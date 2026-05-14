@@ -3,19 +3,23 @@
  * https://reactnative.dev/docs/metro
  * with added config for react-native-svg-transformer
  * https://www.npmjs.com/package/react-native-svg-transformer?activeTab
+ * and Expo / EAS (expo/metro-config).
  *
  * @format
  */
 // eslint-disable-next-line import/no-unresolved
-const { getDefaultConfig, mergeConfig } = require( "@react-native/metro-config" );
+const { mergeConfig } = require( "@react-native/metro-config" );
+const { getDefaultConfig: getExpoDefaultConfig } = require( "expo/metro-config" );
 const { withRozenite } = require( "@rozenite/metro" );
 const {
   withRozeniteRequireProfiler,
 } = require( "@rozenite/require-profiler-plugin/metro" );
 
+const expoConfig = getExpoDefaultConfig( __dirname );
+
 const {
   resolver: { sourceExts, assetExts },
-} = getDefaultConfig();
+} = expoConfig;
 
 const localPackagePaths = [
   // If you reference any local paths in package.json, you'll need to list them here
@@ -29,23 +33,25 @@ const localPackagePaths = [
  */
 const config = {
   transformer: {
+    ...expoConfig.transformer,
     babelTransformerPath: require.resolve( "react-native-svg-transformer/react-native" ),
   },
   resolver: {
+    ...expoConfig.resolver,
     assetExts: assetExts.filter( ext => ext !== "svg" ),
     sourceExts:
       process.env.MOCK_MODE === "e2e"
         ? ["e2e-mock", ...sourceExts, "svg"]
         : [...sourceExts, "svg"],
-    nodeModulesPaths: [...localPackagePaths],
+    nodeModulesPaths: [...( expoConfig.resolver?.nodeModulesPaths || [] ), ...localPackagePaths],
   },
-  watchFolders: [...localPackagePaths],
+  watchFolders: [...( expoConfig.watchFolders || [] ), ...localPackagePaths],
 };
 
 module.exports = withRozenite(
-  mergeConfig( getDefaultConfig( __dirname ), config ),
+  mergeConfig( expoConfig, config ),
   {
     enabled: process.env.WITH_ROZENITE === "true",
-    enhanceMetroConfig: config => withRozeniteRequireProfiler( config ),
+    enhanceMetroConfig: cfg => withRozeniteRequireProfiler( cfg ),
   },
 );

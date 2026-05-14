@@ -1,0 +1,3 @@
+# After `npx eas-cli init`, copy the project UUID from app.config.js (extra.eas.projectId)
+# into a new file named `.eas-project-id` in the repo root (one line, no quotes),
+# or set the EAS_PROJECT_ID environment variable in your CI profile.

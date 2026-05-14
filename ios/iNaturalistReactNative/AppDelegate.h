@@ -1,4 +1,5 @@
 #import <RCTDefaultReactNativeFactoryDelegate.h>
+#import <Expo/Expo.h>
 #import <RCTReactNativeFactory.h>
 #import <UIKit/UIKit.h>
 

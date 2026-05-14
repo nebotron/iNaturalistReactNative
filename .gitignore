@@ -114,3 +114,9 @@ artifacts/
 
 # Rubocop cache
 **/tmp/rubocop_cache
+
+# Expo / EAS
+.expo
+dist/
+web-build/
+.eas-project-id
