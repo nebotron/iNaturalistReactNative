@@ -20,44 +20,14 @@
 		54EB1EFEC1F74152902EED02 /* Lato-BoldItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 8C2D97D72EED451C887998A8 /* Lato-BoldItalic.ttf */; };
 		7196CC2D6D0934D0F4255B7E /* Pods_iNaturalistReactNative.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 05015AADE3E87F2B8A8D3211 /* Pods_iNaturalistReactNative.framework */; };
 		725BA058C5384A9185E8036A /* Lato-Bold.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 00752F4ADC554701A45A848A /* Lato-Bold.ttf */; };
-		74A25CA93620CDD621ADDBE3 /* Pods_iNaturalistReactNative_ShareExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = F15C1390617A309CE0A194B2 /* Pods_iNaturalistReactNative_ShareExtension.framework */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
-		8B65ED3129F575C10054CCEF /* MainInterface.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 8B65ED2F29F575C10054CCEF /* MainInterface.storyboard */; };
-		8B65ED3529F575C10054CCEF /* iNaturalistReactNative-ShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8B65ED2B29F575C10054CCEF /* iNaturalistReactNative-ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
-		8B65ED3B29F575FE0054CCEF /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B65ED3A29F575FE0054CCEF /* ShareViewController.swift */; };
 		8F1AC6772BC1B610002F994B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8F1AC6762BC1B610002F994B /* PrivacyInfo.xcprivacy */; };
-		8F1AC6792BC1B610002F994B /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 8F1AC6762BC1B610002F994B /* PrivacyInfo.xcprivacy */; };
 		8F346E4A2CF6912700CED7B4 /* geomodel.mlmodel in Sources */ = {isa = PBXBuildFile; fileRef = 8F346E492CF6912700CED7B4 /* geomodel.mlmodel */; };
 		8FE171A22E97F0780003E759 /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = 8FE171A12E97F0780003E759 /* GoogleService-Info.plist */; };
-		8FF73F732F69C8CE007CF4F0 /* AutoContinueShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8FF73F722F69C8CE007CF4F0 /* AutoContinueShareViewController.swift */; };
 		AE4DC81B3A87484CB3FD6750 /* Lato-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4B0AEEF6CA584BCF9880EB35 /* Lato-Regular.ttf */; };
 		E5DFC1C6FBFA45739CE91C69 /* Lato-MediumItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 69DF855D92EA4ADFB73B47F1 /* Lato-MediumItalic.ttf */; };
 		F0B9E287B2F441548F4A2DCB /* INatIcon.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 509C6A99546C48429FF5AAFC /* INatIcon.ttf */; };
 /* End PBXBuildFile section */
-
-/* Begin PBXContainerItemProxy section */
-		8B65ED3329F575C10054CCEF /* PBXContainerItemProxy */ = {
-			isa = PBXContainerItemProxy;
-			containerPortal = 83CBB9F71A601CBA00E9B192;
-			proxyType = 1;
-			remoteGlobalIDString = 8B65ED2A29F575C10054CCEF;
-			remoteInfo = "iNaturalistReactNative-ShareExtension";
-		};
-/* End PBXContainerItemProxy section */
-
-/* Begin PBXCopyFilesBuildPhase section */
-		8BD9FE6729C0DD4D00133738 /* Embed Foundation Extensions */ = {
-			isa = PBXCopyFilesBuildPhase;
-			buildActionMask = 12;
-			dstPath = "";
-			dstSubfolderSpec = 13;
-			files = (
-				8B65ED3529F575C10054CCEF /* iNaturalistReactNative-ShareExtension.appex in Embed Foundation Extensions */,
-			);
-			name = "Embed Foundation Extensions";
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		00752F4ADC554701A45A848A /* Lato-Bold.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Lato-Bold.ttf"; path = "../assets/fonts/Lato-Bold.ttf"; sourceTree = "<group>"; };
@@ -75,29 +45,19 @@
 		197A169C2A7C2567001A03DC /* taxonomy.json */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = text.json; path = taxonomy.json; sourceTree = "<group>"; };
 		19916F1F2B4F1871000A2D91 /* iNaturalistReactNativeRelease.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = iNaturalistReactNativeRelease.entitlements; path = iNaturalistReactNative/iNaturalistReactNativeRelease.entitlements; sourceTree = "<group>"; };
 		19A5877328F8E3310016D128 /* iNaturalistReactNative-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iNaturalistReactNative-Bridging-Header.h"; sourceTree = "<group>"; };
-		2026574BDF8A628C18EE2CBC /* Pods-iNaturalistReactNative-ShareExtension.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-iNaturalistReactNative-ShareExtension.debug.xcconfig"; path = "Target Support Files/Pods-iNaturalistReactNative-ShareExtension/Pods-iNaturalistReactNative-ShareExtension.debug.xcconfig"; sourceTree = "<group>"; };
 		3A3C226CE960FF6279D7C2EA /* Pods-iNaturalistReactNative.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-iNaturalistReactNative.release.xcconfig"; path = "Target Support Files/Pods-iNaturalistReactNative/Pods-iNaturalistReactNative.release.xcconfig"; sourceTree = "<group>"; };
 		3A54425709BB4844AFBC680D /* Lato-Italic.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Lato-Italic.ttf"; path = "../assets/fonts/Lato-Italic.ttf"; sourceTree = "<group>"; };
 		3A9BAF07FCF24F668E2EF5AB /* Lato-Medium.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Lato-Medium.ttf"; path = "../assets/fonts/Lato-Medium.ttf"; sourceTree = "<group>"; };
-		3F51DC8BF2B19AB96D47F129 /* Pods-iNaturalistReactNative-ShareExtension.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-iNaturalistReactNative-ShareExtension.release.xcconfig"; path = "Target Support Files/Pods-iNaturalistReactNative-ShareExtension/Pods-iNaturalistReactNative-ShareExtension.release.xcconfig"; sourceTree = "<group>"; };
 		4B0AEEF6CA584BCF9880EB35 /* Lato-Regular.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Lato-Regular.ttf"; path = "../assets/fonts/Lato-Regular.ttf"; sourceTree = "<group>"; };
 		509C6A99546C48429FF5AAFC /* INatIcon.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = INatIcon.ttf; path = ../assets/fonts/INatIcon.ttf; sourceTree = "<group>"; };
 		69DF855D92EA4ADFB73B47F1 /* Lato-MediumItalic.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Lato-MediumItalic.ttf"; path = "../assets/fonts/Lato-MediumItalic.ttf"; sourceTree = "<group>"; };
 		81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = file.storyboard; name = LaunchScreen.storyboard; path = iNaturalistReactNative/LaunchScreen.storyboard; sourceTree = "<group>"; };
-		8B65ED2B29F575C10054CCEF /* iNaturalistReactNative-ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "iNaturalistReactNative-ShareExtension.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
-		8B65ED3029F575C10054CCEF /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/MainInterface.storyboard; sourceTree = "<group>"; };
-		8B65ED3229F575C10054CCEF /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		8B65ED3929F575FD0054CCEF /* iNaturalistReactNative-ShareExtension-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "iNaturalistReactNative-ShareExtension-Bridging-Header.h"; sourceTree = "<group>"; };
-		8B65ED3A29F575FE0054CCEF /* ShareViewController.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; name = ShareViewController.swift; path = "../../node_modules/react-native-share-menu/ios/ShareViewController.swift"; sourceTree = "<group>"; };
-		8B65ED3C29F576D00054CCEF /* iNaturalistReactNative-ShareExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = "iNaturalistReactNative-ShareExtension.entitlements"; sourceTree = "<group>"; };
 		8B8BAD0429F54EB300CE5C9F /* iNaturalistReactNative.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = iNaturalistReactNative.entitlements; path = iNaturalistReactNative/iNaturalistReactNative.entitlements; sourceTree = "<group>"; };
 		8C2D97D72EED451C887998A8 /* Lato-BoldItalic.ttf */ = {isa = PBXFileReference; explicitFileType = undefined; fileEncoding = 9; includeInIndex = 0; lastKnownFileType = unknown; name = "Lato-BoldItalic.ttf"; path = "../assets/fonts/Lato-BoldItalic.ttf"; sourceTree = "<group>"; };
 		8F1AC6762BC1B610002F994B /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		8F346E492CF6912700CED7B4 /* geomodel.mlmodel */ = {isa = PBXFileReference; lastKnownFileType = file.mlmodel; path = geomodel.mlmodel; sourceTree = "<group>"; };
 		8FE171A12E97F0780003E759 /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
-		8FF73F722F69C8CE007CF4F0 /* AutoContinueShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AutoContinueShareViewController.swift; path = "../node_modules/react-native-share-menu/ios/AutoContinueShareViewController.swift"; sourceTree = SOURCE_ROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
-		F15C1390617A309CE0A194B2 /* Pods_iNaturalistReactNative_ShareExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_iNaturalistReactNative_ShareExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -106,14 +66,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				7196CC2D6D0934D0F4255B7E /* Pods_iNaturalistReactNative.framework in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		8B65ED2829F575C10054CCEF /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				74A25CA93620CDD621ADDBE3 /* Pods_iNaturalistReactNative_ShareExtension.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -145,7 +97,6 @@
 			children = (
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				05015AADE3E87F2B8A8D3211 /* Pods_iNaturalistReactNative.framework */,
-				F15C1390617A309CE0A194B2 /* Pods_iNaturalistReactNative_ShareExtension.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -155,8 +106,6 @@
 			children = (
 				06E20E5358FDFF430DB96A37 /* Pods-iNaturalistReactNative.debug.xcconfig */,
 				3A3C226CE960FF6279D7C2EA /* Pods-iNaturalistReactNative.release.xcconfig */,
-				2026574BDF8A628C18EE2CBC /* Pods-iNaturalistReactNative-ShareExtension.debug.xcconfig */,
-				3F51DC8BF2B19AB96D47F129 /* Pods-iNaturalistReactNative-ShareExtension.release.xcconfig */,
 			);
 			path = Pods;
 			sourceTree = "<group>";
@@ -183,7 +132,6 @@
 				81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */,
 				13B07FAE1A68108700A75B9A /* iNaturalistReactNative */,
 				832341AE1AAA6A7D00B99B32 /* Libraries */,
-				8B65ED2C29F575C10054CCEF /* iNaturalistReactNative-ShareExtension */,
 				83CBBA001A601CBA00E9B192 /* Products */,
 				2D16E6871FA4F8E400B85C8A /* Frameworks */,
 				3610B9F08DA0E49FEE702ABA /* Pods */,
@@ -199,22 +147,8 @@
 			isa = PBXGroup;
 			children = (
 				13B07F961A680F5B00A75B9A /* iNaturalistReactNative.app */,
-				8B65ED2B29F575C10054CCEF /* iNaturalistReactNative-ShareExtension.appex */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		8B65ED2C29F575C10054CCEF /* iNaturalistReactNative-ShareExtension */ = {
-			isa = PBXGroup;
-			children = (
-				8FF73F722F69C8CE007CF4F0 /* AutoContinueShareViewController.swift */,
-				8B65ED3C29F576D00054CCEF /* iNaturalistReactNative-ShareExtension.entitlements */,
-				8B65ED3A29F575FE0054CCEF /* ShareViewController.swift */,
-				8B65ED2F29F575C10054CCEF /* MainInterface.storyboard */,
-				8B65ED3229F575C10054CCEF /* Info.plist */,
-				8B65ED3929F575FD0054CCEF /* iNaturalistReactNative-ShareExtension-Bridging-Header.h */,
-			);
-			path = "iNaturalistReactNative-ShareExtension";
 			sourceTree = "<group>";
 		};
 		E7A0E0AA690545D78AA7CC73 /* Resources */ = {
@@ -243,7 +177,6 @@
 				13B07F8C1A680F5B00A75B9A /* Frameworks */,
 				13B07F8E1A680F5B00A75B9A /* Resources */,
 				00DD1BFF1BD5951E006B06BC /* Bundle React Native code and images */,
-				8BD9FE6729C0DD4D00133738 /* Embed Foundation Extensions */,
 				3A27B0FB6A54E9E12AB59C7D /* [CP] Embed Pods Frameworks */,
 				987B044B8ED1BE214203D222 /* [CP] Copy Pods Resources */,
 				8A9262B138E093B4963B9296 /* [CP-User] [RNFB] Core Configuration */,
@@ -251,31 +184,11 @@
 			buildRules = (
 			);
 			dependencies = (
-				8B65ED3429F575C10054CCEF /* PBXTargetDependency */,
 			);
 			name = iNaturalistReactNative;
 			productName = iNaturalistReactNative;
 			productReference = 13B07F961A680F5B00A75B9A /* iNaturalistReactNative.app */;
 			productType = "com.apple.product-type.application";
-		};
-		8B65ED2A29F575C10054CCEF /* iNaturalistReactNative-ShareExtension */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = 8B65ED3829F575C10054CCEF /* Build configuration list for PBXNativeTarget "iNaturalistReactNative-ShareExtension" */;
-			buildPhases = (
-				E34FFE7EBA5BE6CA91CACF36 /* [CP] Check Pods Manifest.lock */,
-				8B65ED2729F575C10054CCEF /* Sources */,
-				8B65ED2829F575C10054CCEF /* Frameworks */,
-				8B65ED2929F575C10054CCEF /* Resources */,
-				CBBE96E94BCFC337E2A3EDB6 /* [CP] Copy Pods Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			name = "iNaturalistReactNative-ShareExtension";
-			productName = "iNaturalistReactNative-ShareExtension";
-			productReference = 8B65ED2B29F575C10054CCEF /* iNaturalistReactNative-ShareExtension.appex */;
-			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -288,10 +201,6 @@
 				TargetAttributes = {
 					13B07F861A680F5B00A75B9A = {
 						LastSwiftMigration = 1340;
-					};
-					8B65ED2A29F575C10054CCEF = {
-						CreatedOnToolsVersion = 14.2;
-						LastSwiftMigration = 1420;
 					};
 				};
 			};
@@ -310,7 +219,6 @@
 			projectRoot = "";
 			targets = (
 				13B07F861A680F5B00A75B9A /* iNaturalistReactNative */,
-				8B65ED2A29F575C10054CCEF /* iNaturalistReactNative-ShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -334,16 +242,6 @@
 				E5DFC1C6FBFA45739CE91C69 /* Lato-MediumItalic.ttf in Resources */,
 				AE4DC81B3A87484CB3FD6750 /* Lato-Regular.ttf in Resources */,
 				F0B9E287B2F441548F4A2DCB /* INatIcon.ttf in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		8B65ED2929F575C10054CCEF /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				8F1AC6792BC1B610002F994B /* PrivacyInfo.xcprivacy in Resources */,
-				8B65ED3129F575C10054CCEF /* MainInterface.storyboard in Resources */,
-				191A91132CD1916800ECC774 /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -435,45 +333,6 @@
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-iNaturalistReactNative/Pods-iNaturalistReactNative-resources.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
-		CBBE96E94BCFC337E2A3EDB6 /* [CP] Copy Pods Resources */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-iNaturalistReactNative-ShareExtension/Pods-iNaturalistReactNative-ShareExtension-resources-${CONFIGURATION}-input-files.xcfilelist",
-			);
-			name = "[CP] Copy Pods Resources";
-			outputFileListPaths = (
-				"${PODS_ROOT}/Target Support Files/Pods-iNaturalistReactNative-ShareExtension/Pods-iNaturalistReactNative-ShareExtension-resources-${CONFIGURATION}-output-files.xcfilelist",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-iNaturalistReactNative-ShareExtension/Pods-iNaturalistReactNative-ShareExtension-resources.sh\"\n";
-			showEnvVarsInLog = 0;
-		};
-		E34FFE7EBA5BE6CA91CACF36 /* [CP] Check Pods Manifest.lock */ = {
-			isa = PBXShellScriptBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			inputFileListPaths = (
-			);
-			inputPaths = (
-				"${PODS_PODFILE_DIR_PATH}/Podfile.lock",
-				"${PODS_ROOT}/Manifest.lock",
-			);
-			name = "[CP] Check Pods Manifest.lock";
-			outputFileListPaths = (
-			);
-			outputPaths = (
-				"$(DERIVED_FILE_DIR)/Pods-iNaturalistReactNative-ShareExtension-checkManifestLockResult.txt",
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-			shellPath = /bin/sh;
-			shellScript = "diff \"${PODS_PODFILE_DIR_PATH}/Podfile.lock\" \"${PODS_ROOT}/Manifest.lock\" > /dev/null\nif [ $? != 0 ] ; then\n    # print error to STDERR\n    echo \"error: The sandbox is not in sync with the Podfile.lock. Run 'pod install' or update your CocoaPods installation.\" >&2\n    exit 1\nfi\n# This output is used by Xcode 'outputs' to avoid re-running this script phase.\necho \"SUCCESS\" > \"${SCRIPT_OUTPUT_FILE_0}\"\n";
-			showEnvVarsInLog = 0;
-		};
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -488,35 +347,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		8B65ED2729F575C10054CCEF /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				8FF73F732F69C8CE007CF4F0 /* AutoContinueShareViewController.swift in Sources */,
-				8B65ED3B29F575FE0054CCEF /* ShareViewController.swift in Sources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 /* End PBXSourcesBuildPhase section */
-
-/* Begin PBXTargetDependency section */
-		8B65ED3429F575C10054CCEF /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = 8B65ED2A29F575C10054CCEF /* iNaturalistReactNative-ShareExtension */;
-			targetProxy = 8B65ED3329F575C10054CCEF /* PBXContainerItemProxy */;
-		};
-/* End PBXTargetDependency section */
-
-/* Begin PBXVariantGroup section */
-		8B65ED2F29F575C10054CCEF /* MainInterface.storyboard */ = {
-			isa = PBXVariantGroup;
-			children = (
-				8B65ED3029F575C10054CCEF /* Base */,
-			);
-			name = MainInterface.storyboard;
-			sourceTree = "<group>";
-		};
-/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		13B07F941A680F5B00A75B9A /* Debug */ = {
@@ -559,7 +390,6 @@
 					"\"${PODS_ROOT}/Headers/Public/RNReanimated\"",
 					"\"${PODS_ROOT}/Headers/Public/RNSVG\"",
 					"\"${PODS_ROOT}/Headers/Public/RNScreens\"",
-					"\"${PODS_ROOT}/Headers/Public/RNShareMenu\"",
 					"\"${PODS_ROOT}/Headers/Public/RNVectorIcons\"",
 					"\"${PODS_ROOT}/Headers/Public/React-Codegen\"",
 					"\"${PODS_ROOT}/Headers/Public/React-Core\"",
@@ -684,7 +514,6 @@
 					"\"${PODS_ROOT}/Headers/Public/RNReanimated\"",
 					"\"${PODS_ROOT}/Headers/Public/RNSVG\"",
 					"\"${PODS_ROOT}/Headers/Public/RNScreens\"",
-					"\"${PODS_ROOT}/Headers/Public/RNShareMenu\"",
 					"\"${PODS_ROOT}/Headers/Public/RNVectorIcons\"",
 					"\"${PODS_ROOT}/Headers/Public/React-Codegen\"",
 					"\"${PODS_ROOT}/Headers/Public/React-Core\"",
@@ -960,94 +789,6 @@
 			};
 			name = Release;
 		};
-		8B65ED3629F575C10054CCEF /* Debug */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 2026574BDF8A628C18EE2CBC /* Pods-iNaturalistReactNative-ShareExtension.debug.xcconfig */;
-			buildSettings = {
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = "iNaturalistReactNative-ShareExtension/iNaturalistReactNative-ShareExtension.entitlements";
-				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 212;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = N5J7L4P93Z;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = i386;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "iNaturalistReactNative-ShareExtension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "iNaturalistReactNative-ShareExtension";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = org.inaturalist.iNaturalistMobile.ShareExtensionIOS;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				SKIP_INSTALL = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "iNaturalistReactNative-ShareExtension/iNaturalistReactNative-ShareExtension-Bridging-Header.h";
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-				SWIFT_VERSION = 5.2;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Debug;
-		};
-		8B65ED3729F575C10054CCEF /* Release */ = {
-			isa = XCBuildConfiguration;
-			baseConfigurationReference = 3F51DC8BF2B19AB96D47F129 /* Pods-iNaturalistReactNative-ShareExtension.release.xcconfig */;
-			buildSettings = {
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CODE_SIGN_ENTITLEMENTS = "iNaturalistReactNative-ShareExtension/iNaturalistReactNative-ShareExtension.entitlements";
-				CODE_SIGN_IDENTITY = "Apple Development";
-				CODE_SIGN_STYLE = Automatic;
-				COPY_PHASE_STRIP = NO;
-				CURRENT_PROJECT_VERSION = 212;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = N5J7L4P93Z;
-				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = i386;
-				GCC_C_LANGUAGE_STANDARD = gnu11;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_FILE = "iNaturalistReactNative-ShareExtension/Info.plist";
-				INFOPLIST_KEY_CFBundleDisplayName = "iNaturalistReactNative-ShareExtension";
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				IPHONEOS_DEPLOYMENT_TARGET = 15.1;
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/Frameworks",
-					"@executable_path/../../Frameworks",
-				);
-				MARKETING_VERSION = 1.0;
-				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = org.inaturalist.iNaturalistMobile.ShareExtensionIOS;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				SKIP_INSTALL = YES;
-				SWIFT_COMPILATION_MODE = wholemodule;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "iNaturalistReactNative-ShareExtension/iNaturalistReactNative-ShareExtension-Bridging-Header.h";
-				SWIFT_OPTIMIZATION_LEVEL = "-O";
-				SWIFT_VERSION = 5.2;
-				TARGETED_DEVICE_FAMILY = "1,2";
-			};
-			name = Release;
-		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1065,15 +806,6 @@
 			buildConfigurations = (
 				83CBBA201A601CBA00E9B192 /* Debug */,
 				83CBBA211A601CBA00E9B192 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		8B65ED3829F575C10054CCEF /* Build configuration list for PBXNativeTarget "iNaturalistReactNative-ShareExtension" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				8B65ED3629F575C10054CCEF /* Debug */,
-				8B65ED3729F575C10054CCEF /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -10,9 +10,5 @@
 	<array>
 		<string>applinks:www.inaturalist.org</string>
 	</array>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>group.org.inaturalist.iNaturalistMobile</string>
-	</array>
 </dict>
 </plist>

@@ -1,18 +1,9 @@
 import { useEffect } from "react";
-import ShareMenu from "react-native-share-menu";
 
-const useShare = ( onShare: ( ) => void ): void => {
-  useEffect( ( ) => {
-    ShareMenu.getInitialShare( onShare );
-  }, [onShare] );
-
-  useEffect( ( ) => {
-    const listener = ShareMenu.addNewShareListener( onShare );
-
-    return ( ) => {
-      listener?.remove( );
-    };
-  }, [onShare] );
+// System share sheet / iOS Share extension were removed so the app stays a single native target
+// (simpler EAS credentials). Opening shared photos from other apps is no longer supported here.
+const useShare = ( _onShare: ( item?: unknown ) => void ): void => {
+  useEffect( () => {}, [] );
 };
 
 export default useShare;

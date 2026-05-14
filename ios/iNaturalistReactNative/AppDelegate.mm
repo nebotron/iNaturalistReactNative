@@ -3,7 +3,6 @@
 #import <Firebase.h>
 #import <React/RCTBundleURLProvider.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
-#import <RNShareMenu/ShareMenuManager.h>
 #import <React/RCTLinkingManager.h>
 
 @interface AppDelegate ()
@@ -16,11 +15,9 @@
             openURL:(NSURL *)url
             options:(NSDictionary<UIApplicationOpenURLOptionsKey,id> *)options
 {
-  BOOL handledByShareMenu = [ShareMenuManager application:app openURL:url options:options];
   BOOL handledByLinkingManager = [RCTLinkingManager application:app openURL:url options:options];
 
-  // Return YES if either of the managers can handle the URL
-  return handledByShareMenu || handledByLinkingManager;
+  return handledByLinkingManager;
 }
 
 - (BOOL)application:(UIApplication *)application continueUserActivity:(nonnull NSUserActivity *)userActivity

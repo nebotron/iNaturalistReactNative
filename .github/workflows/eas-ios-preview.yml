@@ -5,10 +5,9 @@
 #   EXPO_TOKEN       — Personal access token from https://expo.dev/accounts/[account]/settings/access-tokens
 #   EAS_PROJECT_ID   — UUID from your linked EAS project (output of `npx eas-cli init` or Expo dashboard).
 #
-# iOS internal builds use two native targets (app + ShareExtension). EAS must already have valid
-# distribution credentials and provisioning profiles for both bundle IDs, or this job will fail in
-# non-interactive mode. Run `eas build --platform ios --profile preview` once locally (interactive)
-# or configure credentials in the Expo dashboard before relying on this workflow.
+# iOS internal distribution still requires Apple credentials on the Expo project before this job
+# can succeed in non-interactive mode. Run `eas build --platform ios --profile preview` once locally
+# (interactive) or finish setup in the Expo dashboard if the build fails on credentials.
 #
 # Cursor Cloud Agent terminals do not receive Cursor "secrets" as environment variables,
 # so use this workflow (or run `eas build` locally) to deploy with a token.
