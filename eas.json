@@ -24,6 +24,12 @@
       "ios": {
         "simulator": true
       }
+    },
+    "simulator": {
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
     }
   }
 }

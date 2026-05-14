@@ -42,7 +42,6 @@
                                         initialProperties:@{}
                                             launchOptions:launchOptions];
 
-  [super application:application didFinishLaunchingWithOptions:launchOptions];
   return YES;
 }
 
