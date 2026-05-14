@@ -11,7 +11,10 @@ const easProjectIdFromFile = ( () => {
   return null;
 } )();
 
-const easProjectId = process.env.EAS_PROJECT_ID || easProjectIdFromFile;
+// Default from `eas init` (@bfhannel/inaturalist-react-native); override with EAS_PROJECT_ID or .eas-project-id.
+const defaultEasProjectId = "c9d3dfd4-5fab-460b-8d1e-0a038461d319";
+
+const easProjectId = process.env.EAS_PROJECT_ID || easProjectIdFromFile || defaultEasProjectId;
 
 /** @type {import('@expo/config').ExpoConfig} */
 module.exports = {

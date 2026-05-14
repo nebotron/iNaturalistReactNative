@@ -3,7 +3,7 @@
 #
 #   • A repo-root file named `.eas-project-id` (one line, no quotes), for local builds, or
 #   • The `EAS_PROJECT_ID` environment variable, or
-#   • The GitHub Actions secret `EAS_PROJECT_ID` (used by `.github/workflows/eas-android-preview.yml`).
+#   • The GitHub Actions secret `EAS_PROJECT_ID` (used by `.github/workflows/eas-ios-preview.yml`).
 #
 # Cursor Cloud Agent shells do not inject Cursor "secrets" as env vars; use GitHub Actions
 # with repository secrets `EXPO_TOKEN` + `EAS_PROJECT_ID`, or run `eas build` on your machine.

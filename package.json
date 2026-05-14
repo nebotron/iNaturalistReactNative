@@ -26,6 +26,7 @@
     "lint:tsc": "tsc --allowJs false --noEmit",
     "postinstall": "husky && patch-package",
     "eas-build-pre-install": "bash scripts/eas-pre-install.sh",
+    "eas:build": "eas build --platform ios --profile preview --non-interactive",
     "eas:build:android": "eas build --platform android --profile preview --non-interactive",
     "eas:build:ios": "eas build --platform ios --profile preview --non-interactive",
     "translate": "babel-node src/i18n/i18ncli.js build",
