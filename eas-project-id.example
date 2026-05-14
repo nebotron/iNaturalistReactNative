@@ -1,3 +1,9 @@
-# After `npx eas-cli init`, copy the project UUID from app.config.js (extra.eas.projectId)
-# into a new file named `.eas-project-id` in the repo root (one line, no quotes),
-# or set the EAS_PROJECT_ID environment variable in your CI profile.
+# After `npx eas-cli init`, copy the project UUID from the Expo dashboard (or from
+# `eas project:info`) into one of:
+#
+#   • A repo-root file named `.eas-project-id` (one line, no quotes), for local builds, or
+#   • The `EAS_PROJECT_ID` environment variable, or
+#   • The GitHub Actions secret `EAS_PROJECT_ID` (used by `.github/workflows/eas-android-preview.yml`).
+#
+# Cursor Cloud Agent shells do not inject Cursor "secrets" as env vars; use GitHub Actions
+# with repository secrets `EXPO_TOKEN` + `EAS_PROJECT_ID`, or run `eas build` on your machine.

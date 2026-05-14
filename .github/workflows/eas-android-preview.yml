@@ -1,0 +1,42 @@
+# Triggers an EAS Android build (internal distribution APK) using Expo's CI pattern.
+# https://docs.expo.dev/build/building-on-ci/
+#
+# Required GitHub repository secrets:
+#   EXPO_TOKEN       — Personal access token from https://expo.dev/accounts/[account]/settings/access-tokens
+#   EAS_PROJECT_ID   — UUID from your linked EAS project (output of `npx eas-cli init` or Expo dashboard).
+#
+# Cursor Cloud Agent terminals do not receive Cursor "secrets" as environment variables,
+# so use this workflow (or run `eas build` locally) to deploy with a token.
+
+name: EAS Android preview
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Trigger EAS Android build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Expo and EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Trigger Android internal (APK) build on EAS
+        run: eas build --platform android --profile preview --non-interactive --no-wait
+        env:
+          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
