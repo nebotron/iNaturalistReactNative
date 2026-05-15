@@ -4,18 +4,19 @@
 from __future__ import annotations
 
 import csv
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 import urllib.request
 
+TOOL_ROOT = Path(__file__).resolve().parents[1]
 REPO_ROOT = Path(__file__).resolve().parents[3]
 EX_DIR = Path(__file__).resolve().parent
 INPUTS = EX_DIR / "inputs"
 OUTPUTS = EX_DIR / "outputs"
-SALIENCY = REPO_ROOT / "tools" / "inat_vision_saliency" / "saliency.py"
-TFLITE = REPO_ROOT / "tools" / "inat_vision_saliency" / ".cache" / "INatVision_Small_2_fact256_8bit.tflite"
+TFLITE = TOOL_ROOT / ".cache" / "INatVision_Small_2_fact256_8bit.tflite"
 
 # (stem, url, credit line)
 SOURCES: list[tuple[str, str, str]] = [
@@ -140,8 +141,8 @@ def main() -> None:
     if not TFLITE.is_file():
         print("Expected TFLite at", TFLITE, file=sys.stderr)
         sys.exit(
-            "Place INatVision_Small_2_fact256_8bit.tflite in .cache/ "
-            "or run saliency.py once with --download-model.",
+            "Place INatVision_Small_2_fact256_8bit.tflite in tools/inat_vision_saliency/.cache/ "
+            "or run: npm run vision-saliency -- any.jpg --download-model",
         )
 
     INPUTS.mkdir(parents=True, exist_ok=True)
@@ -157,7 +158,8 @@ def main() -> None:
         log = subprocess.check_output(
             [
                 sys.executable,
-                str(SALIENCY),
+                "-m",
+                "inat_vision_saliency",
                 str(dest),
                 "--tflite",
                 str(TFLITE),
@@ -165,6 +167,7 @@ def main() -> None:
                 str(outp),
             ],
             cwd=str(REPO_ROOT),
+            env={**os.environ, "PYTHONPATH": str(TOOL_ROOT)},
             text=True,
         )
         cls = prob = None
@@ -190,8 +193,9 @@ def main() -> None:
     lines: list[str] = []
     lines.append("# iNat vision model: example saliency maps\n")
     lines.append(
-        "This page lists **multiple example photos** (different subjects and scenes) run through "
-        "[`../saliency.py`](../saliency.py). For each image we show the model input (299×299 resize), "
+        "This page lists **multiple example photos** (different subjects and scenes) run through the "
+        "[`inat_vision_saliency`](../inat_vision_saliency/) package (see [`../INTEGRATION.md`](../INTEGRATION.md)). "
+        "For each image we show the model input (299×299 resize), "
         "the **gradient saliency** overlay for the **top-1 softmax class**, and the scientific name "
         "for that class. Class indices match the `leaf_class_id` column in the release "
         "[`taxonomy.csv`](https://github.com/inaturalist/model-files/releases/download/v25.01.15/taxonomy.csv) "
@@ -218,10 +222,13 @@ def main() -> None:
     lines.append("## Regenerating this file\n")
     lines.append(
         "From the repository root, with the vision `.tflite` cached under "
-        "`tools/inat_vision_saliency/.cache/`:\n\n"
+        "`tools/inat_vision_saliency/.cache/` and Python deps installed "
+        "(`pip install -e tools/inat_vision_saliency`):\n\n"
         "```bash\n"
         "python3 tools/inat_vision_saliency/examples/generate_gallery.py\n"
-        "```\n"
+        "```\n\n"
+        "Alternatively, saliency for a single image: `npm run vision-saliency -- path/to/photo.jpg --tflite "
+        "tools/inat_vision_saliency/.cache/INatVision_Small_2_fact256_8bit.tflite -o out.png`.\n"
     )
 
     (EX_DIR / "EXAMPLES.md").write_text("\n".join(lines), encoding="utf-8")

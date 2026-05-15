@@ -1,8 +1,9 @@
-# Conversion (run in isolation; see convert_tflite_to_onnx.py)
+# Install as a package (recommended; adds CLI `inat-vision-saliency` on PATH):
+#   pip install -e tools/inat_vision_saliency
+#
+# Or install the same dependencies without editable mode:
 tensorflow>=2.12,<2.22
 tf2onnx>=1.14
-
-# Saliency (torch path; do not import tensorflow in the same process)
 torch>=2.0
 onnx>=1.14
 onnx2torch>=1.5

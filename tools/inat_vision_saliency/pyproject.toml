@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inat-vision-saliency"
+version = "0.1.0"
+description = "Gradient saliency maps for the iNaturalist mobile vision model (TFLite → ONNX → PyTorch)."
+readme = "INTEGRATION.md"
+requires-python = ">=3.10"
+dependencies = [
+  "tensorflow>=2.12,<2.22",
+  "tf2onnx>=1.14",
+  "torch>=2.0",
+  "onnx>=1.14",
+  "onnx2torch>=1.5",
+  "numpy>=1.24",
+  "Pillow>=10.0",
+  "matplotlib>=3.7",
+]
+
+[project.scripts]
+inat-vision-saliency = "inat_vision_saliency.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["inat_vision_saliency*"]

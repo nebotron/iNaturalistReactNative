@@ -42,6 +42,7 @@
     "e2e": "npm run e2e:build && npm run e2e:test",
     "icons": "./scripts/update-icon-font.sh",
     "add-example-model": "babel-node scripts/add-example-model.js",
+    "vision-saliency": "node scripts/run-vision-saliency.js",
     "reassure": "reassure"
   },
   "dependencies": {

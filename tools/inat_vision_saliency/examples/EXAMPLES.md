@@ -1,6 +1,6 @@
 # iNat vision model: example saliency maps
 
-This page lists **multiple example photos** (different subjects and scenes) run through [`../saliency.py`](../saliency.py). For each image we show the model input (299×299 resize), the **gradient saliency** overlay for the **top-1 softmax class**, and the scientific name for that class. Class indices match the `leaf_class_id` column in the release [`taxonomy.csv`](https://github.com/inaturalist/model-files/releases/download/v25.01.15/taxonomy.csv) (same mapping as the mobile `Taxonomy` loader in [vision-camera-plugin-inatvision](https://github.com/inaturalist/vision-camera-plugin-inatvision)).
+This page lists **multiple example photos** (different subjects and scenes) run through the [`inat_vision_saliency`](../inat_vision_saliency/) package (see [`../INTEGRATION.md`](../INTEGRATION.md)). For each image we show the model input (299×299 resize), the **gradient saliency** overlay for the **top-1 softmax class**, and the scientific name for that class. Class indices match the `leaf_class_id` column in the release [`taxonomy.csv`](https://github.com/inaturalist/model-files/releases/download/v25.01.15/taxonomy.csv) (same mapping as the mobile `Taxonomy` loader in [vision-camera-plugin-inatvision](https://github.com/inaturalist/vision-camera-plugin-inatvision)).
 
 > **On GitHub:** from the repo home page, navigate to `tools/inat_vision_saliency/examples/EXAMPLES.md` on your branch (GitHub renders Markdown and in-repo images).
 
@@ -212,8 +212,14 @@ Smaller JPEGs committed before this gallery (`sample_a.jpg`, `sample_b.jpg`, `sa
 
 ## Regenerating this file
 
-From the repository root, with the vision `.tflite` cached under `tools/inat_vision_saliency/.cache/`:
+From the repository root, with the vision `.tflite` cached under `tools/inat_vision_saliency/.cache/` and Python deps installed (`pip install -e tools/inat_vision_saliency`):
 
 ```bash
 python3 tools/inat_vision_saliency/examples/generate_gallery.py
+```
+
+Alternatively, saliency for a single image:
+
+```bash
+npm run vision-saliency -- path/to/photo.jpg --tflite tools/inat_vision_saliency/.cache/INatVision_Small_2_fact256_8bit.tflite -o out.png
 ```
