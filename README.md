@@ -26,6 +26,7 @@ See [CONTRIBUTING](CONTRIBUTING.md) for guidelines on contributing to this proje
     1. If the download script fails: The sample model files are available in the latest release in this [`repository`](https://github.com/inaturalist/model-files).
     1. On Android, these files are named `INatVision_Small_2_fact256_8bit.tflite`, `INatGeomodel_Small_2_8bit.tflite` and `taxonomy.csv`. Create a camera folder within Android assets (i.e. `android/app/src/debug/assets/camera`) and place the files there.
     1. On iOS, these files are named `smallINatVision_Small_2_fact256_8bit.mlmodel`, `INatGeomodel_Small_2_8bit.mlmodel` and `taxonomy.json` and should be added to the `ios` folder.
+    1. Optional: `tools/inat_vision_saliency/` contains a small Python utility that visualizes which image pixels most influence the vision model’s top prediction (gradient saliency via a dequantized ONNX export).
 
 ### Set up pre-commit hooks
 

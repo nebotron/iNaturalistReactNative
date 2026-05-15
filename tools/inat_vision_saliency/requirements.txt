@@ -1,0 +1,11 @@
+# Conversion (run in isolation; see convert_tflite_to_onnx.py)
+tensorflow>=2.12,<2.22
+tf2onnx>=1.14
+
+# Saliency (torch path; do not import tensorflow in the same process)
+torch>=2.0
+onnx>=1.14
+onnx2torch>=1.5
+numpy>=1.24
+Pillow>=10.0
+matplotlib>=3.7
