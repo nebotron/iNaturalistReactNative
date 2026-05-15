@@ -140,3 +140,30 @@ details summary {
   cursor: pointer;
   color: var(--text);
 }
+
+.param-block {
+  margin-bottom: 1rem;
+}
+
+.param-block:last-of-type {
+  margin-bottom: 0.5rem;
+}
+
+.param-desc {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  max-width: 52rem;
+}
+
+.hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+footer.attribution {
+  margin-top: 1.5rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}

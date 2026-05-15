@@ -1,7 +1,7 @@
 /**
  * Browser saliency for the iNaturalist vision ONNX export (NHWC float32 RGB 0–255).
- * Uses ONNX Runtime Web for forward passes and a SmoothGrad-style Monte Carlo estimate
- * of ∂ p(class) / ∂ pixel (no server; no PyTorch).
+ * Same weights as official v25.01.15 TFLite, dequantized for ORT Web.
+ * SmoothGrad-style Monte Carlo estimate of ∂ p(class) / ∂ pixel (forward passes only).
  *
  * Requires global `ort` from https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.min.js
  */
@@ -9,6 +9,7 @@
 import { TURBO_LUT } from "./turbo_lut.js";
 
 const MODEL_URL = new URL("./inat_vision_dequant.onnx", import.meta.url).href;
+const DEFAULT_BEAR_URL = new URL("./default-bear.jpg", import.meta.url).href;
 const INPUT_NAME = "serving_default_input_1:0";
 const OUTPUT_NAME = "StatefulPartitionedCall:0";
 
@@ -32,7 +33,6 @@ if (!ort?.InferenceSession?.create) {
 
 const statusEl = $("status");
 const runBtn = $("runBtn");
-const modelFile = $("modelFile");
 const imageFile = $("imageFile");
 const samplesEl = $("samples");
 const samplesVal = $("samplesVal");
@@ -124,8 +124,8 @@ function minimalSquareBbox(mag, quantile = 93, minPeakFrac = 0.18) {
     if (mag[i] > peak) peak = mag[i];
   }
   const thr0 = Math.max(peak * minPeakFrac, percentile2d(mag, quantile));
-  let ys = [];
-  let xs = [];
+  const ys = [];
+  const xs = [];
   for (let y = 0; y < H; y += 1) {
     for (let x = 0; x < W; x += 1) {
       const v = mag[y * W + x];
@@ -266,19 +266,6 @@ async function createSessionFromBuffer(buffer) {
   });
 }
 
-async function tryLoadBundledModel() {
-  try {
-    const res = await fetch(MODEL_URL, { cache: "force-cache" });
-    if (!res.ok) return false;
-    const buf = await res.arrayBuffer();
-    session = await createSessionFromBuffer(buf);
-    setStatus("Loaded bundled model from inat_vision_dequant.onnx.");
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function runSaliency() {
   if (!session || !imageBitmap) return;
 
@@ -351,29 +338,13 @@ function updateSliders() {
   sigmaVal.textContent = sigmaEl.value;
 }
 
-modelFile.addEventListener("change", async () => {
-  const f = modelFile.files?.[0];
-  if (!f) return;
-  setStatus(`Loading ONNX from ${f.name}…`);
-  try {
-    const buf = await f.arrayBuffer();
-    session = await createSessionFromBuffer(buf);
-    setStatus(`Loaded model: ${f.name}`);
-    runBtn.disabled = !imageBitmap;
-  } catch (e) {
-    session = null;
-    runBtn.disabled = true;
-    setStatus(`Failed to load ONNX: ${e}`, true);
-  }
-});
-
 imageFile.addEventListener("change", async () => {
   const f = imageFile.files?.[0];
   if (!f) return;
   try {
     imageBitmap = await createImageBitmap(f);
-    runBtn.disabled = !session;
-    setStatus(session ? "Ready. Click Run saliency." : "Load the ONNX model, then run.");
+    setStatus("Running saliency on your photo…");
+    await runSaliency();
   } catch (e) {
     imageBitmap = null;
     runBtn.disabled = true;
@@ -392,12 +363,34 @@ runBtn.addEventListener("click", () => {
   });
 });
 
-(async () => {
-  const ok = await tryLoadBundledModel();
-  if (!ok) {
+async function init() {
+  try {
     setStatus(
-      "No bundled inat_vision_dequant.onnx found next to this page. Use the file picker to load your ONNX export.",
+      "Loading vision model (dequantized ONNX, ~82 MB — first visit may take a while)…",
     );
+    const res = await fetch(MODEL_URL, { cache: "force-cache" });
+    if (!res.ok) {
+      throw new Error(
+        `Could not fetch inat_vision_dequant.onnx (${res.status}). This file ships with the demo in git; if you forked the repo without it, regenerate it with tools/inat_vision_saliency and copy it here.`,
+      );
+    }
+    const buf = await res.arrayBuffer();
+    session = await createSessionFromBuffer(buf);
+
+    setStatus("Loading default bear photo…");
+    const bearRes = await fetch(DEFAULT_BEAR_URL, { cache: "force-cache" });
+    if (!bearRes.ok) {
+      throw new Error(`Could not load default-bear.jpg (${bearRes.status}).`);
+    }
+    const bearBlob = await bearRes.blob();
+    imageBitmap = await createImageBitmap(bearBlob);
+
+    setStatus("Running saliency on the sample image…");
+    await runSaliency();
+  } catch (e) {
+    setStatus(String(e?.message || e), true);
+    runBtn.disabled = true;
   }
-  runBtn.disabled = !(session && imageBitmap);
-})();
+}
+
+init();

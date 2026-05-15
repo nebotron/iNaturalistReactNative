@@ -11,35 +11,47 @@
     <main>
       <h1>iNaturalist vision saliency</h1>
       <p class="lead">
-        Runs entirely in your browser with ONNX Runtime Web. Upload a photo to see an overlay and a salient square.
-        The ONNX file is the dequantized export used by the Python tool (same input preprocessing: 299×299, RGB 0–255).
+        Runs entirely in your browser with ONNX Runtime Web. The network is the same vision weights as the official
+        <a href="https://github.com/inaturalist/model-files/releases/tag/v25.01.15">v25.01.15</a> release
+        (<code>INatVision_Small_2_fact256_8bit.tflite</code>), exported here to a dequantized ONNX graph so we can run
+        many forward passes for a saliency estimate. Preprocessing matches the mobile model: 299×299, RGB 0–255.
       </p>
 
       <section class="panel">
         <div class="row">
           <div>
-            <label for="modelFile">Model (ONNX)</label><br />
-            <input id="modelFile" type="file" accept=".onnx,application/octet-stream" />
-          </div>
-          <div>
-            <label for="imageFile">Photo</label><br />
+            <label for="imageFile">Photo (optional)</label><br />
             <input id="imageFile" type="file" accept="image/*" />
+            <p class="hint">The page starts with a sample bear image. Choose another photo to replace it.</p>
           </div>
         </div>
+
+        <div class="param-block">
+          <label for="samples">Monte Carlo samples: <span id="samplesVal">28</span></label><br />
+          <input id="samples" type="range" min="8" max="64" value="28" step="1" />
+          <p class="param-desc">
+            Each sample adds Gaussian noise to the input (scaled by σ below), runs one forward pass, and contributes to
+            an average that approximates how sensitive the predicted class probability is to each pixel (a
+            SmoothGrad-style estimate without backprop). More samples reduce variance in the heatmap but linearly
+            increase runtime.
+          </p>
+        </div>
+
+        <div class="param-block">
+          <label for="sigma">Noise scale (σ): <span id="sigmaVal">10</span></label><br />
+          <input id="sigma" type="range" min="2" max="24" value="10" step="1" />
+          <p class="param-desc">
+            Standard deviation of the noise, in the same units as pixel values (0–255 per RGB channel), before values
+            are clipped. Larger σ blurs the signal over a wider neighborhood of the image (smoother, more global
+            sensitivity); smaller σ stays closer to the behavior of a sharp local gradient but can look noisier with
+            few samples.
+          </p>
+        </div>
+
         <div class="row">
-          <div>
-            <label for="samples">Monte Carlo samples</label><br />
-            <input id="samples" type="range" min="8" max="64" value="28" step="1" />
-            <span id="samplesVal">28</span>
-          </div>
-          <div>
-            <label for="sigma">Noise scale (σ)</label><br />
-            <input id="sigma" type="range" min="2" max="24" value="10" step="1" />
-            <span id="sigmaVal">10</span>
-          </div>
-          <button id="runBtn" type="button" disabled>Run saliency</button>
+          <button id="runBtn" type="button" disabled>Run saliency again</button>
         </div>
-        <p id="status" class="status">Load the ONNX model and an image to begin.</p>
+        <p id="status" class="status">Loading…</p>
       </section>
 
       <section class="grid" id="outSection" hidden>
@@ -54,18 +66,17 @@
       </section>
 
       <details>
-        <summary>Model file and GitHub Pages</summary>
+        <summary>Technical note</summary>
         <p>
-          Build <code>inat_vision_dequant.onnx</code> with the Python package in
-          <code>tools/inat_vision_saliency/</code> (see INTEGRATION.md there), then either select it above or place it
-          next to this page as <code>inat_vision_dequant.onnx</code> so the app can fetch it on first load.
-        </p>
-        <p>
-          This page uses a forward-only Monte Carlo estimate of the gradient of the predicted class probability with
-          respect to pixels (SmoothGrad-style). It is computed in the browser and is suitable for interactive demos;
-          the Python pipeline uses full autograd for an exact Jacobian-style map.
+          The Python tool in <code>tools/inat_vision_saliency/</code> uses PyTorch autograd for an exact gradient of
+          the softmax probability. This page uses only forward passes and averages random-direction finite differences
+          (Monte Carlo), so maps can differ slightly while remaining interpretable.
         </p>
       </details>
+
+      <footer class="attribution">
+        Default photo: bear image from <a href="https://placebear.com/">PlaceBear</a> (saved in-repo for this demo).
+      </footer>
     </main>
     <script type="module" src="./app.js"></script>
   </body>

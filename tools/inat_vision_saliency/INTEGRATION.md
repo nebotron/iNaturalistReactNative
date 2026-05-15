@@ -46,11 +46,11 @@ The PNG overlay includes a **lime** outline of the **smallest axis-aligned squar
 
 ## GitHub Pages (browser demo)
 
-Static files live under **`docs/inat-saliency-web/`** in this repository. The page loads **ONNX Runtime Web** from a CDN, runs the same **299×299 RGB 0–255** preprocessing as the Python tool, and keeps all inference **in the browser** (no upload to a server).
+Static files live under **`docs/inat-saliency-web/`** in this repository. The page loads **ONNX Runtime Web** from a CDN, ships **`inat_vision_dequant.onnx`** next to the HTML (dequantized export of the official **v25.01.15** `INatVision_Small_2_fact256_8bit.tflite` weights), and keeps all inference **in the browser** (users only choose an optional replacement photo). A **default bear** JPEG is included so the first saliency run needs no uploads.
 
-1. Build **`inat_vision_dequant.onnx`** locally (first `npm run vision-saliency` / `python -m inat_vision_saliency` run, or follow the converter notes in this directory). The file is normally cached next to the TFLite download.
-2. Copy that ONNX next to **`docs/inat-saliency-web/index.html`** as **`inat_vision_dequant.onnx`** (the page tries to fetch it on load). Alternatively, use the **Model (ONNX)** file picker on the page.
-3. Enable **GitHub Pages** for the repository (for example **GitHub Actions** with the included workflow **Deploy iNat saliency web to GitHub Pages**, or publish the `docs/inat-saliency-web` folder as the site root). The live URL will look like `https://<org>.github.io/<repo>/` when that folder is deployed as the site root.
+To publish: enable **GitHub Pages** (for example **GitHub Actions** with **Deploy iNat saliency web to GitHub Pages**, or publish the `docs/inat-saliency-web` folder as the site root). The live URL will look like `https://<org>.github.io/<repo>/` when that folder is the deployed root.
+
+If you maintain a fork **without** the large ONNX binary, regenerate it with `tools/inat_vision_saliency` (first `npm run vision-saliency -- … --download-model` populates the cache) and copy **`inat_vision_dequant.onnx`** into `docs/inat-saliency-web/`.
 
 The browser build uses a **SmoothGrad-style Monte Carlo estimate** of the gradient of the **predicted class probability** with respect to pixels: many noisy forward passes approximate an average gradient without autograd. The Python package still uses **PyTorch autograd** for an exact Jacobian-style map; expect small visual differences.
 
@@ -81,7 +81,7 @@ Suggested phases:
 | `convert_tflite_to_onnx.py` | Subprocess entry for TensorFlow / `tf2onnx` (avoid importing TF next to PyTorch). |
 | `pyproject.toml` | Package metadata + `inat-vision-saliency` console script. |
 | `examples/` | Gallery generator and sample assets. |
-| `docs/inat-saliency-web/` (repo root) | Static GitHub Pages demo: ONNX Runtime Web + in-browser saliency (see **GitHub Pages** above). |
+| `docs/inat-saliency-web/` (repo root) | Static GitHub Pages demo: ships ONNX + default bear image; ORT Web in-browser saliency (see **GitHub Pages** above). |
 
 ## Notes
 
