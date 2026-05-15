@@ -44,6 +44,16 @@ Use `render_overlay_png(result, overlay_alpha=0.45)` to get PNG bytes without wr
 
 The PNG overlay includes a **lime** outline of the **smallest axis-aligned square** that contains pixels whose saliency magnitude is at least `max(peak * bbox_min_peak_frac, percentile(mag, bbox_quantile))` (defaults: 0.18 and 93). The same `(x0, y0, x1, y1)` inclusive coordinates are exposed as `SaliencyResult.bbox_square_xyxy` and mirrored in TypeScript `VisionSaliencyResult.bboxSquareXyxy`. CLI flags: `--no-bbox`, `--bbox-quantile`, `--bbox-min-peak-frac`.
 
+## GitHub Pages (browser demo)
+
+Static files live under **`docs/inat-saliency-web/`** in this repository. The page loads **ONNX Runtime Web** from a CDN, runs the same **299×299 RGB 0–255** preprocessing as the Python tool, and keeps all inference **in the browser** (no upload to a server).
+
+1. Build **`inat_vision_dequant.onnx`** locally (first `npm run vision-saliency` / `python -m inat_vision_saliency` run, or follow the converter notes in this directory). The file is normally cached next to the TFLite download.
+2. Copy that ONNX next to **`docs/inat-saliency-web/index.html`** as **`inat_vision_dequant.onnx`** (the page tries to fetch it on load). Alternatively, use the **Model (ONNX)** file picker on the page.
+3. Enable **GitHub Pages** for the repository (for example **GitHub Actions** with the included workflow **Deploy iNat saliency web to GitHub Pages**, or publish the `docs/inat-saliency-web` folder as the site root). The live URL will look like `https://<org>.github.io/<repo>/` when that folder is deployed as the site root.
+
+The browser build uses a **SmoothGrad-style Monte Carlo estimate** of the gradient of the **predicted class probability** with respect to pixels: many noisy forward passes approximate an average gradient without autograd. The Python package still uses **PyTorch autograd** for an exact Jacobian-style map; expect small visual differences.
+
 ## React Native integration (roadmap)
 
 The production app runs **TFLite / Core ML** via `vision-camera-plugin-inatvision`. Those runtimes do not expose full-network autograd for this quantized model, so **on-device saliency** needs a deliberate second path.
@@ -71,6 +81,7 @@ Suggested phases:
 | `convert_tflite_to_onnx.py` | Subprocess entry for TensorFlow / `tf2onnx` (avoid importing TF next to PyTorch). |
 | `pyproject.toml` | Package metadata + `inat-vision-saliency` console script. |
 | `examples/` | Gallery generator and sample assets. |
+| `docs/inat-saliency-web/` (repo root) | Static GitHub Pages demo: ONNX Runtime Web + in-browser saliency (see **GitHub Pages** above). |
 
 ## Notes
 

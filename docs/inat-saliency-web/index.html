@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>iNaturalist vision saliency (browser)</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.min.js"></script>
+  </head>
+  <body>
+    <main>
+      <h1>iNaturalist vision saliency</h1>
+      <p class="lead">
+        Runs entirely in your browser with ONNX Runtime Web. Upload a photo to see an overlay and a salient square.
+        The ONNX file is the dequantized export used by the Python tool (same input preprocessing: 299×299, RGB 0–255).
+      </p>
+
+      <section class="panel">
+        <div class="row">
+          <div>
+            <label for="modelFile">Model (ONNX)</label><br />
+            <input id="modelFile" type="file" accept=".onnx,application/octet-stream" />
+          </div>
+          <div>
+            <label for="imageFile">Photo</label><br />
+            <input id="imageFile" type="file" accept="image/*" />
+          </div>
+        </div>
+        <div class="row">
+          <div>
+            <label for="samples">Monte Carlo samples</label><br />
+            <input id="samples" type="range" min="8" max="64" value="28" step="1" />
+            <span id="samplesVal">28</span>
+          </div>
+          <div>
+            <label for="sigma">Noise scale (σ)</label><br />
+            <input id="sigma" type="range" min="2" max="24" value="10" step="1" />
+            <span id="sigmaVal">10</span>
+          </div>
+          <button id="runBtn" type="button" disabled>Run saliency</button>
+        </div>
+        <p id="status" class="status">Load the ONNX model and an image to begin.</p>
+      </section>
+
+      <section class="grid" id="outSection" hidden>
+        <figure>
+          <figcaption>Input (299×299)</figcaption>
+          <canvas id="inputCanvas" width="299" height="299"></canvas>
+        </figure>
+        <figure>
+          <figcaption>Saliency overlay + salient square</figcaption>
+          <canvas id="overlayCanvas" width="299" height="299"></canvas>
+        </figure>
+      </section>
+
+      <details>
+        <summary>Model file and GitHub Pages</summary>
+        <p>
+          Build <code>inat_vision_dequant.onnx</code> with the Python package in
+          <code>tools/inat_vision_saliency/</code> (see INTEGRATION.md there), then either select it above or place it
+          next to this page as <code>inat_vision_dequant.onnx</code> so the app can fetch it on first load.
+        </p>
+        <p>
+          This page uses a forward-only Monte Carlo estimate of the gradient of the predicted class probability with
+          respect to pixels (SmoothGrad-style). It is computed in the browser and is suitable for interactive demos;
+          the Python pipeline uses full autograd for an exact Jacobian-style map.
+        </p>
+      </details>
+    </main>
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
