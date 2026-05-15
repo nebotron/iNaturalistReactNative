@@ -18,6 +18,7 @@ from inat_vision_saliency.pipeline import (
     run_saliency_on_tensor,
     run_saliency_pil,
 )
+from inat_vision_saliency.saliency_map import minimal_square_bbox_xyxy
 
 __all__ = [
     "CONVERT_SCRIPT",
@@ -27,6 +28,7 @@ __all__ = [
     "DEFAULT_TFLITE",
     "SaliencyResult",
     "TOOL_ROOT",
+    "minimal_square_bbox_xyxy",
     "prepare_model",
     "render_overlay_png",
     "run_file_to_png",

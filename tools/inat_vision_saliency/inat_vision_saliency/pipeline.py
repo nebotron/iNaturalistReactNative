@@ -15,8 +15,9 @@ from inat_vision_saliency.model import load_torch_model
 from inat_vision_saliency.onnx_convert import ensure_onnx
 from inat_vision_saliency.preprocess import preprocess_image_bytes, preprocess_image_path, preprocess_pil_rgb
 from inat_vision_saliency.saliency_map import (
-    blend_overlay,
     compute_input_grad_saliency,
+    compose_saliency_output,
+    minimal_square_bbox_xyxy,
     save_visualization,
 )
 
@@ -40,6 +41,9 @@ class SaliencyResult:
     rgb_input_u8: np.ndarray
     """Shape (299, 299, 3) uint8; the resized RGB input shown to the model."""
 
+    bbox_square_xyxy: tuple[int, int, int, int] | None
+    """Inclusive (x0, y0, x1, y1) smallest square covering high-saliency pixels; None if unknown."""
+
 
 def prepare_model(
     *,
@@ -61,16 +65,27 @@ def run_saliency_on_tensor(
     rgb_u8: np.ndarray,
     *,
     class_index: int | None,
+    bbox_quantile: float = 93.0,
+    bbox_min_peak_frac: float = 0.18,
 ) -> SaliencyResult:
     mag, cls, probs_t = compute_input_grad_saliency(model, x, class_index=class_index)
     probs = probs_t.cpu().numpy().astype(np.float32)[0]
     top_p = float(probs[cls])
+    h, w = mag.shape
+    bbox = minimal_square_bbox_xyxy(
+        mag,
+        height=h,
+        width=w,
+        quantile=bbox_quantile,
+        min_peak_frac=bbox_min_peak_frac,
+    )
     return SaliencyResult(
         saliency_magnitude=mag,
         class_index=cls,
         top_probability=top_p,
         probabilities=probs,
         rgb_input_u8=rgb_u8,
+        bbox_square_xyxy=bbox,
     )
 
 
@@ -79,9 +94,18 @@ def run_saliency_on_image_path(
     image_path: Path,
     *,
     class_index: int | None,
+    bbox_quantile: float = 93.0,
+    bbox_min_peak_frac: float = 0.18,
 ) -> SaliencyResult:
     x, rgb_u8 = preprocess_image_path(image_path)
-    return run_saliency_on_tensor(model, x, rgb_u8, class_index=class_index)
+    return run_saliency_on_tensor(
+        model,
+        x,
+        rgb_u8,
+        class_index=class_index,
+        bbox_quantile=bbox_quantile,
+        bbox_min_peak_frac=bbox_min_peak_frac,
+    )
 
 
 def run_saliency_on_image_bytes(
@@ -89,9 +113,18 @@ def run_saliency_on_image_bytes(
     data: bytes,
     *,
     class_index: int | None,
+    bbox_quantile: float = 93.0,
+    bbox_min_peak_frac: float = 0.18,
 ) -> SaliencyResult:
     x, rgb_u8 = preprocess_image_bytes(data)
-    return run_saliency_on_tensor(model, x, rgb_u8, class_index=class_index)
+    return run_saliency_on_tensor(
+        model,
+        x,
+        rgb_u8,
+        class_index=class_index,
+        bbox_quantile=bbox_quantile,
+        bbox_min_peak_frac=bbox_min_peak_frac,
+    )
 
 
 def run_saliency_pil(
@@ -99,17 +132,37 @@ def run_saliency_pil(
     image: Image.Image,
     *,
     class_index: int | None,
+    bbox_quantile: float = 93.0,
+    bbox_min_peak_frac: float = 0.18,
 ) -> SaliencyResult:
     x, rgb_u8 = preprocess_pil_rgb(image)
-    return run_saliency_on_tensor(model, x, rgb_u8, class_index=class_index)
+    return run_saliency_on_tensor(
+        model,
+        x,
+        rgb_u8,
+        class_index=class_index,
+        bbox_quantile=bbox_quantile,
+        bbox_min_peak_frac=bbox_min_peak_frac,
+    )
 
 
-def render_overlay_png(result: SaliencyResult, *, overlay_alpha: float) -> bytes:
+def render_overlay_png(
+    result: SaliencyResult,
+    *,
+    overlay_alpha: float,
+    draw_bounding_square: bool = True,
+    bbox_quantile: float = 93.0,
+    bbox_min_peak_frac: float = 0.18,
+) -> bytes:
     """Encode saliency overlay as PNG bytes (e.g. for HTTP responses or tests)."""
-    blend_u8 = blend_overlay(
+    blend_u8 = compose_saliency_output(
         result.rgb_input_u8,
         result.saliency_magnitude,
         overlay_alpha=overlay_alpha,
+        draw_bounding_square=draw_bounding_square,
+        bbox_xyxy=result.bbox_square_xyxy,
+        bbox_quantile=bbox_quantile,
+        bbox_min_peak_frac=bbox_min_peak_frac,
     )
     buf = BytesIO()
     Image.fromarray(blend_u8).save(buf, format="PNG")
@@ -126,6 +179,9 @@ def run_file_to_png(
     class_index: int | None,
     overlay_alpha: float,
     force_reconvert: bool,
+    draw_bounding_square: bool = True,
+    bbox_quantile: float = 93.0,
+    bbox_min_peak_frac: float = 0.18,
 ) -> SaliencyResult:
     """End-to-end: artifacts + inference + write overlay PNG (CLI uses this)."""
     _, model = prepare_model(
@@ -134,11 +190,21 @@ def run_file_to_png(
         onnx_cache=onnx_cache,
         force_reconvert=force_reconvert,
     )
-    result = run_saliency_on_image_path(model, image_path, class_index=class_index)
+    result = run_saliency_on_image_path(
+        model,
+        image_path,
+        class_index=class_index,
+        bbox_quantile=bbox_quantile,
+        bbox_min_peak_frac=bbox_min_peak_frac,
+    )
     save_visualization(
         result.rgb_input_u8,
         result.saliency_magnitude,
         output_path,
         overlay_alpha=overlay_alpha,
+        draw_bounding_square=draw_bounding_square,
+        bbox_xyxy=result.bbox_square_xyxy,
+        bbox_quantile=bbox_quantile,
+        bbox_min_peak_frac=bbox_min_peak_frac,
     )
     return result

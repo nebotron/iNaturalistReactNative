@@ -34,10 +34,15 @@ _, model = prepare_model(
     force_reconvert=False,
 )
 result = run_saliency_on_image_path(model, Path("photo.jpg"), class_index=None)
-# result.saliency_magnitude, result.probabilities, result.rgb_input_u8, …
+# result.saliency_magnitude, result.probabilities, result.rgb_input_u8,
+# result.bbox_square_xyxy (inclusive square over high-saliency pixels), …
 ```
 
 Use `render_overlay_png(result, overlay_alpha=0.45)` to get PNG bytes without writing a temp file.
+
+### Bounding square on the output
+
+The PNG overlay includes a **lime** outline of the **smallest axis-aligned square** that contains pixels whose saliency magnitude is at least `max(peak * bbox_min_peak_frac, percentile(mag, bbox_quantile))` (defaults: 0.18 and 93). The same `(x0, y0, x1, y1)` inclusive coordinates are exposed as `SaliencyResult.bbox_square_xyxy` and mirrored in TypeScript `VisionSaliencyResult.bboxSquareXyxy`. CLI flags: `--no-bbox`, `--bbox-quantile`, `--bbox-min-peak-frac`.
 
 ## React Native integration (roadmap)
 

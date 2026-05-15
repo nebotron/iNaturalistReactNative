@@ -18,104 +18,20 @@ INPUTS = EX_DIR / "inputs"
 OUTPUTS = EX_DIR / "outputs"
 TFLITE = TOOL_ROOT / ".cache" / "INatVision_Small_2_fact256_8bit.tflite"
 
-# (stem, url, credit line)
+# Curated Lorem Picsum IDs where the model's top-1 class is an animal (insect / vertebrate),
+# plus PlaceBear (wild mammal photos). See gallery generator for selection criteria.
+ANIMAL_PICSUM_IDS = (1, 2, 3, 5, 6, 8, 9, 11, 14, 17, 20, 21, 23, 24, 25)
+
 SOURCES: list[tuple[str, str, str]] = [
-    ("bear", "https://placebear.com/800/600", "[PlaceBear](https://placebear.com)"),
-    (
-        "picsum_28",
-        "https://picsum.photos/id/28/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 28",
-    ),
-    (
-        "picsum_40",
-        "https://picsum.photos/id/40/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 40",
-    ),
-    (
-        "picsum_52",
-        "https://picsum.photos/id/52/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 52",
-    ),
-    (
-        "picsum_65",
-        "https://picsum.photos/id/65/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 65",
-    ),
-    (
-        "picsum_76",
-        "https://picsum.photos/id/76/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 76",
-    ),
-    (
-        "picsum_101",
-        "https://picsum.photos/id/101/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 101",
-    ),
-    (
-        "picsum_119",
-        "https://picsum.photos/id/119/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 119",
-    ),
-    (
-        "picsum_160",
-        "https://picsum.photos/id/160/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 160",
-    ),
-    (
-        "picsum_237",
-        "https://picsum.photos/id/237/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 237",
-    ),
-    (
-        "picsum_338",
-        "https://picsum.photos/id/338/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 338",
-    ),
-    (
-        "picsum_433",
-        "https://picsum.photos/id/433/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 433",
-    ),
-    (
-        "picsum_582",
-        "https://picsum.photos/id/582/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 582",
-    ),
-    (
-        "picsum_659",
-        "https://picsum.photos/id/659/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 659",
-    ),
-    (
-        "picsum_718",
-        "https://picsum.photos/id/718/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 718",
-    ),
-    (
-        "picsum_824",
-        "https://picsum.photos/id/824/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 824",
-    ),
-    (
-        "picsum_957",
-        "https://picsum.photos/id/957/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 957",
-    ),
-    (
-        "picsum_1025",
-        "https://picsum.photos/id/1025/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 1025",
-    ),
-    (
-        "picsum_219",
-        "https://picsum.photos/id/219/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 219",
-    ),
-    (
-        "picsum_292",
-        "https://picsum.photos/id/292/600/600.jpg",
-        "[Lorem Picsum](https://picsum.photos) id 292",
-    ),
+    ("bear", "https://placebear.com/800/600", "[PlaceBear](https://placebear.com) (wild bears)"),
+    *[
+        (
+            f"picsum_{pid}",
+            f"https://picsum.photos/id/{pid}/600/600.jpg",
+            f"[Lorem Picsum](https://picsum.photos) id {pid} (wildlife-oriented pick; top-1 is an animal species)",
+        )
+        for pid in ANIMAL_PICSUM_IDS
+    ],
 ]
 
 
@@ -147,6 +63,11 @@ def main() -> None:
 
     INPUTS.mkdir(parents=True, exist_ok=True)
     OUTPUTS.mkdir(parents=True, exist_ok=True)
+    for folder in (INPUTS, OUTPUTS):
+        for p in folder.iterdir():
+            if p.suffix.lower() in {".jpg", ".jpeg", ".png"}:
+                p.unlink()
+
     by_leaf = load_leaf_labels()
 
     rows: list[dict[str, object]] = []
@@ -171,12 +92,19 @@ def main() -> None:
             text=True,
         )
         cls = prob = None
+        bbox: tuple[int, int, int, int] | None = None
         for line in log.splitlines():
             if line.startswith("target_class="):
                 rest = line[len("target_class=") :]
                 cls_s, p_s = rest.split(" p=", 1)
                 cls = int(cls_s)
                 prob = float(p_s)
+            elif line.startswith("bbox_square="):
+                rest = line.split("=", 1)[1].strip()
+                if rest:
+                    parts = [int(x) for x in rest.split(",")]
+                    if len(parts) == 4:
+                        bbox = (parts[0], parts[1], parts[2], parts[3])
         tax = by_leaf.get(int(cls), {}) if cls is not None else {}
         rows.append(
             {
@@ -187,17 +115,25 @@ def main() -> None:
                 "prob": prob,
                 "taxon_id": tax.get("taxon_id", ""),
                 "name": tax.get("name", "(unknown)"),
+                "bbox": bbox,
             },
         )
 
     lines: list[str] = []
-    lines.append("# iNat vision model: example saliency maps\n")
+    lines.append("# iNat vision model: example saliency maps (wild animals)\n")
     lines.append(
-        "This page lists **multiple example photos** (different subjects and scenes) run through the "
-        "[`inat_vision_saliency`](../inat_vision_saliency/) package (see [`../INTEGRATION.md`](../INTEGRATION.md)). "
-        "For each image we show the model input (299×299 resize), "
-        "the **gradient saliency** overlay for the **top-1 softmax class**, and the scientific name "
-        "for that class. Class indices match the `leaf_class_id` column in the release "
+        "> **On GitHub:** from the repo home page, open `tools/inat_vision_saliency/examples/EXAMPLES.md` on your branch.\n"
+    )
+    lines.append(
+        "This gallery uses **only wild-animal-oriented examples**: PlaceBear (bears) plus fixed "
+        "[Lorem Picsum](https://picsum.photos) photo IDs that were screened so the model’s **top-1** "
+        "prediction is an **animal** species (insects, birds, mammals, etc.), not plants or scenery-only taxa. "
+        "Each row shows the 299×299 input, a turbo saliency blend for the predicted class, and the **smallest square** "
+        "bounding high-saliency pixels (lime outline) computed in [`saliency_map.py`](../inat_vision_saliency/saliency_map.py). "
+        "See also [`../INTEGRATION.md`](../INTEGRATION.md).\n"
+    )
+    lines.append(
+        "Class indices match the `leaf_class_id` column in the release "
         "[`taxonomy.csv`](https://github.com/inaturalist/model-files/releases/download/v25.01.15/taxonomy.csv) "
         "(same mapping as the mobile `Taxonomy` loader in "
         "[vision-camera-plugin-inatvision](https://github.com/inaturalist/vision-camera-plugin-inatvision)).\n"
@@ -208,17 +144,15 @@ def main() -> None:
         lines.append(f"### {i}. `{r['stem']}`\n")
         lines.append(f"**Photo:** {r['credit']}  \n")
         lines.append(f"**Top-1 prediction:** *{name}* — iNat taxon `{r['taxon_id']}` — model leaf index `{r['class_index']}` — p = `{r['prob']:.4f}`\n")
+        bb = r.get("bbox")
+        if bb:
+            lines.append(f"**Salient square (inclusive x0,y0,x1,y1):** `{bb[0]}, {bb[1]}, {bb[2]}, {bb[3]}`  \n")
         lines.append(
-            "| Input (resized in tool) | Saliency overlay |\n"
-            "|---------------------------|------------------|\n"
+            "| Input (resized in tool) | Saliency + salient square |\n"
+            "|---------------------------|-----------------------------|\n"
             f"| ![](inputs/{r['stem']}.jpg) | ![](outputs/{r['stem']}_saliency.png) |\n"
         )
 
-    lines.append("## Earlier samples\n")
-    lines.append(
-        "Smaller JPEGs committed before this gallery (`sample_a.jpg`, `sample_b.jpg`, `sample_c.jpg`) "
-        "and their overlays remain in [`inputs/`](inputs/) and [`outputs/`](outputs/).\n"
-    )
     lines.append("## Regenerating this file\n")
     lines.append(
         "From the repository root, with the vision `.tflite` cached under "

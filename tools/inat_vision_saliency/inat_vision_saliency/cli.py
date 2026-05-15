@@ -58,6 +58,23 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Rebuild ONNX from TFLite even if the ONNX file exists.",
     )
+    p.add_argument(
+        "--no-bbox",
+        action="store_true",
+        help="Do not draw the salient-region square outline on the output.",
+    )
+    p.add_argument(
+        "--bbox-quantile",
+        type=float,
+        default=93.0,
+        help="Percentile of saliency magnitude used as floor for salient pixels (default 93).",
+    )
+    p.add_argument(
+        "--bbox-min-peak-frac",
+        type=float,
+        default=0.18,
+        help="Minimum saliency threshold as a fraction of the peak (default 0.18).",
+    )
     return p
 
 
@@ -79,6 +96,14 @@ def main() -> None:
         class_index=args.class_index,
         overlay_alpha=args.overlay_alpha,
         force_reconvert=args.force_reconvert,
+        draw_bounding_square=not args.no_bbox,
+        bbox_quantile=args.bbox_quantile,
+        bbox_min_peak_frac=args.bbox_min_peak_frac,
     )
     print(f"target_class={result.class_index} p={result.top_probability:.6f}", flush=True)
+    bb = result.bbox_square_xyxy
+    if bb is not None:
+        print(f"bbox_square={bb[0]},{bb[1]},{bb[2]},{bb[3]}", flush=True)
+    else:
+        print("bbox_square=", flush=True)
     print(f"Wrote {out}", flush=True)

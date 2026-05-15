@@ -15,10 +15,15 @@ export type VisionSaliencyResult = {
   probabilities: Float32Array;
   /** Row-major 299×299×3, RGB 0–255 (model input after resize). */
   rgbInputU8: Uint8ClampedArray;
+  /**
+   * Inclusive pixel bounds (x0, y0, x1, y1) of the smallest square covering high-saliency
+   * pixels (same convention as Python `SaliencyResult.bbox_square_xyxy`).
+   */
+  bboxSquareXyxy: readonly [number, number, number, number] | null;
 };
 
 /** Bump when the wire format or semantics of `VisionSaliencyResult` change. */
-export const VISION_SALIENCY_SPEC_VERSION = 0;
+export const VISION_SALIENCY_SPEC_VERSION = 1;
 
 /** Repo-relative path to the Python tool + package (see INTEGRATION.md there). */
 export const VISION_SALIENCY_TOOL_DIR = "tools/inat_vision_saliency";
