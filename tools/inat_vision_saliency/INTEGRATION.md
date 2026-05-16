@@ -46,7 +46,7 @@ The PNG overlay includes a **lime** outline of the **smallest axis-aligned squar
 
 ## GitHub Pages (browser demo)
 
-Static files live under **`docs/inat-saliency-web/`** in this repository. The page loads **TensorFlow.js** from a CDN, **`tfjs_model/`** (graph weights exported from the dequantized ONNX for the official **v25.01.15** `INatVision_Small_2_fact256_8bit.tflite`), and computes saliency with **`tf.grad`** on the predicted **softmax probability** (same objective as the Python `inat_vision_saliency` package). Preprocessing is **299×299 RGB 0–255**; a **default bear** JPEG is included so users only need to upload a photo if they want to replace it.
+Static files live under **`docs/inat-saliency-web/`** in this repository. The page loads **TensorFlow.js** from a CDN, **`tfjs_model/`** (graph weights exported from the dequantized ONNX for the official **v25.01.15** `INatVision_Small_2_fact256_8bit.tflite`), and computes saliency with **`tf.grad`** on the predicted **softmax probability** (same objective as the Python `inat_vision_saliency` package). Preprocessing is **299×299 RGB 0–255**; a **default bear** JPEG is included so users only need to upload a photo if they want to replace it. The demo **forces the TF.js CPU backend** during saliency: WebGL can return wrong conv channel depths on the backward pass for this graph (symptom: errors like “depth of input (128) must match input depth for filter 1”).
 
 Regenerate **`tfjs_model/`** after rebuilding the ONNX (e.g. first `npm run vision-saliency` run with `--download-model`):
 

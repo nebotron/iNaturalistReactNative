@@ -188,12 +188,12 @@ function drawBbox(xyxy, color = [0, 255, 90], lineWidth = 3) {
   overlayCtx.restore();
 }
 
+/**
+ * Use the CPU backend for this GraphModel + tf.grad path.
+ * WebGL can mis-report conv channel depths during backprop (e.g. "depth 128" vs filter in_depth 1).
+ */
 async function pickBackend() {
-  try {
-    await tf.setBackend("webgl");
-  } catch {
-    await tf.setBackend("cpu");
-  }
+  await tf.setBackend("cpu");
   await tf.ready();
 }
 
@@ -202,14 +202,14 @@ async function runSaliency() {
 
   runBtn.disabled = true;
   outSection.hidden = false;
-  inputCtx.drawImage(imageBitmap, 0, 0, W, H);
 
   const rgbFlat = imageToNHWCFloat(imageBitmap);
-  const nhwc = tf.tensor4d(rgbFlat, [1, H, W, C]);
+  const nhwc = tf.tensor(rgbFlat, [1, H, W, C], "float32");
   const modelLayout = tf.transpose(nhwc, [0, 2, 3, 1]);
   nhwc.dispose();
 
-  const xv = tf.variable(modelLayout);
+  const xv = tf.variable(tf.clone(modelLayout));
+  modelLayout.dispose();
   try {
     setStatus("Forward pass (top class)…");
     const classIndex = tf.tidy(() => {
@@ -255,13 +255,22 @@ imageFile.addEventListener("change", async () => {
   const f = imageFile.files?.[0];
   if (!f) return;
   try {
-    imageBitmap = await createImageBitmap(f);
+    imageBitmap = await createImageBitmap(f, {
+      imageOrientation: "from-image",
+      premultiplyAlpha: "none",
+    });
     setStatus("Running saliency…");
     await runSaliency();
   } catch (e) {
     imageBitmap = null;
     runBtn.disabled = true;
-    setStatus(`Could not read image: ${e}`, true);
+    const msg = e?.message || String(e);
+    setStatus(
+      msg.includes("conv2d") || msg.includes("depth")
+        ? `Saliency failed: ${msg}\n(Try a different photo format, e.g. JPEG or PNG.)`
+        : `Could not load or run on this image: ${msg}`,
+      true,
+    );
   }
 });
 
@@ -273,7 +282,7 @@ async function init() {
   try {
     await pickBackend();
     setStatus(
-      `Loading TensorFlow.js graph model (~82 MB, first visit may take a while)… (${tf.getBackend()})`,
+      `Loading TensorFlow.js graph model (~82 MB, first visit may take a while)… (backend: ${tf.getBackend()}, required for stable gradients)`,
     );
     model = await tf.loadGraphModel(MODEL_URL);
 
@@ -281,7 +290,7 @@ async function init() {
     const bearRes = await fetch(DEFAULT_BEAR_URL, { cache: "force-cache" });
     if (!bearRes.ok) throw new Error(`default-bear.jpg HTTP ${bearRes.status}`);
     const bearBlob = await bearRes.blob();
-    imageBitmap = await createImageBitmap(bearBlob);
+    imageBitmap = await createImageBitmap(bearBlob, { premultiplyAlpha: "none" });
 
     setStatus("Running saliency on the sample image…");
     await runSaliency();
