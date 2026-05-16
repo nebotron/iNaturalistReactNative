@@ -11,13 +11,16 @@
     <main>
       <h1>iNaturalist vision saliency</h1>
       <p class="lead">
-        Runs entirely in your browser with <strong>ONNX Runtime Web</strong> (WASM) on the same dequantized ONNX as the
-        Python tool — weights match the official
+        Default mode runs in your browser with <strong>ONNX Runtime Web</strong> (WASM) on the same dequantized ONNX
+        as the Python tool — weights match the official
         <a href="https://github.com/inaturalist/model-files/releases/tag/v25.01.15">v25.01.15</a>
-        <code>INatVision_Small_2_fact256_8bit.tflite</code> release. Preprocessing: 299×299, RGB 0–255. Saliency uses a
-        <strong>SmoothGrad-style</strong> Monte Carlo estimate from forward passes only (TensorFlow.js
-        <code>tf.grad</code> on a TF.js export of this graph fails in every backend we tested with a conv2d depth
-        mismatch during backprop, so this demo does not use TF.js).
+        <code>INatVision_Small_2_fact256_8bit.tflite</code> release. Preprocessing: 299×299, RGB 0–255. Static pages
+        cannot run PyTorch autograd; saliency here uses a <strong>SmoothGrad-style</strong> Monte Carlo estimate (forward
+        passes only). For an <strong>exact input gradient</strong> (∂ softmax top-class / ∂ pixels, same as
+        <code>inat_vision_saliency</code>), add
+        <code>?gradApi=http://127.0.0.1:8765</code> to this URL and run
+        <code>python3 tools/inat_vision_saliency/scripts/saliency_grad_http_server.py</code> locally (see
+        <code>INTEGRATION.md</code>).
       </p>
 
       <section class="panel">
@@ -67,9 +70,11 @@
         <summary>Technical note</summary>
         <p>
           The Python package uses PyTorch autograd for an exact gradient of the predicted <strong>softmax</strong>
-          probability. This page approximates that quantity with forward-only ORT runs (SmoothGrad family). For exact
-          ∂p/∂pixels matching production tooling, use <code>npm run vision-saliency</code> or
-          <code>python -m inat_vision_saliency</code> in <code>tools/inat_vision_saliency/</code>.
+          probability. ONNX Runtime Web does not expose reverse-mode autograd for arbitrary graphs, and exporting a
+          single “gradient ONNX” from the onnx2torch stack is not currently viable, so the default demo approximates
+          ∂p/∂pixels with SmoothGrad. For the exact map in a browser session, use the optional
+          <code>?gradApi=…</code> local server above, or run <code>npm run vision-saliency</code> /
+          <code>python -m inat_vision_saliency</code>.
         </p>
       </details>
 

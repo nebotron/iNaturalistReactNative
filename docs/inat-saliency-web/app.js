@@ -1,8 +1,12 @@
 /**
- * Browser saliency: ONNX Runtime Web (WASM) + SmoothGrad-style Monte Carlo estimate
- * of ∂ p(predicted class) / ∂ pixels (forward passes only).
+ * Browser saliency for the iNat vision ONNX export.
  *
- * Requires global `ort` from onnxruntime-web (see index.html).
+ * - Default: ONNX Runtime Web (WASM) + SmoothGrad-style Monte Carlo (forward passes only).
+ * - Optional: ``?gradApi=http://127.0.0.1:8765`` posts the canvas JPEG to a local Python server
+ *   that runs true PyTorch autograd (same stack as ``inat_vision_saliency``). See
+ *   ``tools/inat_vision_saliency/scripts/saliency_grad_http_server.py``.
+ *
+ * Requires global ``ort`` from onnxruntime-web unless ``gradApi`` is set (see index.html).
  */
 
 import { TURBO_LUT } from "./turbo_lut.js";
@@ -19,8 +23,14 @@ const L = H * W * C;
 
 const $ = (id) => document.getElementById(id);
 
+const gradApiBase = (
+  new URLSearchParams(window.location.search).get("gradApi") || ""
+)
+  .trim()
+  .replace(/\/$/, "");
+
 const ort = /** @type {any} */ (window).ort;
-if (!ort?.InferenceSession?.create) {
+if (!gradApiBase && !ort?.InferenceSession?.create) {
   const st = $("status");
   if (st) {
     st.textContent =
@@ -251,6 +261,57 @@ function drawBbox(xyxy, color = [0, 255, 90], lineWidth = 3) {
   overlayCtx.restore();
 }
 
+function decodeMagB64(b64) {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) {
+    bytes[i] = bin.charCodeAt(i);
+  }
+  if (bytes.byteLength !== H * W * 4) {
+    throw new Error(`Unexpected mag payload size ${bytes.byteLength}`);
+  }
+  return new Float32Array(bytes.buffer, bytes.byteOffset, H * W);
+}
+
+async function runSaliencyExactBackend(x0) {
+  const jpegBlob = await new Promise((resolve, reject) => {
+    inputCanvas.toBlob(
+      (b) => {
+        if (b) resolve(b);
+        else reject(new Error("canvas.toBlob failed"));
+      },
+      "image/jpeg",
+      0.92,
+    );
+  });
+  const url = `${gradApiBase}/saliency`;
+  setStatus("Requesting exact PyTorch gradient from local server…");
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "image/jpeg" },
+    body: jpegBlob,
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`gradApi HTTP ${res.status}: ${text.slice(0, 500)}`);
+  }
+  const j = /** @type {any} */ (JSON.parse(text));
+  const mag = decodeMagB64(j.mag_b64);
+  colorizeAndBlend(x0, mag, 0.55);
+  let bbox = null;
+  if (Array.isArray(j.bbox_square_xyxy) && j.bbox_square_xyxy.length === 4) {
+    bbox = j.bbox_square_xyxy.map((v) => Number(v));
+  }
+  if (!bbox) bbox = minimalSquareBbox(mag);
+  if (bbox) drawBbox(bbox);
+  setStatus(
+    `Top class index: ${j.class_index}\n`
+      + `Exact gradient: PyTorch autograd via local server (${url}).\n`
+      + `p(top) ≈ ${Number(j.top_probability).toFixed(6)}\n`
+      + (bbox ? `Salient square (inclusive): ${bbox.join(", ")}` : "No salient square."),
+  );
+}
+
 async function createSessionFromBuffer(buffer) {
   ort.env.wasm.numThreads = 1;
   ort.env.wasm.simd = true;
@@ -261,16 +322,11 @@ async function createSessionFromBuffer(buffer) {
   });
 }
 
-async function runSaliency() {
-  if (!session || !imageBitmap) return;
+async function runSaliencySmoothGrad(x0) {
+  if (!session) return;
 
   const nSamples = Number(samplesEl.value);
   const sigma = Number(sigmaEl.value);
-  runBtn.disabled = true;
-  outSection.hidden = false;
-
-  const x0 = imageToInputTensor(imageBitmap);
-  inputCtx.drawImage(imageBitmap, 0, 0, W, H);
 
   const feeds0 = {
     [INPUT_NAME]: new ort.Tensor("float32", x0, [1, H, W, C]),
@@ -323,6 +379,25 @@ async function runSaliency() {
       + `SmoothGrad estimate: ${nSamples} forward passes, σ=${sigma}.\n`
       + (bbox ? `Salient square (inclusive): ${bbox.join(", ")}` : "No salient square (empty mask)."),
   );
+}
+
+async function runSaliency() {
+  if (!imageBitmap) return;
+  runBtn.disabled = true;
+  outSection.hidden = false;
+
+  const x0 = imageToInputTensor(imageBitmap);
+  inputCtx.drawImage(imageBitmap, 0, 0, W, H);
+
+  try {
+    if (gradApiBase) {
+      await runSaliencyExactBackend(x0);
+    } else {
+      await runSaliencySmoothGrad(x0);
+    }
+  } catch (e) {
+    setStatus(String(e?.message || e), true);
+  }
   runBtn.disabled = false;
 }
 
@@ -360,18 +435,31 @@ runBtn.addEventListener("click", () => {
 });
 
 async function init() {
+  const mainEl = document.querySelector("main");
+  if (gradApiBase && mainEl) {
+    mainEl.classList.add("grad-api-backend");
+    samplesEl.disabled = true;
+    sigmaEl.disabled = true;
+  }
+
   try {
-    setStatus(
-      "Loading vision ONNX (~82 MB, first visit may take a while)…",
-    );
-    const res = await fetch(MODEL_URL, { cache: "force-cache" });
-    if (!res.ok) {
-      throw new Error(
-        `Could not fetch inat_vision_dequant.onnx (${res.status}). It is bundled next to this page in git.`,
+    if (gradApiBase) {
+      setStatus(
+        `Exact-gradient mode: gradApi=${gradApiBase} (no bundled ONNX download).`,
       );
+    } else {
+      setStatus(
+        "Loading vision ONNX (~82 MB, first visit may take a while)…",
+      );
+      const res = await fetch(MODEL_URL, { cache: "force-cache" });
+      if (!res.ok) {
+        throw new Error(
+          `Could not fetch inat_vision_dequant.onnx (${res.status}). It is bundled next to this page in git.`,
+        );
+      }
+      const buf = await res.arrayBuffer();
+      session = await createSessionFromBuffer(buf);
     }
-    const buf = await res.arrayBuffer();
-    session = await createSessionFromBuffer(buf);
 
     setStatus("Loading default bear photo…");
     const bearRes = await fetch(DEFAULT_BEAR_URL, { cache: "force-cache" });
@@ -382,6 +470,7 @@ async function init() {
 
     setStatus("Running saliency on the sample image…");
     await runSaliency();
+    runBtn.disabled = false;
   } catch (e) {
     setStatus(String(e?.message || e), true);
     runBtn.disabled = true;

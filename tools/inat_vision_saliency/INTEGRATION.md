@@ -60,6 +60,17 @@ From the repository root you can also run an **end-to-end check** on the same be
 npm run test:vision-saliency-example
 ```
 
+### Exact PyTorch gradient in the browser (local dev)
+
+Static **GitHub Pages** cannot run PyTorch autograd. For the **same** ∂(softmax top-class)/∂pixels map as `inat_vision_saliency` while using the HTML demo UI, run the small stdlib HTTP helper and open the page with a `gradApi` query parameter (no ~82 MB ONNX download in that mode):
+
+```bash
+python3 tools/inat_vision_saliency/scripts/saliency_grad_http_server.py --port 8765
+# Then open e.g. docs/inat-saliency-web/index.html?gradApi=http://127.0.0.1:8765
+```
+
+The demo POSTs a JPEG of the 299×299 canvas to `POST /saliency` on that origin; the server returns JSON with a base64 float32 saliency magnitude (`299×299`, row-major). **Do not expose this server to untrusted networks** (no auth; intended for localhost).
+
 To publish: enable **GitHub Pages** (for example **GitHub Actions** with **Deploy iNat saliency web to GitHub Pages**, or publish the `docs/inat-saliency-web` folder as the site root).
 
 ## React Native integration (roadmap)
@@ -88,6 +99,7 @@ Suggested phases:
 | `saliency.py` | Legacy shim: `python saliency.py` with `PYTHONPATH` injection. |
 | `convert_tflite_to_onnx.py` | Subprocess entry for TensorFlow / `tf2onnx` (avoid importing TF next to PyTorch). |
 | `pyproject.toml` | Package metadata + `inat-vision-saliency` console script. |
+| `scripts/` | `saliency_grad_http_server.py` — optional localhost helper for exact-gradient saliency in the static web demo (`?gradApi=…`). |
 | `examples/` | Gallery generator and sample assets. |
 | `docs/inat-saliency-web/` (repo root) | Static GitHub Pages demo: ONNX Runtime Web + bundled `inat_vision_dequant.onnx` + default bear (see **GitHub Pages** above). |
 
