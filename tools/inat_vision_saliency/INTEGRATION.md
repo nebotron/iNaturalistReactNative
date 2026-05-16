@@ -46,12 +46,12 @@ The PNG overlay includes a **lime** outline of the **smallest axis-aligned squar
 
 ## GitHub Pages (browser demo)
 
-Static files live under **`docs/inat-saliency-web/`** in this repository. The page loads **TensorFlow.js** from a CDN, **`tfjs_model/`** (graph weights exported from the dequantized ONNX for the official **v25.01.15** `INatVision_Small_2_fact256_8bit.tflite`), and computes saliency with **`tf.grad`** on the predicted **softmax probability** (same objective as the Python `inat_vision_saliency` package). Preprocessing is **299×299 RGB 0–255**; a **default bear** JPEG is included so users only need to upload a photo if they want to replace it. The demo **forces the TF.js CPU backend** during saliency: WebGL can return wrong conv channel depths on the backward pass for this graph (symptom: errors like “depth of input (128) must match input depth for filter 1”).
+Static files live under **`docs/inat-saliency-web/`** in this repository. The page loads **ONNX Runtime Web** (WASM) from a CDN, **`inat_vision_dequant.onnx`** (the same dequantized ONNX the Python tool uses for official **v25.01.15** `INatVision_Small_2_fact256_8bit.tflite` weights), and estimates saliency with a **SmoothGrad-style** Monte Carlo scheme: many noisy forward passes, accumulating a sensitivity map toward the predicted class’s **softmax probability** (interpretability objective aligned with the Python package’s gradient saliency, without relying on broken TF.js autograd for this graph). Preprocessing is **299×299 RGB 0–255**; input to ORT is float32 shaped **`[1, 299, 299, 3]`** (NHWC). A **default bear** JPEG is included so users only need to upload a photo if they want to replace it.
 
-Regenerate **`tfjs_model/`** after rebuilding the ONNX (e.g. first `npm run vision-saliency` run with `--download-model`):
+After regenerating the cached ONNX (for example the first `npm run vision-saliency -- … --download-model` run), refresh the file shipped with the demo:
 
 ```bash
-bash tools/inat_vision_saliency/scripts/export_tfjs_graph_model.sh
+cp tools/inat_vision_saliency/.cache/inat_vision_dequant.onnx docs/inat-saliency-web/inat_vision_dequant.onnx
 ```
 
 From the repository root you can also run an **end-to-end check** on the same bear JPEG used by the GitHub Pages demo (Python path, writes a PNG under `/tmp`):
@@ -61,8 +61,6 @@ npm run test:vision-saliency-example
 ```
 
 To publish: enable **GitHub Pages** (for example **GitHub Actions** with **Deploy iNat saliency web to GitHub Pages**, or publish the `docs/inat-saliency-web` folder as the site root).
-
-The converter’s TensorFlow **SavedModel** uses input shape **`[batch, 299, 3, 299]`** (transpose of NHWC); the web app applies the same transpose automatically.
 
 ## React Native integration (roadmap)
 
@@ -90,9 +88,8 @@ Suggested phases:
 | `saliency.py` | Legacy shim: `python saliency.py` with `PYTHONPATH` injection. |
 | `convert_tflite_to_onnx.py` | Subprocess entry for TensorFlow / `tf2onnx` (avoid importing TF next to PyTorch). |
 | `pyproject.toml` | Package metadata + `inat-vision-saliency` console script. |
-| `scripts/` | `export_tfjs_graph_model.sh` — rebuild `docs/inat-saliency-web/tfjs_model/` from cached ONNX. |
 | `examples/` | Gallery generator and sample assets. |
-| `docs/inat-saliency-web/` (repo root) | Static GitHub Pages demo: TensorFlow.js + `tf.grad`, ships `tfjs_model/` + default bear (see **GitHub Pages** above). |
+| `docs/inat-saliency-web/` (repo root) | Static GitHub Pages demo: ONNX Runtime Web + bundled `inat_vision_dequant.onnx` + default bear (see **GitHub Pages** above). |
 
 ## Notes
 

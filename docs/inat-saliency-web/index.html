@@ -5,18 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>iNaturalist vision saliency (browser)</title>
     <link rel="stylesheet" href="./styles.css" />
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/ort.min.js"></script>
   </head>
   <body>
     <main>
       <h1>iNaturalist vision saliency</h1>
       <p class="lead">
-        Runs entirely in your browser with <strong>TensorFlow.js</strong> and <strong>automatic differentiation</strong>
-        (<code>tf.grad</code>) on a graph exported from the same dequantized ONNX as the Python tool. Weights match the
+        Runs entirely in your browser with <strong>ONNX Runtime Web</strong> (WASM) on the same dequantized ONNX as the
+        Python tool — weights match the official
         <a href="https://github.com/inaturalist/model-files/releases/tag/v25.01.15">v25.01.15</a>
-        <code>INatVision_Small_2_fact256_8bit.tflite</code> release. Preprocessing: 299×299, RGB 0–255 (same as the
-        mobile model). The page uses the <strong>CPU</strong> TensorFlow.js backend so <code>tf.grad</code> stays
-        numerically reliable (WebGL can mis-handle conv depth during backprop on some graphs).
+        <code>INatVision_Small_2_fact256_8bit.tflite</code> release. Preprocessing: 299×299, RGB 0–255. Saliency uses a
+        <strong>SmoothGrad-style</strong> Monte Carlo estimate from forward passes only (TensorFlow.js
+        <code>tf.grad</code> on a TF.js export of this graph fails in every backend we tested with a conv2d depth
+        mismatch during backprop, so this demo does not use TF.js).
       </p>
 
       <section class="panel">
@@ -27,6 +28,24 @@
             <p class="hint">Starts with a sample bear image. Choose another photo to replace it.</p>
           </div>
         </div>
+
+        <div class="param-block">
+          <label for="samples">Monte Carlo samples: <span id="samplesVal">28</span></label><br />
+          <input id="samples" type="range" min="8" max="64" value="28" step="1" />
+          <p class="param-desc">
+            More noisy forward passes reduce variance in the estimated sensitivity map; each sample adds one ORT run.
+          </p>
+        </div>
+
+        <div class="param-block">
+          <label for="sigma">Noise scale (σ): <span id="sigmaVal">10</span></label><br />
+          <input id="sigma" type="range" min="2" max="24" value="10" step="1" />
+          <p class="param-desc">
+            Gaussian noise on RGB (0–255 scale, then clipped) before each perturbed forward; larger σ smooths over a
+            wider neighborhood of the input.
+          </p>
+        </div>
+
         <div class="row">
           <button id="runBtn" type="button" disabled>Run saliency again</button>
         </div>
@@ -47,10 +66,10 @@
       <details>
         <summary>Technical note</summary>
         <p>
-          The SavedModel input layout from the ONNX converter is <code>[1, 299, 3, 299]</code> (a transpose of NHWC).
-          The page transposes your image into that layout for inference and maps gradients back to NHWC for display.
-          Regenerate <code>tfjs_model/</code> with <code>tools/inat_vision_saliency/scripts/export_tfjs_graph_model.sh</code>
-          after rebuilding <code>inat_vision_dequant.onnx</code>.
+          The Python package uses PyTorch autograd for an exact gradient of the predicted <strong>softmax</strong>
+          probability. This page approximates that quantity with forward-only ORT runs (SmoothGrad family). For exact
+          ∂p/∂pixels matching production tooling, use <code>npm run vision-saliency</code> or
+          <code>python -m inat_vision_saliency</code> in <code>tools/inat_vision_saliency/</code>.
         </p>
       </details>
 

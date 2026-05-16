@@ -1,43 +1,50 @@
 /**
- * Browser saliency: TensorFlow.js GraphModel + tf.grad on softmax class probability.
- * Model input layout from converter: [1, 299, 3, 299] = transpose(NHWC, [0,2,3,1]).
+ * Browser saliency: ONNX Runtime Web (WASM) + SmoothGrad-style Monte Carlo estimate
+ * of ∂ p(predicted class) / ∂ pixels (forward passes only).
  *
- * Requires global `tf` from @tensorflow/tfjs (see index.html).
+ * Requires global `ort` from onnxruntime-web (see index.html).
  */
 
 import { TURBO_LUT } from "./turbo_lut.js";
 
-const MODEL_URL = new URL("./tfjs_model/model.json", import.meta.url).href;
+const MODEL_URL = new URL("./inat_vision_dequant.onnx", import.meta.url).href;
 const DEFAULT_BEAR_URL = new URL("./default-bear.jpg", import.meta.url).href;
-const INPUT_KEY = "serving_default_input_1__0";
-const OUTPUT_NODE = "Identity";
+const INPUT_NAME = "serving_default_input_1:0";
+const OUTPUT_NAME = "StatefulPartitionedCall:0";
 
 const H = 299;
 const W = 299;
 const C = 3;
 const L = H * W * C;
 
-const tf = /** @type {any} */ (window).tf;
-if (!tf?.loadGraphModel) {
-  const st = document.getElementById("status");
+const $ = (id) => document.getElementById(id);
+
+const ort = /** @type {any} */ (window).ort;
+if (!ort?.InferenceSession?.create) {
+  const st = $("status");
   if (st) {
-    st.textContent = "TensorFlow.js failed to load.";
+    st.textContent =
+      "ONNX Runtime Web failed to load. Check your network connection or browser extensions.";
     st.classList.add("error");
   }
-  throw new Error("tf missing");
+  throw new Error("ort missing");
 }
 
-const $ = (id) => document.getElementById(id);
 const statusEl = $("status");
 const runBtn = $("runBtn");
 const imageFile = $("imageFile");
+const samplesEl = $("samples");
+const samplesVal = $("samplesVal");
+const sigmaEl = $("sigma");
+const sigmaVal = $("sigmaVal");
 const outSection = $("outSection");
 const inputCanvas = $("inputCanvas");
 const overlayCanvas = $("overlayCanvas");
+
 const inputCtx = inputCanvas.getContext("2d", { willReadFrequently: true });
 const overlayCtx = overlayCanvas.getContext("2d", { willReadFrequently: true });
 
-let model = null;
+let session = null;
 let imageBitmap = null;
 
 function setStatus(text, isError = false) {
@@ -47,6 +54,48 @@ function setStatus(text, isError = false) {
 
 function clamp(v, lo, hi) {
   return Math.min(hi, Math.max(lo, v));
+}
+
+function softmaxInPlace(logits) {
+  let m = -Infinity;
+  for (let i = 0; i < logits.length; i += 1) {
+    if (logits[i] > m) m = logits[i];
+  }
+  let s = 0;
+  for (let i = 0; i < logits.length; i += 1) {
+    const e = Math.exp(logits[i] - m);
+    logits[i] = e;
+    s += e;
+  }
+  for (let i = 0; i < logits.length; i += 1) {
+    logits[i] /= s;
+  }
+}
+
+function argmax(arr) {
+  let j = 0;
+  let m = -Infinity;
+  for (let i = 0; i < arr.length; i += 1) {
+    if (arr[i] > m) {
+      m = arr[i];
+      j = i;
+    }
+  }
+  return j;
+}
+
+function randn(out) {
+  for (let i = 0; i < out.length; i += 2) {
+    let u = 0;
+    let v = 0;
+    while (u === 0) u = Math.random();
+    while (v === 0) v = Math.random();
+    const mag = Math.sqrt(-2 * Math.log(u));
+    out[i] = mag * Math.cos(2 * Math.PI * v);
+    if (i + 1 < out.length) {
+      out[i + 1] = mag * Math.sin(2 * Math.PI * v);
+    }
+  }
 }
 
 function percentileLinear(sorted, q) {
@@ -124,8 +173,7 @@ function minimalSquareBbox(mag, quantile = 93, minPeakFrac = 0.18) {
   return [x0, y0, x1, y1];
 }
 
-/** Float32Array length L row-major NHWC RGB 0–255 */
-function imageToNHWCFloat(bitmap) {
+function imageToInputTensor(bitmap) {
   inputCtx.imageSmoothingEnabled = true;
   inputCtx.imageSmoothingQuality = "high";
   inputCtx.clearRect(0, 0, W, H);
@@ -143,6 +191,21 @@ function imageToNHWCFloat(bitmap) {
     }
   }
   return x;
+}
+
+function magnitudeMeanAbsChannels(grad) {
+  const mag = new Float32Array(H * W);
+  let p = 0;
+  for (let y = 0; y < H; y += 1) {
+    for (let x = 0; x < W; x += 1) {
+      const ax = Math.abs(grad[p]);
+      const ay = Math.abs(grad[p + 1]);
+      const az = Math.abs(grad[p + 2]);
+      mag[y * W + x] = (ax + ay + az) / 3;
+      p += 3;
+    }
+  }
+  return mag;
 }
 
 function colorizeAndBlend(rgbFlat, mag, alpha = 0.55) {
@@ -188,67 +251,84 @@ function drawBbox(xyxy, color = [0, 255, 90], lineWidth = 3) {
   overlayCtx.restore();
 }
 
-/**
- * Use the CPU backend for this GraphModel + tf.grad path.
- * WebGL can mis-report conv channel depths during backprop (e.g. "depth 128" vs filter in_depth 1).
- */
-async function pickBackend() {
-  await tf.setBackend("cpu");
-  await tf.ready();
+async function createSessionFromBuffer(buffer) {
+  ort.env.wasm.numThreads = 1;
+  ort.env.wasm.simd = true;
+  ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.3/dist/";
+  return ort.InferenceSession.create(buffer, {
+    executionProviders: ["wasm"],
+    graphOptimizationLevel: "all",
+  });
 }
 
 async function runSaliency() {
-  if (!model || !imageBitmap) return;
+  if (!session || !imageBitmap) return;
 
+  const nSamples = Number(samplesEl.value);
+  const sigma = Number(sigmaEl.value);
   runBtn.disabled = true;
   outSection.hidden = false;
 
-  const rgbFlat = imageToNHWCFloat(imageBitmap);
-  const nhwc = tf.tensor(rgbFlat, [1, H, W, C], "float32");
-  const modelLayout = tf.transpose(nhwc, [0, 2, 3, 1]);
-  nhwc.dispose();
+  const x0 = imageToInputTensor(imageBitmap);
+  inputCtx.drawImage(imageBitmap, 0, 0, W, H);
 
-  const xv = tf.variable(tf.clone(modelLayout));
-  modelLayout.dispose();
-  try {
-    setStatus("Forward pass (top class)…");
-    const classIndex = tf.tidy(() => {
-      const probs = model.execute({ [INPUT_KEY]: xv }, OUTPUT_NODE);
-      return probs.argMax(1).dataSync()[0];
-    });
+  const feeds0 = {
+    [INPUT_NAME]: new ort.Tensor("float32", x0, [1, H, W, C]),
+  };
+  setStatus("Baseline forward pass…");
+  const out0 = await session.run(feeds0);
+  const logits0 = new Float32Array(out0[OUTPUT_NAME].data);
+  softmaxInPlace(logits0);
+  const classIndex = argmax(logits0);
+  const p0 = logits0[classIndex];
 
-    setStatus(`Backprop: ∂ p(class ${classIndex}) / ∂ input pixels…`);
-    const f = () => {
-      const probs = model.execute({ [INPUT_KEY]: xv }, OUTPUT_NODE);
-      return probs.slice([0, classIndex], [1, 1]).sum();
+  const acc = new Float32Array(L);
+  const xNoisy = new Float32Array(L);
+  const z = new Float32Array(L);
+
+  for (let s = 0; s < nSamples; s += 1) {
+    randn(z);
+    for (let i = 0; i < L; i += 1) {
+      xNoisy[i] = clamp(x0[i] + sigma * z[i], 0, 255);
+    }
+    const feeds = {
+      [INPUT_NAME]: new ort.Tensor("float32", xNoisy, [1, H, W, C]),
     };
-    const g = tf.grad(f);
-    const dXm = g(xv);
-    const dNHWC = tf.transpose(dXm, [0, 2, 3, 1]);
-    dXm.dispose();
-    const magT = tf.mean(tf.abs(dNHWC), -1);
-    dNHWC.dispose();
-    const magSqueezed = tf.squeeze(magT, [0]);
-    magT.dispose();
-    const mag = Float32Array.from(magSqueezed.dataSync());
-    magSqueezed.dispose();
-
-    colorizeAndBlend(rgbFlat, mag, 0.55);
-    const bbox = minimalSquareBbox(mag);
-    if (bbox) drawBbox(bbox);
-
-    setStatus(
-      `Top class index: ${classIndex}\n`
-        + "Saliency: gradient magnitude of the predicted softmax probability (mean |∂/∂R|, |∂/∂G|, |∂/∂B|) per pixel.\n"
-        + (bbox ? `Salient square (inclusive): ${bbox.join(", ")}` : "No salient square (empty mask)."),
-    );
-  } catch (e) {
-    setStatus(`Saliency failed: ${e?.message || e}`, true);
-    throw e;
-  } finally {
-    xv.dispose();
-    runBtn.disabled = false;
+    const out = await session.run(feeds);
+    const logits = new Float32Array(out[OUTPUT_NAME].data);
+    softmaxInPlace(logits);
+    const diff = logits[classIndex] - p0;
+    const scale = diff / sigma;
+    for (let i = 0; i < L; i += 1) {
+      acc[i] += z[i] * scale;
+    }
+    if (s % 4 === 3) {
+      setStatus(`Monte Carlo saliency: ${s + 1} / ${nSamples} samples…`);
+      await new Promise((r) => setTimeout(r, 0));
+    }
   }
+
+  const inv = 1 / nSamples;
+  for (let i = 0; i < L; i += 1) {
+    acc[i] *= inv;
+  }
+
+  const mag = magnitudeMeanAbsChannels(acc);
+  colorizeAndBlend(x0, mag, 0.55);
+  const bbox = minimalSquareBbox(mag);
+  if (bbox) drawBbox(bbox);
+
+  setStatus(
+    `Top class index: ${classIndex}\n`
+      + `SmoothGrad estimate: ${nSamples} forward passes, σ=${sigma}.\n`
+      + (bbox ? `Salient square (inclusive): ${bbox.join(", ")}` : "No salient square (empty mask)."),
+  );
+  runBtn.disabled = false;
+}
+
+function updateSliders() {
+  samplesVal.textContent = samplesEl.value;
+  sigmaVal.textContent = sigmaEl.value;
 }
 
 imageFile.addEventListener("change", async () => {
@@ -264,33 +344,41 @@ imageFile.addEventListener("change", async () => {
   } catch (e) {
     imageBitmap = null;
     runBtn.disabled = true;
-    const msg = e?.message || String(e);
-    setStatus(
-      msg.includes("conv2d") || msg.includes("depth")
-        ? `Saliency failed: ${msg}\n(Try a different photo format, e.g. JPEG or PNG.)`
-        : `Could not load or run on this image: ${msg}`,
-      true,
-    );
+    setStatus(`Could not load or run on this image: ${e?.message || e}`, true);
   }
 });
 
+samplesEl.addEventListener("input", updateSliders);
+sigmaEl.addEventListener("input", updateSliders);
+updateSliders();
+
 runBtn.addEventListener("click", () => {
-  runSaliency().catch(() => {});
+  runSaliency().catch((e) => {
+    setStatus(`Run failed: ${e?.message || e}`, true);
+    runBtn.disabled = false;
+  });
 });
 
 async function init() {
   try {
-    await pickBackend();
     setStatus(
-      `Loading TensorFlow.js graph model (~82 MB, first visit may take a while)… (backend: ${tf.getBackend()}, required for stable gradients)`,
+      "Loading vision ONNX (~82 MB, first visit may take a while)…",
     );
-    model = await tf.loadGraphModel(MODEL_URL);
+    const res = await fetch(MODEL_URL, { cache: "force-cache" });
+    if (!res.ok) {
+      throw new Error(
+        `Could not fetch inat_vision_dequant.onnx (${res.status}). It is bundled next to this page in git.`,
+      );
+    }
+    const buf = await res.arrayBuffer();
+    session = await createSessionFromBuffer(buf);
 
     setStatus("Loading default bear photo…");
     const bearRes = await fetch(DEFAULT_BEAR_URL, { cache: "force-cache" });
     if (!bearRes.ok) throw new Error(`default-bear.jpg HTTP ${bearRes.status}`);
-    const bearBlob = await bearRes.blob();
-    imageBitmap = await createImageBitmap(bearBlob, { premultiplyAlpha: "none" });
+    imageBitmap = await createImageBitmap(await bearRes.blob(), {
+      premultiplyAlpha: "none",
+    });
 
     setStatus("Running saliency on the sample image…");
     await runSaliency();

@@ -141,6 +141,17 @@ details summary {
   color: var(--text);
 }
 
+.param-block {
+  margin-bottom: 1rem;
+}
+
+.param-desc {
+  margin: 0.35rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  max-width: 52rem;
+}
+
 .hint {
   margin: 0.25rem 0 0;
   font-size: 0.8rem;
