@@ -54,6 +54,12 @@ Regenerate **`tfjs_model/`** after rebuilding the ONNX (e.g. first `npm run visi
 bash tools/inat_vision_saliency/scripts/export_tfjs_graph_model.sh
 ```
 
+From the repository root you can also run an **end-to-end check** on the same bear JPEG used by the GitHub Pages demo (Python path, writes a PNG under `/tmp`):
+
+```bash
+npm run test:vision-saliency-example
+```
+
 To publish: enable **GitHub Pages** (for example **GitHub Actions** with **Deploy iNat saliency web to GitHub Pages**, or publish the `docs/inat-saliency-web` folder as the site root).
 
 The converter’s TensorFlow **SavedModel** uses input shape **`[batch, 299, 3, 299]`** (transpose of NHWC); the web app applies the same transpose automatically.

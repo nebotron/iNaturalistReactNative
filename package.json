@@ -43,6 +43,7 @@
     "icons": "./scripts/update-icon-font.sh",
     "add-example-model": "babel-node scripts/add-example-model.js",
     "vision-saliency": "node scripts/run-vision-saliency.js",
+    "test:vision-saliency-example": "bash scripts/e2e-vision-saliency-example.sh",
     "reassure": "reassure"
   },
   "dependencies": {
