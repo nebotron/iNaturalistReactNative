@@ -1,0 +1,1255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=390, initial-scale=1.0">
+<title>iNaturalist – Upload Observation Demo</title>
+<style>
+  /* ── Reset / Base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #1a1a1a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    font-family: -apple-system, 'Lato-Regular', 'Helvetica Neue', sans-serif;
+  }
+
+  /* ── iNaturalist palette ── */
+  :root {
+    --inat-green:      #74AC00;
+    --accessible-green:#5D8017;
+    --black:           #000000;
+    --dark-gray:       #454545;
+    --dark-gray-dis:   #828181;
+    --light-gray:      #E8E8E8;
+    --medium-gray:     #BFBFBF;
+    --white:           #ffffff;
+    --warning-red:     #9B1010;
+    --warning-yellow:  #E6A939;
+    --yellow:          #FFD600;
+  }
+
+  /* ── Phone frame ── */
+  #phone {
+    width: 390px;
+    height: 844px;
+    background: var(--white);
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    box-shadow:
+      0 0 0 2px #333,
+      0 0 0 8px #111,
+      0 30px 80px rgba(0,0,0,.8);
+  }
+
+  /* Status bar */
+  .status-bar {
+    height: 44px;
+    background: var(--white);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--black);
+    flex-shrink: 0;
+  }
+  .status-bar .time { font-weight: 700; font-size: 15px; }
+  .status-bar .icons { display: flex; gap: 5px; align-items: center; }
+
+  /* Screens – all stacked, only .active is visible */
+  .screen {
+    position: absolute;
+    inset: 0;
+    background: var(--white);
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .35s ease;
+  }
+  .screen.active { opacity: 1; pointer-events: auto; }
+
+  /* ── Header ── */
+  .header {
+    background: var(--white);
+    border-bottom: 1px solid var(--light-gray);
+    padding: 10px 16px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .header-title {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--dark-gray);
+  }
+  .header-back {
+    font-size: 15px;
+    color: var(--inat-green);
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* ── Bottom tab bar ── */
+  .tab-bar {
+    height: 83px;
+    background: var(--white);
+    border-top: 1px solid var(--light-gray);
+    display: flex;
+    align-items: flex-start;
+    padding-top: 8px;
+    flex-shrink: 0;
+  }
+  .tab {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    cursor: pointer;
+  }
+  .tab svg { width: 24px; height: 24px; }
+  .tab span { font-size: 10px; color: var(--medium-gray); }
+  .tab.active span { color: var(--inat-green); }
+  .tab.active svg path, .tab.active svg circle, .tab.active svg rect {
+    fill: var(--inat-green);
+  }
+
+  /* ── Observation Card ── */
+  .obs-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--light-gray);
+    align-items: flex-start;
+  }
+  .obs-photo {
+    width: 70px;
+    height: 70px;
+    border-radius: 8px;
+    flex-shrink: 0;
+    overflow: hidden;
+    background: var(--light-gray);
+  }
+  .obs-photo svg { width: 100%; height: 100%; }
+  .obs-info { flex: 1; }
+  .obs-name { font-size: 16px; font-weight: 700; color: var(--dark-gray); margin-bottom: 2px; }
+  .obs-sci  { font-size: 13px; color: var(--dark-gray-dis); font-style: italic; margin-bottom: 4px; }
+  .obs-date { font-size: 12px; color: var(--medium-gray); }
+  .obs-badge {
+    font-size: 11px;
+    background: #e8f5d0;
+    color: var(--accessible-green);
+    border-radius: 4px;
+    padding: 2px 6px;
+    display: inline-block;
+    margin-top: 4px;
+    font-weight: 600;
+  }
+  .obs-badge.pending {
+    background: #fff3d0;
+    color: #8a5f00;
+  }
+
+  /* ── Upload banner ── */
+  .upload-banner {
+    background: #f0f8e0;
+    border-bottom: 1px solid #c8e08a;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .upload-banner-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: var(--warning-yellow);
+    flex-shrink: 0;
+  }
+  .upload-banner-text { font-size: 13px; color: var(--dark-gray); flex: 1; }
+  .upload-banner-btn {
+    background: var(--inat-green);
+    color: var(--white);
+    border: none;
+    border-radius: 20px;
+    padding: 5px 14px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  /* ── FAB ── */
+  .fab {
+    position: absolute;
+    bottom: 95px;
+    right: 20px;
+    width: 56px;
+    height: 56px;
+    border-radius: 28px;
+    background: var(--inat-green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 14px rgba(116,172,0,.5);
+    cursor: pointer;
+    transition: transform .15s;
+  }
+  .fab:active { transform: scale(.93); }
+  .fab svg { width: 28px; height: 28px; }
+
+  /* ── Bottom sheet overlay ── */
+  .sheet-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .3s;
+    z-index: 10;
+  }
+  .sheet-overlay.open { opacity: 1; pointer-events: auto; }
+
+  .bottom-sheet {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    background: var(--white);
+    border-radius: 24px 24px 0 0;
+    padding: 0 16px 40px;
+    transform: translateY(100%);
+    transition: transform .35s cubic-bezier(.32,.72,0,1);
+    z-index: 11;
+  }
+  .bottom-sheet.open { transform: translateY(0); }
+
+  .sheet-handle {
+    width: 36px; height: 4px;
+    background: var(--medium-gray);
+    border-radius: 2px;
+    margin: 12px auto 16px;
+  }
+  .sheet-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--dark-gray);
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .sheet-row {
+    display: flex;
+    justify-content: space-around;
+    margin-bottom: 20px;
+  }
+  .sheet-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    width: 80px;
+  }
+  .sheet-btn-circle {
+    width: 56px; height: 56px;
+    border-radius: 28px;
+    background: var(--inat-green);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform .15s, background .15s;
+  }
+  .sheet-btn:active .sheet-btn-circle,
+  .sheet-btn-circle.pressing { background: var(--accessible-green); transform: scale(.93); }
+  .sheet-btn-label { font-size: 12px; color: var(--dark-gray); text-align: center; font-weight: 600; }
+
+  /* ── Photo library ── */
+  .photo-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 2px;
+    flex: 1;
+    overflow-y: auto;
+  }
+  .photo-cell {
+    aspect-ratio: 1;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    background: var(--light-gray);
+  }
+  .photo-cell svg { width: 100%; height: 100%; }
+  .photo-cell.selected::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border: 3px solid var(--inat-green);
+  }
+  .photo-cell .check {
+    position: absolute;
+    top: 6px; right: 6px;
+    width: 22px; height: 22px;
+    border-radius: 11px;
+    background: var(--inat-green);
+    display: none;
+    align-items: center;
+    justify-content: center;
+  }
+  .photo-cell.selected .check { display: flex; }
+
+  /* ── Suggestions ── */
+  .suggestion-photo-wrap {
+    height: 260px;
+    background: #2a2a2a;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .suggestion-photo-wrap svg { width: 100%; height: 100%; }
+
+  .suggest-section-title {
+    font-size: 12px;
+    color: var(--medium-gray);
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    padding: 12px 16px 6px;
+  }
+  .suggest-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--light-gray);
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .suggest-item:active, .suggest-item.pressing { background: #f5f5f5; }
+  .suggest-thumb {
+    width: 52px; height: 52px;
+    border-radius: 8px;
+    overflow: hidden;
+    flex-shrink: 0;
+    background: var(--light-gray);
+  }
+  .suggest-thumb svg { width: 100%; height: 100%; }
+  .suggest-info { flex: 1; }
+  .suggest-name { font-size: 15px; font-weight: 700; color: var(--dark-gray); }
+  .suggest-sci  { font-size: 13px; color: var(--dark-gray-dis); font-style: italic; }
+  .suggest-bar-wrap {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+  }
+  .suggest-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--light-gray);
+    flex: 1;
+    overflow: hidden;
+  }
+  .suggest-bar-fill {
+    height: 100%;
+    background: var(--inat-green);
+    border-radius: 2px;
+    transition: width 1s ease;
+  }
+  .suggest-pct { font-size: 11px; color: var(--dark-gray-dis); white-space: nowrap; }
+
+  .suggest-check {
+    width: 22px; height: 22px;
+    border-radius: 11px;
+    border: 2px solid var(--medium-gray);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .suggest-check.selected {
+    background: var(--inat-green);
+    border-color: var(--inat-green);
+  }
+
+  /* ── Obs Edit ── */
+  .obs-edit-photo-row {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--light-gray);
+    flex-shrink: 0;
+  }
+  .obs-edit-photo {
+    width: 80px; height: 80px;
+    border-radius: 8px;
+    overflow: hidden;
+    background: var(--light-gray);
+    flex-shrink: 0;
+  }
+  .obs-edit-photo svg { width: 100%; height: 100%; }
+  .obs-edit-add-photo {
+    width: 80px; height: 80px;
+    border-radius: 8px;
+    border: 2px dashed var(--medium-gray);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .field-row {
+    display: flex;
+    align-items: center;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--light-gray);
+    gap: 12px;
+  }
+  .field-icon { width: 22px; height: 22px; flex-shrink: 0; }
+  .field-label { font-size: 13px; color: var(--medium-gray); width: 80px; flex-shrink: 0; }
+  .field-value { font-size: 15px; color: var(--dark-gray); flex: 1; }
+  .field-value.species { font-style: italic; color: var(--inat-green); font-weight: 700; }
+  .field-value.placeholder { color: var(--medium-gray); }
+  .field-arrow {
+    color: var(--medium-gray);
+    font-size: 16px;
+  }
+
+  /* ── Buttons ── */
+  .btn-primary {
+    background: var(--inat-green);
+    color: var(--white);
+    border: none;
+    border-radius: 28px;
+    padding: 14px 0;
+    font-size: 16px;
+    font-weight: 700;
+    width: 100%;
+    cursor: pointer;
+    transition: background .15s;
+  }
+  .btn-primary:active, .btn-primary.pressing { background: var(--accessible-green); }
+  .btn-secondary {
+    background: transparent;
+    color: var(--inat-green);
+    border: 2px solid var(--inat-green);
+    border-radius: 28px;
+    padding: 12px 0;
+    font-size: 16px;
+    font-weight: 700;
+    width: 100%;
+    cursor: pointer;
+  }
+
+  .btn-row { padding: 16px; display: flex; flex-direction: column; gap: 10px; flex-shrink: 0; }
+
+  /* ── Upload progress ── */
+  .upload-progress-wrap {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    gap: 20px;
+  }
+  .upload-icon-circle {
+    width: 80px; height: 80px;
+    border-radius: 40px;
+    background: #f0f8e0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .upload-label { font-size: 18px; font-weight: 700; color: var(--dark-gray); text-align: center; }
+  .upload-sub { font-size: 14px; color: var(--dark-gray-dis); text-align: center; }
+  .progress-bar-outer {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--light-gray);
+    overflow: hidden;
+  }
+  .progress-bar-inner {
+    height: 100%;
+    background: var(--inat-green);
+    border-radius: 3px;
+    width: 0%;
+    transition: width 2s ease;
+  }
+
+  /* ── Success ── */
+  .success-banner {
+    background: var(--inat-green);
+    padding: 12px 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+  .success-banner span { color: var(--white); font-size: 14px; font-weight: 700; }
+
+  /* ── Spinner ── */
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid var(--light-gray);
+    border-top-color: var(--inat-green);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Scroll area ── */
+  .scroll { flex: 1; overflow-y: auto; }
+
+  /* ── iNat logo text ── */
+  .inat-logo {
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--inat-green);
+    letter-spacing: -.5px;
+  }
+  .inat-logo span { color: var(--dark-gray); }
+
+  /* ── User avatar ── */
+  .avatar {
+    width: 32px; height: 32px;
+    border-radius: 16px;
+    background: var(--inat-green);
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-size: 13px; font-weight: 700;
+  }
+
+  .section-header {
+    font-size: 13px;
+    color: var(--medium-gray);
+    font-weight: 700;
+    letter-spacing: .5px;
+    text-transform: uppercase;
+    padding: 14px 16px 6px;
+  }
+</style>
+</head>
+<body>
+
+<div id="phone">
+
+  <!-- ════════════════════════════════════════
+       SCREEN 1 : My Observations
+  ════════════════════════════════════════ -->
+  <div class="screen active" id="screen-myobs">
+    <div class="status-bar">
+      <span class="time">9:41</span>
+      <div class="icons">
+        <!-- signal / wifi / battery SVGs inline -->
+        <svg width="16" height="12" viewBox="0 0 16 12"><rect x="0" y="6" width="3" height="6" rx="1" fill="#000"/><rect x="4.5" y="4" width="3" height="8" rx="1" fill="#000"/><rect x="9" y="2" width="3" height="10" rx="1" fill="#000"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#000"/></svg>
+        <svg width="16" height="12" viewBox="0 0 16 12"><path d="M8 2.5C10.5 2.5 12.7 3.5 14.2 5.2L15.5 3.9C13.6 1.9 11 .5 8 .5S2.4 1.9.5 3.9L1.8 5.2C3.3 3.5 5.5 2.5 8 2.5Z" fill="#000"/><path d="M8 5.5C9.7 5.5 11.2 6.2 12.3 7.3L13.6 6C12.1 4.6 10.1 3.5 8 3.5S3.9 4.6 2.4 6L3.7 7.3C4.8 6.2 6.3 5.5 8 5.5Z" fill="#000"/><circle cx="8" cy="10" r="1.5" fill="#000"/></svg>
+        <svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="#000" stroke-width="1.2" fill="none"/><rect x="1.5" y="2.5" width="17" height="7" rx="1" fill="#000"/><path d="M23 4v4a2 2 0 000-4z" fill="#000"/></svg>
+      </div>
+    </div>
+
+    <!-- Header -->
+    <div class="header">
+      <div class="inat-logo">iNaturalist</div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#454545" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="#454545" stroke-width="2" stroke-linecap="round"/></svg>
+        <div class="avatar">JD</div>
+      </div>
+    </div>
+
+    <!-- Upload banner (1 unuploaded) -->
+    <div class="upload-banner" id="upload-banner">
+      <div class="upload-banner-dot"></div>
+      <div class="upload-banner-text">1 observation ready to upload</div>
+      <button class="upload-banner-btn" id="banner-upload-btn">Upload</button>
+    </div>
+
+    <!-- Observation list -->
+    <div class="scroll">
+      <!-- Unuploaded observation (highlighted) -->
+      <div class="obs-card" style="background:#fffdf0;">
+        <div class="obs-photo">
+          <svg viewBox="0 0 70 70" xmlns="http://www.w3.org/2000/svg">
+            <!-- Monarch butterfly photo simulation -->
+            <rect width="70" height="70" fill="#3a5e1a"/>
+            <!-- Butterfly body -->
+            <ellipse cx="35" cy="35" rx="3" ry="12" fill="#1a0a00"/>
+            <!-- Upper wings -->
+            <path d="M32 28 Q20 15 14 22 Q10 28 20 32 Q28 35 32 30Z" fill="#E87020" stroke="#1a0a00" stroke-width="1"/>
+            <path d="M38 28 Q50 15 56 22 Q60 28 50 32 Q42 35 38 30Z" fill="#E87020" stroke="#1a0a00" stroke-width="1"/>
+            <!-- Lower wings -->
+            <path d="M32 38 Q18 42 16 50 Q18 56 26 50 Q32 45 33 40Z" fill="#E87020" stroke="#1a0a00" stroke-width="1"/>
+            <path d="M38 38 Q52 42 54 50 Q52 56 44 50 Q38 45 37 40Z" fill="#E87020" stroke="#1a0a00" stroke-width="1"/>
+            <!-- Wing markings -->
+            <path d="M20 24 Q25 22 28 27" stroke="#1a0a00" stroke-width="1.5" fill="none"/>
+            <circle cx="16" cy="26" r="2" fill="#ffffff" opacity="0.8"/>
+            <circle cx="52" cy="26" r="2" fill="#ffffff" opacity="0.8"/>
+            <!-- Antennae -->
+            <line x1="33" y1="23" x2="26" y2="12" stroke="#1a0a00" stroke-width="1"/>
+            <line x1="37" y1="23" x2="44" y2="12" stroke="#1a0a00" stroke-width="1"/>
+            <circle cx="26" cy="12" r="2" fill="#1a0a00"/>
+            <circle cx="44" cy="12" r="2" fill="#1a0a00"/>
+          </svg>
+        </div>
+        <div class="obs-info">
+          <div class="obs-name">Unknown</div>
+          <div class="obs-sci">Species ID pending</div>
+          <div class="obs-date">Today, 9:38 AM · San Francisco, CA</div>
+          <div class="obs-badge pending">⏳ Not uploaded</div>
+        </div>
+      </div>
+
+      <!-- Existing observation 1 -->
+      <div class="obs-card">
+        <div class="obs-photo">
+          <svg viewBox="0 0 70 70" xmlns="http://www.w3.org/2000/svg">
+            <rect width="70" height="70" fill="#1a3a1a"/>
+            <!-- Simple bird silhouette -->
+            <ellipse cx="38" cy="36" rx="14" ry="10" fill="#c8a050"/>
+            <ellipse cx="26" cy="32" rx="8" ry="6" fill="#c8a050"/>
+            <circle cx="22" cy="30" r="4" fill="#c8a050"/>
+            <ellipse cx="20" cy="29" rx="2.5" ry="1.5" fill="#222"/>
+            <circle cx="19" cy="29" r="1" fill="#fff" opacity="0.8"/>
+            <path d="M18 31 L12 33 L18 32Z" fill="#f0a020"/>
+            <path d="M38 30 Q44 25 50 28 Q44 30 38 32Z" fill="#c8a050"/>
+          </svg>
+        </div>
+        <div class="obs-info">
+          <div class="obs-name">Song Sparrow</div>
+          <div class="obs-sci">Melospiza melodia</div>
+          <div class="obs-date">May 15, 2026 · Golden Gate Park</div>
+          <div class="obs-badge">✓ Research Grade</div>
+        </div>
+      </div>
+
+      <!-- Existing observation 2 -->
+      <div class="obs-card">
+        <div class="obs-photo">
+          <svg viewBox="0 0 70 70" xmlns="http://www.w3.org/2000/svg">
+            <rect width="70" height="70" fill="#2a4a5a"/>
+            <!-- Simple flower -->
+            <circle cx="35" cy="35" r="8" fill="#f5d020"/>
+            <ellipse cx="35" cy="20" rx="5" ry="8" fill="#ff6b9d"/>
+            <ellipse cx="35" cy="50" rx="5" ry="8" fill="#ff6b9d"/>
+            <ellipse cx="20" cy="35" rx="8" ry="5" fill="#ff6b9d"/>
+            <ellipse cx="50" cy="35" rx="8" ry="5" fill="#ff6b9d"/>
+            <ellipse cx="24" cy="24" rx="5" ry="8" fill="#ff8fb5" transform="rotate(45 24 24)"/>
+            <ellipse cx="46" cy="24" rx="5" ry="8" fill="#ff8fb5" transform="rotate(-45 46 24)"/>
+            <ellipse cx="24" cy="46" rx="5" ry="8" fill="#ff8fb5" transform="rotate(-45 24 46)"/>
+            <ellipse cx="46" cy="46" rx="5" ry="8" fill="#ff8fb5" transform="rotate(45 46 46)"/>
+            <circle cx="35" cy="35" r="7" fill="#f5d020"/>
+          </svg>
+        </div>
+        <div class="obs-info">
+          <div class="obs-name">Seaside Daisy</div>
+          <div class="obs-sci">Erigeron glaucus</div>
+          <div class="obs-date">May 12, 2026 · Ocean Beach</div>
+          <div class="obs-badge">✓ Research Grade</div>
+        </div>
+      </div>
+
+      <!-- Existing observation 3 -->
+      <div class="obs-card">
+        <div class="obs-photo">
+          <svg viewBox="0 0 70 70" xmlns="http://www.w3.org/2000/svg">
+            <rect width="70" height="70" fill="#3a2a1a"/>
+            <!-- Squirrel silhouette -->
+            <ellipse cx="35" cy="42" rx="12" ry="10" fill="#8b5e2a"/>
+            <circle cx="28" cy="34" r="8" fill="#8b5e2a"/>
+            <ellipse cx="24" cy="28" rx="4" ry="6" fill="#8b5e2a"/>
+            <circle cx="23" cy="30" r="1.5" fill="#222"/>
+            <circle cx="22.5" cy="29.5" r=".6" fill="#fff"/>
+            <path d="M42 30 Q52 20 55 30 Q50 35 42 38Z" fill="#a07040"/>
+            <ellipse cx="38" cy="50" rx="8" ry="4" fill="#7a4e20"/>
+          </svg>
+        </div>
+        <div class="obs-info">
+          <div class="obs-name">Western Gray Squirrel</div>
+          <div class="obs-sci">Sciurus griseus</div>
+          <div class="obs-date">May 10, 2026 · Presidio</div>
+          <div class="obs-badge" style="background:#e8f0ff;color:#2a4a9b;">Needs ID</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Bottom Tab Bar -->
+    <div class="tab-bar">
+      <div class="tab">
+        <svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="#BFBFBF" stroke-width="2" fill="none"/></svg>
+        <span>Home</span>
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="#BFBFBF" stroke-width="2" fill="none"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="#BFBFBF" stroke-width="2" stroke-linecap="round"/></svg>
+        <span>Explore</span>
+      </div>
+      <div class="tab active">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="5" rx="1" fill="#74AC00"/><rect x="3" y="10" width="8" height="5" rx="1" fill="#74AC00"/><rect x="3" y="17" width="8" height="5" rx="1" fill="#74AC00"/><rect x="13" y="3" width="8" height="5" rx="1" fill="#74AC00"/><rect x="13" y="10" width="8" height="5" rx="1" fill="#74AC00"/><rect x="13" y="17" width="8" height="5" rx="1" fill="#74AC00"/></svg>
+        <span style="color:#74AC00">Observations</span>
+      </div>
+      <div class="tab">
+        <svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="#BFBFBF" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        <span>Alerts</span>
+      </div>
+    </div>
+
+    <!-- FAB -->
+    <div class="fab" id="fab">
+      <svg viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="white" stroke-width="2.5" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="white" stroke-width="2.5" stroke-linecap="round"/></svg>
+    </div>
+
+    <!-- Bottom sheet overlay -->
+    <div class="sheet-overlay" id="obs-overlay"></div>
+    <div class="bottom-sheet" id="obs-sheet">
+      <div class="sheet-handle"></div>
+      <div class="sheet-title">New Observation</div>
+      <div class="sheet-row">
+        <div class="sheet-btn" id="btn-camera">
+          <div class="sheet-btn-circle">
+            <!-- Camera icon -->
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2v11z" stroke="white" stroke-width="1.8" fill="none"/><circle cx="12" cy="13" r="4" stroke="white" stroke-width="1.8"/></svg>
+          </div>
+          <span class="sheet-btn-label">Take photos</span>
+        </div>
+        <div class="sheet-btn" id="btn-library">
+          <div class="sheet-btn-circle">
+            <!-- Photo library icon -->
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="white" stroke-width="1.8"/><circle cx="8.5" cy="8.5" r="1.5" fill="white"/><path d="M21 15l-5-5L5 21" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </div>
+          <span class="sheet-btn-label">Upload photos</span>
+        </div>
+        <div class="sheet-btn" id="btn-sound">
+          <div class="sheet-btn-circle">
+            <!-- Mic icon -->
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><rect x="9" y="2" width="6" height="12" rx="3" stroke="white" stroke-width="1.8"/><path d="M5 10a7 7 0 0014 0" stroke="white" stroke-width="1.8" stroke-linecap="round"/><line x1="12" y1="19" x2="12" y2="22" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </div>
+          <span class="sheet-btn-label">Record sound</span>
+        </div>
+      </div>
+      <div class="sheet-row">
+        <div class="sheet-btn" id="btn-aicam">
+          <div class="sheet-btn-circle">
+            <!-- AI Camera icon -->
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2v11z" stroke="white" stroke-width="1.6" fill="none"/><circle cx="12" cy="13" r="3.5" stroke="white" stroke-width="1.6"/><path d="M8 8h1M15 8h1" stroke="white" stroke-width="1.4" stroke-linecap="round"/><path d="M10 11l1.5 1.5L14 10" stroke="#74AC00" stroke-width="1.5" stroke-linecap="round" fill="none"/></svg>
+          </div>
+          <span class="sheet-btn-label">ID in Camera</span>
+        </div>
+        <div class="sheet-btn" id="btn-noevidence">
+          <div class="sheet-btn-circle">
+            <!-- No evidence icon -->
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke="white" stroke-width="1.8"/><line x1="8" y1="12" x2="16" y2="12" stroke="white" stroke-width="1.8" stroke-linecap="round"/></svg>
+          </div>
+          <span class="sheet-btn-label">No evidence</span>
+        </div>
+        <div style="width:80px"></div>
+      </div>
+    </div>
+  </div><!-- /screen-myobs -->
+
+
+  <!-- ════════════════════════════════════════
+       SCREEN 2 : Photo Library
+  ════════════════════════════════════════ -->
+  <div class="screen" id="screen-library">
+    <div class="status-bar" style="background:#000;"><span class="time" style="color:#fff">9:41</span><div class="icons"><svg width="16" height="12" viewBox="0 0 16 12"><rect x="0" y="6" width="3" height="6" rx="1" fill="#fff"/><rect x="4.5" y="4" width="3" height="8" rx="1" fill="#fff"/><rect x="9" y="2" width="3" height="10" rx="1" fill="#fff"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#fff"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="#fff" stroke-width="1.2" fill="none"/><rect x="1.5" y="2.5" width="17" height="7" rx="1" fill="#fff"/><path d="M23 4v4a2 2 0 000-4z" fill="#fff"/></svg></div></div>
+    <div class="header">
+      <span class="header-back" id="lib-back">✕</span>
+      <span class="header-title">Photo Library</span>
+      <span style="font-size:15px;font-weight:700;color:var(--inat-green)" id="lib-import">Import (1)</span>
+    </div>
+    <div class="section-header">Recents</div>
+    <div class="photo-grid" style="flex:1;overflow-y:auto">
+      <!-- Monarch butterfly – selected -->
+      <div class="photo-cell selected" id="photo-monarch">
+        <div class="check">
+          <svg width="12" height="10" viewBox="0 0 12 10"><polyline points="1,5 4.5,8.5 11,1" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        </div>
+        <svg viewBox="0 0 130 130" xmlns="http://www.w3.org/2000/svg">
+          <rect width="130" height="130" fill="#3a5e1a"/>
+          <ellipse cx="65" cy="65" rx="5" ry="22" fill="#1a0a00"/>
+          <path d="M60 52 Q38 28 26 40 Q18 52 38 60 Q52 65 60 56Z" fill="#E87020" stroke="#1a0a00" stroke-width="1.5"/>
+          <path d="M70 52 Q92 28 104 40 Q112 52 92 60 Q78 65 70 56Z" fill="#E87020" stroke="#1a0a00" stroke-width="1.5"/>
+          <path d="M60 72 Q32 80 28 95 Q32 106 48 95 Q60 84 62 75Z" fill="#E87020" stroke="#1a0a00" stroke-width="1.5"/>
+          <path d="M70 72 Q98 80 102 95 Q98 106 82 95 Q70 84 68 75Z" fill="#E87020" stroke="#1a0a00" stroke-width="1.5"/>
+          <circle cx="28" cy="46" r="4" fill="#fff" opacity="0.8"/>
+          <circle cx="102" cy="46" r="4" fill="#fff" opacity="0.8"/>
+          <line x1="62" y1="43" x2="50" y2="22" stroke="#1a0a00" stroke-width="1.5"/>
+          <line x1="68" y1="43" x2="80" y2="22" stroke="#1a0a00" stroke-width="1.5"/>
+          <circle cx="50" cy="22" r="3" fill="#1a0a00"/>
+          <circle cx="80" cy="22" r="3" fill="#1a0a00"/>
+        </svg>
+      </div>
+      <!-- Other photos -->
+      <div class="photo-cell">
+        <svg viewBox="0 0 130 130"><rect width="130" height="130" fill="#1a3a5a"/><circle cx="65" cy="50" r="25" fill="#80c0f0" opacity="0.5"/><ellipse cx="65" cy="80" rx="30" ry="15" fill="#4080c0"/><rect x="55" y="55" width="20" height="40" fill="#2060a0"/></svg>
+      </div>
+      <div class="photo-cell">
+        <svg viewBox="0 0 130 130"><rect width="130" height="130" fill="#2a4a1a"/><ellipse cx="65" cy="70" rx="40" ry="25" fill="#50a030"/><rect x="55" y="45" width="8" height="30" fill="#3a7020" rx="2"/><ellipse cx="59" cy="42" rx="12" ry="10" fill="#50a030"/></svg>
+      </div>
+      <div class="photo-cell">
+        <svg viewBox="0 0 130 130"><rect width="130" height="130" fill="#5a3a1a"/><ellipse cx="65" cy="75" rx="35" ry="20" fill="#a06030"/><circle cx="45" cy="60" r="18" fill="#c08050"/><circle cx="85" cy="55" r="14" fill="#b07040"/></svg>
+      </div>
+      <div class="photo-cell">
+        <svg viewBox="0 0 130 130"><rect width="130" height="130" fill="#1a2a3a"/><circle cx="65" cy="65" r="30" fill="#f0a020" opacity="0.3"/><circle cx="65" cy="65" r="20" fill="#f0c040" opacity="0.5"/><line x1="65" y1="10" x2="65" y2="120" stroke="#f0d060" stroke-width="1" opacity="0.4"/></svg>
+      </div>
+      <div class="photo-cell">
+        <svg viewBox="0 0 130 130"><rect width="130" height="130" fill="#3a1a1a"/><ellipse cx="65" cy="80" rx="30" ry="10" fill="#804020"/><rect x="58" y="30" width="14" height="50" fill="#906030" rx="3"/><ellipse cx="65" cy="28" rx="20" ry="16" fill="#70a040"/><ellipse cx="50" cy="45" rx="12" ry="8" fill="#60a030"/><ellipse cx="80" cy="42" rx="10" ry="7" fill="#60a030"/></svg>
+      </div>
+      <div class="photo-cell">
+        <svg viewBox="0 0 130 130"><rect width="130" height="130" fill="#1a3a2a"/><path d="M20 100 Q65 20 110 100Z" fill="#40a060"/><circle cx="65" cy="65" r="8" fill="#f0e040"/></svg>
+      </div>
+      <div class="photo-cell">
+        <svg viewBox="0 0 130 130"><rect width="130" height="130" fill="#2a2a4a"/><ellipse cx="65" cy="65" rx="25" ry="20" fill="#8080d0"/><circle cx="55" cy="58" r="5" fill="#f0f0ff" opacity="0.8"/><path d="M40 80 Q65 60 90 80" stroke="#6060c0" stroke-width="2" fill="none"/></svg>
+      </div>
+      <div class="photo-cell">
+        <svg viewBox="0 0 130 130"><rect width="130" height="130" fill="#3a5a1a"/><circle cx="65" cy="65" r="25" fill="#d04040"/><circle cx="58" cy="60" r="5" fill="#fff" opacity="0.6"/><path d="M42 78 Q65 90 88 78" stroke="#a03030" stroke-width="2" fill="none"/></svg>
+      </div>
+    </div>
+    <div class="btn-row">
+      <button class="btn-primary" id="lib-import-btn">Import 1 Photo</button>
+    </div>
+  </div><!-- /screen-library -->
+
+
+  <!-- ════════════════════════════════════════
+       SCREEN 3 : AI Suggestions
+  ════════════════════════════════════════ -->
+  <div class="screen" id="screen-suggestions">
+    <div class="status-bar"><span class="time">9:41</span><div class="icons"><svg width="16" height="12" viewBox="0 0 16 12"><rect x="0" y="6" width="3" height="6" rx="1" fill="#000"/><rect x="4.5" y="4" width="3" height="8" rx="1" fill="#000"/><rect x="9" y="2" width="3" height="10" rx="1" fill="#000"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#000"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="#000" stroke-width="1.2" fill="none"/><rect x="1.5" y="2.5" width="17" height="7" rx="1" fill="#000"/><path d="M23 4v4a2 2 0 000-4z" fill="#000"/></svg></div></div>
+    <div class="header">
+      <span class="header-back" id="sug-back">‹ Back</span>
+      <span class="header-title">What did you see?</span>
+      <span></span>
+    </div>
+    <!-- Photo -->
+    <div class="suggestion-photo-wrap">
+      <svg viewBox="0 0 390 260" xmlns="http://www.w3.org/2000/svg" style="width:390px;height:260px">
+        <rect width="390" height="260" fill="#2a4a1a"/>
+        <ellipse cx="195" cy="130" rx="12" ry="46" fill="#1a0a00"/>
+        <path d="M183 105 Q145 55 118 78 Q104 100 134 115 Q155 125 180 110Z" fill="#E87020" stroke="#1a0a00" stroke-width="2"/>
+        <path d="M207 105 Q245 55 272 78 Q286 100 256 115 Q235 125 210 110Z" fill="#E87020" stroke="#1a0a00" stroke-width="2"/>
+        <path d="M183 148 Q142 162 138 190 Q142 210 166 192 Q183 175 186 154Z" fill="#E87020" stroke="#1a0a00" stroke-width="2"/>
+        <path d="M207 148 Q248 162 252 190 Q248 210 224 192 Q207 175 204 154Z" fill="#E87020" stroke="#1a0a00" stroke-width="2"/>
+        <circle cx="118" cy="86" r="7" fill="#fff" opacity="0.8"/>
+        <circle cx="272" cy="86" r="7" fill="#fff" opacity="0.8"/>
+        <path d="M175 90 Q182 80 188 88" stroke="#1a0a00" stroke-width="2" fill="none"/>
+        <path d="M202 90 Q208 80 215 88" stroke="#1a0a00" stroke-width="2" fill="none"/>
+        <line x1="186" y1="85" x2="164" y2="44" stroke="#1a0a00" stroke-width="2"/>
+        <line x1="204" y1="85" x2="226" y2="44" stroke="#1a0a00" stroke-width="2"/>
+        <circle cx="164" cy="44" r="5" fill="#1a0a00"/>
+        <circle cx="226" cy="44" r="5" fill="#1a0a00"/>
+        <!-- AI scanning overlay -->
+        <rect x="118" y="44" width="154" height="170" rx="4" stroke="#74AC00" stroke-width="2" fill="none" opacity="0.6"/>
+        <text x="195" y="230" text-anchor="middle" fill="#74AC00" font-size="11" font-weight="700" font-family="sans-serif">AI SCAN COMPLETE</text>
+      </svg>
+    </div>
+
+    <div class="scroll">
+      <div class="suggest-section-title">Top Suggestions</div>
+
+      <!-- Suggestion 1 – Monarch Butterfly, selected -->
+      <div class="suggest-item" id="sug-monarch">
+        <div class="suggest-thumb">
+          <svg viewBox="0 0 52 52"><rect width="52" height="52" fill="#3a5e1a"/><ellipse cx="26" cy="26" rx="4" ry="16" fill="#1a0a00"/><path d="M22 19Q12 8 7 16Q4 22 14 27Q20 30 22 22Z" fill="#E87020"/><path d="M30 19Q40 8 45 16Q48 22 38 27Q32 30 30 22Z" fill="#E87020"/><path d="M22 32Q10 37 9 46Q12 52 20 46Q25 40 23 34Z" fill="#E87020"/><path d="M30 32Q42 37 43 46Q40 52 32 46Q27 40 29 34Z" fill="#E87020"/></svg>
+        </div>
+        <div class="suggest-info">
+          <div class="suggest-name">Monarch Butterfly</div>
+          <div class="suggest-sci">Danaus plexippus</div>
+          <div class="suggest-bar-wrap">
+            <div class="suggest-bar"><div class="suggest-bar-fill" id="bar1" style="width:0%"></div></div>
+            <span class="suggest-pct">94%</span>
+          </div>
+        </div>
+        <div class="suggest-check selected" id="check-monarch">
+          <svg width="12" height="10" viewBox="0 0 12 10"><polyline points="1,5 4.5,8.5 11,1" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+        </div>
+      </div>
+
+      <!-- Suggestion 2 -->
+      <div class="suggest-item">
+        <div class="suggest-thumb">
+          <svg viewBox="0 0 52 52"><rect width="52" height="52" fill="#4a2a1a"/><ellipse cx="26" cy="26" rx="4" ry="16" fill="#0a0a1a"/><path d="M22 19Q12 8 7 16Q4 22 14 27Q20 30 22 22Z" fill="#f06010"/><path d="M30 19Q40 8 45 16Q48 22 38 27Q32 30 30 22Z" fill="#f06010"/><path d="M22 32Q10 37 9 46Q12 52 20 46Q25 40 23 34Z" fill="#d04008"/><path d="M30 32Q42 37 43 46Q40 52 32 46Q27 40 29 34Z" fill="#d04008"/></svg>
+        </div>
+        <div class="suggest-info">
+          <div class="suggest-name">Queen Butterfly</div>
+          <div class="suggest-sci">Danaus gilippus</div>
+          <div class="suggest-bar-wrap">
+            <div class="suggest-bar"><div class="suggest-bar-fill" id="bar2" style="width:0%"></div></div>
+            <span class="suggest-pct">4%</span>
+          </div>
+        </div>
+        <div class="suggest-check"></div>
+      </div>
+
+      <!-- Suggestion 3 -->
+      <div class="suggest-item">
+        <div class="suggest-thumb">
+          <svg viewBox="0 0 52 52"><rect width="52" height="52" fill="#1a3a1a"/><ellipse cx="26" cy="26" rx="3" ry="14" fill="#0a0808"/><path d="M23 20Q14 10 9 18Q6 24 16 28Q21 30 23 23Z" fill="#9060a0"/><path d="M29 20Q38 10 43 18Q46 24 36 28Q31 30 29 23Z" fill="#9060a0"/><path d="M23 31Q11 36 10 45Q13 50 21 44Q26 38 24 33Z" fill="#9060a0"/><path d="M29 31Q41 36 42 45Q39 50 31 44Q26 38 28 33Z" fill="#9060a0"/></svg>
+        </div>
+        <div class="suggest-info">
+          <div class="suggest-name">Gulf Fritillary</div>
+          <div class="suggest-sci">Dione vanillae</div>
+          <div class="suggest-bar-wrap">
+            <div class="suggest-bar"><div class="suggest-bar-fill" id="bar3" style="width:0%"></div></div>
+            <span class="suggest-pct">2%</span>
+          </div>
+        </div>
+        <div class="suggest-check"></div>
+      </div>
+
+      <div class="section-header" style="margin-top:8px">Not seeing it?</div>
+      <div class="suggest-item">
+        <div style="width:52px;height:52px;border-radius:8px;background:var(--light-gray);display:flex;align-items:center;justify-content:center;">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#BFBFBF" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="#BFBFBF" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div class="suggest-info">
+          <div class="suggest-name" style="color:var(--dark-gray-dis)">Search for species</div>
+          <div class="suggest-sci" style="font-style:normal">Choose your own ID</div>
+        </div>
+        <svg width="8" height="14" viewBox="0 0 8 14"><polyline points="1,1 7,7 1,13" stroke="#BFBFBF" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="sug-select-btn">Select Monarch Butterfly</button>
+    </div>
+  </div><!-- /screen-suggestions -->
+
+
+  <!-- ════════════════════════════════════════
+       SCREEN 4 : Observation Edit
+  ════════════════════════════════════════ -->
+  <div class="screen" id="screen-obsedit">
+    <div class="status-bar"><span class="time">9:42</span><div class="icons"><svg width="16" height="12" viewBox="0 0 16 12"><rect x="0" y="6" width="3" height="6" rx="1" fill="#000"/><rect x="4.5" y="4" width="3" height="8" rx="1" fill="#000"/><rect x="9" y="2" width="3" height="10" rx="1" fill="#000"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#000"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="#000" stroke-width="1.2" fill="none"/><rect x="1.5" y="2.5" width="17" height="7" rx="1" fill="#000"/><path d="M23 4v4a2 2 0 000-4z" fill="#000"/></svg></div></div>
+    <div class="header">
+      <span class="header-back" id="edit-back">‹ Back</span>
+      <span class="header-title">New Observation</span>
+      <span style="font-size:13px;color:var(--medium-gray)">Save</span>
+    </div>
+
+    <div class="scroll">
+      <!-- Photos row -->
+      <div class="obs-edit-photo-row">
+        <div class="obs-edit-photo">
+          <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+            <rect width="80" height="80" fill="#3a5e1a"/>
+            <ellipse cx="40" cy="40" rx="5" ry="18" fill="#1a0a00"/>
+            <path d="M35 32Q24 18 16 26Q11 34 25 40Q33 44 35 35Z" fill="#E87020" stroke="#1a0a00" stroke-width="1.2"/>
+            <path d="M45 32Q56 18 64 26Q69 34 55 40Q47 44 45 35Z" fill="#E87020" stroke="#1a0a00" stroke-width="1.2"/>
+            <path d="M35 47Q22 53 20 64Q23 72 33 64Q39 57 37 50Z" fill="#E87020" stroke="#1a0a00" stroke-width="1.2"/>
+            <path d="M45 47Q58 53 60 64Q57 72 47 64Q41 57 43 50Z" fill="#E87020" stroke="#1a0a00" stroke-width="1.2"/>
+            <circle cx="16" cy="29" r="4" fill="#fff" opacity="0.8"/>
+            <circle cx="64" cy="29" r="4" fill="#fff" opacity="0.8"/>
+          </svg>
+        </div>
+        <div class="obs-edit-add-photo">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none"><line x1="12" y1="5" x2="12" y2="19" stroke="#BFBFBF" stroke-width="2" stroke-linecap="round"/><line x1="5" y1="12" x2="19" y2="12" stroke="#BFBFBF" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+      </div>
+
+      <!-- Identification -->
+      <div class="section-header">Identification</div>
+      <div class="field-row" style="background:#f8fff0;border-left:3px solid var(--inat-green);">
+        <svg class="field-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14H9V8h2v8zm4 0h-2V8h2v8z" fill="none"/><circle cx="12" cy="12" r="10" stroke="#74AC00" stroke-width="1.8"/><path d="M9 12l2 2 4-4" stroke="#74AC00" stroke-width="2" stroke-linecap="round" fill="none"/></svg>
+        <div style="flex:1">
+          <div style="font-size:16px;font-weight:700;font-style:italic;color:var(--inat-green)">Danaus plexippus</div>
+          <div style="font-size:13px;color:var(--dark-gray);margin-top:2px">Monarch Butterfly</div>
+          <div style="font-size:11px;color:var(--medium-gray);margin-top:2px">94% AI confidence</div>
+        </div>
+        <svg width="8" height="14" viewBox="0 0 8 14"><polyline points="1,1 7,7 1,13" stroke="#BFBFBF" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      </div>
+
+      <!-- Date / Time -->
+      <div class="section-header">Details</div>
+      <div class="field-row">
+        <svg class="field-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="18" rx="2" stroke="#BFBFBF" stroke-width="1.8"/><line x1="3" y1="9" x2="21" y2="9" stroke="#BFBFBF" stroke-width="1.8"/><line x1="8" y1="2" x2="8" y2="6" stroke="#BFBFBF" stroke-width="1.8" stroke-linecap="round"/><line x1="16" y1="2" x2="16" y2="6" stroke="#BFBFBF" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span class="field-label">Date</span>
+        <span class="field-value">Today, 9:38 AM</span>
+        <span class="field-arrow">›</span>
+      </div>
+
+      <!-- Location -->
+      <div class="field-row">
+        <svg class="field-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z" stroke="#BFBFBF" stroke-width="1.8" fill="none"/><circle cx="12" cy="9" r="2.5" stroke="#BFBFBF" stroke-width="1.8"/></svg>
+        <span class="field-label">Location</span>
+        <span class="field-value">San Francisco, CA</span>
+        <span class="field-arrow">›</span>
+      </div>
+
+      <!-- Geoprivacy -->
+      <div class="field-row">
+        <svg class="field-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2" stroke="#BFBFBF" stroke-width="1.8"/><path d="M7 11V7a5 5 0 0110 0v4" stroke="#BFBFBF" stroke-width="1.8" stroke-linecap="round"/></svg>
+        <span class="field-label">Geoprivacy</span>
+        <span class="field-value">Open</span>
+        <span class="field-arrow">›</span>
+      </div>
+
+      <!-- Captive -->
+      <div class="field-row">
+        <svg class="field-icon" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="#BFBFBF" stroke-width="1.8" fill="none"/></svg>
+        <span class="field-label">Captive</span>
+        <span class="field-value">No</span>
+        <span class="field-arrow">›</span>
+      </div>
+
+      <!-- Notes -->
+      <div class="section-header">Notes</div>
+      <div style="padding:12px 16px;border-bottom:1px solid var(--light-gray);">
+        <div style="font-size:15px;color:var(--medium-gray);font-style:italic">Spotted in Dolores Park near the milkweed garden...</div>
+      </div>
+
+      <div style="height:20px"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn-primary" id="upload-btn">Upload Observation</button>
+    </div>
+  </div><!-- /screen-obsedit -->
+
+
+  <!-- ════════════════════════════════════════
+       SCREEN 5 : Uploading
+  ════════════════════════════════════════ -->
+  <div class="screen" id="screen-uploading">
+    <div class="status-bar"><span class="time">9:42</span><div class="icons"><svg width="16" height="12" viewBox="0 0 16 12"><rect x="0" y="6" width="3" height="6" rx="1" fill="#000"/><rect x="4.5" y="4" width="3" height="8" rx="1" fill="#000"/><rect x="9" y="2" width="3" height="10" rx="1" fill="#000"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#000"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="#000" stroke-width="1.2" fill="none"/><rect x="1.5" y="2.5" width="17" height="7" rx="1" fill="#000"/><path d="M23 4v4a2 2 0 000-4z" fill="#000"/></svg></div></div>
+    <div class="header">
+      <span></span>
+      <span class="header-title">Uploading</span>
+      <span></span>
+    </div>
+    <div class="upload-progress-wrap">
+      <div class="upload-icon-circle">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none"><path d="M20 30V10M20 10L12 18M20 10L28 18" stroke="#74AC00" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </div>
+      <div class="upload-label">Uploading observation…</div>
+      <div class="upload-sub">Monarch Butterfly · San Francisco, CA</div>
+      <div class="progress-bar-outer" style="width:100%">
+        <div class="progress-bar-inner" id="progress-bar"></div>
+      </div>
+      <div style="font-size:13px;color:var(--medium-gray)" id="progress-text">Uploading photo (1 of 1)…</div>
+    </div>
+  </div><!-- /screen-uploading -->
+
+
+  <!-- ════════════════════════════════════════
+       SCREEN 6 : Success (back to My Obs)
+  ════════════════════════════════════════ -->
+  <div class="screen" id="screen-success">
+    <div class="status-bar"><span class="time">9:42</span><div class="icons"><svg width="16" height="12" viewBox="0 0 16 12"><rect x="0" y="6" width="3" height="6" rx="1" fill="#000"/><rect x="4.5" y="4" width="3" height="8" rx="1" fill="#000"/><rect x="9" y="2" width="3" height="10" rx="1" fill="#000"/><rect x="13.5" y="0" width="3" height="12" rx="1" fill="#000"/></svg><svg width="25" height="12" viewBox="0 0 25 12"><rect x="0" y="1" width="22" height="10" rx="2" stroke="#000" stroke-width="1.2" fill="none"/><rect x="1.5" y="2.5" width="17" height="7" rx="1" fill="#000"/><path d="M23 4v4a2 2 0 000-4z" fill="#000"/></svg></div></div>
+    <div class="header">
+      <div class="inat-logo">iNaturalist</div>
+      <div style="display:flex;gap:12px;align-items:center">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7" stroke="#454545" stroke-width="2"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="#454545" stroke-width="2" stroke-linecap="round"/></svg>
+        <div class="avatar">JD</div>
+      </div>
+    </div>
+    <!-- Success banner -->
+    <div class="success-banner" id="success-banner">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="rgba(255,255,255,0.3)"/><polyline points="5,10 8.5,13.5 15,7" stroke="white" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      <span>1 observation uploaded successfully!</span>
+    </div>
+    <div class="scroll">
+      <!-- Newly uploaded observation (now at top) -->
+      <div class="obs-card" style="background:#f8fff0;">
+        <div class="obs-photo">
+          <svg viewBox="0 0 70 70" xmlns="http://www.w3.org/2000/svg">
+            <rect width="70" height="70" fill="#3a5e1a"/>
+            <ellipse cx="35" cy="35" rx="3" ry="12" fill="#1a0a00"/>
+            <path d="M32 28 Q20 15 14 22 Q10 28 20 32 Q28 35 32 30Z" fill="#E87020" stroke="#1a0a00" stroke-width="1"/>
+            <path d="M38 28 Q50 15 56 22 Q60 28 50 32 Q42 35 38 30Z" fill="#E87020" stroke="#1a0a00" stroke-width="1"/>
+            <path d="M32 38 Q18 42 16 50 Q18 56 26 50 Q32 45 33 40Z" fill="#E87020" stroke="#1a0a00" stroke-width="1"/>
+            <path d="M38 38 Q52 42 54 50 Q52 56 44 50 Q38 45 37 40Z" fill="#E87020" stroke="#1a0a00" stroke-width="1"/>
+            <circle cx="14" cy="25" r="3" fill="#fff" opacity="0.8"/>
+            <circle cx="56" cy="25" r="3" fill="#fff" opacity="0.8"/>
+          </svg>
+        </div>
+        <div class="obs-info">
+          <div class="obs-name">Monarch Butterfly</div>
+          <div class="obs-sci">Danaus plexippus</div>
+          <div class="obs-date">Today, 9:38 AM · San Francisco, CA</div>
+          <div class="obs-badge">✓ Needs ID</div>
+        </div>
+      </div>
+
+      <!-- Previous observations -->
+      <div class="obs-card">
+        <div class="obs-photo">
+          <svg viewBox="0 0 70 70" xmlns="http://www.w3.org/2000/svg">
+            <rect width="70" height="70" fill="#1a3a1a"/>
+            <ellipse cx="38" cy="36" rx="14" ry="10" fill="#c8a050"/>
+            <ellipse cx="26" cy="32" rx="8" ry="6" fill="#c8a050"/>
+            <circle cx="22" cy="30" r="4" fill="#c8a050"/>
+            <ellipse cx="20" cy="29" rx="2.5" ry="1.5" fill="#222"/>
+            <circle cx="19" cy="29" r="1" fill="#fff" opacity="0.8"/>
+            <path d="M18 31 L12 33 L18 32Z" fill="#f0a020"/>
+            <path d="M38 30 Q44 25 50 28 Q44 30 38 32Z" fill="#c8a050"/>
+          </svg>
+        </div>
+        <div class="obs-info">
+          <div class="obs-name">Song Sparrow</div>
+          <div class="obs-sci">Melospiza melodia</div>
+          <div class="obs-date">May 15, 2026 · Golden Gate Park</div>
+          <div class="obs-badge">✓ Research Grade</div>
+        </div>
+      </div>
+
+      <div class="obs-card">
+        <div class="obs-photo">
+          <svg viewBox="0 0 70 70" xmlns="http://www.w3.org/2000/svg">
+            <rect width="70" height="70" fill="#2a4a5a"/>
+            <circle cx="35" cy="35" r="8" fill="#f5d020"/>
+            <ellipse cx="35" cy="20" rx="5" ry="8" fill="#ff6b9d"/>
+            <ellipse cx="35" cy="50" rx="5" ry="8" fill="#ff6b9d"/>
+            <ellipse cx="20" cy="35" rx="8" ry="5" fill="#ff6b9d"/>
+            <ellipse cx="50" cy="35" rx="8" ry="5" fill="#ff6b9d"/>
+            <circle cx="35" cy="35" r="7" fill="#f5d020"/>
+          </svg>
+        </div>
+        <div class="obs-info">
+          <div class="obs-name">Seaside Daisy</div>
+          <div class="obs-sci">Erigeron glaucus</div>
+          <div class="obs-date">May 12, 2026 · Ocean Beach</div>
+          <div class="obs-badge">✓ Research Grade</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="tab-bar">
+      <div class="tab"><svg viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" stroke="#BFBFBF" stroke-width="2" fill="none"/></svg><span>Home</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7" stroke="#BFBFBF" stroke-width="2" fill="none"/><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="#BFBFBF" stroke-width="2" stroke-linecap="round"/></svg><span>Explore</span></div>
+      <div class="tab active"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="5" rx="1" fill="#74AC00"/><rect x="3" y="10" width="8" height="5" rx="1" fill="#74AC00"/><rect x="3" y="17" width="8" height="5" rx="1" fill="#74AC00"/><rect x="13" y="3" width="8" height="5" rx="1" fill="#74AC00"/><rect x="13" y="10" width="8" height="5" rx="1" fill="#74AC00"/><rect x="13" y="17" width="8" height="5" rx="1" fill="#74AC00"/></svg><span style="color:#74AC00">Observations</span></div>
+      <div class="tab"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" stroke="#BFBFBF" stroke-width="2" fill="none" stroke-linecap="round"/></svg><span>Alerts</span></div>
+    </div>
+  </div><!-- /screen-success -->
+
+</div><!-- /phone -->
+
+<script>
+// ── Screen navigation ──
+const screens = {};
+['myobs','library','suggestions','obsedit','uploading','success'].forEach(id => {
+  screens[id] = document.getElementById('screen-' + id);
+});
+
+function showScreen(id) {
+  Object.values(screens).forEach(s => s.classList.remove('active'));
+  screens[id].classList.add('active');
+}
+
+// ── Add Observation sheet ──
+const overlay   = document.getElementById('obs-overlay');
+const sheet     = document.getElementById('obs-sheet');
+const fab       = document.getElementById('fab');
+
+function openSheet() {
+  overlay.classList.add('open');
+  sheet.classList.add('open');
+}
+function closeSheet() {
+  overlay.classList.remove('open');
+  sheet.classList.remove('open');
+}
+
+fab.addEventListener('click', openSheet);
+overlay.addEventListener('click', closeSheet);
+
+// ── Upload banner button → shortcut to upload flow ──
+document.getElementById('banner-upload-btn').addEventListener('click', () => {
+  // Jump straight to the uploading screen (simulates tapping upload on the pending obs)
+  showScreen('uploading');
+  startUploadProgress();
+});
+
+// ── Photo library ──
+document.getElementById('btn-library').addEventListener('click', () => {
+  closeSheet();
+  setTimeout(() => showScreen('library'), 350);
+});
+
+document.getElementById('lib-back').addEventListener('click', () => {
+  showScreen('myobs');
+  openSheet();
+});
+
+document.getElementById('lib-import-btn').addEventListener('click', () => {
+  showScreen('suggestions');
+  // Animate confidence bars after a short delay
+  setTimeout(() => {
+    document.getElementById('bar1').style.width = '94%';
+    document.getElementById('bar2').style.width = '4%';
+    document.getElementById('bar3').style.width = '2%';
+  }, 300);
+});
+
+document.getElementById('lib-import').addEventListener('click', () => {
+  showScreen('suggestions');
+  setTimeout(() => {
+    document.getElementById('bar1').style.width = '94%';
+    document.getElementById('bar2').style.width = '4%';
+    document.getElementById('bar3').style.width = '2%';
+  }, 300);
+});
+
+// ── Suggestions ──
+document.getElementById('sug-back').addEventListener('click', () => showScreen('library'));
+
+document.getElementById('sug-select-btn').addEventListener('click', () => {
+  showScreen('obsedit');
+});
+
+document.getElementById('sug-monarch').addEventListener('click', () => {
+  showScreen('obsedit');
+});
+
+// ── Obs Edit ──
+document.getElementById('edit-back').addEventListener('click', () => showScreen('suggestions'));
+
+document.getElementById('upload-btn').addEventListener('click', () => {
+  showScreen('uploading');
+  startUploadProgress();
+});
+
+// ── Upload progress ──
+function startUploadProgress() {
+  const bar  = document.getElementById('progress-bar');
+  const text = document.getElementById('progress-text');
+  bar.style.transition = 'none';
+  bar.style.width = '0%';
+
+  setTimeout(() => {
+    bar.style.transition = 'width 1.5s ease';
+    bar.style.width = '60%';
+    text.textContent = 'Uploading photo (1 of 1)…';
+  }, 200);
+
+  setTimeout(() => {
+    bar.style.width = '90%';
+    text.textContent = 'Saving observation…';
+  }, 1800);
+
+  setTimeout(() => {
+    bar.style.width = '100%';
+    text.textContent = 'Complete!';
+  }, 2800);
+
+  setTimeout(() => {
+    showScreen('success');
+  }, 3300);
+}
+
+// ── Expose helpers for Playwright automation ──
+window._demo = {
+  showScreen,
+  openSheet,
+  closeSheet,
+  startUploadProgress,
+  screens: Object.keys(screens),
+};
+</script>
+</body>
+</html>
