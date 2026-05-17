@@ -17,6 +17,9 @@ name: EAS iOS preview
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - claude/record-upload-demo-dHKBX
     inputs:
       profile:
         description: "EAS build profile"
