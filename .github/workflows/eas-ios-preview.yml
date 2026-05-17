@@ -1,26 +1,38 @@
-# Triggers an EAS iOS build (internal distribution) using Expo's CI pattern.
+# Triggers an EAS iOS build (internal distribution) and waits for the result.
 # https://docs.expo.dev/build/building-on-ci/
 #
-# Required GitHub repository secrets:
-#   EXPO_TOKEN       — Personal access token from https://expo.dev/accounts/[account]/settings/access-tokens
-#   EAS_PROJECT_ID   — UUID from your linked EAS project (output of `npx eas-cli init` or Expo dashboard).
+# Required GitHub repository secret:
+#   EXPO_TOKEN     — Personal access token from
+#                    https://expo.dev/accounts/[account]/settings/access-tokens
 #
-# iOS internal distribution still requires Apple credentials on the Expo project before this job
-# can succeed in non-interactive mode. Run `eas build --platform ios --profile preview` once locally
-# (interactive) or finish setup in the Expo dashboard if the build fails on credentials.
+# Optional GitHub repository secret:
+#   EAS_PROJECT_ID — Override the project UUID (defaults to the one in app.config.js).
+#                    Only needed if you want to build under a different Expo account.
 #
-# Cursor Cloud Agent terminals do not receive Cursor "secrets" as environment variables,
-# so use this workflow (or run `eas build` locally) to deploy with a token.
+# Before the first build succeeds you must have Apple credentials configured on the
+# Expo project. Run `eas build --platform ios --profile preview` once interactively
+# from your local machine (or finish credential setup in the Expo dashboard).
 
 name: EAS iOS preview
 
 on:
   workflow_dispatch:
+    inputs:
+      profile:
+        description: "EAS build profile"
+        required: false
+        default: "preview"
+        type: choice
+        options:
+          - preview
+          - development
 
 jobs:
   build:
-    name: Trigger EAS iOS build
+    name: EAS iOS ${{ inputs.profile }} build
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -31,7 +43,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Setup Expo and EAS
+      - name: Setup EAS CLI
         uses: expo/expo-github-action@v8
         with:
           eas-version: latest
@@ -40,7 +52,41 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Trigger iOS internal build on EAS
-        run: eas build --platform ios --profile preview --non-interactive --no-wait
+      - name: Build on EAS
+        id: eas_build
+        run: |
+          BUILD_URL=$(eas build \
+            --platform ios \
+            --profile ${{ inputs.profile }} \
+            --non-interactive \
+            --json \
+            --no-wait \
+            | python3 -c "import json,sys; builds=json.load(sys.stdin); print(builds[0]['buildDetailsPageUrl'])" 2>/dev/null || echo "")
+
+          if [ -n "$BUILD_URL" ]; then
+            echo "build_url=$BUILD_URL" >> "$GITHUB_OUTPUT"
+            echo ""
+            echo "✅ Build queued successfully!"
+            echo "📱 Track progress: $BUILD_URL"
+          else
+            # Fallback: trigger without capturing URL
+            eas build \
+              --platform ios \
+              --profile ${{ inputs.profile }} \
+              --non-interactive \
+              --no-wait
+            echo "Build queued. Check https://expo.dev/accounts/bfhannel/projects/inaturalist-react-native/builds for status."
+          fi
         env:
           EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+
+      - name: Print build URL
+        if: steps.eas_build.outputs.build_url != ''
+        run: |
+          echo "## iOS Build" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Profile:** \`${{ inputs.profile }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Build page:** ${{ steps.eas_build.outputs.build_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Install the IPA on your device from that page once the build completes (~15–20 min)." >> $GITHUB_STEP_SUMMARY
