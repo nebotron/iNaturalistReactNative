@@ -29,7 +29,7 @@ on:
 
 jobs:
   build:
-    name: EAS iOS ${{ inputs.profile }} build
+    name: EAS iOS ${{ inputs.profile || 'preview' }} build
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -54,10 +54,13 @@ jobs:
 
       - name: Build on EAS
         id: eas_build
+        env:
+          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
+          BUILD_PROFILE: ${{ inputs.profile || 'preview' }}
         run: |
           BUILD_URL=$(eas build \
             --platform ios \
-            --profile ${{ inputs.profile }} \
+            --profile "$BUILD_PROFILE" \
             --non-interactive \
             --json \
             --no-wait \
@@ -72,20 +75,20 @@ jobs:
             # Fallback: trigger without capturing URL
             eas build \
               --platform ios \
-              --profile ${{ inputs.profile }} \
+              --profile "$BUILD_PROFILE" \
               --non-interactive \
               --no-wait
             echo "Build queued. Check https://expo.dev/accounts/bfhannel/projects/inaturalist-react-native/builds for status."
           fi
-        env:
-          EAS_PROJECT_ID: ${{ secrets.EAS_PROJECT_ID }}
 
       - name: Print build URL
         if: steps.eas_build.outputs.build_url != ''
+        env:
+          BUILD_PROFILE: ${{ inputs.profile || 'preview' }}
         run: |
           echo "## iOS Build" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Profile:** \`${{ inputs.profile }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Profile:** \`$BUILD_PROFILE\`" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Build page:** ${{ steps.eas_build.outputs.build_url }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
