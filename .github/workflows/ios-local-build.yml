@@ -1,0 +1,162 @@
+# Builds an iOS IPA on a macOS runner using your personal Apple Development
+# certificate (free Apple ID — no paid Developer Program required).
+#
+# The IPA is uploaded as a workflow artifact. Install it on your device via:
+#   - Xcode: Window > Devices and Simulators > drag IPA onto your device
+#   - Apple Configurator 2 (free on Mac App Store)
+#   - `xcrun devicectl device install app --device <udid> iNaturalist.ipa`
+#
+# ── Required GitHub repository secrets ───────────────────────────────────────
+#
+#   IOS_CERTIFICATE_BASE64
+#     Your Apple Development certificate exported as .p12, base64-encoded.
+#     How to get it:
+#       1. Open Keychain Access on your Mac
+#       2. Find "Apple Development: Your Name (XXXXXXXXXX)"
+#       3. Right-click → Export → save as certificate.p12 (set a password)
+#       4. Run: base64 -i certificate.p12 | pbcopy
+#       5. Paste as the secret value
+#
+#   IOS_CERTIFICATE_PASSWORD
+#     The password you chose when exporting the .p12 above.
+#
+#   IOS_PROVISIONING_PROFILE_BASE64
+#     The development provisioning profile Xcode created for this app on your
+#     device, base64-encoded.
+#     How to get it:
+#       1. Build the app once locally from Xcode (so it creates the profile)
+#       2. Run: find ~/Library/MobileDevice/Provisioning\ Profiles -name "*.mobileprovision" \
+#                 -exec security cms -D -i {} \; 2>/dev/null \
+#                 | grep -A1 "iNaturalistMobile\|iNaturalist"
+#          Note the filename of the matching profile (a UUID .mobileprovision)
+#       3. Run: base64 -i ~/Library/MobileDevice/Provisioning\ Profiles/<UUID>.mobileprovision | pbcopy
+#       4. Paste as the secret value
+#
+#   IOS_TEAM_ID
+#     Your personal Apple team ID (10-character string).
+#     How to find it:
+#       - Xcode → Project settings → Signing & Capabilities → Team → copy the
+#         ID shown in parentheses next to your name, e.g. "Jane Smith (AB12CD34EF)"
+#       - Or: open the provisioning profile plist exported above and read TeamIdentifier
+#
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: iOS build (personal cert)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Setup Ruby + CocoaPods
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
+
+      - name: Install JS dependencies
+        run: npm ci
+
+      - name: Install CocoaPods
+        run: gem install cocoapods --no-document
+
+      - name: Install Pods
+        working-directory: ios
+        run: pod install
+
+      - name: Import certificate into keychain
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ github.run_id }}
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/build.keychain
+          echo "$CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/certificate.p12
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$RUNNER_TEMP/certificate.p12" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$CERTIFICATE_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+      - name: Install provisioning profile
+        env:
+          PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          PP_PATH=$RUNNER_TEMP/profile.mobileprovision
+          echo "$PROVISIONING_PROFILE_BASE64" | base64 --decode > "$PP_PATH"
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          # Read UUID from profile so the filename matches what Xcode expects
+          UUID=$(security cms -D -i "$PP_PATH" 2>/dev/null \
+            | plutil -extract UUID raw - 2>/dev/null \
+            || /usr/libexec/PlistBuddy -c "Print UUID" /dev/stdin <<< \
+               "$(security cms -D -i "$PP_PATH" 2>/dev/null)")
+          cp "$PP_PATH" ~/Library/MobileDevice/Provisioning\ Profiles/"${UUID}.mobileprovision"
+          echo "Installed provisioning profile: $UUID"
+
+      - name: Build & archive
+        env:
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          xcodebuild archive \
+            -workspace ios/iNaturalistReactNative.xcworkspace \
+            -scheme iNaturalistReactNative \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/iNaturalist.xcarchive" \
+            -allowProvisioningUpdates \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Apple Development" \
+            DEVELOPMENT_TEAM="$TEAM_ID" \
+            | xcpretty --color || true
+
+      - name: Export IPA
+        env:
+          TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>development</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>teamID</key>
+            <string>${TEAM_ID}</string>
+            <key>stripSwiftSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/iNaturalist.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export"
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: iNaturalist-${{ github.run_number }}.ipa
+          path: ${{ runner.temp }}/export/*.ipa
+          retention-days: 7
