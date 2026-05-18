@@ -8,7 +8,7 @@ Default classes are **Mallard** (``Anas platyrhynchos``, leaf index 188) and **C
 (``Branta canadensis``, leaf index 265). The v25.01.15 ``INatVision_Small_2`` head has **507** leaves;
 **Gadwall** is not among them.
 
-Default input is a Wikimedia Commons photo of **mallards with Canada geese** (see ``DUAL_SALIENCY_EXAMPLE.md``).
+Default input is a **public-domain** Wikimedia Commons photo of a **male mallard with Canada geese** (USFWS; see ``DUAL_SALIENCY_EXAMPLE.md``).
 """
 
 from __future__ import annotations
@@ -75,7 +75,7 @@ def main() -> None:
     args = p.parse_args()
 
     ex_dir = Path(__file__).resolve().parent
-    default_img = ex_dir / "inputs" / "example_mallard_canada_goose_marina.jpg"
+    default_img = ex_dir / "inputs" / "example_mallard_drake_with_canada_geese.jpg"
     image_path = args.image or default_img
     if not image_path.is_file():
         raise FileNotFoundError(f"Missing input image: {image_path}")

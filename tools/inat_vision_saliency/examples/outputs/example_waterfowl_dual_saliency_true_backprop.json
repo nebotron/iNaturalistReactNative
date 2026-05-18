@@ -1,24 +1,24 @@
 {
-  "input_image": "inputs/example_mallard_canada_goose_marina.jpg",
+  "input_image": "inputs/example_mallard_drake_with_canada_geese.jpg",
   "classes": [
     {
       "leaf_class_id": 188,
-      "top_probability": 0.044791143387556076,
+      "top_probability": 0.08486052602529526,
       "bbox_square_xyxy": [
-        42,
-        44,
-        296,
-        298
+        5,
+        10,
+        277,
+        282
       ]
     },
     {
       "leaf_class_id": 265,
-      "top_probability": 0.7477731108665466,
+      "top_probability": 0.8449345827102661,
       "bbox_square_xyxy": [
-        41,
-        43,
-        296,
-        298
+        5,
+        6,
+        285,
+        286
       ]
     }
   ]
