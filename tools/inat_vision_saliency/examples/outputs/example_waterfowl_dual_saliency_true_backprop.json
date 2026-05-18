@@ -1,0 +1,25 @@
+{
+  "input_image": "examples/inputs/example_waterfowl_input.jpg",
+  "classes": [
+    {
+      "leaf_class_id": 188,
+      "top_probability": 0.3532734513282776,
+      "bbox_square_xyxy": [
+        9,
+        4,
+        298,
+        293
+      ]
+    },
+    {
+      "leaf_class_id": 265,
+      "top_probability": 0.14142119884490967,
+      "bbox_square_xyxy": [
+        35,
+        38,
+        295,
+        298
+      ]
+    }
+  ]
+}

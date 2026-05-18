@@ -2,7 +2,7 @@
 
 > **On GitHub:** from the repo home page, open `tools/inat_vision_saliency/examples/EXAMPLES.md` on your branch.
 
-This gallery uses **only wild-animal-oriented examples**: PlaceBear (bears) plus fixed [Lorem Picsum](https://picsum.photos) photo IDs that were screened so the model’s **top-1** prediction is an **animal** species (insects, birds, mammals, etc.), not plants or scenery-only taxa. Each row shows the 299×299 input, a turbo saliency blend for the predicted class, and the **smallest square** bounding high-saliency pixels (lime outline) computed in [`saliency_map.py`](../inat_vision_saliency/saliency_map.py). See also [`../INTEGRATION.md`](../INTEGRATION.md).
+This gallery uses **only wild-animal-oriented examples**: PlaceBear (bears) plus fixed [Lorem Picsum](https://picsum.photos) photo IDs that were screened so the model’s **top-1** prediction is an **animal** species (insects, birds, mammals, etc.), not plants or scenery-only taxa. Each row shows the 299×299 input, a turbo saliency blend for the predicted class, and the **smallest square** bounding high-saliency pixels (lime outline) computed in [`saliency_map.py`](../inat_vision_saliency/saliency_map.py). See also [`../INTEGRATION.md`](../INTEGRATION.md). For **two fixed-class** true-gradient maps (single-color overlays), see [`DUAL_SALIENCY_EXAMPLE.md`](DUAL_SALIENCY_EXAMPLE.md).
 
 Class indices match the `leaf_class_id` column in the release [`taxonomy.csv`](https://github.com/inaturalist/model-files/releases/download/v25.01.15/taxonomy.csv) (same mapping as the mobile `Taxonomy` loader in [vision-camera-plugin-inatvision](https://github.com/inaturalist/vision-camera-plugin-inatvision)).
 
