@@ -45,9 +45,6 @@ name: iOS build (personal cert)
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - claude/record-upload-demo-dHKBX
 
 jobs:
   build:
