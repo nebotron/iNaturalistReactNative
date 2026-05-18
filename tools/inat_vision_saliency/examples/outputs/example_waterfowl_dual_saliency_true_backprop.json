@@ -1,23 +1,23 @@
 {
-  "input_image": "examples/inputs/example_waterfowl_input.jpg",
+  "input_image": "inputs/example_mallard_canada_goose_marina.jpg",
   "classes": [
     {
       "leaf_class_id": 188,
-      "top_probability": 0.3532734513282776,
+      "top_probability": 0.044791143387556076,
       "bbox_square_xyxy": [
-        9,
-        4,
-        298,
-        293
+        42,
+        44,
+        296,
+        298
       ]
     },
     {
       "leaf_class_id": 265,
-      "top_probability": 0.14142119884490967,
+      "top_probability": 0.7477731108665466,
       "bbox_square_xyxy": [
-        35,
-        38,
-        295,
+        41,
+        43,
+        296,
         298
       ]
     }

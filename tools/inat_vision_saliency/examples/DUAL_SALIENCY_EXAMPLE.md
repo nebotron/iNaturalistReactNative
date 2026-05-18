@@ -6,20 +6,16 @@ This folder includes a **reproducible example** of **exact** input saliency maps
 
 | File | Description |
 |------|-------------|
-| `inputs/example_waterfowl_input.jpg` | Example RGB input (resized from Wikimedia Commons; see attribution below). |
+| `inputs/example_mallard_canada_goose_marina.jpg` | Example RGB input (see attribution below). Scene: **mallard(s)** and **Canada goose / geese** together — aligned with the “mallard + goose on gravel” style reference you provided (the chat attachment itself is not stored as a file in this repo). |
 | `outputs/example_waterfowl_dual_saliency_true_backprop.png` | Three-panel figure: 299×299 input, then **two** saliency overlays. Each overlay uses **one solid color** for the magnitude of ∂(softmax class *k*)/∂pixels (normalized per map, blended over the input). |
 | `outputs/example_waterfowl_dual_saliency_true_backprop.json` | `top_probability` and bbox for each target class on this input. |
 
 ## Colors and classes
 
 - **Mallard** (`Anas platyrhynchos`, leaf index **188**): tint **RGB (29, 78, 216)** — deep blue.
-- **Second map**: **Canada Goose** (`Branta canadensis`, leaf index **265**): tint **RGB (234, 88, 12)** — orange.
+- **Canada Goose** (`Branta canadensis`, leaf index **265**): tint **RGB (234, 88, 12)** — orange.
 
-### Why not “Gadwall”?
-
-The **v25.01.15** `INatVision_Small_2_fact256_8bit` head exported here has **507** leaf classes. The release `taxonomy.csv` used with this model **does not include Gadwall** (*Mareca strepera* / *Anas strepera*). The closest honest second waterbird class for a **two-map illustration** on the same photo is **Canada Goose** (265), which is a leaf in this head.
-
-If Gadwall is added to a future vision head, re-run the generator with e.g. `--class-b <leaf_id>` once you know the leaf index.
+**Gadwall** (*Mareca strepera*) is **not** a leaf in the v25.01.15 `INatVision_Small_2` 507-class head, so this example uses **Canada Goose** as the second species (both appear in the reference photo you described).
 
 ## Regenerate
 
@@ -27,25 +23,23 @@ If Gadwall is added to a future vision head, re-run the generator with e.g. `--c
 pip install -e tools/inat_vision_saliency
 cd tools/inat_vision_saliency
 MPLBACKEND=Agg PYTHONPATH=. python3 examples/generate_dual_class_saliency_example.py \
-  --image examples/inputs/example_waterfowl_input.jpg
+  --image examples/inputs/example_mallard_canada_goose_marina.jpg
 ```
 
 Optional: `--class-a`, `--class-b`, `--color-a R,G,B`, `--color-b R,G,B`, `--alpha`, `--out-dir`.
 
 ## Input image attribution
 
-- **Source:** [Wikimedia Commons — *Herd of cold waterfowl on frozen Green Lake 2008*](https://commons.wikimedia.org/wiki/File:Herd_of_cold_waterfowl_on_frozen_Green_Lake_2008.jpg)  
-- **Author:** [Cacophony](https://commons.wikimedia.org/wiki/User:Cacophony)  
-- **License:** CC BY-SA 2.5  
+- **File:** [Canada geese and mallards at Burgh Castle Marina — geograph.org.uk — 1632106.jpg](https://commons.wikimedia.org/wiki/File:Canada_geese_and_mallards_at_Burgh_Castle_Marina_-_geograph.org.uk_-_1632106.jpg)  
+- **Author:** Evelyn Simak / [Geograph Britain and Ireland](https://www.geograph.org.uk/)  
+- **License:** CC BY-SA 2.0  
 
-The chat-attached photo in the issue was **not available as a file in this workspace**; this freely licensed substitute was used so the example can live in git. To run on your own photo, pass `--image /path/to/your.jpg`.
+## Raw GitHub links (this branch)
 
-## Raw GitHub link
-
-PNG (this branch):
+PNG:
 
 https://raw.githubusercontent.com/nebotron/iNaturalistReactNative/cursor/dual-saliency-example-da10/tools/inat_vision_saliency/examples/outputs/example_waterfowl_dual_saliency_true_backprop.png
 
-JSON metadata:
+JSON:
 
 https://raw.githubusercontent.com/nebotron/iNaturalistReactNative/cursor/dual-saliency-example-da10/tools/inat_vision_saliency/examples/outputs/example_waterfowl_dual_saliency_true_backprop.json

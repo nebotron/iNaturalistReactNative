@@ -6,10 +6,9 @@ single RGB color (heatmap = magnitude of the per-pixel gradient, normalized, mul
 
 Default classes are **Mallard** (``Anas platyrhynchos``, leaf index 188) and **Canada Goose**
 (``Branta canadensis``, leaf index 265). The v25.01.15 ``INatVision_Small_2`` head has **507** leaves;
-**Gadwall** is not among them, so this example uses Canada Goose as a second waterbird class on the
-same input (see ``DUAL_SALIENCY_EXAMPLE.md``).
+**Gadwall** is not among them.
 
-Input image default: Wikimedia Commons herd waterfowl (CC BY-SA 2.5) — see script constants.
+Default input is a Wikimedia Commons photo of **mallards with Canada geese** (see ``DUAL_SALIENCY_EXAMPLE.md``).
 """
 
 from __future__ import annotations
@@ -76,7 +75,7 @@ def main() -> None:
     args = p.parse_args()
 
     ex_dir = Path(__file__).resolve().parent
-    default_img = ex_dir / "inputs" / "example_waterfowl_input.jpg"
+    default_img = ex_dir / "inputs" / "example_mallard_canada_goose_marina.jpg"
     image_path = args.image or default_img
     if not image_path.is_file():
         raise FileNotFoundError(f"Missing input image: {image_path}")
@@ -96,7 +95,11 @@ def main() -> None:
     )
 
     pil = Image.open(image_path).convert("RGB")
-    meta: dict = {"input_image": str(image_path), "classes": []}
+    try:
+        in_rel = str(image_path.resolve().relative_to(ex_dir))
+    except ValueError:
+        in_rel = str(image_path.resolve())
+    meta: dict = {"input_image": in_rel, "classes": []}
 
     panels: list[tuple[str, np.ndarray]] = []
     pil_small = pil.resize((299, 299), Image.Resampling.BILINEAR)
@@ -132,7 +135,7 @@ def main() -> None:
         ax.axis("off")
     fig.suptitle(
         "True backprop (PyTorch autograd) — v25.01.15 INatVision_Small_2 (507 leaves). "
-        "Gadwall is not a leaf in this head; Canada Goose (265) illustrates a second species.",
+        "Mallard (188) vs Canada Goose (265); single-color maps per class.",
         fontsize=9,
         y=1.02,
     )
