@@ -117,6 +117,8 @@ jobs:
         env:
           TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
         run: |
+          set -eo pipefail
+          LOG="$RUNNER_TEMP/xcodebuild.log"
           xcodebuild archive \
             -workspace ios/iNaturalistReactNative.xcworkspace \
             -scheme iNaturalistReactNative \
@@ -126,7 +128,11 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Apple Development" \
             DEVELOPMENT_TEAM="$TEAM_ID" \
-            | xcpretty --color || true
+            2>&1 | tee "$LOG"
+
+      - name: Show archive log tail on failure
+        if: failure()
+        run: tail -100 "$RUNNER_TEMP/xcodebuild.log" 2>/dev/null || true
 
       - name: Export IPA
         env:
