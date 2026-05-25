@@ -1,0 +1,7 @@
+---
+globs: *
+alwaysApply: true
+---
+
+- When you finish a task, commit them with an informative message on the current branch, and `git push fork`.
+- Once you are done with all requests, and there are no follow-ups, deploy the changes with `npm run ios:release`. Debug any failures.
