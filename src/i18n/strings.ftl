@@ -732,9 +732,9 @@ Lowest = Lowest
 LOWEST-RANK = LOWEST RANK
 MAP = MAP
 Map-Area = Map Area
-Mark-as-reviewed = Mark as reviewed
 # Month of March
 March = March
+Mark-as-reviewed = Mark as reviewed
 # Radio button option for navigation flows in Settings
 Match-Screen = Match Screen
 # Identification category
@@ -1305,8 +1305,6 @@ Traditional-Project = Traditional Project
 Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?
-# Text to show when a taoxn rank is unknown or missing
-Unmark-as-reviewed = Unmark as reviewed
 Unknown--rank = Unknown
 # Text to show when a taxon or identification is unknown or missing
 Unknown--taxon = Unknown
@@ -1315,6 +1313,8 @@ Unknown--user = Unknown
 # Generic error message
 Unknown-error = Unknown error
 Unknown-organism = Unknown organism
+# Text to show when a taoxn rank is unknown or missing
+Unmark-as-reviewed = Unmark as reviewed
 Unreviewed-observations-only = Unreviewed observations only
 Upload-Complete = Upload Complete
 Upload-in-progress = Upload in progress

@@ -25,7 +25,6 @@ interface RollbackSnapshot {
   cameraRollUris: string[];
   photoLibraryUris: string[];
   originalDevicePhotoUris: string[];
-  importedPhotoDeviceUriByLocalUri: Record<string, string>;
   removedOriginalDevicePhotoUris: string[];
   evidenceToAdd: string[];
   newPhotoUris: string[];
@@ -69,7 +68,6 @@ interface ObservationFlowState {
   evidenceToAdd: string[];
   photoLibraryUris: string[];
   originalDevicePhotoUris: string[];
-  importedPhotoDeviceUriByLocalUri: Record<string, string>;
   removedOriginalDevicePhotoUris: string[];
   groupedPhotos: GroupedPhoto[];
   observations: RealmObservationPojo[];
@@ -93,9 +91,6 @@ interface ObservationFlowActions {
   resetObservationFlowSlice: ( ) => void;
   addCameraRollUris: ( uris: string[] ) => void;
   addOriginalDevicePhotoUris: ( uris: string[] ) => void;
-  addImportedPhotoDeviceUriMappings: (
-    mappings: { localUri: string; deviceUri: string | null | undefined }[],
-  ) => void;
   setSavingPhoto: ( saving: boolean ) => void;
   setCameraState: ( options: CameraStateOptions ) => void;
   setCurrentObservationIndex: ( index: number ) => void;
@@ -131,7 +126,6 @@ const DEFAULT_STATE: ObservationFlowState = {
   evidenceToAdd: [],
   photoLibraryUris: [],
   originalDevicePhotoUris: [],
-  importedPhotoDeviceUriByLocalUri: {},
   removedOriginalDevicePhotoUris: [],
   groupedPhotos: [],
   observations: [],
@@ -198,28 +192,6 @@ const keysAndValuesToJSON = (
       : value;
   } );
   return result as Partial<RealmObservationPojo>;
-};
-
-const observationPhotoMatchesUri = (
-  obsPhoto: RealmObservationPojo["observationPhotos"][number],
-  uri: string,
-): boolean => {
-  const photo = obsPhoto?.photo;
-  if ( !photo ) {
-    return false;
-  }
-
-  const candidateUris = new Set(
-    [
-      Photo.getLocalPhotoUri( photo.localFilePath ),
-      photo.url,
-      Photo.displayLocalOrRemoteSquarePhoto( photo ),
-      Photo.displayCropSourcePhoto( photo ),
-      obsPhoto.originalPhotoUri,
-    ].filter( ( candidateUri ): candidateUri is string => !!candidateUri ),
-  );
-
-  return candidateUris.has( uri );
 };
 
 const updateObservationKeysWithState = (
@@ -362,21 +334,6 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
     } );
 
     return { originalDevicePhotoUris };
-  } ),
-  addImportedPhotoDeviceUriMappings: (
-    mappings: { localUri: string; deviceUri: string | null | undefined }[],
-  ) => set( state => {
-    const importedPhotoDeviceUriByLocalUri = {
-      ...state.importedPhotoDeviceUriByLocalUri,
-    };
-    mappings.forEach( ( { localUri, deviceUri } ) => {
-      registerImportedPhotoDeviceUriMappings(
-        importedPhotoDeviceUriByLocalUri,
-        localUri,
-        deviceUri,
-      );
-    } );
-    return { importedPhotoDeviceUriByLocalUri };
   } ),
   setSavingPhoto: ( saving: boolean ) => set( { savingPhoto: saving } ),
   setCameraState: ( options: CameraStateOptions ) => set( state => ( {
@@ -534,7 +491,6 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
       cameraRollUris: snapshot.cameraRollUris,
       photoLibraryUris: snapshot.photoLibraryUris,
       originalDevicePhotoUris: snapshot.originalDevicePhotoUris,
-      importedPhotoDeviceUriByLocalUri: snapshot.importedPhotoDeviceUriByLocalUri,
       removedOriginalDevicePhotoUris: snapshot.removedOriginalDevicePhotoUris,
       evidenceToAdd: snapshot.evidenceToAdd,
       newPhotoUris: snapshot.newPhotoUris,
@@ -553,9 +509,6 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
       cameraRollUris: [...state.cameraRollUris],
       photoLibraryUris: [...state.photoLibraryUris],
       originalDevicePhotoUris: [...state.originalDevicePhotoUris],
-      importedPhotoDeviceUriByLocalUri: {
-        ...state.importedPhotoDeviceUriByLocalUri,
-      },
       removedOriginalDevicePhotoUris: [...state.removedOriginalDevicePhotoUris],
       evidenceToAdd: [...state.evidenceToAdd],
       newPhotoUris: [...state.newPhotoUris],

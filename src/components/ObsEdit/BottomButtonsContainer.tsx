@@ -25,7 +25,6 @@ interface Props {
   observations: object[];
   currentObservation: RealmObservation;
   currentObservationIndex: number;
-  setCurrentObservationIndex: ( index: number, observations: object[] ) => void;
   transitionAnimation: ( ) => void;
 }
 
@@ -34,7 +33,6 @@ const BottomButtonsContainer = ( {
   currentObservation,
   currentObservationIndex,
   observations,
-  setCurrentObservationIndex,
   transitionAnimation,
 }: Props ) => {
   const { isConnected } = useNetInfo( );
@@ -48,6 +46,9 @@ const BottomButtonsContainer = ( {
   const setSavedOrUploadedMultiObsFlow = useStore( state => state.setSavedOrUploadedMultiObsFlow );
   const incrementTotalSavedObservations = useStore(
     state => state.incrementTotalSavedObservations,
+  );
+  const removeObservationFromMultiObsFlowAtIndex = useStore(
+    state => state.removeObservationFromMultiObsFlowAtIndex,
   );
   const isNewObs = !currentObservation._created_at;
   const hasPhotos = currentObservation.observationPhotos?.length > 0;
@@ -70,9 +71,11 @@ const BottomButtonsContainer = ( {
   const { startUploadsFromMultiObsEdit } = useUploadObservations( canUpload );
 
   const setNextScreen = useCallback( async ( type: ButtonTypeNonNull ) => {
+    const savedObservationIndex = currentObservationIndex;
+    const numObservations = observations.length;
     const savedObservation = await saveObservation( currentObservation, cameraRollUris, realm );
-    if ( savedObservation && observations?.length > 1 ) {
-      transitionAnimation();
+    if ( savedObservation && numObservations > 1 ) {
+      transitionAnimation( );
       setSavedOrUploadedMultiObsFlow( );
     }
     // If we are saving a new observations, reset the stored my obs offset to
@@ -86,25 +89,17 @@ const BottomButtonsContainer = ( {
       const { uuid } = savedObservation;
       addTotalToolbarIncrements( savedObservation );
       addToUploadQueue( uuid );
-      transitionAnimation();
       startUploadsFromMultiObsEdit( );
     } else {
       incrementTotalSavedObservations( );
     }
 
-    if ( observations.length === 1 ) {
+    if ( numObservations === 1 ) {
       setButtonPressed( null );
       // If this is the last observation, we're done
       exitObservationFlow( );
-    } else if ( currentObservationIndex === observations.length - 1 ) {
-      observations.pop( );
-      setCurrentObservationIndex( currentObservationIndex - 1, observations );
-      setLoading( false );
-      setButtonPressed( null );
     } else {
-      observations.splice( currentObservationIndex, 1 );
-      // this seems necessary for rerendering the ObsEdit screen
-      setCurrentObservationIndex( currentObservationIndex, observations );
+      removeObservationFromMultiObsFlowAtIndex( savedObservationIndex );
       setLoading( false );
       setButtonPressed( null );
     }
@@ -119,8 +114,8 @@ const BottomButtonsContainer = ( {
     isNewObs,
     observations,
     realm,
+    removeObservationFromMultiObsFlowAtIndex,
     resetMyObsOffsetToRestore,
-    setCurrentObservationIndex,
     setMyObsOffset,
     setSavedOrUploadedMultiObsFlow,
     startUploadsFromMultiObsEdit,
