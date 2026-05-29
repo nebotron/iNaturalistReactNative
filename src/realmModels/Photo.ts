@@ -4,6 +4,13 @@ import type { ApiPhoto } from "api/types";
 import { photoUploadPath } from "appConstants/paths";
 import { Platform } from "react-native";
 import type { RealmPhoto } from "realmModels/types";
+import {
+  cropOriginalUriFromPath,
+  normalizedCropToStorage,
+  preserveCropOriginalPath,
+  savedNormalizedCrop,
+} from "sharedHelpers/cropPhotoMetadata";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import resizeImage from "sharedHelpers/resizeImage";
 import { unlink } from "sharedHelpers/util";
 
@@ -138,6 +145,31 @@ class Photo extends Realm.Object {
     );
   }
 
+  static displayCropEditorSourcePhoto( photo: RealmPhoto ) {
+    return (
+      cropOriginalUriFromPath( photo?.cropOriginalLocalFilePath )
+      || Photo.displayCropSourcePhoto( photo )
+    );
+  }
+
+  static savedNormalizedCrop( photo?: RealmPhoto ): NormalizedCrop | null {
+    return savedNormalizedCrop( photo ?? {} );
+  }
+
+  static async preserveCropOriginal(
+    sourceUri: string,
+    photo?: RealmPhoto,
+  ): Promise<string> {
+    return preserveCropOriginalPath(
+      sourceUri,
+      photo?.cropOriginalLocalFilePath,
+    );
+  }
+
+  static cropMetadataFromNormalizedCrop( crop: NormalizedCrop ) {
+    return normalizedCropToStorage( crop );
+  }
+
   static deletePhotoFromDeviceStorage( path: string ) {
     const localPhoto = Photo.getLocalPhotoUri( path );
     unlink( localPhoto );
@@ -158,6 +190,11 @@ class Photo extends Realm.Object {
       license_code: { type: "string", mapTo: "licenseCode", optional: true },
       url: "string?",
       localFilePath: "string?",
+      cropOriginalLocalFilePath: "string?",
+      cropX: "double?",
+      cropY: "double?",
+      cropW: "double?",
+      cropH: "double?",
       hidden: "bool?",
     },
   };

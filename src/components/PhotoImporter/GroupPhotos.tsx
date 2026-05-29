@@ -14,6 +14,7 @@ import ViewWrapper from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import React, { useCallback, useMemo, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -29,6 +30,8 @@ const emptyItemStyle = {
 interface PhotoItem {
   image: {
     uri: string;
+    cropOriginalUri?: string;
+    crop?: NormalizedCrop;
   };
 }
 
