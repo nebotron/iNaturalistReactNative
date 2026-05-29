@@ -2,8 +2,12 @@
 
 import { useNavigation } from "@react-navigation/native";
 import {
+  accuracyToEncompassBounds,
+  boundingBoxGeojsonToBounds,
+  getMapRegion,
   latitudeDeltaToMeters,
   metersToLatitudeDelta,
+  regionForAccuracy,
 } from "components/SharedComponents/Map/helpers/mapHelpers";
 import type { Node } from "react";
 import React, {
@@ -115,9 +119,11 @@ const reducer = ( state, action ) => {
         ...state,
         locationName: action.locationName,
         region: action.region,
+        accuracy: action.accuracy ?? state.accuracy,
         hidePlaceResults: true,
-        regionToAnimate: action.region,
+        regionToAnimate: action.regionToAnimate ?? action.region,
         loading: true,
+        isFirstMapRender: false,
       };
     case "UPDATE_LOCATION_NAME":
       return {
@@ -199,23 +205,57 @@ const LocationPickerContainer = ( ): Node => {
     [navigation, currentObservation, radiusToMapHeight, mapDimensionsRatio],
   );
 
-  const selectPlaceResult = place => {
+  const selectPlaceResult = useCallback( place => {
     const { coordinates } = place.point_geojson;
+    const latitude = coordinates[1];
+    const longitude = coordinates[0];
+    const bounds = boundingBoxGeojsonToBounds( place.bounding_box_geojson );
+
+    if ( !bounds ) {
+      dispatch( {
+        type: "SELECT_PLACE_RESULT",
+        locationName: place.display_name,
+        region: {
+          ...region,
+          latitude,
+          longitude,
+        },
+        regionToAnimate: {
+          ...region,
+          latitude,
+          longitude,
+        },
+      } );
+      return;
+    }
+
+    const placeAccuracy = accuracyToEncompassBounds( latitude, longitude, bounds );
+    let newRegion;
+
+    if ( radiusToMapHeight !== undefined && mapDimensionsRatio !== undefined ) {
+      newRegion = regionForAccuracy(
+        latitude,
+        longitude,
+        placeAccuracy,
+        radiusToMapHeight,
+        mapDimensionsRatio,
+      );
+    } else {
+      newRegion = {
+        ...getMapRegion( bounds ),
+        latitude,
+        longitude,
+      };
+    }
+
     dispatch( {
       type: "SELECT_PLACE_RESULT",
       locationName: place.display_name,
-      region: {
-        ...region,
-        latitude: coordinates[1],
-        longitude: coordinates[0],
-      },
-      regionToAnimate: {
-        ...region,
-        latitude: coordinates[1],
-        longitude: coordinates[0],
-      },
+      region: newRegion,
+      regionToAnimate: newRegion,
+      accuracy: placeAccuracy,
     } );
-  };
+  }, [region, radiusToMapHeight, mapDimensionsRatio] );
 
   const onCurrentLocationPress = ( ) => dispatch( { type: "HANDLE_CURRENT_LOCATION_PRESS" } );
   const onMapReady = useCallback( ( ) => dispatch( { type: "HANDLE_MAP_READY" } ), [] );
