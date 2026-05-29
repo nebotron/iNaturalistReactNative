@@ -1,5 +1,6 @@
 import type { Ref } from "react";
 import { useImperativeHandle } from "react";
+import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 
 import type { ProgrammaticZoomCallback, ZoomableRef } from "./types";
 
@@ -7,6 +8,7 @@ export const useZoomableHandle = (
   ref: Ref<unknown> | undefined,
   reset: () => void,
   zoom: ProgrammaticZoomCallback,
+  applyTransform: ( transform: ImageZoomTransform ) => void,
 ) => {
   useImperativeHandle(
     ref,
@@ -17,7 +19,10 @@ export const useZoomableHandle = (
       zoom( event ) {
         zoom( event );
       },
+      applyTransform( transform ) {
+        applyTransform( transform );
+      },
     } ),
-    [reset, zoom],
+    [applyTransform, reset, zoom],
   );
 };

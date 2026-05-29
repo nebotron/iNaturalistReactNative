@@ -57,7 +57,6 @@ export const useGestures = ( {
   onDoubleTap = () => {},
   onProgrammaticZoom = () => {},
   onResetAnimationEnd,
-  cropPanContext,
 }: ZoomableUseGesturesProps ) => {
   const isInteracting = useRef( false );
   const isPinching = useRef( false );
@@ -141,43 +140,6 @@ export const useGestures = ( {
 
   const moveIntoView = () => {
     "worklet";
-
-    if ( cropPanContext ) {
-      const totalTranslateX = sum( translate.x, focal.x );
-      const totalTranslateY = sum( translate.y, focal.y );
-      const panLimits = computeCropPanTranslateLimits( cropPanContext, {
-        scale: scale.value,
-        translateX: translate.x.value,
-        translateY: translate.y.value,
-        focalX: focal.x.value,
-        focalY: focal.y.value,
-      } );
-
-      if ( totalTranslateX > panLimits.maxTotalTranslateX ) {
-        translate.x.value = withTiming(
-          panLimits.maxTotalTranslateX - focal.x.value,
-          withTimingConfig,
-        );
-      } else if ( totalTranslateX < panLimits.minTotalTranslateX ) {
-        translate.x.value = withTiming(
-          panLimits.minTotalTranslateX - focal.x.value,
-          withTimingConfig,
-        );
-      }
-
-      if ( totalTranslateY > panLimits.maxTotalTranslateY ) {
-        translate.y.value = withTiming(
-          panLimits.maxTotalTranslateY - focal.y.value,
-          withTimingConfig,
-        );
-      } else if ( totalTranslateY < panLimits.minTotalTranslateY ) {
-        translate.y.value = withTiming(
-          panLimits.minTotalTranslateY - focal.y.value,
-          withTimingConfig,
-        );
-      }
-      return;
-    }
 
     if ( scale.value > 1 ) {
       const rightLimit = limits.right( width, scale );
@@ -295,35 +257,6 @@ export const useGestures = ( {
     endPan();
     onPanEnd?.( ...args );
     onInteractionEnded();
-  };
-
-  const getPanClampLimits = () => {
-    "worklet";
-
-    if ( cropPanContext ) {
-      const panLimits = computeCropPanTranslateLimits( cropPanContext, {
-        scale: scale.value,
-        translateX: translate.x.value,
-        translateY: translate.y.value,
-        focalX: focal.x.value,
-        focalY: focal.y.value,
-      } );
-
-      return {
-        leftLimit: panLimits.minTotalTranslateX - focal.x.value,
-        rightLimit: panLimits.maxTotalTranslateX - focal.x.value,
-        topLimit: panLimits.minTotalTranslateY - focal.y.value,
-        bottomLimit: panLimits.maxTotalTranslateY - focal.y.value,
-      };
-    }
-
-    const rightLimit = limits.right( width, scale );
-    return {
-      leftLimit: -rightLimit,
-      rightLimit,
-      topLimit: -limits.bottom( height, scale ),
-      bottomLimit: limits.bottom( height, scale ),
-    };
   };
 
   const panWhilePinchingGesture = Gesture.Pan()

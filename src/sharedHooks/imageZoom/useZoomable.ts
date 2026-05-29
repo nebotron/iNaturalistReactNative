@@ -25,7 +25,6 @@ export const useZoomable = ( {
   onResetAnimationEnd,
   onLayout,
   ref,
-  cropPanContext,
 }: UseZoomableProps ) => {
   const {
     width, height, center, onZoomableLayout,
@@ -62,7 +61,6 @@ export const useZoomable = ( {
     onDoubleTap,
     onProgrammaticZoom,
     onResetAnimationEnd,
-    cropPanContext,
   } );
   useZoomableHandle( ref, reset, zoom, applyTransform );
 

@@ -168,10 +168,6 @@ export interface ZoomProps {
    * The values parameter provides additional detailed information for each animation value.
    */
   onResetAnimationEnd?: OnResetAnimationEndCallback;
-  /**
-   * When set, panning is clamped so the crop frame can reach every image edge.
-   */
-  cropPanContext?: CropPanContext;
 }
 
 export type ZoomableProps = AnimateProps<ViewProps> & ZoomProps;
@@ -243,7 +239,6 @@ export type ZoomableUseGesturesProps = Pick<
     | "onDoubleTap"
     | "onProgrammaticZoom"
     | "onResetAnimationEnd"
-    | "cropPanContext"
   >;
 
 export interface ZoomableRef {

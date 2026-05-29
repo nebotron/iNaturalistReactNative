@@ -53,7 +53,6 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     onLayout,
     style = {},
     testID,
-    cropPanContext,
   },
   ref,
 ) => {
@@ -89,7 +88,6 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     onResetAnimationEnd,
     onLayout,
     ref: undefined,
-    cropPanContext,
   } );
 
   useEffect( ( ) => {

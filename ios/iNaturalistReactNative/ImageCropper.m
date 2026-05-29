@@ -1,6 +1,7 @@
 #import <ImageIO/ImageIO.h>
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
+#import <Vision/Vision.h>
 
 @interface ImageCropper : NSObject <RCTBridgeModule>
 @end
@@ -8,6 +9,125 @@
 @implementation ImageCropper
 
 RCT_EXPORT_MODULE( );
+
+static CGImagePropertyOrientation orientationFromUIImage( UIImage *image )
+{
+  switch ( image.imageOrientation ) {
+    case UIImageOrientationUp:
+      return kCGImagePropertyOrientationUp;
+    case UIImageOrientationDown:
+      return kCGImagePropertyOrientationDown;
+    case UIImageOrientationLeft:
+      return kCGImagePropertyOrientationLeft;
+    case UIImageOrientationRight:
+      return kCGImagePropertyOrientationRight;
+    case UIImageOrientationUpMirrored:
+      return kCGImagePropertyOrientationUpMirrored;
+    case UIImageOrientationDownMirrored:
+      return kCGImagePropertyOrientationDownMirrored;
+    case UIImageOrientationLeftMirrored:
+      return kCGImagePropertyOrientationLeftMirrored;
+    case UIImageOrientationRightMirrored:
+      return kCGImagePropertyOrientationRightMirrored;
+    default:
+      return kCGImagePropertyOrientationUp;
+  }
+}
+
+static NSDictionary *normalizedBoundsFromVisionRect( CGRect rect )
+{
+  if ( rect.size.width <= 0 || rect.size.height <= 0 ) {
+    return nil;
+  }
+
+  CGFloat x = rect.origin.x;
+  CGFloat y = 1.0 - rect.origin.y - rect.size.height;
+  CGFloat width = rect.size.width;
+  CGFloat height = rect.size.height;
+
+  return @{
+    @"x": @( x ),
+    @"y": @( y ),
+    @"width": @( width ),
+    @"height": @( height ),
+  };
+}
+
+static CGRect unionVisionRect( CGRect existing, CGRect next, BOOL hasExisting )
+{
+  if ( !hasExisting ) {
+    return next;
+  }
+
+  CGFloat minX = MIN( existing.origin.x, next.origin.x );
+  CGFloat minY = MIN( existing.origin.y, next.origin.y );
+  CGFloat maxX = MAX( existing.origin.x + existing.size.width, next.origin.x + next.size.width );
+  CGFloat maxY = MAX( existing.origin.y + existing.size.height, next.origin.y + next.size.height );
+
+  return CGRectMake( minX, minY, maxX - minX, maxY - minY );
+}
+
+static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
+{
+  if ( image.CGImage == NULL ) {
+    return nil;
+  }
+
+  CGImagePropertyOrientation orientation = orientationFromUIImage( image );
+  VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
+                                                                      orientation:orientation
+                                                                          options:@{}];
+  NSMutableArray<VNRequest *> *requests = [NSMutableArray array];
+
+  VNDetectHumanRectanglesRequest *humanRequest = [[VNDetectHumanRectanglesRequest alloc] init];
+  [requests addObject:humanRequest];
+
+  VNRecognizeAnimalsRequest *animalRequest = nil;
+  if ( @available( iOS 15.0, * ) ) {
+    animalRequest = [[VNRecognizeAnimalsRequest alloc] init];
+    [requests addObject:animalRequest];
+  }
+
+  VNGenerateAttentionBasedSaliencyImageRequest *saliencyRequest =
+    [[VNGenerateAttentionBasedSaliencyImageRequest alloc] init];
+  [requests addObject:saliencyRequest];
+
+  NSError *error = nil;
+  if ( ![handler performRequests:requests error:&error] ) {
+    return nil;
+  }
+
+  CGRect unionRect = CGRectZero;
+  BOOL hasUnion = NO;
+
+  for ( VNHumanObservation *observation in humanRequest.results ) {
+    unionRect = unionVisionRect( unionRect, observation.boundingBox, hasUnion );
+    hasUnion = YES;
+  }
+
+  if ( @available( iOS 15.0, * ) ) {
+    for ( VNRecognizedObjectObservation *observation in animalRequest.results ) {
+      if ( observation.confidence < 0.3 ) {
+        continue;
+      }
+      unionRect = unionVisionRect( unionRect, observation.boundingBox, hasUnion );
+      hasUnion = YES;
+    }
+  }
+
+  for ( VNSaliencyImageObservation *observation in saliencyRequest.results ) {
+    for ( VNRectangleObservation *salientObject in observation.salientObjects ) {
+      unionRect = unionVisionRect( unionRect, salientObject.boundingBox, hasUnion );
+      hasUnion = YES;
+    }
+  }
+
+  if ( !hasUnion ) {
+    return nil;
+  }
+
+  return normalizedBoundsFromVisionRect( unionRect );
+}
 
 static void updateMetadataForCrop( NSMutableDictionary *metadata, NSInteger width, NSInteger height )
 {
@@ -188,6 +308,28 @@ RCT_EXPORT_METHOD( preserveImageMetadata
   }
 
   resolve( dest );
+}
+
+RCT_EXPORT_METHOD( detectSubjectBounds
+                  : ( NSString * )inputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://"
+                                                           withString:@""];
+  UIImage *image = [UIImage imageWithContentsOfFile:input];
+  if ( image == nil ) {
+    resolve( [NSNull null] );
+    return;
+  }
+
+  NSDictionary *bounds = detectSubjectBoundsForImage( image );
+  if ( bounds == nil ) {
+    resolve( [NSNull null] );
+    return;
+  }
+
+  resolve( bounds );
 }
 
 @end

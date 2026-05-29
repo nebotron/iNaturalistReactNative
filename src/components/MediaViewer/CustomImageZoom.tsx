@@ -5,7 +5,6 @@ import React, {
   useRef,
 } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
-import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 
 import type { SharedZoomableImageRef } from "./SharedZoomableImage";
@@ -25,7 +24,6 @@ interface Props {
   testID?: string;
   zoomRef?: RefObject<SharedZoomableImageRef | null>;
   autoReset?: boolean;
-  cropPanContext?: CropPanContext;
 }
 
 const CustomImageZoom = ( {
@@ -39,7 +37,6 @@ const CustomImageZoom = ( {
   testID,
   zoomRef,
   autoReset = true,
-  cropPanContext,
 }: Props ): Node => {
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   const internalZoomRef = useRef<SharedZoomableImageRef>( null );
@@ -70,7 +67,6 @@ const CustomImageZoom = ( {
       isDoubleTapEnabled
       onInteractionStart={() => setZooming?.( true )}
       onInteractionEnd={() => setZooming?.( false )}
-      cropPanContext={cropPanContext}
     />
   );
 };

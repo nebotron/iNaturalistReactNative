@@ -11,8 +11,6 @@ export function normalizedCropToImageZoomTransform(
   cropSize: number,
   crop: NormalizedCrop,
 ): ImageZoomTransform {
-  "worklet";
-
   if (
     imageWidth <= 0
     || imageHeight <= 0
