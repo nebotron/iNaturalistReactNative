@@ -34,6 +34,7 @@ class ImageCropperModule(
   @ReactMethod
   fun detectSubjectBounds(
     inputPath: String,
+    model: String?,
     promise: Promise,
   ) {
     try {
@@ -64,23 +65,64 @@ class ImageCropperModule(
     }
   }
 
+  private fun rectToWritableMap(
+    rect: RectF,
+  ): WritableMap? {
+    val width = rect.right - rect.left
+    val height = rect.bottom - rect.top
+    if ( width <= 0f || height <= 0f ) {
+      return null
+    }
+
+    return WritableNativeMap().apply {
+      putDouble( "x", rect.left.toDouble() )
+      putDouble( "y", rect.top.toDouble() )
+      putDouble( "width", width.toDouble() )
+      putDouble( "height", height.toDouble() )
+    }
+  }
+
+  private fun detectedObjectToNormalizedRect(
+    detectedObject: DetectedObject,
+    imageWidth: Int,
+    imageHeight: Int,
+  ): RectF {
+    val box = detectedObject.boundingBox
+    return RectF(
+      box.left.toFloat() / imageWidth,
+      box.top.toFloat() / imageHeight,
+      box.right.toFloat() / imageWidth,
+      box.bottom.toFloat() / imageHeight,
+    )
+  }
+
+  private fun detectedObjectScore(
+    detectedObject: DetectedObject,
+    rect: RectF,
+  ): Float {
+    val areaScore = kotlin.math.sqrt( rect.width( ) * rect.height( ) )
+    val trackingScore = detectedObject.trackingId?.toFloat( ) ?: 1f
+    val classificationBoost = detectedObject.labels.maxOfOrNull { label ->
+      label.confidence
+    } ?: 0f
+    return areaScore * trackingScore * ( 1f + classificationBoost )
+  }
+
   private fun unionDetectedObjectBounds(
     detectedObjects: List<DetectedObject>,
     imageWidth: Int,
     imageHeight: Int,
   ): WritableMap? {
-    if ( detectedObjects.isEmpty() || imageWidth <= 0 || imageHeight <= 0 ) {
+    if ( detectedObjects.isEmpty( ) || imageWidth <= 0 || imageHeight <= 0 ) {
       return null
     }
 
     var unionRect: RectF? = null
     detectedObjects.forEach { detectedObject ->
-      val box = detectedObject.boundingBox
-      val normalized = RectF(
-        box.left.toFloat() / imageWidth,
-        box.top.toFloat() / imageHeight,
-        box.right.toFloat() / imageWidth,
-        box.bottom.toFloat() / imageHeight,
+      val normalized = detectedObjectToNormalizedRect(
+        detectedObject,
+        imageWidth,
+        imageHeight,
       )
       unionRect = if ( unionRect == null ) {
         normalized
@@ -94,19 +136,67 @@ class ImageCropperModule(
       }
     }
 
-    val rect = unionRect ?: return null
-    val width = rect.right - rect.left
-    val height = rect.bottom - rect.top
-    if ( width <= 0f || height <= 0f ) {
+    return unionRect?.let( ::rectToWritableMap )
+  }
+
+  private fun bestWeightedDetectedObjectBounds(
+    detectedObjects: List<DetectedObject>,
+    imageWidth: Int,
+    imageHeight: Int,
+  ): WritableMap? {
+    if ( detectedObjects.isEmpty( ) || imageWidth <= 0 || imageHeight <= 0 ) {
       return null
     }
 
-    return WritableNativeMap().apply {
-      putDouble( "x", rect.left.toDouble() )
-      putDouble( "y", rect.top.toDouble() )
-      putDouble( "width", width.toDouble() )
-      putDouble( "height", height.toDouble() )
+    val bestRect = detectedObjects
+      .map { detectedObject ->
+        val rect = detectedObjectToNormalizedRect(
+          detectedObject,
+          imageWidth,
+          imageHeight,
+        )
+        detectedObject to detectedObjectScore( detectedObject, rect )
+      }
+      .maxByOrNull { ( _, score ) -> score }
+      ?.first
+      ?: return null
+
+    return rectToWritableMap(
+      detectedObjectToNormalizedRect(
+        bestRect,
+        imageWidth,
+        imageHeight,
+      ),
+    )
+  }
+
+  private fun largestDetectedObjectBounds(
+    detectedObjects: List<DetectedObject>,
+    imageWidth: Int,
+    imageHeight: Int,
+  ): WritableMap? {
+    if ( detectedObjects.isEmpty( ) || imageWidth <= 0 || imageHeight <= 0 ) {
+      return null
     }
+
+    val largestRect = detectedObjects
+      .maxByOrNull { detectedObject ->
+        val rect = detectedObjectToNormalizedRect(
+          detectedObject,
+          imageWidth,
+          imageHeight,
+        )
+        rect.width( ) * rect.height( )
+      }
+      ?: return null
+
+    return rectToWritableMap(
+      detectedObjectToNormalizedRect(
+        largestRect,
+        imageWidth,
+        imageHeight,
+      ),
+    )
   }
 
   @ReactMethod

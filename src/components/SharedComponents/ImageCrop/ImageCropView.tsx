@@ -114,12 +114,8 @@ const ImageCropView = ( {
     }
 
     const cropKey = [
-      sourceUri,
-      initialCrop.x,
-      initialCrop.y,
-      initialCrop.w,
-      initialCrop.h,
-      boxSize,
+      sourceUri, initialCrop.x, initialCrop.y,
+      initialCrop.w, initialCrop.h, boxSize,
     ].join( ":" );
     if ( appliedInitialCropKey.current === cropKey ) {
       return;

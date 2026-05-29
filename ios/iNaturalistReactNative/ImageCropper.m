@@ -67,16 +67,8 @@ static CGRect unionVisionRect( CGRect existing, CGRect next, BOOL hasExisting )
   return CGRectMake( minX, minY, maxX - minX, maxY - minY );
 }
 
-static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
+static NSDictionary *detectSubjectBoundsUnionAll( VNImageRequestHandler *handler )
 {
-  if ( image.CGImage == NULL ) {
-    return nil;
-  }
-
-  CGImagePropertyOrientation orientation = orientationFromUIImage( image );
-  VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
-                                                                      orientation:orientation
-                                                                          options:@{}];
   NSMutableArray<VNRequest *> *requests = [NSMutableArray array];
 
   VNDetectHumanRectanglesRequest *humanRequest = [[VNDetectHumanRectanglesRequest alloc] init];
@@ -127,6 +119,20 @@ static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
   }
 
   return normalizedBoundsFromVisionRect( unionRect );
+}
+
+static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
+{
+  if ( image.CGImage == NULL ) {
+    return nil;
+  }
+
+  CGImagePropertyOrientation orientation = orientationFromUIImage( image );
+  VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
+                                                                      orientation:orientation
+                                                                          options:@{}];
+
+  return detectSubjectBoundsUnionAll( handler );
 }
 
 static void updateMetadataForCrop( NSMutableDictionary *metadata, NSInteger width, NSInteger height )
@@ -311,7 +317,8 @@ RCT_EXPORT_METHOD( preserveImageMetadata
 }
 
 RCT_EXPORT_METHOD( detectSubjectBounds
-                  : ( NSString * )inputPath resolver
+                  : ( NSString * )inputPath model
+                  : ( NSString * )model resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
@@ -323,6 +330,8 @@ RCT_EXPORT_METHOD( detectSubjectBounds
     return;
   }
 
+  NSString *modelId = model.length > 0 ? model : @"A";
+  (void)modelId;
   NSDictionary *bounds = detectSubjectBoundsForImage( image );
   if ( bounds == nil ) {
     resolve( [NSNull null] );

@@ -4,6 +4,8 @@ import {
   Button,
   ViewWrapper,
 } from "components/SharedComponents";
+import findGroupedPhotoByDisplayUri
+  from "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
 import ImageCropView from "components/SharedComponents/ImageCrop/ImageCropView";
 import { View } from "components/styledComponents";
 import cloneDeep from "lodash/cloneDeep";
@@ -22,6 +24,8 @@ import {
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 import cropImageFile from "sharedHelpers/cropImageFile";
+import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
+import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useTranslation from "sharedHooks/useTranslation";
@@ -51,6 +55,8 @@ const ImageCropEditor = ( ) => {
 
   const [localImageUri, setLocalImageUri] = useState<string | null>( null );
   const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>( null );
+  const [detectedCrop, setDetectedCrop] = useState<NormalizedCrop | null>( null );
+  const [savedInitialCrop, setSavedInitialCrop] = useState<NormalizedCrop | null>( null );
   const [loadingSource, setLoadingSource] = useState( true );
 
   useEffect( ( ) => {
@@ -66,27 +72,59 @@ const ImageCropEditor = ( ) => {
     setLoadingSource( true );
     setLocalImageUri( null );
     setImageSize( null );
+    setDetectedCrop( null );
+    setSavedInitialCrop( null );
 
     ( async ( ) => {
       try {
-        const resolvedUri = await ensureLocalImageForCrop( imageUri );
+        let cropSourceUri = imageUri;
+        let existingSavedCrop: NormalizedCrop | null = null;
+
+        if ( context === "observationEdit" && observationPhotoUuid && currentObservation ) {
+          const obsPhoto = currentObservation.observationPhotos?.find(
+            op => op.uuid === observationPhotoUuid,
+          );
+          const photo = obsPhoto?.photo;
+          if ( photo ) {
+            cropSourceUri = Photo.displayCropEditorSourcePhoto( photo ) || imageUri;
+            existingSavedCrop = Photo.savedNormalizedCrop( photo );
+          }
+        } else if ( context === "groupPhotos" ) {
+          const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
+          if ( groupedPhoto ) {
+            cropSourceUri = groupedPhoto.image.cropOriginalUri || imageUri;
+            existingSavedCrop = groupedPhoto.image.crop ?? null;
+          }
+        }
+
+        const resolvedUri = await ensureLocalImageForCrop( cropSourceUri );
         if ( cancelled ) {
           return;
         }
         setLocalImageUri( resolvedUri );
-        RNImage.getSize(
-          resolvedUri,
-          ( w, h ) => {
-            if ( !cancelled ) {
-              setImageSize( { w, h } );
-            }
-          },
-          ( ) => {
-            if ( !cancelled ) {
-              setImageSize( null );
-            }
-          },
-        );
+        const size = await new Promise<{ w: number; h: number } | null>( resolve => {
+          RNImage.getSize(
+            resolvedUri,
+            ( w, h ) => resolve( { w, h } ),
+            ( ) => resolve( null ),
+          );
+        } );
+        if ( cancelled ) {
+          return;
+        }
+        if ( !size ) {
+          setImageSize( null );
+          return;
+        }
+        setImageSize( size );
+        if ( existingSavedCrop ) {
+          setSavedInitialCrop( existingSavedCrop );
+        }
+        const initialCrop = existingSavedCrop
+          || await detectSubjectInImage( resolvedUri, size.w, size.h );
+        if ( !cancelled ) {
+          setDetectedCrop( initialCrop );
+        }
       } catch {
         if ( !cancelled ) {
           setLocalImageUri( null );
@@ -101,13 +139,18 @@ const ImageCropEditor = ( ) => {
     return ( ) => {
       cancelled = true;
     };
-  }, [imageUri] );
+  }, [
+    context,
+    currentObservation,
+    groupedPhotos,
+    imageUri,
+    observationPhotoUuid,
+  ] );
 
   const labels = useMemo( ( ) => ( {
     confirm: t( "SAVE-CROP" ),
     delete: t( "Delete-photo" ),
     instructions: t( "CROP-DRAG-HINT" ),
-    errorMessage: t( "Something-went-wrong" ),
   } ), [t] );
 
   const finishOrAdvance = useCallback( ( ) => {
@@ -194,11 +237,25 @@ const ImageCropEditor = ( ) => {
       );
 
       if ( context === "groupPhotos" ) {
+        const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
+        const cropOriginalPath = await preserveCropOriginalPath(
+          localImageUri,
+          groupedPhoto?.image.cropOriginalUri,
+        );
+        const cropOriginalUri = cropOriginalUriFromPath( cropOriginalPath ) || localImageUri;
         setGroupedPhotos(
           groupedPhotos.map( group => {
             const photos = group.photos?.map( photo => (
               photo.image.uri === imageUri
-                ? { image: { uri: croppedUri } }
+                ? {
+                  ...photo,
+                  image: {
+                    ...photo.image,
+                    uri: croppedUri,
+                    cropOriginalUri,
+                    crop,
+                  },
+                }
                 : photo
             ) );
             return photos
@@ -212,14 +269,21 @@ const ImageCropEditor = ( ) => {
           op => op.uuid === observationPhotoUuid,
         ) ?? -1;
         if ( idx >= 0 && obs?.observationPhotos ) {
+          const existingPhoto = obs.observationPhotos[idx].photo;
+          const cropOriginalLocalFilePath = await Photo.preserveCropOriginal(
+            localImageUri,
+            existingPhoto,
+          );
           const resizedPath = await Photo.resizeImageForUpload( croppedUri );
           obs.observationPhotos = [...obs.observationPhotos];
           obs.observationPhotos[idx] = {
             ...obs.observationPhotos[idx],
             _updated_at: new Date( ),
             photo: {
-              ...obs.observationPhotos[idx].photo,
+              ...existingPhoto,
               localFilePath: resizedPath,
+              cropOriginalLocalFilePath,
+              ...Photo.cropMetadataFromNormalizedCrop( crop ),
               _updated_at: new Date( ),
             },
           };
@@ -259,7 +323,9 @@ const ImageCropEditor = ( ) => {
     );
   }
 
-  if ( loadingSource || !localImageUri || !imageSize ) {
+  const activeInitialCrop = savedInitialCrop ?? detectedCrop;
+
+  if ( loadingSource || !localImageUri || !imageSize || !activeInitialCrop ) {
     return (
       <View className="flex-1 items-center justify-center bg-black">
         <ActivityIndicator color={colors.white} />
@@ -269,11 +335,11 @@ const ImageCropEditor = ( ) => {
 
   return (
     <ImageCropView
-      key={localImageUri}
       sourceUri={localImageUri}
       imageWidth={imageSize.w}
       imageHeight={imageSize.h}
       framePadding={CROP_FRAME_PADDING}
+      initialCrop={activeInitialCrop}
       labels={labels}
       onConfirm={handleConfirm}
       onDelete={handleDelete}
