@@ -28,6 +28,7 @@ type Props = {
   // Optional component to use as the header
   header?: Function,
   onClose?: Function,
+  onCropPhoto?: Function,
   onDeletePhoto?: Function,
   onDeleteSound?: Function,
   photos?: {
@@ -49,6 +50,7 @@ const MediaViewer = ( {
   deleting,
   header,
   onClose = ( ) => undefined,
+  onCropPhoto,
   onDeletePhoto,
   onDeleteSound,
   photos = [],
@@ -139,6 +141,7 @@ const MediaViewer = ( {
         selectedMediaIndex={selectedMediaIndex}
         horizontalScroll={horizontalScroll}
         setSelectedMediaIndex={setSelectedMediaIndex}
+        onCropPhoto={onCropPhoto}
         onDeletePhoto={photoUri => setMediaToDelete( { type: "photo", uri: photoUri } )}
         onDeleteSound={soundUri => setMediaToDelete( { type: "sound", uri: soundUri } )}
       />

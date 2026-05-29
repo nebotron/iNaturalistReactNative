@@ -48,6 +48,10 @@ class ObservationPhoto extends Realm.Object {
     };
   }
 
+  static needsPhotoReupload( photo?: RealmPhoto ) {
+    return Photo.hasLocalEdits( photo );
+  }
+
   static mapPhotoForAttachingToObs(
     observationID: number,
     observationPhoto: RealmObservationPhoto,
@@ -66,12 +70,23 @@ class ObservationPhoto extends Realm.Object {
     observationID: number,
     observationPhoto: RealmObservationPhoto,
   ) {
+    const observationPhotoParams: {
+      observation_id: number;
+      position?: number;
+      photo_id?: number;
+    } = {
+      observation_id: observationID,
+      position: observationPhoto.position,
+    };
+
+    const { photo } = observationPhoto;
+    if ( ObservationPhoto.needsPhotoReupload( photo ) && photo?.id ) {
+      observationPhotoParams.photo_id = photo.id;
+    }
+
     return {
       id: observationPhoto.uuid,
-      observation_photo: {
-        observation_id: observationID,
-        position: observationPhoto.position,
-      },
+      observation_photo: observationPhotoParams,
     };
   }
 

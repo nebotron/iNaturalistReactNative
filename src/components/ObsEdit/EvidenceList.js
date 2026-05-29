@@ -1,5 +1,6 @@
 // @flow
 
+import { useNavigation } from "@react-navigation/native";
 import deleteRemoteObservationSound from "api/observationSounds";
 import classnames from "classnames";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
@@ -41,6 +42,7 @@ const EvidenceList = ( {
   handleAddEvidence,
   observationSounds = [],
 }: Props ): Node => {
+  const navigation = useNavigation( );
   const currentObservation = useStore( state => state.currentObservation );
 
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
@@ -58,8 +60,11 @@ const EvidenceList = ( {
     [currentObservation?.observationPhotos],
   );
 
-  const photoUris = observationPhotos?.map(
-    obsPhoto => Photo.displayLocalOrRemoteSquarePhoto( obsPhoto.photo ),
+  const photoUris = useMemo(
+    ( ) => observationPhotos
+      .map( obsPhoto => Photo.displayLocalOrRemoteSquarePhoto( obsPhoto.photo ) )
+      .filter( Boolean ),
+    [observationPhotos],
   );
   const mediaUris = useMemo( ( ) => ( [
     ...photoUris,
@@ -180,6 +185,34 @@ const EvidenceList = ( {
     afterMediaDeleted( uriToDelete );
   }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation] );
 
+  const onCropPhoto = useCallback( photo => {
+    const cropUri = Photo.displayCropSourcePhoto( photo );
+    if ( !cropUri ) {
+      return;
+    }
+
+    const obsPhoto = observationPhotos.find( candidate => {
+      const candidateUri = Photo.displayCropSourcePhoto( candidate.photo );
+      const candidateLargeUri = Photo.displayLocalOrRemoteLargePhoto( candidate.photo );
+      const candidateSquareUri = Photo.displayLocalOrRemoteSquarePhoto( candidate.photo );
+      return candidateUri === cropUri
+        || candidateLargeUri === Photo.displayLocalOrRemoteLargePhoto( photo )
+        || candidateSquareUri === Photo.displayLocalOrRemoteSquarePhoto( photo );
+    } );
+
+    if ( !obsPhoto ) {
+      return;
+    }
+
+    setSelectedMediaUri( null );
+    navigation.navigate( "ImageCropEditor", {
+      imageUri: cropUri,
+      context: "observationEdit",
+      observationPhotoUuid: obsPhoto.uuid,
+      onCropSaved: () => setSelectedMediaUri( null ),
+    } );
+  }, [navigation, observationPhotos, setSelectedMediaUri] );
+
   const onDeleteSound = useCallback( async uriToDelete => {
     const obsSound = observationSounds.find( os => os.sound.file_url === uriToDelete );
     async function removeLocalSound( ) {
@@ -250,6 +283,7 @@ const EvidenceList = ( {
         editable
         deleting={deleting}
         onClose={( ) => setSelectedMediaUri( null )}
+        onCropPhoto={onCropPhoto}
         onDeletePhoto={onDeletePhoto}
         onDeleteSound={onDeleteSound}
         photos={observationPhotos.map( obsPhoto => obsPhoto.photo )}

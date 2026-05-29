@@ -34,6 +34,7 @@
 		AE4DC81B3A87484CB3FD6750 /* Lato-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4B0AEEF6CA584BCF9880EB35 /* Lato-Regular.ttf */; };
 		E5DFC1C6FBFA45739CE91C69 /* Lato-MediumItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 69DF855D92EA4ADFB73B47F1 /* Lato-MediumItalic.ttf */; };
 		F0B9E287B2F441548F4A2DCB /* INatIcon.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 509C6A99546C48429FF5AAFC /* INatIcon.ttf */; };
+		IC1B2C3D4E5F60718293A4B5 /* ImageCropper.m in Sources */ = {isa = PBXBuildFile; fileRef = IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -100,6 +101,7 @@
 		8FF73F722F69C8CE007CF4F0 /* AutoContinueShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AutoContinueShareViewController.swift; path = "../node_modules/react-native-share-menu/ios/AutoContinueShareViewController.swift"; sourceTree = SOURCE_ROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F15C1390617A309CE0A194B2 /* Pods_iNaturalistReactNative_ShareExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_iNaturalistReactNative_ShareExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = ImageCropper.m; path = iNaturalistReactNative/ImageCropper.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -139,6 +141,7 @@
 				13B07FB71A68108700A75B9A /* main.m */,
 				19A5877328F8E3310016D128 /* iNaturalistReactNative-Bridging-Header.h */,
 				26972DBD235E42B68E3D5DBC /* Settings.bundle */,
+				IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */,
 			);
 			name = iNaturalistReactNative;
 			sourceTree = "<group>";
@@ -504,6 +507,7 @@
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				197A169D2A7C2567001A03DC /* cvmodel.mlmodel in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
+				IC1B2C3D4E5F60718293A4B5 /* ImageCropper.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

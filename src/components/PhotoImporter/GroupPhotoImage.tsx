@@ -14,6 +14,7 @@ interface Props {
   item: Item;
   selectedObservations: Item[];
   selectObservationPhotos: ( isSelected: boolean, item: Item ) => void;
+  squareCorners?: boolean;
   style?: ViewStyle;
 }
 
@@ -21,6 +22,7 @@ const GroupPhotoImage = ( {
   item,
   selectedObservations,
   selectObservationPhotos,
+  squareCorners = false,
   style,
 }: Props ) => {
   const firstPhoto = item.photos[0];
@@ -34,7 +36,7 @@ const GroupPhotoImage = ( {
       accessibilityRole="button"
       onPress={handlePress}
       testID={`GroupPhotos.${firstPhoto.image.uri}`}
-      className="rounded-[17px] overflow-hidden"
+      className="overflow-hidden"
     >
       <ObsImagePreview
         source={source}
@@ -43,6 +45,7 @@ const GroupPhotoImage = ( {
         obsPhotosCount={item.photos.length}
         selectable
         hideGradientOverlay
+        squareCorners={squareCorners}
       />
     </Pressable>
   );

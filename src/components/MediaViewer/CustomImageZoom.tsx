@@ -1,55 +1,76 @@
-// eslint-disable-next-line import/no-extraneous-dependencies
-import { ImageZoom } from "@likashefqet/react-native-image-zoom";
-import type { Node } from "react";
+import type { Node, RefObject } from "react";
 import React, {
   useEffect,
   useMemo,
   useRef,
 } from "react";
+import type { StyleProp, ViewStyle } from "react-native";
+import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 
-const MIN_SCALE = 0.5;
-const MAX_SCALE = 20;
+import type { SharedZoomableImageRef } from "./SharedZoomableImage";
+import SharedZoomableImage from "./SharedZoomableImage";
+
+export const IMAGE_ZOOM_MIN_SCALE = 0.5;
+export const IMAGE_ZOOM_MAX_SCALE = 50;
 
 interface Props {
   uri: string;
-  setZooming: ( ) => void;
-  selectedMediaIndex: number;
+  setZooming?: ( ) => void;
+  selectedMediaIndex?: number;
+  resetKey?: string | number;
+  width?: number;
+  height?: number;
+  style?: StyleProp<ViewStyle>;
+  testID?: string;
+  zoomRef?: RefObject<SharedZoomableImageRef | null>;
+  autoReset?: boolean;
+  cropPanContext?: CropPanContext;
 }
 
 const CustomImageZoom = ( {
   uri,
   setZooming,
   selectedMediaIndex,
+  resetKey,
+  width,
+  height,
+  style,
+  testID,
+  zoomRef,
+  autoReset = true,
+  cropPanContext,
 }: Props ): Node => {
   const { screenWidth, screenHeight } = useDeviceOrientation( );
-  const imageZoomRef = useRef( null );
+  const internalZoomRef = useRef<SharedZoomableImageRef>( null );
+  const imageZoomRef = zoomRef ?? internalZoomRef;
 
-  const style = useMemo( ( ) => ( {
-    height: screenHeight,
-    width: screenWidth,
-  } ), [screenHeight, screenWidth] );
+  const zoomStyle = useMemo( ( ) => ( [
+    {
+      height: height ?? screenHeight,
+      width: width ?? screenWidth,
+    },
+    style,
+  ] ), [height, screenHeight, screenWidth, style, width] );
 
   useEffect( () => {
-    if ( imageZoomRef?.current ) {
-      // Reset zoom when image uri changes. This supports tapping a thumbnail
-      // but not scrolling left/right since we want the user to be able to pan
-      // and drag a zoomed in photo
-      imageZoomRef?.current?.reset( );
+    if ( autoReset ) {
+      imageZoomRef.current?.reset( );
     }
-  }, [selectedMediaIndex] );
+  }, [autoReset, imageZoomRef, resetKey, selectedMediaIndex] );
 
   return (
-    <ImageZoom
+    <SharedZoomableImage
       ref={imageZoomRef}
-      testID={`CustomImageZoom.${uri}`}
+      testID={testID ?? `CustomImageZoom.${uri}`}
       uri={uri}
-      style={style}
-      minScale={MIN_SCALE}
-      maxScale={MAX_SCALE}
-      isDoubleTapEnabled // we need this so image doesn't snap back to original size on pan/zoom
-      onInteractionStart={( ) => setZooming( true )}
-      onInteractionEnd={( ) => setZooming( false )}
+      style={zoomStyle}
+      minScale={IMAGE_ZOOM_MIN_SCALE}
+      maxScale={IMAGE_ZOOM_MAX_SCALE}
+      isDoubleTapEnabled
+      onInteractionStart={() => setZooming?.( true )}
+      onInteractionEnd={() => setZooming?.( false )}
+      cropPanContext={cropPanContext}
     />
   );
 };

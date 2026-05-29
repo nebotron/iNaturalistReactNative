@@ -3,13 +3,16 @@
 import { useNavigation } from "@react-navigation/native";
 import { t } from "i18next";
 import type { Node } from "react";
-import React, { useEffect, useState } from "react";
-import Observation from "realmModels/Observation";
+import React, { useEffect, useMemo, useState } from "react";
 import { useLayoutPrefs } from "sharedHooks";
 import useStore from "stores/useStore";
 
 import GroupPhotos from "./GroupPhotos";
-import flattenAndOrderSelectedPhotos from "./helpers/groupPhotoHelpers";
+import flattenAndOrderSelectedPhotos, {
+  createObservationFromGroupedMedia,
+  flattenAndOrderSelectedVideos,
+  selectedGroupsHaveMixedMedia,
+} from "./helpers/groupPhotoHelpers";
 
 const GroupPhotosContainer = ( ): Node => {
   const navigation = useNavigation( );
@@ -21,10 +24,26 @@ const GroupPhotosContainer = ( ): Node => {
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
 
-  const [selectedObservations, setSelectedObservations] = useState( [] );
+  const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
+
+  const selectedObservations = useMemo(
+    ( ) => selectedIndices
+      .map( index => groupedPhotos[index] )
+      .filter( Boolean ),
+    [groupedPhotos, selectedIndices],
+  );
+
+  useEffect( ( ) => {
+    setSelectedIndices( prev => prev.filter(
+      index => index >= 0 && index < groupedPhotos.length,
+    ) );
+  }, [groupedPhotos.length] );
+
   const totalPhotos = groupedPhotos
-    .reduce( ( count, current ) => count + current.photos.length, 0 );
+    .reduce( ( count, current ) => (
+      count + ( current.photos?.length || current.videos?.length || 0 )
+    ), 0 );
 
   useEffect( ( ) => {
     navigation.setOptions( {
@@ -36,15 +55,24 @@ const GroupPhotosContainer = ( ): Node => {
     } );
   }, [totalPhotos, groupedPhotos, navigation] );
 
+  const selectAllPhotos = () => {
+    setSelectedIndices( groupedPhotos.map( ( _obs, index ) => index ) );
+  };
+
   const selectObservationPhotos = ( isSelected, observation ) => {
+    const index = groupedPhotos.indexOf( observation );
+    if ( index < 0 ) {
+      return;
+    }
+
     if ( !isSelected ) {
-      const updatedObservations = selectedObservations.concat( observation );
-      setSelectedObservations( [...updatedObservations] );
+      setSelectedIndices( prev => (
+        prev.includes( index )
+          ? prev
+          : [...prev, index]
+      ) );
     } else {
-      const newSelection = selectedObservations;
-      const selectedIndex = selectedObservations.indexOf( observation );
-      newSelection.splice( selectedIndex, 1 );
-      setSelectedObservations( [...newSelection] );
+      setSelectedIndices( prev => prev.filter( selectedIndex => selectedIndex !== index ) );
     }
   };
 
@@ -53,93 +81,126 @@ const GroupPhotosContainer = ( ): Node => {
       return;
     }
 
+    if ( selectedGroupsHaveMixedMedia( selectedObservations ) ) {
+      return;
+    }
+
+    const isVideoSelection = selectedObservations.some(
+      obs => obs.videos?.length > 0,
+    );
+    const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
+    const orderedVideos = flattenAndOrderSelectedVideos( selectedObservations );
+    const mostRecentPhoto = orderedPhotos[0];
+    const mostRecentVideo = orderedVideos[0];
     const newObsList = [];
 
-    const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
-    const mostRecentPhoto = orderedPhotos[0];
-
-    // remove selected photos from observations
     groupedPhotos.forEach( obs => {
-      const obsPhotos = obs.photos;
-      const mostRecentSelected = obsPhotos.indexOf( mostRecentPhoto );
-
-      if ( mostRecentSelected !== -1 ) {
-        const newObs = { photos: orderedPhotos };
-        newObsList.push( newObs );
-      } else {
-        const filteredPhotos = obsPhotos.filter(
-          item => !orderedPhotos.includes( item ),
+      if ( isVideoSelection ) {
+        const containsSelected = mostRecentVideo && obs.videos?.some(
+          video => video.uri === mostRecentVideo.uri,
         );
-        if ( filteredPhotos.length > 0 ) {
-          newObsList.push( { photos: filteredPhotos } );
+
+        if ( containsSelected ) {
+          newObsList.push( { videos: orderedVideos } );
+        } else {
+          const filteredVideos = obs.videos?.filter(
+            video => !orderedVideos.some( item => item.uri === video.uri ),
+          );
+          if ( filteredVideos?.length > 0 ) {
+            newObsList.push( { videos: filteredVideos } );
+          }
+        }
+      } else {
+        const containsSelected = mostRecentPhoto && obs.photos?.includes( mostRecentPhoto );
+
+        if ( containsSelected ) {
+          newObsList.push( { photos: orderedPhotos } );
+        } else {
+          const filteredPhotos = obs.photos?.filter(
+            item => !orderedPhotos.includes( item ),
+          );
+          if ( filteredPhotos?.length > 0 ) {
+            newObsList.push( { photos: filteredPhotos } );
+          }
         }
       }
     } );
 
     setGroupedPhotos( newObsList );
-    setSelectedObservations( [] );
+    setSelectedIndices( [] );
   };
 
   const separatePhotos = () => {
-    let maxCombinedPhotos = 0;
+    let maxCombinedItems = 0;
 
     selectedObservations.forEach( obs => {
-      const numPhotos = obs.photos.length;
-      if ( numPhotos > maxCombinedPhotos ) {
-        maxCombinedPhotos = numPhotos;
+      const numItems = obs.photos?.length || obs.videos?.length || 0;
+      if ( numItems > maxCombinedItems ) {
+        maxCombinedItems = numItems;
       }
     } );
 
-    // make sure at least one set of combined photos is selected
-    if ( maxCombinedPhotos < 2 ) {
+    if ( maxCombinedItems < 2 ) {
       return;
     }
 
-    const separatedPhotos = [];
+    const separatedItems = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
+    const orderedVideos = flattenAndOrderSelectedVideos( selectedObservations );
 
-    // create a list of grouped photos, with selected photos split into individual observations
     groupedPhotos.forEach( obs => {
-      const obsPhotos = obs.photos;
-      const filteredGroupedPhotos = obsPhotos.filter( item => orderedPhotos.includes( item ) );
+      const filteredGroupedPhotos = obs.photos?.filter(
+        item => orderedPhotos.includes( item ),
+      ) || [];
+      const filteredGroupedVideos = obs.videos?.filter(
+        item => orderedVideos.some( video => video.uri === item.uri ),
+      ) || [];
+
       if ( filteredGroupedPhotos.length > 0 ) {
         filteredGroupedPhotos.forEach( photo => {
-          separatedPhotos.push( { photos: [photo] } );
+          separatedItems.push( { photos: [photo] } );
+        } );
+      } else if ( filteredGroupedVideos.length > 0 ) {
+        filteredGroupedVideos.forEach( video => {
+          separatedItems.push( { videos: [video] } );
         } );
       } else {
-        separatedPhotos.push( obs );
+        separatedItems.push( obs );
       }
     } );
-    setGroupedPhotos( separatedPhotos );
-    setSelectedObservations( [] );
+    setGroupedPhotos( separatedItems );
+    setSelectedIndices( [] );
   };
 
   const removePhotos = () => {
     const removedFromGroup = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
+    const orderedVideos = flattenAndOrderSelectedVideos( selectedObservations );
 
-    // create a list of grouped photos, with selected photos removed
     groupedPhotos.forEach( obs => {
-      const obsPhotos = obs.photos;
-      const filteredGroupedPhotos = obsPhotos.filter(
+      const filteredGroupedPhotos = obs.photos?.filter(
         item => !orderedPhotos.includes( item ),
-      );
+      ) || [];
+      const filteredGroupedVideos = obs.videos?.filter(
+        item => !orderedVideos.some( video => video.uri === item.uri ),
+      ) || [];
+
       if ( filteredGroupedPhotos.length > 0 ) {
         removedFromGroup.push( { photos: filteredGroupedPhotos } );
+      } else if ( filteredGroupedVideos.length > 0 ) {
+        removedFromGroup.push( { videos: filteredGroupedVideos } );
       }
     } );
 
-    // remove from group photos screen
     setGroupedPhotos( removedFromGroup );
-    setSelectedObservations( [] );
+    setSelectedIndices( [] );
   };
 
   const navBasedOnUserSettings = async ( ) => {
     setIsCreatingObservations( true );
     const newObservations = await Promise.all( groupedPhotos.map(
-      ( { photos } ) => Observation.createObservationWithPhotos( photos ),
+      group => createObservationFromGroupedMedia( group ),
     ) );
-    // If there are default attributes for new observations, assign them
     setObservations( newObservations.map( ( newObs, idx ) => ( {
       ...( idx === 0
         ? firstObservationDefaults
@@ -149,6 +210,11 @@ const GroupPhotosContainer = ( ): Node => {
     } ) ) );
     setIsCreatingObservations( false );
     if ( newObservations.length === 1 ) {
+      const onlyObservation = newObservations[0];
+      if ( onlyObservation.observationSounds?.length ) {
+        return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
+      }
+
       if ( isDefaultMode ) {
         return navigation.navigate( "NoBottomTabStackNavigator", {
           screen: "Match",
@@ -159,7 +225,6 @@ const GroupPhotosContainer = ( ): Node => {
         } );
       }
 
-      // in advanced mode, navigate based on user preference
       return navigation.navigate( "NoBottomTabStackNavigator", {
         screen: screenAfterPhotoEvidence,
         params: {
@@ -174,14 +239,17 @@ const GroupPhotosContainer = ( ): Node => {
   return (
     <GroupPhotos
       combinePhotos={combinePhotos}
+      clearSelection={() => setSelectedIndices( [] )}
       groupedPhotos={groupedPhotos}
       isCreatingObservations={isCreatingObservations}
       navBasedOnUserSettings={navBasedOnUserSettings}
       removePhotos={removePhotos}
+      selectAllPhotos={selectAllPhotos}
       selectObservationPhotos={selectObservationPhotos}
       selectedObservations={selectedObservations}
       separatePhotos={separatePhotos}
       totalPhotos={totalPhotos}
+      selectedGroupsHaveMixedMedia={selectedGroupsHaveMixedMedia( selectedObservations )}
     />
   );
 };

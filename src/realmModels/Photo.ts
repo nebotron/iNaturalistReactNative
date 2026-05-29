@@ -82,6 +82,23 @@ class Photo extends Realm.Object {
     return `file://${photoUploadPath}/${pieces[1]}`;
   }
 
+  static hasLocalEdits( photo?: RealmPhoto ) {
+    if ( !photo?.localFilePath || !photo._updated_at ) {
+      return false;
+    }
+
+    return !photo._synced_at || photo._synced_at <= photo._updated_at;
+  }
+
+  static preferredLocalPhotoUri( photo?: RealmPhoto ) {
+    const localUri = Photo.getLocalPhotoUri( photo?.localFilePath );
+    if ( Photo.hasLocalEdits( photo ) && localUri ) {
+      return localUri;
+    }
+
+    return null;
+  }
+
   static displayLargePhoto( url?: string ) {
     return url?.replace( "square", "large" );
   }
@@ -92,20 +109,33 @@ class Photo extends Realm.Object {
 
   static displayLocalOrRemoteLargePhoto( photo: RealmPhoto ) {
     return (
-      Photo.displayLargePhoto( photo?.url )
+      Photo.preferredLocalPhotoUri( photo )
+      || Photo.displayLargePhoto( photo?.url )
       || Photo.getLocalPhotoUri( photo?.localFilePath )
     );
   }
 
   static displayLocalOrRemoteMediumPhoto( photo: RealmPhoto ) {
     return (
-      Photo.displayMediumPhoto( photo?.url )
+      Photo.preferredLocalPhotoUri( photo )
+      || Photo.displayMediumPhoto( photo?.url )
       || Photo.getLocalPhotoUri( photo?.localFilePath )
     );
   }
 
   static displayLocalOrRemoteSquarePhoto( photo: RealmPhoto ) {
-    return photo?.url || Photo.getLocalPhotoUri( photo?.localFilePath );
+    return (
+      Photo.preferredLocalPhotoUri( photo )
+      || photo?.url
+      || Photo.getLocalPhotoUri( photo?.localFilePath )
+    );
+  }
+
+  static displayCropSourcePhoto( photo: RealmPhoto ) {
+    return (
+      Photo.getLocalPhotoUri( photo?.localFilePath )
+      || Photo.displayLargePhoto( photo?.url )
+    );
   }
 
   static deletePhotoFromDeviceStorage( path: string ) {
