@@ -157,6 +157,22 @@ const RootExploreContainerWithContext = ( ): Node => {
     makeSnapshot( );
   };
 
+  const skipNextExploreStateSyncRef = useRef(
+    Object.keys( rootStoredParams ).length > 0,
+  );
+
+  useEffect( ( ) => {
+    const storedParams = useStore.getState( ).rootStoredParams;
+    if ( Object.keys( storedParams ).length === 0 ) {
+      return;
+    }
+
+    dispatch( {
+      type: EXPLORE_ACTION.USE_STORED_STATE,
+      storedState: storedParams,
+    } );
+  }, [dispatch] );
+
   useEffect( ( ) => {
     const unsubscribe = navigation.addListener( "focus", ( ) => {
       const storedState = Object.keys( rootStoredParams ).length > 0 || false;
@@ -170,12 +186,13 @@ const RootExploreContainerWithContext = ( ): Node => {
   }, [navigation, dispatch, rootStoredParams] );
 
   useEffect( ( ) => {
-    const unsubscribe = navigation.addListener( "blur", ( ) => {
-      setRootStoredParams( state );
-    } );
+    if ( skipNextExploreStateSyncRef.current ) {
+      skipNextExploreStateSyncRef.current = false;
+      return;
+    }
 
-    return unsubscribe;
-  }, [navigation, setRootStoredParams, state] );
+    setRootStoredParams( state );
+  }, [setRootStoredParams, state] );
 
   useEffect( () => {
     if ( state.placeMode === PLACE_MODE.NEARBY
