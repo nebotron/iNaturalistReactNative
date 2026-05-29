@@ -4,6 +4,10 @@ import { useNavigation } from "@react-navigation/native";
 import { t } from "i18next";
 import type { Node } from "react";
 import React, { useEffect, useMemo, useState } from "react";
+import {
+  deleteDevicePhotosRemovedDuringObservationPrep,
+  resolveDevicePhotoUriFromGroupedPhoto,
+} from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import { useLayoutPrefs } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -176,6 +180,10 @@ const GroupPhotosContainer = ( ): Node => {
     const removedFromGroup = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
     const orderedVideos = flattenAndOrderSelectedVideos( selectedObservations );
+
+    deleteDevicePhotosRemovedDuringObservationPrep(
+      orderedPhotos.map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) ),
+    );
 
     groupedPhotos.forEach( obs => {
       const filteredGroupedPhotos = obs.photos?.filter(

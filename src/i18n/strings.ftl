@@ -272,6 +272,8 @@ Copy-coordinates = Copy Coordinates
 # heading to describe general information about rights, attribution, and
 # licensing
 Copyright = Copyright
+# Error message when original photos could not be deleted from the device
+Could-not-delete-original-photos = Could not delete the original photos from your device.
 # Error message when no camera can be found
 Could-not-find-a-camera-on-this-device = Could not find a camera on this device
 Couldnt-create-comment = Couldn't create comment
@@ -387,8 +389,14 @@ Delete-current-observation = Delete current observation
 # Button that deletes an observation
 Delete-observation = Delete observation
 DELETE-OBSERVATION--question = DELETE OBSERVATION?
+# Title for alert asking whether to delete photos from the device after import
+Delete-original-photos--question = Delete original photos?
+# Description for alert asking whether to delete photos from the device after import
+Delete-original-photos-description = Would you like to delete the original photos from your device? This will remove all photos you selected during import, including any that were not added to an observation.
 # Button label or accessibility label for an element that deletes a photo
 Delete-photo = Delete photo
+# Button that deletes imported photos from the user's device photo library
+Delete-photos = Delete photos
 Delete-sound = Delete sound
 # Hint for a button that clears text you entered
 Deletes-entered-text = Deletes entered text
@@ -686,6 +694,8 @@ July = July
 # Month of June
 June = June
 Just-make-sure-the-organism-is-wild = Just make sure the organism is wild (not a pet, zoo animal, or garden plant)
+# Button that keeps imported photos on the user's device
+Keep-photos = Keep photos
 # Shows date user last active on iNaturalist on user profile
 Last-Active-date = Last Active: { $date }
 # Latitude, longitude on a single line

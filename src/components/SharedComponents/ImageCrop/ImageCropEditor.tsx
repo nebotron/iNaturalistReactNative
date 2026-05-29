@@ -25,6 +25,10 @@ import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
+import {
+  deleteDevicePhotosRemovedDuringObservationPrep,
+  resolveDevicePhotoUriFromGroupedPhoto,
+} from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -176,6 +180,12 @@ const ImageCropEditor = ( ) => {
 
   const handleDelete = useCallback( ( ) => {
     if ( context === "groupPhotos" && imageUri ) {
+      const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
+      if ( groupedPhoto ) {
+        deleteDevicePhotosRemovedDuringObservationPrep( [
+          resolveDevicePhotoUriFromGroupedPhoto( groupedPhoto ),
+        ] );
+      }
       setGroupedPhotos(
         groupedPhotos
           .map( group => {

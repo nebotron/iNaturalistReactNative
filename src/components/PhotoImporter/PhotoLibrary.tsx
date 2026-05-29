@@ -21,6 +21,7 @@ import { launchImageLibrary } from "react-native-image-picker";
 import Observation from "realmModels/Observation";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import fetchPlaceName from "sharedHelpers/fetchPlaceName";
+import { getGalleryAssetDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 import { sleep } from "sharedHelpers/util";
 import { useLayoutPrefs } from "sharedHooks";
@@ -45,6 +46,9 @@ const PhotoLibrary = ( ) => {
 
   const [photoLibraryShown, setPhotoLibraryShown] = useState( false );
   const setPhotoImporterState = useStore( state => state.setPhotoImporterState );
+  const addImportedPhotoDeviceUriMappings = useStore(
+    state => state.addImportedPhotoDeviceUriMappings,
+  );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const updateObservations = useStore( state => state.updateObservations );
@@ -202,6 +206,12 @@ const PhotoLibrary = ( ) => {
     try {
       const selectedTmpDirectoryImages = response.assets.map( x => ( { image: x } ) );
       const selectedImages = await moveImagesToDocumentsDirectory( selectedTmpDirectoryImages );
+      addImportedPhotoDeviceUriMappings(
+        selectedImages.map( ( photo, index ) => ( {
+          localUri: photo.image.uri,
+          deviceUri: getGalleryAssetDevicePhotoUri( response.assets[index] ),
+        } ) ),
+      );
 
       if ( fromGroupPhotos ) {
         // This screen was called from the plus button of the group photos screen - get back to it
@@ -279,6 +289,7 @@ const PhotoLibrary = ( ) => {
       exitObservationFlow( );
     }
   }, [
+    addImportedPhotoDeviceUriMappings,
     currentObservation,
     currentObservationIndex,
     evidenceToAdd,
