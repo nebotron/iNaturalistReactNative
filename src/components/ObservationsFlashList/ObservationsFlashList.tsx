@@ -65,6 +65,7 @@ interface Props {
   listHeaderContent?: React.ReactElement | null;
   showNoResults?: boolean;
   showObservationsEmptyScreen?: boolean;
+  fullWidthGrid?: boolean;
   testID: string;
 }
 
@@ -92,6 +93,7 @@ const ObservationsFlashList = ( {
   listHeaderContent,
   showNoResults,
   showObservationsEmptyScreen,
+  fullWidthGrid = false,
   testID,
 }: Props ) => {
   const {
@@ -116,7 +118,15 @@ const ObservationsFlashList = ( {
     gridItemStyle,
     gridItemWidth,
     numColumns,
-  } = useGridLayout( layout );
+    squareCorners,
+  } = useGridLayout(
+    layout === "list"
+      ? "list"
+      : undefined,
+    fullWidthGrid
+      ? "fullWidth"
+      : "default",
+  );
   const { t } = useTranslation( );
 
   // TODO: type data / observation
@@ -125,7 +135,9 @@ const ObservationsFlashList = ( {
     if ( observation.empty ) {
       return (
         <View
-          className="rounded-[15px] border-dotted border-4 border-lightGray"
+          className={fullWidthGrid
+            ? "border-dotted border-4 border-lightGray"
+            : "rounded-[15px] border-dotted border-4 border-lightGray"}
           style={gridItemStyle}
         />
       );
@@ -178,6 +190,7 @@ const ObservationsFlashList = ( {
         queued={queued}
         unsynced={obsNeedsSync}
         uploadProgress={uploadProgress}
+        squareCorners={squareCorners}
       />
     );
   }, [
@@ -198,6 +211,8 @@ const ObservationsFlashList = ( {
     realm,
     totalUploadProgress,
     uploadQueue,
+    squareCorners,
+    fullWidthGrid,
   ] );
 
   const itemSeparatorComponent = useMemo( ( ) => {

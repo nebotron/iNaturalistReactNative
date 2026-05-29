@@ -22,6 +22,7 @@ interface Props {
   observation: RealmObservation;
   uploadProgress: number;
   unsynced: boolean;
+  squareCorners?: boolean;
 }
 
 const ObsPressable = ( {
@@ -40,6 +41,7 @@ const ObsPressable = ( {
   observation,
   uploadProgress,
   unsynced,
+  squareCorners = false,
 }: Props ) => {
   const { t } = useTranslation( );
 
@@ -67,6 +69,7 @@ const ObsPressable = ( {
               // better with RN styles than with Tailwind classes
               style={gridItemStyle}
               uploadProgress={uploadProgress}
+              squareCorners={squareCorners}
             />
           )
           : (

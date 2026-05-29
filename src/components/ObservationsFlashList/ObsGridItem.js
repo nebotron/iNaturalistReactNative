@@ -25,13 +25,14 @@ type Props = {
   queued: boolean,
   uploadProgress?: number,
   width?: string,
-  testID?: string
+  testID?: string,
+  squareCorners?: boolean,
 };
 
 const ObsGridItem = ( {
   currentUser,
   explore,
-  height = "w-[200px]",
+  height = "h-[200px]",
   hideObsUploadStatus,
   observation,
   onUploadButtonPress,
@@ -40,6 +41,7 @@ const ObsGridItem = ( {
   uploadProgress,
   testID,
   width = "w-[200px]",
+  squareCorners = false,
 }: Props ): Node => {
   const displayTaxonName = useMemo( ( ) => (
     <DisplayTaxonName
@@ -67,8 +69,12 @@ const ObsGridItem = ( {
       source={{
         uri: Photo.displayLocalOrRemoteMediumPhoto( photo ),
       }}
-      width={width}
-      height={height}
+      width={squareCorners
+        ? undefined
+        : width}
+      height={squareCorners
+        ? undefined
+        : height}
       style={style}
       obsPhotosCount={photoCountFromObservation( observation )}
       hasSound={observationHasSound( observation )}
@@ -77,6 +83,7 @@ const ObsGridItem = ( {
       useShortGradient={!explore}
       iconicTaxonName={observation.taxon?.iconic_taxon_name}
       white
+      squareCorners={squareCorners}
     >
       <View className="absolute bottom-0 items-start p-2">
         {!hideObsUploadStatus && (
