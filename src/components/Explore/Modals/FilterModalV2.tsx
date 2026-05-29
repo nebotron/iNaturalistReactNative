@@ -46,6 +46,7 @@ import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
 import placeGuessText from "../helpers/placeGuessText";
+import NearbyRadiusInput from "../NearbyRadiusInput";
 
 const DROP_SHADOW = getShadow( {
   offsetHeight: 4,
@@ -769,6 +770,7 @@ const FilterModalV2 = ( {
                 />
               </View>
             </View>
+            <NearbyRadiusInput />
           </View>
 
           {/* Sort-By Section */}

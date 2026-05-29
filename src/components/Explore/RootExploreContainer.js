@@ -7,6 +7,7 @@ import { useNavigation } from "@react-navigation/native";
 import {
   EXPLORE_ACTION,
   ExploreProvider,
+  exploreReducer,
   PLACE_MODE,
   useExplore,
 } from "providers/ExploreContext";
@@ -89,10 +90,12 @@ const RootExploreContainerWithContext = ( ): Node => {
       const exploreLocation = await defaultExploreLocation( );
       // exploreLocation has a placeMode already
       // dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_NEARBY } );
-      dispatch( {
+      const action = {
         type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
         exploreLocation,
-      } );
+      };
+      dispatch( action );
+      setRootStoredParams( exploreReducer( state, action ) );
     } else {
       navigation.setParams( { place } );
       dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_PLACE } );
@@ -103,7 +106,7 @@ const RootExploreContainerWithContext = ( ): Node => {
         placeGuess: place?.display_name,
       } );
     }
-  }, [checkPermissions, defaultExploreLocation, dispatch, navigation] );
+  }, [checkPermissions, defaultExploreLocation, dispatch, navigation, setRootStoredParams, state] );
 
   // Object | null
   const updateUser = ( user: Object, exclude ) => {

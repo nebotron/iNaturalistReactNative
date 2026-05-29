@@ -32,7 +32,7 @@ const ExploreV2WithProvider = ( {
       // if we have location permissions
       // and place mode isn't one of the viewable modes (worldwide, nearby, specfic place)
       // then attempt to get and set the user's location
-      const next = await defaultExploreV2Location( );
+      const next = await defaultExploreV2Location( state.nearbyRadiusKm );
       if ( next.placeMode === EXPLORE_V2_PLACE_MODE.NEARBY ) {
         dispatch( {
           type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY,

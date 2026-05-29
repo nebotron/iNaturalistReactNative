@@ -797,6 +797,7 @@ Navigates-to-your-observations = Navigates to your observations
 NEARBY = NEARBY
 # Header or button label for content that is near the user's current location
 Nearby = Nearby
+Nearby-search-radius = Nearby search radius
 # Quality grade indicating observation still needs more identifications
 Needs-ID--quality-grade = Needs ID
 # Heading when creating a new observation

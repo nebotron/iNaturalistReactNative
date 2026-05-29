@@ -46,6 +46,7 @@ import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
 import placeGuessText from "../helpers/placeGuessText";
+import NearbyRadiusInput from "../NearbyRadiusInput";
 import ExploreLocationSearchModal from "./ExploreLocationSearchModal";
 import ExploreProjectSearchModal from "./ExploreProjectSearchModal";
 import ExploreTaxonSearchModal from "./ExploreTaxonSearchModal";
@@ -65,7 +66,7 @@ interface Props {
   requestLocationPermissions: ( ) => void;
   // TODO: type this properly when taxon has a type
   updateTaxon: ( taxon: null | { name: string } ) => void;
-  updateLocation: ( location: "worldwide" | ApiPlace ) => void;
+  updateLocation: ( location: "worldwide" | "nearby" | ApiPlace ) => void | Promise<void>;
   // TODO: Param not typed yet, because ExploreUserSearch is not typed yet
   updateUser: ( user: null | { login: string } ) => void;
   updateProject: ( project: ApiProject ) => void;
@@ -782,6 +783,7 @@ const FilterModal = ( {
                 />
               </View>
             </View>
+            <NearbyRadiusInput />
           </View>
 
           {/* Sort-By Section */}

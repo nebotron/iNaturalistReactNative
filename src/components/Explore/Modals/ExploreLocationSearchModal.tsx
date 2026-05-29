@@ -10,7 +10,7 @@ interface Props {
   renderPermissionsGate: ( options: LocationPermissionCallbacks ) => React.FC;
   requestPermissions: ( ) => void;
   showModal: boolean;
-  updateLocation: ( location: "worldwide" | ApiPlace ) => void;
+  updateLocation: ( location: "worldwide" | "nearby" | ApiPlace ) => void | Promise<void>;
 }
 
 const ExploreLocationSearchModal = ( {
