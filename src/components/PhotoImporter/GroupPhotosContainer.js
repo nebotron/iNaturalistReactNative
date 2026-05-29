@@ -1,6 +1,9 @@
 // @flow
 
 import { useNavigation } from "@react-navigation/native";
+import { MAX_PHOTOS_ALLOWED } from "components/Camera/StandardCamera/StandardCamera";
+import { duplicateGroupedMediaGroups } from
+  "components/PhotoImporter/helpers/duplicateGroupedMedia";
 import { t } from "i18next";
 import type { Node } from "react";
 import React, { useEffect, useMemo, useState } from "react";
@@ -30,6 +33,7 @@ const GroupPhotosContainer = ( ): Node => {
 
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
+  const [isDuplicatingPhotos, setIsDuplicatingPhotos] = useState( false );
 
   const selectedObservations = useMemo(
     ( ) => selectedIndices
@@ -176,6 +180,30 @@ const GroupPhotosContainer = ( ): Node => {
     setSelectedIndices( [] );
   };
 
+  const selectedMediaCount = selectedObservations.reduce(
+    ( count, obs ) => count + ( obs.photos?.length || obs.videos?.length || 0 ),
+    0,
+  );
+
+  const duplicatePhotos = async ( ) => {
+    if (
+      selectedObservations.length === 0
+      || selectedGroupsHaveMixedMedia( selectedObservations )
+      || totalPhotos + selectedMediaCount > MAX_PHOTOS_ALLOWED
+    ) {
+      return;
+    }
+
+    setIsDuplicatingPhotos( true );
+    try {
+      const duplicatedGroups = await duplicateGroupedMediaGroups( selectedObservations );
+      setGroupedPhotos( [...groupedPhotos, ...duplicatedGroups] );
+      setSelectedIndices( [] );
+    } finally {
+      setIsDuplicatingPhotos( false );
+    }
+  };
+
   const removePhotos = () => {
     const removedFromGroup = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
@@ -248,10 +276,14 @@ const GroupPhotosContainer = ( ): Node => {
     <GroupPhotos
       combinePhotos={combinePhotos}
       clearSelection={() => setSelectedIndices( [] )}
+      duplicatePhotos={duplicatePhotos}
       groupedPhotos={groupedPhotos}
       isCreatingObservations={isCreatingObservations}
+      isDuplicatingPhotos={isDuplicatingPhotos}
       navBasedOnUserSettings={navBasedOnUserSettings}
       removePhotos={removePhotos}
+      selectedMediaCount={selectedMediaCount}
+      maxPhotosAllowed={MAX_PHOTOS_ALLOWED}
       selectAllPhotos={selectAllPhotos}
       selectObservationPhotos={selectObservationPhotos}
       selectedObservations={selectedObservations}
