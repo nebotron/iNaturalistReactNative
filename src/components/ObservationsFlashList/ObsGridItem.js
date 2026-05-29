@@ -1,5 +1,6 @@
 // @flow
 
+import ObsImageActionButtons from "components/ObsDetails/ObsImageActionButtons";
 import { Body2, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
@@ -20,6 +21,7 @@ type Props = {
   height?: string,
   hideObsUploadStatus?: boolean,
   observation: Object,
+  onExploreObservationAction?: Function,
   onUploadButtonPress: Function,
   style?: Object,
   queued: boolean,
@@ -35,6 +37,7 @@ const ObsGridItem = ( {
   height = "h-[200px]",
   hideObsUploadStatus,
   observation,
+  onExploreObservationAction,
   onUploadButtonPress,
   queued,
   style,
@@ -43,6 +46,10 @@ const ObsGridItem = ( {
   width = "w-[200px]",
   squareCorners = false,
 }: Props ): Node => {
+  const belongsToCurrentUser = observation?.user?.login === currentUser?.login;
+  const showExploreImageActions = explore
+    && currentUser
+    && !belongsToCurrentUser;
   const displayTaxonName = useMemo( ( ) => (
     <DisplayTaxonName
       bottomTextComponent={Body2}
@@ -85,6 +92,14 @@ const ObsGridItem = ( {
       white
       squareCorners={squareCorners}
     >
+      {showExploreImageActions && (
+        <ObsImageActionButtons
+          observation={observation}
+          currentUser={currentUser}
+          afterAction={onExploreObservationAction}
+          directAgree
+        />
+      )}
       <View className="absolute bottom-0 items-start p-2">
         {!hideObsUploadStatus && (
           <ObsUploadStatus

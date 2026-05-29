@@ -732,6 +732,7 @@ Lowest = Lowest
 LOWEST-RANK = LOWEST RANK
 MAP = MAP
 Map-Area = Map Area
+Mark-as-reviewed = Mark as reviewed
 # Month of March
 March = March
 # Radio button option for navigation flows in Settings
@@ -800,11 +801,11 @@ Nearby = Nearby
 Nearby-search-radius = Nearby search radius
 # Quality grade indicating observation still needs more identifications
 Needs-ID--quality-grade = Needs ID
-# Heading when creating a new observation
-New-Observation = New Observation
 New-community-member = New community member
 New-community-member-duckling = 🐥
 New-community-member-explanation = This person joined iNaturalist within the last 30 days. Welcome them to the community!
+# Heading when creating a new observation
+New-Observation = New Observation
 # Sort order, refers to newest or oldest date
 Newest-to-oldest = Newest to oldest
 Next-observation = Next observation
@@ -1305,6 +1306,7 @@ Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?
 # Text to show when a taoxn rank is unknown or missing
+Unmark-as-reviewed = Unmark as reviewed
 Unknown--rank = Unknown
 # Text to show when a taxon or identification is unknown or missing
 Unknown--taxon = Unknown

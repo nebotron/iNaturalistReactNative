@@ -1,3 +1,4 @@
+import ObsImageActionButtons from "components/ObsDetails/ObsImageActionButtons";
 import FloatingButtons from "components/ObsDetailsSharedComponents/ActivityTab/FloatingButtons";
 import ObsMediaDisplayContainer
   from "components/ObsDetailsSharedComponents/Media/ObsMediaDisplayContainer";
@@ -38,7 +39,7 @@ interface Props {
   navToSuggestions: () => void;
   observation: RealmObservation & Observation & { id: number };
   openAddCommentSheet: () => void;
-  openAgreeWithIdSheet: () => void;
+  openAgreeWithIdSheet: ( taxon: object ) => void;
   refetchRemoteObservation: () => void;
   refetchSubscriptions: () => void;
   showAddCommentSheet: boolean;
@@ -102,8 +103,16 @@ const ObsDetailsDefaultMode = ( {
             isConnected={isConnected}
             observation={observation}
           />
-          <View>
+          <View className="relative">
             <ObsMediaDisplayContainer observation={observation} />
+            {currentUser && !belongsToCurrentUser && (
+              <ObsImageActionButtons
+                observation={observation}
+                currentUser={currentUser}
+                afterAction={refetchRemoteObservation}
+                directAgree
+              />
+            )}
           </View>
           <CommunityTaxon
             belongsToCurrentUser={belongsToCurrentUser}

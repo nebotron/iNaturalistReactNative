@@ -56,6 +56,7 @@ interface Props {
   layout: "list" | "grid";
   obsListKey: string;
   onEndReached: () => void;
+  onExploreObservationAction?: () => void;
   onLayout?: ( event: LayoutChangeEvent ) => void;
   onScroll?: ( event: NativeSyntheticEvent<NativeScrollEvent> ) => void;
   // this ref is being forwarded to the underlying CustomFlashList and used as an imperative handle
@@ -87,6 +88,7 @@ const ObservationsFlashList = ( {
   layout,
   obsListKey = "unknown",
   onEndReached,
+  onExploreObservationAction,
   onLayout,
   onScroll,
   ref,
@@ -185,6 +187,7 @@ const ObservationsFlashList = ( {
         layout={layout}
         key={itemKey}
         observation={observation}
+        onExploreObservationAction={onExploreObservationAction}
         onItemPress={onItemPress}
         onUploadButtonPress={onUploadButtonPress}
         queued={queued}
@@ -208,6 +211,7 @@ const ObservationsFlashList = ( {
     navigateToObsEdit,
     navigation,
     obsListKey,
+    onExploreObservationAction,
     realm,
     totalUploadProgress,
     uploadQueue,

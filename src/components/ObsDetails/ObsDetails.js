@@ -20,6 +20,7 @@ import ActivityTab from "./ActivityTab/ActivityTab";
 import DetailsTab from "./DetailsTab/DetailsTab";
 import FaveButton from "./FaveButton";
 import ObsDetailsOverview from "./ObsDetailsOverview";
+import ObsImageActionButtons from "./ObsImageActionButtons";
 
 const isTablet = DeviceInfo.isTablet();
 
@@ -112,15 +113,23 @@ const ObsDetails = ( {
 
   const renderTablet = () => (
     <View className="flex-1 flex-row bg-white">
-      <View className="w-[33%]">
+      <View className="relative w-[33%]">
         <ObsMediaDisplayContainer observation={observation} tablet />
-        {currentUser && (
-          <FaveButton
-            observation={observation}
-            currentUser={currentUser}
-            afterToggleFave={refetchRemoteObservation}
-            top
-          />
+        {currentUser && !belongsToCurrentUser && (
+          <>
+            <ObsImageActionButtons
+              observation={observation}
+              currentUser={currentUser}
+              afterAction={refetchRemoteObservation}
+              directAgree
+            />
+            <FaveButton
+              observation={observation}
+              currentUser={currentUser}
+              afterToggleFave={refetchRemoteObservation}
+              top
+            />
+          </>
         )}
       </View>
       <View className="w-[66%]">
@@ -185,14 +194,22 @@ const ObsDetails = ( {
             setHeightOfContentAboveActivityTab( layout );
           }}
         >
-          <View>
+          <View className="relative">
             <ObsMediaDisplayContainer observation={observation} />
-            { currentUser && (
-              <FaveButton
-                observation={observation}
-                currentUser={currentUser}
-                afterToggleFave={refetchRemoteObservation}
-              />
+            { currentUser && !belongsToCurrentUser && (
+              <>
+                <ObsImageActionButtons
+                  observation={observation}
+                  currentUser={currentUser}
+                  afterAction={refetchRemoteObservation}
+                  directAgree
+                />
+                <FaveButton
+                  observation={observation}
+                  currentUser={currentUser}
+                  afterToggleFave={refetchRemoteObservation}
+                />
+              </>
             ) }
           </View>
           <ObsDetailsOverview

@@ -15,6 +15,7 @@ interface Props {
   hideObsStatus?: boolean;
   isSimpleObsStatus?: boolean;
   hideRGLabel?: boolean;
+  onExploreObservationAction?: ( ) => void;
   onUploadButtonPress: ( ) => void;
   onItemPress: ( ) => void;
   gridItemStyle: object;
@@ -34,6 +35,7 @@ const ObsPressable = ( {
   hideObsStatus,
   isSimpleObsStatus,
   hideRGLabel,
+  onExploreObservationAction,
   onUploadButtonPress,
   onItemPress,
   gridItemStyle,
@@ -62,6 +64,7 @@ const ObsPressable = ( {
               currentUser={currentUser}
               explore={explore}
               hideObsUploadStatus={hideObsUploadStatus}
+              onExploreObservationAction={onExploreObservationAction}
               onUploadButtonPress={onUploadButtonPress}
               observation={observation}
               queued={queued}
