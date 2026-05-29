@@ -802,6 +802,9 @@ Nearby-search-radius = Nearby search radius
 Needs-ID--quality-grade = Needs ID
 # Heading when creating a new observation
 New-Observation = New Observation
+New-community-member = New community member
+New-community-member-duckling = 🐥
+New-community-member-explanation = This person joined iNaturalist within the last 30 days. Welcome them to the community!
 # Sort order, refers to newest or oldest date
 Newest-to-oldest = Newest to oldest
 Next-observation = Next observation
@@ -1171,6 +1174,7 @@ Show-observation-options = Show observation options.
 Showing-offline-search-results--taxa = Showing offline search results. To search for more species, try again when connected to the Internet.
 # Label for button that shows identification suggestions
 Shows-identification-suggestions = Shows identification suggestions
+Shows-information-about-new-community-members = Shows information about new community members
 # Accessibility hint for button that shows observation creation options
 Shows-observation-creation-options = Shows observation creation options
 # Accessibility label for a button that allows user to sign in with their Apple account

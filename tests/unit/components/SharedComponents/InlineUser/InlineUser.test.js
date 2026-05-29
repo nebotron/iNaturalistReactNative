@@ -1,7 +1,9 @@
 import { fireEvent, render, screen } from "@testing-library/react-native";
 import { InlineUser } from "components/SharedComponents";
+import { t } from "i18next";
 import React from "react";
 import factory from "tests/factory";
+import { renderComponent } from "tests/helpers/render";
 
 const mockNavigate = jest.fn( );
 jest.mock( "@react-navigation/native", ( ) => {
@@ -15,6 +17,9 @@ jest.mock( "@react-navigation/native", ( ) => {
 } );
 
 const mockUser = factory( "RemoteUser" );
+const mockNewCommunityMember = factory( "RemoteUser", {
+  created_at: "2026-05-20T12:00:00.000Z",
+} );
 const mockUserWithoutImage = factory( "RemoteUser", { icon_url: null } );
 
 const snapshotUser = { login: "some_login", icon_url: "some_icon_url", id: 1 };
@@ -61,6 +66,37 @@ describe( "InlineUser", ( ) => {
 
     expect( mockNavigate )
       .toHaveBeenCalledWith( "UserProfile", { userId: mockUser.id } );
+  } );
+
+  describe( "when user joined within the last 30 days", ( ) => {
+    beforeEach( ( ) => {
+      jest.spyOn( Date, "now" ).mockReturnValue(
+        new Date( "2026-05-24T12:00:00.000Z" ).getTime( ),
+      );
+    } );
+
+    afterEach( ( ) => {
+      jest.restoreAllMocks( );
+    } );
+
+    it( "shows the new community member duckling badge", ( ) => {
+      render( <InlineUser user={mockNewCommunityMember} isConnected /> );
+
+      expect( screen.getByTestId( "InlineUser.NewCommunityMemberBadge" ) ).toBeTruthy( );
+      expect( screen.getByText( t( "New-community-member-duckling" ) ) ).toBeTruthy( );
+    } );
+
+    it( "shows an explanation bottom sheet when the badge is pressed", async ( ) => {
+      renderComponent( <InlineUser user={mockNewCommunityMember} isConnected /> );
+
+      fireEvent.press( screen.getByTestId( "InlineUser.NewCommunityMemberBadge" ) );
+
+      expect( await screen.findByTestId( "bottom-sheet-header" ) ).toBeVisible();
+      expect( screen.getByText( t( "New-community-member" ) ) ).toBeVisible();
+      expect(
+        screen.getByText( t( "New-community-member-explanation" ) ),
+      ).toBeVisible();
+    } );
   } );
 
   describe( "when user has no icon set", () => {
