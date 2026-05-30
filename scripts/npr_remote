@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# Force-pushes the current HEAD to develop-squash, then polls GitHub Gists
+# until one named npr_output_<hash>.txt appears, downloads it, and prints
+# its content to stderr.
+# Requires GITHUB_TOKEN to be set.
+
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+REMOTE_BRANCH="develop-squash"
+POLL_INTERVAL=5
+TIMEOUT_SECONDS=600   # give up after 10 minutes
+
+if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+  echo "ERROR: GITHUB_TOKEN is not set" >&2
+  exit 1
+fi
+
+# Push current HEAD to develop-squash
+COMMIT_HASH="$(git -C "$REPO_ROOT" rev-parse HEAD)"
+echo "Pushing $COMMIT_HASH to $REMOTE_BRANCH …" >&2
+
+git -C "$REPO_ROOT" push --force origin "HEAD:refs/heads/$REMOTE_BRANCH"
+
+GIST_FILENAME="npr_output_${COMMIT_HASH}.txt"
+echo "Waiting for gist '$GIST_FILENAME' …" >&2
+
+ELAPSED=0
+while true; do
+  if (( ELAPSED >= TIMEOUT_SECONDS )); then
+    echo "ERROR: timed out after ${TIMEOUT_SECONDS}s waiting for gist" >&2
+    exit 1
+  fi
+
+  sleep "$POLL_INTERVAL"
+  ELAPSED=$(( ELAPSED + POLL_INTERVAL ))
+
+  # List the authenticated user's gists and search for our filename
+  GIST_RAW="$(curl -s \
+    -H "Authorization: token $GITHUB_TOKEN" \
+    -H "Accept: application/vnd.github+json" \
+    "https://api.github.com/gists?per_page=30")"
+
+  RAW_URL="$(echo "$GIST_RAW" | python3 - "$GIST_FILENAME" <<'PYEOF'
+import json, sys
+
+filename = sys.argv[1]
+gists = json.load(sys.stdin)
+if not isinstance(gists, list):
+    sys.exit(0)
+for gist in gists:
+    files = gist.get("files", {})
+    if filename in files:
+        print(files[filename].get("raw_url", ""))
+        sys.exit(0)
+PYEOF
+)"
+
+  if [[ -z "$RAW_URL" ]]; then
+    echo "  … still waiting (${ELAPSED}s elapsed)" >&2
+    continue
+  fi
+
+  echo "Found gist, downloading …" >&2
+  OUTPUT="$(curl -s \
+    -H "Authorization: token $GITHUB_TOKEN" \
+    "$RAW_URL")"
+
+  echo "$OUTPUT" >&2
+  break
+done
