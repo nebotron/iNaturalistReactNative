@@ -1,11 +1,11 @@
+import type { Asset } from "react-native-image-picker";
+import Photo from "realmModels/Photo";
+import type { RealmObservationPhoto } from "realmModels/types";
 import {
   getGalleryAssetDevicePhotoUri,
   lookupImportedPhotoDeviceUri,
   normalizeDevicePhotoUri,
 } from "sharedHelpers/getOriginalDevicePhotoUri";
-import type { Asset } from "react-native-image-picker";
-import type { RealmObservationPhoto } from "realmModels/types";
-import Photo from "realmModels/Photo";
 import useStore from "stores/useStore";
 
 export interface GroupedPhotoWithDeviceUri {
@@ -15,7 +15,7 @@ export interface GroupedPhotoWithDeviceUri {
 
 const resolveFromImportedMappings = (
   mappings: Record<string, string>,
-  localUris: Array<string | null | undefined>,
+  localUris: ( string | null | undefined )[],
 ): string | null => {
   for ( const localUri of localUris ) {
     const mappedUri = lookupImportedPhotoDeviceUri( mappings, localUri );
@@ -90,7 +90,9 @@ export const resolveDevicePhotoUriForRemovedObservationPhoto = (
           ],
         )
       );
-      return hasDeviceUri ? null : index;
+      return hasDeviceUri
+        ? null
+        : index;
     } )
     .filter( ( index ): index is number => index !== null );
 
@@ -103,7 +105,7 @@ export const resolveDevicePhotoUriForRemovedObservationPhoto = (
 };
 
 export const deleteDevicePhotosRemovedDuringObservationPrep = (
-  photoUris: Array<string | null | undefined>,
+  photoUris: ( string | null | undefined )[],
 ): void => {
   const uniqueUris = [...new Set(
     photoUris
@@ -116,8 +118,8 @@ export const deleteDevicePhotosRemovedDuringObservationPrep = (
 
   // Require at call time so tests can mock deletion
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { deleteOriginalDevicePhotos } = require(
+  const promptDeleteOriginalDevicePhotos = require(
     "sharedHelpers/promptDeleteOriginalDevicePhotos",
-  );
-  void deleteOriginalDevicePhotos( uniqueUris, { userInitiated: true } );
+  ).default;
+  promptDeleteOriginalDevicePhotos( uniqueUris, ( ) => { } );
 };
