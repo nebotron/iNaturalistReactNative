@@ -73,4 +73,15 @@ describe( "readExifFromMultiplePhotos", ( ) => {
     expect( unified.longitude ).toEqual( EXPECTED_EXIF_LONGITUDE );
     expect( unified.positional_accuracy ).toEqual( EXPECTED_EXIF_POSITIONAL_ACCURACY );
   } );
+
+  it( "should stop scanning once all EXIF fields are found", async ( ) => {
+    Exify.read.mockResolvedValue( MOCK_READ_EXIF_RESPONSE );
+
+    await readExifFromMultiplePhotos( Array.from(
+      { length: 30 },
+      ( _, index ) => `file:///photo-${index}.jpg`,
+    ) );
+
+    expect( Exify.read ).toHaveBeenCalledTimes( 1 );
+  } );
 } );

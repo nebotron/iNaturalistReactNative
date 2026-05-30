@@ -20,7 +20,7 @@ const ExploreV2WithProvider = ( ) => {
   const onPermissionsGained = useEffectEvent( async ( ) => {
     if ( state.location.placeMode !== EXPLORE_V2_PLACE_MODE.UNINITIALIZED ) return;
 
-    const next = await defaultExploreV2Location( );
+    const next = await defaultExploreV2Location( state.nearbyRadiusKm );
     if ( next.placeMode === EXPLORE_V2_PLACE_MODE.NEARBY ) {
       dispatch( {
         type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY,

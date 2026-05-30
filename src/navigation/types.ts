@@ -179,6 +179,14 @@ export type SharedStackParamList = {
   };
   MatchTaxonSearchScreen: undefined;
   FullPageWebView: undefined;
+  // From EvidenceList.js and GroupPhotos.tsx
+  ImageCropEditor: {
+    imageUri: string;
+    context: "groupPhotos" | "observationEdit";
+    observationPhotoUuid?: string;
+    onCropSaved?: () => void;
+    pendingImageUris?: string[];
+  };
 };
 
 // Note from the documentation:

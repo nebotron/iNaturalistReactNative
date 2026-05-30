@@ -17,6 +17,7 @@ import useDeferredStartup from "./hooks/useDeferredStartup";
 import useLinking from "./hooks/useLinking";
 import NetworkService from "./NetworkService";
 import StartupService from "./StartupService";
+import UploadService from "./UploadService";
 
 const logger = log.extend( "App" );
 
@@ -84,6 +85,7 @@ const App = ( { children }: Props ): Node => {
     <>
       <StartupService />
       <NetworkService />
+      <UploadService />
       <AppStateListener />
       {children || <RootStackNavigator />}
     </>

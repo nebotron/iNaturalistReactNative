@@ -38,7 +38,20 @@ interface Props extends PropsWithChildren {
   white?: boolean;
   width?: string;
   hideGradientOverlay?: boolean;
+  squareCorners?: boolean;
 }
+
+const getBorderRadiusClass = (
+  squareCorners: boolean,
+  isSmall: boolean,
+): string | null => {
+  if ( squareCorners ) {
+    return null;
+  }
+  return isSmall
+    ? "rounded-lg"
+    : "rounded-2xl";
+};
 
 const ObsImagePreview = ( {
   children,
@@ -61,20 +74,28 @@ const ObsImagePreview = ( {
   white = false,
   width = "w-[62px]",
   hideGradientOverlay = false,
+  squareCorners = false,
 }: Props ) => {
-  const borderRadius = isSmall
-    ? "rounded-lg"
-    : "rounded-2xl";
+  const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
 
   const imageClassNames: ArgumentArray = [
-    "max-h-[210px]",
     "overflow-hidden",
     "relative",
-    borderRadius,
-    height,
-    className,
-    width,
   ];
+
+  if ( squareCorners ) {
+    imageClassNames.push( "w-full", "h-full" );
+  } else {
+    imageClassNames.push( "max-h-[210px]", height, width );
+  }
+
+  if ( className ) {
+    imageClassNames.push( className );
+  }
+
+  if ( borderRadius ) {
+    imageClassNames.push( borderRadius );
+  }
 
   const renderPhotoCount = useCallback( ( ) => {
     if ( obsPhotosCount <= 1 || hidePhotoCount ) return null;

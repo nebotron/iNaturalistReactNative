@@ -7,6 +7,7 @@ import MatchTaxonSearchScreen from "components/Match/MatchTaxonSearchScreen";
 import ObsEdit from "components/ObsEdit/ObsEdit";
 import PhotoSharing from "components/PhotoSharing";
 import { Heading4 } from "components/SharedComponents";
+import ImageCropEditor from "components/SharedComponents/ImageCrop/ImageCropEditor";
 import SuggestionsContainer from "components/Suggestions/SuggestionsContainer";
 import SuggestionsTaxonSearch from "components/Suggestions/SuggestionsTaxonSearch";
 import TaxonDetails from "components/TaxonDetails/TaxonDetails";
@@ -48,6 +49,7 @@ const FadeInFullPageWebView = ( ) => fadeInComponent( <FullPageWebView /> );
 const FadeInMatchContainer = ( ) => fadeInComponent(
   <MatchContainer />,
 );
+const FadeInImageCropEditor = ( ) => fadeInComponent( <ImageCropEditor /> );
 
 const BASE_SCREEN_OPTIONS = {
   contentStyle: {
@@ -125,6 +127,18 @@ const SharedStackScreens = ( ) => (
         component={FadeInMatchTaxonSearchScreen}
         options={{
           headerTitle: taxonSearchTitle,
+        }}
+      />
+      <Stack.Screen
+        name="ImageCropEditor"
+        component={FadeInImageCropEditor}
+        options={{
+          ...hideHeader,
+          headerTitleAlign: "center",
+          headerBackButtonDisplayMode: "minimal",
+          contentStyle: {
+            backgroundColor: "black",
+          },
         }}
       />
     </Stack.Group>
