@@ -112,9 +112,9 @@ const ObsDetails = ( {
 
   const renderTablet = () => (
     <View className="flex-1 flex-row bg-white">
-      <View className="w-[33%]">
+      <View className="relative w-[33%]">
         <ObsMediaDisplayContainer observation={observation} tablet />
-        {currentUser && (
+        {currentUser && !belongsToCurrentUser && (
           <FaveButton
             observation={observation}
             currentUser={currentUser}
@@ -185,9 +185,9 @@ const ObsDetails = ( {
             setHeightOfContentAboveActivityTab( layout );
           }}
         >
-          <View>
+          <View className="relative">
             <ObsMediaDisplayContainer observation={observation} />
-            { currentUser && (
+            { currentUser && !belongsToCurrentUser && (
               <FaveButton
                 observation={observation}
                 currentUser={currentUser}

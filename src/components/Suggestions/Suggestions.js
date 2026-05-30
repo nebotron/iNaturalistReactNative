@@ -27,13 +27,17 @@ type Props = {
   shouldUseEvidenceLocation: boolean,
   onPressPhoto: Function,
   onTaxonChosen: Function,
+  duplicatePhotoUris?: Set<string>,
   photoUris: string[],
   reloadSuggestions: Function,
   selectedPhotoUri: string,
   showImproveWithLocationButton: boolean,
+  showModelToggle: boolean,
   suggestions: Object,
   toggleLocation: Function,
+  toggleSuggestionsModel: Function,
   urlWillCrashOffline: boolean,
+  useOfflineModel: boolean,
   usingOfflineSuggestions: boolean
 };
 
@@ -47,13 +51,17 @@ const Suggestions = ( {
   shouldUseEvidenceLocation,
   onPressPhoto,
   onTaxonChosen,
+  duplicatePhotoUris,
   photoUris,
   reloadSuggestions,
   selectedPhotoUri,
   showImproveWithLocationButton,
+  showModelToggle,
   suggestions,
   toggleLocation,
+  toggleSuggestionsModel,
   urlWillCrashOffline,
+  useOfflineModel,
   usingOfflineSuggestions,
 }: Props ): Node => {
   const { t } = useTranslation( );
@@ -65,7 +73,11 @@ const Suggestions = ( {
   const taxonIds = otherSuggestions?.map( s => s.taxon.id );
   const observers = useObservers( taxonIds );
   const isEmptyList = !topSuggestion && otherSuggestions?.length === 0;
-  const showOfflineText = !isLoading && usingOfflineSuggestions && !isEmptyList;
+  const showOfflineFallbackBanner = !isLoading
+    && usingOfflineSuggestions
+    && !useOfflineModel
+    && !isEmptyList;
+  const showOfflineModelInfo = !isLoading && useOfflineModel && !isEmptyList;
 
   const renderSuggestion = useCallback( ( { item: suggestion } ) => (
     <Suggestion
@@ -107,22 +119,32 @@ const Suggestions = ( {
 
   const renderHeader = useMemo( ( ) => (
     <SuggestionsHeader
+      duplicatePhotoUris={duplicatePhotoUris}
       onPressPhoto={onPressPhoto}
       photoUris={photoUris}
       reloadSuggestions={reloadSuggestions}
       selectedPhotoUri={selectedPhotoUri}
-      showOfflineText={showOfflineText}
+      showOfflineFallbackBanner={showOfflineFallbackBanner}
+      showOfflineModelInfo={showOfflineModelInfo}
+      showModelToggle={showModelToggle}
+      toggleSuggestionsModel={toggleSuggestionsModel}
+      useOfflineModel={useOfflineModel}
       improveWithLocationButtonOnPress={improveWithLocationButtonOnPress}
       showImproveWithLocationButton={showImproveWithLocationButton}
     />
   ), [
     onPressPhoto,
+    duplicatePhotoUris,
     photoUris,
     reloadSuggestions,
     selectedPhotoUri,
     improveWithLocationButtonOnPress,
     showImproveWithLocationButton,
-    showOfflineText,
+    showOfflineFallbackBanner,
+    showOfflineModelInfo,
+    showModelToggle,
+    toggleSuggestionsModel,
+    useOfflineModel,
   ] );
 
   const renderSectionHeader = ( { section } ) => {

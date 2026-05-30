@@ -2,14 +2,10 @@ import {
   useNetInfo,
 } from "@react-native-community/netinfo";
 import { REQUIRED_LOCATION_ACCURACY } from "components/LocationPicker/CrosshairCircle";
-import useUploadObservations from "components/MyObservations/hooks/useUploadObservations";
-import { RealmContext } from "providers/contexts";
 import React, { useCallback, useState } from "react";
 import type { RealmObservation } from "realmModels/types";
-import saveObservation from "sharedHelpers/saveObservation";
 import {
   useCurrentUser,
-  useExitObservationFlow,
 } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -18,114 +14,48 @@ import BottomButtons, { UPLOAD } from "./BottomButtons";
 import ImpreciseLocationSheet from "./Sheets/ImpreciseLocationSheet";
 import MissingEvidenceSheet from "./Sheets/MissingEvidenceSheet";
 
-const { useRealm } = RealmContext;
-
 interface Props {
   passesEvidenceTest: boolean;
-  observations: object[];
   currentObservation: RealmObservation;
-  currentObservationIndex: number;
-  setCurrentObservationIndex: ( index: number, observations: object[] ) => void;
-  transitionAnimation: ( ) => void;
+  loading: boolean;
+  saveAndAdvance: ( type: typeof UPLOAD | "save" ) => Promise<boolean>;
 }
 
 const BottomButtonsContainer = ( {
   passesEvidenceTest,
   currentObservation,
-  currentObservationIndex,
-  observations,
-  setCurrentObservationIndex,
-  transitionAnimation,
+  loading,
+  saveAndAdvance,
 }: Props ) => {
   const { isConnected } = useNetInfo( );
   const currentUser = useCurrentUser( );
   const cameraRollUris = useStore( state => state.cameraRollUris );
   const unsavedChanges = useStore( state => state.unsavedChanges );
-  const addToUploadQueue = useStore( state => state.addToUploadQueue );
-  const addTotalToolbarIncrements = useStore( state => state.addTotalToolbarIncrements );
-  const resetMyObsOffsetToRestore = useStore( state => state.resetMyObsOffsetToRestore );
-  const setMyObsOffset = useStore( state => state.setMyObsOffset );
-  const setSavedOrUploadedMultiObsFlow = useStore( state => state.setSavedOrUploadedMultiObsFlow );
-  const incrementTotalSavedObservations = useStore(
-    state => state.incrementTotalSavedObservations,
-  );
   const isNewObs = !currentObservation._created_at;
   const hasPhotos = currentObservation.observationPhotos?.length > 0;
   const hasImportedPhotos = hasPhotos && cameraRollUris.length === 0;
 
-  const realm = useRealm( );
   const [showMissingEvidenceSheet, setShowMissingEvidenceSheet] = useState( false );
   const [showImpreciseLocationSheet, setShowImpreciseLocationSheet] = useState( false );
   const [allowUserToUpload, setAllowUserToUpload] = useState( false );
   const [buttonPressed, setButtonPressed] = useState<ButtonType>( null );
-  const [loading, setLoading] = useState( false );
-  const exitObservationFlow = useExitObservationFlow( );
+  const [manualLoading, setManualLoading] = useState( false );
 
   const hasIdentification = currentObservation.taxon
     && currentObservation.taxon.rank_level !== 100;
 
   const passesTests = passesEvidenceTest && hasIdentification;
 
-  const canUpload = !!( currentUser && isConnected );
-  const { startUploadsFromMultiObsEdit } = useUploadObservations( canUpload );
-
   const setNextScreen = useCallback( async ( type: ButtonTypeNonNull ) => {
-    const savedObservation = await saveObservation( currentObservation, cameraRollUris, realm );
-    if ( savedObservation && observations?.length > 1 ) {
-      transitionAnimation();
-      setSavedOrUploadedMultiObsFlow( );
+    const succeeded = await saveAndAdvance( type === UPLOAD
+      ? UPLOAD
+      : "save" );
+    setManualLoading( false );
+    setButtonPressed( null );
+    if ( !succeeded ) {
+      return;
     }
-    // If we are saving a new observations, reset the stored my obs offset to
-    // restore b/c we want MyObs rendered in its default state with this new
-    // observation visible at the top
-    if ( isNewObs ) {
-      resetMyObsOffsetToRestore( );
-      setMyObsOffset( 0 );
-    }
-    if ( type === UPLOAD ) {
-      const { uuid } = savedObservation;
-      addTotalToolbarIncrements( savedObservation );
-      addToUploadQueue( uuid );
-      transitionAnimation();
-      startUploadsFromMultiObsEdit( );
-    } else {
-      incrementTotalSavedObservations( );
-    }
-
-    if ( observations.length === 1 ) {
-      setButtonPressed( null );
-      // If this is the last observation, we're done
-      exitObservationFlow( );
-    } else if ( currentObservationIndex === observations.length - 1 ) {
-      observations.pop( );
-      setCurrentObservationIndex( currentObservationIndex - 1, observations );
-      setLoading( false );
-      setButtonPressed( null );
-    } else {
-      observations.splice( currentObservationIndex, 1 );
-      // this seems necessary for rerendering the ObsEdit screen
-      setCurrentObservationIndex( currentObservationIndex, observations );
-      setLoading( false );
-      setButtonPressed( null );
-    }
-  }, [
-    addToUploadQueue,
-    addTotalToolbarIncrements,
-    cameraRollUris,
-    currentObservation,
-    currentObservationIndex,
-    exitObservationFlow,
-    incrementTotalSavedObservations,
-    isNewObs,
-    observations,
-    realm,
-    resetMyObsOffsetToRestore,
-    setCurrentObservationIndex,
-    setMyObsOffset,
-    setSavedOrUploadedMultiObsFlow,
-    startUploadsFromMultiObsEdit,
-    transitionAnimation,
-  ] );
+  }, [saveAndAdvance] );
 
   const showMissingEvidence = useCallback( ( ) => {
     if ( allowUserToUpload ) { return false; }
@@ -157,7 +87,7 @@ const BottomButtonsContainer = ( {
 
   const handlePress = useCallback( ( type: ButtonTypeNonNull ) => {
     if ( showMissingEvidence( ) ) { return; }
-    setLoading( true );
+    setManualLoading( true );
     setButtonPressed( type );
     setNextScreen( type );
   }, [setNextScreen, showMissingEvidence] );
@@ -178,7 +108,7 @@ const BottomButtonsContainer = ( {
         buttonPressed={buttonPressed}
         canSaveOnly={!currentUser || !isConnected}
         handlePress={handlePress}
-        loading={loading}
+        loading={manualLoading || loading}
         showFocusedChangesButton={unsavedChanges}
         showFocusedUploadButton={!!passesTests}
         showHalfOpacity={!passesEvidenceTest}

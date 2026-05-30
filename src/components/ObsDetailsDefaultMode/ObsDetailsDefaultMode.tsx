@@ -38,7 +38,7 @@ interface Props {
   navToSuggestions: () => void;
   observation: RealmObservation & Observation & { id: number };
   openAddCommentSheet: () => void;
-  openAgreeWithIdSheet: () => void;
+  openAgreeWithIdSheet: ( taxon: object ) => void;
   refetchRemoteObservation: () => void;
   refetchSubscriptions: () => void;
   showAddCommentSheet: boolean;
@@ -102,7 +102,7 @@ const ObsDetailsDefaultMode = ( {
             isConnected={isConnected}
             observation={observation}
           />
-          <View>
+          <View className="relative">
             <ObsMediaDisplayContainer observation={observation} />
           </View>
           <CommunityTaxon
