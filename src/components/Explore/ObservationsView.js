@@ -137,6 +137,7 @@ const ObservationsView = ( {
         onEndReached={fetchNextPage}
         showNoResults={!canFetch || totalResults === 0}
         hideObsUploadStatus={layout === "grid"}
+        fullWidthGrid={layout === "grid"}
         testID="ExploreObservationsAnimatedList"
       />
       <MapView

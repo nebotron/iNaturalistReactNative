@@ -28,6 +28,7 @@ type Props = {
   editable?: boolean,
   // $FlowIgnore
   horizontalScroll: unknown,
+  onCropPhoto?: Function,
   onDeletePhoto?: Function,
   onClose?: Function,
   onDeleteSound?: Function,
@@ -50,6 +51,7 @@ const MainMediaDisplay = ( {
   editable,
   horizontalScroll,
   onDeletePhoto = ( ) => undefined,
+  onCropPhoto,
   onDeleteSound = ( ) => undefined,
   onClose = ( ) => undefined,
   photos,
@@ -72,6 +74,7 @@ const MainMediaDisplay = ( {
   // dependencies keeps that method from getting redefined a lot
   const deletePhotoLabel = t( "Delete-photo" );
   const deleteSoundLabel = t( "Delete-sound" );
+  const cropPhotoLabel = t( "CROP-PHOTO" );
 
   const renderPhoto = useCallback( photo => {
     const uri = Photo.displayLocalOrRemoteLargePhoto( photo );
@@ -86,7 +89,17 @@ const MainMediaDisplay = ( {
         {
           editable
             ? (
-              <View className="absolute bottom-4 right-4">
+              <View className="absolute bottom-4 right-4 flex-row items-center">
+                { onCropPhoto && (
+                  <TransparentCircleButton
+                    onPress={( ) => onCropPhoto( photo )}
+                    icon="crop"
+                    color={colors.white}
+                    accessibilityLabel={cropPhotoLabel}
+                    testID="EvidenceList.editSquareCrop"
+                    optionalClasses="mr-2"
+                  />
+                ) }
                 <TransparentCircleButton
                   onPress={( ) => onDeletePhoto(
                     Photo.getLocalPhotoUri( photo.localFilePath )
@@ -112,8 +125,10 @@ const MainMediaDisplay = ( {
       </View>
     );
   }, [
+    cropPhotoLabel,
     deletePhotoLabel,
     editable,
+    onCropPhoto,
     onDeletePhoto,
     selectedMediaIndex,
   ] );

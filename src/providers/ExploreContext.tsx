@@ -6,11 +6,18 @@ import type { LatLng } from "react-native-maps";
 
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import { migrateTaxonFilters, normalizeTaxonFilters } from "components/Explore/helpers/taxonFilters";
+
 import fetchCoarseUserLocation from "../sharedHelpers/fetchCoarseUserLocation";
+import { DEFAULT_NEARBY_RADIUS_KM } from "../sharedHelpers/nearbyRadius";
+
+export type { ExploreTaxonFilter };
 
 export enum EXPLORE_ACTION {
   CHANGE_SORT_BY = "CHANGE_SORT_BY",
   CHANGE_TAXON = "CHANGE_TAXON",
+  SET_TAXON_FILTERS = "SET_TAXON_FILTERS",
   DISCARD = "DISCARD",
   FILTER_BY_ICONIC_TAXON_UNKNOWN = "FILTER_BY_ICONIC_TAXON_UNKNOWN",
   RESET = "RESET",
@@ -39,6 +46,7 @@ export enum EXPLORE_ACTION {
   SET_USER = "SET_USER",
   SET_EXCLUDE_USER = "SET_EXCLUDE_USER",
   SET_WILD_STATUS = "SET_WILD_STATUS",
+  SET_NEARBY_RADIUS = "SET_NEARBY_RADIUS",
   TOGGLE_CASUAL = "TOGGLE_CASUAL",
   TOGGLE_NEEDS_ID = "TOGGLE_NEEDS_ID",
   TOGGLE_RESEARCH_GRADE = "TOGGLE_RESEARCH_GRADE",
@@ -218,6 +226,7 @@ interface State {
   // and should be typed as such (e.g., in realm model)
   taxon: object | undefined | null;
   taxon_id: number | undefined | null;
+  taxonFilters: ExploreTaxonFilter[];
   // TODO: technically this is not any object but a "User"
   // and should be typed as such (e.g., in realm model)
   user: object | undefined | null;
@@ -225,6 +234,7 @@ interface State {
   excludeUser: object | undefined | null;
   verifiable: boolean;
   wildStatus: WILD_STATUS;
+  nearbyRadiusKm: number;
 }
 type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.DISCARD; snapshot: State}
@@ -241,6 +251,11 @@ type Action = {type: EXPLORE_ACTION.RESET}
     taxon: { id: number } | null;
     taxonId: number;
     taxonName: string;
+    storedState?: State;
+  }
+  | {
+    type: EXPLORE_ACTION.SET_TAXON_FILTERS;
+    taxonFilters: ExploreTaxonFilter[];
     storedState?: State;
   }
   | { type: EXPLORE_ACTION.FILTER_BY_ICONIC_TAXON_UNKNOWN }
@@ -281,6 +296,7 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.SET_MEDIA; media: MEDIA}
   | {type: EXPLORE_ACTION.SET_ESTABLISHMENT_MEAN; establishmentMean: ESTABLISHMENT_MEAN}
   | {type: EXPLORE_ACTION.SET_WILD_STATUS; wildStatus: WILD_STATUS}
+  | {type: EXPLORE_ACTION.SET_NEARBY_RADIUS; radius: number}
   | {type: EXPLORE_ACTION.SET_REVIEWED; reviewedFilter: REVIEWED}
   | {type: EXPLORE_ACTION.SET_PHOTO_LICENSE; photoLicense: PHOTO_LICENSE}
   | {type: EXPLORE_ACTION.SET_MAP_BOUNDARIES; mapBoundaries: MapBoundaries}
@@ -346,7 +362,9 @@ const initialState: State = {
   return_bounds: undefined,
   taxon: undefined,
   taxon_id: undefined,
+  taxonFilters: [],
   verifiable: true,
+  nearbyRadiusKm: DEFAULT_NEARBY_RADIUS_KM,
 };
 
 // Checks if the date is in the format XXXX-XX-XX
@@ -355,7 +373,9 @@ function isValidDateFormat( date: string ): boolean {
   return regex.test( date );
 }
 
-async function defaultExploreLocation( ): Promise<DefaultLocation> {
+async function defaultExploreLocation(
+  nearbyRadiusKm: number = DEFAULT_NEARBY_RADIUS_KM,
+): Promise<DefaultLocation> {
   const location = await fetchCoarseUserLocation( );
   if ( !location || !location.latitude ) {
     return {
@@ -374,7 +394,7 @@ async function defaultExploreLocation( ): Promise<DefaultLocation> {
     placeMode: PLACE_MODE.NEARBY,
     lat: location?.latitude,
     lng: location?.longitude,
-    radius: 1,
+    radius: nearbyRadiusKm,
     place_id: undefined,
     swlat: undefined,
     swlng: undefined,
@@ -404,13 +424,28 @@ function exploreReducer( state: State, action: Action ) {
         iconic_taxa: undefined,
       };
       if ( action.taxon ) {
+        newState.taxonFilters = [{ taxon: action.taxon, exclude: false }];
         newState.taxon = action.taxon;
         newState.taxon_id = action.taxon.id;
       } else {
+        newState.taxonFilters = [];
         newState.taxon = null;
         newState.taxon_id = null;
       }
       return newState;
+    }
+    case EXPLORE_ACTION.SET_TAXON_FILTERS: {
+      const taxonFilters = normalizeTaxonFilters( action.taxonFilters );
+      const includeFilters = taxonFilters.filter( filter => !filter.exclude );
+      const firstInclude = includeFilters[0]?.taxon ?? null;
+      return {
+        ...state,
+        ...action.storedState,
+        iconic_taxa: undefined,
+        taxonFilters,
+        taxon: firstInclude,
+        taxon_id: firstInclude?.id ?? null,
+      };
     }
     // Every iconic taxon filter is essentially a taxon filter... except
     // "unknown", which is a search for observations not associated with an
@@ -424,14 +459,49 @@ function exploreReducer( state: State, action: Action ) {
         iconic_taxa: ["unknown"],
         taxon: undefined,
         taxon_id: undefined,
+        taxonFilters: [],
       };
       return newState;
     }
-    case EXPLORE_ACTION.SET_EXPLORE_LOCATION:
+    case EXPLORE_ACTION.SET_EXPLORE_LOCATION: {
+      const { exploreLocation } = action;
+      const clearedLocationState = {
+        ...state,
+        lat: undefined,
+        lng: undefined,
+        nelat: undefined,
+        nelng: undefined,
+        place: undefined,
+        place_guess: "",
+        place_id: undefined,
+        radius: undefined,
+        swlat: undefined,
+        swlng: undefined,
+      };
+
+      if ( exploreLocation.placeMode === PLACE_MODE.WORLDWIDE ) {
+        return {
+          ...clearedLocationState,
+          placeMode: PLACE_MODE.WORLDWIDE,
+        };
+      }
+
+      if ( exploreLocation.placeMode === PLACE_MODE.NEARBY ) {
+        const radius = exploreLocation.radius ?? state.nearbyRadiusKm;
+        return {
+          ...clearedLocationState,
+          placeMode: PLACE_MODE.NEARBY,
+          lat: exploreLocation.lat,
+          lng: exploreLocation.lng,
+          radius,
+        };
+      }
+
       return {
         ...state,
-        ...action.exploreLocation,
+        ...exploreLocation,
       };
+    }
     case EXPLORE_ACTION.SET_PLACE_MODE_NEARBY:
       return {
         ...state,
@@ -631,6 +701,16 @@ function exploreReducer( state: State, action: Action ) {
         ...state,
         reviewedFilter: action.reviewedFilter,
       };
+    case EXPLORE_ACTION.SET_NEARBY_RADIUS: {
+      const updatedState = {
+        ...state,
+        nearbyRadiusKm: action.radius,
+      };
+      if ( state.placeMode === PLACE_MODE.NEARBY ) {
+        updatedState.radius = action.radius;
+      }
+      return updatedState;
+    }
     case EXPLORE_ACTION.SET_MAP_BOUNDARIES: {
       return {
         ...state,
@@ -641,10 +721,26 @@ function exploreReducer( state: State, action: Action ) {
         radius: undefined,
       };
     }
-    case EXPLORE_ACTION.USE_STORED_STATE:
+    case EXPLORE_ACTION.USE_STORED_STATE: {
+      const { storedState } = action;
+      const nearbyRadiusKm = storedState.nearbyRadiusKm != null
+        ? storedState.nearbyRadiusKm
+        : storedState.radius ?? DEFAULT_NEARBY_RADIUS_KM;
+      const taxonFilters = migrateTaxonFilters( storedState );
+
       return {
-        ...action.storedState,
+        ...initialState,
+        ...storedState,
+        nearbyRadiusKm,
+        taxonFilters,
+        taxon: taxonFilters.find( filter => !filter.exclude )?.taxon
+          ?? storedState.taxon
+          ?? undefined,
+        taxon_id: taxonFilters.find( filter => !filter.exclude )?.taxon?.id
+          ?? storedState.taxon_id
+          ?? undefined,
       };
+    }
     default: {
       throw new Error( `Unhandled action type: ${( action as Action ).type}` );
     }
@@ -670,6 +766,11 @@ const ExploreProvider = ( { children }: ExploreProviderProps ) => {
     dispatch( { type: EXPLORE_ACTION.DISCARD, snapshot } );
   };
 
+  const getDefaultExploreLocation = React.useCallback(
+    () => defaultExploreLocation( state.nearbyRadiusKm ?? DEFAULT_NEARBY_RADIUS_KM ),
+    [state.nearbyRadiusKm],
+  );
+
   const isNotInitialState: boolean = Object.keys( initialState ).some(
     key => initialState[key] !== state[key],
   );
@@ -692,7 +793,7 @@ const ExploreProvider = ( { children }: ExploreProviderProps ) => {
   const value = {
     state,
     dispatch,
-    defaultExploreLocation,
+    defaultExploreLocation: getDefaultExploreLocation,
     isNotInitialState,
     numberOfFilters,
     makeSnapshot,
@@ -715,5 +816,7 @@ function useExplore() {
 export {
   ExploreProvider,
   exploreReducer,
+  initialState as initialExploreState,
   useExplore,
 };
+export type { State as ExploreState };

@@ -1,4 +1,5 @@
 import { StackActions, useNavigation, useRoute } from "@react-navigation/native";
+import useMultiObsSaveAndAdvance from "components/ObsEdit/hooks/useMultiObsSaveAndAdvance";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { useCallback } from "react";
 import useStore from "stores/useStore";
@@ -21,10 +22,24 @@ const useNavigateWithTaxonSelected = (
   >( );
   const { entryScreen, lastScreen } = params || {};
   const currentObservation = useStore( state => state.currentObservation );
+  const currentObservationIndex = useStore( state => state.currentObservationIndex );
+  const observations = useStore( state => state.observations );
+  const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const vision = options?.vision;
 
-  const navigateWithTaxonSelected = useCallback( ( selectedTaxon: object | undefined ) => {
+  const isMultiObsCreateFlow = (
+    observations.length > 1 || savedOrUploadedMultiObsFlow
+  ) && entryScreen === "ObsEdit" && lastScreen === "ObsEdit";
+
+  const { saveAndAdvance } = useMultiObsSaveAndAdvance( {
+    currentObservation,
+    currentObservationIndex,
+    observations,
+    transitionAnimation: ( ) => undefined,
+  } );
+
+  const navigateWithTaxonSelected = useCallback( async ( selectedTaxon: object | undefined ) => {
     if ( selectedTaxon === undefined ) {
       updateObservationKeys( {
         owners_identification_from_vision: false,
@@ -35,6 +50,15 @@ const useNavigateWithTaxonSelected = (
         owners_identification_from_vision: vision,
         taxon: selectedTaxon,
       } );
+    }
+
+    if ( selectedTaxon !== undefined && isMultiObsCreateFlow ) {
+      const numObservations = useStore.getState( ).observations.length;
+      await saveAndAdvance( "save" );
+      if ( numObservations > 1 ) {
+        return;
+      }
+      return;
     }
 
     // checking for previous screen here rather than a synced/unsynced observation
@@ -61,8 +85,10 @@ const useNavigateWithTaxonSelected = (
   }, [
     currentObservation?.uuid,
     entryScreen,
+    isMultiObsCreateFlow,
     lastScreen,
     navigation,
+    saveAndAdvance,
     updateObservationKeys,
     vision,
   ] );

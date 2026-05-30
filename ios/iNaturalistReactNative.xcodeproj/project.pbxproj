@@ -33,6 +33,8 @@
 		AE4DC81B3A87484CB3FD6750 /* Lato-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4B0AEEF6CA584BCF9880EB35 /* Lato-Regular.ttf */; };
 		E5DFC1C6FBFA45739CE91C69 /* Lato-MediumItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 69DF855D92EA4ADFB73B47F1 /* Lato-MediumItalic.ttf */; };
 		F0B9E287B2F441548F4A2DCB /* INatIcon.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 509C6A99546C48429FF5AAFC /* INatIcon.ttf */; };
+		IC1B2C3D4E5F60718293A4B5 /* ImageCropper.m in Sources */ = {isa = PBXBuildFile; fileRef = IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */; };
+		VA1B2C3D4E5F60718293A4B5 /* VideoAudioExtractor.m in Sources */ = {isa = PBXBuildFile; fileRef = VA1B2C3D4E5F60718293A4B6 /* VideoAudioExtractor.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -98,6 +100,8 @@
 		8FF73F722F69C8CE007CF4F0 /* AutoContinueShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AutoContinueShareViewController.swift; path = "../node_modules/react-native-share-menu/ios/AutoContinueShareViewController.swift"; sourceTree = SOURCE_ROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F15C1390617A309CE0A194B2 /* Pods_iNaturalistReactNative_ShareExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_iNaturalistReactNative_ShareExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
+		IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = ImageCropper.m; path = iNaturalistReactNative/ImageCropper.m; sourceTree = "<group>"; };
+		VA1B2C3D4E5F60718293A4B6 /* VideoAudioExtractor.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = VideoAudioExtractor.m; path = iNaturalistReactNative/VideoAudioExtractor.m; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -136,6 +140,8 @@
 				13B07FB61A68108700A75B9A /* Info.plist */,
 				13B07FB71A68108700A75B9A /* main.m */,
 				19A5877328F8E3310016D128 /* iNaturalistReactNative-Bridging-Header.h */,
+				VA1B2C3D4E5F60718293A4B6 /* VideoAudioExtractor.m */,
+				IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */,
 			);
 			name = iNaturalistReactNative;
 			sourceTree = "<group>";
@@ -485,6 +491,8 @@
 				13B07FBC1A68108700A75B9A /* AppDelegate.mm in Sources */,
 				197A169D2A7C2567001A03DC /* cvmodel.mlmodel in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
+				VA1B2C3D4E5F60718293A4B5 /* VideoAudioExtractor.m in Sources */,
+				IC1B2C3D4E5F60718293A4B5 /* ImageCropper.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -526,11 +534,11 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = iNaturalistReactNative/iNaturalistReactNative.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CURRENT_PROJECT_VERSION = 213;
-				DEVELOPMENT_TEAM = N5J7L4P93Z;
+				DEVELOPMENT_TEAM = DVURLJZFH6;
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
 				HEADER_SEARCH_PATHS = (
@@ -631,7 +639,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.inaturalist.iNaturalistMobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.benhannel.inat.dev;
 				PRODUCT_NAME = iNaturalistReactNative;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -652,11 +660,11 @@
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = "$(inherited)";
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CODE_SIGN_ENTITLEMENTS = iNaturalistReactNative/iNaturalistReactNativeRelease.entitlements;
+				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CURRENT_PROJECT_VERSION = 213;
-				DEVELOPMENT_TEAM = N5J7L4P93Z;
+				DEVELOPMENT_TEAM = DVURLJZFH6;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
@@ -756,7 +764,7 @@
 					"-ObjC",
 					"-lc++",
 				);
-				PRODUCT_BUNDLE_IDENTIFIER = org.inaturalist.iNaturalistMobile;
+				PRODUCT_BUNDLE_IDENTIFIER = com.benhannel.inat.dev;
 				PRODUCT_NAME = iNaturalistReactNative;
 				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
 				SUPPORTS_MACCATALYST = NO;
@@ -973,7 +981,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 213;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = N5J7L4P93Z;
+				DEVELOPMENT_TEAM = DVURLJZFH6;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = i386;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -989,7 +997,7 @@
 				MARKETING_VERSION = 1.0;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = org.inaturalist.iNaturalistMobile.ShareExtensionIOS;
+				PRODUCT_BUNDLE_IDENTIFIER = com.benhannel.inat.dev.ShareExtensionIOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
@@ -1018,7 +1026,7 @@
 				COPY_PHASE_STRIP = NO;
 				CURRENT_PROJECT_VERSION = 213;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = N5J7L4P93Z;
+				DEVELOPMENT_TEAM = DVURLJZFH6;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = i386;
 				GCC_C_LANGUAGE_STANDARD = gnu11;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1033,7 +1041,7 @@
 				);
 				MARKETING_VERSION = 1.0;
 				MTL_FAST_MATH = YES;
-				PRODUCT_BUNDLE_IDENTIFIER = org.inaturalist.iNaturalistMobile.ShareExtensionIOS;
+				PRODUCT_BUNDLE_IDENTIFIER = com.benhannel.inat.dev.ShareExtensionIOS;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				PROVISIONING_PROFILE_SPECIFIER = "";
 				SKIP_INSTALL = YES;

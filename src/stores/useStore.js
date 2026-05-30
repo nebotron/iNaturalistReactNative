@@ -87,6 +87,11 @@ const useStore = create( persist(
         }
         return memo;
       }, {} ) ),
+
+      // Explore tab filters and related search state
+      rootExploreView: state.rootExploreView,
+      rootStoredParams: state.rootStoredParams,
+      savedExploreFilters: state.savedExploreFilters,
     } ),
     storage: createJSONStorage( () => zustandStorage ),
     // We need to deep merge to persist nested objects, like layout
