@@ -6,6 +6,7 @@ import {
   useState,
 } from "react";
 import Observation from "realmModels/Observation";
+import useStore from "stores/useStore";
 
 import useLayoutPrefs from "./useLayoutPrefs";
 
@@ -16,12 +17,23 @@ const deletionFilters
 
 const sortedFilters = [["needs_sync", true], ["_created_at", true]];
 
-const useLocalObservations = ( ): Object[] => {
+// Stable secondary sort: within the unuploaded group, put observations that
+// are missing basics (location, time, evidence, or taxon) first.
+const missingBasicsPriority = obs => {
+  if ( obs.needs_sync && ( obs.missing_basics || !obs.taxon ) ) return 0;
+  if ( obs.needs_sync ) return 1;
+  return 2;
+};
+const sortByMissingBasics = ( a, b ) => missingBasicsPriority( a ) - missingBasicsPriority( b );
+
+const useLocalObservations = ( ): Object => {
+  const setNumUnuploadedObservations = useStore( state => state.setNumUnuploadedObservations );
   const [observationList, setObservationList] = useState( [] );
 
   const prevListRef = useRef( {
     list: [],
     count: 0,
+    unsyncedCount: 0,
     isDefaultMode: null,
   } );
 
@@ -41,11 +53,14 @@ const useLocalObservations = ( ): Object[] => {
     const handleChange = ( _collection, changes ) => {
       const { insertions, newModifications, deletions } = changes;
 
+      const unsyncedCount = Observation.filterUnsyncedObservations( realm ).length;
+
       // limit list updates to when there are actual realm changes
       if ( ( insertions.length > 0
           || newModifications.length > 0
           || deletions.length > 0 )
         || filteredObservations.length !== prevListRef.current.count
+        || unsyncedCount !== prevListRef.current.unsyncedCount
         || isDefaultMode !== prevListRef.current.isDefaultMode
       ) {
         // amanda 20250522: React Native works best when minimal data is passed to components,
@@ -87,11 +102,13 @@ const useLocalObservations = ( ): Object[] => {
             } );
         }
 
-        setObservationList( mappedObservations );
+        setObservationList( mappedObservations.sort( sortByMissingBasics ) );
+        setNumUnuploadedObservations( unsyncedCount );
 
         prevListRef.current = {
           list: mappedObservations,
           count: filteredObservations.length,
+          unsyncedCount,
           isDefaultMode,
         };
       }
@@ -104,9 +121,12 @@ const useLocalObservations = ( ): Object[] => {
         filteredObservations?.removeAllListeners( );
       }
     };
-  }, [isDefaultMode, realm] );
+  }, [isDefaultMode, realm, setNumUnuploadedObservations] );
 
-  return observationList;
+  return {
+    observationList,
+    totalResults: observationList.length,
+  };
 };
 
 export default useLocalObservations;

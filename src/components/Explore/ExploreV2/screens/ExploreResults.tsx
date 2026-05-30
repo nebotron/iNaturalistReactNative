@@ -3,8 +3,6 @@ import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2Tabs
   from "components/Explore/ExploreV2/components/ExploreV2Tabs";
-import ExploreV2DebugSheet
-  from "components/Explore/ExploreV2/ExploreV2DebugSheet";
 import buildExploreV2QueryParams
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import useInfiniteExploreScroll
@@ -124,7 +122,6 @@ const ExploreResults = ( ) => {
                 showNoResults={!canFetch || totalResults === 0}
                 testID="ExploreV2ObservationsList"
               />
-              <ExploreV2DebugSheet />
               <SortButton
                 onPress={() => setShowSortSheet( true )}
                 // TODO: add label based on state wether this is sorting species or observations

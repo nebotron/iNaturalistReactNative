@@ -11,7 +11,7 @@ import { useTranslation } from "sharedHooks";
 interface Props {
   closeModal: ( ) => void;
   headerText: string;
-  resetFilters: ( ) => void;
+  resetFilters?: ( ) => void;
   resetDisabled?: boolean;
   testID: string;
 }
@@ -35,21 +35,24 @@ const ExploreSearchHeader = ( {
         />
       </View>
       <Heading4 className="flex-1 wrap text-center">{headerText}</Heading4>
-      <Pressable
-        className={classnames(
-          "w-[50px] items-end",
-          { "opacity-50": resetDisabled },
+      <View className="w-[50px] items-end">
+        {resetFilters && (
+          <Pressable
+            className={classnames(
+              { "opacity-50": resetDisabled },
+            )}
+            onPress={resetFilters}
+            disabled={resetDisabled}
+            accessibilityRole="button"
+            accessibilityLabel={t( "Reset-verb" )}
+            testID={`${testID}.reset`}
+          >
+            <Body3 maxFontSizeMultiplier={1.5}>
+              {t( "Reset-verb" )}
+            </Body3>
+          </Pressable>
         )}
-        onPress={resetFilters}
-        disabled={resetDisabled}
-        accessibilityRole="button"
-        accessibilityLabel={t( "Reset-verb" )}
-        testID={`${testID}.reset`}
-      >
-        <Body3 maxFontSizeMultiplier={1.5}>
-          {t( "Reset-verb" )}
-        </Body3>
-      </Pressable>
+      </View>
     </View>
   );
 };

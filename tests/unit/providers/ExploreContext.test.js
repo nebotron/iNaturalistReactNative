@@ -1,7 +1,9 @@
 import {
   EXPLORE_ACTION,
   exploreReducer,
+  PLACE_MODE,
 } from "providers/ExploreContext";
+import { toExploreTaxonFilterTaxon } from "components/Explore/helpers/taxonFilters";
 import factory from "tests/factory";
 
 describe( "ExploreContext", ( ) => {
@@ -17,6 +19,38 @@ describe( "ExploreContext", ( ) => {
         expect( initialState.lng ).not.toBeUndefined( );
         expect( reducedState.lat ).toBeUndefined( );
         expect( reducedState.lng ).toBeUndefined( );
+      } );
+    } );
+    describe( EXPLORE_ACTION.SET_EXPLORE_LOCATION, ( ) => {
+      it( "should clear place search params when switching to nearby", ( ) => {
+        const initialState = {
+          placeMode: PLACE_MODE.PLACE,
+          place_id: 123,
+          place: factory( "RemotePlace" ),
+          place_guess: "Seattle, WA",
+          swlat: 1,
+          swlng: 2,
+          nelat: 3,
+          nelng: 4,
+        };
+        const reducedState = exploreReducer( initialState, {
+          type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
+          exploreLocation: {
+            placeMode: PLACE_MODE.NEARBY,
+            lat: 47.6,
+            lng: -122.3,
+            radius: 5,
+          },
+        } );
+        expect( reducedState.placeMode ).toBe( PLACE_MODE.NEARBY );
+        expect( reducedState.lat ).toBe( 47.6 );
+        expect( reducedState.lng ).toBe( -122.3 );
+        expect( reducedState.radius ).toBe( 5 );
+        expect( reducedState.place_id ).toBeUndefined( );
+        expect( reducedState.place ).toBeUndefined( );
+        expect( reducedState.place_guess ).toBe( "" );
+        expect( reducedState.swlat ).toBeUndefined( );
+        expect( reducedState.nelng ).toBeUndefined( );
       } );
     } );
     describe( EXPLORE_ACTION.SET_MAP_BOUNDARIES, ( ) => {
@@ -59,15 +93,41 @@ describe( "ExploreContext", ( ) => {
           taxon,
         } );
         expect( reducedState.taxon_id ).toEqual( taxon.id );
+        expect( reducedState.taxonFilters ).toEqual( [{ taxon, exclude: false }] );
       } );
       it( "should remove an id from a blank taxon", ( ) => {
         const taxon = factory( "RemoteTaxon" );
-        const initialState = { taxon, taxon_id: taxon.id };
+        const initialState = {
+          taxon,
+          taxon_id: taxon.id,
+          taxonFilters: [{ taxon, exclude: false }],
+        };
         const reducedState = exploreReducer( initialState, {
           type: EXPLORE_ACTION.CHANGE_TAXON,
           taxon: null,
         } );
         expect( reducedState.taxon_id ).toBeNull( );
+        expect( reducedState.taxonFilters ).toEqual( [] );
+      } );
+    } );
+    describe( EXPLORE_ACTION.SET_TAXON_FILTERS, ( ) => {
+      it( "stores multiple include and exclude taxa", ( ) => {
+        const includeTaxon = factory( "RemoteTaxon" );
+        const excludeTaxon = factory( "RemoteTaxon" );
+        const taxonFilters = [
+          { taxon: includeTaxon, exclude: false },
+          { taxon: excludeTaxon, exclude: true },
+        ];
+        const reducedState = exploreReducer( {}, {
+          type: EXPLORE_ACTION.SET_TAXON_FILTERS,
+          taxonFilters,
+        } );
+        expect( reducedState.taxonFilters ).toEqual( [
+          { taxon: toExploreTaxonFilterTaxon( includeTaxon ), exclude: false },
+          { taxon: toExploreTaxonFilterTaxon( excludeTaxon ), exclude: true },
+        ] );
+        expect( reducedState.taxon ).toEqual( toExploreTaxonFilterTaxon( includeTaxon ) );
+        expect( reducedState.taxon_id ).toEqual( includeTaxon.id );
       } );
     } );
   } );

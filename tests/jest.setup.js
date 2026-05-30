@@ -104,6 +104,14 @@ inatjs.observations.updates.mockResolvedValue( makeResponse( ) );
 
 // the following two mocks are both needed for react-native-keep-awake
 jest.mock( "@sayem314/react-native-keep-awake" );
+jest.mock( "react-native-background-actions", () => ( {
+  __esModule: true,
+  default: {
+    isRunning: jest.fn( () => false ),
+    start: jest.fn( () => Promise.resolve( ) ),
+    stop: jest.fn( () => Promise.resolve( ) ),
+  },
+} ) );
 jest.mock( "react-native/Libraries/TurboModule/TurboModuleRegistry", () => {
   const turboModuleRegistry = jest
     .requireActual( "react-native/Libraries/TurboModule/TurboModuleRegistry" );
@@ -192,6 +200,8 @@ jest.mock( "components/SharedComponents/Buttons/Button", () => {
   // debounce time in the actual Button component
   return jest.fn( props => actualButton( { ...props, debounceTime: 10 } ) );
 } );
+
+jest.mock( "components/ObsEdit/hooks/useMultiObsCreateFlowAutomation", ( ) => jest.fn( ) );
 
 jest.mock( "navigation/FadeInView", () => {
   const React = require( "react" );

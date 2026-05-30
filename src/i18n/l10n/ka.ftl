@@ -382,7 +382,6 @@ If-youre-seeing-this-error = თუ ამას ხედავ და ინ�
 IGNORE-LOCATION = ᲐᲓᲒᲘᲚᲛᲓᲔᲑᲐᲠᲔᲝᲑᲘᲡ ᲘᲒᲜᲝᲠᲘᲠᲔᲑᲐ
 Ignore-notifications = შეტყობინებების იგნორირება
 Ignoring-location = ადგილმდებარეობის იგნორირება
-Import-Photos-From = ფოტოების იმპორტი აქედან...
 IMPORT-X-OBSERVATIONS =
     { $count ->
         [one] 1 ᲓᲐᲙᲕᲘᲠᲕᲔᲑᲘᲡ

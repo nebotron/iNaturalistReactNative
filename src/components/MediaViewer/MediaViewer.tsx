@@ -44,9 +44,12 @@ interface Props {
   header?: (
     { onClose, photoCount }: { onClose: ( ) => void; photoCount: number}
   ) => React.JSX.Element;
+  initialIndex?: number;
   onClose?: ( ) => void;
+  onCropPhoto?: Function;
   onDeletePhoto?: ( uri: string ) => void;
   onDeleteSound?: ( uri: string ) => void;
+  onReorderPhotos?: Function;
   photos?: PhotoItem[];
   sounds?: SoundItem[];
   uri?: string | null;
@@ -57,9 +60,12 @@ const MediaViewer = ( {
   editable,
   deleting,
   header,
+  initialIndex,
   onClose = ( ) => undefined,
+  onCropPhoto,
   onDeletePhoto,
   onDeleteSound,
+  onReorderPhotos,
   photos = [],
   sounds = [],
   uri,
@@ -70,11 +76,15 @@ const MediaViewer = ( {
     ...sounds.map( sound => sound.file_url ),
   ] ), [photos, sounds] );
 
-  const [selectedMediaIndex, setSelectedMediaIndex] = useState(
-    uris.indexOf( uri ) <= 0
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState( ( ) => {
+    if ( initialIndex != null && initialIndex >= 0 ) {
+      return initialIndex;
+    }
+    const uriIndex = uris.indexOf( uri );
+    return uriIndex <= 0
       ? 0
-      : uris.indexOf( uri ),
-  );
+      : uriIndex;
+  } );
   const { t } = useTranslation( );
   const [mediaToDelete, setMediaToDelete] = useState<MediaToDelete | null>( null );
 
@@ -89,6 +99,33 @@ const MediaViewer = ( {
     setSelectedMediaIndex( index );
     horizontalScroll?.current?.scrollTo( { index, animated: true } );
   }, [setSelectedMediaIndex] );
+
+  const handleReorderPhotos = useCallback( ( { data: newPhotoUris } ) => {
+    if ( !onReorderPhotos ) {
+      return;
+    }
+
+    const currentlySelectedUri = uris[selectedMediaIndex];
+    onReorderPhotos( { data: newPhotoUris } );
+
+    const newUris = [
+      ...newPhotoUris,
+      ...sounds.map( sound => sound.file_url ),
+    ];
+    const newIndex = newUris.indexOf( currentlySelectedUri );
+    if ( newIndex >= 0 ) {
+      setSelectedMediaIndex( newIndex );
+      horizontalScroll?.current?.scrollToIndex( {
+        index: newIndex,
+        animated: true,
+      } );
+    }
+  }, [
+    onReorderPhotos,
+    selectedMediaIndex,
+    sounds,
+    uris,
+  ] );
 
   // If we've removed an item the selectedPhoto index might refer to a item
   // that no longer exists, so change it to the previous one
@@ -145,13 +182,16 @@ const MediaViewer = ( {
         selectedMediaIndex={selectedMediaIndex}
         horizontalScroll={horizontalScroll}
         setSelectedMediaIndex={setSelectedMediaIndex}
+        onCropPhoto={onCropPhoto}
         onDeletePhoto={photoUri => setMediaToDelete( { type: "photo", uri: photoUri } )}
         onDeleteSound={soundUri => setMediaToDelete( { type: "sound", uri: soundUri } )}
       />
       <MediaSelector
+        editable={editable}
         photos={photos}
         sounds={sounds}
         scrollToIndex={scrollToIndex}
+        onReorderPhotos={handleReorderPhotos}
         isLargeScreen={isLargeScreen}
         selectedMediaIndex={selectedMediaIndex}
       />

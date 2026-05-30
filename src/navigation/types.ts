@@ -190,6 +190,14 @@ export type SharedStackParamList = {
     initialUrl: string;
     loggedIn: boolean;
   };
+  // From EvidenceList.js and GroupPhotos.tsx
+  ImageCropEditor: {
+    imageUri: string;
+    context: "groupPhotos" | "observationEdit";
+    observationPhotoUuid?: string;
+    onCropSaved?: () => void;
+    pendingImageUris?: string[];
+  };
 };
 
 // Note from the documentation:
@@ -276,6 +284,7 @@ export type BaseTabStackParamList = {
     identAt?: number;
     identTaxonId?: number;
     identTaxonFromVision?: boolean;
+    preloadedObservation?: object;
   };
   Notifications: undefined;
   // From ProjectRequirements, InlineUserBase, UserList
@@ -340,6 +349,8 @@ export type BaseTabStackParamList = {
     projectTitle?: string;
     journalPostsCount?: number;
   } | undefined;
+  AnimalCropTool: undefined;
+  CropLogViewer: undefined;
   Debug: undefined;
   UILibrary: undefined;
   UiLibraryItem: undefined;
