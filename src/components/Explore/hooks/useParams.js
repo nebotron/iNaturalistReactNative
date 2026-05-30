@@ -35,10 +35,8 @@ const useParams = ( ): Object => {
     }
     if ( params?.taxon ) {
       dispatch( {
-        type: EXPLORE_ACTION.CHANGE_TAXON,
-        taxon: params.taxon,
-        taxonId: params.taxon?.id,
-        taxonName: params.taxon?.preferred_common_name || params.taxon?.name,
+        type: EXPLORE_ACTION.SET_TAXON_FILTERS,
+        taxonFilters: [{ taxon: params.taxon, exclude: false }],
       } );
     }
     if ( params?.place ) {
