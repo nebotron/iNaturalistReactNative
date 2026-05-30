@@ -467,6 +467,7 @@ Dont-have-an-account = <0>Don't have an account? </0><1>Sign up</1>
 Duplicate-photo-indicator = Previously uploaded photo
 Duplicate-photo-upload-message = You have already uploaded this photo to iNaturalist. Cropped or edited versions count as the same photo. Upload anyway?
 Duplicate-photo-upload-title = Upload this photo again?
+Duplicate-Photos = Duplicate Photos
 During-app-start-no-model-found = During app start there was no computer vision model found. There will be no AI camera.
 # Button for editing something
 Edit = Edit
@@ -624,6 +625,7 @@ IGNORE-LOCATION = IGNORE LOCATION
 Ignore-notifications = Ignore notifications
 Ignoring-location = Ignoring location
 Import = Import
+Import-Photos-From = Import Photos From
 # Shows the number of observations a user is about to import
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
@@ -733,7 +735,6 @@ LEAVE-US-A-REVIEW = LEAVE US A REVIEW!
 Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
 Load-saved-filter = Load saved filter
-Overwrite-saved-filter = Overwrite saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
 Loads-content-that-requires-an-Internet-connection = Loads content that requires an Internet connection
 LOCATION = LOCATION
@@ -959,6 +960,7 @@ OTHER-SUGGESTIONS = OTHER SUGGESTIONS
 # Tab on notifications showing notifications about content created by others.
 # Should be 16 characters or fewer or it will be ellipsized.
 OTHERS--notifications = OTHERS
+Overwrite-saved-filter = Overwrite saved filter
 PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
@@ -1425,6 +1427,7 @@ View-photo-licensing-info = View photo licensing info
 VIEW-PROJECT-REQUIREMENTS = VIEW PROJECT REQUIREMENTS
 # Button that lets user view a list of projects related to the observation or user profile they're viewing
 VIEW-PROJECTS = VIEW PROJECTS
+View-sound = View sound
 # Label for a button that shows identification suggestions for an observation
 # or photo
 View-suggestions = View suggestions
