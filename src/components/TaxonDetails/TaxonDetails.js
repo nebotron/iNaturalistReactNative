@@ -39,6 +39,7 @@ import Observation from "realmModels/Observation";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { log } from "sharedHelpers/logger";
 import saveObservation from "sharedHelpers/saveObservation";
+import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
@@ -252,7 +253,9 @@ const TaxonDetails = ( ): Node => {
 
   const saveForLater = useCallback( async ( ) => {
     await saveObservationFromSheet( );
-    exitObservationFlow( );
+    exitObservationFlow( {
+      promptDeleteOriginalPhotos: shouldPromptDeleteOriginalPhotos( ),
+    } );
   }, [
     exitObservationFlow,
     saveObservationFromSheet,
@@ -262,6 +265,7 @@ const TaxonDetails = ( ): Node => {
     await saveObservationFromSheet( );
     exitObservationFlow( {
       navigate: ( ) => navigation.navigate( "LoginStackNavigator" ),
+      promptDeleteOriginalPhotos: shouldPromptDeleteOriginalPhotos( ),
     } );
   }, [exitObservationFlow, navigation, saveObservationFromSheet] );
 
@@ -454,7 +458,10 @@ const TaxonDetails = ( ): Node => {
             if ( action === "save" ) {
               await saveObservationFromSheet( );
             }
-            exitObservationFlow( );
+            exitObservationFlow( {
+              promptDeleteOriginalPhotos: action === "save"
+                && shouldPromptDeleteOriginalPhotos( ),
+            } );
           }}
         />
       )}

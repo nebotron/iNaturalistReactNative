@@ -7,6 +7,7 @@ import { useNavigation } from "@react-navigation/native";
 import {
   EXPLORE_ACTION,
   ExploreProvider,
+  exploreReducer,
   PLACE_MODE,
   useExplore,
 } from "providers/ExploreContext";
@@ -87,12 +88,12 @@ const RootExploreContainerWithContext = ( ): Node => {
       } );
     } else if ( place === "nearby" ) {
       const exploreLocation = await defaultExploreLocation( );
-      // exploreLocation has a placeMode already
-      // dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_NEARBY } );
-      dispatch( {
+      const action = {
         type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
         exploreLocation,
-      } );
+      };
+      dispatch( action );
+      setRootStoredParams( exploreReducer( state, action ) );
     } else {
       navigation.setParams( { place } );
       dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_PLACE } );
@@ -103,7 +104,7 @@ const RootExploreContainerWithContext = ( ): Node => {
         placeGuess: place?.display_name,
       } );
     }
-  }, [checkPermissions, defaultExploreLocation, dispatch, navigation] );
+  }, [checkPermissions, defaultExploreLocation, dispatch, navigation, setRootStoredParams, state] );
 
   // Object | null
   const updateUser = ( user: Object, exclude ) => {
@@ -157,25 +158,30 @@ const RootExploreContainerWithContext = ( ): Node => {
     makeSnapshot( );
   };
 
-  useEffect( ( ) => {
-    const unsubscribe = navigation.addListener( "focus", ( ) => {
-      const storedState = Object.keys( rootStoredParams ).length > 0 || false;
-
-      if ( storedState ) {
-        dispatch( { type: EXPLORE_ACTION.USE_STORED_STATE, storedState: rootStoredParams } );
-      }
-    } );
-
-    return unsubscribe;
-  }, [navigation, dispatch, rootStoredParams] );
+  const skipNextExploreStateSyncRef = useRef(
+    Object.keys( rootStoredParams ).length > 0,
+  );
 
   useEffect( ( ) => {
-    const unsubscribe = navigation.addListener( "blur", ( ) => {
-      setRootStoredParams( state );
-    } );
+    const storedParams = useStore.getState( ).rootStoredParams;
+    if ( Object.keys( storedParams ).length === 0 ) {
+      return;
+    }
 
-    return unsubscribe;
-  }, [navigation, setRootStoredParams, state] );
+    dispatch( {
+      type: EXPLORE_ACTION.USE_STORED_STATE,
+      storedState: storedParams,
+    } );
+  }, [dispatch] );
+
+  useEffect( ( ) => {
+    if ( skipNextExploreStateSyncRef.current ) {
+      skipNextExploreStateSyncRef.current = false;
+      return;
+    }
+
+    setRootStoredParams( state );
+  }, [setRootStoredParams, state] );
 
   useEffect( () => {
     if ( state.placeMode === PLACE_MODE.NEARBY
@@ -232,7 +238,10 @@ const RootExploreContainerWithContext = ( ): Node => {
             openFiltersModal={openFiltersModal}
             queryParams={queryParams}
             showFiltersModal={showFiltersModal}
-            updateTaxon={taxon => dispatch( { type: EXPLORE_ACTION.CHANGE_TAXON, taxon } )}
+            updateTaxonFilters={taxonFilters => dispatch( {
+              type: EXPLORE_ACTION.SET_TAXON_FILTERS,
+              taxonFilters,
+            } )}
             updateLocation={updateLocation}
             updateUser={updateUser}
             updateProject={updateProject}

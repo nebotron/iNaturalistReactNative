@@ -69,43 +69,64 @@ exports[`InlineUser renders reliably 1`] = `
       testID="mockUserIcon"
     />
   </View>
-  <Text
-    ellipsizeMode="tail"
-    maxFontSizeMultiplier={1}
-    numberOfLines={1}
-    selectable={true}
+  <View
     style={
       [
-        {
-          "color": "#454545",
-        },
-        {
-          "fontFamily": "Lato-Regular",
-        },
         [
           {
-            "textAlign": "left",
+            "flexDirection": "row",
           },
-          [
-            {
-              "fontSize": 13,
-              "lineHeight": 18,
-            },
-            {
-              "fontFamily": "Lato-Medium",
-            },
-            [
-              {
-                "width": "75%",
-              },
-            ],
-          ],
+          {
+            "alignItems": "center",
+          },
+          {
+            "flexShrink": 1,
+          },
+          {
+            "width": "75%",
+          },
         ],
       ]
     }
   >
-    some_login
-  </Text>
+    <Text
+      ellipsizeMode="tail"
+      maxFontSizeMultiplier={1}
+      numberOfLines={1}
+      selectable={true}
+      style={
+        [
+          {
+            "color": "#454545",
+          },
+          {
+            "fontFamily": "Lato-Regular",
+          },
+          [
+            {
+              "textAlign": "left",
+            },
+            [
+              {
+                "fontSize": 13,
+                "lineHeight": 18,
+              },
+              {
+                "fontFamily": "Lato-Medium",
+              },
+              [
+                {
+                  "flexShrink": 1,
+                },
+              ],
+            ],
+          ],
+        ]
+      }
+    >
+      some_login
+    </Text>
+  </View>
 </View>
 `;
 
@@ -197,43 +218,64 @@ exports[`InlineUser when offline renders reliably 1`] = `
       
     </Text>
   </View>
-  <Text
-    ellipsizeMode="tail"
-    maxFontSizeMultiplier={1}
-    numberOfLines={1}
-    selectable={true}
+  <View
     style={
       [
-        {
-          "color": "#454545",
-        },
-        {
-          "fontFamily": "Lato-Regular",
-        },
         [
           {
-            "textAlign": "left",
+            "flexDirection": "row",
           },
-          [
-            {
-              "fontSize": 13,
-              "lineHeight": 18,
-            },
-            {
-              "fontFamily": "Lato-Medium",
-            },
-            [
-              {
-                "width": "75%",
-              },
-            ],
-          ],
+          {
+            "alignItems": "center",
+          },
+          {
+            "flexShrink": 1,
+          },
+          {
+            "width": "75%",
+          },
         ],
       ]
     }
   >
-    some_login
-  </Text>
+    <Text
+      ellipsizeMode="tail"
+      maxFontSizeMultiplier={1}
+      numberOfLines={1}
+      selectable={true}
+      style={
+        [
+          {
+            "color": "#454545",
+          },
+          {
+            "fontFamily": "Lato-Regular",
+          },
+          [
+            {
+              "textAlign": "left",
+            },
+            [
+              {
+                "fontSize": 13,
+                "lineHeight": 18,
+              },
+              {
+                "fontFamily": "Lato-Medium",
+              },
+              [
+                {
+                  "flexShrink": 1,
+                },
+              ],
+            ],
+          ],
+        ]
+      }
+    >
+      some_login
+    </Text>
+  </View>
 </View>
 `;
 
@@ -325,42 +367,63 @@ exports[`InlineUser when user has no icon set renders reliably 1`] = `
       
     </Text>
   </View>
-  <Text
-    ellipsizeMode="tail"
-    maxFontSizeMultiplier={1}
-    numberOfLines={1}
-    selectable={true}
+  <View
     style={
       [
-        {
-          "color": "#454545",
-        },
-        {
-          "fontFamily": "Lato-Regular",
-        },
         [
           {
-            "textAlign": "left",
+            "flexDirection": "row",
           },
-          [
-            {
-              "fontSize": 13,
-              "lineHeight": 18,
-            },
-            {
-              "fontFamily": "Lato-Medium",
-            },
-            [
-              {
-                "width": "75%",
-              },
-            ],
-          ],
+          {
+            "alignItems": "center",
+          },
+          {
+            "flexShrink": 1,
+          },
+          {
+            "width": "75%",
+          },
         ],
       ]
     }
   >
-    some_login
-  </Text>
+    <Text
+      ellipsizeMode="tail"
+      maxFontSizeMultiplier={1}
+      numberOfLines={1}
+      selectable={true}
+      style={
+        [
+          {
+            "color": "#454545",
+          },
+          {
+            "fontFamily": "Lato-Regular",
+          },
+          [
+            {
+              "textAlign": "left",
+            },
+            [
+              {
+                "fontSize": 13,
+                "lineHeight": 18,
+              },
+              {
+                "fontFamily": "Lato-Medium",
+              },
+              [
+                {
+                  "flexShrink": 1,
+                },
+              ],
+            ],
+          ],
+        ]
+      }
+    >
+      some_login
+    </Text>
+  </View>
 </View>
 `;

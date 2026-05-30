@@ -17,6 +17,15 @@ const deletionFilters
 
 const sortedFilters = [["needs_sync", true], ["_created_at", true]];
 
+// Stable secondary sort: within the unuploaded group, put observations that
+// are missing basics (location, time, evidence, or taxon) first.
+const missingBasicsPriority = obs => {
+  if ( obs.needs_sync && ( obs.missing_basics || !obs.taxon ) ) return 0;
+  if ( obs.needs_sync ) return 1;
+  return 2;
+};
+const sortByMissingBasics = ( a, b ) => missingBasicsPriority( a ) - missingBasicsPriority( b );
+
 const useLocalObservations = ( ): Object => {
   const setNumUnuploadedObservations = useStore( state => state.setNumUnuploadedObservations );
   const [observationList, setObservationList] = useState( [] );
@@ -93,7 +102,7 @@ const useLocalObservations = ( ): Object => {
             } );
         }
 
-        setObservationList( mappedObservations );
+        setObservationList( mappedObservations.sort( sortByMissingBasics ) );
         setNumUnuploadedObservations( unsyncedCount );
 
         prevListRef.current = {

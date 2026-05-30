@@ -373,7 +373,6 @@ If-youre-seeing-this-error = אם את.ה רואה את זה ואת.ה מחוב�
 IGNORE-LOCATION = התעלם ממיקום
 Ignore-notifications = התעלמות מהודעות
 Ignoring-location = מתעלם ממיקום
-Import-Photos-From = ייבוא תמונות מ
 IMPORT-X-OBSERVATIONS =
     ייבוא { $count ->
         [one] 1 תצפית

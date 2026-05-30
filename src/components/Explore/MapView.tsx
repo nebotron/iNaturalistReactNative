@@ -237,7 +237,6 @@ const MapView = ( {
         tileMapParams={tileMapParams}
         withPressableObsTiles={tileMapParams !== null}
         onCurrentLocationPress={handleCurrentLocationPress}
-        isLoading={isLoading}
       />
       {isLoading && (
         <View style={centeredLoadingWheel} testID="activity-indicator">

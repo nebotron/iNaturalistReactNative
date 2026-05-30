@@ -15,9 +15,7 @@ import { View } from "components/styledComponents";
 import { PLACE_MODE } from "providers/ExploreContext";
 import type { Node } from "react";
 import React, { useState } from "react";
-import { Alert } from "react-native";
 import {
-  useDebugMode,
   useStoredLayout,
   useTranslation,
 } from "sharedHooks";
@@ -64,7 +62,7 @@ type Props = {
   startFetching: Function,
   updateLocation: Function,
   updateProject: Function,
-  updateTaxon: Function,
+  updateTaxonFilters: Function,
   updateUser: Function
 }
 
@@ -89,13 +87,12 @@ const Explore = ( {
   startFetching,
   updateLocation,
   updateProject,
-  updateTaxon,
+  updateTaxonFilters,
   updateUser,
 }: Props ): Node => {
   const { t } = useTranslation( );
   const [showExploreBottomSheet, setShowExploreBottomSheet] = useState( false );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreObservationsLayout" );
-  const { isDebug } = useDebugMode( );
 
   const exploreViewA11yLabel = {
     observations: t( "Observations-View" ),
@@ -121,7 +118,7 @@ const Explore = ( {
       renderLocationPermissionsGate={renderLocationPermissionsGate}
       requestLocationPermissions={requestLocationPermissions}
       updateLocation={updateLocation}
-      updateTaxon={updateTaxon}
+      updateTaxonFilters={updateTaxonFilters}
     />
   );
 
@@ -257,35 +254,6 @@ const Explore = ( {
             />
           )}
           {renderMainContent()}
-          {isDebug && (
-            <INatIconButton
-              icon="triangle-exclamation"
-              className={classnames(
-                "absolute",
-                "bg-white",
-                "bottom-[100px]",
-                "h-[55px]",
-                "right-5",
-                "rounded-full",
-                "w-[55px]",
-                "z-10",
-              )}
-              color="white"
-              size={27}
-              style={[
-                DROP_SHADOW,
-                // eslint-disable-next-line react-native/no-inline-styles
-                { backgroundColor: "deeppink" },
-              ]}
-              accessibilityLabel="Diagnostics"
-              onPress={() => {
-                Alert.alert(
-                  "Explore Info",
-                  `queryParams: ${JSON.stringify( queryParams )}`,
-                );
-              }}
-            />
-          )}
           <INatIconButton
             icon={icon}
             color={colors.inatGreen}
@@ -306,7 +274,7 @@ const Explore = ( {
         filterByIconicTaxonUnknown={filterByIconicTaxonUnknown}
         renderLocationPermissionsGate={renderLocationPermissionsGate}
         requestLocationPermissions={requestLocationPermissions}
-        updateTaxon={updateTaxon}
+        updateTaxonFilters={updateTaxonFilters}
         updateLocation={updateLocation}
         updateUser={updateUser}
         updateProject={updateProject}

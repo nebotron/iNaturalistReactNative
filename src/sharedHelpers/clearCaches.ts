@@ -14,6 +14,7 @@ interface RealmObservation {
   observationPhotos: {
     photo: {
       localFilePath: string;
+      cropOriginalLocalFilePath?: string;
     };
   }[];
   observationSounds: {
@@ -47,9 +48,12 @@ const clearSyncedMediaForUpload = async realm => {
     .filtered( "observationPhotos._synced_at == nil" );
   const unsyncedPhotoFileNames = unsyncedObservationsWithPhotos
     .map( observation => observation.observationPhotos.map(
-      op => op.photo.localFilePath?.split( "photoUploads/" )?.at( 1 ),
+      op => [
+        op.photo.localFilePath?.split( "photoUploads/" )?.at( 1 ),
+        op.photo.cropOriginalLocalFilePath?.split( "photoUploads/" )?.at( 1 ),
+      ],
     ) )
-    .flat( )
+    .flat( 2 )
     .filter( Boolean );
   await removeSyncedFilesFromDirectory(
     photoUploadPath,

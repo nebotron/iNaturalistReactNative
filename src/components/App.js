@@ -14,6 +14,7 @@ import useDeferredStartup from "./hooks/useDeferredStartup";
 import useLinking from "./hooks/useLinking";
 import NetworkService from "./NetworkService";
 import StartupService from "./StartupService";
+import UploadService from "./UploadService";
 
 type SharedItem = {
   mimeType: string,
@@ -70,6 +71,7 @@ const App = ( { children }: Props ): Node => {
     <>
       <StartupService />
       <NetworkService />
+      <UploadService />
       <AppStateListener />
       {children || <RootStackNavigator />}
     </>
