@@ -6,3 +6,9 @@ export {
 } from "./dataTransformation/prepareObservationForUpload";
 export { default as handleUploadError } from "./utils/errorHandling";
 export { default as markRecordUploaded } from "./utils/realmSync";
+export {
+  attachUploadFailureDetails,
+  formatUploadFailureAlertBody,
+  formatHttpResponseBody,
+  getUploadFailureDetails,
+} from "./utils/uploadFailureDetails";

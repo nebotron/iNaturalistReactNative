@@ -10,7 +10,6 @@ import { log } from "sharedHelpers/logger";
 import {
   useLayoutPrefs,
 } from "sharedHooks";
-import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
 
 // Relative import so MOCK_MODE=e2e resolves fetchPlaceName.e2e-mock (Metro sourceExts).
@@ -75,7 +74,6 @@ const usePrepareStoreAndNavigate = ( ) => {
     uris,
     userLocation,
     logStageIfAICamera,
-    visionResult,
   ) => {
     const newObservation = await Observation.new( );
 
@@ -94,11 +92,6 @@ const usePrepareStoreAndNavigate = ( ) => {
         position: 0,
         local: true,
       } );
-    if ( !isDefaultMode
-        && screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.OBS_EDIT
-        && visionResult ) {
-      newObservation.taxon = visionResult.taxon;
-    }
     setObservations( [newObservation] );
     handleSavingToPhotoLibrary(
       uris,
@@ -106,8 +99,6 @@ const usePrepareStoreAndNavigate = ( ) => {
       logStageIfAICamera,
     ).catch( e => logger.error( "createObsWithCameraPhotos: error saving to photo library", e ) );
   }, [
-    isDefaultMode,
-    screenAfterPhotoEvidence,
     setObservations,
     handleSavingToPhotoLibrary,
   ] );
@@ -149,7 +140,6 @@ const usePrepareStoreAndNavigate = ( ) => {
     newPhotoState,
     logStageIfAICamera,
     deleteStageIfAICamera,
-    visionResult,
   } ) => {
     if ( userLocation !== null ) {
       logStageIfAICamera( "fetch_user_location_complete" );
@@ -168,7 +158,6 @@ const usePrepareStoreAndNavigate = ( ) => {
       uris,
       userLocation,
       logStageIfAICamera,
-      visionResult,
     );
     await deleteStageIfAICamera( );
     setSentinelFileName( null );

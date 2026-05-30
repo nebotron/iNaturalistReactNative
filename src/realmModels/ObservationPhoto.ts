@@ -1,7 +1,9 @@
 import { Realm } from "@realm/react";
 import type { ApiObservationPhoto } from "api/types";
 import inatjs, { FileUpload } from "inaturalistjs";
+import type { Asset } from "react-native-image-picker";
 import type { RealmObservationPhoto, RealmPhoto } from "realmModels/types";
+import { getGalleryAssetDevicePhotoUri, normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import * as uuid from "uuid";
 
 import Photo from "./Photo";
@@ -48,6 +50,10 @@ class ObservationPhoto extends Realm.Object {
     };
   }
 
+  static needsPhotoReupload( photo?: RealmPhoto ) {
+    return Photo.hasLocalEdits( photo );
+  }
+
   static mapPhotoForAttachingToObs(
     observationID: number,
     observationPhoto: RealmObservationPhoto,
@@ -66,12 +72,23 @@ class ObservationPhoto extends Realm.Object {
     observationID: number,
     observationPhoto: RealmObservationPhoto,
   ) {
+    const observationPhotoParams: {
+      observation_id: number;
+      position?: number;
+      photo_id?: number;
+    } = {
+      observation_id: observationID,
+      position: observationPhoto.position,
+    };
+
+    const { photo } = observationPhoto;
+    if ( ObservationPhoto.needsPhotoReupload( photo ) && photo?.id ) {
+      observationPhotoParams.photo_id = photo.id;
+    }
+
     return {
       id: observationPhoto.uuid,
-      observation_photo: {
-        observation_id: observationID,
-        position: observationPhoto.position,
-      },
+      observation_photo: observationPhotoParams,
     };
   }
 
@@ -91,7 +108,11 @@ class ObservationPhoto extends Realm.Object {
     };
   }
 
-  static async new( uri: string, position: number ) {
+  static async new(
+    uri: string,
+    position: number,
+    originalDevicePhotoUri?: string | null,
+  ) {
     const photo = await Photo.new( uri );
     return {
       _created_at: new Date( ),
@@ -99,27 +120,41 @@ class ObservationPhoto extends Realm.Object {
       uuid: uuid.v4( ),
       photo,
       originalPhotoUri: uri,
+      originalDevicePhotoUri: originalDevicePhotoUri ?? undefined,
       position,
     };
   }
 
   static createObsPhotosWithPosition = async (
-    photos: string[] | { image: { uri: string } }[],
+    photos: string[] | { image: Asset }[],
     { position, local }: { position: number; local: boolean },
   ) => {
     let photoPosition = position;
-    return Promise.all(
-      photos.map( async photo => {
-        const newPhoto = ObservationPhoto.new(
-          local
-            ? photo
-            : photo?.image?.uri,
+    const obsPhotos = [];
+
+    for ( const photo of photos ) {
+      const uri = local
+        ? photo as string
+        : ( photo as { image: Asset } )?.image?.uri;
+      const galleryPhoto = photo as {
+        image: Asset;
+        originalDevicePhotoUri?: string | null;
+      };
+      const originalDevicePhotoUri = local
+        ? null
+        : normalizeDevicePhotoUri( galleryPhoto.originalDevicePhotoUri )
+          ?? getGalleryAssetDevicePhotoUri( galleryPhoto.image );
+      obsPhotos.push(
+        await ObservationPhoto.new(
+          uri,
           photoPosition,
-        );
-        photoPosition += 1;
-        return newPhoto;
-      } ),
-    );
+          originalDevicePhotoUri,
+        ),
+      );
+      photoPosition += 1;
+    }
+
+    return obsPhotos;
   };
 
   // TODO: I don't know how what the type for currentObservation is outside of this context here,
@@ -213,6 +248,7 @@ class ObservationPhoto extends Realm.Object {
       _updated_at: "date?",
       uuid: "string",
       id: "int?",
+      originalDevicePhotoUri: "string?",
       photo: "Photo?",
       position: "int?",
       // this creates an inverse relationship so observation photos

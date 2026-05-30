@@ -2,7 +2,7 @@ import {
   useNetInfo,
 } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
-import type { ApiPhoto, ApiSuggestion } from "api/types";
+import type { ApiPhoto, ApiSuggestion, ApiTaxon } from "api/types";
 import { Body3, Heading4, ViewWrapper } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import flattenUploadParams from "components/Suggestions/helpers/flattenUploadParams";
@@ -26,6 +26,7 @@ import type { RealmPhoto, RealmTaxon } from "realmModels/types";
 import fetchPlaceName from "sharedHelpers/fetchPlaceName";
 import saveObservation from "sharedHelpers/saveObservation";
 import shouldFetchObservationLocation from "sharedHelpers/shouldFetchObservationLocation";
+import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import {
   useExitObservationFlow, useLocationPermission, useSuggestions,
 } from "sharedHooks";
@@ -152,6 +153,8 @@ const MatchContainer = ( ) => {
   const evidenceHasLocation = !!currentObservation?.latitude;
 
   const [iconicTaxon, setIconicTaxon] = useState<RealmTaxon>( );
+  const [explicitTaxon, setExplicitTaxon] = useState<ApiTaxon | RealmTaxon | undefined>( );
+  const [identificationFromVision, setIdentificationFromVision] = useState( false );
   const [currentUserLocation, setCurrentUserLocation] = useState<{
     latitude?: number;
     longitude?: number;
@@ -369,8 +372,17 @@ const MatchContainer = ( ) => {
 
   const onSuggestionChosen = useCallback( ( selection: ApiSuggestion ) => {
     setSelectedSuggestionId( selection.taxon.id );
+    setExplicitTaxon( selection.taxon );
+    setIdentificationFromVision( true );
     scrollToTop( );
-    // TODO: should this set owners_identification_from_vision: false?
+  }, [scrollToTop] );
+
+  const onIconicTaxonChosen = useCallback( ( chosenTaxon: RealmTaxon ) => {
+    setIconicTaxon( chosenTaxon );
+    setExplicitTaxon( chosenTaxon );
+    setIdentificationFromVision( false );
+    setSelectedSuggestionId( undefined );
+    scrollToTop( );
   }, [scrollToTop] );
 
   const createUploadParams = useCallback( async ( uri: string, showLocation: boolean ) => {
@@ -458,14 +470,18 @@ const MatchContainer = ( ) => {
 
   const handleSaveOrDiscardPress = async ( action: MatchButtonAction ) => {
     if ( action === "save" ) {
-      updateObservationKeys( {
-        taxon: taxon || iconicTaxon,
-        owners_identification_from_vision: true,
-      } );
+      if ( explicitTaxon ) {
+        updateObservationKeys( {
+          taxon: explicitTaxon,
+          owners_identification_from_vision: identificationFromVision,
+        } );
+      }
       await saveObservation( getCurrentObservation( ), cameraRollUris, realm );
     }
     stopWatch( subscriptionId );
-    exitObservationFlow( );
+    exitObservationFlow( {
+      promptDeleteOriginalPhotos: action === "save" && shouldPromptDeleteOriginalPhotos( ),
+    } );
   };
 
   const taxonIds = otherSuggestions?.map( suggestion => suggestion.taxon.id );
@@ -491,8 +507,8 @@ const MatchContainer = ( ) => {
           suggestionsLoading={suggestionsLoading}
           scrollRef={scrollRef}
           iconicTaxon={iconicTaxon}
-          setIconicTaxon={setIconicTaxon}
-          taxonToSave={taxon}
+          onIconicTaxonChosen={onIconicTaxonChosen}
+          taxonToSave={explicitTaxon}
         />
         {renderPermissionsGate( {
           // If the user grants location permission while on this screen,

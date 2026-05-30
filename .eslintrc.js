@@ -180,7 +180,13 @@ module.exports = {
 
     "lodash/import-scope": 2,
   },
-  ignorePatterns: ["!.detoxrc.js", "/coverage/*", "/vendor/*", "**/flow-typed"],
+  ignorePatterns: [
+    "!.detoxrc.js",
+    "/coverage/*",
+    "/vendor/*",
+    "**/flow-typed",
+    "src/sharedHooks/imageZoom/**",
+  ],
   settings: {
     "import/resolver": {
       "babel-module": { allowExistingDirectories: true },
