@@ -43,8 +43,8 @@ interface Props {
   onSuggestionChosen: ( suggestion: ApiSuggestion ) => void;
   scrollRef: React.RefObject<ScrollView | null>;
   iconicTaxon?: RealmTaxon;
-  setIconicTaxon: ( taxon: RealmTaxon ) => void;
-  taxonToSave?: ApiTaxon;
+  onIconicTaxonChosen: ( taxon: RealmTaxon ) => void;
+  taxonToSave?: ApiTaxon | RealmTaxon;
 }
 
 const Match = ( {
@@ -60,7 +60,7 @@ const Match = ( {
   onSuggestionChosen,
   scrollRef,
   iconicTaxon,
-  setIconicTaxon,
+  onIconicTaxonChosen,
   taxonToSave,
 }: Props ) => {
   const { t } = useTranslation( );
@@ -89,6 +89,7 @@ const Match = ( {
             <HeaderEditIcon observation={observation} lastScreen="Match" taxon={iconicTaxon} />
           </View>
           <PhotosSection
+            observationUuid={observation?.uuid}
             taxon={taxon}
             obsPhotos={obsPhotos}
             navToTaxonDetails={navToTaxonDetails}
@@ -101,7 +102,7 @@ const Match = ( {
               </Heading3>
               <IconicSuggestionsScroll
                 iconicTaxonChosen={iconicTaxon}
-                onIconicTaxonChosen={setIconicTaxon}
+                onIconicTaxonChosen={onIconicTaxonChosen}
               />
               <Body2 className="mx-5 my-[30px]">
                 {t( "If-you-save-this-observation-and-upload-it-to-iNaturalist" )}
@@ -150,6 +151,7 @@ const Match = ( {
             <HeaderEditIcon observation={observation} lastScreen="Match" />
           </View>
           <PhotosSection
+            observationUuid={observation?.uuid}
             taxon={taxon}
             obsPhotos={obsPhotos}
             navToTaxonDetails={navToTaxonDetails}
@@ -196,6 +198,7 @@ const Match = ( {
           <HeaderEditIcon observation={observation} lastScreen="Match" taxon={taxonToSave} />
         </View>
         <PhotosSection
+          observationUuid={observation?.uuid}
           representativePhoto={topSuggestion?.taxon?.representative_photo}
           taxon={taxon}
           obsPhotos={obsPhotos}

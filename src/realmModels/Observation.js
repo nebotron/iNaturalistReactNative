@@ -68,6 +68,7 @@ class Observation extends Realm.Object {
     },
     updated_at: true,
     viewer_trusted_by_observer: true,
+    reviewed_by: true,
     votes: Vote.VOTE_FIELDS,
     private_geojson: true,
     private_location: true,
@@ -102,6 +103,7 @@ class Observation extends Realm.Object {
     quality_grade: true,
     taxon: {
       id: true,
+      is_active: true,
       name: true,
       preferred_common_name: true,
       // rank and rank_level are needed to italicize scientific names
@@ -117,7 +119,15 @@ class Observation extends Realm.Object {
     identifications: {
       uuid: true,
       current: true,
+      taxon: {
+        id: true,
+        is_active: true,
+      },
+      user: {
+        id: true,
+      },
     },
+    reviewed_by: true,
     comments: {
       uuid: true,
     },

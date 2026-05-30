@@ -49,7 +49,8 @@ const saveObservation = async (
     longitude: observation.longitude,
     positional_accuracy: observation.positional_accuracy,
   } );
-  return Observation.saveLocalObservationForUpload( observation, realm );
+  const savedObservation = await Observation.saveLocalObservationForUpload( observation, realm );
+  return savedObservation;
 };
 
 export default saveObservation;

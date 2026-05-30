@@ -109,25 +109,25 @@ exports[`TaxonResult should render correctly 1`] = `
           [
             [
               {
-                "maxHeight": 210,
-              },
-              {
                 "overflow": "hidden",
               },
               {
                 "position": "relative",
               },
               {
-                "borderBottomLeftRadius": 8,
-                "borderBottomRightRadius": 8,
-                "borderTopLeftRadius": 8,
-                "borderTopRightRadius": 8,
+                "maxHeight": 210,
               },
               {
                 "height": 62,
               },
               {
                 "width": 62,
+              },
+              {
+                "borderBottomLeftRadius": 8,
+                "borderBottomRightRadius": 8,
+                "borderTopLeftRadius": 8,
+                "borderTopRightRadius": 8,
               },
               {
                 "justifyContent": "center",

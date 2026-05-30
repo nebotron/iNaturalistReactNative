@@ -1,6 +1,7 @@
 import { createOrUpdateEvidence } from "api/observations";
 import inatjs from "inaturalistjs";
 import type Realm from "realm";
+import ObservationPhoto from "realmModels/ObservationPhoto";
 import type {
   RealmObservation,
   RealmObservationPhoto,
@@ -84,6 +85,7 @@ export type Evidence = RealmObservationPhoto | RealmObservationSound | RealmPhot
 interface MediaItems {
   unsyncedObservationPhotos: RealmObservationPhoto[];
   modifiedObservationPhotos: RealmObservationPhoto[];
+  modifiedPhotosNeedingReupload: RealmPhoto[];
   unsyncedObservationSounds: RealmObservationSound[];
 }
 
@@ -171,6 +173,7 @@ const filterMediaForUpload = ( observation: RealmObservation ): {
   unsyncedSounds: RealmSound[];
   unsyncedObservationPhotos: RealmObservationPhoto[];
   modifiedObservationPhotos: RealmObservationPhoto[];
+  modifiedPhotosNeedingReupload: RealmPhoto[];
   unsyncedObservationSounds: RealmObservationSound[];
 } => {
   const hasPhotos = observation?.observationPhotos?.length > 0;
@@ -197,6 +200,10 @@ const filterMediaForUpload = ( observation: RealmObservation ): {
     ? observation.observationPhotos.filter( op => op.wasSynced( ) && op.needsSync( ) )
     : [];
 
+  const modifiedPhotosNeedingReupload = modifiedObservationPhotos
+    .map( op => op.photo )
+    .filter( photo => ObservationPhoto.needsPhotoReupload( photo ) );
+
   // get sounds that haven't been synced yet
   const hasSounds = observation.observationSounds?.length > 0;
   const unsyncedObservationSounds = hasSounds
@@ -220,6 +227,7 @@ const filterMediaForUpload = ( observation: RealmObservation ): {
     unsyncedSounds,
     unsyncedObservationPhotos,
     modifiedObservationPhotos,
+    modifiedPhotosNeedingReupload,
     unsyncedObservationSounds,
   };
 };
@@ -230,6 +238,7 @@ const createMediaOperations = (
     unsyncedSounds?: RealmSound[] | null;
     unsyncedObservationPhotos?: RealmObservationPhoto[] | null;
     modifiedObservationPhotos?: RealmObservationPhoto[] | null;
+    modifiedPhotosNeedingReupload?: RealmPhoto[] | null;
     unsyncedObservationSounds?: RealmObservationSound[] | null;
   },
   observationUUID: string | undefined | null,
@@ -241,10 +250,18 @@ const createMediaOperations = (
   const unsyncedSounds = mediaItems?.unsyncedSounds || [];
   const unsyncedObservationPhotos = mediaItems?.unsyncedObservationPhotos || [];
   const modifiedObservationPhotos = mediaItems?.modifiedObservationPhotos || [];
+  const modifiedPhotosNeedingReupload = mediaItems?.modifiedPhotosNeedingReupload || [];
   const unsyncedObservationSounds = mediaItems?.unsyncedObservationSounds || [];
 
-  if ( uploadAction && unsyncedPhotos?.length > 0 ) {
-    unsyncedPhotos.forEach( photo => {
+  const photosToUpload = [
+    ...unsyncedPhotos,
+    ...modifiedPhotosNeedingReupload.filter(
+      modifiedPhoto => !unsyncedPhotos.includes( modifiedPhoto ),
+    ),
+  ];
+
+  if ( uploadAction && photosToUpload.length > 0 ) {
+    photosToUpload.forEach( photo => {
       operations.push( {
         evidence: photo,
         type: "Photo" as EvidenceType,
@@ -318,6 +335,7 @@ async function uploadObservationMedia(
     return {
       unsyncedObservationPhotos: [],
       modifiedObservationPhotos: [],
+      modifiedPhotosNeedingReupload: [],
       unsyncedObservationSounds: [],
     };
   }
@@ -334,6 +352,7 @@ async function uploadObservationMedia(
   return {
     unsyncedObservationPhotos: mediaItems.unsyncedObservationPhotos,
     modifiedObservationPhotos: mediaItems.modifiedObservationPhotos,
+    modifiedPhotosNeedingReupload: mediaItems.modifiedPhotosNeedingReupload,
     unsyncedObservationSounds: mediaItems.unsyncedObservationSounds,
   };
 }

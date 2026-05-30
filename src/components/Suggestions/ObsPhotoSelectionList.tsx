@@ -1,4 +1,6 @@
 import classnames from "classnames";
+import DuplicateUploadBadge from
+  "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import {
   Image, Pressable, View,
 } from "components/styledComponents";
@@ -7,12 +9,14 @@ import { FlatList } from "react-native";
 import { useTranslation } from "sharedHooks";
 
 interface Props {
+  duplicatePhotoUris?: Set<string>;
   photoUris: string[];
   selectedPhotoUri: string;
   onPressPhoto: ( _uri: string ) => void;
 }
 
 const ObsPhotoSelectionList = ( {
+  duplicatePhotoUris,
   photoUris, selectedPhotoUri, onPressPhoto,
 }: Props ) => {
   const { t } = useTranslation( );
@@ -31,7 +35,7 @@ const ObsPhotoSelectionList = ( {
     >
       <View
         className={classnames(
-          "rounded-lg overflow-hidden",
+          "rounded-lg overflow-hidden relative",
           {
             "border-inatGreen border-[3px]": selectedPhotoUri === item,
           },
@@ -43,9 +47,17 @@ const ObsPhotoSelectionList = ( {
           accessibilityIgnoresInvertColors
           className="w-full h-full"
         />
+        {duplicatePhotoUris?.has( item ) && (
+          <DuplicateUploadBadge
+            accessibilityLabel={t( "Duplicate-photo-indicator" )}
+            className="absolute top-1 left-1 z-10"
+            size={18}
+            testID={`ObsPhotoSelectionList.duplicate.${item}`}
+          />
+        )}
       </View>
     </Pressable>
-  ), [selectedPhotoUri, onPressPhoto, t] );
+  ), [duplicatePhotoUris, selectedPhotoUri, onPressPhoto, t] );
 
   return (
     <FlatList

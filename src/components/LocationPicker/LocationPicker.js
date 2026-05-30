@@ -8,6 +8,7 @@ import {
   Map,
   ViewWrapper,
 } from "components/SharedComponents";
+import { hasValidMapCoordinates } from "components/SharedComponents/Map/helpers/mapHelpers";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
 import React from "react";
@@ -55,12 +56,14 @@ const LocationPicker = ( {
   const { t } = useTranslation( );
 
   let regionToDisplay;
-  if ( region && region?.latitude !== 0 && region.longitude !== 0 ) {
+  if ( region && hasValidMapCoordinates( region.latitude, region.longitude ) ) {
     regionToDisplay = region;
-  } else {
+  } else if (
+    initialRegion
+    && hasValidMapCoordinates( initialRegion.latitude, initialRegion.longitude )
+  ) {
     regionToDisplay = initialRegion;
-  }
-  if ( !regionToDisplay ) {
+  } else {
     regionToDisplay = {
       latitude: 0,
       longitude: 0,

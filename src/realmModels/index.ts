@@ -13,6 +13,7 @@ import QueueItem from "./QueueItem";
 import Sound from "./Sound";
 import Taxon from "./Taxon";
 import TaxonPhoto from "./TaxonPhoto";
+import UploadedDevicePhotoUri from "./UploadedDevicePhotoUri";
 import User from "./User";
 import Vote from "./Vote";
 
@@ -30,10 +31,11 @@ export default {
     Sound,
     Taxon,
     TaxonPhoto,
+    UploadedDevicePhotoUri,
     User,
     Vote,
   ],
-  schemaVersion: 68,
+  schemaVersion: 72,
   path: `${DocumentDirectoryPath}/db.realm`,
   // https://github.com/realm/realm-js/pull/6076 embedded constraints
   migrationOptions: {
@@ -41,6 +43,24 @@ export default {
   },
   // TODO: type?
   migration: ( oldRealm: Realm, newRealm: Realm ) => {
+    if ( oldRealm.schemaVersion < 70 ) {
+      const uploadedObservations = oldRealm.objects( "Observation" ).filtered( "id != null" );
+      uploadedObservations.forEach( observation => {
+        observation.observationPhotos?.forEach( obsPhoto => {
+          if ( !obsPhoto.originalDevicePhotoUri ) {
+            return;
+          }
+          newRealm.create(
+            "UploadedDevicePhotoUri",
+            {
+              uri: obsPhoto.originalDevicePhotoUri,
+              uploadedAt: new Date( ),
+            },
+            "modified",
+          );
+        } );
+      } );
+    }
     if ( oldRealm.schemaVersion < 59 ) {
       const oldTaxa = oldRealm.objects( "Taxon" );
       const newTaxa = newRealm.objects( "Taxon" );

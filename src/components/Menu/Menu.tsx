@@ -19,7 +19,7 @@ import DeviceInfo from "react-native-device-info";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Observation from "realmModels/Observation";
 import User from "realmModels/User";
-import { valueToBreakpoint } from "sharedHelpers/breakpoint";
+import { copyCropFeedbackToClipboard } from "sharedHelpers/cropFeedbackLog";
 import { log } from "sharedHelpers/logger";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
 import {
@@ -189,6 +189,11 @@ const Menu = ( ) => {
           navigation: "Debug",
           icon: "triangle-exclamation",
           color: "deeppink",
+        },
+        copyCropFeedback: {
+          label: "Copy crop feedback JSON",
+          icon: "clipboard",
+          onPress: () => copyCropFeedbackToClipboard( ),
         },
       }
       : {} ),

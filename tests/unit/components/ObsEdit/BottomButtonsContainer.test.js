@@ -21,12 +21,9 @@ function renderBottomButtonsContainer( props = {} ) {
   return renderComponent(
     <BottomButtonsContainer
       passesEvidenceTest
-      observations={[]}
       currentObservation={mockObservation}
-      currentObservationIndex={0}
-      setCurrentObservationIndex={0}
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
-      transitionAnimation={() => {}}
+      loading={false}
+      saveAndAdvance={async () => true}
       // eslint-disable-next-line react/jsx-props-no-spreading
       {...props}
     />,

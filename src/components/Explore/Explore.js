@@ -64,7 +64,7 @@ type Props = {
   startFetching: Function,
   updateLocation: Function,
   updateProject: Function,
-  updateTaxon: Function,
+  updateTaxonFilters: Function,
   updateUser: Function
 }
 
@@ -89,7 +89,7 @@ const Explore = ( {
   startFetching,
   updateLocation,
   updateProject,
-  updateTaxon,
+  updateTaxonFilters,
   updateUser,
 }: Props ): Node => {
   const { t } = useTranslation( );
@@ -121,7 +121,7 @@ const Explore = ( {
       renderLocationPermissionsGate={renderLocationPermissionsGate}
       requestLocationPermissions={requestLocationPermissions}
       updateLocation={updateLocation}
-      updateTaxon={updateTaxon}
+      updateTaxonFilters={updateTaxonFilters}
     />
   );
 
@@ -306,7 +306,7 @@ const Explore = ( {
         filterByIconicTaxonUnknown={filterByIconicTaxonUnknown}
         renderLocationPermissionsGate={renderLocationPermissionsGate}
         requestLocationPermissions={requestLocationPermissions}
-        updateTaxon={updateTaxon}
+        updateTaxonFilters={updateTaxonFilters}
         updateLocation={updateLocation}
         updateUser={updateUser}
         updateProject={updateProject}

@@ -39,6 +39,99 @@ See [CONTRIBUTING](CONTRIBUTING.md) for guidelines on contributing to this proje
 1. Run `npm start -- --reset-cache` (`npm start` works too, but resetting the cache each time makes for a lot less build issues)
 2. Run `npm run ios` or `npm run android`
 
+### Building with a personal Apple Developer account
+
+The Xcode project is configured for the iNaturalist Apple Developer team (`N5J7L4P93Z`) and bundle ID (`org.inaturalist.iNaturalistMobile`). If you are not on that team, you need extra setup before the app will build on a physical device. These steps are **not** required for iNat staff with access to the official signing credentials.
+
+The changes below mirror what was needed in commit [`f1bc109c6`](https://github.com/inaturalist/iNaturalistReactNative/commit/f1bc109c6256fa00bfc1f81286e8ca44fe2d6240) to get a personal fork building locally.
+
+#### 1. Configure code signing in Xcode
+
+Open `ios/iNaturalistReactNative.xcworkspace` in Xcode, then for **both** the `iNaturalistReactNative` and `iNaturalistReactNative-ShareExtension` targets (Debug and Release):
+
+1. Sign in with your Apple ID under **Xcode → Settings → Accounts**.
+2. Set **Team** to your personal or organization team (for example `DVURLJZFH6`).
+3. Set **Bundle Identifier** to a value you control:
+   - Main app: e.g. `com.benhannel.inat.dev`
+   - Share extension: e.g. `com.benhannel.inat.dev.ShareExtensionIOS` (must use the main app bundle ID as a prefix)
+
+These correspond to `DEVELOPMENT_TEAM` and `PRODUCT_BUNDLE_IDENTIFIER` in `ios/iNaturalistReactNative.xcodeproj/project.pbxproj`.
+
+#### 2. Remove iNaturalist-only entitlements from the main app
+
+The checked-in entitlements files (`ios/iNaturalistReactNative/iNaturalistReactNative.entitlements` and `iNaturalistReactNativeRelease.entitlements`) include capabilities tied to the iNaturalist team:
+
+- Sign in with Apple
+- Associated domains (`applinks:www.inaturalist.org`, etc.)
+- App group `group.org.inaturalist.iNaturalistMobile`
+
+A personal Apple Developer account cannot provision those as-is. Clear **Code Sign Entitlements** for the main app target's Debug and Release build configurations (set `CODE_SIGN_ENTITLEMENTS` to empty in `project.pbxproj`, or choose **Don't Code Sign Entitlements** in Xcode). Without this, Xcode fails provisioning with errors about app groups or associated domains.
+
+**Tradeoff:** features that depend on those entitlements (Share Extension handoff via app groups, universal links, Sign in with Apple) will not work in your local build.
+
+#### 3. Clear the Share Extension app group
+
+Edit `ios/iNaturalistReactNative-ShareExtension/iNaturalistReactNative-ShareExtension.entitlements` and remove the iNaturalist app group entry, leaving an empty array:
+
+```xml
+<key>com.apple.security.application-groups</key>
+<array/>
+```
+
+The Share Extension target still builds, but it cannot share data with the main app through `group.org.inaturalist.iNaturalistMobile`.
+
+#### 4. Handle Firebase for your bundle ID
+
+Firebase is initialized at launch in `ios/iNaturalistReactNative/AppDelegate.mm`. The build script `ios/link-files-for-build-modes.sh` symlinks either `GoogleService-Info.staging.plist` or `GoogleService-Info.production.plist` to `GoogleService-Info.plist` based on the build configuration.
+
+If you use the example plist files without creating Firebase apps for **your** bundle ID, `[FIRApp configure]` throws at startup and the app crashes immediately.
+
+Either:
+
+1. Create Firebase iOS apps for your bundle IDs and fill in `ios/GoogleService-Info.staging.plist` / `ios/GoogleService-Info.production.plist`, **or**
+2. Wrap Firebase initialization so a bad local plist does not crash the app (as in `f1bc109c6`):
+
+```objc
+@try {
+  [FIRApp configure];
+} @catch (NSException *exception) {
+  NSLog(@"Skipping Firebase configuration due to invalid local GoogleService-Info.plist: %@", exception.reason);
+}
+```
+
+Option 2 is fine for local development if you do not need Firebase Analytics/Crashlytics.
+
+#### 5. Reinstall pods
+
+After changing signing settings, reinstall native dependencies:
+
+```bash
+npx pod-install
+```
+
+If pod install fails, check your CocoaPods version. `f1bc109c6` updated the lockfile from CocoaPods 1.15.2 to 1.16.2; upgrading CocoaPods (`gem install cocoapods` or `brew upgrade cocoapods`) may be required.
+
+#### 6. Build and run on a device
+
+Debug builds:
+
+```bash
+npm start -- --reset-cache
+npm run ios -- --device
+```
+
+Release builds on a connected iPhone (matches the `npm run ios:release` script used in local development):
+
+```bash
+npm run ios:release
+```
+
+This runs `npx react-native run-ios --device --mode Release`.
+
+#### 7. Environment and OAuth
+
+The README steps above for `.env` / `.env.staging` still apply. Create an [iNaturalist OAuth application](https://www.inaturalist.org/oauth/applications) and put the client ID and secret in your env file. If you changed the iOS bundle ID, any Google Sign-In or other third-party credentials in `.env` must also match your bundle ID / Firebase project.
+
 ### Rozenite (React Native DevTools plugins)
 
 You may optionally, as an environment variable, set the Rozenite env var to enable the Rozenite React Native DevTools plugins: `WITH_ROZENITE=true npm start`. This makes the installed Rozenite plugins available in React Native DevTools in their respective tabs.

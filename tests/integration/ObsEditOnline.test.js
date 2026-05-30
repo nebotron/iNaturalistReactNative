@@ -1,6 +1,7 @@
 import Geolocation from "@react-native-community/geolocation";
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import ObsEdit from "components/ObsEdit/ObsEdit";
+import UploadService from "components/UploadService";
 import inatjs from "inaturalistjs";
 import React from "react";
 import useStore from "stores/useStore";
@@ -38,7 +39,12 @@ const mockLocationName = "San Francisco, CA";
 
 const mockCurrentUser = factory( "LocalUser" );
 
-const renderObsEdit = ( ) => renderComponent( <ObsEdit /> );
+const renderObsEdit = ( ) => renderComponent(
+  <>
+    <UploadService />
+    <ObsEdit />
+  </>,
+);
 
 const mockTaxon = factory( "RemoteTaxon", {
   name: faker.person.firstName( ),

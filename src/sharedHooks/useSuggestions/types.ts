@@ -70,4 +70,5 @@ export interface UseSuggestionsOptions {
   scoreImageParams?: ScoreImageParams;
   queryKey: string[];
   onlineSuggestionsAttempted: boolean;
+  preferOfflineModel?: boolean;
 }

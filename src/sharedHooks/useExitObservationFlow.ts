@@ -5,6 +5,7 @@ import { CommonActions, useNavigation } from "@react-navigation/native";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { useCallback } from "react";
 import { clearRollbackPhotos } from "sharedHelpers/clearCaches";
+import promptDeleteOriginalDevicePhotos from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import useStore from "stores/useStore";
 
 interface ExitOptions {
@@ -12,6 +13,7 @@ interface ExitOptions {
 }
 interface Options {
   navigate?: ( ) => void;
+  promptDeleteOriginalPhotos?: boolean;
 }
 
 export default function useExitObservationFlow( exitOptions?: ExitOptions ) {
@@ -32,6 +34,42 @@ export default function useExitObservationFlow( exitOptions?: ExitOptions ) {
   const clearRollbackSnapshot = useStore( state => state.clearRollbackSnapshot );
 
   return useCallback( ( options: Options = {} ) => {
+    const originalDevicePhotoUris = options.promptDeleteOriginalPhotos
+      ? [...useStore.getState( ).removedOriginalDevicePhotoUris]
+      : [];
+
+    const finishExit = ( ) => {
+      if ( typeof ( options.navigate ) === "function" ) {
+        // This seems only to be used in ObsEditHeader in a few cases of backing out
+        options.navigate( );
+      } else {
+        // Use a reset (not navigate) to avoid piling up screen instances
+        navigation.dispatch(
+          CommonActions.reset( {
+            index: 0,
+            routes: [
+              {
+                name: "TabNavigator",
+                state: {
+                  routes: [
+                    {
+                      name: "ObservationsTab",
+                      state: {
+                        index: 0,
+                        routes: [
+                          { name: "ObsList" },
+                        ],
+                      },
+                    },
+                  ],
+                },
+              },
+            ],
+          } ),
+        );
+      }
+    };
+
     // In theory everything that needs to be saved has been saved at this
     // point, so clean up the state before we ditch this posicle stand. Note
     // that for mysterious reasons, tests seem to like it better if we do
@@ -48,34 +86,10 @@ export default function useExitObservationFlow( exitOptions?: ExitOptions ) {
     }
     void clearRollbackPhotos( );
 
-    if ( typeof ( options.navigate ) === "function" ) {
-      // This seems only to be used in ObsEditHeader in a few cases of backing out
-      options.navigate( );
+    if ( originalDevicePhotoUris.length > 0 ) {
+      promptDeleteOriginalDevicePhotos( originalDevicePhotoUris, finishExit );
     } else {
-      // Use a reset (not navigate) to avoid piling up screen instances
-      navigation.dispatch(
-        CommonActions.reset( {
-          index: 0,
-          routes: [
-            {
-              name: "TabNavigator",
-              state: {
-                routes: [
-                  {
-                    name: "ObservationsTab",
-                    state: {
-                      index: 0,
-                      routes: [
-                        { name: "ObsList" },
-                      ],
-                    },
-                  },
-                ],
-              },
-            },
-          ],
-        } ),
-      );
+      finishExit( );
     }
   }, [
     clearRollbackSnapshot,

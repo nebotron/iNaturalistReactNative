@@ -1,7 +1,12 @@
 import { useNavigation } from "@react-navigation/native";
 import type { ApiProject } from "api/types";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import classNames from "classnames";
+import ExploreSavedFilterSheets from "components/Explore/ExploreSavedFilterSheets";
+import ExploreSavedFiltersSection from "components/Explore/ExploreSavedFiltersSection";
 import NumberBadge from "components/Explore/NumberBadge";
+import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
+import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
 import {
   Body1,
@@ -11,7 +16,6 @@ import {
   ButtonBar,
   Checkbox,
   DateTimePicker,
-  DisplayTaxon,
   Heading1,
   Heading4,
   IconicTaxonChooser,
@@ -46,6 +50,7 @@ import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
 import placeGuessText from "../helpers/placeGuessText";
+import ExploreTaxonSearchModal from "./ExploreTaxonSearchModal";
 
 const DROP_SHADOW = getShadow( {
   offsetHeight: 4,
@@ -58,7 +63,7 @@ interface Props {
   closeModal: () => void;
   filterByIconicTaxonUnknown: () => void;
   // TODO: type this properly when taxon has a type
-  updateTaxon: ( taxon: null | { name: string } ) => void;
+  updateTaxonFilters: ( taxonFilters: ExploreTaxonFilter[] ) => void;
   // TODO: Param not typed yet, because ExploreUserSearch is not typed yet
   updateUser: ( user: null | { login: string } ) => void;
   updateProject: ( project: ApiProject ) => void;
@@ -67,7 +72,7 @@ interface Props {
 const FilterModalV2 = ( {
   closeModal,
   filterByIconicTaxonUnknown,
-  updateTaxon,
+  updateTaxonFilters,
   updateUser,
   updateProject,
 }: Props ) => {
@@ -108,7 +113,7 @@ const FilterModalV2 = ( {
     researchGrade,
     reviewedFilter,
     sortBy,
-    taxon,
+    taxonFilters,
     user,
     excludeUser,
     wildStatus,
@@ -129,6 +134,12 @@ const FilterModalV2 = ( {
   const PHOTO_LICENSING = "PHOTO_LICENSING";
   const CONFIRMATION = "CONFIRMATION";
   const [openSheet, setOpenSheet] = useState( NONE );
+  const [showTaxonSearchModal, setShowTaxonSearchModal] = useState( false );
+  const [showSaveFilterSheet, setShowSaveFilterSheet] = useState( false );
+  const [filterToDelete, setFilterToDelete] = useState<null | {
+    id: string;
+    name: string;
+  }>( null );
 
   const sortByButtonText = () => {
     switch ( sortBy ) {
@@ -680,60 +691,35 @@ const FilterModalV2 = ( {
       </View>
 
       <ScrollView className="py-4">
-        {/* Taxon Section */}
+        <ExploreSavedFiltersSection
+          onOpenDeleteFilter={setFilterToDelete}
+          onOpenSaveSheet={() => setShowSaveFilterSheet( true )}
+        />
+        <ExploreTaxonFiltersSection
+          iconicTaxonNames={iconicTaxonNames}
+          onOpenTaxonSearch={() => {
+            setShowTaxonSearchModal( true );
+          }}
+          taxonFilters={taxonFilters || []}
+          updateTaxonFilters={updateTaxonFilters}
+        />
         <View className="mb-7">
-          <Heading4 className="px-4 mb-5">{t( "TAXON" )}</Heading4>
-          <View className="px-4 mb-5">
-            {( taxon || ( iconicTaxonNames || [] ).indexOf( "unknown" ) >= 0 )
-              ? (
-                <Pressable
-                  className="flex-row justify-between items-center"
-                  accessibilityRole="button"
-                  accessibilityLabel={t( "Change-taxon" )}
-                  onPress={() => {
-                    navigation.navigate( "ExploreSearch", { initialSearchMode: "taxon" } );
-                  }}
-                >
-                  <DisplayTaxon
-                    handlePress={() => {
-                      navigation.navigate( "ExploreSearch", { initialSearchMode: "taxon" } );
-                    }}
-                    taxon={taxon || "unknown"}
-                  />
-                  <View className="flex-row items-center">
-                    <INatIcon name="edit" size={22} />
-                    <INatIconButton
-                      className="ml-3"
-                      icon="close"
-                      size={20}
-                      onPress={() => updateTaxon( null )}
-                      accessibilityLabel={t( "Remove-taxon-filter" )}
-                    />
-                  </View>
-                </Pressable>
-              )
-              : (
-                <Button
-                  text={t( "SEARCH-FOR-A-TAXON" )}
-                  onPress={() => {
-                    navigation.navigate( "ExploreSearch", { initialSearchMode: "taxon" } );
-                  }}
-                  accessibilityLabel={t( "Search" )}
-                />
-              )}
-          </View>
           <IconicTaxonChooser
             before
-            chosen={iconicTaxonNames || [taxon?.name?.toLowerCase()]}
+            chosen={[
+              ...( iconicTaxonNames || [] ),
+              ...( taxonFilters || [] )
+                .filter( filter => !filter.exclude )
+                .map( filter => filter.taxon?.name?.toLowerCase( ) )
+                .filter( Boolean ),
+            ]}
             onTaxonChosen={( taxonName: string ) => {
               if ( taxonName === "unknown" ) {
                 if ( ( iconicTaxonNames || [] ).indexOf( taxonName ) >= 0 ) {
-                  updateTaxon( null );
+                  updateTaxonFilters( [] );
                 } else {
                   filterByIconicTaxonUnknown();
                 }
-              } else if ( taxon?.name?.toLowerCase() === taxonName ) {
-                updateTaxon( null );
               } else {
                 const selectedTaxon = realm
                   ?.objects( "Taxon" )
@@ -741,7 +727,11 @@ const FilterModalV2 = ( {
                 const iconicTaxon = selectedTaxon.length > 0
                   ? selectedTaxon[0]
                   : null;
-                updateTaxon( iconicTaxon );
+                if ( iconicTaxon ) {
+                  updateTaxonFilters(
+                    toggleTaxonFilter( taxonFilters || [], iconicTaxon, false ),
+                  );
+                }
               }
             }}
           />
@@ -1324,6 +1314,18 @@ const FilterModalV2 = ( {
           insideModal
         />
       )}
+      <ExploreSavedFilterSheets
+        filterToDelete={filterToDelete}
+        onCloseDeleteFilter={() => setFilterToDelete( null )}
+        onCloseSaveSheet={() => setShowSaveFilterSheet( false )}
+        showSaveSheet={showSaveFilterSheet}
+      />
+      <ExploreTaxonSearchModal
+        closeModal={() => { setShowTaxonSearchModal( false ); }}
+        showModal={showTaxonSearchModal}
+        taxonFilters={taxonFilters || []}
+        updateTaxonFilters={updateTaxonFilters}
+      />
     </ViewWrapper>
   );
 };
