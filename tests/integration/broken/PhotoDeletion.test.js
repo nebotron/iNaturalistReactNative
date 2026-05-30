@@ -64,7 +64,6 @@ afterAll( uniqueRealmAfterAll );
 
 beforeAll( async () => {
   await initI18next();
-  jest.useFakeTimers( );
 } );
 
 // Mock the response from inatjs.computervision.score_image
@@ -91,7 +90,7 @@ describe( "Photo Deletion", ( ) => {
     await actor.press( addObsButton );
     const cameraButton = await screen.findByLabelText( "Camera" );
     await actor.press( cameraButton );
-    const takePhotoButton = await screen.findByLabelText( /Take photo/ );
+    const takePhotoButton = await screen.findByLabelText( /Take photo/, {}, { timeout: 5000 } );
     await actor.press( takePhotoButton );
   }
 

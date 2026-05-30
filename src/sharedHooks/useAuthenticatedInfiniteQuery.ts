@@ -1,8 +1,6 @@
-import { useRoute } from "@react-navigation/native";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import i18n from "i18next";
-import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
 import { useCurrentUser } from "sharedHooks";
 
 // Should work like React Query's useInfiniteQuery with our custom reactQueryRetry
@@ -13,7 +11,6 @@ const useAuthenticatedInfiniteQuery = (
   queryFunction: Function,
   queryOptions: object = {},
 ): object => {
-  const route = useRoute( );
   const currentUser = useCurrentUser( );
 
   // Use locale in case there is no user session
@@ -35,12 +32,6 @@ const useAuthenticatedInfiniteQuery = (
       };
       return queryFunction( params, options );
     },
-    retry: ( failureCount, error ) => reactQueryRetry( failureCount, error, {
-      queryKey,
-      routeName: route?.name,
-      routeParams: route?.params,
-    } ),
-    retryDelay: ( failureCount, error ) => handleRetryDelay( failureCount, error ),
     ...queryOptions,
   } );
 };

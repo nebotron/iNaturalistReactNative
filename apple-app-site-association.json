@@ -1,0 +1,41 @@
+{
+  "webcredentials": {
+    "apps": [
+      "B7H6W7XF8Z.org.inaturalist.inaturalist",
+      "DVURLJZFH6.com.benhannel.inat.dev.iNaturalistMobile"
+    ]
+  },
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "DVURLJZFH6.com.benhannel.inat.dev.iNaturalistMobile"
+        ],
+        "components": [
+          {
+            "/": "/users/sign_in",
+            "?": {
+              "confirmed": "true"
+            },
+            "comment": "Allow app to handle newly-confirmed users"
+          },
+          {
+            "/": "/observations/$(digit)*",
+            "comment": "Allow app to handle observation detail URLs"
+          },
+          {
+            "/": "/app/ai_camera",
+            "comment": "Deep link to AI camera"
+          }
+        ]
+      },
+      {
+        "appID": "DVURLJZFH6.com.benhannel.inat.dev.iNaturalistMobile",
+        "paths": [
+          "/users/sign_in?confirmed=true"
+        ]
+      }
+    ]
+  }
+}

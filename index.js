@@ -29,7 +29,7 @@ import { setJSExceptionHandler, setNativeExceptionHandler } from "react-native-e
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { getInstallID, store as installDataMMKVStorage } from "sharedHelpers/installData";
-import { reactQueryRetry } from "sharedHelpers/logging";
+import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
 import DeviceInfo from "react-native-device-info";
 import useRozenite, { HaltedLaunch, shouldHaltLaunchForDebug } from "sharedHooks/useRozenite";
 import { createMMKVStorageAdapter } from "@rozenite/storage-plugin";
@@ -132,6 +132,7 @@ const queryClient = new QueryClient( {
   defaultOptions: {
     queries: {
       retry: reactQueryRetry,
+      retryDelay: handleRetryDelay,
     },
   },
 } );

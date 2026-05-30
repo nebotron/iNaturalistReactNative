@@ -9,6 +9,8 @@ import {
   WILD_STATUS,
 } from "providers/ExploreContext";
 
+import { taxonFiltersToApiParams } from "./taxonFilters";
+
 const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   const RESEARCH = "research";
   const NEEDS_ID = "needs_id";
@@ -102,6 +104,14 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.viewer_id = currentUser?.id;
   }
 
+  if ( params.unobservedByMe && currentUser?.id ) {
+    filteredParams.unobserved_by_user_id = currentUser.id;
+  }
+
+  if ( params.popular ) {
+    filteredParams.popular = true;
+  }
+
   if ( params.photoLicense !== PHOTO_LICENSE.ALL ) {
     // How license filter maps to the API
     const licenseParams = {
@@ -116,7 +126,21 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.photo_license = licenseParams[params.photoLicense];
   }
 
+  const taxonFilterParams = taxonFiltersToApiParams( params.taxonFilters );
+  if ( taxonFilterParams.taxon_id ) {
+    filteredParams.taxon_id = taxonFilterParams.taxon_id;
+    delete filteredParams.taxon_ids;
+  } else {
+    delete filteredParams.taxon_id;
+  }
+  if ( taxonFilterParams.without_taxon_id ) {
+    filteredParams.without_taxon_id = taxonFilterParams.without_taxon_id;
+  } else {
+    delete filteredParams.without_taxon_id;
+  }
+
   delete filteredParams.taxon;
+  delete filteredParams.taxonFilters;
   delete filteredParams.place_guess;
   delete filteredParams.placeMode;
   delete filteredParams.user;
@@ -133,6 +157,7 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   delete filteredParams.reviewedFilter;
   delete filteredParams.photoLicense;
   delete filteredParams.place;
+  delete filteredParams.unobservedByMe;
 
   return filteredParams;
 };

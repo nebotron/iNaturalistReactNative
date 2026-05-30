@@ -11,6 +11,7 @@ import Mortal from "components/SharedComponents/Mortal";
 import PermissionGateContainer, {
   AUDIO_PERMISSIONS,
   CAMERA_PERMISSIONS,
+  READ_WRITE_MEDIA_PERMISSIONS,
 } from "components/SharedComponents/PermissionGateContainer";
 import SoundRecorder from "components/SoundRecorder/SoundRecorder";
 import { t } from "i18next";
@@ -23,6 +24,7 @@ import {
 import { StackHostProvider } from "navigation/StackHostContext";
 import type { NoBottomTabStackParamList } from "navigation/types";
 import React from "react";
+import { Platform } from "react-native";
 
 import SharedStackScreens from "./SharedStackScreens";
 
@@ -82,7 +84,21 @@ const CameraContainerWithPermission = ( ) => fadeInComponent(
 
 // TODO verify this is true for Android
 const PhotoLibraryContainerWithPermission = ( ) => (
-  <PhotoLibrary />
+  Platform.OS === "android"
+    ? (
+      <PermissionGateContainer
+        permissions={READ_WRITE_MEDIA_PERMISSIONS}
+        title={t( "Choose-photos" )}
+        titleDenied={t( "Please-allow-Photo-Library-Access" )}
+        body={t( "Select-photos-from-your-device-to-create-observations" )}
+        blockedPrompt={t( "Youve-previously-denied-photo-library-permissions" )}
+        buttonText={t( "Choose-photos" )}
+        icon="photo-library"
+      >
+        <PhotoLibrary />
+      </PermissionGateContainer>
+    )
+    : <PhotoLibrary />
 );
 
 const SoundRecorderWithPermission = ( ) => fadeInComponent(

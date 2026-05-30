@@ -13,13 +13,18 @@ const flashListStyle = {
   paddingBottom: TAB_BAR_HEIGHT + HALF_GUTTER,
 };
 
-const useGridLayout = ( layout?: "list" ) => {
+export type GridLayoutVariant = "default" | "fullWidth";
+
+const useGridLayout = (
+  layout?: "list",
+  variant: GridLayoutVariant = "default",
+) => {
   const {
     isLandscapeMode, isTablet, screenWidth, screenHeight,
   } = useDeviceOrientation();
 
   const calculateNumColumns = () => {
-    if ( layout === "list" || screenWidth <= BREAKPOINTS.sm ) {
+    if ( variant === "fullWidth" || layout === "list" || screenWidth <= BREAKPOINTS.sm ) {
       return 1;
     }
     if ( !isTablet ) return 2;
@@ -30,6 +35,12 @@ const useGridLayout = ( layout?: "list" ) => {
   const numColumns = calculateNumColumns();
 
   const calculateGridItemWidth = () => {
+    if ( variant === "fullWidth" ) {
+      return Math.floor( isTablet
+        ? screenWidth
+        : Math.min( screenWidth, screenHeight ) );
+    }
+
     const combinedGutter = ( numColumns + 1 ) * GUTTER;
     const gridWidth = isTablet
       ? screenWidth
@@ -38,16 +49,41 @@ const useGridLayout = ( layout?: "list" ) => {
   };
   const gridItemWidth = calculateGridItemWidth();
 
-  const gridItemStyle = useMemo( ( ) => ( {
-    height: gridItemWidth,
-    width: gridItemWidth,
-    margin: HALF_GUTTER,
-  } ), [gridItemWidth] );
+  const gridItemStyle = useMemo( ( ) => {
+    if ( variant === "fullWidth" ) {
+      return {
+        height: gridItemWidth,
+        width: gridItemWidth,
+        margin: 0,
+      };
+    }
+
+    return {
+      height: gridItemWidth,
+      width: gridItemWidth,
+      margin: HALF_GUTTER,
+    };
+  }, [gridItemWidth, variant] );
+
+  const resolvedFlashListStyle = useMemo( ( ) => {
+    if ( variant === "fullWidth" ) {
+      return {
+        paddingTop: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        paddingBottom: TAB_BAR_HEIGHT,
+      };
+    }
+
+    return flashListStyle;
+  }, [variant] );
 
   return {
-    flashListStyle,
+    flashListStyle: resolvedFlashListStyle,
     gridItemStyle,
+    gridItemWidth,
     numColumns,
+    squareCorners: variant === "fullWidth",
   };
 };
 

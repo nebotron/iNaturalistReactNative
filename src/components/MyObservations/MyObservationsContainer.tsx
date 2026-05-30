@@ -22,6 +22,7 @@ import Observation from "realmModels/Observation";
 import Taxon from "realmModels/Taxon";
 import type { RealmObservation } from "realmModels/types";
 import type { SPECIES_SORT } from "sharedHelpers/speciesSort";
+import { confirmNoDuplicatePhotosBeforeUpload } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import {
   sortSpeciesCounts,
   speciesSortToApiParams,
@@ -181,7 +182,7 @@ const MyObservationsWithProvider = ( ) => {
     isDefaultMode,
   ] );
 
-  const handleIndividualUploadPress = useCallback( uuid => {
+  const handleIndividualUploadPress = useCallback( async uuid => {
     const uploadExists = uploadQueue.includes( uuid );
     if ( uploadExists ) return;
     const observation = realm.objectForPrimaryKey<RealmObservation>( "Observation", uuid );
@@ -191,6 +192,12 @@ const MyObservationsWithProvider = ( ) => {
     }
     if ( !confirmLoggedIn( ) ) return;
     if ( !confirmInternetConnection( ) ) return;
+    const confirmed = await confirmNoDuplicatePhotosBeforeUpload(
+      realm,
+      [uuid],
+      t,
+    );
+    if ( !confirmed ) return;
     addTotalToolbarIncrements( observation );
     addToUploadQueue( uuid );
     if ( uploadStatus === UPLOAD_PENDING ) {
@@ -205,6 +212,7 @@ const MyObservationsWithProvider = ( ) => {
     navigateToObsEdit,
     realm,
     setStartUploadObservations,
+    t,
     uploadQueue,
     uploadStatus,
   ] );

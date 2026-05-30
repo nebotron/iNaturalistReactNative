@@ -25,11 +25,13 @@ type Props = {
   buttonText: string,
   confirm: Function,
   description?: string,
+  insideModal?: boolean,
   mentionsEnabled?: boolean,
   onPressClose: Function,
   headerText: string,
   initialInput?: string,
   maxLength?: number,
+  multiline?: boolean,
   placeholder?: string,
   textInputStyle?: Object
 }
@@ -60,11 +62,13 @@ const TextInputSheet = ( {
   buttonText,
   confirm,
   description,
+  insideModal,
   mentionsEnabled = false,
   onPressClose,
   headerText,
   initialInput,
   maxLength,
+  multiline = true,
   placeholder,
   textInputStyle,
 }: Props ): Node => {
@@ -78,17 +82,29 @@ const TextInputSheet = ( {
   // disable if user hasn't changed existing text
   const confirmButtonDisabled = initialInput === input || ( !input && !initialInput );
 
-  const inputStyle = useMemo( ( ) => ( {
-    height: Math.min(
-      TARGET_INPUT_HEIGHT - ( sheetHeight - nonKeyboardHeight ) - topInset,
-      TARGET_INPUT_HEIGHT,
-    ),
-    fontFamily: fontRegular,
-    fontSize: 14,
-    lineHeight: 17,
-    color: colors.darkGray,
-    textAlignVertical: "top",
-  } ), [
+  const inputStyle = useMemo( ( ) => {
+    if ( !multiline ) {
+      return {
+        fontFamily: fontRegular,
+        fontSize: 14,
+        lineHeight: 17,
+        color: colors.darkGray,
+      };
+    }
+
+    return {
+      height: Math.min(
+        TARGET_INPUT_HEIGHT - ( sheetHeight - nonKeyboardHeight ) - topInset,
+        TARGET_INPUT_HEIGHT,
+      ),
+      fontFamily: fontRegular,
+      fontSize: 14,
+      lineHeight: 17,
+      color: colors.darkGray,
+      textAlignVertical: "top",
+    };
+  }, [
+    multiline,
     nonKeyboardHeight,
     sheetHeight,
     topInset,
@@ -103,14 +119,17 @@ const TextInputSheet = ( {
     <BottomSheet
       onPressClose={dismissKeyboardAndClose}
       headerText={headerText}
+      insideModal={insideModal}
       keyboardShouldPersistTaps="always"
-      onLayout={event => {
-        const { height } = event.nativeEvent.layout;
-        // Only do this once. Device height isn't going to change
-        if ( sheetHeight === 0 ) {
-          setSheetHeight( height );
+      onLayout={multiline
+        ? event => {
+          const { height } = event.nativeEvent.layout;
+          // Only do this once. Device height isn't going to change
+          if ( sheetHeight === 0 ) {
+            setSheetHeight( height );
+          }
         }
-      }}
+        : undefined}
       scrollEnabled={false}
       enablePanDownToClose={false}
       enableContentPanningGesture={false}
@@ -133,9 +152,12 @@ const TextInputSheet = ( {
                 keyboardType="default"
                 maxLength={maxLength}
                 maxFontSizeMultiplier={2}
-                multiline
+                multiline={multiline}
                 onChangeText={setInput}
                 placeholder={placeholder}
+                returnKeyType={multiline
+                  ? undefined
+                  : "done"}
                 style={[inputStyle, textInputStyle]}
                 testID="TextInputSheet.notes"
                 defaultValue={initialInput ?? ""}
@@ -149,9 +171,12 @@ const TextInputSheet = ( {
                 keyboardType="default"
                 maxLength={maxLength}
                 maxFontSizeMultiplier={2}
-                multiline
+                multiline={multiline}
                 onChangeText={setInput}
                 placeholder={placeholder}
+                returnKeyType={multiline
+                  ? undefined
+                  : "done"}
                 style={[inputStyle, textInputStyle]}
                 testID="TextInputSheet.notes"
                 defaultValue={initialInput ?? ""}

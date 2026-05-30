@@ -1,6 +1,8 @@
 import { createOrUpdateEvidence } from "api/observations";
 import inatjs from "inaturalistjs";
 import type Realm from "realm";
+import ObservationPhoto from "realmModels/ObservationPhoto";
+import Photo from "realmModels/Photo";
 import type {
   RealmObservation,
   RealmObservationPhoto,
@@ -10,6 +12,7 @@ import type {
 } from "realmModels/types";
 import { markRecordUploaded, prepareMediaForUpload } from "uploaders";
 import { trackEvidenceUpload } from "uploaders/utils/progressTracker";
+import withRetry from "uploaders/utils/retry";
 
 export type EvidenceType = "Photo" | "ObservationPhoto" | "Sound" | "ObservationSound";
 export type ActionType = "upload" | "attach" | "update";
@@ -84,6 +87,7 @@ export type Evidence = RealmObservationPhoto | RealmObservationSound | RealmPhot
 interface MediaItems {
   unsyncedObservationPhotos: RealmObservationPhoto[];
   modifiedObservationPhotos: RealmObservationPhoto[];
+  modifiedPhotosNeedingReupload: RealmPhoto[];
   unsyncedObservationSounds: RealmObservationSound[];
 }
 
@@ -110,11 +114,11 @@ const uploadSingleEvidence = async (
   const isAttachOperation = observationId != null;
   const evidenceProgress = trackEvidenceUpload( observationUUID );
 
-  const response = await createOrUpdateEvidence(
+  const response = await withRetry( () => createOrUpdateEvidence(
     apiEndpoint,
     params,
     options,
-  );
+  ) );
 
   if ( !response ) {
     throw new Error( `Failed to upload ${type} ${evidenceUUID}: no response from server` );
@@ -171,6 +175,7 @@ const filterMediaForUpload = ( observation: RealmObservation ): {
   unsyncedSounds: RealmSound[];
   unsyncedObservationPhotos: RealmObservationPhoto[];
   modifiedObservationPhotos: RealmObservationPhoto[];
+  modifiedPhotosNeedingReupload: RealmPhoto[];
   unsyncedObservationSounds: RealmObservationSound[];
 } => {
   const hasPhotos = observation?.observationPhotos?.length > 0;
@@ -190,12 +195,22 @@ const filterMediaForUpload = ( observation: RealmObservation ): {
       }
       return null;
     }
-  } ).filter( Boolean ).flat() as RealmPhoto[];
+  } ).filter( photo => {
+    // Skip photos with no uploadable local URI — trying to upload them would
+    // hang because there is no file to read
+    if ( !photo ) return false;
+    return Photo.getLocalPhotoUri( photo.localFilePath ) != null;
+  } ).flat() as RealmPhoto[];
 
   // get photos that have been synced but need updating
   const modifiedObservationPhotos = hasPhotos
     ? observation.observationPhotos.filter( op => op.wasSynced( ) && op.needsSync( ) )
     : [];
+
+  const modifiedPhotosNeedingReupload = modifiedObservationPhotos
+    .map( op => op.photo )
+    .filter( photo => ObservationPhoto.needsPhotoReupload( photo )
+      && Photo.getLocalPhotoUri( photo?.localFilePath ) != null );
 
   // get sounds that haven't been synced yet
   const hasSounds = observation.observationSounds?.length > 0;
@@ -220,6 +235,7 @@ const filterMediaForUpload = ( observation: RealmObservation ): {
     unsyncedSounds,
     unsyncedObservationPhotos,
     modifiedObservationPhotos,
+    modifiedPhotosNeedingReupload,
     unsyncedObservationSounds,
   };
 };
@@ -230,6 +246,7 @@ const createMediaOperations = (
     unsyncedSounds?: RealmSound[] | null;
     unsyncedObservationPhotos?: RealmObservationPhoto[] | null;
     modifiedObservationPhotos?: RealmObservationPhoto[] | null;
+    modifiedPhotosNeedingReupload?: RealmPhoto[] | null;
     unsyncedObservationSounds?: RealmObservationSound[] | null;
   },
   observationUUID: string | undefined | null,
@@ -241,10 +258,18 @@ const createMediaOperations = (
   const unsyncedSounds = mediaItems?.unsyncedSounds || [];
   const unsyncedObservationPhotos = mediaItems?.unsyncedObservationPhotos || [];
   const modifiedObservationPhotos = mediaItems?.modifiedObservationPhotos || [];
+  const modifiedPhotosNeedingReupload = mediaItems?.modifiedPhotosNeedingReupload || [];
   const unsyncedObservationSounds = mediaItems?.unsyncedObservationSounds || [];
 
-  if ( uploadAction && unsyncedPhotos?.length > 0 ) {
-    unsyncedPhotos.forEach( photo => {
+  const photosToUpload = [
+    ...unsyncedPhotos,
+    ...modifiedPhotosNeedingReupload.filter(
+      modifiedPhoto => !unsyncedPhotos.includes( modifiedPhoto ),
+    ),
+  ];
+
+  if ( uploadAction && photosToUpload.length > 0 ) {
+    photosToUpload.forEach( photo => {
       operations.push( {
         evidence: photo,
         type: "Photo" as EvidenceType,
@@ -318,6 +343,7 @@ async function uploadObservationMedia(
     return {
       unsyncedObservationPhotos: [],
       modifiedObservationPhotos: [],
+      modifiedPhotosNeedingReupload: [],
       unsyncedObservationSounds: [],
     };
   }
@@ -334,6 +360,7 @@ async function uploadObservationMedia(
   return {
     unsyncedObservationPhotos: mediaItems.unsyncedObservationPhotos,
     modifiedObservationPhotos: mediaItems.modifiedObservationPhotos,
+    modifiedPhotosNeedingReupload: mediaItems.modifiedPhotosNeedingReupload,
     unsyncedObservationSounds: mediaItems.unsyncedObservationSounds,
   };
 }
