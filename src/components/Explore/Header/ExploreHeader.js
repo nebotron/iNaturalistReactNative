@@ -34,7 +34,7 @@ type Props = {
   renderLocationPermissionsGate: Function,
   requestLocationPermissions: Function,
   updateLocation: Function,
-  updateTaxon: Function
+  updateTaxonFilters: Function
 }
 
 const Header = ( {
@@ -49,12 +49,21 @@ const Header = ( {
   renderLocationPermissionsGate,
   requestLocationPermissions,
   updateLocation,
-  updateTaxon,
+  updateTaxonFilters,
 }: Props ): Node => {
   const { t } = useTranslation( );
   const { state, numberOfFilters } = useExplore( );
-  const { taxon } = state;
+  const { taxonFilters } = state;
   const iconicTaxonNames = state.iconic_taxa || [];
+  const hasUnknownIconicTaxon = iconicTaxonNames.indexOf( "unknown" ) >= 0;
+  const taxonFilterCount = ( taxonFilters || [] ).length;
+  const hasTaxonFilters = taxonFilterCount > 0 || hasUnknownIconicTaxon;
+  const showMultipleTaxa = hasUnknownIconicTaxon
+    ? taxonFilterCount > 0
+    : taxonFilterCount > 1;
+  const singleTaxonFilter = taxonFilterCount === 1
+    ? taxonFilters[0]
+    : null;
   const [showTaxonSearch, setShowTaxonSearch] = useState( false );
   const [showLocationSearch, setShowLocationSearch] = useState( false );
 
@@ -79,15 +88,49 @@ const Header = ( {
               />
             ) }
             <View className="flex-1">
-              {( taxon || iconicTaxonNames.indexOf( "unknown" ) >= 0 )
+              {hasTaxonFilters
                 ? (
-                  <DisplayTaxon
-                    accessibilityLabel={t( "Change-taxon-filter" )}
-                    taxon={taxon || "unknown"}
-                    showInfoButton={false}
-                    showCheckmark={false}
-                    handlePress={() => setShowTaxonSearch( true )}
-                  />
+                  <View>
+                    {showMultipleTaxa
+                      ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={t( "Change-taxon-filter" )}
+                          className="flex-row items-center"
+                          onPress={() => setShowTaxonSearch( true )}
+                        >
+                          <INatIcon name="label-outline" size={15} />
+                          <Body3
+                            maxFontSizeMultiplier={1.5}
+                            className="ml-3"
+                          >
+                            {t( "Multiple-taxa" )}
+                          </Body3>
+                        </Pressable>
+                      )
+                      : (
+                        <>
+                          {hasUnknownIconicTaxon && (
+                            <DisplayTaxon
+                              accessibilityLabel={t( "Change-taxon-filter" )}
+                              taxon="unknown"
+                              showInfoButton={false}
+                              showCheckmark={false}
+                              handlePress={() => setShowTaxonSearch( true )}
+                            />
+                          )}
+                          {singleTaxonFilter && (
+                            <DisplayTaxon
+                              accessibilityLabel={t( "Change-taxon-filter" )}
+                              taxon={singleTaxonFilter.taxon}
+                              showInfoButton={false}
+                              showCheckmark={false}
+                              handlePress={() => setShowTaxonSearch( true )}
+                            />
+                          )}
+                        </>
+                      )}
+                  </View>
                 )
                 : (
                   <Pressable
@@ -146,7 +189,8 @@ const Header = ( {
       <ExploreTaxonSearchModal
         showModal={showTaxonSearch}
         closeModal={() => { setShowTaxonSearch( false ); }}
-        updateTaxon={updateTaxon}
+        taxonFilters={taxonFilters || []}
+        updateTaxonFilters={updateTaxonFilters}
       />
       <ExploreLocationSearchModal
         closeModal={() => { setShowLocationSearch( false ); }}

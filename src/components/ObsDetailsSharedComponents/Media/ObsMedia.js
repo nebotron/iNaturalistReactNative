@@ -45,9 +45,15 @@ const ObsMedia = ( {
         />
       )
       : (
-        <PhotoContainer photo={item} onPress={() => setMediaViewerVisible( true )} />
+        <PhotoContainer
+          photo={item}
+          onPress={() => {
+            setIndex( items.indexOf( item ) );
+            setMediaViewerVisible( true );
+          }}
+        />
       ) ),
-    [setMediaViewerVisible, items, index],
+    [setMediaViewerVisible, setIndex, items, index],
   );
 
   const currentPhotoUrl = index >= photos.length
@@ -105,6 +111,7 @@ const ObsMedia = ( {
         showModal={mediaViewerVisible}
         onClose={( ) => setMediaViewerVisible( false )}
         uri={currentPhotoUrl}
+        initialIndex={index}
         photos={photos}
         sounds={sounds}
       />

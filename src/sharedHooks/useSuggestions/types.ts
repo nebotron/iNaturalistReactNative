@@ -41,6 +41,7 @@ export interface UseSuggestionsResult {
     topSuggestionType: TopSuggestionType;
   };
   usingOfflineSuggestions: boolean;
+  tryOfflineSuggestions: boolean;
   urlWillCrashOffline: boolean;
   refetchSuggestions: () => void;
   onlineSuggestionsUpdatedAt: number;
@@ -70,4 +71,5 @@ export interface UseSuggestionsOptions {
   scoreImageParams?: ScoreImageParams;
   queryKey: string[];
   onlineSuggestionsAttempted: boolean;
+  preferOfflineModel?: boolean;
 }

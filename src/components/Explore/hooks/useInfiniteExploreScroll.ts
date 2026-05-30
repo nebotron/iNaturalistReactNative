@@ -96,7 +96,14 @@ const useInfiniteExploreScroll = (
 
   const pages = data?.pages as ApiObservationsSearchResponse[] | undefined;
 
-  let observations: ApiObservation[] = flatten( pages?.map( r => r.results ) ) || [];
+  const allObservations: ApiObservation[] = flatten( pages?.map( r => r.results ) ) || [];
+  const seenKeys = new Set<string | number>();
+  let observations: ApiObservation[] = allObservations.filter( obs => {
+    const key = obs.uuid ?? obs.id;
+    if ( key == null || seenKeys.has( key ) ) return false;
+    seenKeys.add( key );
+    return true;
+  } );
   let totalResults: number | null | undefined = pages?.[0]?.total_results;
   let filtered = [];
 

@@ -15,6 +15,7 @@ interface Props {
   hideObsStatus?: boolean;
   isSimpleObsStatus?: boolean;
   hideRGLabel?: boolean;
+  onExploreObservationAction?: ( ) => void;
   onUploadButtonPress: ( ) => void;
   onItemPress: ( ) => void;
   gridItemStyle: object;
@@ -22,6 +23,7 @@ interface Props {
   observation: RealmObservation;
   uploadProgress: number;
   unsynced: boolean;
+  squareCorners?: boolean;
 }
 
 const ObsPressable = ( {
@@ -33,6 +35,7 @@ const ObsPressable = ( {
   hideObsStatus,
   isSimpleObsStatus,
   hideRGLabel,
+  onExploreObservationAction,
   onUploadButtonPress,
   onItemPress,
   gridItemStyle,
@@ -40,6 +43,7 @@ const ObsPressable = ( {
   observation,
   uploadProgress,
   unsynced,
+  squareCorners = false,
 }: Props ) => {
   const { t } = useTranslation( );
 
@@ -60,6 +64,7 @@ const ObsPressable = ( {
               currentUser={currentUser}
               explore={explore}
               hideObsUploadStatus={hideObsUploadStatus}
+              onExploreObservationAction={onExploreObservationAction}
               onUploadButtonPress={onUploadButtonPress}
               observation={observation}
               queued={queued}
@@ -67,6 +72,7 @@ const ObsPressable = ( {
               // better with RN styles than with Tailwind classes
               style={gridItemStyle}
               uploadProgress={uploadProgress}
+              squareCorners={squareCorners}
             />
           )
           : (

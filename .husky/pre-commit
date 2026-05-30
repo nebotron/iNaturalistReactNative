@@ -1,5 +1,5 @@
 # If ggshield is installed, run it
-if command -v ggshield &> /dev/null; then
+if command -v ggshield > /dev/null 2>&1; then
   ggshield secret scan pre-commit
 # Otherwise require that inaturalist.org git users install it
 elif git config --list | grep -q "user.email.*inaturalist.org"; then

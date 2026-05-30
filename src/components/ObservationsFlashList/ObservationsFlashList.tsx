@@ -56,6 +56,7 @@ interface Props {
   layout: "list" | "grid";
   obsListKey: string;
   onEndReached: () => void;
+  onExploreObservationAction?: () => void;
   onLayout?: ( event: LayoutChangeEvent ) => void;
   onScroll?: ( event: NativeSyntheticEvent<NativeScrollEvent> ) => void;
   // this ref is being forwarded to the underlying CustomFlashList and used as an imperative handle
@@ -65,6 +66,7 @@ interface Props {
   listHeaderContent?: React.ReactElement | null;
   showNoResults?: boolean;
   showObservationsEmptyScreen?: boolean;
+  fullWidthGrid?: boolean;
   testID: string;
 }
 
@@ -86,12 +88,14 @@ const ObservationsFlashList = ( {
   layout,
   obsListKey = "unknown",
   onEndReached,
+  onExploreObservationAction,
   onLayout,
   onScroll,
   ref,
   listHeaderContent,
   showNoResults,
   showObservationsEmptyScreen,
+  fullWidthGrid = false,
   testID,
 }: Props ) => {
   const {
@@ -115,7 +119,15 @@ const ObservationsFlashList = ( {
     flashListStyle,
     gridItemStyle,
     numColumns,
-  } = useGridLayout( layout );
+    squareCorners,
+  } = useGridLayout(
+    layout === "list"
+      ? "list"
+      : undefined,
+    fullWidthGrid
+      ? "fullWidth"
+      : "default",
+  );
   const { t } = useTranslation( );
 
   // TODO: type data / observation
@@ -124,7 +136,9 @@ const ObservationsFlashList = ( {
     if ( observation.empty ) {
       return (
         <View
-          className="rounded-[15px] border-dotted border-4 border-lightGray"
+          className={fullWidthGrid
+            ? "border-dotted border-4 border-lightGray"
+            : "rounded-[15px] border-dotted border-4 border-lightGray"}
           style={gridItemStyle}
         />
       );
@@ -150,7 +164,14 @@ const ObservationsFlashList = ( {
         navigation.navigate( {
           key: `Obs-${obsListKey}-${uuid}`,
           name: "ObsDetails",
-          params: { uuid },
+          // Pass explore observation so ObsDetails can render immediately
+          // while the full remote fetch completes in the background
+          params: {
+            uuid,
+            preloadedObservation: obsNeedsSync
+              ? undefined
+              : observation,
+          },
         } );
       }
     };
@@ -172,11 +193,13 @@ const ObservationsFlashList = ( {
         layout={layout}
         key={itemKey}
         observation={observation}
+        onExploreObservationAction={onExploreObservationAction}
         onItemPress={onItemPress}
         onUploadButtonPress={onUploadButtonPress}
         queued={queued}
         unsynced={obsNeedsSync}
         uploadProgress={uploadProgress}
+        squareCorners={squareCorners}
       />
     );
   }, [
@@ -194,9 +217,12 @@ const ObservationsFlashList = ( {
     navigateToObsEdit,
     navigation,
     obsListKey,
+    onExploreObservationAction,
     realm,
     totalUploadProgress,
     uploadQueue,
+    squareCorners,
+    fullWidthGrid,
   ] );
 
   const itemSeparatorComponent = useMemo( ( ) => {
@@ -265,9 +291,9 @@ const ObservationsFlashList = ( {
   }, [dataCanBeFetched, onEndReached] );
 
   const handleEndReached = useCallback( ( ) => {
-    if ( !dataCanBeFetched || explore ) return;
+    if ( !dataCanBeFetched ) return;
 
-    if ( fetchFromLastObservation && data.length > 0 ) {
+    if ( !explore && fetchFromLastObservation && data.length > 0 ) {
       const lastObservation = data[data.length - 1];
       const lastId = lastObservation?.id;
       if ( lastId && !lastObservation?.empty ) {
