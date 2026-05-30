@@ -284,7 +284,6 @@ Couldnt-create-identification-unknown-error = Couldn't create identification, un
 CREATE-AN-ACCOUNT = CREATE AN ACCOUNT
 Create-observation-with-no-evidence = Create observation with no evidence
 CROP-DRAG-HINT = Drag to pan. Pinch to zoom.
-Subject-detection-model-option = Model { $model }
 CROP-PHOTO = Crop Photo
 DATA-QUALITY = DATA QUALITY
 DATA-QUALITY-ASSESSMENT = DATA QUALITY ASSESSMENT
@@ -468,6 +467,7 @@ Dont-have-an-account = <0>Don't have an account? </0><1>Sign up</1>
 Duplicate-photo-indicator = Previously uploaded photo
 Duplicate-photo-upload-message = You have already uploaded this photo to iNaturalist. Cropped or edited versions count as the same photo. Upload anyway?
 Duplicate-photo-upload-title = Upload this photo again?
+Duplicate-Photos = Duplicate Photos
 During-app-start-no-model-found = During app start there was no computer vision model found. There will be no AI camera.
 # Button for editing something
 Edit = Edit
@@ -625,6 +625,7 @@ IGNORE-LOCATION = IGNORE LOCATION
 Ignore-notifications = Ignore notifications
 Ignoring-location = Ignoring location
 Import = Import
+Import-Photos-From = Import Photos From
 # Shows the number of observations a user is about to import
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
@@ -734,7 +735,6 @@ LEAVE-US-A-REVIEW = LEAVE US A REVIEW!
 Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
 Load-saved-filter = Load saved filter
-Overwrite-saved-filter = Overwrite saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
 Loads-content-that-requires-an-Internet-connection = Loads content that requires an Internet connection
 LOCATION = LOCATION
@@ -752,6 +752,9 @@ MAP = MAP
 Map-Area = Map Area
 # Month of March
 March = March
+# Title for section of observation filters for controls over whether you have
+# Button to mark an observation as reviewed by the current user
+Mark-as-reviewed = Mark as reviewed
 # Radio button option for navigation flows in Settings
 Match-Screen = Match Screen
 # Identification category
@@ -955,6 +958,7 @@ OTHER-SUGGESTIONS = OTHER SUGGESTIONS
 # Tab on notifications showing notifications about content created by others.
 # Should be 16 characters or fewer or it will be ellipsized.
 OTHERS--notifications = OTHERS
+Overwrite-saved-filter = Overwrite saved filter
 PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
@@ -1142,11 +1146,6 @@ RESTART-APP = RESTART APP
 Restore = Restore
 Reveal = Reveal
 REVIEW-INATURALIST = REVIEW INATURALIST
-# Title for section of observation filters for controls over whether you have
-# Button to mark an observation as reviewed by the current user
-Mark-as-reviewed = Mark as reviewed
-# Button to remove reviewed status from an observation
-Unmark-as-reviewed = Unmark as reviewed
 REVIEWED = REVIEWED
 Reviewed-observations-only = Reviewed observations only
 # Label for the satellite map type
@@ -1359,6 +1358,8 @@ Unknown--user = Unknown
 # Generic error message
 Unknown-error = Unknown error
 Unknown-organism = Unknown organism
+# Button to remove reviewed status from an observation
+Unmark-as-reviewed = Unmark as reviewed
 Unreviewed-observations-only = Unreviewed observations only
 Upload-anyway = Upload anyway
 Upload-Complete = Upload Complete
@@ -1424,6 +1425,7 @@ View-photo-licensing-info = View photo licensing info
 VIEW-PROJECT-REQUIREMENTS = VIEW PROJECT REQUIREMENTS
 # Button that lets user view a list of projects related to the observation or user profile they're viewing
 VIEW-PROJECTS = VIEW PROJECTS
+View-sound = View sound
 # Label for a button that shows identification suggestions for an observation
 # or photo
 View-suggestions = View suggestions
