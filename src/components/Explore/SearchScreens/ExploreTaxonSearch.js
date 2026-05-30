@@ -1,14 +1,13 @@
 // @flow
 
-import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import {
+  normalizeTaxonFilters,
   removeTaxonFilter,
   toggleTaxonFilter,
-  normalizeTaxonFilters,
 } from "components/Explore/helpers/taxonFilters";
 import {
-  ButtonBar,
   Button,
+  ButtonBar,
   DisplayTaxon,
   INatIconButton,
   TaxonResult,
@@ -29,7 +28,7 @@ import ExploreSearchHeader from "./ExploreSearchHeader";
 type Props = {
   closeModal: Function,
   onPressInfo?: Function,
-  taxonFilters?: ExploreTaxonFilter[],
+  taxonFilters?: Object[],
   updateTaxonFilters: Function,
 };
 
@@ -85,7 +84,9 @@ const ExploreTaxonSearch = ( {
         handleTaxonOrEditPress={() => onTaxonToggled( taxon )}
         onPressInfo={onPressInfo}
         showCheckmark={!!filter}
-        activeColor={filter?.exclude ? "warningRed" : undefined}
+        activeColor={filter?.exclude
+          ? "warningRed"
+          : undefined}
         taxon={taxon}
         testID={`Search.taxa.${taxon.id}`}
       />
@@ -94,6 +95,7 @@ const ExploreTaxonSearch = ( {
     getFilterForTaxon,
     onPressInfo,
     onTaxonToggled,
+    t,
   ] );
 
   const modeButtons = [
@@ -133,8 +135,12 @@ const ExploreTaxonSearch = ( {
               />
               <View className="flex-row items-center">
                 <Button
-                  level={filter.exclude ? "neutral" : "focus"}
-                  text={filter.exclude ? t( "Exclude-taxon" ) : t( "Include-taxon" )}
+                  level={filter.exclude
+                    ? "neutral"
+                    : "focus"}
+                  text={filter.exclude
+                    ? t( "Exclude-taxon" )
+                    : t( "Include-taxon" )}
                   onPress={() => setSelectedFilters(
                     current => toggleTaxonFilter(
                       current,

@@ -13,12 +13,12 @@ import React, {
 } from "react";
 import { BackHandler } from "react-native";
 import Observation from "realmModels/Observation";
+import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import { useExitObservationFlow, useTranslation } from "sharedHooks";
 import useObsEditRollback from "sharedHooks/useObsEditRollback";
 import useStore from "stores/useStore";
 
-import DeleteObservationSheet from "./Sheets/DeleteObservationSheet";
 import DiscardChangesSheet from "./Sheets/DiscardChangesSheet";
 import DiscardObservationSheet from "./Sheets/DiscardObservationSheet";
 
@@ -37,10 +37,10 @@ const ObsEditHeader = ( {
   const unsavedChanges = useStore( state => state.unsavedChanges );
   const updateObservations = useStore( state => state.updateObservations );
   const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
+  const addToDeleteQueue = useStore( state => state.addToDeleteQueue );
   const { t } = useTranslation( );
   const navigation = useNavigation( );
   const { params } = useRoute( );
-  const [deleteSheetVisible, setDeleteSheetVisible] = useState( false );
   const [kebabMenuVisible, setKebabMenuVisible] = useState( false );
   const [discardObservationSheetVisible, setDiscardObservationSheetVisible] = useState( false );
   const [discardChangesSheetVisible, setDiscardChangesSheetVisible] = useState( false );
@@ -71,6 +71,34 @@ const ObsEditHeader = ( {
     setDiscardObservationSheetVisible( false );
     exitObservationFlow( );
   }, [exitObservationFlow] );
+
+  const deleteObservation = useCallback( ( ) => {
+    const { uuid } = currentObservation;
+    setKebabMenuVisible( false );
+    if ( !currentObservation?._synced_at ) {
+      Observation.deleteLocalObservation( realm, uuid );
+    } else {
+      const localObsToDelete = realm.objectForPrimaryKey( "Observation", uuid );
+      if ( localObsToDelete ) {
+        safeRealmWrite( realm, ( ) => {
+          localObsToDelete._deleted_at = new Date( );
+        }, "adding _deleted_at date in ObsEditHeader" );
+        addToDeleteQueue( uuid );
+      }
+    }
+    if ( observations.length > 1 ) {
+      updateObservations( observations.filter( o => o.uuid !== uuid ) );
+    } else {
+      exitObservationFlow( );
+    }
+  }, [
+    addToDeleteQueue,
+    currentObservation,
+    exitObservationFlow,
+    observations,
+    realm,
+    updateObservations,
+  ] );
 
   const renderHeaderTitle = useCallback( ( ) => {
     let headingText = "";
@@ -170,10 +198,7 @@ const ObsEditHeader = ( {
       <KebabMenu.Item
         isFirst
         testID="Header.delete-observation"
-        onPress={( ) => {
-          setDeleteSheetVisible( true );
-          setKebabMenuVisible( false );
-        }}
+        onPress={deleteObservation}
         title={
           observations.length > 1
             ? t( "Delete-current-observation" )
@@ -207,11 +232,11 @@ const ObsEditHeader = ( {
       ) }
     </KebabMenu>
   ), [
+    deleteObservation,
     exitObservationFlow,
     kebabMenuVisible,
     observations,
     realm,
-    setDeleteSheetVisible,
     t,
   ] );
 
@@ -222,15 +247,6 @@ const ObsEditHeader = ( {
       <View className="mr-4">
         {observations.length > 0 && renderKebabMenu( )}
       </View>
-      {deleteSheetVisible && (
-        <DeleteObservationSheet
-          onPressClose={( ) => setDeleteSheetVisible( false )}
-          observations={observations}
-          onDelete={( ) => exitObservationFlow( )}
-          currentObservation={currentObservation}
-          updateObservations={updateObservations}
-        />
-      )}
       {discardObservationSheetVisible && (
         <DiscardObservationSheet
           discardObservation={discardObservation}
