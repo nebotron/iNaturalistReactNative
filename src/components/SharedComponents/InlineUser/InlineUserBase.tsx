@@ -1,6 +1,8 @@
 import { useNavigation } from "@react-navigation/native";
 // Directly imported, not from index.js to avoid circular dependency
 import INatIcon from "components/SharedComponents/INatIcon";
+import NewCommunityMemberBadge from
+  "components/SharedComponents/NewCommunityMemberBadge/NewCommunityMemberBadge";
 // Directly imported, not from index.js to avoid circular dependency
 import UserIcon from "components/SharedComponents/UserIcon";
 import {
@@ -11,6 +13,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import type { TextProps } from "react-native";
 import User from "realmModels/User";
+import { isNewCommunityMember } from "sharedHelpers/isNewCommunityMember";
 import useCurrentUser from "sharedHooks/useCurrentUser";
 
 interface Props extends PropsWithChildren {
@@ -18,6 +21,8 @@ interface Props extends PropsWithChildren {
     id: number;
     icon_url?: string;
     login: string;
+    created_at?: string;
+    createdAt?: string;
   };
   isConnected: boolean;
   TextComponent: React.FC<TextProps>;
@@ -37,6 +42,7 @@ const InlineUserBase = ( {
   const userHandle = user?.login;
   const currentUser = useCurrentUser();
   const isCurrentUser = user?.id === currentUser?.id;
+  const showNewCommunityMemberBadge = isNewCommunityMember( user );
 
   const { t } = useTranslation( );
 
@@ -69,15 +75,20 @@ const InlineUserBase = ( {
       }}
     >
       <View className="mr-[7px]">{renderUserIcon()}</View>
-      <TextComponent
-        className="w-3/4"
-        numberOfLines={1}
-        ellipsizeMode="tail"
-        selectable
-        maxFontSizeMultiplier={1}
-      >
-        {userHandle}
-      </TextComponent>
+      <View className="flex-row items-center shrink w-3/4">
+        <TextComponent
+          className="shrink"
+          numberOfLines={1}
+          ellipsizeMode="tail"
+          selectable
+          maxFontSizeMultiplier={1}
+        >
+          {userHandle}
+        </TextComponent>
+        {showNewCommunityMemberBadge && (
+          <NewCommunityMemberBadge testID={`${testID}.NewCommunityMemberBadge`} />
+        )}
+      </View>
     </Pressable>
   );
 };

@@ -4,11 +4,15 @@ import type {
   ApiObservationsSearchParams,
   ApiObservationsSearchResponse,
 } from "api/types";
-import { addSeconds, formatISO, parseISO } from "date-fns";
 import last from "lodash/last";
 
+interface DatePageParam {
+  date: string;
+  id: number;
+}
+
 interface ApiObservationsSearchParamsForInfiniteQuery extends ApiObservationsSearchParams {
-  pageParam: number | string | undefined | null;
+  pageParam: number | string | DatePageParam | undefined | null;
 }
 
 // Gets the next page param for Explore given the last page
@@ -34,27 +38,25 @@ function getNextPageParamForExplore(
   if ( !lastObs ) return null;
 
   // Datetime sorts need to use d1 / d2 or created_d1 / created_d2 to
-  // paginate results, so were storing a datetime from the last observation
+  // paginate results, so we're storing a datetime from the last observation
   // as the "page" and we'll use that to adjust the query when we perform
-  // it
+  // it. We also carry along the last observation's id as a tiebreaker
+  // (combined with id_below / id_above in addPageParamsForExplore) so
+  // pagination still makes forward progress when many observations share
+  // the exact same timestamp (e.g. bulk imports) instead of getting stuck
+  // re-requesting the same date boundary forever.
   if ( ["observed_on", "created_at"].includes( String( orderBy ) ) ) {
     const lastObsDate = orderBy === "observed_on"
       ? lastObs?.time_observed_at
       : lastObs?.created_at;
 
-    // If there are results but the last one doesn't have a datetime, we're
-    // also done... but this is probably impossible.
-    if ( !lastObsDate ) {
+    // If there are results but the last one doesn't have a datetime or id,
+    // we're also done... but this is probably impossible.
+    if ( !lastObsDate || lastObs.id == null ) {
       return null;
     }
 
-    const lastObsDateParsed = parseISO( lastObsDate );
-    // Adding / subtracting a second helps us not include this last
-    // observation on the next page of results
-    const newObsDate = addSeconds( lastObsDateParsed, params.order === "asc"
-      ? 1
-      : -1 );
-    return formatISO( newObsDate );
+    return { date: lastObsDate, id: lastObs.id };
   }
 
   // Any sort that isn't observed_on or created_at and isn't the default
@@ -83,23 +85,37 @@ function addPageParamsForExplore( params: ApiObservationsSearchParamsForInfinite
     // the georaphic bounds of the results so we can pan and zoom the map
     // to contain them
     newParams.return_bounds = true;
-  } else if ( newParams.order_by === "observed_on" && typeof ( pageParam ) === "string" ) {
-    // If we're ordering by date observed, we are "paginating" by date and
-    // getNextPageParam will have set the pageParam to a date string from
-    // the last obs in the previous page
+  } else if (
+    newParams.order_by === "observed_on"
+    && typeof ( pageParam ) === "object"
+    && pageParam
+  ) {
+    // If we're ordering by date observed, we are "paginating" by date
+    // (with the last observation's id as a tiebreaker, since many
+    // observations can share the same date) and getNextPageParam will
+    // have set the pageParam accordingly
     if ( params.order === "asc" ) {
-      newParams.d1 = pageParam;
+      newParams.d1 = pageParam.date;
+      newParams.id_above = pageParam.id;
     } else {
-      newParams.d2 = pageParam;
+      newParams.d2 = pageParam.date;
+      newParams.id_below = pageParam.id;
     }
-  } else if ( newParams.order_by === "created_at" && typeof ( pageParam ) === "string" ) {
-    // If we're ordering by date created, we are "paginating" by date and
-    // getNextPageParam will have set the pageParam to a date string from
-    // the last obs in the previous page
+  } else if (
+    newParams.order_by === "created_at"
+    && typeof ( pageParam ) === "object"
+    && pageParam
+  ) {
+    // If we're ordering by date created, we are "paginating" by date
+    // (with the last observation's id as a tiebreaker, since many
+    // observations can share the same date) and getNextPageParam will
+    // have set the pageParam accordingly
     if ( params.order === "asc" ) {
-      newParams.created_d1 = pageParam;
+      newParams.created_d1 = pageParam.date;
+      newParams.id_above = pageParam.id;
     } else {
-      newParams.created_d2 = pageParam;
+      newParams.created_d2 = pageParam.date;
+      newParams.id_below = pageParam.id;
     }
   } else if ( typeof ( newParams.order_by ) === "string" && typeof ( pageParam ) === "number" ) {
     // If this is any kind of sort other than the date sorts and isn't the

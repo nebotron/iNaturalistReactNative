@@ -1,5 +1,6 @@
 import type { Realm } from "@realm/react";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import { linkCropFeedbackUploadedUrlForPhoto } from "sharedHelpers/cropFeedbackLog";
 
 function findRecordInRealm(
   realm: Realm,
@@ -36,10 +37,17 @@ function updateRecordWithServerId(
   record: object,
   serverId: number,
   type: string,
+  responseResult?: {
+    url?: string;
+  },
 ): void {
   safeRealmWrite( realm, ( ) => {
     record.id = serverId;
     record._synced_at = new Date( );
+    if ( type === "Photo" && responseResult?.url ) {
+      record.url = responseResult.url;
+      linkCropFeedbackUploadedUrlForPhoto( record, responseResult.url );
+    }
     if ( type === "Observation" ) {
       record.needs_sync = false;
     }
@@ -55,6 +63,9 @@ function handleRecordUpdateError(
   serverId: number,
   options?: {
     record: object;
+    responseResult?: {
+      url?: string;
+    };
   },
 ): void {
   // Try it one more time in case it was invalidated but it's still in the
@@ -67,7 +78,7 @@ function handleRecordUpdateError(
         `Cannot find local Realm object on retry (${type}), recordUUID: ${recordUUID || ""}`,
       );
     }
-    updateRecordWithServerId( realm, refreshedRecord, serverId, type );
+    updateRecordWithServerId( realm, refreshedRecord, serverId, type, options?.responseResult );
   } else {
     // For other errors, just log and re-throw
     console.error( `Error updating record in Realm: ${error.message}` );
@@ -90,11 +101,14 @@ const markRecordUploaded = (
   realm: Realm,
   options?: {
     record: object;
+    responseResult?: {
+      url?: string;
+    };
   },
 ) => {
   if ( !realm || realm.isClosed ) return;
 
-  const { id } = response.results[0];
+  const { id, ...responseResult } = response.results[0];
 
   const record = findRecordInRealm( realm, observationUUID, recordUUID, type, options );
 
@@ -106,7 +120,7 @@ const markRecordUploaded = (
   }
 
   try {
-    updateRecordWithServerId( realm, record, id, type );
+    updateRecordWithServerId( realm, record, id, type, responseResult );
   } catch ( realmWriteError ) {
     handleRecordUpdateError(
       realmWriteError,

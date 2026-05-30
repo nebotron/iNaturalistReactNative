@@ -12,10 +12,7 @@ describe( "userPrepareStoreAndNavigate", ( ) => {
       ];
       const mockOnEachSuccess = jest.fn( );
       await savePhotosToPhotoLibrary( uris, mockOnEachSuccess );
-      // This should test that CameraRoll.save was called once for each of the
-      // uris AND that it was called in the order of the uris array
-      // https://jestjs.io/docs/mock-functions#custom-matchers
-      const cameraRollSaveFirstArgs = CameraRoll.save.mock.calls.map( args => args[0] );
+      const cameraRollSaveFirstArgs = CameraRoll.saveAsset.mock.calls.map( args => args[0] );
       expect( cameraRollSaveFirstArgs ).toEqual( uris );
     } );
   } );

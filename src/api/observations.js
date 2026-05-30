@@ -115,6 +115,14 @@ const markAsReviewed = async ( params: Object = {}, opts: Object = {} ): Promise
   }
 };
 
+const markAsUnreviewed = async ( params: Object = {}, opts: Object = {} ): Promise<?number> => {
+  try {
+    return await inatjs.observations.unreview( params, opts );
+  } catch ( e ) {
+    return handleError( e, { context: { functionName: "markAsUnreviewed", opts } } );
+  }
+};
+
 const markObservationUpdatesViewed = async (
   params: Object = {},
   opts: Object = {},
@@ -284,6 +292,7 @@ export {
   fetchSubscriptions,
   fetchUnviewedObservationUpdatesCount,
   markAsReviewed,
+  markAsUnreviewed,
   markObservationUpdatesViewed,
   searchObservations,
   unfaveObservation,

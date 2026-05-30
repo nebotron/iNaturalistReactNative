@@ -10,6 +10,7 @@ import {
   Heading1,
   Heading4,
   List2,
+  NewCommunityMemberBadge,
   OverviewCounts,
   ScrollViewWrapper,
   Subheading1,
@@ -21,6 +22,7 @@ import type { TabStackScreenProps } from "navigation/types";
 import React, { useState } from "react";
 import User from "realmModels/User";
 import { formatLongDate } from "sharedHelpers/dateAndTime";
+import { isNewCommunityMember } from "sharedHelpers/isNewCommunityMember";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
@@ -141,7 +143,12 @@ const UserProfile = ( ) => {
         testID={`UserProfile.${userId}`}
       >
         <UserIcon uri={User.uri( user )} large />
-        <Heading1 className="mt-3" selectable>{user?.login}</Heading1>
+        <View className="flex-row items-center mt-3">
+          <Heading1 selectable>{user?.login}</Heading1>
+          {isNewCommunityMember( user ) && (
+            <NewCommunityMemberBadge testID="UserProfile.NewCommunityMemberBadge" />
+          )}
+        </View>
         <Subheading1 className="mt-1">{user.name}</Subheading1>
         {( user?.roles || [] ).indexOf( "admin" ) >= 0 && (
           <Heading4 className="mt-1">

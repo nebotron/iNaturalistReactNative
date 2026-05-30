@@ -1,12 +1,17 @@
 import classNames from "classnames";
 import { IconicTaxonIcon } from "components/SharedComponents";
 import { FasterImageView, View } from "components/styledComponents";
-import React from "react";
+import React, { useCallback, useState } from "react";
+import type { LayoutChangeEvent } from "react-native";
+import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
+import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 
 interface Props {
+  autoDetectSubject?: boolean;
   iconicTaxonIconSize?: number;
   iconicTaxonName?: string;
   imageClassName?: string;
+  initialContainerSize?: number;
   isBackground?: boolean;
   opaque?: boolean;
   uri?: {
@@ -21,49 +26,96 @@ const CLASS_NAMES = [
 ] as const;
 
 const ObsImage = ( {
+  autoDetectSubject = false,
   iconicTaxonName,
   imageClassName,
+  initialContainerSize,
   isBackground = false,
   opaque = false,
   uri,
   white = false,
   iconicTaxonIconSize,
-}: Props ) => (
-  <View className={classNames( CLASS_NAMES, "relative" )}>
-    <View className="absolute w-full h-full">
-      <IconicTaxonIcon
-        imageClassName={[
-          ...CLASS_NAMES,
-          imageClassName,
-          {
-            "bg-darkGray": white && isBackground,
-            "bg-transparent": white && !isBackground,
-          },
-          "border-0",
-        ]}
-        iconicTaxonName={iconicTaxonName}
-        white={white}
-        isBackground={isBackground}
-        size={iconicTaxonIconSize}
-      />
+}: Props ) => {
+  const [containerSize, setContainerSize] = useState<number | null>(
+    initialContainerSize ?? null,
+  );
+
+  const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
+    setContainerSize( event.nativeEvent.layout.width );
+  }, [] );
+
+  const detection = useSubjectDetectionForUri(
+    autoDetectSubject && uri?.uri
+      ? uri.uri
+      : undefined,
+  );
+
+  const cropStyles = detection && containerSize
+    ? computeCropStyles(
+      detection.crop,
+      containerSize,
+      detection.imageWidth,
+      detection.imageHeight,
+    )
+    : null;
+
+  return (
+    <View
+      className={classNames( CLASS_NAMES, "relative overflow-hidden" )}
+      onLayout={autoDetectSubject
+        ? handleLayout
+        : undefined}
+    >
+      <View className="absolute w-full h-full">
+        <IconicTaxonIcon
+          imageClassName={[
+            ...CLASS_NAMES,
+            imageClassName,
+            {
+              "bg-darkGray": white && isBackground,
+              "bg-transparent": white && !isBackground,
+            },
+            "border-0",
+          ]}
+          iconicTaxonName={iconicTaxonName}
+          white={white}
+          isBackground={isBackground}
+          size={iconicTaxonIconSize}
+        />
+      </View>
+      { uri?.uri && !cropStyles && (
+        <FasterImageView
+          className={classNames( CLASS_NAMES )}
+          testID="ObsList.photo"
+          accessibilityIgnoresInvertColors
+          fadeDuration={0}
+          source={{
+            url: uri.uri,
+            cachePolicy: "discWithCacheControl",
+            resizeMode: "cover",
+          }}
+        />
+      ) }
+      { uri?.uri && cropStyles && (
+        <View style={cropStyles.wrapperStyle}>
+          <FasterImageView
+            testID="ObsList.photo"
+            accessibilityIgnoresInvertColors
+            fadeDuration={0}
+            style={cropStyles.imageStyle}
+            source={{
+              url: uri.uri,
+              cachePolicy: "discWithCacheControl",
+              resizeMode: "stretch",
+            }}
+          />
+        </View>
+      ) }
+      { opaque && (
+        <View className="absolute w-full h-full bg-white opacity-50" />
+      ) }
     </View>
-    { uri?.uri && (
-      <FasterImageView
-        className={classNames( CLASS_NAMES )}
-        testID="ObsList.photo"
-        accessibilityIgnoresInvertColors
-        fadeDuration={0}
-        source={{
-          url: uri.uri,
-          cachePolicy: "discWithCacheControl",
-          resizeMode: "cover",
-        }}
-      />
-    ) }
-    { opaque && (
-      <View className="absolute w-full h-full bg-white opacity-50" />
-    ) }
-  </View>
-);
+  );
+};
 
 export default ObsImage;
