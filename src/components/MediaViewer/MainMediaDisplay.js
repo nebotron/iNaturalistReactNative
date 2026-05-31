@@ -224,8 +224,7 @@ const MainMediaDisplay = ( {
     Gesture.Pan( )
       .runOnJS( true )
       .onUpdate( ( { translationY, velocityY } ) => {
-        if ( translationY > 50 && velocityY > 500 ) {
-          // Close media viewer on swipe up
+        if ( translationY > 150 && velocityY > 1000 ) {
           onClose( );
         }
       } ),
