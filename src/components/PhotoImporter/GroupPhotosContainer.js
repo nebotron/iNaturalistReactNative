@@ -239,9 +239,17 @@ const GroupPhotosContainer = ( ): Node => {
 
   const navBasedOnUserSettings = async ( ) => {
     setIsCreatingObservations( true );
-    const newObservations = await Promise.all( groupedPhotos.map(
-      group => createObservationFromGroupedMedia( group ),
-    ) );
+
+    // Process in batches to avoid spawning hundreds of concurrent native image
+    // resize operations (Photo.resizeImageForUpload) which exhausts resources
+    const BATCH_SIZE = 10;
+    const newObservations = [];
+    for ( let i = 0; i < groupedPhotos.length; i += BATCH_SIZE ) {
+      const batch = groupedPhotos.slice( i, i + BATCH_SIZE );
+      // eslint-disable-next-line no-await-in-loop
+      const batchResults = await Promise.all( batch.map( createObservationFromGroupedMedia ) );
+      newObservations.push( ...batchResults );
+    }
     setObservations( newObservations.map( ( newObs, idx ) => ( {
       ...( idx === 0
         ? firstObservationDefaults
