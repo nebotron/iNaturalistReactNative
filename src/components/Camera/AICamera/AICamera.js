@@ -55,6 +55,7 @@ type Props = {
   device: Object,
   flipCamera: Function,
   isLandscapeMode: boolean,
+  onCameraViewLayout?: ( layout: { width: number, height: number } ) => void,
   toggleFlash: Function,
   takingPhoto: boolean,
   takePhotoAndStoreUri: Function,
@@ -69,6 +70,7 @@ const AICamera = ( {
   device,
   flipCamera,
   isLandscapeMode,
+  onCameraViewLayout,
   toggleFlash,
   takingPhoto,
   takePhotoAndStoreUri,
@@ -238,7 +240,15 @@ const AICamera = ( {
   return (
     <>
       {device && (
-        <View className="w-full h-full absolute z-0">
+        <View
+          className="w-full h-full absolute z-0"
+          onLayout={event => {
+            if ( onCameraViewLayout ) {
+              const { width, height } = event.nativeEvent.layout;
+              onCameraViewLayout( { width, height } );
+            }
+          }}
+        >
           <FrameProcessorCamera
             cameraRef={camera}
             confidenceThreshold={confidenceThreshold}

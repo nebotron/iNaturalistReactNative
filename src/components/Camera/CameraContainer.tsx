@@ -29,6 +29,8 @@ import { FIREBASE_TRACE_ATTRIBUTES, FIREBASE_TRACES } from "stores/createFirebas
 import useStore from "stores/useStore";
 
 import CameraWithDevice from "./CameraWithDevice";
+import cropPhotoToViewport from "./helpers/cropPhotoToViewport";
+import type { ViewDimensions } from "./helpers/cropPhotoToViewport";
 import savePhotoToDocumentsDirectory from "./helpers/savePhotoToDocumentsDirectory";
 import usePrepareStoreAndNavigate from "./hooks/usePrepareStoreAndNavigate";
 
@@ -134,6 +136,11 @@ const CameraContainer = ( ) => {
   const addEvidence = params?.addEvidence;
 
   const camera = useRef<Camera>( null );
+  const cameraViewDimensionsRef = useRef<ViewDimensions | null>( null );
+
+  const onCameraViewLayout = useCallback( ( layout: ViewDimensions ) => {
+    cameraViewDimensionsRef.current = layout;
+  }, [] );
 
   useEffect( () => {
     const generateSentinelFile = async ( ) => {
@@ -245,7 +252,17 @@ const CameraContainer = ( ) => {
       await logStageIfAICamera( "take_photo_error" );
       throw new Error( "Failed to take photo: missing camera" );
     }
-    const uri = await savePhotoToDocumentsDirectory( cameraPhoto );
+    const savedUri = await savePhotoToDocumentsDirectory( cameraPhoto );
+    const viewDimensions = cameraViewDimensionsRef.current;
+    const uri = viewDimensions
+      ? await cropPhotoToViewport(
+        savedUri,
+        cameraPhoto.width,
+        cameraPhoto.height,
+        viewDimensions.width,
+        viewDimensions.height,
+      )
+      : savedUri;
     const newPhotoState = await updateTakePhotoStore( uri, options );
     if ( cameraType !== "AI" ) { setTakingPhoto( false ); }
     if ( options?.navigateImmediately ) {
@@ -310,6 +327,7 @@ const CameraContainer = ( ) => {
         flipCamera={flipCamera}
         handleCheckmarkPress={handleNavigation}
         confirmPhotosInProgress={confirmPhotosInProgress}
+        onCameraViewLayout={onCameraViewLayout}
         toggleFlash={toggleFlash}
         takingPhoto={takingPhoto}
         takePhotoAndStoreUri={takePhotoAndStoreUri}

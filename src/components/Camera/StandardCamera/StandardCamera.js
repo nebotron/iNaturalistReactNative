@@ -50,6 +50,7 @@ type Props = {
   handleCheckmarkPress: Function,
   confirmPhotosInProgress: boolean,
   isLandscapeMode: boolean,
+  onCameraViewLayout?: ( layout: { width: number, height: number } ) => void,
   toggleFlash: Function,
   takingPhoto: boolean,
   takePhotoAndStoreUri: Function,
@@ -65,6 +66,7 @@ const StandardCamera = ( {
   handleCheckmarkPress,
   confirmPhotosInProgress,
   isLandscapeMode,
+  onCameraViewLayout,
   toggleFlash,
   takingPhoto,
   takePhotoAndStoreUri,
@@ -226,7 +228,15 @@ const StandardCamera = ( {
           ? "box-only"
           : "auto"}
       >
-        <View className="relative flex-1">
+        <View
+          className="relative flex-1"
+          onLayout={event => {
+            if ( onCameraViewLayout ) {
+              const { width, height } = event.nativeEvent.layout;
+              onCameraViewLayout( { width, height } );
+            }
+          }}
+        >
           {device && (
             <CameraView
               animatedProps={animatedProps}
