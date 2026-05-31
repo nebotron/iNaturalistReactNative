@@ -39,8 +39,7 @@ import colors from "styles/tailwindColors";
 
 type Route = RouteProp<SharedStackParamList, "ImageCropEditor">;
 
-// Default squareShape uses framePadding 0.15 (70% of max). 0.045 → ~91% (~30% larger).
-const CROP_FRAME_PADDING = 0.045;
+const CROP_FRAME_PADDING = 0;
 
 const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
