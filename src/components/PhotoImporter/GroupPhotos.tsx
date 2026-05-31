@@ -4,7 +4,6 @@ import { MAX_PHOTOS_ALLOWED } from "components/Camera/StandardCamera/StandardCam
 import {
   Body2,
   Button,
-  ButtonBar,
   CustomFlashList,
   INatIcon,
   INatIconButton,
@@ -14,10 +13,13 @@ import { Pressable, View } from "components/styledComponents";
 import React, { useCallback, useMemo } from "react";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { useGridLayout, useTranslation } from "sharedHooks";
+import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
 import GroupPhotoImage from "./GroupPhotoImage";
 import flattenAndOrderSelectedPhotos from "./helpers/groupPhotoHelpers";
+
+const DROP_SHADOW = getShadow( { offsetHeight: -2 } );
 
 const emptyItemStyle = {
   borderWidth: 4,
@@ -203,78 +205,102 @@ const GroupPhotos = ( {
         renderItem={renderItem}
         testID="GroupPhotos.list"
       />
-      <ButtonBar
-        sticky
-        containerClass="items-center z-50 bg-white"
+      <View
+        className="absolute bottom-0 w-full bg-white z-50 items-center px-2 pt-2 pb-4"
+        style={DROP_SHADOW}
       >
         {groupedPhotos.length > 0 && (
-          <View className="flex-row justify-evenly w-[calc(100%+30px)] -mx-[15px]">
-            <INatIconButton
-              icon="check"
-              mode="contained"
-              size={20}
-              color={colors.white}
-              backgroundColor={colors.darkGray}
-              accessibilityLabel={
-                allPhotosSelected
-                  ? t( "Deselect-all-photos" )
-                  : t( "Select-all-photos" )
-              }
-              onPress={toggleSelectAll}
-              testID="GroupPhotos.selectAll"
-            />
-            <INatIconButton
-              icon="crop"
-              mode="contained"
-              size={20}
-              color={colors.white}
-              backgroundColor={colors.darkGray}
-              accessibilityLabel={t( "CROP-PHOTO" )}
-              disabled={!canCropSelectedPhotos}
-              onPress={cropSelectedPhotos}
-              testID="GroupPhotos.crop"
-            />
-            <INatIconButton
-              icon="combine"
-              mode="contained"
-              size={20}
-              color={colors.white}
-              backgroundColor={colors.darkGray}
-              accessibilityLabel={t( "Combine-Photos" )}
-              disabled={noObsSelected || oneObsSelected || selectedGroupsHaveMixedMedia}
-              onPress={combinePhotos}
-            />
-            <INatIconButton
-              icon="separate"
-              mode="contained"
-              size={20}
-              color={colors.white}
-              backgroundColor={colors.darkGray}
-              accessibilityLabel={t( "Separate-Photos" )}
-              disabled={!obsWithMultiplePhotosSelected}
-              onPress={separatePhotos}
-            />
-            <INatIconButton
-              icon="copy"
-              mode="contained"
-              size={20}
-              color={colors.white}
-              backgroundColor={colors.darkGray}
-              accessibilityLabel={t( "Duplicate-Photos" )}
-              disabled={!canDuplicateSelectedPhotos || isDuplicatingPhotos}
-              onPress={duplicatePhotos}
-              testID="GroupPhotos.duplicate"
-            />
-            <INatIconButton
-              icon="trash-outline"
-              mode="contained"
-              size={20}
-              color={colors.white}
-              backgroundColor={colors.warningRed}
-              accessibilityLabel={t( "Remove-Photos" )}
-              disabled={noObsSelected}
-              onPress={removePhotos}
-            />
+          <View className="flex-row w-full gap-2 mb-2">
+            <View className="flex-1 items-center">
+              <INatIconButton
+                icon="check"
+                mode="contained"
+                size={26}
+                width={58}
+                height={58}
+                color={colors.white}
+                backgroundColor={colors.darkGray}
+                accessibilityLabel={
+                  allPhotosSelected
+                    ? t( "Deselect-all-photos" )
+                    : t( "Select-all-photos" )
+                }
+                onPress={toggleSelectAll}
+                testID="GroupPhotos.selectAll"
+              />
+            </View>
+            <View className="flex-1 items-center">
+              <INatIconButton
+                icon="crop"
+                mode="contained"
+                size={26}
+                width={58}
+                height={58}
+                color={colors.white}
+                backgroundColor={colors.darkGray}
+                accessibilityLabel={t( "CROP-PHOTO" )}
+                disabled={!canCropSelectedPhotos}
+                onPress={cropSelectedPhotos}
+                testID="GroupPhotos.crop"
+              />
+            </View>
+            <View className="flex-1 items-center">
+              <INatIconButton
+                icon="combine"
+                mode="contained"
+                size={26}
+                width={58}
+                height={58}
+                color={colors.white}
+                backgroundColor={colors.darkGray}
+                accessibilityLabel={t( "Combine-Photos" )}
+                disabled={noObsSelected || oneObsSelected || selectedGroupsHaveMixedMedia}
+                onPress={combinePhotos}
+              />
+            </View>
+            <View className="flex-1 items-center">
+              <INatIconButton
+                icon="separate"
+                mode="contained"
+                size={26}
+                width={58}
+                height={58}
+                color={colors.white}
+                backgroundColor={colors.darkGray}
+                accessibilityLabel={t( "Separate-Photos" )}
+                disabled={!obsWithMultiplePhotosSelected}
+                onPress={separatePhotos}
+              />
+            </View>
+            <View className="flex-1 items-center">
+              <INatIconButton
+                icon="copy"
+                mode="contained"
+                size={26}
+                width={58}
+                height={58}
+                color={colors.white}
+                backgroundColor={colors.darkGray}
+                accessibilityLabel={t( "Duplicate-Photos" )}
+                disabled={!canDuplicateSelectedPhotos || isDuplicatingPhotos}
+                onPress={duplicatePhotos}
+                testID="GroupPhotos.duplicate"
+              />
+            </View>
+            <View className="flex-1 items-center">
+              <INatIconButton
+                icon="trash-outline"
+                mode="contained"
+                size={26}
+                width={58}
+                height={58}
+                color={colors.white}
+                backgroundColor={colors.warningRed}
+                accessibilityLabel={t( "Remove-Photos" )}
+                disabled={noObsSelected}
+                onPress={removePhotos}
+              />
+            </View>
           </View>
         )}
         <Button
@@ -285,7 +311,7 @@ const GroupPhotos = ( {
           testID="GroupPhotos.next"
           loading={isCreatingObservations}
         />
-      </ButtonBar>
+      </View>
     </ViewWrapper>
   );
 };
