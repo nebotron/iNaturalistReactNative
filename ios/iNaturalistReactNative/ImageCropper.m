@@ -218,6 +218,21 @@ RCT_EXPORT_METHOD( cropImage
     return;
   }
 
+  // The crop coordinates from JavaScript are in display-oriented space (matching
+  // UIImage.size, which accounts for EXIF rotation). CGImageCreateWithImageInRect
+  // operates on the raw CGImage pixel data, which has no rotation applied. For images
+  // with non-Up orientation (e.g. portrait photos stored as landscape + EXIF rotation),
+  // these two coordinate spaces differ. Redraw into a new context to produce a CGImage
+  // whose pixel dimensions and coordinate origin match UIImage.size.
+  UIImage *orientedImage = image;
+  if ( image.imageOrientation != UIImageOrientationUp ) {
+    UIGraphicsBeginImageContextWithOptions( image.size, NO, 1.0 );
+    [image drawInRect:CGRectMake( 0, 0, image.size.width, image.size.height )];
+    orientedImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+  }
+
+
   CGRect cropRect = CGRectMake(
     [originX integerValue],
     [originY integerValue],
@@ -225,7 +240,7 @@ RCT_EXPORT_METHOD( cropImage
     [height integerValue]
   );
 
-  CGImageRef croppedRef = CGImageCreateWithImageInRect( image.CGImage, cropRect );
+  CGImageRef croppedRef = CGImageCreateWithImageInRect( orientedImage.CGImage, cropRect );
   if ( croppedRef == NULL ) {
     reject( @"CROP_FAILED", @"Crop failed", nil );
     return;

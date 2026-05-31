@@ -2,6 +2,7 @@ package org.inaturalist.iNaturalistMobile
 
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
 import android.graphics.RectF
 import androidx.exifinterface.media.ExifInterface
 import com.facebook.react.bridge.Promise
@@ -31,6 +32,30 @@ class ImageCropperModule(
     ObjectDetection.getClient( options )
   }
 
+  // BitmapFactory.decodeFile returns raw pixel data without applying EXIF orientation.
+  // React Native's Image.getSize returns display-oriented dimensions (EXIF applied).
+  // This helper rotates the bitmap to match the display orientation so that crop
+  // coordinates computed in JavaScript map correctly onto the bitmap pixels.
+  private fun applyExifRotation( path: String, bitmap: Bitmap ): Bitmap {
+    val exif = try {
+      ExifInterface( path )
+    } catch ( _: Exception ) {
+      return bitmap
+    }
+    val degrees = when (
+      exif.getAttributeInt( ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL )
+    ) {
+      ExifInterface.ORIENTATION_ROTATE_90 -> 90f
+      ExifInterface.ORIENTATION_ROTATE_180 -> 180f
+      ExifInterface.ORIENTATION_ROTATE_270 -> 270f
+      else -> return bitmap
+    }
+    val matrix = Matrix()
+    matrix.postRotate( degrees )
+    return Bitmap.createBitmap( bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true )
+  }
+
+
   @ReactMethod
   fun detectSubjectBounds(
     inputPath: String,
@@ -39,11 +64,17 @@ class ImageCropperModule(
   ) {
     try {
       val normalizedInput = inputPath.replace( "file://", "" )
-      val bitmap = BitmapFactory.decodeFile( normalizedInput )
-      if ( bitmap == null ) {
+      val rawBitmap = BitmapFactory.decodeFile( normalizedInput )
+      if ( rawBitmap == null ) {
         promise.resolve( null )
         return
       }
+
+      val bitmap = applyExifRotation( normalizedInput, rawBitmap )
+      if ( bitmap != rawBitmap ) {
+        rawBitmap.recycle()
+      }
+
 
       val inputImage = InputImage.fromBitmap( bitmap, 0 )
       objectDetector.process( inputImage )
@@ -212,11 +243,20 @@ class ImageCropperModule(
     try {
       val normalizedInput = inputPath.replace( "file://", "" )
       val normalizedOutput = outputPath.replace( "file://", "" )
-      val bitmap = BitmapFactory.decodeFile( normalizedInput )
-      if ( bitmap == null ) {
+      val rawBitmap = BitmapFactory.decodeFile( normalizedInput )
+      if ( rawBitmap == null ) {
         promise.reject( "CROP_FAILED", "Could not decode image" )
         return
       }
+
+      // Rotate to display orientation so the crop coordinates from JavaScript
+      // (which use display-oriented dimensions from React Native's Image.getSize)
+      // align with the bitmap pixels.
+      val bitmap = applyExifRotation( normalizedInput, rawBitmap )
+      if ( bitmap != rawBitmap ) {
+        rawBitmap.recycle()
+      }
+
 
       val ox = originX.coerceIn( 0, bitmap.width - 1 )
       val oy = originY.coerceIn( 0, bitmap.height - 1 )
