@@ -105,21 +105,9 @@ export const resolveDevicePhotoUriForRemovedObservationPhoto = (
 };
 
 export const deleteDevicePhotosRemovedDuringObservationPrep = (
-  photoUris: ( string | null | undefined )[],
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _photoUris: ( string | null | undefined )[],
 ): void => {
-  const uniqueUris = [...new Set(
-    photoUris
-      .map( uri => normalizeDevicePhotoUri( uri ) )
-      .filter( ( uri ): uri is string => !!uri ),
-  )];
-  if ( uniqueUris.length === 0 ) {
-    return;
-  }
-
-  // Require at call time so tests can mock deletion
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const promptDeleteOriginalDevicePhotos = require(
-    "sharedHelpers/promptDeleteOriginalDevicePhotos",
-  ).default;
-  promptDeleteOriginalDevicePhotos( uniqueUris, ( ) => { } );
+  // No-op: deletions are batched and performed by the caller at import time
+  // to avoid per-photo iOS confirmation dialogs.
 };
