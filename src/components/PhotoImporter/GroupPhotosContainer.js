@@ -7,13 +7,12 @@ import { duplicateGroupedMediaGroups } from
 import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
-import {
-  deleteDevicePhotosRemovedDuringObservationPrep,
-  resolveDevicePhotoUriFromGroupedPhoto,
-} from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import { t } from "i18next";
 import type { Node } from "react";
 import React, { useEffect, useMemo, useState } from "react";
+import {
+  resolveDevicePhotoUriFromGroupedPhoto,
+} from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import { useLayoutPrefs } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -36,6 +35,7 @@ const GroupPhotosContainer = ( ): Node => {
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
   const [isDuplicatingPhotos, setIsDuplicatingPhotos] = useState( false );
+  const [pendingDeletionUris, setPendingDeletionUris] = useState( [] );
 
   const selectedObservations = useMemo(
     ( ) => selectedIndices
@@ -211,9 +211,12 @@ const GroupPhotosContainer = ( ): Node => {
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
     const orderedVideos = flattenAndOrderSelectedVideos( selectedObservations );
 
-    deleteDevicePhotosRemovedDuringObservationPrep(
-      orderedPhotos.map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) ),
-    );
+    const urisToDelete = orderedPhotos
+      .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
+      .filter( Boolean );
+    if ( urisToDelete.length > 0 ) {
+      setPendingDeletionUris( prev => [...new Set( [...prev, ...urisToDelete] )] );
+    }
 
     groupedPhotos.forEach( obs => {
       const filteredGroupedPhotos = obs.photos?.filter(
@@ -247,31 +250,44 @@ const GroupPhotosContainer = ( ): Node => {
       ...newObs,
     } ) ) );
     setIsCreatingObservations( false );
-    if ( newObservations.length === 1 ) {
-      const onlyObservation = newObservations[0];
-      if ( onlyObservation.observationSounds?.length ) {
-        return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
-      }
 
-      if ( isDefaultMode ) {
+    const navigateToNextScreen = ( ) => {
+      if ( newObservations.length === 1 ) {
+        const onlyObservation = newObservations[0];
+        if ( onlyObservation.observationSounds?.length ) {
+          return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
+        }
+
+        if ( isDefaultMode ) {
+          return navigation.navigate( "NoBottomTabStackNavigator", {
+            screen: "Match",
+            params: {
+              entryScreen: "GroupPhotos",
+              lastScreen: "GroupPhotos",
+            },
+          } );
+        }
+
         return navigation.navigate( "NoBottomTabStackNavigator", {
-          screen: "Match",
+          screen: screenAfterPhotoEvidence,
           params: {
             entryScreen: "GroupPhotos",
             lastScreen: "GroupPhotos",
           },
         } );
       }
+      return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
+    };
 
-      return navigation.navigate( "NoBottomTabStackNavigator", {
-        screen: screenAfterPhotoEvidence,
-        params: {
-          entryScreen: "GroupPhotos",
-          lastScreen: "GroupPhotos",
-        },
-      } );
+    if ( pendingDeletionUris.length > 0 ) {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const promptDeleteOriginalDevicePhotos = require(
+        "sharedHelpers/promptDeleteOriginalDevicePhotos",
+      ).default;
+      promptDeleteOriginalDevicePhotos( pendingDeletionUris, navigateToNextScreen );
+    } else {
+      navigateToNextScreen( );
     }
-    return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
   };
 
   return (
