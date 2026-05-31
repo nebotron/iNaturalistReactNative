@@ -19,6 +19,7 @@ import ObservationSound from "realmModels/ObservationSound";
 import Photo from "realmModels/Photo";
 import { log } from "sharedHelpers/logger";
 import { useAuthenticatedMutation } from "sharedHooks";
+import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -49,6 +50,7 @@ const EvidenceList = ( {
   const savingPhoto = useStore( state => state.savingPhoto );
   const realm = useRealm( );
   const { t } = useTranslation( );
+  const { trackImageDeleted } = useInputImageTracking( );
   const [selectedMediaUri, setSelectedMediaUri]: [string | null, Function] = useState( null );
   const [deleting, setDeleting] = useState( false );
   const imageClass = "h-16 w-16 justify-center mx-1.5 rounded-lg";
@@ -176,8 +178,9 @@ const EvidenceList = ( {
   const onDeletePhoto = useCallback( async uriToDelete => {
     await ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
     deletePhotoFromObservation( uriToDelete );
+    trackImageDeleted( uriToDelete );
     afterMediaDeleted( );
-  }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation] );
+  }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation, trackImageDeleted] );
 
   const onDeleteSound = useCallback( async uriToDelete => {
     const obsSound = observationSounds.find( os => os.sound.file_url === uriToDelete );

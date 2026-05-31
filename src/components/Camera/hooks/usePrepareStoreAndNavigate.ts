@@ -8,6 +8,7 @@ import Observation from "realmModels/Observation";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import { log } from "sharedHelpers/logger";
 import {
+  useInputImageTracking,
   useLayoutPrefs,
 } from "sharedHooks";
 import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
@@ -35,6 +36,7 @@ const usePrepareStoreAndNavigate = ( ) => {
   const setCameraState = useStore( state => state.setCameraState );
   const setSentinelFileName = useStore( state => state.setSentinelFileName );
   const { screenAfterPhotoEvidence, isDefaultMode } = useLayoutPrefs( );
+  const { trackImageLoaded } = useInputImageTracking( );
 
   const { deviceStorageFull, showStorageFullAlert } = useDeviceStorageFull( );
 
@@ -94,6 +96,7 @@ const usePrepareStoreAndNavigate = ( ) => {
         position: 0,
         local: true,
       } );
+    uris.forEach( ( uri: string ) => trackImageLoaded( uri, "camera" ) );
     if ( !isDefaultMode
         && screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.OBS_EDIT
         && visionResult ) {
@@ -110,6 +113,7 @@ const usePrepareStoreAndNavigate = ( ) => {
     screenAfterPhotoEvidence,
     setObservations,
     handleSavingToPhotoLibrary,
+    trackImageLoaded,
   ] );
 
   const updateObsWithCameraPhotos = useCallback( async (
@@ -123,6 +127,7 @@ const usePrepareStoreAndNavigate = ( ) => {
         local: true,
       },
     );
+    evidenceToAdd.forEach( ( uri: string ) => trackImageLoaded( uri, "camera" ) );
     const updatedCurrentObservation = Observation
       .appendObsPhotos( obsPhotos, currentObservation );
 
@@ -142,6 +147,7 @@ const usePrepareStoreAndNavigate = ( ) => {
     currentObservationIndex,
     updateObservations,
     handleSavingToPhotoLibrary,
+    trackImageLoaded,
   ] );
 
   const prepareStoreAndNavigate = useCallback( async ( {

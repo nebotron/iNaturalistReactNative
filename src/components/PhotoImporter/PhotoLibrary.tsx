@@ -23,7 +23,7 @@ import ObservationPhoto from "realmModels/ObservationPhoto";
 import fetchPlaceName from "sharedHelpers/fetchPlaceName";
 import { log } from "sharedHelpers/logger";
 import { sleep } from "sharedHelpers/util";
-import { useLayoutPrefs } from "sharedHooks";
+import { useInputImageTracking, useLayoutPrefs } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
 
@@ -40,6 +40,7 @@ const PhotoLibrary = ( ) => {
   const {
     screenAfterPhotoEvidence, isDefaultMode,
   } = useLayoutPrefs( );
+  const { trackImageLoaded } = useInputImageTracking( );
   const navigation = useNavigation<NoBottomTabStackScreenProps<"PhotoLibrary">["navigation"]>();
   const { params } = useRoute<NoBottomTabStackScreenProps<"PhotoLibrary">["route"]>();
 
@@ -203,6 +204,12 @@ const PhotoLibrary = ( ) => {
       const selectedTmpDirectoryImages = response.assets.map( x => ( { image: x } ) );
       const selectedImages = await moveImagesToDocumentsDirectory( selectedTmpDirectoryImages );
 
+      selectedImages.forEach( ( { image } ) => {
+        if ( image.uri ) {
+          trackImageLoaded( image.uri, "photoLibrary" );
+        }
+      } );
+
       if ( fromGroupPhotos ) {
         // This screen was called from the plus button of the group photos screen - get back to it
         // after adding the newly selected photos
@@ -296,6 +303,7 @@ const PhotoLibrary = ( ) => {
     setGroupedPhotos,
     setPhotoImporterState,
     skipGroupPhotos,
+    trackImageLoaded,
     updateObservations,
     fromAICamera,
   ] );
