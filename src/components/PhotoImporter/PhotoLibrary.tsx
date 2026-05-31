@@ -32,7 +32,7 @@ import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalD
 import { log } from "sharedHelpers/logger";
 import { populateObservationTaxonFromFirstPhoto } from "sharedHelpers/predictTopTaxonFromPhoto";
 import { sleep } from "sharedHelpers/util";
-import { useLayoutPrefs } from "sharedHooks";
+import { useInputImageTracking, useLayoutPrefs } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
 
@@ -71,6 +71,7 @@ const PhotoLibrary = ( ) => {
   const numOfObsPhotos: number = currentObservation?.observationPhotos?.length || 0;
   const exitObservationFlow = useExitObservationFlow( );
   const realm = useRealm( );
+  const { trackImageLoaded } = useInputImageTracking( );
 
   const skipGroupPhotos = params
     ? params.skipGroupPhotos
@@ -275,6 +276,11 @@ const PhotoLibrary = ( ) => {
             deviceUri: photo.originalDevicePhotoUri,
           } ) ),
         );
+        selectedPhotos.forEach( ( { image } ) => {
+          if ( image.uri ) {
+            trackImageLoaded( image.uri, "photoLibrary" );
+          }
+        } );
       }
       const selectedVideos = videoAssets.length > 0
         ? await moveImagesToDocumentsDirectory( videoAssets.map( image => ( { image } ) ) )
@@ -371,6 +377,7 @@ const PhotoLibrary = ( ) => {
     setGroupedPhotos,
     setPhotoImporterState,
     skipGroupPhotos,
+    trackImageLoaded,
     updateObservations,
   ] );
 
