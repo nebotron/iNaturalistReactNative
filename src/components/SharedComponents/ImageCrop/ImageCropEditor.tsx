@@ -32,6 +32,7 @@ import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -45,6 +46,7 @@ const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
   const { t } = useTranslation( );
+  const { trackImageCropped, trackImageDeleted } = useInputImageTracking( );
   const currentObservation = useStore( state => state.currentObservation );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
@@ -246,6 +248,7 @@ const ImageCropEditor = ( ) => {
       if ( uriToDelete ) {
         void ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
         deletePhotoFromObservation( uriToDelete );
+        trackImageDeleted( uriToDelete );
       }
       onCropSaved?.( );
       navigation.goBack( );
@@ -263,6 +266,7 @@ const ImageCropEditor = ( ) => {
     observationPhotoUuid,
     onCropSaved,
     setGroupedPhotos,
+    trackImageDeleted,
   ] );
 
   const handleConfirm = useCallback( ( crop: NormalizedCrop ) => {
@@ -342,6 +346,10 @@ const ImageCropEditor = ( ) => {
         recordCropFeedback( feedbackSourceKey, { crop, kept: true } );
       }
 
+      if ( imageUri ) {
+        trackImageCropped( imageUri, crop );
+      }
+
       finishOrAdvance( );
     } )( ).catch( ( ) => {
       Alert.alert( t( "Something-went-wrong" ) );
@@ -358,6 +366,7 @@ const ImageCropEditor = ( ) => {
     observationPhotoUuid,
     setGroupedPhotos,
     t,
+    trackImageCropped,
     updateObservationKeys,
   ] );
 

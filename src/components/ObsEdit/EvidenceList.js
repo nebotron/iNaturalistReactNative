@@ -24,6 +24,7 @@ import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
 import { useAuthenticatedMutation } from "sharedHooks";
+import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -55,6 +56,7 @@ const EvidenceList = ( {
   const savingPhoto = useStore( state => state.savingPhoto );
   const realm = useRealm( );
   const { t } = useTranslation( );
+  const { trackImageDeleted } = useInputImageTracking( );
   const [selectedMediaUri, setSelectedMediaUri]: [string | null, Function] = useState( null );
   const [deleting, setDeleting] = useState( false );
   const imageClass = "h-16 w-16 justify-center mx-1.5 rounded-lg";
@@ -214,8 +216,9 @@ const EvidenceList = ( {
   const onDeletePhoto = useCallback( async uriToDelete => {
     await ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
     deletePhotoFromObservation( uriToDelete );
+    trackImageDeleted( uriToDelete );
     afterMediaDeleted( uriToDelete );
-  }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation] );
+  }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation, trackImageDeleted] );
 
   const onCropPhoto = useCallback( photo => {
     const cropUri = Photo.displayCropSourcePhoto( photo );
