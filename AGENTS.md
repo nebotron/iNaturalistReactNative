@@ -1,4 +1,3 @@
-- When you finish a task, commit them with an informative message on the current branch, and `git push fork`.
-- Always also push your changes as a new commit on the `develop-squash` branch when you are done with a task.
+- When you finish a task, commit them with an informative message on branch develop-squash, and `git push fork`.
 - Keep your changes as concise as possible. If any change turns out to be unnecessary to acheive the task at hand, revert it.
-- Once you are done with all requests, and there are no follow-ups, deploy the changes with `npm run ios:release`. Debug any failures.
+- Once you are done with all requests, and there are no follow-ups, deploy the changes with `npr`. Debug any failures. Never silence the output of this command.
