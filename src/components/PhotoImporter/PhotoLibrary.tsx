@@ -138,7 +138,7 @@ const PhotoLibrary = ( ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
 
-    const movedImages = await Promise.all( selectedImages.map( async ( { image } ) => {
+    const moveImage = async ( { image }: { image: Asset } ) => {
       const { fileName, uri } = image;
       if ( !fileName ) {
         throw new Error( "No fileName in pick photo response" );
@@ -167,7 +167,17 @@ const PhotoLibrary = ( ) => {
             : destPath,
         },
       };
-    } ) );
+    };
+
+    // Process in batches to avoid exhausting file descriptors with large selections
+    const BATCH_SIZE = 10;
+    const movedImages = [];
+    for ( let i = 0; i < selectedImages.length; i += BATCH_SIZE ) {
+      const batch = selectedImages.slice( i, i + BATCH_SIZE );
+      // eslint-disable-next-line no-await-in-loop
+      const batchResults = await Promise.all( batch.map( moveImage ) );
+      movedImages.push( ...batchResults );
+    }
     return movedImages;
   };
 
