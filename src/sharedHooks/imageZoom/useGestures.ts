@@ -349,7 +349,7 @@ export const useGestures = ( {
         bottomLimit,
       } = getPanClampLimits( );
 
-      if ( scale.value > 1 && isDoubleTapEnabled ) {
+      if ( !cropPanContext && scale.value > 1 && isDoubleTapEnabled ) {
         translate.x.value = withDecay(
           {
             velocity: event.velocityX,
@@ -411,7 +411,7 @@ export const useGestures = ( {
         bottomLimit,
       } = getPanClampLimits( );
 
-      if ( scale.value > 1 && isDoubleTapEnabled ) {
+      if ( !cropPanContext && scale.value > 1 && isDoubleTapEnabled ) {
         translate.x.value = withDecay(
           {
             velocity: event.velocityX,
