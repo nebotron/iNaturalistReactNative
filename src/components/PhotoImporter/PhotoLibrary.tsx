@@ -71,7 +71,7 @@ const PhotoLibrary = ( ) => {
   const numOfObsPhotos: number = currentObservation?.observationPhotos?.length || 0;
   const exitObservationFlow = useExitObservationFlow( );
   const realm = useRealm( );
-  const { trackImageLoaded } = useInputImageTracking( );
+  const { trackImagesLoaded } = useInputImageTracking( );
 
   const skipGroupPhotos = params
     ? params.skipGroupPhotos
@@ -286,11 +286,10 @@ const PhotoLibrary = ( ) => {
             deviceUri: photo.originalDevicePhotoUri,
           } ) ),
         );
-        selectedPhotos.forEach( ( { image } ) => {
-          if ( image.uri ) {
-            trackImageLoaded( image.uri, "photoLibrary" );
-          }
-        } );
+        trackImagesLoaded(
+          selectedPhotos.map( ( { image } ) => image.uri ).filter( Boolean ) as string[],
+          "photoLibrary",
+        );
       }
       const selectedVideos = videoAssets.length > 0
         ? await moveImagesToDocumentsDirectory( videoAssets.map( image => ( { image } ) ) )
@@ -387,7 +386,7 @@ const PhotoLibrary = ( ) => {
     setGroupedPhotos,
     setPhotoImporterState,
     skipGroupPhotos,
-    trackImageLoaded,
+    trackImagesLoaded,
     updateObservations,
   ] );
 
