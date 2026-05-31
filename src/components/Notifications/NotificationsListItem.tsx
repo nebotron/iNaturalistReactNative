@@ -2,7 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import classnames from "classnames";
 import ObsNotification from "components/Notifications/ObsNotification";
 import { Pressable, View } from "components/styledComponents";
-import React from "react";
+import React, { useState } from "react";
 import { useLayoutPrefs } from "sharedHooks";
 import type { Notification } from "sharedHooks/useInfiniteNotificationsScroll";
 import { OBS_DETAILS_TAB } from "stores/createLayoutSlice";
@@ -14,7 +14,8 @@ interface Props {
 const NotificationsListItem = ( { notification }: Props ) => {
   const { setObsDetailsTab } = useLayoutPrefs( );
   const navigation = useNavigation( );
-  const viewedStatus = notification.viewed;
+  const [localViewed, setLocalViewed] = useState( notification.viewed );
+  const viewedStatus = localViewed;
 
   return (
     <Pressable
@@ -28,6 +29,7 @@ const NotificationsListItem = ( { notification }: Props ) => {
         },
       )}
       onPress={( ) => {
+        setLocalViewed( true );
         setObsDetailsTab( OBS_DETAILS_TAB.ACTIVITY );
         navigation.push( "ObsDetails", {
           uuid: notification.resource_uuid,
