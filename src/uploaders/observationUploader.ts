@@ -18,6 +18,7 @@ import {
   uploadObservationMedia,
 } from "uploaders/mediaUploader";
 import { RecoverableError, RECOVERY_BY } from "uploaders/utils/errorHandling";
+import withRetry from "uploaders/utils/retry";
 import { trackObservationUpload } from "uploaders/utils/progressTracker";
 import { attachUploadFailureDetails } from "uploaders/utils/uploadFailureDetails";
 
@@ -69,13 +70,13 @@ async function createOrUpdateObservation(
   };
 
   if ( wasPreviouslySynced ) {
-    return updateObservation( {
+    return withRetry( () => updateObservation( {
       ...uploadParams,
       id: newObs.uuid,
       ignore_photos: true,
-    }, options );
+    }, options ) );
   }
-  return createObservation( uploadParams, options );
+  return withRetry( () => createObservation( uploadParams, options ) );
 }
 
 function createErrorContext( stage: string, startTime: number ) {
