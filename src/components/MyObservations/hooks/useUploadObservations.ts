@@ -108,12 +108,21 @@ export default ( canUpload: boolean ) => {
   const uploadObservationAndCatchError = useCallback( async ( observation: RealmObservation ) => {
     const { uuid } = observation;
     setCurrentUpload( observation );
+
+    // Use a per-observation controller for the timeout so that one slow/failed
+    // observation doesn't abort the shared controller and kill the rest of the batch.
+    const perObsController = new AbortController( );
+    const onGlobalAbort = ( ) => perObsController.abort( );
+    abortController?.signal.addEventListener( "abort", onGlobalAbort );
+
+    // eslint-disable-next-line no-undef
+    let timeoutID: ReturnType<typeof setTimeout> | undefined;
+
     try {
-      const timeoutID = setTimeout( ( ) => {
-        abortController.abort( );
+      timeoutID = setTimeout( ( ) => {
+        perObsController.abort( );
       }, MS_BEFORE_UPLOAD_TIMES_OUT );
-      await uploadObservation( observation, realm, { signal: abortController.signal } );
-      clearTimeout( timeoutID );
+      await uploadObservation( observation, realm, { signal: perObsController.signal } );
     } catch ( uploadErr ) {
       const uploadError = uploadErr as Error;
       if ( uploadError.name === "AbortError" ) {
@@ -139,6 +148,8 @@ export default ( canUpload: boolean ) => {
         }
       }
     } finally {
+      clearTimeout( timeoutID );
+      abortController?.signal.removeEventListener( "abort", onGlobalAbort );
       removeFromUploadQueue( );
       if (
         uploadQueue.length === 0
