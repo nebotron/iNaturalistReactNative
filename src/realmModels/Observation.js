@@ -600,7 +600,9 @@ class Observation extends Realm.Object {
     const missingDate = !Date.parse( this.observed_on_string ) && !this.time_observed_at;
     const missingCoords = typeof ( this.latitude ) !== "number"
       && typeof ( this.privateLatitude ) !== "number";
-    return missingDate || missingCoords;
+    const missingEvidence = ( this.observationPhotos?.length ?? 0 ) === 0
+      && ( this.observationSounds?.length ?? 0 ) === 0;
+    return missingDate || missingCoords || missingEvidence;
   }
 }
 
