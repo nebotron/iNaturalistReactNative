@@ -40,6 +40,38 @@ const useInputImageTracking = ( ) => {
     [realm],
   );
 
+  const trackImagesLoaded = useCallback(
+    (
+      originalUris: string[],
+      source: "camera" | "photoLibrary",
+    ) => {
+      if ( originalUris.length === 0 ) return;
+      try {
+        const loadedAt = new Date( );
+        realm.write( ( ) => {
+          originalUris.forEach( originalUri => {
+            realm.create( "InputImageRecord", {
+              uuid: uuid.v4( ),
+              originalUri,
+              fileName: getFileName( originalUri ),
+              source,
+              loadedAt,
+              wasDeleted: false,
+              wasCropped: false,
+              cropX: null,
+              cropY: null,
+              cropW: null,
+              cropH: null,
+            } );
+          } );
+        } );
+      } catch ( _e ) {
+        // Don't let tracking errors affect the main image flow
+      }
+    },
+    [realm],
+  );
+
   const trackImageDeleted = useCallback( ( uri: string ) => {
     try {
       const fileName = getFileName( uri );
@@ -117,6 +149,7 @@ const useInputImageTracking = ( ) => {
 
   return {
     trackImageLoaded,
+    trackImagesLoaded,
     trackImageDeleted,
     trackImageCropped,
     getAllImageMetadata,
