@@ -623,17 +623,12 @@ IGNORE-LOCATION = IGNORE LOCATION
 # Button to stop recieving notifications about observation
 Ignore-notifications = Ignore notifications
 Ignoring-location = Ignoring location
-Import = Import
+Import-Photos-From = Import Photos From
 # Shows the number of observations a user is about to import
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
         [one] 1 OBSERVATION
        *[other] { $count } OBSERVATIONS
-    }
-Import-x-photos =
-    { $count ->
-        [one] Import 1 Photo
-       *[other] Import { $count } Photos
     }
 # Title of screen asking for permission to access location
 Improve-suggestions-by-using-your-location = Improve suggestions by using your location
@@ -842,7 +837,6 @@ No-Location = No Location
 No-Media = No Media
 # As in a machine learning model that powers automated suggestions
 No-model-found = No model found
-No-photos-found = No photos found
 No-projects-match-that-search = No projects match that search
 # Used for explore screen when search params lead to a search with no data
 No-results-found-for-that-search = No results found for that search.
@@ -959,11 +953,6 @@ PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
 Photo-importer = Photo importer
-Photo-library-selection-limit =
-    You can select up to { $count ->
-        [one] 1 item
-       *[other] { $count } items
-    }
 PHOTO-LICENSING = PHOTO LICENSING
 Photos = Photos
 Photos-you-take-will-appear-here = Photos you take will appear here
@@ -991,7 +980,6 @@ Press-and-hold-to-view-more-options = Press and hold to view more options
 Previous-observation = Previous observation
 # Accessibility label for a button that goes to the previous slide on onboarding cards
 Previous-slide = Previous slide
-Previously-selected-for-upload = Previously selected for upload
 Privacy-Policy = Privacy Policy
 PRIVACY-POLICY = PRIVACY POLICY
 Private = Private
@@ -1338,7 +1326,6 @@ This-user-is-not-following-anyone = This user is not following anyone.
 To-sync-your-observations-to-iNaturalist = To sync your observations to iNaturalist, please log in.
 To-view-nearby-organisms-please-enable-location = To view nearby organisms, please enable location.
 To-view-nearby-projects-please-enable-location = To view nearby projects, please enable location.
-Today = Today
 Toggle-map-type = Toggle map type
 TOP-ID-SUGGESTION = TOP ID SUGGESTION
 Traditional-Project = Traditional Project
@@ -1594,7 +1581,6 @@ x-uploads-failed =
         [one] { $count } upload failed
        *[other] { $count } uploads failed
     }
-Yesterday = Yesterday
 You-are-offline = You are offline
 You-are-offline-Tap-to-reload = You are offline. Tap to reload.
 You-are-offline-Tap-to-try-again = You are offline. Tap to try again.
