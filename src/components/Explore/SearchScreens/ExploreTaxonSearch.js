@@ -14,7 +14,7 @@ import {
   TaxonSearch,
   ViewWrapper,
 } from "components/SharedComponents";
-import { View } from "components/styledComponents";
+import { ScrollView, View } from "components/styledComponents";
 import type { Node } from "react";
 import React, {
   useCallback,
@@ -122,16 +122,25 @@ const ExploreTaxonSearch = ( {
         testID="ExploreTaxonSearch.close"
       />
       {selectedFilters.length > 0 && (
-        <View className="px-4 pb-4 bg-white">
+        <ScrollView
+          className="px-4 bg-white"
+          style={{ maxHeight: 200 }}
+          keyboardShouldPersistTaps="handled"
+        >
           {selectedFilters.map( filter => (
             <View
               key={`selected-taxon-${filter.taxon.id}-${filter.exclude}`}
               className="flex-row items-center justify-between mb-3"
             >
               <DisplayTaxon
+                handlePress={() => setSelectedFilters(
+                  current => toggleTaxonFilter(
+                    current,
+                    filter.taxon,
+                    !filter.exclude,
+                  ),
+                )}
                 taxon={filter.taxon}
-                showInfoButton={false}
-                showCheckmark={false}
               />
               <View className="flex-row items-center">
                 <Button
@@ -161,7 +170,8 @@ const ExploreTaxonSearch = ( {
               </View>
             </View>
           ) )}
-        </View>
+          <View className="h-4" />
+        </ScrollView>
       )}
       <ButtonBar
         buttonConfiguration={modeButtons}
