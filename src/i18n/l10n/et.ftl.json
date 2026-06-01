@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "IGNOREERI ASUKOHTA",
   "Ignore-notifications": "Ignoreeri teavitusi",
   "Ignoring-location": "Ignoreerin asukohta",
-  "Import-Photos-From": "Impordi fotosid:",
   "IMPORT-X-OBSERVATIONS": "IMPORDI { $count ->\n  [one] 1 VAATLUS\n *[other] { $count } VAATLUST\n}",
   "Improve-suggestions-by-using-your-location": "Paranda oma asukohta kasutades soovitusi",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "PARANDA OMA ASUKOHTA KASUTADES NEID SOOVITUSI",

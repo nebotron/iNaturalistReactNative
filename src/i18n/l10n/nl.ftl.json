@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "NEGEER LOCATIE",
   "Ignore-notifications": "Meldingen uitschakelen",
   "Ignoring-location": "Locatie negeren",
-  "Import-Photos-From": "Foto's importeren van",
   "IMPORT-X-OBSERVATIONS": "IMPORTEER { $count ->\n  [one] 1 WAARNEMING\n *[other] { $count } WAARNEMINGEN\n}",
   "Improve-suggestions-by-using-your-location": "Verbeter suggesties door het gebruik van jouw locatie",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "VERBETER DEZE SUGGESTIONS DOOR JE LOCATIE TE GEBRUIKEN",

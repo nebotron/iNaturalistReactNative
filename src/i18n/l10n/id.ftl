@@ -368,7 +368,6 @@ If-youre-seeing-this-error = Jika Anda melihat pesan ini dan Anda sedang aktif, 
 IGNORE-LOCATION = ABAIKAN LOKASI
 Ignore-notifications = Abaikan pemberitahuan
 Ignoring-location = Mengabaikan lokasi
-Import-Photos-From = Impor Gambar Dari
 IMPORT-X-OBSERVATIONS =
     IMPOR { $count ->
         [one] 1 PENGAMATAN

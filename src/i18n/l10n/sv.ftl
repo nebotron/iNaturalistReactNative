@@ -374,7 +374,6 @@ If-youre-seeing-this-error = Om du ser detta och du är online har iNat-personal
 IGNORE-LOCATION = BORTSE FRÅN PLATS
 Ignore-notifications = Stäng av aviseringar
 Ignoring-location = Ignorerar plats
-Import-Photos-From = Importera bilder från
 IMPORT-X-OBSERVATIONS =
     IMPORTERA { $count ->
         [one] 1 FYND

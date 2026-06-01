@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "IGNOROVAT LOKALITU",
   "Ignore-notifications": "Ignorovat oznámení",
   "Ignoring-location": "Ignorování polohy",
-  "Import-Photos-From": "Importovat fotografie z",
   "IMPORT-X-OBSERVATIONS": "IMPORT { $count ->\n  [one] 1 POZOROVÁNÍ\n *[other] { $count } POZOROVÁNÍ\n}",
   "Improve-suggestions-by-using-your-location": "Vylepšování návrhů pomocí vaší polohy",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "VYLEPŠETE TYTO NÁVRHY POUŽITÍM VAŠÍ POLOHY",

@@ -374,7 +374,6 @@ If-youre-seeing-this-error = Als je dit ziet en online bent, is het iNat persone
 IGNORE-LOCATION = NEGEER LOCATIE
 Ignore-notifications = Meldingen uitschakelen
 Ignoring-location = Locatie negeren
-Import-Photos-From = Foto's importeren van
 IMPORT-X-OBSERVATIONS =
     IMPORTEER { $count ->
         [one] 1 WAARNEMING

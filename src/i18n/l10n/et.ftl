@@ -368,7 +368,6 @@ If-youre-seeing-this-error = Kui sa seda näed ja sul on võrgu ühendus, on sel
 IGNORE-LOCATION = IGNOREERI ASUKOHTA
 Ignore-notifications = Ignoreeri teavitusi
 Ignoring-location = Ignoreerin asukohta
-Import-Photos-From = Impordi fotosid:
 IMPORT-X-OBSERVATIONS =
     IMPORDI { $count ->
         [one] 1 VAATLUS

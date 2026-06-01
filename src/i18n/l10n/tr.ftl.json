@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "KONUMU YOKSAY",
   "Ignore-notifications": "Bildirimleri yoksay",
   "Ignoring-location": "Konumu yoksayma",
-  "Import-Photos-From": "Fotoğrafları Şuradan İçe Aktar:",
   "IMPORT-X-OBSERVATIONS": "{ $count ->\n  [one] 1 GÖZLEMİ\n *[other] { $count } GÖZLEMİ\n} İÇE AKTAR",
   "Improve-suggestions-by-using-your-location": "Konumunuzu kullanarak önerileri iyileştirin",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "KONUMUNUZU KULLANARAK BU ÖNERİLERİ İYİLEŞTİRİN",

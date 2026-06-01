@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "ABAIKAN LOKASI",
   "Ignore-notifications": "Abaikan pemberitahuan",
   "Ignoring-location": "Mengabaikan lokasi",
-  "Import-Photos-From": "Impor Gambar Dari",
   "IMPORT-X-OBSERVATIONS": "IMPOR { $count ->\n  [one] 1 PENGAMATAN\n *[other] { $count } PENGAMATAN\n}",
   "Improve-suggestions-by-using-your-location": "Tingkatkan kualitas saran dengan menggunakan lokasi Anda",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "TINGKATKAN KUALITAS REKOMENDASI INI DENGAN MENGGUNAKAN LOKASI ANDA",

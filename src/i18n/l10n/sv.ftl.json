@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "BORTSE FRÅN PLATS",
   "Ignore-notifications": "Stäng av aviseringar",
   "Ignoring-location": "Ignorerar plats",
-  "Import-Photos-From": "Importera bilder från",
   "IMPORT-X-OBSERVATIONS": "IMPORTERA { $count ->\n  [one] 1 FYND\n *[other] { $count } FYND\n}",
   "Improve-suggestions-by-using-your-location": "Förbättra förslagen med hjälp av din plats",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "FÖRBÄTTREA DESSA FÖRSLAG GENOM ATT ANVÄNDA DIN PLATS",

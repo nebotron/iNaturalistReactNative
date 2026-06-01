@@ -373,7 +373,6 @@ If-youre-seeing-this-error =
 IGNORE-LOCATION = 場所を無視
 Ignore-notifications = 通知を無視
 Ignoring-location = 場所を無視
-Import-Photos-From = 写真のインポート
 IMPORT-X-OBSERVATIONS =
     インポート { $count ->
         [one] の観察記録を破棄
