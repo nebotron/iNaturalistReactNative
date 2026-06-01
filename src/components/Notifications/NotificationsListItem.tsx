@@ -44,6 +44,7 @@ const NotificationsListItem = ( { notification }: Props ) => {
       )}
       onPress={( ) => {
         setLocalViewed( true );
+        setObservationMarkedAsViewedAt( new Date( ) );
         if ( !notification.viewed ) {
           markViewed( { id: notification.resource_uuid } );
         }
