@@ -114,7 +114,7 @@ const ObsDetails = ( {
     <View className="flex-1 flex-row bg-white">
       <View className="relative w-[33%]">
         <ObsMediaDisplayContainer observation={observation} tablet />
-        {currentUser && !belongsToCurrentUser && (
+        {currentUser && (
           <FaveButton
             observation={observation}
             currentUser={currentUser}
@@ -187,7 +187,7 @@ const ObsDetails = ( {
         >
           <View className="relative">
             <ObsMediaDisplayContainer observation={observation} />
-            { currentUser && !belongsToCurrentUser && (
+            { currentUser && (
               <FaveButton
                 observation={observation}
                 currentUser={currentUser}
