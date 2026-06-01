@@ -1,8 +1,4 @@
-import { mkdir, moveFile, TemporaryDirectoryPath } from "@dr.pogodin/react-native-fs";
-import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
-import {
-  photoLibraryPhotosPath,
-} from "appConstants/paths";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDetails";
 import {
   appendPhotosAndVideoSoundsToObservation,
@@ -10,31 +6,29 @@ import {
   createObservationWithVideoSounds,
   partitionAssetsByMediaType,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
-import { ActivityAnimation, ViewWrapper } from "components/SharedComponents";
-import { t } from "i18next";
 import type { NoBottomTabStackScreenProps } from "navigation/types";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
-  useState,
 } from "react";
 import {
-  InteractionManager,
   Platform,
-  View,
 } from "react-native";
 import type { Asset } from "react-native-image-picker";
-import { launchImageLibrary } from "react-native-image-picker";
 import Observation from "realmModels/Observation";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import fetchPlaceName from "sharedHelpers/fetchPlaceName";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 import { populateObservationTaxonFromFirstPhoto } from "sharedHelpers/predictTopTaxonFromPhoto";
-import { sleep } from "sharedHelpers/util";
 import { useInputImageTracking, useLayoutPrefs } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
+
+import CustomPhotoLibrary from "./CustomPhotoLibrary/CustomPhotoLibrary";
+import {
+  copyCameraRollAssetsToDocumentsDirectory,
+} from "./CustomPhotoLibrary/helpers/copyCameraRollAssetsToDocumentsDirectory";
 
 const logger = log.extend( "PhotoLibrary" );
 
@@ -54,7 +48,6 @@ const PhotoLibrary = ( ) => {
   const navigation = useNavigation<NoBottomTabStackScreenProps<"PhotoLibrary">["navigation"]>();
   const { params } = useRoute<NoBottomTabStackScreenProps<"PhotoLibrary">["route"]>();
 
-  const [photoLibraryShown, setPhotoLibraryShown] = useState( false );
   const setPhotoImporterState = useStore( state => state.setPhotoImporterState );
   const addOriginalDevicePhotoUris = useStore( state => state.addOriginalDevicePhotoUris );
   const addImportedPhotoDeviceUriMappings = useStore(
@@ -123,7 +116,6 @@ const PhotoLibrary = ( ) => {
     } else {
       exitObservationFlow( );
     }
-    setPhotoLibraryShown( false );
   }, [
     exitObservationFlow,
     fromGroupPhotos,
@@ -132,54 +124,6 @@ const PhotoLibrary = ( ) => {
     params,
     skipGroupPhotos,
   ] );
-
-  const moveImagesToDocumentsDirectory = async ( selectedImages:
-    { image: Asset }[] ) => {
-    const path = photoLibraryPhotosPath;
-    await mkdir( path );
-
-    const moveImage = async ( { image }: { image: Asset } ) => {
-      const { fileName, uri } = image;
-      if ( !fileName ) {
-        throw new Error( "No fileName in pick photo response" );
-      }
-      const destPath = `${path}/${fileName}`;
-      const getSourcePath = Platform.select( {
-        ios: ( ) => `${TemporaryDirectoryPath}/${fileName}`,
-        // Get image from uri on android. TemporaryDirectoryPath results in an ANR.
-        android: ( ) => {
-          if ( !uri ) {
-            throw new Error( "No URI in pick photo response" );
-          }
-          return uri;
-        },
-        default: ( ) => {
-          throw new Error( `Unsupported platform for moving picked photo: ${Platform.OS}` );
-        },
-      } );
-
-      await moveFile( getSourcePath(), destPath );
-      return {
-        image: {
-          ...image,
-          uri: Platform.OS === "ios"
-            ? `file://${destPath}`
-            : destPath,
-        },
-      };
-    };
-
-    // Process in batches to avoid exhausting file descriptors with large selections
-    const BATCH_SIZE = 10;
-    const movedImages = [];
-    for ( let i = 0; i < selectedImages.length; i += BATCH_SIZE ) {
-      const batch = selectedImages.slice( i, i + BATCH_SIZE );
-      // eslint-disable-next-line no-await-in-loop
-      const batchResults = await Promise.all( batch.map( moveImage ) );
-      movedImages.push( ...batchResults );
-    }
-    return movedImages;
-  };
 
   const buildMovedVideos = useCallback( (
     selectedVideos: { image: Asset }[],
@@ -217,65 +161,19 @@ const PhotoLibrary = ( ) => {
     } else {
       navToObsEdit( );
     }
-    setPhotoLibraryShown( false );
   }, [navBasedOnUserSettings, navToObsEdit, realm, setPhotoImporterState] );
 
-  const showPhotoLibrary = useCallback( async () => {
-    if ( photoLibraryShown ) {
-      return;
-    }
-
-    setPhotoLibraryShown( true );
-
-    if ( Platform.OS === "ios" ) {
-      // iOS has annoying transition of the screen - that if we don't wait enough time,
-      // the launchImageLibrary would halt and not return (and not showing any image picker)
-      await sleep( 500 );
-    }
-
-    let response;
+  const handleConfirm = useCallback( async ( assets: Asset[] ) => {
     try {
-      response = await launchImageLibrary( {
-        selectionLimit: fromAICamera
-          ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
-          : MAX_PHOTOS_ALLOWED,
-        mediaType: fromAICamera
-          ? "photo"
-          : "mixed",
-        includeBase64: false,
-        includeExtra: !fromAICamera,
-        // forceOldAndroidPhotoPicker is necessary because the "new" picker strips key EXIF data
-        forceOldAndroidPhotoPicker: true,
-        chooserTitle: t( "Import-Photos-From" ),
-        presentationStyle: "overFullScreen",
-      } );
-    } catch ( launchError ) {
-      logger.error( "launchImageLibrary threw unexpectedly", launchError );
-      setPhotoLibraryShown( false );
-      exitObservationFlow( );
-      return;
-    }
-
-    if ( !response || response.didCancel || !response.assets || response.errorCode ) {
-      if ( response?.errorCode ) {
-        logger.error(
-          `import from photo library error: ${response.errorCode}: ${response.errorMessage}`,
-        );
-      }
-
-      handleSelectionCancelled();
-      return;
-    }
-
-    try {
-      const { photoAssets, videoAssets } = partitionAssetsByMediaType( response.assets );
+      const { photoAssets, videoAssets } = partitionAssetsByMediaType( assets );
       addOriginalDevicePhotoUris(
-        getOriginalDevicePhotoUrisFromAssets( response.assets ),
+        getOriginalDevicePhotoUrisFromAssets( assets ),
       );
 
-      const movedPhotos = photoAssets.length > 0
-        ? await moveImagesToDocumentsDirectory( photoAssets.map( image => ( { image } ) ) )
+      const copiedPhotoAssets = photoAssets.length > 0
+        ? await copyCameraRollAssetsToDocumentsDirectory( photoAssets )
         : [];
+      const movedPhotos = copiedPhotoAssets.map( image => ( { image } ) );
       const selectedPhotos = movedPhotos.length > 0
         ? markDuplicatePhotosFromLibrary( realm, movedPhotos, photoAssets )
         : [];
@@ -291,10 +189,14 @@ const PhotoLibrary = ( ) => {
           "photoLibrary",
         );
       }
-      const selectedVideos = videoAssets.length > 0
-        ? await moveImagesToDocumentsDirectory( videoAssets.map( image => ( { image } ) ) )
+
+      const copiedVideoAssets = videoAssets.length > 0
+        ? await copyCameraRollAssetsToDocumentsDirectory( videoAssets )
         : [];
-      const movedVideos = buildMovedVideos( selectedVideos, videoAssets );
+      const movedVideos = buildMovedVideos(
+        copiedVideoAssets.map( image => ( { image } ) ),
+        videoAssets,
+      );
       const hasPhotos = selectedPhotos.length > 0;
       const hasVideos = movedVideos.length > 0;
 
@@ -305,7 +207,6 @@ const PhotoLibrary = ( ) => {
         ] );
         navigation.setParams( { fromGroupPhotos: false } );
         navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
-        setPhotoLibraryShown( false );
         return;
       }
 
@@ -330,7 +231,6 @@ const PhotoLibrary = ( ) => {
         updateObservations( updatedObservations );
 
         navToObsEdit();
-        setPhotoLibraryShown( false );
         return;
       }
 
@@ -357,10 +257,8 @@ const PhotoLibrary = ( ) => {
       } );
       navigation.setParams( { fromGroupPhotos: false } );
       navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
-      setPhotoLibraryShown( false );
     } catch ( error ) {
       logger.error( "Error importing photos from library", error );
-      setPhotoLibraryShown( false );
       exitObservationFlow( );
     }
   }, [
@@ -372,15 +270,12 @@ const PhotoLibrary = ( ) => {
     evidenceToAdd,
     exitObservationFlow,
     finalizeNewObservation,
-    fromAICamera,
     fromGroupPhotos,
     groupedPhotos,
-    handleSelectionCancelled,
     navToObsEdit,
     navigation,
     numOfObsPhotos,
     observations,
-    photoLibraryShown,
     photoLibraryUris,
     realm,
     setGroupedPhotos,
@@ -390,30 +285,17 @@ const PhotoLibrary = ( ) => {
     updateObservations,
   ] );
 
-  useFocusEffect(
-    React.useCallback( () => {
-      let interactionHandle = null;
-
-      interactionHandle = InteractionManager.runAfterInteractions( () => {
-        if ( !photoLibraryShown ) {
-          showPhotoLibrary();
-        }
-      } );
-
-      return () => {
-        if ( interactionHandle ) {
-          interactionHandle.cancel();
-        }
-      };
-    }, [photoLibraryShown, showPhotoLibrary] ),
-  );
-
   return (
-    <ViewWrapper testID="PhotoLibrary">
-      <View className="flex-1 w-full h-full justify-center items-center">
-        <ActivityAnimation />
-      </View>
-    </ViewWrapper>
+    <CustomPhotoLibrary
+      assetType={fromAICamera
+        ? "photo"
+        : "mixed"}
+      maxSelection={fromAICamera
+        ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
+        : MAX_PHOTOS_ALLOWED}
+      onCancel={handleSelectionCancelled}
+      onConfirm={handleConfirm}
+    />
   );
 };
 
