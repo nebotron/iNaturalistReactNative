@@ -96,24 +96,13 @@ inatjs.taxa.search.mockResolvedValue( makeResponse( [mockIconicTaxon] ) );
 inatjs.announcements.search.mockResolvedValue( makeResponse( ) );
 inatjs.observations.updates.mockResolvedValue( makeResponse( ) );
 
-// the following two mocks are both needed for react-native-keep-awake
-jest.mock( "@sayem314/react-native-keep-awake" );
-jest.mock( "react-native-background-actions", () => ( {
-  __esModule: true,
-  default: {
-    isRunning: jest.fn( () => false ),
-    start: jest.fn( () => Promise.resolve( ) ),
-    stop: jest.fn( () => Promise.resolve( ) ),
-  },
-} ) );
 jest.mock( "react-native/Libraries/TurboModule/TurboModuleRegistry", () => {
   const turboModuleRegistry = jest
     .requireActual( "react-native/Libraries/TurboModule/TurboModuleRegistry" );
   return {
     ...turboModuleRegistry,
     getEnforcing: name => {
-      // List of TurboModules libraries to mock.
-      const modulesToMock = ["ReactNativeKCKeepAwake", "FileReaderModule"];
+      const modulesToMock = ["FileReaderModule"];
       if ( modulesToMock.includes( name ) ) {
         return null;
       }

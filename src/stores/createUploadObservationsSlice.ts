@@ -1,4 +1,3 @@
-import { activateKeepAwake, deactivateKeepAwake } from "@sayem314/react-native-keep-awake";
 import remove from "lodash/remove";
 import type { RealmObservation } from "realmModels/types";
 import type { StateCreator } from "zustand";
@@ -130,7 +129,6 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
     multiError: error,
   } ) ),
   stopAllUploads: ( ) => {
-    deactivateKeepAwake( );
     const { abortController } = get( );
     abortController?.abort();
 
@@ -157,16 +155,12 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
   // resetting the state, as there might still be observations to upload
   setCannotUploadObservations: ( ) => set( { uploadStatus: UPLOAD_PENDING } ),
   // Sets the state to start uploading observations
-  setStartUploadObservations: ( ) => {
-    activateKeepAwake( );
-    return set( {
-      // Make a new abort controller for this upload session
-      abortController: new AbortController( ),
-      uploadStatus: UPLOAD_IN_PROGRESS,
-    } );
-  },
+  setStartUploadObservations: ( ) => set( {
+    // Make a new abort controller for this upload session
+    abortController: new AbortController( ),
+    uploadStatus: UPLOAD_IN_PROGRESS,
+  } ),
   completeUploads: ( ) => {
-    deactivateKeepAwake( );
     set( { uploadStatus: UPLOAD_COMPLETE } );
   },
   updateTotalUploadProgress: ( uuid: string, increment: number ) => set( state => {

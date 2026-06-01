@@ -1,17 +1,3 @@
-jest.mock( "react-native-background-actions", ( ) => ( {
-  __esModule: true,
-  default: {
-    isRunning: jest.fn( ( ) => false ),
-    start: jest.fn( ( ) => Promise.resolve( ) ),
-    stop: jest.fn( ( ) => Promise.resolve( ) ),
-  },
-} ) );
-
-jest.mock( "i18next", ( ) => ( {
-  t: jest.fn( key => key ),
-} ) );
-
-import BackgroundService from "react-native-background-actions";
 import {
   beginBackgroundUploadTask,
   endBackgroundUploadTask,
@@ -19,51 +5,41 @@ import {
 } from "sharedHelpers/backgroundExecution";
 
 describe( "backgroundExecution", ( ) => {
-  beforeEach( ( ) => {
-    jest.clearAllMocks( );
-    BackgroundService.isRunning.mockReturnValue( false );
+  beforeEach( async ( ) => {
+    await endBackgroundUploadTask( );
   } );
 
-  it( "reports whether the background upload task is running", ( ) => {
-    BackgroundService.isRunning.mockReturnValue( true );
+  it( "reports that the background upload task is not running initially", ( ) => {
+    expect( isBackgroundUploadTaskRunning( ) ).toBe( false );
+  } );
+
+  it( "starts the background upload task", async ( ) => {
+    const started = await beginBackgroundUploadTask( );
+
+    expect( started ).toBe( true );
     expect( isBackgroundUploadTaskRunning( ) ).toBe( true );
   } );
 
-  it( "starts the background upload task when it is not already running", async ( ) => {
-    const started = await beginBackgroundUploadTask( );
+  it( "does not restart the background upload task when it is already running", async ( ) => {
+    await beginBackgroundUploadTask( );
 
-    expect( started ).toBe( true );
-    expect( BackgroundService.start ).toHaveBeenCalledTimes( 1 );
-  } );
+    const startedAgain = await beginBackgroundUploadTask( );
 
-  it( "does not start the background upload task when it is already running", async ( ) => {
-    BackgroundService.isRunning.mockReturnValue( true );
-
-    const started = await beginBackgroundUploadTask( );
-
-    expect( started ).toBe( true );
-    expect( BackgroundService.start ).not.toHaveBeenCalled( );
-  } );
-
-  it( "returns false when starting the background upload task fails", async ( ) => {
-    BackgroundService.start.mockRejectedValueOnce( new Error( "start failed" ) );
-
-    const started = await beginBackgroundUploadTask( );
-
-    expect( started ).toBe( false );
+    expect( startedAgain ).toBe( true );
+    expect( isBackgroundUploadTaskRunning( ) ).toBe( true );
   } );
 
   it( "stops the background upload task when it is running", async ( ) => {
-    BackgroundService.isRunning.mockReturnValue( true );
+    await beginBackgroundUploadTask( );
 
     await endBackgroundUploadTask( );
 
-    expect( BackgroundService.stop ).toHaveBeenCalledTimes( 1 );
+    expect( isBackgroundUploadTaskRunning( ) ).toBe( false );
   } );
 
-  it( "does not stop the background upload task when it is not running", async ( ) => {
+  it( "does not fail when stopping the background upload task that is not running", async ( ) => {
     await endBackgroundUploadTask( );
 
-    expect( BackgroundService.stop ).not.toHaveBeenCalled( );
+    expect( isBackgroundUploadTaskRunning( ) ).toBe( false );
   } );
 } );
