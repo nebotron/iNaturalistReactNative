@@ -368,7 +368,6 @@ If-youre-seeing-this-error = Ak sa vám táto správa zobrazuje a ste online, za
 IGNORE-LOCATION = IGNOROVAŤ LOKALITU
 Ignore-notifications = Ignorovať oznámenia
 Ignoring-location = Ignorovanie polohy
-Import-Photos-From = Importovať fotografie z
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
         [one] 1 POZOROVANIE

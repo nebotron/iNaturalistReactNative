@@ -368,7 +368,6 @@ If-youre-seeing-this-error = Wenn du dies siehst und online bist, wurden die iNa
 IGNORE-LOCATION = STANDORT IGNORIEREN
 Ignore-notifications = Benachrichtigungen ignorieren
 Ignoring-location = Standort ignorieren
-Import-Photos-From = Fotos importieren von
 IMPORT-X-OBSERVATIONS =
     { $count ->
         [one] 1 BEOBACHTUNG

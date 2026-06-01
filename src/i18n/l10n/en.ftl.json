@@ -355,7 +355,6 @@
   "Ignore-notifications": "Ignore notifications",
   "Ignoring-location": "Ignoring location",
   "Import": "Import",
-  "Import-Photos-From": "Import Photos From",
   "IMPORT-X-OBSERVATIONS": "IMPORT { $count ->\n  [one] 1 OBSERVATION\n *[other] { $count } OBSERVATIONS\n}",
   "Import-x-photos": "{ $count ->\n  [one] Import 1 Photo\n *[other] Import { $count } Photos\n}",
   "Improve-suggestions-by-using-your-location": "Improve suggestions by using your location",

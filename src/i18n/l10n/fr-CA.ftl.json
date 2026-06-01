@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "IGNORER L'EMPLACEMENT",
   "Ignore-notifications": "Ignorer les notifications",
   "Ignoring-location": "Ignorer la localisation",
-  "Import-Photos-From": "Importer les photos depuis",
   "IMPORT-X-OBSERVATIONS": "IMPORTER { $count ->\n  [one] 1 OBSERVATION\n *[other] { $count } OBSERVATIONS\n}",
   "Improve-suggestions-by-using-your-location": "Améliorez les suggestions en utilisant votre position",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "AMÉLIORER CES SUGGESTIONS EN UTILISANT VOTRE POSITION",
