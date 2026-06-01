@@ -31,6 +31,7 @@ const GroupPhotosContainer = ( ): Node => {
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
+  const pendingGroupPhotoDeletionUris = useStore( state => state.pendingGroupPhotoDeletionUris );
 
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
@@ -298,12 +299,15 @@ const GroupPhotosContainer = ( ): Node => {
       return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
     };
 
-    if ( pendingDeletionUris.length > 0 ) {
+    const allPendingUris = [
+      ...new Set( [...pendingDeletionUris, ...pendingGroupPhotoDeletionUris] ),
+    ];
+    if ( allPendingUris.length > 0 ) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const promptDeleteOriginalDevicePhotos = require(
         "sharedHelpers/promptDeleteOriginalDevicePhotos",
       ).default;
-      promptDeleteOriginalDevicePhotos( pendingDeletionUris, navigateToNextScreen );
+      promptDeleteOriginalDevicePhotos( allPendingUris, navigateToNextScreen );
     } else {
       navigateToNextScreen( );
     }
