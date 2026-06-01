@@ -19,7 +19,7 @@ import React, {
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
-import { useLayoutPrefs } from "sharedHooks";
+import { useGridLayout, useLayoutPrefs } from "sharedHooks";
 import useStore from "stores/useStore";
 
 import GroupPhotos from "./GroupPhotos";
@@ -43,6 +43,8 @@ const GroupPhotosContainer = ( ): Node => {
   const {
     screenAfterPhotoEvidence, isDefaultMode,
   } = useLayoutPrefs( );
+  const { gridItemStyle } = useGridLayout( undefined, "fullWidth" );
+  const itemHeight = gridItemStyle.height;
   const setObservations = useStore( state => state.setObservations );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
@@ -70,7 +72,12 @@ const GroupPhotosContainer = ( ): Node => {
   const flashListRef = useRef( null );
   const firstVisibleItemUri = useRef( null );
   const firstVisibleItemIndex = useRef( null );
-  const pendingScrollIndex = useRef( null );
+  const pendingScrollOffset = useRef( null );
+  const scrollOffset = useRef( 0 );
+
+  const onScroll = useCallback( event => {
+    scrollOffset.current = event.nativeEvent.contentOffset.y;
+  }, [] );
 
   const onViewableItemsChanged = useCallback( ( { viewableItems } ) => {
     const firstVisible = viewableItems.find( vi => vi.item?.photos );
@@ -82,11 +89,11 @@ const GroupPhotosContainer = ( ): Node => {
 
   useEffect( ( ) => {
     let timer;
-    if ( pendingScrollIndex.current !== null ) {
-      const index = pendingScrollIndex.current;
-      pendingScrollIndex.current = null;
+    if ( pendingScrollOffset.current !== null ) {
+      const offset = pendingScrollOffset.current;
+      pendingScrollOffset.current = null;
       timer = setTimeout( ( ) => {
-        flashListRef.current?.scrollToIndex( { index, animated: false } );
+        flashListRef.current?.scrollToOffset( { offset, animated: false } );
       }, 0 );
     }
     return ( ) => clearTimeout( timer );
@@ -127,6 +134,13 @@ const GroupPhotosContainer = ( ): Node => {
       setSelectedIndices( prev => prev.filter( selectedIndex => selectedIndex !== index ) );
     }
   };
+
+  const setPendingScrollOffset = useCallback( ( targetIndex ) => {
+    if ( targetIndex === null ) return;
+    const oldIndex = firstVisibleItemIndex.current ?? targetIndex;
+    const delta = targetIndex - oldIndex;
+    pendingScrollOffset.current = Math.max( 0, scrollOffset.current + delta * itemHeight );
+  }, [itemHeight] );
 
   const combinePhotos = () => {
     if ( selectedObservations.length < 2 ) {
@@ -178,14 +192,11 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
-    const targetIndex = findScrollTargetIndex(
+    setPendingScrollOffset( findScrollTargetIndex(
       newObsList,
       firstVisibleItemUri.current,
       firstVisibleItemIndex.current,
-    );
-    if ( targetIndex !== null ) {
-      pendingScrollIndex.current = targetIndex;
-    }
+    ) );
     setGroupedPhotos( newObsList );
     setSelectedIndices( [] );
   };
@@ -229,14 +240,11 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
-    const targetIndex = findScrollTargetIndex(
+    setPendingScrollOffset( findScrollTargetIndex(
       separatedItems,
       firstVisibleItemUri.current,
       firstVisibleItemIndex.current,
-    );
-    if ( targetIndex !== null ) {
-      pendingScrollIndex.current = targetIndex;
-    }
+    ) );
     setGroupedPhotos( separatedItems );
     setSelectedIndices( [] );
   };
@@ -303,14 +311,11 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
-    const targetIndex = findScrollTargetIndex(
+    setPendingScrollOffset( findScrollTargetIndex(
       removedFromGroup,
       firstVisibleItemUri.current,
       firstVisibleItemIndex.current,
-    );
-    if ( targetIndex !== null ) {
-      pendingScrollIndex.current = targetIndex;
-    }
+    ) );
     setGroupedPhotos( removedFromGroup );
     setSelectedIndices( [] );
   };
@@ -389,6 +394,7 @@ const GroupPhotosContainer = ( ): Node => {
       isCreatingObservations={isCreatingObservations}
       isDuplicatingPhotos={isDuplicatingPhotos}
       navBasedOnUserSettings={navBasedOnUserSettings}
+      onScroll={onScroll}
       onViewableItemsChanged={onViewableItemsChanged}
       removePhotos={removePhotos}
       selectedMediaCount={selectedMediaCount}
