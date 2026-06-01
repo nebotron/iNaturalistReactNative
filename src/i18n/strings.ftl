@@ -632,7 +632,6 @@ IGNORE-LOCATION = IGNORE LOCATION
 Ignore-notifications = Ignore notifications
 Ignoring-location = Ignoring location
 Import = Import
-Import-Photos-From = Import Photos From
 # Shows the number of observations a user is about to import
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->

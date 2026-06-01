@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "התעלם ממיקום",
   "Ignore-notifications": "התעלמות מהודעות",
   "Ignoring-location": "מתעלם ממיקום",
-  "Import-Photos-From": "ייבוא תמונות מ",
   "IMPORT-X-OBSERVATIONS": "ייבוא { $count ->\n  [one] 1 תצפית\n *[other] { $count } תצפיות\n}",
   "Improve-suggestions-by-using-your-location": "שיפור ההצעות באמצעות המיקום שלך",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "שפרו הצעות אלה באמצעות המיקום שלכם",

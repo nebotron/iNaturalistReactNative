@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "ΑΓΝΟΗΣΗ ΤΟΠΟΘΕΣΙΑΣ",
   "Ignore-notifications": "Παράβλεψη ειδοποιήσεων",
   "Ignoring-location": "Παράβλεψη τοποθεσίας",
-  "Import-Photos-From": "Εισαγωγή φωτογραφιών από",
   "IMPORT-X-OBSERVATIONS": "IMPORT { $count ->\n  [one] 1 OBSERVATION\n *[other] { $count } OBSERVATIONS\n}",
   "Improve-suggestions-by-using-your-location": "Βελτιώστε τις προτάσεις χρησιμοποιώντας την τοποθεσία σας",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "ΒΕΛΤΙΏΣΤΕ ΑΥΤΈΣ ΤΙΣ ΠΡΟΤΆΣΕΙΣ ΧΡΗΣΙΜΟΠΟΙΏΝΤΑΣ ΤΗΝ ΤΟΠΟΘΕΣΊΑ ΣΑΣ",

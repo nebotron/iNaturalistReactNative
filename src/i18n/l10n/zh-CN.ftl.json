@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "忽略位置",
   "Ignore-notifications": "忽略通知",
   "Ignoring-location": "忽略位置",
-  "Import-Photos-From": "导入照片自",
   "IMPORT-X-OBSERVATIONS": "导入{ $count ->\n  [one] 1个观察\n *[other] { $count }个观察\n}",
   "Improve-suggestions-by-using-your-location": "使用您的位置信息改进建议",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "通过使用您的位置来改善鉴定建议",

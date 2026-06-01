@@ -371,7 +371,6 @@ If-youre-seeing-this-error = Если вы видите это и находит
 IGNORE-LOCATION = ИГНОРИРОВАТЬ МЕСТОПОЛОЖЕНИЕ
 Ignore-notifications = Игнорировать уведомления
 Ignoring-location = Не учитывать местоположение
-Import-Photos-From = Импорт фотографий из
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
         [one] 1 OBSERVATION

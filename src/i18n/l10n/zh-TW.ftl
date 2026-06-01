@@ -368,7 +368,6 @@ If-youre-seeing-this-error = 如果您看到此訊息並處於連線狀態，我
 IGNORE-LOCATION = 忽略位置
 Ignore-notifications = 忽略通知
 Ignoring-location = 忽略位置
-Import-Photos-From = 匯入照片自
 IMPORT-X-OBSERVATIONS =
     匯入 { $count ->
         [one] 一筆觀察紀錄
