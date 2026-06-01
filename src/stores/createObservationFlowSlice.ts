@@ -8,13 +8,12 @@ import Photo from "realmModels/Photo";
 import Sound from "realmModels/Sound";
 import type { RealmObservation, RealmObservationPojo } from "realmModels/types";
 import {
+  resolveDevicePhotoUriForRemovedObservationPhoto,
+} from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
+import {
   normalizeDevicePhotoUri,
   registerImportedPhotoDeviceUriMappings,
 } from "sharedHelpers/getOriginalDevicePhotoUri";
-import {
-  deleteDevicePhotosRemovedDuringObservationPrep,
-  resolveDevicePhotoUriForRemovedObservationPhoto,
-} from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import type { BackupMapping } from "sharedHelpers/rollbackPhotos";
 import type { StateCreator } from "zustand";
 
@@ -71,6 +70,7 @@ interface ObservationFlowState {
   originalDevicePhotoUris: string[];
   importedPhotoDeviceUriByLocalUri: Record<string, string>;
   removedOriginalDevicePhotoUris: string[];
+  pendingGroupPhotoDeletionUris: string[];
   groupedPhotos: GroupedPhoto[];
   observations: RealmObservationPojo[];
   observationMarkedAsViewedAt: Date | null;
@@ -94,7 +94,7 @@ interface ObservationFlowActions {
   addCameraRollUris: ( uris: string[] ) => void;
   addOriginalDevicePhotoUris: ( uris: string[] ) => void;
   addImportedPhotoDeviceUriMappings: (
-    mappings: Array<{ localUri: string; deviceUri: string | null | undefined }>,
+    mappings: { localUri: string; deviceUri: string | null | undefined }[],
   ) => void;
   setSavingPhoto: ( saving: boolean ) => void;
   setCameraState: ( options: CameraStateOptions ) => void;
@@ -119,6 +119,7 @@ interface ObservationFlowActions {
   clearRollbackSnapshot: ( ) => void;
   setRollbackSnapshot: ( ) => void;
   setLastLocationPickerState: ( state: LastLocationPickerState | null ) => void;
+  addPendingGroupPhotoDeletionUri: ( uri: string ) => void;
 }
 
 type ObservationFlowSlice = ObservationFlowState & ObservationFlowActions;
@@ -133,6 +134,7 @@ const DEFAULT_STATE: ObservationFlowState = {
   originalDevicePhotoUris: [],
   importedPhotoDeviceUriByLocalUri: {},
   removedOriginalDevicePhotoUris: [],
+  pendingGroupPhotoDeletionUris: [],
   groupedPhotos: [],
   observations: [],
   // Track when any obs was last marked as viewed so we know when to update
@@ -243,9 +245,6 @@ const updateObservationKeysWithState = (
 const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, get ) => ( {
   ...DEFAULT_STATE,
   deletePhotoFromObservation: ( uri: string ) => {
-    const state = get( );
-    const observation = state.observations[state.currentObservationIndex];
-    const isNewObs = observation && !observation._created_at;
     let deviceUriToDelete: string | null = null;
 
     set( currentState => {
@@ -278,8 +277,8 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
         }
       }
 
-      let cameraRollUris = currentState.cameraRollUris;
-      let importedPhotoDeviceUriByLocalUri = currentState.importedPhotoDeviceUriByLocalUri;
+      let { cameraRollUris } = currentState;
+      let { importedPhotoDeviceUriByLocalUri } = currentState;
       if ( deviceUriToDelete ) {
         const cameraRollIndex = cameraRollUris.findIndex(
           rollUri => normalizeDevicePhotoUri( rollUri ) === deviceUriToDelete,
@@ -313,13 +312,15 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
             originalUri => normalizeDevicePhotoUri( originalUri ) !== deviceUriToDelete,
           )
           : currentState.originalDevicePhotoUris,
+        removedOriginalDevicePhotoUris: deviceUriToDelete
+          ? [...new Set( [
+            ...currentState.removedOriginalDevicePhotoUris,
+            deviceUriToDelete,
+          ] )]
+          : currentState.removedOriginalDevicePhotoUris,
         unsavedChanges: true,
       };
     } );
-
-    if ( isNewObs && deviceUriToDelete ) {
-      deleteDevicePhotosRemovedDuringObservationPrep( [deviceUriToDelete] );
-    }
   },
   deleteSoundFromObservation: ( uri: string ) => set( state => {
     const newObservations = removeObsSoundFromObservation(
@@ -337,6 +338,9 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
   setLastLocationPickerState: ( lastLocationPickerState: LastLocationPickerState | null ) => set( {
     lastLocationPickerState,
   } ),
+  addPendingGroupPhotoDeletionUri: ( uri: string ) => set( state => ( {
+    pendingGroupPhotoDeletionUris: [...new Set( [...state.pendingGroupPhotoDeletionUris, uri] )],
+  } ) ),
   addCameraRollUris: ( uris: string[] ) => set( state => {
     const savedUris = state.cameraRollUris;
     // A placeholder uri means we don't know the real URI, probably b/c we
@@ -364,7 +368,7 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
     return { originalDevicePhotoUris };
   } ),
   addImportedPhotoDeviceUriMappings: (
-    mappings: Array<{ localUri: string; deviceUri: string | null | undefined }>,
+    mappings: { localUri: string; deviceUri: string | null | undefined }[],
   ) => set( state => {
     const importedPhotoDeviceUriByLocalUri = {
       ...state.importedPhotoDeviceUriByLocalUri,
