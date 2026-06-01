@@ -144,8 +144,14 @@ describe( "GroupPhotosContainer", ( ) => {
 
     const { groupedPhotos } = useStore.getState( );
     expect( groupedPhotos ).toHaveLength( 4 );
-    expect( groupedPhotos[3].photos[0].image.uri ).not.toEqual(
+    expect( groupedPhotos[1].photos[0].image.uri ).not.toEqual(
       mockGroupedPhotos[0].photos[0].image.uri,
+    );
+    expect( groupedPhotos[2].photos[0].image.uri ).toEqual(
+      mockGroupedPhotos[1].photos[0].image.uri,
+    );
+    expect( groupedPhotos[3].photos[0].image.uri ).toEqual(
+      mockGroupedPhotos[2].photos[0].image.uri,
     );
   } );
 } );

@@ -199,7 +199,18 @@ const GroupPhotosContainer = ( ): Node => {
     setIsDuplicatingPhotos( true );
     try {
       const duplicatedGroups = await duplicateGroupedMediaGroups( selectedObservations );
-      setGroupedPhotos( [...groupedPhotos, ...duplicatedGroups] );
+      const indexToDuplicate = {};
+      selectedIndices.forEach( ( originalIndex, i ) => {
+        indexToDuplicate[originalIndex] = duplicatedGroups[i];
+      } );
+      const newGroupedPhotos = [];
+      groupedPhotos.forEach( ( group, index ) => {
+        newGroupedPhotos.push( group );
+        if ( indexToDuplicate[index] !== undefined ) {
+          newGroupedPhotos.push( indexToDuplicate[index] );
+        }
+      } );
+      setGroupedPhotos( newGroupedPhotos );
       setSelectedIndices( [] );
     } finally {
       setIsDuplicatingPhotos( false );
