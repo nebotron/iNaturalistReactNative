@@ -216,10 +216,10 @@ const useUploadObservationWorker = ( ) => {
       }
     } finally {
       removeFromUploadQueue( );
-      if (
-        uploadQueue.length === 0
-        && !currentUpload
-      ) {
+      // Read fresh state after removeFromUploadQueue updates the store, rather
+      // than the stale closure values captured when this callback was created.
+      const freshState = useStore.getState( );
+      if ( freshState.uploadQueue.length === 0 && !freshState.currentUpload ) {
         completeUploads( );
       }
     }
@@ -227,14 +227,12 @@ const useUploadObservationWorker = ( ) => {
     abortController,
     addUploadError,
     completeUploads,
-    currentUpload,
     realm,
     removeDeletedObsFromUploadQueue,
     removeFromUploadQueue,
     setCurrentUpload,
     stopAllUploads,
     t,
-    uploadQueue,
   ] );
 
   useEffect( ( ) => {
