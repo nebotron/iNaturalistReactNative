@@ -1,5 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
-import type { ListRenderItem } from "@shopify/flash-list";
+import type { FlashListRef, ListRenderItem, ViewToken } from "@shopify/flash-list";
 import { MAX_PHOTOS_ALLOWED } from "components/Camera/StandardCamera/StandardCamera";
 import {
   Body2,
@@ -54,11 +54,16 @@ interface Props {
   combinePhotos: ( ) => void;
   clearSelection: ( ) => void;
   duplicatePhotos: ( ) => void | Promise<void>;
+  flashListRef?: React.RefObject<FlashListRef<GroupPhotosListItem> | null>;
   groupedPhotos: Item[];
   isCreatingObservations?: boolean;
   isDuplicatingPhotos?: boolean;
   maxPhotosAllowed: number;
   navBasedOnUserSettings: ( ) => void;
+  onViewableItemsChanged?: ( info: {
+    viewableItems: ViewToken<GroupPhotosListItem>[];
+    changed: ViewToken<GroupPhotosListItem>[];
+  } ) => void;
   removePhotos: ( ) => void;
   selectedObservations: Item[];
   selectedMediaCount: number;
@@ -73,11 +78,13 @@ const GroupPhotos = ( {
   combinePhotos,
   clearSelection,
   duplicatePhotos,
+  flashListRef,
   groupedPhotos,
   isCreatingObservations,
   isDuplicatingPhotos,
   maxPhotosAllowed,
   navBasedOnUserSettings,
+  onViewableItemsChanged,
   removePhotos,
   selectedObservations,
   selectedMediaCount,
@@ -202,6 +209,8 @@ const GroupPhotos = ( {
         key={numColumns}
         keyExtractor={extractKey}
         numColumns={numColumns}
+        onViewableItemsChanged={onViewableItemsChanged}
+        ref={flashListRef}
         renderItem={renderItem}
         testID="GroupPhotos.list"
       />

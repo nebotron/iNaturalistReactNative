@@ -9,7 +9,13 @@ import {
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { t } from "i18next";
 import type { Node } from "react";
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
@@ -21,6 +27,16 @@ import flattenAndOrderSelectedPhotos, {
   flattenAndOrderSelectedVideos,
   selectedGroupsHaveMixedMedia,
 } from "./helpers/groupPhotoHelpers";
+
+function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
+  if ( uri == null ) return null;
+  const index = newPhotos.findIndex( obs => obs.photos?.some( p => p.image.uri === uri ) );
+  if ( index >= 0 ) return index;
+  if ( fallbackIndex != null && newPhotos.length > 0 ) {
+    return Math.min( fallbackIndex, newPhotos.length - 1 );
+  }
+  return null;
+}
 
 const GroupPhotosContainer = ( ): Node => {
   const navigation = useNavigation( );
@@ -50,6 +66,31 @@ const GroupPhotosContainer = ( ): Node => {
       index => index >= 0 && index < groupedPhotos.length,
     ) );
   }, [groupedPhotos.length] );
+
+  const flashListRef = useRef( null );
+  const firstVisibleItemUri = useRef( null );
+  const firstVisibleItemIndex = useRef( null );
+  const pendingScrollIndex = useRef( null );
+
+  const onViewableItemsChanged = useCallback( ( { viewableItems } ) => {
+    const firstVisible = viewableItems.find( vi => vi.item?.photos );
+    if ( firstVisible ) {
+      firstVisibleItemUri.current = firstVisible.item.photos[0]?.image?.uri ?? null;
+      firstVisibleItemIndex.current = firstVisible.index ?? null;
+    }
+  }, [] );
+
+  useEffect( ( ) => {
+    let timer;
+    if ( pendingScrollIndex.current !== null ) {
+      const index = pendingScrollIndex.current;
+      pendingScrollIndex.current = null;
+      timer = setTimeout( ( ) => {
+        flashListRef.current?.scrollToIndex( { index, animated: false } );
+      }, 0 );
+    }
+    return ( ) => clearTimeout( timer );
+  }, [groupedPhotos] );
 
   const totalPhotos = groupedPhotos
     .reduce( ( count, current ) => (
@@ -137,6 +178,14 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
+    const targetIndex = findScrollTargetIndex(
+      newObsList,
+      firstVisibleItemUri.current,
+      firstVisibleItemIndex.current,
+    );
+    if ( targetIndex !== null ) {
+      pendingScrollIndex.current = targetIndex;
+    }
     setGroupedPhotos( newObsList );
     setSelectedIndices( [] );
   };
@@ -179,6 +228,15 @@ const GroupPhotosContainer = ( ): Node => {
         separatedItems.push( obs );
       }
     } );
+
+    const targetIndex = findScrollTargetIndex(
+      separatedItems,
+      firstVisibleItemUri.current,
+      firstVisibleItemIndex.current,
+    );
+    if ( targetIndex !== null ) {
+      pendingScrollIndex.current = targetIndex;
+    }
     setGroupedPhotos( separatedItems );
     setSelectedIndices( [] );
   };
@@ -245,6 +303,14 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
+    const targetIndex = findScrollTargetIndex(
+      removedFromGroup,
+      firstVisibleItemUri.current,
+      firstVisibleItemIndex.current,
+    );
+    if ( targetIndex !== null ) {
+      pendingScrollIndex.current = targetIndex;
+    }
     setGroupedPhotos( removedFromGroup );
     setSelectedIndices( [] );
   };
@@ -318,10 +384,12 @@ const GroupPhotosContainer = ( ): Node => {
       combinePhotos={combinePhotos}
       clearSelection={() => setSelectedIndices( [] )}
       duplicatePhotos={duplicatePhotos}
+      flashListRef={flashListRef}
       groupedPhotos={groupedPhotos}
       isCreatingObservations={isCreatingObservations}
       isDuplicatingPhotos={isDuplicatingPhotos}
       navBasedOnUserSettings={navBasedOnUserSettings}
+      onViewableItemsChanged={onViewableItemsChanged}
       removePhotos={removePhotos}
       selectedMediaCount={selectedMediaCount}
       maxPhotosAllowed={MAX_PHOTOS_ALLOWED}
