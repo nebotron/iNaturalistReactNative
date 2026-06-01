@@ -368,7 +368,6 @@ If-youre-seeing-this-error = Se você está vendo isso e está online, a equipe 
 IGNORE-LOCATION = IGNORAR LOCALIZAÇÃO
 Ignore-notifications = Ignorar notificações
 Ignoring-location = Ignorando a localização
-Import-Photos-From = Importar fotos de
 IMPORT-X-OBSERVATIONS =
     IMPORTAR { $count ->
         [um] 1 OBSERVAÇÃO

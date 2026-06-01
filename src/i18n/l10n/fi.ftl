@@ -371,7 +371,6 @@ If-youre-seeing-this-error = Jos näet tämän ja olet verkossa, iNatin henkilö
 IGNORE-LOCATION = OHITA SIJAINTI
 Ignore-notifications = Ohita ilmoitukset
 Ignoring-location = Ohitetaan sijainti
-Import-Photos-From = Tuo kuvia
 IMPORT-X-OBSERVATIONS =
     TEE { $count ->
         [one] 1 HAVAINTO

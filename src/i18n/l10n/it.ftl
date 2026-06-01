@@ -368,7 +368,6 @@ If-youre-seeing-this-error = Se vedi questo e sei online, lo staff di iNat ha gi
 IGNORE-LOCATION = IGNORA POSIZIONE
 Ignore-notifications = Ignora le notifiche
 Ignoring-location = Ignorare la posizione
-Import-Photos-From = Importa foto da
 IMPORT-X-OBSERVATIONS =
     IMPORTAZIONE { $count ->
         [uno] 1 OSSERVAZIONE

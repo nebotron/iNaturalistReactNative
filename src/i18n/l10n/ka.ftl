@@ -368,7 +368,6 @@ If-youre-seeing-this-error = If you're seeing this and you're online, iNat staff
 IGNORE-LOCATION = ᲐᲓᲒᲘᲚᲛᲓᲔᲑᲐᲠᲔᲝᲑᲘᲡ ᲘᲒᲜᲝᲠᲘᲠᲔᲑᲐ
 Ignore-notifications = Ignore notifications
 Ignoring-location = ადგილმდებარეობის იგნორირება
-Import-Photos-From = Import Photos From
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
         [one] 1 OBSERVATION

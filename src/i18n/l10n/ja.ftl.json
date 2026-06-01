@@ -338,7 +338,6 @@
   "IGNORE-LOCATION": "場所を無視",
   "Ignore-notifications": "通知を無視",
   "Ignoring-location": "場所を無視",
-  "Import-Photos-From": "写真のインポート",
   "IMPORT-X-OBSERVATIONS": "インポート { $count ->\n  [one] の観察記録を破棄\n *[other] { $count } の観察記録を破棄\n}",
   "Improve-suggestions-by-using-your-location": "位置情報を使用して提案を改善",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "位置情報を使用して提案を改善",

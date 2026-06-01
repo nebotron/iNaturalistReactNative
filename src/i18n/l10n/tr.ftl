@@ -368,7 +368,6 @@ If-youre-seeing-this-error = Bunu görüyorsanız ve çevrim içiyseniz, iNat pe
 IGNORE-LOCATION = KONUMU YOKSAY
 Ignore-notifications = Bildirimleri yoksay
 Ignoring-location = Konumu yoksayma
-Import-Photos-From = Fotoğrafları Şuradan İçe Aktar:
 IMPORT-X-OBSERVATIONS =
     { $count ->
         [one] 1 GÖZLEMİ

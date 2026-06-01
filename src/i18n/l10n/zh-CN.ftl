@@ -368,7 +368,6 @@ If-youre-seeing-this-error = 如果你看到这个并且你在线, iNat员工已
 IGNORE-LOCATION = 忽略位置
 Ignore-notifications = 忽略通知
 Ignoring-location = 忽略位置
-Import-Photos-From = 导入照片自
 IMPORT-X-OBSERVATIONS =
     导入{ $count ->
         [one] 1个观察
