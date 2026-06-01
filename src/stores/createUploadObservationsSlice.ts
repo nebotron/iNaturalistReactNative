@@ -212,8 +212,8 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
           : uuids.length ),
     } );
   } ),
-  removeFromUploadQueue: ( ) => set( state => ( {
-    uploadQueue: state.uploadQueue.slice( 0, -1 ),
+  removeFromUploadQueue: ( uuid: string ) => set( state => ( {
+    uploadQueue: state.uploadQueue.filter( q => q !== uuid ),
     currentUpload: null,
   } ) ),
   setCurrentUpload: observation => set( state => ( {

@@ -34,7 +34,7 @@ import {
   useTranslation,
 } from "sharedHooks";
 import {
-  UPLOAD_PENDING,
+  UPLOAD_IN_PROGRESS,
 } from "stores/createUploadObservationsSlice";
 import useStore, { zustandStorage } from "stores/useStore";
 import type { SpeciesCount } from "types/sorting";
@@ -189,7 +189,7 @@ const MyObservationsContainer = ( ) => {
     if ( !confirmed ) return;
     addTotalToolbarIncrements( observation );
     addToUploadQueue( uuid );
-    if ( uploadStatus === UPLOAD_PENDING ) {
+    if ( uploadStatus !== UPLOAD_IN_PROGRESS ) {
       setStartUploadObservations( );
     }
   }, [

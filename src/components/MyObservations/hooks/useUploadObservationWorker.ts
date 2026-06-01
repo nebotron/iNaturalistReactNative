@@ -215,7 +215,7 @@ const useUploadObservationWorker = ( ) => {
         }
       }
     } finally {
-      removeFromUploadQueue( );
+      removeFromUploadQueue( uuid );
       // Read fresh state after removeFromUploadQueue updates the store, rather
       // than the stale closure values captured when this callback was created.
       const freshState = useStore.getState( );
@@ -244,6 +244,13 @@ const useUploadObservationWorker = ( ) => {
       );
       if ( localObservation ) {
         await uploadObservationAndCatchError( localObservation );
+      } else {
+        // Observation was deleted from Realm while in the queue; skip it
+        removeFromUploadQueue( lastQueuedUuid );
+        const freshState = useStore.getState( );
+        if ( freshState.uploadQueue.length === 0 && !freshState.currentUpload ) {
+          completeUploads( );
+        }
       }
     };
     if (
