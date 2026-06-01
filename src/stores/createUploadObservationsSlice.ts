@@ -201,28 +201,21 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
     uploadStatus,
   } ) ),
   addToUploadQueue: ( uuids: string | string[] ) => set( state => {
-    let copyOfUploadQueue = state.uploadQueue;
-    if ( typeof uuids === "string" ) {
-      copyOfUploadQueue.unshift( uuids );
-    } else {
-      copyOfUploadQueue = copyOfUploadQueue.concat( uuids );
-    }
+    const uploadQueue = typeof uuids === "string"
+      ? [uuids, ...state.uploadQueue]
+      : state.uploadQueue.concat( uuids );
     return ( {
-      uploadQueue: copyOfUploadQueue,
+      uploadQueue,
       initialNumObservationsInQueue: state.initialNumObservationsInQueue
         + ( typeof uuids === "string"
           ? 1
           : uuids.length ),
     } );
   } ),
-  removeFromUploadQueue: ( ) => set( state => {
-    const copyOfUploadQueue = state.uploadQueue;
-    copyOfUploadQueue.pop( );
-    return ( {
-      uploadQueue: copyOfUploadQueue,
-      currentUpload: null,
-    } );
-  } ),
+  removeFromUploadQueue: ( ) => set( state => ( {
+    uploadQueue: state.uploadQueue.slice( 0, -1 ),
+    currentUpload: null,
+  } ) ),
   setCurrentUpload: observation => set( state => ( {
     currentUpload: observation,
     numUploadsAttempted: state.numUploadsAttempted + 1,
