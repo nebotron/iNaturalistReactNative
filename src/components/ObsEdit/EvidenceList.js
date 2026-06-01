@@ -200,14 +200,25 @@ const EvidenceList = ( {
     // If there was was only one item and it was deleted, close the modal by
     // nullifying the selected media URI. Otherwise, choose the last
     // remaining item.
-    const remainingMediaUris = mediaUris.filter( uri => uri !== deletedUri );
+    //
+    // A synced photo with a local file copy is identified by its local file
+    // URI (what the delete button passes), but mediaUris stores the remote URL
+    // for such photos. Normalize to the display URI before filtering.
+    const matchedObsPhoto = observationPhotos.find( op => {
+      const localUri = Photo.getLocalPhotoUri( op.photo?.localFilePath );
+      return localUri === deletedUri || op.photo?.url === deletedUri;
+    } );
+    const effectiveDeletedUri = matchedObsPhoto
+      ? Photo.displayLocalOrRemoteSquarePhoto( matchedObsPhoto.photo )
+      : deletedUri;
+    const remainingMediaUris = mediaUris.filter( uri => uri !== effectiveDeletedUri );
     if ( remainingMediaUris.length === 0 ) {
       setSelectedMediaUri( null );
     } else {
       setSelectedMediaUri( remainingMediaUris[remainingMediaUris.length - 1] );
     }
     setDeleting( false );
-  }, [mediaUris, setSelectedMediaUri] );
+  }, [mediaUris, observationPhotos, setSelectedMediaUri] );
 
   const { mutate: deleteObservationSoundMutate } = useAuthenticatedMutation(
     ( params, optsWithAuth ) => deleteRemoteObservationSound( params, optsWithAuth ),
