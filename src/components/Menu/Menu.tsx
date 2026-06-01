@@ -20,8 +20,10 @@ import DeviceInfo from "react-native-device-info";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Observation from "realmModels/Observation";
 import User from "realmModels/User";
+import { valueToBreakpoint } from "sharedHelpers/breakpoint";
 import { copyCropFeedbackToClipboard } from "sharedHelpers/cropFeedbackLog";
 import { log } from "sharedHelpers/logger";
+import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
 import {
   useCurrentUser, useDebugMode, useFeatureFlag,
@@ -191,6 +193,51 @@ const Menu = ( ) => {
         const records = getAllImageMetadata( );
         Clipboard.setString( JSON.stringify( records, null, 2 ) );
         Alert.alert( "Copied", "Image metadata copied to clipboard" );
+      },
+    },
+
+    deleteUnfavedImportedPhotos: {
+      label: "Delete imported photos from unfaved observations",
+      icon: "trash",
+      onPress: ( ) => {
+        interface ObsLike {
+          faves: () => unknown[];
+          observationPhotos: { originalDevicePhotoUri?: string | null }[];
+        }
+        const syncedObs = Array.from(
+          realm.objects( "Observation" ).filtered( "_synced_at != null" ),
+        ) as unknown as ObsLike[];
+
+        const uris: string[] = [];
+        for ( const obs of syncedObs ) {
+          if ( obs.faves( ).length === 0 ) {
+            for ( const p of obs.observationPhotos ?? [] ) {
+              if ( p.originalDevicePhotoUri ) {
+                uris.push( p.originalDevicePhotoUri );
+              }
+            }
+          }
+        }
+
+        if ( uris.length === 0 ) {
+          Alert.alert( "No Photos", "No imported photos found from observations with no faves." );
+          return;
+        }
+
+        Alert.alert(
+          "Delete Photos?",
+          `Delete ${uris.length} imported photo(s) from observations with no faves?`,
+          [
+            { text: t( "CANCEL" ), style: "cancel" },
+            {
+              text: "Delete",
+              style: "destructive",
+              onPress: ( ) => {
+                void deleteOriginalDevicePhotos( uris, { userInitiated: true } );
+              },
+            },
+          ],
+        );
       },
     },
 
