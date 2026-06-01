@@ -2,19 +2,12 @@
 
 import {
   normalizeTaxonFilters,
-  removeTaxonFilter,
-  toggleTaxonFilter,
 } from "components/Explore/helpers/taxonFilters";
 import {
-  Button,
-  ButtonBar,
-  DisplayTaxon,
-  INatIconButton,
   TaxonResult,
   TaxonSearch,
   ViewWrapper,
 } from "components/SharedComponents";
-import { ScrollView, View } from "components/styledComponents";
 import type { Node } from "react";
 import React, {
   useCallback,
@@ -40,8 +33,6 @@ const ExploreTaxonSearch = ( {
 }: Props ): Node => {
   const { t } = useTranslation( );
   const [taxonQuery, setTaxonQuery] = useState( "" );
-  const [selectedFilters, setSelectedFilters] = useState( taxonFilters );
-  const [excludeMode, setExcludeMode] = useState( false );
 
   const {
     taxa,
@@ -49,29 +40,20 @@ const ExploreTaxonSearch = ( {
     isLocal,
   } = useTaxonSearch( taxonQuery );
 
-  const applyFilters = useCallback( ( ) => {
-    updateTaxonFilters( normalizeTaxonFilters( selectedFilters ) );
+  const onTaxonSelected = useCallback( taxon => {
+    const alreadyAdded = taxonFilters.some( f => f.taxon.id === taxon.id );
+    if ( !alreadyAdded ) {
+      updateTaxonFilters( normalizeTaxonFilters( [
+        ...taxonFilters,
+        { taxon, exclude: false },
+      ] ) );
+    }
     closeModal( );
-  }, [closeModal, selectedFilters, updateTaxonFilters] );
-
-  const resetTaxonFilters = useCallback(
-    ( ) => {
-      setSelectedFilters( [] );
-    },
-    [],
-  );
-
-  const onTaxonToggled = useCallback( newTaxon => {
-    setSelectedFilters( current => toggleTaxonFilter(
-      current,
-      newTaxon,
-      excludeMode,
-    ) );
-  }, [excludeMode] );
+  }, [closeModal, taxonFilters, updateTaxonFilters] );
 
   const getFilterForTaxon = useCallback( taxonId => (
-    selectedFilters.find( filter => filter.taxon.id === taxonId )
-  ), [selectedFilters] );
+    taxonFilters.find( filter => filter.taxon.id === taxonId )
+  ), [taxonFilters] );
 
   const renderItem = useCallback( ( { item: taxon, index } ) => {
     const filter = getFilterForTaxon( taxon.id );
@@ -80,13 +62,10 @@ const ExploreTaxonSearch = ( {
         accessibilityLabel={t( "Choose-taxon" )}
         first={index === 0}
         fetchRemote={false}
-        handleCheckmarkPress={() => onTaxonToggled( taxon )}
-        handleTaxonOrEditPress={() => onTaxonToggled( taxon )}
+        handleCheckmarkPress={() => onTaxonSelected( taxon )}
+        handleTaxonOrEditPress={() => onTaxonSelected( taxon )}
         onPressInfo={onPressInfo}
         showCheckmark={!!filter}
-        activeColor={filter?.exclude
-          ? "warningRed"
-          : undefined}
         taxon={taxon}
         testID={`Search.taxa.${taxon.id}`}
       />
@@ -94,88 +73,16 @@ const ExploreTaxonSearch = ( {
   }, [
     getFilterForTaxon,
     onPressInfo,
-    onTaxonToggled,
+    onTaxonSelected,
     t,
   ] );
-
-  const modeButtons = [
-    {
-      title: t( "Include-taxon" ),
-      onPress: () => setExcludeMode( false ),
-      isPrimary: !excludeMode,
-      className: "w-1/2 mx-2",
-    },
-    {
-      title: t( "Exclude-taxon" ),
-      onPress: () => setExcludeMode( true ),
-      isPrimary: excludeMode,
-      className: "w-1/2 mx-2",
-    },
-  ];
 
   return (
     <ViewWrapper>
       <ExploreSearchHeader
         closeModal={closeModal}
         headerText={t( "SEARCH-TAXA" )}
-        resetFilters={resetTaxonFilters}
         testID="ExploreTaxonSearch.close"
-      />
-      {selectedFilters.length > 0 && (
-        <ScrollView
-          className="px-4 bg-white"
-          style={{ maxHeight: 200 }}
-          keyboardShouldPersistTaps="handled"
-        >
-          {selectedFilters.map( filter => (
-            <View
-              key={`selected-taxon-${filter.taxon.id}-${filter.exclude}`}
-              className="flex-row items-center justify-between mb-3"
-            >
-              <DisplayTaxon
-                handlePress={() => setSelectedFilters(
-                  current => toggleTaxonFilter(
-                    current,
-                    filter.taxon,
-                    !filter.exclude,
-                  ),
-                )}
-                taxon={filter.taxon}
-              />
-              <View className="flex-row items-center">
-                <Button
-                  level={filter.exclude
-                    ? "neutral"
-                    : "focus"}
-                  text={filter.exclude
-                    ? t( "Exclude-taxon" )
-                    : t( "Include-taxon" )}
-                  onPress={() => setSelectedFilters(
-                    current => toggleTaxonFilter(
-                      current,
-                      filter.taxon,
-                      !filter.exclude,
-                    ),
-                  )}
-                  className="mr-2 shrink"
-                />
-                <INatIconButton
-                  icon="close"
-                  size={20}
-                  onPress={() => setSelectedFilters(
-                    current => removeTaxonFilter( current, filter.taxon.id ),
-                  )}
-                  accessibilityLabel={t( "Remove-taxon-filter" )}
-                />
-              </View>
-            </View>
-          ) )}
-          <View className="h-4" />
-        </ScrollView>
-      )}
-      <ButtonBar
-        buttonConfiguration={modeButtons}
-        containerClass="px-4 py-3 bg-white"
       />
       <TaxonSearch
         isLoading={isLoading}
@@ -185,14 +92,6 @@ const ExploreTaxonSearch = ( {
         setQuery={setTaxonQuery}
         taxa={taxa}
       />
-      <ButtonBar>
-        <Button
-          level="focus"
-          text={t( "APPLY-FILTERS" )}
-          onPress={applyFilters}
-          accessibilityLabel={t( "Apply-filters" )}
-        />
-      </ButtonBar>
     </ViewWrapper>
   );
 };

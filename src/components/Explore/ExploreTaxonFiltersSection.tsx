@@ -1,13 +1,12 @@
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import {
-  Body3,
   Button,
   DisplayTaxon,
   Heading4,
-  INatIcon,
   INatIconButton,
 } from "components/SharedComponents";
-import { Pressable, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import React from "react";
 import { useTranslation } from "sharedHooks";
 
@@ -57,37 +56,38 @@ const ExploreTaxonFiltersSection = ( {
                 </View>
               )}
               {taxonFilters.map( filter => (
-                <Pressable
+                <View
                   key={`taxon-filter-${filter.taxon.id}-${filter.exclude}`}
                   className="flex-row justify-between items-center mb-5"
-                  accessibilityRole="button"
-                  accessibilityLabel={t( "Change-taxon" )}
-                  onPress={onOpenTaxonSearch}
                 >
                   <View className="flex-1 mr-3">
                     <DisplayTaxon
-                      handlePress={onOpenTaxonSearch}
                       taxon={filter.taxon}
                       showInfoButton={false}
                       showCheckmark={false}
                     />
-                    <Body3 className="mt-1">
-                      {filter.exclude
-                        ? t( "Exclude-taxon" )
-                        : t( "Include-taxon" )}
-                    </Body3>
                   </View>
                   <View className="flex-row items-center">
-                    <INatIcon name="edit" size={22} />
+                    <Button
+                      level={filter.exclude
+                        ? "neutral"
+                        : "focus"}
+                      text={filter.exclude
+                        ? t( "Exclude-taxon" )
+                        : t( "Include-taxon" )}
+                      onPress={() => updateTaxonFilters(
+                        toggleTaxonFilter( taxonFilters, filter.taxon, !filter.exclude ),
+                      )}
+                      className="mr-2 shrink"
+                    />
                     <INatIconButton
-                      className="ml-3"
                       icon="close"
                       size={20}
                       onPress={() => removeFilter( filter.taxon.id )}
                       accessibilityLabel={t( "Remove-taxon-filter" )}
                     />
                   </View>
-                </Pressable>
+                </View>
               ) )}
               <Button
                 text={t( "ADD-TAXON-FILTER" )}
