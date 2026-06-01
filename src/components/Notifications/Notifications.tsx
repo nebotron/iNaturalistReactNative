@@ -23,7 +23,7 @@ const OWNER_TAB_PARAMS = { observations_by: "owner" } as const;
 const FOLLOWING_TAB_PARAMS = { observations_by: "following" } as const;
 
 const Notifications = ( ) => {
-  const [activeTab, setActiveTab] = useState<typeof OWNER_TAB | typeof OTHER_TAB>( OWNER_TAB );
+  const [activeTab, setActiveTab] = useState<typeof OWNER_TAB | typeof OTHER_TAB | null>( null );
   const hasAutoSelectedTab = useRef( false );
   const { t } = useTranslation();
   const { isDefaultMode } = useLayoutPrefs( );
@@ -54,9 +54,11 @@ const Notifications = ( ) => {
       && otherUnviewed !== undefined
     ) {
       hasAutoSelectedTab.current = true;
-      if ( Number( ownerUnviewed ) === 0 && Number( otherUnviewed ) > 0 ) {
-        setActiveTab( OTHER_TAB );
-      }
+      setActiveTab(
+        Number( ownerUnviewed ) === 0 && Number( otherUnviewed ) > 0
+          ? OTHER_TAB
+          : OWNER_TAB,
+      );
     }
   }, [ownerUnviewed, otherUnviewed] );
 
@@ -65,22 +67,24 @@ const Notifications = ( ) => {
 
   return (
     <View className="flex-1 bg-white">
-      <Tabs
-        tabs={[
-          {
-            id: OWNER_TAB,
-            text: t( "MY-CONTENT--notifications" ),
-            onPress: () => setActiveTab( OWNER_TAB ),
-          },
-          {
-            id: OTHER_TAB,
-            text: t( "OTHERS--notifications" ),
-            onPress: () => setActiveTab( OTHER_TAB ),
-          },
-        ]}
-        activeId={activeTab}
-        TabComponent={NotificationsTab}
-      />
+      {activeTab !== null && (
+        <Tabs
+          tabs={[
+            {
+              id: OWNER_TAB,
+              text: t( "MY-CONTENT--notifications" ),
+              onPress: () => setActiveTab( OWNER_TAB ),
+            },
+            {
+              id: OTHER_TAB,
+              text: t( "OTHERS--notifications" ),
+              onPress: () => setActiveTab( OTHER_TAB ),
+            },
+          ]}
+          activeId={activeTab}
+          TabComponent={NotificationsTab}
+        />
+      )}
       {activeTab === OWNER_TAB && (
         <NotificationsContainer
           currentUser={currentUser}
