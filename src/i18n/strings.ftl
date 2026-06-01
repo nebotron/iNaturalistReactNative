@@ -205,7 +205,6 @@ Change-species-sort-order = Change species sort order
 CHANGE-START-DATE = CHANGE START DATE
 # Label for a button that changes a selected start date
 Change-start-date = Change start date
-Change-taxon = Change taxon
 # Button that changes the taxon filter on Explore
 Change-taxon-filter = Change taxon filter
 Change-user = Change user
