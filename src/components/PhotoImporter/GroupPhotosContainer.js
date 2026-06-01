@@ -3,13 +3,23 @@
 import { useNavigation } from "@react-navigation/native";
 import { t } from "i18next";
 import type { Node } from "react";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import Observation from "realmModels/Observation";
 import { useLayoutPrefs } from "sharedHooks";
 import useStore from "stores/useStore";
 
 import GroupPhotos from "./GroupPhotos";
 import flattenAndOrderSelectedPhotos from "./helpers/groupPhotoHelpers";
+
+function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
+  if ( uri == null ) return null;
+  const index = newPhotos.findIndex( obs => obs.photos.some( p => p.image.uri === uri ) );
+  if ( index >= 0 ) return index;
+  if ( fallbackIndex != null && newPhotos.length > 0 ) {
+    return Math.min( fallbackIndex, newPhotos.length - 1 );
+  }
+  return null;
+}
 
 const GroupPhotosContainer = ( ): Node => {
   const navigation = useNavigation( );
@@ -23,6 +33,31 @@ const GroupPhotosContainer = ( ): Node => {
 
   const [selectedObservations, setSelectedObservations] = useState( [] );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
+
+  const flashListRef = useRef( null );
+  const firstVisibleItemUri = useRef( null );
+  const firstVisibleItemIndex = useRef( null );
+  const pendingScrollIndex = useRef( null );
+
+  const onViewableItemsChanged = useCallback( ( { viewableItems } ) => {
+    const firstVisible = viewableItems.find( vi => vi.item?.photos );
+    if ( firstVisible ) {
+      firstVisibleItemUri.current = firstVisible.item.photos[0]?.image?.uri ?? null;
+      firstVisibleItemIndex.current = firstVisible.index ?? null;
+    }
+  }, [] );
+
+  useEffect( ( ) => {
+    if ( pendingScrollIndex.current !== null ) {
+      const index = pendingScrollIndex.current;
+      pendingScrollIndex.current = null;
+      const timer = setTimeout( ( ) => {
+        flashListRef.current?.scrollToIndex( { index, animated: false } );
+      }, 0 );
+      return ( ) => clearTimeout( timer );
+    }
+    return undefined;
+  }, [groupedPhotos] );
   const totalPhotos = groupedPhotos
     .reduce( ( count, current ) => count + current.photos.length, 0 );
 
@@ -76,6 +111,14 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
+    const targetIndex = findScrollTargetIndex(
+      newObsList,
+      firstVisibleItemUri.current,
+      firstVisibleItemIndex.current,
+    );
+    if ( targetIndex !== null ) {
+      pendingScrollIndex.current = targetIndex;
+    }
     setGroupedPhotos( newObsList );
     setSelectedObservations( [] );
   };
@@ -110,6 +153,14 @@ const GroupPhotosContainer = ( ): Node => {
         separatedPhotos.push( obs );
       }
     } );
+    const targetIndex = findScrollTargetIndex(
+      separatedPhotos,
+      firstVisibleItemUri.current,
+      firstVisibleItemIndex.current,
+    );
+    if ( targetIndex !== null ) {
+      pendingScrollIndex.current = targetIndex;
+    }
     setGroupedPhotos( separatedPhotos );
     setSelectedObservations( [] );
   };
@@ -129,6 +180,14 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
+    const targetIndex = findScrollTargetIndex(
+      removedFromGroup,
+      firstVisibleItemUri.current,
+      firstVisibleItemIndex.current,
+    );
+    if ( targetIndex !== null ) {
+      pendingScrollIndex.current = targetIndex;
+    }
     // remove from group photos screen
     setGroupedPhotos( removedFromGroup );
     setSelectedObservations( [] );
@@ -174,9 +233,11 @@ const GroupPhotosContainer = ( ): Node => {
   return (
     <GroupPhotos
       combinePhotos={combinePhotos}
+      flashListRef={flashListRef}
       groupedPhotos={groupedPhotos}
       isCreatingObservations={isCreatingObservations}
       navBasedOnUserSettings={navBasedOnUserSettings}
+      onViewableItemsChanged={onViewableItemsChanged}
       removePhotos={removePhotos}
       selectObservationPhotos={selectObservationPhotos}
       selectedObservations={selectedObservations}

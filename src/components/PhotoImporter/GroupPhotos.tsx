@@ -1,5 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
-import type { ListRenderItem } from "@shopify/flash-list";
+import type { FlashListRef, ListRenderItem, ViewToken } from "@shopify/flash-list";
 import { MAX_PHOTOS_ALLOWED } from "components/Camera/StandardCamera/StandardCamera";
 import {
   Body2,
@@ -41,9 +41,14 @@ function isEmptyGridItem( item: GroupPhotosListItem ): item is { empty: true } {
 
 interface Props {
   combinePhotos: ( ) => void;
+  flashListRef?: React.RefObject<FlashListRef<GroupPhotosListItem> | null>;
   groupedPhotos: Item[];
   isCreatingObservations?: boolean;
   navBasedOnUserSettings: ( ) => void;
+  onViewableItemsChanged?: ( info: {
+    viewableItems: ViewToken<GroupPhotosListItem>[];
+    changed: ViewToken<GroupPhotosListItem>[];
+  } ) => void;
   removePhotos: ( ) => void;
   selectedObservations: Item[];
   selectObservationPhotos: ( isSelected: boolean, item: Item ) => void;
@@ -53,9 +58,11 @@ interface Props {
 
 const GroupPhotos = ( {
   combinePhotos,
+  flashListRef,
   groupedPhotos,
   isCreatingObservations,
   navBasedOnUserSettings,
+  onViewableItemsChanged,
   removePhotos,
   selectedObservations,
   selectObservationPhotos,
@@ -149,6 +156,8 @@ const GroupPhotos = ( {
         key={numColumns}
         keyExtractor={extractKey}
         numColumns={numColumns}
+        onViewableItemsChanged={onViewableItemsChanged}
+        ref={flashListRef}
         renderItem={renderItem}
         testID="GroupPhotos.list"
       />
