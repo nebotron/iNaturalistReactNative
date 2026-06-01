@@ -1,5 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
-import type { FlashListRef, ListRenderItem, ViewToken } from "@shopify/flash-list";
+import type { FlashListProps, FlashListRef, ListRenderItem, ViewToken } from "@shopify/flash-list";
 import { MAX_PHOTOS_ALLOWED } from "components/Camera/StandardCamera/StandardCamera";
 import {
   Body2,
@@ -60,6 +60,7 @@ interface Props {
   isDuplicatingPhotos?: boolean;
   maxPhotosAllowed: number;
   navBasedOnUserSettings: ( ) => void;
+  onScroll?: FlashListProps<GroupPhotosListItem>["onScroll"];
   onViewableItemsChanged?: ( info: {
     viewableItems: ViewToken<GroupPhotosListItem>[];
     changed: ViewToken<GroupPhotosListItem>[];
@@ -84,6 +85,7 @@ const GroupPhotos = ( {
   isDuplicatingPhotos,
   maxPhotosAllowed,
   navBasedOnUserSettings,
+  onScroll,
   onViewableItemsChanged,
   removePhotos,
   selectedObservations,
@@ -209,6 +211,7 @@ const GroupPhotos = ( {
         key={numColumns}
         keyExtractor={extractKey}
         numColumns={numColumns}
+        onScroll={onScroll}
         onViewableItemsChanged={onViewableItemsChanged}
         ref={flashListRef}
         renderItem={renderItem}
