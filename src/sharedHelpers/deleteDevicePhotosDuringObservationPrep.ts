@@ -103,11 +103,3 @@ export const resolveDevicePhotoUriForRemovedObservationPhoto = (
 
   return null;
 };
-
-export const deleteDevicePhotosRemovedDuringObservationPrep = (
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _photoUris: ( string | null | undefined )[],
-): void => {
-  // No-op: deletions are batched and performed by the caller at import time
-  // to avoid per-photo iOS confirmation dialogs.
-};

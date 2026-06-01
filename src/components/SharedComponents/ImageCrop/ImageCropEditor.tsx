@@ -4,8 +4,9 @@ import {
   Button,
   ViewWrapper,
 } from "components/SharedComponents";
+import findGroupedPhotoByDisplayUri from
+  "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
 import ImageCropView from "components/SharedComponents/ImageCrop/ImageCropView";
-import findGroupedPhotoByDisplayUri from "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
 import { View } from "components/styledComponents";
 import cloneDeep from "lodash/cloneDeep";
 import type { SharedStackParamList } from "navigation/types";
@@ -24,11 +25,10 @@ import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
+import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
 import {
-  deleteDevicePhotosRemovedDuringObservationPrep,
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
-import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -51,6 +51,9 @@ const ImageCropEditor = ( ) => {
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
+  const addPendingGroupPhotoDeletionUri = useStore(
+    state => state.addPendingGroupPhotoDeletionUri,
+  );
 
   const imageUri = params?.imageUri;
   const context = params?.context;
@@ -221,9 +224,10 @@ const ImageCropEditor = ( ) => {
     if ( context === "groupPhotos" && imageUri ) {
       const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
       if ( groupedPhoto ) {
-        deleteDevicePhotosRemovedDuringObservationPrep( [
-          resolveDevicePhotoUriFromGroupedPhoto( groupedPhoto ),
-        ] );
+        const deviceUri = resolveDevicePhotoUriFromGroupedPhoto( groupedPhoto );
+        if ( deviceUri ) {
+          addPendingGroupPhotoDeletionUri( deviceUri );
+        }
       }
       setGroupedPhotos(
         groupedPhotos
@@ -260,6 +264,7 @@ const ImageCropEditor = ( ) => {
       navigation.goBack( );
     }
   }, [
+    addPendingGroupPhotoDeletionUri,
     context,
     currentObservation,
     deletePhotoFromObservation,
