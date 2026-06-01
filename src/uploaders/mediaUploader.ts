@@ -10,6 +10,7 @@ import type {
 } from "realmModels/types";
 import { markRecordUploaded, prepareMediaForUpload } from "uploaders";
 import { trackEvidenceUpload } from "uploaders/utils/progressTracker";
+import withRetry from "uploaders/utils/retry";
 
 export type EvidenceType = "Photo" | "ObservationPhoto" | "Sound" | "ObservationSound";
 export type ActionType = "upload" | "attach" | "update";
@@ -110,11 +111,11 @@ const uploadSingleEvidence = async (
   const isAttachOperation = observationId != null;
   const evidenceProgress = trackEvidenceUpload( observationUUID );
 
-  const response = await createOrUpdateEvidence(
+  const response = await withRetry( () => createOrUpdateEvidence(
     apiEndpoint,
     params,
     options,
-  );
+  ) );
 
   if ( !response ) {
     throw new Error( `Failed to upload ${type} ${evidenceUUID}: no response from server` );
