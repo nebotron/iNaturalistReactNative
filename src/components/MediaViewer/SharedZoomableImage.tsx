@@ -25,9 +25,13 @@ const styles = StyleSheet.create( {
   },
 } );
 
+type SharedZoomableImageProps = ImageZoomProps & {
+  brightness?: number;
+};
+
 const SharedZoomableImage: ForwardRefRenderFunction<
   SharedZoomableImageRef,
-  ImageZoomProps
+  SharedZoomableImageProps
 > = (
   {
     uri = "",
@@ -54,6 +58,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     style = {},
     testID,
     cropPanContext,
+    brightness = 1,
   },
   ref,
 ) => {
@@ -114,11 +119,14 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     },
   } ), [applyTransform, reset, zoom] );
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const brightnessFilter: any = brightness !== 1 ? { filter: [{ brightness }] } : null;
+
   return (
     <GestureDetector gesture={gestures}>
       <Animated.Image
         testID={testID}
-        style={[styles.image, style, animatedStyle]}
+        style={[styles.image, style, animatedStyle, brightnessFilter]}
         source={{ uri }}
         resizeMode="contain"
         onLayout={onZoomableLayout}
