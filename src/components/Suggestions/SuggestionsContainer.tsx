@@ -3,7 +3,9 @@ import {
 } from "@react-native-community/netinfo";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
+import findIndex from "lodash/findIndex";
 import isEqual from "lodash/isEqual";
+import sortBy from "lodash/sortBy";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
@@ -15,6 +17,7 @@ import React, {
 } from "react";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
+import type { RealmPhoto } from "realmModels/types";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
@@ -25,6 +28,7 @@ import {
   useSuggestions,
 } from "sharedHooks";
 import useDebugMode from "sharedHooks/useDebugMode";
+import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import {
   internalUseSuggestionsInitialSuggestions,
 } from "sharedHooks/useSuggestions/filterSuggestions";
@@ -180,6 +184,13 @@ const SuggestionsContainer = ( ) => {
     );
   }, [currentObservation, realm] );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
+  const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
+  const { trackImageDeleted } = useInputImageTracking( );
+
+  const observationPhotos = useMemo(
+    ( ) => currentObservation?.observationPhotos || [],
+    [currentObservation?.observationPhotos],
+  );
 
   const evidenceHasLocation = !!currentObservation?.latitude;
 
@@ -506,6 +517,85 @@ const SuggestionsContainer = ( ) => {
     } );
   }, [selectedPhotoUri, updateObservationKeys] );
 
+  const afterMediaDeleted = useCallback( ( ) => {
+    const freshObservation = useStore.getState( ).currentObservation;
+    const freshPhotoUris = ObservationPhoto.mapObsPhotoUris( freshObservation );
+    if ( freshPhotoUris.length === 0 ) {
+      dispatch( { type: "TOGGLE_MEDIA_VIEWER", mediaViewerVisible: false } );
+      navigation.goBack( );
+      return;
+    }
+    const newUri = freshPhotoUris[freshPhotoUris.length - 1];
+    createUploadParams( newUri, shouldUseEvidenceLocation ).then( params => {
+      dispatch( {
+        type: "SELECT_PHOTO",
+        selectedPhotoUri: newUri,
+        scoreImageParams: params,
+      } );
+    } );
+  }, [createUploadParams, navigation, shouldUseEvidenceLocation] );
+
+  const onDeletePhoto = useCallback( async ( uriToDelete: string ) => {
+    await ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
+    deletePhotoFromObservation( uriToDelete );
+    trackImageDeleted( uriToDelete );
+    afterMediaDeleted( );
+  }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation, trackImageDeleted] );
+
+  const onCropPhoto = useCallback( ( photo: RealmPhoto ) => {
+    const cropUri = Photo.displayCropSourcePhoto( photo );
+    if ( !cropUri ) { return; }
+
+    const obsPhoto = observationPhotos.find( candidate => {
+      const candidateUri = Photo.displayCropSourcePhoto( candidate.photo );
+      const candidateLargeUri = Photo.displayLocalOrRemoteLargePhoto( candidate.photo );
+      const candidateSquareUri = Photo.displayLocalOrRemoteSquarePhoto( candidate.photo );
+      return candidateUri === cropUri
+        || candidateLargeUri === Photo.displayLocalOrRemoteLargePhoto( photo )
+        || candidateSquareUri === Photo.displayLocalOrRemoteSquarePhoto( photo );
+    } );
+    if ( !obsPhoto ) { return; }
+
+    dispatch( { type: "TOGGLE_MEDIA_VIEWER", mediaViewerVisible: false } );
+    navigation.navigate( "ImageCropEditor", {
+      imageUri: cropUri,
+      context: "observationEdit",
+      observationPhotoUuid: obsPhoto.uuid,
+      onCropSaved: ( ) => {
+        const freshObservation = useStore.getState( ).currentObservation;
+        const freshPhotoUris = ObservationPhoto.mapObsPhotoUris( freshObservation );
+        const photoIdx = ( currentObservation?.observationPhotos || [] )
+          .findIndex( op => op.uuid === obsPhoto.uuid );
+        const newUri = freshPhotoUris[photoIdx] ?? freshPhotoUris[0];
+        if ( newUri ) {
+          createUploadParams( newUri, shouldUseEvidenceLocation ).then( params => {
+            dispatch( {
+              type: "SELECT_PHOTO",
+              selectedPhotoUri: newUri,
+              scoreImageParams: params,
+            } );
+          } );
+        }
+      },
+    } );
+  }, [
+    createUploadParams,
+    currentObservation,
+    navigation,
+    observationPhotos,
+    shouldUseEvidenceLocation,
+  ] );
+
+  const handleReorderPhotos = useCallback( ( { data: newPhotoUris }: { data: string[] } ) => {
+    const newObsPhotos = observationPhotos.map( obsPhoto => {
+      const photoUri = Photo.displayLocalOrRemoteMediumPhoto( obsPhoto.photo );
+      const newPosition = findIndex( newPhotoUris, p => p === photoUri );
+      return { ...obsPhoto, position: newPosition };
+    } );
+    const sortedObsPhotos = sortBy( newObsPhotos, obsPhoto => obsPhoto.position );
+    updateObservationKeys( { observationPhotos: sortedObsPhotos } );
+  }, [observationPhotos, updateObservationKeys] );
+
   const debugData = {
     timedOut,
     onlineFetchStatus,
@@ -531,6 +621,7 @@ const SuggestionsContainer = ( ) => {
         isLoading={isLoading}
         shouldUseEvidenceLocation={shouldUseEvidenceLocation}
         onPressPhoto={onPressPhoto}
+        onReorderPhotos={handleReorderPhotos}
         onTaxonChosen={navigateWithTaxonSelected}
         duplicatePhotoUris={duplicatePhotoUris}
         photoUris={photoUris}
@@ -546,11 +637,15 @@ const SuggestionsContainer = ( ) => {
         usingOfflineSuggestions={usingOfflineSuggestions}
       />
       <MediaViewerModal
+        editable
         showModal={mediaViewerVisible}
         onClose={( ) => dispatch( {
           type: "TOGGLE_MEDIA_VIEWER",
           mediaViewerVisible: false,
         } )}
+        onDeletePhoto={onDeletePhoto}
+        onCropPhoto={onCropPhoto}
+        onReorderPhotos={handleReorderPhotos}
         uri={selectedPhotoUri}
         photos={innerPhotos}
       />
