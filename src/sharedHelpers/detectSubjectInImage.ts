@@ -1,9 +1,9 @@
 import { NativeModules } from "react-native";
-import type { NormalizedBounds } from "sharedHelpers/subjectBoundsToNormalizedCrop";
-import { subjectBoundsToNormalizedCrop } from "sharedHelpers/subjectBoundsToNormalizedCrop";
+import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
-import { log } from "sharedHelpers/logger";
+import type { NormalizedBounds } from "sharedHelpers/subjectBoundsToNormalizedCrop";
+import { subjectBoundsToNormalizedCrop } from "sharedHelpers/subjectBoundsToNormalizedCrop";
 
 import { SUBJECT_DETECTION_MODEL_PADDING } from "./subjectDetectionModels";
 
