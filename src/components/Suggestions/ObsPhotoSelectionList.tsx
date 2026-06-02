@@ -5,7 +5,7 @@ import {
   Image, Pressable, View,
 } from "components/styledComponents";
 import React, { useCallback } from "react";
-import { FlatList } from "react-native";
+import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
 import { useTranslation } from "sharedHooks";
 
 interface Props {
@@ -13,57 +13,63 @@ interface Props {
   photoUris: string[];
   selectedPhotoUri: string;
   onPressPhoto: ( _uri: string ) => void;
+  onReorderPhotos?: ( _data: { data: string[] } ) => void;
 }
 
 const ObsPhotoSelectionList = ( {
   duplicatePhotoUris,
-  photoUris, selectedPhotoUri, onPressPhoto,
+  photoUris, selectedPhotoUri, onPressPhoto, onReorderPhotos,
 }: Props ) => {
   const { t } = useTranslation( );
 
-  const renderPhoto = useCallback( ( { item } ) => (
-    <Pressable
-      accessibilityRole="button"
-      onPress={( ) => {
-        onPressPhoto( item );
-      }}
-      className={classnames(
-        "w-[83px] h-[83px] justify-center mx-1.5 rounded-lg",
-      )}
-      accessibilityLabel={t( "Select-photo" )}
-      testID={`ObsPhotoSelectionList.${item}`}
-    >
-      <View
+  const renderPhoto = useCallback( ( { item, drag } ) => (
+    <ScaleDecorator>
+      <Pressable
+        accessibilityRole="button"
+        onPress={( ) => {
+          onPressPhoto( item );
+        }}
+        onLongPress={drag}
         className={classnames(
-          "rounded-lg overflow-hidden relative",
-          {
-            "border-inatGreen border-[3px]": selectedPhotoUri === item,
-          },
+          "w-[83px] h-[83px] justify-center mx-1.5 rounded-lg",
         )}
-        testID={`ObsPhotoSelectionList.border.${item}`}
+        accessibilityLabel={t( "Select-photo" )}
+        testID={`ObsPhotoSelectionList.${item}`}
       >
-        <Image
-          source={{ uri: item }}
-          accessibilityIgnoresInvertColors
-          className="w-full h-full"
-        />
-        {duplicatePhotoUris?.has( item ) && (
-          <DuplicateUploadBadge
-            accessibilityLabel={t( "Duplicate-photo-indicator" )}
-            className="absolute top-1 left-1 z-10"
-            size={18}
-            testID={`ObsPhotoSelectionList.duplicate.${item}`}
+        <View
+          className={classnames(
+            "rounded-lg overflow-hidden relative",
+            {
+              "border-inatGreen border-[3px]": selectedPhotoUri === item,
+            },
+          )}
+          testID={`ObsPhotoSelectionList.border.${item}`}
+        >
+          <Image
+            source={{ uri: item }}
+            accessibilityIgnoresInvertColors
+            className="w-full h-full"
           />
-        )}
-      </View>
-    </Pressable>
+          {duplicatePhotoUris?.has( item ) && (
+            <DuplicateUploadBadge
+              accessibilityLabel={t( "Duplicate-photo-indicator" )}
+              className="absolute top-1 left-1 z-10"
+              size={18}
+              testID={`ObsPhotoSelectionList.duplicate.${item}`}
+            />
+          )}
+        </View>
+      </Pressable>
+    </ScaleDecorator>
   ), [duplicatePhotoUris, selectedPhotoUri, onPressPhoto, t] );
 
   return (
-    <FlatList
+    <DraggableFlatList
       data={photoUris}
       renderItem={renderPhoto}
+      keyExtractor={uri => uri}
       horizontal
+      onDragEnd={onReorderPhotos ?? ( ( ) => undefined )}
     />
   );
 };
