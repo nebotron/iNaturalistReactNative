@@ -189,6 +189,8 @@ const ObsEdit = ( ): Node => {
                 />
                 <IdentificationSection
                   currentObservation={currentObservation}
+                  hasLocation={hasLocation}
+                  onLocationPress={onLocationPress}
                   resetScreen={resetScreen}
                   setResetScreen={setResetScreen}
                   updateObservationKeys={updateObservationKeys}
