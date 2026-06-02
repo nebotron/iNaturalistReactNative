@@ -77,6 +77,11 @@ Advanced-Mode = Advanced Mode
 ADVANCED-SETTINGS = ADVANCED SETTINGS
 Affiliation = Affiliation: { $site }
 After-capturing-or-importing-photos-show = After capturing or importing photos, show:
+# Accessibility label for brightness adjustment slider button in media viewer
+Adjust-brightness = Adjust brightness
+# Label for the current brightness level shown in the media viewer
+# Accessibility label for button that resets image brightness to default
+Reset-brightness = Reset brightness
 # Label for button that adds an identification of the same taxon as another identification
 Agree = Agree
 # Label for button that adds an identification of the same taxon as another identification
