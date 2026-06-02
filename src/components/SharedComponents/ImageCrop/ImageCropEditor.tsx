@@ -4,8 +4,8 @@ import {
   Button,
   ViewWrapper,
 } from "components/SharedComponents";
-import findGroupedPhotoByDisplayUri from
-  "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
+import findGroupedPhotoByDisplayUri
+  from "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
 import ImageCropView from "components/SharedComponents/ImageCrop/ImageCropView";
 import { View } from "components/styledComponents";
 import cloneDeep from "lodash/cloneDeep";
@@ -27,33 +27,30 @@ import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
 import {
+  deleteDevicePhotosRemovedDuringObservationPrep,
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 type Route = RouteProp<SharedStackParamList, "ImageCropEditor">;
 
-const CROP_FRAME_PADDING = 0;
+// Default squareShape uses framePadding 0.15 (70% of max). 0.045 → ~91% (~30% larger).
+const CROP_FRAME_PADDING = 0.045;
 
 const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
   const { t } = useTranslation( );
-  const { trackImageCropped, trackImageDeleted } = useInputImageTracking( );
   const currentObservation = useStore( state => state.currentObservation );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
-  const addPendingGroupPhotoDeletionUri = useStore(
-    state => state.addPendingGroupPhotoDeletionUri,
-  );
 
   const imageUri = params?.imageUri;
   const context = params?.context;
@@ -120,14 +117,7 @@ const ImageCropEditor = ( ) => {
           );
           const photo = obsPhoto?.photo;
           if ( photo ) {
-            // Prefer the preserved crop original (set after first crop), then the original
-            // device photo (full resolution, not yet resized), then the resized local file.
-            // This ensures cropping always happens on the highest-resolution source available,
-            // so the subsequent resize step operates on the already-cropped image.
-            cropSourceUri = cropOriginalUriFromPath( photo?.cropOriginalLocalFilePath )
-              || obsPhoto?.originalDevicePhotoUri
-              || Photo.displayCropSourcePhoto( photo )
-              || imageUri;
+            cropSourceUri = Photo.displayCropEditorSourcePhoto( photo ) || imageUri;
             existingSavedCrop = Photo.savedNormalizedCrop( photo );
           }
         } else if ( context === "groupPhotos" ) {
@@ -224,10 +214,9 @@ const ImageCropEditor = ( ) => {
     if ( context === "groupPhotos" && imageUri ) {
       const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
       if ( groupedPhoto ) {
-        const deviceUri = resolveDevicePhotoUriFromGroupedPhoto( groupedPhoto );
-        if ( deviceUri ) {
-          addPendingGroupPhotoDeletionUri( deviceUri );
-        }
+        deleteDevicePhotosRemovedDuringObservationPrep( [
+          resolveDevicePhotoUriFromGroupedPhoto( groupedPhoto ),
+        ] );
       }
       setGroupedPhotos(
         groupedPhotos
@@ -258,13 +247,11 @@ const ImageCropEditor = ( ) => {
       if ( uriToDelete ) {
         void ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
         deletePhotoFromObservation( uriToDelete );
-        trackImageDeleted( uriToDelete );
       }
       onCropSaved?.( );
       navigation.goBack( );
     }
   }, [
-    addPendingGroupPhotoDeletionUri,
     context,
     currentObservation,
     deletePhotoFromObservation,
@@ -277,7 +264,6 @@ const ImageCropEditor = ( ) => {
     observationPhotoUuid,
     onCropSaved,
     setGroupedPhotos,
-    trackImageDeleted,
   ] );
 
   const handleConfirm = useCallback( ( crop: NormalizedCrop ) => {
@@ -357,10 +343,6 @@ const ImageCropEditor = ( ) => {
         recordCropFeedback( feedbackSourceKey, { crop, kept: true } );
       }
 
-      if ( imageUri ) {
-        trackImageCropped( imageUri, crop );
-      }
-
       finishOrAdvance( );
     } )( ).catch( ( ) => {
       Alert.alert( t( "Something-went-wrong" ) );
@@ -377,7 +359,6 @@ const ImageCropEditor = ( ) => {
     observationPhotoUuid,
     setGroupedPhotos,
     t,
-    trackImageCropped,
     updateObservationKeys,
   ] );
 
