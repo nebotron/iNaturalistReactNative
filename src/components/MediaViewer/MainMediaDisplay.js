@@ -1,7 +1,9 @@
 // @flow
 
+import Slider from "@react-native-community/slider";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import {
+  INatIconButton,
   TransparentCircleButton,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
@@ -22,6 +24,10 @@ import colors from "styles/tailwindColors";
 
 import AttributionButton from "./AttributionButton";
 import CustomImageZoom from "./CustomImageZoom";
+
+const BRIGHTNESS_MIN = 0.1;
+const BRIGHTNESS_MAX = 3.0;
+const BRIGHTNESS_DEFAULT = 1.0;
 
 type Props = {
   autoPlaySound?: boolean, // automatically start playing a sound when it is visible
@@ -63,6 +69,8 @@ const MainMediaDisplay = ( {
   const { screenWidth } = useDeviceOrientation( );
   const [displayHeight, setDisplayHeight] = useState( 0 );
   const [zooming, setZooming] = useState( false );
+  const [brightness, setBrightness] = useState( BRIGHTNESS_DEFAULT );
+  const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
   const atFirstItem = selectedMediaIndex === 0;
   const items = useMemo( ( ) => ( [
     ...photos.map( photo => ( { ...photo, type: "photo" } ) ),
@@ -85,6 +93,7 @@ const MainMediaDisplay = ( {
           uri={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
+          brightness={brightness}
         />
         {
           editable
@@ -122,15 +131,59 @@ const MainMediaDisplay = ( {
               )
             )
         }
+        <View className="absolute bottom-4 left-4">
+          <INatIconButton
+            onPress={( ) => setShowBrightnessSlider( prev => !prev )}
+            icon="sliders"
+            color={showBrightnessSlider || brightness !== BRIGHTNESS_DEFAULT
+              ? colors.inatGreen
+              : colors.white}
+            className="bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px]"
+            accessibilityLabel={t( "Adjust-brightness" )}
+            testID="MediaViewer.brightnessButton"
+            size={20}
+          />
+        </View>
+        { showBrightnessSlider && (
+          <View className="absolute bottom-16 left-0 right-0 px-4 py-2">
+            <View className="bg-black/60 rounded-xl px-3 py-2 flex-row items-center">
+              <Slider
+                style={{ flex: 1, height: 40 }}
+                minimumValue={BRIGHTNESS_MIN}
+                maximumValue={BRIGHTNESS_MAX}
+                minimumTrackTintColor={colors.inatGreen}
+                maximumTrackTintColor={colors.white}
+                thumbTintColor={colors.white}
+                value={brightness}
+                onValueChange={setBrightness}
+                tapToSeek
+                accessibilityLabel={t( "Adjust-brightness" )}
+              />
+              { brightness !== BRIGHTNESS_DEFAULT && (
+                <TransparentCircleButton
+                  onPress={( ) => setBrightness( BRIGHTNESS_DEFAULT )}
+                  icon="close"
+                  color={colors.white}
+                  accessibilityLabel={t( "Reset-brightness" )}
+                  testID="MediaViewer.resetBrightnessButton"
+                  optionalClasses="ml-2"
+                />
+              ) }
+            </View>
+          </View>
+        ) }
       </View>
     );
   }, [
+    brightness,
     cropPhotoLabel,
     deletePhotoLabel,
     editable,
     onCropPhoto,
     onDeletePhoto,
     selectedMediaIndex,
+    showBrightnessSlider,
+    t,
   ] );
 
   const renderSound = useCallback( sound => (
