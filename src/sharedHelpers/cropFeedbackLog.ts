@@ -1,7 +1,7 @@
 import Clipboard from "@react-native-clipboard/clipboard";
 import { Alert } from "react-native";
-import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { cropOriginalUriFromPath } from "sharedHelpers/cropPhotoMetadata";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { zustandStorage } from "stores/useStore";
 
 const CROP_FEEDBACK_STORAGE_KEY = "cropFeedbackLog";
@@ -106,7 +106,8 @@ export const linkCropFeedbackUploadedUrlForPhoto = (
     linkCropFeedbackUploadedUrl( cropOriginalUri, uploadedUrl );
   }
   if ( photo.localFilePath ) {
-    linkCropFeedbackUploadedUrl( cropOriginalUriFromPath( photo.localFilePath ) || photo.localFilePath, uploadedUrl );
+    const localUri = cropOriginalUriFromPath( photo.localFilePath ) || photo.localFilePath;
+    linkCropFeedbackUploadedUrl( localUri, uploadedUrl );
   }
 };
 
