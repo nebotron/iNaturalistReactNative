@@ -73,6 +73,7 @@ const ObsGridItem = ( {
 
   return (
     <ObsImagePreview
+      autoDetectSubject={explore}
       source={{
         uri: Photo.displayLocalOrRemoteMediumPhoto( photo ),
       }}
