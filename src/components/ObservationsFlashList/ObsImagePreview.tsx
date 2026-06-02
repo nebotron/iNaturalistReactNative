@@ -17,6 +17,7 @@ const ICON_DROP_SHADOW = getShadow( {
 } );
 
 interface Props extends PropsWithChildren {
+  autoDetectSubject?: boolean;
   className?: string;
   hasSound?: boolean;
   height?: string;
@@ -54,6 +55,7 @@ const getBorderRadiusClass = (
 };
 
 const ObsImagePreview = ( {
+  autoDetectSubject = false,
   children,
   className,
   hasSound = false,
@@ -227,6 +229,7 @@ const ObsImagePreview = ( {
     content = (
       <>
         <ObsImage
+          autoDetectSubject={autoDetectSubject}
           uri={source}
           opaque={opaque}
           iconicTaxonName={iconicTaxonName}
