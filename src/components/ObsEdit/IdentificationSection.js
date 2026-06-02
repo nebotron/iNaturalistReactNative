@@ -13,14 +13,18 @@ import { View } from "components/styledComponents";
 import capitalize from "lodash/capitalize";
 import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
+
+import AddLocationForIDSheet from "./Sheets/AddLocationForIDSheet";
 
 const { useRealm } = RealmContext;
 
 type Props = {
   currentObservation: Object,
+  hasLocation: boolean,
+  onLocationPress: ( ) => void,
   resetScreen: boolean,
   setResetScreen: Function,
   updateObservationKeys: Function
@@ -28,6 +32,8 @@ type Props = {
 
 const IdentificationSection = ( {
   currentObservation,
+  hasLocation,
+  onLocationPress,
   resetScreen,
   setResetScreen,
   updateObservationKeys,
@@ -41,11 +47,14 @@ const IdentificationSection = ( {
 
   const hasIdentification = identTaxon && identTaxon.rank_level !== 100;
 
+  const [showNoLocationSheet, setShowNoLocationSheet] = useState( false );
+  const [pendingNavToSuggestions, setPendingNavToSuggestions] = useState( false );
+
   const removeTaxon = useCallback( ( ) => {
     updateObservationKeys( { taxon: undefined } );
   }, [updateObservationKeys] );
 
-  const navToSuggestions = useCallback( ( ) => {
+  const doNavToSuggestions = useCallback( ( ) => {
     if ( hasPhotos ) {
       navigation.push( "Suggestions", {
         entryScreen: "ObsEdit",
@@ -64,6 +73,22 @@ const IdentificationSection = ( {
     hasPhotos,
     navigation,
   ] );
+
+  const navToSuggestions = useCallback( ( ) => {
+    if ( !hasLocation ) {
+      setShowNoLocationSheet( true );
+    } else {
+      doNavToSuggestions( );
+    }
+  }, [hasLocation, doNavToSuggestions] );
+
+  // Once the user adds a location after pressing "Add Location", navigate to Suggestions
+  useEffect( ( ) => {
+    if ( pendingNavToSuggestions && hasLocation ) {
+      setPendingNavToSuggestions( false );
+      doNavToSuggestions( );
+    }
+  }, [pendingNavToSuggestions, hasLocation, doNavToSuggestions] );
 
   const navToSuggestionsSearch = useCallback( ( ) => {
     navigation.navigate( "SuggestionsTaxonSearch", {
@@ -155,6 +180,20 @@ const IdentificationSection = ( {
 
   return (
     <View className="mt-2">
+      {showNoLocationSheet && (
+        <AddLocationForIDSheet
+          onAddLocation={( ) => {
+            setShowNoLocationSheet( false );
+            setPendingNavToSuggestions( true );
+            onLocationPress( );
+          }}
+          onSkip={( ) => {
+            setShowNoLocationSheet( false );
+            doNavToSuggestions( );
+          }}
+          onClose={( ) => setShowNoLocationSheet( false )}
+        />
+      )}
       <View className="ml-6 flex-row">
         <Heading4>{t( "IDENTIFICATION" )}</Heading4>
         {hasIdentification && (
