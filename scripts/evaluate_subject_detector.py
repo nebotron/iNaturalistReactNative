@@ -352,7 +352,7 @@ def main() -> None:
     parser.add_argument("--photos-dir", metavar="DIR",
                         help="Folder of Apple Photos exports (for file:// entries)")
     parser.add_argument("--paddings",
-                        default="0.05,0.08,0.10,0.12,0.15,0.18,0.20,0.25,0.30",
+                        default="0.00,0.05,0.08,0.10,0.12,0.15,0.18,0.20,0.25,0.30",
                         help="Comma-separated padding values to test")
     parser.add_argument("--cache-dir", default=None,
                         help="Cache directory for downloaded images")
@@ -400,7 +400,7 @@ def main() -> None:
             sys.exit("No images could be evaluated.")
 
         results = evaluate(eval_entries, paddings)
-        print_report(results, eval_entries, current_padding=0.12)
+        print_report(results, eval_entries, current_padding=0.0)
 
         csv_path = Path(args.feedback_json).with_suffix(".eval.csv")
         with open(csv_path, "w") as csvf:
