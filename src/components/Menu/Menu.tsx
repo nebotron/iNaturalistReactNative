@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Observation from "realmModels/Observation";
 import User from "realmModels/User";
 import { valueToBreakpoint } from "sharedHelpers/breakpoint";
-import { copyCropFeedbackToClipboard } from "sharedHelpers/cropFeedbackLog";
+import { copyAnimalCropLogToClipboard } from "sharedHelpers/animalCropLog";
 import { log } from "sharedHelpers/logger";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
@@ -139,6 +139,12 @@ const Menu = ( ) => {
       navigation: "Help",
       icon: "help-circle",
     },
+    animalCropTool: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "Animal Crop Tool",
+      navigation: "AnimalCropTool",
+      icon: "crop",
+    },
     settings: {
       testID: "settings",
       label: t( "SETTINGS" ),
@@ -249,10 +255,11 @@ const Menu = ( ) => {
           icon: "triangle-exclamation",
           color: "deeppink",
         },
-        copyCropFeedback: {
-          label: "Copy crop feedback JSON",
+        copyAnimalCropLog: {
+          // eslint-disable-next-line i18next/no-literal-string
+          label: "Copy animal crop log",
           icon: "clipboard",
-          onPress: () => copyCropFeedbackToClipboard( ),
+          onPress: () => copyAnimalCropLogToClipboard( ),
         },
       }
       : {} ),

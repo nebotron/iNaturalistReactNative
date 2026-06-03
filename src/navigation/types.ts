@@ -339,6 +339,7 @@ export type BaseTabStackParamList = {
     projectTitle?: string;
     journalPostsCount?: number;
   } | undefined;
+  AnimalCropTool: undefined;
   Debug: undefined;
   UILibrary: undefined;
   UiLibraryItem: undefined;
