@@ -17,7 +17,7 @@ describe( "detectSubjectInImage", ( ) => {
     NativeModules.ImageCropper = originalImageCropper;
   } );
 
-  it( "falls back to the default square crop when native detection returns no bounds", async ( ) => {
+  it( "falls back to default square crop when native detection returns no bounds", async ( ) => {
     mockDetectSubjectBounds.mockResolvedValue( null );
 
     const crop = await detectSubjectInImage( "file:///tmp/photo.jpg", 2000, 1000 );
@@ -35,7 +35,7 @@ describe( "detectSubjectInImage", ( ) => {
     const crop = await detectSubjectInImage( "file:///tmp/photo.jpg", 2000, 1000 );
 
     expect( mockDetectSubjectBounds ).toHaveBeenCalledWith( "/tmp/photo.jpg", "A" );
-    expect( crop.w ).toBe( crop.h );
+    expect( crop.w * 2000 ).toBeCloseTo( crop.h * 1000, 5 );
     expect( crop.x ).toBeGreaterThanOrEqual( 0 );
     expect( crop.y ).toBeGreaterThanOrEqual( 0 );
   } );

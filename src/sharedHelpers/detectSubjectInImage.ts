@@ -38,6 +38,8 @@ const detectSubjectInImage = async (
     }
     return subjectBoundsToNormalizedCrop(
       bounds,
+      imageWidth,
+      imageHeight,
       SUBJECT_DETECTION_MODEL_PADDING,
     );
   } catch ( error ) {
