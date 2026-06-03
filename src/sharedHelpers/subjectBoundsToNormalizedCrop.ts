@@ -7,7 +7,7 @@ export interface NormalizedBounds {
   height: number;
 }
 
-const DEFAULT_PADDING_FRACTION = 0.12;
+const DEFAULT_PADDING_FRACTION = 0;
 
 export function subjectBoundsToNormalizedCrop(
   bounds: NormalizedBounds,
