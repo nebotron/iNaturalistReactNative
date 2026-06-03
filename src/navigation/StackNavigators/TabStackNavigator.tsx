@@ -1,6 +1,7 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import About from "components/About";
+import AnimalCropTool from "components/AnimalCropTool/AnimalCropTool";
 import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
 import UiLibrary from "components/Developer/UiLibrary";
@@ -84,6 +85,8 @@ const notificationsTitle = () => (
   </Heading4>
 );
 
+// eslint-disable-next-line i18next/no-literal-string
+const animalCropTitle = () => <Heading4 numberOfLines={1}>Animal Crop Tool</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const debugTitle = () => <Heading4 className="text-white">DEBUG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
@@ -320,6 +323,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           ...removeBottomBorder,
         }}
       >
+        <Stack.Screen
+          name="AnimalCropTool"
+          component={AnimalCropTool}
+          options={{
+            headerTitle: animalCropTitle,
+          }}
+        />
         <Stack.Screen
           name="Settings"
           component={FadeInSettings}
