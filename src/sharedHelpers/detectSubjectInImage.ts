@@ -5,7 +5,7 @@ import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
 import type { NormalizedBounds } from "sharedHelpers/subjectBoundsToNormalizedCrop";
 import { subjectBoundsToNormalizedCrop } from "sharedHelpers/subjectBoundsToNormalizedCrop";
 
-import { SUBJECT_DETECTION_MODEL_PADDING } from "./subjectDetectionModels";
+import SUBJECT_DETECTION_MODEL_PADDING from "./subjectDetectionModels";
 
 const logger = log.extend( "detectSubjectInImage" );
 
