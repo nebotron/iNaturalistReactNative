@@ -72,6 +72,7 @@ Adds-ID = Adds ID
 Adds-your-vote-of-agreement = Adds your vote of agreement
 # Hint for a button that adds a vote of disagreement
 Adds-your-vote-of-disagreement = Adds your vote of disagreement
+Adjust-brightness = Adjust brightness
 # Label for toggling app mode between default and advanced settings
 Advanced-Mode = Advanced Mode
 # Link to the advanced search screen with more search filters
@@ -79,11 +80,6 @@ Advanced-Search = Advanced Search
 ADVANCED-SETTINGS = ADVANCED SETTINGS
 Affiliation = Affiliation: { $site }
 After-capturing-or-importing-photos-show = After capturing or importing photos, show:
-# Accessibility label for brightness adjustment slider button in media viewer
-Adjust-brightness = Adjust brightness
-# Label for the current brightness level shown in the media viewer
-# Accessibility label for button that resets image brightness to default
-Reset-brightness = Reset brightness
 # Label for button that adds an identification of the same taxon as another identification
 Agree = Agree
 # Label for button that adds an identification of the same taxon as another identification
@@ -1141,6 +1137,9 @@ Removes-your-vote-of-disagreement = Removes your vote of disagreement
 Research-Grade--quality-grade = Research Grade
 RESEARCH-GRADE--quality-grade = RESEARCH GRADE
 Research-Grade-Status = Research Grade Status
+# Label for a button that resets the state of an interface, e.g. a button that
+# resets the sound recorder to its original state
+Reset-brightness = Reset brightness
 # Reset password button
 RESET-PASSWORD = RESET PASSWORD
 # Label for a button that resets a sound recording
@@ -1149,8 +1148,6 @@ RESET-SEARCH = RESET SEARCH
 # Header of a popup confirming that the user wants to reset a sound
 # recording
 RESET-SOUND-header = RESET SOUND?
-# Label for a button that resets the state of an interface, e.g. a button that
-# resets the sound recorder to its original state
 Reset-verb = Reset
 RESTART-APP = RESTART APP
 # Label for button that restores a withdrawn identification

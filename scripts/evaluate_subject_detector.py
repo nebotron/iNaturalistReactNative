@@ -52,10 +52,27 @@ def clamp_crop(x: float, y: float, w: float, h: float,
 
 
 def bounds_to_crop(bx: float, by: float, bw: float, bh: float,
-                   padding: float) -> Crop:
+                   padding: float,
+                   image_width: int = 0, image_height: int = 0) -> Crop:
     """Exact replica of subjectBoundsToNormalizedCrop.ts."""
     if bw <= 0 or bh <= 0:
         return Crop(0, 0, 1, 1)
+    if image_width > 0 and image_height > 0:
+        padded_w = bw * (1 + padding)
+        padded_h = bh * (1 + padding)
+        pixel_side = min(
+            max(padded_w * image_width, padded_h * image_height),
+            image_width,
+            image_height,
+        )
+        w = pixel_side / image_width
+        h = pixel_side / image_height
+        cx = bx + bw / 2
+        cy = by + bh / 2
+        x = max(0.0, min(1.0 - w, cx - w / 2))
+        y = max(0.0, min(1.0 - h, cy - h / 2))
+        return Crop(x, y, w, h)
+    # Fallback when image dimensions are unavailable (normalized-space squaring)
     pad_w = bw * padding
     pad_h = bh * padding
     x = bx - pad_w / 2
@@ -229,12 +246,40 @@ def resolve_image(key: str, photos_dir: Optional[Path], cache_dir: Path) -> Opti
 # Evaluation
 # ---------------------------------------------------------------------------
 
+def get_image_size(image_path: str) -> tuple[int, int]:
+    """Return (width, height) of the image, or (0, 0) on failure."""
+    try:
+        from PIL import Image as PILImage  # type: ignore[import]
+        with PILImage.open(image_path) as img:
+            return img.size  # (width, height)
+    except Exception:
+        pass
+    try:
+        import objc  # noqa: F401
+        from Foundation import NSURL
+        from ImageIO import CGImageSourceCreateWithURL, CGImageSourceCopyPropertiesAtIndex
+        url = NSURL.fileURLWithPath_(os.path.abspath(image_path))
+        src = CGImageSourceCreateWithURL(url, None)
+        if src:
+            props = CGImageSourceCopyPropertiesAtIndex(src, 0, None)
+            if props:
+                w = props.get("PixelWidth", 0)
+                h = props.get("PixelHeight", 0)
+                if w and h:
+                    return int(w), int(h)
+    except Exception:
+        pass
+    return (0, 0)
+
+
 @dataclass
 class EvalEntry:
     key: str
     truth: Crop
     kept: bool
     bounds: Optional[tuple[float, float, float, float]]
+    image_width: int = 0
+    image_height: int = 0
 
 
 @dataclass
@@ -253,7 +298,7 @@ def evaluate(entries: list[EvalEntry], paddings: list[float]) -> list[PaddingRes
     results = []
     for pad in paddings:
         ious = sorted(
-            iou(bounds_to_crop(*e.bounds, pad), e.truth)  # type: ignore[arg-type]
+            iou(bounds_to_crop(*e.bounds, pad, e.image_width, e.image_height), e.truth)  # type: ignore[arg-type]
             for e in detected
         )
         n = len(ious)
@@ -343,10 +388,11 @@ def main() -> None:
                 print("  ↳ image not found, skipping")
                 skipped += 1
                 continue
+            img_w, img_h = get_image_size(image_path)
             bounds = detect_bounds_vision(image_path)
             if bounds is None:
                 print("  ↳ Vision returned no results (fallback crop)")
-            eval_entries.append(EvalEntry(key, truth, kept, bounds))
+            eval_entries.append(EvalEntry(key, truth, kept, bounds, img_w, img_h))
 
         if skipped:
             print(f"\nSkipped {skipped} entries (image not found).")
@@ -368,7 +414,7 @@ def main() -> None:
                        f"{int(e.bounds is not None)}")
                 for r in results:
                     if e.bounds is not None:
-                        pred = bounds_to_crop(*e.bounds, r.padding)
+                        pred = bounds_to_crop(*e.bounds, r.padding, e.image_width, e.image_height)
                         row += f",{iou(pred, e.truth):.4f}"
                     else:
                         row += ","
