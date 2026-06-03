@@ -1,4 +1,3 @@
-- Always develop on the latest version of branch `develop-squash`.
-- When you finish a task, commit them with an informative message and `git push fork develop-squash`.
+- When you finish a task, commit them with an informative message and `git push fork main`.
 - Keep your changes as concise as possible. If any change turns out to be unnecessary to acheive the task at hand, revert it.
-- Once you are done with all requests, and there are no follow-ups, deploy the changes with `npr`. Debug any failures. Never silence the output of this command.
+- Once you are done with all requests, and there are no follow-ups, deploy the changes with `dpl`. Debug any failures. Never silence the output of this command.
