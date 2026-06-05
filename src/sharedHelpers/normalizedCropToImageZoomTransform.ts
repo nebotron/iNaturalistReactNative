@@ -2,6 +2,7 @@ import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop"
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 
+// eslint-disable-next-line import/prefer-default-export
 export function normalizedCropToImageZoomTransform(
   imageWidth: number,
   imageHeight: number,
@@ -40,20 +41,14 @@ export function normalizedCropToImageZoomTransform(
   const centerY = viewportHeight / 2;
   const half = cropSize / 2;
 
-  const sidePixels = Math.min( crop.w * imageWidth, crop.h * imageHeight );
-  const normalizedSideW = sidePixels / imageWidth;
-  const normalizedSideH = sidePixels / imageHeight;
-  const cropCenterX = crop.x + crop.w / 2;
-  const cropCenterY = crop.y + crop.h / 2;
-
-  const scaleFromWidth = cropSize / ( normalizedSideW * contain.width );
-  const scaleFromHeight = cropSize / ( normalizedSideH * contain.height );
-  const scale = Math.max( scaleFromWidth, scaleFromHeight );
+  const scaleFromWidth = cropSize / ( crop.w * contain.width );
+  const scaleFromHeight = cropSize / ( crop.h * contain.height );
+  const scale = Math.min( scaleFromWidth, scaleFromHeight );
 
   const totalTranslateX = -half
-    - scale * ( contain.left + ( cropCenterX - normalizedSideW / 2 ) * contain.width - centerX );
+    - scale * ( contain.left + crop.x * contain.width - centerX );
   const totalTranslateY = -half
-    - scale * ( contain.top + ( cropCenterY - normalizedSideH / 2 ) * contain.height - centerY );
+    - scale * ( contain.top + crop.y * contain.height - centerY );
 
   return {
     scale,
