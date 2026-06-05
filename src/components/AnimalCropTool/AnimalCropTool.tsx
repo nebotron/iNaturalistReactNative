@@ -45,11 +45,11 @@ const parsePhotos = ( data: unknown ): RemotePhoto[] => {
   const results = ( data as { results?: unknown[] } ).results ?? [];
   for ( const obs of results ) {
     const obsPhotos = ( obs as { observation_photos?: unknown[] } ).observation_photos ?? [];
-    for ( const op of obsPhotos ) {
-      const url = ( ( op as { photo?: { url?: string } } ).photo ?? {} ).url;
-      if ( url ) {
-        photos.push( { squareUrl: url, largeUrl: url.replace( /square/i, "large" ) } );
-      }
+    const first = obsPhotos[0];
+    if ( !first ) continue;
+    const url = ( ( first as { photo?: { url?: string } } ).photo ?? {} ).url;
+    if ( url ) {
+      photos.push( { squareUrl: url, largeUrl: url.replace( /square/i, "large" ) } );
     }
   }
   return photos;
