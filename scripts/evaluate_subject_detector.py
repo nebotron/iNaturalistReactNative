@@ -2,19 +2,36 @@
 """
 Evaluate and tune the iNaturalist subject detector using exported crop feedback.
 
-Reads the JSON exported via Menu → "Copy crop feedback JSON", downloads the
-original images, re-runs Apple's Vision-based subject detection, and evaluates
-how well different padding values match the crops you actually chose.
+Reads the JSON exported via Menu → "Copy crop feedback JSON" (or crop_training.json),
+downloads the original images, re-runs subject detection, and evaluates how well
+different padding values and detection strategies match the crops you actually chose.
 
-Requirements (macOS only):
-    pip3 install pyobjc requests
+Two metrics (both 0–1, higher = better):
+  recall    = fraction of ground-truth crop covered by the AI crop
+              (must be ≈1.0 — the AI crop should always contain the subject)
+  precision = fraction of the AI crop that overlaps with ground truth
+              (tightness; 1.0 = perfect fit)
+
+Weighted score = (2·recall + 1·precision) / 3
+
+Two detection algorithms are compared:
+  current  — union of all detections (human ∪ animal ∪ all saliency objects)
+             mirrors the current ImageCropper.m behaviour
+  improved — if a human or animal is found, use only those boxes;
+             fall back to saliency only when nothing is detected
+
+Backends:
+  yolo    — YOLOv8n + spectral-residual saliency (runs on Linux/macOS)
+             pip install ultralytics pillow opencv-python-headless
+  vision  — Apple Vision framework via PyObjC (macOS only)
+             pip install pyobjc
 
 Usage:
-    python3 scripts/evaluate_subject_detector.py crop_feedback.json
+    python3 scripts/evaluate_subject_detector.py crop_training.json
     python3 scripts/evaluate_subject_detector.py crop_feedback.json \\
-        --photos-dir ~/Desktop/inat-photos
-    python3 scripts/evaluate_subject_detector.py crop_feedback.json \\
-        --paddings 0.05,0.10,0.12,0.15,0.20,0.25,0.30
+        --backend vision --photos-dir ~/Desktop/inat-photos
+    python3 scripts/evaluate_subject_detector.py crop_training.json \\
+        --paddings 0.05,0.10,0.15,0.20,0.25,0.30
 """
 
 from __future__ import annotations
@@ -131,15 +148,153 @@ def weighted_score(pred: Crop, truth: Crop) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Apple Vision detection via PyObjC (macOS only)
+# YOLO + spectral saliency detection backend (Linux / macOS)
 # ---------------------------------------------------------------------------
 
-def _require_objc() -> None:
-    try:
-        import objc  # noqa: F401
-    except ImportError:
-        sys.exit("PyObjC is required. Install with:  pip3 install pyobjc\n")
+# COCO class IDs that count as "animals" for iNaturalist purposes.
+# Covers the species Apple's VNRecognizeAnimalsRequest targets plus common wildlife.
+_YOLO_ANIMAL_CLASSES = {
+    14,  # bird
+    15,  # cat
+    16,  # dog
+    17,  # horse
+    18,  # sheep
+    19,  # cow
+    20,  # elephant
+    21,  # bear
+    22,  # zebra
+    23,  # giraffe
+}
+_YOLO_PERSON_CLASS = 0
+_YOLO_MIN_CONF = 0.25
 
+_yolo_model = None
+
+
+def _get_yolo():
+    global _yolo_model
+    if _yolo_model is None:
+        try:
+            from ultralytics import YOLO  # type: ignore[import]
+            _yolo_model = YOLO("yolov8n.pt")
+        except ImportError:
+            sys.exit(
+                "ultralytics is required for the YOLO backend.\n"
+                "  pip install ultralytics\n"
+            )
+    return _yolo_model
+
+
+def _spectral_saliency_bounds(image_path: str) -> Optional[tuple[float, float, float, float]]:
+    """
+    Spectral Residual saliency (Hou & Zhang 2007) — a fast CPU-only approximation
+    of attention-based saliency.  Returns (x, y, w, h) in top-left normalized coords,
+    or None if no salient region is found.
+    """
+    try:
+        import cv2
+        import numpy as np
+    except ImportError:
+        return None
+
+    img = cv2.imread(image_path)
+    if img is None:
+        return None
+
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    # Resize to fixed size for speed / stability
+    size = 64
+    small = cv2.resize(gray, (size, size))
+
+    # Spectral residual
+    fft = np.fft.fft2(small)
+    log_mag = np.log(np.abs(fft) + 1e-8)
+    # Smooth log magnitude with a 3×3 mean filter
+    kernel = np.ones((3, 3), np.float32) / 9
+    avg_log_mag = cv2.filter2D(log_mag, -1, kernel)
+    residual = log_mag - avg_log_mag
+    phase = np.angle(fft)
+    # Reconstruct and compute saliency map
+    sal = np.abs(np.fft.ifft2(np.exp(residual + 1j * phase))) ** 2
+    sal = cv2.GaussianBlur(sal, (7, 7), 0)
+    sal = (sal - sal.min()) / (sal.max() - sal.min() + 1e-8)
+
+    thresh = sal.mean() + sal.std()
+    mask = (sal > thresh).astype(np.uint8)
+    if mask.sum() == 0:
+        return None
+
+    ys, xs = np.where(mask)
+    x1, x2 = xs.min() / size, xs.max() / size
+    y1, y2 = ys.min() / size, ys.max() / size
+
+    bw = max(x2 - x1, 0.05)
+    bh = max(y2 - y1, 0.05)
+    return (x1, y1, bw, bh)
+
+
+def _union_boxes(boxes: list[tuple[float, float, float, float]]) -> Optional[tuple[float, float, float, float]]:
+    if not boxes:
+        return None
+    min_x = min(b[0] for b in boxes)
+    min_y = min(b[1] for b in boxes)
+    max_x = max(b[0] + b[2] for b in boxes)
+    max_y = max(b[1] + b[3] for b in boxes)
+    bw = max_x - min_x
+    bh = max_y - min_y
+    if bw <= 0 or bh <= 0:
+        return None
+    return (min_x, min_y, bw, bh)
+
+
+def _run_yolo(image_path: str) -> tuple[list, list]:
+    """Return (person_or_animal_boxes, all_boxes) as (x,y,w,h) normalized lists."""
+    model = _get_yolo()
+    results = model(image_path, verbose=False)[0]
+    object_boxes = []
+    for box in results.boxes:
+        cls = int(box.cls)
+        conf = float(box.conf)
+        if conf < _YOLO_MIN_CONF:
+            continue
+        if cls != _YOLO_PERSON_CLASS and cls not in _YOLO_ANIMAL_CLASSES:
+            continue
+        x1, y1, x2, y2 = [float(v) for v in box.xyxyn[0]]
+        object_boxes.append((x1, y1, x2 - x1, y2 - y1))
+    return object_boxes
+
+
+def detect_bounds_yolo_current(image_path: str) -> Optional[tuple[float, float, float, float]]:
+    """
+    Current algorithm: union of all object detections AND all saliency regions.
+    Mirrors ImageCropper.m's detectSubjectBoundsUnionAll behaviour.
+    """
+    object_boxes = _run_yolo(image_path)
+    sal = _spectral_saliency_bounds(image_path)
+    all_boxes = list(object_boxes)
+    if sal is not None:
+        all_boxes.append(sal)
+    return _union_boxes(all_boxes)
+
+
+def detect_bounds_yolo_improved(image_path: str) -> Optional[tuple[float, float, float, float]]:
+    """
+    Improved algorithm: if any human/animal is detected, use only those boxes
+    (skip saliency).  Fall back to saliency only when nothing specific is found.
+
+    Rationale: saliency tends to return loose, background-inclusive bounds that
+    expand the union unnecessarily when precise object detections already exist.
+    """
+    object_boxes = _run_yolo(image_path)
+    if object_boxes:
+        return _union_boxes(object_boxes)
+    # Fallback: saliency only
+    return _spectral_saliency_bounds(image_path)
+
+
+# ---------------------------------------------------------------------------
+# Apple Vision detection via PyObjC (macOS only)
+# ---------------------------------------------------------------------------
 
 def detect_bounds_vision(image_path: str) -> Optional[tuple[float, float, float, float]]:
     """
@@ -147,7 +302,11 @@ def detect_bounds_vision(image_path: str) -> Optional[tuple[float, float, float,
     bounding box as (x, y, width, height) in top-left normalised coords,
     or None if nothing was detected.
     """
-    _require_objc()
+    try:
+        import objc  # noqa: F401
+    except ImportError:
+        sys.exit("PyObjC is required. Install with:  pip3 install pyobjc\n")
+
     import objc  # noqa: F401
     from Foundation import NSURL
     from Vision import (
@@ -180,7 +339,7 @@ def detect_bounds_vision(image_path: str) -> Optional[tuple[float, float, float,
     for obs in (human_req.results() or []):
         bb = obs.boundingBox()
         boxes.append((bb.origin.x, bb.origin.y,
-                      bb.origin.x + bb.size.width, bb.origin.y + bb.size.height))
+                      bb.size.width, bb.size.height))
 
     if has_animals:
         for obs in (animal_req.results() or []):
@@ -188,28 +347,23 @@ def detect_bounds_vision(image_path: str) -> Optional[tuple[float, float, float,
                 continue
             bb = obs.boundingBox()
             boxes.append((bb.origin.x, bb.origin.y,
-                          bb.origin.x + bb.size.width, bb.origin.y + bb.size.height))
+                          bb.size.width, bb.size.height))
 
     for obs in (saliency_req.results() or []):
         for rect_obs in (obs.salientObjects() or []):
             bb = rect_obs.boundingBox()
             boxes.append((bb.origin.x, bb.origin.y,
-                          bb.origin.x + bb.size.width, bb.origin.y + bb.size.height))
+                          bb.size.width, bb.size.height))
 
     if not boxes:
         return None
 
-    min_x = min(b[0] for b in boxes)
-    min_y = min(b[1] for b in boxes)
-    max_x = max(b[2] for b in boxes)
-    max_y = max(b[3] for b in boxes)
-    bw = max_x - min_x
-    bh = max_y - min_y
-    if bw <= 0 or bh <= 0:
+    result = _union_boxes(boxes)
+    if result is None:
         return None
-
+    bx, by, bw, bh = result
     # Vision uses bottom-left origin; flip Y to top-left to match the app
-    return (min_x, 1.0 - min_y - bh, bw, bh)
+    return (bx, 1.0 - by - bh, bw, bh)
 
 
 # ---------------------------------------------------------------------------
@@ -252,7 +406,7 @@ def resolve_image(key: str, photos_dir: Optional[Path], cache_dir: Path) -> Opti
     if key.startswith("/") and os.path.isfile(key):
         return key
 
-    if "inaturalist.org" in key or "static.inaturalist" in key:
+    if "inaturalist" in key or "amazonaws.com" in key:
         orig_url = inaturalist_original_url(key)
         photo_id = re.search(r"/photos/(\d+)/", orig_url)
         name = (photo_id.group(1) if photo_id
@@ -263,7 +417,8 @@ def resolve_image(key: str, photos_dir: Optional[Path], cache_dir: Path) -> Opti
         print(f"  Downloading {orig_url} …")
         if download_image(orig_url, str(dest)):
             return str(dest)
-        dest2 = cache_dir / (name + "_sq.jpg")
+        # Fallback to the original URL size
+        dest2 = cache_dir / (name[:-4] + "_fallback.jpg")
         if dest2.is_file():
             return str(dest2)
         if download_image(key, str(dest2)):
@@ -308,7 +463,8 @@ class EvalEntry:
     key: str
     truth: Crop
     kept: bool
-    bounds: Optional[tuple[float, float, float, float]]
+    bounds_current: Optional[tuple[float, float, float, float]]
+    bounds_improved: Optional[tuple[float, float, float, float]]
     image_width: int = 0
     image_height: int = 0
 
@@ -319,19 +475,20 @@ class PaddingResult:
     mean_recall: float
     mean_precision: float
     mean_score: float
-    pct_full_recall: float   # % of crops where predicted fully contains truth
+    pct_full_recall: float
     scores: list[float] = field(default_factory=list)
 
 
-def evaluate(entries: list[EvalEntry], paddings: list[float]) -> list[PaddingResult]:
-    detected = [e for e in entries if e.bounds is not None]
-    print(f"Detection succeeded on {len(detected)}/{len(entries)} images.\n")
+def _evaluate_one(entries: list[EvalEntry], paddings: list[float],
+                  use_improved: bool) -> list[PaddingResult]:
+    detected = [e for e in entries
+                if (e.bounds_improved if use_improved else e.bounds_current) is not None]
     results = []
     for pad in paddings:
-        preds = [
-            bounds_to_crop(*e.bounds, pad, e.image_width, e.image_height)  # type: ignore[arg-type]
-            for e in detected
-        ]
+        preds = []
+        for e in detected:
+            b = e.bounds_improved if use_improved else e.bounds_current
+            preds.append(bounds_to_crop(*b, pad, e.image_width, e.image_height))  # type: ignore[arg-type]
         recalls = [recall(p, e.truth) for p, e in zip(preds, detected)]
         precisions = [precision(p, e.truth) for p, e in zip(preds, detected)]
         scores = [weighted_score(p, e.truth) for p, e in zip(preds, detected)]
@@ -344,35 +501,71 @@ def evaluate(entries: list[EvalEntry], paddings: list[float]) -> list[PaddingRes
     return results
 
 
-def print_report(results: list[PaddingResult], entries: list[EvalEntry],
-                 current_padding: float) -> None:
+def evaluate(entries: list[EvalEntry], paddings: list[float]) -> tuple[list[PaddingResult], list[PaddingResult]]:
+    n_cur = sum(1 for e in entries if e.bounds_current is not None)
+    n_imp = sum(1 for e in entries if e.bounds_improved is not None)
+    print(f"Detection succeeded — current: {n_cur}/{len(entries)}, improved: {n_imp}/{len(entries)}\n")
+    return (
+        _evaluate_one(entries, paddings, use_improved=False),
+        _evaluate_one(entries, paddings, use_improved=True),
+    )
+
+
+def _best(results: list[PaddingResult]) -> PaddingResult:
+    return max(results, key=lambda r: r.mean_score)
+
+
+def print_report(cur_results: list[PaddingResult], imp_results: list[PaddingResult],
+                 entries: list[EvalEntry], current_padding: float) -> None:
     kept = sum(1 for e in entries if e.kept)
-    print("=" * 72)
+    print("=" * 80)
     print(f"Total: {len(entries)}  |  Photo kept: {kept} ({kept/len(entries)*100:.0f}%)")
     print(f"Score = {RECALL_WEIGHT:.0f}×recall + {PRECISION_WEIGHT:.0f}×precision  "
           f"(recall = % of truth inside AI crop; precision = % of AI crop inside truth)")
-    print("=" * 72)
-    print(f"\n{'Padding':>10}  {'Recall':>8}  {'Precision':>10}  {'Score':>7}  {'100% recall':>12}")
-    print("-" * 60)
-    best = max(results, key=lambda r: r.mean_score)
-    for r in results:
-        cur = " ◀ current" if abs(r.padding - current_padding) < 1e-6 else ""
-        star = " ★ BEST" if r is best else ""
-        print(f"  {r.padding:>6.2f}    {r.mean_recall:>7.3f}   {r.mean_precision:>9.3f}  "
-              f"{r.mean_score:>6.3f}   {r.pct_full_recall:>9.1f}%{cur}{star}")
-    print()
-    current_result = next(
-        (r for r in results if abs(r.padding - current_padding) < 1e-6), None
-    )
-    if current_result and best.padding != current_padding:
-        delta = best.mean_score - current_result.mean_score
-        print(
-            f"Recommendation: update SUBJECT_DETECTION_MODEL_PADDING\n"
-            f"  {current_padding} → {best.padding}  (+{delta:.3f} weighted score)\n"
-            f"  src/sharedHelpers/subjectDetectionModels.ts\n"
-        )
+    print("=" * 80)
+
+    for label, results in [("CURRENT algorithm (union all)", cur_results),
+                           ("IMPROVED algorithm (saliency as fallback)", imp_results)]:
+        best = _best(results)
+        print(f"\n── {label} ──")
+        print(f"  {'Padding':>8}  {'Recall':>8}  {'Precision':>10}  {'Score':>7}  {'100% recall':>12}")
+        print("  " + "-" * 55)
+        for r in results:
+            cur = " ◀ current" if abs(r.padding - current_padding) < 1e-6 else ""
+            star = " ★ BEST" if r is best else ""
+            print(f"  {r.padding:>8.2f}  {r.mean_recall:>8.3f}  {r.mean_precision:>10.3f}  "
+                  f"{r.mean_score:>7.3f}  {r.pct_full_recall:>9.1f}%{cur}{star}")
+        print(f"\n  Best padding: {best.padding}  "
+              f"(recall={best.mean_recall:.3f}, precision={best.mean_precision:.3f}, "
+              f"score={best.mean_score:.3f})")
+
+    best_cur = _best(cur_results)
+    best_imp = _best(imp_results)
+    delta = best_imp.mean_score - best_cur.mean_score
+    delta_r = best_imp.mean_recall - best_cur.mean_recall
+    delta_p = best_imp.mean_precision - best_cur.mean_precision
+
+    print("\n" + "=" * 80)
+    print("SUMMARY — best padding for each algorithm")
+    print(f"  Current  : padding={best_cur.padding}  "
+          f"score={best_cur.mean_score:.3f}  "
+          f"recall={best_cur.mean_recall:.3f}  precision={best_cur.mean_precision:.3f}")
+    print(f"  Improved : padding={best_imp.padding}  "
+          f"score={best_imp.mean_score:.3f}  "
+          f"recall={best_imp.mean_recall:.3f}  precision={best_imp.mean_precision:.3f}")
+    sign = "+" if delta >= 0 else ""
+    print(f"  Δ score  : {sign}{delta:.3f}  "
+          f"(Δ recall {sign}{delta_r:.3f}, Δ precision {sign}{delta_p:.3f})")
+
+    if delta > 0:
+        print(f"\nRecommendation: adopt the improved algorithm and set padding → {best_imp.padding}")
+        print("  src/sharedHelpers/subjectDetectionModels.ts  (SUBJECT_DETECTION_MODEL_PADDING)")
+        print("  ios/iNaturalistReactNative/ImageCropper.m   (detectSubjectBoundsUnionAll)")
+    elif abs(delta) < 0.005:
+        print("\nAlgorithms perform similarly; no change needed beyond padding.")
     else:
-        print(f"Current padding ({current_padding}) is already optimal.\n")
+        print("\nCurrent algorithm is better; consider keeping it.")
+    print()
 
 
 # ---------------------------------------------------------------------------
@@ -384,7 +577,7 @@ def main() -> None:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("feedback_json", help="Path to exported crop feedback JSON")
+    parser.add_argument("feedback_json", help="Path to crop_training.json or feedback export")
     parser.add_argument("--photos-dir", metavar="DIR",
                         help="Folder of Apple Photos exports (for file:// entries)")
     parser.add_argument("--paddings",
@@ -394,6 +587,8 @@ def main() -> None:
                         help="Cache directory for downloaded images")
     parser.add_argument("--current-padding", type=float, default=0.0,
                         help="Padding currently in use (marks it in the report)")
+    parser.add_argument("--backend", choices=["yolo", "vision"], default="yolo",
+                        help="Detection backend: yolo (Linux/macOS) or vision (macOS only)")
     args = parser.parse_args()
 
     paddings = [float(p.strip()) for p in args.paddings.split(",")]
@@ -414,6 +609,13 @@ def main() -> None:
         ]
     print(f"Loaded {len(entries_raw)} entries with crop data.\n")
 
+    if args.backend == "vision":
+        detect_current = detect_bounds_vision
+        detect_improved = detect_bounds_vision  # vision backend: only one algo
+    else:
+        detect_current = detect_bounds_yolo_current
+        detect_improved = detect_bounds_yolo_improved
+
     with tempfile.TemporaryDirectory() as tmp:
         cache_dir = Path(args.cache_dir) if args.cache_dir else Path(tmp)
         cache_dir.mkdir(parents=True, exist_ok=True)
@@ -433,35 +635,53 @@ def main() -> None:
                 skipped += 1
                 continue
             img_w, img_h = get_image_size(image_path)
-            bounds = detect_bounds_vision(image_path)
-            if bounds is None:
-                print("  ↳ Vision returned no results (fallback crop)")
-            eval_entries.append(EvalEntry(key, truth, kept, bounds, img_w, img_h))
+            bounds_cur = detect_current(image_path)
+            if args.backend == "yolo":
+                bounds_imp = detect_improved(image_path)
+            else:
+                bounds_imp = bounds_cur  # same for vision backend
+            if bounds_cur is None:
+                print("  ↳ current: no detection")
+            if bounds_imp is None:
+                print("  ↳ improved: no detection")
+            eval_entries.append(
+                EvalEntry(key, truth, kept, bounds_cur, bounds_imp, img_w, img_h)
+            )
 
         if skipped:
             print(f"\nSkipped {skipped} entries (image not found).")
         if not eval_entries:
             sys.exit("No images could be evaluated.")
 
-        results = evaluate(eval_entries, paddings)
-        print_report(results, eval_entries, current_padding=args.current_padding)
+        cur_results, imp_results = evaluate(eval_entries, paddings)
+        print_report(cur_results, imp_results, eval_entries, current_padding=args.current_padding)
 
+        # CSV export
         csv_path = Path(args.feedback_json).with_suffix(".eval.csv")
         with open(csv_path, "w") as csvf:
-            header = "key,truth_x,truth_y,truth_w,truth_h,kept,detected"
+            header = "key,truth_x,truth_y,truth_w,truth_h,kept,detected_cur,detected_imp"
             for p in paddings:
-                header += f",recall_{p:.2f},precision_{p:.2f},score_{p:.2f}"
+                header += f",cur_recall_{p:.2f},cur_prec_{p:.2f},cur_score_{p:.2f}"
+                header += f",imp_recall_{p:.2f},imp_prec_{p:.2f},imp_score_{p:.2f}"
             csvf.write(header + "\n")
             for e in eval_entries:
                 row = (f"{e.key},{e.truth.x:.4f},{e.truth.y:.4f},"
                        f"{e.truth.w:.4f},{e.truth.h:.4f},{int(e.kept)},"
-                       f"{int(e.bounds is not None)}")
-                for r in results:
-                    if e.bounds is not None:
-                        pred = bounds_to_crop(*e.bounds, r.padding, e.image_width, e.image_height)
-                        row += (f",{recall(pred, e.truth):.4f}"
-                                f",{precision(pred, e.truth):.4f}"
-                                f",{weighted_score(pred, e.truth):.4f}")
+                       f"{int(e.bounds_current is not None)},"
+                       f"{int(e.bounds_improved is not None)}")
+                for p in paddings:
+                    if e.bounds_current is not None:
+                        pred_c = bounds_to_crop(*e.bounds_current, p, e.image_width, e.image_height)
+                        row += (f",{recall(pred_c, e.truth):.4f}"
+                                f",{precision(pred_c, e.truth):.4f}"
+                                f",{weighted_score(pred_c, e.truth):.4f}")
+                    else:
+                        row += ",,,"
+                    if e.bounds_improved is not None:
+                        pred_i = bounds_to_crop(*e.bounds_improved, p, e.image_width, e.image_height)
+                        row += (f",{recall(pred_i, e.truth):.4f}"
+                                f",{precision(pred_i, e.truth):.4f}"
+                                f",{weighted_score(pred_i, e.truth):.4f}")
                     else:
                         row += ",,,"
                 csvf.write(row + "\n")
