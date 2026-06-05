@@ -1,6 +1,6 @@
 import Clipboard from "@react-native-clipboard/clipboard";
-import Config from "react-native-config";
 import { Alert } from "react-native";
+import Config from "react-native-config";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { zustandStorage } from "stores/useStore";
@@ -20,54 +20,41 @@ const load = ( ): AnimalCropLog => {
   }
 };
 
-const _logToArray = ( logObj: AnimalCropLog ) =>
-  Object.entries( logObj )
-    .filter( ( [url] ) => url.startsWith( "http" ) )
-    .map( ( [url, crop] ) => ( {
-      url,
-      x: crop.x,
-      y: crop.y,
-      w: crop.w,
-      h: crop.h,
-    } ) );
+const _logToArray = ( logObj: AnimalCropLog ) => Object.entries( logObj )
+  .filter( ( [url] ) => url.startsWith( "http" ) )
+  .map( ( [url, crop] ) => ( {
+    url,
+    x: crop.x,
+    y: crop.y,
+    w: crop.w,
+    h: crop.h,
+  } ) );
 
 /**
- * Push the full log to a GitHub Gist so it is accessible without needing
- * a local dev-server connection.
+ * Push the full log to Firebase Realtime Database (public read/write rules,
+ * no credentials needed in the app).
  *
  * Requires in .env:
- *   CROP_LOG_GIST_ID=<gist id>
- *   CROP_LOG_GITHUB_TOKEN=<personal access token with gist scope>
+ *   CROP_LOG_FIREBASE_URL=https://<project-id>.firebaseio.com
  */
-function syncToGist( logArray: ReturnType<typeof _logToArray> ) {
-  const gistId = Config.CROP_LOG_GIST_ID;
-  const token = Config.CROP_LOG_GITHUB_TOKEN;
-  if ( !gistId || !token ) return;
+function syncToFirebase( logArray: ReturnType<typeof _logToArray> ) {
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl ) return;
 
-  fetch( `https://api.github.com/gists/${gistId}`, {
-    method: "PATCH",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-      "User-Agent": "iNaturalistReactNative",
-    },
-    body: JSON.stringify( {
-      files: {
-        "crop_training.json": {
-          content: JSON.stringify( logArray, null, 2 ),
-        },
-      },
-    } ),
+  fetch( `${baseUrl}/crop_log.json`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify( logArray ),
   } )
-    .then( r => { if ( !r.ok ) logger.warn( "Gist sync failed", r.status ); } )
-    .catch( err => logger.warn( "Gist sync error", err ) );
+    .then( r => { if ( !r.ok ) logger.warn( "Firebase sync failed", r.status ); } )
+    .catch( err => logger.warn( "Firebase sync error", err ) );
 }
 
 export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
   const current = load( );
   current[photoUrl] = crop;
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
-  syncToGist( _logToArray( current ) );
+  syncToFirebase( _logToArray( current ) );
 };
 
 export const getAnimalCropCount = ( ): number => Object.keys( load( ) ).length;

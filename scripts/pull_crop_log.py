@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """
-Pull the latest animal crop log from the GitHub Gist and merge it into
-crop_training.json.
+Pull the latest animal crop log from Firebase Realtime Database and merge it
+into crop_training.json.
 
-Set CROP_LOG_GIST_ID (and optionally CROP_LOG_GITHUB_TOKEN for private
-gists) in .env or as environment variables.
+Set CROP_LOG_FIREBASE_URL in .env or as an environment variable.
 
 Usage:
     python3 scripts/pull_crop_log.py
-    CROP_LOG_GIST_ID=abc123 python3 scripts/pull_crop_log.py
+    CROP_LOG_FIREBASE_URL=https://project.firebaseio.com python3 scripts/pull_crop_log.py
 """
 
 from __future__ import annotations
@@ -25,7 +24,6 @@ ENV_FILE = REPO_ROOT / ".env"
 
 
 def load_env() -> None:
-    """Load KEY=VALUE pairs from .env into os.environ (no override)."""
     if not ENV_FILE.is_file():
         return
     for line in ENV_FILE.read_text().splitlines():
@@ -36,22 +34,14 @@ def load_env() -> None:
         os.environ.setdefault( k.strip(), v.strip() )
 
 
-def fetch_gist( gist_id: str, token: str | None ) -> list:
-    url = f"https://api.github.com/gists/{gist_id}"
-    headers = { "User-Agent": "iNat-crop-pull/1.0", "Accept": "application/json" }
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request( url, headers=headers )
+def fetch_firebase( base_url: str ) -> list:
+    url = f"{base_url.rstrip('/')}/crop_log.json"
+    req = urllib.request.Request( url, headers={ "User-Agent": "iNat-crop-pull/1.0" } )
     with urllib.request.urlopen( req, timeout=15 ) as r:
-        gist = json.loads( r.read() )
-    files = gist.get( "files", {} )
-    crop_file = files.get( "crop_training.json" )
-    if not crop_file:
-        sys.exit( "Gist does not contain a file named crop_training.json" )
-    raw_url = crop_file["raw_url"]
-    req2 = urllib.request.Request( raw_url, headers={ "User-Agent": "iNat-crop-pull/1.0" } )
-    with urllib.request.urlopen( req2, timeout=15 ) as r:
-        return json.loads( r.read() )
+        data = json.loads( r.read() )
+    if data is None:
+        return []
+    return data
 
 
 def merge( existing: list, incoming: list ) -> list:
@@ -64,17 +54,16 @@ def merge( existing: list, incoming: list ) -> list:
 
 def main() -> None:
     load_env()
-    gist_id = os.environ.get( "CROP_LOG_GIST_ID", "" ).strip()
-    token = os.environ.get( "CROP_LOG_GITHUB_TOKEN", "" ).strip() or None
-    if not gist_id:
+    base_url = os.environ.get( "CROP_LOG_FIREBASE_URL", "" ).strip()
+    if not base_url:
         sys.exit(
-            "CROP_LOG_GIST_ID is not set.\n"
+            "CROP_LOG_FIREBASE_URL is not set.\n"
             "Add it to .env or export it as an environment variable."
         )
 
-    print( f"Fetching gist {gist_id} …" )
-    incoming = fetch_gist( gist_id, token )
-    print( f"  Got {len(incoming)} entries from Gist." )
+    print( f"Fetching crop log from {base_url} …" )
+    incoming = fetch_firebase( base_url )
+    print( f"  Got {len(incoming)} entries from Firebase." )
 
     existing: list = []
     if CROP_LOG_PATH.is_file():
