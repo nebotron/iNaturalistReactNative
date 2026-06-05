@@ -107,10 +107,15 @@ static NSDictionary *detectSubjectBoundsUnionAll( VNImageRequestHandler *handler
     }
   }
 
-  for ( VNSaliencyImageObservation *observation in saliencyRequest.results ) {
-    for ( VNRectangleObservation *salientObject in observation.salientObjects ) {
-      unionRect = unionVisionRect( unionRect, salientObject.boundingBox, hasUnion );
-      hasUnion = YES;
+  // Only use saliency when no human or animal was detected.  When a precise
+  // object detection already exists, unioning with saliency tends to expand
+  // the bounds to near-full-image, producing a much looser crop than desired.
+  if ( !hasUnion ) {
+    for ( VNSaliencyImageObservation *observation in saliencyRequest.results ) {
+      for ( VNRectangleObservation *salientObject in observation.salientObjects ) {
+        unionRect = unionVisionRect( unionRect, salientObject.boundingBox, hasUnion );
+        hasUnion = YES;
+      }
     }
   }
 
