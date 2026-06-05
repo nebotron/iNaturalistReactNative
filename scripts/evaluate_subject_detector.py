@@ -27,11 +27,15 @@ Backends:
              pip install pyobjc
 
 Usage:
+    python3 scripts/evaluate_subject_detector.py
     python3 scripts/evaluate_subject_detector.py crop_training.json
     python3 scripts/evaluate_subject_detector.py crop_feedback.json \\
         --backend vision --photos-dir ~/Desktop/inat-photos
     python3 scripts/evaluate_subject_detector.py crop_training.json \\
         --paddings 0.05,0.10,0.15,0.20,0.25,0.30
+
+When no file is given the crop log is fetched live from Firebase Realtime
+Database using CROP_LOG_FIREBASE_URL from .env.
 """
 
 from __future__ import annotations
@@ -569,6 +573,37 @@ def print_report(cur_results: list[PaddingResult], imp_results: list[PaddingResu
 
 
 # ---------------------------------------------------------------------------
+# Firebase / .env helpers
+# ---------------------------------------------------------------------------
+
+_REPO_ROOT = Path(__file__).parent.parent
+_ENV_FILE = _REPO_ROOT / ".env"
+
+
+def _load_env() -> None:
+    if not _ENV_FILE.is_file():
+        return
+    for line in _ENV_FILE.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        os.environ.setdefault(k.strip(), v.strip())
+
+
+def _fetch_firebase(base_url: str) -> list:
+    url = f"{base_url.rstrip('/')}/crop_log.json"
+    print(f"Fetching crop log from {url} …")
+    req = urllib.request.Request(url, headers={"User-Agent": "iNat-crop-eval/1.0"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.loads(r.read())
+    if data is None:
+        sys.exit("Firebase returned null — no crop log data found.")
+    print(f"  Got {len(data)} entries.\n")
+    return data
+
+
+# ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
 
@@ -577,7 +612,8 @@ def main() -> None:
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
-    parser.add_argument("feedback_json", help="Path to crop_training.json or feedback export")
+    parser.add_argument("feedback_json", nargs="?",
+                        help="Path to crop_training.json (omit to read from Firebase)")
     parser.add_argument("--photos-dir", metavar="DIR",
                         help="Folder of Apple Photos exports (for file:// entries)")
     parser.add_argument("--paddings",
@@ -594,11 +630,21 @@ def main() -> None:
     paddings = [float(p.strip()) for p in args.paddings.split(",")]
     photos_dir = Path(args.photos_dir).expanduser() if args.photos_dir else None
 
-    with open(args.feedback_json) as f:
-        raw = json.load(f)
+    if args.feedback_json:
+        with open(args.feedback_json) as f:
+            raw = json.load(f)
+    else:
+        _load_env()
+        base_url = os.environ.get("CROP_LOG_FIREBASE_URL", "").strip()
+        if not base_url:
+            sys.exit(
+                "No feedback_json given and CROP_LOG_FIREBASE_URL is not set.\n"
+                "Add it to .env or pass a file path."
+            )
+        raw = _fetch_firebase(base_url)
 
     # Support two formats:
-    #   1. Array of {url, x, y, w, h}  (crop_training.json)
+    #   1. Array of {url, x, y, w, h}  (crop_training.json / Firebase)
     #   2. Object keyed by URL with {crop: {x,y,w,h}, kept: bool}  (old feedback export)
     if isinstance(raw, list):
         entries_raw = [(entry["url"], {"crop": entry, "kept": True}) for entry in raw]
@@ -657,7 +703,9 @@ def main() -> None:
         print_report(cur_results, imp_results, eval_entries, current_padding=args.current_padding)
 
         # CSV export
-        csv_path = Path(args.feedback_json).with_suffix(".eval.csv")
+        csv_path = (Path(args.feedback_json).with_suffix(".eval.csv")
+                    if args.feedback_json
+                    else _REPO_ROOT / "crop_training.eval.csv")
         with open(csv_path, "w") as csvf:
             header = "key,truth_x,truth_y,truth_w,truth_h,kept,detected_cur,detected_imp"
             for p in paddings:
