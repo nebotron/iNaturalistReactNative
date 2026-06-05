@@ -179,6 +179,7 @@ PODS:
     - nanopb/encode (= 3.30910.0)
   - nanopb/decode (3.30910.0)
   - nanopb/encode (3.30910.0)
+  - onnxruntime-c (1.26.0)
   - PromisesObjC (2.4.0)
   - PromisesSwift (2.4.0):
     - PromisesObjC (= 2.4.0)
@@ -4004,6 +4005,7 @@ DEPENDENCIES:
   - fmt (from `../node_modules/react-native/third-party-podspecs/fmt.podspec`)
   - glog (from `../node_modules/react-native/third-party-podspecs/glog.podspec`)
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
+  - onnxruntime-c
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
@@ -4150,6 +4152,7 @@ SPEC REPOS:
     - LicensePlist
     - Mute
     - nanopb
+    - onnxruntime-c
     - PromisesObjC
     - PromisesSwift
     - React-Codegen
@@ -4449,6 +4452,7 @@ SPEC CHECKSUMS:
   LicensePlist: 91465ee0724beab897ed5482775c5d3932a3f379
   Mute: 20135a96076f140cc82bfc8b810e2d6150d8ec7e
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
+  onnxruntime-c: e6e9272f5996fed3ea3ca3c9bc843478b2ecbc73
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   PromisesSwift: 9d77319bbe72ebf6d872900551f7eeba9bce2851
   RCT-Folly: b29feb752b08042c62badaef7d453f3bb5e6ae23
@@ -4573,6 +4577,6 @@ SPEC CHECKSUMS:
   VisionCameraPluginInatVision: d29c27577b88822f59906fd8d3550054cffdbe55
   Yoga: e9fea23bf9b2766818ce9a8df72f584bf5ad36cd
 
-PODFILE CHECKSUM: 73e24a8590e365c9fec451abf69476ae07116d98
+PODFILE CHECKSUM: 0ca547adaada016db20d27b1bdf7f125e55fb408
 
 COCOAPODS: 1.16.2

@@ -62,6 +62,7 @@ target "iNaturalistReactNative" do
   )
 
   pod "react-native-config", path: "../node_modules/react-native-config"
+  pod "onnxruntime-c"
 
   envfiles = {
     "Debug" => "$(PODS_ROOT)/../../.env.staging",

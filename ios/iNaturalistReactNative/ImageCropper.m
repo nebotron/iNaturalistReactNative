@@ -2,6 +2,7 @@
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
+#include "onnxruntime_c_api.h"
 
 @interface ImageCropper : NSObject <RCTBridgeModule>
 @end
@@ -10,161 +11,337 @@
 
 RCT_EXPORT_MODULE( );
 
+// ─── Orientation helpers ────────────────────────────────────────────────────
+
 static CGImagePropertyOrientation orientationFromUIImage( UIImage *image )
 {
   switch ( image.imageOrientation ) {
-    case UIImageOrientationUp:
-      return kCGImagePropertyOrientationUp;
-    case UIImageOrientationDown:
-      return kCGImagePropertyOrientationDown;
-    case UIImageOrientationLeft:
-      return kCGImagePropertyOrientationLeft;
-    case UIImageOrientationRight:
-      return kCGImagePropertyOrientationRight;
-    case UIImageOrientationUpMirrored:
-      return kCGImagePropertyOrientationUpMirrored;
-    case UIImageOrientationDownMirrored:
-      return kCGImagePropertyOrientationDownMirrored;
-    case UIImageOrientationLeftMirrored:
-      return kCGImagePropertyOrientationLeftMirrored;
-    case UIImageOrientationRightMirrored:
-      return kCGImagePropertyOrientationRightMirrored;
-    default:
-      return kCGImagePropertyOrientationUp;
+    case UIImageOrientationUp:            return kCGImagePropertyOrientationUp;
+    case UIImageOrientationDown:          return kCGImagePropertyOrientationDown;
+    case UIImageOrientationLeft:          return kCGImagePropertyOrientationLeft;
+    case UIImageOrientationRight:         return kCGImagePropertyOrientationRight;
+    case UIImageOrientationUpMirrored:    return kCGImagePropertyOrientationUpMirrored;
+    case UIImageOrientationDownMirrored:  return kCGImagePropertyOrientationDownMirrored;
+    case UIImageOrientationLeftMirrored:  return kCGImagePropertyOrientationLeftMirrored;
+    case UIImageOrientationRightMirrored: return kCGImagePropertyOrientationRightMirrored;
+    default:                              return kCGImagePropertyOrientationUp;
   }
 }
 
+// ─── Vision helpers (saliency fallback) ─────────────────────────────────────
+
 static NSDictionary *normalizedBoundsFromVisionRect( CGRect rect )
 {
-  if ( rect.size.width <= 0 || rect.size.height <= 0 ) {
-    return nil;
-  }
-
-  CGFloat x = rect.origin.x;
-  CGFloat y = 1.0 - rect.origin.y - rect.size.height;
-  CGFloat width = rect.size.width;
-  CGFloat height = rect.size.height;
-
+  if ( rect.size.width <= 0 || rect.size.height <= 0 ) return nil;
   return @{
-    @"x": @( x ),
-    @"y": @( y ),
-    @"width": @( width ),
-    @"height": @( height ),
+    @"x":      @( rect.origin.x ),
+    @"y":      @( 1.0 - rect.origin.y - rect.size.height ),
+    @"width":  @( rect.size.width ),
+    @"height": @( rect.size.height ),
   };
 }
 
 static CGRect unionVisionRect( CGRect existing, CGRect next, BOOL hasExisting )
 {
-  if ( !hasExisting ) {
-    return next;
-  }
-
+  if ( !hasExisting ) return next;
   CGFloat minX = MIN( existing.origin.x, next.origin.x );
   CGFloat minY = MIN( existing.origin.y, next.origin.y );
-  CGFloat maxX = MAX( existing.origin.x + existing.size.width, next.origin.x + next.size.width );
+  CGFloat maxX = MAX( existing.origin.x + existing.size.width,  next.origin.x + next.size.width );
   CGFloat maxY = MAX( existing.origin.y + existing.size.height, next.origin.y + next.size.height );
-
   return CGRectMake( minX, minY, maxX - minX, maxY - minY );
 }
 
-static NSDictionary *detectSubjectBoundsUnionAll( VNImageRequestHandler *handler )
+// Attention-based saliency — used only when YOLO finds no subject
+static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler )
 {
-  NSMutableArray<VNRequest *> *requests = [NSMutableArray array];
-
-  VNDetectHumanRectanglesRequest *humanRequest = [[VNDetectHumanRectanglesRequest alloc] init];
-  [requests addObject:humanRequest];
-
-  VNRecognizeAnimalsRequest *animalRequest = nil;
-  if ( @available( iOS 15.0, * ) ) {
-    animalRequest = [[VNRecognizeAnimalsRequest alloc] init];
-    [requests addObject:animalRequest];
-  }
-
-  VNGenerateAttentionBasedSaliencyImageRequest *saliencyRequest =
+  VNGenerateAttentionBasedSaliencyImageRequest *req =
     [[VNGenerateAttentionBasedSaliencyImageRequest alloc] init];
-  [requests addObject:saliencyRequest];
-
   NSError *error = nil;
-  if ( ![handler performRequests:requests error:&error] ) {
-    return nil;
-  }
+  if ( ![handler performRequests:@[req] error:&error] ) return nil;
 
   CGRect unionRect = CGRectZero;
-  BOOL hasUnion = NO;
-
-  for ( VNHumanObservation *observation in humanRequest.results ) {
-    unionRect = unionVisionRect( unionRect, observation.boundingBox, hasUnion );
-    hasUnion = YES;
-  }
-
-  if ( @available( iOS 15.0, * ) ) {
-    for ( VNRecognizedObjectObservation *observation in animalRequest.results ) {
-      if ( observation.confidence < 0.3 ) {
-        continue;
-      }
-      unionRect = unionVisionRect( unionRect, observation.boundingBox, hasUnion );
-      hasUnion = YES;
+  BOOL   hasUnion  = NO;
+  for ( VNSaliencyImageObservation *obs in req.results ) {
+    for ( VNRectangleObservation *salientObj in obs.salientObjects ) {
+      unionRect = unionVisionRect( unionRect, salientObj.boundingBox, hasUnion );
+      hasUnion  = YES;
     }
   }
+  return hasUnion ? normalizedBoundsFromVisionRect( unionRect ) : nil;
+}
 
-  // Only use saliency when no human or animal was detected.  When a precise
-  // object detection already exists, unioning with saliency tends to expand
-  // the bounds to near-full-image, producing a much looser crop than desired.
-  if ( !hasUnion ) {
-    for ( VNSaliencyImageObservation *observation in saliencyRequest.results ) {
-      for ( VNRectangleObservation *salientObject in observation.salientObjects ) {
-        unionRect = unionVisionRect( unionRect, salientObject.boundingBox, hasUnion );
-        hasUnion = YES;
-      }
+// ─── YOLO / ONNX Runtime detection ──────────────────────────────────────────
+
+#define YOLO_INPUT_SIZE  640
+#define YOLO_CONF_THRESH 0.25f
+#define YOLO_IOU_THRESH  0.45f
+
+// COCO IDs that count as subjects: person(0) + common animals (14-23)
+static const int kTargetClasses[]    = { 0, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 };
+static const int kTargetClassCount   = 11;
+
+typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
+
+static OrtEnv     *s_ortEnv     = NULL;
+static OrtSession *s_ortSession = NULL;
+static BOOL        s_yoloFailed = NO;
+
+static void initYOLOSession( void )
+{
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{
+    NSString *path = [[NSBundle mainBundle] pathForResource:@"yolov8n" ofType:@"onnx"];
+    if ( !path ) { s_yoloFailed = YES; return; }
+
+    const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
+
+    if ( ort->CreateEnv( ORT_LOGGING_LEVEL_WARNING, "iNat", &s_ortEnv ) ) {
+      s_yoloFailed = YES; return;
     }
-  }
 
-  if ( !hasUnion ) {
+    OrtSessionOptions *opts;
+    if ( ort->CreateSessionOptions( &opts ) ) { s_yoloFailed = YES; return; }
+    ort->SetIntraOpNumThreads( opts, 2 );
+    ort->SetInterOpNumThreads( opts, 1 );
+
+    OrtStatus *status = ort->CreateSession( s_ortEnv, [path UTF8String], opts, &s_ortSession );
+    ort->ReleaseSessionOptions( opts );
+    if ( status ) { ort->ReleaseStatus( status ); s_yoloFailed = YES; }
+  } );
+}
+
+// Returns a [3 × N × N] float32 tensor (CHW, normalized 0-1) from a letterboxed image.
+static float *preprocessForYOLO( UIImage *image,
+                                  float *outPadLeft, float *outPadTop, float *outScale )
+{
+  const int N  = YOLO_INPUT_SIZE;
+  float     iW = (float)image.size.width;
+  float     iH = (float)image.size.height;
+  float     s  = MIN( (float)N / iW, (float)N / iH );
+  float     nW = iW * s, nH = iH * s;
+  float     pL = ( N - nW ) / 2.0f;
+  float     pT = ( N - nH ) / 2.0f;
+
+  *outScale   = s;
+  *outPadLeft = pL;
+  *outPadTop  = pT;
+
+  // Draw letterboxed image onto a gray 640×640 canvas
+  UIGraphicsBeginImageContextWithOptions( CGSizeMake( N, N ), YES, 1.0 );
+  CGContextRef gc = UIGraphicsGetCurrentContext();
+  CGContextSetFillColorWithColor( gc, [UIColor colorWithWhite:127.0 / 255.0 alpha:1.0].CGColor );
+  CGContextFillRect( gc, CGRectMake( 0, 0, N, N ) );
+  [image drawInRect:CGRectMake( pL, pT, nW, nH )];
+  UIImage *lb = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+
+  // Render into RGBA byte buffer
+  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB();
+  unsigned char  *raw = (unsigned char *)calloc( (size_t)N * N * 4, 1 );
+  CGContextRef    bmp = CGBitmapContextCreate(
+    raw, N, N, 8, (size_t)4 * N, cs,
+    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, N, N ), lb.CGImage );
+  CGContextRelease( bmp );
+  CGColorSpaceRelease( cs );
+
+  // RGBA → normalized float32 CHW
+  int     plane  = N * N;
+  float  *tensor = (float *)malloc( (size_t)3 * plane * sizeof( float ) );
+  for ( int i = 0; i < plane; i++ ) {
+    tensor[0 * plane + i] = raw[i * 4 + 0] / 255.0f;
+    tensor[1 * plane + i] = raw[i * 4 + 1] / 255.0f;
+    tensor[2 * plane + i] = raw[i * 4 + 2] / 255.0f;
+  }
+  free( raw );
+  return tensor;
+}
+
+static BOOL isTargetClass( int cls )
+{
+  for ( int i = 0; i < kTargetClassCount; i++ )
+    if ( kTargetClasses[i] == cls ) return YES;
+  return NO;
+}
+
+static float boxIOU( YOLOBox a, YOLOBox b )
+{
+  float ix1 = MAX( a.x1, b.x1 ), iy1 = MAX( a.y1, b.y1 );
+  float ix2 = MIN( a.x2, b.x2 ), iy2 = MIN( a.y2, b.y2 );
+  if ( ix2 <= ix1 || iy2 <= iy1 ) return 0.0f;
+  float inter = ( ix2 - ix1 ) * ( iy2 - iy1 );
+  float ua    = ( a.x2 - a.x1 ) * ( a.y2 - a.y1 )
+              + ( b.x2 - b.x1 ) * ( b.y2 - b.y1 ) - inter;
+  return ua > 0.0f ? inter / ua : 0.0f;
+}
+
+static int compareBoxByConf( const void *a, const void *b )
+{
+  float ca = ( (const YOLOBox *)a )->conf;
+  float cb = ( (const YOLOBox *)b )->conf;
+  return ( cb > ca ) ? 1 : ( cb < ca ) ? -1 : 0;
+}
+
+// Returns {x,y,width,height} in top-left normalised coords, or nil if nothing detected.
+static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
+{
+  initYOLOSession();
+  if ( s_yoloFailed || !s_ortSession ) return nil;
+
+  const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
+  const int     N   = YOLO_INPUT_SIZE;
+
+  float padLeft, padTop, scale;
+  float *inputData = preprocessForYOLO( image, &padLeft, &padTop, &scale );
+
+  OrtMemoryInfo *memInfo;
+  ort->CreateCpuMemoryInfo( OrtArenaAllocator, OrtMemTypeDefault, &memInfo );
+
+  int64_t   inputShape[] = { 1, 3, N, N };
+  OrtValue *inputTensor  = NULL;
+  OrtStatus *status = ort->CreateTensorWithDataAsOrtValue(
+    memInfo, inputData, (size_t)3 * N * N * sizeof( float ),
+    inputShape, 4, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &inputTensor );
+  ort->ReleaseMemoryInfo( memInfo );
+
+  if ( status || !inputTensor ) {
+    if ( status ) ort->ReleaseStatus( status );
+    free( inputData );
     return nil;
   }
 
-  return normalizedBoundsFromVisionRect( unionRect );
+  const char *inputNames[]  = { "images" };
+  const char *outputNames[] = { "output0" };
+  OrtValue   *outputTensor  = NULL;
+
+  status = ort->Run( s_ortSession, NULL,
+                     inputNames,  (const OrtValue *const *)&inputTensor,  1,
+                     outputNames, 1, &outputTensor );
+  ort->ReleaseValue( inputTensor );
+  free( inputData );
+
+  if ( status || !outputTensor ) {
+    if ( status ) ort->ReleaseStatus( status );
+    return nil;
+  }
+
+  // output0: [1, 84, 8400] — rows 0-3 = cx,cy,w,h; rows 4-83 = 80 class scores
+  float *out;
+  ort->GetTensorMutableData( outputTensor, (void **)&out );
+
+  const int numPreds  = 8400;
+  const int numFields = 84;
+
+  YOLOBox *dets  = (YOLOBox *)malloc( (size_t)numPreds * sizeof( YOLOBox ) );
+  int      nDets = 0;
+
+  for ( int j = 0; j < numPreds; j++ ) {
+    float maxScore = -1.0f;
+    int   maxCls   = -1;
+    for ( int c = 4; c < numFields; c++ ) {
+      float s = out[c * numPreds + j];
+      if ( s > maxScore ) { maxScore = s; maxCls = c - 4; }
+    }
+    if ( maxScore < YOLO_CONF_THRESH ) continue;
+    if ( !isTargetClass( maxCls ) )    continue;
+
+    float cx = out[0 * numPreds + j];
+    float cy = out[1 * numPreds + j];
+    float bw = out[2 * numPreds + j];
+    float bh = out[3 * numPreds + j];
+    dets[nDets++] = (YOLOBox){ cx - bw / 2.0f, cy - bh / 2.0f,
+                                cx + bw / 2.0f, cy + bh / 2.0f, maxScore };
+  }
+  ort->ReleaseValue( outputTensor );
+
+  if ( nDets == 0 ) { free( dets ); return nil; }
+
+  // Greedy NMS
+  qsort( dets, (size_t)nDets, sizeof( YOLOBox ), compareBoxByConf );
+  BOOL *suppressed = (BOOL *)calloc( (size_t)nDets, sizeof( BOOL ) );
+
+  float uX1 = FLT_MAX, uY1 = FLT_MAX, uX2 = -FLT_MAX, uY2 = -FLT_MAX;
+  int   kept = 0;
+
+  for ( int i = 0; i < nDets; i++ ) {
+    if ( suppressed[i] ) continue;
+    uX1 = MIN( uX1, dets[i].x1 );
+    uY1 = MIN( uY1, dets[i].y1 );
+    uX2 = MAX( uX2, dets[i].x2 );
+    uY2 = MAX( uY2, dets[i].y2 );
+    kept++;
+    for ( int k = i + 1; k < nDets; k++ ) {
+      if ( !suppressed[k] && boxIOU( dets[i], dets[k] ) > YOLO_IOU_THRESH )
+        suppressed[k] = YES;
+    }
+  }
+  free( dets );
+  free( suppressed );
+
+  if ( kept == 0 ) return nil;
+
+  // Map 640×640 box back to original normalised image coordinates
+  float imgW = (float)image.size.width;
+  float imgH = (float)image.size.height;
+
+  float x = ( uX1 - padLeft ) / scale / imgW;
+  float y = ( uY1 - padTop  ) / scale / imgH;
+  float w = ( uX2 - uX1     ) / scale / imgW;
+  float h = ( uY2 - uY1     ) / scale / imgH;
+
+  x = MAX( 0.0f, MIN( 1.0f, x ) );
+  y = MAX( 0.0f, MIN( 1.0f, y ) );
+  w = MAX( 0.01f, MIN( 1.0f - x, w ) );
+  h = MAX( 0.01f, MIN( 1.0f - y, h ) );
+
+  return @{ @"x": @(x), @"y": @(y), @"width": @(w), @"height": @(h) };
 }
 
+// ─── Public detection entry point ────────────────────────────────────────────
+
+// Try YOLO; fall back to Vision attention saliency when nothing is detected.
 static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
 {
-  if ( image.CGImage == NULL ) {
-    return nil;
-  }
+  if ( image.CGImage == NULL ) return nil;
+
+  NSDictionary *yoloBounds = detectSubjectBoundsYOLO( image );
+  if ( yoloBounds ) return yoloBounds;
 
   CGImagePropertyOrientation orientation = orientationFromUIImage( image );
-  VNImageRequestHandler *handler = [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
-                                                                      orientation:orientation
-                                                                          options:@{}];
-
-  return detectSubjectBoundsUnionAll( handler );
+  VNImageRequestHandler *handler =
+    [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
+                                       orientation:orientation
+                                           options:@{}];
+  return detectSubjectBoundsSaliency( handler );
 }
+
+// ─── Image metadata helpers ──────────────────────────────────────────────────
 
 static void updateMetadataForCrop( NSMutableDictionary *metadata, NSInteger width, NSInteger height )
 {
-  metadata[(NSString *)kCGImagePropertyPixelWidth] = @( width );
+  metadata[(NSString *)kCGImagePropertyPixelWidth]  = @( width );
   metadata[(NSString *)kCGImagePropertyPixelHeight] = @( height );
   metadata[(NSString *)kCGImagePropertyOrientation] = @( 1 );
 
-  NSString *exifKey = (__bridge NSString *)kCGImagePropertyExifDictionary;
-  NSMutableDictionary *exif = [[metadata[exifKey] mutableCopy] ?: @{} mutableCopy];
+  NSString            *exifKey = (__bridge NSString *)kCGImagePropertyExifDictionary;
+  NSMutableDictionary *exif    = [[metadata[exifKey] mutableCopy] ?: @{} mutableCopy];
   exif[(NSString *)kCGImagePropertyExifPixelXDimension] = @( width );
   exif[(NSString *)kCGImagePropertyExifPixelYDimension] = @( height );
   metadata[exifKey] = exif;
 
-  NSString *tiffKey = (__bridge NSString *)kCGImagePropertyTIFFDictionary;
-  NSMutableDictionary *tiff = [[metadata[tiffKey] mutableCopy] ?: @{} mutableCopy];
-  tiff[@"ImageWidth"] = @( width );
-  tiff[@"ImageLength"] = @( height );
-  tiff[(NSString *)kCGImagePropertyTIFFOrientation] = @( 1 );
+  NSString            *tiffKey = (__bridge NSString *)kCGImagePropertyTIFFDictionary;
+  NSMutableDictionary *tiff    = [[metadata[tiffKey] mutableCopy] ?: @{} mutableCopy];
+  tiff[@"ImageWidth"]                                      = @( width );
+  tiff[@"ImageLength"]                                     = @( height );
+  tiff[(NSString *)kCGImagePropertyTIFFOrientation]        = @( 1 );
   metadata[tiffKey] = tiff;
 }
 
 static NSData *jpegDataFromCroppedImage(
-  CGImageRef croppedRef,
-  NSDictionary *sourceMetadata,
-  NSInteger width,
-  NSInteger height
+  CGImageRef       croppedRef,
+  NSDictionary    *sourceMetadata,
+  NSInteger        width,
+  NSInteger        height
 )
 {
   NSMutableDictionary *metadata = sourceMetadata
@@ -173,23 +350,18 @@ static NSData *jpegDataFromCroppedImage(
   updateMetadataForCrop( metadata, width, height );
   metadata[(NSString *)kCGImageDestinationLossyCompressionQuality] = @( 1.0 );
 
-  NSMutableData *destinationData = [NSMutableData data];
-  CGImageDestinationRef destination = CGImageDestinationCreateWithData(
-    (__bridge CFMutableDataRef)destinationData,
-    CFSTR( "public.jpeg" ),
-    1,
-    nil
-  );
-  if ( destination == NULL ) {
-    return nil;
-  }
+  NSMutableData      *destinationData = [NSMutableData data];
+  CGImageDestinationRef destination   = CGImageDestinationCreateWithData(
+    (__bridge CFMutableDataRef)destinationData, CFSTR( "public.jpeg" ), 1, nil );
+  if ( destination == NULL ) return nil;
 
   CGImageDestinationAddImage( destination, croppedRef, (__bridge CFDictionaryRef)metadata );
   BOOL finalized = CGImageDestinationFinalize( destination );
   CFRelease( destination );
-
   return finalized ? destinationData : nil;
 }
+
+// ─── Exported React Native methods ───────────────────────────────────────────
 
 RCT_EXPORT_METHOD( cropImage
                   : ( NSString * )inputPath originX
@@ -201,34 +373,19 @@ RCT_EXPORT_METHOD( cropImage
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://"
-                                                           withString:@""];
-  NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://"
-                                                            withString:@""];
-  NSURL *inputURL = [NSURL fileURLWithPath:input];
-  CGImageSourceRef imageSource = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
-  NSDictionary *sourceMetadata = nil;
-  if ( imageSource != NULL ) {
-    sourceMetadata = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex(
-      imageSource,
-      0,
-      nil
-    );
-    CFRelease( imageSource );
+  NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSURL    *inputURL    = [NSURL fileURLWithPath:input];
+  CGImageSourceRef src  = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
+  NSDictionary *srcMeta = nil;
+  if ( src ) {
+    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+    CFRelease( src );
   }
 
   UIImage *image = [UIImage imageWithContentsOfFile:input];
-  if ( image == nil ) {
-    reject( @"CROP_FAILED", @"Could not load image", nil );
-    return;
-  }
+  if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
 
-  // The crop coordinates from JavaScript are in display-oriented space (matching
-  // UIImage.size, which accounts for EXIF rotation). CGImageCreateWithImageInRect
-  // operates on the raw CGImage pixel data, which has no rotation applied. For images
-  // with non-Up orientation (e.g. portrait photos stored as landscape + EXIF rotation),
-  // these two coordinate spaces differ. Redraw into a new context to produce a CGImage
-  // whose pixel dimensions and coordinate origin match UIImage.size.
   UIImage *orientedImage = image;
   if ( image.imageOrientation != UIImageOrientationUp ) {
     UIGraphicsBeginImageContextWithOptions( image.size, NO, 1.0 );
@@ -237,44 +394,24 @@ RCT_EXPORT_METHOD( cropImage
     UIGraphicsEndImageContext();
   }
 
+  CGRect        cropRect   = CGRectMake( [originX integerValue], [originY integerValue],
+                                         [width integerValue],   [height integerValue] );
+  CGImageRef    croppedRef = CGImageCreateWithImageInRect( orientedImage.CGImage, cropRect );
+  if ( !croppedRef ) { reject( @"CROP_FAILED", @"Crop failed", nil ); return; }
 
-  CGRect cropRect = CGRectMake(
-    [originX integerValue],
-    [originY integerValue],
-    [width integerValue],
-    [height integerValue]
-  );
-
-  CGImageRef croppedRef = CGImageCreateWithImageInRect( orientedImage.CGImage, cropRect );
-  if ( croppedRef == NULL ) {
-    reject( @"CROP_FAILED", @"Crop failed", nil );
-    return;
-  }
-
-  NSInteger cropWidth = [width integerValue];
-  NSInteger cropHeight = [height integerValue];
-  NSData *data = jpegDataFromCroppedImage(
-    croppedRef,
-    sourceMetadata,
-    cropWidth,
-    cropHeight
-  );
+  NSData *data = jpegDataFromCroppedImage( croppedRef,
+                                           srcMeta,
+                                           [width integerValue],
+                                           [height integerValue] );
   CGImageRelease( croppedRef );
+  if ( !data ) { reject( @"CROP_FAILED", @"Could not encode cropped image", nil ); return; }
 
-  if ( data == nil ) {
-    reject( @"CROP_FAILED", @"Could not encode cropped image", nil );
-    return;
-  }
-
-  [[NSFileManager defaultManager] createDirectoryAtPath:[output stringByDeletingLastPathComponent]
-                            withIntermediateDirectories:YES
-                                             attributes:nil
-                                                  error:nil];
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
   if ( ![data writeToFile:output atomically:YES] ) {
-    reject( @"CROP_FAILED", @"Could not write cropped image", nil );
-    return;
+    reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
   }
-
   resolve( output );
 }
 
@@ -286,53 +423,27 @@ RCT_EXPORT_METHOD( preserveImageMetadata
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSString *source = [sourcePath stringByReplacingOccurrencesOfString:@"file://"
-                                                             withString:@""];
-  NSString *dest = [destPath stringByReplacingOccurrencesOfString:@"file://"
-                                                        withString:@""];
-  NSURL *sourceURL = [NSURL fileURLWithPath:source];
-  CGImageSourceRef imageSource = CGImageSourceCreateWithURL( (__bridge CFURLRef)sourceURL, nil );
-  NSDictionary *sourceMetadata = nil;
-  if ( imageSource != NULL ) {
-    sourceMetadata = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex(
-      imageSource,
-      0,
-      nil
-    );
-    CFRelease( imageSource );
+  NSString *source  = [sourcePath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString *dest    = [destPath   stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSURL    *srcURL  = [NSURL fileURLWithPath:source];
+  CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)srcURL, nil );
+  NSDictionary *srcMeta = nil;
+  if ( src ) {
+    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+    CFRelease( src );
   }
 
   UIImage *croppedImage = [UIImage imageWithContentsOfFile:dest];
-  if ( croppedImage == nil ) {
-    reject( @"CROP_FAILED", @"Could not load cropped image", nil );
-    return;
-  }
-
+  if ( !croppedImage ) { reject( @"CROP_FAILED", @"Could not load cropped image", nil ); return; }
   CGImageRef croppedRef = croppedImage.CGImage;
-  if ( croppedRef == NULL ) {
-    reject( @"CROP_FAILED", @"Could not read cropped image", nil );
-    return;
-  }
+  if ( !croppedRef )    { reject( @"CROP_FAILED", @"Could not read cropped image", nil ); return; }
 
-  NSInteger cropWidth = [width integerValue];
-  NSInteger cropHeight = [height integerValue];
-  NSData *data = jpegDataFromCroppedImage(
-    croppedRef,
-    sourceMetadata,
-    cropWidth,
-    cropHeight
-  );
-
-  if ( data == nil ) {
-    reject( @"CROP_FAILED", @"Could not encode cropped image with metadata", nil );
-    return;
-  }
-
+  NSData *data = jpegDataFromCroppedImage( croppedRef, srcMeta,
+                                           [width integerValue], [height integerValue] );
+  if ( !data ) { reject( @"CROP_FAILED", @"Could not encode cropped image with metadata", nil ); return; }
   if ( ![data writeToFile:dest atomically:YES] ) {
-    reject( @"CROP_FAILED", @"Could not write cropped image", nil );
-    return;
+    reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
   }
-
   resolve( dest );
 }
 
@@ -342,23 +453,12 @@ RCT_EXPORT_METHOD( detectSubjectBounds
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://"
-                                                           withString:@""];
-  UIImage *image = [UIImage imageWithContentsOfFile:input];
-  if ( image == nil ) {
-    resolve( [NSNull null] );
-    return;
-  }
+  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  UIImage  *image = [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { resolve( [NSNull null] ); return; }
 
-  NSString *modelId = model.length > 0 ? model : @"A";
-  (void)modelId;
   NSDictionary *bounds = detectSubjectBoundsForImage( image );
-  if ( bounds == nil ) {
-    resolve( [NSNull null] );
-    return;
-  }
-
-  resolve( bounds );
+  resolve( bounds ?: [NSNull null] );
 }
 
 @end
