@@ -21,13 +21,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Observation from "realmModels/Observation";
 import User from "realmModels/User";
 import { valueToBreakpoint } from "sharedHelpers/breakpoint";
-import { copyAnimalCropLogToClipboard } from "sharedHelpers/animalCropLog";
+import {
+  copyAnimalCropLogToClipboard,
+  getAnimalCropLogAsArray,
+} from "sharedHelpers/animalCropLog";
 import { log } from "sharedHelpers/logger";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
 import {
   useCurrentUser, useDebugMode, useFeatureFlag,
-  useInputImageTracking, useLayoutPrefs, useTranslation,
+  useLayoutPrefs, useTranslation,
 } from "sharedHooks";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
 import colors from "styles/tailwindColors";
@@ -104,7 +107,6 @@ const getDeviceMetricsForFeedback = async () => {
 const Menu = ( ) => {
   const { isDebug } = useDebugMode();
   const realm = useRealm( );
-  const { getAllImageMetadata } = useInputImageTracking( );
   const navigation = useNavigation( );
   const queryClient = useQueryClient( );
   const currentUser = useCurrentUser( );
@@ -196,9 +198,9 @@ const Menu = ( ) => {
       label: "Copy Image Metadata",
       icon: "copy",
       onPress: ( ) => {
-        const records = getAllImageMetadata( );
+        const records = getAnimalCropLogAsArray( );
         Clipboard.setString( JSON.stringify( records, null, 2 ) );
-        Alert.alert( "Copied", "Image metadata copied to clipboard" );
+        Alert.alert( "Copied", `${records.length} labeled photos copied to clipboard` );
       },
     },
 
