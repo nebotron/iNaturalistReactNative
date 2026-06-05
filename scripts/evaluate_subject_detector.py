@@ -87,16 +87,47 @@ def bounds_to_crop(bx: float, by: float, bw: float, bh: float,
     return clamp_crop(x, y, side, side)
 
 
-def iou(a: Crop, b: Crop) -> float:
+def intersection_area(a: Crop, b: Crop) -> float:
     x1 = max(a.x, b.x)
     y1 = max(a.y, b.y)
     x2 = min(a.x + a.w, b.x + b.w)
     y2 = min(a.y + a.h, b.y + b.h)
     if x2 <= x1 or y2 <= y1:
         return 0.0
-    inter = (x2 - x1) * (y2 - y1)
+    return (x2 - x1) * (y2 - y1)
+
+
+def iou(a: Crop, b: Crop) -> float:
+    inter = intersection_area(a, b)
     union = a.w * a.h + b.w * b.h - inter
     return inter / union if union > 0 else 0.0
+
+
+def recall(pred: Crop, truth: Crop) -> float:
+    """Fraction of ground-truth crop area covered by the predicted crop."""
+    truth_area = truth.w * truth.h
+    if truth_area <= 0:
+        return 0.0
+    return intersection_area(pred, truth) / truth_area
+
+
+def precision(pred: Crop, truth: Crop) -> float:
+    """Fraction of predicted crop area that overlaps with ground truth."""
+    pred_area = pred.w * pred.h
+    if pred_area <= 0:
+        return 0.0
+    return intersection_area(pred, truth) / pred_area
+
+
+# Weight recall (superset coverage) twice as much as precision (tightness).
+RECALL_WEIGHT = 2.0
+PRECISION_WEIGHT = 1.0
+
+
+def weighted_score(pred: Crop, truth: Crop) -> float:
+    r = recall(pred, truth)
+    p = precision(pred, truth)
+    return (RECALL_WEIGHT * r + PRECISION_WEIGHT * p) / (RECALL_WEIGHT + PRECISION_WEIGHT)
 
 
 # ---------------------------------------------------------------------------
@@ -285,11 +316,11 @@ class EvalEntry:
 @dataclass
 class PaddingResult:
     padding: float
-    mean_iou: float
-    median_iou: float
-    pct_above_07: float
-    pct_above_05: float
-    ious: list[float] = field(default_factory=list)
+    mean_recall: float
+    mean_precision: float
+    mean_score: float
+    pct_full_recall: float   # % of crops where predicted fully contains truth
+    scores: list[float] = field(default_factory=list)
 
 
 def evaluate(entries: list[EvalEntry], paddings: list[float]) -> list[PaddingResult]:
@@ -297,42 +328,47 @@ def evaluate(entries: list[EvalEntry], paddings: list[float]) -> list[PaddingRes
     print(f"Detection succeeded on {len(detected)}/{len(entries)} images.\n")
     results = []
     for pad in paddings:
-        ious = sorted(
-            iou(bounds_to_crop(*e.bounds, pad, e.image_width, e.image_height), e.truth)  # type: ignore[arg-type]
+        preds = [
+            bounds_to_crop(*e.bounds, pad, e.image_width, e.image_height)  # type: ignore[arg-type]
             for e in detected
-        )
-        n = len(ious)
-        mean = sum(ious) / n if n else 0.0
-        median = ious[n // 2] if n else 0.0
-        pct07 = sum(1 for v in ious if v >= 0.7) / n * 100 if n else 0.0
-        pct05 = sum(1 for v in ious if v >= 0.5) / n * 100 if n else 0.0
-        results.append(PaddingResult(pad, mean, median, pct07, pct05, ious))
+        ]
+        recalls = [recall(p, e.truth) for p, e in zip(preds, detected)]
+        precisions = [precision(p, e.truth) for p, e in zip(preds, detected)]
+        scores = [weighted_score(p, e.truth) for p, e in zip(preds, detected)]
+        n = len(scores)
+        mean_r = sum(recalls) / n if n else 0.0
+        mean_p = sum(precisions) / n if n else 0.0
+        mean_s = sum(scores) / n if n else 0.0
+        pct_full = sum(1 for r in recalls if r >= 0.999) / n * 100 if n else 0.0
+        results.append(PaddingResult(pad, mean_r, mean_p, mean_s, pct_full, scores))
     return results
 
 
 def print_report(results: list[PaddingResult], entries: list[EvalEntry],
                  current_padding: float) -> None:
     kept = sum(1 for e in entries if e.kept)
-    print("=" * 60)
+    print("=" * 72)
     print(f"Total: {len(entries)}  |  Photo kept: {kept} ({kept/len(entries)*100:.0f}%)")
-    print("=" * 60)
-    print(f"\n{'Padding':>10}  {'Mean IoU':>9}  {'Median':>7}  {'≥0.7':>6}  {'≥0.5':>6}")
-    print("-" * 50)
-    best = max(results, key=lambda r: r.mean_iou)
+    print(f"Score = {RECALL_WEIGHT:.0f}×recall + {PRECISION_WEIGHT:.0f}×precision  "
+          f"(recall = % of truth inside AI crop; precision = % of AI crop inside truth)")
+    print("=" * 72)
+    print(f"\n{'Padding':>10}  {'Recall':>8}  {'Precision':>10}  {'Score':>7}  {'100% recall':>12}")
+    print("-" * 60)
+    best = max(results, key=lambda r: r.mean_score)
     for r in results:
         cur = " ◀ current" if abs(r.padding - current_padding) < 1e-6 else ""
         star = " ★ BEST" if r is best else ""
-        print(f"  {r.padding:>6.2f}    {r.mean_iou:>8.3f}   {r.median_iou:>6.3f}  "
-              f"{r.pct_above_07:>5.1f}%  {r.pct_above_05:>5.1f}%{cur}{star}")
+        print(f"  {r.padding:>6.2f}    {r.mean_recall:>7.3f}   {r.mean_precision:>9.3f}  "
+              f"{r.mean_score:>6.3f}   {r.pct_full_recall:>9.1f}%{cur}{star}")
     print()
     current_result = next(
         (r for r in results if abs(r.padding - current_padding) < 1e-6), None
     )
     if current_result and best.padding != current_padding:
-        delta = best.mean_iou - current_result.mean_iou
+        delta = best.mean_score - current_result.mean_score
         print(
             f"Recommendation: update SUBJECT_DETECTION_MODEL_PADDING\n"
-            f"  {current_padding} → {best.padding}  (+{delta:.3f} mean IoU)\n"
+            f"  {current_padding} → {best.padding}  (+{delta:.3f} weighted score)\n"
             f"  src/sharedHelpers/subjectDetectionModels.ts\n"
         )
     else:
@@ -356,19 +392,27 @@ def main() -> None:
                         help="Comma-separated padding values to test")
     parser.add_argument("--cache-dir", default=None,
                         help="Cache directory for downloaded images")
+    parser.add_argument("--current-padding", type=float, default=0.0,
+                        help="Padding currently in use (marks it in the report)")
     args = parser.parse_args()
 
     paddings = [float(p.strip()) for p in args.paddings.split(",")]
     photos_dir = Path(args.photos_dir).expanduser() if args.photos_dir else None
 
     with open(args.feedback_json) as f:
-        raw: dict = json.load(f)
+        raw = json.load(f)
 
-    entries_raw = [
-        (key, val) for key, val in raw.items()
-        if val.get("crop") is not None
-    ]
-    print(f"Loaded {len(raw)} entries, {len(entries_raw)} with crop data.\n")
+    # Support two formats:
+    #   1. Array of {url, x, y, w, h}  (crop_training.json)
+    #   2. Object keyed by URL with {crop: {x,y,w,h}, kept: bool}  (old feedback export)
+    if isinstance(raw, list):
+        entries_raw = [(entry["url"], {"crop": entry, "kept": True}) for entry in raw]
+    else:
+        entries_raw = [
+            (key, val) for key, val in raw.items()
+            if val.get("crop") is not None
+        ]
+    print(f"Loaded {len(entries_raw)} entries with crop data.\n")
 
     with tempfile.TemporaryDirectory() as tmp:
         cache_dir = Path(args.cache_dir) if args.cache_dir else Path(tmp)
@@ -400,13 +444,13 @@ def main() -> None:
             sys.exit("No images could be evaluated.")
 
         results = evaluate(eval_entries, paddings)
-        print_report(results, eval_entries, current_padding=0.0)
+        print_report(results, eval_entries, current_padding=args.current_padding)
 
         csv_path = Path(args.feedback_json).with_suffix(".eval.csv")
         with open(csv_path, "w") as csvf:
             header = "key,truth_x,truth_y,truth_w,truth_h,kept,detected"
             for p in paddings:
-                header += f",iou_{p:.2f}"
+                header += f",recall_{p:.2f},precision_{p:.2f},score_{p:.2f}"
             csvf.write(header + "\n")
             for e in eval_entries:
                 row = (f"{e.key},{e.truth.x:.4f},{e.truth.y:.4f},"
@@ -415,9 +459,11 @@ def main() -> None:
                 for r in results:
                     if e.bounds is not None:
                         pred = bounds_to_crop(*e.bounds, r.padding, e.image_width, e.image_height)
-                        row += f",{iou(pred, e.truth):.4f}"
+                        row += (f",{recall(pred, e.truth):.4f}"
+                                f",{precision(pred, e.truth):.4f}"
+                                f",{weighted_score(pred, e.truth):.4f}")
                     else:
-                        row += ","
+                        row += ",,,"
                 csvf.write(row + "\n")
         print(f"Per-entry CSV: {csv_path}\n")
 
