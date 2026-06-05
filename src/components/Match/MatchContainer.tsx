@@ -180,7 +180,8 @@ const MatchContainer = ( ) => {
 
   const onlineSuggestionsAttempted
      = onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_FETCHED
-      || onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_ERROR;
+      || onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_ERROR
+      || onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED;
 
   const onFetchError = useCallback(
     ( { isOnline }: { isOnline: boolean } ) => {
@@ -398,6 +399,23 @@ const MatchContainer = ( ) => {
 
   const setImageParams = useCallback( async ( ) => {
     if ( isConnected === false ) {
+      // Skip online suggestions; try offline model for local photos
+      dispatch( {
+        type: "SET_ONLINE_FETCH_STATUS",
+        onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
+      } );
+      if ( observationPhoto && !observationPhoto.includes( "https://" ) ) {
+        const newImageParams = await createUploadParams(
+          observationPhoto,
+          shouldUseEvidenceLocation,
+        );
+        dispatch( { type: "SET_UPLOAD_PARAMS", scoreImageParams: newImageParams } );
+      } else {
+        dispatch( {
+          type: "SET_OFFLINE_FETCH_STATUS",
+          offlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_OFFLINE_SKIPPED,
+        } );
+      }
       return;
     }
     const newImageParams = await createUploadParams( observationPhoto, shouldUseEvidenceLocation );
