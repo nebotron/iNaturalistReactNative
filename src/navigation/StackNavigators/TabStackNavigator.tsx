@@ -86,7 +86,7 @@ const notificationsTitle = () => (
 );
 
 // eslint-disable-next-line i18next/no-literal-string
-const animalCropTitle = () => <Heading4 numberOfLines={1}>Animal Crop Tool</Heading4>;
+const animalCropTitle = () => <Heading4 numberOfLines={1}>CROP LABELER</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const debugTitle = () => <Heading4 className="text-white">DEBUG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string

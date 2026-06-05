@@ -143,7 +143,7 @@ const Menu = ( ) => {
     },
     animalCropTool: {
       // eslint-disable-next-line i18next/no-literal-string
-      label: "Animal Crop Tool",
+      label: "CROP LABELER",
       navigation: "AnimalCropTool",
       icon: "crop",
     },
@@ -195,7 +195,7 @@ const Menu = ( ) => {
       } ),
 
     imageMetadata: {
-      label: "Copy Image Metadata",
+      label: "COPY CROPS",
       icon: "copy",
       onPress: ( ) => {
         const records = getAnimalCropLogAsArray( );
@@ -205,7 +205,7 @@ const Menu = ( ) => {
     },
 
     deleteUnfavedImportedPhotos: {
-      label: "Delete imported photos from unfaved observations",
+      label: "DELETE UNFAVED",
       icon: "trash",
       onPress: ( ) => {
         interface ObsLike {
