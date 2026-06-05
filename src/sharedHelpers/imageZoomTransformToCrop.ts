@@ -65,17 +65,12 @@ export function imageZoomTransformToNormalizedCrop(
   const minY = Math.max( 0, Math.min( ...corners.map( p => p.ny ) ) );
   const maxY = Math.min( 1, Math.max( ...corners.map( p => p.ny ) ) );
 
-  const centerNx = ( minX + maxX ) / 2;
-  const centerNy = ( minY + maxY ) / 2;
-  const pixelW = ( maxX - minX ) * imageWidth;
-  const pixelH = ( maxY - minY ) * imageHeight;
-  const sidePixels = Math.min( pixelW, pixelH );
-  const w = sidePixels / imageWidth;
-  const h = sidePixels / imageHeight;
+  const w = maxX - minX;
+  const h = maxY - minY;
 
   return clampCropPosition( {
-    x: centerNx - w / 2,
-    y: centerNy - h / 2,
+    x: minX,
+    y: minY,
     w,
     h,
   } );
