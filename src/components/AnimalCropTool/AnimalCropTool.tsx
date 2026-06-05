@@ -85,9 +85,15 @@ const AnimalCropTool = ( ) => {
     fetch( BIRD_API_URL )
       .then( r => r.json( ) )
       .then( data => {
-        const fresh = parsePhotos( data )
-          .filter( p => !seenUrlsRef.current.has( p.largeUrl ) );
-        setBirdPool( prev => [...prev, ...fresh] );
+        const photos = parsePhotos( data );
+        setBirdPool( prev => {
+          const existingUrls = new Set( prev.map( p => p.largeUrl ) );
+          const fresh = photos.filter(
+            p => !seenUrlsRef.current.has( p.largeUrl )
+              && !existingUrls.has( p.largeUrl ),
+          );
+          return [...prev, ...fresh];
+        } );
       } )
       .catch( ( ) => Alert.alert( "Error", "Could not load bird photos" ) )
       .finally( ( ) => { fetchingBirdRef.current = false; } );
@@ -99,9 +105,15 @@ const AnimalCropTool = ( ) => {
     fetch( ANIMAL_API_URL )
       .then( r => r.json( ) )
       .then( data => {
-        const fresh = parsePhotos( data )
-          .filter( p => !seenUrlsRef.current.has( p.largeUrl ) );
-        setAnimalPool( prev => [...prev, ...fresh] );
+        const photos = parsePhotos( data );
+        setAnimalPool( prev => {
+          const existingUrls = new Set( prev.map( p => p.largeUrl ) );
+          const fresh = photos.filter(
+            p => !seenUrlsRef.current.has( p.largeUrl )
+              && !existingUrls.has( p.largeUrl ),
+          );
+          return [...prev, ...fresh];
+        } );
       } )
       .catch( ( ) => Alert.alert( "Error", "Could not load animal photos" ) )
       .finally( ( ) => { fetchingAnimalRef.current = false; } );
@@ -126,21 +138,23 @@ const AnimalCropTool = ( ) => {
   useEffect( ( ) => {
     if ( currentPhoto !== null ) return;
 
-    const hasBird = birdPool.length > 0;
-    const hasAnimal = animalPool.length > 0;
-    if ( !hasBird && !hasAnimal ) return; // still loading
+    const unseenBird = birdPool.find( p => !seenUrlsRef.current.has( p.largeUrl ) );
+    const unseenAnimal = animalPool.find( p => !seenUrlsRef.current.has( p.largeUrl ) );
+    if ( !unseenBird && !unseenAnimal ) return; // still loading
 
     const wantBird = nextIsBirdRef.current;
-    const useBird = ( wantBird && hasBird ) || !hasAnimal;
+    const useBird = ( wantBird && !!unseenBird ) || !unseenAnimal;
     // Next pick is the opposite of what we just showed
     nextIsBirdRef.current = !useBird;
 
+    const picked = useBird
+      ? unseenBird!
+      : unseenAnimal!;
+    setCurrentPhoto( picked );
     if ( useBird ) {
-      setCurrentPhoto( birdPool[0] );
-      setBirdPool( p => p.slice( 1 ) );
+      setBirdPool( p => p.filter( p2 => p2.largeUrl !== picked.largeUrl ) );
     } else {
-      setCurrentPhoto( animalPool[0] );
-      setAnimalPool( p => p.slice( 1 ) );
+      setAnimalPool( p => p.filter( p2 => p2.largeUrl !== picked.largeUrl ) );
     }
   }, [currentPhoto, birdPool, animalPool] );
 
