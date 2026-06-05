@@ -25,6 +25,19 @@ export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
 
 export const getAnimalCropCount = ( ): number => Object.keys( load( ) ).length;
 
+export const getAnimalCropLogAsArray = ( ) => {
+  const log = load( );
+  return Object.entries( log )
+    .filter( ( [url] ) => url.startsWith( "http" ) )
+    .map( ( [url, crop] ) => ( {
+      url,
+      x: crop.x,
+      y: crop.y,
+      w: crop.w,
+      h: crop.h,
+    } ) );
+};
+
 export const copyAnimalCropLogToClipboard = ( ) => {
   const log = load( );
   const count = Object.keys( log ).length;
