@@ -27,7 +27,6 @@ import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
 import {
-  deleteDevicePhotosRemovedDuringObservationPrep,
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
@@ -51,6 +50,9 @@ const ImageCropEditor = ( ) => {
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
+  const addPendingGroupPhotoDeletionUri = useStore(
+    state => state.addPendingGroupPhotoDeletionUri,
+  );
 
   const imageUri = params?.imageUri;
   const context = params?.context;
@@ -214,9 +216,10 @@ const ImageCropEditor = ( ) => {
     if ( context === "groupPhotos" && imageUri ) {
       const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
       if ( groupedPhoto ) {
-        deleteDevicePhotosRemovedDuringObservationPrep( [
-          resolveDevicePhotoUriFromGroupedPhoto( groupedPhoto ),
-        ] );
+        const deviceUri = resolveDevicePhotoUriFromGroupedPhoto( groupedPhoto );
+        if ( deviceUri ) {
+          addPendingGroupPhotoDeletionUri( deviceUri );
+        }
       }
       setGroupedPhotos(
         groupedPhotos
@@ -252,6 +255,7 @@ const ImageCropEditor = ( ) => {
       navigation.goBack( );
     }
   }, [
+    addPendingGroupPhotoDeletionUri,
     context,
     currentObservation,
     deletePhotoFromObservation,
