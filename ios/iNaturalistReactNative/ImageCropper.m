@@ -244,29 +244,46 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
 
   if ( nDets == 0 ) { free( dets ); return nil; }
 
-  // Greedy NMS — union all kept boxes
+  // Greedy NMS — then union kept boxes with conf ≥ 50% of the best box's conf.
+  // Filtering low-confidence outliers avoids an over-large union when a few
+  // spurious detections fall on the background.
   qsort( dets, (size_t)nDets, sizeof( YOLOBox ), compareBoxByConf );
   BOOL *suppressed = (BOOL *)calloc( (size_t)nDets, sizeof( BOOL ) );
 
-  float uX1 = FLT_MAX, uY1 = FLT_MAX, uX2 = -FLT_MAX, uY2 = -FLT_MAX;
-  int   kept = 0;
-
+  // First pass: NMS to get the kept set and the best (first) box confidence.
+  float bestConf = -1.0f;
+  int   kept     = 0;
   for ( int i = 0; i < nDets; i++ ) {
     if ( suppressed[i] ) continue;
-    uX1 = MIN( uX1, dets[i].x1 );
-    uY1 = MIN( uY1, dets[i].y1 );
-    uX2 = MAX( uX2, dets[i].x2 );
-    uY2 = MAX( uY2, dets[i].y2 );
+    if ( bestConf < 0.0f ) bestConf = dets[i].conf;
     kept++;
     for ( int k = i + 1; k < nDets; k++ ) {
       if ( !suppressed[k] && boxIOU( dets[i], dets[k] ) > YOLO_IOU_THRESH )
         suppressed[k] = YES;
     }
   }
+
+  if ( kept == 0 ) { free( dets ); free( suppressed ); return nil; }
+
+  // Second pass: union only boxes at ≥ 50% of best confidence.
+  float confThreshold = 0.50f * bestConf;
+  float uX1 = FLT_MAX, uY1 = FLT_MAX, uX2 = -FLT_MAX, uY2 = -FLT_MAX;
+  int   used = 0;
+  for ( int i = 0; i < nDets; i++ ) {
+    if ( suppressed[i] )            continue;
+    if ( dets[i].conf < confThreshold ) continue;
+    uX1 = MIN( uX1, dets[i].x1 );
+    uY1 = MIN( uY1, dets[i].y1 );
+    uX2 = MAX( uX2, dets[i].x2 );
+    uY2 = MAX( uY2, dets[i].y2 );
+    used++;
+  }
+  if ( used == 0 ) {  // fallback: use best box
+    uX1 = dets[0].x1; uY1 = dets[0].y1;
+    uX2 = dets[0].x2; uY2 = dets[0].y2;
+  }
   free( dets );
   free( suppressed );
-
-  if ( kept == 0 ) return nil;
 
   // Map 640×640 box back to original normalised image coordinates
   float imgW = (float)image.size.width;
