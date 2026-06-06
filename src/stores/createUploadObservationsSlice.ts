@@ -8,6 +8,8 @@ export const UPLOAD_PENDING = "pending";
 export const UPLOAD_COMPLETE = "complete";
 export const UPLOAD_IN_PROGRESS = "in-progress";
 
+export const MAX_CONCURRENT_UPLOADS = 3;
+
 type UploadStatus = typeof UPLOAD_PENDING
   | typeof UPLOAD_IN_PROGRESS
   | typeof UPLOAD_COMPLETE
@@ -22,7 +24,8 @@ interface TotalUploadProgress {
 
 interface UploadObservationsSlice {
   abortController: AbortController | null;
-  currentUpload: RealmObservation | null;
+  // In-flight uploads, keyed by UUID. Items stay in uploadQueue until done.
+  activeUploads: Record<string, RealmObservation>;
   errorsByUuid: object;
   multiError: string | null;
   initialNumObservationsInQueue: number;
@@ -37,7 +40,7 @@ interface UploadObservationsSlice {
 
 const DEFAULT_STATE: UploadObservationsSlice = {
   abortController: null,
-  currentUpload: null,
+  activeUploads: {},
   errorsByUuid: {},
   // Single error caught during multiple obs upload
   multiError: null,
@@ -104,7 +107,7 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
     const { abortController } = get( );
     const defaultStateWithController = {
       abortController,
-      currentUpload: null,
+      activeUploads: {},
       errorsByUuid: {},
       multiError: null,
       initialNumObservationsInQueue: 0,
@@ -138,7 +141,7 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
       // Preserve the abort controller in case in might still get used. It
       // should only get regenerated when the uploads start
       abortController,
-      currentUpload: null,
+      activeUploads: {},
       errorsByUuid: {},
       multiError: null,
       initialNumObservationsInQueue: 0,
@@ -171,7 +174,7 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
   },
   updateTotalUploadProgress: ( uuid: string, increment: number ) => set( state => {
     const {
-      currentUpload,
+      activeUploads,
       totalToolbarIncrements,
       totalUploadProgress: existingTotalUploadProgress,
     } = state;
@@ -183,9 +186,10 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
       ? [...existingTotalUploadProgress]
       : [];
     const currentObsProgressObj = totalUploadProgress.find( o => o.uuid === uuid );
-    if ( !currentObsProgressObj && currentUpload ) {
+    const activeObservation = activeUploads[uuid];
+    if ( !currentObsProgressObj && activeObservation ) {
       const progressObj = createUploadProgressObj(
-        currentUpload,
+        activeObservation,
         increment,
       );
       totalUploadProgress.push( progressObj );
@@ -218,14 +222,20 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
           : uuids.length ),
     } );
   } ),
-  removeFromUploadQueue: ( ) => set( state => ( {
-    uploadQueue: state.uploadQueue.slice( 0, -1 ),
-    currentUpload: null,
-  } ) ),
-  setCurrentUpload: observation => set( state => ( {
-    currentUpload: observation,
+  // Marks an observation as in-flight. The UUID stays in uploadQueue until finishUpload.
+  startActiveUpload: ( uuid: string, observation: RealmObservation ) => set( state => ( {
+    activeUploads: { ...state.activeUploads, [uuid]: observation },
     numUploadsAttempted: state.numUploadsAttempted + 1,
   } ) ),
+  // Removes a completed/failed observation from activeUploads and uploadQueue.
+  finishUpload: ( uuid: string ) => set( state => {
+    const activeUploads = { ...state.activeUploads };
+    delete activeUploads[uuid];
+    return {
+      activeUploads,
+      uploadQueue: state.uploadQueue.filter( u => u !== uuid ),
+    };
+  } ),
   setTotalToolbarIncrements: queuedObservations => set( ( ) => ( {
     totalToolbarIncrements: calculateTotalToolbarIncrements( queuedObservations ),
   } ) ),
@@ -248,6 +258,7 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
       totalToolbarIncrements,
       totalUploadProgress: existingTotalUploadProgress,
       uploadQueue,
+      activeUploads: existingActiveUploads,
     } = state;
     // Zustand does *not* make deep copies when making supposedly immutable
     // state changes, so for nested objects like this, we need to create a
@@ -263,9 +274,12 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
     // return the new queue without the uuid of the object already deleted remotely
     const queueWithDeleted = remove( uploadQueue, uuidInQueue => uuidInQueue !== uuid );
 
+    const activeUploads = { ...existingActiveUploads };
+    delete activeUploads[uuid];
+
     return ( {
       uploadQueue: queueWithDeleted,
-      currentUpload: null,
+      activeUploads,
       totalUploadProgress,
       totalToolbarProgress: setTotalToolbarProgress( totalToolbarIncrements, totalUploadProgress ),
       uploadStatus: numUploadsAttempted === initialNumObservationsInQueue
@@ -278,13 +292,13 @@ const createUploadObservationsSlice: StateCreator<UploadObservationsSlice> = ( s
   getCompletedUploads: () => {
     const uploads = get().numUploadsAttempted;
     const errors = get().getTotalUploadErrors();
-    const inQueue = get().uploadQueue.length;
+    const inFlight = Object.keys( get().activeUploads ).length;
 
     // An upload is considered complete if:
     // 1. It was attempted (increments numUploadsAttempted)
-    // 2. It's no longer in the queue (removed from uploadQueue)
+    // 2. It's no longer in-flight (removed from activeUploads)
     // 3. It didn't error (not counted in errorsByUuid)
-    return Math.max( 0, uploads - inQueue - errors );
+    return Math.max( 0, uploads - inFlight - errors );
   },
 } );
 

@@ -16,6 +16,7 @@ import {
   useTranslation,
 } from "sharedHooks";
 import {
+  MAX_CONCURRENT_UPLOADS,
   UPLOAD_CANCELLED,
   UPLOAD_COMPLETE,
   UPLOAD_IN_PROGRESS,
@@ -44,13 +45,13 @@ const useUploadObservationWorker = ( ) => {
 
   const addUploadError = useStore( state => state.addUploadError );
   const completeUploads = useStore( state => state.completeUploads );
-  const currentUpload = useStore( state => state.currentUpload );
+  const activeUploads = useStore( state => state.activeUploads );
   const removeDeletedObsFromUploadQueue = useStore(
     state => state.removeDeletedObsFromUploadQueue,
   );
-  const removeFromUploadQueue = useStore( state => state.removeFromUploadQueue );
+  const finishUpload = useStore( state => state.finishUpload );
+  const startActiveUpload = useStore( state => state.startActiveUpload );
   const resetUploadObservationsSlice = useStore( state => state.resetUploadObservationsSlice );
-  const setCurrentUpload = useStore( state => state.setCurrentUpload );
   const updateTotalUploadProgress = useStore( state => state.updateTotalUploadProgress );
   const uploadQueue = useStore( state => state.uploadQueue );
   const uploadStatus = useStore( state => state.uploadStatus );
@@ -167,7 +168,6 @@ const useUploadObservationWorker = ( ) => {
 
   const uploadObservationAndCatchError = useCallback( async ( observation: RealmObservation ) => {
     const { uuid } = observation;
-    setCurrentUpload( observation );
     try {
       const timeoutID = setTimeout( ( ) => {
         abortController?.abort( );
@@ -215,11 +215,12 @@ const useUploadObservationWorker = ( ) => {
         }
       }
     } finally {
-      removeFromUploadQueue( );
-      // Read fresh state after removeFromUploadQueue updates the store, rather
+      finishUpload( uuid );
+      // Read fresh state after finishUpload updates the store, rather
       // than the stale closure values captured when this callback was created.
       const freshState = useStore.getState( );
-      if ( freshState.uploadQueue.length === 0 && !freshState.currentUpload ) {
+      if ( freshState.uploadQueue.length === 0
+        && Object.keys( freshState.activeUploads ).length === 0 ) {
         completeUploads( );
       }
     }
@@ -227,39 +228,46 @@ const useUploadObservationWorker = ( ) => {
     abortController,
     addUploadError,
     completeUploads,
+    finishUpload,
     realm,
     removeDeletedObsFromUploadQueue,
-    removeFromUploadQueue,
-    setCurrentUpload,
     stopAllUploads,
     t,
   ] );
 
   useEffect( ( ) => {
-    const uploadNextObservation = async ( ) => {
-      const lastQueuedUuid = uploadQueue[uploadQueue.length - 1];
+    if (
+      uploadStatus !== UPLOAD_IN_PROGRESS
+      || uploadQueue.length === 0
+      || !abortController
+      || abortController.signal.aborted
+    ) {
+      return;
+    }
+
+    const activeCount = Object.keys( activeUploads ).length;
+    const slotsAvailable = MAX_CONCURRENT_UPLOADS - activeCount;
+    if ( slotsAvailable <= 0 ) return;
+
+    // Skip UUIDs already in-flight so we don't start the same observation twice
+    const notYetActive = uploadQueue.filter( uuid => !activeUploads[uuid] );
+    const uuidsToStart = notYetActive.slice( -Math.min( slotsAvailable, notYetActive.length ) );
+    uuidsToStart.forEach( uuid => {
       const localObservation = realm.objectForPrimaryKey<RealmObservation>(
         "Observation",
-        lastQueuedUuid,
+        uuid,
       );
       if ( localObservation ) {
-        await uploadObservationAndCatchError( localObservation );
+        startActiveUpload( uuid, localObservation );
+        uploadObservationAndCatchError( localObservation );
       }
-    };
-    if (
-      uploadStatus === UPLOAD_IN_PROGRESS
-      && uploadQueue.length > 0
-      && !currentUpload
-    ) {
-      if ( abortController && !abortController.signal.aborted ) {
-        uploadNextObservation( );
-      }
-    }
+    } );
   }, [
     abortController,
-    currentUpload,
+    activeUploads,
     initialNumObservationsInQueue,
     realm,
+    startActiveUpload,
     uploadObservationAndCatchError,
     uploadQueue,
     uploadStatus,
