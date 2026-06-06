@@ -23,6 +23,7 @@ import {
 } from "react-native";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
@@ -32,6 +33,7 @@ import {
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import useCurrentUser from "sharedHooks/useCurrentUser";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -45,6 +47,7 @@ const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
   const { t } = useTranslation( );
+  const currentUser = useCurrentUser( );
   const currentObservation = useStore( state => state.currentObservation );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
@@ -340,6 +343,17 @@ const ImageCropEditor = ( ) => {
             },
           };
           updateObservationKeys( { observationPhotos: obs.observationPhotos } );
+
+          const obsUserId = currentObservation?.user?.id;
+          const remotePhotoUrl = Photo.displayOriginalPhoto( existingPhoto?.url );
+          if (
+            remotePhotoUrl
+            && obsUserId
+            && currentUser?.id
+            && obsUserId !== currentUser.id
+          ) {
+            saveAnimalCrop( remotePhotoUrl, crop );
+          }
         }
       }
 
@@ -354,6 +368,7 @@ const ImageCropEditor = ( ) => {
   }, [
     context,
     currentObservation,
+    currentUser,
     finishOrAdvance,
     getCropFeedbackSourceKey,
     groupedPhotos,
