@@ -4,13 +4,13 @@ import type { ApiPhoto } from "api/types";
 import { photoUploadPath } from "appConstants/paths";
 import { Platform } from "react-native";
 import type { RealmPhoto } from "realmModels/types";
-import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import {
   cropOriginalUriFromPath,
   normalizedCropToStorage,
   preserveCropOriginalPath,
   savedNormalizedCrop,
 } from "sharedHelpers/cropPhotoMetadata";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import resizeImage from "sharedHelpers/resizeImage";
 import { unlink } from "sharedHelpers/util";
 
@@ -112,6 +112,18 @@ class Photo extends Realm.Object {
 
   static displayMediumPhoto( url?: string ) {
     return url?.replace( "square", "medium" );
+  }
+
+  static displayOriginalPhoto( url?: string ) {
+    return url?.replace( "square", "original" );
+  }
+
+  static displayLocalOrRemoteOriginalPhoto( photo: RealmPhoto ) {
+    return (
+      Photo.preferredLocalPhotoUri( photo )
+      || Photo.displayOriginalPhoto( photo?.url )
+      || Photo.getLocalPhotoUri( photo?.localFilePath )
+    );
   }
 
   static displayLocalOrRemoteLargePhoto( photo: RealmPhoto ) {
