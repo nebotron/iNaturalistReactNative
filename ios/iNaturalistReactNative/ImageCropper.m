@@ -244,20 +244,20 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
 
   if ( nDets == 0 ) { free( dets ); return nil; }
 
-  // Greedy NMS — return the single highest-confidence box
+  // Greedy NMS — union all kept boxes
   qsort( dets, (size_t)nDets, sizeof( YOLOBox ), compareBoxByConf );
   BOOL *suppressed = (BOOL *)calloc( (size_t)nDets, sizeof( BOOL ) );
 
   float uX1 = FLT_MAX, uY1 = FLT_MAX, uX2 = -FLT_MAX, uY2 = -FLT_MAX;
-  BOOL  bestFound = NO;
+  int   kept = 0;
 
   for ( int i = 0; i < nDets; i++ ) {
     if ( suppressed[i] ) continue;
-    if ( !bestFound ) {
-      uX1 = dets[i].x1; uY1 = dets[i].y1;
-      uX2 = dets[i].x2; uY2 = dets[i].y2;
-      bestFound = YES;
-    }
+    uX1 = MIN( uX1, dets[i].x1 );
+    uY1 = MIN( uY1, dets[i].y1 );
+    uX2 = MAX( uX2, dets[i].x2 );
+    uY2 = MAX( uY2, dets[i].y2 );
+    kept++;
     for ( int k = i + 1; k < nDets; k++ ) {
       if ( !suppressed[k] && boxIOU( dets[i], dets[k] ) > YOLO_IOU_THRESH )
         suppressed[k] = YES;
@@ -266,7 +266,7 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   free( dets );
   free( suppressed );
 
-  if ( !bestFound ) return nil;
+  if ( kept == 0 ) return nil;
 
   // Map 640×640 box back to original normalised image coordinates
   float imgW = (float)image.size.width;
