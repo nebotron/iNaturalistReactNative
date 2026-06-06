@@ -73,12 +73,8 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 // ─── YOLO / ONNX Runtime detection ──────────────────────────────────────────
 
 #define YOLO_INPUT_SIZE  640
-#define YOLO_CONF_THRESH 0.25f
+#define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
 #define YOLO_IOU_THRESH  0.45f
-
-// COCO IDs that count as subjects: person(0) + common animals (14-23)
-static const int kTargetClasses[]    = { 0, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23 };
-static const int kTargetClassCount   = 11;
 
 typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 
@@ -157,13 +153,6 @@ static float *preprocessForYOLO( UIImage *image,
   return tensor;
 }
 
-static BOOL isTargetClass( int cls )
-{
-  for ( int i = 0; i < kTargetClassCount; i++ )
-    if ( kTargetClasses[i] == cls ) return YES;
-  return NO;
-}
-
 static float boxIOU( YOLOBox a, YOLOBox b )
 {
   float ix1 = MAX( a.x1, b.x1 ), iy1 = MAX( a.y1, b.y1 );
@@ -225,25 +214,24 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
     return nil;
   }
 
-  // output0: [1, 84, 8400] — rows 0-3 = cx,cy,w,h; rows 4-83 = 80 class scores
+  // output0: [1, 20, 8400] — rows 0-3 = cx,cy,w,h; rows 4-19 = 16 YOLO-World class scores
+  // Scores are pre-sigmoid (already in [0,1] range from the INT8 model).
   float *out;
   ort->GetTensorMutableData( outputTensor, (void **)&out );
 
   const int numPreds  = 8400;
-  const int numFields = 84;
+  const int numFields = 20;
 
   YOLOBox *dets  = (YOLOBox *)malloc( (size_t)numPreds * sizeof( YOLOBox ) );
   int      nDets = 0;
 
   for ( int j = 0; j < numPreds; j++ ) {
     float maxScore = -1.0f;
-    int   maxCls   = -1;
     for ( int c = 4; c < numFields; c++ ) {
       float s = out[c * numPreds + j];
-      if ( s > maxScore ) { maxScore = s; maxCls = c - 4; }
+      if ( s > maxScore ) maxScore = s;
     }
     if ( maxScore < YOLO_CONF_THRESH ) continue;
-    if ( !isTargetClass( maxCls ) )    continue;
 
     float cx = out[0 * numPreds + j];
     float cy = out[1 * numPreds + j];
@@ -256,20 +244,20 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
 
   if ( nDets == 0 ) { free( dets ); return nil; }
 
-  // Greedy NMS
+  // Greedy NMS — return the single highest-confidence box
   qsort( dets, (size_t)nDets, sizeof( YOLOBox ), compareBoxByConf );
   BOOL *suppressed = (BOOL *)calloc( (size_t)nDets, sizeof( BOOL ) );
 
   float uX1 = FLT_MAX, uY1 = FLT_MAX, uX2 = -FLT_MAX, uY2 = -FLT_MAX;
-  int   kept = 0;
+  BOOL  bestFound = NO;
 
   for ( int i = 0; i < nDets; i++ ) {
     if ( suppressed[i] ) continue;
-    uX1 = MIN( uX1, dets[i].x1 );
-    uY1 = MIN( uY1, dets[i].y1 );
-    uX2 = MAX( uX2, dets[i].x2 );
-    uY2 = MAX( uY2, dets[i].y2 );
-    kept++;
+    if ( !bestFound ) {
+      uX1 = dets[i].x1; uY1 = dets[i].y1;
+      uX2 = dets[i].x2; uY2 = dets[i].y2;
+      bestFound = YES;
+    }
     for ( int k = i + 1; k < nDets; k++ ) {
       if ( !suppressed[k] && boxIOU( dets[i], dets[k] ) > YOLO_IOU_THRESH )
         suppressed[k] = YES;
@@ -278,7 +266,7 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   free( dets );
   free( suppressed );
 
-  if ( kept == 0 ) return nil;
+  if ( !bestFound ) return nil;
 
   // Map 640×640 box back to original normalised image coordinates
   float imgW = (float)image.size.width;
