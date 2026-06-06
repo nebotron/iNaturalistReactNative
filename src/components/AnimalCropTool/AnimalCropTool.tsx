@@ -16,11 +16,9 @@ import {
   getAnimalCropLogAsArray,
   saveAnimalCrop,
 } from "sharedHelpers/animalCropLog";
+import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import {
-  defaultSquareCrop,
-} from "sharedHelpers/normalizedCropTypes";
 import colors from "styles/tailwindColors";
 
 // eslint-disable-next-line i18next/no-literal-string
@@ -63,6 +61,7 @@ const AnimalCropTool = ( ) => {
   const [animalPool, setAnimalPool] = useState<RemotePhoto[]>( [] );
   const [currentPhoto, setCurrentPhoto] = useState<RemotePhoto | null>( null );
   const [localPhoto, setLocalPhoto] = useState<LocalPhoto | null>( null );
+  const [initialCrop, setInitialCrop] = useState<NormalizedCrop | null>( null );
   const [savedCount, setSavedCount] = useState( getAnimalCropCount );
 
   // Alternates which pool to draw from; randomise the starting side
@@ -188,10 +187,28 @@ const AnimalCropTool = ( ) => {
     return ( ) => { cancelled = true; };
   }, [currentPhoto, localPhoto?.largeUrl] );
 
+  // Run subject detection once the local image is ready
+  useEffect( ( ) => {
+    if ( !localPhoto ) return;
+    let cancelled = false;
+    setInitialCrop( null );
+    ( async ( ) => {
+      const crop = await detectSubjectInImage(
+        localPhoto.localUri,
+        localPhoto.w,
+        localPhoto.h,
+      );
+      if ( !cancelled ) setInitialCrop( crop );
+    } )( );
+    // eslint-disable-next-line consistent-return
+    return ( ) => { cancelled = true; };
+  }, [localPhoto] );
+
   const advance = useCallback( ( ) => {
     if ( currentPhoto ) seenUrlsRef.current.add( currentPhoto.largeUrl );
     setCurrentPhoto( null );
     setLocalPhoto( null );
+    setInitialCrop( null );
   }, [currentPhoto] );
 
   const handleConfirm = useCallback( ( crop: NormalizedCrop ): Promise<void> => {
@@ -203,7 +220,7 @@ const AnimalCropTool = ( ) => {
     return Promise.resolve( );
   }, [localPhoto, advance] );
 
-  if ( !localPhoto || localPhoto.largeUrl !== currentPhoto?.largeUrl ) {
+  if ( !localPhoto || localPhoto.largeUrl !== currentPhoto?.largeUrl || !initialCrop ) {
     return (
       <View className="flex-1 items-center justify-center bg-black">
         <ActivityIndicator color={colors.white} size="large" />
@@ -221,7 +238,7 @@ const AnimalCropTool = ( ) => {
       imageWidth={localPhoto.w}
       imageHeight={localPhoto.h}
       framePadding={CROP_FRAME_PADDING}
-      initialCrop={defaultSquareCrop( localPhoto.w, localPhoto.h )}
+      initialCrop={initialCrop}
       labels={{
         // eslint-disable-next-line i18next/no-literal-string
         confirm: "Save",
