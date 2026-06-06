@@ -97,7 +97,7 @@ const ObsListItem = ( {
       <View>
         <ObsImagePreview
           source={{
-            uri: Photo.displayLocalOrRemoteSquarePhoto(
+            uri: Photo.displayLocalOrRemoteOriginalPhoto(
               photoFromObservation( observation ),
             ),
           }}
