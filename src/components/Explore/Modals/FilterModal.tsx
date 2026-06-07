@@ -124,6 +124,7 @@ const FilterModal = ( {
     taxonFilters,
     user,
     excludeUser,
+    unobservedByMe,
     wildStatus,
   } = state;
 
@@ -855,6 +856,13 @@ const FilterModal = ( {
                   />
                 )}
             </View>
+            {currentUser && (
+              <Checkbox
+                text={t( "Unobserved-by-me" )}
+                isChecked={unobservedByMe}
+                onPress={() => dispatch( { type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME } )}
+              />
+            )}
           </View>
 
           {/* Project Section */}

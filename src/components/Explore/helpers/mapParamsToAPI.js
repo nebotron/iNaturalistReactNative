@@ -104,6 +104,10 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.viewer_id = currentUser?.id;
   }
 
+  if ( params.unobservedByMe && currentUser?.id ) {
+    filteredParams.unobserved_by_user_id = currentUser.id;
+  }
+
   if ( params.photoLicense !== PHOTO_LICENSE.ALL ) {
     // How license filter maps to the API
     const licenseParams = {
@@ -149,6 +153,7 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   delete filteredParams.reviewedFilter;
   delete filteredParams.photoLicense;
   delete filteredParams.place;
+  delete filteredParams.unobservedByMe;
 
   return filteredParams;
 };
