@@ -1367,6 +1367,7 @@ Unknown-error = Unknown error
 Unknown-organism = Unknown organism
 # Button to remove reviewed status from an observation
 Unmark-as-reviewed = Unmark as reviewed
+Unobserved-by-me = Unobserved by me
 Unreviewed-observations-only = Unreviewed observations only
 Upload-anyway = Upload anyway
 Upload-Complete = Upload Complete

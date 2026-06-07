@@ -1,13 +1,15 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable no-shadow */
-import isEqual from "lodash/isEqual";
-import * as React from "react";
-import type { LatLng } from "react-native-maps";
-
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
-import { migrateTaxonFilters, normalizeTaxonFilters } from "components/Explore/helpers/taxonFilters";
+import {
+  migrateTaxonFilters,
+  normalizeTaxonFilters,
+} from "components/Explore/helpers/taxonFilters";
+import isEqual from "lodash/isEqual";
+import * as React from "react";
+import type { LatLng } from "react-native-maps";
 
 import fetchCoarseUserLocation from "../sharedHelpers/fetchCoarseUserLocation";
 import { DEFAULT_NEARBY_RADIUS_KM } from "../sharedHelpers/nearbyRadius";
@@ -45,6 +47,7 @@ export enum EXPLORE_ACTION {
   SET_TAXON_NAME = "SET_TAXON_NAME",
   SET_USER = "SET_USER",
   SET_EXCLUDE_USER = "SET_EXCLUDE_USER",
+  TOGGLE_UNOBSERVED_BY_ME = "TOGGLE_UNOBSERVED_BY_ME",
   SET_WILD_STATUS = "SET_WILD_STATUS",
   SET_NEARBY_RADIUS = "SET_NEARBY_RADIUS",
   TOGGLE_CASUAL = "TOGGLE_CASUAL",
@@ -232,6 +235,7 @@ interface State {
   user: object | undefined | null;
   user_id: number | undefined | null;
   excludeUser: object | undefined | null;
+  unobservedByMe: boolean;
   verifiable: boolean;
   wildStatus: WILD_STATUS;
   nearbyRadiusKm: number;
@@ -301,6 +305,7 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.SET_PHOTO_LICENSE; photoLicense: PHOTO_LICENSE}
   | {type: EXPLORE_ACTION.SET_MAP_BOUNDARIES; mapBoundaries: MapBoundaries}
   | {type: EXPLORE_ACTION.USE_STORED_STATE; storedState: State}
+  | {type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME}
 type Dispatch = ( action: Action ) => void
 
 const ExploreContext = React.createContext<
@@ -319,6 +324,7 @@ const ExploreContext = React.createContext<
 const calculatedFilters = {
   user_id: undefined,
   project_id: undefined,
+  unobservedByMe: false,
   researchGrade: true,
   needsID: true,
   casual: false,
@@ -580,6 +586,11 @@ function exploreReducer( state: State, action: Action ) {
       return {
         ...state,
         casual: !state.casual,
+      };
+    case EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME:
+      return {
+        ...state,
+        unobservedByMe: !state.unobservedByMe,
       };
     case EXPLORE_ACTION.SET_HIGHEST_TAXONOMIC_RANK:
       return {
