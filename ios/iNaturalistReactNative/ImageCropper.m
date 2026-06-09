@@ -75,6 +75,9 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 #define YOLO_INPUT_SIZE  640
 #define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
 #define YOLO_IOU_THRESH  0.45f
+// If the best post-NMS box is below this threshold the detection is likely spurious;
+// returning nil triggers the Vision attention-saliency fallback instead.
+#define YOLO_GATE_CONF   0.15f
 
 typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 
@@ -214,23 +217,17 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
     return nil;
   }
 
-  // output0: [1, 20, 8400] — rows 0-3 = cx,cy,w,h; rows 4-19 = 16 YOLO-World class scores
-  // Scores are pre-sigmoid (already in [0,1] range from the INT8 model).
+  // output0: [1, 5, 8400] — rows 0-3 = cx,cy,w,h; row 4 = objectness score (1 class)
   float *out;
   ort->GetTensorMutableData( outputTensor, (void **)&out );
 
   const int numPreds  = 8400;
-  const int numFields = 20;
 
   YOLOBox *dets  = (YOLOBox *)malloc( (size_t)numPreds * sizeof( YOLOBox ) );
   int      nDets = 0;
 
   for ( int j = 0; j < numPreds; j++ ) {
-    float maxScore = -1.0f;
-    for ( int c = 4; c < numFields; c++ ) {
-      float s = out[c * numPreds + j];
-      if ( s > maxScore ) maxScore = s;
-    }
+    float maxScore = out[4 * numPreds + j];
     if ( maxScore < YOLO_CONF_THRESH ) continue;
 
     float cx = out[0 * numPreds + j];
@@ -264,6 +261,10 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   }
 
   if ( kept == 0 ) { free( dets ); free( suppressed ); return nil; }
+
+  // Gate: if the strongest detection is still weak, the model is uncertain — fall
+  // back to Vision attention saliency rather than crop to a likely-wrong location.
+  if ( bestConf < YOLO_GATE_CONF ) { free( dets ); free( suppressed ); return nil; }
 
   // Second pass: union only boxes at ≥ 50% of best confidence.
   float confThreshold = 0.50f * bestConf;
