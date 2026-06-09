@@ -1,7 +1,3 @@
-import CustomImageZoom from "components/MediaViewer/CustomImageZoom";
-import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
-import { INatIconButton } from "components/SharedComponents";
-import { Text, View } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
@@ -9,18 +5,28 @@ import React, {
   useRef,
   useState,
 } from "react";
-import type { ViewStyle } from "react-native";
+import type { LayoutChangeEvent, ViewStyle } from "react-native";
 import {
   ActivityIndicator,
   StyleSheet,
   useWindowDimensions,
 } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  useAnimatedStyle,
+  useSharedValue,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { normalizedCropToImageZoomTransform } from "sharedHelpers/normalizedCropToImageZoomTransform";
+import { INatIconButton } from "components/SharedComponents";
+import { Text, View } from "components/styledComponents";
+import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
+import { normalizedCropToImageZoomTransform } from "sharedHelpers/normalizedCropToImageZoomTransform";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import colors from "styles/tailwindColors";
 
+const MIN_SCALE = 1;
+const MAX_SCALE = 50;
 const DIM_COLOR = "rgba(0, 0, 0, 0.55)";
 const TOOLBAR_HEIGHT = 104;
 const CROP_BUTTON_SIZE = 88;
@@ -41,6 +47,9 @@ const styles = StyleSheet.create( {
     borderColor: colors.white,
     borderWidth: 1,
     position: "absolute",
+  },
+  image: {
+    flex: 1,
   },
   toolbar: {
     minHeight: TOOLBAR_HEIGHT,
@@ -65,10 +74,10 @@ interface Props {
   imageWidth: number;
   imageHeight: number;
   framePadding: number;
-  initialCrop?: NormalizedCrop | null;
+  initialCrop: NormalizedCrop;
   labels: ImageCropLabels;
   onConfirm: ( crop: NormalizedCrop ) => void | Promise<void>;
-  onDelete?: () => void;
+  onDelete?: ( ) => void;
 }
 
 const ImageCropView = ( {
@@ -83,36 +92,53 @@ const ImageCropView = ( {
 }: Props ) => {
   const insets = useSafeAreaInsets( );
   const { width: windowWidth } = useWindowDimensions( );
-  const zoomRef = useRef<SharedZoomableImageRef>( null );
-  const appliedInitialCropKey = useRef<string | null>( null );
   const [cropAreaHeight, setCropAreaHeight] = useState( 0 );
   const [saving, setSaving] = useState( false );
 
+  // Animated transform shared values (pan + pinch)
+  const scale = useSharedValue( 1 );
+  const translateX = useSharedValue( 0 );
+  const translateY = useSharedValue( 0 );
+  const focalX = useSharedValue( 0 );
+  const focalY = useSharedValue( 0 );
+
+  // Gesture start snapshots
+  const savedScale = useSharedValue( 1 );
+  const savedTranslateX = useSharedValue( 0 );
+  const savedTranslateY = useSharedValue( 0 );
+  const savedFocalX = useSharedValue( 0 );
+  const savedFocalY = useSharedValue( 0 );
+  const pinchOriginX = useSharedValue( 0 );
+  const pinchOriginY = useSharedValue( 0 );
+
+  // Viewport center as shared values so gesture worklets can access them
+  const viewportCenterX = useSharedValue( windowWidth / 2 );
+  const viewportCenterY = useSharedValue( 0 );
+
+  useEffect( ( ) => {
+    viewportCenterX.value = windowWidth / 2;
+  }, [viewportCenterX, windowWidth] );
+
   const boxSize = useMemo( ( ) => {
     const maxSide = Math.min( windowWidth, cropAreaHeight );
-    if ( maxSide <= 0 ) {
-      return 0;
-    }
+    if ( maxSide <= 0 ) return 0;
     return maxSide * ( 1 - 2 * framePadding );
   }, [cropAreaHeight, framePadding, windowWidth] );
 
   const boxLeft = ( windowWidth - boxSize ) / 2;
   const boxTop = ( cropAreaHeight - boxSize ) / 2;
 
-  useEffect( ( ) => {
-    if (
-      !initialCrop
-      || boxSize <= 0
-      || cropAreaHeight <= 0
-      || !zoomRef.current
-    ) {
-      return;
-    }
+  // Track which (sourceUri, crop, boxSize) combination has been applied so we
+  // don't reset the user's position when an unrelated re-render fires.
+  const appliedCropKey = useRef<string | null>( null );
 
-    const cropKey = `${sourceUri}:${initialCrop.x}:${initialCrop.y}:${initialCrop.w}:${initialCrop.h}:${boxSize}`;
-    if ( appliedInitialCropKey.current === cropKey ) {
-      return;
-    }
+  useEffect( ( ) => {
+    if ( boxSize <= 0 || cropAreaHeight <= 0 ) return;
+
+    const key = `${sourceUri}:${initialCrop.x}:${initialCrop.y}`
+      + `:${initialCrop.w}:${initialCrop.h}:${boxSize}`;
+    if ( appliedCropKey.current === key ) return;
+    appliedCropKey.current = key;
 
     const transform = normalizedCropToImageZoomTransform(
       imageWidth,
@@ -122,25 +148,99 @@ const ImageCropView = ( {
       boxSize,
       initialCrop,
     );
-    zoomRef.current.applyTransform( transform );
-    appliedInitialCropKey.current = cropKey;
+
+    scale.value = transform.scale;
+    savedScale.value = transform.scale;
+    translateX.value = transform.translateX;
+    translateY.value = transform.translateY;
+    savedTranslateX.value = transform.translateX;
+    savedTranslateY.value = transform.translateY;
+    focalX.value = transform.focalX;
+    focalY.value = transform.focalY;
+    savedFocalX.value = transform.focalX;
+    savedFocalY.value = transform.focalY;
   }, [
     boxSize,
     cropAreaHeight,
+    focalX,
+    focalY,
     imageHeight,
     imageWidth,
     initialCrop,
+    savedFocalX,
+    savedFocalY,
+    savedScale,
+    savedTranslateX,
+    savedTranslateY,
+    scale,
     sourceUri,
+    translateX,
+    translateY,
     windowWidth,
   ] );
 
+  const pinchGesture = Gesture.Pinch( )
+    .onStart( event => {
+      savedScale.value = scale.value;
+      savedFocalX.value = focalX.value;
+      savedFocalY.value = focalY.value;
+      pinchOriginX.value = event.focalX;
+      pinchOriginY.value = event.focalY;
+    } )
+    .onUpdate( event => {
+      const newScale = Math.min(
+        MAX_SCALE,
+        Math.max( MIN_SCALE, savedScale.value * event.scale ),
+      );
+      scale.value = newScale;
+      focalX.value = savedFocalX.value
+        + ( viewportCenterX.value - pinchOriginX.value )
+        * ( newScale - savedScale.value );
+      focalY.value = savedFocalY.value
+        + ( viewportCenterY.value - pinchOriginY.value )
+        * ( newScale - savedScale.value );
+    } );
+
+  const panGesture = Gesture.Pan( )
+    .averageTouches( true )
+    .onStart( ( ) => {
+      savedTranslateX.value = translateX.value;
+      savedTranslateY.value = translateY.value;
+    } )
+    .onUpdate( event => {
+      translateX.value = savedTranslateX.value + event.translationX;
+      translateY.value = savedTranslateY.value + event.translationY;
+    } );
+
+  const gestures = Gesture.Simultaneous( pinchGesture, panGesture );
+
+  const animatedStyle = useAnimatedStyle( ( ) => ( {
+    transform: [
+      { translateX: translateX.value },
+      { translateY: translateY.value },
+      { translateX: focalX.value },
+      { translateY: focalY.value },
+      { scale: scale.value },
+    ],
+  } ) );
+
+  const handleCropAreaLayout = useCallback( ( event: LayoutChangeEvent ) => {
+    const h = event.nativeEvent.layout.height;
+    setCropAreaHeight( h );
+    viewportCenterY.value = h / 2;
+  }, [viewportCenterY] );
+
   const handleConfirm = useCallback( async ( ) => {
-    if ( saving || !zoomRef.current || boxSize <= 0 || cropAreaHeight <= 0 ) {
-      return;
-    }
+    if ( saving || boxSize <= 0 || cropAreaHeight <= 0 ) return;
     setSaving( true );
     try {
-      const transform = zoomRef.current.readTransform( );
+      const transform: ImageZoomTransform = {
+        scale: scale.value,
+        translateX: translateX.value,
+        translateY: translateY.value,
+        focalX: focalX.value,
+        focalY: focalY.value,
+      };
       const crop = imageZoomTransformToNormalizedCrop(
         imageWidth,
         imageHeight,
@@ -156,10 +256,15 @@ const ImageCropView = ( {
   }, [
     boxSize,
     cropAreaHeight,
+    focalX,
+    focalY,
     imageHeight,
     imageWidth,
     onConfirm,
     saving,
+    scale,
+    translateX,
+    translateY,
     windowWidth,
   ] );
 
@@ -177,53 +282,39 @@ const ImageCropView = ( {
   );
 
   const dimTopStyle = useMemo( ( ): ViewStyle => ( {
-    top: 0,
-    left: 0,
-    width: windowWidth,
     height: boxTop,
+    left: 0,
+    top: 0,
+    width: windowWidth,
   } ), [boxTop, windowWidth] );
 
   const dimBottomStyle = useMemo( ( ): ViewStyle => ( {
-    top: boxTop + boxSize,
-    left: 0,
-    width: windowWidth,
     height: Math.max( 0, cropAreaHeight - boxTop - boxSize ),
+    left: 0,
+    top: boxTop + boxSize,
+    width: windowWidth,
   } ), [boxSize, boxTop, cropAreaHeight, windowWidth] );
 
   const dimLeftStyle = useMemo( ( ): ViewStyle => ( {
-    top: boxTop,
-    left: 0,
-    width: boxLeft,
     height: boxSize,
+    left: 0,
+    top: boxTop,
+    width: boxLeft,
   } ), [boxLeft, boxSize, boxTop] );
 
   const dimRightStyle = useMemo( ( ): ViewStyle => ( {
-    top: boxTop,
-    left: boxLeft + boxSize,
-    width: Math.max( 0, windowWidth - boxLeft - boxSize ),
     height: boxSize,
+    left: boxLeft + boxSize,
+    top: boxTop,
+    width: Math.max( 0, windowWidth - boxLeft - boxSize ),
   } ), [boxLeft, boxSize, boxTop, windowWidth] );
 
   const frameStyle = useMemo( ( ): ViewStyle => ( {
+    height: boxSize,
     left: boxLeft,
     top: boxTop,
     width: boxSize,
-    height: boxSize,
   } ), [boxLeft, boxSize, boxTop] );
-
-  const cropPanContext = useMemo( ( ) => {
-    if ( boxSize <= 0 || cropAreaHeight <= 0 ) {
-      return undefined;
-    }
-
-    return {
-      imageWidth,
-      imageHeight,
-      viewportWidth: windowWidth,
-      viewportHeight: cropAreaHeight,
-      cropSize: boxSize,
-    };
-  }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
 
   return (
     <View className="flex-1 bg-black">
@@ -236,23 +327,19 @@ const ImageCropView = ( {
 
       <View
         className="flex-1"
-        onLayout={event => {
-          setCropAreaHeight( event.nativeEvent.layout.height );
-        }}
+        onLayout={handleCropAreaLayout}
       >
         {cropAreaHeight > 0 && (
-          <View style={styles.zoomLayer}>
-            <CustomImageZoom
-              uri={sourceUri}
-              resetKey={sourceUri}
-              width={windowWidth}
-              height={cropAreaHeight}
-              zoomRef={zoomRef}
-              autoReset={!initialCrop}
-              cropPanContext={cropPanContext}
-              testID={`ImageCropView.${sourceUri}`}
-            />
-          </View>
+          <GestureDetector gesture={gestures}>
+            <View style={styles.zoomLayer}>
+              <Animated.Image
+                testID={`ImageCropView.${sourceUri}`}
+                style={[styles.image, animatedStyle]}
+                source={{ uri: sourceUri }}
+                resizeMode="contain"
+              />
+            </View>
+          </GestureDetector>
         )}
 
         {boxSize > 0 && (

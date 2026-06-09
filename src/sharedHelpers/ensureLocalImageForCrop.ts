@@ -3,8 +3,6 @@ import { Platform } from "react-native";
 import resizeImage from "sharedHelpers/resizeImage";
 import * as uuid from "uuid";
 
-const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
-
 const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
   if ( uri.match( /^https?:\/\// ) ) {
     const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
@@ -55,5 +53,3 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
 };
 
 export default ensureLocalImageForCrop;
-
-export { stripFilePrefix };

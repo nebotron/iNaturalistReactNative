@@ -1,10 +1,6 @@
 import { mkdir } from "@dr.pogodin/react-native-fs";
 import { photoUploadPath } from "appConstants/paths";
 import { NativeModules } from "react-native";
-import {
-  alignPixelCropOutwardToJpegBlocks,
-  pixelCropFromNormalizedCrop,
-} from "sharedHelpers/jpegCropBounds";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { log } from "sharedHelpers/logger";
 import * as uuid from "uuid";
@@ -43,23 +39,20 @@ const cropImageFile = async (
   const outputPath = `${outputDir}/${uuid.v4()}.jpg`;
   const inputPath = stripFilePrefix( imageUri );
 
-  const pixelCrop = alignPixelCropOutwardToJpegBlocks(
-    pixelCropFromNormalizedCrop( crop, imageWidth, imageHeight ),
-    imageWidth,
-    imageHeight,
-  );
+  const originX = Math.round( crop.x * imageWidth );
+  const originY = Math.round( crop.y * imageHeight );
+  const width = Math.round( crop.w * imageWidth );
+  const height = Math.round( crop.h * imageHeight );
 
   try {
     const croppedPath = await ImageCropper.cropImage(
       inputPath,
-      pixelCrop.originX,
-      pixelCrop.originY,
-      pixelCrop.width,
-      pixelCrop.height,
+      originX,
+      originY,
+      width,
+      height,
       outputPath,
     );
-    // Native ImageCropper copies EXIF/metadata from the source image into the
-    // cropped JPEG and updates dimension/orientation tags for the new size.
     return croppedPath.startsWith( "file://" )
       ? croppedPath
       : `file://${croppedPath}`;

@@ -21,11 +21,6 @@ export interface RealmPhoto extends RealmObject {
   licenseCode?: License;
   url?: string;
   localFilePath?: string;
-  cropOriginalLocalFilePath?: string;
-  cropX?: number;
-  cropY?: number;
-  cropW?: number;
-  cropH?: number;
 }
 
 export interface RealmSound extends RealmObject {

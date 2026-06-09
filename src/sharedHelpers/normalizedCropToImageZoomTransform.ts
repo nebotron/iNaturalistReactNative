@@ -2,7 +2,6 @@ import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop"
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 
-// eslint-disable-next-line import/prefer-default-export
 export function normalizedCropToImageZoomTransform(
   imageWidth: number,
   imageHeight: number,
@@ -58,3 +57,5 @@ export function normalizedCropToImageZoomTransform(
     focalY: 0,
   };
 }
+
+export default normalizedCropToImageZoomTransform;

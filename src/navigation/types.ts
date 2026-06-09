@@ -192,10 +192,8 @@ export type SharedStackParamList = {
   // From EvidenceList.js and GroupPhotos.tsx
   ImageCropEditor: {
     imageUri: string;
-    context: "groupPhotos" | "observationEdit";
-    observationPhotoUuid?: string;
-    onCropSaved?: () => void;
-    pendingImageUris?: string[];
+    observationPhotoUuid: string;
+    onCropSaved?: ( ) => void;
   };
 };
 
