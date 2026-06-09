@@ -217,23 +217,17 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
     return nil;
   }
 
-  // output0: [1, 20, 8400] — rows 0-3 = cx,cy,w,h; rows 4-19 = 16 YOLO-World class scores
-  // Scores are pre-sigmoid (already in [0,1] range from the INT8 model).
+  // output0: [1, 5, 8400] — rows 0-3 = cx,cy,w,h; row 4 = objectness score (1 class)
   float *out;
   ort->GetTensorMutableData( outputTensor, (void **)&out );
 
   const int numPreds  = 8400;
-  const int numFields = 20;
 
   YOLOBox *dets  = (YOLOBox *)malloc( (size_t)numPreds * sizeof( YOLOBox ) );
   int      nDets = 0;
 
   for ( int j = 0; j < numPreds; j++ ) {
-    float maxScore = -1.0f;
-    for ( int c = 4; c < numFields; c++ ) {
-      float s = out[c * numPreds + j];
-      if ( s > maxScore ) maxScore = s;
-    }
+    float maxScore = out[4 * numPreds + j];
     if ( maxScore < YOLO_CONF_THRESH ) continue;
 
     float cx = out[0 * numPreds + j];
