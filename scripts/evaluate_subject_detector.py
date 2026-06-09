@@ -75,23 +75,27 @@ def clamp_crop(x: float, y: float, w: float, h: float,
 def bounds_to_crop(bx: float, by: float, bw: float, bh: float,
                    padding: float,
                    image_width: int = 0, image_height: int = 0) -> Crop:
-    """Exact replica of subjectBoundsToNormalizedCrop.ts."""
+    """Exact replica of subjectBoundsToNormalizedCrop.ts.
+
+    When the padded subject exceeds the image dimensions, w or h may be > 1
+    and x or y may be negative (letterbox case — caller shows black bars).
+    """
     if bw <= 0 or bh <= 0:
         return Crop(0, 0, 1, 1)
     if image_width > 0 and image_height > 0:
         padded_w = bw * (1 + padding)
         padded_h = bh * (1 + padding)
-        pixel_side = min(
-            max(padded_w * image_width, padded_h * image_height),
-            image_width,
-            image_height,
-        )
+        # No longer clamped to image dimensions — very large subjects letterbox.
+        pixel_side = max(padded_w * image_width, padded_h * image_height)
         w = pixel_side / image_width
         h = pixel_side / image_height
         cx = bx + bw / 2
         cy = by + bh / 2
-        x = max(0.0, min(1.0 - w, cx - w / 2))
-        y = max(0.0, min(1.0 - h, cy - h / 2))
+        # Clamp only when the crop fits within the image.
+        x = (max(0.0, min(1.0 - w, cx - w / 2)) if w <= 1.0
+             else cx - w / 2)
+        y = (max(0.0, min(1.0 - h, cy - h / 2)) if h <= 1.0
+             else cy - h / 2)
         return Crop(x, y, w, h)
     # Fallback when image dimensions are unavailable (normalized-space squaring)
     pad_w = bw * padding
