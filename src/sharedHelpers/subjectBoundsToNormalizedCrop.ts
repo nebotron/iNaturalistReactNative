@@ -31,12 +31,10 @@ export function subjectBoundsToNormalizedCrop(
   const paddedW = bounds.width * ( 1 + paddingFraction );
   const paddedH = bounds.height * ( 1 + paddingFraction );
 
-  // Compute the square side in pixels so the crop fills the square container
-  const pixelSide = Math.min(
-    Math.max( paddedW * imageWidth, paddedH * imageHeight ),
-    imageWidth,
-    imageHeight,
-  );
+  // Compute the square side in pixels so the subject fits in the square
+  // container. When the subject is very large, pixelSide may exceed the image
+  // dimensions; the caller is expected to letterbox rather than crop.
+  const pixelSide = Math.max( paddedW * imageWidth, paddedH * imageHeight );
 
   const w = pixelSide / imageWidth;
   const h = pixelSide / imageHeight;
@@ -44,9 +42,15 @@ export function subjectBoundsToNormalizedCrop(
   const centerX = bounds.x + bounds.width / 2;
   const centerY = bounds.y + bounds.height / 2;
 
-  // Clamp position only; w and h are already within [0, 1]
-  const x = Math.max( 0, Math.min( 1 - w, centerX - w / 2 ) );
-  const y = Math.max( 0, Math.min( 1 - h, centerY - h / 2 ) );
+  // When the crop fits within the image, clamp position to stay in-bounds.
+  // When the crop exceeds the image (letterbox case), center on the subject
+  // and allow negative coordinates.
+  const x = w <= 1
+    ? Math.max( 0, Math.min( 1 - w, centerX - w / 2 ) )
+    : centerX - w / 2;
+  const y = h <= 1
+    ? Math.max( 0, Math.min( 1 - h, centerY - h / 2 ) )
+    : centerY - h / 2;
 
   return {
     x, y, w, h,
