@@ -57,6 +57,13 @@ export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
   syncToFirebase( _logToArray( current ) );
 };
 
+export const deleteAnimalCrop = ( photoUrl: string ) => {
+  const current = load( );
+  delete current[photoUrl];
+  zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
+  syncToFirebase( _logToArray( current ) );
+};
+
 export const getAnimalCropCount = ( ): number => Object.keys( load( ) ).length;
 
 export const getAnimalCropLogAsArray = ( ) => _logToArray( load( ) );
