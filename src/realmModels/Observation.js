@@ -271,10 +271,16 @@ class Observation extends Realm.Object {
     }
 
     const addTimestampsToEvidence = evidence => ( evidence
-      ? evidence.map( record => ( {
-        ...record,
-        ...timestamps,
-      } ) )
+      ? evidence.map( record => {
+        // Don't bump _updated_at on already-synced evidence in existing observations:
+        // their _synced_at timestamp already correctly reflects that they are up to date.
+        // Bumping _updated_at would cause needsSync() to return true and trigger an
+        // unnecessary (or broken) re-upload of the photo file.
+        if ( existingObservation && record._synced_at ) {
+          return record;
+        }
+        return { ...record, ...timestamps };
+      } )
       : evidence );
 
     const taxon = obs.taxon || null;
