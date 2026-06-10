@@ -20,8 +20,12 @@ interface RootExploreSlice {
   rootExploreView: string;
   setRootExploreView: ( _view: string ) => void;
   savedExploreFilters: SavedExploreFilter[];
-  addSavedExploreFilter: ( name: string, params: ExploreState ) => boolean;
-  updateSavedExploreFilter: ( id: string, params: ExploreState ) => boolean;
+  addSavedExploreFilter: (
+    name: string, params: ExploreState, view: string, observationsLayout: string
+  ) => boolean;
+  updateSavedExploreFilter: (
+    id: string, params: ExploreState, view: string, observationsLayout: string
+  ) => boolean;
   removeSavedExploreFilter: ( id: string ) => void;
 }
 
@@ -29,7 +33,7 @@ const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => (
   ...DEFAULT_STATE,
   setRootStoredParams: rootStoredParams => set( ( ) => ( { rootStoredParams } ) ),
   setRootExploreView: rootExploreView => set( ( ) => ( { rootExploreView } ) ),
-  addSavedExploreFilter: ( name, params ) => {
+  addSavedExploreFilter: ( name, params, view, observationsLayout ) => {
     const trimmedName = name.trim( );
 
     if ( !trimmedName ) {
@@ -48,13 +52,15 @@ const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => (
           name: trimmedName,
           createdAt: Date.now( ),
           params,
+          view,
+          observationsLayout,
         },
       ],
     } ) );
 
     return true;
   },
-  updateSavedExploreFilter: ( id, params ) => {
+  updateSavedExploreFilter: ( id, params, view, observationsLayout ) => {
     const savedFilterIndex = get( ).savedExploreFilters.findIndex(
       savedFilter => savedFilter.id === id,
     );
@@ -71,6 +77,8 @@ const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => (
         ...savedFilter,
         createdAt: Date.now( ),
         params,
+        view,
+        observationsLayout,
       };
 
       return { savedExploreFilters: updatedSavedFilters };
