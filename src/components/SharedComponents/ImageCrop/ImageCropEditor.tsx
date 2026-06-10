@@ -1,17 +1,11 @@
 import type { RouteProp } from "@react-navigation/native";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import {
-  Button,
-  ViewWrapper,
-} from "components/SharedComponents";
 import ImageCropView from "components/SharedComponents/ImageCrop/ImageCropView";
 import { View } from "components/styledComponents";
-import cloneDeep from "lodash/cloneDeep";
 import type { SharedStackParamList } from "navigation/types";
 import React, {
   useCallback,
   useEffect,
-  useMemo,
   useState,
 } from "react";
 import {
@@ -48,12 +42,6 @@ const ImageCropEditor = ( ) => {
   const [loading, setLoading] = useState( true );
 
   useEffect( ( ) => {
-    navigation.setOptions( { headerShown: false } );
-  }, [navigation] );
-
-  useEffect( ( ) => {
-    if ( !imageUri ) return ( ) => {};
-
     let cancelled = false;
     setLoading( true );
     setLocalImageUri( null );
@@ -85,11 +73,11 @@ const ImageCropEditor = ( ) => {
     return ( ) => { cancelled = true; };
   }, [imageUri] );
 
-  const labels = useMemo( ( ) => ( {
+  const labels = {
     confirm: t( "SAVE-CROP" ),
     delete: t( "Delete-photo" ),
     instructions: t( "CROP-DRAG-HINT" ),
-  } ), [t] );
+  };
 
   const handleDelete = useCallback( ( ) => {
     if ( !observationPhotoUuid || !currentObservation ) return;
@@ -128,23 +116,20 @@ const ImageCropEditor = ( ) => {
       );
       const resizedPath = await Photo.resizeImageForUpload( croppedUri );
 
-      const obs = cloneDeep( currentObservation );
-      const idx = obs?.observationPhotos?.findIndex(
-        op => op.uuid === observationPhotoUuid,
-      ) ?? -1;
-      if ( idx >= 0 && obs?.observationPhotos ) {
-        const existingPhoto = obs.observationPhotos[idx].photo;
-        obs.observationPhotos = [...obs.observationPhotos];
-        obs.observationPhotos[idx] = {
-          ...obs.observationPhotos[idx],
+      const photos = currentObservation?.observationPhotos ?? [];
+      const idx = photos.findIndex( op => op.uuid === observationPhotoUuid );
+      if ( idx >= 0 ) {
+        const updated = [...photos];
+        updated[idx] = {
+          ...updated[idx],
           _updated_at: new Date( ),
           photo: {
-            ...existingPhoto,
+            ...updated[idx].photo,
             localFilePath: resizedPath,
             _updated_at: new Date( ),
           },
         };
-        updateObservationKeys( { observationPhotos: obs.observationPhotos } );
+        updateObservationKeys( { observationPhotos: updated } );
       }
 
       onCropSaved?.( );
@@ -162,20 +147,6 @@ const ImageCropEditor = ( ) => {
     t,
     updateObservationKeys,
   ] );
-
-  if ( !imageUri ) {
-    return (
-      <ViewWrapper>
-        <View className="p-4">
-          <Button
-            level="focus"
-            onPress={( ) => navigation.goBack( )}
-            text={t( "Go-back" )}
-          />
-        </View>
-      </ViewWrapper>
-    );
-  }
 
   if ( loading || !localImageUri || !imageSize ) {
     return (
