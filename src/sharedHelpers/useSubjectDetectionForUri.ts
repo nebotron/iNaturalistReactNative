@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Image } from "react-native";
+import { getAnimalCrop } from "./animalCropLog";
 import detectSubjectInImage from "./detectSubjectInImage";
 import ensureLocalImageForCrop from "./ensureLocalImageForCrop";
 import type { NormalizedCrop } from "./normalizedCropTypes";
@@ -47,7 +48,9 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
         } );
         if ( cancelled || !imageSize ) return;
 
-        const crop = await detectSubjectInImage( localUri, imageSize.w, imageSize.h );
+        const loggedCrop = getAnimalCrop( uri );
+        const crop = loggedCrop
+          ?? await detectSubjectInImage( localUri, imageSize.w, imageSize.h );
         if ( cancelled ) return;
 
         const detection: DetectionResult = {
