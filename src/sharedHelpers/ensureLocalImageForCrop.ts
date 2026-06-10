@@ -4,8 +4,9 @@ import resizeImage from "sharedHelpers/resizeImage";
 import * as uuid from "uuid";
 
 const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
+  const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
+
   if ( uri.match( /^https?:\/\// ) ) {
-    const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
     await mkdir( cacheDir );
     const destPath = `${cacheDir}/${uuid.v4()}.jpg`;
     const downloadUrl = uri.replace( /square/i, "large" );
@@ -25,7 +26,6 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
       return `file://${afterScheme}`;
     }
     if ( Platform.OS === "ios" ) {
-      const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
       await mkdir( cacheDir );
       const destPath = `${cacheDir}/${uuid.v4()}.jpg`;
       // 99999 → no upscaling; copyAssetsFileIOS caps at the asset's natural dimensions
@@ -36,7 +36,6 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
 
   // Android content:// URIs cannot be read as file paths by the native crop module.
   if ( Platform.OS === "android" && uri.startsWith( "content://" ) ) {
-    const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
     await mkdir( cacheDir );
     return resizeImage( uri, {
       width: 99999,

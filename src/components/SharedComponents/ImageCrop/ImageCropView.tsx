@@ -1,7 +1,6 @@
 import React, {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
 } from "react";
@@ -123,12 +122,8 @@ const ImageCropView = ( {
     viewportCenterX.value = windowWidth / 2;
   }, [viewportCenterX, windowWidth] );
 
-  const boxSize = useMemo( ( ) => {
-    const maxSide = Math.min( windowWidth, cropAreaHeight );
-    if ( maxSide <= 0 ) return 0;
-    return maxSide * ( 1 - 2 * framePadding );
-  }, [cropAreaHeight, framePadding, windowWidth] );
-
+  const maxSide = Math.min( windowWidth, cropAreaHeight );
+  const boxSize = maxSide > 0 ? maxSide * ( 1 - 2 * framePadding ) : 0;
   const boxLeft = ( windowWidth - boxSize ) / 2;
   const boxTop = ( cropAreaHeight - boxSize ) / 2;
 
@@ -272,53 +267,24 @@ const ImageCropView = ( {
     windowWidth,
   ] );
 
-  const instructionStyle = useMemo(
-    ( ) => ( { paddingTop: insets.top + 8 } ),
-    [insets.top],
-  );
+  const instructionStyle = { paddingTop: insets.top + 8 };
+  const toolbarStyle = { minHeight: TOOLBAR_HEIGHT + insets.bottom, paddingBottom: insets.bottom };
 
-  const toolbarStyle = useMemo(
-    ( ) => ( {
-      minHeight: TOOLBAR_HEIGHT + insets.bottom,
-      paddingBottom: insets.bottom,
-    } ),
-    [insets.bottom],
-  );
-
-  const dimTopStyle = useMemo( ( ): ViewStyle => ( {
-    height: boxTop,
-    left: 0,
-    top: 0,
-    width: windowWidth,
-  } ), [boxTop, windowWidth] );
-
-  const dimBottomStyle = useMemo( ( ): ViewStyle => ( {
+  const dimTopStyle: ViewStyle = { height: boxTop, left: 0, top: 0, width: windowWidth };
+  const dimBottomStyle: ViewStyle = {
     height: Math.max( 0, cropAreaHeight - boxTop - boxSize ),
     left: 0,
     top: boxTop + boxSize,
     width: windowWidth,
-  } ), [boxSize, boxTop, cropAreaHeight, windowWidth] );
-
-  const dimLeftStyle = useMemo( ( ): ViewStyle => ( {
-    height: boxSize,
-    left: 0,
-    top: boxTop,
-    width: boxLeft,
-  } ), [boxLeft, boxSize, boxTop] );
-
-  const dimRightStyle = useMemo( ( ): ViewStyle => ( {
+  };
+  const dimLeftStyle: ViewStyle = { height: boxSize, left: 0, top: boxTop, width: boxLeft };
+  const dimRightStyle: ViewStyle = {
     height: boxSize,
     left: boxLeft + boxSize,
     top: boxTop,
     width: Math.max( 0, windowWidth - boxLeft - boxSize ),
-  } ), [boxLeft, boxSize, boxTop, windowWidth] );
-
-  const frameStyle = useMemo( ( ): ViewStyle => ( {
-    height: boxSize,
-    left: boxLeft,
-    top: boxTop,
-    width: boxSize,
-  } ), [boxLeft, boxSize, boxTop] );
+  };
+  const frameStyle: ViewStyle = { height: boxSize, left: boxLeft, top: boxTop, width: boxSize };
 
   return (
     <View className="flex-1 bg-black">

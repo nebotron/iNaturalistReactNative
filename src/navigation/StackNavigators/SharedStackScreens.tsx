@@ -84,6 +84,15 @@ const SharedStackScreens = ( ) => (
         name="PhotoSharing"
         component={FadeInPhotoSharing}
       />
+      <Stack.Screen
+        name="ImageCropEditor"
+        component={FadeInImageCropEditor}
+        options={{
+          contentStyle: {
+            backgroundColor: "black",
+          },
+        }}
+      />
     </Stack.Group>
     {/* Screens with centered header */}
     <Stack.Group
@@ -125,18 +134,6 @@ const SharedStackScreens = ( ) => (
         component={FadeInMatchTaxonSearchScreen}
         options={{
           headerTitle: taxonSearchTitle,
-        }}
-      />
-      <Stack.Screen
-        name="ImageCropEditor"
-        component={FadeInImageCropEditor}
-        options={{
-          ...hideHeader,
-          headerTitleAlign: "center",
-          headerBackButtonDisplayMode: "minimal",
-          contentStyle: {
-            backgroundColor: "black",
-          },
         }}
       />
     </Stack.Group>
