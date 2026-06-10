@@ -5,6 +5,8 @@ export interface SavedExploreFilter {
   name: string;
   createdAt: number;
   params: ExploreState;
+  view?: string;
+  observationsLayout?: string;
 }
 
 export const prepareExploreStateForStorage = (
