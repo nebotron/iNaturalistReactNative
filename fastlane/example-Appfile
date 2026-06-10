@@ -3,7 +3,7 @@ package_name("org.inaturalist.android")
 
 # Apple
 app_identifier("org.inaturalist.iphone") # The bundle identifier of your app
-apple_id("your-username@inaturalist.org") # Your Apple email address
+apple_id("morgan.tenney@gmail.com") # Your Apple email address
 itc_team_id("12345") # App Store Connect Team ID
 team_id("YOURTEAMID") # Developer Portal Team ID
 # ProviderShortname, retrieved w/ `xcrun altool --list-providers -u "YOUR_APPLE_ID"`
