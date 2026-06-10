@@ -26,6 +26,7 @@ type Props = {
   isLoading: boolean,
   shouldUseEvidenceLocation: boolean,
   onPressPhoto: Function,
+  onDoubleTapPhoto?: Function,
   onReorderPhotos?: Function,
   onTaxonChosen: Function,
   duplicatePhotoUris?: Set<string>,
@@ -51,6 +52,7 @@ const Suggestions = ( {
   isLoading,
   shouldUseEvidenceLocation,
   onPressPhoto,
+  onDoubleTapPhoto,
   onReorderPhotos,
   onTaxonChosen,
   duplicatePhotoUris,
@@ -123,6 +125,7 @@ const Suggestions = ( {
     <SuggestionsHeader
       duplicatePhotoUris={duplicatePhotoUris}
       onPressPhoto={onPressPhoto}
+      onDoubleTapPhoto={onDoubleTapPhoto}
       onReorderPhotos={onReorderPhotos}
       photoUris={photoUris}
       reloadSuggestions={reloadSuggestions}
@@ -137,6 +140,7 @@ const Suggestions = ( {
     />
   ), [
     onPressPhoto,
+    onDoubleTapPhoto,
     onReorderPhotos,
     duplicatePhotoUris,
     photoUris,

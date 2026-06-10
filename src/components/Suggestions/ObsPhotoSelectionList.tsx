@@ -4,7 +4,7 @@ import DuplicateUploadBadge from
 import {
   Image, Pressable, View,
 } from "components/styledComponents";
-import React, { useCallback } from "react";
+import React, { useCallback, useRef } from "react";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
 import { useTranslation } from "sharedHooks";
 
@@ -13,22 +13,42 @@ interface Props {
   photoUris: string[];
   selectedPhotoUri: string;
   onPressPhoto: ( _uri: string ) => void;
+  onDoubleTapPhoto?: ( _uri: string ) => void;
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
 }
 
+const DOUBLE_TAP_DELAY = 300;
+
 const ObsPhotoSelectionList = ( {
   duplicatePhotoUris,
-  photoUris, selectedPhotoUri, onPressPhoto, onReorderPhotos,
+  photoUris,
+  selectedPhotoUri,
+  onPressPhoto,
+  onDoubleTapPhoto,
+  onReorderPhotos,
 }: Props ) => {
   const { t } = useTranslation( );
+  const lastTapRef = useRef<{ uri: string; time: number } | null>( null );
+
+  const handlePress = useCallback( ( item: string ) => {
+    const now = Date.now( );
+    if (
+      lastTapRef.current?.uri === item
+      && now - lastTapRef.current.time < DOUBLE_TAP_DELAY
+    ) {
+      lastTapRef.current = null;
+      onDoubleTapPhoto?.( item );
+    } else {
+      lastTapRef.current = { uri: item, time: now };
+      onPressPhoto( item );
+    }
+  }, [onPressPhoto, onDoubleTapPhoto] );
 
   const renderPhoto = useCallback( ( { item, drag } ) => (
     <ScaleDecorator>
       <Pressable
         accessibilityRole="button"
-        onPress={( ) => {
-          onPressPhoto( item );
-        }}
+        onPress={( ) => handlePress( item )}
         onLongPress={drag}
         className={classnames(
           "w-[83px] h-[83px] justify-center mx-1.5 rounded-lg",
@@ -61,7 +81,7 @@ const ObsPhotoSelectionList = ( {
         </View>
       </Pressable>
     </ScaleDecorator>
-  ), [duplicatePhotoUris, selectedPhotoUri, onPressPhoto, t] );
+  ), [duplicatePhotoUris, selectedPhotoUri, handlePress, t] );
 
   return (
     <DraggableFlatList

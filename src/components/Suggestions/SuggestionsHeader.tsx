@@ -14,6 +14,7 @@ import SuggestionsOffline from "./SuggestionsOffline";
 interface Props {
   duplicatePhotoUris?: Set<string>;
   onPressPhoto: ( _uri: string ) => void;
+  onDoubleTapPhoto?: ( _uri: string ) => void;
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
   photoUris: string[];
   reloadSuggestions: ( ) => void;
@@ -30,6 +31,7 @@ interface Props {
 const SuggestionsHeader = ( {
   duplicatePhotoUris,
   onPressPhoto,
+  onDoubleTapPhoto,
   onReorderPhotos,
   photoUris,
   reloadSuggestions,
@@ -52,6 +54,7 @@ const SuggestionsHeader = ( {
           photoUris={photoUris}
           selectedPhotoUri={selectedPhotoUri}
           onPressPhoto={onPressPhoto}
+          onDoubleTapPhoto={onDoubleTapPhoto}
           onReorderPhotos={onReorderPhotos}
         />
       </View>
