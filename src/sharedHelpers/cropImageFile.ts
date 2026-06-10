@@ -1,7 +1,7 @@
 import { mkdir } from "@dr.pogodin/react-native-fs";
 import { photoUploadPath } from "appConstants/paths";
 import { NativeModules } from "react-native";
-import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import type { NormalizedCrop } from "sharedHelpers/cropMath";
 import { log } from "sharedHelpers/logger";
 import * as uuid from "uuid";
 

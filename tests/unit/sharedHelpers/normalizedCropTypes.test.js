@@ -1,7 +1,7 @@
 import {
   computeContainRect,
   defaultSquareCrop,
-} from "sharedHelpers/normalizedCropTypes";
+} from "sharedHelpers/cropMath";
 
 describe( "defaultSquareCrop", ( ) => {
   it( "returns a centered square for landscape images", ( ) => {
