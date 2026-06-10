@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import mmkvStorage from "stores/zustandMMKVBackingStorage";
 import { zustandStorage } from "stores/useStore";
 
 interface LayoutHook {
@@ -15,17 +16,21 @@ const useStoredLayout = ( storageKey: string ): LayoutHook => {
   }, [storageKey] );
 
   useEffect( ( ) => {
-    const readLayoutFromStorage = async ( ) => {
-      // Casting is necessary because zustandStorage.getItem returns string | number | null
-      const storedLayout = zustandStorage.getItem( storageKey ) as string | null;
-      const defaultLayout = storageKey === "exploreObservationsLayout"
-        ? "map"
-        : "grid";
-      setLayout( storedLayout || defaultLayout );
-    };
+    const defaultLayout = storageKey === "exploreObservationsLayout"
+      ? "map"
+      : "grid";
+    // Casting is necessary because zustandStorage.getItem returns string | number | null
+    const storedLayout = zustandStorage.getItem( storageKey ) as string | null;
+    setLayout( storedLayout || defaultLayout );
 
-    readLayoutFromStorage( );
-  }, [writeLayoutToStorage, storageKey] );
+    const listener = mmkvStorage.addOnValueChangedListener( changedKey => {
+      if ( changedKey !== storageKey ) return;
+      const updated = zustandStorage.getItem( storageKey ) as string | null;
+      setLayout( updated || defaultLayout );
+    } );
+
+    return ( ) => listener.remove( );
+  }, [storageKey] );
 
   return {
     layout,
