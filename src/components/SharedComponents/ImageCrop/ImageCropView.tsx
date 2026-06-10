@@ -19,10 +19,14 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INatIconButton } from "components/SharedComponents";
 import { Text, View } from "components/styledComponents";
-import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
-import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
-import { normalizedCropToImageZoomTransform } from "sharedHelpers/normalizedCropToImageZoomTransform";
-import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import type {
+  ImageZoomTransform,
+  NormalizedCrop,
+} from "sharedHelpers/cropMath";
+import {
+  cropToImageZoomTransform,
+  imageZoomTransformToCrop,
+} from "sharedHelpers/cropMath";
 import colors from "styles/tailwindColors";
 
 const MIN_SCALE = 1;
@@ -111,7 +115,7 @@ const ImageCropView = ( {
   const pinchOriginX = useSharedValue( 0 );
   const pinchOriginY = useSharedValue( 0 );
 
-  // Viewport center as shared values so gesture worklets can access them
+  // Viewport center as shared values so gesture worklets can read them
   const viewportCenterX = useSharedValue( windowWidth / 2 );
   const viewportCenterY = useSharedValue( 0 );
 
@@ -128,8 +132,8 @@ const ImageCropView = ( {
   const boxLeft = ( windowWidth - boxSize ) / 2;
   const boxTop = ( cropAreaHeight - boxSize ) / 2;
 
-  // Track which (sourceUri, crop, boxSize) combination has been applied so we
-  // don't reset the user's position when an unrelated re-render fires.
+  // Track which (sourceUri, crop, boxSize) has been applied to avoid resetting
+  // the user's position on unrelated re-renders.
   const appliedCropKey = useRef<string | null>( null );
 
   useEffect( ( ) => {
@@ -140,7 +144,7 @@ const ImageCropView = ( {
     if ( appliedCropKey.current === key ) return;
     appliedCropKey.current = key;
 
-    const transform = normalizedCropToImageZoomTransform(
+    const transform = cropToImageZoomTransform(
       imageWidth,
       imageHeight,
       windowWidth,
@@ -241,7 +245,7 @@ const ImageCropView = ( {
         focalX: focalX.value,
         focalY: focalY.value,
       };
-      const crop = imageZoomTransformToNormalizedCrop(
+      const crop = imageZoomTransformToCrop(
         imageWidth,
         imageHeight,
         windowWidth,

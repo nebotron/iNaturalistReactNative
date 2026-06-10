@@ -1,8 +1,10 @@
-import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
-import { normalizedCropToImageZoomTransform } from "sharedHelpers/normalizedCropToImageZoomTransform";
-import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
+import {
+  cropToImageZoomTransform,
+  defaultSquareCrop,
+  imageZoomTransformToCrop,
+} from "sharedHelpers/cropMath";
 
-describe( "normalizedCropToImageZoomTransform round-trip", ( ) => {
+describe( "cropToImageZoomTransform round-trip", ( ) => {
   const imageWidth = 2000;
   const imageHeight = 1000;
   const viewport = 300;
@@ -10,7 +12,7 @@ describe( "normalizedCropToImageZoomTransform round-trip", ( ) => {
 
   it( "round-trips the default centered square crop", ( ) => {
     const crop = defaultSquareCrop( imageWidth, imageHeight );
-    const transform = normalizedCropToImageZoomTransform(
+    const transform = cropToImageZoomTransform(
       imageWidth,
       imageHeight,
       viewport,
@@ -18,7 +20,7 @@ describe( "normalizedCropToImageZoomTransform round-trip", ( ) => {
       cropSize,
       crop,
     );
-    const roundTrip = imageZoomTransformToNormalizedCrop(
+    const roundTrip = imageZoomTransformToCrop(
       imageWidth,
       imageHeight,
       viewport,
@@ -34,16 +36,15 @@ describe( "normalizedCropToImageZoomTransform round-trip", ( ) => {
   } );
 
   it( "round-trips a subject-focused crop (display-square region)", ( ) => {
-    // For a 2000x1000 image displayed in 300x300 viewport, the contain rect is
-    // 300x150. For round-trip fidelity both axes must be equally constraining,
-    // so the crop must satisfy: crop.w * 300 = crop.h * 150, i.e. crop.w = crop.h/2.
+    // For a 2000x1000 image in a 300x300 viewport, the contain rect is 300x150.
+    // Round-trip fidelity requires: crop.w * 300 = crop.h * 150 → crop.w = crop.h/2.
     const crop = {
       x: 0.4,
       y: 0.1,
       w: 0.125,
       h: 0.25,
     };
-    const transform = normalizedCropToImageZoomTransform(
+    const transform = cropToImageZoomTransform(
       imageWidth,
       imageHeight,
       viewport,
@@ -51,7 +52,7 @@ describe( "normalizedCropToImageZoomTransform round-trip", ( ) => {
       cropSize,
       crop,
     );
-    const roundTrip = imageZoomTransformToNormalizedCrop(
+    const roundTrip = imageZoomTransformToCrop(
       imageWidth,
       imageHeight,
       viewport,
