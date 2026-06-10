@@ -33,11 +33,13 @@ const ExploreSavedFilterSheets = ( {
   const { state } = useExplore( );
   const addSavedExploreFilter = useStore( storeState => storeState.addSavedExploreFilter );
   const removeSavedExploreFilter = useStore( storeState => storeState.removeSavedExploreFilter );
+  const rootExploreView = useStore( storeState => storeState.rootExploreView );
 
   const saveCurrentFilters = ( name: string ) => {
     const saved = addSavedExploreFilter(
       name,
       prepareExploreStateForStorage( state ),
+      rootExploreView,
     );
 
     if ( !saved ) {

@@ -36,6 +36,8 @@ const ExploreSavedFiltersSection = ( {
   const updateSavedExploreFilter = useStore(
     storeState => storeState.updateSavedExploreFilter,
   );
+  const rootExploreView = useStore( storeState => storeState.rootExploreView );
+  const setRootExploreView = useStore( storeState => storeState.setRootExploreView );
 
   const sortedSavedFilters = useMemo(
     ( ) => sortSavedExploreFilters( savedExploreFilters ),
@@ -55,12 +57,17 @@ const ExploreSavedFiltersSection = ( {
       type: EXPLORE_ACTION.USE_STORED_STATE,
       storedState: savedFilter.params,
     } );
+
+    if ( savedFilter.view ) {
+      setRootExploreView( savedFilter.view );
+    }
   };
 
   const overwriteSavedFilter = ( savedFilterId: string ) => {
     updateSavedExploreFilter(
       savedFilterId,
       prepareExploreStateForStorage( state ),
+      rootExploreView,
     );
   };
 
