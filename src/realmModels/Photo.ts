@@ -182,9 +182,11 @@ class Photo extends Realm.Object {
     return normalizedCropToStorage( crop );
   }
 
-  static deletePhotoFromDeviceStorage( path: string ) {
+  static async deletePhotoFromDeviceStorage( path: string ) {
     const localPhoto = Photo.getLocalPhotoUri( path );
-    unlink( localPhoto );
+    // localPhoto is null for rotatedOriginalPhotos paths; fall back to the
+    // original path so those files are also cleaned up
+    await unlink( localPhoto || path );
   }
 
   static schema = {
