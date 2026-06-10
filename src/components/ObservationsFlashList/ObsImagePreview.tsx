@@ -1,10 +1,15 @@
 import type { ArgumentArray } from "classnames";
 import classNames from "classnames";
-import { INatIcon, PhotoCount } from "components/SharedComponents";
+import {
+  Carousel,
+  CarouselDots,
+  INatIcon,
+  PhotoCount,
+} from "components/SharedComponents";
 import { LinearGradient, View } from "components/styledComponents";
 import type { PropsWithChildren } from "react";
-import React, { useCallback } from "react";
-import type { ViewStyle } from "react-native";
+import React, { useCallback, useState } from "react";
+import type { LayoutChangeEvent, ViewStyle } from "react-native";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -33,6 +38,7 @@ interface Props extends PropsWithChildren {
   source?: {
     uri: string;
   };
+  sources?: Array<{uri: string}>;
   style?: ViewStyle;
   testID?: string;
   useShortGradient?: boolean;
@@ -70,6 +76,7 @@ const ObsImagePreview = ( {
   selectable = false,
   selected = false,
   source,
+  sources,
   style,
   testID,
   useShortGradient,
@@ -78,6 +85,15 @@ const ObsImagePreview = ( {
   hideGradientOverlay = false,
   squareCorners = false,
 }: Props ) => {
+  const [containerWidth, setContainerWidth] = useState( 0 );
+  const [slideIndex, setSlideIndex] = useState( 0 );
+
+  const showCarousel = ( sources?.length ?? 0 ) > 1;
+
+  const handleLayout = useCallback( ( e: LayoutChangeEvent ) => {
+    setContainerWidth( e.nativeEvent.layout.width );
+  }, [] );
+
   const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
 
   const imageClassNames: ArgumentArray = [
@@ -100,6 +116,7 @@ const ObsImagePreview = ( {
   }
 
   const renderPhotoCount = useCallback( ( ) => {
+    if ( showCarousel ) return null;
     if ( obsPhotosCount <= 1 || hidePhotoCount ) return null;
 
     if ( isSmall ) {
@@ -140,6 +157,32 @@ const ObsImagePreview = ( {
     isMultiplePhotosTop,
     isSmall,
     obsPhotosCount,
+    showCarousel,
+  ] );
+
+  const renderCarouselItem = useCallback( ( { item }: { item: object } ) => {
+    const photoSource = item as { uri: string };
+    return (
+      <View style={{ width: containerWidth }}>
+        <ObsImage
+          autoDetectSubject={autoDetectSubject}
+          uri={photoSource}
+          opaque={opaque}
+          iconicTaxonName={iconicTaxonName}
+          white={white}
+          isBackground={isBackground}
+          iconicTaxonIconSize={isSmall ? 22 : 100}
+        />
+      </View>
+    );
+  }, [
+    autoDetectSubject,
+    containerWidth,
+    iconicTaxonName,
+    isBackground,
+    isSmall,
+    opaque,
+    white,
   ] );
 
   const renderSelectable = useCallback( ( ) => {
@@ -225,12 +268,30 @@ const ObsImagePreview = ( {
 
   if ( isSmall && obsPhotosCount === 0 && hasSound ) {
     content = <INatIcon name="sound" color={colors.darkGray} size={24} />;
+  } else if ( showCarousel && containerWidth > 0 ) {
+    content = (
+      <>
+        <Carousel
+          data={sources as object[]}
+          renderItem={renderCarouselItem}
+          keyExtractor={( item, index ) => ( item as { uri: string } ).uri || String( index )}
+          onSlideScroll={setSlideIndex}
+        />
+        {renderGradient( )}
+        {renderSelectable( )}
+        <View className="absolute bottom-0 w-full" pointerEvents="none">
+          <CarouselDots length={( sources as Array<{uri: string}> ).length} index={slideIndex} />
+        </View>
+        {renderSoundIcon( )}
+        {children}
+      </>
+    );
   } else {
     content = (
       <>
         <ObsImage
           autoDetectSubject={autoDetectSubject}
-          uri={source}
+          uri={source ?? sources?.[0]}
           opaque={opaque}
           iconicTaxonName={iconicTaxonName}
           white={white}
@@ -255,6 +316,9 @@ const ObsImagePreview = ( {
       className={classNames( imageClassNames )}
       style={style}
       testID={testID}
+      onLayout={showCarousel
+        ? handleLayout
+        : undefined}
     >
       {content}
     </View>

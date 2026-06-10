@@ -12,7 +12,7 @@ import ObsUploadStatus from "./ObsUploadStatus";
 import {
   observationHasSound,
   photoCountFromObservation,
-  photoFromObservation,
+  photosFromObservation,
 } from "./util";
 
 type Props = {
@@ -69,14 +69,13 @@ const ObsGridItem = ( {
     observation?.uuid,
   ] );
 
-  const photo = photoFromObservation( observation );
+  const photos = photosFromObservation( observation );
+  const sources = photos.map( p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ) );
 
   return (
     <ObsImagePreview
       autoDetectSubject={explore}
-      source={{
-        uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),
-      }}
+      sources={sources}
       width={squareCorners
         ? undefined
         : width}
