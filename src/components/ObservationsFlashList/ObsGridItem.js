@@ -75,7 +75,7 @@ const ObsGridItem = ( {
     <ObsImagePreview
       autoDetectSubject={explore}
       source={{
-        uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),
+        uri: Photo.displayLocalOrRemoteMediumPhoto( photo ),
       }}
       width={squareCorners
         ? undefined
