@@ -3,8 +3,9 @@ import classNames from "classnames";
 import { INatIcon, PhotoCount } from "components/SharedComponents";
 import { LinearGradient, View } from "components/styledComponents";
 import type { PropsWithChildren } from "react";
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import type { ViewStyle } from "react-native";
+import { FlatList, StyleSheet } from "react-native";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -28,6 +29,7 @@ interface Props extends PropsWithChildren {
   isSmall?: boolean;
   obsPhotosCount?: number;
   opaque?: boolean;
+  photos?: Array<{ uri: string } | null>;
   selectable?: boolean;
   selected?: boolean;
   source?: {
@@ -67,6 +69,7 @@ const ObsImagePreview = ( {
   isSmall = false,
   obsPhotosCount = 0,
   opaque = false,
+  photos,
   selectable = false,
   selected = false,
   source,
@@ -78,6 +81,7 @@ const ObsImagePreview = ( {
   hideGradientOverlay = false,
   squareCorners = false,
 }: Props ) => {
+  const [containerWidth, setContainerWidth] = useState( 0 );
   const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
 
   const imageClassNames: ArgumentArray = [
@@ -223,24 +227,53 @@ const ObsImagePreview = ( {
     if ( white ) imageClassNames.push( "border-white" );
   }
 
+  const useCarousel = photos && photos.length > 1;
+
+  const renderCarouselItem = useCallback( ( { item }: { item: { uri: string } | null } ) => (
+    <View style={{ width: containerWidth }}>
+      <ObsImage
+        uri={item ?? undefined}
+        opaque={opaque}
+        iconicTaxonName={iconicTaxonName}
+        white={white}
+        isBackground={isBackground}
+        iconicTaxonIconSize={isSmall
+          ? 22
+          : 100}
+      />
+    </View>
+  ), [containerWidth, opaque, iconicTaxonName, white, isBackground, isSmall] );
+
   if ( isSmall && obsPhotosCount === 0 && hasSound ) {
     content = <INatIcon name="sound" color={colors.darkGray} size={24} />;
   } else {
     content = (
       <>
-        <ObsImage
-          autoDetectSubject={autoDetectSubject}
-          uri={source}
-          opaque={opaque}
-          iconicTaxonName={iconicTaxonName}
-          white={white}
-          isBackground={isBackground}
-          iconicTaxonIconSize={
-            isSmall
-              ? 22
-              : 100
-          }
-        />
+        {useCarousel && containerWidth > 0
+          ? (
+            <FlatList
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              style={StyleSheet.absoluteFillObject}
+              data={photos}
+              keyExtractor={( _, idx ) => String( idx )}
+              renderItem={renderCarouselItem}
+            />
+          )
+          : (
+            <ObsImage
+              autoDetectSubject={autoDetectSubject}
+              uri={source}
+              opaque={opaque}
+              iconicTaxonName={iconicTaxonName}
+              white={white}
+              isBackground={isBackground}
+              iconicTaxonIconSize={isSmall
+                ? 22
+                : 100}
+            />
+          )}
         {renderGradient( )}
         {renderSelectable( )}
         {renderPhotoCount( )}
@@ -255,6 +288,9 @@ const ObsImagePreview = ( {
       className={classNames( imageClassNames )}
       style={style}
       testID={testID}
+      onLayout={useCarousel
+        ? e => setContainerWidth( e.nativeEvent.layout.width )
+        : undefined}
     >
       {content}
     </View>
