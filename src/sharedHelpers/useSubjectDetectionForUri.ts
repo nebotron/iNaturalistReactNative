@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Image } from "react-native";
+
 import { getAnimalCrop } from "./animalCropLog";
 import detectSubjectInImage from "./detectSubjectInImage";
 import ensureLocalImageForCrop from "./ensureLocalImageForCrop";
@@ -14,11 +15,13 @@ interface DetectionResult {
 const cache = new Map<string, DetectionResult>( );
 
 const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
-  const [result, setResult] = useState<DetectionResult | null>(
-    uri
-      ? cache.get( uri ) ?? null
-      : null,
-  );
+  const [result, setResult] = useState<DetectionResult | null>( ( ) => {
+    if ( !uri ) return null;
+    const loggedCrop = getAnimalCrop( uri );
+    const existing = cache.get( uri );
+    if ( loggedCrop && existing ) return { ...existing, crop: loggedCrop };
+    return existing ?? null;
+  } );
 
   useEffect( ( ) => {
     if ( !uri ) {
@@ -26,9 +29,19 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
       return ( ) => {};
     }
 
+    // Ground-truth crop log entries always win over the AI-detection cache.
+    const loggedCrop = getAnimalCrop( uri );
     const existing = cache.get( uri );
-    if ( existing ) {
+
+    if ( !loggedCrop && existing ) {
       setResult( existing );
+      return ( ) => {};
+    }
+
+    if ( loggedCrop && existing ) {
+      const updated = { ...existing, crop: loggedCrop };
+      cache.set( uri, updated );
+      setResult( updated );
       return ( ) => {};
     }
 
@@ -48,7 +61,6 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
         } );
         if ( cancelled || !imageSize ) return;
 
-        const loggedCrop = getAnimalCrop( uri );
         const crop = loggedCrop
           ?? await detectSubjectInImage( localUri, imageSize.w, imageSize.h );
         if ( cancelled ) return;
