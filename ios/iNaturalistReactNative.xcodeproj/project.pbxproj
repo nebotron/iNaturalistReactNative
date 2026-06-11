@@ -36,6 +36,7 @@
 		F0B9E287B2F441548F4A2DCB /* INatIcon.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 509C6A99546C48429FF5AAFC /* INatIcon.ttf */; };
 		IC1B2C3D4E5F60718293A4B5 /* ImageCropper.m in Sources */ = {isa = PBXBuildFile; fileRef = IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */; };
 		VA1B2C3D4E5F60718293A4B5 /* VideoAudioExtractor.m in Sources */ = {isa = PBXBuildFile; fileRef = VA1B2C3D4E5F60718293A4B6 /* VideoAudioExtractor.m */; };
+		YO4BF6B1234567890ABCDEF0 /* yolov8n.onnx in Resources */ = {isa = PBXBuildFile; fileRef = YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -104,6 +105,7 @@
 		F15C1390617A309CE0A194B2 /* Pods_iNaturalistReactNative_ShareExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_iNaturalistReactNative_ShareExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = ImageCropper.m; path = iNaturalistReactNative/ImageCropper.m; sourceTree = "<group>"; };
 		VA1B2C3D4E5F60718293A4B6 /* VideoAudioExtractor.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = VideoAudioExtractor.m; path = iNaturalistReactNative/VideoAudioExtractor.m; sourceTree = "<group>"; };
+		YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = yolov8n.onnx; path = iNaturalistReactNative/yolov8n.onnx; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -145,6 +147,7 @@
 				26972DBD235E42B68E3D5DBC /* Settings.bundle */,
 				VA1B2C3D4E5F60718293A4B6 /* VideoAudioExtractor.m */,
 				IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */,
+				YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */,
 			);
 			name = iNaturalistReactNative;
 			sourceTree = "<group>";
@@ -345,6 +348,7 @@
 				AE4DC81B3A87484CB3FD6750 /* Lato-Regular.ttf in Resources */,
 				F0B9E287B2F441548F4A2DCB /* INatIcon.ttf in Resources */,
 				716F7BDCD8B943479083CFAC /* Settings.bundle in Resources */,
+				YO4BF6B1234567890ABCDEF0 /* yolov8n.onnx in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -557,7 +561,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CURRENT_PROJECT_VERSION = 216;
-				DEVELOPMENT_TEAM = N5J7L4P93Z;
+				DEVELOPMENT_TEAM = DVURLJZFH6;
 				ENABLE_BITCODE = NO;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
 				HEADER_SEARCH_PATHS = (
@@ -683,7 +687,7 @@
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
 				CURRENT_PROJECT_VERSION = 216;
-				DEVELOPMENT_TEAM = N5J7L4P93Z;
+				DEVELOPMENT_TEAM = DVURLJZFH6;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
