@@ -50,6 +50,14 @@ function syncToFirebase( logArray: ReturnType<typeof _logToArray> ) {
     .catch( err => logger.warn( "Firebase sync error", err ) );
 }
 
+// Normalise photo URLs to the "large" size so crops saved from the crop
+// tool (which stores large URLs) are found when the explore page looks up
+// original-size URLs (and vice-versa).
+const normalizePhotoUrl = ( url: string ): string => url.replace(
+  /\/(square|small|medium|large|original)(\.(?:jpe?g|png|webp|gif))/i,
+  "/large$2",
+);
+
 export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
   const current = load( );
   current[photoUrl] = crop;
@@ -62,6 +70,11 @@ export const deleteAnimalCrop = ( photoUrl: string ) => {
   delete current[photoUrl];
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
   syncToFirebase( _logToArray( current ) );
+};
+
+export const getAnimalCrop = ( url: string ): NormalizedCrop | null => {
+  const logObj = load( );
+  return logObj[url] ?? logObj[normalizePhotoUrl( url )] ?? null;
 };
 
 export const getAnimalCropCount = ( ): number => Object.keys( load( ) ).length;
