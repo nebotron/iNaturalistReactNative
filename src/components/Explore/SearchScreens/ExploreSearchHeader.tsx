@@ -10,7 +10,7 @@ import { useTranslation } from "sharedHooks";
 interface Props {
   closeModal: ( ) => void;
   headerText: string;
-  resetFilters: ( ) => void;
+  resetFilters?: ( ) => void;
   testID: string;
 }
 
@@ -33,9 +33,11 @@ const ExploreSearchHeader = ( {
       </View>
       <Heading4 className="flex-1 wrap text-center">{headerText}</Heading4>
       <View className="w-[50px] items-end">
-        <Body3 onPress={resetFilters} maxFontSizeMultiplier={1.5}>
-          {t( "Reset-verb" )}
-        </Body3>
+        {resetFilters && (
+          <Body3 onPress={resetFilters} maxFontSizeMultiplier={1.5}>
+            {t( "Reset-verb" )}
+          </Body3>
+        )}
       </View>
     </View>
   );
