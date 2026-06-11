@@ -4,8 +4,8 @@ import {
   Button,
   ViewWrapper,
 } from "components/SharedComponents";
-import findGroupedPhotoByDisplayUri from
-  "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
+import findGroupedPhotoByDisplayUri
+  from "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
 import ImageCropView from "components/SharedComponents/ImageCrop/ImageCropView";
 import { View } from "components/styledComponents";
 import cloneDeep from "lodash/cloneDeep";
@@ -23,6 +23,7 @@ import {
 } from "react-native";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
@@ -32,20 +33,21 @@ import {
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import useInputImageTracking from "sharedHooks/useInputImageTracking";
+import useCurrentUser from "sharedHooks/useCurrentUser";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 type Route = RouteProp<SharedStackParamList, "ImageCropEditor">;
 
-const CROP_FRAME_PADDING = 0;
+// Default squareShape uses framePadding 0.15 (70% of max). 0.045 → ~91% (~30% larger).
+const CROP_FRAME_PADDING = 0.045;
 
 const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
   const { t } = useTranslation( );
-  const { trackImageCropped, trackImageDeleted } = useInputImageTracking( );
+  const currentUser = useCurrentUser( );
   const currentObservation = useStore( state => state.currentObservation );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
@@ -120,14 +122,7 @@ const ImageCropEditor = ( ) => {
           );
           const photo = obsPhoto?.photo;
           if ( photo ) {
-            // Prefer the preserved crop original (set after first crop), then the original
-            // device photo (full resolution, not yet resized), then the resized local file.
-            // This ensures cropping always happens on the highest-resolution source available,
-            // so the subsequent resize step operates on the already-cropped image.
-            cropSourceUri = cropOriginalUriFromPath( photo?.cropOriginalLocalFilePath )
-              || obsPhoto?.originalDevicePhotoUri
-              || Photo.displayCropSourcePhoto( photo )
-              || imageUri;
+            cropSourceUri = Photo.displayCropEditorSourcePhoto( photo ) || imageUri;
             existingSavedCrop = Photo.savedNormalizedCrop( photo );
           }
         } else if ( context === "groupPhotos" ) {
@@ -258,7 +253,6 @@ const ImageCropEditor = ( ) => {
       if ( uriToDelete ) {
         void ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
         deletePhotoFromObservation( uriToDelete );
-        trackImageDeleted( uriToDelete );
       }
       onCropSaved?.( );
       navigation.goBack( );
@@ -277,7 +271,6 @@ const ImageCropEditor = ( ) => {
     observationPhotoUuid,
     onCropSaved,
     setGroupedPhotos,
-    trackImageDeleted,
   ] );
 
   const handleConfirm = useCallback( ( crop: NormalizedCrop ) => {
@@ -350,15 +343,22 @@ const ImageCropEditor = ( ) => {
             },
           };
           updateObservationKeys( { observationPhotos: obs.observationPhotos } );
+
+          const obsUserId = currentObservation?.user?.id;
+          const remotePhotoUrl = Photo.displayOriginalPhoto( existingPhoto?.url );
+          if (
+            remotePhotoUrl
+            && obsUserId
+            && currentUser?.id
+            && obsUserId !== currentUser.id
+          ) {
+            saveAnimalCrop( remotePhotoUrl, crop );
+          }
         }
       }
 
       if ( feedbackSourceKey ) {
         recordCropFeedback( feedbackSourceKey, { crop, kept: true } );
-      }
-
-      if ( imageUri ) {
-        trackImageCropped( imageUri, crop );
       }
 
       finishOrAdvance( );
@@ -368,6 +368,7 @@ const ImageCropEditor = ( ) => {
   }, [
     context,
     currentObservation,
+    currentUser,
     finishOrAdvance,
     getCropFeedbackSourceKey,
     groupedPhotos,
@@ -377,7 +378,6 @@ const ImageCropEditor = ( ) => {
     observationPhotoUuid,
     setGroupedPhotos,
     t,
-    trackImageCropped,
     updateObservationKeys,
   ] );
 
