@@ -21,13 +21,16 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Observation from "realmModels/Observation";
 import User from "realmModels/User";
 import { valueToBreakpoint } from "sharedHelpers/breakpoint";
-import { copyCropFeedbackToClipboard } from "sharedHelpers/cropFeedbackLog";
+import {
+  copyAnimalCropLogToClipboard,
+  getAnimalCropLogAsArray,
+} from "sharedHelpers/animalCropLog";
 import { log } from "sharedHelpers/logger";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
 import {
   useCurrentUser, useDebugMode, useFeatureFlag,
-  useInputImageTracking, useLayoutPrefs, useTranslation,
+  useLayoutPrefs, useTranslation,
 } from "sharedHooks";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
 import colors from "styles/tailwindColors";
@@ -104,7 +107,6 @@ const getDeviceMetricsForFeedback = async () => {
 const Menu = ( ) => {
   const { isDebug } = useDebugMode();
   const realm = useRealm( );
-  const { getAllImageMetadata } = useInputImageTracking( );
   const navigation = useNavigation( );
   const queryClient = useQueryClient( );
   const currentUser = useCurrentUser( );
@@ -138,6 +140,18 @@ const Menu = ( ) => {
       label: t( "HELP" ),
       navigation: "Help",
       icon: "help-circle",
+    },
+    animalCropTool: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CROP LABELER",
+      navigation: "AnimalCropTool",
+      icon: "crop",
+    },
+    cropLog: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CROP LOG",
+      navigation: "CropLogViewer",
+      icon: "clipboard",
     },
     settings: {
       testID: "settings",
@@ -187,17 +201,17 @@ const Menu = ( ) => {
       } ),
 
     imageMetadata: {
-      label: "Copy Image Metadata",
+      label: "COPY CROPS",
       icon: "copy",
       onPress: ( ) => {
-        const records = getAllImageMetadata( );
+        const records = getAnimalCropLogAsArray( );
         Clipboard.setString( JSON.stringify( records, null, 2 ) );
-        Alert.alert( "Copied", "Image metadata copied to clipboard" );
+        Alert.alert( "Copied", `${records.length} labeled photos copied to clipboard` );
       },
     },
 
     deleteUnfavedImportedPhotos: {
-      label: "Delete imported photos from unfaved observations",
+      label: "DELETE UNFAVED",
       icon: "trash",
       onPress: ( ) => {
         interface ObsLike {
@@ -249,10 +263,11 @@ const Menu = ( ) => {
           icon: "triangle-exclamation",
           color: "deeppink",
         },
-        copyCropFeedback: {
-          label: "Copy crop feedback JSON",
+        copyAnimalCropLog: {
+          // eslint-disable-next-line i18next/no-literal-string
+          label: "Copy animal crop log",
           icon: "clipboard",
-          onPress: () => copyCropFeedbackToClipboard( ),
+          onPress: () => copyAnimalCropLogToClipboard( ),
         },
       }
       : {} ),
