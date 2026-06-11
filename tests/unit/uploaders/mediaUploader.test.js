@@ -39,7 +39,9 @@ describe( "mediaUploader", () => {
         observationPhotos: [
           {
             wasSynced: () => false,
-            photo: { uuid: "photo-uuid-1", url: "photo1.jpg" },
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
           },
         ],
         observationSounds: [
@@ -59,6 +61,7 @@ describe( "mediaUploader", () => {
       expect( result ).toEqual( {
         unsyncedObservationPhotos: observation.observationPhotos,
         modifiedObservationPhotos: [],
+        modifiedPhotosNeedingReupload: [],
         unsyncedObservationSounds: observation.observationSounds,
       } );
     } );
@@ -78,6 +81,7 @@ describe( "mediaUploader", () => {
       expect( result ).toEqual( {
         unsyncedObservationPhotos: [],
         modifiedObservationPhotos: [],
+        modifiedPhotosNeedingReupload: [],
         unsyncedObservationSounds: [],
       } );
     } );
@@ -89,7 +93,13 @@ describe( "mediaUploader", () => {
           {
             wasSynced: () => true,
             needsSync: () => true,
-            photo: { uuid: "photo-uuid-1", url: "photo1.jpg" },
+            photo: {
+              uuid: "photo-uuid-1",
+              url: "photo1.jpg",
+              localFilePath: "file:///tmp/photoUploads/cropped.jpg",
+              _synced_at: new Date( "2024-01-01T12:00:00Z" ),
+              _updated_at: new Date( "2024-01-02T12:00:00Z" ),
+            },
           },
         ],
         observationSounds: [],
@@ -99,8 +109,9 @@ describe( "mediaUploader", () => {
 
       const result = await uploadObservationMedia( observation, options, realm );
 
-      expect( createOrUpdateEvidence ).not.toHaveBeenCalled();
+      expect( createOrUpdateEvidence ).toHaveBeenCalledTimes( 1 );
       expect( result.modifiedObservationPhotos.length ).toBe( 1 );
+      expect( result.modifiedPhotosNeedingReupload.length ).toBe( 1 );
     } );
 
     it( "should handle missing photo objects gracefully", async () => {
@@ -115,7 +126,9 @@ describe( "mediaUploader", () => {
           },
           {
             wasSynced: () => false,
-            photo: { uuid: "photo-uuid-1", url: "photo1.jpg" },
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
           },
         ],
         observationSounds: [],
@@ -251,7 +264,12 @@ describe( "mediaUploader", () => {
       const observation = {
         uuid: "obs-uuid-123",
         observationPhotos: [
-          { wasSynced: () => false, photo: { uuid: "photo-uuid-1", url: "photo1.jpg" } },
+          {
+            wasSynced: () => false,
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
+          },
         ],
         observationSounds: [],
       };
@@ -299,7 +317,12 @@ describe( "mediaUploader", () => {
       const observation = {
         uuid: "obs-uuid-123",
         observationPhotos: [
-          { wasSynced: () => false, photo: { uuid: "photo-uuid-1", url: "photo1.jpg" } },
+          {
+            wasSynced: () => false,
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
+          },
         ],
         observationSounds: [],
       };
