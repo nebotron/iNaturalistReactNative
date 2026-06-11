@@ -604,6 +604,14 @@ const SuggestionsContainer = ( ) => {
     shouldUseEvidenceLocation,
   ] );
 
+  const onCropPhotoUri = useCallback( ( uri: string ) => {
+    const photoIdx = photoUris.indexOf( uri );
+    if ( photoIdx === -1 ) { return; }
+    const photo = innerPhotos[photoIdx] as RealmPhoto;
+    if ( !photo ) { return; }
+    onCropPhoto( photo );
+  }, [innerPhotos, onCropPhoto, photoUris] );
+
   const handleReorderPhotos = useCallback( ( { data: newPhotoUris }: { data: string[] } ) => {
     const newObsPhotos = observationPhotos.map( obsPhoto => {
       const photoUri = Photo.displayLocalOrRemoteMediumPhoto( obsPhoto.photo );
@@ -638,6 +646,7 @@ const SuggestionsContainer = ( ) => {
         improveWithLocationButtonOnPress={improveWithLocationButtonOnPress}
         isLoading={isLoading}
         shouldUseEvidenceLocation={shouldUseEvidenceLocation}
+        onCropPhoto={onCropPhotoUri}
         onPressPhoto={onPressPhoto}
         onReorderPhotos={handleReorderPhotos}
         onTaxonChosen={navigateWithTaxonSelected}
