@@ -25,6 +25,7 @@ type Props = {
   improveWithLocationButtonOnPress: () => void,
   isLoading: boolean,
   shouldUseEvidenceLocation: boolean,
+  onCropPhoto?: Function,
   onPressPhoto: Function,
   onReorderPhotos?: Function,
   onTaxonChosen: Function,
@@ -50,6 +51,7 @@ const Suggestions = ( {
   improveWithLocationButtonOnPress,
   isLoading,
   shouldUseEvidenceLocation,
+  onCropPhoto,
   onPressPhoto,
   onReorderPhotos,
   onTaxonChosen,
@@ -122,6 +124,7 @@ const Suggestions = ( {
   const renderHeader = useMemo( ( ) => (
     <SuggestionsHeader
       duplicatePhotoUris={duplicatePhotoUris}
+      onCropPhoto={onCropPhoto}
       onPressPhoto={onPressPhoto}
       onReorderPhotos={onReorderPhotos}
       photoUris={photoUris}
@@ -136,6 +139,7 @@ const Suggestions = ( {
       showImproveWithLocationButton={showImproveWithLocationButton}
     />
   ), [
+    onCropPhoto,
     onPressPhoto,
     onReorderPhotos,
     duplicatePhotoUris,
