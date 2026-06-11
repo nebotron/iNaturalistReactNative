@@ -81,7 +81,7 @@ const initialState = {
   offlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_LOADING,
   scoreImageParams: null,
   mediaViewerVisible: false,
-  mediaViewerUri: null,
+  mediaViewerPhotoIndex: -1,
   queryKey: [],
   selectedPhotoUri: null,
   shouldUseEvidenceLocation: false,
@@ -137,9 +137,9 @@ const reducer = ( state, action ) => {
       return {
         ...state,
         mediaViewerVisible: action.mediaViewerVisible,
-        mediaViewerUri: action.mediaViewerVisible
-          ? ( action.uri ?? state.mediaViewerUri )
-          : null,
+        mediaViewerPhotoIndex: action.mediaViewerVisible
+          ? ( action.photoIndex ?? -1 )
+          : -1,
       };
     case "RESET_OBSERVATION":
       return {
@@ -230,7 +230,7 @@ const SuggestionsContainer = ( ) => {
     onlineFetchStatus,
     offlineFetchStatus,
     mediaViewerVisible,
-    mediaViewerUri,
+    mediaViewerPhotoIndex,
     queryKey,
     selectedPhotoUri,
     shouldUseEvidenceLocation,
@@ -365,9 +365,9 @@ const SuggestionsContainer = ( ) => {
     dispatch( {
       type: "TOGGLE_MEDIA_VIEWER",
       mediaViewerVisible: true,
-      uri,
+      photoIndex: photoUris.indexOf( uri ),
     } );
-  }, [] );
+  }, [photoUris] );
 
   const isLoading = useOfflineModel
     ? offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
@@ -678,7 +678,10 @@ const SuggestionsContainer = ( ) => {
         onDeletePhoto={onDeletePhoto}
         onCropPhoto={onCropPhoto}
         onReorderPhotos={handleReorderPhotos}
-        uri={mediaViewerUri ?? selectedPhotoUri}
+        initialIndex={mediaViewerPhotoIndex >= 0
+          ? mediaViewerPhotoIndex
+          : undefined}
+        uri={selectedPhotoUri}
         photos={innerPhotos}
       />
       {renderPermissionsGate( { onPermissionGranted } )}

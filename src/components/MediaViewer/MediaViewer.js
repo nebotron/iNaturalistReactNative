@@ -27,6 +27,7 @@ type Props = {
   deleting?: boolean,
   // Optional component to use as the header
   header?: Function,
+  initialIndex?: number,
   onClose?: Function,
   onCropPhoto?: Function,
   onDeletePhoto?: Function,
@@ -50,6 +51,7 @@ const MediaViewer = ( {
   editable,
   deleting,
   header,
+  initialIndex,
   onClose = ( ) => undefined,
   onCropPhoto,
   onDeletePhoto,
@@ -127,6 +129,16 @@ const MediaViewer = ( {
       } );
     }
   }, [selectedMediaIndex, setSelectedMediaIndex, uris.length] );
+
+  useEffect( ( ) => {
+    if ( initialIndex != null && initialIndex >= 0 && initialIndex < uris.length ) {
+      setSelectedMediaIndex( initialIndex );
+      horizontalScroll?.current?.scrollToIndex( {
+        index: initialIndex,
+        animated: false,
+      } );
+    }
+  }, [initialIndex, uris.length] );
 
   const confirmDelete = useCallback( ( ) => {
     if ( mediaToDelete?.type === "photo" && onDeletePhoto ) {
