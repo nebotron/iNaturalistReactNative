@@ -1,7 +1,6 @@
 import type { ArgumentArray } from "classnames";
 import classNames from "classnames";
 import {
-  Carousel,
   CarouselDots,
   INatIcon,
   PhotoCount,
@@ -10,6 +9,7 @@ import { LinearGradient, View } from "components/styledComponents";
 import type { PropsWithChildren } from "react";
 import React, { useCallback, useState } from "react";
 import type { LayoutChangeEvent, ViewStyle } from "react-native";
+import ReanimatedCarousel from "react-native-reanimated-carousel";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -86,12 +86,14 @@ const ObsImagePreview = ( {
   squareCorners = false,
 }: Props ) => {
   const [containerWidth, setContainerWidth] = useState( 0 );
+  const [containerHeight, setContainerHeight] = useState( 0 );
   const [slideIndex, setSlideIndex] = useState( 0 );
 
   const showCarousel = ( sources?.length ?? 0 ) > 1;
 
   const handleLayout = useCallback( ( e: LayoutChangeEvent ) => {
     setContainerWidth( e.nativeEvent.layout.width );
+    setContainerHeight( e.nativeEvent.layout.height );
   }, [] );
 
   const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
@@ -160,24 +162,18 @@ const ObsImagePreview = ( {
     showCarousel,
   ] );
 
-  const renderCarouselItem = useCallback( ( { item }: { item: object } ) => {
-    const photoSource = item as { uri: string };
-    return (
-      <View style={{ width: containerWidth }}>
-        <ObsImage
-          autoDetectSubject={autoDetectSubject}
-          uri={photoSource}
-          opaque={opaque}
-          iconicTaxonName={iconicTaxonName}
-          white={white}
-          isBackground={isBackground}
-          iconicTaxonIconSize={isSmall ? 22 : 100}
-        />
-      </View>
-    );
-  }, [
+  const renderCarouselItem = useCallback( ( { item }: { item: { uri: string } } ) => (
+    <ObsImage
+      autoDetectSubject={autoDetectSubject}
+      uri={item}
+      opaque={opaque}
+      iconicTaxonName={iconicTaxonName}
+      white={white}
+      isBackground={isBackground}
+      iconicTaxonIconSize={isSmall ? 22 : 100}
+    />
+  ), [
     autoDetectSubject,
-    containerWidth,
     iconicTaxonName,
     isBackground,
     isSmall,
@@ -271,11 +267,15 @@ const ObsImagePreview = ( {
   } else if ( showCarousel && containerWidth > 0 ) {
     content = (
       <>
-        <Carousel
-          data={sources as object[]}
+        <ReanimatedCarousel
+          data={sources ?? []}
+          width={containerWidth}
+          height={containerHeight || containerWidth}
+          loop={false}
           renderItem={renderCarouselItem}
-          keyExtractor={( item, index ) => ( item as { uri: string } ).uri || String( index )}
-          onSlideScroll={setSlideIndex}
+          onProgressChange={( _offset, absoluteProgress ) => {
+            setSlideIndex( Math.round( absoluteProgress ) );
+          }}
         />
         {renderGradient( )}
         {renderSelectable( )}
