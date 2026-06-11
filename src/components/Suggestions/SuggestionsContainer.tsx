@@ -4,13 +4,19 @@ import {
 import { useNavigation, useRoute } from "@react-navigation/native";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import isEqual from "lodash/isEqual";
+import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
   useEffect,
   useMemo,
   useReducer,
+  useRef,
+  useState,
 } from "react";
 import ObservationPhoto from "realmModels/ObservationPhoto";
+import Photo from "realmModels/Photo";
+import { getPreviouslyUploadedDevicePhotoUrisSet } from
+  "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
 import {
   useLastScreen,
@@ -28,10 +34,13 @@ import useStore from "stores/useStore";
 import fetchCoarseUserLocation from "../../sharedHelpers/fetchCoarseUserLocation";
 import flattenUploadParams from "./helpers/flattenUploadParams";
 import useNavigateWithTaxonSelected from "./hooks/useNavigateWithTaxonSelected";
+import usePreloadNextObservationSuggestions from "./hooks/usePreloadNextObservationSuggestions";
 import Suggestions from "./Suggestions";
 import TaxonSearchButton from "./TaxonSearchButton";
 
 const logger = log.extend( "SuggestionsContainer" );
+
+const { useRealm } = RealmContext;
 
 export enum FETCH_STATUSES {
   FETCH_STATUS_LOADING = "loading",
@@ -109,10 +118,28 @@ const reducer = ( state, action ) => {
         shouldUseEvidenceLocation: action.shouldUseEvidenceLocation,
         queryKey: getQueryKey( state.selectedPhotoUri, action.shouldUseEvidenceLocation ),
       };
+    case "SWITCH_SUGGESTIONS_MODEL":
+      return {
+        ...state,
+        onlineFetchStatus: action.useOfflineModel
+          ? FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED
+          : FETCH_STATUSES.FETCH_STATUS_LOADING,
+        offlineFetchStatus: action.useOfflineModel
+          ? FETCH_STATUSES.FETCH_STATUS_LOADING
+          : FETCH_STATUSES.FETCH_STATUS_OFFLINE_SKIPPED,
+      };
     case "TOGGLE_MEDIA_VIEWER":
       return {
         ...state,
         mediaViewerVisible: action.mediaViewerVisible,
+      };
+    case "RESET_OBSERVATION":
+      return {
+        ...initialState,
+        selectedPhotoUri: action.selectedPhotoUri,
+        scoreImageParams: action.scoreImageParams,
+        shouldUseEvidenceLocation: action.shouldUseEvidenceLocation,
+        queryKey: getQueryKey( action.selectedPhotoUri, action.shouldUseEvidenceLocation ),
       };
     default:
       throw new Error( );
@@ -124,6 +151,7 @@ const SuggestionsContainer = ( ) => {
   const { params } = useRoute( );
   const { isConnected } = useNetInfo( );
   const currentObservation = useStore( state => state.currentObservation );
+  const realm = useRealm( );
   const innerPhotos = ObservationPhoto.mapInnerPhotos( currentObservation );
   // ObservationPhoto.mapObsPhotoUris returns *new* strings with every call,
   // so these values need to be stabilized
@@ -131,6 +159,26 @@ const SuggestionsContainer = ( ) => {
     ( ) => ObservationPhoto.mapObsPhotoUris( currentObservation ),
     [currentObservation],
   );
+  const duplicatePhotoUris = useMemo( ( ) => {
+    const observationPhotos = currentObservation?.observationPhotos || [];
+    const excludeUuid = currentObservation?.uuid
+      ? [currentObservation.uuid]
+      : [];
+    const uploadedDevicePhotoUris = getPreviouslyUploadedDevicePhotoUrisSet(
+      realm,
+      excludeUuid,
+    );
+
+    return new Set(
+      observationPhotos
+        .filter( obsPhoto => (
+          obsPhoto.originalDevicePhotoUri
+          && uploadedDevicePhotoUris.has( obsPhoto.originalDevicePhotoUri )
+        ) )
+        .map( obsPhoto => Photo.displayLocalOrRemoteSquarePhoto( obsPhoto.photo ) )
+        .filter( ( uri ): uri is string => !!uri ),
+    );
+  }, [currentObservation, realm] );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
 
   const evidenceHasLocation = !!currentObservation?.latitude;
@@ -140,6 +188,10 @@ const SuggestionsContainer = ( ) => {
     selectedPhotoUri: photoUris[0],
     shouldUseEvidenceLocation: evidenceHasLocation,
   } );
+  const [useOfflineModel, setUseOfflineModel] = useState( false );
+  const previousObservationUuidRef = useRef<string | undefined>( currentObservation?.uuid );
+
+  usePreloadNextObservationSuggestions( );
 
   const {
     hasPermissions,
@@ -168,8 +220,9 @@ const SuggestionsContainer = ( ) => {
     shouldUseEvidenceLocation,
   } = state;
 
-  const shouldFetchOnlineSuggestions = ( hasPermissions !== undefined )
-      && onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
+  const shouldFetchOnlineSuggestions = !useOfflineModel
+    && ( hasPermissions !== undefined )
+    && onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
 
   const onlineSuggestionsAttempted
    = onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_FETCHED
@@ -245,6 +298,7 @@ const SuggestionsContainer = ( ) => {
     scoreImageParams,
     queryKey,
     onlineSuggestionsAttempted,
+    preferOfflineModel: useOfflineModel,
   } );
 
   const createUploadParams = useCallback( async ( uri: string, showLocation: boolean ) => {
@@ -274,17 +328,26 @@ const SuggestionsContainer = ( ) => {
           selectedPhotoUri: uri,
           scoreImageParams: newImageParams,
         } );
+        if ( useOfflineModel ) {
+          dispatch( {
+            type: "SET_ONLINE_FETCH_STATUS",
+            onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
+          } );
+        }
       }
     },
     [
       createUploadParams,
       selectedPhotoUri,
       shouldUseEvidenceLocation,
+      useOfflineModel,
     ],
   );
 
-  const isLoading = onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
-    || offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
+  const isLoading = useOfflineModel
+    ? offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
+    : onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
+      || offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
 
   const { loadTime } = usePerformance( {
     isLoading,
@@ -304,10 +367,17 @@ const SuggestionsContainer = ( ) => {
       shouldUseEvidenceLocation: showLocation,
       scoreImageParams: newImageParams,
     } );
+    if ( useOfflineModel ) {
+      dispatch( {
+        type: "SET_ONLINE_FETCH_STATUS",
+        onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
+      } );
+    }
   }, [
     createUploadParams,
     resetTimeout,
     selectedPhotoUri,
+    useOfflineModel,
   ] );
 
   const reloadSuggestions = useCallback( ( ) => {
@@ -315,6 +385,7 @@ const SuggestionsContainer = ( ) => {
     // suggestions
     if ( !isConnected ) { return; }
     resetTimeout( );
+    setUseOfflineModel( false );
     dispatch(
       {
         type: "SET_ONLINE_FETCH_STATUS",
@@ -328,6 +399,20 @@ const SuggestionsContainer = ( ) => {
       },
     );
   }, [isConnected, resetTimeout] );
+
+  const toggleSuggestionsModel = useCallback( ( nextUseOfflineModel: boolean ) => {
+    if ( nextUseOfflineModel === useOfflineModel ) {
+      return;
+    }
+    setUseOfflineModel( nextUseOfflineModel );
+    resetTimeout( );
+    dispatch( {
+      type: "SWITCH_SUGGESTIONS_MODEL",
+      useOfflineModel: nextUseOfflineModel,
+    } );
+  }, [resetTimeout, useOfflineModel] );
+
+  const showModelToggle = isConnected && !urlWillCrashOffline;
 
   const hideLocationToggleButton = usingOfflineSuggestions
     || isLoading
@@ -346,6 +431,44 @@ const SuggestionsContainer = ( ) => {
     isConnected,
     selectedPhotoUri,
     shouldUseEvidenceLocation,
+  ] );
+
+  useEffect( ( ) => {
+    const observationUuid = currentObservation?.uuid;
+    if ( !observationUuid || previousObservationUuidRef.current === observationUuid ) {
+      return;
+    }
+    const hadPreviousObservation = previousObservationUuidRef.current !== undefined;
+    previousObservationUuidRef.current = observationUuid;
+
+    if ( !hadPreviousObservation ) {
+      return;
+    }
+
+    const resetForNextObservation = async ( ) => {
+      const nextPhotoUri = photoUris[0];
+      if ( !nextPhotoUri ) {
+        return;
+      }
+      const newImageParams = isConnected === false
+        ? null
+        : await createUploadParams( nextPhotoUri, evidenceHasLocation );
+      setUseOfflineModel( false );
+      dispatch( {
+        type: "RESET_OBSERVATION",
+        selectedPhotoUri: nextPhotoUri,
+        scoreImageParams: newImageParams,
+        shouldUseEvidenceLocation: evidenceHasLocation,
+      } );
+    };
+
+    resetForNextObservation( );
+  }, [
+    createUploadParams,
+    currentObservation?.uuid,
+    evidenceHasLocation,
+    isConnected,
+    photoUris,
   ] );
 
   const headerRight = useCallback( ( ) => <TaxonSearchButton />, [] );
@@ -409,13 +532,17 @@ const SuggestionsContainer = ( ) => {
         shouldUseEvidenceLocation={shouldUseEvidenceLocation}
         onPressPhoto={onPressPhoto}
         onTaxonChosen={navigateWithTaxonSelected}
+        duplicatePhotoUris={duplicatePhotoUris}
         photoUris={photoUris}
         reloadSuggestions={reloadSuggestions}
         selectedPhotoUri={selectedPhotoUri}
         showImproveWithLocationButton={!!showImproveWithLocationButton}
+        showModelToggle={showModelToggle}
         suggestions={suggestions}
         toggleLocation={toggleLocation}
+        toggleSuggestionsModel={toggleSuggestionsModel}
         urlWillCrashOffline={urlWillCrashOffline}
+        useOfflineModel={useOfflineModel}
         usingOfflineSuggestions={usingOfflineSuggestions}
       />
       <MediaViewerModal

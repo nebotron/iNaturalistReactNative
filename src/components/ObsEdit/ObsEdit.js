@@ -1,10 +1,15 @@
 // @flow
 
-import { useIsFocused, useNavigation } from "@react-navigation/native";
+import { useNavigation } from "@react-navigation/native";
 import { ViewWrapper } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Animated } from "react-native";
 import { KeyboardAwareScrollView } from "react-native-keyboard-aware-scroll-view";
 import shouldFetchObservationLocation from "sharedHelpers/shouldFetchObservationLocation";
@@ -18,6 +23,8 @@ import { getShadow } from "styles/global";
 
 import BottomButtonsContainer from "./BottomButtonsContainer";
 import EvidenceSectionContainer from "./EvidenceSectionContainer";
+import useMultiObsCreateFlowAutomation from "./hooks/useMultiObsCreateFlowAutomation";
+import useMultiObsSaveAndAdvance from "./hooks/useMultiObsSaveAndAdvance";
 import IdentificationSection from "./IdentificationSection";
 import MultipleObservationsArrows from "./MultipleObservationsArrows";
 import MultipleObservationsUploadStatus from "./MultipleObservationsUploadStatus";
@@ -42,7 +49,6 @@ const ObsEdit = ( ): Node => {
   const [needLocation, setNeedLocation] = useState(
     shouldFetchObservationLocation( currentObservation ),
   );
-  const isFocused = useIsFocused( );
   const currentUser = useCurrentUser( );
   const {
     hasPermissions: hasLocationPermission,
@@ -50,15 +56,37 @@ const ObsEdit = ( ): Node => {
     requestPermissions: requestLocationPermission,
   } = useLocationPermission( );
 
-  const fadeAnim = React.useRef( new Animated.Value( 1 ) ).current;
+  const fadeAnim = useRef( new Animated.Value( 1 ) ).current;
+  const hadObservationRef = useRef( !!currentObservation );
 
-  const fade = () => {
+  const fade = useCallback( ( ) => {
+    fadeAnim.stopAnimation( );
+    fadeAnim.setValue( 0 );
     Animated.timing( fadeAnim, {
       toValue: 1,
       duration: 250,
       useNativeDriver: true,
-    } ).start( fadeAnim.setValue( 0 ) );
-  };
+    } ).start( );
+  }, [fadeAnim] );
+
+  useEffect( ( ) => {
+    // If currentObservation was briefly null (e.g. index out of bounds after
+    // upload), the form unmounts while opacity is 0 and stays invisible on remount.
+    if ( !hadObservationRef.current && currentObservation ) {
+      fadeAnim.stopAnimation( );
+      fadeAnim.setValue( 1 );
+    }
+    hadObservationRef.current = !!currentObservation;
+  }, [currentObservation, fadeAnim] );
+
+  useEffect( ( ) => {
+    const unsubscribe = navigation.addListener( "focus", ( ) => {
+      // If a multi-observation transition was interrupted by pushing another
+      // screen, opacity can stay at 0; refocusing must show the form again.
+      fadeAnim.setValue( 1 );
+    } );
+    return unsubscribe;
+  }, [navigation, fadeAnim] );
 
   const animatedStyle = {
     flex: 1,
@@ -94,6 +122,22 @@ const ObsEdit = ( ): Node => {
   const latitude = currentObservation?.latitude;
   const longitude = currentObservation?.longitude;
   const hasLocation = !!( latitude && longitude );
+
+  const {
+    loading: multiObsLoading,
+    saveAndAdvance,
+  } = useMultiObsSaveAndAdvance( {
+    currentObservation,
+    currentObservationIndex,
+    observations,
+    transitionAnimation: fade,
+  } );
+
+  useMultiObsCreateFlowAutomation( {
+    currentObservation,
+    isFetchingLocation,
+  } );
+
   const onLocationPress = ( ) => {
     if ( !hasLocation && !hasLocationPermission ) {
       requestLocationPermission( );
@@ -101,8 +145,6 @@ const ObsEdit = ( ): Node => {
       navToLocationPicker( );
     }
   };
-
-  if ( !isFocused ) return null;
 
   // This should never, ever happen
   if ( currentObservation?.user && currentUser && currentUser.id !== currentObservation.user.id ) {
@@ -164,11 +206,9 @@ const ObsEdit = ( ): Node => {
       {currentObservation && (
         <BottomButtonsContainer
           currentObservation={currentObservation}
-          currentObservationIndex={currentObservationIndex}
-          observations={observations}
+          loading={multiObsLoading}
           passesEvidenceTest={passesEvidenceTest}
-          setCurrentObservationIndex={setCurrentObservationIndex}
-          transitionAnimation={fade}
+          saveAndAdvance={saveAndAdvance}
         />
       )}
       {renderLocationPermissionGate( {
