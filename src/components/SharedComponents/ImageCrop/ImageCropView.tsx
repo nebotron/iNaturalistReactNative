@@ -18,10 +18,7 @@ import Animated, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { INatIconButton } from "components/SharedComponents";
 import { Text, View } from "components/styledComponents";
-import type {
-  ImageZoomTransform,
-  NormalizedCrop,
-} from "sharedHelpers/cropMath";
+import type { NormalizedCrop } from "sharedHelpers/cropMath";
 import {
   cropToImageZoomTransform,
   imageZoomTransformToCrop,
@@ -53,9 +50,6 @@ const styles = StyleSheet.create( {
   },
   image: {
     flex: 1,
-  },
-  toolbar: {
-    minHeight: TOOLBAR_HEIGHT,
   },
   zoomLayer: {
     bottom: 0,
@@ -233,20 +227,19 @@ const ImageCropView = ( {
     if ( saving || boxSize <= 0 || cropAreaHeight <= 0 ) return;
     setSaving( true );
     try {
-      const transform: ImageZoomTransform = {
-        scale: scale.value,
-        translateX: translateX.value,
-        translateY: translateY.value,
-        focalX: focalX.value,
-        focalY: focalY.value,
-      };
       const crop = imageZoomTransformToCrop(
         imageWidth,
         imageHeight,
         windowWidth,
         cropAreaHeight,
         boxSize,
-        transform,
+        {
+          scale: scale.value,
+          translateX: translateX.value,
+          translateY: translateY.value,
+          focalX: focalX.value,
+          focalY: focalY.value,
+        },
       );
       await onConfirm( crop );
     } finally {
@@ -325,7 +318,7 @@ const ImageCropView = ( {
 
       <View
         className="flex-row items-center justify-between bg-[#1c1c1c] px-10"
-        style={[styles.toolbar, toolbarStyle]}
+        style={toolbarStyle}
       >
         {onDelete && labels.delete
           ? (

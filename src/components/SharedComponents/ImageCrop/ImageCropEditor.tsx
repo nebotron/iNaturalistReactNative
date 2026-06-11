@@ -37,36 +37,33 @@ const ImageCropEditor = ( ) => {
 
   const { imageUri, observationPhotoUuid, onCropSaved } = params;
 
-  const [localImageUri, setLocalImageUri] = useState<string | null>( null );
-  const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>( null );
-  const [loading, setLoading] = useState( true );
+  const [imageInfo, setImageInfo] = useState<{
+    uri: string;
+    w: number;
+    h: number;
+  } | null>( null );
 
   useEffect( ( ) => {
     let cancelled = false;
-    setLoading( true );
-    setLocalImageUri( null );
-    setImageSize( null );
+    setImageInfo( null );
 
     ( async ( ) => {
       try {
-        const resolvedUri = await ensureLocalImageForCrop( imageUri );
+        const uri = await ensureLocalImageForCrop( imageUri );
         if ( cancelled ) return;
-        setLocalImageUri( resolvedUri );
 
         const size = await new Promise<{ w: number; h: number } | null>( resolve => {
           RNImage.getSize(
-            resolvedUri,
+            uri,
             ( w, h ) => resolve( { w, h } ),
             ( ) => resolve( null ),
           );
         } );
-        if ( !cancelled ) {
-          setImageSize( size );
+        if ( !cancelled && size ) {
+          setImageInfo( { uri, ...size } );
         }
       } catch {
-        // leave localImageUri null so loading screen persists
-      } finally {
-        if ( !cancelled ) setLoading( false );
+        // leave imageInfo null so loading screen persists
       }
     } )( );
 
@@ -86,7 +83,7 @@ const ImageCropEditor = ( ) => {
     );
     const uriToDelete = obsPhoto?.photo
       ? Photo.displayCropSourcePhoto( obsPhoto.photo )
-      : localImageUri;
+      : imageInfo?.uri;
     if ( uriToDelete ) {
       void ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
       deletePhotoFromObservation( uriToDelete );
@@ -96,23 +93,23 @@ const ImageCropEditor = ( ) => {
   }, [
     currentObservation,
     deletePhotoFromObservation,
-    localImageUri,
+    imageInfo?.uri,
     navigation,
     observationPhotoUuid,
     onCropSaved,
   ] );
 
   const handleConfirm = useCallback( ( crop: NormalizedCrop ) => {
-    if ( !localImageUri || !imageSize || !observationPhotoUuid ) {
+    if ( !imageInfo || !observationPhotoUuid ) {
       return Promise.resolve( );
     }
 
     return ( async ( ) => {
       const croppedUri = await cropImageFile(
-        localImageUri,
+        imageInfo.uri,
         crop,
-        imageSize.w,
-        imageSize.h,
+        imageInfo.w,
+        imageInfo.h,
       );
       const resizedPath = await Photo.resizeImageForUpload( croppedUri );
 
@@ -139,8 +136,7 @@ const ImageCropEditor = ( ) => {
     } );
   }, [
     currentObservation,
-    imageSize,
-    localImageUri,
+    imageInfo,
     navigation,
     observationPhotoUuid,
     onCropSaved,
@@ -148,7 +144,7 @@ const ImageCropEditor = ( ) => {
     updateObservationKeys,
   ] );
 
-  if ( loading || !localImageUri || !imageSize ) {
+  if ( !imageInfo ) {
     return (
       <View className="flex-1 items-center justify-center bg-black">
         <ActivityIndicator color={colors.white} />
@@ -158,11 +154,11 @@ const ImageCropEditor = ( ) => {
 
   return (
     <ImageCropView
-      sourceUri={localImageUri}
-      imageWidth={imageSize.w}
-      imageHeight={imageSize.h}
+      sourceUri={imageInfo.uri}
+      imageWidth={imageInfo.w}
+      imageHeight={imageInfo.h}
       framePadding={CROP_FRAME_PADDING}
-      initialCrop={defaultSquareCrop( imageSize.w, imageSize.h )}
+      initialCrop={defaultSquareCrop( imageInfo.w, imageInfo.h )}
       labels={labels}
       onConfirm={handleConfirm}
       onDelete={handleDelete}
