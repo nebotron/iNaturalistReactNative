@@ -31,6 +31,7 @@ const GroupPhotosContainer = ( ): Node => {
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
+  const pendingGroupPhotoDeletionUris = useStore( state => state.pendingGroupPhotoDeletionUris );
 
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
@@ -199,7 +200,18 @@ const GroupPhotosContainer = ( ): Node => {
     setIsDuplicatingPhotos( true );
     try {
       const duplicatedGroups = await duplicateGroupedMediaGroups( selectedObservations );
-      setGroupedPhotos( [...groupedPhotos, ...duplicatedGroups] );
+      const indexToDuplicate = {};
+      selectedIndices.forEach( ( originalIndex, i ) => {
+        indexToDuplicate[originalIndex] = duplicatedGroups[i];
+      } );
+      const newGroupedPhotos = [];
+      groupedPhotos.forEach( ( group, index ) => {
+        newGroupedPhotos.push( group );
+        if ( indexToDuplicate[index] !== undefined ) {
+          newGroupedPhotos.push( indexToDuplicate[index] );
+        }
+      } );
+      setGroupedPhotos( newGroupedPhotos );
       setSelectedIndices( [] );
     } finally {
       setIsDuplicatingPhotos( false );
@@ -239,9 +251,17 @@ const GroupPhotosContainer = ( ): Node => {
 
   const navBasedOnUserSettings = async ( ) => {
     setIsCreatingObservations( true );
-    const newObservations = await Promise.all( groupedPhotos.map(
-      group => createObservationFromGroupedMedia( group ),
-    ) );
+
+    // Process in batches to avoid spawning hundreds of concurrent native image
+    // resize operations (Photo.resizeImageForUpload) which exhausts resources
+    const BATCH_SIZE = 10;
+    const newObservations = [];
+    for ( let i = 0; i < groupedPhotos.length; i += BATCH_SIZE ) {
+      const batch = groupedPhotos.slice( i, i + BATCH_SIZE );
+      // eslint-disable-next-line no-await-in-loop
+      const batchResults = await Promise.all( batch.map( createObservationFromGroupedMedia ) );
+      newObservations.push( ...batchResults );
+    }
     setObservations( newObservations.map( ( newObs, idx ) => ( {
       ...( idx === 0
         ? firstObservationDefaults
@@ -279,12 +299,15 @@ const GroupPhotosContainer = ( ): Node => {
       return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
     };
 
-    if ( pendingDeletionUris.length > 0 ) {
+    const allPendingUris = [
+      ...new Set( [...pendingDeletionUris, ...pendingGroupPhotoDeletionUris] ),
+    ];
+    if ( allPendingUris.length > 0 ) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const promptDeleteOriginalDevicePhotos = require(
         "sharedHelpers/promptDeleteOriginalDevicePhotos",
       ).default;
-      promptDeleteOriginalDevicePhotos( pendingDeletionUris, navigateToNextScreen );
+      promptDeleteOriginalDevicePhotos( allPendingUris, navigateToNextScreen );
     } else {
       navigateToNextScreen( );
     }
