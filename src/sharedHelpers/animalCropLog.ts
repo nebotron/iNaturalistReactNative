@@ -79,7 +79,7 @@ export const getAnimalCrop = ( url: string ): NormalizedCrop | null => {
 
 export const getAnimalCropCount = ( ): number => Object.keys( load( ) ).length;
 
-export const getAnimalCropLogAsArray = ( ) => _logToArray( load( ) );
+export const getAnimalCropLogAsArray = ( ) => _logToArray( load( ) ).reverse( );
 
 export const copyAnimalCropLogToClipboard = ( ) => {
   const current = load( );
