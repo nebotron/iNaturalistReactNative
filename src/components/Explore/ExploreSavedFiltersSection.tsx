@@ -16,6 +16,7 @@ import {
 } from "providers/ExploreContext";
 import React, { useMemo } from "react";
 import { useTranslation } from "sharedHooks";
+import { zustandStorage } from "stores/useStore";
 import useStore from "stores/useStore";
 
 interface Props {
@@ -61,13 +62,18 @@ const ExploreSavedFiltersSection = ( {
     if ( savedFilter.view ) {
       setRootExploreView( savedFilter.view );
     }
+    if ( savedFilter.observationsLayout ) {
+      zustandStorage.setItem( "exploreObservationsLayout", savedFilter.observationsLayout );
+    }
   };
 
   const overwriteSavedFilter = ( savedFilterId: string ) => {
+    const observationsLayout = zustandStorage.getItem( "exploreObservationsLayout" ) as string ?? "map";
     updateSavedExploreFilter(
       savedFilterId,
       prepareExploreStateForStorage( state ),
       rootExploreView,
+      observationsLayout,
     );
   };
 

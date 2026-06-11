@@ -11,6 +11,7 @@ import {
 import React from "react";
 import { Alert } from "react-native";
 import { useTranslation } from "sharedHooks";
+import { zustandStorage } from "stores/useStore";
 import useStore from "stores/useStore";
 
 interface Props {
@@ -36,10 +37,12 @@ const ExploreSavedFilterSheets = ( {
   const rootExploreView = useStore( storeState => storeState.rootExploreView );
 
   const saveCurrentFilters = ( name: string ) => {
+    const observationsLayout = zustandStorage.getItem( "exploreObservationsLayout" ) as string ?? "map";
     const saved = addSavedExploreFilter(
       name,
       prepareExploreStateForStorage( state ),
       rootExploreView,
+      observationsLayout,
     );
 
     if ( !saved ) {
