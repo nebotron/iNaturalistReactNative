@@ -655,7 +655,7 @@ const SuggestionsContainer = ( ) => {
         usingOfflineSuggestions={usingOfflineSuggestions}
       />
       <MediaViewerModal
-        editable
+        editable={lastScreen === "ObsEdit" || lastScreen === "Camera"}
         showModal={mediaViewerVisible}
         onClose={( ) => dispatch( {
           type: "TOGGLE_MEDIA_VIEWER",

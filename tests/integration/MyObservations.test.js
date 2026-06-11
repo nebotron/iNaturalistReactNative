@@ -1,6 +1,8 @@
 // These test ensure that My Observation integrates with other systems like
 // remote data retrieval and local data persistence
 
+// Mock retry to call functions immediately without delay, so upload errors
+// appear in the test without waiting for the retry timeout.
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import { MS_BEFORE_TOOLBAR_RESET } from "components/MyObservations/hooks/useUploadObservations";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
@@ -17,6 +19,11 @@ import { renderAppWithComponent } from "tests/helpers/render";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 import { signIn, signOut } from "tests/helpers/user";
+
+jest.mock( "uploaders/utils/retry", ( ) => ( {
+  __esModule: true,
+  default: fn => fn( ),
+} ) );
 
 const mockUnsyncedObservations = [
   factory( "LocalObservation", {
