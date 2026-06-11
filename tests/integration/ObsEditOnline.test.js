@@ -78,7 +78,7 @@ const mockObservation = factory( "RemoteObservation", {
 
 const mockObservations = [mockObservation];
 
-const mockMultipleObservations = Array.from(
+const makeMockMultipleObservations = ( ) => Array.from(
   { length: 6 },
   () => factory( "RemoteObservation", {
     latitude: 37.99,
@@ -199,7 +199,10 @@ describe( "location fetching", () => {
 } );
 
 describe( "multiple observation upload/save progress", ( ) => {
+  let mockMultipleObservations;
   beforeEach( async ( ) => {
+    mockMultipleObservations = makeMockMultipleObservations( );
+    useStore.getState( ).resetUploadObservationsSlice( );
     await signIn( mockCurrentUser, { realm: global.mockRealms[__filename] } );
     useStore.setState( {
       observations: mockMultipleObservations,
@@ -208,6 +211,7 @@ describe( "multiple observation upload/save progress", ( ) => {
   } );
 
   afterEach( async ( ) => {
+    useStore.getState( ).resetUploadObservationsSlice( );
     useStore.setState( { } );
   } );
 

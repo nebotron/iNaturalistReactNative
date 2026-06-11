@@ -11,6 +11,7 @@ type Props = {
   deleting?: boolean,
   // Optional component to use as the header
   header?: Function,
+  initialIndex?: number,
   onClose?: Function,
   onCropPhoto?: Function,
   onDeletePhoto?: Function,
@@ -35,6 +36,7 @@ const MediaViewerModal = ( {
   editable,
   deleting,
   header,
+  initialIndex,
   onClose = ( ) => undefined,
   onCropPhoto,
   onDeletePhoto,
@@ -56,6 +58,7 @@ const MediaViewerModal = ( {
         editable={editable}
         deleting={deleting}
         header={header}
+        initialIndex={initialIndex}
         onClose={onClose}
         onCropPhoto={onCropPhoto}
         onDeletePhoto={onDeletePhoto}

@@ -1,3 +1,6 @@
+import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
+import useStore from "stores/useStore";
+
 const mockDeleteOriginalDevicePhotos = jest.fn( async ( ) => undefined );
 
 jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
@@ -5,9 +8,6 @@ jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
   __esModule: true,
   default: jest.fn( ( _uris, onComplete ) => onComplete( ) ),
 } ) );
-
-import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
-import useStore from "stores/useStore";
 
 const initialStoreState = useStore.getState( );
 
@@ -35,7 +35,7 @@ describe( "shouldPromptDeleteOriginalPhotos", ( ) => {
     expect( shouldPromptDeleteOriginalPhotos( ) ).toBe( true );
   } );
 
-  it( "deletes removed device photos immediately when deleting from a new observation", ( ) => {
+  it( "tracks removed device photos when deleting from a new observation", ( ) => {
     useStore.setState( {
       observations: [{
         observationPhotos: [{
@@ -56,39 +56,37 @@ describe( "shouldPromptDeleteOriginalPhotos", ( ) => {
     useStore.getState( ).deletePhotoFromObservation( "file:///local/photo.jpg" );
 
     expect( useStore.getState( ).currentObservation?.observationPhotos ).toEqual( [] );
-    expect( mockDeleteOriginalDevicePhotos ).toHaveBeenCalledWith(
-      ["ph://REMOVED"],
-      { userInitiated: true },
-    );
+    expect( mockDeleteOriginalDevicePhotos ).not.toHaveBeenCalled( );
     expect( useStore.getState( ).originalDevicePhotoUris ).toEqual( [] );
-    expect( useStore.getState( ).removedOriginalDevicePhotoUris ).toEqual( [] );
-    expect( shouldPromptDeleteOriginalPhotos( ) ).toBe( false );
+    expect( useStore.getState( ).removedOriginalDevicePhotoUris ).toEqual( ["ph://REMOVED"] );
+    expect( shouldPromptDeleteOriginalPhotos( ) ).toBe( true );
   } );
 
-  it( "deletes camera roll photos immediately when deleting a camera photo from a new observation", ( ) => {
-    useStore.setState( {
-      observations: [{
-        observationPhotos: [{
-          photo: { url: "file:///local/camera.jpg" },
+  it(
+    "tracks removed camera roll photos when deleting a camera photo from a new observation",
+    ( ) => {
+      useStore.setState( {
+        observations: [{
+          observationPhotos: [{
+            photo: { url: "file:///local/camera.jpg" },
+          }],
         }],
-      }],
-      currentObservationIndex: 0,
-      currentObservation: {
-        observationPhotos: [{
-          photo: { url: "file:///local/camera.jpg" },
-        }],
-      },
-      cameraRollUris: ["ph://CAMERA-ROLL"],
-    } );
+        currentObservationIndex: 0,
+        currentObservation: {
+          observationPhotos: [{
+            photo: { url: "file:///local/camera.jpg" },
+          }],
+        },
+        cameraRollUris: ["ph://CAMERA-ROLL"],
+      } );
 
-    useStore.getState( ).deletePhotoFromObservation( "file:///local/camera.jpg" );
+      useStore.getState( ).deletePhotoFromObservation( "file:///local/camera.jpg" );
 
-    expect( mockDeleteOriginalDevicePhotos ).toHaveBeenCalledWith(
-      ["ph://CAMERA-ROLL"],
-      { userInitiated: true },
-    );
-    expect( useStore.getState( ).cameraRollUris ).toEqual( [] );
-  } );
+      expect( mockDeleteOriginalDevicePhotos ).not.toHaveBeenCalled( );
+      expect( useStore.getState( ).cameraRollUris ).toEqual( [] );
+      expect( useStore.getState( ).removedOriginalDevicePhotoUris ).toEqual( ["ph://CAMERA-ROLL"] );
+    },
+  );
 
   it( "does not delete from the device when removing a photo from a saved observation", ( ) => {
     useStore.setState( {

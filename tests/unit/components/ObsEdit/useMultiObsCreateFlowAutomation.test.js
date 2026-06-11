@@ -1,8 +1,11 @@
 import { useNavigationState } from "@react-navigation/native";
-import { renderHook, waitFor } from "@testing-library/react-native";
-import useMultiObsCreateFlowAutomation from "components/ObsEdit/hooks/useMultiObsCreateFlowAutomation";
+import { renderHook } from "@testing-library/react-native";
+import useMultiObsCreateFlowAutomation
+  from "components/ObsEdit/hooks/useMultiObsCreateFlowAutomation";
 import useStore from "stores/useStore";
 import factory from "tests/factory";
+
+jest.unmock( "components/ObsEdit/hooks/useMultiObsCreateFlowAutomation" );
 
 const mockPush = jest.fn( );
 const mockNavigate = jest.fn( );

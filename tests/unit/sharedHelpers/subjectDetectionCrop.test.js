@@ -37,10 +37,13 @@ describe( "normalizedCropToImageZoomTransform", ( ) => {
   } );
 
   it( "round-trips a subject-focused crop", ( ) => {
+    // w * imageWidth must equal h * imageHeight for the crop to be square in
+    // pixel space (0.125 * 2000 == 0.25 * 1000 == 250), which is required for
+    // a perfect round-trip through the square viewport crop box.
     const crop = {
       x: 0.55,
       y: 0.2,
-      w: 0.25,
+      w: 0.125,
       h: 0.25,
     };
     const transform = normalizedCropToImageZoomTransform(

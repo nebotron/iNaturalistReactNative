@@ -39,7 +39,9 @@ describe( "mediaUploader", () => {
         observationPhotos: [
           {
             wasSynced: () => false,
-            photo: { uuid: "photo-uuid-1", url: "photo1.jpg" },
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
           },
         ],
         observationSounds: [
@@ -124,7 +126,9 @@ describe( "mediaUploader", () => {
           },
           {
             wasSynced: () => false,
-            photo: { uuid: "photo-uuid-1", url: "photo1.jpg" },
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
           },
         ],
         observationSounds: [],
@@ -260,7 +264,12 @@ describe( "mediaUploader", () => {
       const observation = {
         uuid: "obs-uuid-123",
         observationPhotos: [
-          { wasSynced: () => false, photo: { uuid: "photo-uuid-1", url: "photo1.jpg" } },
+          {
+            wasSynced: () => false,
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
+          },
         ],
         observationSounds: [],
       };
@@ -308,7 +317,12 @@ describe( "mediaUploader", () => {
       const observation = {
         uuid: "obs-uuid-123",
         observationPhotos: [
-          { wasSynced: () => false, photo: { uuid: "photo-uuid-1", url: "photo1.jpg" } },
+          {
+            wasSynced: () => false,
+            photo: {
+              uuid: "photo-uuid-1", url: "photo1.jpg", localFilePath: "photoUploads/photo1.jpg",
+            },
+          },
         ],
         observationSounds: [],
       };

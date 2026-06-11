@@ -191,6 +191,8 @@ jest.mock( "components/SharedComponents/Buttons/Button", () => {
   return jest.fn( props => actualButton( { ...props, debounceTime: 10 } ) );
 } );
 
+jest.mock( "components/ObsEdit/hooks/useMultiObsCreateFlowAutomation", ( ) => jest.fn( ) );
+
 jest.mock( "navigation/FadeInView", () => {
   const React = require( "react" );
   const { View } = require( "react-native" );
