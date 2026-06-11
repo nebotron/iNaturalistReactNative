@@ -122,7 +122,14 @@ const ImageCropEditor = ( ) => {
           );
           const photo = obsPhoto?.photo;
           if ( photo ) {
-            cropSourceUri = Photo.displayCropEditorSourcePhoto( photo ) || imageUri;
+            // Prefer the preserved crop original (set after first crop), then the original
+            // device photo (full resolution, not yet resized), then the resized local file.
+            // This ensures cropping always happens on the highest-resolution source available,
+            // so the subsequent resize step operates on the already-cropped image.
+            cropSourceUri = cropOriginalUriFromPath( photo?.cropOriginalLocalFilePath )
+              || obsPhoto?.originalDevicePhotoUri
+              || Photo.displayCropSourcePhoto( photo )
+              || imageUri;
             existingSavedCrop = Photo.savedNormalizedCrop( photo );
           }
         } else if ( context === "groupPhotos" ) {
