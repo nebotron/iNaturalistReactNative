@@ -4,9 +4,12 @@ import {
   List2,
   UserIcon,
 } from "components/SharedComponents";
+import NewCommunityMemberBadge from
+  "components/SharedComponents/NewCommunityMemberBadge/NewCommunityMemberBadge";
 import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import User from "realmModels/User";
+import { isNewCommunityMember } from "sharedHelpers/isNewCommunityMember";
 import { useTranslation } from "sharedHooks";
 
 type IconVariant = "mention" | "medium";
@@ -35,6 +38,7 @@ const UserListItem = ( {
 }: Props ) => {
   const { t } = useTranslation( );
   const user = item?.user;
+  const showNewCommunityMemberBadge = isNewCommunityMember( user );
 
   const UserListItemContainer = pressable
     ? ( { children } ) => (
@@ -77,12 +81,19 @@ const UserListItem = ( {
           )}
         <View className="ml-3 shrink">
           {user?.login && (
-            <Body1
-              numberOfLines={1}
-              ellipsizeMode="tail"
-            >
-              {user?.login}
-            </Body1>
+            <View className="flex-row items-center">
+              <Body1
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {user?.login}
+              </Body1>
+              {showNewCommunityMemberBadge && (
+                <NewCommunityMemberBadge
+                  testID={`UserListItem.${user.id}.NewCommunityMemberBadge`}
+                />
+              )}
+            </View>
           )}
           {!!countText && (
             <List2 className="mt-1" maxFontSizeMultiplier={1.5}>

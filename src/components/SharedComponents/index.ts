@@ -43,6 +43,8 @@ export { default as MediaNavButtons } from "./MediaNavButtons";
 export { default as MentionTextInput } from "./MentionTextInput";
 export { default as Modal } from "./Modal";
 export { default as Mortal } from "./Mortal";
+export { default as NewCommunityMemberBadge } from
+  "./NewCommunityMemberBadge/NewCommunityMemberBadge";
 export { default as ObservationLocation } from "./ObservationLocation";
 export { default as ObsStatus } from "./ObsStatus";
 export { default as OfflineNotice } from "./OfflineNotice";

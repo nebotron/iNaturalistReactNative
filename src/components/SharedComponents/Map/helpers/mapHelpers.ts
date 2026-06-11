@@ -74,6 +74,160 @@ export function latitudeDeltaToMeters(
   return latitudeDelta * metersPerDegreeLatitude( latitude );
 }
 
+export interface GeoJsonPolygon {
+  coordinates: number[][][];
+}
+
+export function boundingBoxGeojsonToBounds(
+  bbox?: GeoJsonPolygon | null,
+): MapBoundaries | null {
+  const ring = bbox?.coordinates?.[0];
+  if ( !ring?.length ) {
+    return null;
+  }
+
+  const lngs = ring.map( coordinate => coordinate[0] );
+  const lats = ring.map( coordinate => coordinate[1] );
+
+  return {
+    swlat: Math.min( ...lats ),
+    swlng: Math.min( ...lngs ),
+    nelat: Math.max( ...lats ),
+    nelng: Math.max( ...lngs ),
+  };
+}
+
+export function haversineMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const earthRadiusMeters = 6371000;
+  const toRadians = ( degrees: number ) => ( degrees * Math.PI ) / 180;
+  const latDifference = toRadians( lat2 - lat1 );
+  const lngDifference = toRadians( lng2 - lng1 );
+  const haversine = Math.sin( latDifference / 2 ) ** 2
+    + Math.cos( toRadians( lat1 ) )
+    * Math.cos( toRadians( lat2 ) )
+    * Math.sin( lngDifference / 2 ) ** 2;
+
+  return earthRadiusMeters * 2 * Math.atan2( Math.sqrt( haversine ), Math.sqrt( 1 - haversine ) );
+}
+
+export function accuracyToEncompassBounds(
+  centerLat: number,
+  centerLng: number,
+  bounds: MapBoundaries,
+): number {
+  const corners: [number, number][] = [
+    [bounds.swlat, bounds.swlng],
+    [bounds.swlat, bounds.nelng],
+    [bounds.nelat, bounds.swlng],
+    [bounds.nelat, bounds.nelng],
+  ];
+
+  return Math.max(
+    ...corners.map( ( [lat, lng] ) => haversineMeters(
+      centerLat,
+      centerLng,
+      lat,
+      lng,
+    ) ),
+  );
+}
+
+export const DEFAULT_OBSERVATION_LOCATION_ACCURACY_METERS = 1000;
+
+export function hasValidMapCoordinates(
+  latitude?: number | null,
+  longitude?: number | null,
+): boolean {
+  if ( latitude == null || longitude == null ) {
+    return false;
+  }
+  if ( Number.isNaN( latitude ) || Number.isNaN( longitude ) ) {
+    return false;
+  }
+  if ( latitude === 0 && longitude === 0 ) {
+    return false;
+  }
+  return latitude >= -90
+    && latitude <= 90
+    && longitude >= -180
+    && longitude <= 180;
+}
+
+interface ObservationWithCoordinates {
+  privateLatitude?: number | null;
+  latitude?: number | null;
+  privateLongitude?: number | null;
+  longitude?: number | null;
+  positional_accuracy?: number | null;
+}
+
+export function getObservationCoordinates(
+  observation?: ObservationWithCoordinates | null,
+): { latitude: number; longitude: number } | null {
+  const latitude = observation?.privateLatitude ?? observation?.latitude;
+  const longitude = observation?.privateLongitude ?? observation?.longitude;
+
+  if ( !hasValidMapCoordinates( latitude, longitude ) ) {
+    return null;
+  }
+
+  return {
+    latitude: latitude as number,
+    longitude: longitude as number,
+  };
+}
+
+export function regionForAccuracy(
+  latitude: number,
+  longitude: number,
+  accuracyMeters: number,
+  radiusToMapHeight: number,
+  mapDimensionsRatio: number,
+): Region {
+  const latitudeDelta = metersToLatitudeDelta(
+    accuracyMeters,
+    latitude,
+  ) / radiusToMapHeight;
+
+  return {
+    latitude,
+    longitude,
+    latitudeDelta,
+    longitudeDelta: latitudeDelta * mapDimensionsRatio,
+  };
+}
+
+export function regionForObservationLocation(
+  observation: ObservationWithCoordinates | null | undefined,
+  radiusToMapHeight: number | undefined,
+  mapDimensionsRatio: number | undefined,
+): Region | null {
+  if ( !radiusToMapHeight || !mapDimensionsRatio ) {
+    return null;
+  }
+
+  const coordinates = getObservationCoordinates( observation );
+  if ( !coordinates ) {
+    return null;
+  }
+
+  const accuracyMeters = observation?.positional_accuracy
+    ?? DEFAULT_OBSERVATION_LOCATION_ACCURACY_METERS;
+
+  return regionForAccuracy(
+    coordinates.latitude,
+    coordinates.longitude,
+    accuracyMeters,
+    radiusToMapHeight,
+    mapDimensionsRatio,
+  );
+}
+
 export function getMapRegion( totalBounds: MapBoundaries ): Region {
   const {
     nelat, nelng, swlat, swlng,

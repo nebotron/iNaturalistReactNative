@@ -18,6 +18,7 @@ const useSuggestions = (
     scoreImageParams,
     queryKey,
     onlineSuggestionsAttempted,
+    preferOfflineModel = false,
   } = options;
 
   const {
@@ -32,7 +33,9 @@ const useSuggestions = (
     onFetched,
     scoreImageParams,
     queryKey,
-    shouldFetchOnlineSuggestions,
+    shouldFetchOnlineSuggestions: preferOfflineModel
+      ? false
+      : shouldFetchOnlineSuggestions,
   } );
 
   const onlineSuggestionsResponse = {
@@ -49,10 +52,12 @@ const useSuggestions = (
   const urlWillCrashOffline = photoUri?.includes( "https://" ) && !isConnected;
 
   // skip to offline suggestions if internet connection is spotty
-  const tryOfflineSuggestions = !urlWillCrashOffline && (
-    timedOut
-    || ( !onlineSuggestions && onlineSuggestionsAttempted )
-  );
+  const tryOfflineSuggestions = preferOfflineModel
+    ? !urlWillCrashOffline
+    : !urlWillCrashOffline && (
+      timedOut
+      || ( !onlineSuggestions && onlineSuggestionsAttempted )
+    );
 
   const {
     offlineSuggestions,
@@ -74,23 +79,35 @@ const useSuggestions = (
     }
   };
 
-  const usingOfflineSuggestions = tryOfflineSuggestions || (
+  const usingOfflineSuggestions = preferOfflineModel || tryOfflineSuggestions || (
     ( offlineSuggestions?.results?.length || 0 ) > 0
       && ( !onlineSuggestions || onlineSuggestions?.results?.length === 0 )
   );
 
-  const hasOnlineSuggestionResults = ( onlineSuggestions?.results?.length || 0 ) > 0;
+  const hasOnlineSuggestionResults = !preferOfflineModel
+    && ( onlineSuggestions?.results?.length || 0 ) > 0;
 
   const unfilteredSuggestions = useMemo(
-    ( ) => ( hasOnlineSuggestionResults
-      ? onlineSuggestions?.results || []
-      : offlineSuggestions?.results || [] ),
-    [hasOnlineSuggestionResults, onlineSuggestions, offlineSuggestions],
+    ( ) => {
+      if ( preferOfflineModel ) {
+        return offlineSuggestions?.results || [];
+      }
+      if ( hasOnlineSuggestionResults ) {
+        return onlineSuggestions?.results || [];
+      }
+      return offlineSuggestions?.results || [];
+    },
+    [
+      preferOfflineModel,
+      hasOnlineSuggestionResults,
+      onlineSuggestions,
+      offlineSuggestions,
+    ],
   );
 
-  const commonAncestor = hasOnlineSuggestionResults
-    ? onlineSuggestions?.common_ancestor
-    : offlineSuggestions?.commonAncestor;
+  const commonAncestor = preferOfflineModel || !hasOnlineSuggestionResults
+    ? offlineSuggestions?.commonAncestor
+    : onlineSuggestions?.common_ancestor;
 
   // since we can calculate this, there's no need to store it in state
   const suggestions = useMemo(

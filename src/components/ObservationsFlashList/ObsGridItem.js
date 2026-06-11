@@ -1,5 +1,6 @@
 // @flow
 
+import ObsImageActionButtons from "components/ObsDetails/ObsImageActionButtons";
 import { Body2, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
@@ -20,27 +21,35 @@ type Props = {
   height?: string,
   hideObsUploadStatus?: boolean,
   observation: Object,
+  onExploreObservationAction?: Function,
   onUploadButtonPress: Function,
   style?: Object,
   queued: boolean,
   uploadProgress?: number,
   width?: string,
-  testID?: string
+  testID?: string,
+  squareCorners?: boolean,
 };
 
 const ObsGridItem = ( {
   currentUser,
   explore,
-  height = "w-[200px]",
+  height = "h-[200px]",
   hideObsUploadStatus,
   observation,
+  onExploreObservationAction,
   onUploadButtonPress,
   queued,
   style,
   uploadProgress,
   testID,
   width = "w-[200px]",
+  squareCorners = false,
 }: Props ): Node => {
+  const belongsToCurrentUser = observation?.user?.login === currentUser?.login;
+  const showExploreImageActions = explore
+    && currentUser
+    && !belongsToCurrentUser;
   const displayTaxonName = useMemo( ( ) => (
     <DisplayTaxonName
       bottomTextComponent={Body2}
@@ -67,8 +76,12 @@ const ObsGridItem = ( {
       source={{
         uri: Photo.displayLocalOrRemoteMediumPhoto( photo ),
       }}
-      width={width}
-      height={height}
+      width={squareCorners
+        ? undefined
+        : width}
+      height={squareCorners
+        ? undefined
+        : height}
       style={style}
       obsPhotosCount={photoCountFromObservation( observation )}
       hasSound={observationHasSound( observation )}
@@ -77,7 +90,16 @@ const ObsGridItem = ( {
       useShortGradient={!explore}
       iconicTaxonName={observation.taxon?.iconic_taxon_name}
       white
+      squareCorners={squareCorners}
     >
+      {showExploreImageActions && (
+        <ObsImageActionButtons
+          observation={observation}
+          currentUser={currentUser}
+          afterAction={onExploreObservationAction}
+          directAgree
+        />
+      )}
       <View className="absolute bottom-0 items-start p-2">
         {!hideObsUploadStatus && (
           <ObsUploadStatus
