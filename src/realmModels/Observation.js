@@ -141,6 +141,7 @@ class Observation extends Realm.Object {
     place_guess: true,
     private_place_guess: true,
     taxon_geoprivacy: true,
+    votes: Vote.VOTE_FIELDS,
   };
 
   static async new( obs ) {
@@ -359,6 +360,14 @@ class Observation extends Realm.Object {
       needs_sync: typeof obs.needsSync === "function"
         ? obs.needsSync()
         : obs.needs_sync,
+      votes: obs.votes?.length > 0
+        ? Array.from( obs.votes ).map( v => ( {
+          id: v.id,
+          user_id: v.user_id,
+          vote_flag: v.vote_flag,
+          vote_scope: v.vote_scope,
+        } ) )
+        : [],
     };
   }
 
