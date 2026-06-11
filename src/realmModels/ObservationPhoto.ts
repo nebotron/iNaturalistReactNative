@@ -3,7 +3,10 @@ import type { ApiObservationPhoto } from "api/types";
 import inatjs, { FileUpload } from "inaturalistjs";
 import type { Asset } from "react-native-image-picker";
 import type { RealmObservationPhoto, RealmPhoto } from "realmModels/types";
-import { getGalleryAssetDevicePhotoUri, normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import {
+  getGalleryAssetDevicePhotoUri,
+  normalizeDevicePhotoUri,
+} from "sharedHelpers/getOriginalDevicePhotoUri";
 import * as uuid from "uuid";
 
 import Photo from "./Photo";
@@ -128,11 +131,8 @@ class ObservationPhoto extends Realm.Object {
   static createObsPhotosWithPosition = async (
     photos: string[] | { image: Asset }[],
     { position, local }: { position: number; local: boolean },
-  ) => {
-    let photoPosition = position;
-    const obsPhotos = [];
-
-    for ( const photo of photos ) {
+  ) => Promise.all(
+    photos.map( async ( photo, index ) => {
       const uri = local
         ? photo as string
         : ( photo as { image: Asset } )?.image?.uri;
@@ -144,18 +144,9 @@ class ObservationPhoto extends Realm.Object {
         ? null
         : normalizeDevicePhotoUri( galleryPhoto.originalDevicePhotoUri )
           ?? getGalleryAssetDevicePhotoUri( galleryPhoto.image );
-      obsPhotos.push(
-        await ObservationPhoto.new(
-          uri,
-          photoPosition,
-          originalDevicePhotoUri,
-        ),
-      );
-      photoPosition += 1;
-    }
-
-    return obsPhotos;
-  };
+      return ObservationPhoto.new( uri, position + index, originalDevicePhotoUri );
+    } ),
+  );
 
   // TODO: I don't know how what the type for currentObservation is outside of this context here,
   // in the zustand store slice that is referenced in the two places this function is called
@@ -181,7 +172,7 @@ class ObservationPhoto extends Realm.Object {
 
   static async deleteLocalPhoto( uri: string ) {
     // delete uri on disk
-    Photo.deletePhotoFromDeviceStorage( uri );
+    await Photo.deletePhotoFromDeviceStorage( uri );
   }
 
   // TODO: I don't know how what the type for currentObservation is outside of this context here,
@@ -193,9 +184,9 @@ class ObservationPhoto extends Realm.Object {
     currentObservation?: { observationPhotos?: { photo: { url?: string }; uuid: string }[] },
   ) {
     if ( uri.includes( "https://" ) ) {
-      ObservationPhoto.deleteRemotePhoto( uri, currentObservation );
+      await ObservationPhoto.deleteRemotePhoto( uri, currentObservation );
     } else {
-      ObservationPhoto.deleteLocalPhoto( uri );
+      await ObservationPhoto.deleteLocalPhoto( uri );
     }
   }
 

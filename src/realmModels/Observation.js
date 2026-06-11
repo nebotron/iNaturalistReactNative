@@ -64,6 +64,7 @@ class Observation extends Realm.Object {
     },
     updated_at: true,
     viewer_trusted_by_observer: true,
+    reviewed_by: true,
     votes: Vote.VOTE_FIELDS,
     private_geojson: true,
     private_location: true,
@@ -98,6 +99,7 @@ class Observation extends Realm.Object {
     quality_grade: true,
     taxon: {
       id: true,
+      is_active: true,
       name: true,
       preferred_common_name: true,
       // rank and rank_level are needed to italicize scientific names
@@ -113,7 +115,15 @@ class Observation extends Realm.Object {
     identifications: {
       uuid: true,
       current: true,
+      taxon: {
+        id: true,
+        is_active: true,
+      },
+      user: {
+        id: true,
+      },
     },
+    reviewed_by: true,
     comments: {
       uuid: true,
     },
@@ -261,10 +271,16 @@ class Observation extends Realm.Object {
     }
 
     const addTimestampsToEvidence = evidence => ( evidence
-      ? evidence.map( record => ( {
-        ...record,
-        ...timestamps,
-      } ) )
+      ? evidence.map( record => {
+        // Don't bump _updated_at on already-synced evidence in existing observations:
+        // their _synced_at timestamp already correctly reflects that they are up to date.
+        // Bumping _updated_at would cause needsSync() to return true and trigger an
+        // unnecessary (or broken) re-upload of the photo file.
+        if ( existingObservation && record._synced_at ) {
+          return record;
+        }
+        return { ...record, ...timestamps };
+      } )
       : evidence );
 
     const taxon = obs.taxon || null;
@@ -591,7 +607,9 @@ class Observation extends Realm.Object {
     const missingDate = !Date.parse( this.observed_on_string ) && !this.time_observed_at;
     const missingCoords = typeof ( this.latitude ) !== "number"
       && typeof ( this.privateLatitude ) !== "number";
-    return missingDate || missingCoords;
+    const missingEvidence = ( this.observationPhotos?.length ?? 0 ) === 0
+      && ( this.observationSounds?.length ?? 0 ) === 0;
+    return missingDate || missingCoords || missingEvidence;
   }
 }
 
