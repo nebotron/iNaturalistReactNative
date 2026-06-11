@@ -177,8 +177,6 @@ Data-quality-assessment-title-needs-id = Toto pozorovanie potrebuje ID
 Data-quality-assessment-title-research = Toto pozorovanie je pozorovanie výskumného stupňa!
 DATE = DÁTUM
 Date = Dátum
-Date-Added-Newest-Default = Date Added: Newest (Default)
-Date-Added-Oldest = Date Added: Oldest
 date-format-long = PP
 date-format-month-day = d. MMM
 date-format-month-year = MMM yyyy
@@ -186,9 +184,7 @@ date-format-short = M/d/yy
 DATE-OBSERVED = DÁTUM POZOROVANIA
 Date-observed = Dátum pozorovania
 Date-observed-header-short = Pozorované
-Date-Observed-Newest = Date Observed: Newest
 DATE-OBSERVED-NEWEST = DÁTUM POZOROVANIA - OD NAJNOVŠIEHO PO NAJSTARŠEJ
-Date-Observed-Oldest = Date Observed: Oldest
 DATE-OBSERVED-OLDEST = DÁTUM POZOROVANIA - OD NAJSTARŠIEHO K NAJNOVŠIEMU
 Date-Range = Časový interval
 DATE-RANGE = ROZSAH DÁTUMU
@@ -372,7 +368,6 @@ If-youre-seeing-this-error = Ak sa vám táto správa zobrazuje a ste online, za
 IGNORE-LOCATION = IGNOROVAŤ LOKALITU
 Ignore-notifications = Ignorovať oznámenia
 Ignoring-location = Ignorovanie polohy
-Import-Photos-From = Importovať fotografie z
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
         [one] 1 POZOROVANIE
@@ -475,7 +470,6 @@ MEMBERS-WITHOUT-NUMBER =
         [one] ČLEN
        *[other] ČLENOV
     }
-Membership-in-this-project-is-by-invitation-only = Membership in this project is by invitation only. If you'd like to join, please contact one of the curators and request an invitation.
 Menu = Menu
 Missing-Date = Chýba dátum
 MISSING-EVIDENCE = CHÝBAJÚCI DÔKAZ
@@ -553,12 +547,8 @@ Observation-options = Možnosti pozorovania
 OBSERVATION-WAS-DELETED = POZOROVANIE BOLO ZMAZANÉ
 Observation-with-no-evidence = Pozorovanie bez dôkazov
 Observations = Pozorovania
-Observations-added-least-recently-appear-first = Observations added least recently appear first
-Observations-added-recently-appear-first = Observations added recently appear first
 Observations-need-location-date--warning = iNaturalist pozorovania potrebujú miesto a dátum, ktoré sú pre vedcov užitočné. Pred nahrávaním prosím skontrolujte pozorovanie s touto ikonou.
 Observations-View = Zobrazenie pozorovania
-Observations-with-the-most-recent-date-appear-first = Observations with the most recent date appear first
-Observations-with-the-oldest-date-appear-first = Observations with the oldest date appear first
 OBSERVATIONS-WITHOUT-NUMBER =
     { $count ->
         [one] POZOROVANIE
@@ -583,7 +573,6 @@ Opens-add-comment-form = Otvorí editačný formulár komentáre.
 Opens-AI-camera = Otvorí AI kameru.
 Opens-edit-comment-form = Otvorí editačný formulár komentáre.
 Opens-location-permission-prompt = Otvorí výzvu na povolenie polohy
-Opens-search-interface = Opens search interface.
 OR-SIGN-IN-WITH = ALEBO SA PRIHLASTE POMOCOU
 Or-you-can-try-to-get-a-clearer-photo-by-zooming-in-getting-closer = Alebo sa môžete pokúsiť získať jasnejšiu fotografiu priblížením, priblížením alebo vyskúšaním iného uhla.
 Organism-is-captive = Organizmus je v zajatí
@@ -794,7 +783,6 @@ Sorry-this-observation-was-deleted = Ospravedlňujeme sa, toto pozorovanie bolo 
 Sorry-we-dont-know-how-to-open-that-URL = Ospravedlňujeme sa, ale nevieme, ako otvoriť túto URL: { $url }
 SORT-BY = ZERADIŤ PODĽA
 Sort-by = Zoradiť podľa
-SORT-OBSERVATIONS = SORT OBSERVATIONS
 SORT-SPECIES = SORT SPECIES
 sound-playback-separator = /
 Sound-recorder = Zvukový záznamník

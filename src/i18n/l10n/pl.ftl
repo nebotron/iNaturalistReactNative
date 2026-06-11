@@ -177,8 +177,6 @@ Data-quality-assessment-title-needs-id = Ta obserwacja wymaga ID
 Data-quality-assessment-title-research = Ta obserwacja posiada stopień badawczy!
 DATE = DATA
 Date = Data
-Date-Added-Newest-Default = Date Added: Newest (Default)
-Date-Added-Oldest = Date Added: Oldest
 date-format-long = PP
 date-format-month-day = d MMM
 date-format-month-year = MMM yyyy
@@ -186,9 +184,7 @@ date-format-short = M/d/yy
 DATE-OBSERVED = DATA OBSERWACJI
 Date-observed = Data obserwacji
 Date-observed-header-short = Zaobserwowano
-Date-Observed-Newest = Date Observed: Newest
 DATE-OBSERVED-NEWEST = DATA OBSERWACJI — OD NAJNOWSZEJ DO NAJSTARSZEJ
-Date-Observed-Oldest = Date Observed: Oldest
 DATE-OBSERVED-OLDEST = DATA OBSERWACJI — OD NAJSTARSZEJ DO NAJNOWSZEJ
 Date-Range = Zakres dat
 DATE-RANGE = ZAKRES DAT
@@ -373,7 +369,6 @@ If-youre-seeing-this-error = Jeśli widzisz to i jesteś online, pracownicy iNat
 IGNORE-LOCATION = IGNORUJ LOKALIZACJĘ
 Ignore-notifications = Ignoruj powiadomienia
 Ignoring-location = Ignorowanie lokalizacji
-Import-Photos-From = Importuj zdjęcia z
 IMPORT-X-OBSERVATIONS =
     IMPORTUJ { $count ->
         [one] 1 OBSERWACJĘ
@@ -479,7 +474,6 @@ MEMBERS-WITHOUT-NUMBER =
         [few] CZŁONKOWIE
        *[many] CZŁONKÓW
     }
-Membership-in-this-project-is-by-invitation-only = Membership in this project is by invitation only. If you'd like to join, please contact one of the curators and request an invitation.
 Menu = Menu
 Missing-Date = Brak daty
 MISSING-EVIDENCE = BRAKUJĄCE DOWODY
@@ -557,12 +551,8 @@ Observation-options = Opcje obserwacji
 OBSERVATION-WAS-DELETED = OBSERWACJA ZOSTAŁA USUNIĘTA
 Observation-with-no-evidence = Obserwacja bez dowodów
 Observations = Obserwacje
-Observations-added-least-recently-appear-first = Observations added least recently appear first
-Observations-added-recently-appear-first = Observations added recently appear first
 Observations-need-location-date--warning = Obserwacje iNaturalist wymagają miejsca i daty, aby były użyteczne dla naukowców. Prosimy o sprawdzenie obserwacji oznaczonych tą ikoną przed przesłaniem.
 Observations-View = Widok Obserwacje
-Observations-with-the-most-recent-date-appear-first = Observations with the most recent date appear first
-Observations-with-the-oldest-date-appear-first = Observations with the oldest date appear first
 OBSERVATIONS-WITHOUT-NUMBER =
     { $count ->
         [one] OBSERWACJA
@@ -588,7 +578,6 @@ Opens-add-comment-form = Otwiera formularz dodawania komentarza.
 Opens-AI-camera = Otwiera kamerę AI.
 Opens-edit-comment-form = Otwiera formularz edycji komentarza.
 Opens-location-permission-prompt = Otwiera monit o pozwolenie na lokalizację
-Opens-search-interface = Opens search interface.
 OR-SIGN-IN-WITH = LUB ZALOGUJ SIĘ ZA POMOCĄ
 Or-you-can-try-to-get-a-clearer-photo-by-zooming-in-getting-closer = Możesz też spróbować uzyskać wyraźniejsze zdjęcie, powiększając je, zbliżając się lub próbując ustawić je pod innym kątem.
 Organism-is-captive = Organizm jest w niewoli
@@ -799,7 +788,6 @@ Sorry-this-observation-was-deleted = Przepraszamy, ta obserwacja została usuni�
 Sorry-we-dont-know-how-to-open-that-URL = Przepraszamy, nie wiemy, jak otworzyć ten adres URL: { $url }
 SORT-BY = SORTUJ WG:
 Sort-by = Sortuj wg:
-SORT-OBSERVATIONS = SORT OBSERVATIONS
 SORT-SPECIES = SORT SPECIES
 sound-playback-separator = /
 Sound-recorder = Rejestrator dźwięku

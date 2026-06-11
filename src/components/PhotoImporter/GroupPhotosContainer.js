@@ -9,11 +9,17 @@ import {
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { t } from "i18next";
 import type { Node } from "react";
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
-import { useLayoutPrefs } from "sharedHooks";
+import { useGridLayout, useLayoutPrefs } from "sharedHooks";
 import useStore from "stores/useStore";
 
 import GroupPhotos from "./GroupPhotos";
@@ -22,15 +28,28 @@ import flattenAndOrderSelectedPhotos, {
   selectedGroupsHaveMixedMedia,
 } from "./helpers/groupPhotoHelpers";
 
+function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
+  if ( uri == null ) return null;
+  const index = newPhotos.findIndex( obs => obs.photos?.some( p => p.image.uri === uri ) );
+  if ( index >= 0 ) return index;
+  if ( fallbackIndex != null && newPhotos.length > 0 ) {
+    return Math.min( fallbackIndex, newPhotos.length - 1 );
+  }
+  return null;
+}
+
 const GroupPhotosContainer = ( ): Node => {
   const navigation = useNavigation( );
   const {
     screenAfterPhotoEvidence, isDefaultMode,
   } = useLayoutPrefs( );
+  const { gridItemStyle } = useGridLayout( undefined, "fullWidth" );
+  const itemHeight = gridItemStyle.height;
   const setObservations = useStore( state => state.setObservations );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
+  const pendingGroupPhotoDeletionUris = useStore( state => state.pendingGroupPhotoDeletionUris );
 
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
@@ -49,6 +68,36 @@ const GroupPhotosContainer = ( ): Node => {
       index => index >= 0 && index < groupedPhotos.length,
     ) );
   }, [groupedPhotos.length] );
+
+  const flashListRef = useRef( null );
+  const firstVisibleItemUri = useRef( null );
+  const firstVisibleItemIndex = useRef( null );
+  const pendingScrollOffset = useRef( null );
+  const scrollOffset = useRef( 0 );
+
+  const onScroll = useCallback( event => {
+    scrollOffset.current = event.nativeEvent.contentOffset.y;
+  }, [] );
+
+  const onViewableItemsChanged = useCallback( ( { viewableItems } ) => {
+    const firstVisible = viewableItems.find( vi => vi.item?.photos );
+    if ( firstVisible ) {
+      firstVisibleItemUri.current = firstVisible.item.photos[0]?.image?.uri ?? null;
+      firstVisibleItemIndex.current = firstVisible.index ?? null;
+    }
+  }, [] );
+
+  useEffect( ( ) => {
+    let timer;
+    if ( pendingScrollOffset.current !== null ) {
+      const offset = pendingScrollOffset.current;
+      pendingScrollOffset.current = null;
+      timer = setTimeout( ( ) => {
+        flashListRef.current?.scrollToOffset( { offset, animated: false } );
+      }, 0 );
+    }
+    return ( ) => clearTimeout( timer );
+  }, [groupedPhotos] );
 
   const totalPhotos = groupedPhotos
     .reduce( ( count, current ) => (
@@ -85,6 +134,13 @@ const GroupPhotosContainer = ( ): Node => {
       setSelectedIndices( prev => prev.filter( selectedIndex => selectedIndex !== index ) );
     }
   };
+
+  const setPendingScrollOffset = useCallback( ( targetIndex ) => {
+    if ( targetIndex === null ) return;
+    const oldIndex = firstVisibleItemIndex.current ?? targetIndex;
+    const delta = targetIndex - oldIndex;
+    pendingScrollOffset.current = Math.max( 0, scrollOffset.current + delta * itemHeight );
+  }, [itemHeight] );
 
   const combinePhotos = () => {
     if ( selectedObservations.length < 2 ) {
@@ -136,6 +192,11 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
+    setPendingScrollOffset( findScrollTargetIndex(
+      newObsList,
+      firstVisibleItemUri.current,
+      firstVisibleItemIndex.current,
+    ) );
     setGroupedPhotos( newObsList );
     setSelectedIndices( [] );
   };
@@ -178,6 +239,12 @@ const GroupPhotosContainer = ( ): Node => {
         separatedItems.push( obs );
       }
     } );
+
+    setPendingScrollOffset( findScrollTargetIndex(
+      separatedItems,
+      firstVisibleItemUri.current,
+      firstVisibleItemIndex.current,
+    ) );
     setGroupedPhotos( separatedItems );
     setSelectedIndices( [] );
   };
@@ -199,7 +266,18 @@ const GroupPhotosContainer = ( ): Node => {
     setIsDuplicatingPhotos( true );
     try {
       const duplicatedGroups = await duplicateGroupedMediaGroups( selectedObservations );
-      setGroupedPhotos( [...groupedPhotos, ...duplicatedGroups] );
+      const indexToDuplicate = {};
+      selectedIndices.forEach( ( originalIndex, i ) => {
+        indexToDuplicate[originalIndex] = duplicatedGroups[i];
+      } );
+      const newGroupedPhotos = [];
+      groupedPhotos.forEach( ( group, index ) => {
+        newGroupedPhotos.push( group );
+        if ( indexToDuplicate[index] !== undefined ) {
+          newGroupedPhotos.push( indexToDuplicate[index] );
+        }
+      } );
+      setGroupedPhotos( newGroupedPhotos );
       setSelectedIndices( [] );
     } finally {
       setIsDuplicatingPhotos( false );
@@ -233,6 +311,11 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
+    setPendingScrollOffset( findScrollTargetIndex(
+      removedFromGroup,
+      firstVisibleItemUri.current,
+      firstVisibleItemIndex.current,
+    ) );
     setGroupedPhotos( removedFromGroup );
     setSelectedIndices( [] );
   };
@@ -287,12 +370,15 @@ const GroupPhotosContainer = ( ): Node => {
       return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
     };
 
-    if ( pendingDeletionUris.length > 0 ) {
+    const allPendingUris = [
+      ...new Set( [...pendingDeletionUris, ...pendingGroupPhotoDeletionUris] ),
+    ];
+    if ( allPendingUris.length > 0 ) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const promptDeleteOriginalDevicePhotos = require(
         "sharedHelpers/promptDeleteOriginalDevicePhotos",
       ).default;
-      promptDeleteOriginalDevicePhotos( pendingDeletionUris, navigateToNextScreen );
+      promptDeleteOriginalDevicePhotos( allPendingUris, navigateToNextScreen );
     } else {
       navigateToNextScreen( );
     }
@@ -303,10 +389,13 @@ const GroupPhotosContainer = ( ): Node => {
       combinePhotos={combinePhotos}
       clearSelection={() => setSelectedIndices( [] )}
       duplicatePhotos={duplicatePhotos}
+      flashListRef={flashListRef}
       groupedPhotos={groupedPhotos}
       isCreatingObservations={isCreatingObservations}
       isDuplicatingPhotos={isDuplicatingPhotos}
       navBasedOnUserSettings={navBasedOnUserSettings}
+      onScroll={onScroll}
+      onViewableItemsChanged={onViewableItemsChanged}
       removePhotos={removePhotos}
       selectedMediaCount={selectedMediaCount}
       maxPhotosAllowed={MAX_PHOTOS_ALLOWED}

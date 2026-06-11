@@ -183,8 +183,6 @@ Data-quality-assessment-title-needs-id = Detta fynd behöver bestämmas
 Data-quality-assessment-title-research = Detta fynd är av Forskningsklass!
 DATE = DATUM
 Date = Datum
-Date-Added-Newest-Default = Date Added: Newest (Default)
-Date-Added-Oldest = Date Added: Oldest
 date-format-long = d LLL yyyy
 date-format-month-day = d MMM
 date-format-month-year = MMM yyyy
@@ -192,9 +190,7 @@ date-format-short = d/M-yy
 DATE-OBSERVED = OBSERVATIONSDATUM
 Date-observed = Observationsdatum
 Date-observed-header-short = Observerad
-Date-Observed-Newest = Date Observed: Newest
 DATE-OBSERVED-NEWEST = OBSERVATIONSDATUM - NYAST TILL ÄLDST
-Date-Observed-Oldest = Date Observed: Oldest
 DATE-OBSERVED-OLDEST = OBSERVATIONSDATUM - ÄLDST TILL NYAST
 Date-Range = Datumintervall
 DATE-RANGE = DATUMINTERVALL
@@ -378,7 +374,6 @@ If-youre-seeing-this-error = Om du ser detta och du är online har iNat-personal
 IGNORE-LOCATION = BORTSE FRÅN PLATS
 Ignore-notifications = Stäng av aviseringar
 Ignoring-location = Ignorerar plats
-Import-Photos-From = Importera bilder från
 IMPORT-X-OBSERVATIONS =
     IMPORTERA { $count ->
         [one] 1 FYND
@@ -481,7 +476,6 @@ MEMBERS-WITHOUT-NUMBER =
         [one] MEDLEM
        *[other] MEDLEMMAR
     }
-Membership-in-this-project-is-by-invitation-only = Membership in this project is by invitation only. If you'd like to join, please contact one of the curators and request an invitation.
 Menu = Meny
 Missing-Date = Datum saknas
 MISSING-EVIDENCE = BELÄGG SAKNAS
@@ -559,12 +553,8 @@ Observation-options = Fyndalternativ
 OBSERVATION-WAS-DELETED = FYNDET RADERADES
 Observation-with-no-evidence = Fynd utan belägg
 Observations = Fynd
-Observations-added-least-recently-appear-first = Observations added least recently appear first
-Observations-added-recently-appear-first = Observations added recently appear first
 Observations-need-location-date--warning = iNaturalist-fynd behöver en fyndplats och ett datum för att vara användbara för forskare. Kontrollera fynd med denna ikon innan du laddar upp dem.
 Observations-View = Fyndvy
-Observations-with-the-most-recent-date-appear-first = Observations with the most recent date appear first
-Observations-with-the-oldest-date-appear-first = Observations with the oldest date appear first
 OBSERVATIONS-WITHOUT-NUMBER =
     { $count ->
         [one] FYND
@@ -589,7 +579,6 @@ Opens-add-comment-form = Öppnar dialogfönstret "Lägg till kommentar".
 Opens-AI-camera = Öppnar AI-kamera.
 Opens-edit-comment-form = Öppnar dialogfönstret "Ändra kommentar".
 Opens-location-permission-prompt = Öppnar behörighetsprompten för plats
-Opens-search-interface = Opens search interface.
 OR-SIGN-IN-WITH = ELLER LOGGA IN MED
 Or-you-can-try-to-get-a-clearer-photo-by-zooming-in-getting-closer = Eller så kan du försöka få en tydligare bild genom att zooma in, komma närmare eller prova en annan vinkel.
 Organism-is-captive = Organismen är i fångenskap
@@ -800,7 +789,6 @@ Sorry-this-observation-was-deleted = Tyvärr, detta fynd har raderats
 Sorry-we-dont-know-how-to-open-that-URL = Tyvärr, vi vet inte hur man öppnar denna URL: { $url }
 SORT-BY = SORTERA EFTER
 Sort-by = Sortera efter
-SORT-OBSERVATIONS = SORT OBSERVATIONS
 SORT-SPECIES = SORTERA ARTER
 sound-playback-separator = /
 Sound-recorder = Ljudinspelare

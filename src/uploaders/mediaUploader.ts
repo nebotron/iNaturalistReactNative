@@ -2,7 +2,6 @@ import { createOrUpdateEvidence } from "api/observations";
 import inatjs from "inaturalistjs";
 import type Realm from "realm";
 import ObservationPhoto from "realmModels/ObservationPhoto";
-import Photo from "realmModels/Photo";
 import type {
   RealmObservation,
   RealmObservationPhoto,
@@ -195,12 +194,7 @@ const filterMediaForUpload = ( observation: RealmObservation ): {
       }
       return null;
     }
-  } ).filter( photo => {
-    // Skip photos with no uploadable local URI — trying to upload them would
-    // hang because there is no file to read
-    if ( !photo ) return false;
-    return Photo.getLocalPhotoUri( photo.localFilePath ) != null;
-  } ).flat() as RealmPhoto[];
+  } ).filter( Boolean ).flat() as RealmPhoto[];
 
   // get photos that have been synced but need updating
   const modifiedObservationPhotos = hasPhotos
@@ -209,8 +203,7 @@ const filterMediaForUpload = ( observation: RealmObservation ): {
 
   const modifiedPhotosNeedingReupload = modifiedObservationPhotos
     .map( op => op.photo )
-    .filter( photo => ObservationPhoto.needsPhotoReupload( photo )
-      && Photo.getLocalPhotoUri( photo?.localFilePath ) != null );
+    .filter( photo => ObservationPhoto.needsPhotoReupload( photo ) );
 
   // get sounds that haven't been synced yet
   const hasSounds = observation.observationSounds?.length > 0;

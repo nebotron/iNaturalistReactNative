@@ -177,8 +177,6 @@ Data-quality-assessment-title-needs-id = Diese Beobachtung hat 'benötigt ID'-St
 Data-quality-assessment-title-research = Diese Beobachtung hat Forschungsqualität!
 DATE = DATUM
 Date = Datum
-Date-Added-Newest-Default = Hinzugefügt am: Jüngstes Datum (Standard)
-Date-Added-Oldest = Hinzugefügt am: Ältestes Datum
 date-format-long = dd.LLL.yyyy
 date-format-month-day = d. LLL
 date-format-month-year = LLL. yyyy
@@ -186,9 +184,7 @@ date-format-short = dd. MM. yy
 DATE-OBSERVED = BEOBACHTET AM
 Date-observed = Beobachtet am
 Date-observed-header-short = Beobachtet
-Date-Observed-Newest = Beobachtungsdatum: Jüngstes
 DATE-OBSERVED-NEWEST = BEOBACHTUNGSDATUM - NEUESTE ZUERST
-Date-Observed-Oldest = Beobachtungsdatum: Ältestes
 DATE-OBSERVED-OLDEST = BEOBACHTUNGSDATUM - ÄLTESTE ZUERST
 Date-Range = Zeitraum
 DATE-RANGE = DATUMSBEREICH
@@ -372,7 +368,6 @@ If-youre-seeing-this-error = Wenn du dies siehst und online bist, wurden die iNa
 IGNORE-LOCATION = STANDORT IGNORIEREN
 Ignore-notifications = Benachrichtigungen ignorieren
 Ignoring-location = Standort ignorieren
-Import-Photos-From = Fotos importieren von
 IMPORT-X-OBSERVATIONS =
     { $count ->
         [one] 1 BEOBACHTUNG
@@ -475,10 +470,6 @@ MEMBERS-WITHOUT-NUMBER =
         [one] Mitglied
        *[other] Mitglieder
     }
-Membership-in-this-project-is-by-invitation-only =
-    Die Mitgliedschaft in diesem Projekt erfolgt nur auf Einladung. Wenn du
-    beitreten möchtest, kontaktiere einen der Kuratoren und fordere eine
-    Einladung an.
 Menu = Menü
 Missing-Date = Fehlendes Datum
 MISSING-EVIDENCE = FEHLENDE BELEGE
@@ -556,12 +547,8 @@ Observation-options = Beobachtungs-Optionen
 OBSERVATION-WAS-DELETED = BEOBACHTUNG WURDE GELÖSCHT
 Observation-with-no-evidence = Beobachtung ohne Nachweis
 Observations = Beobachtungen
-Observations-added-least-recently-appear-first = Am weitesten zurückliegende Beobachtungen erscheinen zuerst
-Observations-added-recently-appear-first = Zuletzt hinzugefügte Beobachtungen erscheinen zuerst
 Observations-need-location-date--warning = iNaturalist-Beobachtungen benötigen einen Ort und ein Datum, um wissenschaftlich wertvolle Daten bereitszustellen. Bitte überprüfe die Beobachtungen mit diesem Symbol vor dem Hochladen.
 Observations-View = Beobachtungs-Ansicht
-Observations-with-the-most-recent-date-appear-first = Beobachtungen mit dem jüngsten Datum erscheinen zuerst
-Observations-with-the-oldest-date-appear-first = Beobachtungen mit dem ältesten Datum erscheinen zuerst
 OBSERVATIONS-WITHOUT-NUMBER =
     { $count ->
         [one] BEOBACHTUNG
@@ -586,7 +573,6 @@ Opens-add-comment-form = Öffnet Kommentar-Fenster
 Opens-AI-camera = Öffnet die KI-Kamera.
 Opens-edit-comment-form = Öffnet das Fenster „Kommentar bearbeiten“.
 Opens-location-permission-prompt = Öffnet die Anfrage für den Standortzugriff
-Opens-search-interface = Öffnet das Suchfenster.
 OR-SIGN-IN-WITH = ODER MELDE DICH AN MIT
 Or-you-can-try-to-get-a-clearer-photo-by-zooming-in-getting-closer = Oder versuche, ein schärferes Foto zu erhalten, indem du heranzoomst, näher herangehst oder einen anderen Blickwinkel wählst.
 Organism-is-captive = Organismus in Haltung
@@ -797,7 +783,6 @@ Sorry-this-observation-was-deleted = Leider wurde diese Beobachtung entfernt.
 Sorry-we-dont-know-how-to-open-that-URL = Leider wissen wir nicht, wie diese URL geöffnet werden soll: { $url }
 SORT-BY = SORTIEREN NACH
 Sort-by = Sortieren nach
-SORT-OBSERVATIONS = BEOBACHTUNGEN SORTIEREN
 SORT-SPECIES = ARTEN SORTIEREN
 sound-playback-separator = /
 Sound-recorder = Audioaufnahmegerät
