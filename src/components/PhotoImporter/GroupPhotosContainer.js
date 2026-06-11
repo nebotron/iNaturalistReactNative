@@ -31,7 +31,6 @@ const GroupPhotosContainer = ( ): Node => {
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
-  const pendingGroupPhotoDeletionUris = useStore( state => state.pendingGroupPhotoDeletionUris );
 
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
@@ -200,18 +199,7 @@ const GroupPhotosContainer = ( ): Node => {
     setIsDuplicatingPhotos( true );
     try {
       const duplicatedGroups = await duplicateGroupedMediaGroups( selectedObservations );
-      const indexToDuplicate = {};
-      selectedIndices.forEach( ( originalIndex, i ) => {
-        indexToDuplicate[originalIndex] = duplicatedGroups[i];
-      } );
-      const newGroupedPhotos = [];
-      groupedPhotos.forEach( ( group, index ) => {
-        newGroupedPhotos.push( group );
-        if ( indexToDuplicate[index] !== undefined ) {
-          newGroupedPhotos.push( indexToDuplicate[index] );
-        }
-      } );
-      setGroupedPhotos( newGroupedPhotos );
+      setGroupedPhotos( [...groupedPhotos, ...duplicatedGroups] );
       setSelectedIndices( [] );
     } finally {
       setIsDuplicatingPhotos( false );
@@ -299,15 +287,12 @@ const GroupPhotosContainer = ( ): Node => {
       return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
     };
 
-    const allPendingUris = [
-      ...new Set( [...pendingDeletionUris, ...pendingGroupPhotoDeletionUris] ),
-    ];
-    if ( allPendingUris.length > 0 ) {
+    if ( pendingDeletionUris.length > 0 ) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const promptDeleteOriginalDevicePhotos = require(
         "sharedHelpers/promptDeleteOriginalDevicePhotos",
       ).default;
-      promptDeleteOriginalDevicePhotos( allPendingUris, navigateToNextScreen );
+      promptDeleteOriginalDevicePhotos( pendingDeletionUris, navigateToNextScreen );
     } else {
       navigateToNextScreen( );
     }
