@@ -1,6 +1,7 @@
 import classnames from "classnames";
 import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
+import { TransparentCircleButton } from "components/SharedComponents";
 import {
   Image, Pressable, View,
 } from "components/styledComponents";
@@ -10,6 +11,7 @@ import { useTranslation } from "sharedHooks";
 
 interface Props {
   duplicatePhotoUris?: Set<string>;
+  onCropPhoto?: ( _uri: string ) => void;
   photoUris: string[];
   selectedPhotoUri: string;
   onPressPhoto: ( _uri: string ) => void;
@@ -18,6 +20,7 @@ interface Props {
 
 const ObsPhotoSelectionList = ( {
   duplicatePhotoUris,
+  onCropPhoto,
   photoUris, selectedPhotoUri, onPressPhoto, onReorderPhotos,
 }: Props ) => {
   const { t } = useTranslation( );
@@ -58,10 +61,19 @@ const ObsPhotoSelectionList = ( {
               testID={`ObsPhotoSelectionList.duplicate.${item}`}
             />
           )}
+          {selectedPhotoUri === item && onCropPhoto && (
+            <TransparentCircleButton
+              onPress={( ) => onCropPhoto( item )}
+              icon="crop"
+              accessibilityLabel={t( "CROP-PHOTO" )}
+              testID={`ObsPhotoSelectionList.crop.${item}`}
+              optionalClasses="absolute bottom-1 right-1 z-10"
+            />
+          )}
         </View>
       </Pressable>
     </ScaleDecorator>
-  ), [duplicatePhotoUris, selectedPhotoUri, onPressPhoto, t] );
+  ), [duplicatePhotoUris, onCropPhoto, selectedPhotoUri, onPressPhoto, t] );
 
   return (
     <DraggableFlatList

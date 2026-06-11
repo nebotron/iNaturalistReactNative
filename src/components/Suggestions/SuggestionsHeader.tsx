@@ -13,6 +13,7 @@ import SuggestionsOffline from "./SuggestionsOffline";
 
 interface Props {
   duplicatePhotoUris?: Set<string>;
+  onCropPhoto?: ( _uri: string ) => void;
   onPressPhoto: ( _uri: string ) => void;
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
   photoUris: string[];
@@ -29,6 +30,7 @@ interface Props {
 
 const SuggestionsHeader = ( {
   duplicatePhotoUris,
+  onCropPhoto,
   onPressPhoto,
   onReorderPhotos,
   photoUris,
@@ -49,6 +51,7 @@ const SuggestionsHeader = ( {
       <View className="mx-5">
         <ObsPhotoSelectionList
           duplicatePhotoUris={duplicatePhotoUris}
+          onCropPhoto={onCropPhoto}
           photoUris={photoUris}
           selectedPhotoUri={selectedPhotoUri}
           onPressPhoto={onPressPhoto}
