@@ -14,6 +14,13 @@ export function photoCountFromObservation( observation: ApiObservation | RealmOb
     || 0;
 }
 
+export function photosFromObservation( observation?: ApiObservation | RealmObservation ) {
+  const photos = ( observation as RealmObservation )?.observationPhotos?.map( op => op.photo )
+    ?? ( observation as ApiObservation )?.observation_photos?.map( op => op.photo )
+    ?? [];
+  return photos.filter( Boolean );
+}
+
 export function observationHasSound( observation: ApiObservation | RealmObservation ) {
   return !!(
     ( observation as RealmObservation )?.observationSounds?.length

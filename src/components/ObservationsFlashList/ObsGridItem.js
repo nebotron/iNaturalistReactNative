@@ -14,6 +14,7 @@ import {
   observationHasSound,
   photoCountFromObservation,
   photoFromObservation,
+  photosFromObservation,
 } from "./util";
 
 type Props = {
@@ -71,6 +72,9 @@ const ObsGridItem = ( {
   ] );
 
   const photo = photoFromObservation( observation );
+  const allPhotos = photosFromObservation( observation ).map(
+    p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
+  );
 
   return (
     <ObsImagePreview
@@ -78,6 +82,7 @@ const ObsGridItem = ( {
       source={{
         uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),
       }}
+      photos={allPhotos}
       width={squareCorners
         ? undefined
         : width}
