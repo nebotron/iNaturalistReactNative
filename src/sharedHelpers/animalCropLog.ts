@@ -8,6 +8,16 @@ import { zustandStorage } from "stores/useStore";
 const ANIMAL_CROP_LOG_KEY = "animalCropLog";
 const logger = log.extend( "animalCropLog" );
 
+type ChangeListener = ( url: string ) => void;
+const changeListeners = new Set<ChangeListener>( );
+
+export const subscribeToCropLogChanges = ( fn: ChangeListener ): ( ( ) => void ) => {
+  changeListeners.add( fn );
+  return ( ) => changeListeners.delete( fn );
+};
+
+const notifyChangeListeners = ( url: string ) => changeListeners.forEach( fn => fn( url ) );
+
 export type AnimalCropLog = Record<string, NormalizedCrop>;
 
 const load = ( ): AnimalCropLog => {
@@ -53,7 +63,7 @@ function syncToFirebase( logArray: ReturnType<typeof _logToArray> ) {
 // Normalise photo URLs to the "large" size so crops saved from the crop
 // tool (which stores large URLs) are found when the explore page looks up
 // original-size URLs (and vice-versa).
-const normalizePhotoUrl = ( url: string ): string => url.replace(
+export const normalizePhotoUrl = ( url: string ): string => url.replace(
   /\/(square|small|medium|large|original)(\.(?:jpe?g|png|webp|gif))/i,
   "/large$2",
 );
@@ -63,6 +73,7 @@ export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
   current[photoUrl] = crop;
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
   syncToFirebase( _logToArray( current ) );
+  notifyChangeListeners( photoUrl );
 };
 
 export const deleteAnimalCrop = ( photoUrl: string ) => {
@@ -70,6 +81,7 @@ export const deleteAnimalCrop = ( photoUrl: string ) => {
   delete current[photoUrl];
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
   syncToFirebase( _logToArray( current ) );
+  notifyChangeListeners( photoUrl );
 };
 
 export const getAnimalCrop = ( url: string ): NormalizedCrop | null => {
