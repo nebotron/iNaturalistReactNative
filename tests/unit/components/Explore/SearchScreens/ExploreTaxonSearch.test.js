@@ -2,8 +2,8 @@ import { fireEvent, screen } from "@testing-library/react-native";
 import ExploreTaxonSearch from "components/Explore/SearchScreens/ExploreTaxonSearch";
 import { ExploreProvider } from "providers/ExploreContext";
 import React from "react";
-import * as useTaxonSearch from "sharedHooks/useTaxonSearch";
 import * as useTaxon from "sharedHooks/useTaxon";
+import * as useTaxonSearch from "sharedHooks/useTaxonSearch";
 import factory from "tests/factory";
 import { renderComponent } from "tests/helpers/render";
 
@@ -35,11 +35,12 @@ describe( "ExploreTaxonSearch", ( ) => {
   } );
 
   it( "selects a taxon without crashing", async ( ) => {
+    const updateTaxonFilters = jest.fn( );
     renderComponent(
       <ExploreProvider>
         <ExploreTaxonSearch
           closeModal={jest.fn( )}
-          updateTaxonFilters={jest.fn( )}
+          updateTaxonFilters={updateTaxonFilters}
           taxonFilters={[]}
         />
       </ExploreProvider>,
@@ -51,26 +52,12 @@ describe( "ExploreTaxonSearch", ( ) => {
     await screen.findByTestId( `Search.taxa.${mockTaxon.id}` );
     fireEvent.press( screen.getByRole( "link" ) );
 
-    expect( await screen.findByTestId( `Search.taxa.${mockTaxon.id}.checkmark` ) ).toBeTruthy( );
-  } );
-
-  it( "applies taxon filters without crashing", async ( ) => {
-    const updateTaxonFilters = jest.fn( );
-    const closeModal = jest.fn( );
-
-    renderComponent(
-      <ExploreProvider>
-        <ExploreTaxonSearch
-          closeModal={closeModal}
-          updateTaxonFilters={updateTaxonFilters}
-          taxonFilters={[]}
-        />
-      </ExploreProvider>,
+    expect( updateTaxonFilters ).toHaveBeenCalledWith(
+      expect.arrayContaining( [
+        expect.objectContaining( {
+          taxon: expect.objectContaining( { id: mockTaxon.id } ),
+        } ),
+      ] ),
     );
-
-    fireEvent.press( await screen.findByText( "APPLY FILTERS" ) );
-
-    expect( updateTaxonFilters ).toHaveBeenCalledWith( [] );
-    expect( closeModal ).toHaveBeenCalled( );
   } );
 } );

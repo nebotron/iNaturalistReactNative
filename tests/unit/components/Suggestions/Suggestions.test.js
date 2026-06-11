@@ -64,6 +64,8 @@ describe( "Suggestions", ( ) => {
 
   it( "should fetch offline suggestions for current photo", async ( ) => {
     renderComponent( <Suggestions
+      photoUris={[]}
+      selectedPhotoUri=""
       suggestions={{
         ...initialSuggestions,
         otherSuggestions: mockSuggestionsList,
@@ -78,20 +80,26 @@ describe( "Suggestions", ( ) => {
   } );
 
   it( "should display empty text if no suggestions are found", ( ) => {
-    renderComponent( <Suggestions suggestions={initialSuggestions} /> );
+    renderComponent(
+      <Suggestions photoUris={[]} selectedPhotoUri="" suggestions={initialSuggestions} />,
+    );
     const emptyText = i18next
       .t( "iNaturalist-has-no-ID-suggestions-for-this-photo" );
     expect( screen.getByText( emptyText ) ).toBeVisible( );
   } );
 
   it( "should allow user to bypass suggestions screen", ( ) => {
-    renderComponent( <Suggestions suggestions={initialSuggestions} /> );
+    renderComponent(
+      <Suggestions photoUris={[]} selectedPhotoUri="" suggestions={initialSuggestions} />,
+    );
     const bypassText = screen.getByText( /Add an ID Later/ );
     expect( bypassText ).toBeVisible( );
   } );
 
   it( "should display loading wheel and text when suggestions are loading", ( ) => {
     renderComponent( <Suggestions
+      photoUris={[]}
+      selectedPhotoUri=""
       suggestions={initialSuggestions}
       isLoading
     /> );
@@ -114,6 +122,8 @@ describe( "Suggestions", ( ) => {
     it( "should display loading wheel and vision result when coming from AICamera", async ( ) => {
       renderComponent(
         <Suggestions
+          photoUris={[]}
+          selectedPhotoUri=""
           suggestions={initialSuggestions}
           isLoading
         />,
@@ -129,6 +139,8 @@ describe( "Suggestions", ( ) => {
     it( "should display no vision result if not coming from AICamera", async ( ) => {
       renderComponent(
         <Suggestions
+          photoUris={[]}
+          selectedPhotoUri=""
           suggestions={initialSuggestions}
           isLoading
         />,
@@ -142,6 +154,8 @@ describe( "Suggestions", ( ) => {
 
   it( "should create an id when checkmark is pressed", async ( ) => {
     renderComponent( <Suggestions
+      photoUris={[]}
+      selectedPhotoUri=""
       suggestions={{
         ...initialSuggestions,
         otherSuggestions: mockSuggestionsList,

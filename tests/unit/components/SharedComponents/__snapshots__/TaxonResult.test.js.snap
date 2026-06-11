@@ -167,6 +167,9 @@ exports[`TaxonResult should render correctly 1`] = `
                 {
                   "position": "relative",
                 },
+                {
+                  "overflow": "hidden",
+                },
               ],
             ]
           }

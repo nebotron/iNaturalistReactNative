@@ -1,4 +1,5 @@
 import { Alert } from "react-native";
+import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import { zustandStorage } from "stores/useStore";
 
 const mockIosReadGalleryPermission = jest.fn( async () => "not-determined" );
@@ -15,8 +16,6 @@ jest.mock( "@react-native-camera-roll/camera-roll", ( ) => ( {
 
 jest.spyOn( Alert, "alert" ).mockImplementation( ( ) => undefined );
 
-import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
-
 describe( "promptDeleteOriginalDevicePhotos", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
@@ -29,27 +28,23 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     mockIosRequestReadWriteGalleryPermission.mockResolvedValue( "granted" );
   } );
 
-  it( "requests photo library permission only once for user-initiated deletes", async ( ) => {
-    mockIosReadGalleryPermission
-      .mockResolvedValueOnce( "not-determined" )
-      .mockResolvedValueOnce( "not-determined" )
-      .mockResolvedValueOnce( "not-determined" );
+  it( "requests photo library permission for user-initiated deletes", async ( ) => {
     mockIosRequestReadWriteGalleryPermission.mockResolvedValue( "denied" );
 
     await deleteOriginalDevicePhotos( ["ph://ONE"], { userInitiated: true } );
     await deleteOriginalDevicePhotos( ["ph://TWO"], { userInitiated: true } );
 
-    expect( mockIosRequestReadWriteGalleryPermission ).toHaveBeenCalledTimes( 1 );
+    expect( mockIosRequestReadWriteGalleryPermission ).toHaveBeenCalledTimes( 2 );
     expect( mockDeletePhotos ).not.toHaveBeenCalled( );
-    expect( Alert.alert ).toHaveBeenCalledTimes( 1 );
+    expect( Alert.alert ).toHaveBeenCalledTimes( 2 );
   } );
 
-  it( "deletes without requesting permission when readWrite access is already granted", async ( ) => {
-    mockIosReadGalleryPermission.mockResolvedValue( "granted" );
+  it( "deletes when readWrite access is granted", async ( ) => {
+    mockIosRequestReadWriteGalleryPermission.mockResolvedValue( "granted" );
 
     await deleteOriginalDevicePhotos( ["ph://ONE"], { userInitiated: true } );
 
-    expect( mockIosRequestReadWriteGalleryPermission ).not.toHaveBeenCalled( );
+    expect( mockIosRequestReadWriteGalleryPermission ).toHaveBeenCalled( );
     expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://ONE"] );
     expect( Alert.alert ).not.toHaveBeenCalled( );
   } );

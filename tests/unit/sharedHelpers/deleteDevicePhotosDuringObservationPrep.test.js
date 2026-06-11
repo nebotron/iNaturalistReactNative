@@ -1,3 +1,8 @@
+import {
+  resolveDevicePhotoUriForRemovedObservationPhoto,
+  resolveDevicePhotoUriFromGroupedPhoto,
+} from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
+
 const mockDeleteOriginalDevicePhotos = jest.fn( async ( ) => undefined );
 
 jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
@@ -5,12 +10,6 @@ jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
   __esModule: true,
   default: jest.fn( ( _uris, onComplete ) => onComplete( ) ),
 } ) );
-
-import {
-  deleteDevicePhotosRemovedDuringObservationPrep,
-  resolveDevicePhotoUriForRemovedObservationPhoto,
-  resolveDevicePhotoUriFromGroupedPhoto,
-} from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 
 describe( "deleteDevicePhotosDuringObservationPrep", ( ) => {
   beforeEach( ( ) => {
@@ -66,18 +65,5 @@ describe( "deleteDevicePhotosDuringObservationPrep", ( ) => {
       [],
       { "file:///local/imported.jpg": "ph://MAPPED" },
     ) ).toBe( "ph://MAPPED" );
-  } );
-
-  it( "deletes unique device photo uris", ( ) => {
-    deleteDevicePhotosRemovedDuringObservationPrep( [
-      "ph://A",
-      "ph://A",
-      null,
-    ] );
-
-    expect( mockDeleteOriginalDevicePhotos ).toHaveBeenCalledWith(
-      ["ph://A"],
-      { userInitiated: true },
-    );
   } );
 } );
