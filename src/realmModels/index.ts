@@ -4,6 +4,7 @@ import type Realm from "realm";
 import Application from "./Application";
 import Comment from "./Comment";
 import Flag from "./Flag";
+import InputImageRecord from "./InputImageRecord";
 import Identification from "./Identification";
 import Observation from "./Observation";
 import ObservationPhoto from "./ObservationPhoto";
@@ -21,6 +22,7 @@ export default {
     Application,
     Comment,
     Flag,
+    InputImageRecord,
     Identification,
     Observation,
     ObservationPhoto,
@@ -33,7 +35,7 @@ export default {
     User,
     Vote,
   ],
-  schemaVersion: 68,
+  schemaVersion: 73,
   path: `${DocumentDirectoryPath}/db.realm`,
   // https://github.com/realm/realm-js/pull/6076 embedded constraints
   migrationOptions: {

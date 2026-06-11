@@ -8,9 +8,9 @@ import Observation from "realmModels/Observation";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import { log } from "sharedHelpers/logger";
 import {
+  useInputImageTracking,
   useLayoutPrefs,
 } from "sharedHooks";
-import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
 
 // Relative import so MOCK_MODE=e2e resolves fetchPlaceName.e2e-mock (Metro sourceExts).
@@ -35,6 +35,7 @@ const usePrepareStoreAndNavigate = ( ) => {
   const setCameraState = useStore( state => state.setCameraState );
   const setSentinelFileName = useStore( state => state.setSentinelFileName );
   const { screenAfterPhotoEvidence, isDefaultMode } = useLayoutPrefs( );
+  const { trackImageLoaded } = useInputImageTracking( );
 
   const { deviceStorageFull, showStorageFullAlert } = useDeviceStorageFull( );
 
@@ -75,7 +76,6 @@ const usePrepareStoreAndNavigate = ( ) => {
     uris,
     userLocation,
     logStageIfAICamera,
-    visionResult,
   ) => {
     const newObservation = await Observation.new( );
 
@@ -94,11 +94,7 @@ const usePrepareStoreAndNavigate = ( ) => {
         position: 0,
         local: true,
       } );
-    if ( !isDefaultMode
-        && screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.OBS_EDIT
-        && visionResult ) {
-      newObservation.taxon = visionResult.taxon;
-    }
+    uris.forEach( ( uri: string ) => trackImageLoaded( uri, "camera" ) );
     setObservations( [newObservation] );
     handleSavingToPhotoLibrary(
       uris,
@@ -106,10 +102,9 @@ const usePrepareStoreAndNavigate = ( ) => {
       logStageIfAICamera,
     ).catch( e => logger.error( "createObsWithCameraPhotos: error saving to photo library", e ) );
   }, [
-    isDefaultMode,
-    screenAfterPhotoEvidence,
     setObservations,
     handleSavingToPhotoLibrary,
+    trackImageLoaded,
   ] );
 
   const updateObsWithCameraPhotos = useCallback( async (
@@ -123,6 +118,7 @@ const usePrepareStoreAndNavigate = ( ) => {
         local: true,
       },
     );
+    evidenceToAdd.forEach( ( uri: string ) => trackImageLoaded( uri, "camera" ) );
     const updatedCurrentObservation = Observation
       .appendObsPhotos( obsPhotos, currentObservation );
 
@@ -142,6 +138,7 @@ const usePrepareStoreAndNavigate = ( ) => {
     currentObservationIndex,
     updateObservations,
     handleSavingToPhotoLibrary,
+    trackImageLoaded,
   ] );
 
   const prepareStoreAndNavigate = useCallback( async ( {
@@ -149,7 +146,6 @@ const usePrepareStoreAndNavigate = ( ) => {
     newPhotoState,
     logStageIfAICamera,
     deleteStageIfAICamera,
-    visionResult,
   } ) => {
     if ( userLocation !== null ) {
       logStageIfAICamera( "fetch_user_location_complete" );
@@ -168,7 +164,6 @@ const usePrepareStoreAndNavigate = ( ) => {
       uris,
       userLocation,
       logStageIfAICamera,
-      visionResult,
     );
     await deleteStageIfAICamera( );
     setSentinelFileName( null );

@@ -4,9 +4,16 @@ import {
   photoLibraryPhotosPath,
 } from "appConstants/paths";
 import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDetails";
+import {
+  appendPhotosAndVideoSoundsToObservation,
+  buildGroupedMediaItems,
+  createObservationWithVideoSounds,
+  partitionAssetsByMediaType,
+} from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { ActivityAnimation, ViewWrapper } from "components/SharedComponents";
 import { t } from "i18next";
 import type { NoBottomTabStackScreenProps } from "navigation/types";
+import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
   useState,
@@ -19,15 +26,19 @@ import {
 import type { Asset } from "react-native-image-picker";
 import { launchImageLibrary } from "react-native-image-picker";
 import Observation from "realmModels/Observation";
-import ObservationPhoto from "realmModels/ObservationPhoto";
+import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import fetchPlaceName from "sharedHelpers/fetchPlaceName";
+import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
+import { populateObservationTaxonFromFirstPhoto } from "sharedHelpers/predictTopTaxonFromPhoto";
 import { sleep } from "sharedHelpers/util";
-import { useLayoutPrefs } from "sharedHooks";
+import { useInputImageTracking, useLayoutPrefs } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
 
 const logger = log.extend( "PhotoLibrary" );
+
+const { useRealm } = RealmContext;
 
 const MAX_PHOTOS_ALLOWED = Platform.select( {
   ios: 500,
@@ -45,6 +56,10 @@ const PhotoLibrary = ( ) => {
 
   const [photoLibraryShown, setPhotoLibraryShown] = useState( false );
   const setPhotoImporterState = useStore( state => state.setPhotoImporterState );
+  const addOriginalDevicePhotoUris = useStore( state => state.addOriginalDevicePhotoUris );
+  const addImportedPhotoDeviceUriMappings = useStore(
+    state => state.addImportedPhotoDeviceUriMappings,
+  );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const updateObservations = useStore( state => state.updateObservations );
@@ -55,6 +70,8 @@ const PhotoLibrary = ( ) => {
   const observations = useStore( state => state.observations );
   const numOfObsPhotos: number = currentObservation?.observationPhotos?.length || 0;
   const exitObservationFlow = useExitObservationFlow( );
+  const realm = useRealm( );
+  const { trackImagesLoaded } = useInputImageTracking( );
 
   const skipGroupPhotos = params
     ? params.skipGroupPhotos
@@ -90,12 +107,38 @@ const PhotoLibrary = ( ) => {
     } );
   }, [navigation, screenAfterPhotoEvidence, isDefaultMode] );
 
+  const handleSelectionCancelled = useCallback( ( ) => {
+    if ( fromGroupPhotos ) {
+      navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
+      navigation.setParams( { fromGroupPhotos: false } );
+    } else if ( skipGroupPhotos ) {
+      navToObsEdit();
+    } else if ( params && params.previousScreen && params.previousScreen.name === "ObsDetails" ) {
+      if ( !params.previousScreen.params?.uuid ) {
+        throw new Error( "No UUID found to route to ObsDetails screen" );
+      }
+      navigateToObsDetails( navigation, params.previousScreen.params.uuid );
+    } else if ( params?.cmonBack && navigation.canGoBack() ) {
+      navigation.goBack();
+    } else {
+      exitObservationFlow( );
+    }
+    setPhotoLibraryShown( false );
+  }, [
+    exitObservationFlow,
+    fromGroupPhotos,
+    navToObsEdit,
+    navigation,
+    params,
+    skipGroupPhotos,
+  ] );
+
   const moveImagesToDocumentsDirectory = async ( selectedImages:
     { image: Asset }[] ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
 
-    const movedImages = await Promise.all( selectedImages.map( async ( { image } ) => {
+    const moveImage = async ( { image }: { image: Asset } ) => {
       const { fileName, uri } = image;
       if ( !fileName ) {
         throw new Error( "No fileName in pick photo response" );
@@ -124,9 +167,58 @@ const PhotoLibrary = ( ) => {
             : destPath,
         },
       };
-    } ) );
+    };
+
+    // Process in batches to avoid exhausting file descriptors with large selections
+    const BATCH_SIZE = 10;
+    const movedImages = [];
+    for ( let i = 0; i < selectedImages.length; i += BATCH_SIZE ) {
+      const batch = selectedImages.slice( i, i + BATCH_SIZE );
+      // eslint-disable-next-line no-await-in-loop
+      const batchResults = await Promise.all( batch.map( moveImage ) );
+      movedImages.push( ...batchResults );
+    }
     return movedImages;
   };
+
+  const buildMovedVideos = useCallback( (
+    selectedVideos: { image: Asset }[],
+    videoAssets: Asset[],
+  ) => selectedVideos.map( ( { image }, index ) => ( {
+    uri: image.uri,
+    asset: {
+      ...videoAssets[index],
+      ...image,
+    },
+  } ) ), [] );
+
+  const finalizeNewObservation = useCallback( async (
+    newObservation: Awaited<ReturnType<typeof createObservationWithVideoSounds>>,
+    hasPhotos: boolean,
+  ) => {
+    if ( newObservation.latitude ) {
+      const placeName = await fetchPlaceName(
+        newObservation.latitude,
+        newObservation.longitude,
+      );
+      newObservation.place_guess = placeName;
+    }
+
+    if ( hasPhotos ) {
+      await populateObservationTaxonFromFirstPhoto( newObservation, realm );
+    }
+
+    setPhotoImporterState( {
+      observations: [newObservation],
+    } );
+
+    if ( hasPhotos && !newObservation.observationSounds?.length ) {
+      navBasedOnUserSettings( );
+    } else {
+      navToObsEdit( );
+    }
+    setPhotoLibraryShown( false );
+  }, [navBasedOnUserSettings, navToObsEdit, realm, setPhotoImporterState] );
 
   const showPhotoLibrary = useCallback( async () => {
     if ( photoLibraryShown ) {
@@ -141,20 +233,17 @@ const PhotoLibrary = ( ) => {
       await sleep( 500 );
     }
 
-    // According to the native code of the image picker library, it never rejects the promise,
-    // just returns a response object with errorCode
-    // https://github.com/react-native-image-picker/react-native-image-picker?tab=readme-ov-file#Asset-Object
-    // THAT SAID, we had an android isse where this threw an error, causing a stuck loading screen
-    // see https://linear.app/inaturalist/issue/MOB-90/importing-photo-while-offline-in-android-gets-stuck-on-photogallery
-    // so I am adding a try/catch just in case
     let response;
     try {
       response = await launchImageLibrary( {
         selectionLimit: fromAICamera
           ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
           : MAX_PHOTOS_ALLOWED,
-        mediaType: "photo",
+        mediaType: fromAICamera
+          ? "photo"
+          : "mixed",
         includeBase64: false,
+        includeExtra: !fromAICamera,
         // forceOldAndroidPhotoPicker is necessary because the "new" picker strips key EXIF data
         forceOldAndroidPhotoPicker: true,
         chooserTitle: t( "Import-Photos-From" ),
@@ -168,76 +257,73 @@ const PhotoLibrary = ( ) => {
     }
 
     if ( !response || response.didCancel || !response.assets || response.errorCode ) {
-      // User cancelled selection of photos - close current screen
       if ( response?.errorCode ) {
         logger.error(
           `import from photo library error: ${response.errorCode}: ${response.errorMessage}`,
         );
       }
 
-      if ( fromGroupPhotos ) {
-        // This screen was called from the plus button of the group photos screen - get back to it
-        navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
-        navigation.setParams( { fromGroupPhotos: false } );
-      } else if ( skipGroupPhotos ) {
-        // This only happens when being called from ObsEdit
-        navToObsEdit();
-
-        // Determine if we need to go back to ObsList or ObsDetails screen
-      } else if ( params && params.previousScreen && params.previousScreen.name === "ObsDetails" ) {
-        // If the uuid is undefined we need to error out here or ObsDetails doesn't work
-        if ( !params.previousScreen.params?.uuid ) {
-          throw new Error( "No UUID found to route to ObsDetails screen" );
-        }
-        navigateToObsDetails( navigation, params.previousScreen.params.uuid );
-      } else if ( params?.cmonBack && navigation.canGoBack() ) {
-        navigation.goBack();
-      } else {
-        exitObservationFlow( );
-      }
-      setPhotoLibraryShown( false );
+      handleSelectionCancelled();
       return;
     }
 
     try {
-      const selectedTmpDirectoryImages = response.assets.map( x => ( { image: x } ) );
-      const selectedImages = await moveImagesToDocumentsDirectory( selectedTmpDirectoryImages );
+      const { photoAssets, videoAssets } = partitionAssetsByMediaType( response.assets );
+      addOriginalDevicePhotoUris(
+        getOriginalDevicePhotoUrisFromAssets( response.assets ),
+      );
+
+      const movedPhotos = photoAssets.length > 0
+        ? await moveImagesToDocumentsDirectory( photoAssets.map( image => ( { image } ) ) )
+        : [];
+      const selectedPhotos = movedPhotos.length > 0
+        ? markDuplicatePhotosFromLibrary( realm, movedPhotos, photoAssets )
+        : [];
+      if ( selectedPhotos.length > 0 ) {
+        addImportedPhotoDeviceUriMappings(
+          selectedPhotos.map( photo => ( {
+            localUri: photo.image.uri,
+            deviceUri: photo.originalDevicePhotoUri,
+          } ) ),
+        );
+        trackImagesLoaded(
+          selectedPhotos.map( ( { image } ) => image.uri ).filter( Boolean ) as string[],
+          "photoLibrary",
+        );
+      }
+      const selectedVideos = videoAssets.length > 0
+        ? await moveImagesToDocumentsDirectory( videoAssets.map( image => ( { image } ) ) )
+        : [];
+      const movedVideos = buildMovedVideos( selectedVideos, videoAssets );
+      const hasPhotos = selectedPhotos.length > 0;
+      const hasVideos = movedVideos.length > 0;
 
       if ( fromGroupPhotos ) {
-        // This screen was called from the plus button of the group photos screen - get back to it
-        // after adding the newly selected photos
-        setGroupedPhotos( [...groupedPhotos, ...selectedImages.map( photo => ( {
-          photos: [photo],
-        } ) )] );
+        setGroupedPhotos( [
+          ...groupedPhotos,
+          ...buildGroupedMediaItems( selectedPhotos, movedVideos ),
+        ] );
         navigation.setParams( { fromGroupPhotos: false } );
         navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
         setPhotoLibraryShown( false );
         return;
       }
 
-      const importedPhotoUris = selectedImages.map( x => x.image.uri );
-
       if ( skipGroupPhotos ) {
-        // add evidence to existing observation
-        setPhotoImporterState( {
-          photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
-          evidenceToAdd: [...evidenceToAdd, ...importedPhotoUris],
-        } );
-        const obsPhotos = await ObservationPhoto
-          .createObsPhotosWithPosition(
-            selectedImages,
-            { position: numOfObsPhotos, local: false },
-          );
+        if ( hasPhotos ) {
+          const importedPhotoUris = selectedPhotos.map( x => x.image.uri );
+          setPhotoImporterState( {
+            photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
+            evidenceToAdd: [...evidenceToAdd, ...importedPhotoUris],
+          } );
+        }
 
-        // If the current observation is not synced, update the EXIF data from imported photos
-        const unsynced = !currentObservation?._synced_at;
-        let updatedCurrentObservation = unsynced
-          ? await Observation
-            .updateObsExifFromPhotos( importedPhotoUris, currentObservation )
-          : currentObservation;
-
-        updatedCurrentObservation = Observation
-          .appendObsPhotos( obsPhotos, updatedCurrentObservation );
+        const updatedCurrentObservation = await appendPhotosAndVideoSoundsToObservation(
+          selectedPhotos,
+          movedVideos,
+          currentObservation,
+          numOfObsPhotos,
+        );
 
         const updatedObservations = [...observations];
         updatedObservations[currentObservationIndex] = updatedCurrentObservation;
@@ -245,67 +331,69 @@ const PhotoLibrary = ( ) => {
 
         navToObsEdit();
         setPhotoLibraryShown( false );
-      } else if ( selectedImages.length === 1 ) {
-        // create a new observation and skip group photos screen
-        const newObservation = await Observation.createObservationWithPhotos( [selectedImages[0]] );
-        // fetch place name to display on Match screen
-        if ( newObservation.latitude ) {
-          const placeName = await fetchPlaceName(
-            newObservation.latitude,
-            newObservation.longitude,
-          );
-          newObservation.place_guess = placeName;
-        }
-        setPhotoImporterState( {
-          observations: [newObservation],
-        } );
-        navBasedOnUserSettings( );
-        setPhotoLibraryShown( false );
-      } else {
-        // navigate to group photos
-        setPhotoImporterState( {
-          photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
-          groupedPhotos: selectedImages.map( photo => ( {
-            photos: [photo],
-          } ) ),
-        } );
-        navigation.setParams( { fromGroupPhotos: false } );
-        navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
-        setPhotoLibraryShown( false );
+        return;
       }
+
+      const totalMediaCount = selectedPhotos.length + movedVideos.length;
+
+      if ( totalMediaCount === 1 ) {
+        if ( hasVideos ) {
+          const newObservation = await createObservationWithVideoSounds( movedVideos );
+          await finalizeNewObservation( newObservation, false );
+        } else {
+          const newObservation = await Observation.createObservationWithPhotos(
+            [selectedPhotos[0]],
+          );
+          await finalizeNewObservation( newObservation, true );
+        }
+        return;
+      }
+
+      const importedPhotoUris = selectedPhotos.map( x => x.image.uri );
+
+      setPhotoImporterState( {
+        photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
+        groupedPhotos: buildGroupedMediaItems( selectedPhotos, movedVideos ),
+      } );
+      navigation.setParams( { fromGroupPhotos: false } );
+      navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
+      setPhotoLibraryShown( false );
     } catch ( error ) {
       logger.error( "Error importing photos from library", error );
       setPhotoLibraryShown( false );
       exitObservationFlow( );
     }
   }, [
+    addImportedPhotoDeviceUriMappings,
+    addOriginalDevicePhotoUris,
+    buildMovedVideos,
     currentObservation,
     currentObservationIndex,
     evidenceToAdd,
     exitObservationFlow,
+    finalizeNewObservation,
+    fromAICamera,
     fromGroupPhotos,
-    photoLibraryUris,
     groupedPhotos,
-    navigation,
+    handleSelectionCancelled,
     navToObsEdit,
-    navBasedOnUserSettings,
+    navigation,
     numOfObsPhotos,
     observations,
-    params,
     photoLibraryShown,
+    photoLibraryUris,
+    realm,
     setGroupedPhotos,
     setPhotoImporterState,
     skipGroupPhotos,
+    trackImagesLoaded,
     updateObservations,
-    fromAICamera,
   ] );
 
   useFocusEffect(
     React.useCallback( () => {
-      // This will run when the screen comes into focus.
       let interactionHandle = null;
 
-      // Wait for screen to finish transition
       interactionHandle = InteractionManager.runAfterInteractions( () => {
         if ( !photoLibraryShown ) {
           showPhotoLibrary();
@@ -313,7 +401,6 @@ const PhotoLibrary = ( ) => {
       } );
 
       return () => {
-        // This runs when the screen goes out of focus
         if ( interactionHandle ) {
           interactionHandle.cancel();
         }

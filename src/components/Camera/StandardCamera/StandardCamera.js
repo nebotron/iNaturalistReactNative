@@ -23,6 +23,7 @@ import { BREAKPOINTS } from "sharedHelpers/breakpoint";
 import { log } from "sharedHelpers/logger";
 import { useDeviceOrientation, usePerformance } from "sharedHooks";
 import useDebugMode from "sharedHooks/useDebugMode";
+import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import useStore from "stores/useStore";
 
 import {
@@ -103,6 +104,7 @@ const StandardCamera = ( {
 
   const cameraUris = useStore( state => state.cameraUris );
   const prepareCamera = useStore( state => state.prepareCamera );
+  const { trackImageDeleted } = useInputImageTracking( );
   const photoLibraryUris = useStore( state => state.photoLibraryUris );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
 
@@ -144,8 +146,9 @@ const StandardCamera = ( {
     if ( !deletePhotoFromObservation ) return;
     deletePhotoFromObservation( photoUri );
     await ObservationPhoto.deletePhoto( photoUri );
+    trackImageDeleted( photoUri );
     setNewPhotoUris( newPhotoUris.filter( uri => uri !== photoUri ) );
-  }, [deletePhotoFromObservation, newPhotoUris, setNewPhotoUris] );
+  }, [deletePhotoFromObservation, newPhotoUris, setNewPhotoUris, trackImageDeleted] );
 
   const onFlipCamera = () => {
     resetZoom( );

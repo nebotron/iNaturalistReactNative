@@ -1,3 +1,4 @@
+import Clipboard from "@react-native-clipboard/clipboard";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -19,12 +20,12 @@ import DeviceInfo from "react-native-device-info";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Observation from "realmModels/Observation";
 import User from "realmModels/User";
-import { valueToBreakpoint } from "sharedHelpers/breakpoint";
+import { copyCropFeedbackToClipboard } from "sharedHelpers/cropFeedbackLog";
 import { log } from "sharedHelpers/logger";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
 import {
   useCurrentUser, useDebugMode, useFeatureFlag,
-  useLayoutPrefs, useTranslation,
+  useInputImageTracking, useLayoutPrefs, useTranslation,
 } from "sharedHooks";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
 import colors from "styles/tailwindColors";
@@ -101,6 +102,7 @@ const getDeviceMetricsForFeedback = async () => {
 const Menu = ( ) => {
   const { isDebug } = useDebugMode();
   const realm = useRealm( );
+  const { getAllImageMetadata } = useInputImageTracking( );
   const navigation = useNavigation( );
   const queryClient = useQueryClient( );
   const currentUser = useCurrentUser( );
@@ -182,6 +184,16 @@ const Menu = ( ) => {
         },
       } ),
 
+    imageMetadata: {
+      label: "Copy Image Metadata",
+      icon: "copy",
+      onPress: ( ) => {
+        const records = getAllImageMetadata( );
+        Clipboard.setString( JSON.stringify( records, null, 2 ) );
+        Alert.alert( "Copied", "Image metadata copied to clipboard" );
+      },
+    },
+
     ...( isDebug
       ? {
         debug: {
@@ -189,6 +201,11 @@ const Menu = ( ) => {
           navigation: "Debug",
           icon: "triangle-exclamation",
           color: "deeppink",
+        },
+        copyCropFeedback: {
+          label: "Copy crop feedback JSON",
+          icon: "clipboard",
+          onPress: () => copyCropFeedbackToClipboard( ),
         },
       }
       : {} ),
