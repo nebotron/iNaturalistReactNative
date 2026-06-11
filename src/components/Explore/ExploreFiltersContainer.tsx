@@ -1,7 +1,10 @@
 import { useNavigation } from "@react-navigation/native";
 import type { ApiProject } from "api/types";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import {
+  EXPLORE_ACTION,
   ExploreProvider,
+  useExplore,
 } from "providers/ExploreContext";
 import React from "react";
 
@@ -9,21 +12,21 @@ import FilterModalV2 from "./Modals/FilterModalV2";
 
 const ExploreFiltersContainerWithContext = () => {
   const navigation = useNavigation();
+  const { dispatch } = useExplore();
 
   const closeModal = () => {
     navigation.goBack();
   };
 
   const filterByIconicTaxonUnknown = () => {
-    console.log( " Not implemented in ExploreV2 yet" );
+    dispatch( { type: EXPLORE_ACTION.FILTER_BY_ICONIC_TAXON_UNKNOWN } );
   };
 
-  const updateTaxon = (
-    taxon: {
-      name: string;
-    } | null,
-  ) => {
-    console.log( " Not implemented in ExploreV2 yet", taxon );
+  const updateTaxonFilters = ( taxonFilters: ExploreTaxonFilter[] ) => {
+    dispatch( {
+      type: EXPLORE_ACTION.SET_TAXON_FILTERS,
+      taxonFilters,
+    } );
   };
 
   const updateUser = (
@@ -42,7 +45,7 @@ const ExploreFiltersContainerWithContext = () => {
     <FilterModalV2
       closeModal={closeModal}
       filterByIconicTaxonUnknown={filterByIconicTaxonUnknown}
-      updateTaxon={updateTaxon}
+      updateTaxonFilters={updateTaxonFilters}
       updateUser={updateUser}
       updateProject={updateProject}
     />
