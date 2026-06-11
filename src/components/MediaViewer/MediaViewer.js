@@ -67,11 +67,13 @@ const MediaViewer = ( {
     ...sounds.map( sound => sound.file_url ),
   ] ), [photos, sounds] );
 
-  const [selectedMediaIndex, setSelectedMediaIndex] = useState(
-    uris.indexOf( uri ) <= 0
-      ? 0
-      : uris.indexOf( uri ),
-  );
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState( ( ) => {
+    if ( initialIndex != null && initialIndex >= 0 ) {
+      return initialIndex;
+    }
+    const uriIndex = uris.indexOf( uri );
+    return uriIndex <= 0 ? 0 : uriIndex;
+  } );
   const { t } = useTranslation( );
   const [
     mediaToDelete,
