@@ -1,5 +1,6 @@
 // @flow
 
+import FaveButton from "components/ObsDetails/FaveButton";
 import ObsImageActionButtons from "components/ObsDetails/ObsImageActionButtons";
 import { Body2, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
@@ -99,6 +100,12 @@ const ObsGridItem = ( {
           currentUser={currentUser}
           afterAction={onExploreObservationAction}
           directAgree
+        />
+      )}
+      {!explore && !!observation.id && currentUser && (
+        <FaveButton
+          observation={observation}
+          currentUser={currentUser}
         />
       )}
       <View className="absolute bottom-0 items-start p-2">
