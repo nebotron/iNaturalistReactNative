@@ -4,8 +4,8 @@ import type Realm from "realm";
 import Application from "./Application";
 import Comment from "./Comment";
 import Flag from "./Flag";
-import InputImageRecord from "./InputImageRecord";
 import Identification from "./Identification";
+import InputImageRecord from "./InputImageRecord";
 import Observation from "./Observation";
 import ObservationPhoto from "./ObservationPhoto";
 import ObservationSound from "./ObservationSound";
@@ -14,6 +14,7 @@ import QueueItem from "./QueueItem";
 import Sound from "./Sound";
 import Taxon from "./Taxon";
 import TaxonPhoto from "./TaxonPhoto";
+import UploadedDevicePhotoUri from "./UploadedDevicePhotoUri";
 import User from "./User";
 import Vote from "./Vote";
 
@@ -22,8 +23,8 @@ export default {
     Application,
     Comment,
     Flag,
-    InputImageRecord,
     Identification,
+    InputImageRecord,
     Observation,
     ObservationPhoto,
     ObservationSound,
@@ -32,6 +33,7 @@ export default {
     Sound,
     Taxon,
     TaxonPhoto,
+    UploadedDevicePhotoUri,
     User,
     Vote,
   ],
@@ -43,6 +45,24 @@ export default {
   },
   // TODO: type?
   migration: ( oldRealm: Realm, newRealm: Realm ) => {
+    if ( oldRealm.schemaVersion < 70 ) {
+      const uploadedObservations = oldRealm.objects( "Observation" ).filtered( "id != null" );
+      uploadedObservations.forEach( observation => {
+        observation.observationPhotos?.forEach( obsPhoto => {
+          if ( !obsPhoto.originalDevicePhotoUri ) {
+            return;
+          }
+          newRealm.create(
+            "UploadedDevicePhotoUri",
+            {
+              uri: obsPhoto.originalDevicePhotoUri,
+              uploadedAt: new Date( ),
+            },
+            "modified",
+          );
+        } );
+      } );
+    }
     if ( oldRealm.schemaVersion < 59 ) {
       const oldTaxa = oldRealm.objects( "Taxon" );
       const newTaxa = newRealm.objects( "Taxon" );
