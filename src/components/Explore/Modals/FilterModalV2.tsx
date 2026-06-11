@@ -1,12 +1,12 @@
 import { useNavigation } from "@react-navigation/native";
 import type { ApiProject } from "api/types";
-import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import classNames from "classnames";
 import ExploreSavedFilterSheets from "components/Explore/ExploreSavedFilterSheets";
 import ExploreSavedFiltersSection from "components/Explore/ExploreSavedFiltersSection";
-import NumberBadge from "components/Explore/NumberBadge";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import NumberBadge from "components/Explore/NumberBadge";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
 import {
   Body1,
@@ -116,6 +116,7 @@ const FilterModalV2 = ( {
     taxonFilters,
     user,
     excludeUser,
+    unobservedByMe,
     wildStatus,
   } = state;
 
@@ -844,6 +845,13 @@ const FilterModalV2 = ( {
                   />
                 )}
             </View>
+            {currentUser && (
+              <Checkbox
+                text={t( "Unobserved-by-me" )}
+                isChecked={unobservedByMe}
+                onPress={() => dispatch( { type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME } )}
+              />
+            )}
           </View>
 
           {/* Project Section */}
