@@ -29,7 +29,12 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
     if ( !uri ) return ( ) => {};
     return subscribeToCropLogChanges( changedUrl => {
       if ( normalizePhotoUrl( changedUrl ) === normalizePhotoUrl( uri ) ) {
-        cache.delete( uri );
+        // For deletions, clear the cache so AI detection re-runs.
+        // For saves, keep the cached image dimensions so the `loggedCrop &&
+        // existing` branch can update the crop immediately without a re-download.
+        if ( !getAnimalCrop( changedUrl ) ) {
+          cache.delete( uri );
+        }
         setCropLogVersion( v => v + 1 );
       }
     } );
