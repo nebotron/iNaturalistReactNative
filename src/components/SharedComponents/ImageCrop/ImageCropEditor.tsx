@@ -23,7 +23,7 @@ import {
 } from "react-native";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
-import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import { getAnimalCrop, saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
@@ -156,7 +156,9 @@ const ImageCropEditor = ( ) => {
         if ( existingSavedCrop ) {
           setSavedInitialCrop( existingSavedCrop );
         }
+        const loggedCrop = getAnimalCrop( imageUri || "" );
         const initialCrop = existingSavedCrop
+          || loggedCrop
           || await detectSubjectInImage( resolvedUri, size.w, size.h );
         if ( !cancelled ) {
           setDetectedCrop( initialCrop );
