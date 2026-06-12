@@ -125,6 +125,7 @@ const FilterModal = ( {
     user,
     excludeUser,
     unobservedByMe,
+    popular,
     wildStatus,
   } = state;
 
@@ -863,6 +864,11 @@ const FilterModal = ( {
                 onPress={() => dispatch( { type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME } )}
               />
             )}
+            <Checkbox
+              text={t( "Popular-observations-filter" )}
+              isChecked={popular}
+              onPress={() => dispatch( { type: EXPLORE_ACTION.TOGGLE_POPULAR } )}
+            />
           </View>
 
           {/* Project Section */}

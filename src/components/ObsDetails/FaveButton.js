@@ -21,12 +21,14 @@ type Props = {
   observation: Object,
   currentUser?: Object,
   afterToggleFave?: Function,
+  stacked?: boolean,
 }
 
 const FaveButton = ( {
   observation,
   currentUser,
   afterToggleFave = ( ) => undefined,
+  stacked = false,
 }: Props ): Node => {
   const { t } = useTranslation( );
   const uuid = observation?.uuid;
@@ -113,10 +115,14 @@ const FaveButton = ( {
     return null;
   }
 
+  const positionClassName = stacked
+    ? undefined
+    : "absolute top-3 right-3";
+
   if ( loading ) {
     return (
       <ActivityIndicator
-        className={classNames( "absolute top-3 right-3" )}
+        className={classNames( positionClassName )}
         size={25}
       />
     );
@@ -130,7 +136,7 @@ const FaveButton = ( {
       size={25}
       onPress={toggleFave}
       color={colors.white}
-      className={classNames( "absolute top-3 right-3" )}
+      className={classNames( positionClassName )}
       accessibilityLabel={isFaved
         ? t( "Remove-favorite" )
         : t( "Add-favorite" )}

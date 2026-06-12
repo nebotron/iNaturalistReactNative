@@ -1368,6 +1368,7 @@ Unknown-organism = Unknown organism
 # Button to remove reviewed status from an observation
 Unmark-as-reviewed = Unmark as reviewed
 Unobserved-by-me = Unobserved by me
+Popular-observations-filter = Popular (at least one fave)
 Unreviewed-observations-only = Unreviewed observations only
 Upload-anyway = Upload anyway
 Upload-Complete = Upload Complete

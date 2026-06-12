@@ -108,6 +108,10 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.unobserved_by_user_id = currentUser.id;
   }
 
+  if ( params.popular ) {
+    filteredParams.popular = true;
+  }
+
   if ( params.photoLicense !== PHOTO_LICENSE.ALL ) {
     // How license filter maps to the API
     const licenseParams = {
