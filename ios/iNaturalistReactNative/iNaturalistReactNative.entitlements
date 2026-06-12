@@ -11,9 +11,5 @@
 		<string>applinks:www.inaturalist.org?mode=developer</string>
 		<string>applinks:force-refresh.com?mode=developer</string>
 	</array>
-	<key>com.apple.security.application-groups</key>
-	<array>
-		<string>group.org.inaturalist.iNaturalistMobile</string>
-	</array>
 </dict>
 </plist>

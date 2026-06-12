@@ -56,7 +56,6 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
-				8B65ED3529F575C10054CCEF /* iNaturalistReactNative-ShareExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -264,7 +263,6 @@
 			buildRules = (
 			);
 			dependencies = (
-				8B65ED3429F575C10054CCEF /* PBXTargetDependency */,
 			);
 			name = iNaturalistReactNative;
 			productName = iNaturalistReactNative;
