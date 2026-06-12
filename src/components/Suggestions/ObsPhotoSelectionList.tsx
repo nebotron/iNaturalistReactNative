@@ -1,12 +1,16 @@
 import classnames from "classnames";
+import { TransparentCircleButton } from "components/SharedComponents";
 import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
-import { TransparentCircleButton } from "components/SharedComponents";
 import {
   Image, Pressable, View,
 } from "components/styledComponents";
-import React, { useCallback } from "react";
+import React, { useCallback, useMemo, useState } from "react";
+import type { LayoutChangeEvent } from "react-native";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
+import { getAnimalCrop } from "sharedHelpers/animalCropLog";
+import { cropImageStyle } from "sharedHelpers/normalizedCropTypes";
+import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import { useTranslation } from "sharedHooks";
 
 interface Props {
@@ -17,6 +21,43 @@ interface Props {
   onPressPhoto: ( _uri: string ) => void;
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
 }
+
+const PhotoThumbnail = ( { uri }: { uri: string } ) => {
+  const [containerSize, setContainerSize] = useState<number | null>( null );
+  const loggedCrop = useMemo( ( ) => getAnimalCrop( uri ), [uri] );
+  const detection = useSubjectDetectionForUri( loggedCrop
+    ? uri
+    : undefined );
+
+  const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
+    setContainerSize( event.nativeEvent.layout.width );
+  }, [] );
+
+  const imageStyle = detection && containerSize
+    ? cropImageStyle( detection.crop, containerSize, detection.imageWidth, detection.imageHeight )
+    : null;
+
+  return (
+    <View className="w-full h-full" onLayout={handleLayout}>
+      {imageStyle
+        ? (
+          <Image
+            source={{ uri }}
+            accessibilityIgnoresInvertColors
+            style={imageStyle}
+            resizeMode="stretch"
+          />
+        )
+        : (
+          <Image
+            source={{ uri }}
+            accessibilityIgnoresInvertColors
+            className="w-full h-full"
+          />
+        )}
+    </View>
+  );
+};
 
 const ObsPhotoSelectionList = ( {
   duplicatePhotoUris,
@@ -48,11 +89,7 @@ const ObsPhotoSelectionList = ( {
           )}
           testID={`ObsPhotoSelectionList.border.${item}`}
         >
-          <Image
-            source={{ uri: item }}
-            accessibilityIgnoresInvertColors
-            className="w-full h-full"
-          />
+          <PhotoThumbnail uri={item} />
           {duplicatePhotoUris?.has( item ) && (
             <DuplicateUploadBadge
               accessibilityLabel={t( "Duplicate-photo-indicator" )}
