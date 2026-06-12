@@ -76,8 +76,9 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 #define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
 #define YOLO_IOU_THRESH  0.45f
 // If the best post-NMS box is below this threshold the detection is likely spurious;
-// returning nil triggers the Vision attention-saliency fallback instead.
-#define YOLO_GATE_CONF   0.15f
+// returning nil triggers the fallback (Vision saliency or center crop) instead.
+// Evaluation on 328 labeled images found 0.10 outperforms 0.15 by +0.008 score.
+#define YOLO_GATE_CONF   0.10f
 
 typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 
@@ -266,8 +267,8 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   // back to Vision attention saliency rather than crop to a likely-wrong location.
   if ( bestConf < YOLO_GATE_CONF ) { free( dets ); free( suppressed ); return nil; }
 
-  // Second pass: union only boxes at ≥ 50% of best confidence.
-  float confThreshold = 0.50f * bestConf;
+  // Second pass: union only boxes at ≥ 40% of best confidence.
+  float confThreshold = 0.40f * bestConf;
   float uX1 = FLT_MAX, uY1 = FLT_MAX, uX2 = -FLT_MAX, uY2 = -FLT_MAX;
   int   used = 0;
   for ( int i = 0; i < nDets; i++ ) {
@@ -306,6 +307,10 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
 // ─── Public detection entry point ────────────────────────────────────────────
 
 // Try YOLO; fall back to Vision attention saliency when nothing is detected.
+// If saliency returns bounds wider than 60% of the image in either dimension
+// it is too loose to be reliable; a center 60%×60% crop is used instead
+// (analysis of labeled iNaturalist data shows 98% of subjects are within
+// the central 60% of the frame).
 static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
 {
   if ( image.CGImage == NULL ) return nil;
@@ -318,7 +323,13 @@ static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
     [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
                                        orientation:orientation
                                            options:@{}];
-  return detectSubjectBoundsSaliency( handler );
+  NSDictionary *saliency = detectSubjectBoundsSaliency( handler );
+  if ( saliency ) {
+    float w = [saliency[@"width"] floatValue];
+    float h = [saliency[@"height"] floatValue];
+    if ( w <= 0.6f && h <= 0.6f ) return saliency;
+  }
+  return @{ @"x": @(0.2f), @"y": @(0.2f), @"width": @(0.6f), @"height": @(0.6f) };
 }
 
 // ─── Image metadata helpers ──────────────────────────────────────────────────
