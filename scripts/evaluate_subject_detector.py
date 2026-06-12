@@ -582,6 +582,7 @@ def print_report(cur_results: list[PaddingResult], imp_results: list[PaddingResu
 
 _REPO_ROOT = Path(__file__).parent.parent
 _ENV_FILE = _REPO_ROOT / ".env"
+_DEFAULT_FIREBASE_URL = "https://inaturalist-9001d-default-rtdb.firebaseio.com"
 
 
 def _load_env() -> None:
@@ -639,12 +640,7 @@ def main() -> None:
             raw = json.load(f)
     else:
         _load_env()
-        base_url = os.environ.get("CROP_LOG_FIREBASE_URL", "").strip()
-        if not base_url:
-            sys.exit(
-                "No feedback_json given and CROP_LOG_FIREBASE_URL is not set.\n"
-                "Add it to .env or pass a file path."
-            )
+        base_url = os.environ.get("CROP_LOG_FIREBASE_URL", _DEFAULT_FIREBASE_URL).strip()
         raw = _fetch_firebase(base_url)
 
     # Support two formats:
