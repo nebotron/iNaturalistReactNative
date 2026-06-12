@@ -119,7 +119,6 @@ const ObsDetails = ( {
             observation={observation}
             currentUser={currentUser}
             afterToggleFave={refetchRemoteObservation}
-            top
           />
         )}
       </View>
