@@ -1,4 +1,6 @@
-import { CachesDirectoryPath, copyAssetsFileIOS, downloadFile, mkdir } from "@dr.pogodin/react-native-fs";
+import {
+  CachesDirectoryPath, copyAssetsFileIOS, downloadFile, mkdir,
+} from "@dr.pogodin/react-native-fs";
 import { Platform } from "react-native";
 import resizeImage from "sharedHelpers/resizeImage";
 import * as uuid from "uuid";
@@ -10,7 +12,7 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
     const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
     await mkdir( cacheDir );
     const destPath = `${cacheDir}/${uuid.v4()}.jpg`;
-    const downloadUrl = uri.replace( /square/i, "large" );
+    const downloadUrl = uri.replace( /(square|small|medium|original)/i, "large" );
     await downloadFile( {
       fromUrl: downloadUrl,
       toFile: destPath,
