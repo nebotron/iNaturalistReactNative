@@ -673,6 +673,7 @@ const SuggestionsContainer = ( ) => {
         onDeletePhoto={onDeletePhoto}
         onCropPhoto={onCropPhoto}
         onReorderPhotos={handleReorderPhotos}
+        initialIndex={photoUris.indexOf( selectedPhotoUri )}
         uri={selectedPhotoUri}
         photos={innerPhotos}
       />
