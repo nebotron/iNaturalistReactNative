@@ -118,3 +118,7 @@ artifacts/
 # Rubocop cache
 **/tmp/rubocop_cache
 yolov8n.pt
+
+# Python
+__pycache__/
+*.pyc
