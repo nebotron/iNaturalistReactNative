@@ -77,8 +77,8 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 #define YOLO_IOU_THRESH  0.45f
 // If the best post-NMS box is below this threshold the detection is likely spurious;
 // returning nil triggers the fallback (Vision saliency or center crop) instead.
-// Evaluation on 328 labeled images found 0.10 outperforms 0.15 by +0.008 score.
-#define YOLO_GATE_CONF   0.10f
+// Evaluation on 328 labeled images: 0.08 gives score=0.825, 0.10 gives 0.824.
+#define YOLO_GATE_CONF   0.08f
 
 typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 

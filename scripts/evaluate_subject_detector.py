@@ -316,7 +316,7 @@ def detect_bounds_yolo_improved(image_path: str) -> Optional[tuple[float, float,
 
 _ONNX_CONF_THRESH = 0.05    # raw pre-sigmoid scores; matches YOLO_CONF_THRESH in .m
 _ONNX_IOU_THRESH  = 0.45    # matches YOLO_IOU_THRESH
-_ONNX_GATE_CONF   = 0.10    # matches YOLO_GATE_CONF
+_ONNX_GATE_CONF   = 0.08    # matches YOLO_GATE_CONF
 _ONNX_INPUT_SIZE  = 640
 
 _onnx_session: dict = {}     # path → ort.InferenceSession
