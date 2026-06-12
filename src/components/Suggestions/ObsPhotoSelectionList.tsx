@@ -5,10 +5,9 @@ import DuplicateUploadBadge from
 import {
   Image, Pressable, View,
 } from "components/styledComponents";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
-import { getAnimalCrop } from "sharedHelpers/animalCropLog";
 import { cropImageStyle } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import { useTranslation } from "sharedHooks";
@@ -24,10 +23,7 @@ interface Props {
 
 const PhotoThumbnail = ( { uri }: { uri: string } ) => {
   const [containerSize, setContainerSize] = useState<number | null>( null );
-  const loggedCrop = useMemo( ( ) => getAnimalCrop( uri ), [uri] );
-  const detection = useSubjectDetectionForUri( loggedCrop
-    ? uri
-    : undefined );
+  const detection = useSubjectDetectionForUri( uri );
 
   const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
     setContainerSize( event.nativeEvent.layout.width );
