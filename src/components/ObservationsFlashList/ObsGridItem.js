@@ -92,7 +92,7 @@ const ObsGridItem = ( {
       style={style}
       obsPhotosCount={photoCountFromObservation( observation )}
       hasSound={observationHasSound( observation )}
-      isMultiplePhotosTop
+      isMultiplePhotosTop={explore}
       testID={testID || `MyObservations.obsGridItem.${observation.uuid}`}
       useShortGradient={!explore}
       iconicTaxonName={observation.taxon?.iconic_taxon_name}
