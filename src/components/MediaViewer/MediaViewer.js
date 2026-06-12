@@ -27,6 +27,7 @@ type Props = {
   deleting?: boolean,
   // Optional component to use as the header
   header?: Function,
+  initialIndex?: number,
   onClose?: Function,
   onCropPhoto?: Function,
   onDeletePhoto?: Function,
@@ -50,6 +51,7 @@ const MediaViewer = ( {
   editable,
   deleting,
   header,
+  initialIndex,
   onClose = ( ) => undefined,
   onCropPhoto,
   onDeletePhoto,
@@ -65,10 +67,11 @@ const MediaViewer = ( {
     ...sounds.map( sound => sound.file_url ),
   ] ), [photos, sounds] );
 
+  const uriIndex = uris.indexOf( uri );
   const [selectedMediaIndex, setSelectedMediaIndex] = useState(
-    uris.indexOf( uri ) <= 0
-      ? 0
-      : uris.indexOf( uri ),
+    initialIndex != null
+      ? initialIndex
+      : Math.max( uriIndex, 0 ),
   );
   const { t } = useTranslation( );
   const [
