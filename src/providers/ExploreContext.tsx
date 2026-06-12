@@ -48,6 +48,7 @@ export enum EXPLORE_ACTION {
   SET_USER = "SET_USER",
   SET_EXCLUDE_USER = "SET_EXCLUDE_USER",
   TOGGLE_UNOBSERVED_BY_ME = "TOGGLE_UNOBSERVED_BY_ME",
+  TOGGLE_POPULAR = "TOGGLE_POPULAR",
   SET_WILD_STATUS = "SET_WILD_STATUS",
   SET_NEARBY_RADIUS = "SET_NEARBY_RADIUS",
   TOGGLE_CASUAL = "TOGGLE_CASUAL",
@@ -236,6 +237,7 @@ interface State {
   user_id: number | undefined | null;
   excludeUser: object | undefined | null;
   unobservedByMe: boolean;
+  popular: boolean;
   verifiable: boolean;
   wildStatus: WILD_STATUS;
   nearbyRadiusKm: number;
@@ -306,6 +308,7 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.SET_MAP_BOUNDARIES; mapBoundaries: MapBoundaries}
   | {type: EXPLORE_ACTION.USE_STORED_STATE; storedState: State}
   | {type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME}
+  | {type: EXPLORE_ACTION.TOGGLE_POPULAR}
 type Dispatch = ( action: Action ) => void
 
 const ExploreContext = React.createContext<
@@ -325,6 +328,7 @@ const calculatedFilters = {
   user_id: undefined,
   project_id: undefined,
   unobservedByMe: false,
+  popular: false,
   researchGrade: true,
   needsID: true,
   casual: false,
@@ -591,6 +595,11 @@ function exploreReducer( state: State, action: Action ) {
       return {
         ...state,
         unobservedByMe: !state.unobservedByMe,
+      };
+    case EXPLORE_ACTION.TOGGLE_POPULAR:
+      return {
+        ...state,
+        popular: !state.popular,
       };
     case EXPLORE_ACTION.SET_HIGHEST_TAXONOMIC_RANK:
       return {

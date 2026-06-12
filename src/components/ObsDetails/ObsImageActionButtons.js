@@ -4,6 +4,7 @@ import type { Node } from "react";
 import React from "react";
 
 import AgreeButton from "./AgreeButton";
+import FaveButton from "./FaveButton";
 import ReviewButton from "./ReviewButton";
 
 type Props = {
@@ -21,7 +22,7 @@ const ObsImageActionButtons = ( {
   afterAction = ( ) => undefined,
   directAgree = false,
   openAgreeWithIdSheet,
-  containerClassName = "absolute bottom-2 right-2 z-10 flex-col items-end gap-2",
+  containerClassName = "absolute bottom-2 right-2 z-10 flex-col items-end gap-4",
 }: Props ): Node => {
   if ( !currentUser || !observation ) {
     return null;
@@ -29,6 +30,12 @@ const ObsImageActionButtons = ( {
 
   return (
     <View className={containerClassName}>
+      <FaveButton
+        observation={observation}
+        currentUser={currentUser}
+        afterToggleFave={afterAction}
+        stacked
+      />
       <ReviewButton
         observation={observation}
         currentUser={currentUser}
