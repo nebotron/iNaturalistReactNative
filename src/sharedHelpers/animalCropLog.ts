@@ -87,3 +87,9 @@ export const copyAnimalCropLogToClipboard = ( ) => {
   Clipboard.setString( JSON.stringify( current, null, 2 ) );
   Alert.alert( "Copied", `${count} crops copied to clipboard.` );
 };
+
+export const copyAnimalCropLogArrayToClipboard = ( ) => {
+  const records = getAnimalCropLogAsArray( );
+  Clipboard.setString( JSON.stringify( records, null, 2 ) );
+  Alert.alert( "Copied", `${records.length} labeled photos copied to clipboard` );
+};

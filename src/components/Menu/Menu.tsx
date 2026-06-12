@@ -1,4 +1,3 @@
-import Clipboard from "@react-native-clipboard/clipboard";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,9 +21,10 @@ import Observation from "realmModels/Observation";
 import User from "realmModels/User";
 import { valueToBreakpoint } from "sharedHelpers/breakpoint";
 import {
+  copyAnimalCropLogArrayToClipboard,
   copyAnimalCropLogToClipboard,
-  getAnimalCropLogAsArray,
 } from "sharedHelpers/animalCropLog";
+import { copyCropFeedbackToClipboard } from "sharedHelpers/cropFeedbackLog";
 import { log } from "sharedHelpers/logger";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
@@ -201,13 +201,17 @@ const Menu = ( ) => {
       } ),
 
     imageMetadata: {
+      // eslint-disable-next-line i18next/no-literal-string
       label: "COPY CROPS",
       icon: "copy",
-      onPress: ( ) => {
-        const records = getAnimalCropLogAsArray( );
-        Clipboard.setString( JSON.stringify( records, null, 2 ) );
-        Alert.alert( "Copied", `${records.length} labeled photos copied to clipboard` );
-      },
+      onPress: copyAnimalCropLogArrayToClipboard,
+    },
+
+    copyCropFeedback: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "COPY CROP FEEDBACK",
+      icon: "copy",
+      onPress: copyCropFeedbackToClipboard,
     },
 
     deleteUnfavedImportedPhotos: {

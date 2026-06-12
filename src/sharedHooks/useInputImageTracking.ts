@@ -1,5 +1,6 @@
 import { RealmContext } from "providers/contexts";
 import { useCallback } from "react";
+import InputImageRecord from "realmModels/InputImageRecord";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import * as uuid from "uuid";
 
@@ -77,14 +78,12 @@ const useInputImageTracking = ( ) => {
       const fileName = getFileName( uri );
       realm.write( ( ) => {
         const records = realm
-          .objects( "InputImageRecord" )
+          .objects<InputImageRecord>( "InputImageRecord" )
           .filtered( "fileName = $0 AND wasDeleted = false", fileName );
         const now = new Date( );
         for ( const record of records ) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ( record as any ).wasDeleted = true;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          ( record as any ).deletedAt = now;
+          record.wasDeleted = true;
+          record.deletedAt = now;
         }
       } );
     } catch ( _e ) {
@@ -97,16 +96,14 @@ const useInputImageTracking = ( ) => {
       const fileName = getFileName( uri );
       realm.write( ( ) => {
         const records = realm
-          .objects( "InputImageRecord" )
+          .objects<InputImageRecord>( "InputImageRecord" )
           .filtered( "fileName = $0 AND wasDeleted = false", fileName );
         for ( const record of records ) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const r = record as any;
-          r.wasCropped = true;
-          r.cropX = crop.x;
-          r.cropY = crop.y;
-          r.cropW = crop.w;
-          r.cropH = crop.h;
+          record.wasCropped = true;
+          record.cropX = crop.x;
+          record.cropY = crop.y;
+          record.cropW = crop.w;
+          record.cropH = crop.h;
         }
       } );
     } catch ( _e ) {
@@ -115,36 +112,20 @@ const useInputImageTracking = ( ) => {
   }, [realm] );
 
   const getAllImageMetadata = useCallback( ( ) => (
-    Array.from( realm.objects( "InputImageRecord" ) ).map( record => {
-      const r = record as unknown as {
-        uuid: string;
-        originalUri: string;
-        fileName: string;
-        source: string;
-        loadedAt: Date;
-        wasDeleted: boolean;
-        deletedAt?: Date;
-        wasCropped: boolean;
-        cropX?: number;
-        cropY?: number;
-        cropW?: number;
-        cropH?: number;
-      };
-      return {
-        uuid: r.uuid,
-        originalUri: r.originalUri,
-        fileName: r.fileName,
-        source: r.source,
-        loadedAt: r.loadedAt,
-        wasDeleted: r.wasDeleted,
-        deletedAt: r.deletedAt ?? null,
-        wasCropped: r.wasCropped,
-        cropX: r.cropX ?? null,
-        cropY: r.cropY ?? null,
-        cropW: r.cropW ?? null,
-        cropH: r.cropH ?? null,
-      };
-    } )
+    Array.from( realm.objects<InputImageRecord>( "InputImageRecord" ) ).map( r => ( {
+      uuid: r.uuid,
+      originalUri: r.originalUri,
+      fileName: r.fileName,
+      source: r.source,
+      loadedAt: r.loadedAt,
+      wasDeleted: r.wasDeleted,
+      deletedAt: r.deletedAt ?? null,
+      wasCropped: r.wasCropped,
+      cropX: r.cropX ?? null,
+      cropY: r.cropY ?? null,
+      cropW: r.cropW ?? null,
+      cropH: r.cropH ?? null,
+    } ) )
   ), [realm] );
 
   return {
