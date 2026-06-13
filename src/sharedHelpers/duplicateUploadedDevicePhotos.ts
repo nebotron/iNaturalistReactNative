@@ -3,12 +3,11 @@ import type { Asset } from "react-native-image-picker";
 import type Realm from "realm";
 import type { RealmObservation } from "realmModels/types";
 import UploadedDevicePhotoUri from "realmModels/UploadedDevicePhotoUri";
-import safeRealmWrite from "sharedHelpers/safeRealmWrite";
-
 import {
   getGalleryAssetDevicePhotoUri,
   normalizeDevicePhotoUri,
 } from "sharedHelpers/getOriginalDevicePhotoUri";
+import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 
 export const getDevicePhotoUrisFromObservation = (
   observation: Pick<RealmObservation, "observationPhotos">,
@@ -65,10 +64,10 @@ export const getPreviouslyUploadedDevicePhotoUrisSet = (
       }
     } );
 
-  const uploadedObservations = realm.objects<RealmObservation>( "Observation" )
-    .filtered( "id != null AND NOT ( uuid IN $0 )", excludeObservationUuids );
+  const savedObservations = realm.objects<RealmObservation>( "Observation" )
+    .filtered( "NOT ( uuid IN $0 )", excludeObservationUuids );
 
-  uploadedObservations.forEach( observation => {
+  savedObservations.forEach( observation => {
     getDevicePhotoUrisFromObservation( observation ).forEach( uri => {
       previouslyUploadedUris.add( uri );
     } );
