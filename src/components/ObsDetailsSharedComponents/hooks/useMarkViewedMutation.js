@@ -41,6 +41,7 @@ const useMarkViewedMutation = (
       onSuccess: ( ) => {
         markViewedLocally( );
         queryClient.invalidateQueries( { queryKey: [fetchObservationUpdatesKey] } );
+        queryClient.invalidateQueries( { queryKey: ["useInfiniteNotificationsScroll"] } );
         refetchObservationUpdates( );
         // Set this value so NotificationsIconContainer knows to update the
         // notifications count
