@@ -1,7 +1,7 @@
 // @flow
 import classnames from "classnames";
-import checkCamelAndSnakeCase from "components/ObsDetails/helpers/checkCamelAndSnakeCase";
 import FaveButton from "components/ObsDetails/FaveButton";
+import checkCamelAndSnakeCase from "components/ObsDetails/helpers/checkCamelAndSnakeCase";
 import {
   DateDisplay,
   DisplayTaxonName,
@@ -97,6 +97,7 @@ const ObsListItem = ( {
     >
       <View>
         <ObsImagePreview
+          autoDetectSubject={explore}
           source={{
             uri: Photo.displayLocalOrRemoteOriginalPhoto(
               photoFromObservation( observation ),
