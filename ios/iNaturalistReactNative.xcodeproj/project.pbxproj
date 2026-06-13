@@ -560,6 +560,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 216;
 				DEVELOPMENT_TEAM = DVURLJZFH6;
 				ENABLE_BITCODE = NO;
@@ -686,6 +687,7 @@
 				CODE_SIGN_ENTITLEMENTS = "";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				"CODE_SIGN_IDENTITY[sdk=iphoneos*]" = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 216;
 				DEVELOPMENT_TEAM = DVURLJZFH6;
 				"EXCLUDED_ARCHS[sdk=iphonesimulator*]" = "";
