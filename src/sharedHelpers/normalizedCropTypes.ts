@@ -195,6 +195,14 @@ export function cropImageStyle(
   const scaledW = boxSize / crop.w;
   const scaledH = ( imageHeight / imageWidth ) * scaledW;
 
+  // When the crop's pixel height is less than the container (landscape crop),
+  // center it vertically so letterboxing appears equally on top and bottom,
+  // never on just one side.
+  const cropHeightPx = crop.h * scaledH;
+  const verticalOffset = cropHeightPx < boxSize
+    ? ( boxSize - cropHeightPx ) / 2
+    : 0;
+
   return {
     position: "absolute" as const,
     left: 0,
@@ -203,7 +211,7 @@ export function cropImageStyle(
     height: scaledH,
     transform: [
       { translateX: -crop.x * scaledW },
-      { translateY: -crop.y * scaledH },
+      { translateY: -crop.y * scaledH + verticalOffset },
     ],
   };
 }
