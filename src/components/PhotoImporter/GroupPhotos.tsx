@@ -1,5 +1,7 @@
 import { useNavigation } from "@react-navigation/native";
-import type { FlashListProps, FlashListRef, ListRenderItem, ViewToken } from "@shopify/flash-list";
+import type {
+  FlashListProps, FlashListRef, ListRenderItem, ViewToken,
+} from "@shopify/flash-list";
 import { MAX_PHOTOS_ALLOWED } from "components/Camera/StandardCamera/StandardCamera";
 import {
   Body2,
@@ -58,7 +60,6 @@ interface Props {
   groupedPhotos: Item[];
   isCreatingObservations?: boolean;
   isDuplicatingPhotos?: boolean;
-  maxPhotosAllowed: number;
   navBasedOnUserSettings: ( ) => void;
   onScroll?: FlashListProps<GroupPhotosListItem>["onScroll"];
   onViewableItemsChanged?: ( info: {
@@ -83,7 +84,6 @@ const GroupPhotos = ( {
   groupedPhotos,
   isCreatingObservations,
   isDuplicatingPhotos,
-  maxPhotosAllowed,
   navBasedOnUserSettings,
   onScroll,
   onViewableItemsChanged,
@@ -122,8 +122,7 @@ const GroupPhotos = ( {
   const canCropSelectedPhotos = !selectedGroupsHaveMixedMedia
     && selectedPhotoUris.length > 0;
   const canDuplicateSelectedPhotos = !selectedGroupsHaveMixedMedia
-    && selectedMediaCount > 0
-    && totalPhotos + selectedMediaCount <= maxPhotosAllowed;
+    && selectedMediaCount > 0;
   const cropSelectedPhotos = useCallback( () => {
     if ( selectedPhotoUris.length === 0 ) {
       return;

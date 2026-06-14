@@ -1,7 +1,6 @@
 // @flow
 
 import { useNavigation } from "@react-navigation/native";
-import { MAX_PHOTOS_ALLOWED } from "components/Camera/StandardCamera/StandardCamera";
 import { duplicateGroupedMediaGroups } from
   "components/PhotoImporter/helpers/duplicateGroupedMedia";
 import {
@@ -135,7 +134,7 @@ const GroupPhotosContainer = ( ): Node => {
     }
   };
 
-  const setPendingScrollOffset = useCallback( ( targetIndex ) => {
+  const setPendingScrollOffset = useCallback( targetIndex => {
     if ( targetIndex === null ) return;
     const oldIndex = firstVisibleItemIndex.current ?? targetIndex;
     const delta = targetIndex - oldIndex;
@@ -258,7 +257,6 @@ const GroupPhotosContainer = ( ): Node => {
     if (
       selectedObservations.length === 0
       || selectedGroupsHaveMixedMedia( selectedObservations )
-      || totalPhotos + selectedMediaCount > MAX_PHOTOS_ALLOWED
     ) {
       return;
     }
@@ -398,7 +396,6 @@ const GroupPhotosContainer = ( ): Node => {
       onViewableItemsChanged={onViewableItemsChanged}
       removePhotos={removePhotos}
       selectedMediaCount={selectedMediaCount}
-      maxPhotosAllowed={MAX_PHOTOS_ALLOWED}
       selectAllPhotos={selectAllPhotos}
       selectObservationPhotos={selectObservationPhotos}
       selectedObservations={selectedObservations}
