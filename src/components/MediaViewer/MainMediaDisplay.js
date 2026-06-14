@@ -18,6 +18,7 @@ import {
   GestureHandlerRootView,
 } from "react-native-gesture-handler";
 import Photo from "realmModels/Photo";
+import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
@@ -28,6 +29,7 @@ import CustomImageZoom from "./CustomImageZoom";
 const BRIGHTNESS_MIN = 0.1;
 const BRIGHTNESS_MAX = 3.0;
 const BRIGHTNESS_DEFAULT = 1.0;
+const sliderStyle = { flex: 1, height: 40 };
 
 type Props = {
   autoPlaySound?: boolean, // automatically start playing a sound when it is visible
@@ -91,6 +93,7 @@ const MainMediaDisplay = ( {
       <View>
         <CustomImageZoom
           uri={uri}
+          resetKey={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
           brightness={brightness}
@@ -121,14 +124,25 @@ const MainMediaDisplay = ( {
               </View>
             )
             : (
-              hasAttribution
-              && (
-                <AttributionButton
-                  licenseCode={photo.licenseCode}
-                  attribution={photo.attribution}
-                  optionalClasses="absolute top-4 right-4"
-                />
-              )
+              <View className="absolute top-4 right-4 flex-row items-center">
+                { hasAttribution && (
+                  <AttributionButton
+                    licenseCode={photo.licenseCode}
+                    attribution={photo.attribution}
+                    optionalClasses="mr-2"
+                  />
+                ) }
+                { photo.id && (
+                  <TransparentCircleButton
+                    onPress={( ) => openExternalWebBrowser(
+                      `https://www.inaturalist.org/photos/${photo.id}`,
+                    )}
+                    icon="globe-outline"
+                    color={colors.white}
+                    accessibilityLabel={t( "View-in-browser" )}
+                  />
+                ) }
+              </View>
             )
         }
         <View className="absolute bottom-4 left-4">
@@ -148,7 +162,7 @@ const MainMediaDisplay = ( {
           <View className="absolute bottom-16 left-0 right-0 px-4 py-2">
             <View className="bg-black/60 rounded-xl px-3 py-2 flex-row items-center">
               <Slider
-                style={{ flex: 1, height: 40 }}
+                style={sliderStyle}
                 minimumValue={BRIGHTNESS_MIN}
                 maximumValue={BRIGHTNESS_MAX}
                 minimumTrackTintColor={colors.inatGreen}
@@ -297,6 +311,9 @@ const MainMediaDisplay = ( {
           <FlatList
             data={items}
             renderItem={renderItem}
+            keyExtractor={( item, index ) => (
+              item.url || item.localFilePath || item.file_url || `media-${index}`
+            )}
             initialScrollIndex={selectedMediaIndex}
             getItemLayout={getItemLayout}
             horizontal
