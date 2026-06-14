@@ -48,10 +48,8 @@ const ObsGridItem = ( {
   width = "w-[200px]",
   squareCorners = false,
 }: Props ): Node => {
-  const belongsToCurrentUser = observation?.user?.login === currentUser?.login;
   const showExploreImageActions = explore
-    && currentUser
-    && !belongsToCurrentUser;
+    && currentUser;
   const displayTaxonName = useMemo( ( ) => (
     <DisplayTaxonName
       bottomTextComponent={Body2}
