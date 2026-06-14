@@ -20,7 +20,7 @@ const sortedFilters = [["needs_sync", true], ["_created_at", true]];
 // Stable secondary sort: within the unuploaded group, put observations that
 // are missing basics (location, time, evidence, or taxon) first.
 const missingBasicsPriority = obs => {
-  if ( obs.needs_sync && obs.missing_basics ) return 0;
+  if ( obs.needs_sync && ( obs.missing_basics || !obs.taxon ) ) return 0;
   if ( obs.needs_sync ) return 1;
   return 2;
 };
