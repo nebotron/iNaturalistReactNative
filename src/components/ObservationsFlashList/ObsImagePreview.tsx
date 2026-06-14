@@ -3,9 +3,14 @@ import classNames from "classnames";
 import { INatIcon, PhotoCount } from "components/SharedComponents";
 import { LinearGradient, View } from "components/styledComponents";
 import type { PropsWithChildren } from "react";
-import React, { useCallback, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { ViewStyle } from "react-native";
-import { FlatList, StyleSheet } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -29,7 +34,7 @@ interface Props extends PropsWithChildren {
   isSmall?: boolean;
   obsPhotosCount?: number;
   opaque?: boolean;
-  photos?: Array<{ uri: string } | null>;
+  photos?: ( { uri: string } | null )[];
   selectable?: boolean;
   selected?: boolean;
   source?: {
@@ -81,8 +86,41 @@ const ObsImagePreview = ( {
   hideGradientOverlay = false,
   squareCorners = false,
 }: Props ) => {
-  const [containerWidth, setContainerWidth] = useState( 0 );
+  const [currentIndex, setCurrentIndex] = useState( 0 );
   const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
+
+  useEffect( ( ) => {
+    setCurrentIndex( 0 );
+  }, [photos] );
+
+  const goToPrev = useCallback( ( ) => {
+    setCurrentIndex( i => Math.max( 0, i - 1 ) );
+  }, [] );
+
+  const goToNext = useCallback( ( ) => {
+    if ( !photos ) return;
+    setCurrentIndex( i => Math.min( photos.length - 1, i + 1 ) );
+  }, [photos] );
+
+  // Capture horizontal swipes exclusively: activates after 10px horizontal
+  // movement and fails immediately if vertical movement is detected first,
+  // so vertical list scrolling and taps both pass through unimpeded.
+  const swipeGesture = useMemo(
+    ( ) => Gesture.Pan( )
+      .runOnJS( true )
+      .activeOffsetX( [-10, 10] )
+      .failOffsetY( [-5, 5] )
+      .onEnd( ( { translationX, velocityX } ) => {
+        const isSwipeLeft = translationX < -30 || ( translationX < 0 && velocityX < -200 );
+        const isSwipeRight = translationX > 30 || ( translationX > 0 && velocityX > 200 );
+        if ( isSwipeLeft ) {
+          goToNext( );
+        } else if ( isSwipeRight ) {
+          goToPrev( );
+        }
+      } ),
+    [goToNext, goToPrev],
+  );
 
   const imageClassNames: ArgumentArray = [
     "overflow-hidden",
@@ -229,37 +267,28 @@ const ObsImagePreview = ( {
 
   const useCarousel = photos && photos.length > 1;
 
-  const renderCarouselItem = useCallback( ( { item }: { item: { uri: string } | null } ) => (
-    <View style={{ width: containerWidth }}>
-      <ObsImage
-        uri={item ?? undefined}
-        opaque={opaque}
-        iconicTaxonName={iconicTaxonName}
-        white={white}
-        isBackground={isBackground}
-        iconicTaxonIconSize={isSmall
-          ? 22
-          : 100}
-      />
-    </View>
-  ), [containerWidth, opaque, iconicTaxonName, white, isBackground, isSmall] );
-
   if ( isSmall && obsPhotosCount === 0 && hasSound ) {
     content = <INatIcon name="sound" color={colors.darkGray} size={24} />;
   } else {
     content = (
       <>
-        {useCarousel && containerWidth > 0
+        {useCarousel
           ? (
-            <FlatList
-              horizontal
-              pagingEnabled
-              showsHorizontalScrollIndicator={false}
-              style={StyleSheet.absoluteFillObject}
-              data={photos}
-              keyExtractor={( _, idx ) => String( idx )}
-              renderItem={renderCarouselItem}
-            />
+            <GestureDetector gesture={swipeGesture}>
+              <View className="absolute w-full h-full">
+                <ObsImage
+                  autoDetectSubject={autoDetectSubject}
+                  uri={photos[currentIndex] ?? undefined}
+                  opaque={opaque}
+                  iconicTaxonName={iconicTaxonName}
+                  white={white}
+                  isBackground={isBackground}
+                  iconicTaxonIconSize={isSmall
+                    ? 22
+                    : 100}
+                />
+              </View>
+            </GestureDetector>
           )
           : (
             <ObsImage
@@ -288,9 +317,6 @@ const ObsImagePreview = ( {
       className={classNames( imageClassNames )}
       style={style}
       testID={testID}
-      onLayout={useCarousel
-        ? e => setContainerWidth( e.nativeEvent.layout.width )
-        : undefined}
     >
       {content}
     </View>

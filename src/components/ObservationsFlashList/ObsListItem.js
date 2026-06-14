@@ -24,6 +24,7 @@ import {
   observationHasSound,
   photoCountFromObservation,
   photoFromObservation,
+  photosFromObservation,
 } from "./util";
 
 type Props = {
@@ -103,6 +104,9 @@ const ObsListItem = ( {
               photoFromObservation( observation ),
             ),
           }}
+          photos={photosFromObservation( observation ).map(
+            p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
+          )}
           obsPhotosCount={photoCountFromObservation( observation )}
           hidePhotoCount={missingBasics}
           hasSound={observationHasSound( observation )}
