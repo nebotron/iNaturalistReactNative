@@ -630,7 +630,8 @@ class Observation extends Realm.Object {
       && typeof ( this.privateLatitude ) !== "number";
     const missingEvidence = ( this.observationPhotos?.length ?? 0 ) === 0
       && ( this.observationSounds?.length ?? 0 ) === 0;
-    return missingDate || missingCoords || missingEvidence;
+    const missingTaxon = !this.taxon;
+    return missingDate || missingCoords || missingEvidence || missingTaxon;
   }
 }
 
