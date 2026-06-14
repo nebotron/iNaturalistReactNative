@@ -87,20 +87,20 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       if ( realm && remoteTaxa?.length > 0 ) {
         saveTaxaToRealm( remoteTaxa, realm );
       }
-      // Search for local taxa if we have a query, if remote results are not loading
-      // and if remote results are empty
+
       if ( taxonQuery.length === 0 ) {
         if ( isSubscribed ) setLocalTaxa( null );
         return;
       }
 
-      if ( isLoading ) return;
-
+      // When remote has results, no need to surface local results
       if ( remoteTaxa && remoteTaxa.length > 0 ) {
         if ( isSubscribed ) setLocalTaxa( null );
         return;
       }
 
+      // Always search local Realm immediately, in parallel with any remote
+      // fetch, so results appear even while the network is slow or offline.
       try {
         const results = await safeRealmSearch( taxonQuery );
         if ( isSubscribed ) setLocalTaxa( results );
@@ -116,7 +116,6 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       isSubscribed = false;
     };
   }, [
-    isLoading,
     realm,
     remoteTaxa,
     safeRealmSearch,
@@ -134,7 +133,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       };
     }
 
-    // Show remote taxa if available
+    // Show remote taxa if available (highest quality)
     if ( remoteTaxa && remoteTaxa.length > 0 ) {
       return {
         taxa: remoteTaxa,
@@ -144,21 +143,21 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       };
     }
 
-    // Show local taxa if available
+    // Show local taxa as a baseline while remote is loading or when offline.
+    // Only show the "offline" badge once the remote fetch has finished with no
+    // results, so we don't falsely indicate offline while still loading.
     if ( localTaxa !== null && localTaxa.length > 0 ) {
       return {
         taxa: localTaxa,
         refetch: () => undefined,
-        isLoading: false,
-        isLocal: true,
+        isLoading,
+        isLocal: !isLoading,
       };
     }
 
-    // Still loading or no results
+    // No results yet (loading or genuinely empty)
     return {
-      taxa: isLoading
-        ? []
-        : localTaxa || [],
+      taxa: [],
       refetch,
       isLoading,
       isLocal: false,
