@@ -275,13 +275,18 @@ class Observation extends Realm.Object {
       timestamps._synced_at = null;
     }
 
-    const addTimestampsToEvidence = evidence => ( evidence
+    const addTimestampsToEvidence = ( evidence, existingEvidence ) => ( evidence
       ? evidence.map( record => {
         // Don't bump _updated_at on already-synced evidence in existing observations:
         // their _synced_at timestamp already correctly reflects that they are up to date.
         // Bumping _updated_at would cause needsSync() to return true and trigger an
         // unnecessary (or broken) re-upload of the photo file.
         if ( existingObservation && record._synced_at ) {
+          // Exception: if position changed, bump _updated_at so the new order syncs.
+          const existingRecord = existingEvidence?.find( r => r.uuid === record.uuid );
+          if ( existingRecord && existingRecord.position !== record.position ) {
+            return { ...record, ...timestamps };
+          }
           return record;
         }
         return { ...record, ...timestamps };
@@ -289,7 +294,10 @@ class Observation extends Realm.Object {
       : evidence );
 
     const taxon = obs.taxon || null;
-    const observationPhotos = addTimestampsToEvidence( obs.observationPhotos );
+    const observationPhotos = addTimestampsToEvidence(
+      obs.observationPhotos,
+      existingObservation?.observationPhotos,
+    );
     const observationSounds = addTimestampsToEvidence( obs.observationSounds );
 
     const obsToSave = {
