@@ -35,7 +35,9 @@ from evaluate_subject_detector import (
 YOLO_INPUT_SIZE = 640
 YOLO_CONF_THRESH = 0.05
 YOLO_IOU_THRESH = 0.45
-YOLO_GATE_CONF = 0.15
+YOLO_GATE_CONF = 0.25
+YOLO_UNION_THRESH = 0.60
+YOLO_UNION_MAX_K = 3
 MODEL_PATH = str(Path(__file__).parent.parent / "ios/iNaturalistReactNative/yolov8n.onnx")
 
 PADDINGS = [0.00, 0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.25, 0.30]
@@ -125,8 +127,8 @@ def detect_deployed(image_path: str):
     if best_conf < YOLO_GATE_CONF:
         return _spectral_saliency_bounds(image_path)
 
-    conf_thresh2 = 0.5 * best_conf
-    valid = [i for i in kept if conf[i] >= conf_thresh2] or [kept[0]]
+    conf_thresh2 = YOLO_UNION_THRESH * best_conf
+    valid = [i for i in kept if conf[i] >= conf_thresh2][:YOLO_UNION_MAX_K] or [kept[0]]
 
     ux1 = min(float(boxes[i, 0]) for i in valid)
     uy1 = min(float(boxes[i, 1]) for i in valid)

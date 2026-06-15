@@ -33,7 +33,9 @@ from evaluate_subject_detector import (
 )
 
 CACHE_DIR = Path("/tmp/inat_eval_cache")
-PADDINGS = [0.00, 0.05, 0.08, 0.10, 0.12, 0.15, 0.20]
+PADDINGS = [0.00, 0.03, 0.05, 0.08, 0.10, 0.12, 0.15, 0.20]
+YOLO_UNION_THRESH = 0.60
+YOLO_UNION_MAX_K = 3
 
 
 def _raw_detections(image_path: str):
@@ -69,13 +71,13 @@ def _raw_detections(image_path: str):
 
 
 def algo_union(image_path: str):
-    """Current: union of all confident boxes, saliency fallback."""
+    """Current: union of top-K confident boxes, saliency fallback."""
     dets = _raw_detections(image_path)
     if not dets:
         return _spectral_saliency_bounds(image_path)
     best_conf = dets[0][4]
-    thresh = 0.5 * best_conf
-    valid = [(x, y, w, h) for x, y, w, h, c in dets if c >= thresh] or [(dets[0][0], dets[0][1], dets[0][2], dets[0][3])]
+    thresh = YOLO_UNION_THRESH * best_conf
+    valid = [(x, y, w, h) for x, y, w, h, c in dets if c >= thresh][:YOLO_UNION_MAX_K] or [(dets[0][0], dets[0][1], dets[0][2], dets[0][3])]
     x1 = min(b[0] for b in valid)
     y1 = min(b[1] for b in valid)
     x2 = max(b[0]+b[2] for b in valid)
