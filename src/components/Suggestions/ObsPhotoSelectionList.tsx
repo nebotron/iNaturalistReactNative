@@ -9,7 +9,7 @@ import React, { useCallback, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
 import { getAnimalCrop } from "sharedHelpers/animalCropLog";
-import { cropImageStyle } from "sharedHelpers/normalizedCropTypes";
+import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import { useTranslation } from "sharedHooks";
 
@@ -25,26 +25,34 @@ interface Props {
 const PhotoThumbnail = ( { uri }: { uri: string } ) => {
   const [containerSize, setContainerSize] = useState<number | null>( null );
   // Only apply subject detection when a crop log entry exists; skip AI detection
-  const detection = useSubjectDetectionForUri( getAnimalCrop( uri ) ? uri : undefined );
+  const detection = useSubjectDetectionForUri(
+    getAnimalCrop( uri )
+      ? uri
+      : undefined,
+  );
 
   const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
     setContainerSize( event.nativeEvent.layout.width );
   }, [] );
 
-  const imageStyle = detection && containerSize
-    ? cropImageStyle( detection.crop, containerSize, detection.imageWidth, detection.imageHeight )
+  const cropStyles = detection && containerSize
+    ? computeCropStyles(
+      detection.crop, containerSize, detection.imageWidth, detection.imageHeight,
+    )
     : null;
 
   return (
     <View className="w-full h-full" onLayout={handleLayout}>
-      {imageStyle
+      {cropStyles
         ? (
-          <Image
-            source={{ uri }}
-            accessibilityIgnoresInvertColors
-            style={imageStyle}
-            resizeMode="stretch"
-          />
+          <View style={cropStyles.wrapperStyle}>
+            <Image
+              source={{ uri }}
+              accessibilityIgnoresInvertColors
+              style={cropStyles.imageStyle}
+              resizeMode="stretch"
+            />
+          </View>
         )
         : (
           <Image

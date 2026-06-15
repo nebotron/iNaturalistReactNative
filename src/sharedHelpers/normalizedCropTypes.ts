@@ -186,34 +186,84 @@ export function panSquareCrop(
   } );
 }
 
+/**
+ * Compute the styles needed to display a crop region centered in a square box,
+ * with gray letterboxing on exactly 2 sides (or 0 sides for square crops).
+ *
+ * Returns a `wrapperStyle` to be applied to an `overflow:hidden` View that is
+ * sized to the crop region and centered in the box, and an `imageStyle` to be
+ * applied to the image element inside that wrapper so the correct crop region
+ * appears at the wrapper's origin.
+ *
+ * Landscape crop (wider than tall): fills box width, letterboxes top + bottom.
+ * Portrait crop (taller than wide):  fills box height, letterboxes left + right.
+ * Square crop: fills the box exactly, no letterboxing.
+ */
+export function computeCropStyles(
+  crop: NormalizedCrop,
+  boxSize: number,
+  imageWidth: number,
+  imageHeight: number,
+) {
+  const cropPixelAspect = ( crop.w * imageWidth ) / ( crop.h * imageHeight );
+
+  let scaledW: number;
+  let scaledH: number;
+  let horizontalOffset: number;
+  let verticalOffset: number;
+
+  if ( cropPixelAspect >= 1 ) {
+    // Landscape or square: scale so the crop fills the full box width
+    scaledW = boxSize / crop.w;
+    scaledH = ( imageHeight / imageWidth ) * scaledW;
+    const cropDisplayH = crop.h * scaledH;
+    horizontalOffset = 0;
+    verticalOffset = cropDisplayH < boxSize ? ( boxSize - cropDisplayH ) / 2 : 0;
+  } else {
+    // Portrait: scale so the crop fills the full box height
+    scaledH = boxSize / crop.h;
+    scaledW = ( imageWidth / imageHeight ) * scaledH;
+    const cropDisplayW = crop.w * scaledW;
+    horizontalOffset = cropDisplayW < boxSize ? ( boxSize - cropDisplayW ) / 2 : 0;
+    verticalOffset = 0;
+  }
+
+  const cropDisplayW = crop.w * scaledW;
+  const cropDisplayH = crop.h * scaledH;
+
+  return {
+    // Crop-sized clip container, centered within the box
+    wrapperStyle: {
+      position: "absolute" as const,
+      left: horizontalOffset,
+      top: verticalOffset,
+      width: cropDisplayW,
+      height: cropDisplayH,
+      overflow: "hidden" as const,
+    },
+    // Image positioned so the crop region starts at the wrapper's origin
+    imageStyle: {
+      position: "absolute" as const,
+      left: 0 as const,
+      top: 0 as const,
+      width: scaledW,
+      height: scaledH,
+      transform: [
+        { translateX: -crop.x * scaledW },
+        { translateY: -crop.y * scaledH },
+      ],
+    },
+  };
+}
+
+/** @deprecated Use computeCropStyles, which returns {wrapperStyle, imageStyle} */
 export function cropImageStyle(
   crop: NormalizedCrop,
   boxSize: number,
   imageWidth: number,
   imageHeight: number,
 ) {
-  const scaledW = boxSize / crop.w;
-  const scaledH = ( imageHeight / imageWidth ) * scaledW;
-
-  // When the crop's pixel height is less than the container (landscape crop),
-  // center it vertically so letterboxing appears equally on top and bottom,
-  // never on just one side.
-  const cropHeightPx = crop.h * scaledH;
-  const verticalOffset = cropHeightPx < boxSize
-    ? ( boxSize - cropHeightPx ) / 2
-    : 0;
-
-  return {
-    position: "absolute" as const,
-    left: 0,
-    top: 0,
-    width: scaledW,
-    height: scaledH,
-    transform: [
-      { translateX: -crop.x * scaledW },
-      { translateY: -crop.y * scaledH + verticalOffset },
-    ],
-  };
+  return computeCropStyles( crop, boxSize, imageWidth, imageHeight ).imageStyle;
 }
 
 export function computeContainRect(

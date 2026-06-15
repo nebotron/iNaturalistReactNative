@@ -3,7 +3,7 @@ import { IconicTaxonIcon } from "components/SharedComponents";
 import { FasterImageView, View } from "components/styledComponents";
 import React, { useCallback, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
-import { cropImageStyle } from "sharedHelpers/normalizedCropTypes";
+import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 
 interface Props {
@@ -46,8 +46,8 @@ const ObsImage = ( {
       : undefined,
   );
 
-  const imageStyle = detection && containerSize
-    ? cropImageStyle(
+  const cropStyles = detection && containerSize
+    ? computeCropStyles(
       detection.crop,
       containerSize,
       detection.imageWidth,
@@ -79,7 +79,7 @@ const ObsImage = ( {
           size={iconicTaxonIconSize}
         />
       </View>
-      { uri?.uri && !imageStyle && (
+      { uri?.uri && !cropStyles && (
         <FasterImageView
           className={classNames( CLASS_NAMES )}
           testID="ObsList.photo"
@@ -92,18 +92,20 @@ const ObsImage = ( {
           }}
         />
       ) }
-      { uri?.uri && imageStyle && (
-        <FasterImageView
-          testID="ObsList.photo"
-          accessibilityIgnoresInvertColors
-          fadeDuration={0}
-          style={imageStyle}
-          source={{
-            url: uri.uri,
-            cachePolicy: "discWithCacheControl",
-            resizeMode: "stretch",
-          }}
-        />
+      { uri?.uri && cropStyles && (
+        <View style={cropStyles.wrapperStyle}>
+          <FasterImageView
+            testID="ObsList.photo"
+            accessibilityIgnoresInvertColors
+            fadeDuration={0}
+            style={cropStyles.imageStyle}
+            source={{
+              url: uri.uri,
+              cachePolicy: "discWithCacheControl",
+              resizeMode: "stretch",
+            }}
+          />
+        </View>
       ) }
       { opaque && (
         <View className="absolute w-full h-full bg-white opacity-50" />
