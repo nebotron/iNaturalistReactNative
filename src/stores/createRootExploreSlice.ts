@@ -5,8 +5,8 @@ import {
   hasSavedExploreFilterName,
 } from "components/Explore/helpers/savedExploreFilters";
 import type { ExploreState } from "providers/ExploreContext";
-import type { StateCreator } from "zustand";
 import { v4 as uuidv4 } from "uuid";
+import type { StateCreator } from "zustand";
 
 const DEFAULT_STATE = {
   rootStoredParams: {},
@@ -21,10 +21,12 @@ interface RootExploreSlice {
   setRootExploreView: ( _view: string ) => void;
   savedExploreFilters: SavedExploreFilter[];
   addSavedExploreFilter: (
-    name: string, params: ExploreState, view: string, observationsLayout: string
+    name: string, params: ExploreState, view: string, observationsLayout: string,
+    relativeD1?: number, relativeD2?: number
   ) => boolean;
   updateSavedExploreFilter: (
-    id: string, params: ExploreState, view: string, observationsLayout: string
+    id: string, params: ExploreState, view: string, observationsLayout: string,
+    relativeD1?: number, relativeD2?: number
   ) => boolean;
   removeSavedExploreFilter: ( id: string ) => void;
 }
@@ -33,7 +35,7 @@ const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => (
   ...DEFAULT_STATE,
   setRootStoredParams: rootStoredParams => set( ( ) => ( { rootStoredParams } ) ),
   setRootExploreView: rootExploreView => set( ( ) => ( { rootExploreView } ) ),
-  addSavedExploreFilter: ( name, params, view, observationsLayout ) => {
+  addSavedExploreFilter: ( name, params, view, observationsLayout, relativeD1, relativeD2 ) => {
     const trimmedName = name.trim( );
 
     if ( !trimmedName ) {
@@ -54,13 +56,15 @@ const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => (
           params,
           view,
           observationsLayout,
+          relativeD1,
+          relativeD2,
         },
       ],
     } ) );
 
     return true;
   },
-  updateSavedExploreFilter: ( id, params, view, observationsLayout ) => {
+  updateSavedExploreFilter: ( id, params, view, observationsLayout, relativeD1, relativeD2 ) => {
     const savedFilterIndex = get( ).savedExploreFilters.findIndex(
       savedFilter => savedFilter.id === id,
     );
@@ -79,6 +83,8 @@ const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => (
         params,
         view,
         observationsLayout,
+        relativeD1,
+        relativeD2,
       };
 
       return { savedExploreFilters: updatedSavedFilters };

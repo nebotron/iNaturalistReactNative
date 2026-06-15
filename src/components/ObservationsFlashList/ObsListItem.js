@@ -98,7 +98,7 @@ const ObsListItem = ( {
     >
       <View>
         <ObsImagePreview
-          autoDetectSubject={explore}
+          autoDetectSubject={explore && !belongsToCurrentUser}
           source={{
             uri: Photo.displayLocalOrRemoteOriginalPhoto(
               photoFromObservation( observation ),

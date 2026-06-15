@@ -31,18 +31,34 @@ const toLargeUri = ( uri: string ) => uri.replace(
   "large",
 );
 
+const getCachedResult = ( uri: string ): DetectionResult | null => {
+  const loggedCrop = getAnimalCrop( uri );
+  const existing = cache.get( uri );
+  if ( loggedCrop && existing ) return { ...existing, crop: loggedCrop };
+  return existing ?? null;
+};
+
 const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
-  const [result, setResult] = useState<DetectionResult | null>( ( ) => {
-    if ( !uri ) return null;
-    const loggedCrop = getAnimalCrop( uri );
-    const existing = cache.get( uri );
-    if ( loggedCrop && existing ) return { ...existing, crop: loggedCrop };
-    return existing ?? null;
-  } );
+  const [prevUri, setPrevUri] = useState<string | undefined>( uri );
+  const [result, setResult] = useState<DetectionResult | null>( ( ) => (
+    uri
+      ? getCachedResult( uri )
+      : null
+  ) );
+
+  // Synchronously reset state when the URI changes so the first render with the
+  // new URI never shows a stale crop from the previous one.
+  if ( prevUri !== uri ) {
+    setPrevUri( uri );
+    setResult(
+      uri
+        ? getCachedResult( uri )
+        : null,
+    );
+  }
 
   useEffect( ( ) => {
     if ( !uri ) {
-      setResult( null );
       return ( ) => {};
     }
 

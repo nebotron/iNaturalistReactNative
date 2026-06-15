@@ -1,16 +1,15 @@
 import type { ArgumentArray } from "classnames";
 import classNames from "classnames";
 import { INatIcon, PhotoCount } from "components/SharedComponents";
-import { LinearGradient, View } from "components/styledComponents";
+import { LinearGradient, ScrollView, View } from "components/styledComponents";
 import type { PropsWithChildren } from "react";
 import React, {
   useCallback,
   useEffect,
-  useMemo,
+  useRef,
   useState,
 } from "react";
-import type { ViewStyle } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import type { LayoutChangeEvent, ViewStyle } from "react-native";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -86,43 +85,21 @@ const ObsImagePreview = ( {
   hideGradientOverlay = false,
   squareCorners = false,
 }: Props ) => {
-  const [currentIndex, setCurrentIndex] = useState( 0 );
+  const [containerWidth, setContainerWidth] = useState<number | null>( null );
+  const scrollViewRef = useRef<React.ElementRef<typeof ScrollView>>( null );
   const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
 
   useEffect( ( ) => {
-    setCurrentIndex( 0 );
+    scrollViewRef.current?.scrollTo?.( { x: 0, animated: false } );
   }, [photos] );
 
-  const goToPrev = useCallback( ( ) => {
-    setCurrentIndex( i => Math.max( 0, i - 1 ) );
+  const carouselWidthStyle = containerWidth
+    ? { width: containerWidth }
+    : undefined;
+
+  const handleContainerLayout = useCallback( ( e: LayoutChangeEvent ) => {
+    setContainerWidth( e.nativeEvent.layout.width );
   }, [] );
-
-  const goToNext = useCallback( ( ) => {
-    if ( !photos ) return;
-    setCurrentIndex( i => Math.min( photos.length - 1, i + 1 ) );
-  }, [photos] );
-
-  // Capture horizontal swipes exclusively: activates after 10px horizontal
-  // movement. failOffsetY is intentionally generous (10px) so diagonal swipes
-  // still trigger the carousel rather than silently failing; vertical scrolling
-  // in the parent list still works because the gesture fails once vertical
-  // movement exceeds the threshold and hands control back to the scroll view.
-  const swipeGesture = useMemo(
-    ( ) => Gesture.Pan( )
-      .runOnJS( true )
-      .activeOffsetX( [-10, 10] )
-      .failOffsetY( [-10, 10] )
-      .onEnd( ( { translationX, velocityX } ) => {
-        const isSwipeLeft = translationX < -30 || ( translationX < 0 && velocityX < -200 );
-        const isSwipeRight = translationX > 30 || ( translationX > 0 && velocityX > 200 );
-        if ( isSwipeLeft ) {
-          goToNext( );
-        } else if ( isSwipeRight ) {
-          goToPrev( );
-        }
-      } ),
-    [goToNext, goToPrev],
-  );
 
   const imageClassNames: ArgumentArray = [
     "overflow-hidden",
@@ -268,18 +245,57 @@ const ObsImagePreview = ( {
   }
 
   const useCarousel = photos && photos.length > 1;
-  const activeUri = useCarousel
-    ? ( photos[currentIndex] ?? undefined )
-    : source;
 
   if ( isSmall && obsPhotosCount === 0 && hasSound ) {
     content = <INatIcon name="sound" color={colors.darkGray} size={24} />;
+  } else if ( useCarousel ) {
+    content = (
+      <>
+        {carouselWidthStyle && (
+          <ScrollView
+            ref={scrollViewRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            scrollEventThrottle={16}
+            style={carouselWidthStyle}
+            className="h-full"
+          >
+            {photos.map( ( photo, index ) => (
+              <View
+                // eslint-disable-next-line react/no-array-index-key
+                key={String( index )}
+                style={carouselWidthStyle}
+                className="h-full"
+              >
+                <ObsImage
+                  autoDetectSubject={autoDetectSubject}
+                  uri={photo ?? undefined}
+                  opaque={opaque}
+                  iconicTaxonName={iconicTaxonName}
+                  white={white}
+                  isBackground={isBackground}
+                  iconicTaxonIconSize={isSmall
+                    ? 22
+                    : 100}
+                />
+              </View>
+            ) )}
+          </ScrollView>
+        )}
+        {renderGradient( )}
+        {renderSelectable( )}
+        {renderPhotoCount( )}
+        {renderSoundIcon( )}
+        {children}
+      </>
+    );
   } else {
     content = (
       <>
         <ObsImage
           autoDetectSubject={autoDetectSubject}
-          uri={activeUri}
+          uri={source}
           opaque={opaque}
           iconicTaxonName={iconicTaxonName}
           white={white}
@@ -297,25 +313,16 @@ const ObsImagePreview = ( {
     );
   }
 
-  const containerView = (
+  return (
     <View
       className={classNames( imageClassNames )}
       style={style}
       testID={testID}
+      onLayout={handleContainerLayout}
     >
       {content}
     </View>
   );
-
-  if ( useCarousel ) {
-    return (
-      <GestureDetector gesture={swipeGesture}>
-        {containerView}
-      </GestureDetector>
-    );
-  }
-
-  return containerView;
 };
 
 export default ObsImagePreview;

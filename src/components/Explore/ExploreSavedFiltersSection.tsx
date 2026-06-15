@@ -1,5 +1,7 @@
 import {
+  getRelativeDateOffsets,
   prepareExploreStateForStorage,
+  resolveRelativeDates,
   sortSavedExploreFilters,
 } from "components/Explore/helpers/savedExploreFilters";
 import {
@@ -16,8 +18,7 @@ import {
 } from "providers/ExploreContext";
 import React, { useMemo } from "react";
 import { useTranslation } from "sharedHooks";
-import { zustandStorage } from "stores/useStore";
-import useStore from "stores/useStore";
+import useStore, { zustandStorage } from "stores/useStore";
 
 interface Props {
   onOpenDeleteFilter: ( filter: {
@@ -56,7 +57,11 @@ const ExploreSavedFiltersSection = ( {
 
     dispatch( {
       type: EXPLORE_ACTION.USE_STORED_STATE,
-      storedState: savedFilter.params,
+      storedState: resolveRelativeDates(
+        savedFilter.params,
+        savedFilter.relativeD1,
+        savedFilter.relativeD2,
+      ),
     } );
 
     if ( savedFilter.view ) {
@@ -68,12 +73,16 @@ const ExploreSavedFiltersSection = ( {
   };
 
   const overwriteSavedFilter = ( savedFilterId: string ) => {
-    const observationsLayout = zustandStorage.getItem( "exploreObservationsLayout" ) as string ?? "map";
+    const observationsLayout
+      = zustandStorage.getItem( "exploreObservationsLayout" ) as string ?? "map";
+    const { relativeD1, relativeD2 } = getRelativeDateOffsets( state );
     updateSavedExploreFilter(
       savedFilterId,
       prepareExploreStateForStorage( state ),
       rootExploreView,
       observationsLayout,
+      relativeD1,
+      relativeD2,
     );
   };
 

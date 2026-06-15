@@ -50,6 +50,7 @@ const ObsGridItem = ( {
 }: Props ): Node => {
   const showExploreImageActions = explore
     && currentUser;
+  const isOwnObs = !!currentUser && observation?.user?.login === currentUser?.login;
   const displayTaxonName = useMemo( ( ) => (
     <DisplayTaxonName
       bottomTextComponent={Body2}
@@ -76,7 +77,7 @@ const ObsGridItem = ( {
 
   return (
     <ObsImagePreview
-      autoDetectSubject={explore}
+      autoDetectSubject={explore && !isOwnObs}
       source={{
         uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),
       }}

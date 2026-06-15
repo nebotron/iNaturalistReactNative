@@ -1,6 +1,6 @@
 import { RealmContext } from "providers/contexts";
 import {
-  useCallback, useMemo,
+  useCallback,
 } from "react";
 import Observation from "realmModels/Observation";
 import { confirmNoDuplicatePhotosBeforeUpload } from "sharedHelpers/duplicateUploadedDevicePhotos";
@@ -23,15 +23,21 @@ export default ( canUpload: boolean ) => {
   const setCannotUploadObservations = useStore( state => state.setCannotUploadObservations );
 
   const unsyncedList = Observation.filterUnsyncedObservations( realm );
-  const unsyncedUuids = useMemo( ( ) => unsyncedList.map( o => o.uuid ), [unsyncedList] );
 
   const { t } = useTranslation( );
 
   const createUploadQueueAllUnsynced = useCallback( async (
     skipSomeUuids: string[] | undefined,
   ) => {
-    const uploadsUuids = unsyncedUuids
-      .filter( ( uuid: string ) => !skipSomeUuids?.includes( uuid ) );
+    const uploadsUuids = Array.from( unsyncedList )
+      .filter( obs => {
+        if ( skipSomeUuids?.includes( obs.uuid ) ) return false;
+        // Never upload observations missing required basics (location, date,
+        // evidence, or taxon), regardless of mode.
+        if ( typeof obs.missingBasics === "function" && obs.missingBasics() ) return false;
+        return true;
+      } )
+      .map( obs => obs.uuid );
     if ( uploadsUuids.length === 0 ) {
       return;
     }
@@ -62,7 +68,7 @@ export default ( canUpload: boolean ) => {
     setStartUploadObservations,
     setTotalToolbarIncrements,
     t,
-    unsyncedUuids,
+    unsyncedList,
   ] );
 
   const startUploadObservations = useCallback( async ( skipSomeUuids: string[] | undefined ) => {
