@@ -103,13 +103,15 @@ const ObsImagePreview = ( {
   }, [photos] );
 
   // Capture horizontal swipes exclusively: activates after 10px horizontal
-  // movement and fails immediately if vertical movement is detected first,
-  // so vertical list scrolling and taps both pass through unimpeded.
+  // movement. failOffsetY is intentionally generous (10px) so diagonal swipes
+  // still trigger the carousel rather than silently failing; vertical scrolling
+  // in the parent list still works because the gesture fails once vertical
+  // movement exceeds the threshold and hands control back to the scroll view.
   const swipeGesture = useMemo(
     ( ) => Gesture.Pan( )
       .runOnJS( true )
       .activeOffsetX( [-10, 10] )
-      .failOffsetY( [-5, 5] )
+      .failOffsetY( [-10, 10] )
       .onEnd( ( { translationX, velocityX } ) => {
         const isSwipeLeft = translationX < -30 || ( translationX < 0 && velocityX < -200 );
         const isSwipeRight = translationX > 30 || ( translationX > 0 && velocityX > 200 );
@@ -266,43 +268,26 @@ const ObsImagePreview = ( {
   }
 
   const useCarousel = photos && photos.length > 1;
+  const activeUri = useCarousel
+    ? ( photos[currentIndex] ?? undefined )
+    : source;
 
   if ( isSmall && obsPhotosCount === 0 && hasSound ) {
     content = <INatIcon name="sound" color={colors.darkGray} size={24} />;
   } else {
     content = (
       <>
-        {useCarousel
-          ? (
-            <GestureDetector gesture={swipeGesture}>
-              <View className="absolute w-full h-full">
-                <ObsImage
-                  autoDetectSubject={autoDetectSubject}
-                  uri={photos[currentIndex] ?? undefined}
-                  opaque={opaque}
-                  iconicTaxonName={iconicTaxonName}
-                  white={white}
-                  isBackground={isBackground}
-                  iconicTaxonIconSize={isSmall
-                    ? 22
-                    : 100}
-                />
-              </View>
-            </GestureDetector>
-          )
-          : (
-            <ObsImage
-              autoDetectSubject={autoDetectSubject}
-              uri={source}
-              opaque={opaque}
-              iconicTaxonName={iconicTaxonName}
-              white={white}
-              isBackground={isBackground}
-              iconicTaxonIconSize={isSmall
-                ? 22
-                : 100}
-            />
-          )}
+        <ObsImage
+          autoDetectSubject={autoDetectSubject}
+          uri={activeUri}
+          opaque={opaque}
+          iconicTaxonName={iconicTaxonName}
+          white={white}
+          isBackground={isBackground}
+          iconicTaxonIconSize={isSmall
+            ? 22
+            : 100}
+        />
         {renderGradient( )}
         {renderSelectable( )}
         {renderPhotoCount( )}
@@ -312,7 +297,7 @@ const ObsImagePreview = ( {
     );
   }
 
-  return (
+  const containerView = (
     <View
       className={classNames( imageClassNames )}
       style={style}
@@ -321,6 +306,16 @@ const ObsImagePreview = ( {
       {content}
     </View>
   );
+
+  if ( useCarousel ) {
+    return (
+      <GestureDetector gesture={swipeGesture}>
+        {containerView}
+      </GestureDetector>
+    );
+  }
+
+  return containerView;
 };
 
 export default ObsImagePreview;
