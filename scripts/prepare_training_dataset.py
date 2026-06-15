@@ -134,6 +134,7 @@ def main() -> None:
     print("Exporting to ONNX INT8 …")
 
     trained = YOLO(str(best_pt))
+    trained.set_classes(["subject"])
     export_path = trained.export(
         format="onnx",
         imgsz=640,

@@ -1,4 +1,4 @@
 /** Post-detection padding applied when converting bounds to a square crop (model A). */
-const SUBJECT_DETECTION_MODEL_PADDING = 0.08;
+const SUBJECT_DETECTION_MODEL_PADDING = 0.05;
 
 export default SUBJECT_DETECTION_MODEL_PADDING;
