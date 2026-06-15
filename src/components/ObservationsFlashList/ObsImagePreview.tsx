@@ -1,15 +1,17 @@
 import type { ArgumentArray } from "classnames";
 import classNames from "classnames";
 import { INatIcon, PhotoCount } from "components/SharedComponents";
-import { LinearGradient, ScrollView, View } from "components/styledComponents";
+import { LinearGradient, View } from "components/styledComponents";
 import type { PropsWithChildren } from "react";
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import type { LayoutChangeEvent, ViewStyle } from "react-native";
+import { FlatList } from "react-native";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -86,16 +88,19 @@ const ObsImagePreview = ( {
   squareCorners = false,
 }: Props ) => {
   const [containerWidth, setContainerWidth] = useState<number | null>( null );
-  const scrollViewRef = useRef<React.ElementRef<typeof ScrollView>>( null );
+  const flatListRef = useRef<FlatList<{ uri: string } | null>>( null );
   const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
 
   useEffect( ( ) => {
-    scrollViewRef.current?.scrollTo?.( { x: 0, animated: false } );
+    flatListRef.current?.scrollToOffset?.( { offset: 0, animated: false } );
   }, [photos] );
 
-  const carouselWidthStyle = containerWidth
-    ? { width: containerWidth }
-    : undefined;
+  const carouselWidthStyle = useMemo(
+    ( ) => ( containerWidth
+      ? { width: containerWidth }
+      : undefined ),
+    [containerWidth],
+  );
 
   const handleContainerLayout = useCallback( ( e: LayoutChangeEvent ) => {
     setContainerWidth( e.nativeEvent.layout.width );
@@ -246,42 +251,61 @@ const ObsImagePreview = ( {
 
   const useCarousel = photos && photos.length > 1;
 
+  const carouselGetItemLayout = useCallback(
+    ( _: unknown, index: number ) => ( {
+      length: containerWidth ?? 0,
+      offset: ( containerWidth ?? 0 ) * index,
+      index,
+    } ),
+    [containerWidth],
+  );
+
+  const renderCarouselItem = useCallback(
+    ( info: { item: { uri: string } | null } ) => (
+      <View style={carouselWidthStyle} className="h-full">
+        <ObsImage
+          autoDetectSubject={autoDetectSubject}
+          uri={info.item ?? undefined}
+          opaque={opaque}
+          iconicTaxonName={iconicTaxonName}
+          white={white}
+          isBackground={isBackground}
+          iconicTaxonIconSize={isSmall
+            ? 22
+            : 100}
+        />
+      </View>
+    ),
+    [
+      autoDetectSubject,
+      carouselWidthStyle,
+      iconicTaxonName,
+      isBackground,
+      isSmall,
+      opaque,
+      white,
+    ],
+  );
+
   if ( isSmall && obsPhotosCount === 0 && hasSound ) {
     content = <INatIcon name="sound" color={colors.darkGray} size={24} />;
   } else if ( useCarousel ) {
     content = (
       <>
         {carouselWidthStyle && (
-          <ScrollView
-            ref={scrollViewRef}
+          <FlatList
+            ref={flatListRef}
+            data={photos}
+            renderItem={renderCarouselItem}
+            keyExtractor={( _, index ) => String( index )}
             horizontal
             pagingEnabled
             showsHorizontalScrollIndicator={false}
-            scrollEventThrottle={16}
             style={carouselWidthStyle}
             className="h-full"
-          >
-            {photos.map( ( photo, index ) => (
-              <View
-                // eslint-disable-next-line react/no-array-index-key
-                key={String( index )}
-                style={carouselWidthStyle}
-                className="h-full"
-              >
-                <ObsImage
-                  autoDetectSubject={autoDetectSubject}
-                  uri={photo ?? undefined}
-                  opaque={opaque}
-                  iconicTaxonName={iconicTaxonName}
-                  white={white}
-                  isBackground={isBackground}
-                  iconicTaxonIconSize={isSmall
-                    ? 22
-                    : 100}
-                />
-              </View>
-            ) )}
-          </ScrollView>
+            getItemLayout={carouselGetItemLayout}
+            extraData={containerWidth}
+          />
         )}
         {renderGradient( )}
         {renderSelectable( )}
