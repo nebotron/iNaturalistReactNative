@@ -37,7 +37,10 @@ const PhotoThumbnail = ( { uri }: { uri: string } ) => {
 
   const cropStyles = detection && containerSize
     ? computeCropStyles(
-      detection.crop, containerSize, detection.imageWidth, detection.imageHeight,
+      detection.crop,
+      containerSize,
+      detection.imageWidth,
+      detection.imageHeight,
     )
     : null;
 
