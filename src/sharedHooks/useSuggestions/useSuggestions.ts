@@ -17,7 +17,6 @@ const useSuggestions = (
     onFetched,
     scoreImageParams,
     queryKey,
-    onlineSuggestionsAttempted,
     preferOfflineModel = false,
   } = options;
 
@@ -51,13 +50,8 @@ const useSuggestions = (
   // but for now, passing in an https photo to predictImage while offline crashes the app
   const urlWillCrashOffline = photoUri?.includes( "https://" ) && !isConnected;
 
-  // skip to offline suggestions if internet connection is spotty
-  const tryOfflineSuggestions = preferOfflineModel
-    ? !urlWillCrashOffline
-    : !urlWillCrashOffline && (
-      timedOut
-      || ( !onlineSuggestions && onlineSuggestionsAttempted )
-    );
+  // show offline suggestions immediately, online suggestions replace them once they arrive
+  const tryOfflineSuggestions = !urlWillCrashOffline;
 
   const {
     offlineSuggestions,
@@ -79,13 +73,11 @@ const useSuggestions = (
     }
   };
 
-  const usingOfflineSuggestions = preferOfflineModel || tryOfflineSuggestions || (
-    ( offlineSuggestions?.results?.length || 0 ) > 0
-      && ( !onlineSuggestions || onlineSuggestions?.results?.length === 0 )
-  );
-
   const hasOnlineSuggestionResults = !preferOfflineModel
     && ( onlineSuggestions?.results?.length || 0 ) > 0;
+
+  // offline results are shown by default; switch to online results once they're in
+  const usingOfflineSuggestions = preferOfflineModel || !hasOnlineSuggestionResults;
 
   const unfilteredSuggestions = useMemo(
     ( ) => {
@@ -125,6 +117,7 @@ const useSuggestions = (
     ...onlineSuggestionsResponse,
     suggestions,
     usingOfflineSuggestions,
+    tryOfflineSuggestions,
     urlWillCrashOffline,
     refetchSuggestions,
   };

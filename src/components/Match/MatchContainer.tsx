@@ -237,6 +237,7 @@ const MatchContainer = ( ) => {
   const {
     suggestions,
     usingOfflineSuggestions,
+    tryOfflineSuggestions,
     refetchSuggestions,
   } = useSuggestions( observationPhoto, {
     shouldFetchOnlineSuggestions,
@@ -444,8 +445,9 @@ const MatchContainer = ( ) => {
     topSuggestion,
   );
 
-  const suggestionsLoading = onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
-    || offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
+  const suggestionsLoading = tryOfflineSuggestions
+    ? offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
+    : onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
 
   useEffect( ( ) => {
     if (

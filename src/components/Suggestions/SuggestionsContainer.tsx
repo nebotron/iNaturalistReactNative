@@ -123,9 +123,6 @@ const reducer = ( state, action ) => {
         onlineFetchStatus: action.useOfflineModel
           ? FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED
           : FETCH_STATUSES.FETCH_STATUS_LOADING,
-        offlineFetchStatus: action.useOfflineModel
-          ? FETCH_STATUSES.FETCH_STATUS_LOADING
-          : FETCH_STATUSES.FETCH_STATUS_OFFLINE_SKIPPED,
       };
     case "TOGGLE_MEDIA_VIEWER":
       return {
@@ -194,8 +191,9 @@ const SuggestionsContainer = ( ) => {
     selectedPhotoUri: photoUris[0],
     shouldUseEvidenceLocation: evidenceHasLocation,
   } );
-  const [useOfflineModel, setUseOfflineModel] = useState( false );
+  const [preferOfflineModel, setPreferOfflineModel] = useState( false );
   const previousObservationUuidRef = useRef<string | undefined>( currentObservation?.uuid );
+  const [interactionsDisabled, setInteractionsDisabled] = useState( false );
 
   usePreloadNextObservationSuggestions( );
 
@@ -226,7 +224,7 @@ const SuggestionsContainer = ( ) => {
     shouldUseEvidenceLocation,
   } = state;
 
-  const shouldFetchOnlineSuggestions = !useOfflineModel
+  const shouldFetchOnlineSuggestions = !preferOfflineModel
     && ( hasPermissions !== undefined )
     && onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
 
@@ -293,6 +291,7 @@ const SuggestionsContainer = ( ) => {
     resetTimeout,
     suggestions,
     usingOfflineSuggestions,
+    tryOfflineSuggestions,
     urlWillCrashOffline,
   } = useSuggestions( selectedPhotoUri, {
     shouldFetchOnlineSuggestions,
@@ -301,8 +300,23 @@ const SuggestionsContainer = ( ) => {
     scoreImageParams,
     queryKey,
     onlineSuggestionsAttempted,
-    preferOfflineModel: useOfflineModel,
+    preferOfflineModel,
   } );
+
+  // when the displayed suggestions swap from offline to online (or vice versa),
+  // briefly disable taps so an in-flight tap doesn't land on a different
+  // suggestion after the list reflows
+  const previousUsingOfflineSuggestionsRef = useRef( usingOfflineSuggestions );
+  useEffect( ( ) => {
+    const hasSwapped = previousUsingOfflineSuggestionsRef.current !== usingOfflineSuggestions;
+    previousUsingOfflineSuggestionsRef.current = usingOfflineSuggestions;
+    if ( !hasSwapped ) {
+      return ( ) => { };
+    }
+    setInteractionsDisabled( true );
+    const timer = setTimeout( ( ) => setInteractionsDisabled( false ), 300 );
+    return ( ) => { clearTimeout( timer ); };
+  }, [usingOfflineSuggestions] );
 
   const createUploadParams = useCallback( async ( uri: string, showLocation: boolean ) => {
     const newImageParams = await flattenUploadParams( uri );
@@ -331,7 +345,7 @@ const SuggestionsContainer = ( ) => {
           selectedPhotoUri: uri,
           scoreImageParams: newImageParams,
         } );
-        if ( useOfflineModel ) {
+        if ( preferOfflineModel ) {
           dispatch( {
             type: "SET_ONLINE_FETCH_STATUS",
             onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
@@ -343,14 +357,15 @@ const SuggestionsContainer = ( ) => {
       createUploadParams,
       selectedPhotoUri,
       shouldUseEvidenceLocation,
-      useOfflineModel,
+      preferOfflineModel,
     ],
   );
 
-  const isLoading = useOfflineModel
+  // offline suggestions load first, so loading only depends on them unless
+  // offline is unavailable (e.g. a remote photo with no connection)
+  const isLoading = tryOfflineSuggestions
     ? offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
-    : onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
-      || offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
+    : onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
 
   const toggleLocation = useCallback( async ( { showLocation }: { showLocation: boolean } ) => {
     const newImageParams = await createUploadParams( selectedPhotoUri, showLocation );
@@ -360,7 +375,7 @@ const SuggestionsContainer = ( ) => {
       shouldUseEvidenceLocation: showLocation,
       scoreImageParams: newImageParams,
     } );
-    if ( useOfflineModel ) {
+    if ( preferOfflineModel ) {
       dispatch( {
         type: "SET_ONLINE_FETCH_STATUS",
         onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
@@ -370,7 +385,7 @@ const SuggestionsContainer = ( ) => {
     createUploadParams,
     resetTimeout,
     selectedPhotoUri,
-    useOfflineModel,
+    preferOfflineModel,
   ] );
 
   const reloadSuggestions = useCallback( ( ) => {
@@ -378,7 +393,7 @@ const SuggestionsContainer = ( ) => {
     // suggestions
     if ( !isConnected ) { return; }
     resetTimeout( );
-    setUseOfflineModel( false );
+    setPreferOfflineModel( false );
     dispatch(
       {
         type: "SET_ONLINE_FETCH_STATUS",
@@ -394,16 +409,16 @@ const SuggestionsContainer = ( ) => {
   }, [isConnected, resetTimeout] );
 
   const toggleSuggestionsModel = useCallback( ( nextUseOfflineModel: boolean ) => {
-    if ( nextUseOfflineModel === useOfflineModel ) {
+    if ( nextUseOfflineModel === preferOfflineModel ) {
       return;
     }
-    setUseOfflineModel( nextUseOfflineModel );
+    setPreferOfflineModel( nextUseOfflineModel );
     resetTimeout( );
     dispatch( {
       type: "SWITCH_SUGGESTIONS_MODEL",
       useOfflineModel: nextUseOfflineModel,
     } );
-  }, [resetTimeout, useOfflineModel] );
+  }, [resetTimeout, preferOfflineModel] );
 
   const showModelToggle = isConnected && !urlWillCrashOffline;
 
@@ -463,7 +478,7 @@ const SuggestionsContainer = ( ) => {
       const newImageParams = isConnected === false
         ? null
         : await createUploadParams( nextPhotoUri, evidenceHasLocation );
-      setUseOfflineModel( false );
+      setPreferOfflineModel( false );
       dispatch( {
         type: "RESET_OBSERVATION",
         selectedPhotoUri: nextPhotoUri,
@@ -610,6 +625,7 @@ const SuggestionsContainer = ( ) => {
         hideLocationToggleButton={hideLocationToggleButton}
         hideSkip={params?.hideSkip}
         improveWithLocationButtonOnPress={improveWithLocationButtonOnPress}
+        interactionsDisabled={interactionsDisabled}
         isLoading={isLoading}
         shouldUseEvidenceLocation={shouldUseEvidenceLocation}
         onCropPhoto={onCropPhotoUri}
@@ -626,8 +642,7 @@ const SuggestionsContainer = ( ) => {
         toggleLocation={toggleLocation}
         toggleSuggestionsModel={toggleSuggestionsModel}
         urlWillCrashOffline={urlWillCrashOffline}
-        useOfflineModel={useOfflineModel}
-        usingOfflineSuggestions={usingOfflineSuggestions}
+        useOfflineModel={usingOfflineSuggestions}
       />
       <MediaViewerModal
         editable={lastScreen === "ObsEdit" || lastScreen === "Camera"}

@@ -9,17 +9,15 @@ import { useTranslation } from "sharedHooks";
 
 import ObsPhotoSelectionList from "./ObsPhotoSelectionList";
 import SuggestionsModelToggle from "./SuggestionsModelToggle";
-import SuggestionsOffline from "./SuggestionsOffline";
 
 interface Props {
   duplicatePhotoUris?: Set<string>;
+  interactionsDisabled: boolean;
   onCropPhoto?: ( _uri: string ) => void;
   onPressPhoto: ( _uri: string ) => void;
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
   photoUris: string[];
-  reloadSuggestions: ( ) => void;
   selectedPhotoUri: string;
-  showOfflineFallbackBanner: boolean;
   showOfflineModelInfo: boolean;
   showModelToggle: boolean;
   toggleSuggestionsModel: ( useOfflineModel: boolean ) => void;
@@ -30,13 +28,12 @@ interface Props {
 
 const SuggestionsHeader = ( {
   duplicatePhotoUris,
+  interactionsDisabled,
   onCropPhoto,
   onPressPhoto,
   onReorderPhotos,
   photoUris,
-  reloadSuggestions,
   selectedPhotoUri,
-  showOfflineFallbackBanner,
   showOfflineModelInfo,
   showModelToggle,
   toggleSuggestionsModel,
@@ -60,6 +57,7 @@ const SuggestionsHeader = ( {
       </View>
       {showModelToggle && (
         <SuggestionsModelToggle
+          disabled={interactionsDisabled}
           onModelChange={toggleSuggestionsModel}
           useOfflineModel={useOfflineModel}
         />
@@ -73,9 +71,6 @@ const SuggestionsHeader = ( {
             onPress={improveWithLocationButtonOnPress}
           />
         </View>
-      )}
-      {showOfflineFallbackBanner && (
-        <SuggestionsOffline reloadSuggestions={reloadSuggestions} />
       )}
       {showOfflineModelInfo && (
         <View className="border-lightGray border-[3px] m-5 rounded-2xl p-5">

@@ -22,6 +22,7 @@ type Props = {
   hideLocationToggleButton: boolean,
   hideSkip?: boolean,
   improveWithLocationButtonOnPress: () => void,
+  interactionsDisabled: boolean,
   isLoading: boolean,
   shouldUseEvidenceLocation: boolean,
   onCropPhoto?: Function,
@@ -38,8 +39,7 @@ type Props = {
   toggleLocation: Function,
   toggleSuggestionsModel: Function,
   urlWillCrashOffline: boolean,
-  useOfflineModel: boolean,
-  usingOfflineSuggestions: boolean
+  useOfflineModel: boolean
 };
 
 const Suggestions = ( {
@@ -47,6 +47,7 @@ const Suggestions = ( {
   hideLocationToggleButton,
   hideSkip,
   improveWithLocationButtonOnPress,
+  interactionsDisabled,
   isLoading,
   shouldUseEvidenceLocation,
   onCropPhoto,
@@ -64,7 +65,6 @@ const Suggestions = ( {
   toggleSuggestionsModel,
   urlWillCrashOffline,
   useOfflineModel,
-  usingOfflineSuggestions,
 }: Props ): Node => {
   const { t } = useTranslation( );
   const {
@@ -75,19 +75,20 @@ const Suggestions = ( {
   const taxonIds = otherSuggestions?.map( s => s.taxon.id );
   const observers = useObservers( taxonIds );
   const isEmptyList = !topSuggestion && otherSuggestions?.length === 0;
-  const showOfflineFallbackBanner = !isLoading
-    && usingOfflineSuggestions
-    && !useOfflineModel
-    && !isEmptyList;
   const showOfflineModelInfo = !isLoading && useOfflineModel && !isEmptyList;
+
+  const handleTaxonChosen = useCallback( ( ...args ) => {
+    if ( interactionsDisabled ) { return; }
+    onTaxonChosen( ...args );
+  }, [interactionsDisabled, onTaxonChosen] );
 
   const renderSuggestion = useCallback( ( { item: suggestion } ) => (
     <Suggestion
       accessibilityLabel={t( "Choose-taxon" )}
       suggestion={suggestion}
-      onTaxonChosen={onTaxonChosen}
+      onTaxonChosen={handleTaxonChosen}
     />
-  ), [onTaxonChosen, t] );
+  ), [handleTaxonChosen, t] );
 
   const renderEmptyList = useMemo( ( ) => (
     <SuggestionsEmpty
@@ -120,13 +121,12 @@ const Suggestions = ( {
   const renderHeader = useMemo( ( ) => (
     <SuggestionsHeader
       duplicatePhotoUris={duplicatePhotoUris}
+      interactionsDisabled={interactionsDisabled}
       onCropPhoto={onCropPhoto}
       onPressPhoto={onPressPhoto}
       onReorderPhotos={onReorderPhotos}
       photoUris={photoUris}
-      reloadSuggestions={reloadSuggestions}
       selectedPhotoUri={selectedPhotoUri}
-      showOfflineFallbackBanner={showOfflineFallbackBanner}
       showOfflineModelInfo={showOfflineModelInfo}
       showModelToggle={showModelToggle}
       toggleSuggestionsModel={toggleSuggestionsModel}
@@ -135,16 +135,15 @@ const Suggestions = ( {
       showImproveWithLocationButton={showImproveWithLocationButton}
     />
   ), [
+    interactionsDisabled,
     onCropPhoto,
     onPressPhoto,
     onReorderPhotos,
     duplicatePhotoUris,
     photoUris,
-    reloadSuggestions,
     selectedPhotoUri,
     improveWithLocationButtonOnPress,
     showImproveWithLocationButton,
-    showOfflineFallbackBanner,
     showOfflineModelInfo,
     showModelToggle,
     toggleSuggestionsModel,
@@ -174,7 +173,7 @@ const Suggestions = ( {
         <Suggestion
           accessibilityLabel={t( "Choose-top-taxon" )}
           suggestion={item}
-          onTaxonChosen={onTaxonChosen}
+          onTaxonChosen={handleTaxonChosen}
         />
       </View>
     );
