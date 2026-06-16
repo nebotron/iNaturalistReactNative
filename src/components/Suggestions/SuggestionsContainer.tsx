@@ -409,8 +409,7 @@ const SuggestionsContainer = ( ) => {
           type: "TOGGLE_MEDIA_VIEWER",
           mediaViewerVisible: false,
         } )}
-        initialIndex={photoUris.indexOf( selectedPhotoUri )}
-        uri={selectedPhotoUri}
+        uri={innerPhotos[photoUris.indexOf( selectedPhotoUri )]?.url}
         photos={innerPhotos}
       />
       {renderPermissionsGate( { onPermissionGranted } )}
