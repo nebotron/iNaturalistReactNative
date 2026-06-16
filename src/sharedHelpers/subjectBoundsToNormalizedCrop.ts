@@ -43,14 +43,15 @@ export function subjectBoundsToNormalizedCrop(
   const centerY = bounds.y + bounds.height / 2;
 
   // When the crop fits within the image, clamp position to stay in-bounds.
-  // When the crop exceeds the image (letterbox case), center on the subject
-  // and allow negative coordinates.
+  // When the crop exceeds the image (letterbox case), center on the image
+  // itself (not the subject) so the resulting letterboxing is split evenly
+  // on both sides rather than landing unevenly on just one.
   const x = w <= 1
     ? Math.max( 0, Math.min( 1 - w, centerX - w / 2 ) )
-    : centerX - w / 2;
+    : ( 1 - w ) / 2;
   const y = h <= 1
     ? Math.max( 0, Math.min( 1 - h, centerY - h / 2 ) )
-    : centerY - h / 2;
+    : ( 1 - h ) / 2;
 
   return {
     x, y, w, h,

@@ -284,9 +284,9 @@ const ObservationsFlashList = ( {
   }, [dataCanBeFetched, onEndReached] );
 
   const handleEndReached = useCallback( ( ) => {
-    if ( !dataCanBeFetched || explore ) return;
+    if ( !dataCanBeFetched ) return;
 
-    if ( fetchFromLastObservation && data.length > 0 ) {
+    if ( !explore && fetchFromLastObservation && data.length > 0 ) {
       const lastObservation = data[data.length - 1];
       const lastId = lastObservation?.id;
       if ( lastId && !lastObservation?.empty ) {
