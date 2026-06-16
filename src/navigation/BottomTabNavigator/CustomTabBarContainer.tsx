@@ -85,6 +85,10 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
       }
     }
 
+    if ( targetTabName === "ExploreTab" ) {
+      queryClient.invalidateQueries( { queryKey: ["useInfiniteExploreScroll"] } );
+    }
+
     // If pressing the currently active tab, reset its stack
     if ( targetTabName === activeTabName ) {
       const idx = newStacks.findIndex( r => r.name === targetTabName );
@@ -93,10 +97,6 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
         state: { index: 0, routes: [{ name: targetScreenName }] },
       } );
       needsReset = true;
-
-      if ( targetTabName === "ExploreTab" ) {
-        queryClient.invalidateQueries( { queryKey: ["useInfiniteExploreScroll"] } );
-      }
     }
 
     if ( needsReset ) {

@@ -3,8 +3,7 @@ import {
 } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import type { ApiPhoto, ApiSuggestion, ApiTaxon } from "api/types";
-import { Body3, Heading4, ViewWrapper } from "components/SharedComponents";
-import { View } from "components/styledComponents";
+import { ViewWrapper } from "components/SharedComponents";
 import flattenUploadParams from "components/Suggestions/helpers/flattenUploadParams";
 import {
   FETCH_STATUSES,
@@ -30,7 +29,6 @@ import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOr
 import {
   useExitObservationFlow, useLocationPermission, useSuggestions,
 } from "sharedHooks";
-import useDebugMode from "sharedHooks/useDebugMode";
 import useObservationLocation from "sharedHooks/useObservationLocation";
 import {
   internalUseSuggestionsInitialSuggestions,
@@ -121,7 +119,6 @@ const { useRealm } = RealmContext;
 
 const MatchContainer = ( ) => {
   const hasLoadedRef = useRef( false );
-  const { isDebug } = useDebugMode( );
   const scrollRef = useRef<ScrollView>( null );
   const currentObservation = useStore( state => state.currentObservation );
   const getCurrentObservation = useStore( state => state.getCurrentObservation );
@@ -238,9 +235,6 @@ const MatchContainer = ( ) => {
   );
 
   const {
-    timedOut,
-    onlineSuggestionsError,
-    onlineSuggestionsUpdatedAt,
     suggestions,
     usingOfflineSuggestions,
     refetchSuggestions,
@@ -511,7 +505,7 @@ const MatchContainer = ( ) => {
 
   return (
     <>
-      <ViewWrapper isDebug={isDebug} useTopInset={false}>
+      <ViewWrapper useTopInset={false}>
         <Match
           observation={currentObservation}
           obsPhotos={obsPhotos}
@@ -542,43 +536,6 @@ const MatchContainer = ( ) => {
             if ( !hasPermissions ) navToLocationPicker( );
           },
         } )}
-        {/* eslint-disable i18next/no-literal-string */}
-        {/* eslint-disable react/jsx-one-expression-per-line */}
-        {/* eslint-disable max-len */}
-        {isDebug && (
-          <View className="bg-deeppink text-white p-3">
-            <Heading4 className="text-white">Diagnostics</Heading4>
-            <Body3 className="text-white">
-              Online fetch status:
-              {JSON.stringify( onlineFetchStatus )}
-            </Body3>
-            <Body3 className="text-white">
-              Offline fetch status:
-              {JSON.stringify( offlineFetchStatus )}
-            </Body3>
-            <Body3 className="text-white">
-              Lat/lng:
-              {JSON.stringify( currentObservation?.latitude )}
-              {JSON.stringify( currentObservation?.longitude )}
-            </Body3>
-            <Body3 className="text-white">
-              Using offline suggestions:
-              {JSON.stringify( usingOfflineSuggestions )}
-            </Body3>
-            <Body3 className="text-white">
-              Timed out:
-              {JSON.stringify( timedOut )}
-            </Body3>
-            <Body3 className="text-white">
-              Online suggestions error:
-              {JSON.stringify( onlineSuggestionsError )}
-            </Body3>
-            <Body3 className="text-white">
-              Online suggestions updated at:
-              {JSON.stringify( onlineSuggestionsUpdatedAt )}
-            </Body3>
-          </View>
-        )}
       </ViewWrapper>
       <PreMatchLoadingScreen isLoading={suggestionsLoading} />
     </>

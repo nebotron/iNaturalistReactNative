@@ -20,13 +20,11 @@ import Photo from "realmModels/Photo";
 import type { RealmPhoto } from "realmModels/types";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
-import { log } from "sharedHelpers/logger";
 import {
   useLastScreen,
   useLocationPermission,
   useSuggestions,
 } from "sharedHooks";
-import useDebugMode from "sharedHooks/useDebugMode";
 import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import {
   internalUseSuggestionsInitialSuggestions,
@@ -40,8 +38,6 @@ import useNavigateWithTaxonSelected from "./hooks/useNavigateWithTaxonSelected";
 import usePreloadNextObservationSuggestions from "./hooks/usePreloadNextObservationSuggestions";
 import Suggestions from "./Suggestions";
 import TaxonSearchButton from "./TaxonSearchButton";
-
-const logger = log.extend( "SuggestionsContainer" );
 
 const { useRealm } = RealmContext;
 
@@ -294,11 +290,7 @@ const SuggestionsContainer = ( ) => {
   );
 
   const {
-    timedOut,
     resetTimeout,
-    onlineSuggestions,
-    onlineSuggestionsError,
-    onlineSuggestionsUpdatedAt,
     suggestions,
     usingOfflineSuggestions,
     urlWillCrashOffline,
@@ -611,24 +603,9 @@ const SuggestionsContainer = ( ) => {
     updateObservationKeys( { observationPhotos: sortedObsPhotos } );
   }, [observationPhotos, updateObservationKeys] );
 
-  const debugData = {
-    timedOut,
-    onlineFetchStatus,
-    onlineSuggestions,
-    onlineSuggestionsError,
-    onlineSuggestionsUpdatedAt,
-    selectedPhotoUri,
-    shouldUseEvidenceLocation,
-    topSuggestionType: suggestions?.topSuggestionType,
-    offlineFetchStatus,
-    usingOfflineSuggestions,
-    suggestions,
-  };
-
   return (
     <>
       <Suggestions
-        debugData={debugData}
         handleSkip={( ) => navigateWithTaxonSelected( undefined )}
         hideLocationToggleButton={hideLocationToggleButton}
         hideSkip={params?.hideSkip}

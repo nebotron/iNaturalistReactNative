@@ -18,7 +18,6 @@ import SuggestionsFooter from "./SuggestionsFooter";
 import SuggestionsHeader from "./SuggestionsHeader";
 
 type Props = {
-  debugData: Object,
   handleSkip: Function,
   hideLocationToggleButton: boolean,
   hideSkip?: boolean,
@@ -44,7 +43,6 @@ type Props = {
 };
 
 const Suggestions = ( {
-  debugData,
   handleSkip,
   hideLocationToggleButton,
   hideSkip,
@@ -103,7 +101,6 @@ const Suggestions = ( {
 
   const renderFooter = useMemo( ( ) => (
     <SuggestionsFooter
-      debugData={debugData}
       handleSkip={handleSkip}
       hideLocationToggleButton={hideLocationToggleButton}
       hideSkip={hideSkip}
@@ -112,7 +109,6 @@ const Suggestions = ( {
       toggleLocation={toggleLocation}
     />
   ), [
-    debugData,
     handleSkip,
     hideLocationToggleButton,
     hideSkip,
