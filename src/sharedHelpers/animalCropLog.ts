@@ -20,8 +20,12 @@ const load = ( ): AnimalCropLog => {
   }
 };
 
+// static.inaturalist.org only serves non-CC-licensed photos that are never
+// mirrored to the inaturalist-open-data S3 bucket, so training/eval scripts
+// running in network-restricted environments can never fetch them. Excluded
+// here so the exported crop log only contains durably downloadable URLs.
 const _logToArray = ( logObj: AnimalCropLog ) => Object.entries( logObj )
-  .filter( ( [url] ) => url.startsWith( "http" ) )
+  .filter( ( [url] ) => url.startsWith( "http" ) && !url.includes( "static.inaturalist.org" ) )
   .map( ( [url, crop] ) => ( {
     url,
     x: crop.x,

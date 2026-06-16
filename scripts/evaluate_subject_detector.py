@@ -389,6 +389,18 @@ def inaturalist_original_url(url: str) -> str:
     return m.group(1) + "original" + m.group(3) if m else url
 
 
+def open_data_mirror_url(url: str) -> Optional[str]:
+    """static.inaturalist.org and inaturalist-open-data.s3.amazonaws.com serve
+    the same /photos/{id}/{size}.{ext} path; the S3 host is reachable from
+    more restrictive network environments where static.inaturalist.org is
+    blocked. Returns None if the URL isn't on the legacy host."""
+    if "static.inaturalist.org" not in url:
+        return None
+    return url.replace(
+        "static.inaturalist.org", "inaturalist-open-data.s3.amazonaws.com", 1
+    )
+
+
 def download_image(url: str, dest: str) -> bool:
     try:
         req = urllib.request.Request(url, headers={"User-Agent": "iNat-crop-eval/1.0"})
@@ -431,6 +443,16 @@ def resolve_image(key: str, photos_dir: Optional[Path], cache_dir: Path) -> Opti
             return str(dest2)
         if download_image(key, str(dest2)):
             return str(dest2)
+        # Fallback to the S3 open-data mirror (reachable where the legacy
+        # static.inaturalist.org host is blocked).
+        mirror = open_data_mirror_url(orig_url) or open_data_mirror_url(key)
+        if mirror:
+            dest3 = cache_dir / (name[:-4] + "_mirror.jpg")
+            if dest3.is_file():
+                return str(dest3)
+            print(f"  Trying open-data mirror {mirror} …")
+            if download_image(mirror, str(dest3)):
+                return str(dest3)
         return None
 
     return None
