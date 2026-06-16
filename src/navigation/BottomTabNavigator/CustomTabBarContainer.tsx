@@ -86,7 +86,7 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
     }
 
     if ( targetTabName === "ExploreTab" ) {
-      queryClient.invalidateQueries( { queryKey: ["useInfiniteExploreScroll"] } );
+      queryClient.removeQueries( { queryKey: ["useInfiniteExploreScroll"] } );
     }
 
     // If pressing the currently active tab, reset its stack

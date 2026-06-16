@@ -71,12 +71,13 @@ const ObsGridItem = ( {
   ] );
 
   const photo = photoFromObservation( observation );
-  const allPhotos = photosFromObservation( observation ).map(
+  const allPhotos = useMemo( ( ) => photosFromObservation( observation ).map(
     p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
-  );
+  ), [observation] );
 
   return (
     <ObsImagePreview
+      key={observation.uuid}
       autoDetectSubject={explore && !isOwnObs}
       source={{
         uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),

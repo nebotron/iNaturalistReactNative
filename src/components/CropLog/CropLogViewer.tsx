@@ -17,6 +17,7 @@ import {
 } from "react-native";
 import {
   deleteAnimalCrop,
+  fetchCropLogFromFirebase,
   getAnimalCropLogAsArray,
 } from "sharedHelpers/animalCropLog";
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
@@ -164,6 +165,18 @@ const ListEmpty = ( ) => (
 
 const CropLogViewer = ( ) => {
   const [entries, setEntries] = useState<Entry[]>( getAnimalCropLogAsArray );
+
+  useEffect( ( ) => {
+    let cancelled = false;
+    ( async ( ) => {
+      const remote = await fetchCropLogFromFirebase( );
+      if ( cancelled ) return;
+      const byUrl = new Map<string, Entry>( );
+      [...remote, ...getAnimalCropLogAsArray( )].forEach( e => byUrl.set( e.url, e ) );
+      setEntries( Array.from( byUrl.values( ) ).reverse( ) );
+    } )( );
+    return ( ) => { cancelled = true; };
+  }, [] );
 
   const handleDelete = useCallback( ( url: string ) => {
     Alert.alert(

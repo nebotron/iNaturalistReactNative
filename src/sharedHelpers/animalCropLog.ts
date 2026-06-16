@@ -10,6 +10,14 @@ const logger = log.extend( "animalCropLog" );
 
 export type AnimalCropLog = Record<string, NormalizedCrop>;
 
+export interface CropLogEntry {
+  url: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 const load = ( ): AnimalCropLog => {
   const raw = zustandStorage.getItem( ANIMAL_CROP_LOG_KEY );
   if ( !raw || typeof raw !== "string" ) return {};
@@ -35,23 +43,60 @@ const _logToArray = ( logObj: AnimalCropLog ) => Object.entries( logObj )
   } ) );
 
 /**
- * Push the full log to Firebase Realtime Database (public read/write rules,
- * no credentials needed in the app).
- *
  * Requires in .env:
  *   CROP_LOG_FIREBASE_URL=https://<project-id>.firebaseio.com
  */
-function syncToFirebase( logArray: ReturnType<typeof _logToArray> ) {
+export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[]> => {
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl ) return [];
+  try {
+    const res = await fetch( `${baseUrl}/crop_log.json` );
+    if ( !res.ok ) return [];
+    const data = await res.json( );
+    return Array.isArray( data )
+      ? data.filter( Boolean )
+      : [];
+  } catch ( err ) {
+    logger.warn( "Firebase fetch error", err );
+    return [];
+  }
+};
+
+const _mergeByUrl = ( a: CropLogEntry[], b: CropLogEntry[] ): CropLogEntry[] => {
+  const byUrl = new Map<string, CropLogEntry>( );
+  [...a, ...b].forEach( entry => byUrl.set( entry.url, entry ) );
+  return Array.from( byUrl.values( ) );
+};
+
+const _putToFirebase = ( entries: CropLogEntry[] ) => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
-
   fetch( `${baseUrl}/crop_log.json`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify( logArray ),
+    body: JSON.stringify( entries ),
   } )
     .then( r => { if ( !r.ok ) logger.warn( "Firebase sync failed", r.status ); } )
     .catch( err => logger.warn( "Firebase sync error", err ) );
+};
+
+// Pushes the local log to Firebase Realtime Database (public read/write
+// rules, no credentials needed in the app), merging with whatever is
+// already there so entries synced from other devices/installs aren't
+// clobbered by an overwrite based on incomplete local data.
+async function syncToFirebase( localLogArray: CropLogEntry[] ) {
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl ) return;
+  const remote = await fetchCropLogFromFirebase( );
+  _putToFirebase( _mergeByUrl( remote, localLogArray ) );
+}
+
+async function deleteFromFirebase( photoUrl: string, localLogArray: CropLogEntry[] ) {
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl ) return;
+  const remote = await fetchCropLogFromFirebase( );
+  const merged = _mergeByUrl( remote, localLogArray ).filter( e => e.url !== photoUrl );
+  _putToFirebase( merged );
 }
 
 // Normalise photo URLs to the "large" size so crops saved from the crop
@@ -73,7 +118,7 @@ export const deleteAnimalCrop = ( photoUrl: string ) => {
   const current = load( );
   delete current[photoUrl];
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
-  syncToFirebase( _logToArray( current ) );
+  deleteFromFirebase( photoUrl, _logToArray( current ) );
 };
 
 export const getAnimalCrop = ( url: string ): NormalizedCrop | null => {

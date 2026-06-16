@@ -91,6 +91,10 @@ const ObsListItem = ( {
     observation?.uuid,
   ] );
 
+  const allPhotos = useMemo( ( ) => photosFromObservation( observation ).map(
+    p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
+  ), [observation] );
+
   return (
     <View
       testID={`MyObservations.obsListItem.${observation.uuid}`}
@@ -105,9 +109,7 @@ const ObsListItem = ( {
               photoFromObservation( observation ),
             ),
           }}
-          photos={photosFromObservation( observation ).map(
-            p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
-          )}
+          photos={allPhotos}
           obsPhotosCount={photoCountFromObservation( observation )}
           hidePhotoCount={missingBasics}
           hasSound={observationHasSound( observation )}
