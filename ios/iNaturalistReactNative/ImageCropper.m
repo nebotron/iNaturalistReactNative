@@ -221,17 +221,29 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
     return nil;
   }
 
-  // output0: [1, 5, 8400] — rows 0-3 = cx,cy,w,h; row 4 = objectness score (1 class)
+  // output0: [1, numRows, 8400] — rows 0-3 = cx,cy,w,h; rows 4..numRows-1 = class scores
+  // Single-class models (numRows=5) have one score; multi-class (e.g. YOLO-World, numRows=20)
+  // take the max over all class rows so any detected category contributes to subject detection.
   float *out;
   ort->GetTensorMutableData( outputTensor, (void **)&out );
 
-  const int numPreds  = 8400;
+  OrtTensorTypeAndShapeInfo *shapeInfo;
+  ort->GetTensorTypeAndShape( outputTensor, &shapeInfo );
+  int64_t dims[3] = { 1, 5, 8400 };
+  ort->GetDimensions( shapeInfo, dims, 3 );
+  ort->ReleaseTensorTypeAndShapeInfo( shapeInfo );
+  const int numRows  = (int)dims[1];
+  const int numPreds = (int)dims[2];
 
   YOLOBox *dets  = (YOLOBox *)malloc( (size_t)numPreds * sizeof( YOLOBox ) );
   int      nDets = 0;
 
   for ( int j = 0; j < numPreds; j++ ) {
     float maxScore = out[4 * numPreds + j];
+    for ( int r = 5; r < numRows; r++ ) {
+      float s = out[r * numPreds + j];
+      if ( s > maxScore ) maxScore = s;
+    }
     if ( maxScore < YOLO_CONF_THRESH ) continue;
 
     float cx = out[0 * numPreds + j];
