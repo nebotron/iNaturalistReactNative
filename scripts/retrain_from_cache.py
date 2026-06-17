@@ -148,13 +148,13 @@ def main() -> None:
     print("Exporting to ONNX INT8 …")
 
     trained = YOLO(str(best_pt))
-    trained.set_classes(["subject"])
     export_path = trained.export(
         format="onnx",
         imgsz=640,
         int8=True,
         data=str(OUT_DIR / "data.yaml"),
         dynamic=False,
+        opset=17,
     )
     print(f"Exported: {export_path}")
 
