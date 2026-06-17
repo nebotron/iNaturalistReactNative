@@ -1,25 +1,35 @@
 import { refresh } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
+import classnames from "classnames";
 import {
   Body2,
   Button,
+  INatIconButton,
   OfflineNotice,
   ViewWrapper,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import { PLACE_MODE } from "providers/ExploreContext";
 import React from "react";
+import { Alert } from "react-native";
 import {
+  useDebugMode,
   useStoredLayout,
   useTranslation,
 } from "sharedHooks";
 import type { RenderLocationPermissionsGateFunction } from "sharedHooks/useLocationPermission";
+import { getShadow } from "styles/global";
 
 import IdentifiersView from "./IdentifiersView";
 import ObservationsView from "./ObservationsView";
 import ObservationsViewBar from "./ObservationsViewBar";
 import ObserversView from "./ObserversView";
 import SpeciesView from "./SpeciesView";
+
+const DROP_SHADOW = getShadow( {
+  offsetHeight: 4,
+  elevation: 6,
+} );
 
 enum EXPLORE_VIEW {
   OBSERVATIONS = "observations",
@@ -63,6 +73,7 @@ const ExploreV2 = ( {
     layout: EXPLORE_OBSERVATIONS_LAYOUT | null;
     writeLayoutToStorage: ( newValue: EXPLORE_OBSERVATIONS_LAYOUT ) => void;
   };
+  const { isDebug } = useDebugMode( );
 
   const renderMainContent = ( ) => {
     if ( isConnected === false ) {
@@ -148,6 +159,35 @@ const ExploreV2 = ( {
             />
           )}
           {renderMainContent()}
+          {isDebug && (
+            <INatIconButton
+              icon="triangle-exclamation"
+              className={classnames(
+                "absolute",
+                "bg-white",
+                "bottom-[100px]",
+                "h-[55px]",
+                "right-5",
+                "rounded-full",
+                "w-[55px]",
+                "z-10",
+              )}
+              color="white"
+              size={27}
+              style={[
+                DROP_SHADOW,
+                // eslint-disable-next-line react-native/no-inline-styles
+                { backgroundColor: "deeppink" },
+              ]}
+              accessibilityLabel="Diagnostics"
+              onPress={() => {
+                Alert.alert(
+                  "ExploreV2 Info",
+                  `queryParams: ${JSON.stringify( queryParams )}`,
+                );
+              }}
+            />
+          )}
         </View>
       </ViewWrapper>
       {/*
