@@ -120,11 +120,19 @@ const normalizePhotoUrl = ( url: string ): string => url.replace(
   "/large$2",
 );
 
+const _cropLogListeners = new Set<( ) => void>( );
+
+export const subscribeToCropLog = ( listener: ( ) => void ): ( ) => void => {
+  _cropLogListeners.add( listener );
+  return ( ) => _cropLogListeners.delete( listener );
+};
+
 export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
   const current = load( );
   current[photoUrl] = crop;
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
   syncToFirebase( _logToArray( current ) );
+  _cropLogListeners.forEach( l => l( ) );
 };
 
 export const deleteAnimalCrop = ( photoUrl: string ) => {
