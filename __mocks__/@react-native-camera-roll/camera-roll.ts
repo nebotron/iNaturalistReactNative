@@ -32,4 +32,19 @@ export const CameraRoll = {
     // "My Amazing album": 12
   } ) ),
   save: jest.fn( ( _uri, _options = {} ) => mockFaker.system.filePath( ) ),
+  saveAsset: jest.fn( ( _uri, _options = {} ) => Promise.resolve( {
+    node: {
+      id: "MOCK-ASSET-ID",
+      image: {
+        uri: "ph://MOCK-ASSET-ID",
+      },
+    },
+  } ) ),
+  deletePhotos: jest.fn( () => Promise.resolve( ) ),
 };
+
+export const iosReadGalleryPermission = jest.fn( () => Promise.resolve( "granted" ) );
+export const iosRequestReadWriteGalleryPermission = jest.fn( () => Promise.resolve( "granted" ) );
+export const iosRequestAddOnlyGalleryPermission = jest.fn( () => Promise.resolve( "granted" ) );
+export const iosRefreshGallerySelection = jest.fn( () => Promise.resolve( true ) );
+export const cameraRollEventEmitter = { addListener: jest.fn( ), removeListener: jest.fn( ) };
