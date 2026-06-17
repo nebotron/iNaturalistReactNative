@@ -9,14 +9,23 @@ import { renderComponent } from "tests/helpers/render";
 
 jest.mock(
   "components/SharedComponents/ViewWrapper",
-  () => function MockViewWrapper( props ) {
-    const MockName = "mock-view-no-footer";
-    return (
-      // eslint-disable-next-line react/jsx-props-no-spreading
-      <MockName {...props} testID={MockName}>
-        {props.children}
-      </MockName>
+  () => {
+    const React = require( "react" );
+    const { View } = require( "react-native" );
+    const MockViewWrapper = props => React.createElement(
+      View,
+      { testID: "mock-view-no-footer" },
+      props.children,
     );
+    const MockScreenShell = props => React.createElement( View, null, props.children );
+    return {
+      __esModule: true,
+      default: MockViewWrapper,
+      ScreenShell: MockScreenShell,
+      BottomInsetViewWrapper: MockViewWrapper,
+      SharedStackViewWrapper: MockViewWrapper,
+      TopAndBottomInsetViewWrapper: MockViewWrapper,
+    };
   },
 );
 

@@ -1,12 +1,21 @@
 import type {
   SavedExploreFilter,
 } from "components/Explore/helpers/savedExploreFilters";
-import {
-  hasSavedExploreFilterName,
-} from "components/Explore/helpers/savedExploreFilters";
 import type { ExploreState } from "providers/ExploreContext";
 import { v4 as uuidv4 } from "uuid";
 import type { StateCreator } from "zustand";
+
+const hasSavedExploreFilterName = (
+  savedFilters: SavedExploreFilter[],
+  name: string,
+  excludeId?: string,
+): boolean => {
+  const normalizedName = name.trim( ).toLowerCase( );
+  return savedFilters.some( savedFilter => (
+    savedFilter.id !== excludeId
+    && savedFilter.name.trim( ).toLowerCase( ) === normalizedName
+  ) );
+};
 
 const DEFAULT_STATE = {
   rootStoredParams: {},

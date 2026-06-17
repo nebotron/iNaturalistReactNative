@@ -31,6 +31,7 @@ const mockUnsyncedObservations = [
     observed_on_string: "2024-05-01",
     latitude: 1.2345,
     longitude: 1.2345,
+    taxon: factory( "LocalTaxon" ),
     observationPhotos: [
       factory( "LocalObservationPhoto", {
         photo: {
@@ -45,6 +46,7 @@ const mockUnsyncedObservations = [
     observed_on_string: "2024-05-02",
     latitude: 1.2345,
     longitude: 1.2345,
+    taxon: factory( "LocalTaxon" ),
     observationPhotos: [
       factory( "LocalObservationPhoto", {
         photo: {

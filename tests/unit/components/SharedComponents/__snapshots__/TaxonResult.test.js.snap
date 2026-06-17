@@ -105,6 +105,7 @@ exports[`TaxonResult should render correctly 1`] = `
       }
     >
       <View
+        onLayout={[Function]}
         style={
           [
             [
