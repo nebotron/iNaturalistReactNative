@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Image } from "react-native";
 
-import { getAnimalCrop } from "./animalCropLog";
+import { getAnimalCrop, subscribeToCropLog } from "./animalCropLog";
 import detectSubjectInImage from "./detectSubjectInImage";
 import ensureLocalImageForCrop from "./ensureLocalImageForCrop";
 import type { NormalizedCrop } from "./normalizedCropTypes";
@@ -40,6 +40,7 @@ const getCachedResult = ( uri: string ): DetectionResult | null => {
 
 const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
   const [prevUri, setPrevUri] = useState<string | undefined>( uri );
+  const [cropLogVersion, setCropLogVersion] = useState( 0 );
   const [result, setResult] = useState<DetectionResult | null>( ( ) => (
     uri
       ? getCachedResult( uri )
@@ -56,6 +57,12 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
         : null,
     );
   }
+
+  // Re-run detection when any crop log entry is saved so the UI updates
+  // immediately without waiting for a URI change or component remount.
+  useEffect( ( ) => subscribeToCropLog( ( ) => {
+    setCropLogVersion( v => v + 1 );
+  } ), [] );
 
   useEffect( ( ) => {
     if ( !uri ) {
@@ -124,7 +131,7 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
     return ( ) => {
       cancelled = true;
     };
-  }, [uri] );
+  }, [uri, cropLogVersion] );
 
   return result;
 };
