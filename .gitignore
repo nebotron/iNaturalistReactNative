@@ -119,6 +119,10 @@ artifacts/
 **/tmp/rubocop_cache
 yolov8n.pt
 
+# YOLO training/eval artifacts
+runs/
+*.pt
+
 # Python
 __pycache__/
 *.pyc
