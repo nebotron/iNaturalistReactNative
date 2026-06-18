@@ -8,11 +8,11 @@ import { v4 as uuidv4 } from "uuid";
 const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
 // Deterministic local path for a remote URL so the same photo is never
-// downloaded twice. Strips query/fragment, normalises to "large", and
+// downloaded twice. Strips query/fragment, normalises to "original", and
 // encodes the URL into a safe filename.
 const remoteUrlToLocalPath = ( url: string ): string => {
   const normalized = url
-    .replace( /(square|small|medium|original)/i, "large" )
+    .replace( /(square|small|medium|large)/i, "original" )
     .replace( /\.[a-zA-Z]{2,4}([?#].*)?$/, "" )
     .replace( /[?#].*$/, "" );
   const filename = normalized.replace( /[^a-zA-Z0-9]/g, "_" ).slice( -96 );
@@ -23,7 +23,7 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
   if ( uri.match( /^https?:\/\// ) ) {
     const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
     await mkdir( cacheDir );
-    const downloadUrl = uri.replace( /(square|small|medium|original)/i, "large" );
+    const downloadUrl = uri.replace( /(square|small|medium|large)/i, "original" );
     const destPath = remoteUrlToLocalPath( uri );
     if ( !await exists( destPath ) ) {
       await downloadFile( {
