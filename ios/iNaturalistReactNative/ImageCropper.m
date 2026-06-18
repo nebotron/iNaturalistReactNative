@@ -310,12 +310,24 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
 
 // ─── Brightness measurement ──────────────────────────────────────────────────
 
-// Samples a 64×64 pixel grid, returns average perceptual luminance [0,1].
-static float measureAverageLuminance( UIImage *image )
+// Samples a 64×64 pixel grid within normCrop (0-1 coords), returns average
+// perceptual luminance [0,1].  Pass CGRectMake(0,0,1,1) for the full image.
+static float measureAverageLuminance( UIImage *image, CGRect normCrop )
 {
-  const int N = 64;
+  const int N  = 64;
+  float imgW   = (float)image.size.width;
+  float imgH   = (float)image.size.height;
+
+  // Scale the full image so the crop region fills the N×N canvas.
+  float scaleX = N / ( normCrop.size.width  * imgW );
+  float scaleY = N / ( normCrop.size.height * imgH );
+  float drawW  = imgW * scaleX;
+  float drawH  = imgH * scaleY;
+  float drawX  = -normCrop.origin.x * imgW * scaleX;
+  float drawY  = -normCrop.origin.y * imgH * scaleY;
+
   UIGraphicsBeginImageContextWithOptions( CGSizeMake( N, N ), YES, 1.0 );
-  [image drawInRect:CGRectMake( 0, 0, N, N )];
+  [image drawInRect:CGRectMake( drawX, drawY, drawW, drawH )];
   UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );
   UIGraphicsEndImageContext( );
 
@@ -505,8 +517,14 @@ RCT_EXPORT_METHOD( detectSubjectBounds
   resolve( bounds ?: [NSNull null] );
 }
 
+// cropX/cropY/cropW/cropH are normalized [0,1] coords of the subject region;
+// pass null for all four to measure the full image.
 RCT_EXPORT_METHOD( measureImageBrightness
-                  : ( NSString * )inputPath resolver
+                  : ( NSString * )inputPath cropX
+                  : ( NSNumber * )cropX cropY
+                  : ( NSNumber * )cropY cropW
+                  : ( NSNumber * )cropW cropH
+                  : ( NSNumber * )cropH resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
@@ -514,7 +532,12 @@ RCT_EXPORT_METHOD( measureImageBrightness
   UIImage  *image = [UIImage imageWithContentsOfFile:input];
   if ( !image ) { resolve( @( -1.0 ) ); return; }
 
-  float luminance = measureAverageLuminance( image );
+  CGRect normCrop = ( cropX && cropY && cropW && cropH )
+    ? CGRectMake( [cropX floatValue], [cropY floatValue],
+                  [cropW floatValue], [cropH floatValue] )
+    : CGRectMake( 0, 0, 1, 1 );
+
+  float luminance = measureAverageLuminance( image, normCrop );
   resolve( @( luminance ) );
 }
 
