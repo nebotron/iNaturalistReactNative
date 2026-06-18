@@ -13,19 +13,20 @@ const usePreloadNextObservationSuggestions = ( ) => {
   const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
 
   const isMultiObsCreateFlow = observations.length > 1 || savedOrUploadedMultiObsFlow;
-  const nextObservation = isMultiObsCreateFlow
-    ? observations[currentObservationIndex + 1]
-    : undefined;
+  const nextObs1 = isMultiObsCreateFlow ? observations[currentObservationIndex + 1] : undefined;
+  const nextObs2 = isMultiObsCreateFlow ? observations[currentObservationIndex + 2] : undefined;
+  const nextObs3 = isMultiObsCreateFlow ? observations[currentObservationIndex + 3] : undefined;
 
   useEffect( ( ) => {
-    if ( !nextObservation ) {
-      return;
-    }
-
-    prefetchObservationSuggestions( queryClient, nextObservation ).catch( error => {
-      logger.error( "Failed to preload next observation suggestions", error );
+    [nextObs1, nextObs2, nextObs3].forEach( obs => {
+      if ( !obs ) {
+        return;
+      }
+      prefetchObservationSuggestions( queryClient, obs ).catch( error => {
+        logger.error( "Failed to preload next observation suggestions", error );
+      } );
     } );
-  }, [nextObservation, queryClient] );
+  }, [nextObs1, nextObs2, nextObs3, queryClient] );
 };
 
 export default usePreloadNextObservationSuggestions;
