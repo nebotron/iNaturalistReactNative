@@ -1,9 +1,13 @@
 ---
 name: tune
-description: Improve performance of the CV-based subject detector.
+description: Improve performance of the CV-based subject detector and auto-brightness algorithm.
 ---
 
-Evaluate and improve the subject detector that crops iNaturalist observation photos to the most relevant subject (animal, plant, mushroom, etc.).
+Evaluate and improve two algorithms that enhance iNaturalist observation photos in the Explore tab: the subject detector (crops to the animal/plant) and the auto-brightness adjuster.
+
+---
+
+# Subject detector
 
 ## Current state (as of 2026-06-18)
 
@@ -70,6 +74,12 @@ top_ks = [1, 2, 3, 5]
 
 After `eval_onnx_variants.py` confirms improvement, update `ImageCropper.m` constants and the matching constants at the top of `eval_onnx_variants.py`.
 
+`tune_thresholds.py` grid-searches YOLO_GATE_CONF / YOLO_UNION_THRESH / top-K on the deployed model without retraining:
+
+```sh
+python3 scripts/tune_thresholds.py crop_training.json
+```
+
 ## Improvement approaches (roughly ordered by expected ROI)
 
 1. **Grow the training set.** 328 usable images is a modest benchmark. Use the in-app crop labeler (Menu → Animal Crop Tool) to add labels, then re-export `crop_training.json` via `pull_crop_log.py`.
@@ -92,3 +102,69 @@ After finding improvements:
 3. Update inference constants in `ImageCropper.m` and the matching constants at the top of `eval_onnx_variants.py`
 4. If output shape changed, verify `ImageCropper.m`'s `GetTensorTypeAndShape` path handles it correctly
 5. Commit and run `/dpl`
+
+---
+
+# Auto-brightness algorithm
+
+## Current state (as of 2026-06-18)
+
+**Algorithm** (`src/sharedHelpers/useAutoBrightnessForUri.ts`):
+1. Subject detection runs first; brightness measurement waits for the crop.
+2. The native `measureImageBrightness` in `ImageCropper.m` samples a 64×64 grid of the *crop region* and returns average perceptual luminance `L = 0.299R + 0.587G + 0.114B`.
+3. Predicted multiplier: `adj = TARGET_LUMINANCE / L`. If `|adj − 1| < TOLERANCE_FACTOR`, no adjustment is applied. Result is clamped to [0.4, 3.0].
+4. Manual labels saved via the in-app brightness slider (green **label** button) always override the auto-computed value.
+
+**Current parameters:**
+| Parameter | Value | Location |
+|-----------|-------|----------|
+| `TARGET_LUMINANCE` | 0.45 | `src/sharedHelpers/useAutoBrightnessForUri.ts:8` |
+| `TOLERANCE_FACTOR` | 0.15 | `src/sharedHelpers/useAutoBrightnessForUri.ts:9` |
+
+**Training data:** brightness labels are saved to Firebase at `CROP_LOG_FIREBASE_URL/brightness_log.json` (same project as the crop log). Use the MediaViewer brightness slider to label images: adjust until the photo looks right, then tap the green **label** icon.
+
+## Collecting labels
+
+Open any observation photo in full-screen (tap it from Explore). Adjust the brightness slider until the image looks correct, then tap the green **label** button. Labels sync to Firebase automatically.
+
+Pull the current label set:
+```sh
+python3 scripts/pull_brightness_log.py
+# writes brightness_training.json
+```
+
+## Evaluation
+
+```sh
+python3 scripts/tune_brightness.py [brightness_training.json] [crop_training.json]
+```
+
+The script:
+1. Loads brightness labels from `brightness_training.json`.
+2. Resolves the crop region for each image (from `crop_training.json` if available, else runs YOLO + saliency).
+3. Measures crop-region luminance at 64×64 (identical to the native code).
+4. Grid-searches `TARGET_LUMINANCE` × `TOLERANCE_FACTOR` to minimise mean absolute error in **stops** (log₂ scale — perceptually linear).
+5. Prints the best parameters and the improvement over the current defaults.
+
+Metric: **MAE (stops)** = mean |log₂(predicted) − log₂(labeled)|. Lower is better; 0.5 stops ≈ 41% brightness error.
+
+## Applying changes
+
+After `tune_brightness.py` reports better parameters, update two constants in `src/sharedHelpers/useAutoBrightnessForUri.ts`:
+
+```typescript
+const TARGET_LUMINANCE = 0.45;   // ← update to tuned value
+const TOLERANCE_FACTOR = 0.15;   // ← update to tuned value
+```
+
+Commit and run `/dpl`.
+
+## Improvement approaches
+
+1. **Label more images.** The accuracy of the optimal parameters scales directly with dataset size. Aim for ≥100 labeled images covering a range of lighting conditions (overexposed, underexposed, well-lit, backlit).
+
+2. **Per-taxon targets.** Some taxa (e.g. dark beetles, pale flowers) may warrant different target luminances. A future version could look up `TARGET_LUMINANCE` by iconic taxon.
+
+3. **Luminance histogram.** Rather than measuring the mean, a percentile (e.g. p75) of the crop luminance could be more robust for high-contrast scenes where the subject is lighter than its background.
+
+4. **Exposure-aware clamping.** The current [0.4, 3.0] clamp range is fixed. Extend the tuning grid to include `BRIGHTNESS_MIN` / `BRIGHTNESS_MAX` clamp values if extreme adjustments turn out to be common.
