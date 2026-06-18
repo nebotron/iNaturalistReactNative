@@ -77,11 +77,11 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 #define YOLO_IOU_THRESH  0.45f
 // If the best post-NMS box is below this threshold the detection is likely spurious;
 // returning nil triggers the Vision attention-saliency fallback instead.
-#define YOLO_GATE_CONF   0.25f
+#define YOLO_GATE_CONF   0.08f
 // Union: include box if its confidence is at least this fraction of the best box.
 // Cap at this many boxes to prevent noisy low-conf detections from bloating the union.
-#define YOLO_UNION_THRESH 0.60f
-#define YOLO_UNION_MAX_K  3
+#define YOLO_UNION_THRESH 0.40f
+#define YOLO_UNION_MAX_K  5
 
 typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 
