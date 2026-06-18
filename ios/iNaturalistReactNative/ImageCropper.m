@@ -308,6 +308,39 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   return @{ @"x": @(x), @"y": @(y), @"width": @(w), @"height": @(h) };
 }
 
+// ─── Brightness measurement ──────────────────────────────────────────────────
+
+// Samples a 64×64 pixel grid, returns average perceptual luminance [0,1].
+static float measureAverageLuminance( UIImage *image )
+{
+  const int N = 64;
+  UIGraphicsBeginImageContextWithOptions( CGSizeMake( N, N ), YES, 1.0 );
+  [image drawInRect:CGRectMake( 0, 0, N, N )];
+  UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );
+  UIGraphicsEndImageContext( );
+
+  if ( !scaled.CGImage ) return -1.0f;
+
+  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
+  unsigned char  *raw = (unsigned char *)calloc( (size_t)N * N * 4, 1 );
+  CGContextRef    bmp = CGBitmapContextCreate(
+    raw, N, N, 8, (size_t)4 * N, cs,
+    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, N, N ), scaled.CGImage );
+  CGContextRelease( bmp );
+  CGColorSpaceRelease( cs );
+
+  float total = 0.0f;
+  for ( int i = 0; i < N * N; i++ ) {
+    float r = raw[i * 4 + 0] / 255.0f;
+    float g = raw[i * 4 + 1] / 255.0f;
+    float b = raw[i * 4 + 2] / 255.0f;
+    total += 0.299f * r + 0.587f * g + 0.114f * b;
+  }
+  free( raw );
+  return total / (float)( N * N );
+}
+
 // ─── Public detection entry point ────────────────────────────────────────────
 
 // Try YOLO; fall back to Vision attention saliency when nothing is detected.
@@ -470,6 +503,19 @@ RCT_EXPORT_METHOD( detectSubjectBounds
 
   NSDictionary *bounds = detectSubjectBoundsForImage( image );
   resolve( bounds ?: [NSNull null] );
+}
+
+RCT_EXPORT_METHOD( measureImageBrightness
+                  : ( NSString * )inputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  UIImage  *image = [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { resolve( @( -1.0 ) ); return; }
+
+  float luminance = measureAverageLuminance( image );
+  resolve( @( luminance ) );
 }
 
 @end
