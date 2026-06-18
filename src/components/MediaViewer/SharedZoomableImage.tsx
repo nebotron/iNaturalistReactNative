@@ -3,10 +3,11 @@ import React, {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useRef,
 } from "react";
 import { StyleSheet } from "react-native";
-import { GestureDetector } from "react-native-gesture-handler";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { ImageZoomTransformRefs } from "sharedHooks/imageZoom/readImageZoomTransform";
@@ -27,6 +28,7 @@ const styles = StyleSheet.create( {
 
 type SharedZoomableImageProps = ImageZoomProps & {
   brightness?: number;
+  onLongPress?: () => void;
 };
 
 const SharedZoomableImage: ForwardRefRenderFunction<
@@ -59,6 +61,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     testID,
     cropPanContext,
     brightness = 1,
+    onLongPress,
   },
   ref,
 ) => {
@@ -119,11 +122,25 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     },
   } ), [applyTransform, reset, zoom] );
 
+  const longPressGesture = useMemo(
+    () => onLongPress
+      ? Gesture.LongPress().runOnJS( true ).onStart( onLongPress )
+      : null,
+    [onLongPress],
+  );
+
+  const composedGestures = useMemo(
+    () => ( longPressGesture
+      ? Gesture.Simultaneous( gestures, longPressGesture )
+      : gestures ),
+    [gestures, longPressGesture],
+  );
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const brightnessFilter: any = brightness !== 1 ? { filter: [{ brightness }] } : null;
 
   return (
-    <GestureDetector gesture={gestures}>
+    <GestureDetector gesture={composedGestures}>
       <Animated.Image
         testID={testID}
         style={[styles.image, style, animatedStyle, brightnessFilter]}
