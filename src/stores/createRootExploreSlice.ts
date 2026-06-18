@@ -1,4 +1,5 @@
 import type {
+  RelativeDateOffsets,
   SavedExploreFilter,
 } from "components/Explore/helpers/savedExploreFilters";
 import {
@@ -22,11 +23,11 @@ interface RootExploreSlice {
   savedExploreFilters: SavedExploreFilter[];
   addSavedExploreFilter: (
     name: string, params: ExploreState, view: string, observationsLayout: string,
-    relativeD1?: number, relativeD2?: number
+    relativeDates?: RelativeDateOffsets
   ) => boolean;
   updateSavedExploreFilter: (
     id: string, params: ExploreState, view: string, observationsLayout: string,
-    relativeD1?: number, relativeD2?: number
+    relativeDates?: RelativeDateOffsets
   ) => boolean;
   removeSavedExploreFilter: ( id: string ) => void;
 }
@@ -35,7 +36,7 @@ const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => (
   ...DEFAULT_STATE,
   setRootStoredParams: rootStoredParams => set( ( ) => ( { rootStoredParams } ) ),
   setRootExploreView: rootExploreView => set( ( ) => ( { rootExploreView } ) ),
-  addSavedExploreFilter: ( name, params, view, observationsLayout, relativeD1, relativeD2 ) => {
+  addSavedExploreFilter: ( name, params, view, observationsLayout, relativeDates ) => {
     const trimmedName = name.trim( );
 
     if ( !trimmedName ) {
@@ -56,15 +57,14 @@ const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => (
           params,
           view,
           observationsLayout,
-          relativeD1,
-          relativeD2,
+          ...relativeDates,
         },
       ],
     } ) );
 
     return true;
   },
-  updateSavedExploreFilter: ( id, params, view, observationsLayout, relativeD1, relativeD2 ) => {
+  updateSavedExploreFilter: ( id, params, view, observationsLayout, relativeDates ) => {
     const savedFilterIndex = get( ).savedExploreFilters.findIndex(
       savedFilter => savedFilter.id === id,
     );
@@ -83,8 +83,13 @@ const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => (
         params,
         view,
         observationsLayout,
-        relativeD1,
-        relativeD2,
+        relativeD1: undefined,
+        relativeD2: undefined,
+        relativeObservedOn: undefined,
+        relativeCreatedD1: undefined,
+        relativeCreatedD2: undefined,
+        relativeCreatedOn: undefined,
+        ...relativeDates,
       };
 
       return { savedExploreFilters: updatedSavedFilters };

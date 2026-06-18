@@ -59,8 +59,14 @@ const ExploreSavedFiltersSection = ( {
       type: EXPLORE_ACTION.USE_STORED_STATE,
       storedState: resolveRelativeDates(
         savedFilter.params,
-        savedFilter.relativeD1,
-        savedFilter.relativeD2,
+        {
+          relativeD1: savedFilter.relativeD1,
+          relativeD2: savedFilter.relativeD2,
+          relativeObservedOn: savedFilter.relativeObservedOn,
+          relativeCreatedD1: savedFilter.relativeCreatedD1,
+          relativeCreatedD2: savedFilter.relativeCreatedD2,
+          relativeCreatedOn: savedFilter.relativeCreatedOn,
+        },
       ),
     } );
 
@@ -75,14 +81,13 @@ const ExploreSavedFiltersSection = ( {
   const overwriteSavedFilter = ( savedFilterId: string ) => {
     const observationsLayout
       = zustandStorage.getItem( "exploreObservationsLayout" ) as string ?? "map";
-    const { relativeD1, relativeD2 } = getRelativeDateOffsets( state );
+    const relativeDates = getRelativeDateOffsets( state );
     updateSavedExploreFilter(
       savedFilterId,
       prepareExploreStateForStorage( state ),
       rootExploreView,
       observationsLayout,
-      relativeD1,
-      relativeD2,
+      relativeDates,
     );
   };
 
