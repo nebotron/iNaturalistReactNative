@@ -13,6 +13,7 @@ import React, {
 import type { LayoutChangeEvent, ViewStyle } from "react-native";
 import { FlatList } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import usePhotosSortedByConfidence from "sharedHelpers/usePhotosSortedByConfidence";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -93,10 +94,17 @@ const ObsImagePreview = ( {
   const flatListRef = useRef<FlatList<{ uri: string } | null>>( null );
   const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
 
+  const sortedPhotos = usePhotosSortedByConfidence(
+    photos ?? [],
+    autoDetectSubject && ( photos?.length ?? 0 ) > 1,
+  );
+  const sortedPhotosRef = useRef( sortedPhotos );
+  sortedPhotosRef.current = sortedPhotos;
+
   useLayoutEffect( ( ) => {
     currentIndexRef.current = 0;
     flatListRef.current?.scrollToOffset?.( { offset: 0, animated: false } );
-  }, [photos] );
+  }, [sortedPhotos] );
 
   const goToPrev = useCallback( ( ) => {
     const next = Math.max( 0, currentIndexRef.current - 1 );
@@ -105,11 +113,12 @@ const ObsImagePreview = ( {
   }, [] );
 
   const goToNext = useCallback( ( ) => {
-    if ( !photos ) return;
-    const next = Math.min( photos.length - 1, currentIndexRef.current + 1 );
+    const sp = sortedPhotosRef.current;
+    if ( !sp.length ) return;
+    const next = Math.min( sp.length - 1, currentIndexRef.current + 1 );
     currentIndexRef.current = next;
     flatListRef.current?.scrollToIndex?.( { index: next, animated: true } );
-  }, [photos] );
+  }, [] );
 
   const swipeGesture = useMemo(
     ( ) => Gesture.Pan( )
@@ -117,10 +126,11 @@ const ObsImagePreview = ( {
       .activeOffsetX( [-10, 10] )
       .failOffsetY( [-10, 10] )
       .onUpdate( ( { translationX } ) => {
-        if ( !containerWidth || !photos ) return;
+        const sp = sortedPhotosRef.current;
+        if ( !containerWidth || !sp.length ) return;
         const baseOffset = currentIndexRef.current * containerWidth;
         const targetOffset = baseOffset - translationX;
-        const maxOffset = ( photos.length - 1 ) * containerWidth;
+        const maxOffset = ( sp.length - 1 ) * containerWidth;
         flatListRef.current?.scrollToOffset( {
           offset: Math.max( 0, Math.min( maxOffset, targetOffset ) ),
           animated: false,
@@ -140,7 +150,7 @@ const ObsImagePreview = ( {
           } );
         }
       } ),
-    [containerWidth, goToNext, goToPrev, photos],
+    [containerWidth, goToNext, goToPrev],
   );
 
 
@@ -298,7 +308,7 @@ const ObsImagePreview = ( {
     if ( white ) imageClassNames.push( "border-white" );
   }
 
-  const useCarousel = photos && photos.length > 1;
+  const useCarousel = sortedPhotos.length > 1;
 
   const carouselGetItemLayout = useCallback(
     ( _: unknown, index: number ) => ( {
@@ -346,7 +356,7 @@ const ObsImagePreview = ( {
         {carouselWidthStyle && (
           <FlatList
             ref={flatListRef}
-            data={photos}
+            data={sortedPhotos}
             renderItem={renderCarouselItem}
             keyExtractor={( _, index ) => String( index )}
             horizontal
