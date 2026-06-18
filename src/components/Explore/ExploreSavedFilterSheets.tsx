@@ -39,14 +39,13 @@ const ExploreSavedFilterSheets = ( {
   const saveCurrentFilters = ( name: string ) => {
     const observationsLayout
       = zustandStorage.getItem( "exploreObservationsLayout" ) as string ?? "map";
-    const { relativeD1, relativeD2 } = getRelativeDateOffsets( state );
+    const relativeDates = getRelativeDateOffsets( state );
     const saved = addSavedExploreFilter(
       name,
       prepareExploreStateForStorage( state ),
       rootExploreView,
       observationsLayout,
-      relativeD1,
-      relativeD2,
+      relativeDates,
     );
 
     if ( !saved ) {
