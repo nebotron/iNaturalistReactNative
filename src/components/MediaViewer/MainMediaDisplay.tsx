@@ -18,6 +18,7 @@ import Photo from "realmModels/Photo";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
 
+import { saveBrightness } from "sharedHelpers/brightnessLog";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import colors from "styles/tailwindColors";
 
@@ -173,14 +174,24 @@ const MainMediaDisplay = ( {
                 accessibilityLabel={t( "Adjust-brightness" )}
               />
               { brightness !== BRIGHTNESS_DEFAULT && (
-                <TransparentCircleButton
-                  onPress={( ) => setBrightness( BRIGHTNESS_DEFAULT )}
-                  icon="close"
-                  color={colors.white}
-                  accessibilityLabel={t( "Reset-brightness" )}
-                  testID="MediaViewer.resetBrightnessButton"
-                  optionalClasses="ml-2"
-                />
+                <>
+                  <TransparentCircleButton
+                    onPress={( ) => saveBrightness( photo.url, brightness )}
+                    icon="label"
+                    color={colors.inatGreen}
+                    accessibilityLabel={t( "Save-brightness-label" )}
+                    testID="MediaViewer.saveBrightnessButton"
+                    optionalClasses="ml-2"
+                  />
+                  <TransparentCircleButton
+                    onPress={( ) => setBrightness( BRIGHTNESS_DEFAULT )}
+                    icon="close"
+                    color={colors.white}
+                    accessibilityLabel={t( "Reset-brightness" )}
+                    testID="MediaViewer.resetBrightnessButton"
+                    optionalClasses="ml-2"
+                  />
+                </>
               ) }
             </View>
           </View>
