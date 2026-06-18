@@ -15,7 +15,7 @@ interface DetectionResult {
 const cache = new Map<string, DetectionResult>( );
 
 // Normalise cache keys so medium/square/etc URLs for the same photo share one entry.
-const toCacheKey = ( uri: string ) => uri.replace( /(square|small|medium|original)/i, "large" );
+const toCacheKey = ( uri: string ) => uri.replace( /(square|small|medium|large)/i, "original" );
 
 const getImageSize = (
   uri: string,
@@ -27,11 +27,10 @@ const getImageSize = (
   );
 } );
 
-// Normalize a remote photo URL to the large size so Image.getSize downloads
-// the smallest useful variant rather than square/medium/original.
-const toLargeUri = ( uri: string ) => uri.replace(
-  /(square|small|medium|original)/i,
-  "large",
+// Normalize a remote photo URL to the original size for full-quality detection.
+const toOriginalUri = ( uri: string ) => uri.replace(
+  /(square|small|medium|large)/i,
+  "original",
 );
 
 const getCachedResult = ( uri: string ): DetectionResult | null => {
@@ -101,7 +100,7 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
           // Fast path: crop log entry exists — only need image dimensions.
           // Use Image.getSize on the large URL directly; no local file download
           // or AI detection needed.
-          const imageSize = await getImageSize( toLargeUri( uri ) );
+          const imageSize = await getImageSize( toOriginalUri( uri ) );
           if ( cancelled || !imageSize ) return;
 
           const detection: DetectionResult = {
