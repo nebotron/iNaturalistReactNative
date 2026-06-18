@@ -71,7 +71,6 @@ const Suggestions = ( {
   const taxonIds = otherSuggestions?.map( s => s.taxon.id );
   const observers = useObservers( taxonIds );
   const isEmptyList = !topSuggestion && otherSuggestions?.length === 0;
-  const showOfflineModelInfo = !isLoading && useOfflineModel && !isEmptyList;
 
   const handleTaxonChosen = useCallback( ( ...args ) => {
     if ( interactionsDisabled ) { return; }
@@ -121,7 +120,6 @@ const Suggestions = ( {
       onReorderPhotos={onReorderPhotos}
       photoUris={photoUris}
       selectedPhotoUri={selectedPhotoUri}
-      showOfflineModelInfo={showOfflineModelInfo}
       showModelToggle={showModelToggle}
       toggleSuggestionsModel={toggleSuggestionsModel}
       useOfflineModel={useOfflineModel}
@@ -138,7 +136,6 @@ const Suggestions = ( {
     selectedPhotoUri,
     improveWithLocationButtonOnPress,
     showImproveWithLocationButton,
-    showOfflineModelInfo,
     showModelToggle,
     toggleSuggestionsModel,
     useOfflineModel,
