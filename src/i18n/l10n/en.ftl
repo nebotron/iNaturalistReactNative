@@ -272,6 +272,9 @@ CONTINUE = CONTINUE
 Coordinates-copied-to-clipboard = Coordinates copied to clipboard
 # Button that copies coordinates to the clipboard
 Copy-coordinates = Copy Coordinates
+# Button that copies a photo to the clipboard
+Copy-photo = Copy Photo
+Photo-copied-to-clipboard = Photo copied to clipboard
 # Right to control copies of a creative work; this string may be used as a
 # heading to describe general information about rights, attribution, and
 # licensing
