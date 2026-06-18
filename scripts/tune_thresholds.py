@@ -95,8 +95,14 @@ def precompute_raw(entries):
             orig_w, orig_h = img.size
             lb, pad_left, pad_top, scale = _letterbox(np.array(img))
             x_in = lb.transpose(2, 0, 1)[None]
-            out = _get_session().run(None, {"images": x_in})[0][0]  # [5, 8400]
-            cx, cy, w, h, conf_raw = out[0], out[1], out[2], out[3], out[4]
+            sess = _get_session()
+            input_name = sess.get_inputs()[0].name
+            out = sess.run(None, {input_name: x_in})[0][0]
+            if out.shape[0] == 5:
+                cx, cy, w, h, conf_raw = out[0], out[1], out[2], out[3], out[4]
+            else:
+                cx, cy, w, h = out[0], out[1], out[2], out[3]
+                conf_raw = out[4:].max(axis=0)
 
             # Use a very low threshold to preserve all boxes for threshold search
             mask = conf_raw >= YOLO_CONF_THRESH
@@ -195,20 +201,20 @@ def main():
     print(f"Loaded {len(entries)} images.\n")
     precomputed = precompute_raw(entries)
 
-    # Current baseline
-    BASELINE_GATE = 0.15
-    BASELINE_UNION = 0.50
-    BASELINE_TOPK = 1000  # effectively unlimited
+    # Current deployed settings
+    BASELINE_GATE = 0.08
+    BASELINE_UNION = 0.40
+    BASELINE_TOPK = 5
 
     base_score, base_pad, base_r, base_p = evaluate_settings(
         precomputed, BASELINE_GATE, BASELINE_UNION, BASELINE_TOPK)
-    print(f"BASELINE (gate={BASELINE_GATE}, union_thresh={BASELINE_UNION}, top_k=∞): "
+    print(f"BASELINE (gate={BASELINE_GATE}, union_thresh={BASELINE_UNION}, top_k={BASELINE_TOPK}): "
           f"score={base_score:.4f}, recall={base_r:.4f}, prec={base_p:.4f}, pad={base_pad}\n")
 
     # Grid search
-    gate_confs = [0.05, 0.10, 0.15, 0.20, 0.25, 0.30]
+    gate_confs = [0.03, 0.05, 0.08, 0.10, 0.12, 0.15, 0.20, 0.25]
     union_thresholds = [0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90]
-    top_ks = [1, 2, 3, 5, 10, 1000]
+    top_ks = [1, 2, 3, 5, 8, 10]
 
     best_score = base_score
     best_params = (BASELINE_GATE, BASELINE_UNION, BASELINE_TOPK, base_pad, base_r, base_p)
