@@ -4,9 +4,11 @@ import { FasterImageView, View } from "components/styledComponents";
 import React, { useCallback, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
+import useAutoBrightnessForUri from "sharedHelpers/useAutoBrightnessForUri";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 
 interface Props {
+  autoAdjustBrightness?: boolean;
   autoDetectSubject?: boolean;
   iconicTaxonIconSize?: number;
   iconicTaxonName?: string;
@@ -26,6 +28,7 @@ const CLASS_NAMES = [
 ] as const;
 
 const ObsImage = ( {
+  autoAdjustBrightness = false,
   autoDetectSubject = false,
   iconicTaxonName,
   imageClassName,
@@ -50,6 +53,12 @@ const ObsImage = ( {
       : undefined,
   );
 
+  const autoBrightness = useAutoBrightnessForUri(
+    autoAdjustBrightness && uri?.uri
+      ? uri.uri
+      : undefined,
+  );
+
   const cropStyles = detection && containerSize
     ? computeCropStyles(
       detection.crop,
@@ -57,6 +66,11 @@ const ObsImage = ( {
       detection.imageWidth,
       detection.imageHeight,
     )
+    : null;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const brightnessStyle: any = autoBrightness !== 1.0
+    ? { filter: [{ brightness: autoBrightness }] }
     : null;
 
   return (
@@ -86,6 +100,7 @@ const ObsImage = ( {
       { uri?.uri && !cropStyles && (
         <FasterImageView
           className={classNames( CLASS_NAMES )}
+          style={brightnessStyle}
           testID="ObsList.photo"
           accessibilityIgnoresInvertColors
           fadeDuration={0}
@@ -97,7 +112,7 @@ const ObsImage = ( {
         />
       ) }
       { uri?.uri && cropStyles && (
-        <View style={cropStyles.wrapperStyle}>
+        <View style={[cropStyles.wrapperStyle, brightnessStyle]}>
           <FasterImageView
             testID="ObsList.photo"
             accessibilityIgnoresInvertColors
