@@ -317,7 +317,7 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   w = MAX( 0.01f, MIN( 1.0f - x, w ) );
   h = MAX( 0.01f, MIN( 1.0f - y, h ) );
 
-  return @{ @"x": @(x), @"y": @(y), @"width": @(w), @"height": @(h) };
+  return @{ @"x": @(x), @"y": @(y), @"width": @(w), @"height": @(h), @"confidence": @(bestConf) };
 }
 
 // ─── Public detection entry point ────────────────────────────────────────────
