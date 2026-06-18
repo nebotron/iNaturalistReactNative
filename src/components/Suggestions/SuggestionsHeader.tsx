@@ -1,6 +1,4 @@
 import {
-  Body2,
-  Body3,
   Button,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
@@ -18,7 +16,6 @@ interface Props {
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
   photoUris: string[];
   selectedPhotoUri: string;
-  showOfflineModelInfo: boolean;
   showModelToggle: boolean;
   toggleSuggestionsModel: ( useOfflineModel: boolean ) => void;
   useOfflineModel: boolean;
@@ -34,7 +31,6 @@ const SuggestionsHeader = ( {
   onReorderPhotos,
   photoUris,
   selectedPhotoUri,
-  showOfflineModelInfo,
   showModelToggle,
   toggleSuggestionsModel,
   useOfflineModel,
@@ -70,12 +66,6 @@ const SuggestionsHeader = ( {
             level="focus"
             onPress={improveWithLocationButtonOnPress}
           />
-        </View>
-      )}
-      {showOfflineModelInfo && (
-        <View className="border-lightGray border-[3px] m-5 rounded-2xl p-5">
-          <Body2 className="mb-2">{t( "Viewing-offline-suggestions" )}</Body2>
-          <Body3>{t( "Offline-suggestions-may-differ-from-online" )}</Body3>
         </View>
       )}
     </>
