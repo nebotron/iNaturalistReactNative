@@ -53,11 +53,15 @@ const ObsImage = ( {
       : undefined,
   );
 
-  const autoBrightness = useAutoBrightnessForUri(
-    autoAdjustBrightness && uri?.uri
-      ? uri.uri
-      : undefined,
-  );
+  // crop===undefined: detection still in progress (brightness hook waits)
+  // crop===null:      no subject detection requested (measure full image)
+  // crop===NormalizedCrop: detection done; measure only the subject region
+  const brightnessUri = autoAdjustBrightness && uri?.uri ? uri.uri : undefined;
+  const brightnessCrop = autoDetectSubject
+    ? detection?.crop          // undefined until detection resolves
+    : null;                    // no detection → full-image measurement
+
+  const autoBrightness = useAutoBrightnessForUri( brightnessUri, brightnessCrop );
 
   const cropStyles = detection && containerSize
     ? computeCropStyles(
