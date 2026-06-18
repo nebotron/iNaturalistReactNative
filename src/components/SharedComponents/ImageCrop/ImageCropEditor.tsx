@@ -32,6 +32,7 @@ import {
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import getCropForUri from "sharedHelpers/getCropForUri";
+import { getCachedSubjectDetection } from "sharedHelpers/useSubjectDetectionForUri";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useCurrentUser from "sharedHooks/useCurrentUser";
 import useTranslation from "sharedHooks/useTranslation";
@@ -157,6 +158,7 @@ const ImageCropEditor = ( ) => {
           setSavedInitialCrop( existingSavedCrop );
         }
         const initialCrop = existingSavedCrop
+          || getCachedSubjectDetection( imageUri || "" )?.crop
           || await getCropForUri( imageUri || "", resolvedUri, size.w, size.h );
         if ( !cancelled ) {
           setDetectedCrop( initialCrop );

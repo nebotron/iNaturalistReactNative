@@ -14,6 +14,9 @@ interface DetectionResult {
 
 const cache = new Map<string, DetectionResult>( );
 
+// Normalise cache keys so medium/square/etc URLs for the same photo share one entry.
+const toCacheKey = ( uri: string ) => uri.replace( /(square|small|medium|original)/i, "large" );
+
 const getImageSize = (
   uri: string,
 ): Promise<{ w: number; h: number } | null> => new Promise( resolve => {
@@ -33,10 +36,16 @@ const toLargeUri = ( uri: string ) => uri.replace(
 
 const getCachedResult = ( uri: string ): DetectionResult | null => {
   const loggedCrop = getAnimalCrop( uri );
-  const existing = cache.get( uri );
+  const existing = cache.get( toCacheKey( uri ) );
   if ( loggedCrop && existing ) return { ...existing, crop: loggedCrop };
   return existing ?? null;
 };
+
+// Read the in-memory detection cache without triggering any async work.
+// Returns the AI-detected (or crop-log) result if it was already computed,
+// null otherwise.
+const getCachedSubjectDetection = ( uri: string ): DetectionResult | null =>
+  cache.get( toCacheKey( uri ) ) ?? null;
 
 const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
   const [prevUri, setPrevUri] = useState<string | undefined>( uri );
@@ -71,7 +80,7 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
 
     // Ground-truth crop log entries always win over the AI-detection cache.
     const loggedCrop = getAnimalCrop( uri );
-    const existing = cache.get( uri );
+    const existing = cache.get( toCacheKey( uri ) );
 
     if ( !loggedCrop && existing ) {
       setResult( existing );
@@ -81,7 +90,7 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
     if ( loggedCrop && existing ) {
       // Clear the stale cache so the async fast path below re-fetches image
       // dimensions from the large URL, matching what page refresh does.
-      cache.delete( uri );
+      cache.delete( toCacheKey( uri ) );
     }
 
     let cancelled = false;
@@ -100,7 +109,7 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
             imageWidth: imageSize.w,
             imageHeight: imageSize.h,
           };
-          cache.set( uri, detection );
+          cache.set( toCacheKey( uri ), detection );
           setResult( detection );
         } else {
           // Slow path: no crop log entry — download to a local file and run
@@ -119,7 +128,7 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
             imageWidth: imageSize.w,
             imageHeight: imageSize.h,
           };
-          cache.set( uri, detection );
+          cache.set( toCacheKey( uri ), detection );
           setResult( detection );
         }
       } catch {
@@ -135,4 +144,5 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
   return result;
 };
 
+export { getCachedSubjectDetection };
 export default useSubjectDetectionForUri;

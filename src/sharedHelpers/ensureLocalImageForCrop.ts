@@ -1,22 +1,36 @@
 import {
-  CachesDirectoryPath, copyAssetsFileIOS, downloadFile, mkdir,
+  CachesDirectoryPath, copyAssetsFileIOS, downloadFile, exists, mkdir,
 } from "@dr.pogodin/react-native-fs";
 import { Platform } from "react-native";
 import resizeImage from "sharedHelpers/resizeImage";
-import * as uuid from "uuid";
+import { v4 as uuidv4 } from "uuid";
 
 const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
+
+// Deterministic local path for a remote URL so the same photo is never
+// downloaded twice. Strips query/fragment, normalises to "large", and
+// encodes the URL into a safe filename.
+const remoteUrlToLocalPath = ( url: string ): string => {
+  const normalized = url
+    .replace( /(square|small|medium|original)/i, "large" )
+    .replace( /\.[a-zA-Z]{2,4}([?#].*)?$/, "" )
+    .replace( /[?#].*$/, "" );
+  const filename = normalized.replace( /[^a-zA-Z0-9]/g, "_" ).slice( -96 );
+  return `${CachesDirectoryPath}/inatCropSources/${filename}.jpg`;
+};
 
 const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
   if ( uri.match( /^https?:\/\// ) ) {
     const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
     await mkdir( cacheDir );
-    const destPath = `${cacheDir}/${uuid.v4()}.jpg`;
     const downloadUrl = uri.replace( /(square|small|medium|original)/i, "large" );
-    await downloadFile( {
-      fromUrl: downloadUrl,
-      toFile: destPath,
-    } ).promise;
+    const destPath = remoteUrlToLocalPath( uri );
+    if ( !await exists( destPath ) ) {
+      await downloadFile( {
+        fromUrl: downloadUrl,
+        toFile: destPath,
+      } ).promise;
+    }
     return `file://${destPath}`;
   }
 
@@ -31,7 +45,7 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
     if ( Platform.OS === "ios" ) {
       const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
       await mkdir( cacheDir );
-      const destPath = `${cacheDir}/${uuid.v4()}.jpg`;
+      const destPath = `${cacheDir}/${uuidv4()}.jpg`;
       // 99999 → no upscaling; copyAssetsFileIOS caps at the asset's natural dimensions
       await copyAssetsFileIOS( uri, destPath, 99999, 99999 );
       return `file://${destPath}`;
