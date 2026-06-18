@@ -78,6 +78,7 @@ const ObsGridItem = ( {
   return (
     <ObsImagePreview
       key={observation.uuid}
+      autoAdjustBrightness={explore && !isOwnObs}
       autoDetectSubject={explore && !isOwnObs}
       source={{
         uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),
