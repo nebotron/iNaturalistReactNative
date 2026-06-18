@@ -9,17 +9,23 @@ Run `dpl` and debug failures until the app installs on the connected iPhone.
 
 ## Steps
 
-1. **Check for a connected device first.** If `dpl` fails immediately with "No iOS devices connected", stop and tell the user to plug in their iPhone. Do not retry in a loop.
+1. **Sync with nebotron/main first.** Rebase local main onto origin/main and push:
+   ```sh
+   git pull --rebase origin main && git push origin main
+   ```
+   If the rebase fails due to conflicts, stop and tell the user. If the push is rejected because the remote has diverged, stop and tell the user.
 
-2. **Run dpl.** Never silence output — always capture and show the full log:
+2. **Check for a connected device first.** If `dpl` fails immediately with "No iOS devices connected", stop and tell the user to plug in their iPhone. Do not retry in a loop.
+
+3. **Run dpl.** Never silence output — always capture and show the full log:
    ```sh
    dpl 2>&1
    ```
    Use a 10-minute timeout.
 
-3. **On success** (exit 0, app launched on device): report done in one line.
+4. **On success** (exit 0, app launched on device): report done in one line.
 
-4. **On failure**, diagnose from the output and fix:
+5. **On failure**, diagnose from the output and fix:
 
    | Symptom | Fix |
    |---|---|
@@ -31,7 +37,7 @@ Run `dpl` and debug failures until the app installs on the connected iPhone.
    | Xcode build error (compiler/linker) | Read the error, fix the code, commit, then retry `dpl`. |
    | Any other build error | Read the full error output, fix the root cause, then retry `dpl`. |
 
-5. **After fixing**, re-run `dpl` and repeat until success or until the failure requires user action (phone not connected, trust prompt, etc.).
+6. **After fixing**, re-run `dpl` and repeat until success or until the failure requires user action (phone not connected, trust prompt, etc.).
 
 ## Rules
 
