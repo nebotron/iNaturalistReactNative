@@ -53,6 +53,7 @@ interface Props {
   onDeletePhoto: ( uri: string ) => void;
   onClose: ( ) => void;
   onDeleteSound: ( uri: string ) => void;
+  onLongPressPhoto?: ( uri: string ) => void;
   photos: Omit<PhotoItem, "type">[];
   sounds?: Omit<SoundItem, "type">[];
   selectedMediaIndex: number;
@@ -67,6 +68,7 @@ const MainMediaDisplay = ( {
   onDeletePhoto,
   onDeleteSound,
   onClose,
+  onLongPressPhoto,
   photos,
   sounds = [],
   selectedMediaIndex,
@@ -104,6 +106,9 @@ const MainMediaDisplay = ( {
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
           brightness={brightness}
+          onLongPress={onLongPressPhoto
+            ? ( ) => onLongPressPhoto( uri )
+            : undefined}
         />
         {
           editable
