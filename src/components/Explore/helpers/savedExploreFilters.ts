@@ -1,5 +1,15 @@
 import type { ExploreState } from "providers/ExploreContext";
-import { DATE_OBSERVED } from "providers/ExploreContext";
+import { DATE_OBSERVED, DATE_UPLOADED } from "providers/ExploreContext";
+
+// Days offset from today for each date field (0 = today, -30 = 30 days ago).
+export interface RelativeDateOffsets {
+  relativeD1?: number;
+  relativeD2?: number;
+  relativeObservedOn?: number;
+  relativeCreatedD1?: number;
+  relativeCreatedD2?: number;
+  relativeCreatedOn?: number;
+}
 
 export interface SavedExploreFilter {
   id: string;
@@ -8,10 +18,12 @@ export interface SavedExploreFilter {
   params: ExploreState;
   view?: string;
   observationsLayout?: string;
-  // Days offset from today for relative date ranges (0 = today, -30 = 30 days ago).
-  // Only set when dateObserved === DATE_OBSERVED.DATE_RANGE.
   relativeD1?: number;
   relativeD2?: number;
+  relativeObservedOn?: number;
+  relativeCreatedD1?: number;
+  relativeCreatedD2?: number;
+  relativeCreatedOn?: number;
 }
 
 export const prepareExploreStateForStorage = (
@@ -38,36 +50,66 @@ const offsetToIsoDate = ( offset: number ): string => {
 
 export const getRelativeDateOffsets = (
   state: ExploreState,
-): { relativeD1?: number; relativeD2?: number } => {
-  if ( state.dateObserved !== DATE_OBSERVED.DATE_RANGE ) {
-    return {};
+): RelativeDateOffsets => {
+  const offsets: RelativeDateOffsets = {};
+
+  if ( state.dateObserved === DATE_OBSERVED.DATE_RANGE ) {
+    if ( state.d1 ) offsets.relativeD1 = dateToOffset( state.d1 );
+    if ( state.d2 ) offsets.relativeD2 = dateToOffset( state.d2 );
+  } else if ( state.dateObserved === DATE_OBSERVED.EXACT_DATE && state.observed_on ) {
+    offsets.relativeObservedOn = dateToOffset( state.observed_on );
   }
-  return {
-    relativeD1: state.d1
-      ? dateToOffset( state.d1 )
-      : undefined,
-    relativeD2: state.d2
-      ? dateToOffset( state.d2 )
-      : undefined,
-  };
+
+  if ( state.dateUploaded === DATE_UPLOADED.DATE_RANGE ) {
+    if ( state.created_d1 ) offsets.relativeCreatedD1 = dateToOffset( state.created_d1 );
+    if ( state.created_d2 ) offsets.relativeCreatedD2 = dateToOffset( state.created_d2 );
+  } else if ( state.dateUploaded === DATE_UPLOADED.EXACT_DATE && state.created_on ) {
+    offsets.relativeCreatedOn = dateToOffset( state.created_on );
+  }
+
+  return offsets;
 };
 
 export const resolveRelativeDates = (
   params: ExploreState,
-  relativeD1?: number,
-  relativeD2?: number,
+  offsets: RelativeDateOffsets,
 ): ExploreState => {
-  if ( relativeD1 === undefined && relativeD2 === undefined ) {
+  const {
+    relativeD1,
+    relativeD2,
+    relativeObservedOn,
+    relativeCreatedD1,
+    relativeCreatedD2,
+    relativeCreatedOn,
+  } = offsets;
+
+  if (
+    relativeD1 === undefined
+    && relativeD2 === undefined
+    && relativeObservedOn === undefined
+    && relativeCreatedD1 === undefined
+    && relativeCreatedD2 === undefined
+    && relativeCreatedOn === undefined
+  ) {
     return params;
   }
+
   return {
     ...params,
-    d1: relativeD1 !== undefined
-      ? offsetToIsoDate( relativeD1 )
-      : params.d1,
-    d2: relativeD2 !== undefined
-      ? offsetToIsoDate( relativeD2 )
-      : params.d2,
+    d1: relativeD1 !== undefined ? offsetToIsoDate( relativeD1 ) : params.d1,
+    d2: relativeD2 !== undefined ? offsetToIsoDate( relativeD2 ) : params.d2,
+    observed_on: relativeObservedOn !== undefined
+      ? offsetToIsoDate( relativeObservedOn )
+      : params.observed_on,
+    created_d1: relativeCreatedD1 !== undefined
+      ? offsetToIsoDate( relativeCreatedD1 )
+      : params.created_d1,
+    created_d2: relativeCreatedD2 !== undefined
+      ? offsetToIsoDate( relativeCreatedD2 )
+      : params.created_d2,
+    created_on: relativeCreatedOn !== undefined
+      ? offsetToIsoDate( relativeCreatedOn )
+      : params.created_on,
   };
 };
 
