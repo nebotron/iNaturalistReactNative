@@ -133,6 +133,8 @@ const queryClient = new QueryClient( {
     queries: {
       retry: reactQueryRetry,
       retryDelay: handleRetryDelay,
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
     },
   },
 } );
