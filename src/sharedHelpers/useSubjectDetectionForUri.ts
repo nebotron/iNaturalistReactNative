@@ -79,10 +79,9 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
     }
 
     if ( loggedCrop && existing ) {
-      const updated = { ...existing, crop: loggedCrop };
-      cache.set( uri, updated );
-      setResult( updated );
-      return ( ) => {};
+      // Clear the stale cache so the async fast path below re-fetches image
+      // dimensions from the large URL, matching what page refresh does.
+      cache.delete( uri );
     }
 
     let cancelled = false;
