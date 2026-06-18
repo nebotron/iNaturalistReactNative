@@ -1,5 +1,4 @@
 import Clipboard from "@react-native-clipboard/clipboard";
-import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -66,10 +65,6 @@ enum MenuModalState {
 
 const feedbackLogger = log.extend( "feedback" );
 
-function showOfflineAlert( t: ( _: string ) => string ) {
-  Alert.alert( t( "You-are-offline" ), t( "Please-try-again-when-you-are-online" ) );
-}
-
 const getDeviceMetricsForFeedback = async () => {
   const freeDiskBytes = await DeviceInfo.getFreeDiskStorage();
   const diskCapacityBytes = await DeviceInfo.getTotalDiskCapacity();
@@ -112,8 +107,6 @@ const Menu = ( ) => {
   const currentUser = useCurrentUser( );
   const { t } = useTranslation( );
   const { bottom, top } = useSafeAreaInsets( );
-
-  const { isConnected } = useNetInfo( );
 
   const layoutPrefs = useLayoutPrefs();
   const newsEnabled = useFeatureFlag( FeatureFlag.NewsEnabled );
@@ -164,11 +157,7 @@ const Menu = ( ) => {
       label: t( "FEEDBACK" ),
       icon: "feedback",
       onPress: () => {
-        if ( isConnected ) {
-          setModalState( MenuModalState.ProvideFeedback );
-        } else {
-          showOfflineAlert( t );
-        }
+        setModalState( MenuModalState.ProvideFeedback );
       },
     },
 
@@ -284,10 +273,6 @@ const Menu = ( ) => {
   };
 
   const onSubmitFeedback = useCallback( async ( feedbackText: string ) => {
-    if ( !isConnected ) {
-      showOfflineAlert( t );
-      return false;
-    }
     const getCountBreakpoint = ( count: number ) => valueToBreakpoint( count, [
       [0, "0"],
       [1, "1-9"],
@@ -348,7 +333,7 @@ const Menu = ( ) => {
     Alert.alert( t( "Feedback-Submitted" ), t( "Thank-you-for-sharing-your-feedback" ) );
     setModalState( null );
     return true;
-  }, [currentUser, isConnected, layoutPrefs, realm, t] );
+  }, [currentUser, layoutPrefs, realm, t] );
 
   return (
     <ScrollView
