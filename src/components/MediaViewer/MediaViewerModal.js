@@ -12,6 +12,8 @@ type Props = {
   // Optional component to use as the header
   header?: Function,
   initialIndex?: number,
+  latitude?: number,
+  longitude?: number,
   onClose?: Function,
   onCropPhoto?: Function,
   onDeletePhoto?: Function,
@@ -28,6 +30,7 @@ type Props = {
     file_url: string
   }[],
   showModal: boolean,
+  timeObservedAt?: string,
   uri?: string | null
 }
 
@@ -37,6 +40,8 @@ const MediaViewerModal = ( {
   deleting,
   header,
   initialIndex,
+  latitude,
+  longitude,
   onClose = ( ) => undefined,
   onCropPhoto,
   onDeletePhoto,
@@ -45,6 +50,7 @@ const MediaViewerModal = ( {
   photos = [],
   showModal,
   sounds,
+  timeObservedAt,
   uri,
 }: Props ): Node => (
   <Modal
@@ -59,6 +65,8 @@ const MediaViewerModal = ( {
         deleting={deleting}
         header={header}
         initialIndex={initialIndex}
+        latitude={latitude}
+        longitude={longitude}
         onClose={onClose}
         onCropPhoto={onCropPhoto}
         onDeletePhoto={onDeletePhoto}
@@ -66,6 +74,7 @@ const MediaViewerModal = ( {
         onReorderPhotos={onReorderPhotos}
         photos={photos}
         sounds={sounds}
+        timeObservedAt={timeObservedAt}
         uri={uri}
       />
     )}
