@@ -272,6 +272,7 @@ CONTINUE = CONTINUE
 Coordinates-copied-to-clipboard = Coordinates copied to clipboard
 # Button that copies coordinates to the clipboard
 Copy-coordinates = Copy Coordinates
+Copy-photo = Copy Photo
 # Right to control copies of a creative work; this string may be used as a
 # heading to describe general information about rights, attribution, and
 # licensing
@@ -964,6 +965,7 @@ Overwrite-saved-filter = Overwrite saved filter
 PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
+Photo-copied-to-clipboard = Photo copied to clipboard
 Photo-importer = Photo importer
 PHOTO-LICENSING = PHOTO LICENSING
 Photos = Photos
@@ -982,7 +984,6 @@ PLEASE-LOG-IN = PLEASE LOG IN
 Please-log-in-again = Please log in again. We occasionally need to refresh your session to clear cached data and make sure the app is working its best.
 Please-make-sure-your-password-is-at-least-6-characters = Please make sure your password is at least 6 characters.
 Please-try-again-when-you-are-connected-to-the-internet = Please try again when you are connected to the Internet.
-Please-try-again-when-you-are-online = Please try again when you are online!
 Point-the-camera-at-an-animal-plant-or-fungus = Point the camera at an animal, plant, or fungus
 Popular-observations-filter = Popular (at least one fave)
 POTENTIAL-DISAGREEMENT = POTENTIAL DISAGREEMENT
@@ -1155,6 +1156,7 @@ SAVE = SAVE
 SAVE-ALL = SAVE ALL
 # Button that saves all observations in a batch of multiple observations
 Save-all-observations = Save all observations
+Save-brightness-label = Save brightness as label
 SAVE-CHANGES = SAVE CHANGES
 SAVE-CROP = SAVE CROP
 Save-current-filters = Save current filters
@@ -1367,7 +1369,6 @@ Unobserved-by-me = Unobserved by me
 Unreviewed-observations-only = Unreviewed observations only
 Upload-anyway = Upload anyway
 Upload-Complete = Upload Complete
-Upload-failed = Upload failed
 Upload-in-progress = Upload in progress
 UPLOAD-NOW = UPLOAD NOW
 Upload-photos = Upload photos
@@ -1433,7 +1434,6 @@ View-sound = View sound
 # Label for a button that shows identification suggestions for an observation
 # or photo
 View-suggestions = View suggestions
-Viewing-offline-suggestions = Viewing offline suggestions
 Watch-your-notifications-for-identifications = Watch your notifications for identifications!
 We-are-not-confident-enough-to-make-a-top-ID-suggestion = We’re not confident enough to make a top ID suggestion, but here are some other suggestions:
 Welcome-back = Welcome back!
@@ -1602,7 +1602,6 @@ x-uploads-failed =
         [one] { $count } upload failed
        *[other] { $count } uploads failed
     }
-You-are-offline = You are offline
 You-are-offline-Tap-to-reload = You are offline. Tap to reload.
 You-are-offline-Tap-to-try-again = You are offline. Tap to try again.
 You-can-add-up-to-20-media = You can add up to 20 photos and 20 sounds per observation.
