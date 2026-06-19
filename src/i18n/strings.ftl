@@ -272,7 +272,6 @@ CONTINUE = CONTINUE
 Coordinates-copied-to-clipboard = Coordinates copied to clipboard
 # Button that copies coordinates to the clipboard
 Copy-coordinates = Copy Coordinates
-Copy-photo = Copy Photo
 # Right to control copies of a creative work; this string may be used as a
 # heading to describe general information about rights, attribution, and
 # licensing
@@ -965,7 +964,6 @@ Overwrite-saved-filter = Overwrite saved filter
 PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
-Photo-copied-to-clipboard = Photo copied to clipboard
 Photo-importer = Photo importer
 PHOTO-LICENSING = PHOTO LICENSING
 Photos = Photos
