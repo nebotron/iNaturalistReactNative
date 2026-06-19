@@ -1,16 +1,11 @@
-import Clipboard from "@react-native-clipboard/clipboard";
+import type { ExifTags } from "@lodev09/react-native-exify";
+import * as Exify from "@lodev09/react-native-exify";
 import {
+  copyFile,
   downloadFile,
-  readFile,
   TemporaryDirectoryPath,
 } from "@dr.pogodin/react-native-fs";
-import {
-  Body2,
-  BottomSheet,
-  Button,
-  INatIcon,
-  WarningSheet,
-} from "components/SharedComponents";
+import { WarningSheet } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, {
   useCallback,
@@ -19,15 +14,13 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Platform, StatusBar } from "react-native";
+import { Share, StatusBar } from "react-native";
 import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Photo from "realmModels/Photo";
 import { BREAKPOINTS } from "sharedHelpers/breakpoint";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
-import { getShadow } from "styles/global";
-import colors from "styles/tailwindColors";
 
 import MainMediaDisplay from "./MainMediaDisplay";
 import MediaSelector from "./MediaSelector";
@@ -59,6 +52,8 @@ interface Props {
     { onClose, photoCount }: { onClose: ( ) => void; photoCount: number}
   ) => React.JSX.Element;
   initialIndex?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   onClose?: ( ) => void;
   onCropPhoto?: Function;
   onDeletePhoto?: ( uri: string ) => void;
@@ -66,6 +61,7 @@ interface Props {
   onReorderPhotos?: Function;
   photos?: PhotoItem[];
   sounds?: SoundItem[];
+  timeObservedAt?: string | null;
   uri?: string | null;
 }
 
@@ -75,6 +71,8 @@ const MediaViewer = ( {
   deleting,
   header,
   initialIndex,
+  latitude,
+  longitude,
   onClose = ( ) => undefined,
   onCropPhoto,
   onDeletePhoto,
@@ -82,6 +80,7 @@ const MediaViewer = ( {
   onReorderPhotos,
   photos = [],
   sounds = [],
+  timeObservedAt,
   uri,
 }: Props ) => {
   const insets = useSafeAreaInsets();
@@ -101,9 +100,6 @@ const MediaViewer = ( {
   } );
   const { t } = useTranslation( );
   const [mediaToDelete, setMediaToDelete] = useState<MediaToDelete | null>( null );
-  const [uriToCopy, setUriToCopy] = useState<string | null>( null );
-  const [showCopyPhotoSheet, setShowCopyPhotoSheet] = useState( false );
-  const [photoCopied, setPhotoCopied] = useState( false );
 
   const horizontalScroll = useRef<ICarouselInstance>( null );
 
@@ -172,34 +168,37 @@ const MediaViewer = ( {
     setMediaToDelete,
   ] );
 
-  const handleLongPressPhoto = useCallback( ( uri: string ) => {
-    setUriToCopy( uri );
-    setShowCopyPhotoSheet( true );
-  }, [] );
+  const handleLongPressPhoto = useCallback( async ( photoUri: string ) => {
+    const tempPath = `${TemporaryDirectoryPath}/share_photo.jpg`;
 
-  const handleCopyPhoto = useCallback( async ( ) => {
-    if ( !uriToCopy ) return;
-    setShowCopyPhotoSheet( false );
-    try {
-      if ( Platform.OS === "ios" ) {
-        let base64: string;
-        if ( uriToCopy.startsWith( "file://" ) ) {
-          base64 = await readFile( uriToCopy.replace( "file://", "" ), "base64" );
-        } else {
-          const tempPath = `${TemporaryDirectoryPath}/clipboard_photo.jpg`;
-          await downloadFile( { fromUrl: uriToCopy, toFile: tempPath } ).promise;
-          base64 = await readFile( tempPath, "base64" );
-        }
-        Clipboard.setImage( base64 );
-      } else {
-        Clipboard.setString( uriToCopy );
-      }
-    } catch ( _e ) {
-      Clipboard.setString( uriToCopy );
+    // Get a local file we can annotate and share
+    if ( photoUri.startsWith( "file://" ) ) {
+      await copyFile( photoUri.replace( "file://", "" ), tempPath );
+    } else {
+      await downloadFile( { fromUrl: photoUri, toFile: tempPath } ).promise;
     }
-    setPhotoCopied( true );
-    setTimeout( ( ) => setPhotoCopied( false ), 2000 );
-  }, [uriToCopy] );
+
+    // Embed location and time metadata
+    const exifToWrite: ExifTags = {};
+    if ( latitude != null && longitude != null ) {
+      exifToWrite.GPSLatitude = latitude;
+      exifToWrite.GPSLongitude = longitude;
+    }
+    if ( timeObservedAt ) {
+      const d = new Date( timeObservedAt );
+      const pad = ( n: number ) => String( n ).padStart( 2, "0" );
+      exifToWrite.DateTimeOriginal = `${d.getFullYear()}:${pad( d.getMonth() + 1 )}:${pad( d.getDate() )} ${pad( d.getHours() )}:${pad( d.getMinutes() )}:${pad( d.getSeconds() )}`;
+    }
+    if ( Object.keys( exifToWrite ).length > 0 ) {
+      try {
+        await Exify.write( `file://${tempPath}`, exifToWrite );
+      } catch ( _e ) {
+        // Continue sharing even if EXIF write fails
+      }
+    }
+
+    Share.share( { url: `file://${tempPath}` } );
+  }, [latitude, longitude, timeObservedAt] );
 
   return (
     <View
@@ -254,37 +253,6 @@ const MediaViewer = ( {
           insideModal
           testID="MediaViewer.DiscardMediaWarningSheet"
         />
-      )}
-      {showCopyPhotoSheet && (
-        <BottomSheet
-          onPressClose={( ) => setShowCopyPhotoSheet( false )}
-          insideModal
-        >
-          <View className="p-5">
-            <Button
-              text={t( "Copy-photo" )}
-              onPress={handleCopyPhoto}
-            />
-          </View>
-        </BottomSheet>
-      )}
-      {photoCopied && (
-        <View
-          className="absolute inset-0 items-center justify-center"
-          pointerEvents="none"
-        >
-          <View
-            className="bg-white p-3 rounded-xl flex-row items-center"
-            style={getShadow( )}
-          >
-            <Body2 className="mr-3">{t( "Photo-copied-to-clipboard" )}</Body2>
-            <INatIcon
-              name="checkmark-circle"
-              size={19}
-              color={colors.inatGreen}
-            />
-          </View>
-        </View>
       )}
     </View>
   );
