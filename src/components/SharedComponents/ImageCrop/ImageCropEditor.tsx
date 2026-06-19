@@ -57,12 +57,13 @@ const ImageCropEditor = ( ) => {
   const addPendingGroupPhotoDeletionUri = useStore(
     state => state.addPendingGroupPhotoDeletionUri,
   );
+  const pendingCropImageUris = useStore( state => state.pendingCropImageUris );
+  const setPendingCropImageUris = useStore( state => state.setPendingCropImageUris );
 
   const imageUri = params?.imageUri;
   const context = params?.context;
   const observationPhotoUuid = params?.observationPhotoUuid;
   const onCropSaved = params?.onCropSaved;
-  const pendingImageUris = params?.pendingImageUris;
 
   const [localImageUri, setLocalImageUri] = useState<string | null>( null );
   const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>( null );
@@ -192,10 +193,11 @@ const ImageCropEditor = ( ) => {
   } ), [t] );
 
   const finishOrAdvance = useCallback( ( ) => {
-    if ( pendingImageUris?.length ) {
+    if ( pendingCropImageUris?.length ) {
+      const [nextUri, ...remaining] = pendingCropImageUris;
+      setPendingCropImageUris( remaining );
       navigation.replace( "ImageCropEditor", {
-        imageUri: pendingImageUris[0],
-        pendingImageUris: pendingImageUris.slice( 1 ),
+        imageUri: nextUri,
         context,
         observationPhotoUuid,
         onCropSaved,
@@ -209,7 +211,8 @@ const ImageCropEditor = ( ) => {
     navigation,
     observationPhotoUuid,
     onCropSaved,
-    pendingImageUris,
+    pendingCropImageUris,
+    setPendingCropImageUris,
   ] );
 
   const handleDelete = useCallback( ( ) => {

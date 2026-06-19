@@ -195,7 +195,6 @@ export type SharedStackParamList = {
     context: "groupPhotos" | "observationEdit";
     observationPhotoUuid?: string;
     onCropSaved?: () => void;
-    pendingImageUris?: string[];
   };
 };
 
