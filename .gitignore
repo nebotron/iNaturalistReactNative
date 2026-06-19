@@ -122,6 +122,8 @@ yolov8n.pt
 # YOLO training/eval artifacts
 runs/
 *.pt
+!weights/clip/*.pt
+crop_training.json
 
 # Python
 __pycache__/

@@ -36,11 +36,11 @@ Score = (2×recall + 1×precision) / 3. Padding = 0.12.
 
 - **Threshold tuning gave +0.020** (2026-06-18). Lowering `YOLO_GATE_CONF` from 0.25→0.08 and widening the union criteria (0.60→0.40 thresh, 3→5 boxes) replaced low-quality saliency fallbacks with moderate-confidence YOLO boxes that have better precision. Grid-search script: see below.
 - **Fine-tuned single-class yolov8n models produce zero YOLO detections** on iNat photos (all crops from saliency). Root cause unclear — possibly the training labels (user square crops with padding) don't match YOLO's expected tight bounding boxes, causing diffuse low-confidence predictions.
-- **CLIP download is blocked in the remote session** — `set_classes()` on a YOLOWorld model tries to download CLIP ViT-B/32 from OpenAI's CDN and gets 403. This prevents re-exporting the World model with different class names. The workaround is to use a local machine or a session with unrestricted network access.
+- **CLIP download is blocked in the remote session** — `set_classes()` on a YOLOWorld model tries to download CLIP ViT-B/32 from OpenAI's CDN and gets 403. The model is committed to `weights/clip/ViT-B-32.pt` (gitignore has `!weights/clip/*.pt`). If it's missing (e.g. after a fresh clone), download it on a laptop with unrestricted network access (see "CLIP model" section below) and commit it.
 - `ImageCropper.m` dynamically reads output tensor shape via `GetTensorTypeAndShape`, so both `[1, 5, 8400]` (single-class) and `[1, 20, 8400]` (multi-class) formats work.
 - `tune_thresholds.py` was previously broken for the multi-class model (hardcoded single-class format). Fixed 2026-06-18.
 - Optimal padding: **0.12** (set in `src/sharedHelpers/subjectDetectionModels.ts`).
-- `crop_training.json` is not committed. Restore it with: `git show d4355a0:crop_training.json > crop_training.json`
+- `crop_training.json` is not committed (gitignored). Pull it from Firebase: `python3 scripts/pull_crop_log.py` (requires `CROP_LOG_FIREBASE_URL` in `.env`).
 - 328 of 402 labeled images are downloadable (S3 open-data). The 74 on `static.inaturalist.org` return 404 on both the primary host and the S3 mirror.
 
 ## Evaluation
@@ -93,6 +93,29 @@ python3 scripts/tune_thresholds.py crop_training.json
 3. **Try full-precision World model.** Export `yolov8s-worldv2.pt` to ONNX FP16 with `opset=12` and no INT8. Requires a machine with unrestricted network access (CLIP download needed for `set_classes()`). May give a meaningful accuracy gain since INT8 quantization costs some precision.
 
 4. **Alternative architectures.** YOLO-NAS or RT-DETR may give better accuracy at similar size.
+
+## CLIP model
+
+`set_classes()` on a YOLOWorld model requires `ViT-B-32.pt`, which ultralytics downloads from OpenAI's CDN — blocked in remote sessions (403). The file is committed to `weights/clip/ViT-B-32.pt` so remote sessions can use it.
+
+**If `weights/clip/ViT-B-32.pt` is missing**, download it from a laptop with open internet:
+
+```sh
+# On a laptop (not the remote session)
+cd /path/to/iNaturalistReactNative
+pip install ultralytics
+python3 -c "
+from ultralytics import YOLOWorld
+m = YOLOWorld('yolov8s-worldv2.pt')
+m.set_classes(['animal'])  # triggers ViT-B-32.pt download into weights/clip/
+"
+# The file lands at weights/clip/ViT-B-32.pt (ultralytics respects settings.yaml weights_dir)
+git add weights/clip/ViT-B-32.pt
+git commit -m "Add CLIP ViT-B-32 weights for YOLOWorld set_classes"
+git push fork main
+```
+
+After pushing, the remote session can fetch it and `set_classes()` will work without network access.
 
 ## Applying changes
 

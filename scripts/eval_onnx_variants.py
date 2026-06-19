@@ -245,6 +245,13 @@ def evaluate_combo(entries, model_key: str, model_path: Path, algo_name: str, al
 
 def main():
     json_path = Path(sys.argv[1]) if len(sys.argv) > 1 else REPO_ROOT / "crop_training.json"
+    if not json_path.exists():
+        sys.exit(
+            f"{json_path} not found.\n"
+            "Pull the latest crop log from Firebase first:\n"
+            "  python3 scripts/pull_crop_log.py\n"
+            "(requires CROP_LOG_FIREBASE_URL in .env)"
+        )
     raw = json.loads(json_path.read_text())
     if isinstance(raw, list):
         entries_raw = [(e["url"], e) for e in raw]

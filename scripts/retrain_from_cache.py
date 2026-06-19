@@ -45,6 +45,13 @@ def main() -> None:
     args = parser.parse_args()
 
     json_path = Path(args.json)
+    if not json_path.exists():
+        sys.exit(
+            f"{json_path} not found.\n"
+            "Pull the latest crop log from Firebase first:\n"
+            "  python3 scripts/pull_crop_log.py\n"
+            "(requires CROP_LOG_FIREBASE_URL in .env)"
+        )
     raw = json.loads(json_path.read_text())
     if isinstance(raw, list):
         entries = raw
