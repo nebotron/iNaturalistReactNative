@@ -7,6 +7,7 @@ import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { t } from "i18next";
+import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
 import React, {
   useCallback,
@@ -15,10 +16,11 @@ import React, {
   useRef,
   useState,
 } from "react";
+import Observation from "realmModels/Observation";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
-import { useGridLayout, useLayoutPrefs } from "sharedHooks";
+import { useExitObservationFlow, useGridLayout } from "sharedHooks";
 import useStore from "stores/useStore";
 
 import GroupPhotos from "./GroupPhotos";
@@ -26,6 +28,8 @@ import flattenAndOrderSelectedPhotos, {
   flattenAndOrderSelectedVideos,
   selectedGroupsHaveMixedMedia,
 } from "./helpers/groupPhotoHelpers";
+
+const { useRealm } = RealmContext;
 
 function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
   if ( uri == null ) return null;
@@ -39,16 +43,17 @@ function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
 
 const GroupPhotosContainer = ( ): Node => {
   const navigation = useNavigation( );
-  const {
-    screenAfterPhotoEvidence, isDefaultMode,
-  } = useLayoutPrefs( );
   const { gridItemStyle } = useGridLayout( undefined, "fullWidth" );
   const itemHeight = gridItemStyle.height;
+  const realm = useRealm( );
+  const exitObservationFlow = useExitObservationFlow( );
   const setObservations = useStore( state => state.setObservations );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
   const pendingGroupPhotoDeletionUris = useStore( state => state.pendingGroupPhotoDeletionUris );
+  const resetMyObsOffsetToRestore = useStore( state => state.resetMyObsOffsetToRestore );
+  const setMyObsOffset = useStore( state => state.setMyObsOffset );
 
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
@@ -331,42 +336,22 @@ const GroupPhotosContainer = ( ): Node => {
       const batchResults = await Promise.all( batch.map( createObservationFromGroupedMedia ) );
       newObservations.push( ...batchResults );
     }
-    setObservations( newObservations.map( ( newObs, idx ) => ( {
+    const observationsToSave = newObservations.map( ( newObs, idx ) => ( {
       ...( idx === 0
         ? firstObservationDefaults
         : {}
       ),
       ...newObs,
-    } ) ) );
+    } ) );
+    setObservations( observationsToSave );
+
+    await Promise.all(
+      observationsToSave.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
+    );
+
+    resetMyObsOffsetToRestore( );
+    setMyObsOffset( 0 );
     setIsCreatingObservations( false );
-
-    const navigateToNextScreen = ( ) => {
-      if ( newObservations.length === 1 ) {
-        const onlyObservation = newObservations[0];
-        if ( onlyObservation.observationSounds?.length ) {
-          return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
-        }
-
-        if ( isDefaultMode ) {
-          return navigation.navigate( "NoBottomTabStackNavigator", {
-            screen: "Match",
-            params: {
-              entryScreen: "GroupPhotos",
-              lastScreen: "GroupPhotos",
-            },
-          } );
-        }
-
-        return navigation.navigate( "NoBottomTabStackNavigator", {
-          screen: screenAfterPhotoEvidence,
-          params: {
-            entryScreen: "GroupPhotos",
-            lastScreen: "GroupPhotos",
-          },
-        } );
-      }
-      return navigation.navigate( "ObsEdit", { lastScreen: "GroupPhotos" } );
-    };
 
     const allPendingUris = [
       ...new Set( [...pendingDeletionUris, ...pendingGroupPhotoDeletionUris] ),
@@ -376,9 +361,9 @@ const GroupPhotosContainer = ( ): Node => {
       const promptDeleteOriginalDevicePhotos = require(
         "sharedHelpers/promptDeleteOriginalDevicePhotos",
       ).default;
-      promptDeleteOriginalDevicePhotos( allPendingUris, navigateToNextScreen );
+      promptDeleteOriginalDevicePhotos( allPendingUris, ( ) => exitObservationFlow( ) );
     } else {
-      navigateToNextScreen( );
+      exitObservationFlow( );
     }
   };
 
