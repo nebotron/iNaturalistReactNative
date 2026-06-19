@@ -162,7 +162,7 @@ export type SharedStackParamList = {
   //   lastScreen: "GroupPhotos",
   // }
   Suggestions: {
-    entryScreen?: "CameraWithDevice" | "ObsEdit" | "ObsDetails" | "GroupPhotos";
+    entryScreen?: "CameraWithDevice" | "ObsEdit" | "ObsDetails" | "GroupPhotos" | "UnuploadedObsId";
     lastScreen?: "CameraWithDevice" |
       "ObsEdit" |
       "PhotoLibrary" |
