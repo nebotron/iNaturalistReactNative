@@ -15,11 +15,10 @@ import {
 import type { CarouselRenderItem, ICarouselInstance } from "react-native-reanimated-carousel";
 import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
-import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
-import useTranslation from "sharedHooks/useTranslation";
-
 import { saveBrightness } from "sharedHelpers/brightnessLog";
 import { openExternalWebBrowser } from "sharedHelpers/util";
+import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
+import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
 import AttributionButton from "./AttributionButton";
@@ -78,6 +77,7 @@ const MainMediaDisplay = ( {
   const { screenWidth } = useDeviceOrientation( );
   const [zooming, setZooming] = useState( false );
   const [brightness, setBrightness] = useState( BRIGHTNESS_DEFAULT );
+  const [brightnessSaved, setBrightnessSaved] = useState( false );
   const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
   const items = useMemo( ( ) => ( [
     ...photos.map( photo => ( { ...photo, type: "photo" as const } ) ),
@@ -181,16 +181,21 @@ const MainMediaDisplay = ( {
                 maximumTrackTintColor={colors.white}
                 thumbTintColor={colors.white}
                 value={brightness}
-                onValueChange={setBrightness}
+                onValueChange={val => { setBrightness( val ); setBrightnessSaved( false ); }}
                 tapToSeek
                 accessibilityLabel={t( "Adjust-brightness" )}
               />
               { brightness !== BRIGHTNESS_DEFAULT && (
                 <>
                   <TransparentCircleButton
-                    onPress={( ) => saveBrightness( photo.url, brightness )}
+                    onPress={( ) => {
+                      saveBrightness( photo.url, brightness );
+                      setBrightnessSaved( true );
+                    }}
                     icon="label"
-                    color={colors.inatGreen}
+                    color={brightnessSaved
+                      ? colors.white
+                      : colors.inatGreen}
                     accessibilityLabel={t( "Save-brightness-label" )}
                     testID="MediaViewer.saveBrightnessButton"
                     optionalClasses="ml-2"
