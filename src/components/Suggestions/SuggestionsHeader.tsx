@@ -10,7 +10,6 @@ import SuggestionsModelToggle from "./SuggestionsModelToggle";
 
 interface Props {
   duplicatePhotoUris?: Set<string>;
-  interactionsDisabled: boolean;
   onCropPhoto?: ( _uri: string ) => void;
   onPressPhoto: ( _uri: string ) => void;
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
@@ -25,7 +24,6 @@ interface Props {
 
 const SuggestionsHeader = ( {
   duplicatePhotoUris,
-  interactionsDisabled,
   onCropPhoto,
   onPressPhoto,
   onReorderPhotos,
@@ -53,7 +51,6 @@ const SuggestionsHeader = ( {
       </View>
       {showModelToggle && (
         <SuggestionsModelToggle
-          disabled={interactionsDisabled}
           onModelChange={toggleSuggestionsModel}
           useOfflineModel={useOfflineModel}
         />
