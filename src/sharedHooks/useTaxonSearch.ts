@@ -56,6 +56,13 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     },
     {
       enabled: shouldFetchRemote,
+      // On slow networks the NetInfo reachability ping to inaturalist.org can
+      // time out, causing React Query's online manager to mark the device as
+      // offline and pause this query before it ever starts. 'offlineFirst'
+      // lets the query run immediately regardless of online-manager state;
+      // if the network request actually fails, retries are still paused until
+      // the device comes back online, and local Realm results are shown instead.
+      networkMode: "offlineFirst",
     },
   );
 
