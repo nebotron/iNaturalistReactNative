@@ -2,6 +2,7 @@ import { StackActions, useNavigation, useRoute } from "@react-navigation/native"
 import useMultiObsSaveAndAdvance from "components/ObsEdit/hooks/useMultiObsSaveAndAdvance";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { useCallback } from "react";
+import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
 
 const useNavigateWithTaxonSelected = (
@@ -26,8 +27,13 @@ const useNavigateWithTaxonSelected = (
   const observations = useStore( state => state.observations );
   const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
+  const removeObservationFromMultiObsFlowAtIndex = useStore(
+    state => state.removeObservationFromMultiObsFlowAtIndex,
+  );
+  const exitObservationFlow = useExitObservationFlow( );
   const vision = options?.vision;
 
+  const isUnuploadedObsIdFlow = entryScreen === "UnuploadedObsId";
   const isMultiObsCreateFlow = (
     observations.length > 1 || savedOrUploadedMultiObsFlow
   ) && entryScreen === "ObsEdit" && lastScreen === "ObsEdit";
@@ -50,6 +56,26 @@ const useNavigateWithTaxonSelected = (
         owners_identification_from_vision: vision,
         taxon: selectedTaxon,
       } );
+    }
+
+    if ( isUnuploadedObsIdFlow ) {
+      if ( selectedTaxon !== undefined ) {
+        const numObservations = useStore.getState( ).observations.length;
+        await saveAndAdvance( "save" );
+        if ( numObservations > 1 ) {
+          return;
+        }
+        return;
+      }
+      // Skip: advance without saving so taxon is left unchanged in realm
+      const currentIndex = useStore.getState( ).currentObservationIndex;
+      const numObservations = useStore.getState( ).observations.length;
+      if ( numObservations <= 1 ) {
+        exitObservationFlow( {} );
+      } else {
+        removeObservationFromMultiObsFlowAtIndex( currentIndex );
+      }
+      return;
     }
 
     if ( selectedTaxon !== undefined && isMultiObsCreateFlow ) {
@@ -85,9 +111,12 @@ const useNavigateWithTaxonSelected = (
   }, [
     currentObservation?.uuid,
     entryScreen,
+    exitObservationFlow,
     isMultiObsCreateFlow,
+    isUnuploadedObsIdFlow,
     lastScreen,
     navigation,
+    removeObservationFromMultiObsFlowAtIndex,
     saveAndAdvance,
     updateObservationKeys,
     vision,

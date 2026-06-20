@@ -32,6 +32,7 @@ import {
   useLayoutPrefs, useTranslation,
 } from "sharedHooks";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
+import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import MenuItem from "./MenuItem";
@@ -111,6 +112,8 @@ const Menu = ( ) => {
   const layoutPrefs = useLayoutPrefs();
   const newsEnabled = useFeatureFlag( FeatureFlag.NewsEnabled );
   const [modalState, setModalState] = useState<MenuModalState | null>( null );
+  const setObservations = useStore( state => state.setObservations );
+  const resetObservationFlowSlice = useStore( state => state.resetObservationFlowSlice );
 
   const menuItems: Record<string, MenuOption> = {
     projects: {
@@ -151,6 +154,27 @@ const Menu = ( ) => {
       label: t( "SETTINGS" ),
       navigation: "Settings",
       icon: "gear",
+    },
+
+    idUnuploadedObs: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "ID UNUPLOADED OBS",
+      icon: "label",
+      onPress: ( ) => {
+        const unsyncedObs = Observation.filterUnsyncedObservations( realm );
+        const obsWithPhotos = Array.from( unsyncedObs ).filter(
+          obs => ( obs.observationPhotos?.length ?? 0 ) > 0,
+        );
+        if ( obsWithPhotos.length === 0 ) {
+          Alert.alert( "No unuploaded observations with photos to identify." );
+          return;
+        }
+        resetObservationFlowSlice( );
+        setObservations( obsWithPhotos );
+        navigation.navigate( "Suggestions", {
+          entryScreen: "UnuploadedObsId",
+        } );
+      },
     },
 
     feedback: {
