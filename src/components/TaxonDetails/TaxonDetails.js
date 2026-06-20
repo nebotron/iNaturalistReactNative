@@ -29,7 +29,12 @@ import compact from "lodash/compact";
 import find from "lodash/find";
 import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   ScrollView,
   StatusBar,
@@ -38,6 +43,7 @@ import DeviceInfo from "react-native-device-info";
 import Observation from "realmModels/Observation";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { log } from "sharedHelpers/logger";
+import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import saveObservation from "sharedHelpers/saveObservation";
 import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import {
@@ -176,6 +182,26 @@ const TaxonDetails = ( ): Node => {
 
   const taxon = remoteTaxon || localTaxon;
 
+  const [offlineAncestors, setOfflineAncestors] = useState( null );
+
+  const isNetworkError = !!error?.message?.match( /Network request failed/ );
+
+  useEffect( ( ) => {
+    const ancestorIds = localTaxon?.ancestor_ids;
+    if ( ancestorIds?.length > 0 && !offlineAncestors ) {
+      getAncestorsFromTaxonomyFile( Array.from( ancestorIds ) )
+        .then( ancestors => setOfflineAncestors( ancestors ) )
+        .catch( err => logger.error( "Failed to load offline ancestors", err ) );
+    }
+  }, [localTaxon, offlineAncestors] );
+
+  const taxonForDisplay = useMemo( ( ) => {
+    if ( taxon && !taxon.ancestors && offlineAncestors ) {
+      return { ...taxon, ancestors: offlineAncestors };
+    }
+    return taxon;
+  }, [taxon, offlineAncestors] );
+
   const { data: seenByCurrentUser } = useQuery(
     ["fetchSpeciesCounts", taxon?.id],
     ( ) => fetchSpeciesCounts( {
@@ -279,18 +305,32 @@ const TaxonDetails = ( ): Node => {
 
   const displayTaxonDetails = ( ) => {
     if ( isLoading ) {
+      if ( taxonForDisplay?.ancestors?.length ) {
+        return (
+          <View className="mx-3">
+            <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
+          </View>
+        );
+      }
       return <View className="m-3 flex-1 h-full justify-center"><ActivityIndicator /></View>;
     }
 
-    if ( error?.message?.match( /Network request failed/ ) ) {
+    if ( isNetworkError ) {
+      if ( !taxonForDisplay ) {
+        return (
+          <View className="py-[93px]">
+            <OfflineNotice
+              onPress={( ) => {
+                refresh();
+                refetch();
+              }}
+            />
+          </View>
+        );
+      }
       return (
-        <View className="py-[93px]">
-          <OfflineNotice
-            onPress={( ) => {
-              refresh();
-              refetch();
-            }}
-          />
+        <View className="mx-3">
+          <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
         </View>
       );
     }
@@ -305,7 +345,7 @@ const TaxonDetails = ( ): Node => {
       <View className="mx-3">
         <EstablishmentMeans taxon={taxon} />
         <Wikipedia taxon={taxon} />
-        <Taxonomy taxon={taxon} hideNavButtons={hideNavButtons} />
+        <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
         <TaxonMapPreview
           observation={mappableObservation}
           taxon={taxon}
