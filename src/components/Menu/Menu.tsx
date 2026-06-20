@@ -33,6 +33,7 @@ import {
   useLayoutPrefs, useTranslation,
 } from "sharedHooks";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
+import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import MenuItem from "./MenuItem";
@@ -110,6 +111,8 @@ const Menu = ( ) => {
   const currentUser = useCurrentUser( );
   const { t } = useTranslation( );
   const { bottom, top } = useSafeAreaInsets( );
+  const setObservations = useStore( state => state.setObservations );
+  const resetObservationFlowSlice = useStore( state => state.resetObservationFlowSlice );
 
   const { isConnected } = useNetInfo( );
 
@@ -118,6 +121,24 @@ const Menu = ( ) => {
   const [modalState, setModalState] = useState<MenuModalState | null>( null );
 
   const menuItems: Record<string, MenuOption> = {
+    addIdsToUnuploaded: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "ADD IDs TO UNUPLOADED",
+      icon: "sparkly-label",
+      onPress: ( ) => {
+        const unsyncedObs = Observation.filterUnsyncedObservations( realm );
+        if ( unsyncedObs.length === 0 ) {
+          Alert.alert( "No Unuploaded Observations", "All your observations have been uploaded." );
+          return;
+        }
+        resetObservationFlowSlice( );
+        setObservations( Array.from( unsyncedObs ) );
+        navigation.navigate( "Suggestions", {
+          entryScreen: "ObsEdit",
+          lastScreen: "ObsEdit",
+        } );
+      },
+    },
     projects: {
       label: t( "PROJECTS" ),
       navigation: "Projects",
