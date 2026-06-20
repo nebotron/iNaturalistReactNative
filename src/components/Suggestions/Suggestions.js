@@ -22,7 +22,6 @@ type Props = {
   hideLocationToggleButton: boolean,
   hideSkip?: boolean,
   improveWithLocationButtonOnPress: () => void,
-  interactionsDisabled: boolean,
   isLoading: boolean,
   shouldUseEvidenceLocation: boolean,
   onCropPhoto?: Function,
@@ -45,7 +44,6 @@ const Suggestions = ( {
   hideLocationToggleButton,
   hideSkip,
   improveWithLocationButtonOnPress,
-  interactionsDisabled,
   isLoading,
   shouldUseEvidenceLocation,
   onCropPhoto,
@@ -73,9 +71,8 @@ const Suggestions = ( {
   const isEmptyList = !topSuggestion && otherSuggestions?.length === 0;
 
   const handleTaxonChosen = useCallback( ( ...args ) => {
-    if ( interactionsDisabled ) { return; }
     onTaxonChosen( ...args );
-  }, [interactionsDisabled, onTaxonChosen] );
+  }, [onTaxonChosen] );
 
   const renderSuggestion = useCallback( ( { item: suggestion } ) => (
     <Suggestion
@@ -114,7 +111,6 @@ const Suggestions = ( {
   const renderHeader = useMemo( ( ) => (
     <SuggestionsHeader
       duplicatePhotoUris={duplicatePhotoUris}
-      interactionsDisabled={interactionsDisabled}
       onCropPhoto={onCropPhoto}
       onPressPhoto={onPressPhoto}
       onReorderPhotos={onReorderPhotos}
@@ -127,7 +123,6 @@ const Suggestions = ( {
       showImproveWithLocationButton={showImproveWithLocationButton}
     />
   ), [
-    interactionsDisabled,
     onCropPhoto,
     onPressPhoto,
     onReorderPhotos,
