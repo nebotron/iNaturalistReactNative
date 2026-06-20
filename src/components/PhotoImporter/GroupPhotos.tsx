@@ -1,5 +1,4 @@
 import { useNavigation } from "@react-navigation/native";
-import useStore from "stores/useStore";
 import type {
   FlashListProps, FlashListRef, ListRenderItem, ViewToken,
 } from "@shopify/flash-list";
@@ -99,7 +98,6 @@ const GroupPhotos = ( {
 }: Props ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
-  const setPendingCropImageUris = useStore( state => state.setPendingCropImageUris );
   const {
     flashListStyle,
     gridItemStyle,
@@ -130,13 +128,15 @@ const GroupPhotos = ( {
       return;
     }
     const [firstUri, ...remainingUris] = selectedPhotoUris;
-    setPendingCropImageUris( remainingUris );
     navigation.navigate( "ImageCropEditor", {
       imageUri: firstUri,
+      pendingImageUris: remainingUris.length > 0
+        ? remainingUris
+        : undefined,
       context: "groupPhotos",
       onCropSaved: clearSelection,
     } );
-  }, [clearSelection, navigation, selectedPhotoUris, setPendingCropImageUris] );
+  }, [clearSelection, navigation, selectedPhotoUris] );
 
   const allPhotosSelected = groupedPhotos.length > 0
     && selectedObservations.length === groupedPhotos.length;
