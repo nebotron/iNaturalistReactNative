@@ -143,10 +143,13 @@ const useOnlineSuggestions = (
     },
   );
 
-  // Give up on suggestions request after a timeout
+  // Give up on suggestions request after a timeout.
+  // Guard queryKey.length so the timer can't fire before scoreImageParams is set
+  // (initial queryKey is []) which would cancel all queries and mark online as errored
+  // before the real fetch even starts.
   useEffect( ( ) => {
     const timer = setTimeout( ( ) => {
-      if ( onlineSuggestions === undefined ) {
+      if ( onlineSuggestions === undefined && queryKey.length > 0 ) {
         queryClient.cancelQueries( { queryKey } );
         onFetchError( { isOnline: true } );
         setTimedOut( true );
