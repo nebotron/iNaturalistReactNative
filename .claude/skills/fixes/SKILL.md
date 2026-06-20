@@ -1,18 +1,22 @@
 ---
 name: fixes
-description: List the pure bug-fix commits in nebotron/iNaturalistReactNative that are not part of the upstream inaturalist/iNaturalistReactNative repo.
+description: List the pure bug-fix commits in nebotron/iNaturalistReactNative that fix bugs present in the upstream inaturalist/iNaturalistReactNative repo.
 ---
 
-Present the following numbered list of pure bug fixes (commits in this fork that fix incorrect behavior, not new features or improvements):
+Present the following list of pure bug fixes — commits that fix incorrect behavior in code that existed in the upstream inaturalist/iNaturalistReactNative before this fork:
 
-1. **Fix crop region on live update to match page-refresh path** (`8cec1a2`)
-   On a live crop-log write the detection hook was reusing stale cached `imageWidth`/`imageHeight` from AI inference rather than re-fetching via `getImageSize(toLargeUri(uri))`, so the applied crop was calculated from wrong dimensions. The fix deletes the stale cache entry so both paths (live update and page-refresh) run the same async size-fetch. (`src/sharedHelpers/useSubjectDetectionForUri.ts`)
+None.
 
-2. **Fix test failures and missing translation keys after cleanup** (`b67a1fe`)
-   The cleanup commit (`a779a8a`) broke several things: deleted `extractAudioFromVideo.ts` while it was still imported, stripped `saveAsset`/`deletePhotos`/iOS-permission helpers from the CameraRoll mock (needed by camera tests), introduced a circular import that caused Jest to capture real module references before mocks applied, removed a named `ScreenShell` export needed by `ExploreTaxonSearch` tests, and omitted 50 translation keys used by new features. This commit restores all of them.
+Every fix commit on this branch falls into one of two categories:
 
-3. **Eliminate crop view loading spinner when opening from Identify page** (`39efb1f`)
-   Three related cache/download bugs: (a) `ensureLocalImageForCrop` used a non-deterministic temp path so the same remote image was downloaded again even though the Identify page had already cached it — fixed by using a stable, URL-derived filename; (b) `useSubjectDetectionForUri` keyed its cache on whatever URL it was handed (medium or large), so detections stored under the medium URL were not found when the crop editor looked up the large URL — fixed by normalising to the large-URL form; (c) `ImageCropEditor` always ran full AI inference even when a detection was already in cache — fixed by checking the cache before calling `getCropForUri`.
+**A. Fixing bugs in code the fork itself added** (files created by the fork's initial `All changes` commit that don't exist upstream):
+- `useSubjectDetectionForUri.ts`, `ensureLocalImageForCrop.ts`, `ImageCropEditor.tsx`, `animalCropLog.ts` — subject-detection and crop pipeline (all fork-new)
+- `SuggestionsContainer.tsx`'s `interactionsDisabled` state and `tryOfflineSuggestions=true` behavior — fork modifications that caused the checkmark and race-condition bugs later fixed by separate commits
+- `useNavigateWithTaxonSelected.ts` made async by the fork, then reverted
 
-4. **Remove blocking Alert.alert calls during network retries** (`526f4f0`)
-   `reactQueryRetry` in `src/sharedHelpers/logging.js` called `Alert.alert()` on every retry attempt, popping a modal dialog over the UI each time a query failed on a flaky connection. This blocked all user interaction until the alert was dismissed and made the app appear broken during ordinary network hiccups. The alert was removed; the retry logic itself is unchanged.
+**B. Fixing bugs the fork introduced into existing upstream files**:
+- The `Alert.alert()` in `logging.js` — added by the fork, then removed
+- The offline-popup alerts in `Menu.tsx` and `OfflineNavigationGuard.tsx` — added by the fork, then removed
+- The 50 missing translation keys and broken test mocks — omitted by the fork's own cleanup commit
+
+The `patches/react-native-image-picker+8.2.1.patch` change (`a5fc7d57`) does fix a real iOS OOM crash on 200+ photo imports, but it replaces the upstream's patch entirely rather than adding to it, so it is not a pure upstream bug fix either.
