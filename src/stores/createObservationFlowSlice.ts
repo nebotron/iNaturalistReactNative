@@ -71,7 +71,6 @@ interface ObservationFlowState {
   importedPhotoDeviceUriByLocalUri: Record<string, string>;
   removedOriginalDevicePhotoUris: string[];
   pendingGroupPhotoDeletionUris: string[];
-  pendingCropImageUris: string[];
   groupedPhotos: GroupedPhoto[];
   observations: RealmObservationPojo[];
   observationMarkedAsViewedAt: Date | null;
@@ -101,7 +100,6 @@ interface ObservationFlowActions {
   setCameraState: ( options: CameraStateOptions ) => void;
   setCurrentObservationIndex: ( index: number ) => void;
   removeObservationFromMultiObsFlowAtIndex: ( removedIndex: number ) => void;
-  setPendingCropImageUris: ( uris: string[] ) => void;
   setGroupedPhotos: ( photos: GroupedPhoto[] ) => void;
   setObservationMarkedAsViewedAt: ( date: Date | null ) => void;
   setObservations: ( updatedObservations: RealmObservationPojo[] ) => void;
@@ -137,7 +135,6 @@ const DEFAULT_STATE: ObservationFlowState = {
   importedPhotoDeviceUriByLocalUri: {},
   removedOriginalDevicePhotoUris: [],
   pendingGroupPhotoDeletionUris: [],
-  pendingCropImageUris: [],
   groupedPhotos: [],
   observations: [],
   // Track when any obs was last marked as viewed so we know when to update
@@ -432,9 +429,6 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
         ? observationToJSON( observations[currentObservationIndex] )
         : null,
     };
-  } ),
-  setPendingCropImageUris: ( uris: string[] ) => set( {
-    pendingCropImageUris: uris,
   } ),
   setGroupedPhotos: ( photos: GroupedPhoto[] ) => set( {
     groupedPhotos: photos,
