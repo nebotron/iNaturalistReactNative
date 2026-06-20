@@ -60,11 +60,7 @@ const useNavigateWithTaxonSelected = (
 
     if ( isUnuploadedObsIdFlow ) {
       if ( selectedTaxon !== undefined ) {
-        const numObservations = useStore.getState( ).observations.length;
-        await saveAndAdvance( "save" );
-        if ( numObservations > 1 ) {
-          return;
-        }
+        saveAndAdvance( "save" );
         return;
       }
       // Skip: advance without saving so taxon is left unchanged in realm
