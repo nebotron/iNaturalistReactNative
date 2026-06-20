@@ -39,9 +39,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
 
   const shouldFetchRemote = taxonQuery.length > 0;
 
-  const {
-    data: remoteTaxa, refetch, isLoading, isPending, isError,
-  } = useAuthenticatedQuery(
+  const { data: remoteTaxa, refetch, isLoading } = useAuthenticatedQuery(
     ["fetchTaxonSuggestions", taxonQuery],
     async ( optsWithAuth: ApiOpts ) => {
       const apiTaxa = await fetchSearchResults(
@@ -58,7 +56,6 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     },
     {
       enabled: shouldFetchRemote,
-      allowAnonymousJWT: true,
     },
   );
 
@@ -147,30 +144,25 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     }
 
     // Show local taxa as a baseline while remote is loading or when offline.
-    // isPending covers both "auth being checked" (query disabled) and "actively
-    // fetching" so we don't flash "offline" or "No results" during either phase.
-    // Only show the offline badge after a genuine network error (isError), not
-    // merely because the API returned empty results.
+    // Only show the "offline" badge once the remote fetch has finished with no
+    // results, so we don't falsely indicate offline while still loading.
     if ( localTaxa !== null && localTaxa.length > 0 ) {
       return {
         taxa: localTaxa,
         refetch: () => undefined,
-        isLoading: isPending,
-        isLocal: !isPending && isError,
+        isLoading,
+        isLocal: !isLoading,
       };
     }
 
-    // No results yet — show loading indicator while the query is pending
-    // (covers auth-checking state as well as active fetch) to avoid a brief
-    // "No results found" flash before the first network attempt completes.
+    // No results yet (loading or genuinely empty)
     return {
       taxa: [],
       refetch,
-      isLoading: shouldFetchRemote && isPending,
+      isLoading,
       isLocal: false,
     };
-  }, [taxonQuery, remoteTaxa, localTaxa, iconicTaxa, refetch, isLoading, isPending, isError,
-    shouldFetchRemote] );
+  }, [taxonQuery, remoteTaxa, localTaxa, iconicTaxa, refetch, isLoading] );
 };
 
 export default useTaxonSearch;
