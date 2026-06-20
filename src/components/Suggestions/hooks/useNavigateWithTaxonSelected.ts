@@ -45,7 +45,7 @@ const useNavigateWithTaxonSelected = (
     transitionAnimation: ( ) => undefined,
   } );
 
-  const navigateWithTaxonSelected = useCallback( async ( selectedTaxon: object | undefined ) => {
+  const navigateWithTaxonSelected = useCallback( ( selectedTaxon: object | undefined ) => {
     if ( selectedTaxon === undefined ) {
       updateObservationKeys( {
         owners_identification_from_vision: false,
@@ -79,11 +79,7 @@ const useNavigateWithTaxonSelected = (
     }
 
     if ( selectedTaxon !== undefined && isMultiObsCreateFlow ) {
-      const numObservations = useStore.getState( ).observations.length;
-      await saveAndAdvance( "save" );
-      if ( numObservations > 1 ) {
-        return;
-      }
+      saveAndAdvance( "save" );
       return;
     }
 
