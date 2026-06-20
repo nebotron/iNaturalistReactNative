@@ -76,11 +76,37 @@ const useLocalObservations = ( ): Object => {
         let mappedObservations;
 
         if ( isDefaultMode !== prevListRef.current.isDefaultMode ) {
-          // Mode change requires full remap
+          // Mode change requires full remap and resort
           mappedObservations = Array.from( filteredObservations )
             .filter( obs => obs.isValid() )
             .map( mapObservation );
+          setObservationList( mappedObservations.sort( sortByMissingBasics ) );
+        } else if (
+          insertions.length === 0
+          && deletions.length === 0
+          && filteredObservations.length === prevListRef.current.count
+          && newModifications.length > 0
+        ) {
+          // Only modifications (e.g. upload completing) — update items in-place to
+          // preserve scroll position rather than resorting and jumping items around.
+          const modifiedUuids = new Set(
+            newModifications
+              .map( index => filteredObservations[index] )
+              .filter( obs => obs?.isValid() )
+              .map( obs => obs.uuid ),
+          );
+          mappedObservations = prevListRef.current.list.map( obs => {
+            if ( modifiedUuids.has( obs.uuid ) ) {
+              const realmObs = realm.objectForPrimaryKey( "Observation", obs.uuid );
+              return realmObs?.isValid()
+                ? mapObservation( realmObs )
+                : obs;
+            }
+            return obs;
+          } );
+          setObservationList( mappedObservations );
         } else {
+          // Insertions, deletions, or list length change — full resort
           const modifiedUuids = new Set(
             newModifications
               .map( index => filteredObservations[index] )
@@ -100,9 +126,9 @@ const useLocalObservations = ( ): Object => {
               }
               return previousObsByUuid[obs.uuid] ?? mapObservation( obs );
             } );
+          setObservationList( mappedObservations.sort( sortByMissingBasics ) );
         }
 
-        setObservationList( mappedObservations.sort( sortByMissingBasics ) );
         setNumUnuploadedObservations( unsyncedCount );
 
         prevListRef.current = {
