@@ -4,7 +4,6 @@ import {
 import { useNavigation, useRoute } from "@react-navigation/native";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import findIndex from "lodash/findIndex";
-import isEqual from "lodash/isEqual";
 import sortBy from "lodash/sortBy";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -26,9 +25,6 @@ import {
   useSuggestions,
 } from "sharedHooks";
 import useInputImageTracking from "sharedHooks/useInputImageTracking";
-import {
-  internalUseSuggestionsInitialSuggestions,
-} from "sharedHooks/useSuggestions/filterSuggestions";
 import type { TopSuggestionType } from "sharedHooks/useSuggestions/types";
 import useStore from "stores/useStore";
 
@@ -458,12 +454,7 @@ const SuggestionsContainer = ( ) => {
 
   const headerRight = useCallback( ( ) => <TaxonSearchButton />, [] );
 
-  const shouldSetImageParams = useMemo(
-    // TODO: part of MOB-1081, see `internalUseSuggestionsInitialSuggestions`
-    // we shouldn't rely on implementation internals to consumer drive state
-    () => isEqual( internalUseSuggestionsInitialSuggestions, suggestions ),
-    [suggestions],
-  );
+  const shouldSetImageParams = scoreImageParams === null;
 
   useEffect( ( ) => {
     const unsubscribe = navigation.addListener( "focus", ( ) => {
