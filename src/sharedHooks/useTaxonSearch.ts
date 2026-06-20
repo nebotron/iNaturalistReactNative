@@ -39,7 +39,9 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
 
   const shouldFetchRemote = taxonQuery.length > 0;
 
-  const { data: remoteTaxa, refetch, isLoading } = useAuthenticatedQuery(
+  const {
+    data: remoteTaxa, refetch, isLoading, isPending, isError,
+  } = useAuthenticatedQuery(
     ["fetchTaxonSuggestions", taxonQuery],
     async ( optsWithAuth: ApiOpts ) => {
       const apiTaxa = await fetchSearchResults(
@@ -56,6 +58,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     },
     {
       enabled: shouldFetchRemote,
+      allowAnonymousJWT: true,
     },
   );
 
@@ -144,25 +147,30 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     }
 
     // Show local taxa as a baseline while remote is loading or when offline.
-    // Only show the "offline" badge once the remote fetch has finished with no
-    // results, so we don't falsely indicate offline while still loading.
+    // isPending covers both "auth being checked" (query disabled) and "actively
+    // fetching" so we don't flash "offline" or "No results" during either phase.
+    // Only show the offline badge after a genuine network error (isError), not
+    // merely because the API returned empty results.
     if ( localTaxa !== null && localTaxa.length > 0 ) {
       return {
         taxa: localTaxa,
         refetch: () => undefined,
-        isLoading,
-        isLocal: !isLoading,
+        isLoading: isPending,
+        isLocal: !isPending && isError,
       };
     }
 
-    // No results yet (loading or genuinely empty)
+    // No results yet — show loading indicator while the query is pending
+    // (covers auth-checking state as well as active fetch) to avoid a brief
+    // "No results found" flash before the first network attempt completes.
     return {
       taxa: [],
       refetch,
-      isLoading,
+      isLoading: shouldFetchRemote && isPending,
       isLocal: false,
     };
-  }, [taxonQuery, remoteTaxa, localTaxa, iconicTaxa, refetch, isLoading] );
+  }, [taxonQuery, remoteTaxa, localTaxa, iconicTaxa, refetch, isLoading, isPending, isError,
+    shouldFetchRemote] );
 };
 
 export default useTaxonSearch;
