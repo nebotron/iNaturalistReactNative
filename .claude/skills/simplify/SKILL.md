@@ -9,13 +9,19 @@ cleanly; large noisy ones don't.
 
 ## Step 1 — Get the diff
 
+Find the merge base between this branch and `inaturalist/main`, then diff from
+there to HEAD:
+
 ```
 git fetch inaturalist main 2>/dev/null || git fetch origin main
-git diff inaturalist/main...HEAD   # or FETCH_HEAD/main if no inaturalist remote
+BASE=$(git merge-base HEAD FETCH_HEAD)
+git diff $BASE HEAD
 ```
 
-If the remote is named differently, adapt. If the branch has no upstream, use
-`git diff main...HEAD` or `git diff HEAD~N` as appropriate.
+If a remote named `inaturalist` exists, use `inaturalist/main` instead of
+`FETCH_HEAD`. The merge base is the point where this branch diverged from
+upstream — diffing from there captures exactly the work added on this branch,
+regardless of how many upstream commits have landed since.
 
 ## Step 2 — Analyse
 
