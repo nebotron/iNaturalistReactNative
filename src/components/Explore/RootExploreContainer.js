@@ -5,6 +5,10 @@ import {
 } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import {
+  getRelativeDateOffsets,
+  resolveRelativeDates,
+} from "components/Explore/helpers/savedExploreFilters";
+import {
   EXPLORE_ACTION,
   ExploreProvider,
   exploreReducer,
@@ -93,7 +97,8 @@ const RootExploreContainerWithContext = ( ): Node => {
         exploreLocation,
       };
       dispatch( action );
-      setRootStoredParams( exploreReducer( state, action ) );
+      const newState = exploreReducer( state, action );
+      setRootStoredParams( newState, getRelativeDateOffsets( newState ) );
     } else {
       navigation.setParams( { place } );
       dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_PLACE } );
@@ -167,10 +172,11 @@ const RootExploreContainerWithContext = ( ): Node => {
     if ( Object.keys( storedParams ).length === 0 ) {
       return;
     }
+    const relativeDates = useStore.getState( ).rootRelativeDateOffsets ?? {};
 
     dispatch( {
       type: EXPLORE_ACTION.USE_STORED_STATE,
-      storedState: storedParams,
+      storedState: resolveRelativeDates( storedParams, relativeDates ),
     } );
   }, [dispatch] );
 
@@ -180,7 +186,7 @@ const RootExploreContainerWithContext = ( ): Node => {
       return;
     }
 
-    setRootStoredParams( state );
+    setRootStoredParams( state, getRelativeDateOffsets( state ) );
   }, [setRootStoredParams, state] );
 
   useEffect( () => {
