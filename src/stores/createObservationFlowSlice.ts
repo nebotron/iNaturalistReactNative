@@ -77,6 +77,7 @@ interface ObservationFlowState {
   cameraUris: string[];
   savingPhoto: boolean;
   savedOrUploadedMultiObsFlow: boolean;
+  bulkUploadMode: boolean;
   unsavedChanges: boolean;
   totalSavedObservations: number;
   sentinelFileName: string | null;
@@ -105,6 +106,7 @@ interface ObservationFlowActions {
   setObservations: ( updatedObservations: RealmObservationPojo[] ) => void;
   setPhotoImporterState: ( options: PhotoImporterOptions ) => void;
   setSavedOrUploadedMultiObsFlow: ( ) => void;
+  setBulkUploadMode: ( enabled: boolean ) => void;
   updateObservations: ( updatedObservations: RealmObservationPojo[] ) => void;
   updateObservationKeys: ( keysAndValues: Partial<RealmObservationPojo> ) => void;
   getCurrentObservation: ( ) => RealmObservationPojo | null;
@@ -147,6 +149,7 @@ const DEFAULT_STATE: ObservationFlowState = {
   cameraUris: [],
   savingPhoto: false,
   savedOrUploadedMultiObsFlow: false,
+  bulkUploadMode: false,
   unsavedChanges: false,
   totalSavedObservations: 0,
   sentinelFileName: null,
@@ -471,6 +474,9 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
   } ) ),
   setSavedOrUploadedMultiObsFlow: ( ) => set( {
     savedOrUploadedMultiObsFlow: true,
+  } ),
+  setBulkUploadMode: ( enabled: boolean ) => set( {
+    bulkUploadMode: enabled,
   } ),
   updateObservations: (
     updatedObservations: RealmObservationPojo[],
