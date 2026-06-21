@@ -11,13 +11,15 @@ import type { StateCreator } from "zustand";
 
 const DEFAULT_STATE = {
   rootStoredParams: {},
+  rootRelativeDateOffsets: {} as RelativeDateOffsets,
   rootExploreView: "observations",
   savedExploreFilters: [] as SavedExploreFilter[],
 };
 
 interface RootExploreSlice {
   rootStoredParams: object;
-  setRootStoredParams: ( _params: object ) => void;
+  rootRelativeDateOffsets: RelativeDateOffsets;
+  setRootStoredParams: ( _params: object, _relativeDates?: RelativeDateOffsets ) => void;
   rootExploreView: string;
   setRootExploreView: ( _view: string ) => void;
   savedExploreFilters: SavedExploreFilter[];
@@ -34,7 +36,10 @@ interface RootExploreSlice {
 
 const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => ( {
   ...DEFAULT_STATE,
-  setRootStoredParams: rootStoredParams => set( ( ) => ( { rootStoredParams } ) ),
+  setRootStoredParams: ( rootStoredParams, relativeDates ) => set( ( ) => ( {
+    rootStoredParams,
+    rootRelativeDateOffsets: relativeDates ?? {},
+  } ) ),
   setRootExploreView: rootExploreView => set( ( ) => ( { rootExploreView } ) ),
   addSavedExploreFilter: ( name, params, view, observationsLayout, relativeDates ) => {
     const trimmedName = name.trim( );
