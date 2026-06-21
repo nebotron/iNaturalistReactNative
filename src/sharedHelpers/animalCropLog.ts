@@ -1,6 +1,7 @@
 import Clipboard from "@react-native-clipboard/clipboard";
 import { Alert } from "react-native";
 import Config from "react-native-config";
+import fetchWithRetry from "sharedHelpers/fetchWithRetry";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { zustandStorage } from "stores/useStore";
@@ -50,7 +51,7 @@ export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[]> => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return [];
   try {
-    const res = await fetch( `${baseUrl}/crop_log.json` );
+    const res = await fetchWithRetry( `${baseUrl}/crop_log.json` );
     if ( !res.ok ) return [];
     const data = await res.json( );
     if ( Array.isArray( data ) ) {
@@ -84,7 +85,7 @@ const _mergeByUrl = ( a: CropLogEntry[], b: CropLogEntry[] ): CropLogEntry[] => 
 const _putToFirebase = ( entries: CropLogEntry[] ) => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
-  fetch( `${baseUrl}/crop_log.json`, {
+  fetchWithRetry( `${baseUrl}/crop_log.json`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify( entries ),

@@ -1,6 +1,7 @@
 import Clipboard from "@react-native-clipboard/clipboard";
 import { Alert } from "react-native";
 import Config from "react-native-config";
+import fetchWithRetry from "sharedHelpers/fetchWithRetry";
 import { log } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
 
@@ -39,7 +40,7 @@ export const fetchBrightnessLogFromFirebase = async ( ): Promise<BrightnessLogEn
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return [];
   try {
-    const res = await fetch( `${baseUrl}/brightness_log.json` );
+    const res = await fetchWithRetry( `${baseUrl}/brightness_log.json` );
     if ( !res.ok ) return [];
     const data = await res.json( );
     if ( Array.isArray( data ) ) return data.filter( Boolean );
@@ -67,7 +68,7 @@ const _mergeByUrl = (
 const _putToFirebase = ( entries: BrightnessLogEntry[] ) => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
-  fetch( `${baseUrl}/brightness_log.json`, {
+  fetchWithRetry( `${baseUrl}/brightness_log.json`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify( entries ),

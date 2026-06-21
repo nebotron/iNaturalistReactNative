@@ -18,6 +18,7 @@ import {
 } from "sharedHelpers/animalCropLog";
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
+import fetchWithRetry from "sharedHelpers/fetchWithRetry";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import colors from "styles/tailwindColors";
 
@@ -81,7 +82,7 @@ const AnimalCropTool = ( ) => {
   const fetchBirds = useCallback( ( ) => {
     if ( fetchingBirdRef.current ) return;
     fetchingBirdRef.current = true;
-    fetch( BIRD_API_URL )
+    fetchWithRetry( BIRD_API_URL )
       .then( r => r.json( ) )
       .then( data => {
         const photos = parsePhotos( data );
@@ -101,7 +102,7 @@ const AnimalCropTool = ( ) => {
   const fetchAnimals = useCallback( ( ) => {
     if ( fetchingAnimalRef.current ) return;
     fetchingAnimalRef.current = true;
-    fetch( ANIMAL_API_URL )
+    fetchWithRetry( ANIMAL_API_URL )
       .then( r => r.json( ) )
       .then( data => {
         const photos = parsePhotos( data );

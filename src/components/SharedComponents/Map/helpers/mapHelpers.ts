@@ -2,6 +2,7 @@ import type { MapBoundaries } from "providers/ExploreContext";
 import Config from "react-native-config";
 import type { LatLng, Region } from "react-native-maps";
 import createUTFPosition from "sharedHelpers/createUTFPosition";
+import fetchWithRetry from "sharedHelpers/fetchWithRetry";
 import getDataForPixel from "sharedHelpers/fetchUTFGridData";
 
 export const OBSCURATION_CELL_SIZE = 0.2;
@@ -278,7 +279,7 @@ export async function fetchObservationUUID(
     },
   };
 
-  const response = await fetch( gridUrlTemplate, options );
+  const response = await fetchWithRetry( gridUrlTemplate, options );
   const json = await response.json( );
 
   const observation = getDataForPixel( mPixelPositionX, mPixelPositionY, json );
