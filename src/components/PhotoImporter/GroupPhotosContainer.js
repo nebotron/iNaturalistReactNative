@@ -27,6 +27,7 @@ import GroupPhotos from "./GroupPhotos";
 import flattenAndOrderSelectedPhotos, {
   flattenAndOrderSelectedVideos,
   selectedGroupsHaveMixedMedia,
+  sortGroupsByTime,
 } from "./helpers/groupPhotoHelpers";
 
 const { useRealm } = RealmContext;
@@ -244,12 +245,13 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } );
 
+    const sortedSeparatedItems = sortGroupsByTime( separatedItems );
     setPendingScrollOffset( findScrollTargetIndex(
-      separatedItems,
+      sortedSeparatedItems,
       firstVisibleItemUri.current,
       firstVisibleItemIndex.current,
     ) );
-    setGroupedPhotos( separatedItems );
+    setGroupedPhotos( sortedSeparatedItems );
     setSelectedIndices( [] );
   };
 
