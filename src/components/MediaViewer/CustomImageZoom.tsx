@@ -28,6 +28,7 @@ interface Props {
   cropPanContext?: CropPanContext;
   brightness?: number;
   onLongPress?: () => void;
+  onInteractionEnd?: () => void;
 }
 
 const CustomImageZoom = ( {
@@ -44,6 +45,7 @@ const CustomImageZoom = ( {
   cropPanContext,
   brightness = 1,
   onLongPress,
+  onInteractionEnd,
 }: Props ): Node => {
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   const internalZoomRef = useRef<SharedZoomableImageRef>( null );
@@ -73,7 +75,10 @@ const CustomImageZoom = ( {
       maxScale={IMAGE_ZOOM_MAX_SCALE}
       isDoubleTapEnabled
       onInteractionStart={() => setZooming?.( true )}
-      onInteractionEnd={() => setZooming?.( false )}
+      onInteractionEnd={() => {
+        setZooming?.( false );
+        onInteractionEnd?.( );
+      }}
       cropPanContext={cropPanContext}
       brightness={brightness}
       onLongPress={onLongPress}

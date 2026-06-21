@@ -25,6 +25,7 @@ const DIM_COLOR = "rgba(0, 0, 0, 0.55)";
 const TOOLBAR_HEIGHT = 104;
 const CROP_BUTTON_SIZE = 88;
 const CROP_ICON_SIZE = 36;
+const UPLOAD_MAX_SIDE = 2048;
 
 const styles = StyleSheet.create( {
   confirmSlot: {
@@ -87,6 +88,7 @@ const ImageCropView = ( {
   const appliedInitialCropKey = useRef<string | null>( null );
   const [cropAreaHeight, setCropAreaHeight] = useState( 0 );
   const [saving, setSaving] = useState( false );
+  const [willBeDownsized, setWillBeDownsized] = useState( false );
 
   const boxSize = useMemo( ( ) => {
     const maxSide = Math.min( windowWidth, cropAreaHeight );
@@ -98,6 +100,24 @@ const ImageCropView = ( {
 
   const boxLeft = ( windowWidth - boxSize ) / 2;
   const boxTop = ( cropAreaHeight - boxSize ) / 2;
+
+  const updateDownsizeStatus = useCallback( ( ) => {
+    if ( !zoomRef.current || boxSize <= 0 || cropAreaHeight <= 0 ) {
+      return;
+    }
+    const transform = zoomRef.current.readTransform( );
+    const crop = imageZoomTransformToNormalizedCrop(
+      imageWidth,
+      imageHeight,
+      windowWidth,
+      cropAreaHeight,
+      boxSize,
+      transform,
+    );
+    setWillBeDownsized(
+      Math.max( crop.w * imageWidth, crop.h * imageHeight ) > UPLOAD_MAX_SIDE,
+    );
+  }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
 
   useEffect( ( ) => {
     if (
@@ -124,6 +144,7 @@ const ImageCropView = ( {
     );
     zoomRef.current.applyTransform( transform );
     appliedInitialCropKey.current = cropKey;
+    updateDownsizeStatus( );
   }, [
     boxSize,
     cropAreaHeight,
@@ -131,6 +152,7 @@ const ImageCropView = ( {
     imageWidth,
     initialCrop,
     sourceUri,
+    updateDownsizeStatus,
     windowWidth,
   ] );
 
@@ -251,6 +273,7 @@ const ImageCropView = ( {
               autoReset={!initialCrop}
               cropPanContext={cropPanContext}
               testID={`ImageCropView.${sourceUri}`}
+              onInteractionEnd={updateDownsizeStatus}
             />
           </View>
         )}
@@ -261,7 +284,14 @@ const ImageCropView = ( {
             <View pointerEvents="none" style={[styles.dim, dimBottomStyle]} />
             <View pointerEvents="none" style={[styles.dim, dimLeftStyle]} />
             <View pointerEvents="none" style={[styles.dim, dimRightStyle]} />
-            <View pointerEvents="none" style={[styles.frame, frameStyle]} />
+            <View
+              pointerEvents="none"
+              style={[
+                styles.frame,
+                frameStyle,
+                willBeDownsized && { borderColor: colors.warningYellow },
+              ]}
+            />
           </>
         )}
       </View>
