@@ -1,4 +1,5 @@
 import { StackActions, useNavigation, useRoute } from "@react-navigation/native";
+import { UPLOAD } from "components/ObsEdit/BottomButtons";
 import useMultiObsSaveAndAdvance from "components/ObsEdit/hooks/useMultiObsSaveAndAdvance";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { useCallback } from "react";
@@ -25,6 +26,7 @@ const useNavigateWithTaxonSelected = (
   const currentObservationIndex = useStore( state => state.currentObservationIndex );
   const observations = useStore( state => state.observations );
   const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
+  const bulkUploadMode = useStore( state => state.bulkUploadMode );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const vision = options?.vision;
 
@@ -54,7 +56,7 @@ const useNavigateWithTaxonSelected = (
 
     if ( selectedTaxon !== undefined && isMultiObsCreateFlow ) {
       const numObservations = useStore.getState( ).observations.length;
-      await saveAndAdvance( "save" );
+      await saveAndAdvance( bulkUploadMode ? UPLOAD : "save" );
       if ( numObservations > 1 ) {
         return;
       }
@@ -83,6 +85,7 @@ const useNavigateWithTaxonSelected = (
       navigation.navigate( "ObsEdit", { lastScreen: "Suggestions" } );
     }
   }, [
+    bulkUploadMode,
     currentObservation?.uuid,
     entryScreen,
     isMultiObsCreateFlow,
