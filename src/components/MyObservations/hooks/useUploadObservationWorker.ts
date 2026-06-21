@@ -4,7 +4,7 @@ import {
   useCallback, useEffect, useRef,
 } from "react";
 import type { AppStateStatus } from "react-native";
-import { Alert, AppState, Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import { EventRegister } from "react-native-event-listeners";
 import Observation from "realmModels/Observation";
 import type { RealmObservation } from "realmModels/types";
@@ -12,9 +12,6 @@ import {
   beginBackgroundUploadTask,
   endBackgroundUploadTask,
 } from "sharedHelpers/backgroundExecution";
-import {
-  useTranslation,
-} from "sharedHooks";
 import {
   MAX_CONCURRENT_UPLOADS,
   UPLOAD_CANCELLED,
@@ -28,10 +25,6 @@ import { RECOVERY_BY } from "uploaders/utils/errorHandling";
 import {
   INCREMENT_SINGLE_UPLOAD_PROGRESS,
 } from "uploaders/utils/progressTracker";
-import {
-  formatUploadFailureAlertBody,
-  getUploadFailureDetails,
-} from "uploaders/utils/uploadFailureDetails";
 
 import { MS_BEFORE_TOOLBAR_RESET } from "./useUploadObservations";
 
@@ -60,8 +53,6 @@ const useUploadObservationWorker = ( ) => {
   const initialNumObservationsInQueue = useStore( state => state.initialNumObservationsInQueue );
   const stopAllUploads = useStore( state => state.stopAllUploads );
   const abortController = useStore( storeState => storeState.abortController );
-
-  const { t } = useTranslation( );
 
   const resetNumUnsyncedObs = useCallback( ( ) => {
     if ( !realm || realm.isClosed ) return;
@@ -193,13 +184,6 @@ const useUploadObservationWorker = ( ) => {
           };
         }
         const { message, recoveryPossible, recoveryBy } = uploadFailureResult;
-
-        const failureDetails = getUploadFailureDetails( uploadError );
-        Alert.alert(
-          t( "Upload-failed" ),
-          formatUploadFailureAlertBody( failureDetails, message ),
-          [{ text: t( "OK" ) }],
-        );
 
         if ( message?.match( /That observation no longer exists./ ) ) {
           removeDeletedObsFromUploadQueue( uuid );

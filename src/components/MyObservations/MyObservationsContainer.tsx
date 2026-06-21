@@ -17,7 +17,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Alert } from "react-native";
 import Observation from "realmModels/Observation";
 import Taxon from "realmModels/Taxon";
 import type { RealmObservation } from "realmModels/types";
@@ -36,7 +35,6 @@ import {
   useNavigateToObsEdit,
   useObservationsUpdates,
   useStoredLayout,
-  useTranslation,
 } from "sharedHooks";
 import {
   UPLOAD_PENDING,
@@ -63,7 +61,6 @@ export enum ACTIVE_SHEET {
 
 const MyObservationsWithProvider = ( ) => {
   const { isDefaultMode, loggedInWhileInDefaultMode } = useLayoutPrefs();
-  const { t } = useTranslation( );
   const realm = useRealm( );
   const navigation = useNavigation( );
   const listRef = useRef<FlashListRef<RealmObservation>>( null );
@@ -140,15 +137,7 @@ const MyObservationsWithProvider = ( ) => {
       : "grid" );
   };
 
-  const confirmInternetConnection = useCallback( ( ) => {
-    if ( !isConnected ) {
-      Alert.alert(
-        t( "Internet-Connection-Required" ),
-        t( "Please-try-again-when-you-are-connected-to-the-internet" ),
-      );
-    }
-    return isConnected;
-  }, [t, isConnected] );
+  const confirmInternetConnection = useCallback( ( ) => isConnected, [isConnected] );
 
   const confirmLoggedIn = useCallback( ( ) => {
     if ( !currentUser ) {
