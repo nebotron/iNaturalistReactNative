@@ -113,6 +113,7 @@ const Menu = ( ) => {
   const { bottom, top } = useSafeAreaInsets( );
   const setObservations = useStore( state => state.setObservations );
   const resetObservationFlowSlice = useStore( state => state.resetObservationFlowSlice );
+  const setBulkUploadMode = useStore( state => state.setBulkUploadMode );
 
   const { isConnected } = useNetInfo( );
 
@@ -133,6 +134,7 @@ const Menu = ( ) => {
         }
         resetObservationFlowSlice( );
         setObservations( Array.from( unsyncedObs ) );
+        setBulkUploadMode( true );
         navigation.navigate( "Suggestions", {
           entryScreen: "ObsEdit",
           lastScreen: "ObsEdit",
