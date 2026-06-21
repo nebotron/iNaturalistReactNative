@@ -357,7 +357,6 @@ const MyObservationsSimple = ( {
               isConnected={isConnected}
               obsListKey="MyObservations"
               layout={layout}
-              fullWidthGrid={layout === "grid"}
               onEndReached={onEndReached}
               onLayout={onListLayout}
               onScroll={onScroll}
