@@ -93,6 +93,7 @@ const useStore = create( persist(
 
       // Explore tab filters and related search state
       rootExploreView: state.rootExploreView,
+      rootRelativeDateOffsets: state.rootRelativeDateOffsets,
       rootStoredParams: state.rootStoredParams,
       savedExploreFilters: state.savedExploreFilters,
     } ),
