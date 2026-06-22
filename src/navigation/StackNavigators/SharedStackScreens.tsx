@@ -8,6 +8,7 @@ import ObsEdit from "components/ObsEdit/ObsEdit";
 import PhotoSharing from "components/PhotoSharing";
 import { Heading4 } from "components/SharedComponents";
 import ImageCropEditor from "components/SharedComponents/ImageCrop/ImageCropEditor";
+import SpeciesGame from "components/SpeciesGame/SpeciesGame";
 import SuggestionsContainer from "components/Suggestions/SuggestionsContainer";
 import SuggestionsTaxonSearch from "components/Suggestions/SuggestionsTaxonSearch";
 import TaxonDetails from "components/TaxonDetails/TaxonDetails";
@@ -49,6 +50,7 @@ const FadeInMatchContainer = ( ) => fadeInComponent(
   <MatchContainer />,
 );
 const FadeInImageCropEditor = ( ) => fadeInComponent( <ImageCropEditor /> );
+const FadeInSpeciesGame = ( ) => fadeInComponent( <SpeciesGame /> );
 
 const BASE_SCREEN_OPTIONS = {
   contentStyle: {
@@ -83,6 +85,10 @@ const SharedStackScreens = ( ) => (
       <Stack.Screen
         name="PhotoSharing"
         component={FadeInPhotoSharing}
+      />
+      <Stack.Screen
+        name="SpeciesGame"
+        component={FadeInSpeciesGame}
       />
     </Stack.Group>
     {/* Screens with centered header */}

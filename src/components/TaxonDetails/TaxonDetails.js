@@ -360,6 +360,8 @@ const TaxonDetails = ( ): Node => {
   );
 
   const showExploreButton = !hideNavButtons && isConnected && !fromMatch;
+  const showGameButton = !hideNavButtons && isConnected && !fromMatch && !fromSuggestions
+    && !fromObsEdit && taxon?.rank_level <= 10;
 
   const displayTaxonTitle = useCallback( ( ) => (
     <View
@@ -392,10 +394,25 @@ const TaxonDetails = ( ): Node => {
           />
         </View>
       )}
+      {showGameButton && (
+        <View className="ml-2">
+          <INatIconButton
+            icon="play"
+            onPress={( ) => navigation.navigate( "SpeciesGame", { taxonId: taxon?.id } )}
+            accessibilityLabel="Play species identification game"
+            size={20}
+            color={colors.white}
+            className="bg-inatGreen rounded-full"
+            mode="contained"
+            preventTransparency
+          />
+        </View>
+      )}
     </View>
   ), [
     currentUserHasSeenTaxon,
     showExploreButton,
+    showGameButton,
     navigation,
     setExploreView,
     t,
