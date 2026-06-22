@@ -5,6 +5,7 @@ import flattenUploadParams from "components/Suggestions/helpers/flattenUploadPar
 import i18n from "i18next";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import type { RealmObservationPojo } from "realmModels/types";
+import { getAnimalCrop } from "sharedHelpers/animalCropLog";
 import type { OnlineSuggestionsQueryResponse } from "sharedHooks/useSuggestions/useOnlineSuggestions";
 
 interface OnlineSuggestionsApiResponse {
@@ -48,7 +49,8 @@ const prefetchObservationSuggestions = async (
     scoreImageParams.lng = observation.longitude;
   }
 
-  const queryKey = ["scoreImage", photoUri, { shouldUseEvidenceLocation }];
+  const crop = getAnimalCrop( photoUri );
+  const queryKey = ["scoreImage", photoUri, { shouldUseEvidenceLocation, crop }];
   const userLoggedIn = await isLoggedIn( );
   const authQueryKey = [...queryKey, true, userLoggedIn];
   const locale = i18n?.language ?? "en";
