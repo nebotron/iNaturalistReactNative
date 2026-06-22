@@ -334,7 +334,10 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
       unsavedChanges: true,
     };
   } ),
-  resetObservationFlowSlice: ( ) => set( DEFAULT_STATE ),
+  resetObservationFlowSlice: ( ) => set( state => ( {
+    ...DEFAULT_STATE,
+    lastLocationPickerState: state.lastLocationPickerState,
+  } ) ),
   setLastLocationPickerState: ( lastLocationPickerState: LastLocationPickerState | null ) => set( {
     lastLocationPickerState,
   } ),
