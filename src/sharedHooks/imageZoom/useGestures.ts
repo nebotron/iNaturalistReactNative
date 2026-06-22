@@ -12,10 +12,7 @@ import {
 
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
-import {
-  computeCropPanSnapPositions,
-  computeCropPanTranslateLimits,
-} from "sharedHelpers/cropPanTranslateLimits";
+import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 
 import type {
   OnPanEndCallback,
@@ -146,37 +143,39 @@ export const useGestures = ( {
     "worklet";
 
     if ( cropPanContext ) {
-      const totalTranslateX = sum( translate.x, focal.x );
-      const totalTranslateY = sum( translate.y, focal.y );
-      const snapPositions = computeCropPanSnapPositions( cropPanContext, {
+      const panLimits = computeCropPanTranslateLimits( cropPanContext, {
         scale: scale.value,
         translateX: translate.x.value,
         translateY: translate.y.value,
         focalX: focal.x.value,
         focalY: focal.y.value,
       } );
+      const totalTranslateX = sum( translate.x, focal.x );
+      const totalTranslateY = sum( translate.y, focal.y );
 
-      // Snap X to nearest discrete position: left edge, center, or right edge
-      const xSnaps = snapPositions.snapTotalTranslateX;
-      let nearestX = xSnaps[0];
-      if ( Math.abs( xSnaps[1] - totalTranslateX ) < Math.abs( nearestX - totalTranslateX ) ) {
-        nearestX = xSnaps[1];
+      if ( totalTranslateX < panLimits.minTotalTranslateX ) {
+        translate.x.value = withTiming(
+          panLimits.minTotalTranslateX - focal.x.value,
+          withTimingConfig,
+        );
+      } else if ( totalTranslateX > panLimits.maxTotalTranslateX ) {
+        translate.x.value = withTiming(
+          panLimits.maxTotalTranslateX - focal.x.value,
+          withTimingConfig,
+        );
       }
-      if ( Math.abs( xSnaps[2] - totalTranslateX ) < Math.abs( nearestX - totalTranslateX ) ) {
-        nearestX = xSnaps[2];
-      }
-      translate.x.value = withTiming( nearestX - focal.x.value, withTimingConfig );
 
-      // Snap Y to nearest discrete position: top edge, center, or bottom edge
-      const ySnaps = snapPositions.snapTotalTranslateY;
-      let nearestY = ySnaps[0];
-      if ( Math.abs( ySnaps[1] - totalTranslateY ) < Math.abs( nearestY - totalTranslateY ) ) {
-        nearestY = ySnaps[1];
+      if ( totalTranslateY < panLimits.minTotalTranslateY ) {
+        translate.y.value = withTiming(
+          panLimits.minTotalTranslateY - focal.y.value,
+          withTimingConfig,
+        );
+      } else if ( totalTranslateY > panLimits.maxTotalTranslateY ) {
+        translate.y.value = withTiming(
+          panLimits.maxTotalTranslateY - focal.y.value,
+          withTimingConfig,
+        );
       }
-      if ( Math.abs( ySnaps[2] - totalTranslateY ) < Math.abs( nearestY - totalTranslateY ) ) {
-        nearestY = ySnaps[2];
-      }
-      translate.y.value = withTiming( nearestY - focal.y.value, withTimingConfig );
 
       return;
     }
