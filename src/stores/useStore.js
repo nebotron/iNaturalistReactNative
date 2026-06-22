@@ -88,6 +88,9 @@ const useStore = create( persist(
         return memo;
       }, {} ) ),
 
+      // Last location used in the location picker
+      lastLocationPickerState: state.lastLocationPickerState,
+
       // Explore tab filters and related search state
       rootExploreView: state.rootExploreView,
       rootStoredParams: state.rootStoredParams,
