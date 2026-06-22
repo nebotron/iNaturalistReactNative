@@ -3,6 +3,7 @@ import type {
   SavedExploreFilter,
 } from "components/Explore/helpers/savedExploreFilters";
 import {
+  getRelativeDateOffsets,
   hasSavedExploreFilterName,
 } from "components/Explore/helpers/savedExploreFilters";
 import type { ExploreState } from "providers/ExploreContext";
@@ -19,7 +20,7 @@ const DEFAULT_STATE = {
 interface RootExploreSlice {
   rootStoredParams: object;
   rootRelativeDateOffsets: RelativeDateOffsets;
-  setRootStoredParams: ( _params: object, _relativeDates?: RelativeDateOffsets ) => void;
+  setRootStoredParams: ( _params: object ) => void;
   rootExploreView: string;
   setRootExploreView: ( _view: string ) => void;
   savedExploreFilters: SavedExploreFilter[];
@@ -36,9 +37,9 @@ interface RootExploreSlice {
 
 const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => ( {
   ...DEFAULT_STATE,
-  setRootStoredParams: ( rootStoredParams, relativeDates ) => set( ( ) => ( {
+  setRootStoredParams: ( rootStoredParams ) => set( ( ) => ( {
     rootStoredParams,
-    rootRelativeDateOffsets: relativeDates ?? {},
+    rootRelativeDateOffsets: getRelativeDateOffsets( rootStoredParams as ExploreState ),
   } ) ),
   setRootExploreView: rootExploreView => set( ( ) => ( { rootExploreView } ) ),
   addSavedExploreFilter: ( name, params, view, observationsLayout, relativeDates ) => {
