@@ -48,10 +48,17 @@ export const countGroupedMedia = ( groups: GroupedMediaItem[] ) => (
 export const buildGroupedMediaItems = (
   photos: GroupedMediaPhotoItem[],
   movedVideos: MovedVideoAsset[],
-): GroupedMediaItem[] => [
-  ...photos.map( photo => ( { photos: [photo] } ) ),
-  ...movedVideos.map( video => ( { videos: [video] } ) ),
-];
+): GroupedMediaItem[] => {
+  const items: GroupedMediaItem[] = [
+    ...photos.map( photo => ( { photos: [photo] } ) ),
+    ...movedVideos.map( video => ( { videos: [video] } ) ),
+  ];
+  return items.sort( ( a, b ) => {
+    const aTs = a.photos?.[0]?.image?.timestamp || a.videos?.[0]?.asset?.timestamp || 0;
+    const bTs = b.photos?.[0]?.image?.timestamp || b.videos?.[0]?.asset?.timestamp || 0;
+    return ( bTs as number ) - ( aTs as number );
+  } );
+};
 
 export const isVideoAsset = ( asset: Asset ) => (
   asset.type?.startsWith( "video/" ) === true
