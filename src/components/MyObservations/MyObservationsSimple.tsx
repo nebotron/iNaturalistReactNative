@@ -21,7 +21,6 @@ import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashLi
 import StatTab from "components/SharedComponents/StatTab";
 import { View } from "components/styledComponents";
 import React, { useCallback, useMemo } from "react";
-import { Alert } from "react-native";
 import Photo from "realmModels/Photo";
 import type {
   RealmObservation,
@@ -281,9 +280,7 @@ const MyObservationsSimple = ( {
     return null;
   };
 
-  function showOfflineAlert( ) {
-    Alert.alert( t( "You-are-offline" ), t( "Please-try-again-when-you-are-online" ) );
-  }
+  function showOfflineAlert( ) { }
 
   const handleSortConfirm = ( optionId: SPECIES_SORT ) => {
     if ( currentUser && !isConnected ) {

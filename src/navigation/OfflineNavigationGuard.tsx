@@ -5,16 +5,13 @@ import { NavigationContainer } from "@react-navigation/native";
 import { useReactNavigationDevTools } from "@rozenite/react-navigation-plugin";
 import type { PropsWithChildren } from "react";
 import React, { useRef } from "react";
-import { Alert } from "react-native";
 import { logFirebaseScreenView } from "sharedHelpers/tracking";
-import { useTranslation } from "sharedHooks";
 
 import { navigationRef } from "./navigationUtils";
 
 const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
   const routeNameRef = useRef( navigationRef.current?.getCurrentRoute()?.name );
   const { isConnected } = useNetInfo( );
-  const { t } = useTranslation( );
 
   useReactNavigationDevTools( { ref: navigationRef } );
 
@@ -31,12 +28,6 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
     if ( currentRouteName === "Login" && !isConnected ) {
       // return to previous screen if offline
       navigationRef.current?.goBack( );
-      if ( !isConnected ) {
-        Alert.alert(
-          t( "Internet-Connection-Required" ),
-          t( "Please-try-again-when-you-are-connected-to-the-internet" ),
-        );
-      }
     }
   };
 
