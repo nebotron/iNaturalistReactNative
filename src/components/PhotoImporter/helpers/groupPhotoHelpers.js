@@ -1,10 +1,20 @@
 // @flow
 
 const sortByTime = array => array.sort( ( a, b ) => {
-  const aTimestamp = a.timestamp || a.asset?.timestamp || 0;
-  const bTimestamp = b.timestamp || b.asset?.timestamp || 0;
+  const aTimestamp = a.timestamp || a.asset?.timestamp || a.image?.timestamp || 0;
+  const bTimestamp = b.timestamp || b.asset?.timestamp || b.image?.timestamp || 0;
   return bTimestamp - aTimestamp;
 } );
+
+export const getGroupTimestamp = group => (
+  group.photos?.[0]?.image?.timestamp
+  || group.videos?.[0]?.asset?.timestamp
+  || 0
+);
+
+export const sortGroupsByTime = groups => [...groups].sort(
+  ( a, b ) => getGroupTimestamp( b ) - getGroupTimestamp( a ),
+);
 
 const dedupePhotos = photos => [...new Set( photos )];
 

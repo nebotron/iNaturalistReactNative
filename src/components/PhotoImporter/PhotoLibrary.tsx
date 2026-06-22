@@ -10,6 +10,7 @@ import {
   createObservationWithVideoSounds,
   partitionAssetsByMediaType,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
+import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
 import { ActivityAnimation, ViewWrapper } from "components/SharedComponents";
 import { t } from "i18next";
 import type { NoBottomTabStackScreenProps } from "navigation/types";
@@ -299,10 +300,10 @@ const PhotoLibrary = ( ) => {
       const hasVideos = movedVideos.length > 0;
 
       if ( fromGroupPhotos ) {
-        setGroupedPhotos( [
+        setGroupedPhotos( sortGroupsByTime( [
           ...groupedPhotos,
           ...buildGroupedMediaItems( selectedPhotos, movedVideos ),
-        ] );
+        ] ) );
         navigation.setParams( { fromGroupPhotos: false } );
         navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
         setPhotoLibraryShown( false );
