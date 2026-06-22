@@ -198,6 +198,11 @@ export type SharedStackParamList = {
     onCropSaved?: () => void;
     pendingImageUris?: string[];
   };
+  // From TaxonDetails
+  // { taxonId: number }
+  SpeciesGame: {
+    taxonId: number;
+  };
 };
 
 // Note from the documentation:
