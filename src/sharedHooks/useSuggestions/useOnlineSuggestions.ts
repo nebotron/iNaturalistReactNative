@@ -140,6 +140,10 @@ const useOnlineSuggestions = (
       enabled: !!shouldFetchOnlineSuggestions
         && !!scoreImageParams,
       allowAnonymousJWT: true,
+      // Prevents a background refetch when cached data exists (e.g. returning
+      // to this screen or using prefetched data). scoreImage results are
+      // deterministic for a given photo+location, so the data never goes stale.
+      staleTime: Infinity,
     },
   );
 

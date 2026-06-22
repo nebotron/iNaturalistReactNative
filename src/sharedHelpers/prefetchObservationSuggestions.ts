@@ -55,6 +55,7 @@ const prefetchObservationSuggestions = async (
 
   await queryClient.prefetchQuery( {
     queryKey: authQueryKey,
+    staleTime: Infinity,
     queryFn: async ( ) => {
       const apiToken = await getJWT( true );
       const suggestionsResponse = await scoreImage(
