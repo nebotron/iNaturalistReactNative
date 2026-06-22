@@ -6,6 +6,7 @@ import {
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, { useCallback, useMemo, useState } from "react";
+import { ActivityIndicator } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
 import {
   Gesture,
@@ -78,6 +79,7 @@ const MainMediaDisplay = ( {
   const [zooming, setZooming] = useState( false );
   const [brightness, setBrightness] = useState( BRIGHTNESS_DEFAULT );
   const [brightnessSaved, setBrightnessSaved] = useState( false );
+  const [brightnessSaving, setBrightnessSaving] = useState( false );
   const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
   const items = useMemo( ( ) => ( [
     ...photos.map( photo => ( { ...photo, type: "photo" as const } ) ),
@@ -187,19 +189,35 @@ const MainMediaDisplay = ( {
               />
               { brightness !== BRIGHTNESS_DEFAULT && (
                 <>
-                  <TransparentCircleButton
-                    onPress={( ) => {
-                      saveBrightness( photo.url, brightness );
-                      setBrightnessSaved( true );
-                    }}
-                    icon="label"
-                    color={brightnessSaved
-                      ? colors.white
-                      : colors.inatGreen}
-                    accessibilityLabel={t( "Save-brightness-label" )}
-                    testID="MediaViewer.saveBrightnessButton"
-                    optionalClasses="ml-2"
-                  />
+                  { brightnessSaving
+                    ? (
+                      <View className="bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px] ml-2">
+                        <ActivityIndicator
+                          size="small"
+                          color={colors.white}
+                        />
+                      </View>
+                    )
+                    : (
+                      <INatIconButton
+                        className="bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px] ml-2"
+                        onPress={( ) => {
+                          setBrightnessSaving( true );
+                          saveBrightness( photo.url, brightness );
+                          setTimeout( ( ) => {
+                            setBrightnessSaving( false );
+                            setBrightnessSaved( true );
+                          }, 600 );
+                        }}
+                        icon="label"
+                        color={brightnessSaved
+                          ? colors.white
+                          : colors.inatGreen}
+                        size={20}
+                        accessibilityLabel={t( "Save-brightness-label" )}
+                        testID="MediaViewer.saveBrightnessButton"
+                      />
+                    ) }
                   <TransparentCircleButton
                     onPress={( ) => setBrightness( BRIGHTNESS_DEFAULT )}
                     icon="close"
