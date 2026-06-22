@@ -20,6 +20,7 @@ import Photo from "realmModels/Photo";
 import type { RealmPhoto } from "realmModels/types";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
+import { getAnimalCrop } from "sharedHelpers/animalCropLog";
 import {
   useLastScreen,
   useLocationPermission,
@@ -54,7 +55,7 @@ export enum FETCH_STATUSES {
 const getQueryKey = ( selectedPhotoUri: string, shouldUseEvidenceLocation: boolean ) => [
   "scoreImage",
   selectedPhotoUri,
-  { shouldUseEvidenceLocation },
+  { shouldUseEvidenceLocation, crop: getAnimalCrop( selectedPhotoUri ) },
 ];
 
 interface Suggestion {
