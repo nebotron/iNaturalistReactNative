@@ -194,13 +194,11 @@ const MainMediaDisplay = ( {
                     : (
                       <INatIconButton
                         className="bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px] ml-2"
-                        onPress={( ) => {
+                        onPress={async ( ) => {
                           setBrightnessSaving( true );
-                          saveBrightness( photo.url, brightness );
-                          setTimeout( ( ) => {
-                            setBrightnessSaving( false );
-                            setBrightnessSaved( true );
-                          }, 600 );
+                          await saveBrightness( photo.url, brightness );
+                          setBrightnessSaving( false );
+                          setBrightnessSaved( true );
                         }}
                         icon="label"
                         color={brightnessSaved
