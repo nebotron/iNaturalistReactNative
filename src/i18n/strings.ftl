@@ -1310,6 +1310,7 @@ Stop-verb = Stop
 Stops-recording-sound = Stops recording sound
 SUBMIT = SUBMIT
 SUBMIT-ID-SUGGESTION = SUBMIT ID SUGGESTION
+SUGGEST-GENUS = SUGGEST GENUS
 SUGGEST-ID = SUGGEST ID
 # Identification category
 supporting--identification = Supporting
