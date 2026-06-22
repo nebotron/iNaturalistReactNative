@@ -15,6 +15,11 @@ import React, {
   useRef,
   useState,
 } from "react";
+import {
+  getStats,
+  recordGuess,
+  type TaxonStats,
+} from "sharedHelpers/speciesGameStats";
 import colors from "styles/tailwindColors";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
@@ -33,6 +38,8 @@ interface RouteParams {
   taxonId: number;
 }
 
+const pct = ( stats: TaxonStats ) => Math.round( ( stats.correct / stats.total ) * 100 );
+
 const SpeciesGame = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute( );
@@ -48,11 +55,17 @@ const SpeciesGame = ( ) => {
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>( null );
   // true = guessed target, false = guessed lookalike, null = not yet guessed
   const [guessedTarget, setGuessedTarget] = useState<boolean | null>( null );
+  // lifetime stats for the target taxon, updated reactively after each guess
+  const [lifetimeStats, setLifetimeStats] = useState<TaxonStats | null>( null );
 
   const targetPoolRef = useRef<string[]>( [] );
   const lookalikePoolRef = useRef<string[]>( [] );
 
   const taxonLabel = ( t: TaxonInfo ) => t.preferredCommonName || t.name;
+
+  const refreshLifetimeStats = useCallback( ( ) => {
+    setLifetimeStats( getStats( taxonId ) );
+  }, [taxonId] );
 
   const fetchPhotoPool = useCallback( async ( id: number ): Promise<string[]> => {
     const url = `${INATURALIST_API}/observations`
@@ -91,6 +104,7 @@ const SpeciesGame = ( ) => {
 
   useEffect( ( ) => {
     let cancelled = false;
+    refreshLifetimeStats( );
 
     const loadGame = async ( ) => {
       try {
@@ -163,15 +177,16 @@ const SpeciesGame = ( ) => {
 
     loadGame( );
     return ( ) => { cancelled = true; };
-  }, [taxonId, fetchPhotoPool, startRound] );
+  }, [taxonId, fetchPhotoPool, startRound, refreshLifetimeStats] );
 
   const handleGuess = useCallback( ( guessIsTarget: boolean ) => {
+    const correct = guessIsTarget === isTargetShown;
     setGuessedTarget( guessIsTarget );
-    if ( guessIsTarget === isTargetShown ) {
-      setScore( prev => prev + 1 );
-    }
+    if ( correct ) setScore( prev => prev + 1 );
+    recordGuess( taxonId, correct );
+    refreshLifetimeStats( );
     setPhase( "revealed" );
-  }, [isTargetShown] );
+  }, [isTargetShown, taxonId, refreshLifetimeStats] );
 
   const handleNext = useCallback( ( ) => {
     if ( round >= ROUNDS ) {
@@ -187,6 +202,10 @@ const SpeciesGame = ( ) => {
     setScore( 0 );
     startRound( targetPoolRef.current, lookalikePoolRef.current );
   }, [startRound] );
+
+  const lifetimeBadge = lifetimeStats
+    ? `${lifetimeStats.correct}/${lifetimeStats.total} lifetime`
+    : null;
 
   if ( phase === "loading" || ( phase !== "done" && ( !target || !lookalike ) ) ) {
     return (
@@ -210,7 +229,7 @@ const SpeciesGame = ( ) => {
   }
 
   if ( phase === "done" ) {
-    const pct = Math.round( ( score / ROUNDS ) * 100 );
+    const sessionPct = Math.round( ( score / ROUNDS ) * 100 );
     return (
       <SharedStackViewWrapper>
         <View className="flex-row items-center px-3 py-2 bg-white border-b border-lightGray">
@@ -223,13 +242,20 @@ const SpeciesGame = ( ) => {
           />
         </View>
         <View className="flex-1 items-center justify-center px-6">
-          <Heading2 className="text-center mb-4">Game Over</Heading2>
-          <Body1 className="text-center mb-2">
-            {`You scored ${score} out of ${ROUNDS}`}
+          <Heading2 className="text-center mb-2">Game Over</Heading2>
+          {target && (
+            <Body2 className="text-center mb-4 italic">{taxonLabel( target )}</Body2>
+          )}
+
+          <Body1 className="text-center mb-1">
+            {`Session: ${score} / ${ROUNDS} (${sessionPct}%)`}
           </Body1>
-          <Body1 className="text-center mb-8 text-inatGreen font-bold">
-            {`${pct}% correct`}
-          </Body1>
+          {lifetimeStats && (
+            <Body1 className="text-center mb-8 text-inatGreen font-bold">
+              {`Lifetime: ${lifetimeStats.correct} / ${lifetimeStats.total} (${pct( lifetimeStats )}%)`}
+            </Body1>
+          )}
+
           <Button
             className="w-full max-w-[500px]"
             text="Play Again"
@@ -248,13 +274,14 @@ const SpeciesGame = ( ) => {
 
   const isCorrect = guessedTarget === isTargetShown;
   const shownTaxon = isTargetShown ? target! : lookalike!;
-  const targetLevelForReveal = ( ) => {
+
+  const targetButtonLevel = ( ) => {
     if ( phase !== "revealed" ) return "focus";
     if ( isTargetShown ) return "focus";
     if ( guessedTarget === true ) return "warning";
     return undefined;
   };
-  const lookalikeLevelForReveal = ( ) => {
+  const lookalikeButtonLevel = ( ) => {
     if ( phase !== "revealed" ) return undefined;
     if ( !isTargetShown ) return "focus";
     if ( guessedTarget === false ) return "warning";
@@ -272,8 +299,14 @@ const SpeciesGame = ( ) => {
           size={22}
           color={colors.darkGray}
         />
-        <Body2 className="font-bold">{`Round ${round} / ${ROUNDS}`}</Body2>
-        <Body2>{`Score: ${score}`}</Body2>
+        <View className="items-center">
+          <Body2 className="font-bold">{`Round ${round} / ${ROUNDS}  ·  ${score} correct`}</Body2>
+          {lifetimeBadge && (
+            <Body2 className="text-inatGreen">{lifetimeBadge}</Body2>
+          )}
+        </View>
+        {/* spacer to keep center aligned */}
+        <View style={{ width: 44 }} />
       </View>
 
       {/* Photo area */}
@@ -286,7 +319,11 @@ const SpeciesGame = ( ) => {
               resizeMode="cover"
             />
           )
-          : <View className="flex-1 bg-lightGray items-center justify-center"><ActivityIndicator /></View>}
+          : (
+            <View className="flex-1 bg-lightGray items-center justify-center">
+              <ActivityIndicator />
+            </View>
+          )}
       </View>
 
       {/* Bottom panel */}
@@ -294,8 +331,12 @@ const SpeciesGame = ( ) => {
         <Body1 className="text-center mb-3">Which species is this?</Body1>
 
         {phase === "revealed" && (
-          <View className={`mb-3 p-3 rounded-lg ${isCorrect ? "bg-inatGreen/20" : "bg-warningRed/20"}`}>
-            <Body1 className={`text-center font-bold ${isCorrect ? "text-inatGreen" : "text-warningRed"}`}>
+          <View
+            className={`mb-3 p-3 rounded-lg ${isCorrect ? "bg-inatGreen/20" : "bg-warningRed/20"}`}
+          >
+            <Body1
+              className={`text-center font-bold ${isCorrect ? "text-inatGreen" : "text-warningRed"}`}
+            >
               {isCorrect ? "Correct!" : "Incorrect"}
             </Body1>
             <Body2 className="text-center mt-1 italic">
@@ -309,7 +350,7 @@ const SpeciesGame = ( ) => {
             <Button
               className="w-full"
               text={taxonLabel( target! )}
-              level={targetLevelForReveal()}
+              level={targetButtonLevel()}
               onPress={() => { if ( phase === "playing" ) handleGuess( true ); }}
               disabled={phase === "revealed"}
             />
@@ -318,7 +359,7 @@ const SpeciesGame = ( ) => {
             <Button
               className="w-full"
               text={taxonLabel( lookalike! )}
-              level={lookalikeLevelForReveal()}
+              level={lookalikeButtonLevel()}
               onPress={() => { if ( phase === "playing" ) handleGuess( false ); }}
               disabled={phase === "revealed"}
             />
