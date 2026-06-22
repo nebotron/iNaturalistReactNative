@@ -64,23 +64,26 @@ const _mergeByUrl = (
   return Array.from( byUrl.values( ) );
 };
 
-const _putToFirebase = ( entries: BrightnessLogEntry[] ) => {
+const _putToFirebase = async ( entries: BrightnessLogEntry[] ): Promise<void> => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
-  fetch( `${baseUrl}/brightness_log.json`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify( entries ),
-  } )
-    .then( r => { if ( !r.ok ) logger.warn( "Firebase sync failed", r.status ); } )
-    .catch( err => logger.warn( "Firebase sync error", err ) );
+  try {
+    const r = await fetch( `${baseUrl}/brightness_log.json`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify( entries ),
+    } );
+    if ( !r.ok ) logger.warn( "Firebase sync failed", r.status );
+  } catch ( err ) {
+    logger.warn( "Firebase sync error", err );
+  }
 };
 
-async function syncToFirebase( localArray: BrightnessLogEntry[] ) {
+async function syncToFirebase( localArray: BrightnessLogEntry[] ): Promise<void> {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
   const remote = await fetchBrightnessLogFromFirebase( );
-  _putToFirebase( _mergeByUrl( remote, localArray ) );
+  await _putToFirebase( _mergeByUrl( remote, localArray ) );
 }
 
 async function deleteFromFirebase( photoUrl: string, localArray: BrightnessLogEntry[] ) {
@@ -103,12 +106,12 @@ export const subscribeToBrightnessLog = ( listener: ( ) => void ): ( ) => void =
   return ( ) => _brightnessLogListeners.delete( listener );
 };
 
-export const saveBrightness = ( photoUrl: string, brightness: number ) => {
+export const saveBrightness = ( photoUrl: string, brightness: number ): Promise<void> => {
   const current = load( );
   current[normalizePhotoUrl( photoUrl )] = brightness;
   zustandStorage.setItem( BRIGHTNESS_LOG_KEY, JSON.stringify( current ) );
-  syncToFirebase( _logToArray( current ) );
   _brightnessLogListeners.forEach( l => l( ) );
+  return syncToFirebase( _logToArray( current ) );
 };
 
 export const deleteBrightness = ( photoUrl: string ) => {
