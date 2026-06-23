@@ -1,14 +1,15 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
   ActivityIndicator,
+  BackButton,
   Body1,
   Body2,
   Button,
   Heading2,
-  INatIconButton,
 } from "components/SharedComponents";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
-import { Image, View } from "components/styledComponents";
+import CustomImageZoom from "components/MediaViewer/CustomImageZoom";
+import { View } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
@@ -20,7 +21,6 @@ import {
   recordGuess,
   type TaxonStats,
 } from "sharedHelpers/speciesGameStats";
-import colors from "styles/tailwindColors";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const ROUNDS = 10;
@@ -57,6 +57,10 @@ const SpeciesGame = ( ) => {
   const [guessedTarget, setGuessedTarget] = useState<boolean | null>( null );
   // lifetime stats for the target taxon, updated reactively after each guess
   const [lifetimeStats, setLifetimeStats] = useState<TaxonStats | null>( null );
+  const [skipped, setSkipped] = useState( false );
+  const [photoAreaSize, setPhotoAreaSize] = useState<{
+    width: number; height: number;
+  } | null>( null );
 
   const targetPoolRef = useRef<string[]>( [] );
   const lookalikePoolRef = useRef<string[]>( [] );
@@ -99,6 +103,7 @@ const SpeciesGame = ( ) => {
     setIsTargetShown( showTarget );
     setCurrentPhotoUrl( photo );
     setGuessedTarget( null );
+    setSkipped( false );
     setPhase( "playing" );
   }, [] );
 
@@ -234,6 +239,11 @@ const SpeciesGame = ( ) => {
     setPhase( "revealed" );
   }, [isTargetShown, taxonId, refreshLifetimeStats] );
 
+  const handleSkip = useCallback( ( ) => {
+    setSkipped( true );
+    setPhase( "revealed" );
+  }, [] );
+
   const handleNext = useCallback( ( ) => {
     if ( round >= ROUNDS ) {
       setPhase( "done" );
@@ -257,13 +267,7 @@ const SpeciesGame = ( ) => {
     return (
       <SharedStackViewWrapper>
         <View className="flex-row items-center px-3 py-2 bg-white border-b border-lightGray">
-          <INatIconButton
-            icon="arrow-back"
-            onPress={() => navigation.goBack()}
-            accessibilityLabel="Go back"
-            size={22}
-            color={colors.darkGray}
-          />
+          <BackButton onPress={() => navigation.goBack()} />
         </View>
         <View className="flex-1 items-center justify-center px-6">
           {loadError
@@ -279,13 +283,7 @@ const SpeciesGame = ( ) => {
     return (
       <SharedStackViewWrapper>
         <View className="flex-row items-center px-3 py-2 bg-white border-b border-lightGray">
-          <INatIconButton
-            icon="arrow-back"
-            onPress={() => navigation.goBack()}
-            accessibilityLabel="Go back"
-            size={22}
-            color={colors.darkGray}
-          />
+          <BackButton onPress={() => navigation.goBack()} />
         </View>
         <View className="flex-1 items-center justify-center px-6">
           <Heading2 className="text-center mb-2">Game Over</Heading2>
@@ -318,7 +316,7 @@ const SpeciesGame = ( ) => {
     );
   }
 
-  const isCorrect = guessedTarget === isTargetShown;
+  const isCorrect = !skipped && guessedTarget === isTargetShown;
   const shownTaxon = isTargetShown ? target! : lookalike!;
 
   const targetButtonLevel = ( ) => {
@@ -338,13 +336,7 @@ const SpeciesGame = ( ) => {
     <SharedStackViewWrapper>
       {/* Header bar */}
       <View className="flex-row items-center justify-between px-3 py-2 bg-white border-b border-lightGray">
-        <INatIconButton
-          icon="arrow-back"
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back"
-          size={22}
-          color={colors.darkGray}
-        />
+        <BackButton onPress={() => navigation.goBack()} />
         <View className="items-center">
           <Body2 className="font-bold">{`Round ${round} / ${ROUNDS}  ·  ${score} correct`}</Body2>
           {lifetimeBadge && (
@@ -355,14 +347,18 @@ const SpeciesGame = ( ) => {
         <View style={{ width: 44 }} />
       </View>
 
-      {/* Photo area */}
-      <View className="flex-1">
-        {currentPhotoUrl
+      {/* Photo area — pinch to zoom */}
+      <View
+        className="flex-1"
+        onLayout={e => setPhotoAreaSize( e.nativeEvent.layout )}
+      >
+        {currentPhotoUrl && photoAreaSize
           ? (
-            <Image
-              className="w-full h-full"
-              source={{ uri: currentPhotoUrl }}
-              resizeMode="cover"
+            <CustomImageZoom
+              uri={currentPhotoUrl}
+              width={photoAreaSize.width}
+              height={photoAreaSize.height}
+              resetKey={currentPhotoUrl}
             />
           )
           : (
@@ -378,12 +374,12 @@ const SpeciesGame = ( ) => {
 
         {phase === "revealed" && (
           <View
-            className={`mb-3 p-3 rounded-lg ${isCorrect ? "bg-inatGreen/20" : "bg-warningRed/20"}`}
+            className={`mb-3 p-3 rounded-lg ${skipped ? "bg-gray-100" : isCorrect ? "bg-inatGreen/20" : "bg-warningRed/20"}`}
           >
             <Body1
-              className={`text-center font-bold ${isCorrect ? "text-inatGreen" : "text-warningRed"}`}
+              className={`text-center font-bold ${skipped ? "text-darkGray" : isCorrect ? "text-inatGreen" : "text-warningRed"}`}
             >
-              {isCorrect ? "Correct!" : "Incorrect"}
+              {skipped ? "Skipped" : isCorrect ? "Correct!" : "Incorrect"}
             </Body1>
             <Body2 className="text-center mt-1 italic">
               {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
@@ -391,7 +387,7 @@ const SpeciesGame = ( ) => {
           </View>
         )}
 
-        <View className="flex-row mb-3">
+        <View className="flex-row mb-2">
           <View className="flex-1 mr-2">
             <Button
               className="w-full"
@@ -411,6 +407,14 @@ const SpeciesGame = ( ) => {
             />
           </View>
         </View>
+
+        {phase === "playing" && (
+          <Button
+            className="w-full mb-2"
+            text="I don't know"
+            onPress={handleSkip}
+          />
+        )}
 
         {phase === "revealed" && (
           <Button
