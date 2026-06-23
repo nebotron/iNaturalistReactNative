@@ -21,6 +21,7 @@ import Observation from "realmModels/Observation";
 import Taxon from "realmModels/Taxon";
 import type { RealmObservation } from "realmModels/types";
 import { confirmNoDuplicatePhotosBeforeUpload } from "sharedHelpers/duplicateUploadedDevicePhotos";
+import type { SPECIES_SORT } from "sharedHelpers/speciesSort";
 import {
   sortSpeciesCounts,
   speciesSortToApiParams,
@@ -35,6 +36,7 @@ import {
   useNavigateToObsEdit,
   useObservationsUpdates,
   useStoredLayout,
+  useTranslation,
 } from "sharedHooks";
 import {
   UPLOAD_PENDING,
@@ -60,6 +62,7 @@ export enum ACTIVE_SHEET {
 }
 
 const MyObservationsWithProvider = ( ) => {
+  const { t } = useTranslation( );
   const { isDefaultMode, loggedInWhileInDefaultMode } = useLayoutPrefs();
   const realm = useRealm( );
   const navigation = useNavigation( );
@@ -137,9 +140,7 @@ const MyObservationsWithProvider = ( ) => {
       : "grid" );
   };
 
-  const confirmInternetConnection = useCallback( ( ) => {
-    return isConnected;
-  }, [isConnected] );
+  const confirmInternetConnection = useCallback( ( ) => isConnected, [isConnected] );
 
   const confirmLoggedIn = useCallback( ( ) => {
     if ( !currentUser ) {

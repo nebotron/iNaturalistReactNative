@@ -1444,6 +1444,7 @@ View-sound = View sound
 # Label for a button that shows identification suggestions for an observation
 # or photo
 View-suggestions = View suggestions
+Viewing-offline-suggestions = Viewing offline suggestions
 Watch-your-notifications-for-identifications = Watch your notifications for identifications!
 We-are-not-confident-enough-to-make-a-top-ID-suggestion = We’re not confident enough to make a top ID suggestion, but here are some other suggestions:
 Welcome-back = Welcome back!

@@ -6,13 +6,13 @@ const sortByTime = array => array.sort( ( a, b ) => {
   return bTimestamp - aTimestamp;
 } );
 
-export const getGroupTimestamp = group => (
+export const getGroupTimestamp = ( group: Object ): number => (
   group.photos?.[0]?.image?.timestamp
   || group.videos?.[0]?.asset?.timestamp
   || 0
 );
 
-export const sortGroupsByTime = groups => [...groups].sort(
+export const sortGroupsByTime = ( groups: Object[] ): Object[] => [...groups].sort(
   ( a, b ) => getGroupTimestamp( b ) - getGroupTimestamp( a ),
 );
 
