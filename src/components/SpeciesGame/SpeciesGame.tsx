@@ -267,7 +267,6 @@ const SpeciesGame = ( ) => {
   }, [round, startRound] );
 
   const handlePlayAgain = useCallback( ( ) => {
-    usedUuidsRef.current = new Set( );
     setRound( 1 );
     setScore( 0 );
     startRound( targetPoolRef.current, lookalikePoolRef.current );
