@@ -122,8 +122,8 @@ const SpeciesGame = ( ) => {
       for ( const ident of obs.identifications ?? [] ) {
         const altId: number | undefined = ident.taxon?.id;
         const rankLevel: number | undefined = ident.taxon?.rank_level;
-        // Only count species-level taxa that differ from the target
-        if ( altId && altId !== id && rankLevel != null && rankLevel <= 10 ) {
+        // Only count species-level taxa (not subspecies) that differ from the target
+        if ( altId && altId !== id && rankLevel === 10 ) {
           counts[altId] = ( counts[altId] ?? 0 ) + 1;
         }
       }
