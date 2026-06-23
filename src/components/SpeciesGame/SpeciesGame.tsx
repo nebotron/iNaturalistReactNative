@@ -74,6 +74,7 @@ const SpeciesGame = ( ) => {
 
   const targetPoolRef = useRef<PhotoEntry[]>( [] );
   const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
+  const usedUuidsRef = useRef<Set<string>>( new Set( ) );
 
   const taxonLabel = ( t: TaxonInfo ) => t.preferredCommonName || t.name;
 
@@ -112,7 +113,10 @@ const SpeciesGame = ( ) => {
   ) => {
     const showTarget = Math.random( ) < 0.5;
     const pool = showTarget ? targetPool : lookalikePool;
-    const entry = pool[Math.floor( Math.random( ) * pool.length )] ?? null;
+    const unused = pool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
+    const candidates = unused.length > 0 ? unused : pool;
+    const entry = candidates[Math.floor( Math.random( ) * candidates.length )] ?? null;
+    if ( entry ) usedUuidsRef.current.add( entry.observationUuid );
     setIsTargetShown( showTarget );
     setCurrentPhotoUrl( entry?.url ?? null );
     setCurrentObservationUuid( entry?.observationUuid ?? null );
@@ -263,6 +267,7 @@ const SpeciesGame = ( ) => {
   }, [round, startRound] );
 
   const handlePlayAgain = useCallback( ( ) => {
+    usedUuidsRef.current = new Set( );
     setRound( 1 );
     setScore( 0 );
     startRound( targetPoolRef.current, lookalikePoolRef.current );
