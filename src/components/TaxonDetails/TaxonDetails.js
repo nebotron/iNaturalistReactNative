@@ -69,6 +69,7 @@ import TaxonDetailsTitle from "./TaxonDetailsTitle";
 import TaxonMapPreview from "./TaxonMapPreview";
 import TaxonMedia from "./TaxonMedia";
 import Taxonomy from "./Taxonomy";
+import IdentificationTips from "./IdentificationTips";
 import Wikipedia from "./Wikipedia";
 
 const SCROLL_VIEW_STYLE = {
@@ -345,6 +346,7 @@ const TaxonDetails = ( ): Node => {
       <View className="mx-3">
         <EstablishmentMeans taxon={taxon} />
         <Wikipedia taxon={taxon} />
+        {taxon.rank_level <= 10 && <IdentificationTips taxon={taxon} />}
         <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
         <TaxonMapPreview
           observation={mappableObservation}
