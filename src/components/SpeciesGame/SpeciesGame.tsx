@@ -8,7 +8,6 @@ import {
   Body1,
   Body2,
   Button,
-  Heading2,
   INatIconButton,
 } from "components/SharedComponents";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
@@ -27,7 +26,6 @@ import {
 import colors from "styles/tailwindColors";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
-const ROUNDS = 10;
 const POOL_SIZE = 20;
 const WASHINGTON_PLACE_ID = 46;
 
@@ -42,13 +40,12 @@ interface PhotoEntry {
   observationUuid: string;
 }
 
-type GamePhase = "loading" | "playing" | "revealed" | "done";
+type GamePhase = "loading" | "playing" | "revealed";
 
 interface RouteParams {
   taxonId: number;
 }
 
-const pct = ( stats: TaxonStats ) => Math.round( ( stats.correct / stats.total ) * 100 );
 
 const SpeciesGame = ( ) => {
   const navigation = useNavigation<
@@ -254,17 +251,7 @@ const SpeciesGame = ( ) => {
   }, [isTargetShown, taxonId, refreshLifetimeStats] );
 
   const handleNext = useCallback( ( ) => {
-    if ( round >= ROUNDS ) {
-      setPhase( "done" );
-      return;
-    }
     setRound( prev => prev + 1 );
-    startRound( targetPoolRef.current, lookalikePoolRef.current );
-  }, [round, startRound] );
-
-  const handlePlayAgain = useCallback( ( ) => {
-    setRound( 1 );
-    setScore( 0 );
     startRound( targetPoolRef.current, lookalikePoolRef.current );
   }, [startRound] );
 
@@ -272,7 +259,7 @@ const SpeciesGame = ( ) => {
     ? `${lifetimeStats.correct}/${lifetimeStats.total} lifetime`
     : null;
 
-  if ( phase === "loading" || ( phase !== "done" && ( !target || !lookalike ) ) ) {
+  if ( phase === "loading" || !target || !lookalike ) {
     return (
       <SharedStackViewWrapper>
         <View className="flex-row items-center px-3 py-2 bg-white border-b border-lightGray">
@@ -288,50 +275,6 @@ const SpeciesGame = ( ) => {
           {loadError
             ? <Body1 className="text-center text-warningRed">{loadError}</Body1>
             : <ActivityIndicator />}
-        </View>
-      </SharedStackViewWrapper>
-    );
-  }
-
-  if ( phase === "done" ) {
-    const sessionPct = Math.round( ( score / ROUNDS ) * 100 );
-    return (
-      <SharedStackViewWrapper>
-        <View className="flex-row items-center px-3 py-2 bg-white border-b border-lightGray">
-          <INatIconButton
-            icon="arrow-back"
-            onPress={() => navigation.goBack()}
-            accessibilityLabel="Go back"
-            size={22}
-            color={colors.darkGray}
-          />
-        </View>
-        <View className="flex-1 items-center justify-center px-6">
-          <Heading2 className="text-center mb-2">Game Over</Heading2>
-          {target && (
-            <Body2 className="text-center mb-4 italic">{taxonLabel( target )}</Body2>
-          )}
-
-          <Body1 className="text-center mb-1">
-            {`Session: ${score} / ${ROUNDS} (${sessionPct}%)`}
-          </Body1>
-          {lifetimeStats && (
-            <Body1 className="text-center mb-8 text-inatGreen font-bold">
-              {`Lifetime: ${lifetimeStats.correct} / ${lifetimeStats.total} (${pct( lifetimeStats )}%)`}
-            </Body1>
-          )}
-
-          <Button
-            className="w-full max-w-[500px]"
-            text="Play Again"
-            level="focus"
-            onPress={handlePlayAgain}
-          />
-          <Button
-            className="w-full max-w-[500px] mt-4"
-            text="Done"
-            onPress={() => navigation.goBack()}
-          />
         </View>
       </SharedStackViewWrapper>
     );
@@ -365,7 +308,7 @@ const SpeciesGame = ( ) => {
           color={colors.darkGray}
         />
         <View className="items-center">
-          <Body2 className="font-bold">{`Round ${round} / ${ROUNDS}  ·  ${score} correct`}</Body2>
+          <Body2 className="font-bold">{`Round ${round}  ·  ${score} correct`}</Body2>
           {lifetimeBadge && (
             <Body2 className="text-inatGreen">{lifetimeBadge}</Body2>
           )}
@@ -452,7 +395,7 @@ const SpeciesGame = ( ) => {
         {phase === "revealed" && (
           <Button
             className="w-full max-w-[500px] self-center mb-2"
-            text={round >= ROUNDS ? "See Results" : "Next"}
+            text="Next"
             level="focus"
             onPress={handleNext}
           />
