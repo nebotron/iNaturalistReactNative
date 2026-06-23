@@ -36,8 +36,9 @@ export const prepareExploreStateForStorage = (
 const dateToOffset = ( dateStr: string ): number => {
   const today = new Date( );
   today.setHours( 0, 0, 0, 0 );
-  const d = new Date( dateStr );
-  d.setHours( 0, 0, 0, 0 );
+  // Parse as local date to avoid UTC-vs-local timezone shift on YYYY-MM-DD strings
+  const [year, month, day] = dateStr.split( "-" ).map( Number );
+  const d = new Date( year, month - 1, day );
   return Math.round( ( d.getTime( ) - today.getTime( ) ) / ( 1000 * 60 * 60 * 24 ) );
 };
 
@@ -45,7 +46,11 @@ const offsetToIsoDate = ( offset: number ): string => {
   const d = new Date( );
   d.setHours( 0, 0, 0, 0 );
   d.setDate( d.getDate( ) + offset );
-  return d.toISOString( ).slice( 0, 10 );
+  // Use local date parts to avoid UTC-vs-local timezone shift
+  const year = d.getFullYear( );
+  const month = String( d.getMonth( ) + 1 ).padStart( 2, "0" );
+  const day = String( d.getDate( ) ).padStart( 2, "0" );
+  return `${year}-${month}-${day}`;
 };
 
 export const getRelativeDateOffsets = (
