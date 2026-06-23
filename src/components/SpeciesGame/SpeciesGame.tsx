@@ -102,6 +102,50 @@ const SpeciesGame = ( ) => {
     setPhase( "playing" );
   }, [] );
 
+  // Returns the taxon ID most commonly confused with taxonId, by scanning
+  // a random sample of observations for identifications proposing a different
+  // species-level taxon.  Returns null if the sample contains no disagreements.
+  const findMisidentifiedLookalike = useCallback( async (
+    id: number,
+  ): Promise<number | null> => {
+    const res = await fetch(
+      `${INATURALIST_API}/observations`
+        + `?taxon_id=${id}`
+        + "&per_page=100"
+        + "&order_by=random",
+    );
+    if ( !res.ok ) return null;
+    const data = await res.json( );
+
+    const counts: Record<number, number> = {};
+    for ( const obs of data.results ?? [] ) {
+      for ( const ident of obs.identifications ?? [] ) {
+        const altId: number | undefined = ident.taxon?.id;
+        const rankLevel: number | undefined = ident.taxon?.rank_level;
+        // Only count species-level taxa that differ from the target
+        if ( altId && altId !== id && rankLevel != null && rankLevel <= 10 ) {
+          counts[altId] = ( counts[altId] ?? 0 ) + 1;
+        }
+      }
+    }
+
+    const sorted = Object.entries( counts ).sort( ( [, a], [, b] ) => b - a );
+    return sorted.length > 0 ? Number( sorted[0][0] ) : null;
+  }, [] );
+
+  // Fetches basic taxon info (name, common name) by ID.
+  const fetchTaxonInfo = useCallback( async ( id: number ): Promise<TaxonInfo | null> => {
+    const res = await fetch(
+      `${INATURALIST_API}/taxa/${id}`
+        + "?fields=preferred_common_name,name,rank_level",
+    );
+    if ( !res.ok ) return null;
+    const data = await res.json( );
+    const t = data.results?.[0];
+    if ( !t ) return null;
+    return { id, name: t.name, preferredCommonName: t.preferred_common_name };
+  }, [] );
+
   useEffect( ( ) => {
     let cancelled = false;
     refreshLifetimeStats( );
@@ -116,41 +160,47 @@ const SpeciesGame = ( ) => {
         const taxon = taxonData.results?.[0];
         if ( !taxon || cancelled ) return;
 
-        const parentId = taxon.ancestor_ids?.[taxon.ancestor_ids.length - 1];
-        if ( !parentId ) {
-          if ( !cancelled ) setLoadError( "Could not find a parent taxon." );
-          return;
+        // Primary strategy: find the most-confused species via identification disagreements.
+        // Fallback: use a sibling in the same parent taxon.
+        let lookalikeId = await findMisidentifiedLookalike( taxonId );
+
+        if ( lookalikeId === null ) {
+          const parentId = taxon.ancestor_ids?.[taxon.ancestor_ids.length - 1];
+          if ( !parentId ) {
+            if ( !cancelled ) setLoadError( "No similar species found to compare against." );
+            return;
+          }
+          const siblingsRes = await fetch(
+            `${INATURALIST_API}/taxa`
+              + `?parent_id=${parentId}`
+              + `&rank=${taxon.rank}`
+              + "&per_page=12"
+              + "&order_by=observations_count"
+              + "&order=desc"
+              + "&fields=id,preferred_common_name,name",
+          );
+          const siblingsData = await siblingsRes.json( );
+          const siblings = ( siblingsData.results ?? [] ).filter(
+            ( s: { id: number } ) => s.id !== taxonId,
+          );
+          if ( siblings.length === 0 ) {
+            if ( !cancelled ) setLoadError( "No similar species found to compare against." );
+            return;
+          }
+          lookalikeId = siblings[
+            Math.floor( Math.random( ) * Math.min( siblings.length, 5 ) )
+          ].id;
         }
 
-        const siblingsRes = await fetch(
-          `${INATURALIST_API}/taxa`
-            + `?parent_id=${parentId}`
-            + `&rank=${taxon.rank}`
-            + "&per_page=12"
-            + "&order_by=observations_count"
-            + "&order=desc"
-            + "&fields=preferred_common_name,name,rank_level",
-        );
-        const siblingsData = await siblingsRes.json( );
-        const siblings = ( siblingsData.results ?? [] ).filter(
-          ( s: { id: number } ) => s.id !== taxonId,
-        );
-
-        if ( siblings.length === 0 ) {
-          if ( !cancelled ) setLoadError( "No similar species found to compare against." );
-          return;
-        }
-
-        const pick = siblings[Math.floor( Math.random( ) * Math.min( siblings.length, 5 ) )];
-
-        const [targetPool, lookalikePool] = await Promise.all( [
+        const [lookalikeInfo, targetPool, lookalikePool] = await Promise.all( [
+          fetchTaxonInfo( lookalikeId ),
           fetchPhotoPool( taxonId ),
-          fetchPhotoPool( pick.id ),
+          fetchPhotoPool( lookalikeId ),
         ] );
 
         if ( cancelled ) return;
 
-        if ( targetPool.length === 0 || lookalikePool.length === 0 ) {
+        if ( !lookalikeInfo || targetPool.length === 0 || lookalikePool.length === 0 ) {
           if ( !cancelled ) setLoadError( "Not enough photos found for this species pair." );
           return;
         }
@@ -163,11 +213,7 @@ const SpeciesGame = ( ) => {
           name: taxon.name,
           preferredCommonName: taxon.preferred_common_name,
         } );
-        setLookalike( {
-          id: pick.id,
-          name: pick.name,
-          preferredCommonName: pick.preferred_common_name,
-        } );
+        setLookalike( lookalikeInfo );
 
         startRound( targetPool, lookalikePool );
       } catch ( _e ) {
@@ -177,7 +223,7 @@ const SpeciesGame = ( ) => {
 
     loadGame( );
     return ( ) => { cancelled = true; };
-  }, [taxonId, fetchPhotoPool, startRound, refreshLifetimeStats] );
+  }, [taxonId, fetchPhotoPool, fetchTaxonInfo, findMisidentifiedLookalike, startRound, refreshLifetimeStats] );
 
   const handleGuess = useCallback( ( guessIsTarget: boolean ) => {
     const correct = guessIsTarget === isTargetShown;
