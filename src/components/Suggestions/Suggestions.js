@@ -18,7 +18,7 @@ import SuggestionsFooter from "./SuggestionsFooter";
 import SuggestionsHeader from "./SuggestionsHeader";
 
 type Props = {
-  genusTaxon?: Object,
+  genusMap?: Object,
   handleSkip: Function,
   hideLocationToggleButton: boolean,
   hideSkip?: boolean,
@@ -42,7 +42,7 @@ type Props = {
 };
 
 const Suggestions = ( {
-  genusTaxon,
+  genusMap,
   handleSkip,
   hideLocationToggleButton,
   hideSkip,
@@ -80,13 +80,18 @@ const Suggestions = ( {
     onTaxonChosen( ...args );
   }, [interactionsDisabled, onTaxonChosen] );
 
-  const renderSuggestion = useCallback( ( { item: suggestion } ) => (
-    <Suggestion
-      accessibilityLabel={t( "Choose-taxon" )}
-      suggestion={suggestion}
-      onTaxonChosen={handleTaxonChosen}
-    />
-  ), [handleTaxonChosen, t] );
+  const renderSuggestion = useCallback( ( { item: suggestion } ) => {
+    const genusTaxon = genusMap?.get( suggestion.taxon.id );
+    return (
+      <Suggestion
+        accessibilityLabel={t( "Choose-taxon" )}
+        suggestion={suggestion}
+        onTaxonChosen={handleTaxonChosen}
+        genusTaxon={genusTaxon}
+        onSelectGenus={genusTaxon ? ( ) => handleTaxonChosen( genusTaxon ) : undefined}
+      />
+    );
+  }, [genusMap, handleTaxonChosen, t] );
 
   const renderEmptyList = useMemo( ( ) => (
     <SuggestionsEmpty
@@ -164,55 +169,38 @@ const Suggestions = ( {
         </Body1>
       );
     }
+    const genusTaxon = genusMap?.get( item.taxon.id );
     return (
       <View className="bg-inatGreen/[.13]">
         <Suggestion
           accessibilityLabel={t( "Choose-top-taxon" )}
           suggestion={item}
           onTaxonChosen={handleTaxonChosen}
+          genusTaxon={genusTaxon}
+          onSelectGenus={genusTaxon ? ( ) => handleTaxonChosen( genusTaxon ) : undefined}
         />
       </View>
     );
   };
 
-  const renderGenusSuggestion = useCallback( ( { item } ) => (
-    <Suggestion
-      accessibilityLabel={t( "Choose-taxon" )}
-      suggestion={{ taxon: item }}
-      onTaxonChosen={handleTaxonChosen}
-    />
-  ), [handleTaxonChosen, t] );
-
   const createSections = ( ) => {
-    const genusSections = genusTaxon
-      ? [{
-        title: t( "SUGGEST-GENUS" ),
-        data: [genusTaxon],
-        renderItem: renderGenusSuggestion,
-      }]
-      : [];
-
     if ( isLoading ) {
-      return genusSections;
+      return [];
     }
     if ( isEmptyList ) {
-      return genusSections;
+      return [];
     }
-    return [
-      ...genusSections,
-      {
-        title: t( "TOP-ID-SUGGESTION" ),
-        // If there is a top suggestion we want to show it, but if there isn't
-        // we will still show the section with a notice saying there's nothing
-        // to show, so data can't be empty
-        data: [topSuggestion || null],
-        renderItem: renderTopSuggestion,
-      },
-      {
-        title: t( "OTHER-SUGGESTIONS" ),
-        data: otherSuggestions,
-      },
-    ];
+    return [{
+      title: t( "TOP-ID-SUGGESTION" ),
+      // If there is a top suggestion we want to show it, but if there isn't
+      // we will still show the section with a notice saying there's nothing
+      // to show, so data can't be empty
+      data: [topSuggestion || null],
+      renderItem: renderTopSuggestion,
+    }, {
+      title: t( "OTHER-SUGGESTIONS" ),
+      data: otherSuggestions,
+    }];
   };
 
   const sections = createSections( );
