@@ -15,7 +15,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Linking } from "react-native";
 import {
   getStats,
   recordGuess,
@@ -35,7 +34,7 @@ interface TaxonInfo {
 
 interface PhotoEntry {
   url: string;
-  observationId: number;
+  observationUuid: string;
 }
 
 type GamePhase = "loading" | "playing" | "revealed" | "done";
@@ -59,7 +58,7 @@ const SpeciesGame = ( ) => {
   const [score, setScore] = useState( 0 );
   const [isTargetShown, setIsTargetShown] = useState( true );
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>( null );
-  const [currentObservationId, setCurrentObservationId] = useState<number | null>( null );
+  const [currentObservationUuid, setCurrentObservationUuid] = useState<string | null>( null );
   // true = guessed target, false = guessed lookalike, null = not yet guessed
   const [guessedTarget, setGuessedTarget] = useState<boolean | null>( null );
   // lifetime stats for the target taxon, updated reactively after each guess
@@ -82,17 +81,17 @@ const SpeciesGame = ( ) => {
       + `&sounds=false`
       + `&order_by=random`
       + `&per_page=${POOL_SIZE}`
-      + "&fields=id,observation_photos";
+      + "&fields=uuid,observation_photos";
     const res = await fetch( url );
     const data = await res.json( );
     const entries: PhotoEntry[] = [];
     for ( const obs of data.results ?? [] ) {
       const first = ( obs.observation_photos ?? [] )[0];
       const raw: string | undefined = first?.photo?.url;
-      if ( raw && obs.id ) {
+      if ( raw && obs.uuid ) {
         entries.push( {
           url: raw.replace( /square\.(jpe?g|png|gif|webp)$/i, "medium.$1" ),
-          observationId: obs.id,
+          observationUuid: obs.uuid,
         } );
       }
     }
@@ -108,7 +107,7 @@ const SpeciesGame = ( ) => {
     const entry = pool[Math.floor( Math.random( ) * pool.length )] ?? null;
     setIsTargetShown( showTarget );
     setCurrentPhotoUrl( entry?.url ?? null );
-    setCurrentObservationId( entry?.observationId ?? null );
+    setCurrentObservationUuid( entry?.observationUuid ?? null );
     setGuessedTarget( null );
     setPhase( "playing" );
   }, [] );
@@ -399,11 +398,9 @@ const SpeciesGame = ( ) => {
             <Body2 className="text-center mt-1 italic">
               {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
             </Body2>
-            {currentObservationId && (
+            {currentObservationUuid && (
               <Pressable
-                onPress={() => Linking.openURL(
-                  `https://www.inaturalist.org/observations/${currentObservationId}`,
-                )}
+                onPress={() => navigation.navigate( "ObsDetails" as never, { uuid: currentObservationUuid } as never )}
               >
                 <Body2 className="text-center mt-1 text-inatGreen underline">
                   View observation
