@@ -2,6 +2,7 @@ import {
   useNetInfo,
 } from "@react-native-community/netinfo";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { fetchTaxon } from "api/taxa";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import findIndex from "lodash/findIndex";
 import isEqual from "lodash/isEqual";
@@ -17,10 +18,13 @@ import React, {
 } from "react";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
+import TaxonModel from "realmModels/Taxon";
 import type { RealmPhoto } from "realmModels/types";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getAnimalCrop } from "sharedHelpers/animalCropLog";
+import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
+import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import {
   useLastScreen,
   useLocationPermission,
@@ -195,8 +199,75 @@ const SuggestionsContainer = ( ) => {
   const [preferOfflineModel, setPreferOfflineModel] = useState( false );
   const previousObservationUuidRef = useRef<string | undefined>( currentObservation?.uuid );
   const [interactionsDisabled, setInteractionsDisabled] = useState( false );
+  const [genusTaxon, setGenusTaxon] = useState( null );
 
   usePreloadNextObservationSuggestions( );
+
+  const obsTaxon = currentObservation?.taxon;
+  const obsTaxonId = obsTaxon?.id;
+
+  useEffect( ( ) => {
+    const rankLevel = obsTaxon?.rank_level;
+    if ( !obsTaxonId || rankLevel == null || rankLevel > TaxonModel.SPECIES_LEVEL ) {
+      setGenusTaxon( null );
+      return ( ) => { };
+    }
+
+    let cancelled = false;
+
+    async function findGenus( ) {
+      const ancestorIds = Array.from( obsTaxon?.ancestor_ids || [] );
+      let foundGenusId: number | null = null;
+
+      if ( ancestorIds.length > 0 ) {
+        const genusFromRealm = realm.objects( "Taxon" ).filtered(
+          "id IN $0 AND rank_level == $1",
+          ancestorIds,
+          TaxonModel.GENUS_LEVEL,
+        )[0];
+        if ( genusFromRealm ) foundGenusId = genusFromRealm.id;
+      }
+
+      if ( !foundGenusId ) {
+        try {
+          const offlineAncestors = await getAncestorsFromTaxonomyFile( ancestorIds );
+          const genusAncestor = offlineAncestors.find(
+            a => a.rank_level === TaxonModel.GENUS_LEVEL,
+          );
+          foundGenusId = genusAncestor?.id ?? null;
+        } catch {
+          // Taxonomy file unavailable
+        }
+      }
+
+      if ( !foundGenusId ) {
+        try {
+          const taxonWithAncestors = await fetchTaxon( obsTaxonId );
+          const genusAncestor = taxonWithAncestors?.ancestors?.find(
+            ( a: { rank_level?: number } ) => a.rank_level === TaxonModel.GENUS_LEVEL,
+          );
+          foundGenusId = genusAncestor?.id ?? null;
+        } catch {
+          // API unavailable
+        }
+      }
+
+      if ( cancelled || !foundGenusId ) {
+        if ( !cancelled ) setGenusTaxon( null );
+        return;
+      }
+
+      let fullGenusTaxon = realm.objectForPrimaryKey( "Taxon", foundGenusId );
+      if ( !fullGenusTaxon ) {
+        fullGenusTaxon = await fetchTaxonAndSave( foundGenusId, realm );
+      }
+
+      if ( !cancelled ) setGenusTaxon( fullGenusTaxon );
+    }
+
+    findGenus( );
+    return ( ) => { cancelled = true; };
+  }, [obsTaxonId, obsTaxon, realm] );
 
   const {
     hasPermissions,
@@ -582,6 +653,7 @@ const SuggestionsContainer = ( ) => {
   return (
     <>
       <Suggestions
+        genusTaxon={genusTaxon}
         handleSkip={( ) => navigateWithTaxonSelected( undefined )}
         hideLocationToggleButton={hideLocationToggleButton}
         hideSkip={params?.hideSkip}

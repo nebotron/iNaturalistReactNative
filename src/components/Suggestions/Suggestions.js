@@ -18,6 +18,7 @@ import SuggestionsFooter from "./SuggestionsFooter";
 import SuggestionsHeader from "./SuggestionsHeader";
 
 type Props = {
+  genusTaxon?: Object,
   handleSkip: Function,
   hideLocationToggleButton: boolean,
   hideSkip?: boolean,
@@ -41,6 +42,7 @@ type Props = {
 };
 
 const Suggestions = ( {
+  genusTaxon,
   handleSkip,
   hideLocationToggleButton,
   hideSkip,
@@ -173,24 +175,44 @@ const Suggestions = ( {
     );
   };
 
+  const renderGenusSuggestion = useCallback( ( { item } ) => (
+    <Suggestion
+      accessibilityLabel={t( "Choose-taxon" )}
+      suggestion={{ taxon: item }}
+      onTaxonChosen={handleTaxonChosen}
+    />
+  ), [handleTaxonChosen, t] );
+
   const createSections = ( ) => {
+    const genusSections = genusTaxon
+      ? [{
+        title: t( "SUGGEST-GENUS" ),
+        data: [genusTaxon],
+        renderItem: renderGenusSuggestion,
+      }]
+      : [];
+
     if ( isLoading ) {
-      return [];
+      return genusSections;
     }
     if ( isEmptyList ) {
-      return [];
+      return genusSections;
     }
-    return [{
-      title: t( "TOP-ID-SUGGESTION" ),
-      // If there is a top suggestion we want to show it, but if there isn't
-      // we will still show the section with a notice saying there's nothing
-      // to show, so data can't be empty
-      data: [topSuggestion || null],
-      renderItem: renderTopSuggestion,
-    }, {
-      title: t( "OTHER-SUGGESTIONS" ),
-      data: otherSuggestions,
-    }];
+    return [
+      ...genusSections,
+      {
+        title: t( "TOP-ID-SUGGESTION" ),
+        // If there is a top suggestion we want to show it, but if there isn't
+        // we will still show the section with a notice saying there's nothing
+        // to show, so data can't be empty
+        data: [topSuggestion || null],
+        renderItem: renderTopSuggestion,
+      },
+      {
+        title: t( "OTHER-SUGGESTIONS" ),
+        data: otherSuggestions,
+      },
+    ];
   };
 
   const sections = createSections( );
