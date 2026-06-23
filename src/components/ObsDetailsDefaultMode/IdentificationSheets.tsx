@@ -1,6 +1,7 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { createComment } from "api/comments";
 import { createIdentification } from "api/identifications";
+import { fetchTaxon } from "api/taxa";
 import AgreeWithIDSheet from "components/ObsDetailsSharedComponents/Sheets/AgreeWithIDSheet";
 import PotentialDisagreementSheet
   from "components/ObsDetailsSharedComponents/Sheets/PotentialDisagreementSheet";
@@ -309,10 +310,50 @@ const IdentificationSheets: React.FC<Props> = ( {
       // Find genus ancestor for species-level or below taxa
       if ( taxon?.rank_level != null && taxon.rank_level <= TaxonModel.SPECIES_LEVEL ) {
         const ancestorIds = Array.from( taxon.ancestor_ids || [] );
-        const ancestors = await getAncestorsFromTaxonomyFile( ancestorIds );
-        const genusAncestor = ancestors.find( a => a.rank_level === TaxonModel.GENUS_LEVEL );
+        let foundGenusId: number | null = null;
+
+        // Try Realm lookup first (fast, no network)
+        if ( ancestorIds.length > 0 ) {
+          const genusFromRealm = realm.objects( "Taxon" ).filtered(
+            "id IN $0 AND rank_level == $1",
+            ancestorIds,
+            TaxonModel.GENUS_LEVEL,
+          )[0];
+          if ( genusFromRealm ) {
+            foundGenusId = genusFromRealm.id;
+          }
+        }
+
+        // Fall back to offline taxonomy file
+        if ( !foundGenusId ) {
+          try {
+            const offlineAncestors = await getAncestorsFromTaxonomyFile( ancestorIds );
+            const genusAncestor = offlineAncestors.find(
+              a => a.rank_level === TaxonModel.GENUS_LEVEL,
+            );
+            foundGenusId = genusAncestor?.id ?? null;
+          } catch {
+            // Taxonomy file unavailable; continue to API fallback
+          }
+        }
+
+        // Final fallback: fetch ancestors from the API (reliable, always has IDs)
+        if ( !foundGenusId ) {
+          try {
+            const taxonWithAncestors = await fetchTaxon( identTaxonId );
+            const genusAncestor = taxonWithAncestors?.ancestors?.find(
+              ( a: { id?: number; rank_level?: number } ) => (
+                a.rank_level === TaxonModel.GENUS_LEVEL
+              ),
+            );
+            foundGenusId = genusAncestor?.id ?? null;
+          } catch {
+            // API unavailable; genus button won't appear
+          }
+        }
+
         if ( !cancelled ) {
-          dispatch( { type: "SET_GENUS_ID", genusId: genusAncestor?.id ?? null } );
+          dispatch( { type: "SET_GENUS_ID", genusId: foundGenusId } );
         }
       } else if ( !cancelled ) {
         dispatch( { type: "SET_GENUS_ID", genusId: null } );
