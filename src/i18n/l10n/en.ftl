@@ -611,6 +611,7 @@ ID-Suggestions = ID Suggestions
 # Identification Status
 ID-Withdrawn = ID Withdrawn
 IDENTIFICATION = IDENTIFICATION
+IDENTIFICATION-TIPS = IDENTIFICATION TIPS
 # Accessibility label for a button that shows options for an identification
 Identification-options = Identification options
 IDENTIFICATIONS-WITHOUT-NUMBER =
