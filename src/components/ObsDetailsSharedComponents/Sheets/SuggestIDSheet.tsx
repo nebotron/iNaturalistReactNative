@@ -19,7 +19,6 @@ interface Props {
   onSuggestId: ( ) => void;
   editIdentBody: () => void;
   onPressClose?: () => void;
-  onSelectGenus?: () => void;
 }
 
 const SuggestIDSheet = ( {
@@ -29,7 +28,6 @@ const SuggestIDSheet = ( {
   onSuggestId,
   editIdentBody,
   onPressClose,
-  onSelectGenus,
 }: Props ): React.ReactNode => (
   <BottomSheetV2
     headerText={t( "SUGGEST-ID" )}
@@ -61,16 +59,6 @@ const SuggestIDSheet = ( {
             : <List2>{t( "Unknown-organism" )}</List2>
         }
       </View>
-      {onSelectGenus && (
-        <View className="mx-3 mb-2">
-          <Button
-            text={t( "SUGGEST-GENUS" )}
-            onPress={onSelectGenus}
-            disabled={loading}
-            testID="SuggestID.genusButton"
-          />
-        </View>
-      )}
       <View className="flex-row justify-evenly mx-3 mb-3">
         {identification.body
           ? (

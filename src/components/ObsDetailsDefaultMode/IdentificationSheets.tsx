@@ -1,7 +1,6 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { createComment } from "api/comments";
 import { createIdentification } from "api/identifications";
-import { fetchTaxon } from "api/taxa";
 import AgreeWithIDSheet from "components/ObsDetailsSharedComponents/Sheets/AgreeWithIDSheet";
 import PotentialDisagreementSheet
   from "components/ObsDetailsSharedComponents/Sheets/PotentialDisagreementSheet";
@@ -16,12 +15,9 @@ import React, {
   useCallback,
   useEffect,
   useReducer,
-  useState,
 } from "react";
 import { Alert, Platform } from "react-native";
-import TaxonModel from "realmModels/Taxon";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
-import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import {
   useAuthenticatedMutation,
   useTranslation,
@@ -38,7 +34,6 @@ const textInputStyle = Platform.OS === "android"
 interface Taxon extends Record<string, unknown> {
   id: number;
   ancestor_ids: number[];
-  rank_level?: number;
 }
 
 interface Observation extends Record<string, unknown> {
@@ -65,7 +60,6 @@ interface IdentState {
   showPotentialDisagreementSheet: boolean;
   showSuggestIdSheet: boolean;
   identTaxon?: Taxon | null;
-  genusId: number | null;
 }
 
 type IdentAction =
@@ -77,8 +71,7 @@ type IdentAction =
   | { type: "SHOW_EDIT_IDENT_BODY_SHEET" }
   | { type: "SHOW_POTENTIAL_DISAGREEMENT_SHEET" }
   | { type: "SUBMIT_IDENTIFICATION" }
-  | { type: "HIDE_SUGGESTED_ID_SHEET" }
-  | { type: "SET_GENUS_ID"; genusId: number | null };
+  | { type: "HIDE_SUGGESTED_ID_SHEET" };
 
 const initialIdentState: IdentState = {
   comment: null,
@@ -88,7 +81,6 @@ const initialIdentState: IdentState = {
   showPotentialDisagreementSheet: false,
   showSuggestIdSheet: false,
   identTaxon: null,
-  genusId: null,
 };
 
 const CLEAR_SUGGESTED_TAXON = "CLEAR_SUGGESTED_TAXON";
@@ -147,11 +139,9 @@ export const identReducer = ( state: IdentState, action: IdentAction ): IdentSta
         identTaxon: null,
       };
     case CLEAR_SUGGESTED_TAXON:
-      return { ...state, identTaxon: null, genusId: null };
+      return { ...state, identTaxon: null };
     case HIDE_SUGGESTED_ID_SHEET:
       return { ...state, showSuggestIdSheet: false };
-    case "SET_GENUS_ID":
-      return { ...state, genusId: action.genusId };
     default:
       return state;
   }
@@ -202,10 +192,8 @@ const IdentificationSheets: React.FC<Props> = ( {
     newIdentification,
     showPotentialDisagreementSheet,
     showSuggestIdSheet,
-    genusId,
   } = state;
 
-  const [isSelectingGenus, setIsSelectingGenus] = useState( false );
   const realm = useRealm( );
   const { t } = useTranslation( );
 
@@ -306,58 +294,6 @@ const IdentificationSheets: React.FC<Props> = ( {
         taxon,
         vision: identTaxonFromVision,
       } );
-
-      // Find genus ancestor for species-level or below taxa
-      if ( taxon?.rank_level != null && taxon.rank_level <= TaxonModel.SPECIES_LEVEL ) {
-        const ancestorIds = Array.from( taxon.ancestor_ids || [] );
-        let foundGenusId: number | null = null;
-
-        // Try Realm lookup first (fast, no network)
-        if ( ancestorIds.length > 0 ) {
-          const genusFromRealm = realm.objects( "Taxon" ).filtered(
-            "id IN $0 AND rank_level == $1",
-            ancestorIds,
-            TaxonModel.GENUS_LEVEL,
-          )[0];
-          if ( genusFromRealm ) {
-            foundGenusId = genusFromRealm.id;
-          }
-        }
-
-        // Fall back to offline taxonomy file
-        if ( !foundGenusId ) {
-          try {
-            const offlineAncestors = await getAncestorsFromTaxonomyFile( ancestorIds );
-            const genusAncestor = offlineAncestors.find(
-              a => a.rank_level === TaxonModel.GENUS_LEVEL,
-            );
-            foundGenusId = genusAncestor?.id ?? null;
-          } catch {
-            // Taxonomy file unavailable; continue to API fallback
-          }
-        }
-
-        // Final fallback: fetch ancestors from the API (reliable, always has IDs)
-        if ( !foundGenusId ) {
-          try {
-            const taxonWithAncestors = await fetchTaxon( identTaxonId );
-            const genusAncestor = taxonWithAncestors?.ancestors?.find(
-              ( a: { id?: number; rank_level?: number } ) => (
-                a.rank_level === TaxonModel.GENUS_LEVEL
-              ),
-            );
-            foundGenusId = genusAncestor?.id ?? null;
-          } catch {
-            // API unavailable; genus button won't appear
-          }
-        }
-
-        if ( !cancelled ) {
-          dispatch( { type: "SET_GENUS_ID", genusId: foundGenusId } );
-        }
-      } else if ( !cancelled ) {
-        dispatch( { type: "SET_GENUS_ID", genusId: null } );
-      }
 
       if ( cancelled ) return;
 
@@ -471,26 +407,6 @@ const IdentificationSheets: React.FC<Props> = ( {
     dispatch( { type: HIDE_SUGGESTED_ID_SHEET } );
   };
 
-  const onSelectGenus = useCallback( async ( ) => {
-    if ( !genusId ) return;
-    setIsSelectingGenus( true );
-    try {
-      let genusTaxon = realm.objectForPrimaryKey( "Taxon", genusId );
-      if ( !genusTaxon ) {
-        genusTaxon = await fetchTaxonAndSave( genusId, realm );
-      }
-      dispatch( {
-        type: SET_NEW_IDENTIFICATION,
-        taxon: genusTaxon,
-        vision: newIdentification?.vision,
-        body: newIdentification?.body,
-      } );
-      dispatch( { type: "SET_GENUS_ID", genusId: null } );
-    } finally {
-      setIsSelectingGenus( false );
-    }
-  }, [genusId, newIdentification, realm] );
-
   const addCommentHeaderText = showAddCommentHeader( );
 
   return (
@@ -533,11 +449,10 @@ const IdentificationSheets: React.FC<Props> = ( {
         <SuggestIDSheet
           editIdentBody={editIdentBody}
           hidden={showIdentBodySheet}
-          loading={isCreateIdPending || isSelectingGenus}
+          loading={isCreateIdPending}
           onSuggestId={onSuggestId}
           identification={newIdentification}
           onPressClose={hideSuggestedIdSheet}
-          onSelectGenus={genusId ? onSelectGenus : undefined}
         />
       )}
       {showPotentialDisagreementSheet && newIdentification && (
