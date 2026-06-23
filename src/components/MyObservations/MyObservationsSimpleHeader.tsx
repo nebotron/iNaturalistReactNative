@@ -1,10 +1,15 @@
+import { useNavigation } from "@react-navigation/native";
 import {
   HeaderUser,
   Heading3,
+  INatIconButton,
   RotatingINatIconButton,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
+import { RealmContext } from "providers/contexts";
 import React from "react";
+import { Alert } from "react-native";
+import Observation from "realmModels/Observation";
 import type {
   RealmUser,
 } from "realmModels/types";
@@ -22,6 +27,8 @@ import colors from "styles/tailwindColors";
 
 import SimpleUploadBannerContainer from "./SimpleUploadBannerContainer";
 
+const { useRealm } = RealmContext;
+
 interface Props {
   currentUser?: RealmUser;
   numUploadableObservations: number;
@@ -36,6 +43,26 @@ const MyObservationsSimpleHeader = ( {
   numUploadableObservations,
 }: Props ) => {
   const { t } = useTranslation( );
+  const navigation = useNavigation( );
+  const realm = useRealm( );
+  const setObservations = useStore( state => state.setObservations );
+  const resetObservationFlowSlice = useStore( state => state.resetObservationFlowSlice );
+  const setBulkUploadMode = useStore( state => state.setBulkUploadMode );
+
+  const handleBulkIDPress = ( ) => {
+    const unsyncedObs = Observation.filterUnsyncedObservations( realm );
+    if ( unsyncedObs.length === 0 ) {
+      Alert.alert( "No Unuploaded Observations", "All your observations have been uploaded." );
+      return;
+    }
+    resetObservationFlowSlice( );
+    setObservations( Array.from( unsyncedObs ) );
+    setBulkUploadMode( true );
+    navigation.navigate( "Suggestions", {
+      entryScreen: "ObsEdit",
+      lastScreen: "ObsEdit",
+    } );
+  };
 
   // TODO: all the code related to showing the sync button is pretty convoluted and'
   // should be cleaned up at some point, but right now it's ported from our ToolbarContainer/Toolbar
@@ -80,24 +107,37 @@ const MyObservationsSimpleHeader = ( {
           ? <HeaderUser user={currentUser} isConnected={isConnected} />
           : <Heading3>{ t( "My-Observations" ) }</Heading3>}
         {currentUser && (
-          <RotatingINatIconButton
-            icon={
-              showsExclamation
-                ? "sync-unsynced"
-                : "sync"
-            }
-            onPress={handleSyncButtonPress}
-            color={String(
-              numUploadableObservations > 0
-                ? colors?.inatGreen
-                : colors?.darkGray,
+          <View className="flex-row items-center">
+            {numUploadableObservations > 0 && (
+              <INatIconButton
+                icon="sparkly-label"
+                // eslint-disable-next-line i18next/no-literal-string
+                accessibilityLabel="Add IDs to unuploaded observations"
+                onPress={handleBulkIDPress}
+                color={String( colors?.inatGreen )}
+                size={26}
+                testID="BulkIDButton"
+              />
             )}
-            rotating={rotating}
-            disabled={rotating}
-            accessibilityLabel={t( "Sync-observations" )}
-            size={26}
-            testID="SyncButton"
-          />
+            <RotatingINatIconButton
+              icon={
+                showsExclamation
+                  ? "sync-unsynced"
+                  : "sync"
+              }
+              onPress={handleSyncButtonPress}
+              color={String(
+                numUploadableObservations > 0
+                  ? colors?.inatGreen
+                  : colors?.darkGray,
+              )}
+              rotating={rotating}
+              disabled={rotating}
+              accessibilityLabel={t( "Sync-observations" )}
+              size={26}
+              testID="SyncButton"
+            />
+          </View>
         )}
       </View>
     </>
