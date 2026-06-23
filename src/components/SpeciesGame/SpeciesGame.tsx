@@ -74,8 +74,7 @@ const SpeciesGame = ( ) => {
       + `&photos=true`
       + `&sounds=false`
       + `&order_by=random`
-      + `&per_page=${POOL_SIZE}`
-      + "&fields=observation_photos";
+      + `&per_page=${POOL_SIZE}`;
     const res = await fetch( url );
     const data = await res.json( );
     const urls: string[] = [];
@@ -83,7 +82,7 @@ const SpeciesGame = ( ) => {
       const first = ( obs.observation_photos ?? [] )[0];
       const raw: string | undefined = first?.photo?.url;
       if ( raw ) {
-        urls.push( raw.replace( /square\.(jpe?g|png|gif|webp)$/i, "medium.$1" ) );
+        urls.push( raw.replace( /square/i, "medium" ) );
       }
     }
     return urls;
