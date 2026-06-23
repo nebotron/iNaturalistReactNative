@@ -29,6 +29,7 @@ import colors from "styles/tailwindColors";
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const ROUNDS = 10;
 const POOL_SIZE = 20;
+const WASHINGTON_PLACE_ID = 46;
 
 interface TaxonInfo {
   id: number;
@@ -128,6 +129,7 @@ const SpeciesGame = ( ) => {
     const res = await fetch(
       `${INATURALIST_API}/observations`
         + `?taxon_id=${id}`
+        + `&place_id=${WASHINGTON_PLACE_ID}`
         + "&per_page=100"
         + "&order_by=random",
     );
