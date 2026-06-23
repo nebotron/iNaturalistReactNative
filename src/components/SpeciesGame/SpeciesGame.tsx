@@ -8,13 +8,14 @@ import {
   INatIconButton,
 } from "components/SharedComponents";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
-import { Image, View } from "components/styledComponents";
+import { Image, Pressable, View } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
   useRef,
   useState,
 } from "react";
+import { Linking } from "react-native";
 import {
   getStats,
   recordGuess,
@@ -30,6 +31,11 @@ interface TaxonInfo {
   id: number;
   name: string;
   preferredCommonName?: string;
+}
+
+interface PhotoEntry {
+  url: string;
+  observationId: number;
 }
 
 type GamePhase = "loading" | "playing" | "revealed" | "done";
@@ -53,13 +59,14 @@ const SpeciesGame = ( ) => {
   const [score, setScore] = useState( 0 );
   const [isTargetShown, setIsTargetShown] = useState( true );
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>( null );
+  const [currentObservationId, setCurrentObservationId] = useState<number | null>( null );
   // true = guessed target, false = guessed lookalike, null = not yet guessed
   const [guessedTarget, setGuessedTarget] = useState<boolean | null>( null );
   // lifetime stats for the target taxon, updated reactively after each guess
   const [lifetimeStats, setLifetimeStats] = useState<TaxonStats | null>( null );
 
-  const targetPoolRef = useRef<string[]>( [] );
-  const lookalikePoolRef = useRef<string[]>( [] );
+  const targetPoolRef = useRef<PhotoEntry[]>( [] );
+  const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
 
   const taxonLabel = ( t: TaxonInfo ) => t.preferredCommonName || t.name;
 
@@ -67,7 +74,7 @@ const SpeciesGame = ( ) => {
     setLifetimeStats( getStats( taxonId ) );
   }, [taxonId] );
 
-  const fetchPhotoPool = useCallback( async ( id: number ): Promise<string[]> => {
+  const fetchPhotoPool = useCallback( async ( id: number ): Promise<PhotoEntry[]> => {
     const url = `${INATURALIST_API}/observations`
       + `?taxon_id=${id}`
       + `&quality_grade=research`
@@ -75,29 +82,33 @@ const SpeciesGame = ( ) => {
       + `&sounds=false`
       + `&order_by=random`
       + `&per_page=${POOL_SIZE}`
-      + "&fields=observation_photos";
+      + "&fields=id,observation_photos";
     const res = await fetch( url );
     const data = await res.json( );
-    const urls: string[] = [];
+    const entries: PhotoEntry[] = [];
     for ( const obs of data.results ?? [] ) {
       const first = ( obs.observation_photos ?? [] )[0];
       const raw: string | undefined = first?.photo?.url;
-      if ( raw ) {
-        urls.push( raw.replace( /square\.(jpe?g|png|gif|webp)$/i, "medium.$1" ) );
+      if ( raw && obs.id ) {
+        entries.push( {
+          url: raw.replace( /square\.(jpe?g|png|gif|webp)$/i, "medium.$1" ),
+          observationId: obs.id,
+        } );
       }
     }
-    return urls;
+    return entries;
   }, [] );
 
   const startRound = useCallback( (
-    targetPool: string[],
-    lookalikePool: string[],
+    targetPool: PhotoEntry[],
+    lookalikePool: PhotoEntry[],
   ) => {
     const showTarget = Math.random( ) < 0.5;
     const pool = showTarget ? targetPool : lookalikePool;
-    const photo = pool[Math.floor( Math.random( ) * pool.length )] ?? null;
+    const entry = pool[Math.floor( Math.random( ) * pool.length )] ?? null;
     setIsTargetShown( showTarget );
-    setCurrentPhotoUrl( photo );
+    setCurrentPhotoUrl( entry?.url ?? null );
+    setCurrentObservationId( entry?.observationId ?? null );
     setGuessedTarget( null );
     setPhase( "playing" );
   }, [] );
@@ -388,6 +399,17 @@ const SpeciesGame = ( ) => {
             <Body2 className="text-center mt-1 italic">
               {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
             </Body2>
+            {currentObservationId && (
+              <Pressable
+                onPress={() => Linking.openURL(
+                  `https://www.inaturalist.org/observations/${currentObservationId}`,
+                )}
+              >
+                <Body2 className="text-center mt-1 text-inatGreen underline">
+                  View observation
+                </Body2>
+              </Pressable>
+            )}
           </View>
         )}
 
