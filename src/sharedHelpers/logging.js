@@ -1,5 +1,4 @@
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
-import { Alert } from "react-native";
 
 import { log } from "../../react-native-logs.config";
 
@@ -41,10 +40,6 @@ function reactQueryRetry( failureCount, error ) {
       ? "Network failure"
       : `HTTP ${status}`;
     console.log( `reactQueryRetry: ${label}, attempt ${failureCount + 1}` );
-    Alert.alert(
-      "Request failed — retrying",
-      `${label}: ${error.message || "Unknown error"}`,
-    );
   }
 
   return shouldRetry;
