@@ -1,4 +1,8 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
+import type {
+  NoBottomTabStackScreenProps,
+  TabStackScreenProps,
+} from "navigation/types";
 import {
   ActivityIndicator,
   Body1,
@@ -46,7 +50,10 @@ interface RouteParams {
 const pct = ( stats: TaxonStats ) => Math.round( ( stats.correct / stats.total ) * 100 );
 
 const SpeciesGame = ( ) => {
-  const navigation = useNavigation( );
+  const navigation = useNavigation<
+    NoBottomTabStackScreenProps<"SpeciesGame">["navigation"] &
+    TabStackScreenProps<"SpeciesGame">["navigation"]
+  >( );
   const { params } = useRoute( );
   const { taxonId } = params as RouteParams;
 
@@ -416,8 +423,10 @@ const SpeciesGame = ( ) => {
               className="w-full"
               text={taxonLabel( target! )}
               level={targetButtonLevel()}
-              onPress={() => { if ( phase === "playing" ) handleGuess( true ); }}
-              disabled={phase === "revealed"}
+              onPress={() => {
+                if ( phase === "playing" ) handleGuess( true );
+                else if ( phase === "revealed" ) navigation.push( "TaxonDetails", { id: target!.id } );
+              }}
             />
           </View>
           <View className="flex-1 ml-2">
@@ -425,11 +434,18 @@ const SpeciesGame = ( ) => {
               className="w-full"
               text={taxonLabel( lookalike! )}
               level={lookalikeButtonLevel()}
-              onPress={() => { if ( phase === "playing" ) handleGuess( false ); }}
-              disabled={phase === "revealed"}
+              onPress={() => {
+                if ( phase === "playing" ) handleGuess( false );
+                else if ( phase === "revealed" ) navigation.push( "TaxonDetails", { id: lookalike!.id } );
+              }}
             />
           </View>
         </View>
+        {phase === "revealed" && (
+          <Body2 className="text-center text-darkGray mb-1">
+            Tap a species to view its page
+          </Body2>
+        )}
 
         {phase === "revealed" && (
           <Button
