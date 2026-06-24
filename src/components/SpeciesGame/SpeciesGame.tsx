@@ -217,13 +217,11 @@ const SpeciesGame = ( ) => {
           = await findMisidentifiedLookalikes( taxonId );
 
         // Build a prioritized list of lookalike candidates.
+        // Always fetch siblings so we can fall back to them if misidentification
+        // candidates have no usable photo pools.
+        const parentId = taxon.ancestor_ids?.[taxon.ancestor_ids.length - 1];
         let siblingCandidates: number[] = [];
-        if ( misidentifiedId === null ) {
-          const parentId = taxon.ancestor_ids?.[taxon.ancestor_ids.length - 1];
-          if ( !parentId ) {
-            if ( !cancelled ) setLoadError( "No similar species found to compare against." );
-            return;
-          }
+        if ( parentId ) {
           const siblingsRes = await fetch(
             `${INATURALIST_API}/taxa`
               + `?parent_id=${parentId}`
@@ -237,18 +235,24 @@ const SpeciesGame = ( ) => {
           const siblings = ( siblingsData.results ?? [] ).filter(
             ( s: { id: number } ) => s.id !== taxonId,
           );
-          if ( siblings.length === 0 ) {
-            if ( !cancelled ) setLoadError( "No similar species found to compare against." );
-            return;
-          }
           // Shuffle so we don't always pick the most-observed sibling.
           const shuffled = [...siblings].sort( ( ) => Math.random( ) - 0.5 );
           siblingCandidates = shuffled.map( ( s: { id: number } ) => s.id );
         }
 
+        // Try all misidentification entries first (ordered by frequency), then
+        // fall back to siblings so a single taxon with no photos doesn't block the game.
+        const misidentCandidates = misidentEntries
+          .map( ( e: { taxonId: number } ) => e.taxonId )
+          .filter( ( id: number ) => id !== ( misidentifiedId ?? -1 ) );
         const candidates = misidentifiedId !== null
-          ? [misidentifiedId]
+          ? [misidentifiedId, ...misidentCandidates, ...siblingCandidates]
           : siblingCandidates;
+
+        if ( candidates.length === 0 ) {
+          if ( !cancelled ) setLoadError( "No similar species found to compare against." );
+          return;
+        }
 
         const targetPool = await fetchPhotoPool( taxonId );
         if ( cancelled ) return;
