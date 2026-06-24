@@ -102,7 +102,7 @@ const TaxonDetails = ( ): Node => {
   const navigation = useNavigation( );
   const { params } = useRoute( );
   const {
-    id, hideNavButtons, firstPhotoID, representativePhoto,
+    id, hideNavButtons, firstPhotoID, representativePhoto, rankLevel,
   } = params;
   const { t } = useTranslation( );
   const { isConnected } = useNetInfo( );
@@ -361,9 +361,12 @@ const TaxonDetails = ( ): Node => {
     <CarouselDots length={photos.length} index={mediaIndex} />
   );
 
-  const showExploreButton = !hideNavButtons && isConnected && !fromMatch;
-  const showGameButton = !hideNavButtons && isConnected && !fromMatch && !fromSuggestions
-    && !fromObsEdit && taxon?.rank_level <= 10;
+  // Rank level from taxon data, or from a hint passed by callers (e.g. SpeciesGame) that
+  // know the rank before taxon data has loaded from the API.
+  const effectiveRankLevel = taxon?.rank_level ?? rankLevel;
+  const showExploreButton = !hideNavButtons && isConnected && !fromMatch && taxon != null;
+  const showGameButton = !hideNavButtons && isConnected !== false && !fromMatch && !fromSuggestions
+    && !fromObsEdit && effectiveRankLevel != null && effectiveRankLevel <= 10;
 
   const displayTaxonTitle = useCallback( ( ) => (
     <View
@@ -400,7 +403,7 @@ const TaxonDetails = ( ): Node => {
         <View className="ml-2">
           <INatIconButton
             icon="play"
-            onPress={( ) => navigation.navigate( "SpeciesGame", { taxonId: taxon?.id } )}
+            onPress={( ) => navigation.navigate( "SpeciesGame", { taxonId: taxon?.id ?? id } )}
             accessibilityLabel="Play species identification game"
             size={20}
             color={colors.white}
@@ -413,6 +416,7 @@ const TaxonDetails = ( ): Node => {
     </View>
   ), [
     currentUserHasSeenTaxon,
+    id,
     showExploreButton,
     showGameButton,
     navigation,
@@ -497,7 +501,7 @@ const TaxonDetails = ( ): Node => {
               pointerEvents="box-none"
             >
               {isConnected && !isTablet && photos.length > 1 && displayScrollDots()}
-              {taxon && displayTaxonTitle()}
+              {(taxon || showGameButton) && displayTaxonTitle()}
             </View>
           </View>
           <View className="bg-white py-5 h-full flex-1">
