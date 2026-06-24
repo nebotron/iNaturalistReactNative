@@ -221,7 +221,6 @@ export type ExploreStackParamList = {
   ExploreResults: undefined;
   UniversalSearch: undefined;
   AdvancedSearch: undefined;
-  WildlifeHotspots: undefined;
 };
 
 // Screens hosted by MyObservationsStackNavigator
@@ -357,6 +356,7 @@ export type BaseTabStackParamList = {
     projectTitle?: string;
     journalPostsCount?: number;
   } | undefined;
+  WildlifeHotspots: undefined;
   AnimalCropTool: undefined;
   CropLogViewer: undefined;
   Debug: undefined;

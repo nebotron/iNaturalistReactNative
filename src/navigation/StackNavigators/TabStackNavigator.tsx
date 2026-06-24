@@ -30,6 +30,7 @@ import { Heading4 } from "components/SharedComponents";
 import FollowersList from "components/UserProfile/FollowersList";
 import FollowingList from "components/UserProfile/FollowingList";
 import UserProfile from "components/UserProfile/UserProfile";
+import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
 import { t } from "i18next";
 import ContextHeader from "navigation/ContextHeader";
 import {
@@ -217,6 +218,11 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           <Stack.Screen
             name="ExploreSearch"
             component={ExploreSearchContainer}
+          />
+          <Stack.Screen
+            name="WildlifeHotspots"
+            component={WildlifeHotspotsScreen}
+            options={hideHeader}
           />
           <Stack.Screen
             name="ObsDetails"

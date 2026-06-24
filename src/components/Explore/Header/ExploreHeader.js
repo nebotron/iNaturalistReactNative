@@ -12,6 +12,7 @@ import {
   INatIconButton,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
+import { useNavigation } from "@react-navigation/native";
 import { useExplore } from "providers/ExploreContext";
 import type { Node } from "react";
 import React, { useState } from "react";
@@ -52,6 +53,7 @@ const Header = ( {
   updateTaxonFilters,
 }: Props ): Node => {
   const { t } = useTranslation( );
+  const navigation = useNavigation( );
   const { state, numberOfFilters } = useExplore( );
   const { taxonFilters } = state;
   const iconicTaxonNames = state.iconic_taxa || [];
@@ -157,25 +159,35 @@ const Header = ( {
               </Pressable>
             </View>
           </View>
-          <View>
+          <View className="flex-row items-center">
             <INatIconButton
-              icon="sliders"
+              icon="location"
               color={colors.white}
-              className={classNames(
-                numberOfFilters !== 0
-                  ? "bg-inatGreen"
-                  : "bg-darkGray",
-                "rounded-md",
-              )}
-              onPress={() => openFiltersModal()}
-              accessibilityLabel={t( "Filters" )}
-              accessibilityHint={t( "Navigates-to-explore" )}
+              className="bg-darkGray rounded-md mr-2"
+              onPress={() => navigation.navigate( "WildlifeHotspots" )}
+              accessibilityLabel={t( "Wildlife-Hotspots" )}
+              accessibilityHint={t( "Opens-route-hotspots" )}
             />
-            {numberOfFilters !== 0 && (
-              <View className="absolute top-[-10] right-[-10]">
-                <NumberBadge number={numberOfFilters} light />
-              </View>
-            )}
+            <View>
+              <INatIconButton
+                icon="sliders"
+                color={colors.white}
+                className={classNames(
+                  numberOfFilters !== 0
+                    ? "bg-inatGreen"
+                    : "bg-darkGray",
+                  "rounded-md",
+                )}
+                onPress={() => openFiltersModal()}
+                accessibilityLabel={t( "Filters" )}
+                accessibilityHint={t( "Navigates-to-explore" )}
+              />
+              {numberOfFilters !== 0 && (
+                <View className="absolute top-[-10] right-[-10]">
+                  <NumberBadge number={numberOfFilters} light />
+                </View>
+              )}
+            </View>
           </View>
         </View>
         <ExploreHeaderCount
