@@ -134,7 +134,7 @@ const SpeciesGame = ( ) => {
     setPhase( "playing" );
   }, [] );
 
-  // Scans 100 random observations of taxonId near the user's location and returns all
+  // Scans 400 random observations of taxonId near the user's location and returns all
   // species-level taxa that appeared as alternate identifications, sorted by frequency.
   // Also records which observation UUIDs contained each misidentification.
   const findMisidentifiedLookalikes = useCallback( async (
@@ -147,15 +147,26 @@ const SpeciesGame = ( ) => {
     const locationParams = location
       ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
       : "";
-    const res = await fetch(
-      `${INATURALIST_API}/observations`
-        + `?taxon_id=${id}`
-        + locationParams
-        + "&per_page=100"
-        + "&order_by=random",
-    );
-    if ( !res.ok ) return { topId: null, entries: [] };
-    const data = await res.json( );
+    const baseUrl = `${INATURALIST_API}/observations`
+      + `?taxon_id=${id}`
+      + locationParams
+      + "&per_page=200"
+      + "&order_by=random";
+    const [res1, res2] = await Promise.all( [
+      fetch( `${baseUrl}&page=1` ),
+      fetch( `${baseUrl}&page=2` ),
+    ] );
+    const results: unknown[] = [];
+    if ( res1.ok ) {
+      const d = await res1.json( );
+      results.push( ...( d.results ?? [] ) );
+    }
+    if ( res2.ok ) {
+      const d = await res2.json( );
+      results.push( ...( d.results ?? [] ) );
+    }
+    if ( results.length === 0 ) return { topId: null, entries: [] };
+    const data = { results };
 
     const counts: Record<number, { count: number; observationUuids: string[] }> = {};
     for ( const obs of data.results ?? [] ) {
