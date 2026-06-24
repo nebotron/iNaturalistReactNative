@@ -151,6 +151,16 @@ const ExploreV2Header = ( ) => {
               </Heading2>
             </View>
           )}
+        <View className="mr-2">
+          <ContainedSquareButton
+            accessibilityHint={t( "Opens-route-hotspots" )}
+            accessibilityLabel={t( "Wildlife-Hotspots" )}
+            backgroundColor={colors.darkGray}
+            icon="location"
+            onPress={() => navigation.navigate( "WildlifeHotspots" )}
+            testID="ExploreV2Header.hotspotsButton"
+          />
+        </View>
         <ContainedSquareButton
           accessibilityHint={t( "Opens-search-interface" )}
           accessibilityLabel={t( "Search" )}
