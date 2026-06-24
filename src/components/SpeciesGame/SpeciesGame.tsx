@@ -401,7 +401,7 @@ const SpeciesGame = ( ) => {
               level={targetButtonLevel()}
               onPress={() => {
                 if ( phase === "playing" ) handleGuess( true );
-                else if ( phase === "revealed" ) navigation.push( "TaxonDetails", { id: target!.id } );
+                else if ( phase === "revealed" ) navigation.push( "TaxonDetails", { id: target!.id, rankLevel: 10 } );
               }}
             />
           </View>
@@ -412,7 +412,7 @@ const SpeciesGame = ( ) => {
               level={lookalikeButtonLevel()}
               onPress={() => {
                 if ( phase === "playing" ) handleGuess( false );
-                else if ( phase === "revealed" ) navigation.push( "TaxonDetails", { id: lookalike!.id } );
+                else if ( phase === "revealed" ) navigation.push( "TaxonDetails", { id: lookalike!.id, rankLevel: 10 } );
               }}
             />
           </View>

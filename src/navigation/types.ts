@@ -97,6 +97,8 @@ export type SharedStackParamList = {
     };
     hideNavButtons?: boolean;
     lastScreen?: "Suggestions";
+    // Hint from callers that know the taxon rank without full taxon data (e.g. SpeciesGame)
+    rankLevel?: number;
     // TODO: do we really use both?
     vision?: boolean;
     usesVision?: boolean;
