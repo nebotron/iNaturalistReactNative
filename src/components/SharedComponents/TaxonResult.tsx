@@ -41,6 +41,7 @@ interface TaxonResultProps {
   hideNavButtons?: boolean;
   lastScreen?: "Suggestions";
   onPressInfo?: ( taxon: object ) => void;
+  onSelectGenus?: () => void;
   showCheckmark?: boolean;
   showEditButton?: boolean;
   showRemoveButton?: boolean;
@@ -73,6 +74,7 @@ const TaxonResult = ( {
   hideNavButtons = false,
   lastScreen,
   onPressInfo,
+  onSelectGenus,
   retryQuery = true,
   showCheckmark = true,
   showEditButton = false,
@@ -260,6 +262,19 @@ const TaxonResult = ( {
       </TaxonResultMain>
       { !unpressable && (
         <View className="flex-row items-center">
+          { onSelectGenus && (
+            <INatIconButton
+              icon="arrow-up-bold-circle-outline"
+              size={22}
+              onPress={onSelectGenus}
+              color={String(
+                clearBackground
+                  ? colors?.white
+                  : colors?.darkGray,
+              )}
+              accessibilityLabel={t( "SUGGEST-GENUS" )}
+            />
+          )}
           { !hideInfoButton && (
             <INatIconButton
               icon="info-circle-outline"
