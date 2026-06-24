@@ -1,10 +1,24 @@
 import {
+  getRelativeDateOffsets,
   hasSavedExploreFilterName,
   prepareExploreStateForStorage,
+  resolveRelativeDates,
   sortSavedExploreFilters,
 } from "components/Explore/helpers/savedExploreFilters";
 import { initialExploreState } from "providers/ExploreContext";
 import useStore, { zustandStorage } from "stores/useStore";
+
+// Returns a local YYYY-MM-DD string for a date offset from today
+const localIsoDateOffset = offset => {
+  const d = new Date( );
+  d.setHours( 0, 0, 0, 0 );
+  d.setDate( d.getDate( ) + offset );
+  return [
+    d.getFullYear( ),
+    String( d.getMonth( ) + 1 ).padStart( 2, "0" ),
+    String( d.getDate( ) ).padStart( 2, "0" ),
+  ].join( "-" );
+};
 
 describe( "savedExploreFilters helpers", ( ) => {
   it( "sorts saved filters newest first", ( ) => {
@@ -35,6 +49,60 @@ describe( "savedExploreFilters helpers", ( ) => {
 
     expect( prepared.return_bounds ).toBeUndefined( );
     expect( prepared.needsID ).toBe( true );
+  } );
+
+  it( "getRelativeDateOffsets returns 0 for today and negative for past dates", ( ) => {
+    const today = localIsoDateOffset( 0 );
+    const sevenDaysAgo = localIsoDateOffset( -7 );
+
+    const offsets = getRelativeDateOffsets( {
+      ...initialExploreState,
+      dateObserved: "DATE_RANGE",
+      d1: sevenDaysAgo,
+      d2: today,
+    } );
+
+    expect( offsets.relativeD1 ).toBe( -7 );
+    expect( offsets.relativeD2 ).toBe( 0 );
+  } );
+
+  it( "resolveRelativeDates round-trips correctly (no timezone drift)", ( ) => {
+    const today = localIsoDateOffset( 0 );
+    const sevenDaysAgo = localIsoDateOffset( -7 );
+
+    const state = {
+      ...initialExploreState,
+      dateObserved: "DATE_RANGE",
+      d1: sevenDaysAgo,
+      d2: today,
+    };
+    const offsets = getRelativeDateOffsets( state );
+    const resolved = resolveRelativeDates( state, offsets );
+
+    expect( resolved.d1 ).toBe( sevenDaysAgo );
+    expect( resolved.d2 ).toBe( today );
+  } );
+
+  it( "resolveRelativeDates produces stable dates on repeated calls (no per-open drift)", ( ) => {
+    const today = localIsoDateOffset( 0 );
+
+    const state = {
+      ...initialExploreState,
+      dateObserved: "DATE_RANGE",
+      d1: today,
+      d2: today,
+    };
+
+    // Simulate what happens on each Explore tab open: resolve → recompute offsets → resolve again
+    const offsets1 = getRelativeDateOffsets( state );
+    const resolved1 = resolveRelativeDates( state, offsets1 );
+    const offsets2 = getRelativeDateOffsets( resolved1 );
+    const resolved2 = resolveRelativeDates( resolved1, offsets2 );
+
+    expect( resolved1.d1 ).toBe( today );
+    expect( resolved2.d1 ).toBe( today );
+    expect( offsets1.relativeD1 ).toBe( 0 );
+    expect( offsets2.relativeD1 ).toBe( 0 );
   } );
 } );
 
