@@ -81,13 +81,16 @@ const SpeciesGame = ( ) => {
   }, [taxonId] );
 
   const fetchPhotoPool = useCallback( async ( id: number ): Promise<PhotoEntry[]> => {
+    const page = Math.floor( Math.random( ) * 5 ) + 1;
     const url = `${INATURALIST_API}/observations`
       + `?taxon_id=${id}`
       + `&quality_grade=research`
       + `&photos=true`
       + `&sounds=false`
-      + `&order_by=random`
+      + `&order_by=votes`
+      + `&order=desc`
       + `&per_page=${POOL_SIZE}`
+      + `&page=${page}`
       + "&fields=uuid,observation_photos";
     const res = await fetch( url );
     const data = await res.json( );
