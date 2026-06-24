@@ -1,6 +1,7 @@
 import { useNavigation } from "@react-navigation/native";
 import type { ApiProject } from "api/types";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import type { ExploreUserFilter } from "components/Explore/helpers/userFilters";
 import {
   EXPLORE_ACTION,
   ExploreProvider,
@@ -29,12 +30,11 @@ const ExploreFiltersContainerWithContext = () => {
     } );
   };
 
-  const updateUser = (
-    user: {
-      login: string;
-    } | null,
-  ) => {
-    console.log( " Not implemented in ExploreV2 yet", user );
+  const updateUserFilters = ( userFilters: ExploreUserFilter[] ) => {
+    dispatch( {
+      type: EXPLORE_ACTION.SET_USER_FILTERS,
+      userFilters,
+    } );
   };
 
   const updateProject = ( project: ApiProject ) => {
@@ -46,7 +46,7 @@ const ExploreFiltersContainerWithContext = () => {
       closeModal={closeModal}
       filterByIconicTaxonUnknown={filterByIconicTaxonUnknown}
       updateTaxonFilters={updateTaxonFilters}
-      updateUser={updateUser}
+      updateUserFilters={updateUserFilters}
       updateProject={updateProject}
     />
   );

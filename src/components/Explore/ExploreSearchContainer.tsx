@@ -1,6 +1,7 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { ApiPlace, ApiProject, ApiTaxon } from "api/types";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import { toggleUserFilter } from "components/Explore/helpers/userFilters";
 import { View } from "components/styledComponents";
 import type { TabStackScreenProps } from "navigation/types";
 import {
@@ -78,8 +79,15 @@ const ExploreSearchContainerWithContext = () => {
     } );
   }, [defaultExploreLocation, dispatch, setRootStoredParams, state] );
 
-  const updateUser = ( user: null | { login: string } ) => {
-    console.log( "Not implemented in ExploreV2 yet.", user );
+  const updateUser = ( user: null | { id: number; login: string }, exclude = false ) => {
+    if ( !user ) {
+      dispatch( { type: EXPLORE_ACTION.SET_USER_FILTERS, userFilters: [] } );
+    } else {
+      dispatch( {
+        type: EXPLORE_ACTION.SET_USER_FILTERS,
+        userFilters: toggleUserFilter( state.userFilters || [], user, exclude ),
+      } );
+    }
   };
   const updateProject = ( project: null | ApiProject ) => {
     console.log( "Not implemented in ExploreV2 yet.", project );
