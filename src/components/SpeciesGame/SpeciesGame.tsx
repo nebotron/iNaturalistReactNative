@@ -12,6 +12,7 @@ import {
 } from "components/SharedComponents";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { Image, Pressable, View } from "components/styledComponents";
+import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import React, {
   useCallback,
   useEffect,
@@ -27,7 +28,7 @@ import colors from "styles/tailwindColors";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
-const WASHINGTON_PLACE_ID = 46;
+const LOOKALIKE_RADIUS_KM = 500;
 
 interface TaxonInfo {
   id: number;
@@ -127,10 +128,14 @@ const SpeciesGame = ( ) => {
   const findMisidentifiedLookalike = useCallback( async (
     id: number,
   ): Promise<number | null> => {
+    const location = await fetchCoarseUserLocation( );
+    const locationParams = location
+      ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
+      : "";
     const res = await fetch(
       `${INATURALIST_API}/observations`
         + `?taxon_id=${id}`
-        + `&place_id=${WASHINGTON_PLACE_ID}`
+        + locationParams
         + "&per_page=100"
         + "&order_by=random",
     );
