@@ -1,7 +1,4 @@
-import {
-  fetchSpeciesCounts,
-  searchObservations,
-} from "api/observations";
+import { searchObservations } from "api/observations";
 import { useCallback, useState } from "react";
 
 export interface RoutePoint {
@@ -21,80 +18,153 @@ export interface Hotspot {
   centerLatitude: number;
   centerLongitude: number;
   observationCount: number;
-  detourKm: number;
+  distanceFromRouteKm: number;
   topSpecies: HotspotSpecies[];
 }
 
 const EARTH_RADIUS_KM = 6371;
-const HOTSPOT_RADIUS_KM = 25;
+const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
+// ~20 km grid cells for clustering
+const GRID_DEG = 0.18;
+// Hotspots must be within this distance of the route to be shown
+const MAX_ROUTE_DISTANCE_KM = 25;
 
 function toRad( deg: number ): number {
   return ( deg * Math.PI ) / 180;
 }
 
-function haversineDistance(
-  lat1: number,
-  lon1: number,
-  lat2: number,
-  lon2: number,
-): number {
+function haversineKm( lat1: number, lon1: number, lat2: number, lon2: number ): number {
   const dLat = toRad( lat2 - lat1 );
   const dLon = toRad( lon2 - lon1 );
-  const a =
-    Math.sin( dLat / 2 ) ** 2
+  const a = Math.sin( dLat / 2 ) ** 2
     + Math.cos( toRad( lat1 ) ) * Math.cos( toRad( lat2 ) ) * Math.sin( dLon / 2 ) ** 2;
   return 2 * EARTH_RADIUS_KM * Math.asin( Math.sqrt( a ) );
 }
 
-function sampleRoutePoints(
-  start: RoutePoint,
-  end: RoutePoint,
-  count: number,
-): RoutePoint[] {
-  const points: RoutePoint[] = [];
-  for ( let i = 0; i < count; i++ ) {
-    const t = count === 1 ? 0 : i / ( count - 1 );
-    points.push( {
-      latitude: start.latitude + t * ( end.latitude - start.latitude ),
-      longitude: start.longitude + t * ( end.longitude - start.longitude ),
-    } );
+// Minimum distance from a point to a polyline (sequence of segments)
+function distanceToPolylineKm( pt: RoutePoint, polyline: RoutePoint[] ): number {
+  let minDist = Infinity;
+  for ( let i = 0; i < polyline.length - 1; i++ ) {
+    const a = polyline[i];
+    const b = polyline[i + 1];
+    const dx = b.longitude - a.longitude;
+    const dy = b.latitude - a.latitude;
+    const len2 = dx * dx + dy * dy;
+    let nearLat: number;
+    let nearLng: number;
+    if ( len2 === 0 ) {
+      nearLat = a.latitude;
+      nearLng = a.longitude;
+    } else {
+      const t = Math.max( 0, Math.min( 1,
+        ( ( pt.longitude - a.longitude ) * dx + ( pt.latitude - a.latitude ) * dy ) / len2,
+      ) );
+      nearLat = a.latitude + t * dy;
+      nearLng = a.longitude + t * dx;
+    }
+    const d = haversineKm( pt.latitude, pt.longitude, nearLat, nearLng );
+    if ( d < minDist ) minDist = d;
   }
-  return points;
+  return minDist;
 }
 
-// Distance from a point to the nearest point on the line segment (start→end)
-function distanceToRouteLine(
-  point: RoutePoint,
-  routeStart: RoutePoint,
-  routeEnd: RoutePoint,
-): number {
-  const dx = routeEnd.longitude - routeStart.longitude;
-  const dy = routeEnd.latitude - routeStart.latitude;
-  const len2 = dx * dx + dy * dy;
-  if ( len2 === 0 ) {
-    return haversineDistance(
-      point.latitude,
-      point.longitude,
-      routeStart.latitude,
-      routeStart.longitude,
-    );
+async function fetchOSRMRoute( start: RoutePoint, end: RoutePoint ): Promise<RoutePoint[]> {
+  const url = `${OSRM_BASE}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`;
+  const response = await fetch( url );
+  if ( !response.ok ) {
+    throw new Error( `Routing service error: ${response.status}` );
   }
-  const t = Math.max(
-    0,
-    Math.min(
-      1,
-      ( ( point.longitude - routeStart.longitude ) * dx
-        + ( point.latitude - routeStart.latitude ) * dy )
-        / len2,
-    ),
-  );
-  const nearestLat = routeStart.latitude + t * dy;
-  const nearestLng = routeStart.longitude + t * dx;
-  return haversineDistance( point.latitude, point.longitude, nearestLat, nearestLng );
+  const data = await response.json();
+  if ( !data.routes?.length ) {
+    throw new Error( "No route found between these locations" );
+  }
+  const coords: [number, number][] = data.routes[0].geometry.coordinates;
+  return coords.map( ( [lng, lat] ) => ( { latitude: lat, longitude: lng } ) );
+}
+
+function routeBbox( coords: RoutePoint[], paddingDeg = 0.3 ) {
+  let minLat = Infinity;
+  let maxLat = -Infinity;
+  let minLng = Infinity;
+  let maxLng = -Infinity;
+  for ( const { latitude, longitude } of coords ) {
+    if ( latitude < minLat ) minLat = latitude;
+    if ( latitude > maxLat ) maxLat = latitude;
+    if ( longitude < minLng ) minLng = longitude;
+    if ( longitude > maxLng ) maxLng = longitude;
+  }
+  return {
+    swlat: minLat - paddingDeg,
+    swlng: minLng - paddingDeg,
+    nelat: maxLat + paddingDeg,
+    nelng: maxLng + paddingDeg,
+  };
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function getObsCoords( obs: any ): { lat: number; lng: number } | null {
+  const coords = obs?.geojson?.coordinates;
+  if ( Array.isArray( coords ) && coords.length >= 2 ) {
+    return { lat: coords[1], lng: coords[0] };
+  }
+  return null;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function clusterByGrid( observations: any[] ): Map<string, {
+  centerLat: number;
+  centerLng: number;
+  count: number;
+  taxa: Map<number, HotspotSpecies>;
+}> {
+  const cells = new Map<string, {
+    centerLat: number;
+    centerLng: number;
+    count: number;
+    taxa: Map<number, HotspotSpecies>;
+  }>();
+
+  for ( const obs of observations ) {
+    const coords = getObsCoords( obs );
+    if ( !coords ) continue;
+
+    const cellLat = ( Math.floor( coords.lat / GRID_DEG ) + 0.5 ) * GRID_DEG;
+    const cellLng = ( Math.floor( coords.lng / GRID_DEG ) + 0.5 ) * GRID_DEG;
+    const key = `${cellLat.toFixed( 5 )},${cellLng.toFixed( 5 )}`;
+
+    if ( !cells.has( key ) ) {
+      cells.set( key, {
+        centerLat: cellLat,
+        centerLng: cellLng,
+        count: 0,
+        taxa: new Map(),
+      } );
+    }
+    const cell = cells.get( key )!;
+    cell.count++;
+
+    const taxon = obs.taxon;
+    if ( taxon?.id ) {
+      const prev = cell.taxa.get( taxon.id );
+      if ( prev ) {
+        prev.count++;
+      } else {
+        cell.taxa.set( taxon.id, {
+          id: taxon.id,
+          name: taxon.name ?? "",
+          preferred_common_name: taxon.preferred_common_name,
+          count: 1,
+        } );
+      }
+    }
+  }
+
+  return cells;
 }
 
 export function useRouteHotspots() {
   const [hotspots, setHotspots] = useState<Hotspot[]>( [] );
+  const [routeCoords, setRouteCoords] = useState<RoutePoint[]>( [] );
   const [loading, setLoading] = useState( false );
   const [error, setError] = useState<string | null>( null );
 
@@ -107,91 +177,65 @@ export function useRouteHotspots() {
       setLoading( true );
       setError( null );
       setHotspots( [] );
+      setRouteCoords( [] );
 
       try {
-        const totalDistanceKm = haversineDistance(
-          start.latitude,
-          start.longitude,
-          end.latitude,
-          end.longitude,
-        );
-        // Scale sample count to route length; every ~30km, min 5, max 20
-        const numSamples = Math.max( 5, Math.min( 20, Math.round( totalDistanceKm / 30 ) + 1 ) );
-        const samplePoints = sampleRoutePoints( start, end, numSamples );
+        // 1. Get the actual road route
+        const routePoints = await fetchOSRMRoute( start, end );
+        setRouteCoords( routePoints );
 
-        const countResults = await Promise.all(
-          samplePoints.map( async point => {
-            const response = await searchObservations( {
-              lat: point.latitude,
-              lng: point.longitude,
-              radius: HOTSPOT_RADIUS_KM,
-              per_page: 0,
-              verifiable: true,
-              ...filterParams,
-            } );
-            return {
-              point,
-              count: response?.total_results ?? 0,
-              bounds: response?.total_bounds ?? null,
-            };
-          } ),
-        );
+        // 2. Single iNaturalist call for the whole route bounding box
+        const bbox = routeBbox( routePoints );
+        const response = await searchObservations( {
+          ...bbox,
+          per_page: 200,
+          verifiable: true,
+          order_by: "observations.id",
+          fields: {
+            geojson: true,
+            taxon: {
+              id: true,
+              name: true,
+              preferred_common_name: true,
+              iconic_taxon_name: true,
+            },
+          },
+          ...filterParams,
+        } );
 
-        // Take the top 10 by count for species lookup
-        const ranked = countResults
-          .filter( r => r.count > 0 )
-          .sort( ( a, b ) => b.count - a.count )
-          .slice( 0, 10 );
+        const observations = response?.results ?? [];
 
-        const results = await Promise.all(
-          ranked.map( async ( result, idx ) => {
-            const speciesResponse = await fetchSpeciesCounts( {
-              lat: result.point.latitude,
-              lng: result.point.longitude,
-              radius: HOTSPOT_RADIUS_KM,
-              per_page: 5,
-              verifiable: true,
-              ...filterParams,
-            } );
+        // 3. Cluster observations into geographic grid cells
+        const cells = clusterByGrid( observations );
 
-            const topSpecies: HotspotSpecies[] = ( speciesResponse?.results ?? [] )
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              .map( ( entry: any ) => ( {
-                id: entry.taxon?.id,
-                name: entry.taxon?.name ?? "",
-                preferred_common_name: entry.taxon?.preferred_common_name,
-                count: entry.count,
-              } ) );
+        // 4. Filter to cells within MAX_ROUTE_DISTANCE_KM of the route,
+        //    then sort by observation count
+        const results: Hotspot[] = [];
+        cells.forEach( ( cell, key ) => {
+          const dist = distanceToPolylineKm(
+            { latitude: cell.centerLat, longitude: cell.centerLng },
+            routePoints,
+          );
+          if ( dist > MAX_ROUTE_DISTANCE_KM ) return;
 
-            // If the API returns bounds, use their center as a more accurate
-            // hotspot location; otherwise fall back to the sample point
-            let centerLat = result.point.latitude;
-            let centerLng = result.point.longitude;
-            if ( result.bounds ) {
-              centerLat = ( result.bounds.swlat + result.bounds.nelat ) / 2;
-              centerLng = ( result.bounds.swlng + result.bounds.nelng ) / 2;
-            }
+          const topSpecies = [...cell.taxa.values()]
+            .sort( ( a, b ) => b.count - a.count )
+            .slice( 0, 5 );
 
-            const detourKm = distanceToRouteLine(
-              { latitude: centerLat, longitude: centerLng },
-              start,
-              end,
-            );
+          results.push( {
+            id: `hotspot-${key}`,
+            centerLatitude: cell.centerLat,
+            centerLongitude: cell.centerLng,
+            observationCount: cell.count,
+            distanceFromRouteKm: dist,
+            topSpecies,
+          } );
+        } );
 
-            return {
-              id: `hotspot-${idx}-${result.point.latitude.toFixed( 4 )}-${result.point.longitude.toFixed( 4 )}`,
-              centerLatitude: centerLat,
-              centerLongitude: centerLng,
-              observationCount: result.count,
-              detourKm,
-              topSpecies,
-            };
-          } ),
-        );
-
+        results.sort( ( a, b ) => b.observationCount - a.observationCount );
         setHotspots( results );
-      } catch ( _err ) {
-        setError( "Failed to load hotspot data. Please try again." );
+      } catch ( err ) {
+        setError( err instanceof Error ? err.message : "Failed to load hotspot data" );
       } finally {
         setLoading( false );
       }
@@ -201,6 +245,7 @@ export function useRouteHotspots() {
 
   return {
     hotspots,
+    routeCoords,
     loading,
     error,
     findHotspots,

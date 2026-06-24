@@ -29,7 +29,7 @@ import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
 import HotspotListItem from "./HotspotListItem";
-import type { Hotspot } from "./hooks/useRouteHotspots";
+import type { Hotspot, RoutePoint } from "./hooks/useRouteHotspots";
 import { useRouteHotspots } from "./hooks/useRouteHotspots";
 
 const MAX_CIRCLE_RADIUS_M = 60_000;
@@ -56,6 +56,10 @@ async function geocodeText( text: string ): Promise<LatLng | null> {
   }
 }
 
+function toMapCoord( pt: RoutePoint ): LatLng {
+  return { latitude: pt.latitude, longitude: pt.longitude };
+}
+
 const WildlifeHotspotsScreen = () => {
   const { t } = useTranslation();
   const { state } = useExploreV2();
@@ -69,27 +73,23 @@ const WildlifeHotspotsScreen = () => {
   const [geocodingEnd, setGeocodingEnd] = useState( false );
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>( null );
 
-  const { hotspots, loading, error, findHotspots } = useRouteHotspots();
+  const {
+    hotspots, routeCoords, loading, error, findHotspots,
+  } = useRouteHotspots();
 
-  // Fit map to show both start and end when both are set
+  // Fit map whenever the route or hotspots change
   useEffect( () => {
-    if ( !startPoint || !endPoint || !mapRef.current ) return;
-    const coords = [startPoint, endPoint];
-    // Pad bounds with hotspot centers if available
+    if ( routeCoords.length === 0 || !mapRef.current ) return;
+    const coords: LatLng[] = routeCoords.map( toMapCoord );
     hotspots.forEach( h => coords.push( {
       latitude: h.centerLatitude,
       longitude: h.centerLongitude,
     } ) );
     mapRef.current.fitToCoordinates( coords, {
-      edgePadding: {
-        top: 60,
-        right: 40,
-        bottom: 60,
-        left: 40,
-      },
+      edgePadding: { top: 60, right: 40, bottom: 60, left: 40 },
       animated: true,
     } );
-  }, [startPoint, endPoint, hotspots] );
+  }, [routeCoords, hotspots] );
 
   const handleSubmitStart = useCallback( async () => {
     if ( !startText.trim() ) return;
@@ -119,24 +119,8 @@ const WildlifeHotspotsScreen = () => {
     if ( !startPoint || !endPoint ) return;
 
     const queryParams = buildExploreV2QueryParams( state );
-    // Pass only the subject/filter params, not per_page/sort/location
-    const {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      per_page: _pp,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      order_by: _ob,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      order: _o,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      lat: _lat,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      lng: _lng,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      radius: _r,
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      place_id: _pid,
-      ...filterParams
-    } = queryParams;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { per_page, order_by, order, lat, lng, radius, place_id, ...filterParams } = queryParams;
 
     setSelectedHotspotId( null );
     await findHotspots(
@@ -161,16 +145,9 @@ const WildlifeHotspotsScreen = () => {
   const maxCount = hotspots.reduce( ( max, h ) => Math.max( max, h.observationCount ), 0 );
   const canSearch = !!( startPoint && endPoint );
 
-  const initialRegion = {
-    latitude: 25,
-    longitude: -40,
-    latitudeDelta: 80,
-    longitudeDelta: 100,
-  };
-
   const subjectLabel = state.subject
     ? ( state.subject.type === "taxon"
-      ? ( state.subject.taxon.preferred_common_name || state.subject.taxon.name )
+      ? ( state.subject.taxon.preferred_common_name ?? state.subject.taxon.name )
       : ( state.subject.type === "user"
         ? state.subject.user.login
         : state.subject.project.title ) )
@@ -248,7 +225,12 @@ const WildlifeHotspotsScreen = () => {
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
-          initialRegion={initialRegion}
+          initialRegion={{
+            latitude: 25,
+            longitude: -40,
+            latitudeDelta: 80,
+            longitudeDelta: 100,
+          }}
           rotateEnabled={false}
           pitchEnabled={false}
           showsUserLocation
@@ -267,18 +249,20 @@ const WildlifeHotspotsScreen = () => {
               title={endText || t( "End" )}
             />
           )}
-          {startPoint && endPoint && (
+          {routeCoords.length > 1 && (
             <Polyline
-              coordinates={[startPoint, endPoint]}
+              coordinates={routeCoords.map( toMapCoord )}
               strokeColor={colors.darkGray}
               strokeWidth={3}
-              lineDashPattern={[8, 4]}
             />
           )}
           {hotspots.map( hotspot => (
             <Circle
               key={hotspot.id}
-              center={{ latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude }}
+              center={{
+                latitude: hotspot.centerLatitude,
+                longitude: hotspot.centerLongitude,
+              }}
               radius={hotspotCircleRadius( hotspot.observationCount, maxCount )}
               fillColor={
                 selectedHotspotId === hotspot.id

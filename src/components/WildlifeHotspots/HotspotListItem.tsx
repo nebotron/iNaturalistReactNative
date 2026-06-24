@@ -23,9 +23,9 @@ const HotspotListItem = ( {
   selected,
   onPress,
 }: Props ) => {
-  const detourText = hotspot.detourKm < 0.5
+  const detourText = hotspot.distanceFromRouteKm < 0.5
     ? "On route"
-    : `${Math.round( hotspot.detourKm )}km off route`;
+    : `${Math.round( hotspot.distanceFromRouteKm )}km off route`;
 
   return (
     <Pressable
