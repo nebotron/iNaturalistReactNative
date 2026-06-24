@@ -10,6 +10,7 @@ import {
 } from "providers/ExploreContext";
 
 import { taxonFiltersToApiParams } from "./taxonFilters";
+import { userFiltersToApiParams } from "./userFilters";
 
 const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   const RESEARCH = "research";
@@ -139,11 +140,28 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     delete filteredParams.without_taxon_id;
   }
 
+  const userFilterParams = userFiltersToApiParams( params.userFilters );
+  if ( userFilterParams.user_id ) {
+    filteredParams.user_id = userFilterParams.user_id;
+  } else {
+    delete filteredParams.user_id;
+  }
+
+  // Excluded users are filtered client-side (no API param for without_user_id)
+  const excludedUsers = ( params.userFilters || [] )
+    .filter( f => f.exclude )
+    .map( f => ( { id: f.user.id } ) );
+  if ( excludedUsers.length > 0 ) {
+    filteredParams.excludedUsers = excludedUsers;
+  }
+
   delete filteredParams.taxon;
   delete filteredParams.taxonFilters;
+  delete filteredParams.userFilters;
   delete filteredParams.place_guess;
   delete filteredParams.placeMode;
   delete filteredParams.user;
+  delete filteredParams.excludeUser;
   delete filteredParams.project;
   delete filteredParams.sortBy;
   delete filteredParams.researchGrade;

@@ -22,7 +22,10 @@ interface ExcludeUser {
 }
 
 interface UseInfiniteExploreScrollParams {
-  params: ApiObservationsSearchParams & { excludeUser?: ExcludeUser };
+  params: ApiObservationsSearchParams & {
+    excludeUser?: ExcludeUser;
+    excludedUsers?: ExcludeUser[];
+  };
   enabled: boolean;
 }
 
@@ -58,6 +61,7 @@ const useInfiniteExploreScroll = (
   } ), [newInputParams] );
 
   const excludedUser: ExcludeUser | undefined = newInputParams.excludeUser;
+  const excludedUsers: ExcludeUser[] = newInputParams.excludedUsers || [];
 
   const queryKey = ["useInfiniteExploreScroll", newInputParams];
 
@@ -107,8 +111,12 @@ const useInfiniteExploreScroll = (
   let totalResults: number | null | undefined = pages?.[0]?.total_results;
   let filtered = [];
 
-  // filter out obs from excluded user and adjust count
-  if ( excludedUser && observations ) {
+  // filter out obs from excluded users (client-side, no API param available)
+  if ( excludedUsers.length > 0 && observations ) {
+    const excludedIds = new Set( excludedUsers.map( u => u.id ) );
+    filtered = observations.filter( obs => !excludedIds.has( obs?.user?.id ) );
+    observations = filtered;
+  } else if ( excludedUser && observations ) {
     filtered = observations.filter( observation => observation?.user?.id !== excludedUser.id );
     observations = filtered;
   }
