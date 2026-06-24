@@ -220,7 +220,6 @@ export type ExploreStackParamList = {
   ExploreResults: undefined;
   UniversalSearch: undefined;
   AdvancedSearch: undefined;
-  WildlifeHotspots: undefined;
 };
 
 // Tab-only routes (not from SharedStackScreens). Intersected with SharedStackParamList
@@ -348,6 +347,7 @@ export type BaseTabStackParamList = {
     projectTitle?: string;
     journalPostsCount?: number;
   } | undefined;
+  WildlifeHotspots: undefined;
   AnimalCropTool: undefined;
   CropLogViewer: undefined;
   Debug: undefined;

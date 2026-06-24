@@ -1,4 +1,3 @@
-import buildExploreV2QueryParams from "components/Explore/ExploreV2/buildQueryParams";
 import {
   ActivityIndicator,
   Body2,
@@ -10,7 +9,6 @@ import {
 } from "components/SharedComponents";
 import BackButton from "components/SharedComponents/Buttons/BackButton";
 import { ScrollView, TextInput, View } from "components/styledComponents";
-import { useExploreV2 } from "providers/ExploreV2Context";
 import React, {
   useCallback,
   useEffect,
@@ -62,7 +60,6 @@ function toMapCoord( pt: RoutePoint ): LatLng {
 
 const WildlifeHotspotsScreen = () => {
   const { t } = useTranslation();
-  const { state } = useExploreV2();
   const mapRef = useRef<MapView>( null );
 
   const [startText, setStartText] = useState( "" );
@@ -117,18 +114,13 @@ const WildlifeHotspotsScreen = () => {
 
   const handleFindHotspots = useCallback( async () => {
     if ( !startPoint || !endPoint ) return;
-
-    const queryParams = buildExploreV2QueryParams( state );
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { per_page, order_by, order, lat, lng, radius, place_id, ...filterParams } = queryParams;
-
     setSelectedHotspotId( null );
     await findHotspots(
       { latitude: startPoint.latitude, longitude: startPoint.longitude },
       { latitude: endPoint.latitude, longitude: endPoint.longitude },
-      filterParams as Record<string, unknown>,
+      {},
     );
-  }, [startPoint, endPoint, state, findHotspots] );
+  }, [startPoint, endPoint, findHotspots] );
 
   const handleHotspotPress = useCallback( ( hotspot: Hotspot ) => {
     setSelectedHotspotId( prev => ( prev === hotspot.id ? null : hotspot.id ) );
@@ -145,14 +137,6 @@ const WildlifeHotspotsScreen = () => {
   const maxCount = hotspots.reduce( ( max, h ) => Math.max( max, h.observationCount ), 0 );
   const canSearch = !!( startPoint && endPoint );
 
-  const subjectLabel = state.subject
-    ? ( state.subject.type === "taxon"
-      ? ( state.subject.taxon.preferred_common_name ?? state.subject.taxon.name )
-      : ( state.subject.type === "user"
-        ? state.subject.user.login
-        : state.subject.project.title ) )
-    : null;
-
   return (
     <ViewWrapper testID="WildlifeHotspotsScreen">
       {/* Header */}
@@ -160,9 +144,6 @@ const WildlifeHotspotsScreen = () => {
         <BackButton />
         <View className="flex-1 ml-2">
           <Heading2 numberOfLines={1}>{t( "Wildlife-Hotspots" )}</Heading2>
-          {subjectLabel && (
-            <Body3 className="text-inatGreen" numberOfLines={1}>{subjectLabel}</Body3>
-          )}
         </View>
       </View>
 

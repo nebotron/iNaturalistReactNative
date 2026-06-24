@@ -5,8 +5,6 @@ import ExploreResults
   from "components/Explore/ExploreV2/screens/ExploreResults";
 import UniversalSearch
   from "components/Explore/ExploreV2/screens/UniversalSearch";
-import WildlifeHotspotsScreen
-  from "components/WildlifeHotspots/WildlifeHotspotsScreen";
 import { hideHeader } from "navigation/navigationOptions";
 import type { ExploreStackParamList } from "navigation/types";
 import React from "react";
@@ -30,11 +28,6 @@ const ExploreStackNavigator = ( ) => (
     <Stack.Screen
       name="AdvancedSearch"
       component={AdvancedSearch}
-      options={hideHeader}
-    />
-    <Stack.Screen
-      name="WildlifeHotspots"
-      component={WildlifeHotspotsScreen}
       options={hideHeader}
     />
   </Stack.Navigator>

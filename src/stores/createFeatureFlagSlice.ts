@@ -27,7 +27,7 @@ export enum FeatureFlag {
 
 const initialFeatureFlagConfig: Record<FeatureFlag, boolean> = {
   // [FeatureFlag.MyFeatureFlagEnabled]: false,
-  [FeatureFlag.ExploreV2Enabled]: true,
+  [FeatureFlag.ExploreV2Enabled]: false,
   [FeatureFlag.NewsEnabled]: false,
   [FeatureFlag.TraditionalProjectsEnabled]: false,
 };
