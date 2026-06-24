@@ -105,22 +105,41 @@ const SpeciesGame = ( ) => {
     return entries;
   }, [] );
 
-  const startRound = useCallback( (
+  const startRound = useCallback( async (
     targetPool: PhotoEntry[],
     lookalikePool: PhotoEntry[],
+    targetTaxonId: number,
+    lookalikeTaxonId: number,
   ) => {
     const showTarget = Math.random( ) < 0.5;
-    const pool = showTarget ? targetPool : lookalikePool;
-    const unused = pool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
-    const candidates = unused.length > 0 ? unused : pool;
-    const entry = candidates[Math.floor( Math.random( ) * candidates.length )] ?? null;
-    if ( entry ) usedUuidsRef.current.add( entry.observationUuid );
+    let pool = showTarget ? targetPool : lookalikePool;
+    const poolTaxonId = showTarget ? targetTaxonId : lookalikeTaxonId;
+    let unused = pool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
+
+    if ( unused.length === 0 ) {
+      const fresh = await fetchPhotoPool( poolTaxonId );
+      const newEntries = fresh.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
+      if ( newEntries.length > 0 ) {
+        pool = [...pool, ...newEntries];
+        if ( showTarget ) targetPoolRef.current = pool;
+        else lookalikePoolRef.current = pool;
+        unused = newEntries;
+      }
+    }
+
+    if ( unused.length === 0 ) {
+      setLoadError( "You've seen all available observations for this species pair!" );
+      return;
+    }
+
+    const entry = unused[Math.floor( Math.random( ) * unused.length )];
+    usedUuidsRef.current.add( entry.observationUuid );
     setIsTargetShown( showTarget );
-    setCurrentPhotoUrl( entry?.url ?? null );
-    setCurrentObservationUuid( entry?.observationUuid ?? null );
+    setCurrentPhotoUrl( entry.url );
+    setCurrentObservationUuid( entry.observationUuid );
     setGuessedTarget( null );
     setPhase( "playing" );
-  }, [] );
+  }, [fetchPhotoPool] );
 
   // Returns the taxon ID most commonly confused with taxonId, by scanning
   // a random sample of observations for identifications proposing a different
@@ -236,7 +255,7 @@ const SpeciesGame = ( ) => {
         } );
         setLookalike( lookalikeInfo );
 
-        startRound( targetPool, lookalikePool );
+        await startRound( targetPool, lookalikePool, taxonId, lookalikeInfo.id );
       } catch ( _e ) {
         if ( !cancelled ) setLoadError( "Failed to load game data. Please try again." );
       }
@@ -262,8 +281,13 @@ const SpeciesGame = ( ) => {
 
   const handleNext = useCallback( ( ) => {
     setRound( prev => prev + 1 );
-    startRound( targetPoolRef.current, lookalikePoolRef.current );
-  }, [startRound] );
+    startRound(
+      targetPoolRef.current,
+      lookalikePoolRef.current,
+      taxonId,
+      lookalike!.id,
+    );
+  }, [startRound, taxonId, lookalike] );
 
   const lifetimeBadge = lifetimeStats
     ? `${lifetimeStats.correct}/${lifetimeStats.total} lifetime`
