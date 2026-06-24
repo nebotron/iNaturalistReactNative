@@ -8,8 +8,8 @@ import {
   Body1,
   Body2,
   Button,
-  INatIconButton,
 } from "components/SharedComponents";
+import BackButton from "components/SharedComponents/Buttons/BackButton";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import { Pressable, View } from "components/styledComponents";
@@ -24,7 +24,6 @@ import {
   recordGuess,
   type TaxonStats,
 } from "sharedHelpers/speciesGameStats";
-import colors from "styles/tailwindColors";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
@@ -294,13 +293,7 @@ const SpeciesGame = ( ) => {
     return (
       <SharedStackViewWrapper>
         <View className="flex-row items-center px-3 py-2 bg-white border-b border-lightGray">
-          <INatIconButton
-            icon="arrow-back"
-            onPress={() => navigation.goBack()}
-            accessibilityLabel="Go back"
-            size={22}
-            color={colors.darkGray}
-          />
+          <BackButton inCustomHeader />
         </View>
         <View className="flex-1 items-center justify-center px-6">
           {loadError
@@ -332,13 +325,7 @@ const SpeciesGame = ( ) => {
     <SharedStackViewWrapper>
       {/* Header bar */}
       <View className="flex-row items-center justify-between px-3 py-2 bg-white border-b border-lightGray">
-        <INatIconButton
-          icon="arrow-back"
-          onPress={() => navigation.goBack()}
-          accessibilityLabel="Go back"
-          size={22}
-          color={colors.darkGray}
-        />
+        <BackButton inCustomHeader />
         <View className="items-center">
           <Body2 className="font-bold">{`Round ${round}  ·  ${score} correct`}</Body2>
           {lifetimeBadge && (
