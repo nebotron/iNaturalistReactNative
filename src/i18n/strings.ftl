@@ -1685,3 +1685,23 @@ Zoom-in-as-much-as-possible-to-improve = Zoom in as much as possible to improve 
 Zoom-to-current-location = Zoom to current location
 # Label for button that shows zoom level, e.g. on a camera
 zoom-x = { $zoom }×
+# Wildlife Hotspots along a route
+Wildlife-Hotspots = Wildlife Hotspots
+# Placeholder text for the start location input in the Wildlife Hotspots tool
+Start-location = Start location (e.g. New York, NY)
+# Placeholder text for the end location input in the Wildlife Hotspots tool
+End-location = End location (e.g. Boston, MA)
+# Button that triggers the Wildlife Hotspots search
+Find-Hotspots = Find Hotspots
+# Title for alert when a location name could not be geocoded
+Location-not-found = Location not found
+# Body for alert when a location name could not be geocoded
+Could-not-find-location = Could not find that location. Try a city name or a well-known place.
+# Loading message shown while searching for wildlife hotspots
+Searching-for-hotspots = Searching for hotspots…
+# Accessibility hint for the Wildlife Hotspots button in the Explore header
+Opens-route-hotspots = Opens the Wildlife Hotspots route finder
+# Label for the start point marker on the hotspots map
+Start = Start
+# Label for the end point marker on the hotspots map
+End = End

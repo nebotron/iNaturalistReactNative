@@ -221,6 +221,7 @@ export type ExploreStackParamList = {
   ExploreResults: undefined;
   UniversalSearch: undefined;
   AdvancedSearch: undefined;
+  WildlifeHotspots: undefined;
 };
 
 // Screens hosted by MyObservationsStackNavigator
