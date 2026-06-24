@@ -218,6 +218,7 @@ export type ExploreStackParamList = {
   ExploreResults: undefined;
   UniversalSearch: undefined;
   AdvancedSearch: undefined;
+  WildlifeHotspots: undefined;
 };
 
 // Tab-only routes (not from SharedStackScreens). Intersected with SharedStackParamList
