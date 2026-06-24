@@ -24,8 +24,8 @@ export interface Hotspot {
 
 const EARTH_RADIUS_KM = 6371;
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
-// ~20 km grid cells for clustering
-const GRID_DEG = 0.18;
+// ~3 km grid cells for clustering (1° ≈ 111 km)
+const GRID_DEG = 0.027;
 // Hotspots must be within this distance of the route to be shown
 const MAX_ROUTE_DISTANCE_KM = 25;
 
