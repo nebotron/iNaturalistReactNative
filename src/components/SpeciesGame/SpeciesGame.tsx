@@ -81,7 +81,6 @@ const SpeciesGame = ( ) => {
   }, [taxonId] );
 
   const fetchPhotoPool = useCallback( async ( id: number ): Promise<PhotoEntry[]> => {
-    const page = Math.floor( Math.random( ) * 5 ) + 1;
     const url = `${INATURALIST_API}/observations`
       + `?taxon_id=${id}`
       + `&quality_grade=research`
@@ -90,7 +89,6 @@ const SpeciesGame = ( ) => {
       + `&order_by=votes`
       + `&order=desc`
       + `&per_page=${POOL_SIZE}`
-      + `&page=${page}`
       + "&fields=uuid,observation_photos";
     const res = await fetch( url );
     const data = await res.json( );
@@ -136,7 +134,8 @@ const SpeciesGame = ( ) => {
         + `?taxon_id=${id}`
         + `&place_id=${WASHINGTON_PLACE_ID}`
         + "&per_page=100"
-        + "&order_by=random",
+        + "&order_by=votes"
+        + "&order=desc",
     );
     if ( !res.ok ) return null;
     const data = await res.json( );
@@ -186,9 +185,11 @@ const SpeciesGame = ( ) => {
 
         // Primary strategy: find the most-confused species via identification disagreements.
         // Fallback: use a sibling in the same parent taxon.
-        let lookalikeId = await findMisidentifiedLookalike( taxonId );
+        const misidentifiedId = await findMisidentifiedLookalike( taxonId );
 
-        if ( lookalikeId === null ) {
+        // Build a prioritized list of lookalike candidates.
+        let siblingCandidates: number[] = [];
+        if ( misidentifiedId === null ) {
           const parentId = taxon.ancestor_ids?.[taxon.ancestor_ids.length - 1];
           if ( !parentId ) {
             if ( !cancelled ) setLoadError( "No similar species found to compare against." );
@@ -211,20 +212,41 @@ const SpeciesGame = ( ) => {
             if ( !cancelled ) setLoadError( "No similar species found to compare against." );
             return;
           }
-          lookalikeId = siblings[
-            Math.floor( Math.random( ) * Math.min( siblings.length, 5 ) )
-          ].id;
+          // Shuffle so we don't always pick the most-observed sibling.
+          const shuffled = [...siblings].sort( ( ) => Math.random( ) - 0.5 );
+          siblingCandidates = shuffled.map( ( s: { id: number } ) => s.id );
         }
 
-        const [lookalikeInfo, targetPool, lookalikePool] = await Promise.all( [
-          fetchTaxonInfo( lookalikeId ),
-          fetchPhotoPool( taxonId ),
-          fetchPhotoPool( lookalikeId ),
-        ] );
+        const candidates = misidentifiedId !== null
+          ? [misidentifiedId]
+          : siblingCandidates;
+
+        const targetPool = await fetchPhotoPool( taxonId );
+        if ( cancelled ) return;
+        if ( targetPool.length === 0 ) {
+          if ( !cancelled ) setLoadError( "Not enough photos found for this species." );
+          return;
+        }
+
+        // Try candidates in order until one has photos.
+        let lookalikeInfo: TaxonInfo | null = null;
+        let lookalikePool: PhotoEntry[] = [];
+        for ( const candidateId of candidates ) {
+          if ( cancelled ) return;
+          const [info, pool] = await Promise.all( [
+            fetchTaxonInfo( candidateId ),
+            fetchPhotoPool( candidateId ),
+          ] );
+          if ( info && pool.length > 0 ) {
+            lookalikeInfo = info;
+            lookalikePool = pool;
+            break;
+          }
+        }
 
         if ( cancelled ) return;
 
-        if ( !lookalikeInfo || targetPool.length === 0 || lookalikePool.length === 0 ) {
+        if ( !lookalikeInfo || lookalikePool.length === 0 ) {
           if ( !cancelled ) setLoadError( "Not enough photos found for this species pair." );
           return;
         }
