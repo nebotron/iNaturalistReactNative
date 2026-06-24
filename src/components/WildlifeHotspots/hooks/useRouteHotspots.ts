@@ -184,9 +184,10 @@ export function useRouteHotspots() {
         const routePoints = await fetchOSRMRoute( start, end );
         setRouteCoords( routePoints );
 
-        // 2. Single iNaturalist call for the whole route bounding box
+        // 2. Fetch 500 observations for the route bounding box.
+        //    The API caps at 200/page, so fetch pages 1–3 in parallel.
         const bbox = routeBbox( routePoints );
-        const response = await searchObservations( {
+        const obsParams = {
           ...bbox,
           per_page: 200,
           verifiable: true,
@@ -201,9 +202,17 @@ export function useRouteHotspots() {
             },
           },
           ...filterParams,
-        } );
-
-        const observations = response?.results ?? [];
+        };
+        const [page1, page2, page3] = await Promise.all( [
+          searchObservations( { ...obsParams, page: 1 } ),
+          searchObservations( { ...obsParams, page: 2 } ),
+          searchObservations( { ...obsParams, page: 3 } ),
+        ] );
+        const observations = [
+          ...( page1?.results ?? [] ),
+          ...( page2?.results ?? [] ),
+          ...( page3?.results ?? [] ),
+        ];
 
         // 3. Cluster observations into geographic grid cells
         const cells = clusterByGrid( observations );
