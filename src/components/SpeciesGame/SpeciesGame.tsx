@@ -86,8 +86,6 @@ const SpeciesGame = ( ) => {
       + `&quality_grade=research`
       + `&photos=true`
       + `&sounds=false`
-      + `&order_by=votes`
-      + `&order=desc`
       + `&per_page=${POOL_SIZE}`
       + "&fields=uuid,observation_photos";
     const res = await fetch( url );
@@ -133,9 +131,7 @@ const SpeciesGame = ( ) => {
       `${INATURALIST_API}/observations`
         + `?taxon_id=${id}`
         + `&place_id=${WASHINGTON_PLACE_ID}`
-        + "&per_page=100"
-        + "&order_by=votes"
-        + "&order=desc",
+        + "&per_page=100",
     );
     if ( !res.ok ) return null;
     const data = await res.json( );
