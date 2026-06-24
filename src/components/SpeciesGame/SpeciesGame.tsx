@@ -11,7 +11,8 @@ import {
   INatIconButton,
 } from "components/SharedComponents";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
-import { Image, Pressable, View } from "components/styledComponents";
+import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
+import { Pressable, View } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
@@ -325,10 +326,9 @@ const SpeciesGame = ( ) => {
       <View className="flex-1">
         {currentPhotoUrl
           ? (
-            <Image
-              className="w-full h-full"
-              source={{ uri: currentPhotoUrl }}
-              resizeMode="cover"
+            <SharedZoomableImage
+              uri={currentPhotoUrl}
+              style={{ flex: 1 }}
             />
           )
           : (
