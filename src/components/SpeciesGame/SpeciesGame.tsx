@@ -65,8 +65,8 @@ const SpeciesGame = ( ) => {
   const [isTargetShown, setIsTargetShown] = useState( true );
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>( null );
   const [currentObservationUuid, setCurrentObservationUuid] = useState<string | null>( null );
-  // true = guessed target, false = guessed lookalike, null = not yet guessed
-  const [guessedTarget, setGuessedTarget] = useState<boolean | null>( null );
+  // true = guessed target, false = guessed lookalike, "skip" = I don't know, null = not yet guessed
+  const [guessedTarget, setGuessedTarget] = useState<boolean | "skip" | null>( null );
   // lifetime stats for the target taxon, updated reactively after each guess
   const [lifetimeStats, setLifetimeStats] = useState<TaxonStats | null>( null );
 
@@ -255,6 +255,11 @@ const SpeciesGame = ( ) => {
     setPhase( "revealed" );
   }, [isTargetShown, taxonId, refreshLifetimeStats] );
 
+  const handleSkip = useCallback( ( ) => {
+    setGuessedTarget( "skip" );
+    setPhase( "revealed" );
+  }, [] );
+
   const handleNext = useCallback( ( ) => {
     setRound( prev => prev + 1 );
     startRound( targetPoolRef.current, lookalikePoolRef.current );
@@ -285,7 +290,8 @@ const SpeciesGame = ( ) => {
     );
   }
 
-  const isCorrect = guessedTarget === isTargetShown;
+  const isSkip = guessedTarget === "skip";
+  const isCorrect = !isSkip && guessedTarget === isTargetShown;
   const shownTaxon = isTargetShown ? target! : lookalike!;
 
   const targetButtonLevel = ( ) => {
@@ -344,12 +350,12 @@ const SpeciesGame = ( ) => {
 
         {phase === "revealed" && (
           <View
-            className={`mb-3 p-3 rounded-lg ${isCorrect ? "bg-inatGreen/20" : "bg-warningRed/20"}`}
+            className={`mb-3 p-3 rounded-lg ${isCorrect ? "bg-inatGreen/20" : isSkip ? "bg-lightGray" : "bg-warningRed/20"}`}
           >
             <Body1
-              className={`text-center font-bold ${isCorrect ? "text-inatGreen" : "text-warningRed"}`}
+              className={`text-center font-bold ${isCorrect ? "text-inatGreen" : isSkip ? "text-darkGray" : "text-warningRed"}`}
             >
-              {isCorrect ? "Correct!" : "Incorrect"}
+              {isCorrect ? "Correct!" : isSkip ? "It was..." : "Incorrect"}
             </Body1>
             <Body2 className="text-center mt-1 italic">
               {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
@@ -390,6 +396,14 @@ const SpeciesGame = ( ) => {
             />
           </View>
         </View>
+        {phase === "playing" && (
+          <Button
+            className="w-full max-w-[500px] self-center mb-2"
+            text="I don't know"
+            onPress={handleSkip}
+          />
+        )}
+
         {phase === "revealed" && (
           <Body2 className="text-center text-darkGray mb-1">
             Tap a species to view its page
