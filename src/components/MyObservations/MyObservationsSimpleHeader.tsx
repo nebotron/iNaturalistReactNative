@@ -76,12 +76,13 @@ const MyObservationsSimpleHeader = ( {
 
   const handleBulkIDPress = ( ) => {
     const unsyncedObs = Observation.filterUnsyncedObservations( realm );
-    if ( unsyncedObs.length === 0 ) {
+    const unknownUnsyncedObs = unsyncedObs.filtered( "taxon == nil" );
+    if ( unknownUnsyncedObs.length === 0 ) {
       Alert.alert( "No Unuploaded Observations", "All your observations have been uploaded." );
       return;
     }
     resetObservationFlowSlice( );
-    setObservations( Array.from( unsyncedObs ) );
+    setObservations( Array.from( unknownUnsyncedObs ) );
     setBulkUploadMode( true );
     navigation.navigate( "Suggestions", {
       entryScreen: "ObsEdit",
