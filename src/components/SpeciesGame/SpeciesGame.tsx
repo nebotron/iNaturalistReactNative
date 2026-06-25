@@ -51,6 +51,12 @@ interface LookalikeEntry {
   observationUuids: string[];
 }
 
+interface LookalikeCandidate {
+  info: TaxonInfo;
+  pool: PhotoEntry[];
+  weight: number; // misidentification count, or 1 for sibling fallback
+}
+
 type GamePhase = "loading" | "playing" | "revealed";
 
 interface RouteParams {
@@ -85,6 +91,7 @@ const SpeciesGame = ( ) => {
 
   const targetPoolRef = useRef<PhotoEntry[]>( [] );
   const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
+  const lookalikeCandidatesRef = useRef<LookalikeCandidate[]>( [] );
   const usedUuidsRef = useRef<Set<string>>( new Set( ) );
 
   const taxonLabel = ( t: TaxonInfo ) => t.preferredCommonName || t.name;
@@ -92,6 +99,18 @@ const SpeciesGame = ( ) => {
   const refreshLifetimeStats = useCallback( ( ) => {
     setLifetimeStats( getStats( taxonId ) );
   }, [taxonId] );
+
+  const selectWeightedLookalike = useCallback( ( ): LookalikeCandidate | null => {
+    const cs = lookalikeCandidatesRef.current;
+    if ( cs.length === 0 ) return null;
+    const totalWeight = cs.reduce( ( sum, c ) => sum + c.weight, 0 );
+    let roll = Math.random( ) * totalWeight;
+    for ( const c of cs ) {
+      roll -= c.weight;
+      if ( roll <= 0 ) return c;
+    }
+    return cs[cs.length - 1];
+  }, [] );
 
   const fetchPhotoPool = useCallback( async ( id: number ): Promise<PhotoEntry[]> => {
     const url = `${INATURALIST_API}/observations`
@@ -251,16 +270,18 @@ const SpeciesGame = ( ) => {
           siblingCandidates = shuffled.map( ( s: { id: number } ) => s.id );
         }
 
-        // Try all misidentification entries first (ordered by frequency), then
-        // fall back to siblings so a single taxon with no photos doesn't block the game.
-        const misidentCandidates = misidentEntries
-          .map( ( e: { taxonId: number } ) => e.taxonId )
-          .filter( ( id: number ) => id !== ( misidentifiedId ?? -1 ) );
-        const candidates = misidentifiedId !== null
-          ? [misidentifiedId, ...misidentCandidates, ...siblingCandidates]
-          : siblingCandidates;
+        // Build weighted candidate list: misidentified species (by count) then siblings.
+        const weightedCandidates: Array<{ id: number; weight: number }> = [
+          ...misidentEntries.map( ( e: { taxonId: number; count: number } ) => ( {
+            id: e.taxonId,
+            weight: e.count,
+          } ) ),
+          ...siblingCandidates
+            .filter( id => !misidentEntries.some( ( e: { taxonId: number } ) => e.taxonId === id ) )
+            .map( id => ( { id, weight: 1 } ) ),
+        ];
 
-        if ( candidates.length === 0 ) {
+        if ( weightedCandidates.length === 0 ) {
           if ( !cancelled ) setLoadError( "No similar species found to compare against." );
           return;
         }
@@ -272,38 +293,40 @@ const SpeciesGame = ( ) => {
           return;
         }
 
-        // Try candidates in order until one has photos.
-        let lookalikeInfo: TaxonInfo | null = null;
-        let lookalikePool: PhotoEntry[] = [];
-        for ( const candidateId of candidates ) {
+        // Find the first viable lookalike sequentially so the game starts immediately.
+        let firstLookalike: LookalikeCandidate | null = null;
+        let firstIndex = -1;
+        for ( let i = 0; i < weightedCandidates.length; i++ ) {
           if ( cancelled ) return;
+          const { id: candidateId, weight } = weightedCandidates[i];
           const [info, pool] = await Promise.all( [
             fetchTaxonInfo( candidateId ),
             fetchPhotoPool( candidateId ),
           ] );
           if ( info && pool.length > 0 ) {
-            lookalikeInfo = info;
-            lookalikePool = pool;
+            firstLookalike = { info, pool, weight };
+            firstIndex = i;
             break;
           }
         }
 
         if ( cancelled ) return;
 
-        if ( !lookalikeInfo || lookalikePool.length === 0 ) {
+        if ( !firstLookalike ) {
           if ( !cancelled ) setLoadError( "Not enough photos found for this species pair." );
           return;
         }
 
+        lookalikeCandidatesRef.current = [firstLookalike];
         targetPoolRef.current = targetPool;
-        lookalikePoolRef.current = lookalikePool;
+        lookalikePoolRef.current = firstLookalike.pool;
 
         setTarget( {
           id: taxonId,
           name: taxon.name,
           preferredCommonName: taxon.preferred_common_name,
         } );
-        setLookalike( lookalikeInfo );
+        setLookalike( firstLookalike.info );
 
         // Fetch names for all misidentification-based lookalikes in the background
         // so the game starts immediately without waiting.
@@ -325,7 +348,31 @@ const SpeciesGame = ( ) => {
           } ).catch( ( ) => { /* best-effort, ignore errors */ } );
         }
 
-        startRound( targetPool, lookalikePool );
+        startRound( targetPool, firstLookalike.pool );
+
+        // Load remaining lookalike candidates in the background so future rounds
+        // rotate through all species weighted by misidentification frequency.
+        const remainingCandidates = weightedCandidates.filter( ( _, i ) => i !== firstIndex );
+        Promise.all(
+          remainingCandidates.map( async ( { id, weight } ) => {
+            const [info, pool] = await Promise.all( [
+              fetchTaxonInfo( id ),
+              fetchPhotoPool( id ),
+            ] );
+            if ( info && pool.length > 0 ) {
+              return { info, pool, weight } as LookalikeCandidate;
+            }
+            return null;
+          } ),
+        ).then( results => {
+          if ( cancelled ) return;
+          const valid = results.filter( ( r ): r is LookalikeCandidate => r !== null );
+          const existingIds = new Set( lookalikeCandidatesRef.current.map( c => c.info.id ) );
+          const newCandidates = valid.filter( c => !existingIds.has( c.info.id ) );
+          if ( newCandidates.length > 0 ) {
+            lookalikeCandidatesRef.current = [...lookalikeCandidatesRef.current, ...newCandidates];
+          }
+        } ).catch( ( ) => { /* best-effort */ } );
       } catch ( _e ) {
         if ( !cancelled ) setLoadError( "Failed to load game data. Please try again." );
       }
@@ -351,8 +398,13 @@ const SpeciesGame = ( ) => {
 
   const handleNext = useCallback( ( ) => {
     setRound( prev => prev + 1 );
+    const selected = selectWeightedLookalike( );
+    if ( selected ) {
+      lookalikePoolRef.current = selected.pool;
+      setLookalike( selected.info );
+    }
     startRound( targetPoolRef.current, lookalikePoolRef.current );
-  }, [startRound] );
+  }, [startRound, selectWeightedLookalike] );
 
   const lifetimeBadge = lifetimeStats
     ? `${lifetimeStats.correct}/${lifetimeStats.total} lifetime`
@@ -409,7 +461,7 @@ const SpeciesGame = ( ) => {
           ? (
             <>
               <Body2 className="text-center text-darkGray pb-3">
-                {`Based on 100 random observations of ${taxonLabel( target! )} near your location, these species were most often identified instead:`}
+                {`Based on 400 random observations of ${taxonLabel( target! )} near your location, these species were most often identified instead:`}
               </Body2>
               {lookalikesData.length === 0
                 ? <ActivityIndicator />
