@@ -13,6 +13,7 @@ import {
 import BackButton from "components/SharedComponents/Buttons/BackButton";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
+import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import React, {
@@ -22,6 +23,12 @@ import React, {
   useState,
 } from "react";
 import { Dimensions } from "react-native";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
+import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
+import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import {
   getStats,
   recordGuess,
@@ -31,6 +38,39 @@ import {
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
 const LOOKALIKE_RADIUS_KM = 500;
+const MAX_ZOOM_SCALE = 5;
+
+function cropToZoomTransform(
+  crop: NormalizedCrop,
+  viewportSize: number,
+  imageWidth: number,
+  imageHeight: number,
+): ImageZoomTransform {
+  const contain = computeContainRect( viewportSize, viewportSize, imageWidth, imageHeight );
+  if ( contain.width <= 0 || contain.height <= 0 ) {
+    return {
+      scale: 1, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
+    };
+  }
+  const centerX = viewportSize / 2;
+  const centerY = viewportSize / 2;
+  const cx = contain.left + ( crop.x + crop.w / 2 ) * contain.width;
+  const cy = contain.top + ( crop.y + crop.h / 2 ) * contain.height;
+  const scale = Math.min(
+    MAX_ZOOM_SCALE,
+    Math.max( 1, Math.min(
+      viewportSize / ( crop.w * contain.width ),
+      viewportSize / ( crop.h * contain.height ),
+    ) ),
+  );
+  return {
+    scale,
+    translateX: 0,
+    translateY: 0,
+    focalX: ( centerX - cx ) * scale,
+    focalY: ( centerY - cy ) * scale,
+  };
+}
 
 interface TaxonInfo {
   id: number;
@@ -93,6 +133,52 @@ const SpeciesGame = ( ) => {
   const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
   const lookalikeCandidatesRef = useRef<LookalikeCandidate[]>( [] );
   const usedUuidsRef = useRef<Set<string>>( new Set( ) );
+
+  const windowWidth = Dimensions.get( "window" ).width;
+  const imageRef = useRef<SharedZoomableImageRef>( null );
+  const detection = useSubjectDetectionForUri( currentPhotoUrl ?? undefined );
+
+  const detectionRef = useRef( detection );
+  useEffect( ( ) => { detectionRef.current = detection; }, [detection] );
+  const currentPhotoUrlRef = useRef( currentPhotoUrl );
+  useEffect( ( ) => { currentPhotoUrlRef.current = currentPhotoUrl; }, [currentPhotoUrl] );
+
+  // Reset zoom to full image when the photo URL changes.
+  useEffect( ( ) => {
+    imageRef.current?.applyTransform( {
+      scale: 1, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
+    } );
+  }, [currentPhotoUrl] );
+
+  // Zoom to detected subject when detection is available.
+  useEffect( ( ) => {
+    if ( !detection || !imageRef.current ) return;
+    const transform = cropToZoomTransform(
+      detection.crop,
+      windowWidth,
+      detection.imageWidth,
+      detection.imageHeight,
+    );
+    imageRef.current.applyTransform( transform );
+  }, [detection, windowWidth] );
+
+  const handleInteractionEnd = useCallback( ( ) => {
+    setTimeout( ( ) => {
+      const url = currentPhotoUrlRef.current;
+      const det = detectionRef.current;
+      if ( !url || !det || !imageRef.current ) return;
+      const transform = imageRef.current.readTransform( );
+      const crop = imageZoomTransformToNormalizedCrop(
+        det.imageWidth,
+        det.imageHeight,
+        windowWidth,
+        windowWidth,
+        windowWidth,
+        transform,
+      );
+      saveAnimalCrop( url, crop );
+    }, 400 );
+  }, [windowWidth] );
 
   const taxonLabel = ( t: TaxonInfo ) => t.preferredCommonName || t.name;
 
@@ -537,13 +623,16 @@ const SpeciesGame = ( ) => {
         <View style={{ width: 44 }} />
       </View>
 
-      {/* Photo area */}
-      <View className="flex-1">
+      {/* Photo area — square viewport so the crop frame is always 1:1 */}
+      <View style={{ width: windowWidth, height: windowWidth }}>
         {currentPhotoUrl
           ? (
             <SharedZoomableImage
+              ref={imageRef}
               uri={currentPhotoUrl}
               style={{ flex: 1 }}
+              isDoubleTapEnabled
+              onInteractionEnd={handleInteractionEnd}
             />
           )
           : (
