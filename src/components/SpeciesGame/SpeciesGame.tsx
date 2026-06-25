@@ -624,7 +624,7 @@ const SpeciesGame = ( ) => {
       </View>
 
       {/* Photo area — square viewport so the crop frame is always 1:1 */}
-      <View style={{ width: windowWidth, height: windowWidth }}>
+      <View style={{ width: windowWidth, height: windowWidth, overflow: "hidden" }}>
         {currentPhotoUrl
           ? (
             <SharedZoomableImage
