@@ -623,8 +623,8 @@ const SpeciesGame = ( ) => {
         <View style={{ width: 44 }} />
       </View>
 
-      {/* Photo area — square viewport so the crop frame is always 1:1 */}
-      <View style={{ width: windowWidth, height: windowWidth }}>
+      {/* Photo area — fills remaining vertical space above the bottom panel */}
+      <View style={{ flex: 1 }}>
         {currentPhotoUrl
           ? (
             <SharedZoomableImage
