@@ -624,7 +624,7 @@ const SpeciesGame = ( ) => {
       </View>
 
       {/* Photo area — fills remaining vertical space above the bottom panel */}
-      <View style={{ flex: 1 }}>
+      <View style={{ flex: 1, overflow: "hidden" }}>
         {currentPhotoUrl
           ? (
             <SharedZoomableImage
