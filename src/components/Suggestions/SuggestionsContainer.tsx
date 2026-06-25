@@ -22,7 +22,6 @@ import TaxonModel from "realmModels/Taxon";
 import type { RealmPhoto } from "realmModels/types";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
-import { getAnimalCrop } from "sharedHelpers/animalCropLog";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import {
@@ -59,7 +58,7 @@ export enum FETCH_STATUSES {
 const getQueryKey = ( selectedPhotoUri: string, shouldUseEvidenceLocation: boolean ) => [
   "scoreImage",
   selectedPhotoUri,
-  { shouldUseEvidenceLocation, crop: getAnimalCrop( selectedPhotoUri ) },
+  { shouldUseEvidenceLocation },
 ];
 
 interface Suggestion {
