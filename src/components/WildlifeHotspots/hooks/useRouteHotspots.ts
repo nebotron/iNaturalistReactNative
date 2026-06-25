@@ -190,7 +190,7 @@ export function useRouteHotspots() {
           ...bbox,
           per_page: 200,
           verifiable: true,
-          order_by: "observations.id",
+          order_by: "id",
           fields: {
             geojson: true,
             taxon: {

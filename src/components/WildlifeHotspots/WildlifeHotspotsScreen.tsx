@@ -15,14 +15,17 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Alert, StyleSheet } from "react-native";
+import {
+  Alert,
+  StyleSheet,
+  TouchableOpacity,
+} from "react-native";
 import type { LatLng } from "react-native-maps";
 import MapView, {
   Circle,
   Marker,
   Polyline,
 } from "react-native-maps";
-import Geocoder from "react-native-geocoder-reborn";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -32,6 +35,14 @@ import { useRouteHotspots } from "./hooks/useRouteHotspots";
 
 const MAX_CIRCLE_RADIUS_M = 60_000;
 const MIN_CIRCLE_RADIUS_M = 8_000;
+const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
+
+interface NominatimResult {
+  place_id: number;
+  display_name: string;
+  lat: string;
+  lon: string;
+}
 
 function hotspotCircleRadius( count: number, maxCount: number ): number {
   if ( maxCount === 0 ) return MIN_CIRCLE_RADIUS_M;
@@ -39,24 +50,107 @@ function hotspotCircleRadius( count: number, maxCount: number ): number {
   return MIN_CIRCLE_RADIUS_M + ratio * ( MAX_CIRCLE_RADIUS_M - MIN_CIRCLE_RADIUS_M );
 }
 
-async function geocodeText( text: string ): Promise<LatLng | null> {
+async function searchNominatim( text: string ): Promise<NominatimResult[]> {
   try {
-    const results = await Geocoder.geocodeAddress( text );
-    if ( results && results.length > 0 ) {
-      return {
-        latitude: results[0].position.lat,
-        longitude: results[0].position.lng,
-      };
-    }
-    return null;
+    const url = `${NOMINATIM_BASE}/search?q=${encodeURIComponent( text )}&format=json&limit=5`;
+    const response = await fetch( url, {
+      headers: { "Accept-Language": "en" },
+    } );
+    if ( !response.ok ) return [];
+    return response.json();
   } catch {
-    return null;
+    return [];
   }
 }
 
 function toMapCoord( pt: RoutePoint ): LatLng {
   return { latitude: pt.latitude, longitude: pt.longitude };
 }
+
+interface AddressInputProps {
+  placeholder: string;
+  value: string;
+  onChangeText: ( text: string ) => void;
+  onSelectSuggestion: ( result: NominatimResult ) => void;
+  confirmed: boolean;
+  loading: boolean;
+  dotColor: string;
+}
+
+const AddressInput = ( {
+  placeholder,
+  value,
+  onChangeText,
+  onSelectSuggestion,
+  confirmed,
+  loading,
+  dotColor,
+}: AddressInputProps ) => {
+  const [suggestions, setSuggestions] = useState<NominatimResult[]>( [] );
+  const [searching, setSearching] = useState( false );
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>( null );
+
+  const handleChange = useCallback( ( text: string ) => {
+    onChangeText( text );
+    if ( debounceRef.current ) clearTimeout( debounceRef.current );
+    if ( text.trim().length < 3 ) {
+      setSuggestions( [] );
+      return;
+    }
+    debounceRef.current = setTimeout( async () => {
+      setSearching( true );
+      const results = await searchNominatim( text.trim() );
+      setSuggestions( results );
+      setSearching( false );
+    }, 350 );
+  }, [onChangeText] );
+
+  const handleSelect = useCallback( ( result: NominatimResult ) => {
+    setSuggestions( [] );
+    onSelectSuggestion( result );
+  }, [onSelectSuggestion] );
+
+  return (
+    <View className="flex-1">
+      <View className="flex-row items-center border border-lightGray rounded-lg px-3 py-1">
+        <View
+          className="w-4 h-4 rounded-full mr-2 items-center justify-center"
+          style={{ backgroundColor: dotColor }}
+        >
+          <INatIcon name="location" size={8} color="white" />
+        </View>
+        <TextInput
+          className="flex-1 text-darkGray"
+          placeholder={placeholder}
+          value={value}
+          onChangeText={handleChange}
+          autoCorrect={false}
+          autoCapitalize="none"
+        />
+        {( loading || searching ) && <ActivityIndicator size={16} />}
+        {confirmed && !loading && !searching && (
+          <INatIcon name="checkmark" size={16} color={colors.inatGreen} />
+        )}
+      </View>
+      {suggestions.length > 0 && (
+        <View
+          className="absolute top-10 left-0 right-0 bg-white border border-lightGray rounded-lg z-50"
+          style={{ elevation: 8, shadowOpacity: 0.15, shadowRadius: 4 }}
+        >
+          {suggestions.map( result => (
+            <TouchableOpacity
+              key={result.place_id}
+              className="px-3 py-2 border-b border-lightGray"
+              onPress={() => handleSelect( result )}
+            >
+              <Body3 numberOfLines={2}>{result.display_name}</Body3>
+            </TouchableOpacity>
+          ) )}
+        </View>
+      )}
+    </View>
+  );
+};
 
 const WildlifeHotspotsScreen = () => {
   const { t } = useTranslation();
@@ -66,15 +160,12 @@ const WildlifeHotspotsScreen = () => {
   const [endText, setEndText] = useState( "" );
   const [startPoint, setStartPoint] = useState<LatLng | null>( null );
   const [endPoint, setEndPoint] = useState<LatLng | null>( null );
-  const [geocodingStart, setGeocodingStart] = useState( false );
-  const [geocodingEnd, setGeocodingEnd] = useState( false );
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>( null );
 
   const {
     hotspots, routeCoords, loading, error, findHotspots,
   } = useRouteHotspots();
 
-  // Fit map whenever the route or hotspots change
   useEffect( () => {
     if ( routeCoords.length === 0 || !mapRef.current ) return;
     const coords: LatLng[] = routeCoords.map( toMapCoord );
@@ -88,39 +179,38 @@ const WildlifeHotspotsScreen = () => {
     } );
   }, [routeCoords, hotspots] );
 
-  const handleSubmitStart = useCallback( async () => {
-    if ( !startText.trim() ) return;
-    setGeocodingStart( true );
-    const coords = await geocodeText( startText.trim() );
-    setGeocodingStart( false );
-    if ( coords ) {
-      setStartPoint( coords );
-    } else {
-      Alert.alert( t( "Location-not-found" ), t( "Could-not-find-location" ) );
-    }
-  }, [startText, t] );
+  const handleSelectStart = useCallback( ( result: NominatimResult ) => {
+    setStartText( result.display_name );
+    setStartPoint( { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) } );
+  }, [] );
 
-  const handleSubmitEnd = useCallback( async () => {
-    if ( !endText.trim() ) return;
-    setGeocodingEnd( true );
-    const coords = await geocodeText( endText.trim() );
-    setGeocodingEnd( false );
-    if ( coords ) {
-      setEndPoint( coords );
-    } else {
-      Alert.alert( t( "Location-not-found" ), t( "Could-not-find-location" ) );
-    }
-  }, [endText, t] );
+  const handleSelectEnd = useCallback( ( result: NominatimResult ) => {
+    setEndText( result.display_name );
+    setEndPoint( { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) } );
+  }, [] );
+
+  const handleStartTextChange = useCallback( ( text: string ) => {
+    setStartText( text );
+    setStartPoint( null );
+  }, [] );
+
+  const handleEndTextChange = useCallback( ( text: string ) => {
+    setEndText( text );
+    setEndPoint( null );
+  }, [] );
 
   const handleFindHotspots = useCallback( async () => {
-    if ( !startPoint || !endPoint ) return;
+    if ( !startPoint || !endPoint ) {
+      Alert.alert( t( "Location-not-found" ), t( "Please-select-a-location-from-the-suggestions" ) );
+      return;
+    }
     setSelectedHotspotId( null );
     await findHotspots(
       { latitude: startPoint.latitude, longitude: startPoint.longitude },
       { latitude: endPoint.latitude, longitude: endPoint.longitude },
       {},
     );
-  }, [startPoint, endPoint, findHotspots] );
+  }, [startPoint, endPoint, findHotspots, t] );
 
   const handleHotspotPress = useCallback( ( hotspot: Hotspot ) => {
     setSelectedHotspotId( prev => ( prev === hotspot.id ? null : hotspot.id ) );
@@ -148,48 +238,28 @@ const WildlifeHotspotsScreen = () => {
       </View>
 
       {/* Start/End inputs */}
-      <View className="bg-white px-3 py-2 border-b border-lightGray">
-        <View className="flex-row items-center mb-2">
-          <View className="w-5 h-5 rounded-full bg-warningYellow mr-3 items-center justify-center">
-            <INatIcon name="location" size={10} color="white" />
-          </View>
-          <View className="flex-1 flex-row items-center border border-lightGray rounded-lg px-3 py-1">
-            <TextInput
-              className="flex-1 text-darkGray"
-              placeholder={t( "Start-location" )}
-              value={startText}
-              onChangeText={setStartText}
-              onSubmitEditing={handleSubmitStart}
-              returnKeyType="search"
-              autoCorrect={false}
-            />
-            {geocodingStart
-              ? <ActivityIndicator size={16} />
-              : startPoint
-                ? <INatIcon name="checkmark" size={16} color={colors.inatGreen} />
-                : null}
-          </View>
+      <View className="bg-white px-3 py-2 border-b border-lightGray" style={{ zIndex: 10 }}>
+        <View className="flex-row items-center mb-2" style={{ zIndex: 20 }}>
+          <AddressInput
+            placeholder={t( "Start-location" )}
+            value={startText}
+            onChangeText={handleStartTextChange}
+            onSelectSuggestion={handleSelectStart}
+            confirmed={!!startPoint}
+            loading={false}
+            dotColor={colors.warningYellow}
+          />
         </View>
-        <View className="flex-row items-center">
-          <View className="w-5 h-5 rounded-full bg-inatGreen mr-3 items-center justify-center">
-            <INatIcon name="location" size={10} color="white" />
-          </View>
-          <View className="flex-1 flex-row items-center border border-lightGray rounded-lg px-3 py-1">
-            <TextInput
-              className="flex-1 text-darkGray"
-              placeholder={t( "End-location" )}
-              value={endText}
-              onChangeText={setEndText}
-              onSubmitEditing={handleSubmitEnd}
-              returnKeyType="search"
-              autoCorrect={false}
-            />
-            {geocodingEnd
-              ? <ActivityIndicator size={16} />
-              : endPoint
-                ? <INatIcon name="checkmark" size={16} color={colors.inatGreen} />
-                : null}
-          </View>
+        <View className="flex-row items-center" style={{ zIndex: 10 }}>
+          <AddressInput
+            placeholder={t( "End-location" )}
+            value={endText}
+            onChangeText={handleEndTextChange}
+            onSelectSuggestion={handleSelectEnd}
+            confirmed={!!endPoint}
+            loading={false}
+            dotColor={colors.inatGreen}
+          />
         </View>
         <Button
           className="mt-3"
