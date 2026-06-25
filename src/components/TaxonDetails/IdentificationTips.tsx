@@ -84,8 +84,11 @@ const IdentificationTips = ( { taxon }: Props ) => {
             {squareUrl && (
               <FasterImageView
                 className="w-[62px] h-[62px] rounded-lg mr-3 shrink-0"
-                source={{ uri: squareUrl }}
-                resizeMode="cover"
+                source={{
+                  url: squareUrl,
+                  cachePolicy: "discWithCacheControl",
+                  resizeMode: "cover",
+                }}
               />
             )}
             <View className="flex-1">

@@ -346,13 +346,13 @@ const TaxonDetails = ( ): Node => {
       <View className="mx-3">
         <EstablishmentMeans taxon={taxon} />
         <Wikipedia taxon={taxon} />
-        {taxon.rank_level <= 10 && <IdentificationTips taxon={taxon} />}
         <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
         <TaxonMapPreview
           observation={mappableObservation}
           taxon={taxon}
           showSpeciesSeenCheckmark={currentUserHasSeenTaxon}
         />
+        {taxon.rank_level <= 10 && <IdentificationTips taxon={taxon} />}
       </View>
     );
   };
