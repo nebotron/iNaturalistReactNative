@@ -1,6 +1,6 @@
 ---
 name: dpl
-description: Deploy the iNaturalistReactNative app to a connected iPhone. Run dpl, stream the full output, and debug any failures until the app successfully installs. Use when the user says /dpl, "deploy", "run dpl", or "install on phone".
+description: Deploy the iNaturalistReactNative app to a connected iPhone
 ---
 
 # Pull
@@ -13,17 +13,11 @@ Run `dpl` and debug failures until the app installs on the connected iPhone.
 
 ## Steps
 
-1. **Check for a connected device first.** If `dpl` fails immediately with "No iOS devices connected", stop and tell the user to plug in their iPhone. Do not retry in a loop.
+1. **Run dpl.** Never silence output — always capture the full log:
 
-2. **Run dpl.** Never silence output — always capture and show the full log:
-   ```sh
-   dpl 2>&1
-   ```
-   Use a 10-minute timeout.
+2. **On success** (exit 0, app launched on device): report done in one line.
 
-3. **On success** (exit 0, app launched on device): report done in one line.
-
-4. **On failure**, diagnose from the output and fix:
+3. **On failure**, diagnose from the output and fix:
 
    | Symptom | Fix |
    |---|---|
@@ -35,11 +29,9 @@ Run `dpl` and debug failures until the app installs on the connected iPhone.
    | Xcode build error (compiler/linker) | Read the error, fix the code, commit, then retry `dpl`. |
    | Any other build error | Read the full error output, fix the root cause, then retry `dpl`. |
 
-5. **After fixing**, re-run `dpl` and repeat until success or until the failure requires user action (phone not connected, trust prompt, etc.).
+4. **After fixing**, re-run `dpl` and repeat until success or until the failure requires user action (phone not connected, trust prompt, etc.).
 
 ## Rules
 
 - Never use `--no-verify` or bypass signing.
-- Never silence `dpl` output — the full log is required for debugging.
 - Do not loop-retry on "no device connected" — always ask the user first.
-- After a successful deploy, report done. Do not push or commit unless separately asked.
