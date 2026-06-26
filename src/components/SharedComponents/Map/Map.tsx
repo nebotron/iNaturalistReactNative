@@ -312,10 +312,11 @@ const Map = ( {
 
   const showPointTiles = currentZoom > 13;
 
-  // We want green points and vivid orange-red grid for better density contrast
+  // We want green points and a thermal heatmap (violet→blue→green→yellow→red)
+  // for the grid so low- and high-density cells are clearly distinguishable.
   const tileUrlTemplate = showPointTiles
     ? `${TILE_URL}/points/{z}/{x}/{y}.png?${queryString}&color=%2374ac00`
-    : `${TILE_URL}/grid/{z}/{x}/{y}.png?${queryString}&color=%23FF5500`;
+    : `${TILE_URL}/heatmap/{z}/{x}/{y}.png?${queryString}`;
 
   // In Android, MapView does not reliably process tileUrlTemplate changes.
   // Thus, we do not change tileUrlTemplate on Android anymore but first shut
