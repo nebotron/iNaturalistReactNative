@@ -17,7 +17,7 @@ const useNavigateWithTaxonSelected = (
     NoBottomTabStackScreenProps<"Suggestions" | "SuggestionsTaxonSearch">["navigation"] &
     TabStackScreenProps<"Suggestions" | "SuggestionsTaxonSearch">["navigation"]
   >( );
-  const { params } = useRoute<
+  const { name: routeName, params } = useRoute<
     NoBottomTabStackScreenProps<"Suggestions" | "SuggestionsTaxonSearch">["route"] &
     TabStackScreenProps<"Suggestions" | "SuggestionsTaxonSearch">["route"]
   >( );
@@ -58,6 +58,9 @@ const useNavigateWithTaxonSelected = (
       const numObservations = useStore.getState( ).observations.length;
       await saveAndAdvance( bulkUploadMode ? UPLOAD : "save" );
       if ( numObservations > 1 ) {
+        if ( routeName === "SuggestionsTaxonSearch" ) {
+          navigation.goBack( );
+        }
         return;
       }
       return;
@@ -91,6 +94,7 @@ const useNavigateWithTaxonSelected = (
     isMultiObsCreateFlow,
     lastScreen,
     navigation,
+    routeName,
     saveAndAdvance,
     updateObservationKeys,
     vision,
