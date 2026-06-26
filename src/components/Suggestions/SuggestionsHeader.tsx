@@ -3,7 +3,7 @@ import {
   Body3,
   Button,
 } from "components/SharedComponents";
-import { View } from "components/styledComponents";
+import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import { useTranslation } from "sharedHooks";
 
@@ -73,10 +73,14 @@ const SuggestionsHeader = ( {
         </View>
       )}
       {showOfflineModelInfo && (
-        <View className="border-lightGray border-[3px] m-5 rounded-2xl p-5">
+        <Pressable
+          accessibilityRole="button"
+          className="border-lightGray border-[3px] m-5 rounded-2xl p-5"
+          onPress={() => toggleSuggestionsModel( false )}
+        >
           <Body2 className="mb-2">{t( "Viewing-offline-suggestions" )}</Body2>
           <Body3>{t( "Offline-suggestions-may-differ-from-online" )}</Body3>
-        </View>
+        </Pressable>
       )}
     </>
   );
