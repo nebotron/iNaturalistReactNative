@@ -233,7 +233,7 @@ export function useRouteHotspots() {
         } );
 
         results.sort( ( a, b ) => b.observationCount - a.observationCount );
-        setHotspots( results );
+        setHotspots( results.slice( 0, 20 ) );
       } catch ( err ) {
         setError( err instanceof Error ? err.message : "Failed to load hotspot data" );
       } finally {

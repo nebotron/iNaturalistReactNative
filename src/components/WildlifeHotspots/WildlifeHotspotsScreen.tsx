@@ -9,6 +9,7 @@ import {
 } from "components/SharedComponents";
 import BackButton from "components/SharedComponents/Buttons/BackButton";
 import { ScrollView, TextInput, View } from "components/styledComponents";
+import type { TabStackScreenProps } from "navigation/types";
 import React, {
   useCallback,
   useEffect,
@@ -22,7 +23,6 @@ import {
 } from "react-native";
 import type { LatLng } from "react-native-maps";
 import MapView, {
-  Circle,
   Marker,
   Polyline,
 } from "react-native-maps";
@@ -33,8 +33,6 @@ import HotspotListItem from "./HotspotListItem";
 import type { Hotspot, RoutePoint } from "./hooks/useRouteHotspots";
 import { useRouteHotspots } from "./hooks/useRouteHotspots";
 
-const MAX_CIRCLE_RADIUS_M = 60_000;
-const MIN_CIRCLE_RADIUS_M = 8_000;
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
 
 interface NominatimResult {
@@ -42,12 +40,6 @@ interface NominatimResult {
   display_name: string;
   lat: string;
   lon: string;
-}
-
-function hotspotCircleRadius( count: number, maxCount: number ): number {
-  if ( maxCount === 0 ) return MIN_CIRCLE_RADIUS_M;
-  const ratio = Math.sqrt( count / maxCount );
-  return MIN_CIRCLE_RADIUS_M + ratio * ( MAX_CIRCLE_RADIUS_M - MIN_CIRCLE_RADIUS_M );
 }
 
 async function searchNominatim( text: string ): Promise<NominatimResult[]> {
@@ -152,9 +144,12 @@ const AddressInput = ( {
   );
 };
 
-const WildlifeHotspotsScreen = () => {
+type Props = TabStackScreenProps<"WildlifeHotspots">;
+
+const WildlifeHotspotsScreen = ( { route }: Props ) => {
   const { t } = useTranslation();
   const mapRef = useRef<MapView>( null );
+  const filterParams = route?.params?.filterParams ?? {};
 
   const [startText, setStartText] = useState( "" );
   const [endText, setEndText] = useState( "" );
@@ -208,7 +203,7 @@ const WildlifeHotspotsScreen = () => {
     await findHotspots(
       { latitude: startPoint.latitude, longitude: startPoint.longitude },
       { latitude: endPoint.latitude, longitude: endPoint.longitude },
-      {},
+      filterParams,
     );
   }, [startPoint, endPoint, findHotspots, t] );
 
@@ -224,7 +219,6 @@ const WildlifeHotspotsScreen = () => {
     }
   }, [] );
 
-  const maxCount = hotspots.reduce( ( max, h ) => Math.max( max, h.observationCount ), 0 );
   const canSearch = !!( startPoint && endPoint );
 
   return (
@@ -308,24 +302,18 @@ const WildlifeHotspotsScreen = () => {
             />
           )}
           {hotspots.map( hotspot => (
-            <Circle
+            <Marker
               key={hotspot.id}
-              center={{
+              coordinate={{
                 latitude: hotspot.centerLatitude,
                 longitude: hotspot.centerLongitude,
               }}
-              radius={hotspotCircleRadius( hotspot.observationCount, maxCount )}
-              fillColor={
-                selectedHotspotId === hotspot.id
-                  ? "rgba(116,172,0,0.35)"
-                  : "rgba(116,172,0,0.18)"
-              }
-              strokeColor={
+              pinColor={
                 selectedHotspotId === hotspot.id
                   ? colors.inatGreen
-                  : "rgba(116,172,0,0.5)"
+                  : colors.warningYellow
               }
-              strokeWidth={selectedHotspotId === hotspot.id ? 2 : 1}
+              onPress={() => handleHotspotPress( hotspot )}
             />
           ) )}
         </MapView>
