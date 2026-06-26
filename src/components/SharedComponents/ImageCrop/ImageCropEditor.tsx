@@ -1,6 +1,7 @@
 import type { RouteProp } from "@react-navigation/native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
+  BackButton,
   Button,
   ViewWrapper,
 } from "components/SharedComponents";
@@ -399,8 +400,13 @@ const ImageCropEditor = ( ) => {
 
   if ( loadingSource || !localImageUri || !imageSize || !activeInitialCrop ) {
     return (
-      <View className="flex-1 items-center justify-center bg-black">
-        <ActivityIndicator color={colors.white} />
+      <View className="flex-1 bg-black">
+        <View className="absolute top-0 left-0">
+          <BackButton color={colors.white} onPress={( ) => navigation.goBack( )} />
+        </View>
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color={colors.white} />
+        </View>
       </View>
     );
   }
