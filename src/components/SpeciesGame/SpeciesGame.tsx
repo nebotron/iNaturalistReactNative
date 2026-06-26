@@ -29,11 +29,7 @@ import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop"
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
-import {
-  getStats,
-  recordGuess,
-  type TaxonStats,
-} from "sharedHelpers/speciesGameStats";
+import { recordGuess } from "sharedHelpers/speciesGameStats";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
@@ -123,8 +119,6 @@ const SpeciesGame = ( ) => {
   const [currentObservationUuid, setCurrentObservationUuid] = useState<string | null>( null );
   // true = guessed target, false = guessed lookalike, "skip" = I don't know, null = not yet guessed
   const [guessedTarget, setGuessedTarget] = useState<boolean | "skip" | null>( null );
-  // lifetime stats for the target taxon, updated reactively after each guess
-  const [lifetimeStats, setLifetimeStats] = useState<TaxonStats | null>( null );
   const [showLookalikesModal, setShowLookalikesModal] = useState( false );
   const [lookalikesData, setLookalikesData] = useState<LookalikeEntry[]>( [] );
   const [usedMisidentifications, setUsedMisidentifications] = useState( false );
@@ -181,10 +175,6 @@ const SpeciesGame = ( ) => {
   }, [windowWidth] );
 
   const taxonLabel = ( t: TaxonInfo ) => t.preferredCommonName || t.name;
-
-  const refreshLifetimeStats = useCallback( ( ) => {
-    setLifetimeStats( getStats( taxonId ) );
-  }, [taxonId] );
 
   const selectWeightedLookalike = useCallback( ( ): LookalikeCandidate | null => {
     const cs = lookalikeCandidatesRef.current;
@@ -315,7 +305,6 @@ const SpeciesGame = ( ) => {
 
   useEffect( ( ) => {
     let cancelled = false;
-    refreshLifetimeStats( );
 
     const loadGame = async ( ) => {
       try {
@@ -466,16 +455,15 @@ const SpeciesGame = ( ) => {
 
     loadGame( );
     return ( ) => { cancelled = true; };
-  }, [taxonId, fetchPhotoPool, fetchTaxonInfo, findMisidentifiedLookalikes, startRound, refreshLifetimeStats] );
+  }, [taxonId, fetchPhotoPool, fetchTaxonInfo, findMisidentifiedLookalikes, startRound] );
 
   const handleGuess = useCallback( ( guessIsTarget: boolean ) => {
     const correct = guessIsTarget === isTargetShown;
     setGuessedTarget( guessIsTarget );
     if ( correct ) setScore( prev => prev + 1 );
     recordGuess( taxonId, correct );
-    refreshLifetimeStats( );
     setPhase( "revealed" );
-  }, [isTargetShown, taxonId, refreshLifetimeStats] );
+  }, [isTargetShown, taxonId] );
 
   const handleSkip = useCallback( ( ) => {
     setGuessedTarget( "skip" );
@@ -492,9 +480,10 @@ const SpeciesGame = ( ) => {
     startRound( targetPoolRef.current, lookalikePoolRef.current );
   }, [startRound, selectWeightedLookalike] );
 
-  const lifetimeBadge = lifetimeStats
-    ? `${lifetimeStats.correct}/${lifetimeStats.total} lifetime`
-    : null;
+  const answered = round - 1;
+  const accuracyStr = answered > 0
+    ? `${score}/${answered} (${Math.round( ( score / answered ) * 100 )}% accuracy)`
+    : "0/0";
 
   if ( phase === "loading" || !target || !lookalike ) {
     return (
@@ -613,14 +602,13 @@ const SpeciesGame = ( ) => {
       {/* Header bar */}
       <View className="flex-row items-center justify-between px-3 py-2 bg-white border-b border-lightGray">
         <BackButton inCustomHeader />
-        <View className="items-center">
-          <Body2 className="font-bold">{`Round ${round}  ·  ${score} correct`}</Body2>
-          {lifetimeBadge && (
-            <Body2 className="text-inatGreen">{lifetimeBadge}</Body2>
-          )}
-        </View>
-        {/* spacer to keep center aligned */}
-        <View style={{ width: 44 }} />
+        <Body2 className="font-bold">{accuracyStr}</Body2>
+        <Pressable
+          className="w-11 h-11 items-center justify-center"
+          onPress={() => setShowLookalikesModal( true )}
+        >
+          <Body1 className="text-inatGreen font-bold">?</Body1>
+        </Pressable>
       </View>
 
       {/* Photo area — fills remaining vertical space above the bottom panel */}
@@ -644,8 +632,6 @@ const SpeciesGame = ( ) => {
 
       {/* Bottom panel */}
       <View className="bg-white px-4 pt-4 pb-2">
-        <Body1 className="text-center mb-3">Which species is this?</Body1>
-
         {phase === "revealed" && (
           <View
             className={`mb-3 p-3 rounded-lg ${isCorrect ? "bg-inatGreen/20" : isSkip ? "bg-lightGray" : "bg-warningRed/20"}`}
@@ -670,36 +656,50 @@ const SpeciesGame = ( ) => {
           </View>
         )}
 
-        <View className="flex-row mb-3">
-          <View className="flex-1 mr-2">
-            <Button
-              className="w-full"
-              text={taxonLabel( target! )}
-              level={targetButtonLevel()}
-              onPress={() => {
-                if ( phase === "playing" ) handleGuess( true );
-                else if ( phase === "revealed" ) navigation.push( "TaxonDetails", { id: target!.id, rankLevel: 10 } );
-              }}
-            />
+        {phase === "playing" ? (
+          <View className="flex-row mb-3 gap-2">
+            <View className="flex-1">
+              <Button
+                className="w-full h-full"
+                text={taxonLabel( target! )}
+                level="focus"
+                onPress={() => handleGuess( true )}
+              />
+            </View>
+            <View className="flex-1">
+              <Button
+                className="w-full h-full"
+                text="I don't know"
+                onPress={handleSkip}
+              />
+            </View>
+            <View className="flex-1">
+              <Button
+                className="w-full h-full"
+                text={taxonLabel( lookalike! )}
+                onPress={() => handleGuess( false )}
+              />
+            </View>
           </View>
-          <View className="flex-1 ml-2">
-            <Button
-              className="w-full"
-              text={taxonLabel( lookalike! )}
-              level={lookalikeButtonLevel()}
-              onPress={() => {
-                if ( phase === "playing" ) handleGuess( false );
-                else if ( phase === "revealed" ) navigation.push( "TaxonDetails", { id: lookalike!.id, rankLevel: 10 } );
-              }}
-            />
+        ) : (
+          <View className="flex-row mb-3 gap-2">
+            <View className="flex-1">
+              <Button
+                className="w-full"
+                text={taxonLabel( target! )}
+                level={targetButtonLevel()}
+                onPress={() => navigation.push( "TaxonDetails", { id: target!.id, rankLevel: 10 } )}
+              />
+            </View>
+            <View className="flex-1">
+              <Button
+                className="w-full"
+                text={taxonLabel( lookalike! )}
+                level={lookalikeButtonLevel()}
+                onPress={() => navigation.push( "TaxonDetails", { id: lookalike!.id, rankLevel: 10 } )}
+              />
+            </View>
           </View>
-        </View>
-        {phase === "playing" && (
-          <Button
-            className="w-full max-w-[500px] self-center mb-2"
-            text="I don't know"
-            onPress={handleSkip}
-          />
         )}
 
         {phase === "revealed" && (
@@ -716,13 +716,6 @@ const SpeciesGame = ( ) => {
             onPress={handleNext}
           />
         )}
-
-        <Pressable
-          className="items-center py-2"
-          onPress={() => setShowLookalikesModal( true )}
-        >
-          <Body2 className="text-inatGreen underline">Why these species?</Body2>
-        </Pressable>
       </View>
     </SharedStackViewWrapper>
   );
