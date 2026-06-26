@@ -623,6 +623,7 @@ const SpeciesGame = ( ) => {
               uri={currentPhotoUrl}
               style={{ flex: 1 }}
               isDoubleTapEnabled
+              maxScale={50}
               onInteractionEnd={handleInteractionEnd}
             />
           )
