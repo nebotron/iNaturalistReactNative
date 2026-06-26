@@ -4,7 +4,7 @@ import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import MasonryLayout from "components/ObsDetails/MasonryLayout";
 import { ActivityIndicator, Carousel } from "components/SharedComponents";
 import {
-  Image, Pressable, View,
+  FasterImageView, Pressable, View,
 } from "components/styledComponents";
 import type { Node } from "react";
 import React, {
@@ -59,14 +59,13 @@ const TaxonMedia = ( {
           colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.5) 100%)"]}
           className="absolute w-full h-full z-10"
         />
-        <Image
+        <FasterImageView
           testID={`TaxonDetails.photo.${item.id}`}
           className="w-full h-full"
           source={{
-            // TODO replace this entire image component to one that supports
-            // progressive sizes and fallbacks if the large photo isn't
-            // available
-            uri: Photo.displayLargePhoto( item.url ),
+            url: Photo.displayLargePhoto( item.url ),
+            cachePolicy: "discWithCacheControl",
+            resizeMode: "cover",
           }}
           accessibilityIgnoresInvertColors
         />
