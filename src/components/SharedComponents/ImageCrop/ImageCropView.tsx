@@ -19,6 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { normalizedCropToImageZoomTransform } from "sharedHelpers/normalizedCropToImageZoomTransform";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import colors from "styles/tailwindColors";
 
 const DIM_COLOR = "rgba(0, 0, 0, 0.55)";
@@ -116,6 +117,22 @@ const ImageCropView = ( {
     );
     setWillBeDownsized(
       Math.max( crop.w * imageWidth, crop.h * imageHeight ) > UPLOAD_MAX_SIDE,
+    );
+  }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
+
+  const handleScaleChange = useCallback( ( scale: number ) => {
+    if ( boxSize <= 0 || cropAreaHeight <= 0 || scale <= 0 ) {
+      return;
+    }
+    const contain = computeContainRect( windowWidth, cropAreaHeight, imageWidth, imageHeight );
+    if ( contain.width <= 0 || contain.height <= 0 ) {
+      return;
+    }
+    setWillBeDownsized(
+      Math.max(
+        boxSize * imageWidth / ( scale * contain.width ),
+        boxSize * imageHeight / ( scale * contain.height ),
+      ) > UPLOAD_MAX_SIDE,
     );
   }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
 
@@ -285,6 +302,7 @@ const ImageCropView = ( {
               cropPanContext={cropPanContext}
               testID={`ImageCropView.${sourceUri}`}
               onInteractionEnd={updateDownsizeStatus}
+              onScaleChange={handleScaleChange}
             />
           </View>
         )}
