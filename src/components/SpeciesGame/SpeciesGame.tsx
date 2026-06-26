@@ -33,6 +33,8 @@ import {
   getStats,
   recordGuess,
   type TaxonStats,
+  getCachedLookalikes,
+  setCachedLookalikes,
 } from "sharedHelpers/speciesGameStats";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
@@ -242,12 +244,16 @@ const SpeciesGame = ( ) => {
   // Scans 400 random observations of taxonId near the user's location and returns all
   // species-level taxa that appeared as alternate identifications, sorted by frequency.
   // Also records which observation UUIDs contained each misidentification.
+  // Results are cached persistently for 30 days to avoid redundant API calls.
   const findMisidentifiedLookalikes = useCallback( async (
     id: number,
   ): Promise<{
     topId: number | null;
     entries: Array<{ taxonId: number; count: number; observationUuids: string[] }>;
   }> => {
+    const cached = getCachedLookalikes( id );
+    if ( cached ) return cached;
+
     const location = await fetchCoarseUserLocation( );
     const locationParams = location
       ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
@@ -270,7 +276,10 @@ const SpeciesGame = ( ) => {
       const d = await res2.json( );
       results.push( ...( d.results ?? [] ) );
     }
-    if ( results.length === 0 ) return { topId: null, entries: [] };
+    if ( results.length === 0 ) {
+      setCachedLookalikes( id, null, [] );
+      return { topId: null, entries: [] };
+    }
     const data = { results };
 
     const counts: Record<number, { count: number; observationUuids: string[] }> = {};
@@ -297,7 +306,9 @@ const SpeciesGame = ( ) => {
       } ) )
       .sort( ( a, b ) => b.count - a.count );
 
-    return { topId: entries.length > 0 ? entries[0].taxonId : null, entries };
+    const topId = entries.length > 0 ? entries[0].taxonId : null;
+    setCachedLookalikes( id, topId, entries );
+    return { topId, entries };
   }, [] );
 
   // Fetches basic taxon info (name, common name) by ID.
