@@ -1,5 +1,6 @@
+import { preload } from "@candlefinance/faster-image";
 import { useNavigation } from "@react-navigation/native";
-import type { FlashListRef } from "@shopify/flash-list";
+import type { FlashListRef, ViewToken } from "@shopify/flash-list";
 import {
   ActivityIndicator,
   Body3,
@@ -12,6 +13,7 @@ import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type {
@@ -19,6 +21,7 @@ import type {
 } from "react-native";
 import { Animated } from "react-native";
 import RealmObservation from "realmModels/Observation";
+import Photo from "realmModels/Photo";
 import {
   useCurrentUser,
   useGridLayout,
@@ -29,6 +32,7 @@ import {
 import useStore from "stores/useStore";
 
 import ObsPressable from "./ObsPressable";
+import { photoFromObservation, photosFromObservation } from "./util";
 
 const { useRealm } = RealmContext;
 
@@ -290,6 +294,62 @@ const ObservationsFlashList = ( {
     }
   }, [dataCanBeFetched, onEndReached] );
 
+  // Use a ref so the stable callback below always sees the current data
+  const dataRef = useRef<unknown[]>( data );
+  dataRef.current = data;
+
+  const handleViewableItemsChanged = useCallback(
+    ( { viewableItems }: { viewableItems: ViewToken<unknown>[] } ) => {
+      if ( !explore ) return;
+
+      const maxVisibleIndex = viewableItems.reduce(
+        ( max, token ) => Math.max( max, token.index ?? -1 ),
+        -1,
+      );
+      if ( maxVisibleIndex < 0 ) return;
+
+      const currentData = dataRef.current;
+
+      // Priority 1: first photo of next 5 items in the vertical scroll
+      const nextItemSources: { url: string; cachePolicy: "discWithCacheControl" }[] = [];
+      for (
+        let i = maxVisibleIndex + 1;
+        i <= maxVisibleIndex + 5 && i < currentData.length;
+        i++
+      ) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const obs = currentData[i] as any;
+        if ( obs?.empty ) continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const photo = photoFromObservation( obs );
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const url = Photo.displayLocalOrRemoteOriginalPhoto( photo as any );
+        if ( url ) nextItemSources.push( { url, cachePolicy: "discWithCacheControl" } );
+      }
+
+      // Priority 2: carousel photos beyond the first for currently visible items
+      const carouselSources: { url: string; cachePolicy: "discWithCacheControl" }[] = [];
+      for ( const token of viewableItems ) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const obs = token.item as any;
+        if ( obs?.empty ) continue;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const photos = photosFromObservation( obs );
+        for ( let i = 1; i < photos.length; i++ ) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const url = Photo.displayLocalOrRemoteOriginalPhoto( photos[i] as any );
+          if ( url ) carouselSources.push( { url, cachePolicy: "discWithCacheControl" } );
+        }
+      }
+
+      const allSources = [ ...nextItemSources, ...carouselSources ];
+      if ( allSources.length > 0 ) {
+        preload( allSources );
+      }
+    },
+    [explore],
+  );
+
   const handleEndReached = useCallback( ( ) => {
     if ( !dataCanBeFetched ) return;
 
@@ -329,6 +389,7 @@ const ObservationsFlashList = ( {
       onEndReached={handleEndReached}
       onMomentumScrollEnd={onMomentumScrollEnd}
       onScroll={onScroll}
+      onViewableItemsChanged={handleViewableItemsChanged}
       renderItem={renderItem}
       refreshControl={refreshControl}
       testID={testID}
