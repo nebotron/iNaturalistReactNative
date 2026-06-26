@@ -29,6 +29,8 @@ const styles = StyleSheet.create( {
 type SharedZoomableImageProps = ImageZoomProps & {
   brightness?: number;
   onLongPress?: () => void;
+  onLoad?: () => void;
+  onError?: () => void;
 };
 
 const SharedZoomableImage: ForwardRefRenderFunction<
@@ -62,6 +64,8 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     cropPanContext,
     brightness = 1,
     onLongPress,
+    onLoad,
+    onError,
   },
   ref,
 ) => {
@@ -147,6 +151,8 @@ const SharedZoomableImage: ForwardRefRenderFunction<
         source={{ uri }}
         resizeMode="contain"
         onLayout={onZoomableLayout}
+        onLoad={onLoad}
+        onError={onError}
       />
     </GestureDetector>
   );
