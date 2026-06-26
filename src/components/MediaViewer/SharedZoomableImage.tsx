@@ -8,7 +8,10 @@ import React, {
 } from "react";
 import { StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated from "react-native-reanimated";
+import Animated, {
+  runOnJS,
+  useAnimatedReaction,
+} from "react-native-reanimated";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { ImageZoomTransformRefs } from "sharedHooks/imageZoom/readImageZoomTransform";
 import readImageZoomTransform from "sharedHooks/imageZoom/readImageZoomTransform";
@@ -29,6 +32,7 @@ const styles = StyleSheet.create( {
 type SharedZoomableImageProps = ImageZoomProps & {
   brightness?: number;
   onLongPress?: () => void;
+  onScaleChange?: ( scale: number ) => void;
 };
 
 const SharedZoomableImage: ForwardRefRenderFunction<
@@ -62,6 +66,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     cropPanContext,
     brightness = 1,
     onLongPress,
+    onScaleChange,
   },
   ref,
 ) => {
@@ -103,6 +108,16 @@ const SharedZoomableImage: ForwardRefRenderFunction<
   useEffect( ( ) => {
     transformRef.current = transform;
   }, [transform] );
+
+  useAnimatedReaction(
+    ( ) => transform.scale.value,
+    ( scale ) => {
+      if ( onScaleChange ) {
+        runOnJS( onScaleChange )( scale );
+      }
+    },
+    [onScaleChange],
+  );
 
   useImperativeHandle( ref, ( ) => ( {
     reset,
