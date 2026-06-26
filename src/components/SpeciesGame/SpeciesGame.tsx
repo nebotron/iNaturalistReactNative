@@ -549,7 +549,7 @@ const SpeciesGame = ( ) => {
         Why these species?
       </Body1>
 
-      <ScrollView className="px-4">
+      <ScrollView className="px-4" style={{ flex: 1 }}>
         {usedMisidentifications
           ? (
             <>
