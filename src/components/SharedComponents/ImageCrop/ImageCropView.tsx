@@ -144,7 +144,10 @@ const ImageCropView = ( {
     );
     zoomRef.current.applyTransform( transform );
     appliedInitialCropKey.current = cropKey;
-    updateDownsizeStatus( );
+    // Read directly from crop; applyTransform (a worklet) may not have propagated to JS yet.
+    setWillBeDownsized(
+      Math.max( initialCrop.w * imageWidth, initialCrop.h * imageHeight ) > UPLOAD_MAX_SIDE,
+    );
   }, [
     boxSize,
     cropAreaHeight,
@@ -152,9 +155,17 @@ const ImageCropView = ( {
     imageWidth,
     initialCrop,
     sourceUri,
-    updateDownsizeStatus,
     windowWidth,
   ] );
+
+  // When there is no initialCrop the image auto-resets to scale=1. Compute the
+  // downsize status for that default view once the layout is ready.
+  useEffect( ( ) => {
+    if ( initialCrop || boxSize <= 0 || cropAreaHeight <= 0 ) {
+      return;
+    }
+    updateDownsizeStatus( );
+  }, [boxSize, cropAreaHeight, initialCrop, updateDownsizeStatus] );
 
   const handleConfirm = useCallback( async ( ) => {
     if ( saving || !zoomRef.current || boxSize <= 0 || cropAreaHeight <= 0 ) {
