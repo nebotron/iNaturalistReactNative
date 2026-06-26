@@ -312,10 +312,10 @@ const Map = ( {
 
   const showPointTiles = currentZoom > 13;
 
-  // We want green points and (default) orange grid
+  // We want green points and vivid orange-red grid for better density contrast
   const tileUrlTemplate = showPointTiles
     ? `${TILE_URL}/points/{z}/{x}/{y}.png?${queryString}&color=%2374ac00`
-    : `${TILE_URL}/grid/{z}/{x}/{y}.png?${queryString}`;
+    : `${TILE_URL}/grid/{z}/{x}/{y}.png?${queryString}&color=%23FF5500`;
 
   // In Android, MapView does not reliably process tileUrlTemplate changes.
   // Thus, we do not change tileUrlTemplate on Android anymore but first shut
@@ -480,11 +480,7 @@ const Map = ( {
             testID="Map.UrlTile"
             tileSize={512}
             urlTemplate={tileUrlTemplate}
-            opacity={
-              showPointTiles
-                ? 1
-                : 0.7
-            }
+            opacity={1}
           />
         )}
         { observation && hasCoordinates && ( currentUserCanViewCoords
