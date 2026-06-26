@@ -152,21 +152,11 @@ const MyObservationsResults = ( ) => {
     if ( !confirmInternetConnection( ) ) { return; }
 
     startManualSync( );
-    const syncOptions = isDefaultMode
-      ? {
-        skipSomeUploads: Observation
-          .filterUnsyncedObservations( realm )
-          .filter( ( obs: Observation ) => obs.missingBasics() )
-          .map( obs => obs.uuid ),
-      }
-      : { };
-    syncManually( syncOptions );
+    syncManually( {} );
   }, [
     confirmLoggedIn,
     confirmInternetConnection,
     startManualSync,
-    isDefaultMode,
-    realm,
     syncManually,
   ] );
 
