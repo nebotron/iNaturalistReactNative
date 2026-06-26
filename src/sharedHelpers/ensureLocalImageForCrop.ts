@@ -68,6 +68,12 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
   return uri;
 };
 
+// Fire-and-forget: warm the crop cache for a remote photo while the user views it
+const prefetchForCrop = ( uri: string ): void => {
+  if ( !uri.match( /^https?:\/\// ) ) return;
+  ensureLocalImageForCrop( uri ).catch( ( ) => { /* ignore prefetch errors */ } );
+};
+
 export default ensureLocalImageForCrop;
 
-export { stripFilePrefix };
+export { prefetchForCrop, stripFilePrefix };

@@ -22,6 +22,7 @@ import TaxonModel from "realmModels/Taxon";
 import type { RealmPhoto } from "realmModels/types";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
+import { prefetchForCrop } from "sharedHelpers/ensureLocalImageForCrop";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import {
@@ -187,6 +188,13 @@ const SuggestionsContainer = ( ) => {
     ( ) => currentObservation?.observationPhotos || [],
     [currentObservation?.observationPhotos],
   );
+
+  useEffect( ( ) => {
+    observationPhotos.forEach( obsPhoto => {
+      const cropUri = Photo.displayCropSourcePhoto( obsPhoto.photo );
+      if ( cropUri ) prefetchForCrop( cropUri );
+    } );
+  }, [observationPhotos] );
 
   const evidenceHasLocation = !!currentObservation?.latitude;
 

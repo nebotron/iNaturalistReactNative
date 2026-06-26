@@ -13,7 +13,7 @@ import sortBy from "lodash/sortBy";
 import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
 import React, {
-  useCallback, useMemo, useState,
+  useCallback, useEffect, useMemo, useState,
 } from "react";
 import { Alert } from "react-native";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
@@ -22,6 +22,7 @@ import ObservationSound from "realmModels/ObservationSound";
 import Photo from "realmModels/Photo";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
+import { prefetchForCrop } from "sharedHelpers/ensureLocalImageForCrop";
 import { log } from "sharedHelpers/logger";
 import { useAuthenticatedMutation } from "sharedHooks";
 import useInputImageTracking from "sharedHooks/useInputImageTracking";
@@ -72,6 +73,13 @@ const EvidenceList = ( {
       .filter( Boolean ),
     [observationPhotos],
   );
+
+  useEffect( ( ) => {
+    observationPhotos.forEach( obsPhoto => {
+      const cropUri = Photo.displayCropSourcePhoto( obsPhoto.photo );
+      if ( cropUri ) prefetchForCrop( cropUri );
+    } );
+  }, [observationPhotos] );
 
   const duplicatePhotoUris = useMemo( ( ) => {
     const excludeUuid = currentObservation?.uuid
