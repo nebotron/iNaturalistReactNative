@@ -346,13 +346,16 @@ const SpeciesGame = ( ) => {
         }
 
         // Build weighted candidate list: misidentified species (by count) then siblings.
+        // Exclude the target species itself from all candidate lists.
         const weightedCandidates: Array<{ id: number; weight: number }> = [
-          ...misidentEntries.map( ( e: { taxonId: number; count: number } ) => ( {
-            id: e.taxonId,
-            weight: e.count,
-          } ) ),
+          ...misidentEntries
+            .filter( ( e: { taxonId: number } ) => e.taxonId !== taxonId )
+            .map( ( e: { taxonId: number; count: number } ) => ( {
+              id: e.taxonId,
+              weight: e.count,
+            } ) ),
           ...siblingCandidates
-            .filter( id => !misidentEntries.some( ( e: { taxonId: number } ) => e.taxonId === id ) )
+            .filter( id => id !== taxonId && !misidentEntries.some( ( e: { taxonId: number } ) => e.taxonId === id ) )
             .map( id => ( { id, weight: 1 } ) ),
         ];
 
