@@ -22,7 +22,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Dimensions } from "react-native";
+import { Dimensions, StyleSheet } from "react-native";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
@@ -116,6 +116,7 @@ const SpeciesGame = ( ) => {
   const [score, setScore] = useState( 0 );
   const [isTargetShown, setIsTargetShown] = useState( true );
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>( null );
+  const [imageLoading, setImageLoading] = useState( false );
   const [currentObservationUuid, setCurrentObservationUuid] = useState<string | null>( null );
   // true = guessed target, false = guessed lookalike, "skip" = I don't know, null = not yet guessed
   const [guessedTarget, setGuessedTarget] = useState<boolean | "skip" | null>( null );
@@ -224,6 +225,7 @@ const SpeciesGame = ( ) => {
     if ( entry ) usedUuidsRef.current.add( entry.observationUuid );
     setIsTargetShown( showTarget );
     setCurrentPhotoUrl( entry?.url ?? null );
+    setImageLoading( !!entry?.url );
     setCurrentObservationUuid( entry?.observationUuid ?? null );
     setGuessedTarget( null );
     setPhase( "playing" );
@@ -618,14 +620,26 @@ const SpeciesGame = ( ) => {
       <View style={{ flex: 1, overflow: "hidden" }}>
         {currentPhotoUrl
           ? (
-            <SharedZoomableImage
-              ref={imageRef}
-              uri={currentPhotoUrl}
-              style={{ flex: 1 }}
-              isDoubleTapEnabled
-              maxScale={50}
-              onInteractionEnd={handleInteractionEnd}
-            />
+            <>
+              <SharedZoomableImage
+                ref={imageRef}
+                uri={currentPhotoUrl}
+                style={{ flex: 1 }}
+                isDoubleTapEnabled
+                maxScale={50}
+                onInteractionEnd={handleInteractionEnd}
+                onLoad={() => setImageLoading( false )}
+                onError={() => setImageLoading( false )}
+              />
+              {imageLoading && (
+                <View
+                  className="absolute inset-0 bg-lightGray items-center justify-center"
+                  style={{ ...StyleSheet.absoluteFillObject }}
+                >
+                  <ActivityIndicator />
+                </View>
+              )}
+            </>
           )
           : (
             <View className="flex-1 bg-lightGray items-center justify-center">
