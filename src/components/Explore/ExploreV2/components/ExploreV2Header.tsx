@@ -12,6 +12,7 @@ import BackButton from "components/SharedComponents/Buttons/BackButton";
 import ContainedSquareButton from "components/SharedComponents/Buttons/ContainedSquareButton";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
 import { Image, View } from "components/styledComponents";
+import buildExploreV2QueryParams from "components/Explore/ExploreV2/buildQueryParams";
 import type { TFunction } from "i18next";
 import type { ExploreStackScreenProps } from "navigation/types";
 import type { ExploreV2LocationState, ExploreV2Subject } from "providers/ExploreV2Context";
@@ -161,7 +162,9 @@ const ExploreV2Header = ( ) => {
             accessibilityLabel={t( "Wildlife-Hotspots" )}
             backgroundColor={colors.darkGray}
             icon="location"
-            onPress={() => navigation.navigate( "WildlifeHotspots" )}
+            onPress={() => navigation.navigate( "WildlifeHotspots", {
+              filterParams: buildExploreV2QueryParams( state ),
+            } )}
             testID="ExploreV2Header.hotspotsButton"
           />
         </View>
