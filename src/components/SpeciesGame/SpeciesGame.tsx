@@ -691,7 +691,7 @@ const SpeciesGame = ( ) => {
           <View className="flex-row mb-3 gap-2">
             <View className="flex-1">
               <Button
-                className="w-full h-full"
+                className="w-full"
                 text={taxonLabel( target! )}
                 level="focus"
                 onPress={() => handleGuess( true )}
@@ -699,14 +699,14 @@ const SpeciesGame = ( ) => {
             </View>
             <View className="flex-1">
               <Button
-                className="w-full h-full"
+                className="w-full"
                 text="I don't know"
                 onPress={handleSkip}
               />
             </View>
             <View className="flex-1">
               <Button
-                className="w-full h-full"
+                className="w-full"
                 text={taxonLabel( lookalike! )}
                 onPress={() => handleGuess( false )}
               />
