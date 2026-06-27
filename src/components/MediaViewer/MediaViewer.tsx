@@ -128,7 +128,7 @@ const MediaViewer = ( {
     const newIndex = newUris.indexOf( currentlySelectedUri );
     if ( newIndex >= 0 ) {
       setSelectedMediaIndex( newIndex );
-      horizontalScroll?.current?.scrollToIndex( {
+      horizontalScroll?.current?.scrollTo( {
         index: newIndex,
         animated: true,
       } );
