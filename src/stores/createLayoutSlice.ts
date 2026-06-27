@@ -139,6 +139,24 @@ const createLayoutSlice = set => ( {
         mapType: newMapType,
       },
     } ) ),
+    // Last viewport seen by the user in the Explore map
+    lastExploreMapRegion: null as {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    } | null,
+    setLastExploreMapRegion: ( region: {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    } ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        lastExploreMapRegion: region,
+      },
+    } ) ),
   },
 } );
 
