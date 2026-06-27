@@ -6,8 +6,8 @@ import measureImageBrightness from "./measureImageBrightness";
 import type { NormalizedCrop } from "./normalizedCropTypes";
 
 // Images with luminance within this fraction of the target need no adjustment.
-const TARGET_LUMINANCE = 0.45;
-const TOLERANCE_FACTOR = 0.15;
+const TARGET_LUMINANCE = 0.50;
+const TOLERANCE_FACTOR = 0.20;
 
 const computeAdjustment = ( luminance: number ): number => {
   const adjustment = TARGET_LUMINANCE / luminance;

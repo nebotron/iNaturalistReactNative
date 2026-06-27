@@ -66,3 +66,54 @@ To meaningfully improve further would require:
 1. GPU access to retrain from the labeled crop data (using `scripts/retrain_from_cache.py`)
 2. More labeled training data beyond the 328 usable images
 3. A larger model (YOLOv8s or YOLOv8m) — but these are significantly bigger for iOS bundle
+
+---
+
+## Notes from tune session (2026-06-27) — Auto Brightness
+
+### Task
+Tune the auto-brightness parameters in `src/sharedHelpers/useAutoBrightnessForUri.ts`.
+
+### Data Analysis
+Firebase was not accessible from this environment (proxy blocks it). Instead, analyzed luminance distribution from 150 downloadable S3 images in `crop_training.json`.
+
+**iNat crop luminance distribution (n=150):**
+- mean=0.514, p10=0.344, p25=0.441, p50=0.519, p75=0.584, p90=0.677
+- The median luminance is **0.519**, significantly above the prior target of 0.45
+
+### Baseline (target=0.45, tolerance=0.15)
+- No adjustment:  37%  (luminance in [0.391, 0.529])
+- Brightened:     16%  (luminance < 0.391)
+- **Darkened:     47%** ← clear problem: most well-lit nature photos darkened unnecessarily
+- Mean adjustment: 0.946 (net darkening)
+
+The algorithm was systematically darkening the majority of well-lit iNat photos because the
+0.45 target sits below the natural median of the photo corpus.
+
+### Improvement (target=0.50, tolerance=0.20) — APPLIED
+- No adjustment:  **63%**  (luminance in [0.417, 0.625])
+- Brightened:     21%  (luminance < 0.417)
+- Darkened:       **16%**  (luminance > 0.625 — truly overexposed)
+- Mean adjustment: 1.059 (nearly balanced)
+
+**Change applied** to `src/sharedHelpers/useAutoBrightnessForUri.ts`.
+**Evaluation script** added at `scripts/evaluate_brightness.py` — will run the labeled
+evaluation against Firebase `brightness_log.json` when Firebase is accessible.
+
+### What Was Tried
+- Raising TOLERANCE_FACTOR only (0.15→0.20): reduces darkening but still 32% darkened due to low target
+- Raising TARGET_LUMINANCE only (0.45→0.50): 52% no-adjust, better balance
+- Both together (0.50, 0.20): 63% no-adjust, 21% brightened, 16% darkened → best combo
+- Asymmetric tolerance (different values for brighten vs darken): analytically sound but more complex
+  to implement; the symmetric (0.50, 0.20) solution achieves similar goals with simpler code
+
+### Why 0.50 / 0.20
+- 0.50 aligns with the actual median luminance of iNat crop images (0.519 ≈ 0.50)
+- 0.20 tolerance captures most of the central distribution as "acceptable"
+- The pair dramatically reduces false-positive darkening while still catching truly dark (<0.417)
+  and truly bright (>0.625) images for adjustment
+
+### Caveat
+Without the Firebase brightness_log labeled data, this evaluation is analytical rather than
+empirical. Run `scripts/evaluate_brightness.py` with Firebase accessible to get a ground-truth
+score and validate the new parameters against user-labeled brightness preferences.
