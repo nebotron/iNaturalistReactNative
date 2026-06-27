@@ -1,4 +1,4 @@
-import { preload } from "@candlefinance/faster-image";
+import { prefetch } from "@candlefinance/faster-image";
 import { useNavigation } from "@react-navigation/native";
 import type { FlashListRef, ViewToken } from "@shopify/flash-list";
 import {
@@ -12,6 +12,7 @@ import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -296,7 +297,9 @@ const ObservationsFlashList = ( {
 
   // Use a ref so the stable callback below always sees the current data
   const dataRef = useRef<unknown[]>( data );
-  dataRef.current = data;
+  useEffect( ( ) => {
+    dataRef.current = data;
+  }, [data] );
 
   const handleViewableItemsChanged = useCallback(
     ( { viewableItems }: { viewableItems: ViewToken<unknown>[] } ) => {
@@ -311,40 +314,42 @@ const ObservationsFlashList = ( {
       const currentData = dataRef.current;
 
       // Priority 1: first photo of next 5 items in the vertical scroll
-      const nextItemSources: { url: string; cachePolicy: "discWithCacheControl" }[] = [];
+      const nextItemUrls: string[] = [];
       for (
         let i = maxVisibleIndex + 1;
         i <= maxVisibleIndex + 5 && i < currentData.length;
-        i++
+        i += 1
       ) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const obs = currentData[i] as any;
-        if ( obs?.empty ) continue;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const photo = photoFromObservation( obs );
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const url = Photo.displayLocalOrRemoteOriginalPhoto( photo as any );
-        if ( url ) nextItemSources.push( { url, cachePolicy: "discWithCacheControl" } );
-      }
-
-      // Priority 2: carousel photos beyond the first for currently visible items
-      const carouselSources: { url: string; cachePolicy: "discWithCacheControl" }[] = [];
-      for ( const token of viewableItems ) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const obs = token.item as any;
-        if ( obs?.empty ) continue;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const photos = photosFromObservation( obs );
-        for ( let i = 1; i < photos.length; i++ ) {
+        if ( !obs?.empty ) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const url = Photo.displayLocalOrRemoteOriginalPhoto( photos[i] as any );
-          if ( url ) carouselSources.push( { url, cachePolicy: "discWithCacheControl" } );
+          const photo = photoFromObservation( obs );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const url = Photo.displayLocalOrRemoteOriginalPhoto( photo as any );
+          if ( url ) nextItemUrls.push( url );
         }
       }
 
-      const allSources = [ ...nextItemSources, ...carouselSources ];
-      if ( allSources.length > 0 ) {
-        preload( allSources );
+      // Priority 2: carousel photos beyond the first for currently visible items
+      const carouselUrls: string[] = [];
+      for ( const token of viewableItems ) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const obs = token.item as any;
+        if ( !obs?.empty ) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const photos = photosFromObservation( obs );
+          for ( let i = 1; i < photos.length; i += 1 ) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const url = Photo.displayLocalOrRemoteOriginalPhoto( photos[i] as any );
+            if ( url ) carouselUrls.push( url );
+          }
+        }
+      }
+
+      const allUrls = [...nextItemUrls, ...carouselUrls];
+      if ( allUrls.length > 0 ) {
+        prefetch( allUrls );
       }
     },
     [explore],
