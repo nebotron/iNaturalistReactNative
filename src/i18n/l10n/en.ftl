@@ -66,6 +66,7 @@ Add-observations = Add observations
 ADD-OPTIONAL-COMMENT = ADD OPTIONAL COMMENT
 Add-optional-notes = Add optional notes
 ADD-TAXON-FILTER = ADD TAXON FILTER
+ADD-USER-FILTER = ADD USER FILTER
 # Hint for a button that adds an identification
 Adds-ID = Adds ID
 # Hint for a button that adds a vote of agreement
@@ -501,6 +502,10 @@ Enable-flash = Enable flash
 Enable-location = Enable location
 # Button that subscribes the user to notifications for an observation
 Enable-notifications = Enable notifications
+# Label for the end point marker on the hotspots map
+End = End
+# Placeholder text for the end location input in the Wildlife Hotspots tool
+End-location = End location (e.g. Boston, MA)
 # Indicates a species only occurs in a specific place
 Endemic = Endemic
 # TODO this and many other uses of placeables are not currently translatable
@@ -527,6 +532,7 @@ Exact-Date = Exact Date
 EXACT-DATE = EXACT DATE
 except = except
 Exclude-taxon = Exclude
+Exclude-user = Exclude
 EXPAND-MAP = EXPAND MAP
 # Onboarding carousel second screen description
 Experts-help-verify-and-improve-IDs = Experts help verify and improve IDs
@@ -556,6 +562,8 @@ Filter-by-observed-on-date = Filter by observations observed on a specific date
 Filter-by-uploaded-between-dates = Filter by observations uploaded between two specific dates
 Filter-by-uploaded-on-date = Filter by observations uploaded on a specific date
 Filters = Filters
+# Button that triggers the Wildlife Hotspots search
+Find-Hotspots = Find Hotspots
 # Status when an item has been flagged
 Flagged = Flagged
 Flash = Flash
@@ -602,9 +610,9 @@ ID-Suggestions = ID Suggestions
 # Identification Status
 ID-Withdrawn = ID Withdrawn
 IDENTIFICATION = IDENTIFICATION
-IDENTIFICATION-TIPS = IDENTIFICATION TIPS
 # Accessibility label for a button that shows options for an identification
 Identification-options = Identification options
+IDENTIFICATION-TIPS = IDENTIFICATION TIPS
 IDENTIFICATIONS-WITHOUT-NUMBER =
     { $count ->
         [one] IDENTIFICATION
@@ -676,6 +684,7 @@ iNaturalist-users-who-have-observed = iNaturalist users who have observed a part
 iNaturalists-apps-are-designed-and-developed-3 = iNaturalist's apps are designed, developed, and supported by the iNaturalist team: Yaron Budowski, Amanda Bullington, Tony Iwane, Johannes Klein, Patrick Leary, Joanne Lin, Scott Loarie, Abhas Misraraj, Sylvain Morin, Carrie Seltzer, Alex Shepard, Thea Skaff, Angie Ta, Ken-ichi Ueda, Kirk van Gorkom, Jason Walthall, & Jane Weeden.
 iNaturalists-vision-is-a-world = iNaturalist's vision is a world where everyone can understand and sustain biodiversity through the practice of observing wild organisms and sharing information about them.
 Include-taxon = Include
+Include-user = Include
 Individual-encounters-with-organisms = Individual encounters with organisms at a particular time and location, usually with evidence
 # Title for dialog telling the user that an Internet connection is required
 Internet-Connection-Required = Internet Connection Required
@@ -745,6 +754,8 @@ Loads-content-that-requires-an-Internet-connection = Loads content that requires
 LOCATION = LOCATION
 Location = Location
 Location-accuracy-is-too-imprecise = Location accuracy is too imprecise to help identifiers. Please zoom in.
+# Title for alert when a location name could not be geocoded
+Location-not-found = Location not found
 LOCATION-TOO-IMPRECISE = LOCATION TOO IMPRECISE
 LOG-IN = LOG IN
 LOG-IN-TO-INATURALIST = LOG IN TO INATURALIST
@@ -960,6 +971,8 @@ Opens-AI-camera = Opens AI camera.
 # Accessibility hint for a button that opens a form for editing a comment
 Opens-edit-comment-form = Opens edit comment form.
 Opens-location-permission-prompt = Opens location permission prompt
+# Accessibility hint for the Wildlife Hotspots button in the Explore header
+Opens-route-hotspots = Opens the Wildlife Hotspots route finder
 # Accessibility hint for search button in Explore header that navigates to the search interface
 Opens-search-interface = Opens search interface.
 OR-SIGN-IN-WITH = OR SIGN IN WITH
@@ -993,6 +1006,7 @@ Please-Grant-Permission = Please Grant Permission
 PLEASE-LOG-IN = PLEASE LOG IN
 Please-log-in-again = Please log in again. We occasionally need to refresh your session to clear cached data and make sure the app is working its best.
 Please-make-sure-your-password-is-at-least-6-characters = Please make sure your password is at least 6 characters.
+Please-select-a-location-from-the-suggestions = Please select a location from the suggestions.
 Please-try-again-when-you-are-connected-to-the-internet = Please try again when you are connected to the Internet.
 Point-the-camera-at-an-animal-plant-or-fungus = Point the camera at an animal, plant, or fungus
 Popular-observations-filter = Popular (at least one fave)
@@ -1194,6 +1208,8 @@ Search-suggestions-with-location = Search suggestions with location
 Search-suggestions-without-location = Search suggestions without location
 SEARCH-TAXA = SEARCH TAXA
 SEARCH-USERS = SEARCH USERS
+# Loading message shown while searching for wildlife hotspots
+Searching-for-hotspots = Searching for hotspots…
 # Accessibility label for navigating to journal posts screen
 See-journal-posts = See journal posts
 # Accessibility label for Observations button on UserProfile screen
@@ -1282,6 +1298,10 @@ SPECIES-WITHOUT-NUMBER =
     }
 # Label for the standard map type
 Standard--map-type = Standard
+# Label for the start point marker on the hotspots map
+Start = Start
+# Placeholder text for the start location input in the Wildlife Hotspots tool
+Start-location = Start location (e.g. New York, NY)
 Start-must-be-before-end = The start date must be before the end date.
 Start-upload = Start upload
 # Accessibility hint for button that starts recording a sound
@@ -1455,6 +1475,8 @@ When-tapping-the-green-observation-button = When tapping the green observation b
 WIKIPEDIA = WIKIPEDIA
 Wild = Wild
 WILD-STATUS = WILD STATUS
+# Wildlife Hotspots along a route
+Wildlife-Hotspots = Wildlife Hotspots
 # Label for a button that withdraws an identification
 Withdraw = Withdraw
 # Button to Withdraw identification made by user
