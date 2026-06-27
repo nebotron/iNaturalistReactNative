@@ -13,7 +13,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Dimensions } from "react-native";
+import { useWindowDimensions } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 import Photo from "realmModels/Photo";
 
@@ -37,7 +37,7 @@ const TaxonMedia = ( {
   sounds = [],
   tablet,
 }: Props ): Node => {
-  const { width } = Dimensions.get( "window" );
+  const { width } = useWindowDimensions( );
   const [index, setIndex] = useState( 0 );
   const [mediaViewerVisible, setMediaViewerVisible] = useState( false );
 
@@ -101,6 +101,7 @@ const TaxonMedia = ( {
           data={items}
           renderItem={CarouselSlide}
           onSlideScroll={setIndex}
+          style={{ width }}
         />
       )
   );
