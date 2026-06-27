@@ -44,7 +44,7 @@ interface SoundItem {
 }
 
 const BRIGHTNESS_MIN = 0.1;
-const BRIGHTNESS_MAX = 3.0;
+const BRIGHTNESS_MAX = 5.0;
 const BRIGHTNESS_DEFAULT = 1.0;
 const sliderStyle = { flex: 1, height: 40 };
 
