@@ -4,13 +4,13 @@ import {
   photoLibraryPhotosPath,
 } from "appConstants/paths";
 import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDetails";
+import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
 import {
   appendPhotosAndVideoSoundsToObservation,
   buildGroupedMediaItems,
   createObservationWithVideoSounds,
   partitionAssetsByMediaType,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
-import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
 import { ActivityAnimation, ViewWrapper } from "components/SharedComponents";
 import { t } from "i18next";
 import type { NoBottomTabStackScreenProps } from "navigation/types";
@@ -20,6 +20,7 @@ import React, {
   useState,
 } from "react";
 import {
+  Alert,
   InteractionManager,
   Platform,
   View,
@@ -268,10 +269,28 @@ const PhotoLibrary = ( ) => {
       return;
     }
 
+    // Some photo pickers (notably the old Android picker, which we force in order
+    // to preserve EXIF data) don't enforce the selectionLimit we request, so a
+    // user can select far more photos than we can safely process. Cap the number
+    // of assets here to avoid running out of memory / crashing on huge selections.
+    const maxPhotosAllowed = fromAICamera
+      ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
+      : MAX_PHOTOS_ALLOWED;
+    let { assets } = response;
+    if ( maxPhotosAllowed && assets.length > maxPhotosAllowed ) {
+      logger.warn(
+        `Photo picker returned ${assets.length} assets; capping at ${maxPhotosAllowed}`,
+      );
+      assets = assets.slice( 0, maxPhotosAllowed );
+      Alert.alert(
+        t( "You-can-only-import-X-photos-at-a-time", { count: maxPhotosAllowed } ),
+      );
+    }
+
     try {
-      const { photoAssets, videoAssets } = partitionAssetsByMediaType( response.assets );
+      const { photoAssets, videoAssets } = partitionAssetsByMediaType( assets );
       addOriginalDevicePhotoUris(
-        getOriginalDevicePhotoUrisFromAssets( response.assets ),
+        getOriginalDevicePhotoUrisFromAssets( assets ),
       );
 
       const movedPhotos = photoAssets.length > 0
