@@ -18,7 +18,7 @@ export interface Hotspot {
   centerLatitude: number;
   centerLongitude: number;
   observationCount: number;
-  distanceFromRouteKm: number;
+  detourMinutes: number;
   topSpecies: HotspotSpecies[];
 }
 
@@ -28,6 +28,8 @@ const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const GRID_DEG = 0.027;
 // Hotspots must be within this distance of the route to be shown
 const MAX_ROUTE_DISTANCE_KM = 25;
+// Evaluate detour times for this many top-by-obs candidates
+const MAX_DETOUR_CANDIDATES = 30;
 
 function toRad( deg: number ): number {
   return ( deg * Math.PI ) / 180;
@@ -68,7 +70,10 @@ function distanceToPolylineKm( pt: RoutePoint, polyline: RoutePoint[] ): number 
   return minDist;
 }
 
-async function fetchOSRMRoute( start: RoutePoint, end: RoutePoint ): Promise<RoutePoint[]> {
+async function fetchOSRMRoute( start: RoutePoint, end: RoutePoint ): Promise<{
+  coords: RoutePoint[];
+  durationSec: number;
+}> {
   const url = `${OSRM_BASE}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`;
   const response = await fetch( url );
   if ( !response.ok ) {
@@ -79,7 +84,23 @@ async function fetchOSRMRoute( start: RoutePoint, end: RoutePoint ): Promise<Rou
     throw new Error( "No route found between these locations" );
   }
   const coords: [number, number][] = data.routes[0].geometry.coordinates;
-  return coords.map( ( [lng, lat] ) => ( { latitude: lat, longitude: lng } ) );
+  return {
+    coords: coords.map( ( [lng, lat] ) => ( { latitude: lat, longitude: lng } ) ),
+    durationSec: data.routes[0].duration as number,
+  };
+}
+
+async function fetchOSRMDuration( waypoints: RoutePoint[] ): Promise<number> {
+  const wStr = waypoints.map( w => `${w.longitude},${w.latitude}` ).join( ";" );
+  const url = `${OSRM_BASE}/${wStr}?overview=false`;
+  try {
+    const response = await fetch( url );
+    if ( !response.ok ) return Infinity;
+    const data = await response.json();
+    return ( data.routes?.[0]?.duration as number ) ?? Infinity;
+  } catch {
+    return Infinity;
+  }
 }
 
 function routeBbox( coords: RoutePoint[], paddingDeg = 0.3 ) {
@@ -180,8 +201,8 @@ export function useRouteHotspots() {
       setRouteCoords( [] );
 
       try {
-        // 1. Get the actual road route
-        const routePoints = await fetchOSRMRoute( start, end );
+        // 1. Get the actual road route and baseline travel time
+        const { coords: routePoints, durationSec: directDurationSec } = await fetchOSRMRoute( start, end );
         setRouteCoords( routePoints );
 
         // 2. Single iNaturalist call for the whole route bounding box
@@ -208,9 +229,15 @@ export function useRouteHotspots() {
         // 3. Cluster observations into geographic grid cells
         const cells = clusterByGrid( observations );
 
-        // 4. Filter to cells within MAX_ROUTE_DISTANCE_KM of the route,
-        //    then sort by observation count
-        const results: Hotspot[] = [];
+        // 4. Filter to cells within MAX_ROUTE_DISTANCE_KM, take top candidates by obs count
+        const candidates: Array<{
+          id: string;
+          centerLat: number;
+          centerLng: number;
+          count: number;
+          topSpecies: HotspotSpecies[];
+        }> = [];
+
         cells.forEach( ( cell, key ) => {
           const dist = distanceToPolylineKm(
             { latitude: cell.centerLat, longitude: cell.centerLng },
@@ -222,18 +249,49 @@ export function useRouteHotspots() {
             .sort( ( a, b ) => b.count - a.count )
             .slice( 0, 5 );
 
-          results.push( {
+          candidates.push( {
             id: `hotspot-${key}`,
-            centerLatitude: cell.centerLat,
-            centerLongitude: cell.centerLng,
-            observationCount: cell.count,
-            distanceFromRouteKm: dist,
+            centerLat: cell.centerLat,
+            centerLng: cell.centerLng,
+            count: cell.count,
             topSpecies,
           } );
         } );
 
-        results.sort( ( a, b ) => b.observationCount - a.observationCount );
-        setHotspots( results.slice( 0, 20 ) );
+        candidates.sort( ( a, b ) => b.count - a.count );
+        const topCandidates = candidates.slice( 0, MAX_DETOUR_CANDIDATES );
+
+        // 5. Compute actual 3-point travel times in parallel (start → hotspot → end)
+        const withDetours = await Promise.all(
+          topCandidates.map( async candidate => {
+            const threePointSec = await fetchOSRMDuration( [
+              start,
+              { latitude: candidate.centerLat, longitude: candidate.centerLng },
+              end,
+            ] );
+            const detourMinutes = Math.max(
+              0,
+              Math.round( ( threePointSec - directDurationSec ) / 60 ),
+            );
+            return {
+              id: candidate.id,
+              centerLatitude: candidate.centerLat,
+              centerLongitude: candidate.centerLng,
+              observationCount: candidate.count,
+              detourMinutes,
+              topSpecies: candidate.topSpecies,
+            };
+          } ),
+        );
+
+        // 6. Rank by ratio of added travel time to observations (lower = better)
+        withDetours.sort( ( a, b ) => {
+          const ratioA = a.detourMinutes / a.observationCount;
+          const ratioB = b.detourMinutes / b.observationCount;
+          return ratioA - ratioB;
+        } );
+
+        setHotspots( withDetours.slice( 0, 10 ) );
       } catch ( err ) {
         setError( err instanceof Error ? err.message : "Failed to load hotspot data" );
       } finally {
