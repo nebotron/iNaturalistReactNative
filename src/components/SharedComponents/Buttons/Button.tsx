@@ -23,6 +23,7 @@ interface ButtonProps {
   text: string;
   dropdown?: boolean;
   maxFontSizeMultiplier?: number;
+  adjustsFontSizeToFit?: boolean;
   debounceTime?: number;
   preventMultipleTaps?: boolean;
 }
@@ -144,6 +145,7 @@ const Button = ( {
   text,
   dropdown,
   maxFontSizeMultiplier = 1.5,
+  adjustsFontSizeToFit = false,
   debounceTime = 300,
   preventMultipleTaps = true,
 }: ButtonProps ) => {
@@ -214,6 +216,7 @@ const Button = ( {
         className={classnames( textClasses )}
         testID={`${testID || "RNButton"}.text`}
         maxFontSizeMultiplier={maxFontSizeMultiplier}
+        adjustsFontSizeToFit={adjustsFontSizeToFit}
         numberOfLines={3}
       >
         {text}
