@@ -78,6 +78,10 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 // If the best post-NMS box is below this threshold the detection is likely spurious;
 // returning nil triggers the Vision attention-saliency fallback instead.
 #define YOLO_GATE_CONF   0.25f
+// Union: include box if its confidence is at least this fraction of the best box.
+// Cap at this many boxes to prevent noisy low-conf detections from bloating the union.
+#define YOLO_UNION_THRESH 0.60f
+#define YOLO_UNION_MAX_K  3
 
 typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 
@@ -266,9 +270,24 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   // back to Vision attention saliency rather than crop to a likely-wrong location.
   if ( bestConf < YOLO_GATE_CONF ) { free( dets ); free( suppressed ); return nil; }
 
-  // Use the single highest-confidence box (top-1).
-  float uX1 = dets[0].x1, uY1 = dets[0].y1;
-  float uX2 = dets[0].x2, uY2 = dets[0].y2;
+  // Second pass: union top-K boxes at ≥ YOLO_UNION_THRESH of best confidence.
+  float confThreshold = YOLO_UNION_THRESH * bestConf;
+  float uX1 = FLT_MAX, uY1 = FLT_MAX, uX2 = -FLT_MAX, uY2 = -FLT_MAX;
+  int   used = 0;
+  for ( int i = 0; i < nDets; i++ ) {
+    if ( suppressed[i] )                   continue;
+    if ( dets[i].conf < confThreshold )    continue;
+    if ( used >= YOLO_UNION_MAX_K )        break;
+    uX1 = MIN( uX1, dets[i].x1 );
+    uY1 = MIN( uY1, dets[i].y1 );
+    uX2 = MAX( uX2, dets[i].x2 );
+    uY2 = MAX( uY2, dets[i].y2 );
+    used++;
+  }
+  if ( used == 0 ) {  // fallback: use best box
+    uX1 = dets[0].x1; uY1 = dets[0].y1;
+    uX2 = dets[0].x2; uY2 = dets[0].y2;
+  }
   free( dets );
   free( suppressed );
 
