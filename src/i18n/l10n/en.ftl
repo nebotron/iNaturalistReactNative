@@ -861,6 +861,7 @@ No-email-app-installed-body = If you have another way of sending email, the addr
 No-Location = No Location
 No-Media = No Media
 # As in a machine learning model that powers automated suggestions
+No-hotspots-found-nearby = No hotspots found near this route. Try a longer route or different filters.
 No-model-found = No model found
 No-projects-match-that-search = No projects match that search
 # Used for explore screen when search params lead to a search with no data

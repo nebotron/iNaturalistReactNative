@@ -859,6 +859,7 @@ No-Camera-Available = No Camera Available
 No-email-app-installed = No email app installed
 No-email-app-installed-body = If you have another way of sending email, the address is { $address }
 No-Location = No Location
+No-hotspots-found-nearby = No hotspots found near this route. Try a longer route or different filters.
 No-Media = No Media
 # As in a machine learning model that powers automated suggestions
 No-model-found = No model found

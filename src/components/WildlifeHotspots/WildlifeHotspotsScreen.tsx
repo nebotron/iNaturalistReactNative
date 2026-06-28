@@ -329,7 +329,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
       </View>
 
       {/* Hotspot list */}
-      {( hotspots.length > 0 || error ) && (
+      {( hotspots.length > 0 || error || ( routeCoords.length > 0 && !loading ) ) && (
         <View className="max-h-56 bg-lightGray border-t border-lightGray">
           {error
             ? (
@@ -337,22 +337,28 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
                 <Body2 className="text-darkGray text-center">{error}</Body2>
               </View>
             )
-            : (
-              <ScrollView
-                contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
-                showsVerticalScrollIndicator
-              >
-                {hotspots.map( ( hotspot, idx ) => (
-                  <HotspotListItem
-                    key={hotspot.id}
-                    hotspot={hotspot}
-                    rank={idx + 1}
-                    selected={selectedHotspotId === hotspot.id}
-                    onPress={() => handleHotspotPress( hotspot )}
-                  />
-                ) )}
-              </ScrollView>
-            )}
+            : hotspots.length === 0
+              ? (
+                <View className="p-4 items-center">
+                  <Body2 className="text-darkGray text-center">{t( "No-hotspots-found-nearby" )}</Body2>
+                </View>
+              )
+              : (
+                <ScrollView
+                  contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
+                  showsVerticalScrollIndicator
+                >
+                  {hotspots.map( ( hotspot, idx ) => (
+                    <HotspotListItem
+                      key={hotspot.id}
+                      hotspot={hotspot}
+                      rank={idx + 1}
+                      selected={selectedHotspotId === hotspot.id}
+                      onPress={() => handleHotspotPress( hotspot )}
+                    />
+                  ) )}
+                </ScrollView>
+              )}
         </View>
       )}
     </ViewWrapper>

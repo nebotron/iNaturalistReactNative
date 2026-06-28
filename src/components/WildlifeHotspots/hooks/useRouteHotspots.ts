@@ -205,7 +205,21 @@ export function useRouteHotspots() {
         const { coords: routePoints, durationSec: directDurationSec } = await fetchOSRMRoute( start, end );
         setRouteCoords( routePoints );
 
-        // 2. Single iNaturalist call for the whole route bounding box
+        // 2. Single iNaturalist call for the whole route bounding box.
+        // Strip location and pagination params from filterParams — the hotspot
+        // search provides its own bbox and page size, and passing Explore's
+        // lat/lng/radius or place_id would intersect with our bbox and return
+        // 0 results whenever the Explore location differs from the route area.
+        const LOCATION_AND_PAGINATION_PARAMS = [
+          "lat", "lng", "radius", "place_id",
+          "swlat", "swlng", "nelat", "nelng",
+          "per_page", "order_by", "order",
+        ];
+        const safeFilterParams = Object.fromEntries(
+          Object.entries( filterParams ).filter(
+            ( [key] ) => !LOCATION_AND_PAGINATION_PARAMS.includes( key ),
+          ),
+        );
         const bbox = routeBbox( routePoints );
         const response = await searchObservations( {
           ...bbox,
@@ -221,7 +235,7 @@ export function useRouteHotspots() {
               iconic_taxon_name: true,
             },
           },
-          ...filterParams,
+          ...safeFilterParams,
         } );
 
         const observations = response?.results ?? [];
