@@ -1,8 +1,6 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
-import type {
-  NoBottomTabStackScreenProps,
-  TabStackScreenProps,
-} from "navigation/types";
+import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
+import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import {
   ActivityIndicator,
   Body1,
@@ -12,10 +10,11 @@ import {
 } from "components/SharedComponents";
 import BackButton from "components/SharedComponents/Buttons/BackButton";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
-import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
-import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
-import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
+import type {
+  NoBottomTabStackScreenProps,
+  TabStackScreenProps,
+} from "navigation/types";
 import React, {
   useCallback,
   useEffect,
@@ -23,24 +22,35 @@ import React, {
   useState,
 } from "react";
 import { Dimensions, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
-import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
+import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
-import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
+import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import useSubjectDetectionForUri, { preloadSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
+import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import {
-  recordGuess,
   getCachedLookalikes,
+  recordGuess,
   setCachedLookalikes,
   getStats,
 } from "sharedHelpers/speciesGameStats";
+import useSubjectDetectionForUri, {
+  preloadSubjectDetectionForUri,
+} from "sharedHelpers/useSubjectDetectionForUri";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
 const LOOKALIKE_RADIUS_KM = 500;
 const LOCATION_FILTER_RADIUS_KM = 1000;
 const MAX_ZOOM_SCALE = 5;
+
+const gameStyles = StyleSheet.create( {
+  imageContainer: { flex: 1, overflow: "hidden" },
+  imageStyle: { flex: 1 },
+  playingButtonRow: { minHeight: 56 },
+  modalScrollView: { flex: 1 },
+} );
 
 function cropToZoomTransform(
   crop: NormalizedCrop,
@@ -105,7 +115,6 @@ interface RouteParams {
   taxonId: number;
 }
 
-
 const SpeciesGame = ( ) => {
   const navigation = useNavigation<
     NoBottomTabStackScreenProps<"SpeciesGame">["navigation"] &
@@ -146,6 +155,7 @@ const SpeciesGame = ( ) => {
   const usedUuidsRef = useRef<Set<string>>( new Set( ) );
 
   const windowWidth = Dimensions.get( "window" ).width;
+  const { bottom: bottomInset } = useSafeAreaInsets( );
   const imageRef = useRef<SharedZoomableImageRef>( null );
   const detection = useSubjectDetectionForUri( currentPhotoUrl ?? undefined );
 
@@ -208,9 +218,9 @@ const SpeciesGame = ( ) => {
   const fetchPhotoPool = useCallback( async ( id: number ): Promise<PhotoEntry[]> => {
     const url = `${INATURALIST_API}/observations`
       + `?taxon_id=${id}`
-      + `&quality_grade=research`
-      + `&photos=true`
-      + `&sounds=false`
+      + "&quality_grade=research"
+      + "&photos=true"
+      + "&sounds=false"
       + `&per_page=${POOL_SIZE}`
       + "&fields=uuid,observation_photos";
     const res = await fetch( url );
@@ -234,9 +244,13 @@ const SpeciesGame = ( ) => {
     lookalikePool: PhotoEntry[],
   ) => {
     const showTarget = Math.random( ) < 0.5;
-    const pool = showTarget ? targetPool : lookalikePool;
+    const pool = showTarget
+      ? targetPool
+      : lookalikePool;
     const unused = pool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
-    const candidates = unused.length > 0 ? unused : pool;
+    const candidates = unused.length > 0
+      ? unused
+      : pool;
     const entry = candidates[Math.floor( Math.random( ) * candidates.length )] ?? null;
     if ( entry ) usedUuidsRef.current.add( entry.observationUuid );
     setIsTargetShown( showTarget );
@@ -250,7 +264,9 @@ const SpeciesGame = ( ) => {
     // when those images are shown the snap-to-subject zoom happens instantly.
     const PRELOAD_COUNT = 3;
     const unusedTarget = targetPool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
-    const unusedLookalike = lookalikePool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
+    const unusedLookalike = lookalikePool.filter(
+      e => !usedUuidsRef.current.has( e.observationUuid ),
+    );
     [
       ...unusedTarget.slice( 0, PRELOAD_COUNT ),
       ...unusedLookalike.slice( 0, PRELOAD_COUNT ),
@@ -266,7 +282,7 @@ const SpeciesGame = ( ) => {
     prefetchedLocation?: { latitude: number; longitude: number } | null,
   ): Promise<{
     topId: number | null;
-    entries: Array<{ taxonId: number; count: number; observationUuids: string[] }>;
+    entries: { taxonId: number; count: number; observationUuids: string[] }[];
   }> => {
     const cached = getCachedLookalikes( id );
     if ( cached ) return cached;
@@ -278,9 +294,9 @@ const SpeciesGame = ( ) => {
       ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
       : "";
     const baseUrl = `${INATURALIST_API}/observations`
-      + `?taxon_id=${id}`
-      + locationParams
-      + "&per_page=200"
+      + `?taxon_id=${id}${
+        locationParams
+      }&per_page=200`
       + "&order_by=random";
     const [res1, res2] = await Promise.all( [
       fetch( `${baseUrl}&page=1` ),
@@ -325,7 +341,9 @@ const SpeciesGame = ( ) => {
       } ) )
       .sort( ( a, b ) => b.count - a.count );
 
-    const topId = entries.length > 0 ? entries[0].taxonId : null;
+    const topId = entries.length > 0
+      ? entries[0].taxonId
+      : null;
     setCachedLookalikes( id, topId, entries );
     return { topId, entries };
   }, [] );
@@ -367,14 +385,16 @@ const SpeciesGame = ( ) => {
 
         // Filter misidentification candidates to species actually found within 1000km.
         const locationFilterParams = userLocation
-          ? `&lat=${userLocation.latitude}&lng=${userLocation.longitude}&radius=${LOCATION_FILTER_RADIUS_KM}`
+          ? `&lat=${userLocation.latitude}&lng=${userLocation.longitude}`
+            + `&radius=${LOCATION_FILTER_RADIUS_KM}`
           : "";
         const nearbyMisidentEntries = locationFilterParams
           ? await ( async ( ) => {
             const checks = await Promise.all(
               misidentEntries.map( async entry => {
                 const res = await fetch(
-                  `${INATURALIST_API}/observations?taxon_id=${entry.taxonId}${locationFilterParams}&per_page=1`,
+                  `${INATURALIST_API}/observations`
+                    + `?taxon_id=${entry.taxonId}${locationFilterParams}&per_page=1`,
                 );
                 if ( !res.ok ) return true; // fail open
                 const d = await res.json( );
@@ -398,8 +418,8 @@ const SpeciesGame = ( ) => {
               + "&per_page=12"
               + "&order_by=observations_count"
               + "&order=desc"
-              + "&fields=id,preferred_common_name,name"
-              + locationFilterParams,
+              + `&fields=id,preferred_common_name,name${
+                locationFilterParams}`,
           );
           const siblingsData = await siblingsRes.json( );
           const siblings = ( siblingsData.results ?? [] ).filter(
@@ -412,7 +432,7 @@ const SpeciesGame = ( ) => {
 
         // Build weighted candidate list: misidentified species (by count) then siblings.
         // Exclude the target species itself from all candidate lists.
-        const weightedCandidates: Array<{ id: number; weight: number }> = [
+        const weightedCandidates: { id: number; weight: number }[] = [
           ...nearbyMisidentEntries
             .filter( ( e: { taxonId: number } ) => e.taxonId !== taxonId )
             .map( ( e: { taxonId: number; count: number } ) => ( {
@@ -420,7 +440,8 @@ const SpeciesGame = ( ) => {
               weight: e.count,
             } ) ),
           ...siblingCandidates
-            .filter( id => id !== taxonId && !nearbyMisidentEntries.some( ( e: { taxonId: number } ) => e.taxonId === id ) )
+            .filter( id => id !== taxonId
+              && !nearbyMisidentEntries.some( ( e: { taxonId: number } ) => e.taxonId === id ) )
             .map( id => ( { id, weight: 1 } ) ),
         ].filter( c => c.id !== taxonId );
 
@@ -439,9 +460,11 @@ const SpeciesGame = ( ) => {
         // Find the first viable lookalike sequentially so the game starts immediately.
         let firstLookalike: LookalikeCandidate | null = null;
         let firstIndex = -1;
-        for ( let i = 0; i < weightedCandidates.length; i++ ) {
+        for ( let i = 0; i < weightedCandidates.length; i += 1 ) {
           if ( cancelled ) return;
           const { id: candidateId, weight } = weightedCandidates[i];
+          // Sequential fetching is intentional: we try each candidate until one has photos.
+          // eslint-disable-next-line no-await-in-loop
           const [info, pool] = await Promise.all( [
             fetchTaxonInfo( candidateId ),
             fetchPhotoPool( candidateId ),
@@ -573,41 +596,67 @@ const SpeciesGame = ( ) => {
 
   const isSkip = guessedTarget === "skip";
   const isCorrect = !isSkip && guessedTarget === isTargetShown;
-  const shownTaxon = isTargetShown ? target! : lookalike!;
+  const shownTaxon = isTargetShown
+    ? target!
+    : lookalike!;
 
-  const targetButtonLevel = ( ) => {
-    if ( phase !== "revealed" ) return "focus";
-    if ( isTargetShown ) return "focus";
-    if ( guessedTarget === true ) return "warning";
-    return undefined;
-  };
-  const lookalikeButtonLevel = ( ) => {
-    if ( phase !== "revealed" ) return undefined;
-    if ( !isTargetShown ) return "focus";
-    if ( guessedTarget === false ) return "warning";
-    return undefined;
-  };
+  let targetButtonLevel: string | undefined;
+  if ( phase !== "revealed" || isTargetShown ) {
+    targetButtonLevel = "focus";
+  } else if ( guessedTarget === true ) {
+    targetButtonLevel = "warning";
+  }
+
+  let lookalikeButtonLevel: string | undefined;
+  if ( phase === "revealed" ) {
+    if ( !isTargetShown ) {
+      lookalikeButtonLevel = "focus";
+    } else if ( guessedTarget === false ) {
+      lookalikeButtonLevel = "warning";
+    }
+  }
+
+  const navToTaxon = ( id: number ) => navigation.push( "TaxonDetails", { id, rankLevel: 10 } );
+  const onPressTarget = () => navToTaxon( target!.id );
+  const onPressLookalike = () => navToTaxon( lookalike!.id );
 
   const windowHeight = Dimensions.get( "window" ).height;
+  const modalContainerStyle = { maxHeight: windowHeight * 0.82, flex: 1 };
+  const bottomPanelStyle = { paddingBottom: Math.max( 8, bottomInset ) };
+
+  let resultCardBg = "bg-warningRed/20";
+  let resultHeaderColor = "text-warningRed";
+  let resultText = "Incorrect";
+  if ( isCorrect ) {
+    resultCardBg = "bg-inatGreen/20";
+    resultHeaderColor = "text-inatGreen";
+    resultText = "Correct!";
+  } else if ( isSkip ) {
+    resultCardBg = "bg-lightGray";
+    resultHeaderColor = "text-darkGray";
+    resultText = "It was...";
+  }
 
   const lookalikesModalContent = (
     <View
       className="bg-white rounded-t-3xl"
-      style={{ maxHeight: windowHeight * 0.82, flex: 1 }}
+      style={modalContainerStyle}
     >
       <View className="items-center pt-3 pb-1">
         <View className="w-10 h-1 bg-lightGray rounded-full" />
       </View>
+      {/* eslint-disable-next-line i18next/no-literal-string */}
       <Body1 className="text-center font-bold px-4 pt-2 pb-1">
         Why these species?
       </Body1>
 
-      <ScrollView className="px-4" style={{ flex: 1 }}>
+      <ScrollView className="px-4" style={gameStyles.modalScrollView}>
         {usedMisidentifications
           ? (
             <>
               <Body2 className="text-center text-darkGray pb-3">
-                {`Based on 400 random observations of ${taxonLabel( target! )} near your location, these species were most often identified instead:`}
+                {`Based on 400 random observations of ${taxonLabel( target! )}`
+                  + " near your location, these species were most often identified instead:"}
               </Body2>
               {lookalikesData.length === 0
                 ? <ActivityIndicator />
@@ -620,11 +669,14 @@ const SpeciesGame = ( ) => {
                       <Body2 className="italic text-darkGray">{entry.name}</Body2>
                     )}
                     <Body2 className="mt-1">
-                      {`Misidentified ${entry.count} time${entry.count !== 1 ? "s" : ""}`}
+                      {`Misidentified ${entry.count} time${entry.count !== 1
+                        ? "s"
+                        : ""}`}
                     </Body2>
                     <View className="flex-row flex-wrap mt-1 gap-x-3">
                       {entry.observationUuids.map( ( uuid, i ) => (
                         <Pressable
+                          accessibilityRole="button"
                           key={uuid}
                           onPress={() => {
                             setShowLookalikesModal( false );
@@ -646,7 +698,8 @@ const SpeciesGame = ( ) => {
           )
           : (
             <Body2 className="text-center text-darkGray pb-3">
-              {`No misidentification data was found near your location. ${taxonLabel( lookalike! )} is a related species in the same taxonomic group.`}
+              {"No misidentification data was found near your location. "
+                + `${taxonLabel( lookalike! )} is a related species in the same taxonomic group.`}
             </Body2>
           )}
         <View className="pt-2 pb-6">
@@ -671,10 +724,14 @@ const SpeciesGame = ( ) => {
       />
 
       {/* Header bar */}
-      <View className="flex-row items-center justify-between px-3 py-2 bg-white border-b border-lightGray">
+      <View
+        // eslint-disable-next-line max-len
+        className="flex-row items-center justify-between px-3 py-2 bg-white border-b border-lightGray"
+      >
         <BackButton inCustomHeader />
         <Body2 className="font-bold">{accuracyStr}</Body2>
         <Pressable
+          accessibilityRole="button"
           className="w-11 h-11 items-center justify-center"
           onPress={() => setShowLookalikesModal( true )}
         >
@@ -682,119 +739,117 @@ const SpeciesGame = ( ) => {
         </Pressable>
       </View>
 
-      <ScrollView bounces={false}>
-        {/* Photo area — always square */}
-        <View style={{ width: windowWidth, height: windowWidth, overflow: "hidden" }}>
-          {currentPhotoUrl
-            ? (
-              <>
-                <SharedZoomableImage
-                  ref={imageRef}
-                  uri={currentPhotoUrl}
-                  style={{ flex: 1 }}
-                  isDoubleTapEnabled
-                  maxScale={50}
-                  onInteractionEnd={handleInteractionEnd}
-                  onLoad={() => setImageLoading( false )}
-                  onError={() => setImageLoading( false )}
-                />
-                {imageLoading && (
-                  <View
-                    className="absolute inset-0 bg-lightGray items-center justify-center"
-                    style={{ ...StyleSheet.absoluteFillObject }}
-                  >
-                    <ActivityIndicator />
-                  </View>
-                )}
-              </>
-            )
-            : (
-              <View className="flex-1 bg-lightGray items-center justify-center">
-                <ActivityIndicator />
-              </View>
-            )}
-        </View>
+      {/* Photo area — fills remaining space */}
+      <View style={gameStyles.imageContainer}>
+        {currentPhotoUrl
+          ? (
+            <>
+              <SharedZoomableImage
+                ref={imageRef}
+                uri={currentPhotoUrl}
+                style={gameStyles.imageStyle}
+                isDoubleTapEnabled
+                maxScale={50}
+                onInteractionEnd={handleInteractionEnd}
+                onLoad={() => setImageLoading( false )}
+                onError={() => setImageLoading( false )}
+              />
+              {imageLoading && (
+                <View
+                  className="absolute inset-0 bg-lightGray items-center justify-center"
+                  style={{ ...StyleSheet.absoluteFillObject }}
+                >
+                  <ActivityIndicator />
+                </View>
+              )}
+            </>
+          )
+          : (
+            <View className="flex-1 bg-lightGray items-center justify-center">
+              <ActivityIndicator />
+            </View>
+          )}
+      </View>
 
-        {/* Bottom panel */}
-        <View className="bg-white px-4 pt-4 pb-2">
+      {/* Bottom panel */}
+      <View className="bg-white px-4 pt-4" style={bottomPanelStyle}>
         {phase === "revealed" && (
-          <View
-            className={`mb-3 p-3 rounded-lg ${isCorrect ? "bg-inatGreen/20" : isSkip ? "bg-lightGray" : "bg-warningRed/20"}`}
-          >
-            <Body1
-              className={`text-center font-bold ${isCorrect ? "text-inatGreen" : isSkip ? "text-darkGray" : "text-warningRed"}`}
-            >
-              {isCorrect ? "Correct!" : isSkip ? "It was..." : "Incorrect"}
+          <View className={`mb-3 p-3 rounded-lg ${resultCardBg}`}>
+            <Body1 className={`text-center font-bold ${resultHeaderColor}`}>
+              {resultText}
             </Body1>
-            <Body2 className="text-center mt-1 italic">
-              {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
-            </Body2>
-            {currentObservationUuid && (
-              <Pressable
-                onPress={() => navigation.navigate( "ObsDetails" as never, { uuid: currentObservationUuid } as never )}
-              >
-                <Body2 className="text-center mt-1 text-inatGreen underline">
-                  View observation
+            {currentObservationUuid
+              ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => navigation.navigate(
+                    "ObsDetails" as never,
+                    { uuid: currentObservationUuid } as never,
+                  )}
+                >
+                  <Body2 className="text-center mt-1 italic text-inatGreen underline">
+                    {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
+                  </Body2>
+                </Pressable>
+              )
+              : (
+                <Body2 className="text-center mt-1 italic">
+                  {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
                 </Body2>
-              </Pressable>
-            )}
+              )}
           </View>
         )}
 
-        {phase === "playing" ? (
-          <View className="flex-row items-stretch mb-3 gap-2">
-            <View className="flex-1">
-              <Button
-                className="w-full h-full p-0 rounded-none"
-                text={taxonLabel( target! )}
-                level="focus"
-                adjustsFontSizeToFit
-                onPress={() => handleGuess( true )}
-              />
+        {phase === "playing"
+          ? (
+            <View className="flex-row mb-3 gap-2" style={gameStyles.playingButtonRow}>
+              <View className="flex-1">
+                <Button
+                  className="w-full"
+                  text={taxonLabel( target! )}
+                  level="focus"
+                  adjustsFontSizeToFit
+                  onPress={() => handleGuess( true )}
+                />
+              </View>
+              <View className="flex-1">
+                <Button
+                  className="w-full"
+                  text="I don't know"
+                  adjustsFontSizeToFit
+                  onPress={handleSkip}
+                />
+              </View>
+              <View className="flex-1">
+                <Button
+                  className="w-full"
+                  text={taxonLabel( lookalike! )}
+                  adjustsFontSizeToFit
+                  onPress={() => handleGuess( false )}
+                />
+              </View>
             </View>
-            <View className="flex-1">
-              <Button
-                className="w-full h-full p-0 rounded-none"
-                text="I don't know"
-                adjustsFontSizeToFit
-                onPress={handleSkip}
-              />
+          )
+          : (
+            <View className="flex-row mb-3 gap-2">
+              <View className="flex-1">
+                <Button
+                  className="w-full"
+                  text={taxonLabel( target! )}
+                  level={targetButtonLevel}
+                  onPress={onPressTarget}
+                />
+              </View>
+              <View className="flex-1">
+                <Button
+                  className="w-full"
+                  text={taxonLabel( lookalike! )}
+                  level={lookalikeButtonLevel}
+                  onPress={onPressLookalike}
+                />
+              </View>
             </View>
-            <View className="flex-1">
-              <Button
-                className="w-full h-full p-0 rounded-none"
-                text={taxonLabel( lookalike! )}
-                adjustsFontSizeToFit
-                onPress={() => handleGuess( false )}
-              />
-            </View>
-          </View>
-        ) : (
-          <View className="flex-row mb-3 gap-2">
-            <View className="flex-1">
-              <Button
-                className="w-full"
-                text={taxonLabel( target! )}
-                level={targetButtonLevel()}
-                onPress={() => navigation.push( "TaxonDetails", { id: target!.id, rankLevel: 10 } )}
-              />
-            </View>
-            <View className="flex-1">
-              <Button
-                className="w-full"
-                text={taxonLabel( lookalike! )}
-                level={lookalikeButtonLevel()}
-                onPress={() => navigation.push( "TaxonDetails", { id: lookalike!.id, rankLevel: 10 } )}
-              />
-            </View>
-          </View>
-        )}
-
-        {phase === "revealed" && (
-          <Body2 className="text-center text-darkGray mb-1">
-            Tap a species to view its page
-          </Body2>
-        )}
+          )}
 
         {phase === "revealed" && (
           <Button
@@ -804,8 +859,7 @@ const SpeciesGame = ( ) => {
             onPress={handleNext}
           />
         )}
-        </View>
-      </ScrollView>
+      </View>
     </SharedStackViewWrapper>
   );
 };
