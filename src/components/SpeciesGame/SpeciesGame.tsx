@@ -28,7 +28,7 @@ import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTrans
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
+import useSubjectDetectionForUri, { preloadSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
 import {
   recordGuess,
   getCachedLookalikes,
@@ -233,6 +233,16 @@ const SpeciesGame = ( ) => {
     setCurrentObservationUuid( entry?.observationUuid ?? null );
     setGuessedTarget( null );
     setPhase( "playing" );
+
+    // Preload subject detection for the next 3 images from each pool so that
+    // when those images are shown the snap-to-subject zoom happens instantly.
+    const PRELOAD_COUNT = 3;
+    const unusedTarget = targetPool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
+    const unusedLookalike = lookalikePool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
+    [
+      ...unusedTarget.slice( 0, PRELOAD_COUNT ),
+      ...unusedLookalike.slice( 0, PRELOAD_COUNT ),
+    ].forEach( e => preloadSubjectDetectionForUri( e.url ) );
   }, [] );
 
   // Scans 400 random observations of taxonId near the user's location and returns all
