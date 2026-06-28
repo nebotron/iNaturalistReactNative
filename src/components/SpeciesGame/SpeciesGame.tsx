@@ -688,26 +688,29 @@ const SpeciesGame = ( ) => {
         )}
 
         {phase === "playing" ? (
-          <View className="flex-row mb-3 gap-2">
+          <View className="flex-row items-stretch mb-3 gap-2">
             <View className="flex-1">
               <Button
-                className="w-full"
+                className="w-full h-full p-0 rounded-none"
                 text={taxonLabel( target! )}
                 level="focus"
+                adjustsFontSizeToFit
                 onPress={() => handleGuess( true )}
               />
             </View>
             <View className="flex-1">
               <Button
-                className="w-full"
+                className="w-full h-full p-0 rounded-none"
                 text="I don't know"
+                adjustsFontSizeToFit
                 onPress={handleSkip}
               />
             </View>
             <View className="flex-1">
               <Button
-                className="w-full"
+                className="w-full h-full p-0 rounded-none"
                 text={taxonLabel( lookalike! )}
+                adjustsFontSizeToFit
                 onPress={() => handleGuess( false )}
               />
             </View>
