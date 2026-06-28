@@ -114,11 +114,15 @@ def main() -> None:
 
     print(f"Fine-tuning {args.base} for {args.epochs} epochs …")
     from ultralytics import YOLO
+    import torch
 
     # Resolve base model path — allow local files
     base_path = REPO_ROOT / args.base
     base_model = str(base_path) if base_path.exists() else args.base
     print(f"Base model: {base_model}\n")
+
+    device = "mps" if torch.backends.mps.is_available() else "cpu"
+    print(f"Training device: {device}\n")
 
     model = YOLO(base_model)
     model.train(
@@ -126,6 +130,7 @@ def main() -> None:
         epochs=args.epochs,
         imgsz=640,
         batch=args.batch,
+        device=device,
         lr0=1e-4,
         lrf=0.01,
         weight_decay=0.0005,
@@ -145,16 +150,15 @@ def main() -> None:
         sys.exit(f"Training finished but best.pt not found at {best_pt}")
 
     print(f"\nBest checkpoint: {best_pt}")
-    print("Exporting to ONNX INT8 …")
+    print("Exporting to ONNX (float32) …")
 
     trained = YOLO(str(best_pt))
-    trained.set_classes(["subject"])
     export_path = trained.export(
         format="onnx",
         imgsz=640,
-        int8=True,
-        data=str(OUT_DIR / "data.yaml"),
         dynamic=False,
+        simplify=True,
+        opset=12,
     )
     print(f"Exported: {export_path}")
 
