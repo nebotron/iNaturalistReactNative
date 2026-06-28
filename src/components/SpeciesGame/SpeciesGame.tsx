@@ -629,40 +629,41 @@ const SpeciesGame = ( ) => {
         </Pressable>
       </View>
 
-      {/* Photo area — fills remaining vertical space above the bottom panel */}
-      <View style={{ flex: 1, overflow: "hidden" }}>
-        {currentPhotoUrl
-          ? (
-            <>
-              <SharedZoomableImage
-                ref={imageRef}
-                uri={currentPhotoUrl}
-                style={{ flex: 1 }}
-                isDoubleTapEnabled
-                maxScale={50}
-                onInteractionEnd={handleInteractionEnd}
-                onLoad={() => setImageLoading( false )}
-                onError={() => setImageLoading( false )}
-              />
-              {imageLoading && (
-                <View
-                  className="absolute inset-0 bg-lightGray items-center justify-center"
-                  style={{ ...StyleSheet.absoluteFillObject }}
-                >
-                  <ActivityIndicator />
-                </View>
-              )}
-            </>
-          )
-          : (
-            <View className="flex-1 bg-lightGray items-center justify-center">
-              <ActivityIndicator />
-            </View>
-          )}
-      </View>
+      <ScrollView bounces={false}>
+        {/* Photo area — always square */}
+        <View style={{ width: windowWidth, height: windowWidth, overflow: "hidden" }}>
+          {currentPhotoUrl
+            ? (
+              <>
+                <SharedZoomableImage
+                  ref={imageRef}
+                  uri={currentPhotoUrl}
+                  style={{ flex: 1 }}
+                  isDoubleTapEnabled
+                  maxScale={50}
+                  onInteractionEnd={handleInteractionEnd}
+                  onLoad={() => setImageLoading( false )}
+                  onError={() => setImageLoading( false )}
+                />
+                {imageLoading && (
+                  <View
+                    className="absolute inset-0 bg-lightGray items-center justify-center"
+                    style={{ ...StyleSheet.absoluteFillObject }}
+                  >
+                    <ActivityIndicator />
+                  </View>
+                )}
+              </>
+            )
+            : (
+              <View className="flex-1 bg-lightGray items-center justify-center">
+                <ActivityIndicator />
+              </View>
+            )}
+        </View>
 
-      {/* Bottom panel */}
-      <View className="bg-white px-4 pt-4 pb-2">
+        {/* Bottom panel */}
+        <View className="bg-white px-4 pt-4 pb-2">
         {phase === "revealed" && (
           <View
             className={`mb-3 p-3 rounded-lg ${isCorrect ? "bg-inatGreen/20" : isSkip ? "bg-lightGray" : "bg-warningRed/20"}`}
@@ -750,7 +751,8 @@ const SpeciesGame = ( ) => {
             onPress={handleNext}
           />
         )}
-      </View>
+        </View>
+      </ScrollView>
     </SharedStackViewWrapper>
   );
 };
