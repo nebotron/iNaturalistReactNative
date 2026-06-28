@@ -1644,8 +1644,6 @@ You-can-click-join-on-the-project-page = You can click “join” on the project
 You-can-find-answers-on-our-help-page = You can find answers on our help page.
 You-can-now-upload-your-observations-to-iNaturalist-and-contribute = You can now upload your observations to iNaturalist and contribute to global biodiversity research.
 You-can-only-add-20-photos-per-observation = You can only add 20 photos per observation
-# Alert shown when a user selects more photos than can be imported at once
-You-can-only-import-X-photos-at-a-time = You can only import { $count } photos at a time. Only the first { $count } were imported.
 You-can-still-share-the-file = You can still share the file with another app. If you can email it, please send it to { $email }
 You-can-upload-this-observation-to-our-community = You can upload this observation to our community to get an identification from a real person, and help our AI improve its identifications in the future
 You-changed-filters-will-be-discarded = You changed filters, but they were not applied to your explore search results.

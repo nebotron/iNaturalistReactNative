@@ -3,7 +3,6 @@ import {
   userEvent,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
-import { Alert } from "react-native";
 import * as ImagePicker from "react-native-image-picker";
 import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 import factory from "tests/factory";
@@ -146,45 +145,4 @@ describe( "Photo Import", ( ) => {
     await screen.findByTestId( "ObsEdit.saveButton", {}, { timeout: 10_000 } );
     await saveObservationWithPhoto( { skipMyObsWait: true } );
   } );
-
-  // The (old Android) picker doesn't always enforce the selectionLimit we
-  // request, so the app must cap the number of photos it processes to avoid
-  // crashing on very large selections.
-  it( "caps the number of imported photos when the picker returns too many", async ( ) => {
-    // The iOS limit used in the test environment is 500
-    const MAX_PHOTOS_ALLOWED = 500;
-    const tooManyAssets = Array.from(
-      { length: MAX_PHOTOS_ALLOWED + 50 },
-      ( _value, i ) => ( {
-        uri: `file:///tmp/photo_${i}.jpg`,
-        fileName: `photo_${i}.jpg`,
-        timestamp: `2024-01-01T00:00:${String( i % 60 ).padStart( 2, "0" )}.000Z`,
-      } ),
-    );
-    jest.spyOn( ImagePicker, "launchImageLibrary" ).mockImplementation(
-      ( ) => ( { assets: tooManyAssets } ),
-    );
-    const alertSpy = jest.spyOn( Alert, "alert" ).mockImplementation( ( ) => {} );
-
-    renderApp( );
-    await navigateToPhotoImporterFromMyObs();
-
-    const groupPhotosText = await screen.findByText(
-      /Group Photos/,
-      {},
-      { timeout: 30_000 },
-    );
-    expect( groupPhotosText ).toBeVisible();
-    // Only MAX_PHOTOS_ALLOWED photos should be imported, not the full selection
-    expect(
-      await screen.findByText(
-        `IMPORT ${MAX_PHOTOS_ALLOWED} OBSERVATIONS`,
-        {},
-        { timeout: 30_000 },
-      ),
-    ).toBeVisible();
-    expect( alertSpy ).toHaveBeenCalledTimes( 1 );
-
-    alertSpy.mockRestore( );
-  }, 60_000 );
 } );
