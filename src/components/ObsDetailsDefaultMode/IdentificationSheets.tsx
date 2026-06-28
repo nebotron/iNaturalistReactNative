@@ -35,10 +35,17 @@ interface Taxon extends Record<string, unknown> {
   ancestor_ids: number[];
 }
 
+interface ObservationIdentification {
+  current?: boolean;
+  taxon?: { id: number };
+  user?: { id: number };
+}
+
 interface Observation extends Record<string, unknown> {
   uuid?: string;
   taxon?: Taxon;
   community_taxon?: Taxon;
+  identifications?: ObservationIdentification[];
   prefers_community_taxon: boolean | null;
   user?: {
     prefers_community_taxa: boolean;
@@ -153,6 +160,7 @@ interface Props {
   agreeIdentification: boolean;
   closeAgreeWithIdSheet: () => void;
   confirmRemoteObsWasDeleted?: () => void;
+  currentUser?: { id: number } | null;
   handleCommentMutationSuccess: ( data: unknown ) => void;
   handleIdentificationMutationSuccess: ( data: unknown ) => void;
   hideAddCommentSheet: () => void;
@@ -167,6 +175,7 @@ const IdentificationSheets: React.FC<Props> = ( {
   agreeIdentification,
   closeAgreeWithIdSheet,
   confirmRemoteObsWasDeleted,
+  currentUser,
   handleCommentMutationSuccess,
   handleIdentificationMutationSuccess,
   hideAddCommentSheet,
@@ -343,10 +352,18 @@ const IdentificationSheets: React.FC<Props> = ( {
     if ( !newIdentification?.taxon ) {
       throw new Error( "Cannot create an identification without a taxon" );
     }
+    const taxonId = newIdentification.taxon.id;
+    const alreadyHasId = currentUser?.id && observation.identifications?.some(
+      id => id.user?.id === currentUser.id
+        && id.taxon?.id === taxonId
+        && id.current !== false,
+    );
+    if ( alreadyHasId ) return;
+
     // New taxon identification added by user
     const idParams = {
       observation_id: uuid,
-      taxon_id: newIdentification.taxon.id,
+      taxon_id: taxonId,
       vision: newIdentification.vision,
       disagreement: potentialDisagree,
       body: newIdentification?.body,
@@ -354,7 +371,7 @@ const IdentificationSheets: React.FC<Props> = ( {
 
     loadActivityItem( );
     createIdentificationMutate( { identification: idParams } );
-  }, [createIdentificationMutate, newIdentification, uuid, loadActivityItem] );
+  }, [createIdentificationMutate, currentUser, newIdentification, observation.identifications, uuid, loadActivityItem] );
 
   useEffect( ( ) => {
     if ( pendingAutoSubmit && newIdentification ) {
