@@ -14,7 +14,7 @@ import BackButton from "components/SharedComponents/Buttons/BackButton";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
-import { Pressable, ScrollView, View } from "components/styledComponents";
+import { Pressable, View } from "components/styledComponents";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import React, {
   useCallback,
@@ -668,9 +668,9 @@ const SpeciesGame = ( ) => {
         </Pressable>
       </View>
 
-      <ScrollView bounces={false}>
-        {/* Photo area — always square */}
-        <View style={{ width: windowWidth, height: windowWidth, overflow: "hidden" }}>
+      <View className="flex-1">
+        {/* Photo area — fills remaining space */}
+        <View style={{ flex: 1, overflow: "hidden" }}>
           {currentPhotoUrl
             ? (
               <>
@@ -712,18 +712,21 @@ const SpeciesGame = ( ) => {
             >
               {isCorrect ? "Correct!" : isSkip ? "It was..." : "Incorrect"}
             </Body1>
-            <Body2 className="text-center mt-1 italic">
-              {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
-            </Body2>
-            {currentObservationUuid && (
-              <Pressable
-                onPress={() => navigation.navigate( "ObsDetails" as never, { uuid: currentObservationUuid } as never )}
-              >
-                <Body2 className="text-center mt-1 text-inatGreen underline">
-                  View observation
+            {currentObservationUuid
+              ? (
+                <Pressable
+                  onPress={() => navigation.navigate( "ObsDetails" as never, { uuid: currentObservationUuid } as never )}
+                >
+                  <Body2 className="text-center mt-1 italic text-inatGreen underline">
+                    {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
+                  </Body2>
+                </Pressable>
+              )
+              : (
+                <Body2 className="text-center mt-1 italic">
+                  {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
                 </Body2>
-              </Pressable>
-            )}
+              )}
           </View>
         )}
 
@@ -777,12 +780,6 @@ const SpeciesGame = ( ) => {
         )}
 
         {phase === "revealed" && (
-          <Body2 className="text-center text-darkGray mb-1">
-            Tap a species to view its page
-          </Body2>
-        )}
-
-        {phase === "revealed" && (
           <Button
             className="w-full max-w-[500px] self-center mb-2"
             text="Next"
@@ -791,7 +788,7 @@ const SpeciesGame = ( ) => {
           />
         )}
         </View>
-      </ScrollView>
+      </View>
     </SharedStackViewWrapper>
   );
 };
