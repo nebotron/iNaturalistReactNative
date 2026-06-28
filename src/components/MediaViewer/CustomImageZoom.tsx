@@ -30,6 +30,7 @@ interface Props {
   onLongPress?: () => void;
   onInteractionEnd?: () => void;
   onScaleChange?: ( scale: number ) => void;
+  pixelated?: boolean;
 }
 
 const CustomImageZoom = ( {
@@ -48,6 +49,7 @@ const CustomImageZoom = ( {
   onLongPress,
   onInteractionEnd,
   onScaleChange,
+  pixelated = false,
 }: Props ): Node => {
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   const internalZoomRef = useRef<SharedZoomableImageRef>( null );
@@ -85,6 +87,7 @@ const CustomImageZoom = ( {
       brightness={brightness}
       onLongPress={onLongPress}
       onScaleChange={onScaleChange}
+      pixelated={pixelated}
     />
   );
 };

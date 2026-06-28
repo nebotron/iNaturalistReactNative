@@ -303,6 +303,7 @@ const ImageCropView = ( {
               testID={`ImageCropView.${sourceUri}`}
               onInteractionEnd={updateDownsizeStatus}
               onScaleChange={handleScaleChange}
+              pixelated
             />
           </View>
         )}
