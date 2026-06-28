@@ -63,7 +63,7 @@
       UIImage *image = [UIImage imageWithData:data];
       if ( !image ) return;
       dispatch_async( dispatch_get_main_queue(), ^{
-        typeof(weakSelf) strongSelf = weakSelf;
+        __strong typeof(weakSelf) strongSelf = weakSelf;
         if ( strongSelf && [strongSelf->_uri isEqualToString:uri] ) {
           strongSelf->_imageView.image = image;
         }
