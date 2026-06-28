@@ -297,7 +297,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
           {routeCoords.length > 1 && (
             <Polyline
               coordinates={routeCoords.map( toMapCoord )}
-              strokeColor={colors.darkGray}
+              strokeColor={colors.blue}
               strokeWidth={3}
             />
           )}
