@@ -38,6 +38,31 @@ const getCachedResult = ( uri: string ): DetectionResult | null => {
   return existing ?? null;
 };
 
+// Runs the full detection pipeline for a URI and populates the module cache so
+// that when useSubjectDetectionForUri is later called with the same URI it can
+// return synchronously without any async work.
+export const preloadSubjectDetectionForUri = ( uri: string ): void => {
+  if ( cache.has( uri ) ) return;
+  ( async ( ) => {
+    try {
+      const loggedCrop = getAnimalCrop( uri );
+      if ( loggedCrop ) {
+        const imageSize = await getImageSize( toLargeUri( uri ) );
+        if ( !imageSize ) return;
+        cache.set( uri, { crop: loggedCrop, imageWidth: imageSize.w, imageHeight: imageSize.h } );
+      } else {
+        const localUri = await ensureLocalImageForCrop( uri );
+        const imageSize = await getImageSize( localUri );
+        if ( !imageSize ) return;
+        const crop = await detectSubjectInImage( localUri, imageSize.w, imageSize.h );
+        cache.set( uri, { crop, imageWidth: imageSize.w, imageHeight: imageSize.h } );
+      }
+    } catch {
+      // Best-effort preload; ignore failures.
+    }
+  } )( );
+};
+
 const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
   const [prevUri, setPrevUri] = useState<string | undefined>( uri );
   const [result, setResult] = useState<DetectionResult | null>( ( ) => (
