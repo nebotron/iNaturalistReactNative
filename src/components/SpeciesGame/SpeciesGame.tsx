@@ -38,6 +38,7 @@ import {
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
 const LOOKALIKE_RADIUS_KM = 500;
+const LOCATION_FILTER_RADIUS_KM = 1000;
 const MAX_ZOOM_SCALE = 5;
 
 function cropToZoomTransform(
@@ -251,6 +252,7 @@ const SpeciesGame = ( ) => {
   // Results are cached persistently for 30 days to avoid redundant API calls.
   const findMisidentifiedLookalikes = useCallback( async (
     id: number,
+    prefetchedLocation?: { latitude: number; longitude: number } | null,
   ): Promise<{
     topId: number | null;
     entries: Array<{ taxonId: number; count: number; observationUuids: string[] }>;
@@ -258,7 +260,9 @@ const SpeciesGame = ( ) => {
     const cached = getCachedLookalikes( id );
     if ( cached ) return cached;
 
-    const location = await fetchCoarseUserLocation( );
+    const location = prefetchedLocation !== undefined
+      ? prefetchedLocation
+      : await fetchCoarseUserLocation( );
     const locationParams = location
       ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
       : "";
@@ -341,10 +345,34 @@ const SpeciesGame = ( ) => {
         const taxon = taxonData.results?.[0];
         if ( !taxon || cancelled ) return;
 
+        // Fetch user location once so it can be reused for both lookalike detection
+        // and candidate filtering without duplicate GPS/network calls.
+        const userLocation = await fetchCoarseUserLocation( );
+
         // Primary strategy: find the most-confused species via identification disagreements.
         // Fallback: use a sibling in the same parent taxon.
         const { topId: misidentifiedId, entries: misidentEntries }
-          = await findMisidentifiedLookalikes( taxonId );
+          = await findMisidentifiedLookalikes( taxonId, userLocation );
+
+        // Filter misidentification candidates to species actually found within 1000km.
+        const locationFilterParams = userLocation
+          ? `&lat=${userLocation.latitude}&lng=${userLocation.longitude}&radius=${LOCATION_FILTER_RADIUS_KM}`
+          : "";
+        const nearbyMisidentEntries = locationFilterParams
+          ? await ( async ( ) => {
+            const checks = await Promise.all(
+              misidentEntries.map( async entry => {
+                const res = await fetch(
+                  `${INATURALIST_API}/observations?taxon_id=${entry.taxonId}${locationFilterParams}&per_page=1`,
+                );
+                if ( !res.ok ) return true; // fail open
+                const d = await res.json( );
+                return ( d.total_results ?? 0 ) > 0;
+              } ),
+            );
+            return misidentEntries.filter( ( _, i ) => checks[i] );
+          } )( )
+          : misidentEntries;
 
         // Build a prioritized list of lookalike candidates.
         // Always fetch siblings so we can fall back to them if misidentification
@@ -359,7 +387,8 @@ const SpeciesGame = ( ) => {
               + "&per_page=12"
               + "&order_by=observations_count"
               + "&order=desc"
-              + "&fields=id,preferred_common_name,name",
+              + "&fields=id,preferred_common_name,name"
+              + locationFilterParams,
           );
           const siblingsData = await siblingsRes.json( );
           const siblings = ( siblingsData.results ?? [] ).filter(
@@ -373,14 +402,14 @@ const SpeciesGame = ( ) => {
         // Build weighted candidate list: misidentified species (by count) then siblings.
         // Exclude the target species itself from all candidate lists.
         const weightedCandidates: Array<{ id: number; weight: number }> = [
-          ...misidentEntries
+          ...nearbyMisidentEntries
             .filter( ( e: { taxonId: number } ) => e.taxonId !== taxonId )
             .map( ( e: { taxonId: number; count: number } ) => ( {
               id: e.taxonId,
               weight: e.count,
             } ) ),
           ...siblingCandidates
-            .filter( id => id !== taxonId && !misidentEntries.some( ( e: { taxonId: number } ) => e.taxonId === id ) )
+            .filter( id => id !== taxonId && !nearbyMisidentEntries.some( ( e: { taxonId: number } ) => e.taxonId === id ) )
             .map( id => ( { id, weight: 1 } ) ),
         ];
 
@@ -433,10 +462,10 @@ const SpeciesGame = ( ) => {
 
         // Fetch names for all misidentification-based lookalikes in the background
         // so the game starts immediately without waiting.
-        if ( misidentifiedId !== null && misidentEntries.length > 0 ) {
+        if ( misidentifiedId !== null && nearbyMisidentEntries.length > 0 ) {
           setUsedMisidentifications( true );
           Promise.all(
-            misidentEntries.slice( 0, 10 ).map( async entry => {
+            nearbyMisidentEntries.slice( 0, 10 ).map( async entry => {
               const info = await fetchTaxonInfo( entry.taxonId );
               return {
                 taxonId: entry.taxonId,
