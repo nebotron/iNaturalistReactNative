@@ -540,7 +540,7 @@ const SpeciesGame = ( ) => {
   const lookalikesModalContent = (
     <View
       className="bg-white rounded-t-3xl"
-      style={{ maxHeight: windowHeight * 0.82 }}
+      style={{ maxHeight: windowHeight * 0.82, flex: 1 }}
     >
       <View className="items-center pt-3 pb-1">
         <View className="w-10 h-1 bg-lightGray rounded-full" />
