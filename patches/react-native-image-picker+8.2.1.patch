@@ -85,10 +85,10 @@ index 21970d5..b1cd9e9 100644
          String videoQualityString = options.getString("videoQuality");
          if (!TextUtils.isEmpty(videoQualityString) && !videoQualityString.toLowerCase().equals("high")) {
 diff --git a/node_modules/react-native-image-picker/ios/ImagePickerManager.mm b/node_modules/react-native-image-picker/ios/ImagePickerManager.mm
-index 93e99be..b42b3be 100644
+index 93e99be..59dbed9 100644
 --- a/node_modules/react-native-image-picker/ios/ImagePickerManager.mm
 +++ b/node_modules/react-native-image-picker/ios/ImagePickerManager.mm
-@@ -207,6 +207,7 @@ -(NSMutableDictionary *)mapImageToAsset:(UIImage *)image data:(NSData *)data phA
+@@ -207,6 +207,7 @@ NSData* extractImageData(UIImage* image){
      if(phAsset){
          asset[@"timestamp"] = [self getDateTimeInUTC:phAsset.creationDate];
          asset[@"id"] = phAsset.localIdentifier;
@@ -96,6 +96,105 @@ index 93e99be..b42b3be 100644
          // Add more extra data here ...
      }
  
+@@ -526,45 +527,66 @@ CGImagePropertyOrientation CGImagePropertyOrientationForUIImageOrientation(UIIma
+         [assets addObject:(NSDictionary *)[NSNull null]];
+     }
+ 
+-    [results enumerateObjectsUsingBlock:^(PHPickerResult *result, NSUInteger index, BOOL *stop) {
+-        PHAsset *asset = nil;
+-        NSItemProvider *provider = result.itemProvider;
+-
+-        // If include extra, we fetch the PHAsset, this required library permissions
+-        if([self.options[@"includeExtra"] boolValue] && result.assetIdentifier != nil) {
+-            PHFetchResult* fetchResult = [PHAsset fetchAssetsWithLocalIdentifiers:@[result.assetIdentifier] options:nil];
+-            asset = fetchResult.firstObject;
+-        }
++    // Loading the full file data and a decoded UIImage for every selected asset
++    // at once exhausts memory and crashes the app on large selections (e.g. a few
++    // hundred photos). Bound how many assets are processed concurrently and free
++    // each image's buffers as soon as it has been mapped, so large imports
++    // succeed regardless of how many photos were selected.
++    dispatch_semaphore_t loadSemaphore = dispatch_semaphore_create(4);
++    dispatch_queue_t loadQueue = dispatch_queue_create("com.imagepicker.assetLoad", DISPATCH_QUEUE_SERIAL);
+ 
++    [results enumerateObjectsUsingBlock:^(PHPickerResult *result, NSUInteger index, BOOL *stop) {
+         dispatch_group_enter(completionGroup);
++        dispatch_async(loadQueue, ^{
++            dispatch_semaphore_wait(loadSemaphore, DISPATCH_TIME_FOREVER);
+ 
+-        if ([provider hasItemConformingToTypeIdentifier:(NSString *)kUTTypeImage]) {
+-            NSString *identifier = provider.registeredTypeIdentifiers.firstObject;
+-            // Matches both com.apple.live-photo-bundle and com.apple.private.live-photo-bundle
+-            if ([identifier containsString:@"live-photo-bundle"]) {
+-                // Handle live photos
+-                identifier = @"public.jpeg";
+-            }
++            PHAsset *asset = nil;
++            NSItemProvider *provider = result.itemProvider;
+ 
+-            [provider loadFileRepresentationForTypeIdentifier:identifier completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
+-                NSData *data = [[NSData alloc] initWithContentsOfURL:url];
+-                UIImage *image = [[UIImage alloc] initWithData:data];
++            // If include extra, we fetch the PHAsset, this required library permissions
++            if([self.options[@"includeExtra"] boolValue] && result.assetIdentifier != nil) {
++                PHFetchResult* fetchResult = [PHAsset fetchAssetsWithLocalIdentifiers:@[result.assetIdentifier] options:nil];
++                asset = fetchResult.firstObject;
++            }
+ 
+-                assets[index] = [self mapImageToAsset:image data:data phAsset:asset];
+-                dispatch_group_leave(completionGroup);
+-            }];
+-        } else if ([provider hasItemConformingToTypeIdentifier:(NSString *)kUTTypeMovie]) {
+-            [provider loadFileRepresentationForTypeIdentifier:(NSString *)kUTTypeMovie completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
+-                NSDictionary *mappedAsset = [self mapVideoToAsset:url phAsset:asset error:nil];
+-                if (nil != mappedAsset) {
+-                    assets[index] = mappedAsset;
++            if ([provider hasItemConformingToTypeIdentifier:(NSString *)kUTTypeImage]) {
++                NSString *identifier = provider.registeredTypeIdentifiers.firstObject;
++                // Matches both com.apple.live-photo-bundle and com.apple.private.live-photo-bundle
++                if ([identifier containsString:@"live-photo-bundle"]) {
++                    // Handle live photos
++                    identifier = @"public.jpeg";
+                 }
++
++                [provider loadFileRepresentationForTypeIdentifier:identifier completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
++                    @autoreleasepool {
++                        NSData *data = [[NSData alloc] initWithContentsOfURL:url];
++                        UIImage *image = [[UIImage alloc] initWithData:data];
++
++                        NSDictionary *mappedAsset = [self mapImageToAsset:image data:data phAsset:asset];
++                        @synchronized (assets) {
++                            assets[index] = mappedAsset;
++                        }
++                    }
++                    dispatch_semaphore_signal(loadSemaphore);
++                    dispatch_group_leave(completionGroup);
++                }];
++            } else if ([provider hasItemConformingToTypeIdentifier:(NSString *)kUTTypeMovie]) {
++                [provider loadFileRepresentationForTypeIdentifier:(NSString *)kUTTypeMovie completionHandler:^(NSURL * _Nullable url, NSError * _Nullable error) {
++                    NSDictionary *mappedAsset = [self mapVideoToAsset:url phAsset:asset error:nil];
++                    if (nil != mappedAsset) {
++                        @synchronized (assets) {
++                            assets[index] = mappedAsset;
++                        }
++                    }
++                    dispatch_semaphore_signal(loadSemaphore);
++                    dispatch_group_leave(completionGroup);
++                }];
++            } else {
++                // The provider didn't have an item matching photo or video (fails on M1 Mac Simulator)
++                dispatch_semaphore_signal(loadSemaphore);
+                 dispatch_group_leave(completionGroup);
+-            }];
+-        } else {
+-            // The provider didn't have an item matching photo or video (fails on M1 Mac Simulator)
+-            dispatch_group_leave(completionGroup);
+-        }
++            }
++        });
+     }];
+ 
+     dispatch_group_notify(completionGroup, dispatch_get_main_queue(), ^{
 diff --git a/node_modules/react-native-image-picker/lib/typescript/types.d.ts b/node_modules/react-native-image-picker/lib/typescript/types.d.ts
 index 2d703a7..595e6cd 100644
 --- a/node_modules/react-native-image-picker/lib/typescript/types.d.ts
