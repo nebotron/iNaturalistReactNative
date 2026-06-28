@@ -4,7 +4,6 @@ import { createIdentification } from "api/identifications";
 import AgreeWithIDSheet from "components/ObsDetailsSharedComponents/Sheets/AgreeWithIDSheet";
 import PotentialDisagreementSheet
   from "components/ObsDetailsSharedComponents/Sheets/PotentialDisagreementSheet";
-import SuggestIDSheet from "components/ObsDetailsSharedComponents/Sheets/SuggestIDSheet";
 import {
   TextInputSheet,
   WarningSheet,
@@ -60,6 +59,7 @@ interface IdentState {
   showPotentialDisagreementSheet: boolean;
   showSuggestIdSheet: boolean;
   identTaxon?: Taxon | null;
+  pendingAutoSubmit: boolean;
 }
 
 type IdentAction =
@@ -81,6 +81,7 @@ const initialIdentState: IdentState = {
   showPotentialDisagreementSheet: false,
   showSuggestIdSheet: false,
   identTaxon: null,
+  pendingAutoSubmit: false,
 };
 
 const CLEAR_SUGGESTED_TAXON = "CLEAR_SUGGESTED_TAXON";
@@ -111,7 +112,7 @@ export const identReducer = ( state: IdentState, action: IdentAction ): IdentSta
         identTaxon: action.taxon,
       };
     case CONFIRM_ID:
-      return { ...state, showSuggestIdSheet: true };
+      return { ...state, pendingAutoSubmit: true };
     case HIDE_POTENTIAL_DISAGREEMENT_SHEET:
       return {
         ...state,
@@ -137,6 +138,7 @@ export const identReducer = ( state: IdentState, action: IdentAction ): IdentSta
         showIdentBodySheet: false,
         newIdentification: null,
         identTaxon: null,
+        pendingAutoSubmit: false,
       };
     case CLEAR_SUGGESTED_TAXON:
       return { ...state, identTaxon: null };
@@ -191,7 +193,7 @@ const IdentificationSheets: React.FC<Props> = ( {
     identTaxon,
     newIdentification,
     showPotentialDisagreementSheet,
-    showSuggestIdSheet,
+    pendingAutoSubmit,
   } = state;
 
   const realm = useRealm( );
@@ -354,17 +356,12 @@ const IdentificationSheets: React.FC<Props> = ( {
     createIdentificationMutate( { identification: idParams } );
   }, [createIdentificationMutate, newIdentification, uuid, loadActivityItem] );
 
-  const onSuggestId = useCallback( ( ) => {
-    if ( hasPotentialDisagreement( identTaxon ) ) {
-      dispatch( { type: "SHOW_POTENTIAL_DISAGREEMENT_SHEET" } );
-    } else {
+  useEffect( ( ) => {
+    if ( pendingAutoSubmit && newIdentification ) {
+      dispatch( { type: SUBMIT_IDENTIFICATION } );
       doSuggestId();
     }
-  }, [
-    doSuggestId,
-    hasPotentialDisagreement,
-    identTaxon,
-  ] );
+  }, [doSuggestId, newIdentification, pendingAutoSubmit] );
 
   const onPotentialDisagreePressed = useCallback( ( potentialDisagree?: boolean ) => {
     doSuggestId( potentialDisagree );
@@ -403,10 +400,6 @@ const IdentificationSheets: React.FC<Props> = ( {
     }
   }, [commentIsOptional, onCommentAdded] );
 
-  const hideSuggestedIdSheet = ( ) => {
-    dispatch( { type: HIDE_SUGGESTED_ID_SHEET } );
-  };
-
   const addCommentHeaderText = showAddCommentHeader( );
 
   return (
@@ -443,16 +436,6 @@ const IdentificationSheets: React.FC<Props> = ( {
           textInputStyle={textInputStyle}
           initialInput={newIdentification?.body}
           confirm={onChangeIdentBody}
-        />
-      )}
-      {showSuggestIdSheet && (
-        <SuggestIDSheet
-          editIdentBody={editIdentBody}
-          hidden={showIdentBodySheet}
-          loading={isCreateIdPending}
-          onSuggestId={onSuggestId}
-          identification={newIdentification}
-          onPressClose={hideSuggestedIdSheet}
         />
       )}
       {showPotentialDisagreementSheet && newIdentification && (

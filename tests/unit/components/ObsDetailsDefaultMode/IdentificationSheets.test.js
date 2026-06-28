@@ -67,7 +67,7 @@ describe( "IdentificationSheets", () => {
   };
 
   describe( "SuggestIDSheet", () => {
-    it( "shows SuggestIDSheet when identTaxonId is provided via route params", async () => {
+    it( "auto-submits identification when identTaxonId is provided via route params", async () => {
       useRoute.mockReturnValue( {
         params: {
           identTaxonId: mockTaxon.id,
@@ -82,9 +82,12 @@ describe( "IdentificationSheets", () => {
       );
 
       await waitFor( () => {
-        expect( screen.getByText(
-          t( "Would-you-like-to-suggest-the-following-identification" ),
-        ) ).toBeVisible();
+        expect( mockMutate ).toHaveBeenCalledWith( {
+          identification: expect.objectContaining( {
+            observation_id: mockObservation.uuid,
+            taxon_id: mockTaxon.id,
+          } ),
+        } );
       } );
     } );
   } );
@@ -149,6 +152,7 @@ describe( "IdentificationSheets", () => {
       showPotentialDisagreementSheet: false,
       showSuggestIdSheet: false,
       identTaxon: null,
+      pendingAutoSubmit: false,
     };
 
     it( "handles SET_NEW_IDENTIFICATION action", () => {
