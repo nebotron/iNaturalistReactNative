@@ -26,6 +26,7 @@ import MapView, {
   Marker,
   Polyline,
 } from "react-native-maps";
+import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -40,6 +41,20 @@ interface NominatimResult {
   display_name: string;
   lat: string;
   lon: string;
+}
+
+async function reverseGeocode( lat: number, lon: number ): Promise<string | null> {
+  try {
+    const url = `${NOMINATIM_BASE}/reverse?lat=${lat}&lon=${lon}&format=json`;
+    const response = await fetch( url, {
+      headers: { "Accept-Language": "en" },
+    } );
+    if ( !response.ok ) return null;
+    const data: NominatimResult = await response.json();
+    return data.display_name ?? null;
+  } catch {
+    return null;
+  }
 }
 
 async function searchNominatim( text: string ): Promise<NominatimResult[]> {
@@ -160,6 +175,19 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
   const {
     hotspots, routeCoords, loading, error, findHotspots,
   } = useRouteHotspots();
+
+  useEffect( () => {
+    fetchAccurateUserLocation().then( async loc => {
+      if ( !loc ) return;
+      const coord: LatLng = { latitude: loc.latitude, longitude: loc.longitude };
+      const name = await reverseGeocode( loc.latitude, loc.longitude );
+      const label = name ?? `${loc.latitude.toFixed( 4 )}, ${loc.longitude.toFixed( 4 )}`;
+      setStartPoint( coord );
+      setStartText( label );
+      setEndPoint( coord );
+      setEndText( label );
+    } );
+  }, [] );
 
   useEffect( () => {
     if ( routeCoords.length === 0 || !mapRef.current ) return;
