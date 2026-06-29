@@ -33,6 +33,7 @@ import {
   recordGuess,
   getCachedLookalikes,
   setCachedLookalikes,
+  getStats,
 } from "sharedHelpers/speciesGameStats";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
@@ -121,6 +122,15 @@ const SpeciesGame = ( ) => {
   const [score, setScore] = useState( 0 );
   const [totalGuesses, setTotalGuesses] = useState( 0 );
   const [isTargetShown, setIsTargetShown] = useState( true );
+
+  // Load accumulated stats from previous sessions on mount
+  useEffect( ( ) => {
+    const savedStats = getStats( taxonId );
+    if ( savedStats ) {
+      setScore( savedStats.correct );
+      setTotalGuesses( savedStats.total );
+    }
+  }, [taxonId] );
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>( null );
   const [imageLoading, setImageLoading] = useState( false );
   const [currentObservationUuid, setCurrentObservationUuid] = useState<string | null>( null );
