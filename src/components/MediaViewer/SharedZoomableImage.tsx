@@ -35,7 +35,6 @@ type SharedZoomableImageProps = ImageZoomProps & {
   onScaleChange?: ( scale: number ) => void;
   onLoad?: () => void;
   onError?: () => void;
-  pixelated?: boolean;
 };
 
 const SharedZoomableImage: ForwardRefRenderFunction<
@@ -72,7 +71,6 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     onScaleChange,
     onLoad,
     onError,
-    pixelated = false,
   },
   ref,
 ) => {
@@ -159,14 +157,12 @@ const SharedZoomableImage: ForwardRefRenderFunction<
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const brightnessFilter: any = brightness !== 1 ? { filter: [{ brightness }] } : null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const pixelatedStyle: any = pixelated ? { imageRendering: "pixelated" } : null;
 
   return (
     <GestureDetector gesture={composedGestures}>
       <Animated.Image
         testID={testID}
-        style={[styles.image, style, animatedStyle, brightnessFilter, pixelatedStyle]}
+        style={[styles.image, style, animatedStyle, brightnessFilter]}
         source={{ uri }}
         resizeMode="contain"
         onLayout={onZoomableLayout}
