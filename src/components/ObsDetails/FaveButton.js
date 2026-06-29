@@ -17,6 +17,8 @@ import {
 } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
+const OBS_IMAGE_ACTION_ICON_SIZE = 50;
+
 type Props = {
   observation: Object,
   currentUser?: Object,
@@ -119,11 +121,21 @@ const FaveButton = ( {
     ? undefined
     : "absolute top-3 right-3";
 
+  const iconSize = stacked
+    ? OBS_IMAGE_ACTION_ICON_SIZE
+    : 25;
+  const buttonWidth = stacked
+    ? OBS_IMAGE_ACTION_ICON_SIZE
+    : undefined;
+  const buttonHeight = stacked
+    ? OBS_IMAGE_ACTION_ICON_SIZE
+    : undefined;
+
   if ( loading ) {
     return (
       <ActivityIndicator
         className={classNames( positionClassName )}
-        size={25}
+        size={iconSize}
       />
     );
   }
@@ -133,7 +145,9 @@ const FaveButton = ( {
       icon={isFaved
         ? "star"
         : "star-bold-outline"}
-      size={25}
+      size={iconSize}
+      width={buttonWidth}
+      height={buttonHeight}
       onPress={toggleFave}
       color={colors.white}
       className={classNames( positionClassName )}
