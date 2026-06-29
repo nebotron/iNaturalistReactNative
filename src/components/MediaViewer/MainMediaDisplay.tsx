@@ -206,11 +206,13 @@ const MainMediaDisplay = ( {
                 if ( zoomRefForThisPhoto.current ) {
                   const transform = zoomRefForThisPhoto.current.readTransform?.( );
                   if ( transform && photo.url ) {
+                    const viewportWidth = Math.min( 1, 1 / transform.scale );
+                    const viewportHeight = Math.min( 1, 1 / transform.scale );
                     const crop = {
-                      x: Math.max( 0, Math.min( 1 - transform.scale, transform.translateX / 100 ) ),
-                      y: Math.max( 0, Math.min( 1 - transform.scale, transform.translateY / 100 ) ),
-                      w: Math.min( 1, transform.scale ),
-                      h: Math.min( 1, transform.scale ),
+                      x: Math.max( 0, Math.min( 1 - viewportWidth, -transform.translateX / screenWidth ) ),
+                      y: Math.max( 0, Math.min( 1 - viewportHeight, -transform.translateY / screenWidth ) ),
+                      w: viewportWidth,
+                      h: viewportHeight,
                     };
                     saveAnimalCrop( photo.url, crop );
                     onSaveViewport?.( photo.url );
