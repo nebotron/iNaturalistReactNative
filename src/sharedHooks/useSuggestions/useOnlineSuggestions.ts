@@ -1,7 +1,6 @@
 import {
   useNetInfo,
 } from "@react-native-community/netinfo";
-import { useQueryClient } from "@tanstack/react-query";
 import scoreImage from "api/computerVision";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
@@ -87,7 +86,6 @@ const useOnlineSuggestions = (
     shouldFetchOnlineSuggestions,
   } = options;
 
-  const queryClient = useQueryClient( );
   const [timedOut, setTimedOut] = useState( false );
   const { isConnected } = useNetInfo( );
   const currentUser = useCurrentUser();
@@ -143,11 +141,19 @@ const useOnlineSuggestions = (
     },
   );
 
-  // Give up on suggestions request after a timeout
+  // Stop blocking the UI on online suggestions after a timeout so the offline
+  // suggestions are shown. We intentionally do NOT cancel the query: a slow
+  // request is left running so its results still replace the offline ones once
+  // they arrive instead of being abandoned (which left online IDs never
+  // loading on slow connections). We also only start the timer once the request
+  // is actually in flight, so preparing the image (resizing) doesn't eat into
+  // the timeout window.
   useEffect( ( ) => {
+    if ( fetchStatus !== "fetching" ) {
+      return ( ) => { };
+    }
     const timer = setTimeout( ( ) => {
       if ( onlineSuggestions === undefined ) {
-        queryClient.cancelQueries( { queryKey } );
         onFetchError( { isOnline: true } );
         setTimedOut( true );
       }
@@ -156,7 +162,7 @@ const useOnlineSuggestions = (
     return ( ) => {
       clearTimeout( timer );
     };
-  }, [onlineSuggestions, queryKey, queryClient, onFetchError] );
+  }, [fetchStatus, onlineSuggestions, onFetchError] );
 
   const resetTimeout = useCallback( ( ) => {
     setTimedOut( false );
@@ -205,15 +211,13 @@ const useOnlineSuggestions = (
     fetchStatus,
   };
 
-  return timedOut
-    ? {
-      ...queryObject,
-      onlineSuggestions: undefined,
-    }
-    : {
-      ...queryObject,
-      onlineSuggestions,
-    };
+  // Always surface online suggestions once they exist. Even after a timeout we
+  // want a slow response to replace the offline suggestions when it lands,
+  // rather than being hidden permanently.
+  return {
+    ...queryObject,
+    onlineSuggestions,
+  };
 };
 
 export default useOnlineSuggestions;
