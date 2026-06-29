@@ -18,6 +18,7 @@ import React, {
 } from "react";
 import {
   Alert,
+  Linking,
   StyleSheet,
   TouchableOpacity,
 } from "react-native";
@@ -31,7 +32,7 @@ import colors from "styles/tailwindColors";
 
 import HotspotListItem from "./HotspotListItem";
 import type { Hotspot, RoutePoint } from "./hooks/useRouteHotspots";
-import { useRouteHotspots } from "./hooks/useRouteHotspots";
+import { fetchOSRMRoute, useRouteHotspots } from "./hooks/useRouteHotspots";
 
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
 
@@ -156,6 +157,8 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
   const [startPoint, setStartPoint] = useState<LatLng | null>( null );
   const [endPoint, setEndPoint] = useState<LatLng | null>( null );
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>( null );
+  const [hotspotRouteCoords, setHotspotRouteCoords] = useState<RoutePoint[]>( [] );
+  const [hotspotRouteLoading, setHotspotRouteLoading] = useState( false );
 
   const {
     hotspots, routeCoords, loading, error, findHotspots,
@@ -200,6 +203,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
       return;
     }
     setSelectedHotspotId( null );
+    setHotspotRouteCoords( [] );
     await findHotspots(
       { latitude: startPoint.latitude, longitude: startPoint.longitude },
       { latitude: endPoint.latitude, longitude: endPoint.longitude },
@@ -207,8 +211,13 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     );
   }, [startPoint, endPoint, findHotspots, t] );
 
-  const handleHotspotPress = useCallback( ( hotspot: Hotspot ) => {
-    setSelectedHotspotId( prev => ( prev === hotspot.id ? null : hotspot.id ) );
+  const handleHotspotPress = useCallback( async ( hotspot: Hotspot ) => {
+    const isDeselecting = selectedHotspotId === hotspot.id;
+    setSelectedHotspotId( isDeselecting ? null : hotspot.id );
+    if ( isDeselecting ) {
+      setHotspotRouteCoords( [] );
+      return;
+    }
     if ( mapRef.current ) {
       mapRef.current.animateToRegion( {
         latitude: hotspot.centerLatitude,
@@ -217,7 +226,39 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
         longitudeDelta: 0.5,
       }, 400 );
     }
-  }, [] );
+    if ( !startPoint || !endPoint ) return;
+    setHotspotRouteLoading( true );
+    try {
+      const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
+      const [leg1, leg2] = await Promise.all( [
+        fetchOSRMRoute( startPoint, via ),
+        fetchOSRMRoute( via, endPoint ),
+      ] );
+      setHotspotRouteCoords( [...leg1.coords, ...leg2.coords] );
+      if ( mapRef.current ) {
+        const allCoords: LatLng[] = [...leg1.coords, ...leg2.coords].map(
+          p => ( { latitude: p.latitude, longitude: p.longitude } ),
+        );
+        mapRef.current.fitToCoordinates( allCoords, {
+          edgePadding: { top: 60, right: 40, bottom: 60, left: 40 },
+          animated: true,
+        } );
+      }
+    } catch {
+      // silently ignore route fetch failure for hotspot
+    } finally {
+      setHotspotRouteLoading( false );
+    }
+  }, [selectedHotspotId, startPoint, endPoint] );
+
+  const handleOpenInGoogleMaps = useCallback( ( hotspot: Hotspot ) => {
+    if ( !startPoint || !endPoint ) return;
+    const origin = `${startPoint.latitude},${startPoint.longitude}`;
+    const destination = `${endPoint.latitude},${endPoint.longitude}`;
+    const waypoint = `${hotspot.centerLatitude},${hotspot.centerLongitude}`;
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${waypoint}&travelmode=driving`;
+    Linking.openURL( url );
+  }, [startPoint, endPoint] );
 
   const canSearch = !!( startPoint && endPoint );
 
@@ -301,6 +342,13 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
               strokeWidth={3}
             />
           )}
+          {hotspotRouteCoords.length > 1 && (
+            <Polyline
+              coordinates={hotspotRouteCoords.map( toMapCoord )}
+              strokeColor={colors.inatGreen}
+              strokeWidth={4}
+            />
+          )}
           {hotspots.map( hotspot => (
             <Marker
               key={hotspot.id}
@@ -318,12 +366,14 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
           ) )}
         </MapView>
 
-        {loading && (
+        {( loading || hotspotRouteLoading ) && (
           <View
             className="absolute top-0 left-0 right-0 bottom-0 items-center justify-center bg-white/60"
           >
             <ActivityIndicator size={48} />
-            <Body2 className="mt-3 text-darkGray">{t( "Searching-for-hotspots" )}</Body2>
+            <Body2 className="mt-3 text-darkGray">
+              {loading ? t( "Searching-for-hotspots" ) : t( "Loading-route" )}
+            </Body2>
           </View>
         )}
       </View>
@@ -349,6 +399,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
                     rank={idx + 1}
                     selected={selectedHotspotId === hotspot.id}
                     onPress={() => handleHotspotPress( hotspot )}
+                    onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
                   />
                 ) )}
               </ScrollView>

@@ -70,7 +70,7 @@ function distanceToPolylineKm( pt: RoutePoint, polyline: RoutePoint[] ): number 
   return minDist;
 }
 
-async function fetchOSRMRoute( start: RoutePoint, end: RoutePoint ): Promise<{
+export async function fetchOSRMRoute( start: RoutePoint, end: RoutePoint ): Promise<{
   coords: RoutePoint[];
   durationSec: number;
 }> {
