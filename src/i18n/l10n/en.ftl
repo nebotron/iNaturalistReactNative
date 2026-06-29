@@ -759,6 +759,8 @@ Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
 Load-saved-filter = Load saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
+# Loading message shown while fetching the route through a selected hotspot
+Loading-route = Loading route…
 Loads-content-that-requires-an-Internet-connection = Loads content that requires an Internet connection
 LOCATION = LOCATION
 Location = Location
@@ -1224,8 +1226,6 @@ SEARCH-TAXA = SEARCH TAXA
 SEARCH-USERS = SEARCH USERS
 # Loading message shown while searching for wildlife hotspots
 Searching-for-hotspots = Searching for hotspots…
-# Loading message shown while fetching the route through a selected hotspot
-Loading-route = Loading route…
 # Accessibility label for navigating to journal posts screen
 See-journal-posts = See journal posts
 # Accessibility label for Observations button on UserProfile screen
