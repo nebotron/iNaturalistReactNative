@@ -70,6 +70,7 @@ export const useGestures = ( {
   const savedFocal = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
   const focal = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
   const savedTranslate = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
+  const savedTranslatePanOnly = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
   const translate = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
 
   const { getInteractionId, updateInteractionId } = useInteractionId();
@@ -108,6 +109,8 @@ export const useGestures = ( {
     ) );
     savedTranslate.x.value = 0;
     savedTranslate.y.value = 0;
+    savedTranslatePanOnly.x.value = 0;
+    savedTranslatePanOnly.y.value = 0;
     const lastTranslateXValue = translate.x.value;
     translate.x.value = withTiming( 0, withTimingConfig, ( ...args ) => onAnimationEnd(
       interactionId,
@@ -133,6 +136,8 @@ export const useGestures = ( {
     focal.y,
     savedTranslate.x,
     savedTranslate.y,
+    savedTranslatePanOnly.x,
+    savedTranslatePanOnly.y,
     translate.x,
     translate.y,
     getInteractionId,
@@ -219,6 +224,8 @@ export const useGestures = ( {
     focal.y.value = transform.focalY;
     savedTranslate.x.value = transform.translateX;
     savedTranslate.y.value = transform.translateY;
+    savedTranslatePanOnly.x.value = transform.translateX;
+    savedTranslatePanOnly.y.value = transform.translateY;
     translate.x.value = transform.translateX;
     translate.y.value = transform.translateY;
   }, [
@@ -229,6 +236,8 @@ export const useGestures = ( {
     savedScale,
     savedTranslate.x,
     savedTranslate.y,
+    savedTranslatePanOnly.x,
+    savedTranslatePanOnly.y,
     scale,
     translate.x,
     translate.y,
@@ -397,12 +406,12 @@ export const useGestures = ( {
     } )
     .onStart( event => {
       runOnJS( onPanStarted )( event );
-      savedTranslate.x.value = translate.x.value;
-      savedTranslate.y.value = translate.y.value;
+      savedTranslatePanOnly.x.value = translate.x.value;
+      savedTranslatePanOnly.y.value = translate.y.value;
     } )
     .onUpdate( event => {
-      translate.x.value = savedTranslate.x.value + event.translationX;
-      translate.y.value = savedTranslate.y.value + event.translationY;
+      translate.x.value = savedTranslatePanOnly.x.value + event.translationX;
+      translate.y.value = savedTranslatePanOnly.y.value + event.translationY;
     } )
     .onEnd( ( event, success ) => {
       const {
