@@ -85,6 +85,7 @@ const CustomImageZoom = ( {
       brightness={brightness}
       onLongPress={onLongPress}
       onScaleChange={onScaleChange}
+      onSaveViewport={onSaveViewport}
     />
   );
 };

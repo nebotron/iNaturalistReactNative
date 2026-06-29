@@ -59,6 +59,7 @@ interface Props {
   onDeletePhoto?: ( uri: string ) => void;
   onDeleteSound?: ( uri: string ) => void;
   onReorderPhotos?: Function;
+  onSaveViewport?: ( uri: string ) => void;
   photos?: PhotoItem[];
   sounds?: SoundItem[];
   timeObservedAt?: string | null;
@@ -78,6 +79,7 @@ const MediaViewer = ( {
   onDeletePhoto,
   onDeleteSound,
   onReorderPhotos,
+  onSaveViewport,
   photos = [],
   sounds = [],
   timeObservedAt,
@@ -233,6 +235,7 @@ const MediaViewer = ( {
         onDeletePhoto={photoUri => setMediaToDelete( { type: "photo", uri: photoUri } )}
         onDeleteSound={soundUri => setMediaToDelete( { type: "sound", uri: soundUri } )}
         onLongPressPhoto={handleLongPressPhoto}
+        onSaveViewport={onSaveViewport}
       />
       <MediaSelector
         editable={editable}

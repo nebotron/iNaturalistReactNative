@@ -19,6 +19,7 @@ type Props = {
   onDeletePhoto?: Function,
   onDeleteSound?: Function,
   onReorderPhotos?: Function,
+  onSaveViewport?: Function,
   photos?: {
     id?: number,
     url: string,
@@ -47,6 +48,7 @@ const MediaViewerModal = ( {
   onDeletePhoto,
   onDeleteSound,
   onReorderPhotos,
+  onSaveViewport,
   photos = [],
   showModal,
   sounds,
@@ -72,6 +74,7 @@ const MediaViewerModal = ( {
         onDeletePhoto={onDeletePhoto}
         onDeleteSound={onDeleteSound}
         onReorderPhotos={onReorderPhotos}
+        onSaveViewport={onSaveViewport}
         photos={photos}
         sounds={sounds}
         timeObservedAt={timeObservedAt}

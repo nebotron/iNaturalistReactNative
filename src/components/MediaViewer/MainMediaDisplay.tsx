@@ -6,7 +6,7 @@ import {
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, {
-  useCallback, useEffect, useMemo, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import { ActivityIndicator } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
@@ -19,6 +19,7 @@ import type { CarouselRenderItem, ICarouselInstance } from "react-native-reanima
 import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
 import { saveBrightness } from "sharedHelpers/brightnessLog";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
@@ -27,6 +28,7 @@ import colors from "styles/tailwindColors";
 
 import AttributionButton from "./AttributionButton";
 import CustomImageZoom from "./CustomImageZoom";
+import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 
 interface PhotoItem {
   attribution?: string;
@@ -61,6 +63,7 @@ interface Props {
   sounds?: Omit<SoundItem, "type">[];
   selectedMediaIndex: number;
   setSelectedMediaIndex: ( index: number ) => void;
+  onSaveViewport?: ( uri: string ) => void;
 }
 
 const MainMediaDisplay = ( {
@@ -76,6 +79,7 @@ const MainMediaDisplay = ( {
   sounds = [],
   selectedMediaIndex,
   setSelectedMediaIndex,
+  onSaveViewport,
 }: Props ) => {
   const { t } = useTranslation( );
   const { screenWidth } = useDeviceOrientation( );
@@ -110,15 +114,18 @@ const MainMediaDisplay = ( {
     return ( ) => { cancelled = true; };
   }, [photos] );
 
-  const renderPhoto = ( photo: PhotoItem ) => {
+  const renderPhoto = useCallback( ( photo: PhotoItem, photoIndex: number ) => {
     const remoteUri = Photo.displayLocalOrRemoteLargePhoto( photo );
     const localUri = remoteUri ? localUris[remoteUri] : undefined;
     const hasAttribution = photo?.attribution;
+    const zoomRefForThisPhoto = React.createRef<SharedZoomableImageRef>();
+
     return (
       <View className="flex-1">
         { localUri
           ? (
             <CustomImageZoom
+              zoomRef={zoomRefForThisPhoto}
               uri={localUri}
               resetKey={localUri}
               setZooming={setZooming}
@@ -181,7 +188,7 @@ const MainMediaDisplay = ( {
               </View>
             )
         }
-        <View className="absolute bottom-4 left-4">
+        <View className="absolute bottom-4 left-4 flex-row items-center gap-2">
           <INatIconButton
             onPress={( ) => setShowBrightnessSlider( prev => !prev )}
             icon="sliders"
@@ -193,6 +200,31 @@ const MainMediaDisplay = ( {
             testID="MediaViewer.brightnessButton"
             size={20}
           />
+          { photoIndex === selectedMediaIndex && !editable && (
+            <INatIconButton
+              onPress={( ) => {
+                if ( zoomRefForThisPhoto.current ) {
+                  const transform = zoomRefForThisPhoto.current.readTransform?.( );
+                  if ( transform && photo.url ) {
+                    const crop = {
+                      x: Math.max( 0, Math.min( 1 - transform.scale, transform.translateX / 100 ) ),
+                      y: Math.max( 0, Math.min( 1 - transform.scale, transform.translateY / 100 ) ),
+                      w: Math.min( 1, transform.scale ),
+                      h: Math.min( 1, transform.scale ),
+                    };
+                    saveAnimalCrop( photo.url, crop );
+                    onSaveViewport?.( photo.url );
+                  }
+                }
+              }}
+              icon="checkmark-circle"
+              color={colors.inatGreen}
+              className="bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px]"
+              accessibilityLabel={t( "Save-viewport" )}
+              testID="MediaViewer.agreeButton"
+              size={20}
+            />
+          ) }
         </View>
         { showBrightnessSlider && (
           <View className="absolute bottom-16 left-0 right-0 px-4 py-2">
@@ -253,7 +285,7 @@ const MainMediaDisplay = ( {
         ) }
       </View>
     );
-  };
+  }, [localUris, selectedMediaIndex, onLongPressPhoto, brightness, showBrightnessSlider, editable, onCropPhoto, onDeletePhoto, setBrightness, setBrightnessSaved, setBrightnessSaving, brightnessSaved, brightnessSaving, cropPhotoLabel, deletePhotoLabel, t, onSaveViewport] );
 
   const renderSound = ( sound: SoundItem ) => (
     <View
@@ -281,7 +313,7 @@ const MainMediaDisplay = ( {
 
   const renderItem: CarouselRenderItem<PhotoItem | SoundItem> = ( { item } ) => (
     item.type === "photo"
-      ? renderPhoto( item )
+      ? renderPhoto( item, items.indexOf( item ) )
       : renderSound( item )
   );
 
