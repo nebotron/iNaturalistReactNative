@@ -22,7 +22,7 @@ const ObsImageActionButtons = ( {
   afterAction = ( ) => undefined,
   directAgree = false,
   openAgreeWithIdSheet,
-  containerClassName = "absolute bottom-2 right-2 z-10 flex-col items-end gap-4",
+  containerClassName = "absolute bottom-2 right-2 z-10 flex-col items-end gap-6",
 }: Props ): Node => {
   if ( !currentUser || !observation ) {
     return null;
