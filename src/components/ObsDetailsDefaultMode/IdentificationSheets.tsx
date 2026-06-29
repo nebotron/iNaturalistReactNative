@@ -14,6 +14,7 @@ import React, {
   useCallback,
   useEffect,
   useReducer,
+  useRef,
 } from "react";
 import { Alert, Platform } from "react-native";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
@@ -274,6 +275,13 @@ const IdentificationSheets: React.FC<Props> = ( {
         && observationTaxon.ancestor_ids.includes( taxon?.id );
   }, [observation] );
 
+  // Keep a ref so the effect below can read the latest hasPotentialDisagreement
+  // without listing it as a dependency (which would cause double-submission when
+  // the observation updates synchronously inside onSuccess before onSettled clears
+  // the identTaxonId param).
+  const hasPotentialDisagreementRef = useRef( hasPotentialDisagreement );
+  hasPotentialDisagreementRef.current = hasPotentialDisagreement;
+
   // Translates identification-related params to local state and shows appropriate sheet
   useEffect( ( ) => {
     let cancelled = false;
@@ -299,7 +307,7 @@ const IdentificationSheets: React.FC<Props> = ( {
 
       if ( cancelled ) return;
 
-      const isDisagreement = hasPotentialDisagreement( taxon );
+      const isDisagreement = hasPotentialDisagreementRef.current( taxon );
 
       if ( isDisagreement ) {
         dispatch( { type: "SHOW_POTENTIAL_DISAGREEMENT_SHEET" } );
@@ -320,7 +328,9 @@ const IdentificationSheets: React.FC<Props> = ( {
     identAt,
     identTaxonId,
     identTaxonFromVision,
-    hasPotentialDisagreement,
+    // hasPotentialDisagreement intentionally omitted: the observation updates
+    // synchronously in onSuccess (before onSettled clears identTaxonId), which
+    // would retrigger this effect and submit a duplicate identification.
     realm,
   ] );
 
