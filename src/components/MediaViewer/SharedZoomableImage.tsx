@@ -1,4 +1,3 @@
-import { AnimatedPixelatedImage } from "./PixelatedImage";
 import type { ForwardRefRenderFunction } from "react";
 import React, {
   forwardRef,
@@ -160,29 +159,20 @@ const SharedZoomableImage: ForwardRefRenderFunction<
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const brightnessFilter: any = brightness !== 1 ? { filter: [{ brightness }] } : null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const pixelatedStyle: any = pixelated ? { imageRendering: "pixelated" } : null;
 
   return (
     <GestureDetector gesture={composedGestures}>
-      {pixelated
-        ? (
-          <AnimatedPixelatedImage
-            testID={testID}
-            style={[styles.image, style, animatedStyle, brightnessFilter]}
-            uri={uri}
-            onLayout={onZoomableLayout}
-          />
-        )
-        : (
-          <Animated.Image
-            testID={testID}
-            style={[styles.image, style, animatedStyle, brightnessFilter]}
-            source={{ uri }}
-            resizeMode="contain"
-            onLayout={onZoomableLayout}
-            onLoad={onLoad}
-            onError={onError}
-          />
-        )}
+      <Animated.Image
+        testID={testID}
+        style={[styles.image, style, animatedStyle, brightnessFilter, pixelatedStyle]}
+        source={{ uri }}
+        resizeMode="contain"
+        onLayout={onZoomableLayout}
+        onLoad={onLoad}
+        onError={onError}
+      />
     </GestureDetector>
   );
 };
