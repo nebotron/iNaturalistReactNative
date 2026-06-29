@@ -119,6 +119,7 @@ const SpeciesGame = ( ) => {
   const [lookalike, setLookalike] = useState<TaxonInfo | null>( null );
   const [round, setRound] = useState( 1 );
   const [score, setScore] = useState( 0 );
+  const [totalGuesses, setTotalGuesses] = useState( 0 );
   const [isTargetShown, setIsTargetShown] = useState( true );
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>( null );
   const [imageLoading, setImageLoading] = useState( false );
@@ -518,6 +519,7 @@ const SpeciesGame = ( ) => {
     const correct = guessIsTarget === isTargetShown;
     setGuessedTarget( guessIsTarget );
     if ( correct ) setScore( prev => prev + 1 );
+    setTotalGuesses( prev => prev + 1 );
     recordGuess( taxonId, correct );
     setPhase( "revealed" );
   }, [isTargetShown, taxonId] );
@@ -537,9 +539,8 @@ const SpeciesGame = ( ) => {
     startRound( targetPoolRef.current, lookalikePoolRef.current );
   }, [startRound, selectWeightedLookalike] );
 
-  const answered = round - 1;
-  const accuracyStr = answered > 0
-    ? `${score}/${answered} (${Math.round( ( score / answered ) * 100 )}% accuracy)`
+  const accuracyStr = totalGuesses > 0
+    ? `${score}/${totalGuesses} (${Math.round( ( score / totalGuesses ) * 100 )}% accuracy)`
     : "0/0";
 
   if ( phase === "loading" || !target || !lookalike ) {
