@@ -24,8 +24,8 @@ export interface Hotspot {
 
 const EARTH_RADIUS_KM = 6371;
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
-// ~3 km grid cells for clustering (1° ≈ 111 km)
-const GRID_DEG = 0.027;
+// Max radius for each k-means cluster (3 km diameter)
+const MAX_CLUSTER_RADIUS_KM = 1.5;
 // Hotspots must be within this distance of the route to be shown
 const MAX_ROUTE_DISTANCE_KM = 25;
 // Evaluate detour times for this many top-by-obs candidates
@@ -70,7 +70,7 @@ function distanceToPolylineKm( pt: RoutePoint, polyline: RoutePoint[] ): number 
   return minDist;
 }
 
-async function fetchOSRMRoute( start: RoutePoint, end: RoutePoint ): Promise<{
+export async function fetchOSRMRoute( start: RoutePoint, end: RoutePoint ): Promise<{
   coords: RoutePoint[];
   durationSec: number;
 }> {
@@ -131,13 +131,121 @@ function getObsCoords( obs: any ): { lat: number; lng: number } | null {
   return null;
 }
 
+type LatLng = { lat: number; lng: number };
+
+// Farthest-first k-means: runs for up to maxIter iterations, returns centroids and member indices
+function runKMeans(
+  points: LatLng[],
+  k: number,
+  maxIter = 20,
+): { centroid: LatLng; memberIndices: number[] }[] {
+  const n = points.length;
+  const effectiveK = Math.min( k, n );
+  if ( effectiveK <= 0 ) return [];
+
+  // Farthest-first initialisation (deterministic)
+  const seedIndices: number[] = [0];
+  while ( seedIndices.length < effectiveK ) {
+    let bestIdx = -1;
+    let bestDist = -1;
+    for ( let i = 0; i < n; i++ ) {
+      if ( seedIndices.includes( i ) ) continue;
+      let minD = Infinity;
+      for ( const si of seedIndices ) {
+        const d = haversineKm( points[i].lat, points[i].lng, points[si].lat, points[si].lng );
+        if ( d < minD ) minD = d;
+      }
+      if ( minD > bestDist ) { bestDist = minD; bestIdx = i; }
+    }
+    if ( bestIdx < 0 ) break;
+    seedIndices.push( bestIdx );
+  }
+
+  let centroids: LatLng[] = seedIndices.map( i => ( { ...points[i] } ) );
+  let assignments = new Array<number>( n ).fill( 0 );
+
+  for ( let iter = 0; iter < maxIter; iter++ ) {
+    const newAssign = points.map( p => {
+      let minD = Infinity;
+      let best = 0;
+      for ( let c = 0; c < centroids.length; c++ ) {
+        const d = haversineKm( p.lat, p.lng, centroids[c].lat, centroids[c].lng );
+        if ( d < minD ) { minD = d; best = c; }
+      }
+      return best;
+    } );
+
+    if ( iter > 0 && !newAssign.some( ( a, i ) => a !== assignments[i] ) ) break;
+    assignments = newAssign;
+
+    const sums = centroids.map( () => ( { lat: 0, lng: 0, n: 0 } ) );
+    for ( let i = 0; i < n; i++ ) {
+      const c = assignments[i];
+      sums[c].lat += points[i].lat;
+      sums[c].lng += points[i].lng;
+      sums[c].n++;
+    }
+    centroids = sums.map( ( s, ci ) => s.n > 0
+      ? { lat: s.lat / s.n, lng: s.lng / s.n }
+      : centroids[ci],
+    );
+  }
+
+  const groups: { centroid: LatLng; memberIndices: number[] }[] = centroids.map( c => ( {
+    centroid: c,
+    memberIndices: [],
+  } ) );
+  for ( let i = 0; i < n; i++ ) groups[assignments[i]].memberIndices.push( i );
+  return groups.filter( g => g.memberIndices.length > 0 );
+}
+
+// Recursively split a group of points until every cluster fits within maxRadiusKm
+function splitToRadiusConstraint(
+  points: LatLng[],
+  maxRadiusKm: number,
+): { centroid: LatLng; memberIndices: number[] }[] {
+  if ( points.length === 0 ) return [];
+
+  const [cluster] = runKMeans( points, 1 );
+  if ( !cluster ) return [];
+  const { centroid } = cluster;
+
+  const exceedsRadius = points.some(
+    p => haversineKm( p.lat, p.lng, centroid.lat, centroid.lng ) > maxRadiusKm,
+  );
+  if ( !exceedsRadius || points.length <= 1 ) return [cluster];
+
+  // Split into two, then recurse on each half
+  const halves = runKMeans( points, 2 );
+  return halves.flatMap( half => {
+    const subPoints = half.memberIndices.map( i => points[i] );
+    const subClusters = splitToRadiusConstraint( subPoints, maxRadiusKm );
+    return subClusters.map( sc => ( {
+      centroid: sc.centroid,
+      memberIndices: sc.memberIndices.map( i => half.memberIndices[i] ),
+    } ) );
+  } );
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function clusterByGrid( observations: any[] ): Map<string, {
+function clusterByKMeans( observations: any[] ): Map<string, {
   centerLat: number;
   centerLng: number;
   count: number;
   taxa: Map<number, HotspotSpecies>;
 }> {
+  // Extract valid positions paired with their original observation
+  const points: LatLng[] = [];
+  const obsForPoint: typeof observations = [];
+  for ( const obs of observations ) {
+    const coords = getObsCoords( obs );
+    if ( !coords ) continue;
+    points.push( coords );
+    obsForPoint.push( obs );
+  }
+
+  const clusters = splitToRadiusConstraint( points, MAX_CLUSTER_RADIUS_KM );
+
   const cells = new Map<string, {
     centerLat: number;
     centerLng: number;
@@ -145,39 +253,31 @@ function clusterByGrid( observations: any[] ): Map<string, {
     taxa: Map<number, HotspotSpecies>;
   }>();
 
-  for ( const obs of observations ) {
-    const coords = getObsCoords( obs );
-    if ( !coords ) continue;
-
-    const cellLat = ( Math.floor( coords.lat / GRID_DEG ) + 0.5 ) * GRID_DEG;
-    const cellLng = ( Math.floor( coords.lng / GRID_DEG ) + 0.5 ) * GRID_DEG;
-    const key = `${cellLat.toFixed( 5 )},${cellLng.toFixed( 5 )}`;
-
-    if ( !cells.has( key ) ) {
-      cells.set( key, {
-        centerLat: cellLat,
-        centerLng: cellLng,
-        count: 0,
-        taxa: new Map(),
-      } );
-    }
-    const cell = cells.get( key )!;
-    cell.count++;
-
-    const taxon = obs.taxon;
-    if ( taxon?.id ) {
-      const prev = cell.taxa.get( taxon.id );
-      if ( prev ) {
-        prev.count++;
-      } else {
-        cell.taxa.set( taxon.id, {
-          id: taxon.id,
-          name: taxon.name ?? "",
-          preferred_common_name: taxon.preferred_common_name,
-          count: 1,
-        } );
+  for ( const { centroid, memberIndices } of clusters ) {
+    const key = `${centroid.lat.toFixed( 5 )},${centroid.lng.toFixed( 5 )}`;
+    const taxa = new Map<number, HotspotSpecies>();
+    for ( const i of memberIndices ) {
+      const taxon = obsForPoint[i].taxon;
+      if ( taxon?.id ) {
+        const prev = taxa.get( taxon.id );
+        if ( prev ) {
+          prev.count++;
+        } else {
+          taxa.set( taxon.id, {
+            id: taxon.id,
+            name: taxon.name ?? "",
+            preferred_common_name: taxon.preferred_common_name,
+            count: 1,
+          } );
+        }
       }
     }
+    cells.set( key, {
+      centerLat: centroid.lat,
+      centerLng: centroid.lng,
+      count: memberIndices.length,
+      taxa,
+    } );
   }
 
   return cells;
@@ -226,8 +326,8 @@ export function useRouteHotspots() {
 
         const observations = response?.results ?? [];
 
-        // 3. Cluster observations into geographic grid cells
-        const cells = clusterByGrid( observations );
+        // 3. Cluster observations with k-means (≤3 km diameter per cluster)
+        const cells = clusterByKMeans( observations );
 
         // 4. Filter to cells within MAX_ROUTE_DISTANCE_KM, take top candidates by obs count
         const candidates: Array<{
