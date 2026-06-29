@@ -422,7 +422,7 @@ const SpeciesGame = ( ) => {
           ...siblingCandidates
             .filter( id => id !== taxonId && !nearbyMisidentEntries.some( ( e: { taxonId: number } ) => e.taxonId === id ) )
             .map( id => ( { id, weight: 1 } ) ),
-        ];
+        ].filter( c => c.id !== taxonId );
 
         if ( weightedCandidates.length === 0 ) {
           if ( !cancelled ) setLoadError( "No similar species found to compare against." );
@@ -476,16 +476,19 @@ const SpeciesGame = ( ) => {
         if ( misidentifiedId !== null && nearbyMisidentEntries.length > 0 ) {
           setUsedMisidentifications( true );
           Promise.all(
-            nearbyMisidentEntries.slice( 0, 10 ).map( async entry => {
-              const info = await fetchTaxonInfo( entry.taxonId );
-              return {
-                taxonId: entry.taxonId,
-                count: entry.count,
-                observationUuids: entry.observationUuids,
-                name: info?.name ?? String( entry.taxonId ),
-                commonName: info?.preferredCommonName,
-              };
-            } ),
+            nearbyMisidentEntries
+              .filter( e => e.taxonId !== taxonId )
+              .slice( 0, 10 )
+              .map( async entry => {
+                const info = await fetchTaxonInfo( entry.taxonId );
+                return {
+                  taxonId: entry.taxonId,
+                  count: entry.count,
+                  observationUuids: entry.observationUuids,
+                  name: info?.name ?? String( entry.taxonId ),
+                  commonName: info?.preferredCommonName,
+                };
+              } ),
           ).then( withNames => {
             if ( !cancelled ) setLookalikesData( withNames );
           } ).catch( ( ) => { /* best-effort, ignore errors */ } );
