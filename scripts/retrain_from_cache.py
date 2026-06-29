@@ -34,8 +34,9 @@ def main() -> None:
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--epochs", type=int, default=100,
                         help="Number of training epochs (default: 100)")
-    parser.add_argument("--base", default="yolov8s-worldv2.pt",
-                        help="Base model to fine-tune (default: yolov8s-worldv2.pt)")
+    parser.add_argument("--base", default="yolov8n.pt",
+                        help="Base model to fine-tune (default: yolov8n.pt — "
+                             "matches the deployed yolov8n.onnx output [1,5,8400])")
     parser.add_argument("--batch", type=int, default=8,
                         help="Batch size (default: 8)")
     parser.add_argument("--patience", type=int, default=20,
