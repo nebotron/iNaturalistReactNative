@@ -1,6 +1,7 @@
 import {
   Body2,
   Body3,
+  Button,
   Heading4,
   INatIcon,
 } from "components/SharedComponents";
@@ -15,6 +16,7 @@ interface Props {
   rank: number;
   selected: boolean;
   onPress: () => void;
+  onOpenInGoogleMaps?: () => void;
 }
 
 const HotspotListItem = ( {
@@ -22,6 +24,7 @@ const HotspotListItem = ( {
   rank,
   selected,
   onPress,
+  onOpenInGoogleMaps,
 }: Props ) => {
   const detourText = hotspot.detourMinutes < 1
     ? "On route"
@@ -78,6 +81,15 @@ const HotspotListItem = ( {
               </View>
             ) )}
           </View>
+        )}
+        {selected && onOpenInGoogleMaps && (
+          <Button
+            className="mt-3"
+            text="Open in Google Maps"
+            level="focus"
+            onPress={onOpenInGoogleMaps}
+            testID="HotspotListItem.openInGoogleMaps"
+          />
         )}
       </View>
     </Pressable>
