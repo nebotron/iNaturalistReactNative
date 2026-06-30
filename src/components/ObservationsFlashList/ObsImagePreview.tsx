@@ -116,6 +116,7 @@ const ObsImagePreview = ( {
   const swipeGesture = useMemo(
     ( ) => Gesture.Pan( )
       .runOnJS( true )
+      .maxPointers( 1 )
       .activeOffsetX( [-10, 10] )
       .failOffsetY( [-10, 10] )
       .onUpdate( ( { translationX } ) => {
@@ -144,7 +145,6 @@ const ObsImagePreview = ( {
       } ),
     [containerWidth, goToNext, goToPrev, photos],
   );
-
 
   const carouselWidthStyle = useMemo(
     ( ) => ( containerWidth
@@ -198,6 +198,7 @@ const ObsImagePreview = ( {
 
     return (
       <View
+        pointerEvents="none"
         className={classNames(
           "absolute",
           "right-0",
@@ -250,6 +251,7 @@ const ObsImagePreview = ( {
     if ( useShortGradient ) {
       return (
         <LinearGradient
+          pointerEvents="none"
           colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.6) 100%)"]}
           className="absolute w-full h-full"
           start={{ x: 0, y: 0.5 }}
@@ -259,6 +261,7 @@ const ObsImagePreview = ( {
     }
     return (
       <LinearGradient
+        pointerEvents="none"
         colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.5) 100%)"]}
         className="absolute w-full h-full"
         start={{ x: 0, y: 0 }}
@@ -283,6 +286,7 @@ const ObsImagePreview = ( {
 
     return (
       <View
+        pointerEvents="none"
         className={classNames( "absolute left-0 top-0 p-1", {
           "p-2": !isSmall,
         } )}
