@@ -1,9 +1,17 @@
 import classNames from "classnames";
 import { IconicTaxonIcon } from "components/SharedComponents";
 import { FasterImageView, View } from "components/styledComponents";
-import React, { useCallback, useState } from "react";
+import React, {
+  useCallback, useMemo, useRef, useState,
+} from "react";
 import type { LayoutChangeEvent } from "react-native";
-import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import {
+  computeCropStyles,
+  pinchCropAtFocalPoint,
+} from "sharedHelpers/normalizedCropTypes";
+import { getPendingViewport, setPendingViewport } from "sharedHelpers/pendingViewport";
 import useAutoBrightnessForUri from "sharedHelpers/useAutoBrightnessForUri";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 
@@ -53,19 +61,69 @@ const ObsImage = ( {
       : undefined,
   );
 
+  // Live viewport from a two-finger zoom/pan gesture. Null means "show the
+  // detected crop". Reset synchronously when the photo changes so recycled
+  // grid cells never keep a stale viewport.
+  const [viewportUri, setViewportUri] = useState( uri?.uri );
+  const [viewport, setViewport] = useState<NormalizedCrop | null>( null );
+  if ( viewportUri !== uri?.uri ) {
+    setViewportUri( uri?.uri );
+    setViewport( null );
+  }
+
+  const effectiveCrop = viewport ?? detection?.crop ?? null;
+
+  const gestureStartCrop = useRef<NormalizedCrop | null>( null );
+  const gestureStartFocal = useRef<{ x: number; y: number } | null>( null );
+
+  // Two fingers zoom and pan the touched image; one finger falls through to the
+  // list scroll. Pinch's focal point handles both zoom and pan in one gesture.
+  // The start crop resumes from any prior viewport for this photo (kept in the
+  // pending-viewport map) so successive pinches keep zooming from where they
+  // left off, falling back to the detected crop.
+  const photoUri = uri?.uri;
+  const zoomPanGesture = useMemo( ( ) => Gesture.Pinch( )
+    .runOnJS( true )
+    .onStart( event => {
+      gestureStartCrop.current = ( photoUri && getPendingViewport( photoUri ) )
+        || detection?.crop
+        || null;
+      gestureStartFocal.current = { x: event.focalX, y: event.focalY };
+    } )
+    .onUpdate( event => {
+      const startCrop = gestureStartCrop.current;
+      const startFocal = gestureStartFocal.current;
+      if ( !startCrop || !startFocal || !detection || !containerSize ) return;
+      const nextCrop = pinchCropAtFocalPoint(
+        startCrop,
+        event.scale,
+        startFocal.x,
+        startFocal.y,
+        event.focalX,
+        event.focalY,
+        containerSize,
+        detection.imageWidth,
+        detection.imageHeight,
+      );
+      setViewport( nextCrop );
+      if ( photoUri ) setPendingViewport( photoUri, nextCrop );
+    } ), [containerSize, detection, photoUri] );
+
   // crop===undefined: detection still in progress (brightness hook waits)
   // crop===null:      no subject detection requested (measure full image)
   // crop===NormalizedCrop: detection done; measure only the subject region
-  const brightnessUri = autoAdjustBrightness && uri?.uri ? uri.uri : undefined;
+  const brightnessUri = autoAdjustBrightness && uri?.uri
+    ? uri.uri
+    : undefined;
   const brightnessCrop = autoDetectSubject
-    ? detection?.crop          // undefined until detection resolves
-    : null;                    // no detection → full-image measurement
+    ? detection?.crop // undefined until detection resolves
+    : null; // no detection → full-image measurement
 
   const autoBrightness = useAutoBrightnessForUri( brightnessUri, brightnessCrop );
 
-  const cropStyles = detection && containerSize
+  const cropStyles = detection && containerSize && effectiveCrop
     ? computeCropStyles(
-      detection.crop,
+      effectiveCrop,
       containerSize,
       detection.imageWidth,
       detection.imageHeight,
@@ -77,7 +135,7 @@ const ObsImage = ( {
     ? { filter: [{ brightness: autoBrightness }] }
     : null;
 
-  return (
+  const content = (
     <View
       className={classNames( CLASS_NAMES, "relative overflow-hidden" )}
       onLayout={autoDetectSubject
@@ -134,6 +192,16 @@ const ObsImage = ( {
         <View className="absolute w-full h-full bg-white opacity-50" />
       ) }
     </View>
+  );
+
+  if ( !autoDetectSubject ) {
+    return content;
+  }
+
+  return (
+    <GestureDetector gesture={zoomPanGesture}>
+      {content}
+    </GestureDetector>
   );
 };
 

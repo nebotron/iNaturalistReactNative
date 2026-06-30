@@ -50,6 +50,7 @@ type Props = {
   currentUser?: Object,
   openAgreeWithIdSheet?: ( taxon: Object ) => void,
   afterAgree?: Function,
+  onAgree?: Function,
   directAgree?: boolean,
   positionClassName?: string,
   stacked?: boolean,
@@ -60,6 +61,7 @@ const AgreeButton = ( {
   currentUser,
   openAgreeWithIdSheet,
   afterAgree = ( ) => undefined,
+  onAgree = ( ) => undefined,
   directAgree = false,
   positionClassName,
   stacked = false,
@@ -111,6 +113,7 @@ const AgreeButton = ( {
     {
       onSuccess: ( ) => {
         setIsAgreed( true );
+        onAgree( );
         afterAgree( );
         setLoading( false );
       },
