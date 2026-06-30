@@ -5,8 +5,10 @@ import ObsImageActionButtons from "components/ObsDetails/ObsImageActionButtons";
 import { Body2, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
-import React, { useMemo } from "react";
+import React, { useCallback, useMemo } from "react";
 import Photo from "realmModels/Photo";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import { takePendingViewport } from "sharedHelpers/pendingViewport";
 
 import ObsImagePreview from "./ObsImagePreview";
 import ObsUploadStatus from "./ObsUploadStatus";
@@ -75,6 +77,16 @@ const ObsGridItem = ( {
     p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
   ), [observation] );
 
+  // When the user agrees after zooming/panning a photo with two fingers, persist
+  // that viewport to the crop log as a ground-truth crop for the subject.
+  const handleAgree = useCallback( ( ) => {
+    allPhotos.forEach( p => {
+      if ( !p?.uri ) return;
+      const viewport = takePendingViewport( p.uri );
+      if ( viewport ) saveAnimalCrop( p.uri, viewport );
+    } );
+  }, [allPhotos] );
+
   return (
     <ObsImagePreview
       key={observation.uuid}
@@ -105,6 +117,7 @@ const ObsGridItem = ( {
           observation={observation}
           currentUser={currentUser}
           afterAction={onExploreObservationAction}
+          onAgree={handleAgree}
           directAgree
         />
       )}
