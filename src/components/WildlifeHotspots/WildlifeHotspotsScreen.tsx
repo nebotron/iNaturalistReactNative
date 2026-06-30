@@ -9,6 +9,7 @@ import {
 } from "components/SharedComponents";
 import BackButton from "components/SharedComponents/Buttons/BackButton";
 import { ScrollView, TextInput, View } from "components/styledComponents";
+import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import type { TabStackScreenProps } from "navigation/types";
 import React, {
   useCallback,
@@ -163,6 +164,19 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
   const {
     hotspots, routeCoords, loading, error, findHotspots,
   } = useRouteHotspots();
+
+  useEffect( () => {
+    const initializeLocation = async () => {
+      const userLocation = await fetchAccurateUserLocation();
+      if ( userLocation ) {
+        setStartPoint( { latitude: userLocation.latitude, longitude: userLocation.longitude } );
+        setEndPoint( { latitude: userLocation.latitude, longitude: userLocation.longitude } );
+        setStartText( t( "Current-location" ) );
+        setEndText( t( "Current-location" ) );
+      }
+    };
+    initializeLocation();
+  }, [t] );
 
   useEffect( () => {
     if ( routeCoords.length === 0 || !mapRef.current ) return;
