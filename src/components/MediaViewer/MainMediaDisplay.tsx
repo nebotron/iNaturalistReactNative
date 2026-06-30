@@ -5,9 +5,7 @@ import {
   TransparentCircleButton,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
-import React, {
-  useCallback, useEffect, useMemo, useState,
-} from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { ActivityIndicator } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
 import {
@@ -19,7 +17,6 @@ import type { CarouselRenderItem, ICarouselInstance } from "react-native-reanima
 import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
 import { saveBrightness } from "sharedHelpers/brightnessLog";
-import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
@@ -100,47 +97,21 @@ const MainMediaDisplay = ( {
   const deleteSoundLabel = t( "Delete-sound" );
   const cropPhotoLabel = t( "CROP-PHOTO" );
 
-  // Resolve each photo's large URI to a local file once so both the viewer
-  // and the crop editor share the same single download.
-  const [localUris, setLocalUris] = useState<Record<string, string>>( {} );
-  useEffect( ( ) => {
-    let cancelled = false;
-    photos.forEach( photo => {
-      const remoteUri = Photo.displayLocalOrRemoteLargePhoto( photo );
-      if ( !remoteUri ) return;
-      ensureLocalImageForCrop( remoteUri ).then( localUri => {
-        if ( !cancelled ) {
-          setLocalUris( prev => ( { ...prev, [remoteUri]: localUri } ) );
-        }
-      } ).catch( ( ) => { /* show nothing until retry */ } );
-    } );
-    return ( ) => { cancelled = true; };
-  }, [photos] );
-
   const renderPhoto = ( photo: PhotoItem ) => {
-    const remoteUri = Photo.displayLocalOrRemoteLargePhoto( photo );
-    const localUri = remoteUri ? localUris[remoteUri] : undefined;
+    const uri = Photo.displayLocalOrRemoteLargePhoto( photo );
     const hasAttribution = photo?.attribution;
     return (
       <View className="flex-1">
-        { localUri
-          ? (
-            <CustomImageZoom
-              uri={localUri}
-              resetKey={localUri}
-              setZooming={setZooming}
-              selectedMediaIndex={selectedMediaIndex}
-              brightness={brightness}
-              onLongPress={onLongPressPhoto
-                ? ( ) => onLongPressPhoto( localUri )
-                : undefined}
-            />
-          )
-          : (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator color={colors.white} />
-            </View>
-          ) }
+        <CustomImageZoom
+          uri={uri}
+          resetKey={uri}
+          setZooming={setZooming}
+          selectedMediaIndex={selectedMediaIndex}
+          brightness={brightness}
+          onLongPress={onLongPressPhoto
+            ? ( ) => onLongPressPhoto( uri )
+            : undefined}
+        />
         {
           editable
             ? (

@@ -30,9 +30,7 @@ import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTrans
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import {
-  getCachedLookalikes,
   recordGuess,
-  setCachedLookalikes,
   getStats,
 } from "sharedHelpers/speciesGameStats";
 import useSubjectDetectionForUri, {
@@ -276,7 +274,6 @@ const SpeciesGame = ( ) => {
   // Scans 400 random observations of taxonId near the user's location and returns all
   // species-level taxa that appeared as alternate identifications, sorted by frequency.
   // Also records which observation UUIDs contained each misidentification.
-  // Results are cached persistently for 30 days to avoid redundant API calls.
   const findMisidentifiedLookalikes = useCallback( async (
     id: number,
     prefetchedLocation?: { latitude: number; longitude: number } | null,
@@ -284,12 +281,7 @@ const SpeciesGame = ( ) => {
     topId: number | null;
     entries: { taxonId: number; count: number; observationUuids: string[] }[];
   }> => {
-    const cached = getCachedLookalikes( id );
-    if ( cached ) return cached;
-
-    const location = prefetchedLocation !== undefined
-      ? prefetchedLocation
-      : await fetchCoarseUserLocation( );
+    const location = await fetchCoarseUserLocation( );
     const locationParams = location
       ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
       : "";
@@ -311,10 +303,7 @@ const SpeciesGame = ( ) => {
       const d = await res2.json( );
       results.push( ...( d.results ?? [] ) );
     }
-    if ( results.length === 0 ) {
-      setCachedLookalikes( id, null, [] );
-      return { topId: null, entries: [] };
-    }
+    if ( results.length === 0 ) return { topId: null, entries: [] };
     const data = { results };
 
     const counts: Record<number, { count: number; observationUuids: string[] }> = {};
@@ -341,11 +330,7 @@ const SpeciesGame = ( ) => {
       } ) )
       .sort( ( a, b ) => b.count - a.count );
 
-    const topId = entries.length > 0
-      ? entries[0].taxonId
-      : null;
-    setCachedLookalikes( id, topId, entries );
-    return { topId, entries };
+    return { topId: entries.length > 0 ? entries[0].taxonId : null, entries };
   }, [] );
 
   // Fetches basic taxon info (name, common name) by ID.
