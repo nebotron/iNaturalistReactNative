@@ -296,6 +296,8 @@ CREATE-AN-ACCOUNT = CREATE AN ACCOUNT
 Create-observation-with-no-evidence = Create observation with no evidence
 CROP-DRAG-HINT = Drag to pan. Pinch to zoom.
 CROP-PHOTO = Crop Photo
+# Label for current device location in Wildlife Hotspots tool
+Current-location = Current location
 DATA-QUALITY = DATA QUALITY
 DATA-QUALITY-ASSESSMENT = DATA QUALITY ASSESSMENT
 # Label for button that navigates users to the data quality screen
@@ -1708,7 +1710,5 @@ Youve-previously-denied-microphone-permissions = You’ve previously denied micr
 Youve-previously-denied-photo-library-permissions = You've previously denied photo library permissions
 Zoom-in-as-much-as-possible-to-improve = Zoom in as much as possible to improve location accuracy and get better identifications.
 Zoom-to-current-location = Zoom to current location
-# Label for current device location in Wildlife Hotspots tool
-Current-location = Current location
 # Label for button that shows zoom level, e.g. on a camera
 zoom-x = { $zoom }×
