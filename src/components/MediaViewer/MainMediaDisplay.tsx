@@ -5,7 +5,7 @@ import {
   TransparentCircleButton,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { ActivityIndicator } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
 import {
@@ -17,12 +17,15 @@ import type { CarouselRenderItem, ICarouselInstance } from "react-native-reanima
 import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
 import { saveBrightness } from "sharedHelpers/brightnessLog";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
 import AttributionButton from "./AttributionButton";
+import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 import CustomImageZoom from "./CustomImageZoom";
 
 interface PhotoItem {
@@ -77,12 +80,14 @@ const MainMediaDisplay = ( {
   setSelectedMediaIndex,
 }: Props ) => {
   const { t } = useTranslation( );
-  const { screenWidth } = useDeviceOrientation( );
+  const { screenWidth, screenHeight } = useDeviceOrientation( );
   const [zooming, setZooming] = useState( false );
   const [brightness, setBrightness] = useState( BRIGHTNESS_DEFAULT );
   const [brightnessSaved, setBrightnessSaved] = useState( false );
   const [brightnessSaving, setBrightnessSaving] = useState( false );
   const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
+  const imageDimensionsRef = useRef<{ width: number; height: number } | null>( null );
+  const currentZoomRefRef = useRef<SharedZoomableImageRef | null>( null );
   const items = useMemo( ( ) => ( [
     ...photos.map( photo => ( { ...photo, type: "photo" as const } ) ),
     ...sounds.map( sound => ( { ...sound, type: "sound" as const } ) ),
@@ -99,9 +104,47 @@ const MainMediaDisplay = ( {
   const deleteSoundLabel = t( "Delete-sound" );
   const cropPhotoLabel = t( "CROP-PHOTO" );
 
-  const renderPhoto = ( photo: PhotoItem ) => {
+  const handleImageDimensionsChange = useCallback( ( dims: { width: number; height: number } ) => {
+    imageDimensionsRef.current = dims;
+  }, [] );
+
+  const handleInteractionEnd = useCallback( ( ) => {
+    const currentIndex = selectedMediaIndex;
+    if ( currentIndex >= photos.length ) return;
+
+    const photo = photos[currentIndex];
+    const photoUrl = Photo.displayLocalOrRemoteLargePhoto( photo );
+    const zoomRef = currentZoomRefRef.current;
+    const imageDims = imageDimensionsRef.current;
+
+    if ( !zoomRef || !imageDims ) return;
+
+    try {
+      const transform = zoomRef.readTransform( );
+      // Convert zoom transform to normalized crop (0-1 range)
+      const crop = imageZoomTransformToNormalizedCrop(
+        imageDims.width,
+        imageDims.height,
+        screenWidth,
+        screenHeight,
+        Math.min( screenWidth, screenHeight ) * 0.8, // crop frame is ~80% of viewport
+        transform,
+      );
+      saveAnimalCrop( photoUrl, crop );
+    } catch {
+      // Silently fail if we can't read the transform or save the crop
+    }
+  }, [photos, selectedMediaIndex, screenWidth, screenHeight] );
+
+  const renderPhoto = ( photo: PhotoItem, photoIndex: number ) => {
     const uri = Photo.displayLocalOrRemoteLargePhoto( photo );
     const hasAttribution = photo?.attribution;
+    const handleZoomRef = useCallback( ( ref: SharedZoomableImageRef | null ) => {
+      // Only update currentZoomRefRef if this is the currently selected photo
+      if ( photoIndex === selectedMediaIndex ) {
+        currentZoomRefRef.current = ref;
+      }
+    }, [photoIndex, selectedMediaIndex] );
     return (
       <View className="flex-1">
         <CustomImageZoom
@@ -110,9 +153,12 @@ const MainMediaDisplay = ( {
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
           brightness={brightness}
+          zoomRef={handleZoomRef as any}
           onLongPress={onLongPressPhoto
             ? ( ) => onLongPressPhoto( uri )
             : undefined}
+          onImageDimensionsChange={handleImageDimensionsChange}
+          onInteractionEnd={handleInteractionEnd}
         />
         {
           editable
@@ -259,11 +305,13 @@ const MainMediaDisplay = ( {
     </View>
   );
 
-  const renderItem: CarouselRenderItem<PhotoItem | SoundItem> = ( { item } ) => (
-    item.type === "photo"
-      ? renderPhoto( item )
-      : renderSound( item )
-  );
+  const renderItem: CarouselRenderItem<PhotoItem | SoundItem> = ( { item, index } ) => {
+    if ( item.type === "photo" ) {
+      const photoIndex = photos.indexOf( item as PhotoItem );
+      return renderPhoto( item as PhotoItem, photoIndex );
+    }
+    return renderSound( item as SoundItem );
+  };
 
   // Must be stable: onConfigurePanGesture is a useMemo dependency inside the Carousel
   const onConfigurePanGesture = useCallback( ( panGesture: PanGesture ) => {
