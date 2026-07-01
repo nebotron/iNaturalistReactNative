@@ -335,3 +335,25 @@ export function displayDeltaToNormalized(
     dy: dy / imageRect.height,
   };
 }
+
+export function square2048Crop(
+  imageWidth: number,
+  imageHeight: number,
+): NormalizedCrop {
+  if ( imageWidth <= 0 || imageHeight <= 0 ) {
+    return {
+      x: 0, y: 0, w: 1, h: 1,
+    };
+  }
+
+  const cropSize = Math.min( 2048, imageWidth, imageHeight );
+  const w = cropSize / imageWidth;
+  const h = cropSize / imageHeight;
+
+  return clampCrop( {
+    x: ( 1 - w ) / 2,
+    y: ( 1 - h ) / 2,
+    w,
+    h,
+  } );
+}
