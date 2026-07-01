@@ -312,12 +312,14 @@ const Map = ( {
 
   const showPointTiles = currentZoom > 13;
 
-  // Use green points; for the heatmap pass a single orange-red color that goes
-  // from fully transparent (no density) to fully opaque (peak density) so the
-  // opacity gap between low and high count cells is as wide as possible.
+  // We want green points and (default) orange grid. The /heatmap endpoint's
+  // density-to-color mapping isn't tied to a fixed scale, so pairing it with
+  // a hardcoded color gradient made the colors look inconsistent between
+  // zoom levels. /grid uses a fixed color scale tuned per zoom level, so it
+  // stays visually consistent as you zoom in and out.
   const tileUrlTemplate = showPointTiles
     ? `${TILE_URL}/points/{z}/{x}/{y}.png?${queryString}&color=%2374ac00`
-    : `${TILE_URL}/heatmap/{z}/{x}/{y}.png?${queryString}&color=transparent%200%2C%20%23FF5500%201`;
+    : `${TILE_URL}/grid/{z}/{x}/{y}.png?${queryString}`;
 
   // In Android, MapView does not reliably process tileUrlTemplate changes.
   // Thus, we do not change tileUrlTemplate on Android anymore but first shut
