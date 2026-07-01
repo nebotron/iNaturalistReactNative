@@ -218,7 +218,10 @@ const AnimalCropTool = ( ) => {
 
   const handleCropChange = useCallback( ( crop: NormalizedCrop ) => {
     latestCropRef.current = crop;
-  }, [] );
+    if ( localPhoto ) {
+      saveAnimalCrop( localPhoto.largeUrl, crop );
+    }
+  }, [localPhoto] );
 
   const handleConfirm = useCallback( ( crop: NormalizedCrop ): Promise<void> => {
     if ( localPhoto ) {

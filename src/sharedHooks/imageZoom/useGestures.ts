@@ -401,8 +401,30 @@ export const useGestures = ( {
       savedTranslate.y.value = translate.y.value;
     } )
     .onUpdate( event => {
-      translate.x.value = savedTranslate.x.value + event.translationX;
-      translate.y.value = savedTranslate.y.value + event.translationY;
+      const desiredX = savedTranslate.x.value + event.translationX;
+      const desiredY = savedTranslate.y.value + event.translationY;
+      if ( cropPanContext ) {
+        const panLimits = computeCropPanTranslateLimits( cropPanContext, {
+          scale: scale.value,
+          translateX: desiredX,
+          translateY: desiredY,
+          focalX: focal.x.value,
+          focalY: focal.y.value,
+        } );
+        translate.x.value = clamp(
+          desiredX + focal.x.value,
+          panLimits.minTotalTranslateX,
+          panLimits.maxTotalTranslateX,
+        ) - focal.x.value;
+        translate.y.value = clamp(
+          desiredY + focal.y.value,
+          panLimits.minTotalTranslateY,
+          panLimits.maxTotalTranslateY,
+        ) - focal.y.value;
+      } else {
+        translate.x.value = desiredX;
+        translate.y.value = desiredY;
+      }
     } )
     .onEnd( ( event, success ) => {
       const {
