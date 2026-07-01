@@ -42,16 +42,16 @@ const HotspotListItem = ( {
             : "bg-white border border-lightGray"
         }`}
       >
-        <View className="flex-row items-start">
+        <View className="flex-row items-center">
           <View className="flex-1">
             <Body2 className="font-bold">
               {hotspot.observationCount.toLocaleString()}
               {" observations"}
             </Body2>
-            <View className="flex-row items-center mt-1">
-              <INatIcon name="location" size={12} color={colors.darkGray} />
-              <Body3 className="ml-1 text-darkGray">{detourText}</Body3>
-            </View>
+          </View>
+          <View className="flex-row items-center">
+            <INatIcon name="location" size={12} color={colors.darkGray} />
+            <Body3 className="ml-1 text-darkGray">{detourText}</Body3>
           </View>
         </View>
 
@@ -67,9 +67,7 @@ const HotspotListItem = ( {
                   className="ml-2 flex-1 text-darkGray"
                   numberOfLines={1}
                 >
-                  {species.preferred_common_name
-                    ? `${species.preferred_common_name} (${species.name})`
-                    : species.name}
+                  {species.preferred_common_name || species.name}
                   <Body3 className="text-darkGray">
                     {`  ·  ${species.count}`}
                   </Body3>
