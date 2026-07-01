@@ -1,18 +1,45 @@
 import {
-  CachesDirectoryPath, copyAssetsFileIOS, downloadFile, mkdir,
+  CachesDirectoryPath, copyAssetsFileIOS, downloadFile, exists, mkdir, stat,
+  unlink,
 } from "@dr.pogodin/react-native-fs";
+import { cropSourcesPath } from "appConstants/paths";
 import { Platform } from "react-native";
 import resizeImage from "sharedHelpers/resizeImage";
-import * as uuid from "uuid";
 
 const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
+const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
+
+// djb2 hash → stable hex filename for a given URL
+function urlToFilename( url: string ): string {
+  let hash = 5381;
+  for ( let i = 0; i < url.length; i++ ) {
+    // eslint-disable-next-line no-bitwise
+    hash = ( ( hash << 5 ) + hash ) ^ url.charCodeAt( i );
+    // eslint-disable-next-line no-bitwise
+    hash >>>= 0; // keep unsigned 32-bit
+  }
+  return `${hash.toString( 16 )}.jpg`;
+}
+
+async function getCachedOrNull( filePath: string ): Promise<string | null> {
+  if ( !( await exists( filePath ) ) ) return null;
+  const info = await stat( filePath );
+  const age = Date.now() - new Date( info.mtime ).getTime();
+  if ( age > CROP_CACHE_TTL_MS ) {
+    await unlink( filePath );
+    return null;
+  }
+  return `file://${filePath}`;
+}
+
 const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
   if ( uri.match( /^https?:\/\// ) ) {
-    const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
-    await mkdir( cacheDir );
-    const destPath = `${cacheDir}/${uuid.v4()}.jpg`;
+    await mkdir( cropSourcesPath );
     const downloadUrl = uri.replace( /(square|small|medium|original)/i, "large" );
+    const destPath = `${cropSourcesPath}/${urlToFilename( downloadUrl )}`;
+    const cached = await getCachedOrNull( destPath );
+    if ( cached ) return cached;
     await downloadFile( {
       fromUrl: downloadUrl,
       toFile: destPath,
@@ -29,9 +56,10 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
       return `file://${afterScheme}`;
     }
     if ( Platform.OS === "ios" ) {
-      const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
-      await mkdir( cacheDir );
-      const destPath = `${cacheDir}/${uuid.v4()}.jpg`;
+      await mkdir( cropSourcesPath );
+      const destPath = `${cropSourcesPath}/${urlToFilename( uri )}`;
+      const cached = await getCachedOrNull( destPath );
+      if ( cached ) return cached;
       // 99999 → no upscaling; copyAssetsFileIOS caps at the asset's natural dimensions
       await copyAssetsFileIOS( uri, destPath, 99999, 99999 );
       return `file://${destPath}`;
@@ -40,11 +68,13 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
 
   // Android content:// URIs cannot be read as file paths by the native crop module.
   if ( Platform.OS === "android" && uri.startsWith( "content://" ) ) {
-    const cacheDir = `${CachesDirectoryPath}/inatCropSources`;
-    await mkdir( cacheDir );
+    await mkdir( cropSourcesPath );
+    const destPath = `${cropSourcesPath}/${urlToFilename( uri )}`;
+    const cached = await getCachedOrNull( destPath );
+    if ( cached ) return cached;
     return resizeImage( uri, {
       width: 99999,
-      outputPath: cacheDir,
+      outputPath: cropSourcesPath,
       imageOptions: { mode: "contain", onlyScaleDown: true },
     } );
   }
