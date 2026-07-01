@@ -29,6 +29,7 @@ interface Props {
   brightness?: number;
   onLongPress?: () => void;
   onInteractionEnd?: () => void;
+  onImageDimensionsChange?: (dims: { width: number; height: number }) => void;
   onScaleChange?: ( scale: number ) => void;
 }
 
@@ -47,6 +48,7 @@ const CustomImageZoom = ( {
   brightness = 1,
   onLongPress,
   onInteractionEnd,
+  onImageDimensionsChange,
   onScaleChange,
 }: Props ): Node => {
   const { screenWidth, screenHeight } = useDeviceOrientation( );
@@ -84,6 +86,7 @@ const CustomImageZoom = ( {
       cropPanContext={cropPanContext}
       brightness={brightness}
       onLongPress={onLongPress}
+      onImageDimensionsChange={onImageDimensionsChange}
       onScaleChange={onScaleChange}
     />
   );

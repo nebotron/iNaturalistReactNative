@@ -33,6 +33,7 @@ type SharedZoomableImageProps = ImageZoomProps & {
   brightness?: number;
   onLongPress?: () => void;
   onScaleChange?: ( scale: number ) => void;
+  onImageDimensionsChange?: (dims: { width: number; height: number }) => void;
   onLoad?: () => void;
   onError?: () => void;
 };
@@ -69,6 +70,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     brightness = 1,
     onLongPress,
     onScaleChange,
+    onImageDimensionsChange,
     onLoad,
     onError,
   },
@@ -166,7 +168,11 @@ const SharedZoomableImage: ForwardRefRenderFunction<
         source={{ uri }}
         resizeMode="contain"
         onLayout={onZoomableLayout}
-        onLoad={onLoad}
+        onLoad={( event ) => {
+          const { width, height } = event.nativeEvent.source;
+          onImageDimensionsChange?.( { width, height } );
+          onLoad?.( );
+        }}
         onError={onError}
       />
     </GestureDetector>
