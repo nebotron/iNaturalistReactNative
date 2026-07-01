@@ -19,7 +19,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { normalizedCropToImageZoomTransform } from "sharedHelpers/normalizedCropToImageZoomTransform";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
+import { computeContainRect, square2048Crop } from "sharedHelpers/normalizedCropTypes";
 import colors from "styles/tailwindColors";
 
 const DIM_COLOR = "rgba(0, 0, 0, 0.55)";
@@ -184,6 +184,30 @@ const ImageCropView = ( {
     updateDownsizeStatus( );
   }, [boxSize, cropAreaHeight, initialCrop, updateDownsizeStatus] );
 
+  const handleSet2048 = useCallback( ( ) => {
+    if ( !zoomRef.current || boxSize <= 0 || cropAreaHeight <= 0 ) {
+      return;
+    }
+    const crop = square2048Crop( imageWidth, imageHeight );
+    const transform = normalizedCropToImageZoomTransform(
+      imageWidth,
+      imageHeight,
+      windowWidth,
+      cropAreaHeight,
+      boxSize,
+      crop,
+    );
+    zoomRef.current.applyTransform( transform );
+    updateDownsizeStatus( );
+  }, [
+    boxSize,
+    cropAreaHeight,
+    imageHeight,
+    imageWidth,
+    windowWidth,
+    updateDownsizeStatus,
+  ] );
+
   const handleConfirm = useCallback( async ( ) => {
     if ( saving || !zoomRef.current || boxSize <= 0 || cropAreaHeight <= 0 ) {
       return;
@@ -326,7 +350,7 @@ const ImageCropView = ( {
       </View>
 
       <View
-        className="flex-row items-center justify-between bg-[#1c1c1c] px-10"
+        className="flex-row items-center justify-center gap-4 bg-[#1c1c1c] px-10"
         style={[styles.toolbar, toolbarStyle]}
       >
         {onDelete && labels.delete
@@ -343,6 +367,16 @@ const ImageCropView = ( {
             />
           )
           : <View style={styles.confirmSlot} />}
+        <INatIconButton
+          icon="crop"
+          accessibilityLabel="2048×2048"
+          color={colors.inatGreen}
+          height={CROP_BUTTON_SIZE}
+          width={CROP_BUTTON_SIZE}
+          size={CROP_ICON_SIZE}
+          onPress={handleSet2048}
+          disabled={saving}
+        />
         {saving
           ? (
             <View style={styles.confirmSlot}>
