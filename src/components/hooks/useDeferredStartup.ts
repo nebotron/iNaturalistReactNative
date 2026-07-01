@@ -14,6 +14,7 @@ import { RealmContext } from "providers/contexts";
 import { useEffect } from "react";
 import {
   clearComputerVisionPhotos,
+  clearExpiredCropSources,
   clearGalleryPhotos,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,
@@ -98,6 +99,7 @@ const useDeferredStartup = ( ) => {
     const id6 = deferTask( "clearComputerVisionPhotos", clearComputerVisionPhotos );
     const id7 = deferTask( "clearSyncedMediaForUpload", () => clearSyncedMediaForUpload( realm ) );
     const id8 = deferTask( "clearRollbackPhotos", clearRollbackPhotos );
+    const id11 = deferTask( "clearExpiredCropSources", clearExpiredCropSources );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
     const id10 = deferTask( "warmIntlCache", () => {
@@ -119,6 +121,7 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id8 );
       cancelIdleCallback( id9 );
       cancelIdleCallback( id10 );
+      cancelIdleCallback( id11 );
     };
   }, [i18n, realm] );
 };
