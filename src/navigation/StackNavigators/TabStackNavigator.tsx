@@ -15,6 +15,7 @@ import ExploreV2Container from "components/Explore/ExploreV2/ExploreV2Container"
 import RootExploreContainer from "components/Explore/RootExploreContainer";
 import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
+import LifeListContainer from "components/LifeList/LifeListContainer";
 import Menu from "components/Menu/Menu";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
 import Notifications from "components/Notifications/Notifications";
@@ -118,6 +119,7 @@ const FadeInProjectList = ( ) => fadeInComponent( <ProjectListContainer /> );
 const FadeInFollowersList = ( ) => fadeInComponent( <FollowersList /> );
 const FadeInFollowingList = ( ) => fadeInComponent( <FollowingList /> );
 const FadeInJournal = ( ) => fadeInComponent( <Journal /> );
+const FadeInLifeList = ( ) => fadeInComponent( <LifeListContainer /> );
 
 const BASE_SCREEN_OPTIONS = {
   headerBackButtonDisplayMode: "minimal",
@@ -298,6 +300,11 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           <Stack.Screen
             name="Journal"
             component={FadeInJournal}
+            options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="LifeList"
+            component={FadeInLifeList}
             options={LIST_OPTIONS}
           />
         </Stack.Group>

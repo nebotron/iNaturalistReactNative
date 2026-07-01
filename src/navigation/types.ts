@@ -347,6 +347,7 @@ export type BaseTabStackParamList = {
     projectTitle?: string;
     journalPostsCount?: number;
   } | undefined;
+  LifeList: undefined;
   WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   AnimalCropTool: undefined;
   CropLogViewer: undefined;
