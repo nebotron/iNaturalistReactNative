@@ -5,8 +5,41 @@
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <RNShareMenu/ShareMenuManager.h>
 #import <React/RCTLinkingManager.h>
+#import <QuartzCore/QuartzCore.h>
+#import <objc/runtime.h>
 
 @interface AppDelegate ()
+@end
+
+// React Native's Image component (both legacy and Fabric) renders by setting
+// CALayer.contents directly to a CGImage rather than going through
+// UIImageView, so swizzling this is the one hook point that covers every
+// image view in the app for a pixelated, nearest-neighbor look.
+@interface CALayer (PixelatedImages)
+@end
+
+@implementation CALayer (PixelatedImages)
+
++ (void)load
+{
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    Method originalMethod = class_getInstanceMethod(self, @selector(setContents:));
+    Method swizzledMethod = class_getInstanceMethod(self, @selector(pixelated_setContents:));
+    method_exchangeImplementations(originalMethod, swizzledMethod);
+  });
+}
+
+- (void)pixelated_setContents:(id)contents
+{
+  // Calls through to the original -setContents: implementation (swapped via the exchange above).
+  [self pixelated_setContents:contents];
+  if (contents) {
+    self.magnificationFilter = kCAFilterNearest;
+    self.minificationFilter = kCAFilterNearest;
+  }
+}
+
 @end
 
 @implementation AppDelegate
