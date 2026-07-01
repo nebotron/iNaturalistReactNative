@@ -6,6 +6,7 @@ import {
   panCropFromScreenTranslation,
   panSquareCrop,
   pinchCropAtFocalPoint,
+  square2048Crop,
   squareCropSidePixels,
   zoomSquareCropFromCenter,
 } from "sharedHelpers/normalizedCropTypes";
@@ -176,5 +177,45 @@ describe( "panSquareCrop", ( ) => {
     };
     const moved = panSquareCrop( crop, 0.1, 0 );
     expect( moved.x ).toBe( 0.35 );
+  } );
+} );
+
+describe( "square2048Crop", ( ) => {
+  it( "returns full image for images smaller than 2048", ( ) => {
+    const crop = square2048Crop( 1000, 1000 );
+    expect( crop ).toEqual( {
+      x: 0, y: 0, w: 1, h: 1,
+    } );
+  } );
+
+  it( "returns centered 2048 crop for large landscape images", ( ) => {
+    const crop = square2048Crop( 4000, 3000 );
+    expect( crop.w ).toBeCloseTo( 2048 / 4000, 5 );
+    expect( crop.h ).toBeCloseTo( 2048 / 3000, 5 );
+    expect( crop.x ).toBeCloseTo( ( 1 - 2048 / 4000 ) / 2, 5 );
+    expect( crop.y ).toBeCloseTo( ( 1 - 2048 / 3000 ) / 2, 5 );
+  } );
+
+  it( "returns centered 2048 crop for large portrait images", ( ) => {
+    const crop = square2048Crop( 3000, 4000 );
+    expect( crop.w ).toBeCloseTo( 2048 / 3000, 5 );
+    expect( crop.h ).toBeCloseTo( 2048 / 4000, 5 );
+    expect( crop.x ).toBeCloseTo( ( 1 - 2048 / 3000 ) / 2, 5 );
+    expect( crop.y ).toBeCloseTo( ( 1 - 2048 / 4000 ) / 2, 5 );
+  } );
+
+  it( "returns full image for square 2048x2048 images", ( ) => {
+    const crop = square2048Crop( 2048, 2048 );
+    expect( crop ).toEqual( {
+      x: 0, y: 0, w: 1, h: 1,
+    } );
+  } );
+
+  it( "constrains crops to image boundaries", ( ) => {
+    const crop = square2048Crop( 4000, 3000 );
+    expect( crop.x ).toBeGreaterThanOrEqual( 0 );
+    expect( crop.y ).toBeGreaterThanOrEqual( 0 );
+    expect( crop.x + crop.w ).toBeLessThanOrEqual( 1 );
+    expect( crop.y + crop.h ).toBeLessThanOrEqual( 1 );
   } );
 } );
