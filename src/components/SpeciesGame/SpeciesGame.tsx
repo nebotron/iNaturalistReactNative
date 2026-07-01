@@ -791,7 +791,7 @@ const SpeciesGame = ( ) => {
               <View className="flex-1">
                 <Button
                   className="w-full"
-                  text={taxonLabel( target! )}
+                  text="Yes"
                   level="focus"
                   adjustsFontSizeToFit
                   onPress={() => handleGuess( true )}
@@ -808,7 +808,7 @@ const SpeciesGame = ( ) => {
               <View className="flex-1">
                 <Button
                   className="w-full"
-                  text={taxonLabel( lookalike! )}
+                  text="No"
                   adjustsFontSizeToFit
                   onPress={() => handleGuess( false )}
                 />
