@@ -44,6 +44,8 @@ const BRIGHTNESS_MIN = 0.1;
 const BRIGHTNESS_MAX = 5.0;
 const BRIGHTNESS_DEFAULT = 1.0;
 const sliderStyle = { flex: 1, height: 40 };
+const roundIconButtonClass = "bg-black/50 items-center justify-center "
+  + "rounded-full h-[40px] w-[40px] ml-2";
 
 interface Props {
   autoPlaySound?: boolean; // automatically start playing a sound when it is visible
@@ -191,7 +193,7 @@ const MainMediaDisplay = ( {
                 <>
                   { brightnessSaving
                     ? (
-                      <View className="bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px] ml-2">
+                      <View className={roundIconButtonClass}>
                         <ActivityIndicator
                           size="small"
                           color={colors.white}
@@ -200,7 +202,7 @@ const MainMediaDisplay = ( {
                     )
                     : (
                       <INatIconButton
-                        className="bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px] ml-2"
+                        className={roundIconButtonClass}
                         onPress={async ( ) => {
                           setBrightnessSaving( true );
                           await saveBrightness( photo.url, brightness );

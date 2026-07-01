@@ -159,6 +159,7 @@
   "Create-observation-with-no-evidence": "Create observation with no evidence",
   "CROP-DRAG-HINT": "Drag to pan. Pinch to zoom.",
   "CROP-PHOTO": "Crop Photo",
+  "Current-location": "Current location",
   "DATA-QUALITY": "DATA QUALITY",
   "DATA-QUALITY-ASSESSMENT": "DATA QUALITY ASSESSMENT",
   "Data-Quality-Assessment": "Data Quality Assessment",
@@ -1039,6 +1040,5 @@
   "Youve-previously-denied-photo-library-permissions": "You've previously denied photo library permissions",
   "Zoom-in-as-much-as-possible-to-improve": "Zoom in as much as possible to improve location accuracy and get better identifications.",
   "Zoom-to-current-location": "Zoom to current location",
-  "Current-location": "Current location",
   "zoom-x": "{ $zoom }×"
 }
