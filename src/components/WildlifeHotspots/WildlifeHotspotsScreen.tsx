@@ -2,7 +2,6 @@ import {
   ActivityIndicator,
   Body2,
   Body3,
-  Button,
   INatIcon,
   ViewWrapper,
 } from "components/SharedComponents";
@@ -16,7 +15,6 @@ import React, {
   useState,
 } from "react";
 import {
-  Alert,
   Linking,
   StyleSheet,
   TouchableOpacity,
@@ -218,19 +216,16 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     setEndPoint( null );
   }, [] );
 
-  const handleFindHotspots = useCallback( async () => {
-    if ( !startPoint || !endPoint ) {
-      Alert.alert( t( "Location-not-found" ), t( "Please-select-a-location-from-the-suggestions" ) );
-      return;
-    }
+  useEffect( () => {
+    if ( !startPoint || !endPoint ) return;
     setSelectedHotspotId( null );
     setHotspotRouteCoords( [] );
-    await findHotspots(
+    findHotspots(
       { latitude: startPoint.latitude, longitude: startPoint.longitude },
       { latitude: endPoint.latitude, longitude: endPoint.longitude },
       filterParams,
     );
-  }, [startPoint, endPoint, findHotspots, t] );
+  }, [startPoint, endPoint, findHotspots, filterParams] );
 
   const handleHotspotPress = useCallback( async ( hotspot: Hotspot ) => {
     const isDeselecting = selectedHotspotId === hotspot.id;
@@ -281,8 +276,6 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     Linking.openURL( url );
   }, [startPoint, endPoint] );
 
-  const canSearch = !!( startPoint && endPoint );
-
   return (
     <ViewWrapper testID="WildlifeHotspotsScreen">
       {/* Start/End inputs */}
@@ -309,14 +302,6 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
             dotColor={colors.inatGreen}
           />
         </View>
-        <Button
-          className="mt-3"
-          text={t( "Find-Hotspots" )}
-          level={canSearch ? "focus" : "neutral"}
-          disabled={!canSearch || loading}
-          onPress={handleFindHotspots}
-          testID="WildlifeHotspots.findButton"
-        />
       </View>
 
       {/* Map */}
