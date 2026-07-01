@@ -204,12 +204,21 @@ const AnimalCropTool = ( ) => {
     return ( ) => { cancelled = true; };
   }, [localPhoto] );
 
+  // Tracks the most recent crop position the user has dragged to; updated on
+  // every interaction end so Skip can save it without requiring a confirm press.
+  const latestCropRef = useRef<NormalizedCrop | null>( null );
+
   const advance = useCallback( ( ) => {
     if ( currentPhoto ) seenUrlsRef.current.add( currentPhoto.largeUrl );
+    latestCropRef.current = null;
     setCurrentPhoto( null );
     setLocalPhoto( null );
     setInitialCrop( null );
   }, [currentPhoto] );
+
+  const handleCropChange = useCallback( ( crop: NormalizedCrop ) => {
+    latestCropRef.current = crop;
+  }, [] );
 
   const handleConfirm = useCallback( ( crop: NormalizedCrop ): Promise<void> => {
     if ( localPhoto ) {
@@ -218,6 +227,14 @@ const AnimalCropTool = ( ) => {
     }
     advance( );
     return Promise.resolve( );
+  }, [localPhoto, advance] );
+
+  const handleSkip = useCallback( ( ) => {
+    if ( localPhoto && latestCropRef.current ) {
+      saveAnimalCrop( localPhoto.largeUrl, latestCropRef.current );
+      setSavedCount( c => c + 1 );
+    }
+    advance( );
   }, [localPhoto, advance] );
 
   if ( !localPhoto || localPhoto.largeUrl !== currentPhoto?.largeUrl || !initialCrop ) {
@@ -248,7 +265,8 @@ const AnimalCropTool = ( ) => {
         instructions: `${savedCount} saved — crop to subject`,
       }}
       onConfirm={handleConfirm}
-      onDelete={advance}
+      onCropChange={handleCropChange}
+      onDelete={handleSkip}
     />
   );
 };
