@@ -307,6 +307,10 @@ export function useRouteHotspots() {
 
         // 2. Single iNaturalist call for the whole route bounding box
         const bbox = routeBbox( routePoints );
+        const locationFilters = ["swlat", "swlng", "nelat", "nelng", "lat", "lng", "radius", "place_id"];
+        const nonLocationParams = Object.fromEntries(
+          Object.entries( filterParams ).filter( ([key] ) => !locationFilters.includes( key ) ),
+        );
         const response = await searchObservations( {
           ...bbox,
           per_page: 200,
@@ -321,7 +325,7 @@ export function useRouteHotspots() {
               iconic_taxon_name: true,
             },
           },
-          ...filterParams,
+          ...nonLocationParams,
         } );
 
         const observations = response?.results ?? [];
