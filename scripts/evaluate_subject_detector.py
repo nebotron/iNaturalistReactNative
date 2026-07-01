@@ -7,12 +7,13 @@ downloads the original images, re-runs subject detection, and evaluates how well
 different padding values and detection strategies match the crops you actually chose.
 
 Two metrics (both 0–1, higher = better):
-  recall    = fraction of ground-truth crop covered by the AI crop
-              (must be ≈1.0 — the AI crop should always contain the subject)
-  precision = fraction of the AI crop that overlaps with ground truth
-              (tightness; 1.0 = perfect fit)
+  recall    = fraction of the ground-truth crop (shrunk 5% per side) covered
+              by the AI crop (must be ≈1.0 — the AI crop should always
+              contain the subject)
+  precision = fraction of the AI crop's square viewport that overlaps with
+              ground truth (tightness; penalizes letterboxing; 1.0 = perfect fit)
 
-Weighted score = (2·recall + 1·precision) / 3
+Weighted score = (4·recall + 1·precision) / 5
 
 Two detection algorithms are compared:
   current  — union of all detections (human ∪ animal ∪ all saliency objects)
@@ -128,24 +129,41 @@ def iou(a: Crop, b: Crop) -> float:
     return inter / union if union > 0 else 0.0
 
 
+RECALL_TRUTH_SHRINK = 0.05  # shrink ground truth 5% per side when scoring recall
+
+
+def shrink_crop(c: Crop, frac: float = RECALL_TRUTH_SHRINK) -> Crop:
+    """Inset a crop by `frac` of its own width/height on each side."""
+    dx = c.w * frac
+    dy = c.h * frac
+    return Crop(c.x + dx, c.y + dy, max(0.0, c.w - 2 * dx), max(0.0, c.h - 2 * dy))
+
+
 def recall(pred: Crop, truth: Crop) -> float:
-    """Fraction of ground-truth crop area covered by the predicted crop."""
-    truth_area = truth.w * truth.h
+    """Fraction of the (slightly shrunk) ground-truth crop covered by the predicted crop."""
+    shrunk = shrink_crop(truth)
+    truth_area = shrunk.w * shrunk.h
     if truth_area <= 0:
         return 0.0
-    return intersection_area(pred, truth) / truth_area
+    return intersection_area(pred, shrunk) / truth_area
 
 
 def precision(pred: Crop, truth: Crop) -> float:
-    """Fraction of predicted crop area that overlaps with ground truth."""
-    pred_area = pred.w * pred.h
+    """Fraction of the predicted crop's *square viewport* that overlaps with ground truth.
+
+    The on-device viewport is always square, so a pred box whose w != h
+    (i.e. would letterbox) is scored against the larger square it actually
+    occupies on screen, not the smaller raw w*h product.
+    """
+    side = max(pred.w, pred.h)
+    pred_area = side * side
     if pred_area <= 0:
         return 0.0
     return intersection_area(pred, truth) / pred_area
 
 
-# Weight recall (superset coverage) twice as much as precision (tightness).
-RECALL_WEIGHT = 2.0
+# Weight recall (superset coverage) four times as much as precision (tightness).
+RECALL_WEIGHT = 4.0
 PRECISION_WEIGHT = 1.0
 
 
