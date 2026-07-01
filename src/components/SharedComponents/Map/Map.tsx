@@ -158,6 +158,10 @@ const Map = ( {
       : null,
   );
 
+  // On Android, suppress the controlled region prop while the user is dragging
+  // so the map doesn't fight the gesture or snap on release.
+  const [isUserDragging, setIsUserDragging] = useState( false );
+
   // In Android, onMapReady does not fire when we pass parameter region instead
   // of parameter initialRegion. This state allows us to fire onMapReady and
   // fire it only once. This state is always false in iOS.
@@ -222,10 +226,14 @@ const Map = ( {
     onPermissionGranted,
   } );
 
-  // In Android, we always return a state, either region or androidLocalRegion.
+  // In Android, we always return a state, either region or androidLocalRegion,
+  // unless the user is actively dragging (to avoid fighting the gesture).
   const setRegion = ( ) => {
     if ( Platform.OS !== "android" && initialRegion ) {
-      return null;
+      return undefined;
+    }
+    if ( Platform.OS === "android" && isUserDragging ) {
+      return undefined;
     }
     return Platform.OS === "android"
       ? androidLocalRegion
@@ -344,6 +352,9 @@ const Map = ( {
       }
       shouldSkipRegionUpdate = true;
     }
+    if ( isUserDragging ) {
+      setIsUserDragging( false );
+    }
     if ( !shouldSkipRegionUpdate ) {
       if ( onRegionChangeComplete ) {
         const boundaries = await mapViewRef?.current?.getMapBoundaries( );
@@ -361,6 +372,7 @@ const Map = ( {
     onMapReady,
     onRegionChangeComplete,
     androidLocalRegion,
+    isUserDragging,
     screenWidth,
   ] );
 
@@ -386,6 +398,13 @@ const Map = ( {
       handleRegionChangeComplete,
     ],
   );
+
+  const handlePanDrag = useCallback( ( ) => {
+    if ( Platform.OS === "android" ) {
+      setIsUserDragging( true );
+    }
+    onPanDrag( );
+  }, [onPanDrag] );
 
   const handleMapPress = e => {
     if ( withPressableObsTiles ) onMapPressForObsLyr( e.nativeEvent.coordinate );
@@ -461,7 +480,7 @@ const Map = ( {
         mapType={mapType}
         minZoomLevel={MIN_ZOOM_LEVEL}
         onMapReady={handleMapReady}
-        onPanDrag={onPanDrag}
+        onPanDrag={handlePanDrag}
         onPress={handleMapPress}
         onRegionChangeComplete={handleRegionChangeComplete}
         onUserLocationChange={handleUserLocationChange}
