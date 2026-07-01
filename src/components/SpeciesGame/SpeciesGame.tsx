@@ -104,7 +104,7 @@ interface LookalikeEntry {
 interface LookalikeCandidate {
   info: TaxonInfo;
   pool: PhotoEntry[];
-  weight: number; // misidentification count, or 1 for sibling fallback
+  weight: number; // misidentification count
 }
 
 type GamePhase = "loading" | "playing" | "revealed";
@@ -363,8 +363,7 @@ const SpeciesGame = ( ) => {
         // and candidate filtering without duplicate GPS/network calls.
         const userLocation = await fetchCoarseUserLocation( );
 
-        // Primary strategy: find the most-confused species via identification disagreements.
-        // Fallback: use a sibling in the same parent taxon.
+        // Find the most-confused species via identification disagreements.
         const { topId: misidentifiedId, entries: misidentEntries }
           = await findMisidentifiedLookalikes( taxonId, userLocation );
 
@@ -390,45 +389,14 @@ const SpeciesGame = ( ) => {
           } )( )
           : misidentEntries;
 
-        // Build a prioritized list of lookalike candidates.
-        // Always fetch siblings so we can fall back to them if misidentification
-        // candidates have no usable photo pools.
-        const parentId = taxon.ancestor_ids?.[taxon.ancestor_ids.length - 1];
-        let siblingCandidates: number[] = [];
-        if ( parentId ) {
-          const siblingsRes = await fetch(
-            `${INATURALIST_API}/taxa`
-              + `?parent_id=${parentId}`
-              + `&rank=${taxon.rank}`
-              + "&per_page=12"
-              + "&order_by=observations_count"
-              + "&order=desc"
-              + `&fields=id,preferred_common_name,name${
-                locationFilterParams}`,
-          );
-          const siblingsData = await siblingsRes.json( );
-          const siblings = ( siblingsData.results ?? [] ).filter(
-            ( s: { id: number } ) => s.id !== taxonId,
-          );
-          // Shuffle so we don't always pick the most-observed sibling.
-          const shuffled = [...siblings].sort( ( ) => Math.random( ) - 0.5 );
-          siblingCandidates = shuffled.map( ( s: { id: number } ) => s.id );
-        }
-
-        // Build weighted candidate list: misidentified species (by count) then siblings.
+        // Build weighted candidate list from misidentified species only.
         // Exclude the target species itself from all candidate lists.
-        const weightedCandidates: { id: number; weight: number }[] = [
-          ...nearbyMisidentEntries
-            .filter( ( e: { taxonId: number } ) => e.taxonId !== taxonId )
-            .map( ( e: { taxonId: number; count: number } ) => ( {
-              id: e.taxonId,
-              weight: e.count,
-            } ) ),
-          ...siblingCandidates
-            .filter( id => id !== taxonId
-              && !nearbyMisidentEntries.some( ( e: { taxonId: number } ) => e.taxonId === id ) )
-            .map( id => ( { id, weight: 1 } ) ),
-        ].filter( c => c.id !== taxonId );
+        const weightedCandidates: { id: number; weight: number }[] = nearbyMisidentEntries
+          .filter( ( e: { taxonId: number } ) => e.taxonId !== taxonId )
+          .map( ( e: { taxonId: number; count: number } ) => ( {
+            id: e.taxonId,
+            weight: e.count,
+          } ) );
 
         if ( weightedCandidates.length === 0 ) {
           if ( !cancelled ) setLoadError( "No similar species found to compare against." );
