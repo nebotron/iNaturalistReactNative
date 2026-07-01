@@ -70,6 +70,7 @@ interface Props {
   initialCrop?: NormalizedCrop | null;
   labels: ImageCropLabels;
   onConfirm: ( crop: NormalizedCrop ) => void | Promise<void>;
+  onCropChange?: ( crop: NormalizedCrop ) => void;
   onDelete?: () => void;
 }
 
@@ -81,6 +82,7 @@ const ImageCropView = ( {
   initialCrop,
   labels,
   onConfirm,
+  onCropChange,
   onDelete,
 }: Props ) => {
   const insets = useSafeAreaInsets( );
@@ -118,7 +120,8 @@ const ImageCropView = ( {
     setWillBeDownsized(
       Math.max( crop.w * imageWidth, crop.h * imageHeight ) > UPLOAD_MAX_SIDE,
     );
-  }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
+    onCropChange?.( crop );
+  }, [boxSize, cropAreaHeight, imageHeight, imageWidth, onCropChange, windowWidth] );
 
   const handleScaleChange = useCallback( ( scale: number ) => {
     if ( boxSize <= 0 || cropAreaHeight <= 0 || scale <= 0 ) {

@@ -161,6 +161,9 @@ const Map = ( {
   // On Android, suppress the controlled region prop while the user is dragging
   // so the map doesn't fight the gesture or snap on release.
   const [isUserDragging, setIsUserDragging] = useState( false );
+  // Ref so we only call setIsUserDragging/onPanDrag once per gesture, not on
+  // every movement event that onPanDrag fires during the drag.
+  const panDragActiveRef = useRef( false );
 
   // In Android, onMapReady does not fire when we pass parameter region instead
   // of parameter initialRegion. This state allows us to fire onMapReady and
@@ -352,6 +355,7 @@ const Map = ( {
       }
       shouldSkipRegionUpdate = true;
     }
+    panDragActiveRef.current = false;
     if ( isUserDragging ) {
       setIsUserDragging( false );
     }
@@ -400,6 +404,8 @@ const Map = ( {
   );
 
   const handlePanDrag = useCallback( ( ) => {
+    if ( panDragActiveRef.current ) return;
+    panDragActiveRef.current = true;
     if ( Platform.OS === "android" ) {
       setIsUserDragging( true );
     }
