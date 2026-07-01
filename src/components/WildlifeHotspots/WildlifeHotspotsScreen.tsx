@@ -15,6 +15,7 @@ import React, {
   useState,
 } from "react";
 import {
+  Keyboard,
   Linking,
   StyleSheet,
   TouchableOpacity,
@@ -97,6 +98,7 @@ const AddressInput = ( {
 
   const handleSelect = useCallback( ( result: NominatimResult ) => {
     setSuggestions( [] );
+    Keyboard.dismiss();
     onSelectSuggestion( result );
   }, [onSelectSuggestion] );
 
@@ -122,6 +124,7 @@ const AddressInput = ( {
           placeholder={placeholder}
           value={value}
           onChangeText={handleChange}
+          onFocus={handleClear}
           autoCorrect={false}
           autoCapitalize="none"
           editable={true}
