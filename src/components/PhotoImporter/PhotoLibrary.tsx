@@ -7,7 +7,6 @@ import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDet
 import {
   appendPhotosAndVideoSoundsToObservation,
   buildGroupedMediaItems,
-  createObservationWithVideoSounds,
   partitionAssetsByMediaType,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
@@ -28,10 +27,8 @@ import type { Asset } from "react-native-image-picker";
 import { launchImageLibrary } from "react-native-image-picker";
 import Observation from "realmModels/Observation";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
-import fetchPlaceName from "sharedHelpers/fetchPlaceName";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
-import { populateObservationTaxonFromFirstPhoto } from "sharedHelpers/predictTopTaxonFromPhoto";
 import { sleep } from "sharedHelpers/util";
 import { useInputImageTracking, useLayoutPrefs } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
@@ -193,33 +190,6 @@ const PhotoLibrary = ( ) => {
     },
   } ) ), [] );
 
-  const finalizeNewObservation = useCallback( async (
-    newObservation: Awaited<ReturnType<typeof createObservationWithVideoSounds>>,
-    hasPhotos: boolean,
-  ) => {
-    if ( newObservation.latitude ) {
-      const placeName = await fetchPlaceName(
-        newObservation.latitude,
-        newObservation.longitude,
-      );
-      newObservation.place_guess = placeName;
-    }
-
-    if ( hasPhotos ) {
-      await populateObservationTaxonFromFirstPhoto( newObservation, realm );
-    }
-
-    setPhotoImporterState( {
-      observations: [newObservation],
-    } );
-
-    if ( hasPhotos && !newObservation.observationSounds?.length ) {
-      navBasedOnUserSettings( );
-    } else {
-      navToObsEdit( );
-    }
-    setPhotoLibraryShown( false );
-  }, [navBasedOnUserSettings, navToObsEdit, realm, setPhotoImporterState] );
 
   const showPhotoLibrary = useCallback( async () => {
     if ( photoLibraryShown ) {
@@ -335,21 +305,6 @@ const PhotoLibrary = ( ) => {
         return;
       }
 
-      const totalMediaCount = selectedPhotos.length + movedVideos.length;
-
-      if ( totalMediaCount === 1 ) {
-        if ( hasVideos ) {
-          const newObservation = await createObservationWithVideoSounds( movedVideos );
-          await finalizeNewObservation( newObservation, false );
-        } else {
-          const newObservation = await Observation.createObservationWithPhotos(
-            [selectedPhotos[0]],
-          );
-          await finalizeNewObservation( newObservation, true );
-        }
-        return;
-      }
-
       const importedPhotoUris = selectedPhotos.map( x => x.image.uri );
 
       setPhotoImporterState( {
@@ -372,7 +327,6 @@ const PhotoLibrary = ( ) => {
     currentObservationIndex,
     evidenceToAdd,
     exitObservationFlow,
-    finalizeNewObservation,
     fromAICamera,
     fromGroupPhotos,
     groupedPhotos,
