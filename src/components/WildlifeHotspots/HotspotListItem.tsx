@@ -2,7 +2,6 @@ import {
   Body2,
   Body3,
   Button,
-  Heading4,
   INatIcon,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
@@ -44,9 +43,6 @@ const HotspotListItem = ( {
         }`}
       >
         <View className="flex-row items-start">
-          <View className="w-9 h-9 rounded-full bg-inatGreen items-center justify-center mr-3 mt-0.5">
-            <Heading4 className="text-white">{rank}</Heading4>
-          </View>
           <View className="flex-1">
             <Body2 className="font-bold">
               {hotspot.observationCount.toLocaleString()}
@@ -60,7 +56,7 @@ const HotspotListItem = ( {
         </View>
 
         {hotspot.topSpecies.length > 0 && (
-          <View className="mt-3 ml-12">
+          <View className="mt-3">
             {hotspot.topSpecies.map( species => (
               <View
                 key={String( species.id )}

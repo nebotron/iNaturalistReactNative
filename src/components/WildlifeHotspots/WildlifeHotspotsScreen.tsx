@@ -3,11 +3,9 @@ import {
   Body2,
   Body3,
   Button,
-  Heading2,
   INatIcon,
   ViewWrapper,
 } from "components/SharedComponents";
-import BackButton from "components/SharedComponents/Buttons/BackButton";
 import { ScrollView, TextInput, View } from "components/styledComponents";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import type { TabStackScreenProps } from "navigation/types";
@@ -104,9 +102,17 @@ const AddressInput = ( {
     onSelectSuggestion( result );
   }, [onSelectSuggestion] );
 
+  const handleClear = useCallback( () => {
+    handleChange( "" );
+  }, [handleChange] );
+
   return (
     <View className="flex-1">
-      <View className="flex-row items-center border border-lightGray rounded-lg px-3 py-1">
+      <TouchableOpacity
+        activeOpacity={1}
+        onPress={handleClear}
+        className="flex-row items-center border border-lightGray rounded-lg px-3 py-1"
+      >
         <View
           className="w-4 h-4 rounded-full mr-2 items-center justify-center"
           style={{ backgroundColor: dotColor }}
@@ -120,12 +126,13 @@ const AddressInput = ( {
           onChangeText={handleChange}
           autoCorrect={false}
           autoCapitalize="none"
+          editable={true}
         />
         {( loading || searching ) && <ActivityIndicator size={16} />}
         {confirmed && !loading && !searching && (
           <INatIcon name="checkmark" size={16} color={colors.inatGreen} />
         )}
-      </View>
+      </TouchableOpacity>
       {suggestions.length > 0 && (
         <View
           className="absolute top-10 left-0 right-0 bg-white border border-lightGray rounded-lg z-50"
@@ -278,14 +285,6 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
 
   return (
     <ViewWrapper testID="WildlifeHotspotsScreen">
-      {/* Header */}
-      <View className="bg-white px-3 pt-2 pb-3 flex-row items-center border-b border-lightGray">
-        <BackButton />
-        <View className="flex-1 ml-2">
-          <Heading2 numberOfLines={1}>{t( "Wildlife-Hotspots" )}</Heading2>
-        </View>
-      </View>
-
       {/* Start/End inputs */}
       <View className="bg-white px-3 py-2 border-b border-lightGray" style={{ zIndex: 10 }}>
         <View className="flex-row items-center mb-2" style={{ zIndex: 20 }}>
