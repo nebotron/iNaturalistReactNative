@@ -1,5 +1,10 @@
 import {
+  exists, readDir,
+} from "@dr.pogodin/react-native-fs";
+import { unlink } from "sharedHelpers/util";
+import {
   computerVisionPath,
+  cropSourcesPath,
   photoLibraryPhotosPath,
   photoUploadPath,
   rollbackPhotosPath,
@@ -8,6 +13,8 @@ import {
 } from "appConstants/paths";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import removeSyncedFilesFromDirectory from "sharedHelpers/removeSyncedFilesFromDirectory";
+
+const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 
 // TODO replace when Realm classes are properly typed
 interface RealmObservation {
@@ -88,8 +95,21 @@ const clearRollbackPhotos = async ( ) => {
   await removeAllFilesFromDirectory( rollbackPhotosPath );
 };
 
+const clearExpiredCropSources = async ( ) => {
+  const dirExists = await exists( cropSourcesPath );
+  if ( !dirExists ) return;
+  const files = await readDir( cropSourcesPath );
+  const now = Date.now();
+  await Promise.all(
+    files
+      .filter( f => now - new Date( f.mtime ).getTime() > CROP_CACHE_TTL_MS )
+      .map( f => unlink( f.path ) ),
+  );
+};
+
 export {
   clearComputerVisionPhotos,
+  clearExpiredCropSources,
   clearGalleryPhotos,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,
