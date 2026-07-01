@@ -118,6 +118,15 @@ const Menu = ( ) => {
   const [modalState, setModalState] = useState<MenuModalState | null>( null );
 
   const menuItems: Record<string, MenuOption> = {
+    ...( currentUser
+      ? {
+        lifeList: {
+          label: t( "MY-LIFERS" ),
+          navigation: "LifeList",
+          icon: "star",
+        },
+      }
+      : {} ),
     projects: {
       label: t( "PROJECTS" ),
       navigation: "Projects",

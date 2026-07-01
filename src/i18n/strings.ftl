@@ -819,6 +819,9 @@ Multiple-taxa = Multiple taxa
 # Title for section in Notifications showing notifications about observations
 # created by the viewer. Should be 16 characters or fewer or it will be ellipsized.
 MY-CONTENT--notifications = MY CONTENT
+# Label for a menu item and screen title showing the first time the user
+# observed each species they've seen, newest to oldest
+MY-LIFERS = My Lifers
 My-Observations = My Observations
 # Label for the bottom tab that shows your observations. Feel free to be
 # flexible in translating this to keep it as short as possible. "My
