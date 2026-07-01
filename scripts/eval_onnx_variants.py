@@ -295,7 +295,7 @@ def main():
     all_results.sort(key=lambda r: r.best_score, reverse=True)
 
     print("\n" + "=" * 80)
-    print("RESULTS — sorted by weighted score (2×recall + 1×precision) / 3")
+    print("RESULTS — sorted by weighted score (4×recall + 1×precision) / 5")
     print("=" * 80)
     print(f"  {'Model':<24}  {'Algo':<12}  {'Pad':>6}  {'Recall':>8}  {'Precision':>10}  {'Score':>7}")
     print("  " + "-" * 72)
