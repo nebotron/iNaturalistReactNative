@@ -43,10 +43,11 @@ const LOOKALIKE_RADIUS_KM = 500;
 const LOCATION_FILTER_RADIUS_KM = 1000;
 const MAX_ZOOM_SCALE = 5;
 
+const BUTTON_ROW_HEIGHT = 56;
+
 const gameStyles = StyleSheet.create( {
-  imageContainer: { flex: 1, overflow: "hidden" },
   imageStyle: { flex: 1 },
-  playingButtonRow: { minHeight: 56 },
+  buttonRow: { height: BUTTON_ROW_HEIGHT },
   modalScrollView: { flex: 1 },
 } );
 
@@ -553,41 +554,15 @@ const SpeciesGame = ( ) => {
     ? target!
     : lookalike!;
 
-  let targetButtonLevel: string | undefined;
-  if ( phase !== "revealed" || isTargetShown ) {
-    targetButtonLevel = "focus";
-  } else if ( guessedTarget === true ) {
-    targetButtonLevel = "warning";
-  }
-
-  let lookalikeButtonLevel: string | undefined;
-  if ( phase === "revealed" ) {
-    if ( !isTargetShown ) {
-      lookalikeButtonLevel = "focus";
-    } else if ( guessedTarget === false ) {
-      lookalikeButtonLevel = "warning";
-    }
-  }
-
-  const navToTaxon = ( id: number ) => navigation.push( "TaxonDetails", { id, rankLevel: 10 } );
-  const onPressTarget = () => navToTaxon( target!.id );
-  const onPressLookalike = () => navToTaxon( lookalike!.id );
-
   const windowHeight = Dimensions.get( "window" ).height;
   const modalContainerStyle = { maxHeight: windowHeight * 0.82, flex: 1 };
   const bottomPanelStyle = { paddingBottom: Math.max( 8, bottomInset ) };
 
-  let resultCardBg = "bg-warningRed/20";
   let resultHeaderColor = "text-warningRed";
-  let resultText = "Incorrect";
   if ( isCorrect ) {
-    resultCardBg = "bg-inatGreen/20";
     resultHeaderColor = "text-inatGreen";
-    resultText = "Correct!";
   } else if ( isSkip ) {
-    resultCardBg = "bg-lightGray";
     resultHeaderColor = "text-darkGray";
-    resultText = "It was...";
   }
 
   const lookalikesModalContent = (
@@ -692,8 +667,8 @@ const SpeciesGame = ( ) => {
         </Pressable>
       </View>
 
-      {/* Photo area — fills remaining space */}
-      <View style={gameStyles.imageContainer}>
+      {/* Photo area — square to match crop */}
+      <View style={{ width: windowWidth, height: windowWidth, overflow: "hidden" }}>
         {currentPhotoUrl
           ? (
             <>
@@ -726,39 +701,12 @@ const SpeciesGame = ( ) => {
 
       {/* Bottom panel */}
       <View className="bg-white px-4 pt-4" style={bottomPanelStyle}>
-        {phase === "revealed" && (
-          <View className={`mb-3 p-3 rounded-lg ${resultCardBg}`}>
-            <Body1 className={`text-center font-bold ${resultHeaderColor}`}>
-              {resultText}
-            </Body1>
-            {currentObservationUuid
-              ? (
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => navigation.navigate(
-                    "ObsDetails" as never,
-                    { uuid: currentObservationUuid } as never,
-                  )}
-                >
-                  <Body2 className="text-center mt-1 italic text-inatGreen underline">
-                    {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
-                  </Body2>
-                </Pressable>
-              )
-              : (
-                <Body2 className="text-center mt-1 italic">
-                  {`This is ${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
-                </Body2>
-              )}
-          </View>
-        )}
-
         {phase === "playing"
           ? (
-            <View className="flex-row mb-3 gap-2" style={gameStyles.playingButtonRow}>
+            <View className="flex-row mb-3 gap-2" style={gameStyles.buttonRow}>
               <View className="flex-1">
                 <Button
-                  className="w-full"
+                  className="w-full h-full"
                   text="Yes"
                   level="focus"
                   adjustsFontSizeToFit
@@ -767,7 +715,7 @@ const SpeciesGame = ( ) => {
               </View>
               <View className="flex-1">
                 <Button
-                  className="w-full"
+                  className="w-full h-full"
                   text="I don't know"
                   adjustsFontSizeToFit
                   onPress={handleSkip}
@@ -775,7 +723,7 @@ const SpeciesGame = ( ) => {
               </View>
               <View className="flex-1">
                 <Button
-                  className="w-full"
+                  className="w-full h-full"
                   text="No"
                   adjustsFontSizeToFit
                   onPress={() => handleGuess( false )}
@@ -784,34 +732,33 @@ const SpeciesGame = ( ) => {
             </View>
           )
           : (
-            <View className="flex-row mb-3 gap-2">
+            <View className="flex-row mb-3 gap-2 items-center" style={gameStyles.buttonRow}>
+              {currentObservationUuid
+                ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    className="flex-1 items-center justify-center px-2"
+                    onPress={() => navigation.navigate(
+                      "ObsDetails" as never,
+                      { uuid: currentObservationUuid } as never,
+                    )}
+                  >
+                    <Body2 className={`text-center italic underline ${resultHeaderColor}`}>
+                      {`${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
+                    </Body2>
+                  </Pressable>
+                )
+                : <View className="flex-1" />}
               <View className="flex-1">
                 <Button
-                  className="w-full"
-                  text={taxonLabel( target! )}
-                  level={targetButtonLevel}
-                  onPress={onPressTarget}
-                />
-              </View>
-              <View className="flex-1">
-                <Button
-                  className="w-full"
-                  text={taxonLabel( lookalike! )}
-                  level={lookalikeButtonLevel}
-                  onPress={onPressLookalike}
+                  className="w-full h-full"
+                  text="Next"
+                  level="focus"
+                  onPress={handleNext}
                 />
               </View>
             </View>
           )}
-
-        {phase === "revealed" && (
-          <Button
-            className="w-full max-w-[500px] self-center mb-2"
-            text="Next"
-            level="focus"
-            onPress={handleNext}
-          />
-        )}
       </View>
     </SharedStackViewWrapper>
   );
