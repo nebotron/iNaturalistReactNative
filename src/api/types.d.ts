@@ -185,9 +185,15 @@ export interface ApiComment {
 
 export interface ApiIdentification {
   body?: string;
+  category?: "improving" | "supporting" | "leading" | "maverick";
+  created_at?: string;
+  current?: boolean;
+  hidden?: boolean;
+  id?: number;
+  observation?: { uuid?: string };
   taxon?: ApiTaxon;
   user?: ApiUser;
-  hidden?: boolean;
+  uuid?: string;
 }
 
 export interface ApiNotification {

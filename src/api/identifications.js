@@ -33,7 +33,20 @@ const updateIdentification = async (
   }
 };
 
+const searchIdentifications = async (
+  params: Object = {},
+  opts: Object = {},
+): Promise<?Object> => {
+  try {
+    const response = await inatjs.identifications.search( { ...PARAMS, ...params }, opts );
+    return response;
+  } catch ( e ) {
+    return handleError( e, { context: { functionName: "searchIdentifications", opts } } );
+  }
+};
+
 export {
   createIdentification,
+  searchIdentifications,
   updateIdentification,
 };

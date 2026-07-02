@@ -120,6 +120,11 @@ const Menu = ( ) => {
           navigation: "LifeList",
           icon: "star",
         },
+        mavericks: {
+          label: t( "MY-MAVERICK-IDS" ),
+          navigation: "MaverickIdentifications",
+          icon: "flag",
+        },
       }
       : {} ),
     projects: {
