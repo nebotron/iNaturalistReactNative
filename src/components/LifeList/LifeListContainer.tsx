@@ -12,14 +12,10 @@ import Taxon from "realmModels/Taxon";
 import Photo from "realmModels/Photo";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
 import { useFontScale, useCurrentUser, useGridLayout, useTranslation, useAuthenticatedQuery } from "sharedHooks";
+import { zustandStorage } from "stores/useStore";
 
 // Max page size the API allows
 const PAGE_SIZE = 200;
-
-// A user's full lifer list rarely changes (only when they observe a new
-// species), and computing it requires paging through their entire
-// observation history, so avoid refetching on every mount.
-const ONE_HOUR_MS = 3600000;
 
 interface Lifer {
   observed_on: string | null;
@@ -28,70 +24,108 @@ interface Lifer {
   taxon: ApiTaxon;
 }
 
+// The lifer list is expensive to compute (it requires paging through a
+// user's entire observation history), so once computed it's cached to disk
+// forever, keyed by the highest observation id seen so far. Subsequent
+// fetches only need to look at observations newer than that id to find any
+// new lifers, instead of recomputing the whole list from scratch.
+const cacheKey = ( userId: number ) => `lifers-${userId}`;
+const maxObservationIdCacheKey = ( userId: number ) => `lifersMaxObservationId-${userId}`;
+
+function readCachedLifers( userId: number ): { lifers: Lifer[], maxObservationId: number } {
+  const rawLifers = zustandStorage.getItem( cacheKey( userId ) );
+  return {
+    lifers: rawLifers ? JSON.parse( rawLifers ) : [],
+    maxObservationId: Number( zustandStorage.getItem( maxObservationIdCacheKey( userId ) ) ) || 0,
+  };
+}
+
+function writeCachedLifers( userId: number, lifers: Lifer[], maxObservationId: number ): void {
+  zustandStorage.setItem( cacheKey( userId ), JSON.stringify( lifers ) );
+  zustandStorage.setItem( maxObservationIdCacheKey( userId ), maxObservationId );
+}
+
 async function fetchLifers(
   userId: number | undefined,
   opts: { api_token: string | null },
 ): Promise<Lifer[]> {
   if ( !userId ) return [];
 
+  const { lifers: cachedLifers, maxObservationId } = readCachedLifers( userId );
+  const firstObservationBySpeciesId = new Map<number, Lifer>(
+    cachedLifers.map( lifer => [lifer.taxon.id, lifer] ),
+  );
+
   // Cheap request (per_page: 0) for the total number of distinct species
-  // this user has observed, so the paging loop below can stop as soon as
-  // every species has been found instead of always scanning the user's
-  // entire observation history.
+  // this user has observed, so we can tell whether the cached list is
+  // already complete and, if not, the paging loop below can stop as soon as
+  // every remaining species has been found.
   const { total_results: totalSpecies } = await fetchSpeciesCounts(
     { user_id: userId, per_page: 0 },
     opts,
   );
 
-  // The API can't return "first observation per species" directly, so we
-  // page through this user's observations oldest-to-newest and keep only
-  // the first (i.e. oldest) observation we see of each species-level taxon.
-  // Using the largest allowed page size keeps the number of requests to a minimum.
-  const firstObservationBySpeciesId = new Map<number, Lifer>( );
-  let page = 1;
-  let hasMorePages = true;
-  while ( hasMorePages ) {
-    // eslint-disable-next-line no-await-in-loop
-    const response = await searchObservations(
-      {
-        user_id: userId,
-        order_by: "observed_on",
-        order: "asc",
-        per_page: PAGE_SIZE,
-        page,
-        fields: {
-          observed_on: true,
-          uuid: true,
-          observation_photos: {
-            photo: {
-              url: true,
-              license_code: true,
-              attribution: true,
+  if ( firstObservationBySpeciesId.size < totalSpecies ) {
+    // The API can't return "first observation per species" directly, so we
+    // page through observations newer than the newest one we've already
+    // looked at and keep only the first (i.e. oldest) observation we see of
+    // each species-level taxon we haven't already cached. Using the
+    // largest allowed page size keeps the number of requests to a minimum.
+    let newMaxObservationId = maxObservationId;
+    let page = 1;
+    let hasMorePages = true;
+    while ( hasMorePages ) {
+      // eslint-disable-next-line no-await-in-loop
+      const response = await searchObservations(
+        {
+          user_id: userId,
+          id_above: maxObservationId || undefined,
+          order_by: "id",
+          order: "asc",
+          per_page: PAGE_SIZE,
+          page,
+          fields: {
+            id: true,
+            observed_on: true,
+            uuid: true,
+            observation_photos: {
+              photo: {
+                url: true,
+                license_code: true,
+                attribution: true,
+              },
             },
+            taxon: Taxon.LIMITED_TAXON_FIELDS,
           },
-          taxon: Taxon.LIMITED_TAXON_FIELDS,
         },
-      },
-      opts,
-    );
-    const results: ApiObservation[] = response?.results ?? [];
-    results.forEach( obs => {
-      const taxon = obs.taxon;
-      // Only track species-level observations (rank_level === 10)
-      if ( taxon?.id && taxon.rank_level === Taxon.SPECIES_LEVEL ) {
-        if ( !firstObservationBySpeciesId.has( taxon.id ) ) {
-          firstObservationBySpeciesId.set( taxon.id, {
-            observed_on: obs.observed_on ?? null,
-            uuid: obs.uuid,
-            observation_photos: obs.observation_photos,
-            taxon,
-          } );
+        opts,
+      );
+      const results: ApiObservation[] = response?.results ?? [];
+      results.forEach( obs => {
+        const taxon = obs.taxon;
+        // Only track species-level observations (rank_level === 10)
+        if ( taxon?.id && taxon.rank_level === Taxon.SPECIES_LEVEL ) {
+          if ( !firstObservationBySpeciesId.has( taxon.id ) ) {
+            firstObservationBySpeciesId.set( taxon.id, {
+              observed_on: obs.observed_on ?? null,
+              uuid: obs.uuid,
+              observation_photos: obs.observation_photos,
+              taxon,
+            } );
+          }
         }
-      }
-    } );
-    hasMorePages = results.length === PAGE_SIZE
-      && firstObservationBySpeciesId.size < totalSpecies;
-    page += 1;
+        if ( obs.id && obs.id > newMaxObservationId ) { newMaxObservationId = obs.id; }
+      } );
+      hasMorePages = results.length === PAGE_SIZE
+        && firstObservationBySpeciesId.size < totalSpecies;
+      page += 1;
+    }
+
+    writeCachedLifers(
+      userId,
+      Array.from( firstObservationBySpeciesId.values( ) ),
+      newMaxObservationId,
+    );
   }
 
   return Array.from( firstObservationBySpeciesId.values( ) ).sort(
@@ -184,8 +218,12 @@ const LifeListContainer = ( ) => {
     optsWithAuth => fetchLifers( currentUser?.id, optsWithAuth ),
     {
       enabled: !!currentUser,
-      gcTime: ONE_HOUR_MS,
-      staleTime: ONE_HOUR_MS,
+      // Show the cached lifer list immediately, if we have one, while a
+      // background fetch checks for any new lifers
+      initialData: ( ) => {
+        const cached = currentUser ? readCachedLifers( currentUser.id ).lifers : [];
+        return cached.length ? cached : undefined;
+      },
     },
   );
 
