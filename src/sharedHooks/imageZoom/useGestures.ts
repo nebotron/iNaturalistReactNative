@@ -42,7 +42,6 @@ export const useGestures = ( {
   maxScale = 5,
   scale: scaleValue,
   doubleTapScale = 3,
-  maxPanPointers = 2,
   isPanEnabled = true,
   isPinchEnabled = true,
   isSingleTapEnabled = false,
@@ -328,63 +327,6 @@ export const useGestures = ( {
     };
   };
 
-  const panWhilePinchingGesture = Gesture.Pan()
-    .enabled( isPanEnabled )
-    .averageTouches( true )
-    .enableTrackpadTwoFingerGesture( true )
-    .minPointers( 2 )
-    .maxPointers( maxPanPointers )
-    .onStart( event => {
-      runOnJS( onPanStarted )( event );
-      savedTranslate.x.value = translate.x.value;
-      savedTranslate.y.value = translate.y.value;
-    } )
-    .onUpdate( event => {
-      translate.x.value = savedTranslate.x.value + event.translationX;
-      translate.y.value = savedTranslate.y.value + event.translationY;
-    } )
-    .onEnd( ( event, success ) => {
-      const {
-        leftLimit,
-        rightLimit,
-        topLimit,
-        bottomLimit,
-      } = getPanClampLimits( );
-
-      if ( !cropPanContext && scale.value > 1 && isDoubleTapEnabled ) {
-        translate.x.value = withDecay(
-          {
-            velocity: event.velocityX,
-            velocityFactor: 0.6,
-            rubberBandEffect: true,
-            rubberBandFactor: 0.9,
-            clamp: [leftLimit, rightLimit],
-          },
-          () => {
-            if ( event.velocityX >= event.velocityY ) {
-              runOnJS( onPanEnded )( event, success );
-            }
-          },
-        );
-        translate.y.value = withDecay(
-          {
-            velocity: event.velocityY,
-            velocityFactor: 0.6,
-            rubberBandEffect: true,
-            rubberBandFactor: 0.9,
-            clamp: [topLimit, bottomLimit],
-          },
-          () => {
-            if ( event.velocityY > event.velocityX ) {
-              runOnJS( onPanEnded )( event, success );
-            }
-          },
-        );
-      } else {
-        runOnJS( onPanEnded )( event, success );
-      }
-    } );
-
   const panOnlyGesture = Gesture.Pan()
     .enabled( isPanEnabled )
     .averageTouches( true )
@@ -469,6 +411,14 @@ export const useGestures = ( {
       }
     } );
 
+  // A single pinch gesture handles both zooming and two-finger panning by
+  // tracking the live centroid of the two fingers every frame. The image point
+  // under the centroid when the pinch began stays pinned under the centroid as
+  // the fingers move and spread, so zooming follows the fingers and a
+  // two-finger drag pans. Folding pan into the pinch (rather than running a
+  // separate averageTouches pan gesture alongside it) avoids the double-counted
+  // translation that previously caused jitter, and it is exact at any scale so
+  // the point under the fingers does not drift even at high maxScale.
   const pinchGesture = Gesture.Pinch()
     .enabled( isPinchEnabled )
     .onStart( event => {
@@ -476,17 +426,31 @@ export const useGestures = ( {
       savedScale.value = scale.value;
       savedFocal.x.value = focal.x.value;
       savedFocal.y.value = focal.y.value;
+      savedTranslate.x.value = translate.x.value;
+      savedTranslate.y.value = translate.y.value;
       initialFocal.x.value = event.focalX;
       initialFocal.y.value = event.focalY;
     } )
     .onUpdate( event => {
-      scale.value = clamp( savedScale.value * event.scale, minScale, maxScale );
-      focal.x.value
-        = savedFocal.x.value
-        + ( center.x - initialFocal.x.value ) * ( scale.value - savedScale.value );
-      focal.y.value
-        = savedFocal.y.value
-        + ( center.y - initialFocal.y.value ) * ( scale.value - savedScale.value );
+      const newScale = clamp( savedScale.value * event.scale, minScale, maxScale );
+      const ratio = newScale / savedScale.value;
+      scale.value = newScale;
+
+      // Total offset ( translate + focal ) at the start of the pinch.
+      const total0X = savedTranslate.x.value + savedFocal.x.value;
+      const total0Y = savedTranslate.y.value + savedFocal.y.value;
+      // Start and current centroid positions, relative to the view center.
+      const startFocalX = initialFocal.x.value - center.x;
+      const startFocalY = initialFocal.y.value - center.y;
+      const currentFocalX = event.focalX - center.x;
+      const currentFocalY = event.focalY - center.y;
+
+      // Keep the image point under the start centroid pinned to the current
+      // centroid, so both zoom and two-finger pan follow the fingers.
+      const totalNewX = currentFocalX - ratio * ( startFocalX - total0X );
+      const totalNewY = currentFocalY - ratio * ( startFocalY - total0Y );
+      focal.x.value = totalNewX - savedTranslate.x.value;
+      focal.y.value = totalNewY - savedTranslate.y.value;
     } )
     .onEnd( ( ...args ) => {
       runOnJS( onPinchEnded )( ...args );
@@ -532,16 +496,11 @@ export const useGestures = ( {
     ],
   } ) );
 
-  // In the crop editor (cropPanContext set), simultaneous pan+pinch is useful for
-  // precise crop adjustment and the cropPanContext clamping prevents erratic movement.
-  // Without cropPanContext (e.g. MediaViewer), running panWhilePinchingGesture alongside
-  // pinchGesture causes jitter: asymmetric finger spreads shift the average touch position,
-  // adding unwanted translation on top of the focal-point correction. The focal calculation
-  // in pinchGesture already handles "zoom around the pinch center", so skip the simultaneous
-  // pan in the unconstrained case.
-  const pinchPanGestures = cropPanContext
-    ? Gesture.Simultaneous( pinchGesture, panWhilePinchingGesture )
-    : pinchGesture;
+  // The pinch gesture handles two-finger zoom and pan together (see above), so
+  // every surface (crop editor, MediaViewer, IDing game) shares the same gesture
+  // and behaves identically. A separate one-finger panOnlyGesture handles panning
+  // once zoomed in.
+  const pinchPanGestures = pinchGesture;
 
   // When onSwipeToClose is provided, add a downward-swipe gesture into the same
   // GestureDetector as the zoom gestures. This avoids the cross-detector coordination
