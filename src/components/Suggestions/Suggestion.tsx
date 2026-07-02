@@ -33,7 +33,7 @@ const Suggestion = ( {
   suggestion,
   onTaxonChosen,
 }: Props ) => (
-  <View>
+  <View testID={`Suggestion.${suggestion?.taxon?.id}`}>
     <TaxonResult
       accessibilityLabel={accessibilityLabel}
       activeColor="bg-inatGreen"
@@ -41,6 +41,7 @@ const Suggestion = ( {
       confidencePosition="text"
       fetchRemote={false}
       first
+      hideInfoButton
       showCheckmark
       handleCheckmarkPress={onTaxonChosen}
       hideNavButtons
