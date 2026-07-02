@@ -33,7 +33,7 @@ type SharedZoomableImageProps = ImageZoomProps & {
   brightness?: number;
   onLongPress?: () => void;
   onScaleChange?: ( scale: number ) => void;
-  onImageDimensionsChange?: (dims: { width: number; height: number }) => void;
+  onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
   onLoad?: () => void;
   onError?: () => void;
 };
@@ -67,6 +67,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     style = {},
     testID,
     cropPanContext,
+    onSwipeToClose,
     brightness = 1,
     onLongPress,
     onScaleChange,
@@ -109,6 +110,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     onLayout,
     ref: undefined,
     cropPanContext,
+    onSwipeToClose,
   } );
 
   useEffect( ( ) => {
@@ -117,7 +119,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
 
   useAnimatedReaction(
     ( ) => transform.scale.value,
-    ( scale ) => {
+    scale => {
       if ( onScaleChange ) {
         runOnJS( onScaleChange )( scale );
       }
@@ -144,9 +146,9 @@ const SharedZoomableImage: ForwardRefRenderFunction<
   } ), [applyTransform, reset, zoom] );
 
   const longPressGesture = useMemo(
-    () => onLongPress
+    () => ( onLongPress
       ? Gesture.LongPress().runOnJS( true ).onStart( onLongPress )
-      : null,
+      : null ),
     [onLongPress],
   );
 
@@ -158,7 +160,9 @@ const SharedZoomableImage: ForwardRefRenderFunction<
   );
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const brightnessFilter: any = brightness !== 1 ? { filter: [{ brightness }] } : null;
+  const brightnessFilter: any = brightness !== 1
+    ? { filter: [{ brightness }] }
+    : null;
 
   return (
     <GestureDetector gesture={composedGestures}>
@@ -168,7 +172,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
         source={{ uri }}
         resizeMode="contain"
         onLayout={onZoomableLayout}
-        onLoad={( event ) => {
+        onLoad={event => {
           const { width, height } = event.nativeEvent.source;
           onImageDimensionsChange?.( { width, height } );
           onLoad?.( );

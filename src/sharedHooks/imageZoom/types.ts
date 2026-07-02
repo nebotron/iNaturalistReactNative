@@ -172,6 +172,12 @@ export interface ZoomProps {
    * When set, panning is clamped so the crop frame can reach every image edge.
    */
   cropPanContext?: CropPanContext;
+  /**
+   * When provided, a downward swipe gesture (when not zoomed) will call this to close the viewer.
+   * Moving the swipe-to-close gesture into the same GestureDetector as the zoom gestures
+   * eliminates cross-detector coordination overhead that causes lag and jitter.
+   */
+  onSwipeToClose?: () => void;
 }
 
 export type ZoomableProps = AnimateProps<ViewProps> & ZoomProps;
@@ -244,6 +250,7 @@ export type ZoomableUseGesturesProps = Pick<
     | "onProgrammaticZoom"
     | "onResetAnimationEnd"
     | "cropPanContext"
+    | "onSwipeToClose"
   >;
 
 export interface ZoomableRef {
