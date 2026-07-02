@@ -16,6 +16,8 @@ import RootExploreContainer from "components/Explore/RootExploreContainer";
 import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
 import LifeListContainer from "components/LifeList/LifeListContainer";
+import MaverickIdentificationsContainer
+  from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
 import Notifications from "components/Notifications/Notifications";
@@ -120,6 +122,9 @@ const FadeInFollowersList = ( ) => fadeInComponent( <FollowersList /> );
 const FadeInFollowingList = ( ) => fadeInComponent( <FollowingList /> );
 const FadeInJournal = ( ) => fadeInComponent( <Journal /> );
 const FadeInLifeList = ( ) => fadeInComponent( <LifeListContainer /> );
+const FadeInMaverickIdentifications = (
+  ( ) => fadeInComponent( <MaverickIdentificationsContainer /> )
+);
 
 const BASE_SCREEN_OPTIONS = {
   headerBackButtonDisplayMode: "minimal",
@@ -320,6 +325,11 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             options={{
               headerTitle: cropLogTitle,
             }}
+          />
+          <Stack.Screen
+            name="MaverickIdentifications"
+            component={FadeInMaverickIdentifications}
+            options={LIST_OPTIONS}
           />
         </Stack.Group>
         {/* Developer Stack Group */}
