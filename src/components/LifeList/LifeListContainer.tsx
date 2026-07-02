@@ -125,8 +125,8 @@ const LiferGridItem = ( { item, style }: LiferGridItemProps ) => {
       testID={`LiferGridItem.Pressable.${item.uuid}`}
       onPress={( ) => (
         navigation.navigate( {
-          key: `${route.key}-LiferGridItem-ObservationDetails-${item.uuid}`,
-          name: "ObservationDetails",
+          key: `${route.key}-LiferGridItem-ObsDetails-${item.uuid}`,
+          name: "ObsDetails",
           params: { id: item.uuid },
         } )
       )}
