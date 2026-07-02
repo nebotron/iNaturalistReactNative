@@ -365,7 +365,7 @@ const TaxonDetails = ( ): Node => {
   // know the rank before taxon data has loaded from the API.
   const effectiveRankLevel = taxon?.rank_level ?? rankLevel;
   const showExploreButton = !hideNavButtons && isConnected && !fromMatch && taxon != null;
-  const showGameButton = !hideNavButtons && isConnected !== false && !fromMatch && !fromSuggestions
+  const showGameButton = !hideNavButtons && isConnected !== false && !fromMatch
     && !fromObsEdit && effectiveRankLevel != null && effectiveRankLevel <= 10;
 
   const displayTaxonTitle = useCallback( ( ) => (
