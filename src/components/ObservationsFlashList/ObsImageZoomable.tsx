@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
@@ -159,24 +159,27 @@ const ObsImageZoomable = ( {
 
   const layerStyle = { width: size, height: size };
 
+  // The GestureDetector must attach to a view that is NOT transformed: gesture
+  // coordinates (e.g. pinch focalX/focalY) are reported relative to the attached
+  // view, so attaching to the transformed view itself creates a feedback loop
+  // that makes two-finger panning lag far behind the fingers.
   return (
     <GestureDetector gesture={gestures}>
-      <Animated.View
-        style={[layerStyle, animatedStyle]}
-        onLayout={onZoomableLayout}
-      >
-        <FasterImageView
-          testID="ObsList.photo"
-          accessibilityIgnoresInvertColors
-          fadeDuration={0}
-          style={[StyleSheet.absoluteFill, brightnessStyle]}
-          source={{
-            url: uri,
-            cachePolicy: "discWithCacheControl",
-            resizeMode: "contain",
-          }}
-        />
-      </Animated.View>
+      <View style={layerStyle} onLayout={onZoomableLayout}>
+        <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
+          <FasterImageView
+            testID="ObsList.photo"
+            accessibilityIgnoresInvertColors
+            fadeDuration={0}
+            style={[StyleSheet.absoluteFill, brightnessStyle]}
+            source={{
+              url: uri,
+              cachePolicy: "discWithCacheControl",
+              resizeMode: "contain",
+            }}
+          />
+        </Animated.View>
+      </View>
     </GestureDetector>
   );
 };
