@@ -51,7 +51,7 @@ const getActiveTab = ( activeTabName: TabName ): ScreenName => {
   }
 };
 
-const HIDDEN_TAB_BAR_SCREENS = ["AnimalCropTool", "ImageCropEditor"];
+const HIDDEN_TAB_BAR_SCREENS = ["ImageCropEditor"];
 
 const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
   const { t } = useTranslation( );

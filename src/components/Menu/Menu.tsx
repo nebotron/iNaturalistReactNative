@@ -1,4 +1,3 @@
-import Clipboard from "@react-native-clipboard/clipboard";
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
@@ -21,10 +20,6 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Observation from "realmModels/Observation";
 import User from "realmModels/User";
 import { valueToBreakpoint } from "sharedHelpers/breakpoint";
-import {
-  copyAnimalCropLogToClipboard,
-  getAnimalCropLogAsArray,
-} from "sharedHelpers/animalCropLog";
 import { log } from "sharedHelpers/logger";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
@@ -148,18 +143,6 @@ const Menu = ( ) => {
       navigation: "Help",
       icon: "help-circle",
     },
-    animalCropTool: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "CROP LABELER",
-      navigation: "AnimalCropTool",
-      icon: "crop",
-    },
-    cropLog: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "CROP LOG",
-      navigation: "CropLogViewer",
-      icon: "clipboard",
-    },
     settings: {
       testID: "settings",
       label: t( "SETTINGS" ),
@@ -207,61 +190,6 @@ const Menu = ( ) => {
         },
       } ),
 
-    imageMetadata: {
-      label: "COPY CROPS",
-      icon: "copy",
-      onPress: ( ) => {
-        const records = getAnimalCropLogAsArray( );
-        Clipboard.setString( JSON.stringify( records, null, 2 ) );
-        Alert.alert( "Copied", `${records.length} labeled photos copied to clipboard` );
-      },
-    },
-
-    deleteUnfavedImportedPhotos: {
-      label: "DELETE UNFAVED",
-      icon: "trash",
-      onPress: ( ) => {
-        interface ObsLike {
-          faves: () => unknown[];
-          observationPhotos: { originalDevicePhotoUri?: string | null }[];
-        }
-        const syncedObs = Array.from(
-          realm.objects( "Observation" ).filtered( "_synced_at != null" ),
-        ) as unknown as ObsLike[];
-
-        const uris: string[] = [];
-        for ( const obs of syncedObs ) {
-          if ( obs.faves( ).length === 0 ) {
-            for ( const p of obs.observationPhotos ?? [] ) {
-              if ( p.originalDevicePhotoUri ) {
-                uris.push( p.originalDevicePhotoUri );
-              }
-            }
-          }
-        }
-
-        if ( uris.length === 0 ) {
-          Alert.alert( "No Photos", "No imported photos found from observations with no faves." );
-          return;
-        }
-
-        Alert.alert(
-          "Delete Photos?",
-          `Delete ${uris.length} imported photo(s) from observations with no faves?`,
-          [
-            { text: t( "CANCEL" ), style: "cancel" },
-            {
-              text: "Delete",
-              style: "destructive",
-              onPress: ( ) => {
-                void deleteOriginalDevicePhotos( uris, { userInitiated: true } );
-              },
-            },
-          ],
-        );
-      },
-    },
-
     ...( isDebug
       ? {
         debug: {
@@ -269,12 +197,6 @@ const Menu = ( ) => {
           navigation: "Debug",
           icon: "triangle-exclamation",
           color: "deeppink",
-        },
-        copyAnimalCropLog: {
-          // eslint-disable-next-line i18next/no-literal-string
-          label: "Copy animal crop log",
-          icon: "clipboard",
-          onPress: () => copyAnimalCropLogToClipboard( ),
         },
       }
       : {} ),
