@@ -46,7 +46,7 @@ async function searchNominatim(
   nearbyLatLng?: LatLng,
 ): Promise<NominatimResult[]> {
   try {
-    let url = `${NOMINATIM_BASE}/search?q=${encodeURIComponent( text )}&format=json&limit=8`;
+    let url = `${NOMINATIM_BASE}/search?q=${encodeURIComponent( text )}&format=json&limit=3`;
     if ( nearbyLatLng ) {
       const { latitude: lat, longitude: lon } = nearbyLatLng;
       const delta = 2;
