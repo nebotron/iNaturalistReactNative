@@ -365,7 +365,10 @@ const TaxonDetails = ( ): Node => {
   // know the rank before taxon data has loaded from the API.
   const effectiveRankLevel = taxon?.rank_level ?? rankLevel;
   const showExploreButton = !hideNavButtons && isConnected && !fromMatch && taxon != null;
-  const showGameButton = !hideNavButtons && isConnected !== false && !fromMatch
+  // The game button should remain available on the species page even in flows that
+  // hide the other nav buttons (e.g. "add an id" / Suggestions), so it is intentionally
+  // not gated on hideNavButtons. It is still hidden in the match flow.
+  const showGameButton = isConnected !== false && !fromMatch
     && effectiveRankLevel != null && effectiveRankLevel <= 10;
 
   const displayTaxonTitle = useCallback( ( ) => (
