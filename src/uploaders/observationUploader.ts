@@ -1,5 +1,6 @@
 import {
   createObservation,
+  faveObservation,
   updateObservation,
 } from "api/observations";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
@@ -223,6 +224,26 @@ async function uploadObservation(
     );
     const realmError = new Error( `Realm update failed: ${error.message}` );
     throw attachUploadFailureDetails( realmError, "realm_update", uploadStartTime );
+  }
+
+  // Step 5: favorite observation if it was locally favorited
+  const wasLocallyFavorited = observation.votes?.filter(
+    v => v?.vote_scope === null,
+  ).length > 0;
+
+  if ( wasLocallyFavorited ) {
+    try {
+      const apiToken = await validateAndGetToken( );
+      await withRetry( () => faveObservation(
+        { uuid: obsUUID },
+        { ...opts, api_token: apiToken },
+      ) );
+    } catch ( error ) {
+      logger.error(
+        `Upload: Failed to favorite ${observation.uuid} after upload`,
+        error,
+      );
+    }
   }
 
   const totalDuration = Date.now( ) - uploadStartTime;
