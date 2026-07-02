@@ -143,6 +143,18 @@ const Menu = ( ) => {
       navigation: "Help",
       icon: "help-circle",
     },
+    animalCropTool: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CROP LABELER",
+      navigation: "AnimalCropTool",
+      icon: "crop",
+    },
+    cropLog: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CROP LOG",
+      navigation: "CropLogViewer",
+      icon: "clipboard",
+    },
     settings: {
       testID: "settings",
       label: t( "SETTINGS" ),
