@@ -40,6 +40,8 @@ import useSubjectDetectionForUri, {
 } from "sharedHelpers/useSubjectDetectionForUri";
 import { zustandStorage } from "stores/useStore";
 
+type ObservationType = "egg" | "larva" | "pupa" | "nymph" | "juvenile" | "adult" | "unavailable";
+
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
 const LOOKALIKE_RADIUS_KM = 500;
@@ -99,11 +101,26 @@ function setCachedLookalikes( taxonId: number, value: LookalikeCacheEntry ): voi
 }
 
 const BUTTON_ROW_HEIGHT = 56;
+const OBSERVATION_TYPES: { label: string; value: ObservationType }[] = [
+  { label: "Egg", value: "egg" },
+  { label: "Larva", value: "larva" },
+  { label: "Pupa", value: "pupa" },
+  { label: "Nymph", value: "nymph" },
+  { label: "Juvenile", value: "juvenile" },
+  { label: "Adult", value: "adult" },
+  { label: "Unavailable", value: "unavailable" },
+];
 
 const gameStyles = StyleSheet.create( {
   imageStyle: { flex: 1 },
   buttonRow: { height: BUTTON_ROW_HEIGHT },
   modalScrollView: { flex: 1 },
+  filterCheckbox: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
 } );
 
 function cropToZoomTransform(
@@ -204,6 +221,8 @@ const SpeciesGame = ( ) => {
   const [lookalikesData, setLookalikesData] = useState<LookalikeEntry[]>( [] );
   const [usedMisidentifications, setUsedMisidentifications] = useState( false );
   const [obsScannedCount, setObsScannedCount] = useState( 0 );
+  const [selectedObsTypes, setSelectedObsTypes] = useState<ObservationType[]>( [] );
+  const [showFilterModal, setShowFilterModal] = useState( false );
 
   const targetPoolRef = useRef<PhotoEntry[]>( [] );
   const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
@@ -271,15 +290,23 @@ const SpeciesGame = ( ) => {
     return cs[cs.length - 1];
   }, [] );
 
-  const fetchPhotoPool = useCallback( async ( id: number ): Promise<PhotoEntry[]> => {
-    const url = `${INATURALIST_API}/observations`
-      + `?taxon_id=${id}`
-      + "&quality_grade=research"
-      + "&photos=true"
-      + "&sounds=false"
-      + `&per_page=${POOL_SIZE}`
-      + "&fields=uuid,observation_photos";
-    const res = await fetch( url );
+  const fetchPhotoPool = useCallback( async (
+    id: number,
+    filters?: ObservationType[],
+  ): Promise<PhotoEntry[]> => {
+    const url = new URL( `${INATURALIST_API}/observations` );
+    url.searchParams.append( "taxon_id", String( id ) );
+    url.searchParams.append( "quality_grade", "research" );
+    url.searchParams.append( "photos", "true" );
+    url.searchParams.append( "sounds", "false" );
+    url.searchParams.append( "per_page", String( POOL_SIZE ) );
+    url.searchParams.append( "fields", "uuid,observation_photos,life_stage" );
+
+    if ( filters && filters.length > 0 ) {
+      filters.forEach( f => url.searchParams.append( "life_stage", f ) );
+    }
+
+    const res = await fetch( url.toString( ) );
     const data = await res.json( );
     const entries: PhotoEntry[] = [];
     for ( const obs of data.results ?? [] ) {
@@ -454,7 +481,7 @@ const SpeciesGame = ( ) => {
           return;
         }
 
-        const targetPool = await fetchPhotoPool( taxonId );
+        const targetPool = await fetchPhotoPool( taxonId, selectedObsTypes.length > 0 ? selectedObsTypes : undefined );
         if ( cancelled ) return;
         if ( targetPool.length === 0 ) {
           if ( !cancelled ) setLoadError( "Not enough photos found for this species." );
@@ -471,7 +498,7 @@ const SpeciesGame = ( ) => {
           // eslint-disable-next-line no-await-in-loop
           const [info, pool] = await Promise.all( [
             fetchTaxonInfo( candidateId ),
-            fetchPhotoPool( candidateId ),
+            fetchPhotoPool( candidateId, selectedObsTypes.length > 0 ? selectedObsTypes : undefined ),
           ] );
           if ( info && pool.length > 0 ) {
             firstLookalike = { info, pool, weight };
@@ -531,7 +558,7 @@ const SpeciesGame = ( ) => {
           remainingCandidates.map( async ( { id, weight } ) => {
             const [info, pool] = await Promise.all( [
               fetchTaxonInfo( id ),
-              fetchPhotoPool( id ),
+              fetchPhotoPool( id, selectedObsTypes.length > 0 ? selectedObsTypes : undefined ),
             ] );
             if ( info && pool.length > 0 ) {
               return { info, pool, weight } as LookalikeCandidate;
@@ -554,7 +581,7 @@ const SpeciesGame = ( ) => {
 
     loadGame( );
     return ( ) => { cancelled = true; };
-  }, [taxonId, fetchPhotoPool, fetchTaxonInfo, findMisidentifiedLookalikes, startRound] );
+  }, [taxonId, fetchPhotoPool, fetchTaxonInfo, findMisidentifiedLookalikes, startRound, selectedObsTypes] );
 
   const handleGuess = useCallback( ( guessIsTarget: boolean ) => {
     const correct = guessIsTarget === isTargetShown;
@@ -615,6 +642,71 @@ const SpeciesGame = ( ) => {
   } else if ( isSkip ) {
     resultHeaderColor = "text-darkGray";
   }
+
+  const filterModalContent = (
+    <View
+      className="bg-white rounded-t-3xl"
+      style={modalContainerStyle}
+    >
+      <View className="items-center pt-3 pb-1">
+        <View className="w-10 h-1 bg-lightGray rounded-full" />
+      </View>
+      {/* eslint-disable-next-line i18next/no-literal-string */}
+      <Body1 className="text-center font-bold px-4 pt-2 pb-1">
+        Filter by Life Stage
+      </Body1>
+
+      <ScrollView className="px-4" style={gameStyles.modalScrollView}>
+        <Body2 className="text-center text-darkGray pb-3">
+          {/* eslint-disable-next-line i18next/no-literal-string */}
+          Select one or more life stages to filter observations:
+        </Body2>
+
+        {OBSERVATION_TYPES.map( ( obsType ) => {
+          const isSelected = selectedObsTypes.includes( obsType.value );
+          return (
+            <Pressable
+              key={obsType.value}
+              onPress={() => {
+                setSelectedObsTypes( prev => (
+                  isSelected
+                    ? prev.filter( t => t !== obsType.value )
+                    : [...prev, obsType.value]
+                ) );
+              }}
+              style={[
+                gameStyles.filterCheckbox,
+                isSelected && { backgroundColor: "#E0F2F1" },
+              ]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: isSelected }}
+            >
+              <Body1>
+                {isSelected ? "✓ " : "  "}
+                {obsType.label}
+              </Body1>
+            </Pressable>
+          );
+        } )}
+
+        <View className="pt-4 pb-6 gap-2">
+          <Button
+            text="Apply"
+            onPress={() => setShowFilterModal( false )}
+            level="focus"
+            className="w-full"
+          />
+          <Button
+            text="Clear Filters"
+            onPress={() => {
+              setSelectedObsTypes( [] );
+            }}
+            className="w-full"
+          />
+        </View>
+      </ScrollView>
+    </View>
+  );
 
   const lookalikesModalContent = (
     <View
@@ -695,6 +787,13 @@ const SpeciesGame = ( ) => {
 
   return (
     <SharedStackViewWrapper>
+      {/* Filter modal */}
+      <Modal
+        showModal={showFilterModal}
+        closeModal={() => setShowFilterModal( false )}
+        modal={filterModalContent}
+      />
+
       {/* Lookalikes explanation modal */}
       <Modal
         showModal={showLookalikesModal}
@@ -709,13 +808,25 @@ const SpeciesGame = ( ) => {
       >
         <BackButton inCustomHeader />
         <Body2 className="font-bold">{accuracyStr}</Body2>
-        <Pressable
-          accessibilityRole="button"
-          className="w-11 h-11 items-center justify-center"
-          onPress={() => setShowLookalikesModal( true )}
-        >
-          <Body1 className="text-inatGreen font-bold">?</Body1>
-        </Pressable>
+        <View className="flex-row gap-1">
+          <Pressable
+            accessibilityRole="button"
+            className="w-11 h-11 items-center justify-center"
+            onPress={() => setShowFilterModal( true )}
+            accessibilityLabel={selectedObsTypes.length > 0 ? "Filter active" : "Open filter"}
+          >
+            <Body1 className={`font-bold ${selectedObsTypes.length > 0 ? "text-inatGreen" : "text-darkGray"}`}>
+              ≡
+            </Body1>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            className="w-11 h-11 items-center justify-center"
+            onPress={() => setShowLookalikesModal( true )}
+          >
+            <Body1 className="text-inatGreen font-bold">?</Body1>
+          </Pressable>
+        </View>
       </View>
 
       {/* Photo area — square to match crop */}
