@@ -8,6 +8,7 @@ import React, {
 import { StyleSheet } from "react-native";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
@@ -88,8 +89,9 @@ const ObsImageZoomable = ( {
     return size / Math.min( contain.width, contain.height );
   }, [size, imageWidth, imageHeight] );
 
-  // On gesture end, persist the framed region so the AgreeButton can log it as a
-  // ground-truth crop and a later gesture resumes from where this one left off.
+  // On gesture end, immediately log the framed region as a ground-truth crop
+  // and stash it so a later gesture on this photo resumes from where this one
+  // left off.
   const handleInteractionEnd = useCallback( ( ) => {
     if ( !transformRef.current ) return;
     const crop = imageZoomTransformToNormalizedCrop(
@@ -101,6 +103,7 @@ const ObsImageZoomable = ( {
       readImageZoomTransform( transformRef.current ),
     );
     setPendingViewport( uri, crop );
+    saveAnimalCrop( uri, crop );
   }, [uri, imageWidth, imageHeight, size] );
 
   const cropPanContext: CropPanContext = {
