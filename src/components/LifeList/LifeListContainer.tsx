@@ -127,7 +127,7 @@ const LiferGridItem = ( { item, style }: LiferGridItemProps ) => {
         navigation.navigate( {
           key: `${route.key}-LiferGridItem-ObsDetails-${item.uuid}`,
           name: "ObsDetails",
-          params: { id: item.uuid },
+          params: { uuid: item.uuid },
         } )
       )}
       accessibilityLabel={accessibleName}
