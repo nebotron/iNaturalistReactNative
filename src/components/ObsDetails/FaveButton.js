@@ -8,14 +8,18 @@ import {
   ActivityIndicator,
   INatIconButton,
 } from "components/SharedComponents";
+import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert } from "react-native";
+import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import {
   useAuthenticatedMutation,
   useTranslation,
 } from "sharedHooks";
 import colors from "styles/tailwindColors";
+
+const { useRealm } = RealmContext;
 
 const OBS_IMAGE_ACTION_ICON_SIZE = 50;
 
@@ -33,12 +37,23 @@ const FaveButton = ( {
   stacked = false,
 }: Props ): Node => {
   const { t } = useTranslation( );
+  const realm = useRealm( );
   const uuid = observation?.uuid;
   const [loading, setLoading] = useState( false );
+
+  const isUnuploaded = useMemo( ( ) => {
+    return observation && typeof observation.wasSynced === "function"
+      ? !observation.wasSynced( )
+      : false;
+  }, [observation] );
 
   const observationFaved = useMemo( ( ) => {
     if ( !observation ) return null;
     const faves = observation.votes?.filter( vote => vote?.vote_scope === null ) || [];
+
+    if ( isUnuploaded ) {
+      return faves.length > 0;
+    }
 
     if ( currentUser && faves.length > 0 ) {
       const viewerFaved = faves.find( fave => fave.user_id === currentUser.id );
@@ -48,6 +63,7 @@ const FaveButton = ( {
   }, [
     currentUser,
     observation,
+    isUnuploaded,
   ] );
 
   const [isFaved, setIsFaved] = useState( observationFaved || false );
@@ -95,7 +111,33 @@ const FaveButton = ( {
     },
   );
 
+  const toggleLocalFave = useCallback( ( ) => {
+    if ( !realm.isClosed && observation && observation.isValid( ) ) {
+      safeRealmWrite( realm, ( ) => {
+        if ( isFaved ) {
+          observation.votes = observation.votes?.filter( v => v?.vote_scope !== null ) || [];
+        } else {
+          const newVote = {
+            id: Math.random( ),
+            user_id: currentUser?.id || 0,
+            vote_flag: true,
+            vote_scope: null,
+          };
+          observation.votes = [...( observation.votes || [] ), newVote];
+        }
+      }, "toggling favorite locally for unuploaded observation" );
+    }
+  }, [realm, observation, isFaved, currentUser] );
+
   const toggleFave = useCallback( ( ) => {
+    if ( isUnuploaded ) {
+      setLoading( true );
+      toggleLocalFave( );
+      setIsFaved( !isFaved );
+      setLoading( false );
+      afterToggleFave( !isFaved );
+      return;
+    }
     if ( !currentUser ) return;
     setLoading( true );
     if ( isFaved ) {
@@ -111,9 +153,16 @@ const FaveButton = ( {
     createUnfaveMutate,
     isFaved,
     uuid,
+    isUnuploaded,
+    toggleLocalFave,
+    afterToggleFave,
   ] );
 
   if ( !observation ) {
+    return null;
+  }
+
+  if ( !isUnuploaded && !currentUser ) {
     return null;
   }
 
