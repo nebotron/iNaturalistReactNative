@@ -84,7 +84,7 @@ const MaverickIdentificationItem = ( { item }: MaverickIdentificationItemProps )
           handlePress={( ) => obsUuid && navigation.navigate( {
             key: `${route.key}-MaverickIdentificationItem-ObsDetails-${item.uuid}`,
             name: "ObsDetails",
-            params: { id: obsUuid },
+            params: { uuid: obsUuid },
           } )}
           bottomTextComponent={( ) => (
             <Body4>
