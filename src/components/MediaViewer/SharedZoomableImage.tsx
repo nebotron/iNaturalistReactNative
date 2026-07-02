@@ -6,7 +6,7 @@ import React, {
   useMemo,
   useRef,
 } from "react";
-import { StyleSheet } from "react-native";
+import { StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
@@ -164,21 +164,26 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     ? { filter: [{ brightness }] }
     : null;
 
+  // The GestureDetector must attach to a view that is NOT transformed: gesture
+  // coordinates (e.g. pinch focalX/focalY) are reported relative to the attached
+  // view, so attaching to the transformed image itself creates a feedback loop
+  // that makes two-finger panning lag far behind the fingers.
   return (
     <GestureDetector gesture={composedGestures}>
-      <Animated.Image
-        testID={testID}
-        style={[styles.image, style, animatedStyle, brightnessFilter]}
-        source={{ uri }}
-        resizeMode="contain"
-        onLayout={onZoomableLayout}
-        onLoad={event => {
-          const { width, height } = event.nativeEvent.source;
-          onImageDimensionsChange?.( { width, height } );
-          onLoad?.( );
-        }}
-        onError={onError}
-      />
+      <View style={[styles.image, style]} onLayout={onZoomableLayout}>
+        <Animated.Image
+          testID={testID}
+          style={[StyleSheet.absoluteFill, animatedStyle, brightnessFilter]}
+          source={{ uri }}
+          resizeMode="contain"
+          onLoad={event => {
+            const { width, height } = event.nativeEvent.source;
+            onImageDimensionsChange?.( { width, height } );
+            onLoad?.( );
+          }}
+          onError={onError}
+        />
+      </View>
     </GestureDetector>
   );
 };
