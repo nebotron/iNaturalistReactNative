@@ -366,7 +366,7 @@ const TaxonDetails = ( ): Node => {
   const effectiveRankLevel = taxon?.rank_level ?? rankLevel;
   const showExploreButton = !hideNavButtons && isConnected && !fromMatch && taxon != null;
   const showGameButton = !hideNavButtons && isConnected !== false && !fromMatch
-    && !fromObsEdit && effectiveRankLevel != null && effectiveRankLevel <= 10;
+    && effectiveRankLevel != null && effectiveRankLevel <= 10;
 
   const displayTaxonTitle = useCallback( ( ) => (
     <View
