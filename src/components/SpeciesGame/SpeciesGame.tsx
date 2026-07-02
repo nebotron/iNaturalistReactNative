@@ -38,12 +38,65 @@ import {
 import useSubjectDetectionForUri, {
   preloadSubjectDetectionForUri,
 } from "sharedHelpers/useSubjectDetectionForUri";
+import { zustandStorage } from "stores/useStore";
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
 const LOOKALIKE_RADIUS_KM = 500;
 const LOCATION_FILTER_RADIUS_KM = 1000;
 const MAX_ZOOM_SCALE = 5;
+const LOOKALIKE_CACHE_KEY = "speciesGameLookalikes";
+const MAX_LOOKALIKE_OBS = 2000;
+
+interface LookalikeCacheEntry {
+  entries: { taxonId: number; count: number; observationUuids: string[] }[];
+  topId: number | null;
+  obsScanned: number;
+}
+
+function computeLookalikesFromObs(
+  results: unknown[],
+  targetId: number,
+): { topId: number | null; entries: { taxonId: number; count: number; observationUuids: string[] }[] } {
+  const counts: Record<number, { count: number; observationUuids: string[] }> = {};
+  for ( const obs of results ) {
+    for ( const ident of ( obs as { identifications?: unknown[] } ).identifications ?? [] ) {
+      const altId: number | undefined = ( ident as { taxon?: { id?: number } } ).taxon?.id;
+      const rankLevel: number | undefined
+        = ( ident as { taxon?: { rank_level?: number } } ).taxon?.rank_level;
+      if ( altId && altId !== targetId && rankLevel === 10 ) {
+        if ( !counts[altId] ) counts[altId] = { count: 0, observationUuids: [] };
+        counts[altId].count += 1;
+        const uuid = ( obs as { uuid?: string } ).uuid;
+        if ( uuid && !counts[altId].observationUuids.includes( uuid ) ) {
+          counts[altId].observationUuids.push( uuid );
+        }
+      }
+    }
+  }
+  const entries = Object.entries( counts )
+    .map( ( [id, d] ) => ( {
+      taxonId: Number( id ),
+      count: d.count,
+      observationUuids: d.observationUuids,
+    } ) )
+    .sort( ( a, b ) => b.count - a.count );
+  return { topId: entries.length > 0 ? entries[0].taxonId : null, entries };
+}
+
+function getCachedLookalikes( taxonId: number ): LookalikeCacheEntry | null {
+  const raw = zustandStorage.getItem( `${LOOKALIKE_CACHE_KEY}_${taxonId}` );
+  if ( !raw || typeof raw !== "string" ) return null;
+  try {
+    return JSON.parse( raw ) as LookalikeCacheEntry;
+  } catch {
+    return null;
+  }
+}
+
+function setCachedLookalikes( taxonId: number, value: LookalikeCacheEntry ): void {
+  zustandStorage.setItem( `${LOOKALIKE_CACHE_KEY}_${taxonId}`, JSON.stringify( value ) );
+}
 
 const BUTTON_ROW_HEIGHT = 56;
 
@@ -150,6 +203,7 @@ const SpeciesGame = ( ) => {
   const [showLookalikesModal, setShowLookalikesModal] = useState( false );
   const [lookalikesData, setLookalikesData] = useState<LookalikeEntry[]>( [] );
   const [usedMisidentifications, setUsedMisidentifications] = useState( false );
+  const [obsScannedCount, setObsScannedCount] = useState( 0 );
 
   const targetPoolRef = useRef<PhotoEntry[]>( [] );
   const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
@@ -275,66 +329,56 @@ const SpeciesGame = ( ) => {
     ].forEach( e => preloadSubjectDetectionForUri( e.url ) );
   }, [taxonId] );
 
-  // Scans 400 random observations of taxonId near the user's location and returns all
+  // Scans up to 2000 random observations of taxonId near the user's location and returns all
   // species-level taxa that appeared as alternate identifications, sorted by frequency.
-  // Also records which observation UUIDs contained each misidentification.
+  // Stops fetching early once lookalikes are found. Results are cached in persistent storage.
   const findMisidentifiedLookalikes = useCallback( async (
     id: number,
     prefetchedLocation?: { latitude: number; longitude: number } | null,
   ): Promise<{
     topId: number | null;
     entries: { taxonId: number; count: number; observationUuids: string[] }[];
+    obsScanned: number;
   }> => {
-    const location = await fetchCoarseUserLocation( );
+    const cached = getCachedLookalikes( id );
+    if ( cached ) {
+      return { topId: cached.topId, entries: cached.entries, obsScanned: cached.obsScanned };
+    }
+
+    const location = prefetchedLocation ?? await fetchCoarseUserLocation( );
     const locationParams = location
       ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
       : "";
     const baseUrl = `${INATURALIST_API}/observations`
-      + `?taxon_id=${id}${
-        locationParams
-      }&per_page=200`
-      + "&order_by=random";
-    const [res1, res2] = await Promise.all( [
-      fetch( `${baseUrl}&page=1` ),
-      fetch( `${baseUrl}&page=2` ),
-    ] );
-    const results: unknown[] = [];
-    if ( res1.ok ) {
-      const d = await res1.json( );
-      results.push( ...( d.results ?? [] ) );
-    }
-    if ( res2.ok ) {
-      const d = await res2.json( );
-      results.push( ...( d.results ?? [] ) );
-    }
-    if ( results.length === 0 ) return { topId: null, entries: [] };
-    const data = { results };
+      + `?taxon_id=${id}${locationParams}&per_page=200&order_by=random`;
 
-    const counts: Record<number, { count: number; observationUuids: string[] }> = {};
-    for ( const obs of data.results ?? [] ) {
-      for ( const ident of obs.identifications ?? [] ) {
-        const altId: number | undefined = ident.taxon?.id;
-        const rankLevel: number | undefined = ident.taxon?.rank_level;
-        // Only count species-level taxa (not subspecies) that differ from the target
-        if ( altId && altId !== id && rankLevel === 10 ) {
-          if ( !counts[altId] ) counts[altId] = { count: 0, observationUuids: [] };
-          counts[altId].count += 1;
-          if ( obs.uuid && !counts[altId].observationUuids.includes( obs.uuid ) ) {
-            counts[altId].observationUuids.push( obs.uuid );
-          }
+    const PAGE_BATCH = 2;
+    const MAX_PAGES = MAX_LOOKALIKE_OBS / 200;
+    const allResults: unknown[] = [];
+
+    for ( let page = 1; page <= MAX_PAGES; page += PAGE_BATCH ) {
+      const pageNums = [page, page + 1].filter( p => p <= MAX_PAGES );
+      // eslint-disable-next-line no-await-in-loop
+      const responses = await Promise.all( pageNums.map( p => fetch( `${baseUrl}&page=${p}` ) ) );
+      for ( const res of responses ) {
+        if ( res.ok ) {
+          // eslint-disable-next-line no-await-in-loop
+          const d = await res.json( );
+          allResults.push( ...( d.results ?? [] ) );
         }
       }
+      const interim = computeLookalikesFromObs( allResults, id );
+      if ( interim.entries.length > 0 ) break;
     }
 
-    const entries = Object.entries( counts )
-      .map( ( [taxonId, d] ) => ( {
-        taxonId: Number( taxonId ),
-        count: d.count,
-        observationUuids: d.observationUuids,
-      } ) )
-      .sort( ( a, b ) => b.count - a.count );
+    const result = computeLookalikesFromObs( allResults, id );
+    const cacheEntry: LookalikeCacheEntry = {
+      ...result,
+      obsScanned: allResults.length,
+    };
+    setCachedLookalikes( id, cacheEntry );
 
-    return { topId: entries.length > 0 ? entries[0].taxonId : null, entries };
+    return { ...result, obsScanned: allResults.length };
   }, [] );
 
   // Fetches basic taxon info (name, common name) by ID.
@@ -368,8 +412,11 @@ const SpeciesGame = ( ) => {
         const userLocation = await fetchCoarseUserLocation( );
 
         // Find the most-confused species via identification disagreements.
-        const { topId: misidentifiedId, entries: misidentEntries }
-          = await findMisidentifiedLookalikes( taxonId, userLocation );
+        const {
+          topId: misidentifiedId,
+          entries: misidentEntries,
+          obsScanned,
+        } = await findMisidentifiedLookalikes( taxonId, userLocation );
 
         // Filter misidentification candidates to species actually found within 1000km.
         const locationFilterParams = userLocation
@@ -455,6 +502,7 @@ const SpeciesGame = ( ) => {
         // so the game starts immediately without waiting.
         if ( misidentifiedId !== null && nearbyMisidentEntries.length > 0 ) {
           setUsedMisidentifications( true );
+          setObsScannedCount( obsScanned );
           Promise.all(
             nearbyMisidentEntries
               .filter( e => e.taxonId !== taxonId )
@@ -586,7 +634,7 @@ const SpeciesGame = ( ) => {
           ? (
             <>
               <Body2 className="text-center text-darkGray pb-3">
-                {`Based on 400 random observations of ${taxonLabel( target! )}`
+                {`Based on ${obsScannedCount} random observations of ${taxonLabel( target! )}`
                   + " near your location, these species were most often identified instead:"}
               </Body2>
               {lookalikesData.length === 0
