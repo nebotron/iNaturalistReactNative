@@ -820,6 +820,9 @@ MY-CONTENT--notifications = MY CONTENT
 # Label for a menu item and screen title showing the first time the user
 # observed each species they've seen, newest to oldest
 MY-LIFERS = My Lifers
+# Label for a menu item and screen title showing identifications the user
+# made that are outliers, disagreeing with the community taxon
+MY-MAVERICK-IDS = My Maverick IDs
 My-Observations = My Observations
 # Label for the bottom tab that shows your observations. Feel free to be
 # flexible in translating this to keep it as short as possible. "My
@@ -1150,7 +1153,6 @@ REDO-SEARCH-IN-MAP-AREA = REDO SEARCH IN MAP AREA
 Remove-agreement = Remove agreement
 # Label for a button that removes a vote of disagreement
 Remove-disagreement = Remove disagreement
-Remove-favorite = Remove favorite
 # Label for button that removes an identification
 Remove-identification = Remove identification
 Remove-Photos = Remove Photos
@@ -1667,6 +1669,8 @@ You-can-still-share-the-file = You can still share the file with another app. If
 You-can-upload-this-observation-to-our-community = You can upload this observation to our community to get an identification from a real person, and help our AI improve its identifications in the future
 You-cant-add-or-remove-observations-from-collection-and-umbrella-projects = You can’t add or remove observations from collection and umbrella projects.
 You-changed-filters-will-be-discarded = You changed filters, but they were not applied to your explore search results.
+# Empty state for the screen listing the user's maverick identifications
+You-dont-have-any-maverick-identifications = You don't have any maverick identifications.
 You-have-no-notifications-get-started-by-creating-your-own-observations = You have no notifications! Get started by creating your own observations.
 You-have-no-notifications-you-will-see-updates-to-obs-you-have-left-IDs-or-comments-on = You have no notifications! You will see updates to observations you have left IDs or comments on here.
 You-have-opted-out-of-the-Community-Taxon = You have opted out of the Community Taxon
