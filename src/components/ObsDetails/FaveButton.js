@@ -1,6 +1,7 @@
 // @flow
 import {
   faveObservation,
+  unfaveObservation,
 } from "api/observations";
 import classNames from "classnames";
 import {
@@ -40,11 +41,9 @@ const FaveButton = ( {
   const uuid = observation?.uuid;
   const [loading, setLoading] = useState( false );
 
-  const isUnuploaded = useMemo( ( ) => {
-    return observation && typeof observation.wasSynced === "function"
-      ? !observation.wasSynced( )
-      : false;
-  }, [observation] );
+  const isUnuploaded = useMemo( ( ) => ( observation && typeof observation.wasSynced === "function"
+    ? !observation.wasSynced( )
+    : false ), [observation] );
 
   const observationFaved = useMemo( ( ) => {
     if ( !observation ) return null;
@@ -95,6 +94,21 @@ const FaveButton = ( {
     },
   );
 
+  const { mutate: deleteFaveMutate } = useAuthenticatedMutation(
+    ( faveOrUnfaveParams, optsWithAuth ) => unfaveObservation( faveOrUnfaveParams, optsWithAuth ),
+    {
+      onSuccess: ( ) => {
+        afterToggleFave( false );
+        setLoading( false );
+      },
+      onError: error => {
+        showErrorAlert( error );
+        setIsFaved( true );
+        setLoading( false );
+      },
+    },
+  );
+
   const toggleLocalFave = useCallback( ( ) => {
     if ( !realm.isClosed && observation && observation.isValid( ) ) {
       safeRealmWrite( realm, ( ) => {
@@ -123,14 +137,18 @@ const FaveButton = ( {
       return;
     }
     if ( !currentUser ) return;
-    if ( !isFaved ) {
-      setLoading( true );
+    setLoading( true );
+    if ( isFaved ) {
+      setIsFaved( false );
+      deleteFaveMutate( { uuid } );
+    } else {
       setIsFaved( true );
       createFaveMutate( { uuid } );
     }
   }, [
     currentUser,
     createFaveMutate,
+    deleteFaveMutate,
     isFaved,
     uuid,
     isUnuploaded,
@@ -169,20 +187,20 @@ const FaveButton = ( {
     );
   }
 
-  if ( isFaved ) {
-    return null;
-  }
-
   return (
     <INatIconButton
-      icon="star-bold-outline"
+      icon={isFaved
+        ? "star"
+        : "star-bold-outline"}
       size={iconSize}
       width={buttonWidth}
       height={buttonHeight}
       onPress={toggleFave}
       color={colors.white}
       className={classNames( positionClassName )}
-      accessibilityLabel={t( "Add-favorite" )}
+      accessibilityLabel={isFaved
+        ? t( "Remove-favorite" )
+        : t( "Add-favorite" )}
     />
   );
 };

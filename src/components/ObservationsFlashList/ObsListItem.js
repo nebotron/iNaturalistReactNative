@@ -117,7 +117,7 @@ const ObsListItem = ( {
           isSmall
           iconicTaxonName={observation.taxon?.iconic_taxon_name}
         >
-          {!explore && !!observation.id && currentUser && (
+          {!explore && currentUser && (
             <FaveButton
               observation={observation}
               currentUser={currentUser}
