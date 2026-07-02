@@ -11,7 +11,6 @@ type Props = {
   observation: Object,
   currentUser?: Object,
   afterAction?: Function,
-  onAgree?: Function,
   directAgree?: boolean,
   openAgreeWithIdSheet?: ( taxon: Object ) => void,
   containerClassName?: string,
@@ -21,7 +20,6 @@ const ObsImageActionButtons = ( {
   observation,
   currentUser,
   afterAction = ( ) => undefined,
-  onAgree,
   directAgree = false,
   openAgreeWithIdSheet,
   containerClassName = "absolute bottom-2 right-2 z-10 flex-col items-end gap-6",
@@ -48,7 +46,6 @@ const ObsImageActionButtons = ( {
         observation={observation}
         currentUser={currentUser}
         afterAgree={afterAction}
-        onAgree={onAgree}
         directAgree={directAgree}
         openAgreeWithIdSheet={openAgreeWithIdSheet}
         stacked

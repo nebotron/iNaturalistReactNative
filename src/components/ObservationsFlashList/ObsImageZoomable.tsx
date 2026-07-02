@@ -15,7 +15,6 @@ import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop"
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
-import { getPendingViewport, setPendingViewport } from "sharedHelpers/pendingViewport";
 import type { ImageZoomTransformRefs } from "sharedHooks/imageZoom/readImageZoomTransform";
 import readImageZoomTransform from "sharedHooks/imageZoom/readImageZoomTransform";
 import { useZoomable } from "sharedHooks/imageZoom/useZoomable";
@@ -89,9 +88,7 @@ const ObsImageZoomable = ( {
     return size / Math.min( contain.width, contain.height );
   }, [size, imageWidth, imageHeight] );
 
-  // On gesture end, immediately log the framed region as a ground-truth crop
-  // and stash it so a later gesture on this photo resumes from where this one
-  // left off.
+  // On gesture end, immediately log the framed region as a ground-truth crop.
   const handleInteractionEnd = useCallback( ( ) => {
     if ( !transformRef.current ) return;
     const crop = imageZoomTransformToNormalizedCrop(
@@ -102,7 +99,6 @@ const ObsImageZoomable = ( {
       size,
       readImageZoomTransform( transformRef.current ),
     );
-    setPendingViewport( uri, crop );
     saveAnimalCrop( uri, crop );
   }, [uri, imageWidth, imageHeight, size] );
 
@@ -136,15 +132,14 @@ const ObsImageZoomable = ( {
     transformRef.current = transform;
   }, [transform] );
 
-  // Frame the detected subject (or the last saved viewport for this photo) once
-  // the layout and image dimensions are known. Applied a single time per photo;
-  // the engine keeps the live transform across subsequent gestures.
+  // Frame the detected (or previously logged) crop once the layout and image
+  // dimensions are known. Applied a single time per photo; the engine keeps
+  // the live transform across subsequent gestures.
   const appliedRef = useRef( false );
   useEffect( ( ) => {
     if ( appliedRef.current ) return;
     if ( size <= 0 || imageWidth <= 0 || imageHeight <= 0 ) return;
-    const start = getPendingViewport( uri ) ?? initialCrop;
-    const framed = frameCropTransform( start, size, imageWidth, imageHeight, coverScale );
+    const framed = frameCropTransform( initialCrop, size, imageWidth, imageHeight, coverScale );
     // Clamp the framing so the image always covers the tile even when the subject
     // sits against an edge (matches the crop clamping applied during gestures).
     const limits = computeCropPanTranslateLimits(
