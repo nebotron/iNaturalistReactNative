@@ -58,6 +58,7 @@ export const useGestures = ( {
   onProgrammaticZoom = () => {},
   onResetAnimationEnd,
   cropPanContext,
+  onSwipeToClose,
 }: ZoomableUseGesturesProps ) => {
   const isInteracting = useRef( false );
   const isPinching = useRef( false );
@@ -531,15 +532,57 @@ export const useGestures = ( {
     ],
   } ) );
 
-  const pinchPanGestures = Gesture.Simultaneous(
-    pinchGesture,
-    panWhilePinchingGesture,
-  );
+  // In the crop editor (cropPanContext set), simultaneous pan+pinch is useful for
+  // precise crop adjustment and the cropPanContext clamping prevents erratic movement.
+  // Without cropPanContext (e.g. MediaViewer), running panWhilePinchingGesture alongside
+  // pinchGesture causes jitter: asymmetric finger spreads shift the average touch position,
+  // adding unwanted translation on top of the focal-point correction. The focal calculation
+  // in pinchGesture already handles "zoom around the pinch center", so skip the simultaneous
+  // pan in the unconstrained case.
+  const pinchPanGestures = cropPanContext
+    ? Gesture.Simultaneous( pinchGesture, panWhilePinchingGesture )
+    : pinchGesture;
+
+  // When onSwipeToClose is provided, add a downward-swipe gesture into the same
+  // GestureDetector as the zoom gestures. This avoids the cross-detector coordination
+  // overhead that causes lag when swipe-to-close lives in a separate outer GestureDetector.
+  // It runs on the UI thread (no runOnJS) and fails immediately when zoomed in so that
+  // the panOnlyGesture can handle panning instead.
+  const swipeToCloseGesture = onSwipeToClose
+    ? Gesture.Pan()
+      .maxPointers( 1 )
+      .activeOffsetY( 15 )
+      .failOffsetX( [-15, 15] )
+      .onTouchesDown( ( _, manager ) => {
+        "worklet";
+        if ( scale.value > 1 ) {
+          manager.fail();
+        }
+      } )
+      .onUpdate( ( { translationY, velocityY } ) => {
+        "worklet";
+        if ( translationY > 50 && velocityY > 500 ) {
+          runOnJS( onSwipeToClose )();
+        }
+      } )
+    : null;
+
   const tapGestures = Gesture.Exclusive( doubleTapGesture, singleTapGesture );
-  const gestures
-    = isDoubleTapEnabled || isSingleTapEnabled
-      ? Gesture.Race( pinchPanGestures, panOnlyGesture, tapGestures )
+
+  // Build a flat list of competing gestures so there is only one Race layer.
+  // swipeToCloseGesture (when present) competes alongside the others: it fails
+  // immediately for 2-finger touches (maxPointers=1) and when scale > 1 (zoomed),
+  // so it never interferes with pinch or with the panOnlyGesture.
+  let gestures;
+  if ( isDoubleTapEnabled || isSingleTapEnabled ) {
+    gestures = swipeToCloseGesture
+      ? Gesture.Race( pinchPanGestures, panOnlyGesture, tapGestures, swipeToCloseGesture )
+      : Gesture.Race( pinchPanGestures, panOnlyGesture, tapGestures );
+  } else {
+    gestures = swipeToCloseGesture
+      ? Gesture.Race( pinchPanGestures, swipeToCloseGesture )
       : pinchPanGestures;
+  }
 
   return {
     gestures,

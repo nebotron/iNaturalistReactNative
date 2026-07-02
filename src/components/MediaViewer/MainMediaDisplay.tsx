@@ -5,8 +5,10 @@ import {
   TransparentCircleButton,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
-import React, { useCallback, useMemo, useRef, useState } from "react";
-import { ActivityIndicator } from "react-native";
+import React, {
+  useCallback, useMemo, useRef, useState,
+} from "react";
+import { ActivityIndicator, StyleSheet } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
 import {
   Gesture,
@@ -16,8 +18,8 @@ import {
 import type { CarouselRenderItem, ICarouselInstance } from "react-native-reanimated-carousel";
 import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
-import { saveBrightness } from "sharedHelpers/brightnessLog";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import { saveBrightness } from "sharedHelpers/brightnessLog";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
@@ -25,8 +27,8 @@ import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
 import AttributionButton from "./AttributionButton";
-import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 import CustomImageZoom from "./CustomImageZoom";
+import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 
 interface PhotoItem {
   attribution?: string;
@@ -46,6 +48,9 @@ interface SoundItem {
 const BRIGHTNESS_MIN = 0.1;
 const BRIGHTNESS_MAX = 5.0;
 const BRIGHTNESS_DEFAULT = 1.0;
+const styles = StyleSheet.create( {
+  gestureHandlerRoot: { flex: 1 },
+} );
 const sliderStyle = { flex: 1, height: 40 };
 const roundIconButtonClass = "bg-black/50 items-center justify-center "
   + "rounded-full h-[40px] w-[40px] ml-2";
@@ -132,12 +137,6 @@ const MainMediaDisplay = ( {
   const renderPhoto = ( photo: PhotoItem, photoIndex: number ) => {
     const uri = Photo.displayLocalOrRemoteLargePhoto( photo );
     const hasAttribution = photo?.attribution;
-    const handleZoomRef = useCallback( ( ref: SharedZoomableImageRef | null ) => {
-      // Only update currentZoomRefRef if this is the currently selected photo
-      if ( photoIndex === selectedMediaIndex ) {
-        currentZoomRefRef.current = ref;
-      }
-    }, [photoIndex, selectedMediaIndex] );
     return (
       <View className="flex-1">
         <CustomImageZoom
@@ -146,7 +145,12 @@ const MainMediaDisplay = ( {
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
           brightness={brightness}
-          zoomRef={handleZoomRef as any}
+          zoomRef={( ref: SharedZoomableImageRef | null ) => {
+            if ( photoIndex === selectedMediaIndex ) {
+              currentZoomRefRef.current = ref;
+            }
+          }}
+          onSwipeToClose={onClose}
           onLongPress={onLongPressPhoto
             ? ( ) => onLongPressPhoto( uri )
             : undefined}
@@ -274,31 +278,45 @@ const MainMediaDisplay = ( {
     );
   };
 
-  const renderSound = ( sound: SoundItem ) => (
-    <View
-      className="flex-1 justify-center items-center"
-    >
-      <SoundContainer
-        autoPlay={autoPlaySound}
-        sizeClass="h-72 w-screen"
-        sound={sound}
-        isVisible={items.indexOf( sound ) === selectedMediaIndex}
-      />
-      {
-        editable && (
-          <View className="absolute bottom-4 right-4">
-            <TransparentCircleButton
-              onPress={( ) => onDeleteSound( sound.file_url )}
-              icon="trash-outline"
-              accessibilityLabel={deleteSoundLabel}
-            />
-          </View>
-        )
+  const soundSwipeToCloseGesture = Gesture.Pan()
+    .runOnJS( true )
+    .maxPointers( 1 )
+    .activeOffsetY( 15 )
+    .failOffsetX( [-15, 15] )
+    .onUpdate( ( { translationY, velocityY } ) => {
+      if ( translationY > 50 && velocityY > 500 ) {
+        onClose();
       }
-    </View>
+    } );
+
+  const renderSound = ( sound: SoundItem ) => (
+    <GestureDetector gesture={soundSwipeToCloseGesture}>
+      <View
+        collapsable={false}
+        className="flex-1 justify-center items-center"
+      >
+        <SoundContainer
+          autoPlay={autoPlaySound}
+          sizeClass="h-72 w-screen"
+          sound={sound}
+          isVisible={items.indexOf( sound ) === selectedMediaIndex}
+        />
+        {
+          editable && (
+            <View className="absolute bottom-4 right-4">
+              <TransparentCircleButton
+                onPress={( ) => onDeleteSound( sound.file_url )}
+                icon="trash-outline"
+                accessibilityLabel={deleteSoundLabel}
+              />
+            </View>
+          )
+        }
+      </View>
+    </GestureDetector>
   );
 
-  const renderItem: CarouselRenderItem<PhotoItem | SoundItem> = ( { item, index } ) => {
+  const renderItem: CarouselRenderItem<PhotoItem | SoundItem> = ( { item } ) => {
     if ( item.type === "photo" ) {
       const photoIndex = photos.indexOf( item as PhotoItem );
       return renderPhoto( item as PhotoItem, photoIndex );
@@ -316,46 +334,27 @@ const MainMediaDisplay = ( {
       .maxPointers( 1 );
   }, [] );
 
-  const swipeToCloseGesture = Gesture.Pan()
-    .runOnJS( true )
-    // While zoomed, a downward drag should pan the image, not close the viewer
-    .enabled( !zooming )
-    .maxPointers( 1 )
-    // Activate only on a mostly-vertical downward drag
-    .activeOffsetY( 15 )
-    .failOffsetX( [-15, 15] )
-    .onUpdate( ( { translationY, velocityY } ) => {
-      if ( translationY > 50 && velocityY > 500 ) {
-        // Close media viewer on swipe down
-        onClose();
-      }
-    } );
-
   return (
     <View className="flex-1">
-      <GestureHandlerRootView>
-        <GestureDetector gesture={swipeToCloseGesture}>
-          <View collapsable={false}>
-            <Carousel
-              key={`MediaViewerCarousel-${screenWidth}`}
-              testID="MediaViewer.carousel"
-              ref={horizontalScroll}
-              data={items}
-              renderItem={renderItem}
-              // defaultIndex is only read once, on mount, but the underlying
-              // carousel library validates it against data.length on every
-              // render, so it must stay in bounds even after items shrink
-              // (e.g. deleting the last item) to avoid an out-of-range crash
-              defaultIndex={Math.min( selectedMediaIndex, Math.max( items.length - 1, 0 ) )}
-              loop={false}
-              width={screenWidth}
-              // Disable scrolling when image is zooming
-              enabled={!zooming}
-              onSnapToItem={setSelectedMediaIndex}
-              onConfigurePanGesture={onConfigurePanGesture}
-            />
-          </View>
-        </GestureDetector>
+      <GestureHandlerRootView style={styles.gestureHandlerRoot}>
+        <Carousel
+          key={`MediaViewerCarousel-${screenWidth}`}
+          testID="MediaViewer.carousel"
+          ref={horizontalScroll}
+          data={items}
+          renderItem={renderItem}
+          // defaultIndex is only read once, on mount, but the underlying
+          // carousel library validates it against data.length on every
+          // render, so it must stay in bounds even after items shrink
+          // (e.g. deleting the last item) to avoid an out-of-range crash
+          defaultIndex={Math.min( selectedMediaIndex, Math.max( items.length - 1, 0 ) )}
+          loop={false}
+          width={screenWidth}
+          // Disable scrolling when image is zooming
+          enabled={!zooming}
+          onSnapToItem={setSelectedMediaIndex}
+          onConfigurePanGesture={onConfigurePanGesture}
+        />
       </GestureHandlerRootView>
     </View>
   );

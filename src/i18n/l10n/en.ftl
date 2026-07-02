@@ -564,8 +564,6 @@ Filter-by-observed-on-date = Filter by observations observed on a specific date
 Filter-by-uploaded-between-dates = Filter by observations uploaded between two specific dates
 Filter-by-uploaded-on-date = Filter by observations uploaded on a specific date
 Filters = Filters
-# Button that triggers the Wildlife Hotspots search
-Find-Hotspots = Find Hotspots
 # Status when an item has been flagged
 Flagged = Flagged
 Flash = Flash
@@ -758,8 +756,6 @@ Loads-content-that-requires-an-Internet-connection = Loads content that requires
 LOCATION = LOCATION
 Location = Location
 Location-accuracy-is-too-imprecise = Location accuracy is too imprecise to help identifiers. Please zoom in.
-# Title for alert when a location name could not be geocoded
-Location-not-found = Location not found
 LOCATION-TOO-IMPRECISE = LOCATION TOO IMPRECISE
 LOG-IN = LOG IN
 LOG-IN-TO-INATURALIST = LOG IN TO INATURALIST
@@ -808,6 +804,9 @@ Multiple-taxa = Multiple taxa
 # Title for section in Notifications showing notifications about observations
 # created by the viewer. Should be 16 characters or fewer or it will be ellipsized.
 MY-CONTENT--notifications = MY CONTENT
+# Label for a menu item and screen title showing the first time the user
+# observed each species they've seen, newest to oldest
+MY-LIFERS = My Lifers
 My-Observations = My Observations
 # Label for the bottom tab that shows your observations. Feel free to be
 # flexible in translating this to keep it as short as possible. "My
@@ -1010,7 +1009,6 @@ Please-Grant-Permission = Please Grant Permission
 PLEASE-LOG-IN = PLEASE LOG IN
 Please-log-in-again = Please log in again. We occasionally need to refresh your session to clear cached data and make sure the app is working its best.
 Please-make-sure-your-password-is-at-least-6-characters = Please make sure your password is at least 6 characters.
-Please-select-a-location-from-the-suggestions = Please select a location from the suggestions.
 Please-try-again-when-you-are-connected-to-the-internet = Please try again when you are connected to the Internet.
 Point-the-camera-at-an-animal-plant-or-fungus = Point the camera at an animal, plant, or fungus
 Popular-observations-filter = Popular (at least one fave)

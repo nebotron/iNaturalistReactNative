@@ -1,4 +1,4 @@
-import type { Node, RefObject } from "react";
+import type { Node, Ref } from "react";
 import React, {
   useEffect,
   useMemo,
@@ -23,14 +23,15 @@ interface Props {
   height?: number;
   style?: StyleProp<ViewStyle>;
   testID?: string;
-  zoomRef?: RefObject<SharedZoomableImageRef | null>;
+  zoomRef?: Ref<SharedZoomableImageRef>;
   autoReset?: boolean;
   cropPanContext?: CropPanContext;
   brightness?: number;
   onLongPress?: () => void;
   onInteractionEnd?: () => void;
-  onImageDimensionsChange?: (dims: { width: number; height: number }) => void;
+  onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
   onScaleChange?: ( scale: number ) => void;
+  onSwipeToClose?: () => void;
 }
 
 const CustomImageZoom = ( {
@@ -50,6 +51,7 @@ const CustomImageZoom = ( {
   onInteractionEnd,
   onImageDimensionsChange,
   onScaleChange,
+  onSwipeToClose,
 }: Props ): Node => {
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   const internalZoomRef = useRef<SharedZoomableImageRef>( null );
@@ -84,6 +86,7 @@ const CustomImageZoom = ( {
         onInteractionEnd?.( );
       }}
       cropPanContext={cropPanContext}
+      onSwipeToClose={onSwipeToClose}
       brightness={brightness}
       onLongPress={onLongPress}
       onImageDimensionsChange={onImageDimensionsChange}
