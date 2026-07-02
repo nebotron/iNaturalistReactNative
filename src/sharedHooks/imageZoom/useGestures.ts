@@ -40,7 +40,7 @@ export const useGestures = ( {
   height,
   center,
   minScale = 1,
-  maxScale = 5,
+  maxScale = 20,
   scale: scaleValue,
   doubleTapScale = 3,
   isPanEnabled = true,
