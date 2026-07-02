@@ -706,60 +706,59 @@ const SpeciesGame = ( ) => {
       <View className="bg-white px-4 pt-4" style={bottomPanelStyle}>
         {phase === "playing"
           ? (
-            <View className="flex-row mb-3 gap-2" style={gameStyles.buttonRow}>
-              <View className="flex-1">
-                <Button
-                  className="w-full h-full"
-                  text="Yes"
-                  level="focus"
-                  adjustsFontSizeToFit
-                  onPress={() => handleGuess( true )}
-                />
+            <>
+              {/* eslint-disable-next-line i18next/no-literal-string */}
+              <Body2 className="text-center text-darkGray mb-2">
+                {`Is this ${taxonLabel( target )}?`}
+              </Body2>
+              <View className="flex-row mb-3 gap-2" style={gameStyles.buttonRow}>
+                <View className="flex-1">
+                  <Button
+                    className="w-full h-full"
+                    text="Yes"
+                    level="focus"
+                    onPress={() => handleGuess( true )}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Button
+                    className="w-full h-full"
+                    text="I don't know"
+                    onPress={handleSkip}
+                  />
+                </View>
+                <View className="flex-1">
+                  <Button
+                    className="w-full h-full"
+                    text="No"
+                    onPress={() => handleGuess( false )}
+                  />
+                </View>
               </View>
-              <View className="flex-1">
-                <Button
-                  className="w-full h-full"
-                  text="I don't know"
-                  adjustsFontSizeToFit
-                  onPress={handleSkip}
-                />
-              </View>
-              <View className="flex-1">
-                <Button
-                  className="w-full h-full"
-                  text="No"
-                  adjustsFontSizeToFit
-                  onPress={() => handleGuess( false )}
-                />
-              </View>
-            </View>
+            </>
           )
           : (
-            <View className="flex-row mb-3 gap-2 items-center" style={gameStyles.buttonRow}>
-              {currentObservationUuid
-                ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    className="flex-1 items-center justify-center px-2"
-                    onPress={() => navigation.navigate(
-                      "ObsDetails" as never,
-                      { uuid: currentObservationUuid } as never,
-                    )}
-                  >
-                    <Body2 className={`text-center italic underline ${resultHeaderColor}`}>
-                      {`${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
-                    </Body2>
-                  </Pressable>
-                )
-                : <View className="flex-1" />}
-              <View className="flex-1">
-                <Button
-                  className="w-full h-full"
-                  text="Next"
-                  level="focus"
-                  onPress={handleNext}
-                />
-              </View>
+            <View className="mb-3">
+              <Button
+                className="w-full mb-2"
+                text="Next"
+                level="focus"
+                onPress={handleNext}
+              />
+              {currentObservationUuid && (
+                <Pressable
+                  accessibilityRole="button"
+                  className="items-center justify-center py-1"
+                  onPress={() => navigation.navigate(
+                    "ObsDetails" as never,
+                    { uuid: currentObservationUuid } as never,
+                  )}
+                >
+                  <Body2 className={`text-center italic underline ${resultHeaderColor}`}>
+                    {`${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
+                  </Body2>
+                </Pressable>
+              )}
             </View>
           )}
       </View>
