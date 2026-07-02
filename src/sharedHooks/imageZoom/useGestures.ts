@@ -266,7 +266,11 @@ export const useGestures = ( {
 
   const onInteractionEnded = () => {
     if ( isInteracting.current && !isPinching.current && !isPanning() ) {
-      if ( isDoubleTapEnabled ) {
+      // When a cropPanContext is present (e.g. the Explore grid) the gesture
+      // reframes a persisted crop, so settle the pinch by clamping it into the
+      // valid crop limits rather than resetting it back to the base transform,
+      // which would discard the zoom and snap the image around on release.
+      if ( isDoubleTapEnabled || cropPanContext ) {
         moveIntoView();
       } else {
         reset();
