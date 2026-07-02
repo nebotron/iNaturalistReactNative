@@ -1,7 +1,6 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import About from "components/About";
-import AnimalCropTool from "components/AnimalCropTool/AnimalCropTool";
 import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
@@ -90,8 +89,6 @@ const notificationsTitle = () => (
     {t( "NOTIFICATIONS" )}
   </Heading4>
 );
-// eslint-disable-next-line i18next/no-literal-string
-const animalCropTitle = () => <Heading4 numberOfLines={1}>CROP LABELER</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 
@@ -311,13 +308,6 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             name="LifeList"
             component={FadeInLifeList}
             options={LIST_OPTIONS}
-          />
-          <Stack.Screen
-            name="AnimalCropTool"
-            component={AnimalCropTool}
-            options={{
-              headerTitle: animalCropTitle,
-            }}
           />
           <Stack.Screen
             name="CropLogViewer"
