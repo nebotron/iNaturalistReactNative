@@ -1,7 +1,6 @@
 // @flow
 import {
   faveObservation,
-  unfaveObservation,
 } from "api/observations";
 import classNames from "classnames";
 import {
@@ -81,21 +80,6 @@ const FaveButton = ( {
     );
   };
 
-  const { mutate: createUnfaveMutate } = useAuthenticatedMutation(
-    ( faveOrUnfaveParams, optsWithAuth ) => unfaveObservation( faveOrUnfaveParams, optsWithAuth ),
-    {
-      onSuccess: ( ) => {
-        afterToggleFave( false );
-        setLoading( false );
-      },
-      onError: error => {
-        showErrorAlert( error );
-        setIsFaved( true );
-        setLoading( false );
-      },
-    },
-  );
-
   const { mutate: createFaveMutate } = useAuthenticatedMutation(
     ( faveOrUnfaveParams, optsWithAuth ) => faveObservation( faveOrUnfaveParams, optsWithAuth ),
     {
@@ -133,24 +117,20 @@ const FaveButton = ( {
     if ( isUnuploaded ) {
       setLoading( true );
       toggleLocalFave( );
-      setIsFaved( !isFaved );
+      setIsFaved( true );
       setLoading( false );
-      afterToggleFave( !isFaved );
+      afterToggleFave( true );
       return;
     }
     if ( !currentUser ) return;
-    setLoading( true );
-    if ( isFaved ) {
-      setIsFaved( false );
-      createUnfaveMutate( { uuid } );
-    } else {
+    if ( !isFaved ) {
+      setLoading( true );
       setIsFaved( true );
       createFaveMutate( { uuid } );
     }
   }, [
     currentUser,
     createFaveMutate,
-    createUnfaveMutate,
     isFaved,
     uuid,
     isUnuploaded,
@@ -189,20 +169,20 @@ const FaveButton = ( {
     );
   }
 
+  if ( isFaved ) {
+    return null;
+  }
+
   return (
     <INatIconButton
-      icon={isFaved
-        ? "star"
-        : "star-bold-outline"}
+      icon="star-bold-outline"
       size={iconSize}
       width={buttonWidth}
       height={buttonHeight}
       onPress={toggleFave}
       color={colors.white}
       className={classNames( positionClassName )}
-      accessibilityLabel={isFaved
-        ? t( "Remove-favorite" )
-        : t( "Add-favorite" )}
+      accessibilityLabel={t( "Add-favorite" )}
     />
   );
 };
