@@ -108,7 +108,7 @@ const ObsGridItem = ( {
           directAgree
         />
       )}
-      {!explore && !!observation.id && currentUser && (
+      {!explore && currentUser && (
         <FaveButton
           observation={observation}
           currentUser={currentUser}
