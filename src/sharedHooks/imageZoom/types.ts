@@ -109,6 +109,13 @@ export interface ZoomProps {
    */
   isPanEnabled?: boolean;
   /**
+   * Enables single-finger panning once zoomed in. Disable on surfaces that must
+   * let one finger pass through to a parent scroll view (e.g. the Explore grid),
+   * where two fingers are required to pan or zoom.
+   * @default true
+   */
+  isSingleFingerPanEnabled?: boolean;
+  /**
    * Determines whether pinching is enabled.
    * @default true
    */
@@ -236,6 +243,7 @@ export type ZoomableUseGesturesProps = Pick<
     | "doubleTapScale"
     | "maxPanPointers"
     | "isPanEnabled"
+    | "isSingleFingerPanEnabled"
     | "isPinchEnabled"
     | "isSingleTapEnabled"
     | "isDoubleTapEnabled"

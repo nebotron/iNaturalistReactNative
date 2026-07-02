@@ -1,4 +1,5 @@
 import { useCallback, useRef } from "react";
+import type { ComposedGesture, GestureType } from "react-native-gesture-handler";
 import { Gesture } from "react-native-gesture-handler";
 import type { WithTimingConfig } from "react-native-reanimated";
 import {
@@ -43,6 +44,7 @@ export const useGestures = ( {
   scale: scaleValue,
   doubleTapScale = 3,
   isPanEnabled = true,
+  isSingleFingerPanEnabled = true,
   isPinchEnabled = true,
   isSingleTapEnabled = false,
   isDoubleTapEnabled = false,
@@ -528,20 +530,25 @@ export const useGestures = ( {
 
   const tapGestures = Gesture.Exclusive( doubleTapGesture, singleTapGesture );
 
-  // Build a flat list of competing gestures so there is only one Race layer.
-  // swipeToCloseGesture (when present) competes alongside the others: it fails
-  // immediately for 2-finger touches (maxPointers=1) and when scale > 1 (zoomed),
-  // so it never interferes with pinch or with the panOnlyGesture.
-  let gestures;
-  if ( isDoubleTapEnabled || isSingleTapEnabled ) {
-    gestures = swipeToCloseGesture
-      ? Gesture.Race( pinchPanGestures, panOnlyGesture, tapGestures, swipeToCloseGesture )
-      : Gesture.Race( pinchPanGestures, panOnlyGesture, tapGestures );
-  } else {
-    gestures = swipeToCloseGesture
-      ? Gesture.Race( pinchPanGestures, swipeToCloseGesture )
-      : pinchPanGestures;
+  // Build a flat list of competing gestures so there is only one Race layer. The
+  // two-finger pinch always competes; the one-finger panOnlyGesture is included
+  // only when single-finger panning is enabled (disabled on the Explore grid so
+  // one finger scrolls the list and two fingers are required to pan or zoom).
+  // swipeToCloseGesture (when present) fails immediately for 2-finger touches
+  // (maxPointers=1) and when zoomed (scale > 1), so it never interferes.
+  const competingGestures: ( ComposedGesture | GestureType )[] = [pinchPanGestures];
+  if ( isSingleFingerPanEnabled ) {
+    competingGestures.push( panOnlyGesture );
   }
+  if ( isDoubleTapEnabled || isSingleTapEnabled ) {
+    competingGestures.push( tapGestures );
+  }
+  if ( swipeToCloseGesture ) {
+    competingGestures.push( swipeToCloseGesture );
+  }
+  const gestures = competingGestures.length > 1
+    ? Gesture.Race( ...competingGestures )
+    : competingGestures[0];
 
   return {
     gestures,
