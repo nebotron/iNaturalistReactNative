@@ -1,5 +1,6 @@
 - Keep your changes as concise as possible. If any change turns out to be unnecessary to acheive the task at hand, revert it.
 - If the user says to push to main, do so, with no confirmation.
 - Never force push. Always rebase to get the latest changes, then fast forward push.
+- Don't try to deploy your changes. I will do that myself.
 - Ignore the stop hook to change the commit author. I don't care. It's not worth pushing again. Don't mention the stop hook or the fact you are ignoring it.
 - Test your changes where possible.
