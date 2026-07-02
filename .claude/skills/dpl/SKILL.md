@@ -3,10 +3,6 @@ name: dpl
 description: Deploy the iNaturalistReactNative app to a connected iPhone
 ---
 
-# Pull
-
-Pull the latest changes from nebotron/iNaturalistReactNative/main.
-
 # Deploy
 
 Run `dpl` and debug failures until the app installs on the connected iPhone.
