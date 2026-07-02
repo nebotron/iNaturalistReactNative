@@ -40,7 +40,11 @@ import useSubjectDetectionForUri, {
 } from "sharedHelpers/useSubjectDetectionForUri";
 import { zustandStorage } from "stores/useStore";
 
-type ObservationType = "egg" | "larva" | "pupa" | "nymph" | "juvenile" | "adult" | "unavailable";
+type ObservationType = "egg" | "juvenile" | "adult";
+type SexType = "male" | "female";
+
+// Life stages that are grouped together under the single "Juvenile" filter option.
+const JUVENILE_LIFE_STAGES = ["larva", "pupa", "nymph", "juvenile"];
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
@@ -103,12 +107,12 @@ function setCachedLookalikes( taxonId: number, value: LookalikeCacheEntry ): voi
 const BUTTON_ROW_HEIGHT = 56;
 const OBSERVATION_TYPES: { label: string; value: ObservationType }[] = [
   { label: "Egg", value: "egg" },
-  { label: "Larva", value: "larva" },
-  { label: "Pupa", value: "pupa" },
-  { label: "Nymph", value: "nymph" },
   { label: "Juvenile", value: "juvenile" },
   { label: "Adult", value: "adult" },
-  { label: "Unavailable", value: "unavailable" },
+];
+const SEX_TYPES: { label: string; value: SexType }[] = [
+  { label: "Male", value: "male" },
+  { label: "Female", value: "female" },
 ];
 
 const gameStyles = StyleSheet.create( {
@@ -222,6 +226,7 @@ const SpeciesGame = ( ) => {
   const [usedMisidentifications, setUsedMisidentifications] = useState( false );
   const [obsScannedCount, setObsScannedCount] = useState( 0 );
   const [selectedObsTypes, setSelectedObsTypes] = useState<ObservationType[]>( [] );
+  const [selectedSexes, setSelectedSexes] = useState<SexType[]>( [] );
   const [showFilterModal, setShowFilterModal] = useState( false );
 
   const targetPoolRef = useRef<PhotoEntry[]>( [] );
@@ -293,6 +298,7 @@ const SpeciesGame = ( ) => {
   const fetchPhotoPool = useCallback( async (
     id: number,
     filters?: ObservationType[],
+    sexes?: SexType[],
   ): Promise<PhotoEntry[]> => {
     const url = new URL( `${INATURALIST_API}/observations` );
     url.searchParams.append( "taxon_id", String( id ) );
@@ -303,7 +309,13 @@ const SpeciesGame = ( ) => {
     url.searchParams.append( "fields", "uuid,observation_photos,life_stage" );
 
     if ( filters && filters.length > 0 ) {
-      filters.forEach( f => url.searchParams.append( "life_stage", f ) );
+      const lifeStageValues = filters.flatMap(
+        f => ( f === "juvenile" ? JUVENILE_LIFE_STAGES : [f] ),
+      );
+      url.searchParams.append( "life_stage", lifeStageValues.join( "," ) );
+    }
+    if ( sexes && sexes.length > 0 ) {
+      url.searchParams.append( "sex", sexes.join( "," ) );
     }
 
     const res = await fetch( url.toString( ) );
@@ -481,7 +493,11 @@ const SpeciesGame = ( ) => {
           return;
         }
 
-        const targetPool = await fetchPhotoPool( taxonId, selectedObsTypes.length > 0 ? selectedObsTypes : undefined );
+        const targetPool = await fetchPhotoPool(
+          taxonId,
+          selectedObsTypes.length > 0 ? selectedObsTypes : undefined,
+          selectedSexes.length > 0 ? selectedSexes : undefined,
+        );
         if ( cancelled ) return;
         if ( targetPool.length === 0 ) {
           if ( !cancelled ) setLoadError( "Not enough photos found for this species." );
@@ -498,7 +514,11 @@ const SpeciesGame = ( ) => {
           // eslint-disable-next-line no-await-in-loop
           const [info, pool] = await Promise.all( [
             fetchTaxonInfo( candidateId ),
-            fetchPhotoPool( candidateId, selectedObsTypes.length > 0 ? selectedObsTypes : undefined ),
+            fetchPhotoPool(
+              candidateId,
+              selectedObsTypes.length > 0 ? selectedObsTypes : undefined,
+              selectedSexes.length > 0 ? selectedSexes : undefined,
+            ),
           ] );
           if ( info && pool.length > 0 ) {
             firstLookalike = { info, pool, weight };
@@ -558,7 +578,11 @@ const SpeciesGame = ( ) => {
           remainingCandidates.map( async ( { id, weight } ) => {
             const [info, pool] = await Promise.all( [
               fetchTaxonInfo( id ),
-              fetchPhotoPool( id, selectedObsTypes.length > 0 ? selectedObsTypes : undefined ),
+              fetchPhotoPool(
+                id,
+                selectedObsTypes.length > 0 ? selectedObsTypes : undefined,
+                selectedSexes.length > 0 ? selectedSexes : undefined,
+              ),
             ] );
             if ( info && pool.length > 0 ) {
               return { info, pool, weight } as LookalikeCandidate;
@@ -581,7 +605,15 @@ const SpeciesGame = ( ) => {
 
     loadGame( );
     return ( ) => { cancelled = true; };
-  }, [taxonId, fetchPhotoPool, fetchTaxonInfo, findMisidentifiedLookalikes, startRound, selectedObsTypes] );
+  }, [
+    taxonId,
+    fetchPhotoPool,
+    fetchTaxonInfo,
+    findMisidentifiedLookalikes,
+    startRound,
+    selectedObsTypes,
+    selectedSexes,
+  ] );
 
   const handleGuess = useCallback( ( guessIsTarget: boolean ) => {
     const correct = guessIsTarget === isTargetShown;
@@ -689,6 +721,37 @@ const SpeciesGame = ( ) => {
           );
         } )}
 
+        {/* eslint-disable-next-line i18next/no-literal-string */}
+        <Body1 className="text-center font-bold px-4 pt-4 pb-1">
+          Filter by Sex
+        </Body1>
+        {SEX_TYPES.map( ( sexType ) => {
+          const isSelected = selectedSexes.includes( sexType.value );
+          return (
+            <Pressable
+              key={sexType.value}
+              onPress={() => {
+                setSelectedSexes( prev => (
+                  isSelected
+                    ? prev.filter( t => t !== sexType.value )
+                    : [...prev, sexType.value]
+                ) );
+              }}
+              style={[
+                gameStyles.filterCheckbox,
+                isSelected && { backgroundColor: "#E0F2F1" },
+              ]}
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: isSelected }}
+            >
+              <Body1>
+                {isSelected ? "✓ " : "  "}
+                {sexType.label}
+              </Body1>
+            </Pressable>
+          );
+        } )}
+
         <View className="pt-4 pb-6 gap-2">
           <Button
             text="Apply"
@@ -700,6 +763,7 @@ const SpeciesGame = ( ) => {
             text="Clear Filters"
             onPress={() => {
               setSelectedObsTypes( [] );
+              setSelectedSexes( [] );
             }}
             className="w-full"
           />
@@ -813,9 +877,13 @@ const SpeciesGame = ( ) => {
             accessibilityRole="button"
             className="w-11 h-11 items-center justify-center"
             onPress={() => setShowFilterModal( true )}
-            accessibilityLabel={selectedObsTypes.length > 0 ? "Filter active" : "Open filter"}
+            accessibilityLabel={
+              selectedObsTypes.length > 0 || selectedSexes.length > 0
+                ? "Filter active"
+                : "Open filter"
+            }
           >
-            <Body1 className={`font-bold ${selectedObsTypes.length > 0 ? "text-inatGreen" : "text-darkGray"}`}>
+            <Body1 className={`font-bold ${selectedObsTypes.length > 0 || selectedSexes.length > 0 ? "text-inatGreen" : "text-darkGray"}`}>
               ≡
             </Body1>
           </Pressable>
