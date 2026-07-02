@@ -32,6 +32,8 @@ import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import {
   recordGuess,
   getStats,
+  getUsedUuids,
+  addUsedUuid,
 } from "sharedHelpers/speciesGameStats";
 import useSubjectDetectionForUri, {
   preloadSubjectDetectionForUri,
@@ -130,13 +132,14 @@ const SpeciesGame = ( ) => {
   const [totalGuesses, setTotalGuesses] = useState( 0 );
   const [isTargetShown, setIsTargetShown] = useState( true );
 
-  // Load accumulated stats from previous sessions on mount
+  // Load accumulated stats and used UUIDs from previous sessions on mount
   useEffect( ( ) => {
     const savedStats = getStats( taxonId );
     if ( savedStats ) {
       setScore( savedStats.correct );
       setTotalGuesses( savedStats.total );
     }
+    usedUuidsRef.current = getUsedUuids( taxonId );
   }, [taxonId] );
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>( null );
   const [imageLoading, setImageLoading] = useState( false );
@@ -250,7 +253,7 @@ const SpeciesGame = ( ) => {
       ? unused
       : pool;
     const entry = candidates[Math.floor( Math.random( ) * candidates.length )] ?? null;
-    if ( entry ) usedUuidsRef.current.add( entry.observationUuid );
+    if ( entry ) addUsedUuid( taxonId, entry.observationUuid, usedUuidsRef.current );
     setIsTargetShown( showTarget );
     setCurrentPhotoUrl( entry?.url ?? null );
     setImageLoading( !!entry?.url );
@@ -269,7 +272,7 @@ const SpeciesGame = ( ) => {
       ...unusedTarget.slice( 0, PRELOAD_COUNT ),
       ...unusedLookalike.slice( 0, PRELOAD_COUNT ),
     ].forEach( e => preloadSubjectDetectionForUri( e.url ) );
-  }, [] );
+  }, [taxonId] );
 
   // Scans 400 random observations of taxonId near the user's location and returns all
   // species-level taxa that appeared as alternate identifications, sorted by frequency.

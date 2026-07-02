@@ -1,6 +1,7 @@
 import { zustandStorage } from "stores/useStore";
 
 const STATS_KEY = "speciesGameStats";
+const USED_UUIDS_KEY = "speciesGameUsedUuids";
 
 export interface TaxonStats {
   correct: number;
@@ -33,4 +34,21 @@ export const recordGuess = ( taxonId: number, correct: boolean ): void => {
 export const getStats = ( taxonId: number ): TaxonStats | null => {
   const stats = load( );
   return stats[String( taxonId )] ?? null;
+};
+
+const loadUsedUuids = ( taxonId: number ): string[] => {
+  const raw = zustandStorage.getItem( `${USED_UUIDS_KEY}_${taxonId}` );
+  if ( !raw || typeof raw !== "string" ) return [];
+  try {
+    return JSON.parse( raw ) as string[];
+  } catch {
+    return [];
+  }
+};
+
+export const getUsedUuids = ( taxonId: number ): Set<string> => new Set( loadUsedUuids( taxonId ) );
+
+export const addUsedUuid = ( taxonId: number, uuid: string, currentSet: Set<string> ): void => {
+  currentSet.add( uuid );
+  zustandStorage.setItem( `${USED_UUIDS_KEY}_${taxonId}`, JSON.stringify( [...currentSet] ) );
 };
