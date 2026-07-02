@@ -16,6 +16,11 @@ import { useFontScale, useCurrentUser, useGridLayout, useTranslation, useAuthent
 // Max page size the API allows
 const PAGE_SIZE = 200;
 
+// A user's full lifer list rarely changes (only when they observe a new
+// species), and computing it requires paging through their entire
+// observation history, so avoid refetching on every mount.
+const ONE_HOUR_MS = 3600000;
+
 interface Lifer {
   observed_on: string | null;
   uuid: string;
@@ -177,7 +182,11 @@ const LifeListContainer = ( ) => {
   const { data: lifers, isLoading } = useAuthenticatedQuery(
     ["fetchLifers", currentUser?.id],
     optsWithAuth => fetchLifers( currentUser?.id, optsWithAuth ),
-    { enabled: !!currentUser },
+    {
+      enabled: !!currentUser,
+      gcTime: ONE_HOUR_MS,
+      staleTime: ONE_HOUR_MS,
+    },
   );
 
   useEffect( ( ) => {
