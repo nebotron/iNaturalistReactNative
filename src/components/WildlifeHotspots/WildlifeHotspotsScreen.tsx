@@ -41,9 +41,17 @@ interface NominatimResult {
   lon: string;
 }
 
-async function searchNominatim( text: string ): Promise<NominatimResult[]> {
+async function searchNominatim(
+  text: string,
+  nearbyLatLng?: LatLng,
+): Promise<NominatimResult[]> {
   try {
-    const url = `${NOMINATIM_BASE}/search?q=${encodeURIComponent( text )}&format=json&limit=5`;
+    let url = `${NOMINATIM_BASE}/search?q=${encodeURIComponent( text )}&format=json&limit=8`;
+    if ( nearbyLatLng ) {
+      const { latitude: lat, longitude: lon } = nearbyLatLng;
+      const delta = 2;
+      url += `&viewbox=${lon - delta},${lat + delta},${lon + delta},${lat - delta}`;
+    }
     const response = await fetch( url, {
       headers: { "Accept-Language": "en" },
     } );
@@ -66,6 +74,7 @@ interface AddressInputProps {
   confirmed: boolean;
   loading: boolean;
   dotColor: string;
+  nearbyLatLng?: LatLng;
 }
 
 const AddressInput = ( {
@@ -76,6 +85,7 @@ const AddressInput = ( {
   confirmed,
   loading,
   dotColor,
+  nearbyLatLng,
 }: AddressInputProps ) => {
   const [suggestions, setSuggestions] = useState<NominatimResult[]>( [] );
   const [searching, setSearching] = useState( false );
@@ -90,11 +100,11 @@ const AddressInput = ( {
     }
     debounceRef.current = setTimeout( async () => {
       setSearching( true );
-      const results = await searchNominatim( text.trim() );
+      const results = await searchNominatim( text.trim(), nearbyLatLng );
       setSuggestions( results );
       setSearching( false );
-    }, 350 );
-  }, [onChangeText] );
+    }, 200 );
+  }, [onChangeText, nearbyLatLng] );
 
   const handleSelect = useCallback( ( result: NominatimResult ) => {
     setSuggestions( [] );
@@ -165,6 +175,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
   const [endText, setEndText] = useState( "" );
   const [startPoint, setStartPoint] = useState<LatLng | null>( null );
   const [endPoint, setEndPoint] = useState<LatLng | null>( null );
+  const [userLocation, setUserLocation] = useState<LatLng | null>( null );
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>( null );
   const [hotspotRouteCoords, setHotspotRouteCoords] = useState<RoutePoint[]>( [] );
   const [hotspotRouteLoading, setHotspotRouteLoading] = useState( false );
@@ -175,10 +186,12 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
 
   useEffect( () => {
     const initializeLocation = async () => {
-      const userLocation = await fetchAccurateUserLocation();
-      if ( userLocation ) {
-        setStartPoint( { latitude: userLocation.latitude, longitude: userLocation.longitude } );
-        setEndPoint( { latitude: userLocation.latitude, longitude: userLocation.longitude } );
+      const loc = await fetchAccurateUserLocation();
+      if ( loc ) {
+        const latLng = { latitude: loc.latitude, longitude: loc.longitude };
+        setUserLocation( latLng );
+        setStartPoint( latLng );
+        setEndPoint( latLng );
         setStartText( t( "Current-location" ) );
         setEndText( t( "Current-location" ) );
       }
@@ -292,6 +305,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
             confirmed={!!startPoint}
             loading={false}
             dotColor={colors.warningYellow}
+            nearbyLatLng={userLocation ?? undefined}
           />
         </View>
         <View className="flex-row items-center" style={{ zIndex: 10 }}>
@@ -303,6 +317,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
             confirmed={!!endPoint}
             loading={false}
             dotColor={colors.inatGreen}
+            nearbyLatLng={startPoint ?? userLocation ?? undefined}
           />
         </View>
       </View>
