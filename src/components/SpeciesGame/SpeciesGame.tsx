@@ -43,8 +43,22 @@ import { zustandStorage } from "stores/useStore";
 type ObservationType = "egg" | "juvenile" | "adult";
 type SexType = "male" | "female";
 
-// Life stages that are grouped together under the single "Juvenile" filter option.
-const JUVENILE_LIFE_STAGES = ["larva", "pupa", "nymph", "juvenile"];
+// iNaturalist filters annotations by controlled-term / value IDs, not by the
+// life_stage/sex string params (which the observations endpoint silently ignores).
+// Life Stage controlled term = 1, Sex controlled term = 9.
+const LIFE_STAGE_TERM_ID = 1;
+const SEX_TERM_ID = 9;
+// Value IDs grouped under each life-stage filter option. Larva, Pupa, Nymph and
+// Juvenile are grouped together under the single "Juvenile" option.
+const LIFE_STAGE_VALUE_IDS: Record<ObservationType, number[]> = {
+  egg: [7],
+  juvenile: [6, 4, 5, 8],
+  adult: [2],
+};
+const SEX_VALUE_IDS: Record<SexType, number> = {
+  female: 10,
+  male: 11,
+};
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
@@ -306,16 +320,19 @@ const SpeciesGame = ( ) => {
     url.searchParams.append( "photos", "true" );
     url.searchParams.append( "sounds", "false" );
     url.searchParams.append( "per_page", String( POOL_SIZE ) );
-    url.searchParams.append( "fields", "uuid,observation_photos,life_stage" );
+    url.searchParams.append( "fields", "uuid,observation_photos" );
 
+    // Annotation filters are ANDed across terms by pairing each term_id with the
+    // matching term_value_id (comma-joined value IDs are ORed within a term).
     if ( filters && filters.length > 0 ) {
-      const lifeStageValues = filters.flatMap(
-        f => ( f === "juvenile" ? JUVENILE_LIFE_STAGES : [f] ),
-      );
-      url.searchParams.append( "life_stage", lifeStageValues.join( "," ) );
+      const valueIds = filters.flatMap( f => LIFE_STAGE_VALUE_IDS[f] );
+      url.searchParams.append( "term_id", String( LIFE_STAGE_TERM_ID ) );
+      url.searchParams.append( "term_value_id", valueIds.join( "," ) );
     }
     if ( sexes && sexes.length > 0 ) {
-      url.searchParams.append( "sex", sexes.join( "," ) );
+      const valueIds = sexes.map( s => SEX_VALUE_IDS[s] );
+      url.searchParams.append( "term_id", String( SEX_TERM_ID ) );
+      url.searchParams.append( "term_value_id", valueIds.join( "," ) );
     }
 
     const res = await fetch( url.toString( ) );
