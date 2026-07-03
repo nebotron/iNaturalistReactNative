@@ -792,15 +792,13 @@ function exploreReducer( state: State, action: Action ) {
         nearbyRadiusKm,
         taxonFilters,
         taxon: taxonFilters.find( filter => !filter.exclude )?.taxon
-          ?? storedState.taxon
-          ?? undefined,
+          ?? storedState.taxon,
         taxon_id: taxonFilters.find( filter => !filter.exclude )?.taxon?.id
-          ?? storedState.taxon_id
-          ?? undefined,
+          ?? storedState.taxon_id,
         userFilters,
-        user: firstIncludeUser ?? storedState.user ?? undefined,
-        user_id: firstIncludeUser?.id ?? storedState.user_id ?? undefined,
-        excludeUser: firstExcludeUser ?? storedState.excludeUser ?? undefined,
+        user: firstIncludeUser ?? storedState.user,
+        user_id: firstIncludeUser?.id ?? storedState.user_id,
+        excludeUser: firstExcludeUser ?? storedState.excludeUser,
       };
     }
     default: {
