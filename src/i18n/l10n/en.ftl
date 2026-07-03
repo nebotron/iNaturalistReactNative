@@ -1139,6 +1139,8 @@ REDO-SEARCH-IN-MAP-AREA = REDO SEARCH IN MAP AREA
 Remove-agreement = Remove agreement
 # Label for a button that removes a vote of disagreement
 Remove-disagreement = Remove disagreement
+# Label for a button that removes a favorite/fave from an observation
+Remove-favorite = Remove favorite
 # Label for button that removes an identification
 Remove-identification = Remove identification
 Remove-Photos = Remove Photos
