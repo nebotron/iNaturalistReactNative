@@ -22,20 +22,24 @@ const ObsImageActionButtons = ( {
   afterAction = ( ) => undefined,
   directAgree = false,
   openAgreeWithIdSheet,
-  containerClassName = "absolute bottom-2 right-2 z-10 flex-col items-end gap-6",
+  containerClassName = "absolute bottom-2 right-2 z-10 flex-col items-end gap-9",
 }: Props ): Node => {
   if ( !currentUser || !observation ) {
     return null;
   }
 
+  const isOwnObservation = observation?.user?.id === currentUser.id;
+
   return (
     <View className={containerClassName}>
-      <FaveButton
-        observation={observation}
-        currentUser={currentUser}
-        afterToggleFave={afterAction}
-        stacked
-      />
+      {isOwnObservation && (
+        <FaveButton
+          observation={observation}
+          currentUser={currentUser}
+          afterToggleFave={afterAction}
+          stacked
+        />
+      )}
       <ReviewButton
         observation={observation}
         currentUser={currentUser}
