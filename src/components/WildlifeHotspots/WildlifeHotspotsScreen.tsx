@@ -182,12 +182,8 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
   const [hotspotRouteLoading, setHotspotRouteLoading] = useState( false );
   const [activeSuggestions, setActiveSuggestions] = useState<{
     stopId: string;
-    index: number;
     suggestions: NominatimResult[];
   } | null>( null );
-  // Bottom edge (y + height) of each stop row, keyed by index, used to position the
-  // address suggestion dropdown right below whichever row is being edited
-  const rowOffsetsRef = useRef<Map<number, number>>( new Map() );
 
   const {
     hotspots, routeCoords, loading, error, findHotspots,
@@ -244,17 +240,12 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
 
   const handleStopSuggestionsChange = useCallback( (
     stopId: string,
-    index: number,
     suggestions: NominatimResult[],
   ) => {
     setActiveSuggestions( prev => {
-      if ( suggestions.length > 0 ) return { stopId, index, suggestions };
+      if ( suggestions.length > 0 ) return { stopId, suggestions };
       return prev?.stopId === stopId ? null : prev;
     } );
-  }, [] );
-
-  const handleRowLayout = useCallback( ( index: number, y: number, height: number ) => {
-    rowOffsetsRef.current.set( index, y + height );
   }, [] );
 
   const handleAddStop = useCallback( () => {
@@ -347,7 +338,6 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
         <View
           className={`flex-row items-center bg-white ${index < stops.length - 1 ? "mb-2" : ""}`}
           style={{ zIndex: stops.length - index, opacity: isActive ? 0.7 : 1 }}
-          onLayout={e => handleRowLayout( index, e.nativeEvent.layout.y, e.nativeEvent.layout.height )}
         >
           <TouchableOpacity
             onLongPress={drag}
@@ -368,7 +358,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
             }
             value={stop.text}
             onChangeText={text => handleStopTextChange( stop.id, text )}
-            onSuggestionsChange={suggestions => handleStopSuggestionsChange( stop.id, index, suggestions )}
+            onSuggestionsChange={suggestions => handleStopSuggestionsChange( stop.id, suggestions )}
             confirmed={!!stop.point}
             loading={false}
             dotColor={stopDotColor( index, stops.length )}
@@ -394,7 +384,6 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     handleStopTextChange,
     handleStopSuggestionsChange,
     handleRemoveStop,
-    handleRowLayout,
   ] );
 
   const handleOpenInGoogleMaps = useCallback( ( hotspot: Hotspot ) => {
@@ -424,17 +413,13 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
           onDragEnd={handleReorderStops}
           scrollEnabled={false}
         />
-        {/* Rendered here (not inside a stop row) so the draggable list's ScrollView doesn't clip it */}
+        {/*
+          Rendered in normal flow (not absolutely positioned) as a sibling of the
+          draggable list so it can't be clipped by the list's ScrollView, hidden
+          behind the map, or mispositioned by a stale measured offset.
+        */}
         {activeSuggestions && (
-          <View
-            className="absolute left-0 right-0 bg-white border border-lightGray rounded-lg z-50"
-            style={{
-              top: ( rowOffsetsRef.current.get( activeSuggestions.index ) ?? 0 ) + 4,
-              elevation: 8,
-              shadowOpacity: 0.15,
-              shadowRadius: 4,
-            }}
-          >
+          <View className="mt-1 bg-white border border-lightGray rounded-lg overflow-hidden">
             {activeSuggestions.suggestions.map( result => (
               <TouchableOpacity
                 key={result.place_id}
