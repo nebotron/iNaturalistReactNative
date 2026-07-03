@@ -663,13 +663,14 @@ class Observation extends Realm.Object {
   }
 
   missingBasics() {
+    const missingId = !this.uuid;
     const missingDate = !Date.parse( this.observed_on_string ) && !this.time_observed_at;
     const missingCoords = typeof ( this.latitude ) !== "number"
       && typeof ( this.privateLatitude ) !== "number";
     const missingEvidence = ( this.observationPhotos?.length ?? 0 ) === 0
       && ( this.observationSounds?.length ?? 0 ) === 0;
     const missingTaxon = !this.taxon;
-    return missingDate || missingCoords || missingEvidence || missingTaxon;
+    return missingId || missingDate || missingCoords || missingEvidence || missingTaxon;
   }
 }
 
