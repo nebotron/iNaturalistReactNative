@@ -392,6 +392,10 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     handleRemoveStop,
   ] );
 
+  const handleObservationPress = useCallback( ( uuid: string ) => {
+    navigation.push( "ObsDetails", { uuid } );
+  }, [navigation] );
+
   const handleOpenInGoogleMaps = useCallback( ( hotspot: Hotspot ) => {
     if ( confirmedStopPoints.length < 2 ) return;
     const first = confirmedStopPoints[0];
