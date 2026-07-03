@@ -352,15 +352,18 @@ const SuggestionsContainer = ( ) => {
     }
 
     async function buildGenusMap( ) {
-      const results = await Promise.all( allSuggestions.map( findGenusForSuggestion ) );
-      if ( cancelled ) return;
-      const newMap = new Map<number, object>( );
-      for ( const result of results ) {
-        if ( result ) newMap.set( result[0], result[1] );
-      }
-      setGenusMap( newMap );
+      await Promise.all( allSuggestions.map( async suggestion => {
+        const result = await findGenusForSuggestion( suggestion );
+        if ( cancelled || !result ) return;
+        setGenusMap( prevMap => {
+          const newMap = new Map( prevMap );
+          newMap.set( result[0], result[1] );
+          return newMap;
+        } );
+      } ) );
     }
 
+    setGenusMap( new Map( ) );
     buildGenusMap( );
     return ( ) => { cancelled = true; };
   }, [suggestions, realm] );
