@@ -21,6 +21,8 @@ import {
   StyleSheet,
   TouchableOpacity,
 } from "react-native";
+import type { RenderItemParams } from "react-native-draggable-flatlist";
+import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
 import type { LatLng } from "react-native-maps";
 import MapView, {
   Marker,
@@ -263,6 +265,10 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     setStops( prev => ( prev.length > 2 ? prev.filter( s => s.id !== id ) : prev ) );
   }, [] );
 
+  const handleReorderStops = useCallback( ( { data }: { data: Stop[] } ) => {
+    setStops( data );
+  }, [] );
+
   useEffect( () => {
     if ( confirmedStopPoints.length !== stops.length || stops.length < 2 ) return;
     setSelectedHotspotId( null );
@@ -327,6 +333,54 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     navigation.push( "ObsDetails", { uuid } );
   }, [navigation] );
 
+  const renderStopItem = useCallback( ( { item: stop, getIndex, drag, isActive }: RenderItemParams<Stop> ) => {
+    const index = getIndex() ?? 0;
+    return (
+      <ScaleDecorator>
+        <View
+          className={`flex-row items-center bg-white ${index < stops.length - 1 ? "mb-2" : ""}`}
+          style={{ zIndex: stops.length - index, opacity: isActive ? 0.7 : 1 }}
+        >
+          <TouchableOpacity
+            onLongPress={drag}
+            disabled={isActive}
+            className="mr-2 p-1"
+            accessibilityRole="button"
+            accessibilityLabel={t( "Reorder-stop" )}
+          >
+            <INatIcon name="list" size={16} color={colors.darkGray} />
+          </TouchableOpacity>
+          <AddressInput
+            placeholder={
+              index === 0
+                ? t( "Start-location" )
+                : index === stops.length - 1
+                  ? t( "End-location" )
+                  : t( "Add-stop" )
+            }
+            value={stop.text}
+            onChangeText={text => handleStopTextChange( stop.id, text )}
+            onSelectSuggestion={result => handleSelectStopSuggestion( stop.id, result )}
+            confirmed={!!stop.point}
+            loading={false}
+            dotColor={stopDotColor( index, stops.length )}
+            nearbyLatLng={stops[index - 1]?.point ?? userLocation ?? undefined}
+          />
+          {index > 0 && index < stops.length - 1 && (
+            <TouchableOpacity
+              onPress={() => handleRemoveStop( stop.id )}
+              className="ml-2 p-1"
+              accessibilityRole="button"
+              accessibilityLabel={t( "Remove-stop" )}
+            >
+              <INatIcon name="close" size={16} color={colors.darkGray} />
+            </TouchableOpacity>
+          )}
+        </View>
+      </ScaleDecorator>
+    );
+  }, [stops, userLocation, t, handleStopTextChange, handleSelectStopSuggestion, handleRemoveStop] );
+
   const handleOpenInGoogleMaps = useCallback( ( hotspot: Hotspot ) => {
     if ( confirmedStopPoints.length < 2 ) return;
     const first = confirmedStopPoints[0];
@@ -347,40 +401,13 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     <ViewWrapper testID="WildlifeHotspotsScreen">
       {/* Stop inputs */}
       <View className="bg-white px-3 py-2 border-b border-lightGray" style={{ zIndex: 10 }}>
-        {stops.map( ( stop, index ) => (
-          <View
-            key={stop.id}
-            className={`flex-row items-center ${index < stops.length - 1 ? "mb-2" : ""}`}
-            style={{ zIndex: stops.length - index }}
-          >
-            <AddressInput
-              placeholder={
-                index === 0
-                  ? t( "Start-location" )
-                  : index === stops.length - 1
-                    ? t( "End-location" )
-                    : t( "Add-stop" )
-              }
-              value={stop.text}
-              onChangeText={text => handleStopTextChange( stop.id, text )}
-              onSelectSuggestion={result => handleSelectStopSuggestion( stop.id, result )}
-              confirmed={!!stop.point}
-              loading={false}
-              dotColor={stopDotColor( index, stops.length )}
-              nearbyLatLng={stops[index - 1]?.point ?? userLocation ?? undefined}
-            />
-            {index > 0 && index < stops.length - 1 && (
-              <TouchableOpacity
-                onPress={() => handleRemoveStop( stop.id )}
-                className="ml-2 p-1"
-                accessibilityRole="button"
-                accessibilityLabel={t( "Remove-stop" )}
-              >
-                <INatIcon name="close" size={16} color={colors.darkGray} />
-              </TouchableOpacity>
-            )}
-          </View>
-        ) )}
+        <DraggableFlatList
+          data={stops}
+          keyExtractor={stop => stop.id}
+          renderItem={renderStopItem}
+          onDragEnd={handleReorderStops}
+          scrollEnabled={false}
+        />
         <TouchableOpacity
           onPress={handleAddStop}
           className="flex-row items-center mt-1"
