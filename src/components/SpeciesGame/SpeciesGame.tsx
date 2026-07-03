@@ -63,6 +63,9 @@ const SEX_VALUE_IDS: Record<SexType, number> = {
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
+// Max pages of observations we'll page through per taxon to keep supplying fresh,
+// never-before-seen images (POOL_SIZE * MAX_POOL_PAGES photos per taxon).
+const MAX_POOL_PAGES = 25;
 const LOOKALIKE_RADIUS_KM = 500;
 const LOCATION_FILTER_RADIUS_KM = 1000;
 const MAX_ZOOM_SCALE = 5;
@@ -246,8 +249,11 @@ const SpeciesGame = ( ) => {
 
   const targetPoolRef = useRef<PhotoEntry[]>( [] );
   const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
+  const lookalikeIdRef = useRef<number | null>( null );
   const lookalikeCandidatesRef = useRef<LookalikeCandidate[]>( [] );
   const usedUuidsRef = useRef<Set<string>>( new Set( ) );
+  // Next API page already loaded per taxon id, so refills fetch new observations.
+  const poolPagesRef = useRef<Record<number, number>>( {} );
 
   const windowWidth = Dimensions.get( "window" ).width;
   const { bottom: bottomInset } = useSafeAreaInsets( );
@@ -314,6 +320,7 @@ const SpeciesGame = ( ) => {
     id: number,
     filters?: ObservationType[],
     sexes?: SexType[],
+    page = 1,
   ): Promise<PhotoEntry[]> => {
     const url = new URL( `${INATURALIST_API}/observations` );
     url.searchParams.append( "taxon_id", String( id ) );
@@ -321,6 +328,7 @@ const SpeciesGame = ( ) => {
     url.searchParams.append( "photos", "true" );
     url.searchParams.append( "sounds", "false" );
     url.searchParams.append( "per_page", String( POOL_SIZE ) );
+    url.searchParams.append( "page", String( page ) );
     url.searchParams.append( "fields", "uuid,observation_photos" );
 
     // Annotation filters are ANDed across terms by pairing each term_id with the
@@ -352,21 +360,85 @@ const SpeciesGame = ( ) => {
     return entries;
   }, [] );
 
-  const startRound = useCallback( (
+  const unusedIn = useCallback(
+    ( pool: PhotoEntry[] ) => pool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) ),
+    [],
+  );
+
+  // Fetches the next page of observations for a taxon and appends any never-before-seen
+  // photos to its pool (in place, so shared pool references stay in sync). Returns true
+  // when new photos were added.
+  const refillPool = useCallback( async (
+    id: number,
+    pool: PhotoEntry[],
+  ): Promise<boolean> => {
+    const page = ( poolPagesRef.current[id] ?? 1 ) + 1;
+    if ( page > MAX_POOL_PAGES ) return false;
+    poolPagesRef.current[id] = page;
+    let more: PhotoEntry[] = [];
+    try {
+      more = await fetchPhotoPool(
+        id,
+        selectedObsTypes.length > 0 ? selectedObsTypes : undefined,
+        selectedSexes.length > 0 ? selectedSexes : undefined,
+        page,
+      );
+    } catch {
+      return false;
+    }
+    const existing = new Set( pool.map( e => e.observationUuid ) );
+    let addedAny = false;
+    for ( const entry of more ) {
+      if ( !existing.has( entry.observationUuid ) ) {
+        pool.push( entry );
+        addedAny = true;
+      }
+    }
+    return addedAny;
+  }, [fetchPhotoPool, selectedObsTypes, selectedSexes] );
+
+  // Returns unused photos in a pool, fetching more pages from the API until at least one
+  // fresh photo is available or the taxon's observations are exhausted.
+  const unusedWithRefill = useCallback( async (
+    id: number | null,
+    pool: PhotoEntry[],
+  ): Promise<PhotoEntry[]> => {
+    let unused = unusedIn( pool );
+    while ( unused.length === 0 && id != null ) {
+      // eslint-disable-next-line no-await-in-loop
+      const added = await refillPool( id, pool );
+      if ( !added ) break;
+      unused = unusedIn( pool );
+    }
+    return unused;
+  }, [refillPool, unusedIn] );
+
+  const startRound = useCallback( async (
     targetPool: PhotoEntry[],
     lookalikePool: PhotoEntry[],
   ) => {
     const showTarget = Math.random( ) < 0.5;
-    const pool = showTarget
-      ? targetPool
-      : lookalikePool;
-    const unused = pool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
-    const candidates = unused.length > 0
-      ? unused
-      : pool;
-    const entry = candidates[Math.floor( Math.random( ) * candidates.length )] ?? null;
+    const primary = showTarget
+      ? { id: taxonId, pool: targetPool }
+      : { id: lookalikeIdRef.current, pool: lookalikePool };
+    const secondary = showTarget
+      ? { id: lookalikeIdRef.current, pool: lookalikePool }
+      : { id: taxonId, pool: targetPool };
+
+    // Never re-show a photo: draw only from unused entries, refilling from the API as
+    // needed, and fall back to the other pool if the preferred one is exhausted.
+    let chosen = primary;
+    let unused = await unusedWithRefill( primary.id, primary.pool );
+    if ( unused.length === 0 ) {
+      chosen = secondary;
+      unused = await unusedWithRefill( secondary.id, secondary.pool );
+    }
+
+    const entry = unused.length > 0
+      ? unused[Math.floor( Math.random( ) * unused.length )]
+      : null;
     if ( entry ) addUsedUuid( taxonId, entry.observationUuid, usedUuidsRef.current );
-    setIsTargetShown( showTarget );
+    setIsTargetShown( chosen.id === taxonId );
     setCurrentPhotoUrl( entry?.url ?? null );
     setImageLoading( !!entry?.url );
     setCurrentObservationUuid( entry?.observationUuid ?? null );
@@ -377,17 +449,13 @@ const SpeciesGame = ( ) => {
     // when those images are shown they appear instantly and the snap-to-subject
     // zoom happens without delay.
     const PRELOAD_COUNT = 3;
-    const unusedTarget = targetPool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
-    const unusedLookalike = lookalikePool.filter(
-      e => !usedUuidsRef.current.has( e.observationUuid ),
-    );
     const upcoming = [
-      ...unusedTarget.slice( 0, PRELOAD_COUNT ),
-      ...unusedLookalike.slice( 0, PRELOAD_COUNT ),
+      ...unusedIn( targetPool ).slice( 0, PRELOAD_COUNT ),
+      ...unusedIn( lookalikePool ).slice( 0, PRELOAD_COUNT ),
     ];
     prefetch( upcoming.map( e => e.url ) );
     upcoming.forEach( e => preloadSubjectDetectionForUri( e.url ) );
-  }, [taxonId] );
+  }, [taxonId, unusedIn, unusedWithRefill] );
 
   // Scans up to 2000 random observations of taxonId near the user's location and returns all
   // species-level taxa that appeared as alternate identifications, sorted by frequency.
@@ -558,6 +626,7 @@ const SpeciesGame = ( ) => {
         lookalikeCandidatesRef.current = [firstLookalike];
         targetPoolRef.current = targetPool;
         lookalikePoolRef.current = firstLookalike.pool;
+        lookalikeIdRef.current = firstLookalike.info.id;
 
         setTarget( {
           id: taxonId,
@@ -655,6 +724,7 @@ const SpeciesGame = ( ) => {
     const selected = selectWeightedLookalike( );
     if ( selected ) {
       lookalikePoolRef.current = selected.pool;
+      lookalikeIdRef.current = selected.info.id;
       setLookalike( selected.info );
     }
     startRound( targetPoolRef.current, lookalikePoolRef.current );
