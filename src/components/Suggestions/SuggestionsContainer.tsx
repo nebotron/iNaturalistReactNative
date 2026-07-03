@@ -194,7 +194,6 @@ const SuggestionsContainer = ( ) => {
   const [preferOfflineModel, setPreferOfflineModel] = useState( false );
   const previousObservationUuidRef = useRef<string | undefined>( currentObservation?.uuid );
   const [interactionsDisabled, setInteractionsDisabled] = useState( false );
-  const [genusMap, setGenusMap] = useState<Map<number, object>>( new Map( ) );
 
   usePreloadNextObservationSuggestions( );
 
@@ -284,89 +283,80 @@ const SuggestionsContainer = ( ) => {
     preferOfflineModel,
   } );
 
-  useEffect( ( ) => {
+  // Taxa ranked at species level or finer (or of unknown rank) can show a
+  // "suggest genus" button; this is decided synchronously from data already
+  // in Realm so the button appears immediately instead of after a lookup.
+  const genusEligibleTaxonIds = useMemo( ( ) => {
     const allSuggestions = [
       ...( suggestions.topSuggestion ? [suggestions.topSuggestion] : [] ),
       ...( suggestions.otherSuggestions || [] ),
     ];
-
-    if ( allSuggestions.length === 0 ) {
-      setGenusMap( new Map( ) );
-      return ( ) => { };
-    }
-
-    let cancelled = false;
-
-    async function findGenusForSuggestion( suggestion ) {
+    const eligibleIds = new Set<number>( );
+    allSuggestions.forEach( suggestion => {
       const taxonId = suggestion.taxon.id;
       const realmTaxon = realm.objectForPrimaryKey( "Taxon", taxonId );
       const rankLevel = suggestion.taxon.rank_level ?? realmTaxon?.rank_level;
-
-      if ( rankLevel != null && rankLevel > TaxonModel.SPECIES_LEVEL ) return null;
-
-      const ancestorIds = Array.from( realmTaxon?.ancestor_ids || [] );
-      let foundGenusId: number | null = null;
-
-      if ( ancestorIds.length > 0 ) {
-        const genusFromRealm = realm.objects( "Taxon" ).filtered(
-          "id IN $0 AND rank_level == $1",
-          ancestorIds,
-          TaxonModel.GENUS_LEVEL,
-        )[0];
-        if ( genusFromRealm ) foundGenusId = genusFromRealm.id;
+      if ( rankLevel == null || rankLevel <= TaxonModel.SPECIES_LEVEL ) {
+        eligibleIds.add( taxonId );
       }
-
-      if ( !foundGenusId && ancestorIds.length > 0 ) {
-        try {
-          const offlineAncestors = await getAncestorsFromTaxonomyFile( ancestorIds );
-          const genusAncestor = offlineAncestors.find(
-            a => a.rank_level === TaxonModel.GENUS_LEVEL,
-          );
-          foundGenusId = genusAncestor?.id ?? null;
-        } catch { /* Taxonomy file unavailable */ }
-      }
-
-      if ( !foundGenusId ) {
-        try {
-          const taxonWithAncestors = await fetchTaxon( taxonId );
-          if ( rankLevel == null
-            && taxonWithAncestors?.rank_level != null
-            && taxonWithAncestors.rank_level > TaxonModel.SPECIES_LEVEL ) {
-            return null;
-          }
-          const genusAncestor = taxonWithAncestors?.ancestors?.find(
-            ( a: { rank_level?: number } ) => a.rank_level === TaxonModel.GENUS_LEVEL,
-          );
-          foundGenusId = genusAncestor?.id ?? null;
-        } catch { /* API unavailable */ }
-      }
-
-      if ( !foundGenusId ) return null;
-
-      let fullGenusTaxon = realm.objectForPrimaryKey( "Taxon", foundGenusId );
-      if ( !fullGenusTaxon ) {
-        fullGenusTaxon = await fetchTaxonAndSave( foundGenusId, realm );
-      }
-
-      return fullGenusTaxon ? [taxonId, fullGenusTaxon] as const : null;
-    }
-
-    async function buildGenusMap( ) {
-      await Promise.all( allSuggestions.map( async suggestion => {
-        const result = await findGenusForSuggestion( suggestion );
-        if ( cancelled || !result ) return;
-        setGenusMap( prevMap => {
-          const newMap = new Map( prevMap );
-          newMap.set( result[0], result[1] );
-          return newMap;
-        } );
-      } ) );
-    }
-
-    setGenusMap( new Map( ) );
-    buildGenusMap( );
-    return ( ) => { cancelled = true; };
+    } );
+    return eligibleIds;
   }, [suggestions, realm] );
+
+  // The actual genus taxon is only looked up once the user taps the button
+  const findGenusForSuggestion = useCallback( async suggestion => {
+    const taxonId = suggestion.taxon.id;
+    const realmTaxon = realm.objectForPrimaryKey( "Taxon", taxonId );
+    const ancestorIds = Array.from( realmTaxon?.ancestor_ids || [] );
+    let foundGenusId: number | null = null;
+
+    if ( ancestorIds.length > 0 ) {
+      const genusFromRealm = realm.objects( "Taxon" ).filtered(
+        "id IN $0 AND rank_level == $1",
+        ancestorIds,
+        TaxonModel.GENUS_LEVEL,
+      )[0];
+      if ( genusFromRealm ) foundGenusId = genusFromRealm.id;
+    }
+
+    if ( !foundGenusId && ancestorIds.length > 0 ) {
+      try {
+        const offlineAncestors = await getAncestorsFromTaxonomyFile( ancestorIds );
+        const genusAncestor = offlineAncestors.find(
+          a => a.rank_level === TaxonModel.GENUS_LEVEL,
+        );
+        foundGenusId = genusAncestor?.id ?? null;
+      } catch { /* Taxonomy file unavailable */ }
+    }
+
+    if ( !foundGenusId ) {
+      try {
+        const taxonWithAncestors = await fetchTaxon( taxonId );
+        const genusAncestor = taxonWithAncestors?.ancestors?.find(
+          ( a: { rank_level?: number } ) => a.rank_level === TaxonModel.GENUS_LEVEL,
+        );
+        foundGenusId = genusAncestor?.id ?? null;
+      } catch { /* API unavailable */ }
+    }
+
+    if ( !foundGenusId ) return null;
+
+    let fullGenusTaxon = realm.objectForPrimaryKey( "Taxon", foundGenusId );
+    if ( !fullGenusTaxon ) {
+      fullGenusTaxon = await fetchTaxonAndSave( foundGenusId, realm );
+    }
+
+    return fullGenusTaxon || null;
+  }, [realm] );
+
+  const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: true } );
+
+  const handleSelectGenus = useCallback( async suggestion => {
+    const genusTaxon = await findGenusForSuggestion( suggestion );
+    if ( genusTaxon ) {
+      navigateWithTaxonSelected( genusTaxon );
+    }
+  }, [findGenusForSuggestion, navigateWithTaxonSelected] );
 
   // when the displayed suggestions swap from offline to online (or vice versa),
   // briefly disable taps so an in-flight tap doesn't land on a different
@@ -393,8 +383,6 @@ const SuggestionsContainer = ( ) => {
   }, [
     currentObservation,
   ] );
-
-  const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: true } );
 
   const onPressPhoto = useCallback(
     async ( uri: string ) => {
@@ -664,7 +652,7 @@ const SuggestionsContainer = ( ) => {
   return (
     <>
       <Suggestions
-        genusMap={genusMap}
+        genusEligibleTaxonIds={genusEligibleTaxonIds}
         handleSkip={( ) => navigateWithTaxonSelected( undefined )}
         hideLocationToggleButton={hideLocationToggleButton}
         hideSkip={params?.hideSkip}
@@ -675,6 +663,7 @@ const SuggestionsContainer = ( ) => {
         onCropPhoto={onCropPhotoUri}
         onPressPhoto={onPressPhoto}
         onReorderPhotos={handleReorderPhotos}
+        onSelectGenus={handleSelectGenus}
         onTaxonChosen={navigateWithTaxonSelected}
         duplicatePhotoUris={duplicatePhotoUris}
         photoUris={photoUris}

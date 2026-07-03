@@ -18,7 +18,7 @@ import SuggestionsFooter from "./SuggestionsFooter";
 import SuggestionsHeader from "./SuggestionsHeader";
 
 type Props = {
-  genusMap?: Object,
+  genusEligibleTaxonIds?: Set<number>,
   handleSkip: Function,
   hideLocationToggleButton: boolean,
   hideSkip?: boolean,
@@ -29,6 +29,7 @@ type Props = {
   onCropPhoto?: Function,
   onPressPhoto: Function,
   onReorderPhotos?: Function,
+  onSelectGenus: Function,
   onTaxonChosen: Function,
   duplicatePhotoUris?: Set<string>,
   photoUris: string[],
@@ -42,7 +43,7 @@ type Props = {
 };
 
 const Suggestions = ( {
-  genusMap,
+  genusEligibleTaxonIds,
   handleSkip,
   hideLocationToggleButton,
   hideSkip,
@@ -53,6 +54,7 @@ const Suggestions = ( {
   onCropPhoto,
   onPressPhoto,
   onReorderPhotos,
+  onSelectGenus,
   onTaxonChosen,
   duplicatePhotoUris,
   photoUris,
@@ -80,18 +82,22 @@ const Suggestions = ( {
     onTaxonChosen( ...args );
   }, [interactionsDisabled, onTaxonChosen] );
 
+  const handleSelectGenus = useCallback( suggestion => {
+    if ( interactionsDisabled ) { return; }
+    onSelectGenus( suggestion );
+  }, [interactionsDisabled, onSelectGenus] );
+
   const renderSuggestion = useCallback( ( { item: suggestion } ) => {
-    const genusTaxon = genusMap?.get( suggestion.taxon.id );
+    const showGenusButton = genusEligibleTaxonIds?.has( suggestion.taxon.id );
     return (
       <Suggestion
         accessibilityLabel={t( "Choose-taxon" )}
         suggestion={suggestion}
         onTaxonChosen={handleTaxonChosen}
-        genusTaxon={genusTaxon}
-        onSelectGenus={genusTaxon ? ( ) => handleTaxonChosen( genusTaxon ) : undefined}
+        onSelectGenus={showGenusButton ? ( ) => handleSelectGenus( suggestion ) : undefined}
       />
     );
-  }, [genusMap, handleTaxonChosen, t] );
+  }, [genusEligibleTaxonIds, handleSelectGenus, handleTaxonChosen, t] );
 
   const renderEmptyList = useMemo( ( ) => (
     <SuggestionsEmpty
@@ -169,15 +175,14 @@ const Suggestions = ( {
         </Body1>
       );
     }
-    const genusTaxon = genusMap?.get( item.taxon.id );
+    const showGenusButton = genusEligibleTaxonIds?.has( item.taxon.id );
     return (
       <View className="bg-inatGreen/[.13]">
         <Suggestion
           accessibilityLabel={t( "Choose-top-taxon" )}
           suggestion={item}
           onTaxonChosen={handleTaxonChosen}
-          genusTaxon={genusTaxon}
-          onSelectGenus={genusTaxon ? ( ) => handleTaxonChosen( genusTaxon ) : undefined}
+          onSelectGenus={showGenusButton ? ( ) => handleSelectGenus( item ) : undefined}
         />
       </View>
     );

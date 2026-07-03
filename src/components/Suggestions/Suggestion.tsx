@@ -3,15 +3,8 @@ import { TaxonResult } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React from "react";
 
-interface GenusTaxon {
-  id: number;
-  name: string;
-  preferred_common_name?: string;
-}
-
 interface Props {
   accessibilityLabel: string;
-  genusTaxon?: GenusTaxon;
   onSelectGenus?: ( ) => void;
   onTaxonChosen: ( taxon: object ) => void;
   suggestion: {
@@ -28,7 +21,6 @@ interface Props {
 
 const Suggestion = ( {
   accessibilityLabel,
-  genusTaxon,
   onSelectGenus,
   suggestion,
   onTaxonChosen,
@@ -46,7 +38,7 @@ const Suggestion = ( {
       handleCheckmarkPress={onTaxonChosen}
       hideNavButtons
       lastScreen="Suggestions"
-      onSelectGenus={genusTaxon ? onSelectGenus : undefined}
+      onSelectGenus={onSelectGenus}
       taxon={suggestion?.taxon}
       testID={`SuggestionsList.taxa.${suggestion?.taxon?.id}`}
       vision
