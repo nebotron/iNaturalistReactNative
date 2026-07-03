@@ -79,9 +79,10 @@ const ObsImageZoomable = ( {
 }: Props ) => {
   const transformRef = useRef<ImageZoomTransformRefs | null>( null );
 
-  // Minimum zoom at which the image still fills the square tile. Also the floor
-  // that keeps the crop strictly inside the image, so panning never reveals a
-  // letterbox edge.
+  // Minimum zoom at which the image still fills the square tile. Used as the
+  // floor for the initial framing so a photo lands covering the tile (no
+  // letterbox), while pinch-to-zoom can still go below it (down to scale 1) to
+  // letterbox the full image into the square viewport.
   const coverScale = useMemo( ( ) => {
     const contain = computeContainRect( size, size, imageWidth, imageHeight );
     if ( contain.width <= 0 || contain.height <= 0 ) return 1;
@@ -117,7 +118,9 @@ const ObsImageZoomable = ( {
     transform,
     applyTransform,
   } = useZoomable( {
-    minScale: coverScale,
+    // scale 1 renders the whole image contained (letterboxed) in the square, so
+    // allowing pinch down to 1 lets the user shrink the photo until it fully fits.
+    minScale: 1,
     maxScale: MAX_SCALE,
     isPinchEnabled: true,
     isSingleFingerPanEnabled: false,
