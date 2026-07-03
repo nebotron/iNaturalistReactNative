@@ -41,9 +41,15 @@ const FaveButton = ( {
   const uuid = observation?.uuid;
   const [loading, setLoading] = useState( false );
 
-  const isUnuploaded = useMemo( ( ) => ( observation && typeof observation.wasSynced === "function"
-    ? !observation.wasSynced( )
-    : false ), [observation] );
+  const isUnuploaded = useMemo( ( ) => {
+    if ( !observation ) return false;
+    // Real Realm observations expose wasSynced( ). Observations mapped for the
+    // MyObservations screen are plain objects without that method, so fall back
+    // to checking for a server-assigned id, which is only set once uploaded.
+    return typeof observation.wasSynced === "function"
+      ? !observation.wasSynced( )
+      : !observation.id;
+  }, [observation] );
 
   const observationFaved = useMemo( ( ) => {
     if ( !observation ) return null;
@@ -110,30 +116,36 @@ const FaveButton = ( {
   );
 
   const toggleLocalFave = useCallback( ( ) => {
-    if ( !realm.isClosed && observation && observation.isValid( ) ) {
-      safeRealmWrite( realm, ( ) => {
-        if ( isFaved ) {
-          observation.votes = observation.votes?.filter( v => v?.vote_scope !== null ) || [];
-        } else {
-          const newVote = {
-            id: Math.random( ),
-            user_id: currentUser?.id || 0,
-            vote_flag: true,
-            vote_scope: null,
-          };
-          observation.votes = [...( observation.votes || [] ), newVote];
-        }
-      }, "toggling favorite locally for unuploaded observation" );
-    }
-  }, [realm, observation, isFaved, currentUser] );
+    if ( realm.isClosed || !uuid ) return;
+    // observation may be a plain object mapped for display (e.g. on the
+    // MyObservations screen), so look up the Realm-managed record by uuid
+    // rather than writing directly to the prop we were passed.
+    const realmObservation = realm.objectForPrimaryKey( "Observation", uuid );
+    if ( !realmObservation || !realmObservation.isValid( ) ) return;
+    safeRealmWrite( realm, ( ) => {
+      if ( isFaved ) {
+        realmObservation.votes = realmObservation.votes
+          ?.filter( v => v?.vote_scope !== null ) || [];
+      } else {
+        const newVote = {
+          id: Math.floor( Math.random( ) * 1e9 ),
+          user_id: currentUser?.id || 0,
+          vote_flag: true,
+          vote_scope: null,
+        };
+        realmObservation.votes = [...( realmObservation.votes || [] ), newVote];
+      }
+    }, "toggling favorite locally for unuploaded observation" );
+  }, [realm, uuid, isFaved, currentUser] );
 
   const toggleFave = useCallback( ( ) => {
     if ( isUnuploaded ) {
       setLoading( true );
       toggleLocalFave( );
-      setIsFaved( true );
+      const newIsFaved = !isFaved;
+      setIsFaved( newIsFaved );
       setLoading( false );
-      afterToggleFave( true );
+      afterToggleFave( newIsFaved );
       return;
     }
     if ( !currentUser ) return;

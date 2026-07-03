@@ -1,10 +1,14 @@
 // @flow
 
 import inatjs from "inaturalistjs";
-import rison from "rison-node";
 import Identification from "realmModels/Identification";
+import rison from "rison-node";
 
 import handleError from "./error";
+
+class FetchResponseError extends Error {
+  response: Object;
+}
 
 const PARAMS = {
   fields: Identification.ID_FIELDS,
@@ -52,7 +56,7 @@ const searchIdentifications = async (
     if ( fields ) {
       searchParams.append( "fields", rison.encode( fields ) );
     }
-    const headers = {
+    const headers: { [key: string]: string } = {
       Accept: "application/json",
       "Content-Type": "application/json",
     };
@@ -64,7 +68,7 @@ const searchIdentifications = async (
       { headers },
     );
     if ( !response.ok ) {
-      const error = new Error( `Failed to fetch identifications: ${response.status}` );
+      const error = new FetchResponseError( `Failed to fetch identifications: ${response.status}` );
       error.response = response;
       throw error;
     }
