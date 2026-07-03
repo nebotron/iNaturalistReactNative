@@ -19,7 +19,7 @@ import type { ImageZoomTransformRefs } from "sharedHooks/imageZoom/readImageZoom
 import readImageZoomTransform from "sharedHooks/imageZoom/readImageZoomTransform";
 import { useZoomable } from "sharedHooks/imageZoom/useZoomable";
 
-const MAX_SCALE = 40;
+const MAX_SCALE = 100;
 
 interface Props {
   uri: string;
