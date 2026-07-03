@@ -229,9 +229,9 @@ const ObsImagePreview = ( {
             "rounded-full",
             "absolute m-2.5 right-0",
             {
-              "bg-white/70": selected,
+              "bg-white": selected,
               "w-[24px] h-[24px]": selected,
-              "w-[24px] h-[24px] border-[1.2px] border-white/70": !selected,
+              "w-[24px] h-[24px] border-2 border-white": !selected,
             },
           )}
           style={ICON_DROP_SHADOW}

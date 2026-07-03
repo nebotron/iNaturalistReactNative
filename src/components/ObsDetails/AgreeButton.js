@@ -19,6 +19,7 @@ import {
 import colors from "styles/tailwindColors";
 
 const OBS_IMAGE_ACTION_ICON_SIZE = 50;
+const WHITE_OVERLAY_COLOR = "rgba(255, 255, 255, 0.7)";
 
 const findRecentUserAgreedToID = ( observation, userId ) => {
   const currentIds = observation?.identifications;
@@ -214,7 +215,7 @@ const AgreeButton = ( {
       onPress={handlePress}
       color={isAgreed
         ? colors.inatGreen
-        : colors.white}
+        : WHITE_OVERLAY_COLOR}
       className={classNames( iconPositionClassName )}
       accessibilityLabel={isAgreed
         ? t( "Withdraw" )
