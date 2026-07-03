@@ -12,7 +12,7 @@ import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 import SharedZoomableImage from "./SharedZoomableImage";
 
 export const IMAGE_ZOOM_MIN_SCALE = 0.5;
-export const IMAGE_ZOOM_MAX_SCALE = 200;
+export const IMAGE_ZOOM_MAX_SCALE = 100;
 
 interface Props {
   uri: string;

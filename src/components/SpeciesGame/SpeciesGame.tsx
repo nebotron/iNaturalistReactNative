@@ -907,7 +907,7 @@ const SpeciesGame = ( ) => {
                 uri={currentPhotoUrl}
                 style={gameStyles.imageStyle}
                 isDoubleTapEnabled
-                maxScale={200}
+                maxScale={100}
                 onInteractionEnd={handleInteractionEnd}
                 onLoad={() => setImageLoading( false )}
                 onError={() => setImageLoading( false )}
