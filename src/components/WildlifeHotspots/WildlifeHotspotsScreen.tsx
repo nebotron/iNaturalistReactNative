@@ -1,3 +1,4 @@
+import { useNavigation } from "@react-navigation/native";
 import {
   ActivityIndicator,
   Body2,
@@ -186,6 +187,7 @@ type Props = TabStackScreenProps<"WildlifeHotspots">;
 
 const WildlifeHotspotsScreen = ( { route }: Props ) => {
   const { t } = useTranslation();
+  const navigation = useNavigation();
   const mapRef = useRef<MapView>( null );
   const filterParams = route?.params?.filterParams ?? {};
 
@@ -321,6 +323,10 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops, t] );
 
+  const handleObservationPress = useCallback( ( uuid: string ) => {
+    navigation.push( "ObsDetails", { uuid } );
+  }, [navigation] );
+
   const handleOpenInGoogleMaps = useCallback( ( hotspot: Hotspot ) => {
     if ( confirmedStopPoints.length < 2 ) return;
     const first = confirmedStopPoints[0];
@@ -437,6 +443,21 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
               onPress={() => handleHotspotPress( hotspot )}
             />
           ) )}
+          {hotspots
+            .find( h => h.id === selectedHotspotId )
+            ?.observations.map( obs => (
+              <Marker
+                key={obs.uuid}
+                coordinate={{ latitude: obs.latitude, longitude: obs.longitude }}
+                anchor={{ x: 0.5, y: 0.5 }}
+                onPress={() => handleObservationPress( obs.uuid )}
+              >
+                <View
+                  className="w-2.5 h-2.5 rounded-full border border-white"
+                  style={{ backgroundColor: colors.inatGreen }}
+                />
+              </Marker>
+            ) )}
         </MapView>
 
         {( loading || hotspotRouteLoading ) && (
