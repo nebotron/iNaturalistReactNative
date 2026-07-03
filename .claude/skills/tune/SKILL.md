@@ -44,3 +44,25 @@ Honest held-out (90-img val) comparison, **forced-YOLO** (no gate/fallback, to r
 - *Full-605 eval of the retrained model reads 0.874 but is meaningless* (515/605 were training images → leakage). Use the held-out val numbers.
 
 **Brightness: BLOCKED — could not tune.** The brightness labels live only in Firebase at `{CROP_LOG_FIREBASE_URL}/brightness_log.json`; `firebaseio.com` is denied by this environment's egress policy (proxy `connect_rejected`), and there is no committed fallback (unlike `crop_training.json`). Without the human-chosen brightness labels there is no ground truth to fit `TARGET_LUMINANCE`/the adjustment curve in `useAutoBrightnessForUri.ts`, so no validated change was possible. To make progress next time: export `brightness_log.json` to a committed file (mirror the crop-log fallback pattern) from an environment that can reach Firebase.
+
+### Session 2026-07-03: exhaustive no-win — deployed model is at a robust optimum
+
+**Baseline (fast custom eval, deployed model):** full 605-image set S=0.875 pipeline / 0.864 forced (inflated — 514 of 605 were its training images). Honest held-out (91-img seed-42 val): **forced 0.877, pipeline 0.886** (R=0.96, P=0.55). Old pre-retrain model on same val: 0.766 forced. NOTE: absolute scores are NOT comparable across sessions — this session's harness scores no-det images as full-image crops and derives the val split by re-running the seed-42 shuffle (91 val imgs, not the "90" in older notes). Compare candidates only within one session, same harness.
+
+**Everything tried, nothing beat deployed (all VAL, forced/pipeline):**
+- *E1 continue-train from deployed weights* (AdamW 2e-4, cos_lr, degrees=5, mixup 0.05): 0.870/0.885 — tie. Early-stopped, best at epoch 8.
+- *E2 box-loss emphasis* (box=10, dfl=2, lr 5e-4, gentle warmup): 0.866/0.875 — slightly worse. Best at epoch 4.
+- *E3 fine-tune at imgsz=960* (motivated by tiny-subject failures; app would need YOLO_INPUT_SIZE/numPreds=18900 change): **0.829/0.845 — clearly worse.** 605 images can't support a resolution shift. Also deployed 640-weights run raw at 960: 0.852 (precision collapses).
+- *Model soups* (weight-average deployed+E1+E2, ideal same-parent conditions): 0.878 — tie.
+- *Post-proc sweeps* (uthr 0.3–0.8 × maxk 1–5 × pad, conf-weighted fusion, size-adaptive padding): all ±0.004 = noise. Gate raising again "wins" (0.897 at gate 0.5) — same spectral-saliency-fallback trap as before, do not trust it.
+- *Label cleaning*: 38/514 train labels have IoU<0.1 vs the fitted model. Visually inspected the worst 9 (label vs prediction rendered): labels are VALID — tiny distant subjects (median user crop = 3.9% of image area) or one-of-many-animals ambiguity (duck flocks). Do not drop them.
+
+**Why warm-start retraining always stalls:** every run's best epoch is 4–8 then declines — training on the mosaic-augmented 514-image distribution moves *away* from the val optimum. The deployed checkpoint (COCO→71-epoch fine-tune, last session) is effectively the optimum reachable from this data with yolov8n.
+
+**Environment blockers (remote/cloud env), and the workaround that matters:**
+- ALL pretrained-weight sources are blocked: github release assets (proxy 403 "add_repo"), huggingface, download.pytorch.org, kaggle, zenodo — so stock yolov8n/s.pt is unobtainable. GitLab IS reachable and searchable via API but no usable yolov8 weight mirror was found.
+- **Workaround: `scripts/onnx_to_pt.py` (committed this session)** reconstructs a trainable .pt from the deployed BN-fused ONNX (initializer names are preserved; BN un-fused via activation-stats calibration, parity rel err 3e-7). This is the only warm-start path in this env — verified training runs fine from it.
+- Bigger models (yolov8s = 43 MB, ~3× device latency) judged not deploy-worthy for a mobile bundle even if obtainable.
+- **Brightness: still BLOCKED, worse than before** — this env has no `CROP_LOG_FIREBASE_URL` at all (no .env), firebaseio.com egress is denied (CONNECT 403), and no brightness data exists in git history. Unchanged advice: from an env with Firebase access, commit `brightness_log.json` as a fallback file like crop_training.json.
+
+**Next-session ideas that could actually move the needle:** more labeled data (the only real lever — export a bigger crop log), or run the tune on a Mac/GPU env where yolov8s + MPS training and Apple-Vision-fallback evaluation are possible.
