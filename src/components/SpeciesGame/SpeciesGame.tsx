@@ -52,7 +52,7 @@ const LOOKALIKE_RADIUS_KM = 500;
 const LOCATION_FILTER_RADIUS_KM = 1000;
 const MAX_ZOOM_SCALE = 5;
 const LOOKALIKE_CACHE_KEY = "speciesGameLookalikes";
-const MAX_LOOKALIKE_OBS = 2000;
+const MAX_LOOKALIKE_OBS = 1000;
 
 interface LookalikeCacheEntry {
   entries: { taxonId: number; count: number; observationUuids: string[] }[];
@@ -797,12 +797,22 @@ const SpeciesGame = ( ) => {
                 ? <ActivityIndicator />
                 : lookalikesData.map( entry => (
                   <View key={entry.taxonId} className="mb-4 p-3 bg-lightGray rounded-lg">
-                    <Body1 className="font-bold">
-                      {entry.commonName ?? entry.name}
-                    </Body1>
-                    {entry.commonName && (
-                      <Body2 className="italic text-darkGray">{entry.name}</Body2>
-                    )}
+                    <Pressable
+                      onPress={() => {
+                        setShowLookalikesModal( false );
+                        navigation.navigate(
+                          "TaxonDetails" as never,
+                          { id: entry.taxonId } as never,
+                        );
+                      }}
+                    >
+                      <Body1 className="font-bold text-inatGreen">
+                        {entry.commonName ?? entry.name}
+                      </Body1>
+                      {entry.commonName && (
+                        <Body2 className="italic text-inatGreen">{entry.name}</Body2>
+                      )}
+                    </Pressable>
                     <Body2 className="mt-1">
                       {`Misidentified ${entry.count} time${entry.count !== 1
                         ? "s"
