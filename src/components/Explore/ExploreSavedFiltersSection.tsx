@@ -1,3 +1,4 @@
+import classnames from "classnames";
 import {
   getRelativeDateOffsets,
   prepareExploreStateForStorage,
@@ -12,6 +13,7 @@ import {
   INatIconButton,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
+import isEqual from "lodash/isEqual";
 import {
   EXPLORE_ACTION,
   useExplore,
@@ -45,6 +47,25 @@ const ExploreSavedFiltersSection = ( {
     ( ) => sortSavedExploreFilters( savedExploreFilters ),
     [savedExploreFilters],
   );
+
+  const activeSavedFilterId = useMemo( ( ) => {
+    const currentParams = prepareExploreStateForStorage( state );
+    const activeFilter = sortedSavedFilters.find( savedFilter => {
+      const resolvedParams = resolveRelativeDates(
+        savedFilter.params,
+        {
+          relativeD1: savedFilter.relativeD1,
+          relativeD2: savedFilter.relativeD2,
+          relativeObservedOn: savedFilter.relativeObservedOn,
+          relativeCreatedD1: savedFilter.relativeCreatedD1,
+          relativeCreatedD2: savedFilter.relativeCreatedD2,
+          relativeCreatedOn: savedFilter.relativeCreatedOn,
+        },
+      );
+      return isEqual( currentParams, resolvedParams );
+    } );
+    return activeFilter?.id;
+  }, [state, sortedSavedFilters] );
 
   const loadSavedFilter = ( savedFilterId: string ) => {
     const savedFilter = savedExploreFilters.find(
@@ -105,37 +126,46 @@ const ExploreSavedFiltersSection = ( {
         ? (
           <Body3 className="text-darkGray">{t( "No-saved-filters-yet" )}</Body3>
         )
-        : sortedSavedFilters.map( savedFilter => (
-          <View
-            key={savedFilter.id}
-            className="flex-row items-center mb-4"
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t( "Load-saved-filter" )}
-              className="flex-1 pr-3"
-              onPress={() => loadSavedFilter( savedFilter.id )}
+        : sortedSavedFilters.map( savedFilter => {
+          const isActive = savedFilter.id === activeSavedFilterId;
+          return (
+            <View
+              key={savedFilter.id}
+              className="flex-row items-center mb-4"
             >
-              <Body1>{savedFilter.name}</Body1>
-            </Pressable>
-            <INatIconButton
-              icon="pencil-outline"
-              onPress={() => overwriteSavedFilter( savedFilter.id )}
-              size={20}
-              accessibilityLabel={t( "Overwrite-saved-filter" )}
-              className="mr-3"
-            />
-            <INatIconButton
-              icon="trash-outline"
-              onPress={() => onOpenDeleteFilter( {
-                id: savedFilter.id,
-                name: savedFilter.name,
-              } )}
-              size={20}
-              accessibilityLabel={t( "Delete-saved-filter" )}
-            />
-          </View>
-        ) ) }
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t( "Load-saved-filter" )}
+                accessibilityState={{ selected: isActive }}
+                className={classnames(
+                  "flex-1 pr-3 py-2 px-3 rounded-lg border border-[2px]",
+                  isActive
+                    ? "border-inatGreen bg-inatGreen/10"
+                    : "border-transparent",
+                )}
+                onPress={() => loadSavedFilter( savedFilter.id )}
+              >
+                <Body1>{savedFilter.name}</Body1>
+              </Pressable>
+              <INatIconButton
+                icon="pencil-outline"
+                onPress={() => overwriteSavedFilter( savedFilter.id )}
+                size={20}
+                accessibilityLabel={t( "Overwrite-saved-filter" )}
+                className="mr-3"
+              />
+              <INatIconButton
+                icon="trash-outline"
+                onPress={() => onOpenDeleteFilter( {
+                  id: savedFilter.id,
+                  name: savedFilter.name,
+                } )}
+                size={20}
+                accessibilityLabel={t( "Delete-saved-filter" )}
+              />
+            </View>
+          );
+        } ) }
     </View>
   );
 };
