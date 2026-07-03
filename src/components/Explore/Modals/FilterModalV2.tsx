@@ -911,6 +911,7 @@ const FilterModalV2 = ( {
                   accessibilityLabel={t( "Change-date" )}
                 />
                 <DateTimePicker
+                  date={observedOn ? new Date( observedOn ) : new Date( )}
                   isDateTimePickerVisible={openSheet === OBSERVED_EXACT}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedExact( date )}
@@ -959,11 +960,13 @@ const FilterModalV2 = ( {
                   </View>
                 )}
                 <DateTimePicker
+                  date={d1 ? new Date( d1 ) : new Date( )}
                   isDateTimePickerVisible={openSheet === OBSERVED_START}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedStart( date )}
                 />
                 <DateTimePicker
+                  date={d2 ? new Date( d2 ) : new Date( )}
                   isDateTimePickerVisible={openSheet === OBSERVED_END}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedEnd( date )}
@@ -1007,6 +1010,7 @@ const FilterModalV2 = ( {
                   accessibilityLabel={t( "Change-date" )}
                 />
                 <DateTimePicker
+                  date={createdOn ? new Date( createdOn ) : new Date( )}
                   isDateTimePickerVisible={openSheet === UPLOADED_EXACT}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateDateUploaded( {
@@ -1058,11 +1062,13 @@ const FilterModalV2 = ( {
                   </View>
                 )}
                 <DateTimePicker
+                  date={createdD1 ? new Date( createdD1 ) : new Date( )}
                   isDateTimePickerVisible={openSheet === UPLOADED_START}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateUploadedStart( date )}
                 />
                 <DateTimePicker
+                  date={createdD2 ? new Date( createdD2 ) : new Date( )}
                   isDateTimePickerVisible={openSheet === UPLOADED_END}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateUploadedEnd( date )}
