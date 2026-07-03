@@ -1,3 +1,4 @@
+import { prefetch } from "@candlefinance/faster-image";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
@@ -372,17 +373,20 @@ const SpeciesGame = ( ) => {
     setGuessedTarget( null );
     setPhase( "playing" );
 
-    // Preload subject detection for the next 3 images from each pool so that
-    // when those images are shown the snap-to-subject zoom happens instantly.
+    // Preload the next 3 images and their subject detection for each pool so that
+    // when those images are shown they appear instantly and the snap-to-subject
+    // zoom happens without delay.
     const PRELOAD_COUNT = 3;
     const unusedTarget = targetPool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) );
     const unusedLookalike = lookalikePool.filter(
       e => !usedUuidsRef.current.has( e.observationUuid ),
     );
-    [
+    const upcoming = [
       ...unusedTarget.slice( 0, PRELOAD_COUNT ),
       ...unusedLookalike.slice( 0, PRELOAD_COUNT ),
-    ].forEach( e => preloadSubjectDetectionForUri( e.url ) );
+    ];
+    prefetch( upcoming.map( e => e.url ) );
+    upcoming.forEach( e => preloadSubjectDetectionForUri( e.url ) );
   }, [taxonId] );
 
   // Scans up to 2000 random observations of taxonId near the user's location and returns all
