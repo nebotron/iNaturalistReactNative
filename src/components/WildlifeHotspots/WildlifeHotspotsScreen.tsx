@@ -6,7 +6,9 @@ import {
   INatIcon,
   ViewWrapper,
 } from "components/SharedComponents";
-import { ScrollView, TextInput, View } from "components/styledComponents";
+import {
+  Modal, ScrollView, TextInput, View,
+} from "components/styledComponents";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import type { TabStackScreenProps } from "navigation/types";
 import React, {
@@ -110,7 +112,11 @@ const AddressInput = ( {
 }: AddressInputProps ) => {
   const [suggestions, setSuggestions] = useState<NominatimResult[]>( [] );
   const [searching, setSearching] = useState( false );
+  const [anchorLayout, setAnchorLayout] = useState<{
+    x: number; y: number; width: number; height: number;
+  } | null>( null );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>( null );
+  const containerRef = useRef<View>( null );
 
   const handleChange = useCallback( ( text: string ) => {
     onChangeText( text );
@@ -124,6 +130,11 @@ const AddressInput = ( {
       const results = await searchNominatim( text.trim(), nearbyLatLng );
       setSuggestions( results );
       setSearching( false );
+      if ( results.length > 0 ) {
+        containerRef.current?.measureInWindow( ( x, y, width, height ) => {
+          setAnchorLayout( { x, y, width, height } );
+        } );
+      }
     }, 200 );
   }, [onChangeText, nearbyLatLng] );
 
@@ -138,7 +149,7 @@ const AddressInput = ( {
   }, [handleChange] );
 
   return (
-    <View className="flex-1">
+    <View ref={containerRef} className="flex-1">
       <TouchableOpacity
         activeOpacity={1}
         onPress={handleClear}
@@ -165,21 +176,36 @@ const AddressInput = ( {
           <INatIcon name="checkmark" size={16} color={colors.inatGreen} />
         )}
       </TouchableOpacity>
-      {suggestions.length > 0 && (
-        <View
-          className="absolute top-10 left-0 right-0 bg-white border border-lightGray rounded-lg z-50"
-          style={{ elevation: 8, shadowOpacity: 0.15, shadowRadius: 4 }}
-        >
-          {suggestions.map( result => (
-            <TouchableOpacity
-              key={result.place_id}
-              className="px-3 py-2 border-b border-lightGray"
-              onPress={() => handleSelect( result )}
-            >
-              <Body3 numberOfLines={2}>{result.display_name}</Body3>
-            </TouchableOpacity>
-          ) )}
-        </View>
+      {/* Rendered in a Modal so the dropdown isn't clipped by the draggable stop list */}
+      {suggestions.length > 0 && anchorLayout && (
+        <Modal transparent visible animationType="none" onRequestClose={() => setSuggestions( [] )}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFillObject}
+            activeOpacity={1}
+            onPress={() => setSuggestions( [] )}
+          />
+          <View
+            className="absolute bg-white border border-lightGray rounded-lg"
+            style={{
+              top: anchorLayout.y + anchorLayout.height + 4,
+              left: anchorLayout.x,
+              width: anchorLayout.width,
+              elevation: 8,
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+            }}
+          >
+            {suggestions.map( result => (
+              <TouchableOpacity
+                key={result.place_id}
+                className="px-3 py-2 border-b border-lightGray"
+                onPress={() => handleSelect( result )}
+              >
+                <Body3 numberOfLines={2}>{result.display_name}</Body3>
+              </TouchableOpacity>
+            ) )}
+          </View>
+        </Modal>
       )}
     </View>
   );
