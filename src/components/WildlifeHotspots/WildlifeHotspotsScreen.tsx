@@ -6,9 +6,7 @@ import {
   INatIcon,
   ViewWrapper,
 } from "components/SharedComponents";
-import {
-  Modal, ScrollView, TextInput, View,
-} from "components/styledComponents";
+import { ScrollView, TextInput, View } from "components/styledComponents";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import type { TabStackScreenProps } from "navigation/types";
 import React, {
@@ -93,63 +91,49 @@ interface AddressInputProps {
   placeholder: string;
   value: string;
   onChangeText: ( text: string ) => void;
-  onSelectSuggestion: ( result: NominatimResult ) => void;
+  onSuggestionsChange: ( suggestions: NominatimResult[] ) => void;
   confirmed: boolean;
   loading: boolean;
   dotColor: string;
   nearbyLatLng?: LatLng;
 }
 
+// Suggestions are reported up to the parent, which renders the dropdown as a
+// sibling of the draggable stop list so it isn't clipped by the list's ScrollView.
 const AddressInput = ( {
   placeholder,
   value,
   onChangeText,
-  onSelectSuggestion,
+  onSuggestionsChange,
   confirmed,
   loading,
   dotColor,
   nearbyLatLng,
 }: AddressInputProps ) => {
-  const [suggestions, setSuggestions] = useState<NominatimResult[]>( [] );
   const [searching, setSearching] = useState( false );
-  const [anchorLayout, setAnchorLayout] = useState<{
-    x: number; y: number; width: number; height: number;
-  } | null>( null );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>( null );
-  const containerRef = useRef<View>( null );
 
   const handleChange = useCallback( ( text: string ) => {
     onChangeText( text );
     if ( debounceRef.current ) clearTimeout( debounceRef.current );
     if ( text.trim().length < 3 ) {
-      setSuggestions( [] );
+      onSuggestionsChange( [] );
       return;
     }
     debounceRef.current = setTimeout( async () => {
       setSearching( true );
       const results = await searchNominatim( text.trim(), nearbyLatLng );
-      setSuggestions( results );
+      onSuggestionsChange( results );
       setSearching( false );
-      if ( results.length > 0 ) {
-        containerRef.current?.measureInWindow( ( x, y, width, height ) => {
-          setAnchorLayout( { x, y, width, height } );
-        } );
-      }
     }, 200 );
-  }, [onChangeText, nearbyLatLng] );
-
-  const handleSelect = useCallback( ( result: NominatimResult ) => {
-    setSuggestions( [] );
-    Keyboard.dismiss();
-    onSelectSuggestion( result );
-  }, [onSelectSuggestion] );
+  }, [onChangeText, nearbyLatLng, onSuggestionsChange] );
 
   const handleClear = useCallback( () => {
     handleChange( "" );
   }, [handleChange] );
 
   return (
-    <View ref={containerRef} className="flex-1">
+    <View className="flex-1">
       <TouchableOpacity
         activeOpacity={1}
         onPress={handleClear}
@@ -176,37 +160,6 @@ const AddressInput = ( {
           <INatIcon name="checkmark" size={16} color={colors.inatGreen} />
         )}
       </TouchableOpacity>
-      {/* Rendered in a Modal so the dropdown isn't clipped by the draggable stop list */}
-      {suggestions.length > 0 && anchorLayout && (
-        <Modal transparent visible animationType="none" onRequestClose={() => setSuggestions( [] )}>
-          <TouchableOpacity
-            style={StyleSheet.absoluteFillObject}
-            activeOpacity={1}
-            onPress={() => setSuggestions( [] )}
-          />
-          <View
-            className="absolute bg-white border border-lightGray rounded-lg"
-            style={{
-              top: anchorLayout.y + anchorLayout.height + 4,
-              left: anchorLayout.x,
-              width: anchorLayout.width,
-              elevation: 8,
-              shadowOpacity: 0.15,
-              shadowRadius: 4,
-            }}
-          >
-            {suggestions.map( result => (
-              <TouchableOpacity
-                key={result.place_id}
-                className="px-3 py-2 border-b border-lightGray"
-                onPress={() => handleSelect( result )}
-              >
-                <Body3 numberOfLines={2}>{result.display_name}</Body3>
-              </TouchableOpacity>
-            ) )}
-          </View>
-        </Modal>
-      )}
     </View>
   );
 };
@@ -227,6 +180,14 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>( null );
   const [hotspotRouteCoords, setHotspotRouteCoords] = useState<RoutePoint[]>( [] );
   const [hotspotRouteLoading, setHotspotRouteLoading] = useState( false );
+  const [activeSuggestions, setActiveSuggestions] = useState<{
+    stopId: string;
+    index: number;
+    suggestions: NominatimResult[];
+  } | null>( null );
+  // Bottom edge (y + height) of each stop row, keyed by index, used to position the
+  // address suggestion dropdown right below whichever row is being edited
+  const rowOffsetsRef = useRef<Map<number, number>>( new Map() );
 
   const {
     hotspots, routeCoords, loading, error, findHotspots,
@@ -277,6 +238,23 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
         point: { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) },
       }
       : s ) ) );
+    setActiveSuggestions( null );
+    Keyboard.dismiss();
+  }, [] );
+
+  const handleStopSuggestionsChange = useCallback( (
+    stopId: string,
+    index: number,
+    suggestions: NominatimResult[],
+  ) => {
+    setActiveSuggestions( prev => {
+      if ( suggestions.length > 0 ) return { stopId, index, suggestions };
+      return prev?.stopId === stopId ? null : prev;
+    } );
+  }, [] );
+
+  const handleRowLayout = useCallback( ( index: number, y: number, height: number ) => {
+    rowOffsetsRef.current.set( index, y + height );
   }, [] );
 
   const handleAddStop = useCallback( () => {
@@ -285,14 +263,17 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
       { id: makeStopId(), text: "", point: null },
       prev[prev.length - 1],
     ] );
+    setActiveSuggestions( null );
   }, [] );
 
   const handleRemoveStop = useCallback( ( id: string ) => {
     setStops( prev => ( prev.length > 2 ? prev.filter( s => s.id !== id ) : prev ) );
+    setActiveSuggestions( null );
   }, [] );
 
   const handleReorderStops = useCallback( ( { data }: { data: Stop[] } ) => {
     setStops( data );
+    setActiveSuggestions( null );
   }, [] );
 
   useEffect( () => {
@@ -366,6 +347,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
         <View
           className={`flex-row items-center bg-white ${index < stops.length - 1 ? "mb-2" : ""}`}
           style={{ zIndex: stops.length - index, opacity: isActive ? 0.7 : 1 }}
+          onLayout={e => handleRowLayout( index, e.nativeEvent.layout.y, e.nativeEvent.layout.height )}
         >
           <TouchableOpacity
             onLongPress={drag}
@@ -386,7 +368,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
             }
             value={stop.text}
             onChangeText={text => handleStopTextChange( stop.id, text )}
-            onSelectSuggestion={result => handleSelectStopSuggestion( stop.id, result )}
+            onSuggestionsChange={suggestions => handleStopSuggestionsChange( stop.id, index, suggestions )}
             confirmed={!!stop.point}
             loading={false}
             dotColor={stopDotColor( index, stops.length )}
@@ -405,7 +387,15 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
         </View>
       </ScaleDecorator>
     );
-  }, [stops, userLocation, t, handleStopTextChange, handleSelectStopSuggestion, handleRemoveStop] );
+  }, [
+    stops,
+    userLocation,
+    t,
+    handleStopTextChange,
+    handleStopSuggestionsChange,
+    handleRemoveStop,
+    handleRowLayout,
+  ] );
 
   const handleOpenInGoogleMaps = useCallback( ( hotspot: Hotspot ) => {
     if ( confirmedStopPoints.length < 2 ) return;
@@ -434,6 +424,28 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
           onDragEnd={handleReorderStops}
           scrollEnabled={false}
         />
+        {/* Rendered here (not inside a stop row) so the draggable list's ScrollView doesn't clip it */}
+        {activeSuggestions && (
+          <View
+            className="absolute left-0 right-0 bg-white border border-lightGray rounded-lg z-50"
+            style={{
+              top: ( rowOffsetsRef.current.get( activeSuggestions.index ) ?? 0 ) + 4,
+              elevation: 8,
+              shadowOpacity: 0.15,
+              shadowRadius: 4,
+            }}
+          >
+            {activeSuggestions.suggestions.map( result => (
+              <TouchableOpacity
+                key={result.place_id}
+                className="px-3 py-2 border-b border-lightGray"
+                onPress={() => handleSelectStopSuggestion( activeSuggestions.stopId, result )}
+              >
+                <Body3 numberOfLines={2}>{result.display_name}</Body3>
+              </TouchableOpacity>
+            ) )}
+          </View>
+        )}
         <TouchableOpacity
           onPress={handleAddStop}
           className="flex-row items-center mt-1"
