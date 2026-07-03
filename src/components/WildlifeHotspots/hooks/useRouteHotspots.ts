@@ -70,11 +70,12 @@ function distanceToPolylineKm( pt: RoutePoint, polyline: RoutePoint[] ): number 
   return minDist;
 }
 
-export async function fetchOSRMRoute( start: RoutePoint, end: RoutePoint ): Promise<{
+export async function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<{
   coords: RoutePoint[];
   durationSec: number;
 }> {
-  const url = `${OSRM_BASE}/${start.longitude},${start.latitude};${end.longitude},${end.latitude}?overview=full&geometries=geojson`;
+  const wStr = waypoints.map( w => `${w.longitude},${w.latitude}` ).join( ";" );
+  const url = `${OSRM_BASE}/${wStr}?overview=full&geometries=geojson`;
   const response = await fetch( url );
   if ( !response.ok ) {
     throw new Error( `Routing service error: ${response.status}` );
@@ -101,6 +102,31 @@ async function fetchOSRMDuration( waypoints: RoutePoint[] ): Promise<number> {
   } catch {
     return Infinity;
   }
+}
+
+// Extra distance (km) incurred by visiting `candidate` between stops[idx] and stops[idx + 1]
+function insertionCostKm( stops: RoutePoint[], idx: number, candidate: RoutePoint ): number {
+  const a = stops[idx];
+  const b = stops[idx + 1];
+  const direct = haversineKm( a.latitude, a.longitude, b.latitude, b.longitude );
+  const viaCost = haversineKm( a.latitude, a.longitude, candidate.latitude, candidate.longitude )
+    + haversineKm( candidate.latitude, candidate.longitude, b.latitude, b.longitude );
+  return viaCost - direct;
+}
+
+// Finds the cheapest place to insert `candidate` into an ordered list of stops,
+// returning the index it should be spliced in at.
+export function findBestInsertion( stops: RoutePoint[], candidate: RoutePoint ): number {
+  let bestIdx = stops.length;
+  let bestCost = Infinity;
+  for ( let i = 0; i < stops.length - 1; i++ ) {
+    const cost = insertionCostKm( stops, i, candidate );
+    if ( cost < bestCost ) {
+      bestCost = cost;
+      bestIdx = i + 1;
+    }
+  }
+  return bestIdx;
 }
 
 function routeBbox( coords: RoutePoint[], paddingDeg = 0.3 ) {
@@ -291,18 +317,18 @@ export function useRouteHotspots() {
 
   const findHotspots = useCallback(
     async (
-      start: RoutePoint,
-      end: RoutePoint,
+      stops: RoutePoint[],
       filterParams: Record<string, unknown>,
     ) => {
+      if ( stops.length < 2 ) return;
       setLoading( true );
       setError( null );
       setHotspots( [] );
       setRouteCoords( [] );
 
       try {
-        // 1. Get the actual road route and baseline travel time
-        const { coords: routePoints, durationSec: directDurationSec } = await fetchOSRMRoute( start, end );
+        // 1. Get the actual road route (through every stop, in order) and baseline travel time
+        const { coords: routePoints, durationSec: directDurationSec } = await fetchOSRMRoute( stops );
         setRouteCoords( routePoints );
 
         // 2. Single iNaturalist call for the whole route bounding box
@@ -365,17 +391,21 @@ export function useRouteHotspots() {
         candidates.sort( ( a, b ) => b.count - a.count );
         const topCandidates = candidates.slice( 0, MAX_DETOUR_CANDIDATES );
 
-        // 5. Compute actual 3-point travel times in parallel (start → hotspot → end)
+        // 5. Compute actual travel time in parallel for each candidate, inserted at
+        // whichever point along the current stops minimizes the added distance
         const withDetours = await Promise.all(
           topCandidates.map( async candidate => {
-            const threePointSec = await fetchOSRMDuration( [
-              start,
-              { latitude: candidate.centerLat, longitude: candidate.centerLng },
-              end,
-            ] );
+            const point = { latitude: candidate.centerLat, longitude: candidate.centerLng };
+            const insertIdx = findBestInsertion( stops, point );
+            const withCandidate = [
+              ...stops.slice( 0, insertIdx ),
+              point,
+              ...stops.slice( insertIdx ),
+            ];
+            const detourSec = await fetchOSRMDuration( withCandidate );
             const detourMinutes = Math.max(
               0,
-              Math.round( ( threePointSec - directDurationSec ) / 60 ),
+              Math.round( ( detourSec - directDurationSec ) / 60 ),
             );
             return {
               id: candidate.id,

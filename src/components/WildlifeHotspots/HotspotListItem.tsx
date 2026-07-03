@@ -16,6 +16,7 @@ interface Props {
   selected: boolean;
   onPress: () => void;
   onOpenInGoogleMaps?: () => void;
+  onAddToRoute?: () => void;
 }
 
 const HotspotListItem = ( {
@@ -24,6 +25,7 @@ const HotspotListItem = ( {
   selected,
   onPress,
   onOpenInGoogleMaps,
+  onAddToRoute,
 }: Props ) => {
   const detourText = hotspot.detourMinutes < 1
     ? "On route"
@@ -76,11 +78,20 @@ const HotspotListItem = ( {
             ) )}
           </View>
         )}
+        {selected && onAddToRoute && (
+          <Button
+            className="mt-3"
+            text="Add to Route"
+            level="focus"
+            onPress={onAddToRoute}
+            testID="HotspotListItem.addToRoute"
+          />
+        )}
         {selected && onOpenInGoogleMaps && (
           <Button
             className="mt-3"
             text="Open in Google Maps"
-            level="focus"
+            level="neutral"
             onPress={onOpenInGoogleMaps}
             testID="HotspotListItem.openInGoogleMaps"
           />

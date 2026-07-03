@@ -30,7 +30,7 @@ import colors from "styles/tailwindColors";
 
 import HotspotListItem from "./HotspotListItem";
 import type { Hotspot, RoutePoint } from "./hooks/useRouteHotspots";
-import { fetchOSRMRoute, useRouteHotspots } from "./hooks/useRouteHotspots";
+import { fetchOSRMRoute, findBestInsertion, useRouteHotspots } from "./hooks/useRouteHotspots";
 
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
 
@@ -64,6 +64,24 @@ async function searchNominatim(
 
 function toMapCoord( pt: RoutePoint ): LatLng {
   return { latitude: pt.latitude, longitude: pt.longitude };
+}
+
+interface Stop {
+  id: string;
+  text: string;
+  point: LatLng | null;
+}
+
+let stopIdCounter = 0;
+function makeStopId(): string {
+  stopIdCounter += 1;
+  return `stop-${Date.now()}-${stopIdCounter}`;
+}
+
+function stopDotColor( index: number, count: number ): string {
+  if ( index === 0 ) return colors.warningYellow;
+  if ( index === count - 1 ) return colors.inatGreen;
+  return colors.blue;
 }
 
 interface AddressInputProps {
@@ -171,10 +189,10 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
   const mapRef = useRef<MapView>( null );
   const filterParams = route?.params?.filterParams ?? {};
 
-  const [startText, setStartText] = useState( "" );
-  const [endText, setEndText] = useState( "" );
-  const [startPoint, setStartPoint] = useState<LatLng | null>( null );
-  const [endPoint, setEndPoint] = useState<LatLng | null>( null );
+  const [stops, setStops] = useState<Stop[]>( [
+    { id: makeStopId(), text: "", point: null },
+    { id: makeStopId(), text: "", point: null },
+  ] );
   const [userLocation, setUserLocation] = useState<LatLng | null>( null );
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>( null );
   const [hotspotRouteCoords, setHotspotRouteCoords] = useState<RoutePoint[]>( [] );
@@ -184,16 +202,21 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     hotspots, routeCoords, loading, error, findHotspots,
   } = useRouteHotspots();
 
+  const confirmedStopPoints = stops
+    .filter( s => s.point )
+    .map( s => ( { latitude: ( s.point as LatLng ).latitude, longitude: ( s.point as LatLng ).longitude } ) );
+
   useEffect( () => {
     const initializeLocation = async () => {
       const loc = await fetchAccurateUserLocation();
       if ( loc ) {
         const latLng = { latitude: loc.latitude, longitude: loc.longitude };
         setUserLocation( latLng );
-        setStartPoint( latLng );
-        setEndPoint( latLng );
-        setStartText( t( "Current-location" ) );
-        setEndText( t( "Current-location" ) );
+        setStops( prev => prev.map( s => ( {
+          ...s,
+          point: latLng,
+          text: t( "Current-location" ),
+        } ) ) );
       }
     };
     initializeLocation();
@@ -212,36 +235,39 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     } );
   }, [routeCoords, hotspots] );
 
-  const handleSelectStart = useCallback( ( result: NominatimResult ) => {
-    setStartText( result.display_name );
-    setStartPoint( { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) } );
+  const handleStopTextChange = useCallback( ( id: string, text: string ) => {
+    setStops( prev => prev.map( s => ( s.id === id ? { ...s, text, point: null } : s ) ) );
   }, [] );
 
-  const handleSelectEnd = useCallback( ( result: NominatimResult ) => {
-    setEndText( result.display_name );
-    setEndPoint( { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) } );
+  const handleSelectStopSuggestion = useCallback( ( id: string, result: NominatimResult ) => {
+    setStops( prev => prev.map( s => ( s.id === id
+      ? {
+        ...s,
+        text: result.display_name,
+        point: { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) },
+      }
+      : s ) ) );
   }, [] );
 
-  const handleStartTextChange = useCallback( ( text: string ) => {
-    setStartText( text );
-    setStartPoint( null );
+  const handleAddStop = useCallback( () => {
+    setStops( prev => [
+      ...prev.slice( 0, prev.length - 1 ),
+      { id: makeStopId(), text: "", point: null },
+      prev[prev.length - 1],
+    ] );
   }, [] );
 
-  const handleEndTextChange = useCallback( ( text: string ) => {
-    setEndText( text );
-    setEndPoint( null );
+  const handleRemoveStop = useCallback( ( id: string ) => {
+    setStops( prev => ( prev.length > 2 ? prev.filter( s => s.id !== id ) : prev ) );
   }, [] );
 
   useEffect( () => {
-    if ( !startPoint || !endPoint ) return;
+    if ( confirmedStopPoints.length !== stops.length || stops.length < 2 ) return;
     setSelectedHotspotId( null );
     setHotspotRouteCoords( [] );
-    findHotspots(
-      { latitude: startPoint.latitude, longitude: startPoint.longitude },
-      { latitude: endPoint.latitude, longitude: endPoint.longitude },
-      filterParams,
-    );
-  }, [startPoint, endPoint, findHotspots, filterParams] );
+    findHotspots( confirmedStopPoints, filterParams );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stops, findHotspots, filterParams] );
 
   const handleHotspotPress = useCallback( async ( hotspot: Hotspot ) => {
     const isDeselecting = selectedHotspotId === hotspot.id;
@@ -258,20 +284,20 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
         longitudeDelta: 0.5,
       }, 400 );
     }
-    if ( !startPoint || !endPoint ) return;
+    if ( confirmedStopPoints.length < 2 ) return;
     setHotspotRouteLoading( true );
     try {
       const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
-      const [leg1, leg2] = await Promise.all( [
-        fetchOSRMRoute( startPoint, via ),
-        fetchOSRMRoute( via, endPoint ),
-      ] );
-      setHotspotRouteCoords( [...leg1.coords, ...leg2.coords] );
+      const insertIdx = findBestInsertion( confirmedStopPoints, via );
+      const withVia = [
+        ...confirmedStopPoints.slice( 0, insertIdx ),
+        via,
+        ...confirmedStopPoints.slice( insertIdx ),
+      ];
+      const { coords } = await fetchOSRMRoute( withVia );
+      setHotspotRouteCoords( coords );
       if ( mapRef.current ) {
-        const allCoords: LatLng[] = [...leg1.coords, ...leg2.coords].map(
-          p => ( { latitude: p.latitude, longitude: p.longitude } ),
-        );
-        mapRef.current.fitToCoordinates( allCoords, {
+        mapRef.current.fitToCoordinates( coords.map( toMapCoord ), {
           edgePadding: { top: 60, right: 40, bottom: 60, left: 40 },
           animated: true,
         } );
@@ -281,45 +307,82 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     } finally {
       setHotspotRouteLoading( false );
     }
-  }, [selectedHotspotId, startPoint, endPoint] );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedHotspotId, stops] );
+
+  const handleAddHotspotToRoute = useCallback( ( hotspot: Hotspot ) => {
+    if ( confirmedStopPoints.length < 2 ) return;
+    const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
+    const insertIdx = findBestInsertion( confirmedStopPoints, via );
+    const newStop: Stop = { id: makeStopId(), text: t( "Hotspot" ), point: via };
+    setStops( prev => [...prev.slice( 0, insertIdx ), newStop, ...prev.slice( insertIdx )] );
+    setSelectedHotspotId( null );
+    setHotspotRouteCoords( [] );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stops, t] );
 
   const handleOpenInGoogleMaps = useCallback( ( hotspot: Hotspot ) => {
-    if ( !startPoint || !endPoint ) return;
-    const origin = `${startPoint.latitude},${startPoint.longitude}`;
-    const destination = `${endPoint.latitude},${endPoint.longitude}`;
-    const waypoint = `${hotspot.centerLatitude},${hotspot.centerLongitude}`;
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${waypoint}&travelmode=driving`;
+    if ( confirmedStopPoints.length < 2 ) return;
+    const first = confirmedStopPoints[0];
+    const last = confirmedStopPoints[confirmedStopPoints.length - 1];
+    const origin = `${first.latitude},${first.longitude}`;
+    const destination = `${last.latitude},${last.longitude}`;
+    const waypointPoints = [
+      ...confirmedStopPoints.slice( 1, -1 ),
+      { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude },
+    ];
+    const waypoints = waypointPoints.map( p => `${p.latitude},${p.longitude}` ).join( "|" );
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${waypoints}&travelmode=driving`;
     Linking.openURL( url );
-  }, [startPoint, endPoint] );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stops] );
 
   return (
     <ViewWrapper testID="WildlifeHotspotsScreen">
-      {/* Start/End inputs */}
+      {/* Stop inputs */}
       <View className="bg-white px-3 py-2 border-b border-lightGray" style={{ zIndex: 10 }}>
-        <View className="flex-row items-center mb-2" style={{ zIndex: 20 }}>
-          <AddressInput
-            placeholder={t( "Start-location" )}
-            value={startText}
-            onChangeText={handleStartTextChange}
-            onSelectSuggestion={handleSelectStart}
-            confirmed={!!startPoint}
-            loading={false}
-            dotColor={colors.warningYellow}
-            nearbyLatLng={userLocation ?? undefined}
-          />
-        </View>
-        <View className="flex-row items-center" style={{ zIndex: 10 }}>
-          <AddressInput
-            placeholder={t( "End-location" )}
-            value={endText}
-            onChangeText={handleEndTextChange}
-            onSelectSuggestion={handleSelectEnd}
-            confirmed={!!endPoint}
-            loading={false}
-            dotColor={colors.inatGreen}
-            nearbyLatLng={startPoint ?? userLocation ?? undefined}
-          />
-        </View>
+        {stops.map( ( stop, index ) => (
+          <View
+            key={stop.id}
+            className={`flex-row items-center ${index < stops.length - 1 ? "mb-2" : ""}`}
+            style={{ zIndex: stops.length - index }}
+          >
+            <AddressInput
+              placeholder={
+                index === 0
+                  ? t( "Start-location" )
+                  : index === stops.length - 1
+                    ? t( "End-location" )
+                    : t( "Add-stop" )
+              }
+              value={stop.text}
+              onChangeText={text => handleStopTextChange( stop.id, text )}
+              onSelectSuggestion={result => handleSelectStopSuggestion( stop.id, result )}
+              confirmed={!!stop.point}
+              loading={false}
+              dotColor={stopDotColor( index, stops.length )}
+              nearbyLatLng={stops[index - 1]?.point ?? userLocation ?? undefined}
+            />
+            {index > 0 && index < stops.length - 1 && (
+              <TouchableOpacity
+                onPress={() => handleRemoveStop( stop.id )}
+                className="ml-2 p-1"
+                accessibilityRole="button"
+                accessibilityLabel={t( "Remove-stop" )}
+              >
+                <INatIcon name="close" size={16} color={colors.darkGray} />
+              </TouchableOpacity>
+            )}
+          </View>
+        ) )}
+        <TouchableOpacity
+          onPress={handleAddStop}
+          className="flex-row items-center mt-1"
+          accessibilityRole="button"
+        >
+          <INatIcon name="plus" size={14} color={colors.inatGreen} />
+          <Body3 className="ml-1 text-inatGreen">{t( "Add-stop" )}</Body3>
+        </TouchableOpacity>
       </View>
 
       {/* Map */}
@@ -337,20 +400,14 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
           pitchEnabled={false}
           showsUserLocation
         >
-          {startPoint && (
+          {stops.map( ( stop, index ) => stop.point && (
             <Marker
-              coordinate={startPoint}
-              pinColor={colors.warningYellow}
-              title={startText || t( "Start" )}
+              key={stop.id}
+              coordinate={stop.point}
+              pinColor={stopDotColor( index, stops.length )}
+              title={stop.text || `${t( "Stop-noun" )} ${index + 1}`}
             />
-          )}
-          {endPoint && (
-            <Marker
-              coordinate={endPoint}
-              pinColor={colors.inatGreen}
-              title={endText || t( "End" )}
-            />
-          )}
+          ) )}
           {routeCoords.length > 1 && (
             <Polyline
               coordinates={routeCoords.map( toMapCoord )}
@@ -416,6 +473,7 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
                     selected={selectedHotspotId === hotspot.id}
                     onPress={() => handleHotspotPress( hotspot )}
                     onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
+                    onAddToRoute={() => handleAddHotspotToRoute( hotspot )}
                   />
                 ) )}
               </ScrollView>
