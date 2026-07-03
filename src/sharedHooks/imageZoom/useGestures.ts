@@ -69,6 +69,8 @@ export const useGestures = ( {
   const internalScaleValue = useSharedValue( 1 );
   const scale = scaleValue ?? internalScaleValue;
   const initialFocal = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
+  const pinchPointers = useSharedValue( 0 );
+  const pinchBaseEventScale = useSharedValue( 1 );
   const savedFocal = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
   const focal = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
   const savedTranslate = { x: useSharedValue( 0 ), y: useSharedValue( 0 ) };
@@ -437,9 +439,31 @@ export const useGestures = ( {
       savedTranslate.y.value = translate.y.value;
       initialFocal.x.value = event.focalX;
       initialFocal.y.value = event.focalY;
+      pinchPointers.value = event.numberOfPointers;
+      pinchBaseEventScale.value = 1;
     } )
     .onUpdate( event => {
-      const newScale = clamp( savedScale.value * event.scale, minScale, maxScale );
+      if ( event.numberOfPointers !== pinchPointers.value ) {
+        // When a finger is added or lifted the reported centroid jumps to the
+        // centroid of the new finger set, so re-anchor the pinch at the
+        // current transform instead of letting the pin-to-centroid math yank
+        // the image (most visible on release, when fingers rarely lift in the
+        // same frame).
+        pinchPointers.value = event.numberOfPointers;
+        pinchBaseEventScale.value = event.scale;
+        savedScale.value = scale.value;
+        savedFocal.x.value = focal.x.value;
+        savedFocal.y.value = focal.y.value;
+        savedTranslate.x.value = translate.x.value;
+        savedTranslate.y.value = translate.y.value;
+        initialFocal.x.value = event.focalX;
+        initialFocal.y.value = event.focalY;
+      }
+      const newScale = clamp(
+        savedScale.value * ( event.scale / pinchBaseEventScale.value ),
+        minScale,
+        maxScale,
+      );
       const ratio = newScale / savedScale.value;
       scale.value = newScale;
 
