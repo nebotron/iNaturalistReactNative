@@ -425,22 +425,13 @@ const SpeciesGame = ( ) => {
     targetPool: PhotoEntry[],
     lookalikePool: PhotoEntry[],
   ) => {
+    // Always pick a pool fairly (50/50). Never re-show a photo and never fall back to
+    // the other pool: draw only from unused entries, paging in more from the API as needed.
     const showTarget = Math.random( ) < 0.5;
-    const primary = showTarget
+    const chosen = showTarget
       ? { id: taxonId, pool: targetPool }
       : { id: lookalikeIdRef.current, pool: lookalikePool };
-    const secondary = showTarget
-      ? { id: lookalikeIdRef.current, pool: lookalikePool }
-      : { id: taxonId, pool: targetPool };
-
-    // Never re-show a photo: draw only from unused entries, refilling from the API as
-    // needed, and fall back to the other pool if the preferred one is exhausted.
-    let chosen = primary;
-    let unused = await unusedWithRefill( primary.id, primary.pool );
-    if ( unused.length === 0 ) {
-      chosen = secondary;
-      unused = await unusedWithRefill( secondary.id, secondary.pool );
-    }
+    const unused = await unusedWithRefill( chosen.id, chosen.pool );
 
     const entry = unused.length > 0
       ? unused[Math.floor( Math.random( ) * unused.length )]
