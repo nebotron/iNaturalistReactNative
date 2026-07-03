@@ -13,6 +13,12 @@ export interface HotspotSpecies {
   count: number;
 }
 
+export interface HotspotObservation {
+  uuid: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface Hotspot {
   id: string;
   centerLatitude: number;
@@ -20,6 +26,7 @@ export interface Hotspot {
   observationCount: number;
   detourMinutes: number;
   topSpecies: HotspotSpecies[];
+  observations: HotspotObservation[];
 }
 
 const EARTH_RADIUS_KM = 6371;
@@ -259,6 +266,7 @@ function clusterByKMeans( observations: any[] ): Map<string, {
   centerLng: number;
   count: number;
   taxa: Map<number, HotspotSpecies>;
+  observations: HotspotObservation[];
 }> {
   // Extract valid positions paired with their original observation
   const points: LatLng[] = [];
@@ -277,13 +285,16 @@ function clusterByKMeans( observations: any[] ): Map<string, {
     centerLng: number;
     count: number;
     taxa: Map<number, HotspotSpecies>;
+    observations: HotspotObservation[];
   }>();
 
   for ( const { centroid, memberIndices } of clusters ) {
     const key = `${centroid.lat.toFixed( 5 )},${centroid.lng.toFixed( 5 )}`;
     const taxa = new Map<number, HotspotSpecies>();
+    const cellObservations: HotspotObservation[] = [];
     for ( const i of memberIndices ) {
-      const taxon = obsForPoint[i].taxon;
+      const obs = obsForPoint[i];
+      const taxon = obs.taxon;
       if ( taxon?.id ) {
         const prev = taxa.get( taxon.id );
         if ( prev ) {
@@ -297,12 +308,20 @@ function clusterByKMeans( observations: any[] ): Map<string, {
           } );
         }
       }
+      if ( obs.uuid ) {
+        cellObservations.push( {
+          uuid: obs.uuid,
+          latitude: points[i].lat,
+          longitude: points[i].lng,
+        } );
+      }
     }
     cells.set( key, {
       centerLat: centroid.lat,
       centerLng: centroid.lng,
       count: memberIndices.length,
       taxa,
+      observations: cellObservations,
     } );
   }
 
@@ -343,6 +362,7 @@ export function useRouteHotspots() {
           verifiable: true,
           order_by: "id",
           fields: {
+            uuid: true,
             geojson: true,
             taxon: {
               id: true,
@@ -366,6 +386,7 @@ export function useRouteHotspots() {
           centerLng: number;
           count: number;
           topSpecies: HotspotSpecies[];
+          observations: HotspotObservation[];
         }> = [];
 
         cells.forEach( ( cell, key ) => {
@@ -385,6 +406,7 @@ export function useRouteHotspots() {
             centerLng: cell.centerLng,
             count: cell.count,
             topSpecies,
+            observations: cell.observations,
           } );
         } );
 
@@ -414,6 +436,7 @@ export function useRouteHotspots() {
               observationCount: candidate.count,
               detourMinutes,
               topSpecies: candidate.topSpecies,
+              observations: candidate.observations,
             };
           } ),
         );
