@@ -819,10 +819,10 @@ Multiple-taxa = Multiple taxa
 MY-CONTENT--notifications = MY CONTENT
 # Label for a menu item and screen title showing the first time the user
 # observed each species they've seen, newest to oldest
-MY-LIFERS = My Lifers
+MY-LIFERS = MY LIFERS
 # Label for a menu item and screen title showing identifications the user
 # made that are outliers, disagreeing with the community taxon
-MY-MAVERICK-IDS = My Maverick IDs
+MY-MAVERICK-IDS = MY MAVERICK IDS
 My-Observations = My Observations
 # Label for the bottom tab that shows your observations. Feel free to be
 # flexible in translating this to keep it as short as possible. "My

@@ -960,7 +960,7 @@ const SpeciesGame = ( ) => {
                 <View className="flex-1">
                   <Button
                     className="w-full h-full"
-                    text="I don't know"
+                    text="IDK"
                     onPress={handleSkip}
                   />
                 </View>
