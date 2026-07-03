@@ -31,6 +31,11 @@ const styles = StyleSheet.create( {
     borderWidth: 2,
     position: "absolute",
   },
+  deleteButton: {
+    bottom: 8,
+    position: "absolute",
+    right: 8,
+  },
   legendBox: {
     borderWidth: 2,
     height: 10,
@@ -40,7 +45,7 @@ const styles = StyleSheet.create( {
   spinner: {
     bottom: 8,
     position: "absolute",
-    right: 8,
+    right: 44,
   },
 } );
 
@@ -92,50 +97,51 @@ const Row = ( { entry, onDelete }: RowProps ) => {
     ? ( imgDims.h / imgDims.w ) * screenWidth
     : screenWidth;
 
-  const labelRect = {
-    height: entry.h * displayHeight,
-    left: entry.x * displayWidth,
-    top: entry.y * displayHeight,
-    width: entry.w * displayWidth,
-  };
-  const detectorRect = detectorCrop && {
-    height: detectorCrop.h * displayHeight,
-    left: detectorCrop.x * displayWidth,
-    top: detectorCrop.y * displayHeight,
-    width: detectorCrop.w * displayWidth,
+  const clampRect = ( x: number, y: number, w: number, h: number ) => {
+    const left = Math.min( Math.max( x, 0 ), 1 );
+    const top = Math.min( Math.max( y, 0 ), 1 );
+    const right = Math.min( Math.max( x + w, 0 ), 1 );
+    const bottom = Math.min( Math.max( y + h, 0 ), 1 );
+    return {
+      height: ( bottom - top ) * displayHeight,
+      left: left * displayWidth,
+      top: top * displayHeight,
+      width: ( right - left ) * displayWidth,
+    };
   };
 
+  const labelRect = clampRect( entry.x, entry.y, entry.w, entry.h );
+  const detectorRect = detectorCrop
+    && clampRect( detectorCrop.x, detectorCrop.y, detectorCrop.w, detectorCrop.h );
+
   return (
-    <View className="border-b border-lightGray">
-      <View style={{ height: displayHeight, width: displayWidth }}>
-        <Image
-          source={{ uri: entry.url }}
-          style={{ height: displayHeight, width: displayWidth }}
-          resizeMode="stretch"
-        />
+    <View style={{ height: displayHeight, width: displayWidth }}>
+      <Image
+        source={{ uri: entry.url }}
+        style={{ height: displayHeight, width: displayWidth }}
+        resizeMode="stretch"
+      />
+      <View
+        pointerEvents="none"
+        style={[styles.cropBox, { borderColor: LABEL_COLOR }, labelRect]}
+      />
+      {detectorRect && (
         <View
           pointerEvents="none"
-          style={[styles.cropBox, { borderColor: LABEL_COLOR }, labelRect]}
+          style={[styles.cropBox, { borderColor: DETECTOR_COLOR }, detectorRect]}
         />
-        {detectorRect && (
-          <View
-            pointerEvents="none"
-            style={[styles.cropBox, { borderColor: DETECTOR_COLOR }, detectorRect]}
-          />
-        )}
-        {detecting && (
-          <ActivityIndicator size="small" style={styles.spinner} />
-        )}
-      </View>
-      <View className="flex-row justify-end p-2">
-        <Pressable
-          onPress={onDelete}
-          className="p-2"
-          accessibilityLabel="Delete entry"
-        >
-          <INatIcon name="trash-outline" size={22} color="red" />
-        </Pressable>
-      </View>
+      )}
+      {detecting && (
+        <ActivityIndicator size="small" style={styles.spinner} />
+      )}
+      <Pressable
+        onPress={onDelete}
+        className="p-2"
+        style={styles.deleteButton}
+        accessibilityLabel="Delete entry"
+      >
+        <INatIcon name="trash-outline" size={22} color="red" />
+      </Pressable>
     </View>
   );
 };
