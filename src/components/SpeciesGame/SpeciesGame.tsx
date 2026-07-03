@@ -68,6 +68,8 @@ const LOCATION_FILTER_RADIUS_KM = 1000;
 const MAX_ZOOM_SCALE = 5;
 const LOOKALIKE_CACHE_KEY = "speciesGameLookalikes";
 const MAX_LOOKALIKE_OBS = 1000;
+const FETCH_MORE_OBS_COUNT = 400;
+const LOOKALIKE_PAGE_SIZE = 200;
 
 interface LookalikeCacheEntry {
   entries: { taxonId: number; count: number; observationUuids: string[] }[];
@@ -78,8 +80,12 @@ interface LookalikeCacheEntry {
 function computeLookalikesFromObs(
   results: unknown[],
   targetId: number,
+  seed?: { taxonId: number; count: number; observationUuids: string[] }[],
 ): { topId: number | null; entries: { taxonId: number; count: number; observationUuids: string[] }[] } {
   const counts: Record<number, { count: number; observationUuids: string[] }> = {};
+  for ( const s of seed ?? [] ) {
+    counts[s.taxonId] = { count: s.count, observationUuids: [...s.observationUuids] };
+  }
   for ( const obs of results ) {
     for ( const ident of ( obs as { identifications?: unknown[] } ).identifications ?? [] ) {
       const altId: number | undefined = ( ident as { taxon?: { id?: number } } ).taxon?.id;
@@ -240,6 +246,7 @@ const SpeciesGame = ( ) => {
   const [lookalikesData, setLookalikesData] = useState<LookalikeEntry[]>( [] );
   const [usedMisidentifications, setUsedMisidentifications] = useState( false );
   const [obsScannedCount, setObsScannedCount] = useState( 0 );
+  const [isFetchingMoreObs, setIsFetchingMoreObs] = useState( false );
   const [selectedObsTypes, setSelectedObsTypes] = useState<ObservationType[]>( [] );
   const [selectedSexes, setSelectedSexes] = useState<SexType[]>( [] );
   const [showFilterModal, setShowFilterModal] = useState( false );
@@ -248,6 +255,7 @@ const SpeciesGame = ( ) => {
   const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
   const lookalikeCandidatesRef = useRef<LookalikeCandidate[]>( [] );
   const usedUuidsRef = useRef<Set<string>>( new Set( ) );
+  const userLocationRef = useRef<{ latitude: number; longitude: number } | null>( null );
 
   const windowWidth = Dimensions.get( "window" ).width;
   const { bottom: bottomInset } = useSafeAreaInsets( );
@@ -454,6 +462,68 @@ const SpeciesGame = ( ) => {
     return { id, name: t.name, preferredCommonName: t.preferred_common_name };
   }, [] );
 
+  // Fetches another batch of random observations of the target taxon and merges any
+  // newly found misidentifications into the cached lookalike data and the modal display.
+  const handleFetchMoreObservations = useCallback( async ( ) => {
+    setIsFetchingMoreObs( true );
+    try {
+      const cached = getCachedLookalikes( taxonId );
+      const baseObsScanned = cached?.obsScanned ?? obsScannedCount;
+      const seedEntries = cached?.entries ?? [];
+
+      const location = userLocationRef.current;
+      const locationParams = location
+        ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
+        : "";
+      const baseUrl = `${INATURALIST_API}/observations`
+        + `?taxon_id=${taxonId}${locationParams}&per_page=${LOOKALIKE_PAGE_SIZE}&order_by=random`;
+      const startPage = Math.floor( baseObsScanned / LOOKALIKE_PAGE_SIZE ) + 1;
+      const pageCount = FETCH_MORE_OBS_COUNT / LOOKALIKE_PAGE_SIZE;
+      const pages = Array.from( { length: pageCount }, ( _, i ) => startPage + i );
+
+      const responses = await Promise.all( pages.map( p => fetch( `${baseUrl}&page=${p}` ) ) );
+      const newResults: unknown[] = [];
+      for ( const res of responses ) {
+        if ( res.ok ) {
+          // eslint-disable-next-line no-await-in-loop
+          const d = await res.json( );
+          newResults.push( ...( d.results ?? [] ) );
+        }
+      }
+
+      const merged = computeLookalikesFromObs( newResults, taxonId, seedEntries );
+      const newObsScanned = baseObsScanned + newResults.length;
+      setCachedLookalikes( taxonId, {
+        entries: merged.entries,
+        topId: merged.topId,
+        obsScanned: newObsScanned,
+      } );
+      setObsScannedCount( newObsScanned );
+      setUsedMisidentifications( merged.entries.length > 0 );
+
+      const knownNames = new Map(
+        lookalikesData.map( e => [e.taxonId, { name: e.name, commonName: e.commonName }] ),
+      );
+      const withNames = await Promise.all(
+        merged.entries.slice( 0, 10 ).map( async entry => {
+          const known = knownNames.get( entry.taxonId );
+          if ( known ) return { ...entry, ...known };
+          const info = await fetchTaxonInfo( entry.taxonId );
+          return {
+            taxonId: entry.taxonId,
+            count: entry.count,
+            observationUuids: entry.observationUuids,
+            name: info?.name ?? String( entry.taxonId ),
+            commonName: info?.preferredCommonName,
+          };
+        } ),
+      );
+      setLookalikesData( withNames );
+    } finally {
+      setIsFetchingMoreObs( false );
+    }
+  }, [taxonId, obsScannedCount, lookalikesData, fetchTaxonInfo] );
+
   useEffect( ( ) => {
     let cancelled = false;
 
@@ -470,6 +540,7 @@ const SpeciesGame = ( ) => {
         // Fetch user location once so it can be reused for both lookalike detection
         // and candidate filtering without duplicate GPS/network calls.
         const userLocation = await fetchCoarseUserLocation( );
+        userLocationRef.current = userLocation;
 
         // Find the most-confused species via identification disagreements.
         const {
@@ -868,6 +939,15 @@ const SpeciesGame = ( ) => {
                 + `${taxonLabel( lookalike! )} is a related species in the same taxonomic group.`}
             </Body2>
           )}
+        <View className="pt-2 pb-2">
+          <Button
+            text="Search 400 More Observations"
+            onPress={handleFetchMoreObservations}
+            disabled={isFetchingMoreObs}
+            loading={isFetchingMoreObs}
+            className="w-full"
+          />
+        </View>
         <View className="pt-2 pb-6">
           <Button
             text="Close"
