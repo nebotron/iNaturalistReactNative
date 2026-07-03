@@ -2,6 +2,7 @@ import { RealmContext } from "providers/contexts";
 import {
   useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 import type Realm from "realm";
@@ -97,6 +98,12 @@ export const predictOffline = async ( {
   return returnValue;
 };
 
+const getOfflinePredictionCacheKey = (
+  photoUri: string,
+  latitude?: number,
+  longitude?: number,
+): string => `${photoUri}|${latitude ?? ""}|${longitude ?? ""}`;
+
 const useOfflineSuggestions = (
   photoUri: string,
   options: {
@@ -119,6 +126,10 @@ const useOfflineSuggestions = (
     commonAncestor?: UseSuggestionsOfflineSuggestion;
   }>( { results: [], commonAncestor: undefined } );
   const [error, setError] = useState( null );
+  // Running the on-device model is expensive, so avoid re-running it for a
+  // photo (+ location) we've already scanned during this session, e.g. when
+  // swiping back to a previously-viewed photo or toggling location on/off.
+  const predictionCacheRef = useRef<Map<string, OfflineSuggestionsResponse>>( new Map( ) );
 
   const {
     onFetchError, onFetched, latitude, longitude, tryOfflineSuggestions,
@@ -126,6 +137,13 @@ const useOfflineSuggestions = (
 
   const fetchOfflineSuggestions = useCallback( async () => {
     if ( !photoUri ) return;
+    const cacheKey = getOfflinePredictionCacheKey( photoUri, latitude, longitude );
+    const cachedSuggestions = predictionCacheRef.current.get( cacheKey );
+    if ( cachedSuggestions ) {
+      setOfflineSuggestions( cachedSuggestions );
+      onFetched( { isOnline: false } );
+      return;
+    }
     try {
       const suggestions = await predictOffline( {
         latitude,
@@ -136,6 +154,7 @@ const useOfflineSuggestions = (
       if ( !suggestions ) {
         return;
       }
+      predictionCacheRef.current.set( cacheKey, suggestions );
       setOfflineSuggestions( suggestions );
       onFetched( { isOnline: false } );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
