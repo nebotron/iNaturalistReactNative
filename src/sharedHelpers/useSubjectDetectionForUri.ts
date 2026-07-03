@@ -13,6 +13,10 @@ interface DetectionResult {
 }
 
 const cache = new Map<string, DetectionResult>( );
+// In-flight detections, so concurrent callers for the same URI (e.g. the
+// thumbnail and the computer vision request) share a single detector run
+// instead of each kicking off their own.
+const inflight = new Map<string, Promise<DetectionResult | null>>( );
 
 const getImageSize = (
   uri: string,
@@ -38,29 +42,63 @@ const getCachedResult = ( uri: string ): DetectionResult | null => {
   return existing ?? null;
 };
 
+// Resolves the best crop for a URI (crop log entry wins over AI detection),
+// reusing the module cache and de-duplicating concurrent runs so the detector
+// only executes once per URI. Awaiting this is how a caller "waits for the
+// subject detector to be ready".
+export const resolveSubjectDetectionForUri = async (
+  uri: string,
+): Promise<DetectionResult | null> => {
+  const cached = getCachedResult( uri );
+  if ( cached ) return cached;
+
+  const existing = inflight.get( uri );
+  if ( existing ) return existing;
+
+  const promise = ( async ( ): Promise<DetectionResult | null> => {
+    const loggedCrop = getAnimalCrop( uri );
+    if ( loggedCrop ) {
+      // Fast path: crop log entry exists — only need image dimensions.
+      const imageSize = await getImageSize( toLargeUri( uri ) );
+      if ( !imageSize ) return null;
+      const detection = {
+        crop: loggedCrop,
+        imageWidth: imageSize.w,
+        imageHeight: imageSize.h,
+      };
+      cache.set( uri, detection );
+      return detection;
+    }
+    // Slow path: download to a local file and run the AI subject detector.
+    const localUri = await ensureLocalImageForCrop( uri );
+    const imageSize = await getImageSize( localUri );
+    if ( !imageSize ) return null;
+    const crop = await detectSubjectInImage( localUri, imageSize.w, imageSize.h );
+    const detection = {
+      crop,
+      imageWidth: imageSize.w,
+      imageHeight: imageSize.h,
+    };
+    cache.set( uri, detection );
+    return detection;
+  } )( );
+
+  inflight.set( uri, promise );
+  try {
+    return await promise;
+  } finally {
+    inflight.delete( uri );
+  }
+};
+
 // Runs the full detection pipeline for a URI and populates the module cache so
 // that when useSubjectDetectionForUri is later called with the same URI it can
 // return synchronously without any async work.
 export const preloadSubjectDetectionForUri = ( uri: string ): void => {
   if ( cache.has( uri ) ) return;
-  ( async ( ) => {
-    try {
-      const loggedCrop = getAnimalCrop( uri );
-      if ( loggedCrop ) {
-        const imageSize = await getImageSize( toLargeUri( uri ) );
-        if ( !imageSize ) return;
-        cache.set( uri, { crop: loggedCrop, imageWidth: imageSize.w, imageHeight: imageSize.h } );
-      } else {
-        const localUri = await ensureLocalImageForCrop( uri );
-        const imageSize = await getImageSize( localUri );
-        if ( !imageSize ) return;
-        const crop = await detectSubjectInImage( localUri, imageSize.w, imageSize.h );
-        cache.set( uri, { crop, imageWidth: imageSize.w, imageHeight: imageSize.h } );
-      }
-    } catch {
-      // Best-effort preload; ignore failures.
-    }
-  } )( );
+  resolveSubjectDetectionForUri( uri ).catch( ( ) => {
+    // Best-effort preload; ignore failures.
+  } );
 };
 
 const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
@@ -87,64 +125,15 @@ const useSubjectDetectionForUri = ( uri?: string ): DetectionResult | null => {
       return ( ) => {};
     }
 
-    // Ground-truth crop log entries always win over the AI-detection cache.
-    const loggedCrop = getAnimalCrop( uri );
-    const existing = cache.get( uri );
-
-    if ( !loggedCrop && existing ) {
-      setResult( existing );
-      return ( ) => {};
-    }
-
-    if ( loggedCrop && existing ) {
-      const updated = { ...existing, crop: loggedCrop };
-      cache.set( uri, updated );
-      setResult( updated );
-      return ( ) => {};
-    }
-
     let cancelled = false;
-
-    ( async ( ) => {
-      try {
-        if ( loggedCrop ) {
-          // Fast path: crop log entry exists — only need image dimensions.
-          // Use Image.getSize on the large URL directly; no local file download
-          // or AI detection needed.
-          const imageSize = await getImageSize( toLargeUri( uri ) );
-          if ( cancelled || !imageSize ) return;
-
-          const detection: DetectionResult = {
-            crop: loggedCrop,
-            imageWidth: imageSize.w,
-            imageHeight: imageSize.h,
-          };
-          cache.set( uri, detection );
-          setResult( detection );
-        } else {
-          // Slow path: no crop log entry — download to a local file and run
-          // the AI subject detector.
-          const localUri = await ensureLocalImageForCrop( uri );
-          if ( cancelled ) return;
-
-          const imageSize = await getImageSize( localUri );
-          if ( cancelled || !imageSize ) return;
-
-          const crop = await detectSubjectInImage( localUri, imageSize.w, imageSize.h );
-          if ( cancelled ) return;
-
-          const detection: DetectionResult = {
-            crop,
-            imageWidth: imageSize.w,
-            imageHeight: imageSize.h,
-          };
-          cache.set( uri, detection );
-          setResult( detection );
-        }
-      } catch {
-        // Detection failed, leave result as null (image shows with default cover)
-      }
-    } )( );
+    resolveSubjectDetectionForUri( uri )
+      .then( detection => {
+        if ( cancelled || !detection ) return;
+        setResult( detection );
+      } )
+      .catch( ( ) => {
+        // Detection failed, leave result as-is (image shows with default cover)
+      } );
 
     return ( ) => {
       cancelled = true;
