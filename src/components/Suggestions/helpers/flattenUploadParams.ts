@@ -1,7 +1,10 @@
 import { mkdir } from "@dr.pogodin/react-native-fs";
 import { computerVisionPath } from "appConstants/paths";
 import { FileUpload } from "inaturalistjs";
+import cropImageFile from "sharedHelpers/cropImageFile";
+import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import resizeImage from "sharedHelpers/resizeImage";
+import { resolveSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
 
 const outputPath = computerVisionPath;
 
@@ -13,12 +16,37 @@ interface FlattenUploadArgs {
   };
 }
 
+// Crop the source image to the subject detector bounding box (or the crop log
+// entry if one exists) before scoring, so the computer vision request classifies
+// the same region shown in the thumbnail. Awaiting the shared detector here means
+// only one scoring request is made per photo — the one built from the cropped
+// image — rather than one uncropped request followed by a cropped one. Falls back
+// to the full image if detection or cropping fails.
+const cropToSubject = async ( uri: string ): Promise<string> => {
+  try {
+    const detection = await resolveSubjectDetectionForUri( uri );
+    if ( !detection ) return uri;
+    const localUri = await ensureLocalImageForCrop( uri );
+    return await cropImageFile(
+      localUri,
+      detection.crop,
+      detection.imageWidth,
+      detection.imageHeight,
+      outputPath,
+    );
+  } catch {
+    return uri;
+  }
+};
+
 const flattenUploadParams = async (
   uri: string,
 ): Promise<FlattenUploadArgs> => {
   await mkdir( outputPath );
 
-  const uploadUri = await resizeImage( uri, {
+  const sourceUri = await cropToSubject( uri );
+
+  const uploadUri = await resizeImage( sourceUri, {
     // this max width/height is the same as the legacy Android app
     // we always want the width/height to be bigger than 299x299
     // and want to preserve the aspect ratio (not crunch the image down into a square)

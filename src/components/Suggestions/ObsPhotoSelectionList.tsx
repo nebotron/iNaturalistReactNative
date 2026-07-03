@@ -8,7 +8,6 @@ import {
 import React, { useCallback, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
-import { getAnimalCrop } from "sharedHelpers/animalCropLog";
 import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import { useTranslation } from "sharedHooks";
@@ -24,12 +23,9 @@ interface Props {
 
 const PhotoThumbnail = ( { uri }: { uri: string } ) => {
   const [containerSize, setContainerSize] = useState<number | null>( null );
-  // Only apply subject detection when a crop log entry exists; skip AI detection
-  const detection = useSubjectDetectionForUri(
-    getAnimalCrop( uri )
-      ? uri
-      : undefined,
-  );
+  // Frame the thumbnail with the subject detector bounding box by default, or
+  // the crop log entry if one exists.
+  const detection = useSubjectDetectionForUri( uri );
 
   const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
     setContainerSize( event.nativeEvent.layout.width );
