@@ -65,6 +65,8 @@ Add-location-to-refresh-suggestions = Add location to refresh suggestions
 Add-observations = Add observations
 ADD-OPTIONAL-COMMENT = ADD OPTIONAL COMMENT
 Add-optional-notes = Add optional notes
+# Button to add another waypoint to a multi-stop route on the Wildlife Hotspots screen
+Add-stop = Add stop
 ADD-TAXON-FILTER = ADD TAXON FILTER
 ADD-USER-FILTER = ADD USER FILTER
 # Hint for a button that adds an identification
@@ -603,6 +605,8 @@ Help-us-translate-the-app = Help us translate the app!
 Hide = Hide
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
+# Label used for a stop added to a route from a wildlife hotspot
+Hotspot = Hotspot
 I-agree-to-the-Terms-of-Use = <0>I agree to the Terms of Use and Privacy Policy, and I have reviewed the Community Guidelines (</0><1>required</1><0>).</0>
 Iconic-taxon-name = Iconic taxon name: { $iconicTaxon }
 ID-in-Camera = ID in Camera
@@ -1145,6 +1149,8 @@ Remove-favorite = Remove favorite
 Remove-identification = Remove identification
 Remove-Photos = Remove Photos
 Remove-project-filter = Remove project filter
+# Accessibility label for a button that removes an intermediate stop from a multi-stop route
+Remove-stop = Remove stop
 Remove-taxon-filter = Remove taxon filter
 Remove-user-filter = Remove user filter
 # Label for button that removes an observation's taxon
@@ -1315,6 +1321,8 @@ Starts-recording-sound = Starts recording sound
 Stay-on-this-screen = Stay on this screen while your location loads.
 Still-loading = Still loading...
 Still-need-help = Still need help? You can file a support request here.
+# Noun label for an unnamed waypoint on a multi-stop route, followed by a number, e.g. "Stop 2"
+Stop-noun = Stop
 # Button or accessibility label for an interactive element that stops an upload
 Stop-upload = Stop upload
 # Imperative verb for stopping the recording of a sound
