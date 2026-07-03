@@ -2,13 +2,13 @@ import { RealmContext } from "providers/contexts";
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
 } from "react";
 import type Realm from "realm";
 import type { RealmTaxon } from "realmModels/types";
 import { log } from "sharedHelpers/logger";
 import { predictImage } from "sharedHelpers/mlModel";
+import { getCachedSuggestions, setCachedSuggestions } from "sharedHelpers/suggestionsCache";
 import type { Prediction } from "vision-camera-plugin-inatvision";
 
 import type { UseSuggestionsOfflineSuggestion } from "./types";
@@ -102,7 +102,7 @@ const getOfflinePredictionCacheKey = (
   photoUri: string,
   latitude?: number,
   longitude?: number,
-): string => `${photoUri}|${latitude ?? ""}|${longitude ?? ""}`;
+): string => `offline|${photoUri}|${latitude ?? ""}|${longitude ?? ""}`;
 
 const useOfflineSuggestions = (
   photoUri: string,
@@ -126,10 +126,6 @@ const useOfflineSuggestions = (
     commonAncestor?: UseSuggestionsOfflineSuggestion;
   }>( { results: [], commonAncestor: undefined } );
   const [error, setError] = useState( null );
-  // Running the on-device model is expensive, so avoid re-running it for a
-  // photo (+ location) we've already scanned during this session, e.g. when
-  // swiping back to a previously-viewed photo or toggling location on/off.
-  const predictionCacheRef = useRef<Map<string, OfflineSuggestionsResponse>>( new Map( ) );
 
   const {
     onFetchError, onFetched, latitude, longitude, tryOfflineSuggestions,
@@ -138,7 +134,9 @@ const useOfflineSuggestions = (
   const fetchOfflineSuggestions = useCallback( async () => {
     if ( !photoUri ) return;
     const cacheKey = getOfflinePredictionCacheKey( photoUri, latitude, longitude );
-    const cachedSuggestions = predictionCacheRef.current.get( cacheKey );
+    // Running the on-device model is expensive, so avoid re-running it for a
+    // photo (+ location) we've already scanned, even across app restarts.
+    const cachedSuggestions = getCachedSuggestions<OfflineSuggestionsResponse>( cacheKey );
     if ( cachedSuggestions ) {
       setOfflineSuggestions( cachedSuggestions );
       onFetched( { isOnline: false } );
@@ -154,7 +152,7 @@ const useOfflineSuggestions = (
       if ( !suggestions ) {
         return;
       }
-      predictionCacheRef.current.set( cacheKey, suggestions );
+      setCachedSuggestions( cacheKey, suggestions );
       setOfflineSuggestions( suggestions );
       onFetched( { isOnline: false } );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

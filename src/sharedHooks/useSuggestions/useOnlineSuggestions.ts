@@ -5,11 +5,12 @@ import scoreImage from "api/computerVision";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import {
-  useCallback, useEffect, useRef, useState,
+  useCallback, useEffect, useState,
 } from "react";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import { getCachedSuggestions, setCachedSuggestions } from "sharedHelpers/suggestionsCache";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
@@ -94,12 +95,6 @@ const useOnlineSuggestions = (
 
   const getCurrentObservation = useStore( state => state.getCurrentObservation );
 
-  // Calling the API is expensive (network + server-side scoring), so avoid
-  // re-fetching for a query key we've already resolved during this session,
-  // e.g. when swiping back to a previously-viewed photo or toggling location
-  // on/off. Keyed by the same query key React Query uses for this request.
-  const suggestionsCacheRef = useRef<Map<string, OnlineSuggestionsQueryResponse>>( new Map( ) );
-
   // TODO if this is a remote observation with an `id` param, use
   // scoreObservation instead so we don't have to spend time resizing and
   // uploading images
@@ -112,8 +107,11 @@ const useOnlineSuggestions = (
   } = useAuthenticatedQuery<OnlineSuggestionsQueryResponse>(
     queryKey,
     async optsWithAuth => {
-      const cacheKey = JSON.stringify( queryKey );
-      const cachedSuggestions = suggestionsCacheRef.current.get( cacheKey );
+      // Calling the API is expensive (network + server-side scoring), so
+      // avoid re-fetching for a query/auth state we've already resolved,
+      // even across app restarts.
+      const cacheKey = JSON.stringify( [...queryKey, "online", !!currentUser, locale] );
+      const cachedSuggestions = getCachedSuggestions<OnlineSuggestionsQueryResponse>( cacheKey );
       if ( cachedSuggestions ) {
         return cachedSuggestions;
       }
@@ -130,7 +128,7 @@ const useOnlineSuggestions = (
       // there's a slight discrepancy between online/offline responses which this smooths over for
       // the eventual UI
       const shimmedOnlineResponse = shimApiResponseForCommonAncestor( suggestionsResponse );
-      suggestionsCacheRef.current.set( cacheKey, shimmedOnlineResponse );
+      setCachedSuggestions( cacheKey, shimmedOnlineResponse );
 
       if ( !!scoreImageParams && typeof obsUuid === "string" ) {
         startOfflineExperimentInBackground(
