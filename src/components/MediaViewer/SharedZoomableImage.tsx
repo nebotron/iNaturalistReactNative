@@ -26,6 +26,7 @@ export type SharedZoomableImageRef = ImageZoomRef & {
 const styles = StyleSheet.create( {
   image: {
     flex: 1,
+    overflow: "hidden",
   },
 } );
 
