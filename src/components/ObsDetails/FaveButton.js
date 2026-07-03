@@ -17,11 +17,11 @@ import {
   useAuthenticatedMutation,
   useTranslation,
 } from "sharedHooks";
-import colors from "styles/tailwindColors";
 
 const { useRealm } = RealmContext;
 
 const OBS_IMAGE_ACTION_ICON_SIZE = 50;
+const WHITE_OVERLAY_COLOR = "rgba(255, 255, 255, 0.7)";
 
 type Props = {
   observation: Object,
@@ -208,7 +208,7 @@ const FaveButton = ( {
       width={buttonWidth}
       height={buttonHeight}
       onPress={toggleFave}
-      color={colors.white}
+      color={WHITE_OVERLAY_COLOR}
       className={classNames( positionClassName )}
       accessibilityLabel={isFaved
         ? t( "Remove-favorite" )

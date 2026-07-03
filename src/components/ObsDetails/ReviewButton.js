@@ -21,6 +21,7 @@ import {
 import colors from "styles/tailwindColors";
 
 const OBS_IMAGE_ACTION_ICON_SIZE = 50;
+const WHITE_OVERLAY_COLOR = "rgba(255, 255, 255, 0.7)";
 
 type Props = {
   observation: Object,
@@ -160,7 +161,7 @@ const ReviewButton = ( {
       onPress={toggleReview}
       color={isReviewed
         ? colors.inatGreen
-        : colors.white}
+        : WHITE_OVERLAY_COLOR}
       className={classNames( iconPositionClassName )}
       accessibilityLabel={isReviewed
         ? t( "Unmark-as-reviewed" )
