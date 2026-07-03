@@ -41,7 +41,12 @@ const PhotoThumbnail = ( { uri }: { uri: string } ) => {
     : null;
 
   return (
-    <View className="w-full h-full" onLayout={handleLayout}>
+    // aspect-square (not h-full) guarantees a definite square box: h-full never
+    // resolves here because the ancestors hug their content, so once the crop
+    // wrapper (position: absolute) is the only child the box would otherwise
+    // collapse or inherit the image's aspect ratio, shifting/over-zooming the
+    // crop that computeCropStyles frames assuming a square box.
+    <View className="w-full aspect-square" onLayout={handleLayout}>
       {cropStyles
         ? (
           <View style={cropStyles.wrapperStyle}>
