@@ -35,6 +35,8 @@ const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const MAX_CLUSTER_RADIUS_KM = 1;
 // Evaluate detour times for this many top-by-obs candidates
 const MAX_DETOUR_CANDIDATES = 30;
+// Extra minutes added to travel time to account for parking when ranking hotspots
+const PARKING_MINUTES = 5;
 
 function toRad( deg: number ): number {
   return ( deg * Math.PI ) / 180;
@@ -411,8 +413,8 @@ export function useRouteHotspots() {
 
         // 6. Rank by ratio of added travel time to observations (lower = better)
         withDetours.sort( ( a, b ) => {
-          const ratioA = a.detourMinutes / a.observationCount;
-          const ratioB = b.detourMinutes / b.observationCount;
+          const ratioA = ( a.detourMinutes + PARKING_MINUTES ) / a.observationCount;
+          const ratioB = ( b.detourMinutes + PARKING_MINUTES ) / b.observationCount;
           return ratioA - ratioB;
         } );
 
