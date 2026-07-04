@@ -20,6 +20,14 @@ import {
 
 import ExploreFlashList from "./ExploreFlashList";
 
+// A species is "seen" if the user has observed this exact taxon, or any of its
+// subspecies/varieties/forms, or the species any of those infraspecies belong to.
+// This maps a taxon to the id we should compare against for "seen" purposes: its
+// own id at species rank or above, or its parent species' id if it's an infraspecies.
+const speciesLevelId = taxon => ( taxon.rank_level < Taxon.SPECIES_LEVEL && taxon.ancestor_ids?.length > 0
+  ? taxon.ancestor_ids[taxon.ancestor_ids.length - 1]
+  : taxon.id );
+
 type Props = {
   canFetch?: boolean,
   isConnected: boolean,
@@ -41,14 +49,14 @@ const SpeciesView = ( {
   const [pendingTaxonIds, setPendingTaxonIds] = useState( [] );
   const currentUser = useCurrentUser( );
   const { state } = useExplore();
-  const { excludeUser } = state;
+  const { unobservedByMe } = state;
   const {
     flashListStyle,
     gridItemStyle,
     numColumns,
   } = useGridLayout( );
 
-  // query all of current users seen species if "not by me" explore filter
+  // query all of current users seen species if "unobserved by me" explore filter
   const { data: seenByCurrentUserAll } = useQuery(
     ["fetchSpeciesCountsAll"],
     ( ) => fetchSpeciesCounts( {
@@ -57,20 +65,22 @@ const SpeciesView = ( {
       fields: {
         taxon: {
           id: true,
+          rank_level: true,
+          ancestor_ids: true,
         },
       },
     } ),
     {
-      enabled: ( !!currentUser && !!excludeUser ),
+      enabled: ( !!currentUser && !!unobservedByMe ),
     },
   );
 
-  const pageObservedTaxonIdsAll = useMemo( ( ) => seenByCurrentUserAll?.results?.map(
-    r => r.taxon.id,
-  ) || [], [seenByCurrentUserAll?.results] );
+  const observedSpeciesIds = useMemo( ( ) => new Set(
+    ( seenByCurrentUserAll?.results || [] ).map( r => speciesLevelId( r.taxon ) ),
+  ), [seenByCurrentUserAll?.results] );
 
-  const params = excludeUser
-    ? { ...queryParams, without_taxon_id: pageObservedTaxonIdsAll }
+  const params = unobservedByMe
+    ? { ...queryParams, without_taxon_id: Array.from( observedSpeciesIds ) }
     : queryParams;
 
   const locale = i18n?.language ?? "en";
@@ -95,7 +105,14 @@ const SpeciesView = ( {
     },
   );
 
-  const taxonIds = data.map( r => r.taxon.id );
+  // without_taxon_id only matches exact taxon ids, so a species result whose id
+  // wasn't in that list (e.g. a subspecies newly split from an already-observed
+  // species) can still slip through the API filter. Catch those client-side.
+  const visibleData = unobservedByMe
+    ? data.filter( r => !observedSpeciesIds.has( speciesLevelId( r.taxon ) ) )
+    : data;
+
+  const taxonIds = visibleData.map( r => r.taxon.id );
 
   // Reset per-session seen-status cache when the user changes (login/logout).
   useEffect( ( ) => {
@@ -175,7 +192,7 @@ const SpeciesView = ( {
     <ExploreFlashList
       canFetch={canFetch}
       contentContainerStyle={contentContainerStyle}
-      data={data}
+      data={visibleData}
       fetchNextPage={fetchNextPage}
       hideLoadingWheel={!isFetchingNextPage}
       isFetchingNextPage={isFetchingNextPage}
