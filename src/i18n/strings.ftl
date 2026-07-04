@@ -516,8 +516,6 @@ Enable-flash = Enable flash
 Enable-location = Enable location
 # Button that subscribes the user to notifications for an observation
 Enable-notifications = Enable notifications
-# Label for the end point marker on the hotspots map
-End = End
 # Placeholder text for the end location input in the Wildlife Hotspots tool
 End-location = End location (e.g. Boston, MA)
 # Indicates a species only occurs in a specific place
@@ -1332,8 +1330,6 @@ SPECIES-WITHOUT-NUMBER =
     }
 # Label for the standard map type
 Standard--map-type = Standard
-# Label for the start point marker on the hotspots map
-Start = Start
 # Placeholder text for the start location input in the Wildlife Hotspots tool
 Start-location = Start location (e.g. New York, NY)
 Start-must-be-before-end = The start date must be before the end date.

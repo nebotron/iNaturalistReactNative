@@ -7,7 +7,6 @@ import {
   ViewWrapper,
 } from "components/SharedComponents";
 import { ScrollView, TextInput, View } from "components/styledComponents";
-import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import type { TabStackScreenProps } from "navigation/types";
 import React, {
   useCallback,
@@ -28,12 +27,13 @@ import MapView, {
   Marker,
   Polyline,
 } from "react-native-maps";
+import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
-import HotspotListItem from "./HotspotListItem";
 import type { Hotspot, RoutePoint } from "./hooks/useRouteHotspots";
 import { fetchOSRMRoute, findBestInsertion, useRouteHotspots } from "./hooks/useRouteHotspots";
+import HotspotListItem from "./HotspotListItem";
 
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
 
@@ -87,6 +87,16 @@ function stopDotColor( index: number, count: number ): string {
   return colors.blue;
 }
 
+function stopPlaceholder(
+  index: number,
+  count: number,
+  t: ( key: string ) => string,
+): string {
+  if ( index === 0 ) return t( "Start-location" );
+  if ( index === count - 1 ) return t( "End-location" );
+  return t( "Add-stop" );
+}
+
 interface AddressInputProps {
   placeholder: string;
   value: string;
@@ -135,6 +145,7 @@ const AddressInput = ( {
   return (
     <View className="flex-1">
       <TouchableOpacity
+        accessibilityRole="button"
         activeOpacity={1}
         onPress={handleClear}
         className="flex-row items-center border border-lightGray rounded-lg px-3 py-1"
@@ -146,6 +157,7 @@ const AddressInput = ( {
           <INatIcon name="location" size={8} color="white" />
         </View>
         <TextInput
+          accessibilityLabel="Text input field"
           className="flex-1 text-darkGray"
           placeholder={placeholder}
           value={value}
@@ -153,7 +165,7 @@ const AddressInput = ( {
           onFocus={handleClear}
           autoCorrect={false}
           autoCapitalize="none"
-          editable={true}
+          editable
         />
         {( loading || searching ) && <ActivityIndicator size={16} />}
         {confirmed && !loading && !searching && (
@@ -171,6 +183,16 @@ type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
   embedded?: boolean;
   filterParams?: Record<string, unknown>;
 };
+
+const styles = StyleSheet.create( {
+  stopInputsContainer: {
+    zIndex: 10,
+  },
+  hotspotListContent: {
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+} );
 
 const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsProp }: Props ) => {
   const { t } = useTranslation();
@@ -197,7 +219,10 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
 
   const confirmedStopPoints = stops
     .filter( s => s.point )
-    .map( s => ( { latitude: ( s.point as LatLng ).latitude, longitude: ( s.point as LatLng ).longitude } ) );
+    .map( s => ( {
+      latitude: ( s.point as LatLng ).latitude,
+      longitude: ( s.point as LatLng ).longitude,
+    } ) );
 
   useEffect( () => {
     const initializeLocation = async () => {
@@ -223,13 +248,17 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
       longitude: h.centerLongitude,
     } ) );
     mapRef.current.fitToCoordinates( coords, {
-      edgePadding: { top: 60, right: 40, bottom: 60, left: 40 },
+      edgePadding: {
+        top: 60, right: 40, bottom: 60, left: 40,
+      },
       animated: true,
     } );
   }, [routeCoords, hotspots] );
 
   const handleStopTextChange = useCallback( ( id: string, text: string ) => {
-    setStops( prev => prev.map( s => ( s.id === id ? { ...s, text, point: null } : s ) ) );
+    setStops( prev => prev.map( s => ( s.id === id
+      ? { ...s, text, point: null }
+      : s ) ) );
   }, [] );
 
   const handleSelectStopSuggestion = useCallback( ( id: string, result: NominatimResult ) => {
@@ -250,7 +279,9 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   ) => {
     setActiveSuggestions( prev => {
       if ( suggestions.length > 0 ) return { stopId, suggestions };
-      return prev?.stopId === stopId ? null : prev;
+      return prev?.stopId === stopId
+        ? null
+        : prev;
     } );
   }, [] );
 
@@ -264,7 +295,9 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   }, [] );
 
   const handleRemoveStop = useCallback( ( id: string ) => {
-    setStops( prev => ( prev.length > 2 ? prev.filter( s => s.id !== id ) : prev ) );
+    setStops( prev => ( prev.length > 2
+      ? prev.filter( s => s.id !== id )
+      : prev ) );
     setActiveSuggestions( null );
   }, [] );
 
@@ -283,7 +316,9 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
 
   const handleHotspotPress = useCallback( async ( hotspot: Hotspot ) => {
     const isDeselecting = selectedHotspotId === hotspot.id;
-    setSelectedHotspotId( isDeselecting ? null : hotspot.id );
+    setSelectedHotspotId( isDeselecting
+      ? null
+      : hotspot.id );
     if ( isDeselecting ) {
       setHotspotRouteCoords( [] );
       return;
@@ -310,7 +345,9 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
       setHotspotRouteCoords( coords );
       if ( mapRef.current ) {
         mapRef.current.fitToCoordinates( coords.map( toMapCoord ), {
-          edgePadding: { top: 60, right: 40, bottom: 60, left: 40 },
+          edgePadding: {
+            top: 60, right: 40, bottom: 60, left: 40,
+          },
           animated: true,
         } );
       }
@@ -337,13 +374,23 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     navigation.push( "ObsDetails", { uuid } );
   }, [navigation] );
 
-  const renderStopItem = useCallback( ( { item: stop, getIndex, drag, isActive }: RenderItemParams<Stop> ) => {
+  const renderStopItem = useCallback( ( {
+    item: stop, getIndex, drag, isActive,
+  }: RenderItemParams<Stop> ) => {
     const index = getIndex() ?? 0;
     return (
       <ScaleDecorator>
         <View
-          className={`flex-row items-center bg-white ${index < stops.length - 1 ? "mb-2" : ""}`}
-          style={{ zIndex: stops.length - index, opacity: isActive ? 0.7 : 1 }}
+          className={`flex-row items-center bg-white ${index < stops.length - 1
+            ? "mb-2"
+            : ""}`}
+          // eslint-disable-next-line react-native/no-inline-styles
+          style={{
+            zIndex: stops.length - index,
+            opacity: isActive
+              ? 0.7
+              : 1,
+          }}
         >
           <TouchableOpacity
             onLongPress={drag}
@@ -355,13 +402,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
             <INatIcon name="list" size={16} color={colors.darkGray} />
           </TouchableOpacity>
           <AddressInput
-            placeholder={
-              index === 0
-                ? t( "Start-location" )
-                : index === stops.length - 1
-                  ? t( "End-location" )
-                  : t( "Add-stop" )
-            }
+            placeholder={stopPlaceholder( index, stops.length, t )}
             value={stop.text}
             onChangeText={text => handleStopTextChange( stop.id, text )}
             onSuggestionsChange={suggestions => handleStopSuggestionsChange( stop.id, suggestions )}
@@ -411,7 +452,10 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   const content = (
     <>
       {/* Stop inputs */}
-      <View className="bg-white px-3 py-2 border-b border-lightGray" style={{ zIndex: 10 }}>
+      <View
+        className="bg-white px-3 py-2 border-b border-lightGray"
+        style={styles.stopInputsContainer}
+      >
         <DraggableFlatList
           data={stops}
           keyExtractor={stop => stop.id}
@@ -428,6 +472,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
           <View className="mt-1 bg-white border border-lightGray rounded-lg overflow-hidden">
             {activeSuggestions.suggestions.map( result => (
               <TouchableOpacity
+                accessibilityRole="button"
                 key={result.place_id}
                 className="px-3 py-2 border-b border-lightGray"
                 onPress={() => handleSelectStopSuggestion( activeSuggestions.stopId, result )}
@@ -518,11 +563,14 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
 
         {( loading || hotspotRouteLoading ) && (
           <View
-            className="absolute top-0 left-0 right-0 bottom-0 items-center justify-center bg-white/60"
+            className={"absolute top-0 left-0 right-0 bottom-0 "
+              + "items-center justify-center bg-white/60"}
           >
             <ActivityIndicator size={48} />
             <Body2 className="mt-3 text-darkGray">
-              {loading ? t( "Searching-for-hotspots" ) : t( "Loading-route" )}
+              {loading
+                ? t( "Searching-for-hotspots" )
+                : t( "Loading-route" )}
             </Body2>
           </View>
         )}
@@ -539,7 +587,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
             )
             : (
               <ScrollView
-                contentContainerStyle={{ paddingTop: 12, paddingBottom: 8 }}
+                contentContainerStyle={styles.hotspotListContent}
                 showsVerticalScrollIndicator
               >
                 {hotspots.map( ( hotspot, idx ) => (
