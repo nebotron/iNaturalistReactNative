@@ -1,6 +1,11 @@
-import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
+import {
+  computeCropMinScale,
+  computeCropPanTranslateLimits,
+} from "sharedHelpers/cropPanTranslateLimits";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
-import { normalizedCropToImageZoomTransform } from "sharedHelpers/normalizedCropToImageZoomTransform";
+import {
+  normalizedCropToImageZoomTransform,
+} from "sharedHelpers/normalizedCropToImageZoomTransform";
 import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
 
 describe( "computeCropPanTranslateLimits", ( ) => {
@@ -16,10 +21,10 @@ describe( "computeCropPanTranslateLimits", ( ) => {
     cropSize,
   };
 
-  const totalTranslate = ( transform ) => (
+  const totalTranslate = transform => (
     transform.translateX + transform.focalX
   );
-  const totalTranslateY = ( transform ) => (
+  const totalTranslateY = transform => (
     transform.translateY + transform.focalY
   );
 
@@ -159,5 +164,45 @@ describe( "computeCropPanTranslateLimits", ( ) => {
     ] ).toEqual( expect.arrayContaining( [
       expect.closeTo( totalTranslate( leftEdgeTransform ), 1 ),
     ] ) );
+  } );
+
+  it( "pins the axis where the crop exceeds the image to the centered position", ( ) => {
+    // At scale 1 the crop square is taller than the (shorter) image height but
+    // still narrower than the (longer) image width, so the vertical axis is
+    // freed and must be pinned centered (total translate 0) while the
+    // horizontal axis stays confined.
+    const transform = {
+      scale: 1, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
+    };
+    const limits = computeCropPanTranslateLimits( context, transform );
+
+    expect( limits.minTotalTranslateY ).toBe( 0 );
+    expect( limits.maxTotalTranslateY ).toBe( 0 );
+    expect( limits.maxTotalTranslateX ).toBeGreaterThan( limits.minTotalTranslateX );
+  } );
+} );
+
+describe( "computeCropMinScale", ( ) => {
+  it( "floors zoom-out at the scale where the crop spans the longer image edge", ( ) => {
+    const context = {
+      imageWidth: 2000,
+      imageHeight: 1000,
+      viewportWidth: 300,
+      viewportHeight: 300,
+      cropSize: 273,
+    };
+    // Image contained in the square viewport spans 300 (width) x 150 (height),
+    // so the crop square (273) equals the longer edge at scale 273 / 300.
+    expect( computeCropMinScale( context ) ).toBeCloseTo( 273 / 300, 5 );
+  } );
+
+  it( "returns 0 for a degenerate context", ( ) => {
+    expect( computeCropMinScale( {
+      imageWidth: 0,
+      imageHeight: 1000,
+      viewportWidth: 300,
+      viewportHeight: 300,
+      cropSize: 273,
+    } ) ).toBe( 0 );
   } );
 } );

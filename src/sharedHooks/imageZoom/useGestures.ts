@@ -13,7 +13,10 @@ import {
 
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
-import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
+import {
+  computeCropMinScale,
+  computeCropPanTranslateLimits,
+} from "sharedHelpers/cropPanTranslateLimits";
 
 import type {
   OnPanEndCallback,
@@ -459,9 +462,15 @@ export const useGestures = ( {
         initialFocal.x.value = event.focalX;
         initialFocal.y.value = event.focalY;
       }
+      // In a crop context, never let the crop square grow past the image's
+      // larger dimension: floor the zoom-out at the scale where the crop spans
+      // that dimension.
+      const effectiveMinScale = cropPanContext
+        ? Math.max( minScale, computeCropMinScale( cropPanContext ) )
+        : minScale;
       const newScale = clamp(
         savedScale.value * ( event.scale / pinchBaseEventScale.value ),
-        minScale,
+        effectiveMinScale,
         maxScale,
       );
       const ratio = newScale / savedScale.value;
