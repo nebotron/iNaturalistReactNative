@@ -122,10 +122,14 @@ const AddressInput = ( {
 }: AddressInputProps ) => {
   const [searching, setSearching] = useState( false );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>( null );
+  // Guards against a stale, slow-to-resolve search (from earlier text, or from
+  // before this field lost focus) clobbering the currently relevant suggestions.
+  const requestIdRef = useRef( 0 );
 
   const handleChange = useCallback( ( text: string ) => {
     onChangeText( text );
     if ( debounceRef.current ) clearTimeout( debounceRef.current );
+    const requestId = ++requestIdRef.current;
     if ( text.trim().length < 3 ) {
       onSuggestionsChange( [] );
       return;
@@ -133,14 +137,19 @@ const AddressInput = ( {
     debounceRef.current = setTimeout( async () => {
       setSearching( true );
       const results = await searchNominatim( text.trim(), nearbyLatLng );
-      onSuggestionsChange( results );
       setSearching( false );
+      if ( requestIdRef.current !== requestId ) return;
+      onSuggestionsChange( results );
     }, 200 );
   }, [onChangeText, nearbyLatLng, onSuggestionsChange] );
 
   const handleClear = useCallback( () => {
     handleChange( "" );
   }, [handleChange] );
+
+  const handleBlur = useCallback( () => {
+    requestIdRef.current += 1;
+  }, [] );
 
   return (
     <View className="flex-1">
@@ -163,6 +172,7 @@ const AddressInput = ( {
           value={value}
           onChangeText={handleChange}
           onFocus={handleClear}
+          onBlur={handleBlur}
           autoCorrect={false}
           autoCapitalize="none"
           editable
