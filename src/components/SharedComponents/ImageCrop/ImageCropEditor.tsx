@@ -34,7 +34,6 @@ import {
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import getCropForUri from "sharedHelpers/getCropForUri";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import useCurrentUser from "sharedHooks/useCurrentUser";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -48,7 +47,6 @@ const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
   const { t } = useTranslation( );
-  const currentUser = useCurrentUser( );
   const currentObservation = useStore( state => state.currentObservation );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
@@ -297,6 +295,7 @@ const ImageCropEditor = ( ) => {
         );
         const cropOriginalUri = cropOriginalUriFromPath( cropOriginalPath ) || localImageUri;
         feedbackSourceKey = cropOriginalUri;
+        saveAnimalCrop( imageUri, crop );
         setGroupedPhotos(
           groupedPhotos.map( group => {
             const photos = group.photos?.map( photo => (
@@ -345,15 +344,9 @@ const ImageCropEditor = ( ) => {
           };
           updateObservationKeys( { observationPhotos: obs.observationPhotos } );
 
-          const obsUserId = currentObservation?.user?.id;
-          const remotePhotoUrl = Photo.displayOriginalPhoto( existingPhoto?.url );
-          if (
-            remotePhotoUrl
-            && obsUserId
-            && currentUser?.id
-            && obsUserId !== currentUser.id
-          ) {
-            saveAnimalCrop( remotePhotoUrl, crop );
+          const photoUrl = Photo.displayLocalOrRemoteLargePhoto( existingPhoto );
+          if ( photoUrl ) {
+            saveAnimalCrop( photoUrl, crop );
           }
         }
       }
@@ -369,7 +362,6 @@ const ImageCropEditor = ( ) => {
   }, [
     context,
     currentObservation,
-    currentUser,
     finishOrAdvance,
     getCropFeedbackSourceKey,
     groupedPhotos,
