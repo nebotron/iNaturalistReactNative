@@ -2,6 +2,7 @@
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
+#include <stdlib.h>
 #include "onnxruntime_c_api.h"
 
 @interface ImageCropper : NSObject <RCTBridgeModule>
@@ -310,9 +311,22 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
 
 // ─── Brightness measurement ──────────────────────────────────────────────────
 
-// Samples a 64×64 pixel grid within normCrop (0-1 coords), returns average
-// perceptual luminance [0,1].  Pass CGRectMake(0,0,1,1) for the full image.
-static float measureAverageLuminance( UIImage *image, CGRect normCrop )
+static int compareFloatsAsc( const void *a, const void *b )
+{
+  float fa = *(const float *)a, fb = *(const float *)b;
+  return ( fa > fb ) - ( fa < fb );
+}
+
+// Samples a 64×64 pixel grid within normCrop (0-1 coords) and returns the
+// 10th-percentile perceptual luminance [0,1] — i.e. how dark the shadows are
+// within the region. Pass CGRectMake(0,0,1,1) for the full image.
+//
+// Fit via scripts/explore_brightness_crop_models.py against
+// brightness_log_raw.json (21 human-labeled ideal-brightness examples):
+// shadow depth in the subject crop was the strongest available predictor of
+// the brightness multiplier a person actually chose (log-linear, LOOCV MAE
+// 0.573 vs 0.641 for a naive constant guess).
+static float measureShadowPercentile( UIImage *image, CGRect normCrop )
 {
   const int N  = 64;
   float imgW   = (float)image.size.width;
@@ -342,15 +356,18 @@ static float measureAverageLuminance( UIImage *image, CGRect normCrop )
   CGContextRelease( bmp );
   CGColorSpaceRelease( cs );
 
-  float total = 0.0f;
+  float *lums = (float *)malloc( (size_t)N * N * sizeof( float ) );
   for ( int i = 0; i < N * N; i++ ) {
     float r = raw[i * 4 + 0] / 255.0f;
     float g = raw[i * 4 + 1] / 255.0f;
     float b = raw[i * 4 + 2] / 255.0f;
-    total += 0.299f * r + 0.587f * g + 0.114f * b;
+    lums[i] = 0.299f * r + 0.587f * g + 0.114f * b;
   }
   free( raw );
-  return total / (float)( N * N );
+  qsort( lums, N * N, sizeof( float ), compareFloatsAsc );
+  float p10 = lums[(int)( 0.10f * ( N * N - 1 ) )];
+  free( lums );
+  return p10;
 }
 
 // ─── Public detection entry point ────────────────────────────────────────────
@@ -537,8 +554,8 @@ RCT_EXPORT_METHOD( measureImageBrightness
                   [cropW floatValue], [cropH floatValue] )
     : CGRectMake( 0, 0, 1, 1 );
 
-  float luminance = measureAverageLuminance( image, normCrop );
-  resolve( @( luminance ) );
+  float shadowPercentile = measureShadowPercentile( image, normCrop );
+  resolve( @( shadowPercentile ) );
 }
 
 @end
