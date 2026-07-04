@@ -166,6 +166,33 @@ describe( "computeCropPanTranslateLimits", ( ) => {
     ] ) );
   } );
 
+  it( "computes the same limits regardless of the current pan position", ( ) => {
+    // At scale 3 both axes are confined (crop smaller than both image edges).
+    // The limits depend only on scale and crop size, so a transform whose crop
+    // sits centered and one whose crop overhangs the right/bottom edges must
+    // yield identical limits -- otherwise the far edges would not be enforced.
+    const scale = 3;
+    const inBounds = {
+      scale, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
+    };
+    const overhangsFarEdges = {
+      scale, translateX: -5000, translateY: -5000, focalX: 0, focalY: 0,
+    };
+
+    const a = computeCropPanTranslateLimits( context, inBounds );
+    const b = computeCropPanTranslateLimits( context, overhangsFarEdges );
+
+    expect( b.minTotalTranslateX ).toBeCloseTo( a.minTotalTranslateX, 3 );
+    expect( b.maxTotalTranslateX ).toBeCloseTo( a.maxTotalTranslateX, 3 );
+    expect( b.minTotalTranslateY ).toBeCloseTo( a.minTotalTranslateY, 3 );
+    expect( b.maxTotalTranslateY ).toBeCloseTo( a.maxTotalTranslateY, 3 );
+
+    // The over-panned position is outside those limits on both far edges, so it
+    // would be clamped back into view.
+    expect( totalTranslate( overhangsFarEdges ) ).toBeLessThan( b.minTotalTranslateX );
+    expect( totalTranslateY( overhangsFarEdges ) ).toBeLessThan( b.minTotalTranslateY );
+  } );
+
   it( "pins the axis where the crop exceeds the image to the centered position", ( ) => {
     // At scale 1 the crop square is taller than the (shorter) image height but
     // still narrower than the (longer) image width, so the vertical axis is

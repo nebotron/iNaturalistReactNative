@@ -114,6 +114,22 @@ export function computeCropPanTranslateLimits(
   const cropFractionW = cropSize / ( transform.scale * contain.width );
   const cropFractionH = cropSize / ( transform.scale * contain.height );
 
+  // Use the true (unclamped) crop fractions -- not crop.w/crop.h from the
+  // normalized crop, which shrink whenever the current position overhangs an
+  // image edge. Feeding those clamped sizes back through
+  // normalizedCropToImageZoomTransform would recompute a different scale and
+  // shift the far-edge position (1 - w / 1 - h), letting the crop drift past
+  // the right/bottom edges (and corrupting every edge at a corner, where both
+  // dimensions clamp). The fractions make the recomputed scale exactly equal
+  // the current scale, so the limits depend only on scale and crop size, not
+  // on the current pan position.
+  const edgeW = cropFractionW;
+  const edgeH = cropFractionH;
+  // Cross-axis position is irrelevant to the target axis translate, so any
+  // in-range value works; clamp the current position for stability.
+  const crossY = Math.max( 0, Math.min( 1 - edgeH, crop.y ) );
+  const crossX = Math.max( 0, Math.min( 1 - edgeW, crop.x ) );
+
   let minTotalTranslateX = 0;
   let maxTotalTranslateX = 0;
   if ( cropFractionW <= 1 ) {
@@ -125,9 +141,9 @@ export function computeCropPanTranslateLimits(
       cropSize,
       {
         x: 0,
-        y: Math.max( 0, Math.min( 1 - crop.h, crop.y ) ),
-        w: crop.w,
-        h: crop.h,
+        y: crossY,
+        w: edgeW,
+        h: edgeH,
       },
     );
     const rightTransform = normalizedCropToImageZoomTransform(
@@ -137,10 +153,10 @@ export function computeCropPanTranslateLimits(
       viewportHeight,
       cropSize,
       {
-        x: Math.max( 0, 1 - crop.w ),
-        y: Math.max( 0, Math.min( 1 - crop.h, crop.y ) ),
-        w: crop.w,
-        h: crop.h,
+        x: Math.max( 0, 1 - edgeW ),
+        y: crossY,
+        w: edgeW,
+        h: edgeH,
       },
     );
     const leftTotalX = leftTransform.translateX + leftTransform.focalX;
@@ -159,10 +175,10 @@ export function computeCropPanTranslateLimits(
       viewportHeight,
       cropSize,
       {
-        x: Math.max( 0, Math.min( 1 - crop.w, crop.x ) ),
+        x: crossX,
         y: 0,
-        w: crop.w,
-        h: crop.h,
+        w: edgeW,
+        h: edgeH,
       },
     );
     const bottomTransform = normalizedCropToImageZoomTransform(
@@ -172,10 +188,10 @@ export function computeCropPanTranslateLimits(
       viewportHeight,
       cropSize,
       {
-        x: Math.max( 0, Math.min( 1 - crop.w, crop.x ) ),
-        y: Math.max( 0, 1 - crop.h ),
-        w: crop.w,
-        h: crop.h,
+        x: crossX,
+        y: Math.max( 0, 1 - edgeH ),
+        w: edgeW,
+        h: edgeH,
       },
     );
     const topTotalY = topTransform.translateY + topTransform.focalY;
