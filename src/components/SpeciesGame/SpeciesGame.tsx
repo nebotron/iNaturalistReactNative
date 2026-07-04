@@ -38,6 +38,7 @@ import {
 } from "sharedHelpers/speciesGameStats";
 import useSubjectDetectionForUri, {
   preloadSubjectDetectionForUri,
+  resolveSubjectDetectionForUri,
 } from "sharedHelpers/useSubjectDetectionForUri";
 import { zustandStorage } from "stores/useStore";
 
@@ -437,6 +438,13 @@ const SpeciesGame = ( ) => {
       ? unused[Math.floor( Math.random( ) * unused.length )]
       : null;
     if ( entry ) addUsedUuid( taxonId, entry.observationUuid, usedUuidsRef.current );
+
+    // Resolve the subject detection for the chosen photo *before* showing it, so the
+    // image renders already cropped to the subject instead of snapping into place
+    // after a visible delay. This is normally instant, since the photo was already
+    // preloaded while the previous round was being played.
+    if ( entry ) await resolveSubjectDetectionForUri( entry.url );
+
     setIsTargetShown( chosen.id === taxonId );
     setCurrentPhotoUrl( entry?.url ?? null );
     setImageLoading( !!entry?.url );
@@ -444,10 +452,10 @@ const SpeciesGame = ( ) => {
     setGuessedTarget( null );
     setPhase( "playing" );
 
-    // Preload the next 3 images and their subject detection for each pool so that
-    // when those images are shown they appear instantly and the snap-to-subject
-    // zoom happens without delay.
-    const PRELOAD_COUNT = 3;
+    // Preload the next 5 images and their subject detection for each pool so that
+    // when those images are shown they appear instantly, already cropped to the
+    // subject, with no delay or shift.
+    const PRELOAD_COUNT = 5;
     const upcoming = [
       ...unusedIn( targetPool ).slice( 0, PRELOAD_COUNT ),
       ...unusedIn( lookalikePool ).slice( 0, PRELOAD_COUNT ),
