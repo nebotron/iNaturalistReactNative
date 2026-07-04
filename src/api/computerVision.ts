@@ -24,4 +24,23 @@ const scoreImage = async (
   }
 };
 
+const scoreObservation = async (
+  params: { id: number },
+  opts = {},
+): Promise<object> => {
+  try {
+    return inatjs.computervision.score_observation( {
+      ...PARAMS,
+      ...params,
+      fields: {
+        ...PARAMS.fields,
+        taxon: { ...PARAMS.fields.taxon, is_active: true },
+      },
+    }, opts );
+  } catch ( e ) {
+    return handleError( e as Error, { context: { functionName: "scoreObservation", opts } } );
+  }
+};
+
 export default scoreImage;
+export { scoreObservation };
