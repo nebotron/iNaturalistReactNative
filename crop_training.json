@@ -7714,11 +7714,11 @@
     "y": 0.07847613709941546
   },
   {
-    "h": 0.08447215043008327,
+    "h": 1,
     "url": "https://static.inaturalist.org/photos/690525083/original.jpg",
-    "w": 0.11262953390677766,
-    "x": 0.5338260041673978,
-    "y": 0.4029839072003961
+    "w": 1,
+    "x": 0,
+    "y": 0
   },
   {
     "h": 0.18371227039573423,
@@ -14931,11 +14931,11 @@
     "y": 0.2176002923194056
   },
   {
-    "h": 0.31641498764309056,
+    "h": 0.3052582630242589,
     "url": "https://static.inaturalist.org/photos/690943019/original.jpg",
-    "w": 0.2113553237772206,
-    "x": 0.47631636281329776,
-    "y": 0.47991897289332136
+    "w": 0.20390298037948545,
+    "x": 0.47388781282036724,
+    "y": 0.48360731020955866
   },
   {
     "h": 0.5802879452165913,
@@ -15013,5 +15013,2504 @@
     "w": 0.4961945041077849,
     "x": 0.22814437326515943,
     "y": 0.23661063681181216
+  },
+  {
+    "h": 0.6284202407608408,
+    "url": "https://static.inaturalist.org/photos/690989466/original.jpg",
+    "w": 0.4191513910543499,
+    "x": 0.19696559978900413,
+    "y": 0.05301253074128899
+  },
+  {
+    "h": 0.5764433706031772,
+    "url": "https://static.inaturalist.org/photos/690989515/original.jpg",
+    "w": 0.3844832247284864,
+    "x": 0.4519500560389792,
+    "y": 0.08597484093500292
+  },
+  {
+    "h": 0.15621511291906642,
+    "url": "https://static.inaturalist.org/photos/690987034/original.jpg",
+    "w": 0.20828681722542186,
+    "x": 0.16460449006875905,
+    "y": 0.2941872147907198
+  },
+  {
+    "h": 0.09307563828131143,
+    "url": "https://static.inaturalist.org/photos/690986345/original.jpg",
+    "w": 0.06217161775821978,
+    "x": 0.5739172037460151,
+    "y": 0.35367077553834436
+  },
+  {
+    "h": 0.36989903851110917,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690984263/original.jpg",
+    "w": 0.277424278883332,
+    "x": 0.37724632734782937,
+    "y": 0.20993307337724723
+  },
+  {
+    "h": 0.490236075233895,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690982992/original.jpg",
+    "w": 0.65364810031186,
+    "x": 0.13398624886685642,
+    "y": 0.34570892799978314
+  },
+  {
+    "h": 0.220903892406907,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690981014/original.jpg",
+    "w": 0.16567791930518033,
+    "x": 0.24809644240814677,
+    "y": 0.5494507978584319
+  },
+  {
+    "h": 0.43121796990478367,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690980642/original.jpg",
+    "w": 0.32341347742858784,
+    "x": 0.40117906650055135,
+    "y": 0.4168491598691113
+  },
+  {
+    "h": 0.1848315850123899,
+    "url": "https://static.inaturalist.org/photos/690979047/original.jpg",
+    "w": 0.10396776656946927,
+    "x": 0.5664819169516865,
+    "y": 0.32348929412953514
+  },
+  {
+    "h": 0.6430327406946073,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690978321/original.jpg",
+    "w": 0.48185482135601115,
+    "x": 0.1881550426567135,
+    "y": 0.18594646690913194
+  },
+  {
+    "h": 0.21567226876836487,
+    "url": "https://static.inaturalist.org/photos/690978323/original.jpg",
+    "w": 0.16175420157627374,
+    "x": 0.423300491579892,
+    "y": 0.5046021767454554
+  },
+  {
+    "h": 0.7687496060986055,
+    "url": "https://static.inaturalist.org/photos/690976391/original.jpg",
+    "w": 0.4331723854676714,
+    "x": 0.3157237011257517,
+    "y": 0.18208566606657092
+  },
+  {
+    "h": 0.7916820073387356,
+    "url": "https://static.inaturalist.org/photos/690976304/original.jpg",
+    "w": 0.44609425608833053,
+    "x": 0.14206121005014727,
+    "y": 0.08986494848640718
+  },
+  {
+    "h": 0.23789885144763784,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690972264/original.jpg",
+    "w": 0.17842413858572834,
+    "x": 0.24861259716146863,
+    "y": 0.2769641805372069
+  },
+  {
+    "h": 0.7876318945652135,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690969905/original.jpg",
+    "w": 0.5907239209239104,
+    "x": 0.2293869852569468,
+    "y": 0.08976864658421936
+  },
+  {
+    "h": 0.2751047941955685,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690968530/original.jpg",
+    "w": 0.15474644673500715,
+    "x": 0.3958760230026124,
+    "y": 0.3052240525429209
+  },
+  {
+    "h": 0.32143887363558044,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690990291/original.jpg",
+    "w": 0.40736807747875536,
+    "x": 0.3547589576519804,
+    "y": 0.2709358302422541
+  },
+  {
+    "h": 0.39869332963733306,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690989932/original.jpg",
+    "w": 0.29901999722799977,
+    "x": 0.4372925878373839,
+    "y": 0.32925021957019707
+  },
+  {
+    "h": 0.15540197000526085,
+    "url": "https://static.inaturalist.org/photos/690963993/original.jpg",
+    "w": 0.1038036596519516,
+    "x": 0.5574957808319337,
+    "y": 0.2697744739744008
+  },
+  {
+    "h": 0.5925420308293845,
+    "url": "https://static.inaturalist.org/photos/690962447/original.jpg",
+    "w": 0.3957995596555655,
+    "x": 0.33080398198208655,
+    "y": 0.27829130704465943
+  },
+  {
+    "h": 0.4699406703687793,
+    "url": "https://static.inaturalist.org/photos/690963188/original.jpg",
+    "w": 0.6241494765987419,
+    "x": 0.06982386533157287,
+    "y": 0.23218103687051417
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690963009/original.jpg",
+    "w": 0.8118009553421638,
+    "x": 0.03718273069779032,
+    "y": 0
+  },
+  {
+    "h": 0.24406856177745256,
+    "url": "https://static.inaturalist.org/photos/690961816/original.jpg",
+    "w": 0.15802485982270598,
+    "x": 0.3582997704711498,
+    "y": 0.4931950980605833
+  },
+  {
+    "h": 0.05650471332822071,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690961583/original.jpg",
+    "w": 0.07533961777096104,
+    "x": 0.4848567104578361,
+    "y": 0.45366676564340924
+  },
+  {
+    "h": 0.11024059089799276,
+    "url": "https://static.inaturalist.org/photos/690959830/original.jpg",
+    "w": 0.07363726970139362,
+    "x": 0.414194274160619,
+    "y": 0.4052079783910414
+  },
+  {
+    "h": 0.9916357521311904,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690956731/original.jpg",
+    "w": 0.8071847188824317,
+    "x": 0.03506426329468716,
+    "y": 0.008364247868809578
+  },
+  {
+    "h": 0.36582498400551866,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690954611/original.jpg",
+    "w": 0.4877666453406914,
+    "x": 0.22494065783054945,
+    "y": 0.5586893423976997
+  },
+  {
+    "h": 0.49626357386780184,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690953917/original.jpg",
+    "w": 0.6616847651570692,
+    "x": 0.13104765571064492,
+    "y": 0.03014864688557037
+  },
+  {
+    "h": 0.6329032541718458,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690953449/original.jpg",
+    "w": 0.8438710055624611,
+    "x": 0.10580985102541894,
+    "y": 0.18006554309875777
+  },
+  {
+    "h": 0.8104381425297527,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690953064/original.jpg",
+    "w": 0.6078286068973147,
+    "x": 0.10307590586335151,
+    "y": 0.14529387532488913
+  },
+  {
+    "h": 0.11604711587194388,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690952826/original.jpg",
+    "w": 0.08703533690395787,
+    "x": 0.44926532107543654,
+    "y": 0.4284993791770146
+  },
+  {
+    "h": 0.3596303163680886,
+    "url": "https://static.inaturalist.org/photos/690947862/original.jpg",
+    "w": 0.27007393875689467,
+    "x": 0.06002923048248201,
+    "y": 0.4981288366660328
+  },
+  {
+    "h": 0.14178972437917664,
+    "url": "https://static.inaturalist.org/photos/690992141/original.jpg",
+    "w": 0.1890529658389022,
+    "x": 0.30855359585290865,
+    "y": 0.4282762604230382
+  },
+  {
+    "h": 0.1337657004390238,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690991528/original.jpg",
+    "w": 0.2378056896693756,
+    "x": 0.3091556339530865,
+    "y": 0.4722673499457499
+  },
+  {
+    "h": 0.6881264959877806,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690991503/original.jpg",
+    "w": 0.7440776471927004,
+    "x": 0.2500749118572057,
+    "y": 0.21375107336612734
+  },
+  {
+    "h": 0.4046419771550873,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690991193/original.jpg",
+    "w": 0.7193635149423775,
+    "x": 0.1260109968850978,
+    "y": 0.34913748016757606
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690990403/original.jpg",
+    "w": 0.9188581423668039,
+    "x": 0.06004368246403088,
+    "y": 0
+  },
+  {
+    "h": 0.2689682375790823,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690983051/original.jpg",
+    "w": 0.3586243167721097,
+    "x": 0.3851224394774293,
+    "y": 0.36065165709569913
+  },
+  {
+    "h": 0.6537785534706468,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690996772/original.jpg",
+    "w": 0.8291360663549018,
+    "x": 0.024003069943922074,
+    "y": 0.21892918159973634
+  },
+  {
+    "h": 0.6416829221107405,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690996534/original.jpg",
+    "w": 0.48126219158305533,
+    "x": 0.3933483775457541,
+    "y": 0.3249761035150403
+  },
+  {
+    "h": 0.6009001740914159,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690994022/original.jpg",
+    "w": 0.8012002321218881,
+    "x": 0.11988699648821988,
+    "y": 0.397280818081738
+  },
+  {
+    "h": 0.6425788382409225,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/690976664/original.jpg",
+    "w": 0.8567717843212301,
+    "x": 0.004392319688627834,
+    "y": 0.12554098968905988
+  },
+  {
+    "h": 0.3450589803880482,
+    "url": "https://static.inaturalist.org/photos/691006649/original.jpg",
+    "w": 0.4600786405173978,
+    "x": 0.2739397496939534,
+    "y": 0.24314963425826125
+  },
+  {
+    "h": 0.5336184597454929,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691005710/original.jpg",
+    "w": 0.7114912796606572,
+    "x": 0.28520864358690184,
+    "y": 0.3034057747792495
+  },
+  {
+    "h": 0.39834402363806504,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691005934/original.jpg",
+    "w": 0.5311253648507535,
+    "x": 0.20152525100155172,
+    "y": 0.3273150249223484
+  },
+  {
+    "h": 0.17816752033871863,
+    "url": "https://static.inaturalist.org/photos/691005325/original.jpg",
+    "w": 0.23755669378495792,
+    "x": 0.4634385647869227,
+    "y": 0.5023233821867508
+  },
+  {
+    "h": 0.20244732416376116,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691004883/original.jpg",
+    "w": 0.2699297655516816,
+    "x": 0.20056116958518946,
+    "y": 0.4576462680926093
+  },
+  {
+    "h": 0.7449745542808313,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691003083/original.jpg",
+    "w": 0.5274478045445339,
+    "x": 0.19763681131356375,
+    "y": 0.2507873396471484
+  },
+  {
+    "h": 0.2234810336085919,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691003610/original.jpg",
+    "w": 0.14884186027447227,
+    "x": 0.46373092208376604,
+    "y": 0.46799185446952635
+  },
+  {
+    "h": 0.14762193489684666,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691003682/original.jpg",
+    "w": 0.1968292465291288,
+    "x": 0.3638455071673854,
+    "y": 0.2964154190910677
+  },
+  {
+    "h": 0.48135891370689593,
+    "url": "https://static.inaturalist.org/photos/691001984/original.jpg",
+    "w": 0.2980288586818086,
+    "x": 0.4750748720354586,
+    "y": 0.15163999504836173
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691008152/original.jpg",
+    "w": 0.9937660698669581,
+    "x": 0,
+    "y": 0
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691007416/original.jpg",
+    "w": 0.7707496714923656,
+    "x": 0.22263835330485746,
+    "y": 0
+  },
+  {
+    "h": 0.6917179501550822,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691007019/original.jpg",
+    "w": 0.4620459745176526,
+    "x": 0.11808489259847477,
+    "y": 0.14432319112685163
+  },
+  {
+    "h": 0.7274747253179057,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691006582/original.jpg",
+    "w": 0.4852199583907516,
+    "x": 0.27909642894315745,
+    "y": 0.12300739350106593
+  },
+  {
+    "h": 0.7328559112398513,
+    "url": "https://static.inaturalist.org/photos/691011011/original.jpg",
+    "w": 0.9771412149864682,
+    "x": 0.013474920418220874,
+    "y": 0.05503883302585114
+  },
+  {
+    "h": 0.37603334999729093,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691005857/original.jpg",
+    "w": 0.5013777999963879,
+    "x": 0.13677383325275536,
+    "y": 0.34994000625223437
+  },
+  {
+    "h": 0.6235159955109164,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691005954/original.jpg",
+    "w": 0.8313546606812218,
+    "x": 0.1635077292135687,
+    "y": 0.2134025999637163
+  },
+  {
+    "h": 0.19560938669042438,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691049291/original.jpg",
+    "w": 0.3477500207829767,
+    "x": 0.3367035081533083,
+    "y": 0.5089032246869806
+  },
+  {
+    "h": 0.31088209394275734,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691046592/original.jpg",
+    "w": 0.221928526047027,
+    "x": 0.4012064352858417,
+    "y": 0.27409469967226496
+  },
+  {
+    "h": 0.7259521465999336,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691046610/original.jpg",
+    "w": 0.5189423547960463,
+    "x": 0.2125499504527365,
+    "y": 0.20227418172519673
+  },
+  {
+    "h": 0.7442475457906872,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691046559/original.jpg",
+    "w": 0.4964072986084369,
+    "x": 0.20793707363774042,
+    "y": 0.1506876276333456
+  },
+  {
+    "h": 0.7953410429705186,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691046371/original.jpg",
+    "w": 0.5685445736859568,
+    "x": 0.16284351098501962,
+    "y": 0.06684203941098028
+  },
+  {
+    "h": 0.1655726810857312,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691042870/original.jpg",
+    "w": 0.11043568474761178,
+    "x": 0.5186706511807225,
+    "y": 0.22565544478136362
+  },
+  {
+    "h": 0.08311098992147242,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691042601/original.jpg",
+    "w": 0.05543438097301345,
+    "x": 0.7088378764571986,
+    "y": 0.42535026973996176
+  },
+  {
+    "h": 0.752798094784553,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691042527/original.jpg",
+    "w": 0.5248197130377886,
+    "x": 0.0920876277309522,
+    "y": 0.24720190521544702
+  },
+  {
+    "h": 0.10278568692342982,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691043310/original.jpg",
+    "w": 0.1370475825645731,
+    "x": 0.49841745664760256,
+    "y": 0.5060531794400056
+  },
+  {
+    "h": 0.9913671794709522,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691044730/original.jpg",
+    "w": 1,
+    "x": 0,
+    "y": 0.008632820529047774
+  },
+  {
+    "h": 0.37306056824738815,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691035282/original.jpg",
+    "w": 0.49741409099651773,
+    "x": 0.28613909832823,
+    "y": 0.3203427527572598
+  },
+  {
+    "h": 0.5424647504024825,
+    "url": "https://static.inaturalist.org/photos/691033218/original.jpg",
+    "w": 0.3618197505125933,
+    "x": 0.2692090628973971,
+    "y": 0.20065035798131972
+  },
+  {
+    "h": 0.4613519737356416,
+    "url": "https://static.inaturalist.org/photos/691032303/original.jpg",
+    "w": 0.6916902212376236,
+    "x": 0.14809066925313366,
+    "y": 0.32886185010245433
+  },
+  {
+    "h": 0.44257494287158633,
+    "url": "https://static.inaturalist.org/photos/691032221/original.jpg",
+    "w": 0.663538420937781,
+    "x": 0.27020511670313474,
+    "y": 0.48017746475177087
+  },
+  {
+    "h": 0.6204702142651323,
+    "url": "https://static.inaturalist.org/photos/691031931/original.jpg",
+    "w": 0.4138487854912942,
+    "x": 0.4329331382764343,
+    "y": 0.17167964391069643
+  },
+  {
+    "h": 0.5686799723489578,
+    "url": "https://static.inaturalist.org/photos/691031800/original.jpg",
+    "w": 0.3793050987444709,
+    "x": 0.30006077346209875,
+    "y": 0.3461568111919626
+  },
+  {
+    "h": 0.5028815513602537,
+    "url": "https://static.inaturalist.org/photos/691030983/original.jpg",
+    "w": 0.3354180659951692,
+    "x": 0.2401612039980173,
+    "y": 0.2547650597831417
+  },
+  {
+    "h": 0.3258008886890907,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691033841/original.jpg",
+    "w": 0.3258008886890905,
+    "x": 0.3813918392232747,
+    "y": 0.3605111211861341
+  },
+  {
+    "h": 0.34225540818868916,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691033664/original.jpg",
+    "w": 0.3422554081886891,
+    "x": 0.314445701701867,
+    "y": 0.36696497994066946
+  },
+  {
+    "h": 0.31474227847972963,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691033563/original.jpg",
+    "w": 0.3147422784797296,
+    "x": 0.38828780599150203,
+    "y": 0.4115322138196547
+  },
+  {
+    "h": 0.9429170631601289,
+    "url": "https://static.inaturalist.org/photos/691029468/original.jpg",
+    "w": 0.6650599451490831,
+    "x": 0.2080226064367519,
+    "y": 0.05708293683987108
+  },
+  {
+    "h": 0.2879827911365245,
+    "url": "https://static.inaturalist.org/photos/691026966/original.jpg",
+    "w": 0.19208227182250615,
+    "x": 0.40154251159384213,
+    "y": 0.27640863354143697
+  },
+  {
+    "h": 0.1445818107732072,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691029432/original.jpg",
+    "w": 0.10843635807990537,
+    "x": 0.43059884439760865,
+    "y": 0.39994929998244255
+  },
+  {
+    "h": 0.1011111986553902,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691028715/original.jpg",
+    "w": 0.17975324205402715,
+    "x": 0.38764202677437637,
+    "y": 0.36741211073605246
+  },
+  {
+    "h": 0.43590183459346743,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691027331/original.jpg",
+    "w": 0.3528931844511567,
+    "x": 0.36357349084479107,
+    "y": 0.37732818750255515
+  },
+  {
+    "h": 0.15831140758767398,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691027329/original.jpg",
+    "w": 0.11687834388308743,
+    "x": 0.44189216805942727,
+    "y": 0.32902228379742315
+  },
+  {
+    "h": 0.8000003423768767,
+    "url": "https://static.inaturalist.org/photos/691026528/original.jpg",
+    "w": 0.6375002728315735,
+    "x": 0.15283663235474543,
+    "y": 0.1785395664559826
+  },
+  {
+    "h": 0.21648026386997113,
+    "url": "https://static.inaturalist.org/photos/691024973/original.jpg",
+    "w": 0.28864035182662806,
+    "x": 0.37035413638549963,
+    "y": 0.2445930074505908
+  },
+  {
+    "h": 0.1476649824897689,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691023298/original.jpg",
+    "w": 0.19688664331969197,
+    "x": 0.36416089982449407,
+    "y": 0.3712813625915117
+  },
+  {
+    "h": 0.1775729995159716,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691023236/original.jpg",
+    "w": 0.23676399935462877,
+    "x": 0.5574392075152403,
+    "y": 0.379488646730493
+  },
+  {
+    "h": 0.7490913808383048,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691023177/original.jpg",
+    "w": 0.6144890233439217,
+    "x": 0.20425270283500577,
+    "y": 0.17633587737872286
+  },
+  {
+    "h": 0.21375076168793994,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691022650/original.jpg",
+    "w": 0.28500101558391994,
+    "x": 0.12252372059187522,
+    "y": 0.5691979471559456
+  },
+  {
+    "h": 0.3622192381388828,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691022597/original.jpg",
+    "w": 0.48295898418517713,
+    "x": 0.24772091906267102,
+    "y": 0.168968459342971
+  },
+  {
+    "h": 0.802556219344997,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691021822/original.jpg",
+    "w": 0.8025562193449969,
+    "x": 0.039534998720944584,
+    "y": 0.15821625764544014
+  },
+  {
+    "h": 0.8421420790626958,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691021821/original.jpg",
+    "w": 0.6316065592970218,
+    "x": 0.10791989280914063,
+    "y": 0.1399747789978418
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691021790/original.jpg",
+    "w": 0.7738308451807402,
+    "x": 0.03421840853538609,
+    "y": 0
+  },
+  {
+    "h": 0.956850179931977,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691021794/original.jpg",
+    "w": 0.7644081954235666,
+    "x": 0.19304168512982384,
+    "y": 0.04314982006802304
+  },
+  {
+    "h": 0.7769812400474481,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691021791/original.jpg",
+    "w": 0.5827359300355861,
+    "x": 0.2883695166535193,
+    "y": 0.16337951209689433
+  },
+  {
+    "h": 0.36738650060776956,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691021445/original.jpg",
+    "w": 0.489848667477026,
+    "x": 0.3568057275166228,
+    "y": 0.26908855160890577
+  },
+  {
+    "h": 0.33452683710263287,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691020907/original.jpg",
+    "w": 0.3345268371026328,
+    "x": 0.3905592155758019,
+    "y": 0.43366181540562976
+  },
+  {
+    "h": 0.7065261785650163,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691016853/original.jpg",
+    "w": 0.5298946339237623,
+    "x": 0.18775788334421464,
+    "y": 0.17139616020882611
+  },
+  {
+    "h": 0.31066805872420433,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691018484/original.jpg",
+    "w": 0.4029373186722649,
+    "x": 0.36392592855669903,
+    "y": 0.42176080335724175
+  },
+  {
+    "h": 0.9028922604240759,
+    "url": "https://static.inaturalist.org/photos/691051438/original.jpg",
+    "w": 0.8111922652247557,
+    "x": 0.10449192785156118,
+    "y": 0.00839743386527767
+  },
+  {
+    "h": 0.57782335895605,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691049926/original.jpg",
+    "w": 0.667822934053042,
+    "x": 0.1434896273761025,
+    "y": 0.2104891977728223
+  },
+  {
+    "h": 0.5045063152972427,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691055278/original.jpg",
+    "w": 0.6726750870629902,
+    "x": 0.028453129649840543,
+    "y": 0.38735729598560115
+  },
+  {
+    "h": 0.6178571517059455,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691055307/original.jpg",
+    "w": 0.8238095356079272,
+    "x": 0.009681632958429482,
+    "y": 0.3816240137667049
+  },
+  {
+    "h": 0.7151646285307411,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691056451/original.jpg",
+    "w": 0.9524784981493373,
+    "x": 0.04752150185066268,
+    "y": 0.25120064748124576
+  },
+  {
+    "h": 0.29863331816300553,
+    "url": "https://static.inaturalist.org/photos/691149804/original.jpg",
+    "w": 0.39765997112993207,
+    "x": 0.34541100654996865,
+    "y": 0.5020428225097836
+  },
+  {
+    "h": 0.3909682955165079,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691147810/original.jpg",
+    "w": 0.5212910606886773,
+    "x": 0.03334606252775454,
+    "y": 0.3232198745585828
+  },
+  {
+    "h": 0.11555157436637742,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691147518/original.jpg",
+    "w": 0.08666368077478309,
+    "x": 0.43810979077040774,
+    "y": 0.4538979769711422
+  },
+  {
+    "h": 0.1901634683495611,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691147538/original.jpg",
+    "w": 0.08783918020443593,
+    "x": 0.2734505259236604,
+    "y": 0.45281072294105573
+  },
+  {
+    "h": 0.12704140799654184,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691147557/original.jpg",
+    "w": 0.05868221287340256,
+    "x": 0.05061690850431671,
+    "y": 0.5593553455001106
+  },
+  {
+    "h": 0.057439732767430085,
+    "url": "https://static.inaturalist.org/photos/691146997/original.jpg",
+    "w": 0.07658631035657343,
+    "x": 0.37915683713399484,
+    "y": 0.4994962734947772
+  },
+  {
+    "h": 0.5548993195268032,
+    "url": "https://static.inaturalist.org/photos/691145795/original.jpg",
+    "w": 0.739865759369071,
+    "x": 0.11495879597781648,
+    "y": 0.15263829534659398
+  },
+  {
+    "h": 0.34255596541515215,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691147586/original.jpg",
+    "w": 0.5243308050599639,
+    "x": 0.23951090141136866,
+    "y": 0.3260750812138053
+  },
+  {
+    "h": 0.11528857671060816,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691143718/original.jpg",
+    "w": 0.2049574697077478,
+    "x": 0.426959841552977,
+    "y": 0.4292209718744879
+  },
+  {
+    "h": 0.12984351011199685,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691143681/original.jpg",
+    "w": 0.23083290686577246,
+    "x": 0.41778784873460334,
+    "y": 0.428704108115969
+  },
+  {
+    "h": 0.38262259615310823,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691142099/original.jpg",
+    "w": 0.464775253215638,
+    "x": 0.27777727125569535,
+    "y": 0.27510575135034643
+  },
+  {
+    "h": 0.21715576536553832,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691125633/original.jpg",
+    "w": 0.21715576536553827,
+    "x": 0.39037574467410685,
+    "y": 0.4037121486726632
+  },
+  {
+    "h": 0.7234177521320992,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691121180/original.jpg",
+    "w": 0.7234177521320992,
+    "x": 0.1659065815898394,
+    "y": 0.157209753622492
+  },
+  {
+    "h": 0.4337626090174231,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691141600/original.jpg",
+    "w": 0.43376260901742303,
+    "x": 0.3304764841775869,
+    "y": 0.2568513129337158
+  },
+  {
+    "h": 0.3937626536209846,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691141639/original.jpg",
+    "w": 0.43875185778877945,
+    "x": 0.39275613977602375,
+    "y": 0.2458332113109103
+  },
+  {
+    "h": 0.35081543372903057,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691141683/original.jpg",
+    "w": 0.35081543372903057,
+    "x": 0.41103063318559385,
+    "y": 0.3600461909745817
+  },
+  {
+    "h": 0.1955290501986806,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691141719/original.jpg",
+    "w": 0.24210610326898302,
+    "x": 0.39800487999938367,
+    "y": 0.40169309163269085
+  },
+  {
+    "h": 0.32118020102847583,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691140367/original.jpg",
+    "w": 0.3716254529414227,
+    "x": 0.31600535826541143,
+    "y": 0.3249351228887329
+  },
+  {
+    "h": 0.4133420828481571,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691140395/original.jpg",
+    "w": 0.31929061282509014,
+    "x": 0.29720589492811317,
+    "y": 0.2406863238321095
+  },
+  {
+    "h": 0.29275095595233996,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691140430/original.jpg",
+    "w": 0.38932075181194303,
+    "x": 0.2850071518199121,
+    "y": 0.4351905447747048
+  },
+  {
+    "h": 0.20900560361708664,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691139591/original.jpg",
+    "w": 0.17491972880844076,
+    "x": 0.40326711099528756,
+    "y": 0.41492170140747375
+  },
+  {
+    "h": 0.21269887871561427,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691139541/original.jpg",
+    "w": 0.3781313399388698,
+    "x": 0.20435366920572695,
+    "y": 0.4911881209232772
+  },
+  {
+    "h": 0.30962892766040545,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691138953/original.jpg",
+    "w": 0.23222169574530416,
+    "x": 0.3564010814908585,
+    "y": 0.4806637537069102
+  },
+  {
+    "h": 0.515031432545176,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691138709/original.jpg",
+    "w": 0.6867085767269012,
+    "x": 0.24426631902843635,
+    "y": 0.16579609776826854
+  },
+  {
+    "h": 0.1278103143361255,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691138668/original.jpg",
+    "w": 0.07938218741970304,
+    "x": 0.5237929925434414,
+    "y": 0.424213907233896
+  },
+  {
+    "h": 0.08971362898945417,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691138183/original.jpg",
+    "w": 0.15949089598125193,
+    "x": 0.383129530303524,
+    "y": 0.439512314198688
+  },
+  {
+    "h": 0.4468715967084083,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691137027/original.jpg",
+    "w": 0.3351536975313064,
+    "x": 0.33320016995637003,
+    "y": 0.28369172862838304
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691135585/original.jpg",
+    "w": 0.7900276824057549,
+    "x": 0.05205436273785406,
+    "y": 0
+  },
+  {
+    "h": 0.17329803513902386,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691134458/original.jpg",
+    "w": 0.23016496495766597,
+    "x": 0.3503699696089098,
+    "y": 0.6326972803441273
+  },
+  {
+    "h": 0.15370327094132308,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691134415/original.jpg",
+    "w": 0.061541348716740774,
+    "x": 0.10211384688252009,
+    "y": 0.6686279430967376
+  },
+  {
+    "h": 0.3476439763706557,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691134313/original.jpg",
+    "w": 0.3936011758055824,
+    "x": 0.34767789904941115,
+    "y": 0.3178055964382428
+  },
+  {
+    "h": 0.48835086049351945,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691134334/original.jpg",
+    "w": 0.49272089056504975,
+    "x": 0.20173409251600824,
+    "y": 0.26279402945252744
+  },
+  {
+    "h": 0.4764009864339051,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691129752/original.jpg",
+    "w": 0.3219428541135374,
+    "x": 0.337190294279063,
+    "y": 0.3093317736502004
+  },
+  {
+    "h": 0.30528884405892903,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691127309/original.jpg",
+    "w": 0.5673607555650516,
+    "x": 0.32368842907694806,
+    "y": 0.37846754930932264
+  },
+  {
+    "h": 0.5844857591184414,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691126596/original.jpg",
+    "w": 0.4383643193388311,
+    "x": 0.439511227642791,
+    "y": 0.1398137558738732
+  },
+  {
+    "h": 0.05099018268676875,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691122817/original.jpg",
+    "w": 0.06798691024902487,
+    "x": 0.4871405722020919,
+    "y": 0.46596646762078503
+  },
+  {
+    "h": 0.9701841593966256,
+    "url": "https://static.inaturalist.org/photos/691122543/original.jpg",
+    "w": 1,
+    "x": 0,
+    "y": 0.029815840603374336
+  },
+  {
+    "h": 0.13999681994499058,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691122763/original.jpg",
+    "w": 0.18666242659332077,
+    "x": 0.3178756321193744,
+    "y": 0.5753578456564491
+  },
+  {
+    "h": 0.1251748700480304,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691122391/original.jpg",
+    "w": 0.1668998267307072,
+    "x": 0.3927049732775367,
+    "y": 0.5217112997961283
+  },
+  {
+    "h": 0.16211525462687143,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691118358/original.jpg",
+    "w": 0.12292072290123895,
+    "x": 0.42499877516936596,
+    "y": 0.4284114204403498
+  },
+  {
+    "h": 0.17879824385658527,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691117924/original.jpg",
+    "w": 0.13252721395229322,
+    "x": 0.4966035900104699,
+    "y": 0.3879762991929059
+  },
+  {
+    "h": 0.1355416237506853,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691115610/original.jpg",
+    "w": 0.11767236671324138,
+    "x": 0.4422159177753295,
+    "y": 0.4090959937191874
+  },
+  {
+    "h": 0.4628874137302311,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691114861/original.jpg",
+    "w": 0.6171832183069748,
+    "x": 0.04627436670801183,
+    "y": 0.05977079547775675
+  },
+  {
+    "h": 0.157504896570474,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691113270/original.jpg",
+    "w": 0.2100065287606318,
+    "x": 0.4032729142152755,
+    "y": 0.400566115195851
+  },
+  {
+    "h": 0.18698278189379947,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691113268/original.jpg",
+    "w": 0.24931037585839938,
+    "x": 0.4607808489326271,
+    "y": 0.352933922062159
+  },
+  {
+    "h": 0.43246705206243524,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691112788/original.jpg",
+    "w": 0.5766227360832471,
+    "x": 0.1548781401165347,
+    "y": 0.37326244744724696
+  },
+  {
+    "h": 0.8069999364777217,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691112222/original.jpg",
+    "w": 0.6052499523582913,
+    "x": 0.13616370315937124,
+    "y": 0.1780573431826603
+  },
+  {
+    "h": 0.8727903506523148,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691107442/original.jpg",
+    "w": 0.7537707008227257,
+    "x": 0.2018482087232513,
+    "y": 0.1272096493476852
+  },
+  {
+    "h": 0.34092805102511997,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691107224/original.jpg",
+    "w": 0.25569603826883996,
+    "x": 0.33157360962569177,
+    "y": 0.3696545538663318
+  },
+  {
+    "h": 0.20271100730083208,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691111865/original.jpg",
+    "w": 0.2702813430677762,
+    "x": 0.24076216438581566,
+    "y": 0.31796749726733503
+  },
+  {
+    "h": 0.5226148059309674,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691108610/original.jpg",
+    "w": 0.6968197412412901,
+    "x": 0.04416503916689259,
+    "y": 0.30175782349495567
+  },
+  {
+    "h": 0.09661520165965315,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691108218/original.jpg",
+    "w": 0.12882026887953762,
+    "x": 0.3295227679903528,
+    "y": 0.3656469913922145
+  },
+  {
+    "h": 0.4109652736078994,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691107043/original.jpg",
+    "w": 0.3405140838465453,
+    "x": 0.31450155113161343,
+    "y": 0.31398382415494014
+  },
+  {
+    "h": 0.36085643169021486,
+    "url": "https://static.inaturalist.org/photos/691106146/original.jpg",
+    "w": 0.2706423237676612,
+    "x": 0.28988557718294705,
+    "y": 0.5032565970298131
+  },
+  {
+    "h": 0.3604933512548405,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691103204/original.jpg",
+    "w": 0.4806578016731206,
+    "x": 0.33706761583114414,
+    "y": 0.1529125676437452
+  },
+  {
+    "h": 0.2677169491717823,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691097013/original.jpg",
+    "w": 0.2507231975153703,
+    "x": 0.383475119691462,
+    "y": 0.3776695819031158
+  },
+  {
+    "h": 0.16602438106569312,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691096841/original.jpg",
+    "w": 0.12451828579927005,
+    "x": 0.6135172119717488,
+    "y": 0.3430603563469125
+  },
+  {
+    "h": 0.2650463095214913,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691096351/original.jpg",
+    "w": 0.3533950793619882,
+    "x": 0.16140186809001741,
+    "y": 0.4056150359633581
+  },
+  {
+    "h": 0.8906597964901931,
+    "url": "https://static.inaturalist.org/photos/691093108/original.jpg",
+    "w": 0.6672802894932176,
+    "x": 0.1383975623469926,
+    "y": 0.10934020350980689
+  },
+  {
+    "h": 0.09846223726257441,
+    "url": "https://static.inaturalist.org/photos/691090864/original.jpg",
+    "w": 0.2109316547214985,
+    "x": 0.4100069647282361,
+    "y": 0.4158954069793981
+  },
+  {
+    "h": 0.2979452386351056,
+    "url": "https://static.inaturalist.org/photos/691081814/original.jpg",
+    "w": 0.19872714647243866,
+    "x": 0.3117152450070208,
+    "y": 0.6282488727966987
+  },
+  {
+    "h": 0.07991077970831906,
+    "url": "https://static.inaturalist.org/photos/691079515/original.jpg",
+    "w": 0.14181739761060436,
+    "x": 0.3584774528790748,
+    "y": 0.4405141905716815
+  },
+  {
+    "h": 0.317932367970132,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691078133/original.jpg",
+    "w": 0.42390982396017607,
+    "x": 0.3402817627456367,
+    "y": 0.38296244645407895
+  },
+  {
+    "h": 0.13790175157973406,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691077302/original.jpg",
+    "w": 0.18386900210631213,
+    "x": 0.4625925028060042,
+    "y": 0.3203103625348195
+  },
+  {
+    "h": 0.17243045067411478,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691071534/original.jpg",
+    "w": 0.22990726756548635,
+    "x": 0.3862478876920918,
+    "y": 0.44363569644487966
+  },
+  {
+    "h": 0.26495604712037446,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691067386/original.jpg",
+    "w": 0.3532747294938326,
+    "x": 0.2333021411214265,
+    "y": 0.3274779840031715
+  },
+  {
+    "h": 0.24155159565067164,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691060561/original.jpg",
+    "w": 0.1811636967380038,
+    "x": 0.37419482009407756,
+    "y": 0.34607392944278503
+  },
+  {
+    "h": 0.4599910261508791,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691060107/original.jpg",
+    "w": 0.32837250011356695,
+    "x": 0.26306893627809863,
+    "y": 0.2957851859480945
+  },
+  {
+    "h": 0.5909674987810116,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691059905/original.jpg",
+    "w": 0.4218723062587104,
+    "x": 0.3138488528136436,
+    "y": 0.23467286112131935
+  },
+  {
+    "h": 0.5374487080984958,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691059815/original.jpg",
+    "w": 0.3836669976757817,
+    "x": 0.24625312422630177,
+    "y": 0.2865088052589218
+  },
+  {
+    "h": 0.4370420814706949,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691058966/original.jpg",
+    "w": 0.3277815611030211,
+    "x": 0.2508756745093936,
+    "y": 0.2528051869441009
+  },
+  {
+    "h": 0.7432867060379169,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691058826/original.jpg",
+    "w": 0.5574650295284377,
+    "x": 0.14446991584419255,
+    "y": 0.13158711738905454
+  },
+  {
+    "h": 0.9381538792369206,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691058762/original.jpg",
+    "w": 0.7036154094276904,
+    "x": 0.10773803641049547,
+    "y": 0.043672372756722665
+  },
+  {
+    "h": 0.5522712318353353,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691058131/original.jpg",
+    "w": 0.41420342387650166,
+    "x": 0.2567611980335808,
+    "y": 0.19700592072251308
+  },
+  {
+    "h": 0.3736996048228431,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691058671/original.jpg",
+    "w": 0.28027470361713225,
+    "x": 0.36515256583237177,
+    "y": 0.38871244024883306
+  },
+  {
+    "h": 0.3695316665009848,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691058091/original.jpg",
+    "w": 0.27714874987573873,
+    "x": 0.4078909038965702,
+    "y": 0.2383921437272913
+  },
+  {
+    "h": 0.3842054681039638,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691057880/original.jpg",
+    "w": 0.28815410107797296,
+    "x": 0.47484590024958845,
+    "y": 0.3602292471359813
+  },
+  {
+    "h": 0.10897133042348234,
+    "url": "https://static.inaturalist.org/photos/691155320/original.jpg",
+    "w": 0.19372680964174638,
+    "x": 0.4733298434305445,
+    "y": 0.4412787322191742
+  },
+  {
+    "h": 0.7564873424054449,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691153455/original.jpg",
+    "w": 0.6057808796606101,
+    "x": 0.3854863482885169,
+    "y": 0.13467546187763205
+  },
+  {
+    "h": 0.22534127525231634,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691153073/original.jpg",
+    "w": 0.16900595643923721,
+    "x": 0.41041023738229687,
+    "y": 0.35835067593209685
+  },
+  {
+    "h": 0.462379846949791,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691152939/original.jpg",
+    "w": 0.34678488521234335,
+    "x": 0.33905616988966997,
+    "y": 0.4441074078844622
+  },
+  {
+    "h": 0.20754093760844572,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691152996/original.jpg",
+    "w": 0.15565570320633426,
+    "x": 0.39940219338428284,
+    "y": 0.6823999985238934
+  },
+  {
+    "h": 0.5876552385443505,
+    "url": "https://static.inaturalist.org/photos/691151768/original.jpg",
+    "w": 0.39196145305253055,
+    "x": 0.3667278402175926,
+    "y": 0.30146255233791114
+  },
+  {
+    "h": 0.20512264086065474,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691149024/original.jpg",
+    "w": 0.1368151989334251,
+    "x": 0.570275410386322,
+    "y": 0.4579521553151316
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691160040/original.jpg",
+    "w": 0.9351063063687397,
+    "x": 0.0648936936312603,
+    "y": 0
+  },
+  {
+    "h": 0.8520888846000283,
+    "url": "https://static.inaturalist.org/photos/691160024/original.jpg",
+    "w": 0.47929999758751596,
+    "x": 0.2466314830877028,
+    "y": 0.048650527666716153
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691158527/original.jpg",
+    "w": 0.8350040054227233,
+    "x": 0.07060815192404542,
+    "y": 0
+  },
+  {
+    "h": 0.1805866263225272,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691157760/original.jpg",
+    "w": 0.2459051932902498,
+    "x": 0.3690007839748379,
+    "y": 0.3420371643857574
+  },
+  {
+    "h": 0.18537252433277895,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691157382/original.jpg",
+    "w": 0.24716336577703857,
+    "x": 0.3596798460041005,
+    "y": 0.32049473371181914
+  },
+  {
+    "h": 0.17054538871996877,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691157400/original.jpg",
+    "w": 0.22739385162662512,
+    "x": 0.3295809314251393,
+    "y": 0.4032556209052948
+  },
+  {
+    "h": 0.16237954102442176,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691157417/original.jpg",
+    "w": 0.21650605469922896,
+    "x": 0.37304978281286066,
+    "y": 0.4905605370649364
+  },
+  {
+    "h": 0.543092288564289,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691152400/original.jpg",
+    "w": 0.40731921642321683,
+    "x": 0.4072728747367687,
+    "y": 0.4317272639077178
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691165862/original.jpg",
+    "w": 0.6681644945477563,
+    "x": 0.0745470600674484,
+    "y": 0
+  },
+  {
+    "h": 0.32189170744062995,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691165838/original.jpg",
+    "w": 0.29800130727902097,
+    "x": 0.35646262274068996,
+    "y": 0.4944261535944194
+  },
+  {
+    "h": 0.07218334379817698,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691167707/original.jpg",
+    "w": 0.12832594453009244,
+    "x": 0.3791139668290698,
+    "y": 0.3568306781506796
+  },
+  {
+    "h": 0.13031921687604964,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691165932/original.jpg",
+    "w": 0.07330455949277787,
+    "x": 0.45470791386914083,
+    "y": 0.40308497749665406
+  },
+  {
+    "h": 0.5308177655036586,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691182667/original.jpg",
+    "w": 0.5867287737990947,
+    "x": 0.16795846917427798,
+    "y": 0.2941256297579769
+  },
+  {
+    "h": 0.15528314691482015,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691182890/original.jpg",
+    "w": 0.20704419588642675,
+    "x": 0.3831847818837605,
+    "y": 0.4514461067879252
+  },
+  {
+    "h": 0.06662158460109047,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691179563/original.jpg",
+    "w": 0.08882877946812057,
+    "x": 0.44514242278695276,
+    "y": 0.43457824067644524
+  },
+  {
+    "h": 0.1529103375629552,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691179628/original.jpg",
+    "w": 0.20388045008394018,
+    "x": 0.42000417139338164,
+    "y": 0.34797175002133757
+  },
+  {
+    "h": 0.3084557450565342,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691179113/original.jpg",
+    "w": 0.41127432674204556,
+    "x": 0.34305032627208765,
+    "y": 0.29471450340191013
+  },
+  {
+    "h": 0.0568616692570407,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691179046/original.jpg",
+    "w": 0.07581555900938758,
+    "x": 0.4824995800614645,
+    "y": 0.2228042318392466
+  },
+  {
+    "h": 0.07711712465050424,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691178663/original.jpg",
+    "w": 0.10282283286733895,
+    "x": 0.5061593096264694,
+    "y": 0.47342477687105733
+  },
+  {
+    "h": 0.2502424412556114,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691178479/original.jpg",
+    "w": 0.33365658834081513,
+    "x": 0.28050257656427946,
+    "y": 0.31203533321818183
+  },
+  {
+    "h": 0.29027206894015356,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691178300/original.jpg",
+    "w": 0.3870294252535382,
+    "x": 0.4110782376498258,
+    "y": 0.4057241448055642
+  },
+  {
+    "h": 0.7947274694374237,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691177726/original.jpg",
+    "w": 1,
+    "x": 0,
+    "y": 0.08723804438733254
+  },
+  {
+    "h": 0.18489909671394328,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691177651/original.jpg",
+    "w": 0.24653212895192445,
+    "x": 0.6394668110847218,
+    "y": 0.3923273486635573
+  },
+  {
+    "h": 0.4204235530458255,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691177683/original.jpg",
+    "w": 0.5605647373944339,
+    "x": 0.18092730220936204,
+    "y": 0.34701472143269657
+  },
+  {
+    "h": 0.8946173852566031,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691177347/original.jpg",
+    "w": 0.7270852335919753,
+    "x": 0.14992643968538347,
+    "y": 0.10538261474339694
+  },
+  {
+    "h": 0.3161214524507523,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691173142/original.jpg",
+    "w": 0.4214952699343364,
+    "x": 0.32498108784357704,
+    "y": 0.35242739647626875
+  },
+  {
+    "h": 0.3724040456947787,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691165874/original.jpg",
+    "w": 0.33094500154516476,
+    "x": 0.39027394835437995,
+    "y": 0.38842774369128763
+  },
+  {
+    "h": 0.6897362007854559,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691165821/original.jpg",
+    "w": 0.5637785156810806,
+    "x": 0.18215274870402778,
+    "y": 0.038048716295073975
+  },
+  {
+    "h": 0.7225790686588951,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691033948/original.jpg",
+    "w": 0.5419343014941714,
+    "x": 0.18920706132125675,
+    "y": 0.1590105771186665
+  },
+  {
+    "h": 0.8468521791284038,
+    "url": "https://static.inaturalist.org/photos/691165352/original.jpg",
+    "w": 0.6351391343463029,
+    "x": 0.09428844539516101,
+    "y": 0.10024339037922389
+  },
+  {
+    "h": 0.1489475936340785,
+    "url": "https://static.inaturalist.org/photos/546467743/original.jpg",
+    "w": 0.19859679151210463,
+    "x": 0.5268845966073077,
+    "y": 0.32518795439279075
+  },
+  {
+    "h": 0.8353857829813058,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/546097136/original.jpg",
+    "w": 0.8149906222639889,
+    "x": 0.06435307489730041,
+    "y": 0.04489692559540873
+  },
+  {
+    "h": 0.22507097870994064,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/544648103/original.jpg",
+    "w": 0.300094638279921,
+    "x": 0.28194849542342626,
+    "y": 0.31808900215660485
+  },
+  {
+    "h": 0.9570278680515996,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/544179792/original.jpg",
+    "w": 0.7229133678970032,
+    "x": 0.20322044903218756,
+    "y": 0
+  },
+  {
+    "h": 0.7391193284767608,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/543703007/original.jpg",
+    "w": 0.5543394963575705,
+    "x": 0.22753627402228335,
+    "y": 0.11186580590596056
+  },
+  {
+    "h": 0.887570050081091,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/528119815/original.jpg",
+    "w": 0.5003029176254903,
+    "x": 0.2262485348415393,
+    "y": 0.11242994991890898
+  },
+  {
+    "h": 0.7018505670360249,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/514968558/original.jpg",
+    "w": 0.5263879252770186,
+    "x": 0.4134884687674901,
+    "y": 0.16851083557880028
+  },
+  {
+    "h": 0.505297782148991,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/509675123/original.jpg",
+    "w": 0.33702967305445386,
+    "x": 0.38150176958310367,
+    "y": 0.1704447550506179
+  },
+  {
+    "h": 0.661636646482833,
+    "url": "https://static.inaturalist.org/photos/507370601/original.jpg",
+    "w": 0.4962274848621248,
+    "x": 0.34948231767408905,
+    "y": 0.2054447265426436
+  },
+  {
+    "h": 0.2706029324726861,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/500164140/original.jpeg",
+    "w": 0.4802381331924275,
+    "x": 0.26544274110853516,
+    "y": 0.17671265029967764
+  },
+  {
+    "h": 0.37957723895163825,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691277269/original.jpg",
+    "w": 0.3795772389516382,
+    "x": 0.2899177022287279,
+    "y": 0.23979149455238896
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691277244/original.jpg",
+    "w": 0.9863149307692921,
+    "x": 0.013685069230707891,
+    "y": 0
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691277248/original.jpg",
+    "w": 0.9232187730038889,
+    "x": 0.07678122699611112,
+    "y": 0
+  },
+  {
+    "h": 0.44956989937619085,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691277230/original.jpg",
+    "w": 0.4495698993761908,
+    "x": 0.38827226747902305,
+    "y": 0.12453856511067539
+  },
+  {
+    "h": 0.6848625838280369,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691276933/original.jpg",
+    "w": 0.6848625838280367,
+    "x": 0.30435013038001535,
+    "y": 0.21357503139245843
+  },
+  {
+    "h": 0.4857322579092514,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691268310/original.jpg",
+    "w": 0.48573225790925134,
+    "x": 0.3107067910996846,
+    "y": 0.24268910169353525
+  },
+  {
+    "h": 0.31407283070060693,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691268334/original.jpg",
+    "w": 0.31376611895187595,
+    "x": 0.3352578067974426,
+    "y": 0.2818174685747324
+  },
+  {
+    "h": 0.1586114517376102,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691251937/original.jpg",
+    "w": 0.10579259915701933,
+    "x": 0.46213686549784483,
+    "y": 0.3903863347954439
+  },
+  {
+    "h": 0.24326536517124253,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691250751/original.jpg",
+    "w": 0.16225609805855346,
+    "x": 0.46459626498614437,
+    "y": 0.4014183663313816
+  },
+  {
+    "h": 0.6053389316294375,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691250376/original.jpg",
+    "w": 0.4037563381864315,
+    "x": 0.3291180931412168,
+    "y": 0.16940174978526373
+  },
+  {
+    "h": 0.5517345400569744,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691250116/original.jpg",
+    "w": 0.36800262779190784,
+    "x": 0.2516137122602162,
+    "y": 0.2542512082407878
+  },
+  {
+    "h": 0.6615819554898551,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691249316/original.jpg",
+    "w": 0.44126999570270603,
+    "x": 0.3594057636893702,
+    "y": 0.23179575745788492
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691247367/original.jpg",
+    "w": 0.8230732840795094,
+    "x": 0.07892681347920619,
+    "y": 0
+  },
+  {
+    "h": 0.4180031962584927,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691246013/original.jpg",
+    "w": 0.42625040366130823,
+    "x": 0.2909798544170143,
+    "y": 0.282845144743357
+  },
+  {
+    "h": 0.5086700235144328,
+    "url": "https://static.inaturalist.org/photos/691238526/original.jpg",
+    "w": 0.6470535454394774,
+    "x": 0.07444390404189076,
+    "y": 0.29604518570424776
+  },
+  {
+    "h": 0.8325458559517501,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691237412/original.jpg",
+    "w": 0.5943271686530561,
+    "x": 0.20957323536191821,
+    "y": 0.07398705952478042
+  },
+  {
+    "h": 0.37810424995531616,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691233239/original.jpg",
+    "w": 0.2835781874664871,
+    "x": 0.38207962968832443,
+    "y": 0.3248335125823883
+  },
+  {
+    "h": 0.10514039854556095,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691225642/original.jpg",
+    "w": 0.07885529890917076,
+    "x": 0.4642669702321286,
+    "y": 0.4087318241650852
+  },
+  {
+    "h": 0.27326270033051087,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691213441/original.jpg",
+    "w": 0.204947025247883,
+    "x": 0.5255972152144415,
+    "y": 0.46096168041804325
+  },
+  {
+    "h": 0.30569905215547194,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691212957/original.jpg",
+    "w": 0.21582761588704813,
+    "x": 0.42300713434403114,
+    "y": 0.3660501648026558
+  },
+  {
+    "h": 0.5340416163594571,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691212258/original.jpg",
+    "w": 0.40053121226959276,
+    "x": 0.17701385146945095,
+    "y": 0.2128909742741316
+  },
+  {
+    "h": 0.9285434082249938,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691219988/original.jpg",
+    "w": 0.6966162716452766,
+    "x": 0.11075640453176513,
+    "y": 0.07145659177500616
+  },
+  {
+    "h": 0.9966124343780741,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691224130/original.jpg",
+    "w": 1,
+    "x": 0,
+    "y": 0.003387565621925881
+  },
+  {
+    "h": 0.471242018394027,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691223782/original.jpg",
+    "w": 0.6258778558177479,
+    "x": 0.20621539885419074,
+    "y": 0.27903598290355913
+  },
+  {
+    "h": 0.6398811681746258,
+    "url": "https://static.inaturalist.org/photos/691223183/original.jpg",
+    "w": 0.8454687951107314,
+    "x": 0.08549170618600298,
+    "y": 0.1788580130692621
+  },
+  {
+    "h": 0.39529728013348736,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691222582/original.jpg",
+    "w": 0.2635315200889916,
+    "x": 0.35628435099940814,
+    "y": 0.2837389362309431
+  },
+  {
+    "h": 0.12525651236007085,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691220347/original.jpg",
+    "w": 0.09394238427005297,
+    "x": 0.6083835511352428,
+    "y": 0.5007224406521402
+  },
+  {
+    "h": 0.4168194545830683,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691212519/original.jpg",
+    "w": 0.5557592727774243,
+    "x": 0.2432924743177595,
+    "y": 0.3886658055493349
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691209946/original.jpg",
+    "w": 0.8258350626611346,
+    "x": 0.13935784685996178,
+    "y": 0
+  },
+  {
+    "h": 0.41569209489515835,
+    "url": "https://static.inaturalist.org/photos/691209358/original.jpg",
+    "w": 0.5542561265268777,
+    "x": 0.133885949672188,
+    "y": 0.2862560730339968
+  },
+  {
+    "h": 0.3837949023944079,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691204517/original.jpg",
+    "w": 0.3837949023944079,
+    "x": 0.31834665039855575,
+    "y": 0.28149798130741016
+  },
+  {
+    "h": 0.4989440731199597,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691179135/original.jpg",
+    "w": 0.3327917987704418,
+    "x": 0.3337625087744341,
+    "y": 0.29210529250429906
+  },
+  {
+    "h": 0.7157650785118028,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691179133/original.jpg",
+    "w": 0.4774097154526966,
+    "x": 0.23531560386145897,
+    "y": 0.1604030015706522
+  },
+  {
+    "h": 0.6383489154086502,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691179130/original.jpg",
+    "w": 0.425773739476668,
+    "x": 0.264554835632361,
+    "y": 0.164358061589997
+  },
+  {
+    "h": 0.6703547490658621,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691178985/original.jpg",
+    "w": 0.44646673717081836,
+    "x": 0.2586443484539617,
+    "y": 0.16564176377273623
+  },
+  {
+    "h": 0.6809257881805653,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691178972/original.jpg",
+    "w": 0.45417218098371687,
+    "x": 0.25909468173661737,
+    "y": 0.2066469967744581
+  },
+  {
+    "h": 0.5258808661257279,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691178966/original.jpg",
+    "w": 0.3502448737282679,
+    "x": 0.30063063854897404,
+    "y": 0.25684358861712325
+  },
+  {
+    "h": 0.3054769926967627,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691178967/original.jpg",
+    "w": 0.20375076758973526,
+    "x": 0.3716233546664907,
+    "y": 0.33560600871307994
+  },
+  {
+    "h": 0.5692464531616513,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691202810/original.jpg",
+    "w": 0.42693483987123854,
+    "x": 0.28406099211679975,
+    "y": 0.1862310217583961
+  },
+  {
+    "h": 0.9978327263026002,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691202441/original.jpg",
+    "w": 1,
+    "x": 0,
+    "y": 0.002167273697399774
+  },
+  {
+    "h": 0.39948581112878456,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691283058/original.jpg",
+    "w": 0.2664539150399997,
+    "x": 0.3510684095519223,
+    "y": 0.34566892513685776
+  },
+  {
+    "h": 0.6480087292725307,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691277231/original.jpg",
+    "w": 0.6480087292725307,
+    "x": 0.2652351568496231,
+    "y": 0.08287470905394773
+  },
+  {
+    "h": 0.5226738517359953,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691277287/original.jpg",
+    "w": 0.5226738517359952,
+    "x": 0.4015137382419263,
+    "y": 0.4092850077985306
+  },
+  {
+    "h": 0.17389705080597562,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691276827/original.jpg",
+    "w": 0.23006534886992114,
+    "x": 0.4219404607123841,
+    "y": 0.4169516491687424
+  },
+  {
+    "h": 0.20683245660952,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691277392/original.jpg",
+    "w": 0.20683245660951988,
+    "x": 0.4420354674342005,
+    "y": 0.3078691098573406
+  },
+  {
+    "h": 0.24114840185331393,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691277390/original.jpg",
+    "w": 0.2741053501066002,
+    "x": 0.407264680387069,
+    "y": 0.3773876999002233
+  },
+  {
+    "h": 0.17538023737599762,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691277393/original.jpg",
+    "w": 0.232027600869537,
+    "x": 0.43112892177960427,
+    "y": 0.41594345084124906
+  },
+  {
+    "h": 0.13384596172576457,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691263907/original.jpg",
+    "w": 0.17776688042436195,
+    "x": 0.3541768943054161,
+    "y": 0.46820059307295436
+  },
+  {
+    "h": 0.1600033393833286,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691261842/original.jpg",
+    "w": 0.21250767772831197,
+    "x": 0.3938934263660306,
+    "y": 0.40479400009251837
+  },
+  {
+    "h": 0.17065048873066085,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691261095/original.jpg",
+    "w": 0.22664863872917856,
+    "x": 0.3513624355638589,
+    "y": 0.3092514656473496
+  },
+  {
+    "h": 0.648291763696561,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691258224/original.jpg",
+    "w": 0.8610256368680652,
+    "x": 0.04605982461612147,
+    "y": 0.1658739937015439
+  },
+  {
+    "h": 0.18405797601905488,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691255078/original.jpg",
+    "w": 0.1218665114657414,
+    "x": 0.4434028953566081,
+    "y": 0.42476076936472457
+  },
+  {
+    "h": 0.19848853780066744,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691254612/original.jpg",
+    "w": 0.13122728524516775,
+    "x": 0.4096761390510533,
+    "y": 0.40265741129897814
+  },
+  {
+    "h": 0.19483752593364684,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691254625/original.jpg",
+    "w": 0.1288134815010537,
+    "x": 0.42411374184502343,
+    "y": 0.4531682515994913
+  },
+  {
+    "h": 0.15609029776164934,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691254534/original.jpg",
+    "w": 0.1033488494945295,
+    "x": 0.4383014744388358,
+    "y": 0.4085867739370433
+  },
+  {
+    "h": 0.064794076758793,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691254517/original.jpg",
+    "w": 0.04283749020088162,
+    "x": 0.46586796125397484,
+    "y": 0.49469208551220356
+  },
+  {
+    "h": 0.5642291738463288,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691251110/original.jpg",
+    "w": 0.5179447494292471,
+    "x": 0.46557315841961566,
+    "y": 0.28411570067106046
+  },
+  {
+    "h": 0.9982177645964354,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691244551/original.jpg",
+    "w": 1,
+    "x": 0,
+    "y": 0
+  },
+  {
+    "h": 0.0808821045903989,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691242261/original.jpg",
+    "w": 0.10784280612053182,
+    "x": 0.48579922919656154,
+    "y": 0.5548961078243942
+  },
+  {
+    "h": 0.32482436045583524,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691233365/original.jpg",
+    "w": 0.24393548163138412,
+    "x": 0.3886607471893646,
+    "y": 0.367028080459524
+  },
+  {
+    "h": 0.7921043464194162,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691233345/original.jpg",
+    "w": 0.5940782598145622,
+    "x": 0.2852102276767009,
+    "y": 0.10511515495421651
+  },
+  {
+    "h": 0.28450675432240147,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691233342/original.jpg",
+    "w": 0.21310222711453308,
+    "x": 0.41476859870135296,
+    "y": 0.3464027227635893
+  },
+  {
+    "h": 0.46921244363190084,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691437118/original.jpg",
+    "w": 0.9974203415826244,
+    "x": 0,
+    "y": 0.22666690776768428
+  },
+  {
+    "h": 0.28562394385276296,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691436950/original.jpg",
+    "w": 0.38083192513701714,
+    "x": 0.1697688783252841,
+    "y": 0.3033304722386558
+  },
+  {
+    "h": 0.4454440811631707,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691436774/original.jpg",
+    "w": 0.5939254415508942,
+    "x": 0.20822283954657458,
+    "y": 0.23553993917512497
+  },
+  {
+    "h": 0.6972052489336309,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691436412/original.jpg",
+    "w": 0.5229039367002231,
+    "x": 0.1552513588969493,
+    "y": 0.08134262931881667
+  },
+  {
+    "h": 0.24236279305920755,
+    "url": "https://static.inaturalist.org/photos/691425955/original.jpg",
+    "w": 0.4308671876608133,
+    "x": 0.2701706104409977,
+    "y": 0.42085615817961214
+  },
+  {
+    "h": 0.5220422039674948,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691425077/original.jpg",
+    "w": 0.39153165297562115,
+    "x": 0.2737424023959108,
+    "y": 0.22835463538300255
+  },
+  {
+    "h": 0.7065222006671388,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691425129/original.jpg",
+    "w": 0.529891650500354,
+    "x": 0.17785972574910636,
+    "y": 0.01914506146290887
+  },
+  {
+    "h": 0.45517952859335387,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691424972/original.jpg",
+    "w": 0.3413846464450153,
+    "x": 0.20821544132332678,
+    "y": 0.28940783066037656
+  },
+  {
+    "h": 0.33059829777703376,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691424895/original.jpg",
+    "w": 0.2479487233327753,
+    "x": 0.39842839441079647,
+    "y": 0.19244743988000915
+  },
+  {
+    "h": 0.3648293308304881,
+    "url": "https://static.inaturalist.org/photos/691415186/original.jpg",
+    "w": 0.4793137045015703,
+    "x": 0.5206862954984297,
+    "y": 0.17058327353195427
+  },
+  {
+    "h": 0.3384927689615223,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691414860/original.jpg",
+    "w": 0.25386957672114163,
+    "x": 0.43191509588233423,
+    "y": 0.25184671708960565
+  },
+  {
+    "h": 0.09565340531722807,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691404080/original.jpg",
+    "w": 0.1275378737563041,
+    "x": 0.3629274500201287,
+    "y": 0.14744343249930267
+  },
+  {
+    "h": 0.19321358648924913,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691392481/original.jpg",
+    "w": 0.2576181153189989,
+    "x": 0.3303583885228286,
+    "y": 0.26502968603653976
+  },
+  {
+    "h": 0.17775573110127757,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691384516/original.jpg",
+    "w": 0.1182145047655957,
+    "x": 0.5147976386732251,
+    "y": 0.4836995826181895
+  },
+  {
+    "h": 0.4929046901105417,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691380082/original.jpg",
+    "w": 0.6572062534807221,
+    "x": 0.2726336849168536,
+    "y": 0.27465925829757165
+  },
+  {
+    "h": 0.1806231304744444,
+    "url": "https://static.inaturalist.org/photos/691377257/original.jpg",
+    "w": 0.16448677011505608,
+    "x": 0.40077634433414355,
+    "y": 0.3957437199137586
+  },
+  {
+    "h": 0.07507476742811964,
+    "url": "https://static.inaturalist.org/photos/691442594/original.jpg",
+    "w": 0.05007428335293529,
+    "x": 0.41669654242891513,
+    "y": 0.421251922609423
+  },
+  {
+    "h": 0.10081976824877609,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691456509/original.jpg",
+    "w": 0.17923514355337983,
+    "x": 0.2780376172774601,
+    "y": 0.4622614200721648
+  },
+  {
+    "h": 0.1481119842486357,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691456661/original.jpg",
+    "w": 0.2633101942197966,
+    "x": 0.5357301265737484,
+    "y": 0.3416321206946631
+  },
+  {
+    "h": 0.152220747460024,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691455982/original.jpg",
+    "w": 0.2029609966133652,
+    "x": 0.3388140647137543,
+    "y": 0.42934614739443755
+  },
+  {
+    "h": 0.13235351419747365,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691455190/original.jpg",
+    "w": 0.09926513564810527,
+    "x": 0.11173307201781313,
+    "y": 0.3422019608391628
+  },
+  {
+    "h": 0.28160971819706176,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691454573/original.jpg",
+    "w": 0.6122470306449922,
+    "x": 0.05502127462264898,
+    "y": 0.4248947235933012
+  },
+  {
+    "h": 0.7283075270648883,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691454337/original.jpg",
+    "w": 0.5462306452986663,
+    "x": 0.148868278951649,
+    "y": 0.17300525809236722
+  },
+  {
+    "h": 0.28459887845345394,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691454285/original.jpg",
+    "w": 0.3794651712712719,
+    "x": 0.10334257624261803,
+    "y": 0.28931967031314904
+  },
+  {
+    "h": 0.20726569805380146,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691453559/original.jpg",
+    "w": 0.4506158700787531,
+    "x": 0.43560856756811733,
+    "y": 0.3424798152695956
+  },
+  {
+    "h": 0.3244147311587734,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691453453/original.jpg",
+    "w": 0.4325529748783644,
+    "x": 0.24558317867792223,
+    "y": 0.31632632885200773
+  },
+  {
+    "h": 0.21773431808432675,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691453347/original.jpg",
+    "w": 0.29031242411243574,
+    "x": 0.3741773019316458,
+    "y": 0.5045827180543531
+  },
+  {
+    "h": 0.22929800360710184,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691453073/original.jpg",
+    "w": 0.49851625412669287,
+    "x": 0.2244171829293481,
+    "y": 0.4567120372016029
+  },
+  {
+    "h": 0.0858147231080219,
+    "url": "https://static.inaturalist.org/photos/691453619/original.jpg",
+    "w": 0.11441963081069584,
+    "x": 0.42590292963870025,
+    "y": 0.3693784049675536
+  },
+  {
+    "h": 0.3510269705161489,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691452843/original.jpg",
+    "w": 0.7631669167909482,
+    "x": 0.10264999719366277,
+    "y": 0.34752604442451535
+  },
+  {
+    "h": 0.7301341181618128,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691452611/original.jpg",
+    "w": 0.8613563790296042,
+    "x": 0.08232874572168529,
+    "y": 0.19639066236826141
+  },
+  {
+    "h": 0.2658401498643524,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691452150/original.jpg",
+    "w": 0.5779624489619892,
+    "x": 0.19284872525371527,
+    "y": 0.291651590304224
+  },
+  {
+    "h": 0.27730758870892797,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691448783/original.jpg",
+    "w": 0.4929912688158721,
+    "x": 0.1729690803385674,
+    "y": 0.3733920606262066
+  },
+  {
+    "h": 0.2026620177045027,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691448252/original.jpg",
+    "w": 0.4406070193830376,
+    "x": 0.136981632058133,
+    "y": 0.41908924253472674
+  },
+  {
+    "h": 0.2867423037442739,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691445907/original.jpg",
+    "w": 0.3823230716590318,
+    "x": 0.47741515090933606,
+    "y": 0.2433515750575923
+  },
+  {
+    "h": 0.20012530733352624,
+    "url": "https://static.inaturalist.org/photos/691444102/original.jpg",
+    "w": 0.13348201651249847,
+    "x": 0.492954681924316,
+    "y": 0.33858832385153864
+  },
+  {
+    "h": 0.4602487593545046,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691470440/original.jpg",
+    "w": 0.6136650124726729,
+    "x": 0.17996376994606134,
+    "y": 0.24772923362214516
+  },
+  {
+    "h": 0.14467852038208295,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691470201/original.jpg",
+    "w": 0.1929046938427772,
+    "x": 0.4598068590778128,
+    "y": 0.419029218876117
+  },
+  {
+    "h": 0.9018857241140652,
+    "url": "https://static.inaturalist.org/photos/691469966/original.jpg",
+    "w": 0.6764142930855489,
+    "x": 0.054116375627315354,
+    "y": 0.06840896655292125
+  },
+  {
+    "h": 0.036893354617221985,
+    "url": "https://static.inaturalist.org/photos/691469297/original.jpg",
+    "w": 0.049191139489629276,
+    "x": 0.45777531703518404,
+    "y": 0.3131172113832276
+  },
+  {
+    "h": 0.24576193829328297,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691468230/original.jpg",
+    "w": 0.18432145371996225,
+    "x": 0.11547330021554478,
+    "y": 0.29726729088687354
+  },
+  {
+    "h": 0.15706759622135685,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691465424/original.jpg",
+    "w": 0.20942346162847567,
+    "x": 0.1081897358382117,
+    "y": 0.3511909465499557
+  },
+  {
+    "h": 0.22804375068965616,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691465286/original.jpg",
+    "w": 0.3040583342528749,
+    "x": 0.28566583289682457,
+    "y": 0.2621422408794256
+  },
+  {
+    "h": 0.3881162759846149,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691465283/original.jpg",
+    "w": 0.5174883679794866,
+    "x": 0.07884670513801985,
+    "y": 0.07328347075858642
+  },
+  {
+    "h": 0.3708563265853945,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691459483/original.jpg",
+    "w": 0.4944751021138595,
+    "x": 0.1813450054196456,
+    "y": 0.3331291941372256
+  },
+  {
+    "h": 0.27926896168060994,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691454784/original.jpg",
+    "w": 0.6071579973693091,
+    "x": 0.1169884773145866,
+    "y": 0.44947521922300254
+  },
+  {
+    "h": 0.20513611351635047,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691474329/original.jpg",
+    "w": 0.20513611351635053,
+    "x": 0.4144096267857389,
+    "y": 0.4901817109010806
+  },
+  {
+    "h": 0.19099240615942686,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691473673/original.jpg",
+    "w": 0.1909924061594268,
+    "x": 0.40049912920394015,
+    "y": 0.4046960202405287
+  },
+  {
+    "h": 0.1763698689986707,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691473707/original.jpg",
+    "w": 0.1763698689986707,
+    "x": 0.40685676640302304,
+    "y": 0.4473942418183565
+  },
+  {
+    "h": 1,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691468276/original.jpg",
+    "w": 0.8854098819350962,
+    "x": 0,
+    "y": 0
+  },
+  {
+    "h": 0.445768371957894,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691474765/original.jpg",
+    "w": 0.47598207808642695,
+    "x": 0.2665302578273188,
+    "y": 0.2625767721179427
+  },
+  {
+    "h": 0.7899464129958695,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691474801/original.jpg",
+    "w": 0.7182032329093309,
+    "x": 0.19176597475374418,
+    "y": 0.15512392964620128
+  },
+  {
+    "h": 0.4294226109882872,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691209131/original.jpg",
+    "w": 0.2520202938081355,
+    "x": 0.5393717023204657,
+    "y": 0
+  },
+  {
+    "h": 0.12651147559713705,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691096958/original.jpg",
+    "w": 0.07116270502338962,
+    "x": 0.5113645838941192,
+    "y": 0.211703291544176
+  },
+  {
+    "h": 0.14865416710692378,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691097006/original.jpg",
+    "w": 0.08361796899764451,
+    "x": 0.50218807530164,
+    "y": 0.1881628735286104
+  },
+  {
+    "h": 0.2804486987420816,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691089940/original.jpg",
+    "w": 0.1577523930424209,
+    "x": 0.43076050109314573,
+    "y": 0.3409150494059085
+  },
+  {
+    "h": 0.16845733950390152,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691085687/original.jpg",
+    "w": 0.09737018758886884,
+    "x": 0.5908770415225281,
+    "y": 0.8315426604960985
+  },
+  {
+    "h": 0.2440508862944507,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691085181/original.jpg",
+    "w": 0.13727862354062847,
+    "x": 0.528244853674394,
+    "y": 0.3721959435480058
+  },
+  {
+    "h": 0.04722656266368114,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691477017/original.jpg",
+    "w": 0.06296875021824161,
+    "x": 0.3277239416594517,
+    "y": 0.3068252235073323
+  },
+  {
+    "h": 0.5471894169053858,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691476987/original.jpg",
+    "w": 0.431766649276906,
+    "x": 0.2971356575219932,
+    "y": 0.2613242862408828
+  },
+  {
+    "h": 0.675504449950997,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691476019/original.jpg",
+    "w": 0.6755044499509969,
+    "x": 0.14208379481331698,
+    "y": 0.18177939961833972
+  },
+  {
+    "h": 0.2723734790061886,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691475278/original.jpg",
+    "w": 0.23099573780973987,
+    "x": 0.4682946684336254,
+    "y": 0.4318273163619488
+  },
+  {
+    "h": 0.3189061646432036,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691479287/original.jpg",
+    "w": 0.4252082195242714,
+    "x": 0.010799486760448732,
+    "y": 0.4228554294711803
+  },
+  {
+    "h": 0.2807731513577671,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691479362/original.jpg",
+    "w": 0.37436420181035607,
+    "x": 0.06671196043736892,
+    "y": 0.23114006653029
+  },
+  {
+    "h": 0.4773287660150695,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691506169/original.jpg",
+    "w": 0.47732876601506946,
+    "x": 0.19147491901221114,
+    "y": 0.26408270456890187
+  },
+  {
+    "h": 0.47487656939349837,
+    "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/691506169/large.jpg",
+    "w": 0.4748765693934983,
+    "x": 0.19950474193171097,
+    "y": 0.2557960374393497
   }
 ]
