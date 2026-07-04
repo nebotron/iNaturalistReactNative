@@ -13,8 +13,9 @@ interface ImageCropperModule {
 
 const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
-// Returns average perceptual luminance in [0, 1] within the given crop region,
-// or null on failure.  Pass crop=null to measure the full image.
+// Returns the 10th-percentile perceptual luminance ("shadow depth") in [0, 1]
+// within the given crop region, or null on failure. Pass crop=null to
+// measure the full image.
 const measureImageBrightness = async (
   imageUri: string,
   crop: NormalizedCrop | null = null,

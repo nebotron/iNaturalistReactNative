@@ -5,13 +5,21 @@ import ensureLocalImageForCrop from "./ensureLocalImageForCrop";
 import measureImageBrightness from "./measureImageBrightness";
 import type { NormalizedCrop } from "./normalizedCropTypes";
 
-// Images with luminance within this fraction of the target need no adjustment.
-const TARGET_LUMINANCE = 0.45;
-const TOLERANCE_FACTOR = 0.15;
+// Log-linear fit of brightness multiplier ~ shadow-percentile (10th
+// percentile luminance) of the detected subject crop, against 21 human
+// picked "ideal brightness" labels from brightness_log_raw.json — see
+// scripts/explore_brightness_crop_models.py. Darker subject shadows predict
+// a stronger brightening choice (LOOCV MAE 0.573 vs 0.641 for a naive
+// constant guess — the best of ~20 candidate models tried).
+const SHADOW_ADJUSTMENT_SLOPE = -1.463;
+const SHADOW_ADJUSTMENT_INTERCEPT = 0.804;
 
+// luminance here is the 10th-percentile luminance ("shadow depth") of the
+// subject crop, as measured natively by measureImageBrightness.
 const computeAdjustment = ( luminance: number ): number => {
-  const adjustment = TARGET_LUMINANCE / luminance;
-  if ( Math.abs( adjustment - 1.0 ) < TOLERANCE_FACTOR ) return 1.0;
+  const adjustment = Math.exp(
+    SHADOW_ADJUSTMENT_SLOPE * luminance + SHADOW_ADJUSTMENT_INTERCEPT
+  );
   return Math.max( 0.4, Math.min( 3.0, adjustment ) );
 };
 
