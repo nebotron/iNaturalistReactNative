@@ -164,13 +164,19 @@ const AddressInput = ( {
   );
 };
 
-type Props = TabStackScreenProps<"WildlifeHotspots">;
+type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
+  // When embedded inline as an Explore view (rather than navigated to as its
+  // own screen), the filter params are passed directly and the screen skips
+  // its own safe-area wrapper since the host already provides one.
+  embedded?: boolean;
+  filterParams?: Record<string, unknown>;
+};
 
-const WildlifeHotspotsScreen = ( { route }: Props ) => {
+const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsProp }: Props ) => {
   const { t } = useTranslation();
   const navigation = useNavigation();
   const mapRef = useRef<MapView>( null );
-  const filterParams = route?.params?.filterParams ?? {};
+  const filterParams = filterParamsProp ?? route?.params?.filterParams ?? {};
 
   const [stops, setStops] = useState<Stop[]>( [
     { id: makeStopId(), text: "", point: null },
@@ -402,8 +408,8 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops] );
 
-  return (
-    <ViewWrapper testID="WildlifeHotspotsScreen">
+  const content = (
+    <>
       {/* Stop inputs */}
       <View className="bg-white px-3 py-2 border-b border-lightGray" style={{ zIndex: 10 }}>
         <DraggableFlatList
@@ -551,6 +557,20 @@ const WildlifeHotspotsScreen = ( { route }: Props ) => {
             )}
         </View>
       )}
+    </>
+  );
+
+  if ( embedded ) {
+    return (
+      <View className="flex-1" testID="WildlifeHotspotsScreen">
+        {content}
+      </View>
+    );
+  }
+
+  return (
+    <ViewWrapper testID="WildlifeHotspotsScreen">
+      {content}
     </ViewWrapper>
   );
 };

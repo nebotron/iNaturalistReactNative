@@ -249,6 +249,8 @@ Closes-explanation = Closes explanation
 Closes-introduction = Closes introduction
 # Accessibility hint for button that closes the help that
 Closes-withdraw-id-sheet = Closes "Withdraw ID" sheet
+# Description of the hotspots explore view shown in the view picker sheet
+Clusters-of-observations-along-a-route = Clusters of observations along a route you plan
 # Heading for a section that describes people and organizations that
 # collaborate with iNaturalist
 COLLABORATORS = COLLABORATORS
@@ -551,6 +553,7 @@ Experts-help-verify-and-improve-IDs = Experts help verify and improve IDs
 Explore = Explore
 EXPLORE = EXPLORE
 Explore-Filters = Explore Filters
+EXPLORE-HOTSPOTS = EXPLORE HOTSPOTS
 EXPLORE-IDENTIFIERS = EXPLORE IDENTIFIERS
 EXPLORE-OBSERVATIONS = EXPLORE OBSERVATIONS
 EXPLORE-OBSERVERS = EXPLORE OBSERVERS
@@ -616,6 +619,9 @@ Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
 # Label used for a stop added to a route from a wildlife hotspot
 Hotspot = Hotspot
+Hotspots = Hotspots
+# Accessibility label for the wildlife hotspots explore view
+Hotspots-View = Hotspots View
 I-agree-to-the-Terms-of-Use = <0>I agree to the Terms of Use and Privacy Policy, and I have reviewed the Community Guidelines (</0><1>required</1><0>).</0>
 Iconic-taxon-name = Iconic taxon name: { $iconicTaxon }
 ID-in-Camera = ID in Camera

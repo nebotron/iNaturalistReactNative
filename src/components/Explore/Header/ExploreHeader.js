@@ -12,14 +12,12 @@ import {
   INatIconButton,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
-import { useNavigation } from "@react-navigation/native";
 import { useExplore } from "providers/ExploreContext";
 import type { Node } from "react";
 import React, { useState } from "react";
 import { Surface } from "react-native-paper";
-import { useCurrentUser, useTranslation } from "sharedHooks";
+import { useTranslation } from "sharedHooks";
 
-import mapParamsToAPI from "../helpers/mapParamsToAPI";
 import colors from "styles/tailwindColors";
 
 import placeGuessText from "../helpers/placeGuessText";
@@ -55,8 +53,6 @@ const Header = ( {
   updateTaxonFilters,
 }: Props ): Node => {
   const { t } = useTranslation( );
-  const navigation = useNavigation( );
-  const currentUser = useCurrentUser( );
   const { state, numberOfFilters } = useExplore( );
   const { taxonFilters } = state;
   const iconicTaxonNames = state.iconic_taxa || [];
@@ -163,16 +159,6 @@ const Header = ( {
             </View>
           </View>
           <View className="flex-row items-center">
-            <INatIconButton
-              icon="location"
-              color={colors.white}
-              className="bg-darkGray rounded-md mr-2"
-              onPress={() => navigation.navigate( "WildlifeHotspots", {
-                filterParams: mapParamsToAPI( state, currentUser ),
-              } )}
-              accessibilityLabel={t( "Wildlife-Hotspots" )}
-              accessibilityHint={t( "Opens-route-hotspots" )}
-            />
             <View>
               <INatIconButton
                 icon="sliders"

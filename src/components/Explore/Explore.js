@@ -12,6 +12,7 @@ import {
   ViewWrapper,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
+import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
 import { PLACE_MODE } from "providers/ExploreContext";
 import type { Node } from "react";
 import React, { useState } from "react";
@@ -39,6 +40,7 @@ const exploreViewIcon = {
   species: "leaf",
   observers: "observers",
   identifiers: "identifiers",
+  hotspots: "location",
 };
 
 type Props = {
@@ -99,6 +101,7 @@ const Explore = ( {
     species: t( "Species-View" ),
     observers: t( "Observers-View" ),
     identifiers: t( "Identifiers-View" ),
+    hotspots: t( "Hotspots-View" ),
   };
 
   const icon = exploreViewIcon[currentExploreView];
@@ -184,6 +187,12 @@ const Explore = ( {
             handleUpdateCount={handleUpdateCount}
           />
         )}
+        {currentExploreView === "hotspots" && (
+          <WildlifeHotspotsScreen
+            embedded
+            filterParams={queryParams}
+          />
+        )}
       </View>
     );
   };
@@ -220,6 +229,13 @@ const Explore = ( {
         label: t( "Identifiers" ),
         text: t( "iNaturalist-users-who-have-left-an-identification" ),
         value: "identifiers",
+      },
+      hotspots: {
+        buttonText: t( "EXPLORE-HOTSPOTS" ),
+        icon: "location",
+        label: t( "Hotspots" ),
+        text: t( "Clusters-of-observations-along-a-route" ),
+        value: "hotspots",
       },
     };
 
