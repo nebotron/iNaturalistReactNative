@@ -14,6 +14,7 @@ type Props = {
   directAgree?: boolean,
   openAgreeWithIdSheet?: ( taxon: Object ) => void,
   containerClassName?: string,
+  suggestedTaxon?: Object,
 }
 
 const ObsImageActionButtons = ( {
@@ -23,6 +24,7 @@ const ObsImageActionButtons = ( {
   directAgree = false,
   openAgreeWithIdSheet,
   containerClassName = "absolute bottom-2 right-2 z-10 flex-col items-end gap-9",
+  suggestedTaxon,
 }: Props ): Node => {
   if ( !currentUser || !observation ) {
     return null;
@@ -52,6 +54,7 @@ const ObsImageActionButtons = ( {
         afterAgree={afterAction}
         directAgree={directAgree}
         openAgreeWithIdSheet={openAgreeWithIdSheet}
+        suggestedTaxon={suggestedTaxon}
         stacked
       />
     </View>

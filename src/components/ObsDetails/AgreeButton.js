@@ -54,6 +54,7 @@ type Props = {
   directAgree?: boolean,
   positionClassName?: string,
   stacked?: boolean,
+  suggestedTaxon?: Object,
 }
 
 const AgreeButton = ( {
@@ -64,9 +65,12 @@ const AgreeButton = ( {
   directAgree = false,
   positionClassName,
   stacked = false,
+  suggestedTaxon,
 }: Props ): Node => {
   const { t } = useTranslation( );
-  const taxon = observation?.taxon;
+  // If the community taxon is genus or broader, agree with the suggested
+  // species-level CV taxon instead
+  const taxon = suggestedTaxon || observation?.taxon;
 
   const userAgreedToId = useMemo(
     ( ) => findRecentUserAgreedToID( observation, currentUser?.id ),

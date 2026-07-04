@@ -8,6 +8,7 @@ import type { Node } from "react";
 import React, { useMemo } from "react";
 import Photo from "realmModels/Photo";
 
+import useTopSpeciesSuggestion from "./hooks/useTopSpeciesSuggestion";
 import ObsImagePreview from "./ObsImagePreview";
 import ObsUploadStatus from "./ObsUploadStatus";
 import {
@@ -51,6 +52,8 @@ const ObsGridItem = ( {
   const showExploreImageActions = explore
     && currentUser;
   const isOwnObs = !!currentUser && observation?.user?.login === currentUser?.login;
+  const topSpeciesSuggestion = useTopSpeciesSuggestion( observation, explore );
+  const displayTaxon = topSpeciesSuggestion || observation?.taxon;
   const displayTaxonName = useMemo( ( ) => (
     <DisplayTaxonName
       bottomTextComponent={Body2}
@@ -61,12 +64,12 @@ const ObsGridItem = ( {
       prefersCommonNames={currentUser?.prefers_common_names}
       scientificNameFirst={currentUser?.prefers_scientific_name_first}
       showOneNameOnly
-      taxon={observation?.taxon}
+      taxon={displayTaxon}
     />
   ), [
     currentUser?.prefers_common_names,
     currentUser?.prefers_scientific_name_first,
-    observation?.taxon,
+    displayTaxon,
     observation?.uuid,
   ] );
 
@@ -106,6 +109,7 @@ const ObsGridItem = ( {
           currentUser={currentUser}
           afterAction={onExploreObservationAction}
           directAgree
+          suggestedTaxon={topSpeciesSuggestion}
         />
       )}
       {!explore && currentUser && (
