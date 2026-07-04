@@ -321,15 +321,17 @@ export function useRouteHotspots() {
         const { coords: routePoints, durationSec: directDurationSec } = await fetchOSRMRoute( stops );
         setRouteCoords( routePoints );
 
-        // 2. Single iNaturalist call for the whole route bounding box
+        // 2. iNaturalist calls for the whole route bounding box (API caps per_page at 200,
+        // so fetch 2 pages to get up to 400 observations)
         const bbox = routeBbox( routePoints );
         const locationFilters = ["swlat", "swlng", "nelat", "nelng", "lat", "lng", "radius", "place_id"];
         const nonLocationParams = Object.fromEntries(
           Object.entries( filterParams ).filter( ([key] ) => !locationFilters.includes( key ) ),
         );
-        const response = await searchObservations( {
+        const fetchPage = ( page: number ) => searchObservations( {
           ...bbox,
-          per_page: 400,
+          per_page: 200,
+          page,
           verifiable: true,
           order_by: "id",
           fields: {
@@ -344,10 +346,11 @@ export function useRouteHotspots() {
           },
           ...nonLocationParams,
         } );
+        const [page1, page2] = await Promise.all( [fetchPage( 1 ), fetchPage( 2 )] );
 
-        const observations = response?.results ?? [];
+        const observations = [...( page1?.results ?? [] ), ...( page2?.results ?? [] )];
 
-        // 3. Cluster observations with k-means (≤3 km diameter per cluster)
+        // 3. Cluster observations with k-means (≤2 km diameter per cluster)
         const cells = clusterByKMeans( observations );
 
         // 4. Filter to cells within MAX_ROUTE_DISTANCE_KM, take top candidates by obs count
