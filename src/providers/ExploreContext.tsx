@@ -11,6 +11,7 @@ import type { ExploreUserFilter } from "components/Explore/helpers/userFilters";
 import {
   migrateUserFilters,
   normalizeUserFilters,
+  toExploreUserFilterUser,
 } from "components/Explore/helpers/userFilters";
 import isEqual from "lodash/isEqual";
 import * as React from "react";
@@ -577,28 +578,36 @@ function exploreReducer( state: State, action: Action ) {
         excludeUser: firstExclude,
       };
     }
-    case EXPLORE_ACTION.SET_USER:
+    case EXPLORE_ACTION.SET_USER: {
+      const normalizedUser = action.user
+        ? toExploreUserFilterUser( action.user as ExploreUserFilter["user"] )
+        : null;
       return {
         ...state,
         ...action.storedState,
-        user: action.user,
+        user: normalizedUser,
         user_id: action.userId,
         excludeUser: null,
-        userFilters: action.user
-          ? [{ user: action.user as ExploreUserFilter["user"], exclude: false }]
+        userFilters: normalizedUser
+          ? [{ user: normalizedUser, exclude: false }]
           : [],
       };
-    case EXPLORE_ACTION.EXCLUDE_USER:
+    }
+    case EXPLORE_ACTION.EXCLUDE_USER: {
+      const normalizedExcludeUser = action.excludeUser
+        ? toExploreUserFilterUser( action.excludeUser as ExploreUserFilter["user"] )
+        : null;
       return {
         ...state,
         ...action.storedState,
-        excludeUser: action.excludeUser,
+        excludeUser: normalizedExcludeUser,
         user: null,
         user_id: null,
-        userFilters: action.excludeUser
-          ? [{ user: action.excludeUser as ExploreUserFilter["user"], exclude: true }]
+        userFilters: normalizedExcludeUser
+          ? [{ user: normalizedExcludeUser, exclude: true }]
           : [],
       };
+    }
     case EXPLORE_ACTION.SET_PROJECT:
       return {
         ...state,
