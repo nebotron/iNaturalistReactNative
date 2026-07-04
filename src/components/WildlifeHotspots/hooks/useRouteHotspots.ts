@@ -31,10 +31,8 @@ export interface Hotspot {
 
 const EARTH_RADIUS_KM = 6371;
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
-// Max radius for each k-means cluster (3 km diameter)
-const MAX_CLUSTER_RADIUS_KM = 1.5;
-// Hotspots must be within this distance of the route to be shown
-const MAX_ROUTE_DISTANCE_KM = 25;
+// Max radius for each k-means cluster (2 km diameter)
+const MAX_CLUSTER_RADIUS_KM = 1;
 // Evaluate detour times for this many top-by-obs candidates
 const MAX_DETOUR_CANDIDATES = 30;
 
@@ -48,33 +46,6 @@ function haversineKm( lat1: number, lon1: number, lat2: number, lon2: number ): 
   const a = Math.sin( dLat / 2 ) ** 2
     + Math.cos( toRad( lat1 ) ) * Math.cos( toRad( lat2 ) ) * Math.sin( dLon / 2 ) ** 2;
   return 2 * EARTH_RADIUS_KM * Math.asin( Math.sqrt( a ) );
-}
-
-// Minimum distance from a point to a polyline (sequence of segments)
-function distanceToPolylineKm( pt: RoutePoint, polyline: RoutePoint[] ): number {
-  let minDist = Infinity;
-  for ( let i = 0; i < polyline.length - 1; i++ ) {
-    const a = polyline[i];
-    const b = polyline[i + 1];
-    const dx = b.longitude - a.longitude;
-    const dy = b.latitude - a.latitude;
-    const len2 = dx * dx + dy * dy;
-    let nearLat: number;
-    let nearLng: number;
-    if ( len2 === 0 ) {
-      nearLat = a.latitude;
-      nearLng = a.longitude;
-    } else {
-      const t = Math.max( 0, Math.min( 1,
-        ( ( pt.longitude - a.longitude ) * dx + ( pt.latitude - a.latitude ) * dy ) / len2,
-      ) );
-      nearLat = a.latitude + t * dy;
-      nearLng = a.longitude + t * dx;
-    }
-    const d = haversineKm( pt.latitude, pt.longitude, nearLat, nearLng );
-    if ( d < minDist ) minDist = d;
-  }
-  return minDist;
 }
 
 export async function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<{
@@ -358,7 +329,7 @@ export function useRouteHotspots() {
         );
         const response = await searchObservations( {
           ...bbox,
-          per_page: 200,
+          per_page: 400,
           verifiable: true,
           order_by: "id",
           fields: {
@@ -390,12 +361,6 @@ export function useRouteHotspots() {
         }> = [];
 
         cells.forEach( ( cell, key ) => {
-          const dist = distanceToPolylineKm(
-            { latitude: cell.centerLat, longitude: cell.centerLng },
-            routePoints,
-          );
-          if ( dist > MAX_ROUTE_DISTANCE_KM ) return;
-
           const topSpecies = [...cell.taxa.values()]
             .sort( ( a, b ) => b.count - a.count )
             .slice( 0, 5 );
