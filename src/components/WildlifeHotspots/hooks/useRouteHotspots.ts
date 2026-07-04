@@ -326,7 +326,10 @@ export function useRouteHotspots() {
         // 2. iNaturalist calls for the whole route bounding box (API caps per_page at 200,
         // so fetch 2 pages to get up to 400 observations)
         const bbox = routeBbox( routePoints );
-        const locationFilters = ["swlat", "swlng", "nelat", "nelng", "lat", "lng", "radius", "place_id"];
+        const locationFilters = [
+          "swlat", "swlng", "nelat", "nelng", "lat", "lng", "radius", "place_id",
+          "per_page", "page",
+        ];
         const nonLocationParams = Object.fromEntries(
           Object.entries( filterParams ).filter( ([key] ) => !locationFilters.includes( key ) ),
         );

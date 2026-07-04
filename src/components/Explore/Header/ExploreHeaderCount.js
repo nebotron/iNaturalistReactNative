@@ -38,13 +38,16 @@ const ExploreHeaderCount = ( {
     if ( exploreView === "identifiers" ) {
       return t( "X-Identifiers", { count } );
     }
+    if ( exploreView === "hotspots" ) {
+      return t( "Hotspots" );
+    }
     return t( "X-Observers", { count } );
   };
 
   const renderHeader = ( ) => {
     if ( isFetching ) {
       return <ActivityIndicator size={25} />;
-    } if ( count !== null ) {
+    } if ( count !== null || exploreView === "hotspots" ) {
       return (
         <>
           <INatIcon
