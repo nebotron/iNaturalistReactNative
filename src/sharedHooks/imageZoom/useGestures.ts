@@ -480,8 +480,29 @@ export const useGestures = ( {
       // centroid, so both zoom and two-finger pan follow the fingers.
       const totalNewX = currentFocalX - ratio * ( startFocalX - total0X );
       const totalNewY = currentFocalY - ratio * ( startFocalY - total0Y );
-      focal.x.value = totalNewX - savedTranslate.x.value;
-      focal.y.value = totalNewY - savedTranslate.y.value;
+
+      if ( cropPanContext ) {
+        const panLimits = computeCropPanTranslateLimits( cropPanContext, {
+          scale: newScale,
+          translateX: savedTranslate.x.value,
+          translateY: savedTranslate.y.value,
+          focalX: focal.x.value,
+          focalY: focal.y.value,
+        } );
+        focal.x.value = clamp(
+          totalNewX,
+          panLimits.minTotalTranslateX,
+          panLimits.maxTotalTranslateX,
+        ) - savedTranslate.x.value;
+        focal.y.value = clamp(
+          totalNewY,
+          panLimits.minTotalTranslateY,
+          panLimits.maxTotalTranslateY,
+        ) - savedTranslate.y.value;
+      } else {
+        focal.x.value = totalNewX - savedTranslate.x.value;
+        focal.y.value = totalNewY - savedTranslate.y.value;
+      }
     } )
     .onEnd( ( ...args ) => {
       runOnJS( onPinchEnded )( ...args );
