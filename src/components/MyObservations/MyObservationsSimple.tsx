@@ -12,7 +12,6 @@ import {
   Body1,
   InfiniteScrollLoadingWheel,
   OfflineNotice,
-  PerformanceDebugView,
   RadioButtonSheet,
   Tabs,
   ViewWrapper,
@@ -22,7 +21,6 @@ import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashLi
 import StatTab from "components/SharedComponents/StatTab";
 import { View } from "components/styledComponents";
 import React, { useCallback, useMemo } from "react";
-import { Alert } from "react-native";
 import Photo from "realmModels/Photo";
 import type {
   RealmObservation,
@@ -141,14 +139,14 @@ const MyObservationsSimple = ( {
   const navigation = useNavigation( );
   const route = useRoute( );
   const {
-    flashListStyle,
-    gridItemStyle,
-    numColumns,
+    flashListStyle: taxaFlashListStyleBase,
+    gridItemStyle: taxaGridItemStyle,
+    numColumns: taxaNumColumns,
   } = useGridLayout( );
   const taxaFlashListStyle = useMemo( ( ) => ( {
-    ...flashListStyle,
+    ...taxaFlashListStyleBase,
     paddingTop: 10,
-  } ), [flashListStyle] );
+  } ), [taxaFlashListStyleBase] );
 
   const taxaSortOptions = MY_OBSERVATIONS_SPECIES_SORT_OPTIONS.reduce(
     ( acc, sortBy ) => {
@@ -190,7 +188,7 @@ const MyObservationsSimple = ( {
     return (
       <SimpleTaxonGridItem
         key={itemKey}
-        style={gridItemStyle}
+        style={taxaGridItemStyle}
         speciesCount={speciesCount}
         navToTaxonDetails={navToTaxonDetails}
         accessibleName={accessibleName}
@@ -199,7 +197,7 @@ const MyObservationsSimple = ( {
     );
   }, [
     currentUser,
-    gridItemStyle,
+    taxaGridItemStyle,
     navigation,
     route.key,
     t,
@@ -246,38 +244,13 @@ const MyObservationsSimple = ( {
     />
   );
 
-  const observationsHeader = useMemo( ( ) => {
-    if ( layout !== "grid" ) {
-      return (
-        <SimpleHeader
-          isConnected={isConnected}
-          obsMissingBasicsExist={obsMissingBasicsExist}
-          numTotalObservations={numTotalObservations}
-        />
-      );
-    }
-
-    const TARGET_SPACING = 10;
-
-    // our HALF_GUTTER margin value is 7.5, so when we try to cancel it out around announcements we
-    // can get odd rounding behavior that causes 1px margins. Using Math.ceil accounts for this.
-    return (
-      <View
-        style={{
-          marginTop: -Math.ceil( flashListStyle.paddingTop ),
-          marginLeft: -Math.ceil( flashListStyle.paddingLeft ),
-          marginRight: -Math.ceil( flashListStyle.paddingRight ),
-          marginBottom: TARGET_SPACING - flashListStyle.paddingTop,
-        }}
-      >
-        <SimpleHeader
-          isConnected={isConnected}
-          obsMissingBasicsExist={obsMissingBasicsExist}
-          numTotalObservations={numTotalObservations}
-        />
-      </View>
-    );
-  }, [flashListStyle, isConnected, layout, numTotalObservations, obsMissingBasicsExist] );
+  const observationsHeader = useMemo( ( ) => (
+    <SimpleHeader
+      isConnected={isConnected}
+      obsMissingBasicsExist={obsMissingBasicsExist}
+      numTotalObservations={numTotalObservations}
+    />
+  ), [isConnected, numTotalObservations, obsMissingBasicsExist] );
 
   const dataFilledWithEmptyBoxes = useMemo( ( ) => {
     const data = observationIds;
@@ -307,9 +280,7 @@ const MyObservationsSimple = ( {
     return null;
   };
 
-  function showOfflineAlert( ) {
-    Alert.alert( t( "You-are-offline" ), t( "Please-try-again-when-you-are-online" ) );
-  }
+  function showOfflineAlert( ) { }
 
   const handleSortConfirm = ( optionId: SPECIES_SORT ) => {
     if ( currentUser && !isConnected ) {
@@ -418,7 +389,7 @@ const MyObservationsSimple = ( {
                 item: SpeciesCount,
               ) => `${item.taxon.id}-${item?.taxon?.default_photo?.url || "no-photo"}`}
               layout="grid"
-              numColumns={numColumns}
+              numColumns={taxaNumColumns}
               renderItem={renderTaxaItem}
               totalResults={numTotalTaxa}
               onEndReached={
@@ -475,11 +446,6 @@ const MyObservationsSimple = ( {
           />
         </>
       )}
-      <PerformanceDebugView
-        showListMetrics
-        showScrollMetrics
-        position="bottom-left"
-      />
     </>
   );
 };

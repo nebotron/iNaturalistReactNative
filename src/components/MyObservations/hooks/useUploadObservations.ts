@@ -1,11 +1,12 @@
 import { useNavigation } from "@react-navigation/native";
 import { RealmContext } from "providers/contexts";
 import {
-  useCallback, useEffect, useMemo,
+  useCallback, useEffect,
 } from "react";
 import { EventRegister } from "react-native-event-listeners";
 import Observation from "realmModels/Observation";
 import type { RealmObservation } from "realmModels/types";
+import { confirmNoDuplicatePhotosBeforeUpload } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import {
   useTranslation,
 } from "sharedHooks";
@@ -52,7 +53,6 @@ export default ( canUpload: boolean ) => {
   const stopAllUploads = useStore( state => state.stopAllUploads );
 
   const unsyncedList = Observation.filterUnsyncedObservations( realm );
-  const unsyncedUuids = useMemo( ( ) => unsyncedList.map( o => o.uuid ), [unsyncedList] );
   const abortController = useStore( storeState => storeState.abortController );
 
   const { t } = useTranslation( );
@@ -182,10 +182,27 @@ export default ( canUpload: boolean ) => {
     uploadStatus,
   ] );
 
-  const createUploadQueueAllUnsynced = useCallback( ( skipSomeUuids: string[] | undefined ) => {
-    const uploadsUuids = unsyncedUuids
-      .filter( ( uuid: string ) => !skipSomeUuids?.includes( uuid ) );
+  const createUploadQueueAllUnsynced = useCallback( async (
+    skipSomeUuids: string[] | undefined,
+  ) => {
+    const uploadsUuids = Array.from( unsyncedList )
+      .filter( obs => {
+        if ( skipSomeUuids?.includes( obs.uuid ) ) return false;
+        // Never upload observations missing required basics (location, date,
+        // evidence, or taxon), regardless of mode.
+        if ( typeof obs.missingBasics === "function" && obs.missingBasics() ) return false;
+        return true;
+      } )
+      .map( obs => obs.uuid );
     if ( uploadsUuids.length === 0 ) {
+      return;
+    }
+    const confirmed = await confirmNoDuplicatePhotosBeforeUpload(
+      realm,
+      uploadsUuids,
+      t,
+    );
+    if ( !confirmed ) {
       return;
     }
     const uuidsQuery = uploadsUuids
@@ -206,7 +223,8 @@ export default ( canUpload: boolean ) => {
     setCannotUploadObservations,
     setStartUploadObservations,
     setTotalToolbarIncrements,
-    unsyncedUuids,
+    t,
+    unsyncedList,
   ] );
 
   const startUploadObservations = useCallback( async ( skipSomeUuids: string[] | undefined ) => {
