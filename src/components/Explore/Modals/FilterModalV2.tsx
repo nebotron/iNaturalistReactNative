@@ -117,6 +117,7 @@ const FilterModalV2 = ( {
     userFilters,
     unobservedByMe,
     wildStatus,
+    hasLocationMissing,
   } = state;
 
   const NONE = "NONE";
@@ -755,6 +756,13 @@ const FilterModalV2 = ( {
                     navigation.navigate( "ExploreSearch", { initialSearchMode: "location" } );
                   }}
                   accessibilityLabel={t( "Edit" )}
+                />
+              </View>
+              <View className="mt-5">
+                <Checkbox
+                  text={t( "Location-Missing" )}
+                  isChecked={hasLocationMissing}
+                  onPress={() => dispatch( { type: EXPLORE_ACTION.TOGGLE_LOCATION_MISSING } )}
                 />
               </View>
             </View>
