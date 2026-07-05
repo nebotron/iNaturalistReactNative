@@ -29,7 +29,12 @@ import compact from "lodash/compact";
 import find from "lodash/find";
 import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   ScrollView,
   StatusBar,
@@ -38,7 +43,9 @@ import DeviceInfo from "react-native-device-info";
 import Observation from "realmModels/Observation";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { log } from "sharedHelpers/logger";
+import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import saveObservation from "sharedHelpers/saveObservation";
+import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
@@ -62,6 +69,7 @@ import TaxonDetailsTitle from "./TaxonDetailsTitle";
 import TaxonMapPreview from "./TaxonMapPreview";
 import TaxonMedia from "./TaxonMedia";
 import Taxonomy from "./Taxonomy";
+import IdentificationTips from "./IdentificationTips";
 import Wikipedia from "./Wikipedia";
 
 const SCROLL_VIEW_STYLE = {
@@ -94,7 +102,7 @@ const TaxonDetails = ( ): Node => {
   const navigation = useNavigation( );
   const { params } = useRoute( );
   const {
-    id, hideNavButtons, firstPhotoID, representativePhoto,
+    id, hideNavButtons, firstPhotoID, representativePhoto, rankLevel,
   } = params;
   const { t } = useTranslation( );
   const { isConnected } = useNetInfo( );
@@ -175,6 +183,26 @@ const TaxonDetails = ( ): Node => {
 
   const taxon = remoteTaxon || localTaxon;
 
+  const [offlineAncestors, setOfflineAncestors] = useState( null );
+
+  const isNetworkError = !!error?.message?.match( /Network request failed/ );
+
+  useEffect( ( ) => {
+    const ancestorIds = localTaxon?.ancestor_ids;
+    if ( ancestorIds?.length > 0 && !offlineAncestors ) {
+      getAncestorsFromTaxonomyFile( Array.from( ancestorIds ) )
+        .then( ancestors => setOfflineAncestors( ancestors ) )
+        .catch( err => logger.error( "Failed to load offline ancestors", err ) );
+    }
+  }, [localTaxon, offlineAncestors] );
+
+  const taxonForDisplay = useMemo( ( ) => {
+    if ( taxon && !taxon.ancestors && offlineAncestors ) {
+      return { ...taxon, ancestors: offlineAncestors };
+    }
+    return taxon;
+  }, [taxon, offlineAncestors] );
+
   const { data: seenByCurrentUser } = useQuery(
     ["fetchSpeciesCounts", taxon?.id],
     ( ) => fetchSpeciesCounts( {
@@ -252,7 +280,9 @@ const TaxonDetails = ( ): Node => {
 
   const saveForLater = useCallback( async ( ) => {
     await saveObservationFromSheet( );
-    exitObservationFlow( );
+    exitObservationFlow( {
+      promptDeleteOriginalPhotos: shouldPromptDeleteOriginalPhotos( ),
+    } );
   }, [
     exitObservationFlow,
     saveObservationFromSheet,
@@ -262,6 +292,7 @@ const TaxonDetails = ( ): Node => {
     await saveObservationFromSheet( );
     exitObservationFlow( {
       navigate: ( ) => navigation.navigate( "LoginStackNavigator" ),
+      promptDeleteOriginalPhotos: shouldPromptDeleteOriginalPhotos( ),
     } );
   }, [exitObservationFlow, navigation, saveObservationFromSheet] );
 
@@ -275,18 +306,32 @@ const TaxonDetails = ( ): Node => {
 
   const displayTaxonDetails = ( ) => {
     if ( isLoading ) {
+      if ( taxonForDisplay?.ancestors?.length ) {
+        return (
+          <View className="mx-3">
+            <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
+          </View>
+        );
+      }
       return <View className="m-3 flex-1 h-full justify-center"><ActivityIndicator /></View>;
     }
 
-    if ( error?.message?.match( /Network request failed/ ) ) {
+    if ( isNetworkError ) {
+      if ( !taxonForDisplay ) {
+        return (
+          <View className="py-[93px]">
+            <OfflineNotice
+              onPress={( ) => {
+                refresh();
+                refetch();
+              }}
+            />
+          </View>
+        );
+      }
       return (
-        <View className="py-[93px]">
-          <OfflineNotice
-            onPress={( ) => {
-              refresh();
-              refetch();
-            }}
-          />
+        <View className="mx-3">
+          <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
         </View>
       );
     }
@@ -301,12 +346,13 @@ const TaxonDetails = ( ): Node => {
       <View className="mx-3">
         <EstablishmentMeans taxon={taxon} />
         <Wikipedia taxon={taxon} />
-        <Taxonomy taxon={taxon} hideNavButtons={hideNavButtons} />
+        <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
         <TaxonMapPreview
           observation={mappableObservation}
           taxon={taxon}
           showSpeciesSeenCheckmark={currentUserHasSeenTaxon}
         />
+        {taxon.rank_level <= 10 && <IdentificationTips taxon={taxon} />}
       </View>
     );
   };
@@ -315,7 +361,12 @@ const TaxonDetails = ( ): Node => {
     <CarouselDots length={photos.length} index={mediaIndex} />
   );
 
-  const showExploreButton = !hideNavButtons && isConnected && !fromMatch;
+  // Rank level from taxon data, or from a hint passed by callers (e.g. SpeciesGame) that
+  // know the rank before taxon data has loaded from the API.
+  const effectiveRankLevel = taxon?.rank_level ?? rankLevel;
+  const showExploreButton = !hideNavButtons && isConnected && !fromMatch && taxon != null;
+  const showGameButton = !hideNavButtons && isConnected !== false && !fromMatch && !fromSuggestions
+    && !fromObsEdit && effectiveRankLevel != null && effectiveRankLevel <= 10;
 
   const displayTaxonTitle = useCallback( ( ) => (
     <View
@@ -348,10 +399,26 @@ const TaxonDetails = ( ): Node => {
           />
         </View>
       )}
+      {showGameButton && (
+        <View className="ml-2">
+          <INatIconButton
+            icon="play"
+            onPress={( ) => navigation.navigate( "SpeciesGame", { taxonId: taxon?.id ?? id } )}
+            accessibilityLabel="Play species identification game"
+            size={20}
+            color={colors.white}
+            className="bg-inatGreen rounded-full"
+            mode="contained"
+            preventTransparency
+          />
+        </View>
+      )}
     </View>
   ), [
     currentUserHasSeenTaxon,
+    id,
     showExploreButton,
+    showGameButton,
     navigation,
     setExploreView,
     t,
@@ -434,7 +501,7 @@ const TaxonDetails = ( ): Node => {
               pointerEvents="box-none"
             >
               {isConnected && !isTablet && photos.length > 1 && displayScrollDots()}
-              {taxon && displayTaxonTitle()}
+              {(taxon || showGameButton) && displayTaxonTitle()}
             </View>
           </View>
           <View className="bg-white py-5 h-full flex-1">
@@ -454,7 +521,10 @@ const TaxonDetails = ( ): Node => {
             if ( action === "save" ) {
               await saveObservationFromSheet( );
             }
-            exitObservationFlow( );
+            exitObservationFlow( {
+              promptDeleteOriginalPhotos: action === "save"
+                && shouldPromptDeleteOriginalPhotos( ),
+            } );
           }}
         />
       )}
