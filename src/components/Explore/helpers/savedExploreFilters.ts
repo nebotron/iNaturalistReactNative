@@ -1,5 +1,4 @@
-import type { ExploreState } from "providers/ExploreContext";
-import { DATE_OBSERVED, DATE_UPLOADED } from "providers/ExploreContext";
+import type { DATE_OBSERVED, DATE_UPLOADED, ExploreState } from "providers/ExploreContext";
 
 // Days offset from today for each date field (0 = today, -30 = 30 days ago).
 export interface RelativeDateOffsets {
@@ -58,17 +57,20 @@ export const getRelativeDateOffsets = (
 ): RelativeDateOffsets => {
   const offsets: RelativeDateOffsets = {};
 
-  if ( state.dateObserved === DATE_OBSERVED.DATE_RANGE ) {
+  // Compared against string literals (rather than the DATE_OBSERVED/DATE_UPLOADED
+  // enums) so this module doesn't pull in providers/ExploreContext as a runtime
+  // dependency, which transitively drags in geolocation/permission/Realm code.
+  if ( state.dateObserved === ( "DATE_RANGE" as DATE_OBSERVED ) ) {
     if ( state.d1 ) offsets.relativeD1 = dateToOffset( state.d1 );
     if ( state.d2 ) offsets.relativeD2 = dateToOffset( state.d2 );
-  } else if ( state.dateObserved === DATE_OBSERVED.EXACT_DATE && state.observed_on ) {
+  } else if ( state.dateObserved === ( "EXACT_DATE" as DATE_OBSERVED ) && state.observed_on ) {
     offsets.relativeObservedOn = dateToOffset( state.observed_on );
   }
 
-  if ( state.dateUploaded === DATE_UPLOADED.DATE_RANGE ) {
+  if ( state.dateUploaded === ( "DATE_RANGE" as DATE_UPLOADED ) ) {
     if ( state.created_d1 ) offsets.relativeCreatedD1 = dateToOffset( state.created_d1 );
     if ( state.created_d2 ) offsets.relativeCreatedD2 = dateToOffset( state.created_d2 );
-  } else if ( state.dateUploaded === DATE_UPLOADED.EXACT_DATE && state.created_on ) {
+  } else if ( state.dateUploaded === ( "EXACT_DATE" as DATE_UPLOADED ) && state.created_on ) {
     offsets.relativeCreatedOn = dateToOffset( state.created_on );
   }
 
@@ -101,8 +103,12 @@ export const resolveRelativeDates = (
 
   return {
     ...params,
-    d1: relativeD1 !== undefined ? offsetToIsoDate( relativeD1 ) : params.d1,
-    d2: relativeD2 !== undefined ? offsetToIsoDate( relativeD2 ) : params.d2,
+    d1: relativeD1 !== undefined
+      ? offsetToIsoDate( relativeD1 )
+      : params.d1,
+    d2: relativeD2 !== undefined
+      ? offsetToIsoDate( relativeD2 )
+      : params.d2,
     observed_on: relativeObservedOn !== undefined
       ? offsetToIsoDate( relativeObservedOn )
       : params.observed_on,

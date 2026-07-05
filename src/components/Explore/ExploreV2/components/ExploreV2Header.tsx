@@ -1,5 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import { THUMBNAIL_CLASS } from "appConstants/classNames";
+import buildExploreV2QueryParams from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import {
   Body1,
   Body3,
@@ -12,7 +13,6 @@ import BackButton from "components/SharedComponents/Buttons/BackButton";
 import ContainedSquareButton from "components/SharedComponents/Buttons/ContainedSquareButton";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
 import { Image, View } from "components/styledComponents";
-import buildExploreV2QueryParams from "components/Explore/ExploreV2/buildQueryParams";
 import type { TFunction } from "i18next";
 import type { ExploreStackScreenProps } from "navigation/types";
 import type { ExploreV2LocationState, ExploreV2Subject } from "providers/ExploreV2Context";

@@ -70,12 +70,12 @@ Add-stop = Add stop
 ADD-TAXON-FILTER = ADD TAXON FILTER
 Add-to-Projects = Add to Projects
 ADD-TO-PROJECTS = ADD TO PROJECTS
+ADD-USER-FILTER = ADD USER FILTER
 Added-to-X-Projects =
     Added to { $count } { $count ->
         [one] Project
        *[other] Projects
     }
-ADD-USER-FILTER = ADD USER FILTER
 # Hint for a button that adds an identification
 Adds-ID = Adds ID
 # Hint for a button that adds a vote of agreement
@@ -114,8 +114,6 @@ ALLOW-LOCATION-ACCESS = ALLOW LOCATION ACCESS
 # Button asking if user has an existing iNaturalist account
 Already-have-an-iNaturalist-account = Already have an iNaturalist account?
 An-Internet-connection-is-required = An Internet connection is required to load more observations.
-# Label for toggling automatic photo brightness adjustment in Explore
-Auto-Adjust-Brightness = Auto Adjust Brightness
 # Message shown to the user after they have left the AI camera where they may
 # have seen a species suggestion but before they land on the match screen,
 # where they might see a better suggestion.
@@ -164,6 +162,8 @@ attribution-cc-by-nd = some rights reserved (CC BY-ND)
 attribution-cc-by-sa = some rights reserved (CC BY-SA)
 # Month of August
 August = August
+# Label for toggling automatic photo brightness adjustment in Explore
+Auto-Adjust-Brightness = Auto Adjust Brightness
 # Returns user to login screen
 BACK-TO-LOGIN = BACK TO LOGIN
 Blog = Blog
@@ -505,8 +505,6 @@ Edit-identification = Edit identification
 EDIT-LOCATION = EDIT LOCATION
 # Label for interactive element that takes you to a location choosing screen
 Edit-location = Edit location
-# Checkbox label for filtering observations without location data
-Location-Missing = Location Missing
 Edit-Observation = Edit Observation
 Edit-your-profile-change-your-settings = Edit your profile, change your notifications settings, and manage all other parts of your account.
 # Label for button that edits an observation's taxon
@@ -777,6 +775,8 @@ Loads-content-that-requires-an-Internet-connection = Loads content that requires
 LOCATION = LOCATION
 Location = Location
 Location-accuracy-is-too-imprecise = Location accuracy is too imprecise to help identifiers. Please zoom in.
+# Checkbox label for filtering observations without location data
+Location-Missing = Location Missing
 LOCATION-TOO-IMPRECISE = LOCATION TOO IMPRECISE
 LOG-IN = LOG IN
 LOG-IN-TO-INATURALIST = LOG IN TO INATURALIST
@@ -1039,6 +1039,7 @@ Please-log-in = Please log in
 Please-log-in-again = Please log in again. We occasionally need to refresh your session to clear cached data and make sure the app is working its best.
 Please-make-sure-your-password-is-at-least-6-characters = Please make sure your password is at least 6 characters.
 Please-try-again-when-you-are-connected-to-the-internet = Please try again when you are connected to the Internet.
+Please-try-again-when-you-are-online = Please try again when you are online!
 Point-the-camera-at-an-animal-plant-or-fungus = Point the camera at an animal, plant, or fungus
 Popular-observations-filter = Popular (at least one fave)
 POTENTIAL-DISAGREEMENT = POTENTIAL DISAGREEMENT
@@ -1674,6 +1675,7 @@ x-uploads-failed =
         [one] { $count } upload failed
        *[other] { $count } uploads failed
     }
+You-are-offline = You are offline
 You-are-offline-Tap-to-reload = You are offline. Tap to reload.
 You-are-offline-Tap-to-try-again = You are offline. Tap to try again.
 You-can-add-up-to-20-media = You can add up to 20 photos and 20 sounds per observation.

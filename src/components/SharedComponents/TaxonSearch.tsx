@@ -1,9 +1,7 @@
 import EmptySearchResults from "components/Explore/SearchScreens/EmptySearchResults";
-import {
-  Body2,
-  INatIcon,
-  SearchBar,
-} from "components/SharedComponents";
+import INatIcon from "components/SharedComponents/INatIcon";
+import SearchBar from "components/SharedComponents/SearchBar";
+import Body2 from "components/SharedComponents/Typography/Body2";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";

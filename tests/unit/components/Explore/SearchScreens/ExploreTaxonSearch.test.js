@@ -9,14 +9,21 @@ import { renderComponent } from "tests/helpers/render";
 
 jest.mock(
   "components/SharedComponents/ViewWrapper",
-  () => function MockViewWrapper( props ) {
-    const MockName = "mock-view-no-footer";
-    return (
-      // eslint-disable-next-line react/jsx-props-no-spreading
-      <MockName {...props} testID={MockName}>
-        {props.children}
-      </MockName>
-    );
+  () => {
+    const originalModule = jest.requireActual( "components/SharedComponents/ViewWrapper" );
+    return {
+      __esModule: true,
+      ...originalModule,
+      default: function MockViewWrapper( props ) {
+        const MockName = "mock-view-no-footer";
+        return (
+          // eslint-disable-next-line react/jsx-props-no-spreading
+          <MockName {...props} testID={MockName}>
+            {props.children}
+          </MockName>
+        );
+      },
+    };
   },
 );
 
