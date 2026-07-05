@@ -10,7 +10,6 @@ interface GroupedPhotoItem {
 
 interface GroupedPhotoGroup {
   photos?: GroupedPhotoItem[];
-  videos?: { uri: string }[];
 }
 
 export function findGroupedPhotoByDisplayUri(

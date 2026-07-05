@@ -7,7 +7,6 @@ import * as uuid from "uuid";
 import type {
   GroupedMediaItem,
   GroupedMediaPhotoItem,
-  MovedVideoAsset,
 } from "./photoLibraryMediaHelpers";
 
 const outputDirForUri = ( uri: string ) => {
@@ -45,7 +44,7 @@ export const duplicateGroupedPhotoItem = async (
   photo: GroupedMediaPhotoItem,
 ): Promise<GroupedMediaPhotoItem> => {
   const newUri = await copyMediaFile( photo.image.uri );
-  let cropOriginalUri = photo.image.cropOriginalUri;
+  let { cropOriginalUri } = photo.image;
   if ( cropOriginalUri ) {
     cropOriginalUri = await copyMediaFile( cropOriginalUri );
   }
@@ -67,48 +66,21 @@ export const duplicateGroupedPhotoItem = async (
   };
 };
 
-export const duplicateGroupedVideoItem = async (
-  video: MovedVideoAsset,
-): Promise<MovedVideoAsset> => {
-  const newUri = await copyMediaFile( video.uri );
-
-  return {
-    uri: newUri,
-    asset: {
-      ...video.asset,
-      uri: newUri,
-    },
-  };
-};
-
 export const duplicateGroupedMediaGroup = async (
   group: GroupedMediaItem,
 ): Promise<GroupedMediaItem> => {
-  if ( group.videos?.length ) {
-    const videos = [];
-    for ( const video of group.videos ) {
-      videos.push( await duplicateGroupedVideoItem( video ) );
-    }
-    return { videos };
-  }
-
   if ( group.photos?.length ) {
-    const photos = [];
-    for ( const photo of group.photos ) {
-      photos.push( await duplicateGroupedPhotoItem( photo ) );
-    }
+    const photos = await Promise.all(
+      group.photos.map( photo => duplicateGroupedPhotoItem( photo ) ),
+    );
     return { photos };
   }
 
   return group;
 };
 
-export const duplicateGroupedMediaGroups = async (
+export const duplicateGroupedMediaGroups = (
   groups: GroupedMediaItem[],
-): Promise<GroupedMediaItem[]> => {
-  const duplicatedGroups = [];
-  for ( const group of groups ) {
-    duplicatedGroups.push( await duplicateGroupedMediaGroup( group ) );
-  }
-  return duplicatedGroups;
-};
+): Promise<GroupedMediaItem[]> => Promise.all(
+  groups.map( group => duplicateGroupedMediaGroup( group ) ),
+);
