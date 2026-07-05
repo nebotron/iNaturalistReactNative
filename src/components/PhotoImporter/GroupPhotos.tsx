@@ -37,13 +37,8 @@ interface PhotoItem {
   };
 }
 
-interface VideoItem {
-  uri: string;
-}
-
 interface Item {
   photos?: PhotoItem[];
-  videos?: VideoItem[];
 }
 
 type GroupPhotosListItem = Item | { empty: true };
@@ -73,7 +68,6 @@ interface Props {
   selectObservationPhotos: ( isSelected: boolean, item: Item ) => void;
   separatePhotos: ( ) => void;
   totalPhotos: number;
-  selectedGroupsHaveMixedMedia?: boolean;
 }
 
 const GroupPhotos = ( {
@@ -94,7 +88,6 @@ const GroupPhotos = ( {
   selectObservationPhotos,
   separatePhotos,
   totalPhotos,
-  selectedGroupsHaveMixedMedia = false,
 }: Props ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
@@ -106,23 +99,21 @@ const GroupPhotos = ( {
   const extractKey = ( item: GroupPhotosListItem, index: number ) => (
     isEmptyGridItem( item )
       ? "empty"
-      : `${item.photos?.[0]?.image.uri || item.videos?.[0]?.uri}${index}`
+      : `${item.photos?.[0]?.image.uri}${index}`
   );
 
   const noObsSelected = selectedObservations.length === 0;
   const oneObsSelected = selectedObservations.length === 1;
   const obsWithMultiplePhotosSelected = selectedObservations.some(
-    obs => ( obs.photos?.length || obs.videos?.length || 0 ) > 1,
+    obs => ( obs.photos?.length || 0 ) > 1,
   );
   const selectedPhotoUris = useMemo(
     ( ) => flattenAndOrderSelectedPhotos( selectedObservations )
       .map( photo => photo.image.uri ),
     [selectedObservations],
   );
-  const canCropSelectedPhotos = !selectedGroupsHaveMixedMedia
-    && selectedPhotoUris.length > 0;
-  const canDuplicateSelectedPhotos = !selectedGroupsHaveMixedMedia
-    && selectedMediaCount > 0;
+  const canCropSelectedPhotos = selectedPhotoUris.length > 0;
+  const canDuplicateSelectedPhotos = selectedMediaCount > 0;
   const cropSelectedPhotos = useCallback( () => {
     if ( selectedPhotoUris.length === 0 ) {
       return;
@@ -265,7 +256,7 @@ const GroupPhotos = ( {
                 color={colors.white}
                 backgroundColor={colors.darkGray}
                 accessibilityLabel={t( "Combine-Photos" )}
-                disabled={noObsSelected || oneObsSelected || selectedGroupsHaveMixedMedia}
+                disabled={noObsSelected || oneObsSelected}
                 onPress={combinePhotos}
               />
             </View>

@@ -229,7 +229,7 @@ const ImageCropEditor = ( ) => {
             const photos = group.photos?.filter(
               photo => photo.image.uri !== imageUri,
             );
-            if ( !photos?.length && !group.videos?.length ) {
+            if ( !photos?.length ) {
               return null;
             }
             return photos

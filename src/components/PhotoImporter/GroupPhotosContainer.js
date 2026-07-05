@@ -25,8 +25,6 @@ import useStore from "stores/useStore";
 
 import GroupPhotos from "./GroupPhotos";
 import flattenAndOrderSelectedPhotos, {
-  flattenAndOrderSelectedVideos,
-  selectedGroupsHaveMixedMedia,
   sortGroupsByTime,
 } from "./helpers/groupPhotoHelpers";
 
@@ -105,9 +103,7 @@ const GroupPhotosContainer = ( ): Node => {
   }, [groupedPhotos] );
 
   const totalPhotos = groupedPhotos
-    .reduce( ( count, current ) => (
-      count + ( current.photos?.length || current.videos?.length || 0 )
-    ), 0 );
+    .reduce( ( count, current ) => count + ( current.photos?.length || 0 ), 0 );
 
   useEffect( ( ) => {
     navigation.setOptions( {
@@ -152,47 +148,21 @@ const GroupPhotosContainer = ( ): Node => {
       return;
     }
 
-    if ( selectedGroupsHaveMixedMedia( selectedObservations ) ) {
-      return;
-    }
-
-    const isVideoSelection = selectedObservations.some(
-      obs => obs.videos?.length > 0,
-    );
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
-    const orderedVideos = flattenAndOrderSelectedVideos( selectedObservations );
     const mostRecentPhoto = orderedPhotos[0];
-    const mostRecentVideo = orderedVideos[0];
     const newObsList = [];
 
     groupedPhotos.forEach( obs => {
-      if ( isVideoSelection ) {
-        const containsSelected = mostRecentVideo && obs.videos?.some(
-          video => video.uri === mostRecentVideo.uri,
-        );
+      const containsSelected = mostRecentPhoto && obs.photos?.includes( mostRecentPhoto );
 
-        if ( containsSelected ) {
-          newObsList.push( { videos: orderedVideos } );
-        } else {
-          const filteredVideos = obs.videos?.filter(
-            video => !orderedVideos.some( item => item.uri === video.uri ),
-          );
-          if ( filteredVideos?.length > 0 ) {
-            newObsList.push( { videos: filteredVideos } );
-          }
-        }
+      if ( containsSelected ) {
+        newObsList.push( { photos: orderedPhotos } );
       } else {
-        const containsSelected = mostRecentPhoto && obs.photos?.includes( mostRecentPhoto );
-
-        if ( containsSelected ) {
-          newObsList.push( { photos: orderedPhotos } );
-        } else {
-          const filteredPhotos = obs.photos?.filter(
-            item => !orderedPhotos.includes( item ),
-          );
-          if ( filteredPhotos?.length > 0 ) {
-            newObsList.push( { photos: filteredPhotos } );
-          }
+        const filteredPhotos = obs.photos?.filter(
+          item => !orderedPhotos.includes( item ),
+        );
+        if ( filteredPhotos?.length > 0 ) {
+          newObsList.push( { photos: filteredPhotos } );
         }
       }
     } );
@@ -210,7 +180,7 @@ const GroupPhotosContainer = ( ): Node => {
     let maxCombinedItems = 0;
 
     selectedObservations.forEach( obs => {
-      const numItems = obs.photos?.length || obs.videos?.length || 0;
+      const numItems = obs.photos?.length || 0;
       if ( numItems > maxCombinedItems ) {
         maxCombinedItems = numItems;
       }
@@ -222,23 +192,15 @@ const GroupPhotosContainer = ( ): Node => {
 
     const separatedItems = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
-    const orderedVideos = flattenAndOrderSelectedVideos( selectedObservations );
 
     groupedPhotos.forEach( obs => {
       const filteredGroupedPhotos = obs.photos?.filter(
         item => orderedPhotos.includes( item ),
       ) || [];
-      const filteredGroupedVideos = obs.videos?.filter(
-        item => orderedVideos.some( video => video.uri === item.uri ),
-      ) || [];
 
       if ( filteredGroupedPhotos.length > 0 ) {
         filteredGroupedPhotos.forEach( photo => {
           separatedItems.push( { photos: [photo] } );
-        } );
-      } else if ( filteredGroupedVideos.length > 0 ) {
-        filteredGroupedVideos.forEach( video => {
-          separatedItems.push( { videos: [video] } );
         } );
       } else {
         separatedItems.push( obs );
@@ -256,15 +218,12 @@ const GroupPhotosContainer = ( ): Node => {
   };
 
   const selectedMediaCount = selectedObservations.reduce(
-    ( count, obs ) => count + ( obs.photos?.length || obs.videos?.length || 0 ),
+    ( count, obs ) => count + ( obs.photos?.length || 0 ),
     0,
   );
 
   const duplicatePhotos = async ( ) => {
-    if (
-      selectedObservations.length === 0
-      || selectedGroupsHaveMixedMedia( selectedObservations )
-    ) {
+    if ( selectedObservations.length === 0 ) {
       return;
     }
 
@@ -292,7 +251,6 @@ const GroupPhotosContainer = ( ): Node => {
   const removePhotos = () => {
     const removedFromGroup = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
-    const orderedVideos = flattenAndOrderSelectedVideos( selectedObservations );
 
     const urisToDelete = orderedPhotos
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
@@ -305,14 +263,9 @@ const GroupPhotosContainer = ( ): Node => {
       const filteredGroupedPhotos = obs.photos?.filter(
         item => !orderedPhotos.includes( item ),
       ) || [];
-      const filteredGroupedVideos = obs.videos?.filter(
-        item => !orderedVideos.some( video => video.uri === item.uri ),
-      ) || [];
 
       if ( filteredGroupedPhotos.length > 0 ) {
         removedFromGroup.push( { photos: filteredGroupedPhotos } );
-      } else if ( filteredGroupedVideos.length > 0 ) {
-        removedFromGroup.push( { videos: filteredGroupedVideos } );
       }
     } );
 
@@ -388,7 +341,6 @@ const GroupPhotosContainer = ( ): Node => {
       selectedObservations={selectedObservations}
       separatePhotos={separatePhotos}
       totalPhotos={totalPhotos}
-      selectedGroupsHaveMixedMedia={selectedGroupsHaveMixedMedia( selectedObservations )}
     />
   );
 };

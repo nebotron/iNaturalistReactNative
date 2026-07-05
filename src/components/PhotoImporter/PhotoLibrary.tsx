@@ -4,12 +4,11 @@ import {
   photoLibraryPhotosPath,
 } from "appConstants/paths";
 import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDetails";
-import {
-  appendPhotosAndVideoSoundsToObservation,
-  buildGroupedMediaItems,
-  partitionAssetsByMediaType,
-} from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
+import {
+  appendPhotosToObservation,
+  buildGroupedMediaItems,
+} from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { ActivityAnimation, ViewWrapper } from "components/SharedComponents";
 import { t } from "i18next";
 import type { NoBottomTabStackScreenProps } from "navigation/types";
@@ -25,12 +24,11 @@ import {
 } from "react-native";
 import type { Asset } from "react-native-image-picker";
 import { launchImageLibrary } from "react-native-image-picker";
-import Observation from "realmModels/Observation";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 import { sleep } from "sharedHelpers/util";
-import { useInputImageTracking, useLayoutPrefs } from "sharedHooks";
+import { useInputImageTracking } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
 
@@ -46,9 +44,6 @@ const MAX_PHOTOS_ALLOWED = Platform.select( {
 const FROM_AICAMERA_MAX_PHOTOS_ALLOWED = 1;
 
 const PhotoLibrary = ( ) => {
-  const {
-    screenAfterPhotoEvidence, isDefaultMode,
-  } = useLayoutPrefs( );
   const navigation = useNavigation<NoBottomTabStackScreenProps<"PhotoLibrary">["navigation"]>();
   const { params } = useRoute<NoBottomTabStackScreenProps<"PhotoLibrary">["route"]>();
 
@@ -84,26 +79,6 @@ const PhotoLibrary = ( ) => {
   const navToObsEdit = useCallback( ( ) => navigation.navigate( "ObsEdit", {
     lastScreen: "PhotoLibrary",
   } ), [navigation] );
-
-  const navBasedOnUserSettings = useCallback( async ( ) => {
-    if ( isDefaultMode ) {
-      // TODO: why do we need to define higher navigator here
-      return navigation.navigate( "NoBottomTabStackNavigator", {
-        screen: "Match",
-        params: {
-          lastScreen: "PhotoLibrary",
-        },
-      } );
-    }
-
-    // in advanced mode, navigate based on user preference
-    return navigation.navigate( "NoBottomTabStackNavigator", {
-      screen: screenAfterPhotoEvidence,
-      params: {
-        lastScreen: "PhotoLibrary",
-      },
-    } );
-  }, [navigation, screenAfterPhotoEvidence, isDefaultMode] );
 
   const handleSelectionCancelled = useCallback( ( ) => {
     if ( fromGroupPhotos ) {
@@ -179,18 +154,6 @@ const PhotoLibrary = ( ) => {
     return movedImages;
   };
 
-  const buildMovedVideos = useCallback( (
-    selectedVideos: { image: Asset }[],
-    videoAssets: Asset[],
-  ) => selectedVideos.map( ( { image }, index ) => ( {
-    uri: image.uri,
-    asset: {
-      ...videoAssets[index],
-      ...image,
-    },
-  } ) ), [] );
-
-
   const showPhotoLibrary = useCallback( async () => {
     if ( photoLibraryShown ) {
       return;
@@ -210,9 +173,7 @@ const PhotoLibrary = ( ) => {
         selectionLimit: fromAICamera
           ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
           : MAX_PHOTOS_ALLOWED,
-        mediaType: fromAICamera
-          ? "photo"
-          : "mixed",
+        mediaType: "photo",
         includeBase64: false,
         includeExtra: !fromAICamera,
         // forceOldAndroidPhotoPicker is necessary because the "new" picker strips key EXIF data
@@ -239,7 +200,7 @@ const PhotoLibrary = ( ) => {
     }
 
     try {
-      const { photoAssets, videoAssets } = partitionAssetsByMediaType( response.assets );
+      const photoAssets = response.assets;
       addOriginalDevicePhotoUris(
         getOriginalDevicePhotoUrisFromAssets( response.assets ),
       );
@@ -262,17 +223,12 @@ const PhotoLibrary = ( ) => {
           "photoLibrary",
         );
       }
-      const selectedVideos = videoAssets.length > 0
-        ? await moveImagesToDocumentsDirectory( videoAssets.map( image => ( { image } ) ) )
-        : [];
-      const movedVideos = buildMovedVideos( selectedVideos, videoAssets );
       const hasPhotos = selectedPhotos.length > 0;
-      const hasVideos = movedVideos.length > 0;
 
       if ( fromGroupPhotos ) {
         setGroupedPhotos( sortGroupsByTime( [
           ...groupedPhotos,
-          ...buildGroupedMediaItems( selectedPhotos, movedVideos ),
+          ...buildGroupedMediaItems( selectedPhotos ),
         ] ) );
         navigation.setParams( { fromGroupPhotos: false } );
         navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
@@ -289,9 +245,8 @@ const PhotoLibrary = ( ) => {
           } );
         }
 
-        const updatedCurrentObservation = await appendPhotosAndVideoSoundsToObservation(
+        const updatedCurrentObservation = await appendPhotosToObservation(
           selectedPhotos,
-          movedVideos,
           currentObservation,
           numOfObsPhotos,
         );
@@ -309,7 +264,7 @@ const PhotoLibrary = ( ) => {
 
       setPhotoImporterState( {
         photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
-        groupedPhotos: buildGroupedMediaItems( selectedPhotos, movedVideos ),
+        groupedPhotos: buildGroupedMediaItems( selectedPhotos ),
       } );
       navigation.setParams( { fromGroupPhotos: false } );
       navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
@@ -322,7 +277,6 @@ const PhotoLibrary = ( ) => {
   }, [
     addImportedPhotoDeviceUriMappings,
     addOriginalDevicePhotoUris,
-    buildMovedVideos,
     currentObservation,
     currentObservationIndex,
     evidenceToAdd,
