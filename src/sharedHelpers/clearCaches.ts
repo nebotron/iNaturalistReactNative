@@ -1,7 +1,6 @@
 import {
   exists, readDir,
 } from "@dr.pogodin/react-native-fs";
-import { unlink } from "sharedHelpers/util";
 import {
   computerVisionPath,
   cropSourcesPath,
@@ -13,6 +12,8 @@ import {
 } from "appConstants/paths";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import removeSyncedFilesFromDirectory from "sharedHelpers/removeSyncedFilesFromDirectory";
+import { unlink } from "sharedHelpers/util";
+import useStore from "stores/useStore";
 
 const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 
@@ -35,8 +36,43 @@ const clearRotatedOriginalPhotosDirectory = async ( ) => {
   await removeAllFilesFromDirectory( rotatedOriginalPhotosPath );
 };
 
+// Gallery photos imported for in-progress Group Photos work are persisted in
+// the Zustand store so grouping survives an app kill, but the underlying image
+// files live in photoLibraryPhotosPath. Collect the file names still referenced
+// by groupedPhotos so we don't delete the images out from under saved progress.
+const groupedPhotoFileNamesToKeep = ( ): string[] => {
+  // The store types groupedPhotos loosely; at runtime each photo is
+  // { image: { uri, cropOriginalUri } }, so read it through that shape.
+  const groupedPhotos = useStore.getState( ).groupedPhotos as unknown as {
+    photos?: { image?: { uri?: string; cropOriginalUri?: string } }[];
+  }[];
+  const fileNames: string[] = [];
+  groupedPhotos?.forEach( group => {
+    group?.photos?.forEach( photo => {
+      [photo?.image?.uri, photo?.image?.cropOriginalUri].forEach( uri => {
+        const fileName = uri?.split( "/" ).pop( );
+        if ( fileName ) { fileNames.push( fileName ); }
+      } );
+    } );
+  } );
+  return fileNames;
+};
+
 const clearGalleryPhotos = async ( ) => {
-  await removeAllFilesFromDirectory( photoLibraryPhotosPath );
+  const fileNamesToKeep = new Set( groupedPhotoFileNamesToKeep( ) );
+  if ( fileNamesToKeep.size === 0 ) {
+    await removeAllFilesFromDirectory( photoLibraryPhotosPath );
+    return;
+  }
+
+  const directoryExists = await exists( photoLibraryPhotosPath );
+  if ( !directoryExists ) { return; }
+  const files = await readDir( photoLibraryPhotosPath );
+  await Promise.all(
+    files
+      .filter( file => !fileNamesToKeep.has( file.name ) )
+      .map( file => unlink( file.path ) ),
+  );
 };
 
 const clearComputerVisionPhotos = async ( ) => {

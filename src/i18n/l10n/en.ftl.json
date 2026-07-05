@@ -446,6 +446,7 @@
   "LOCATION": "LOCATION",
   "Location": "Location",
   "Location-accuracy-is-too-imprecise": "Location accuracy is too imprecise to help identifiers. Please zoom in.",
+  "Location-Missing": "Location Missing",
   "LOCATION-TOO-IMPRECISE": "LOCATION TOO IMPRECISE",
   "LOG-IN": "LOG IN",
   "LOG-IN-TO-INATURALIST": "LOG IN TO INATURALIST",
