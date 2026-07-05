@@ -62,6 +62,7 @@ export enum EXPLORE_ACTION {
   TOGGLE_CASUAL = "TOGGLE_CASUAL",
   TOGGLE_NEEDS_ID = "TOGGLE_NEEDS_ID",
   TOGGLE_RESEARCH_GRADE = "TOGGLE_RESEARCH_GRADE",
+  TOGGLE_LOCATION_MISSING = "TOGGLE_LOCATION_MISSING",
   USE_STORED_STATE = "USE_STORED_STATE"
 }
 
@@ -250,6 +251,7 @@ interface State {
   verifiable: boolean;
   wildStatus: WILD_STATUS;
   nearbyRadiusKm: number;
+  hasLocationMissing: boolean;
 }
 type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.DISCARD; snapshot: State}
@@ -323,6 +325,7 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.USE_STORED_STATE; storedState: State}
   | {type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME}
   | {type: EXPLORE_ACTION.TOGGLE_POPULAR}
+  | {type: EXPLORE_ACTION.TOGGLE_LOCATION_MISSING}
 type Dispatch = ( action: Action ) => void
 
 const ExploreContext = React.createContext<
@@ -355,6 +358,7 @@ const calculatedFilters = {
   wildStatus: WILD_STATUS.ALL,
   reviewedFilter: REVIEWED.ALL,
   photoLicense: PHOTO_LICENSE.ALL,
+  hasLocationMissing: false,
 };
 
 // Sort by: is NOT a filter criteria, but should return to default state when reset is pressed
@@ -644,6 +648,11 @@ function exploreReducer( state: State, action: Action ) {
       return {
         ...state,
         popular: !state.popular,
+      };
+    case EXPLORE_ACTION.TOGGLE_LOCATION_MISSING:
+      return {
+        ...state,
+        hasLocationMissing: !state.hasLocationMissing,
       };
     case EXPLORE_ACTION.SET_HIGHEST_TAXONOMIC_RANK:
       return {

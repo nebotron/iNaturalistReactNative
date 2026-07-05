@@ -113,6 +113,10 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.popular = true;
   }
 
+  if ( params.hasLocationMissing ) {
+    filteredParams.has_geo = false;
+  }
+
   if ( params.photoLicense !== PHOTO_LICENSE.ALL ) {
     // How license filter maps to the API
     const licenseParams = {
@@ -176,6 +180,7 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   delete filteredParams.photoLicense;
   delete filteredParams.place;
   delete filteredParams.unobservedByMe;
+  delete filteredParams.hasLocationMissing;
 
   return filteredParams;
 };
