@@ -109,7 +109,11 @@ export function findBestInsertion( stops: RoutePoint[], candidate: RoutePoint ):
   return bestIdx;
 }
 
-function routeBbox( coords: RoutePoint[], paddingDeg = 0.3 ) {
+// Km per degree of latitude/longitude, used to pad the bbox by a fixed distance
+const KM_PER_DEG_LAT = ( EARTH_RADIUS_KM * Math.PI ) / 180;
+const BBOX_PADDING_KM = 100;
+
+function routeBbox( coords: RoutePoint[], paddingKm = BBOX_PADDING_KM ) {
   let minLat = Infinity;
   let maxLat = -Infinity;
   let minLng = Infinity;
@@ -120,11 +124,14 @@ function routeBbox( coords: RoutePoint[], paddingDeg = 0.3 ) {
     if ( longitude < minLng ) minLng = longitude;
     if ( longitude > maxLng ) maxLng = longitude;
   }
+  const latPaddingDeg = paddingKm / KM_PER_DEG_LAT;
+  const midLat = ( minLat + maxLat ) / 2;
+  const lngPaddingDeg = paddingKm / ( KM_PER_DEG_LAT * Math.cos( toRad( midLat ) ) );
   return {
-    swlat: minLat - paddingDeg,
-    swlng: minLng - paddingDeg,
-    nelat: maxLat + paddingDeg,
-    nelng: maxLng + paddingDeg,
+    swlat: minLat - latPaddingDeg,
+    swlng: minLng - lngPaddingDeg,
+    nelat: maxLat + latPaddingDeg,
+    nelng: maxLng + lngPaddingDeg,
   };
 }
 
@@ -338,7 +345,8 @@ export function useRouteHotspots() {
           per_page: 200,
           page,
           verifiable: true,
-          order_by: "id",
+          order_by: "observed_on",
+          order: "desc",
           fields: {
             uuid: true,
             geojson: true,
