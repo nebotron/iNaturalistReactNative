@@ -1,6 +1,8 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import About from "components/About";
+import AnimalCropTool from "components/AnimalCropTool/AnimalCropTool";
+import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
 import UiLibrary from "components/Developer/UiLibrary";
@@ -28,6 +30,7 @@ import { Heading4 } from "components/SharedComponents";
 import FollowersList from "components/UserProfile/FollowersList";
 import FollowingList from "components/UserProfile/FollowingList";
 import UserProfile from "components/UserProfile/UserProfile";
+import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
 import { t } from "i18next";
 import ContextHeader from "navigation/ContextHeader";
 import {
@@ -85,6 +88,10 @@ const notificationsTitle = () => (
   </Heading4>
 );
 
+// eslint-disable-next-line i18next/no-literal-string
+const animalCropTitle = () => <Heading4 numberOfLines={1}>CROP LABELER</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const debugTitle = () => <Heading4 className="text-white">DEBUG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
@@ -213,6 +220,11 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={ExploreSearchContainer}
           />
           <Stack.Screen
+            name="WildlifeHotspots"
+            component={WildlifeHotspotsScreen}
+            options={hideHeader}
+          />
+          <Stack.Screen
             name="ObsDetails"
             component={FadeInObsDetailsScreen}
             options={OBS_DETAILS_OPTIONS}
@@ -322,6 +334,20 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             ...removeBottomBorder,
           }}
         >
+          <Stack.Screen
+            name="AnimalCropTool"
+            component={AnimalCropTool}
+            options={{
+              headerTitle: animalCropTitle,
+            }}
+          />
+          <Stack.Screen
+            name="CropLogViewer"
+            component={CropLogViewer}
+            options={{
+              headerTitle: cropLogTitle,
+            }}
+          />
           <Stack.Screen
             name="Settings"
             component={FadeInSettings}

@@ -97,6 +97,8 @@ export type SharedStackParamList = {
     };
     hideNavButtons?: boolean;
     lastScreen?: "Suggestions";
+    // Hint from callers that know the taxon rank without full taxon data (e.g. SpeciesGame)
+    rankLevel?: number;
     // TODO: do we really use both?
     vision?: boolean;
     usesVision?: boolean;
@@ -190,6 +192,19 @@ export type SharedStackParamList = {
     initialUrl: string;
     loggedIn: boolean;
   };
+  // From EvidenceList.js and GroupPhotos.tsx
+  ImageCropEditor: {
+    imageUri: string;
+    context: "groupPhotos" | "observationEdit";
+    observationPhotoUuid?: string;
+    onCropSaved?: () => void;
+    pendingImageUris?: string[];
+  };
+  // From TaxonDetails
+  // { taxonId: number }
+  SpeciesGame: {
+    taxonId: number;
+  };
 };
 
 // Note from the documentation:
@@ -276,6 +291,7 @@ export type BaseTabStackParamList = {
     identAt?: number;
     identTaxonId?: number;
     identTaxonFromVision?: boolean;
+    preloadedObservation?: object;
   };
   Notifications: undefined;
   // From ProjectRequirements, InlineUserBase, UserList
@@ -340,6 +356,9 @@ export type BaseTabStackParamList = {
     projectTitle?: string;
     journalPostsCount?: number;
   } | undefined;
+  WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
+  AnimalCropTool: undefined;
+  CropLogViewer: undefined;
   Debug: undefined;
   UILibrary: undefined;
   UiLibraryItem: undefined;
