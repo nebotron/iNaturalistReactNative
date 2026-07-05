@@ -1,16 +1,32 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable no-shadow */
+// Please don't change this to an aliased path or the e2e mock will not get
+// used in our e2e tests on Github Actions
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import {
+  migrateTaxonFilters,
+  normalizeTaxonFilters,
+} from "components/Explore/helpers/taxonFilters";
+import type { ExploreUserFilter } from "components/Explore/helpers/userFilters";
+import {
+  migrateUserFilters,
+  normalizeUserFilters,
+} from "components/Explore/helpers/userFilters";
 import isEqual from "lodash/isEqual";
 import * as React from "react";
 import type { LatLng } from "react-native-maps";
 
-// Please don't change this to an aliased path or the e2e mock will not get
-// used in our e2e tests on Github Actions
 import fetchCoarseUserLocation from "../sharedHelpers/fetchCoarseUserLocation";
+import { DEFAULT_NEARBY_RADIUS_KM } from "../sharedHelpers/nearbyRadius";
+
+export type { ExploreTaxonFilter };
+export type { ExploreUserFilter };
 
 export enum EXPLORE_ACTION {
   CHANGE_SORT_BY = "CHANGE_SORT_BY",
   CHANGE_TAXON = "CHANGE_TAXON",
+  SET_TAXON_FILTERS = "SET_TAXON_FILTERS",
+  SET_USER_FILTERS = "SET_USER_FILTERS",
   DISCARD = "DISCARD",
   FILTER_BY_ICONIC_TAXON_UNKNOWN = "FILTER_BY_ICONIC_TAXON_UNKNOWN",
   RESET = "RESET",
@@ -38,7 +54,10 @@ export enum EXPLORE_ACTION {
   SET_TAXON_NAME = "SET_TAXON_NAME",
   SET_USER = "SET_USER",
   SET_EXCLUDE_USER = "SET_EXCLUDE_USER",
+  TOGGLE_UNOBSERVED_BY_ME = "TOGGLE_UNOBSERVED_BY_ME",
+  TOGGLE_POPULAR = "TOGGLE_POPULAR",
   SET_WILD_STATUS = "SET_WILD_STATUS",
+  SET_NEARBY_RADIUS = "SET_NEARBY_RADIUS",
   TOGGLE_CASUAL = "TOGGLE_CASUAL",
   TOGGLE_NEEDS_ID = "TOGGLE_NEEDS_ID",
   TOGGLE_RESEARCH_GRADE = "TOGGLE_RESEARCH_GRADE",
@@ -218,13 +237,18 @@ interface State {
   // and should be typed as such (e.g., in realm model)
   taxon: object | undefined | null;
   taxon_id: number | undefined | null;
+  taxonFilters: ExploreTaxonFilter[];
   // TODO: technically this is not any object but a "User"
   // and should be typed as such (e.g., in realm model)
   user: object | undefined | null;
   user_id: number | undefined | null;
   excludeUser: object | undefined | null;
+  userFilters: ExploreUserFilter[];
+  unobservedByMe: boolean;
+  popular: boolean;
   verifiable: boolean;
   wildStatus: WILD_STATUS;
+  nearbyRadiusKm: number;
 }
 type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.DISCARD; snapshot: State}
@@ -241,6 +265,16 @@ type Action = {type: EXPLORE_ACTION.RESET}
     taxon: { id: number } | null;
     taxonId: number;
     taxonName: string;
+    storedState?: State;
+  }
+  | {
+    type: EXPLORE_ACTION.SET_TAXON_FILTERS;
+    taxonFilters: ExploreTaxonFilter[];
+    storedState?: State;
+  }
+  | {
+    type: EXPLORE_ACTION.SET_USER_FILTERS;
+    userFilters: ExploreUserFilter[];
     storedState?: State;
   }
   | { type: EXPLORE_ACTION.FILTER_BY_ICONIC_TAXON_UNKNOWN }
@@ -281,10 +315,13 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.SET_MEDIA; media: MEDIA}
   | {type: EXPLORE_ACTION.SET_ESTABLISHMENT_MEAN; establishmentMean: ESTABLISHMENT_MEAN}
   | {type: EXPLORE_ACTION.SET_WILD_STATUS; wildStatus: WILD_STATUS}
+  | {type: EXPLORE_ACTION.SET_NEARBY_RADIUS; radius: number}
   | {type: EXPLORE_ACTION.SET_REVIEWED; reviewedFilter: REVIEWED}
   | {type: EXPLORE_ACTION.SET_PHOTO_LICENSE; photoLicense: PHOTO_LICENSE}
   | {type: EXPLORE_ACTION.SET_MAP_BOUNDARIES; mapBoundaries: MapBoundaries}
   | {type: EXPLORE_ACTION.USE_STORED_STATE; storedState: State}
+  | {type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME}
+  | {type: EXPLORE_ACTION.TOGGLE_POPULAR}
 type Dispatch = ( action: Action ) => void
 
 const ExploreContext = React.createContext<
@@ -301,8 +338,10 @@ const ExploreContext = React.createContext<
 
 // Every key in this object represents a numbered filter in the UI
 const calculatedFilters = {
-  user_id: undefined,
+  userFilters: [] as ExploreUserFilter[],
   project_id: undefined,
+  unobservedByMe: false,
+  popular: false,
   researchGrade: true,
   needsID: true,
   casual: false,
@@ -331,6 +370,8 @@ const defaultFilters = {
   project: undefined,
   sortBy: SORT_BY.DATE_UPLOADED_NEWEST,
   user: undefined,
+  user_id: undefined,
+  excludeUser: undefined,
 };
 
 const initialState: State = {
@@ -346,7 +387,10 @@ const initialState: State = {
   return_bounds: undefined,
   taxon: undefined,
   taxon_id: undefined,
+  taxonFilters: [],
+  userFilters: [],
   verifiable: true,
+  nearbyRadiusKm: DEFAULT_NEARBY_RADIUS_KM,
 };
 
 // Checks if the date is in the format XXXX-XX-XX
@@ -355,7 +399,9 @@ function isValidDateFormat( date: string ): boolean {
   return regex.test( date );
 }
 
-async function defaultExploreLocation( ): Promise<DefaultLocation> {
+async function defaultExploreLocation(
+  nearbyRadiusKm: number = DEFAULT_NEARBY_RADIUS_KM,
+): Promise<DefaultLocation> {
   const location = await fetchCoarseUserLocation( );
   if ( !location || !location.latitude ) {
     return {
@@ -374,7 +420,7 @@ async function defaultExploreLocation( ): Promise<DefaultLocation> {
     placeMode: PLACE_MODE.NEARBY,
     lat: location?.latitude,
     lng: location?.longitude,
-    radius: 1,
+    radius: nearbyRadiusKm,
     place_id: undefined,
     swlat: undefined,
     swlng: undefined,
@@ -404,13 +450,28 @@ function exploreReducer( state: State, action: Action ) {
         iconic_taxa: undefined,
       };
       if ( action.taxon ) {
+        newState.taxonFilters = [{ taxon: action.taxon, exclude: false }];
         newState.taxon = action.taxon;
         newState.taxon_id = action.taxon.id;
       } else {
+        newState.taxonFilters = [];
         newState.taxon = null;
         newState.taxon_id = null;
       }
       return newState;
+    }
+    case EXPLORE_ACTION.SET_TAXON_FILTERS: {
+      const taxonFilters = normalizeTaxonFilters( action.taxonFilters );
+      const includeFilters = taxonFilters.filter( filter => !filter.exclude );
+      const firstInclude = includeFilters[0]?.taxon ?? null;
+      return {
+        ...state,
+        ...action.storedState,
+        iconic_taxa: undefined,
+        taxonFilters,
+        taxon: firstInclude,
+        taxon_id: firstInclude?.id ?? null,
+      };
     }
     // Every iconic taxon filter is essentially a taxon filter... except
     // "unknown", which is a search for observations not associated with an
@@ -424,14 +485,49 @@ function exploreReducer( state: State, action: Action ) {
         iconic_taxa: ["unknown"],
         taxon: undefined,
         taxon_id: undefined,
+        taxonFilters: [],
       };
       return newState;
     }
-    case EXPLORE_ACTION.SET_EXPLORE_LOCATION:
+    case EXPLORE_ACTION.SET_EXPLORE_LOCATION: {
+      const { exploreLocation } = action;
+      const clearedLocationState = {
+        ...state,
+        lat: undefined,
+        lng: undefined,
+        nelat: undefined,
+        nelng: undefined,
+        place: undefined,
+        place_guess: "",
+        place_id: undefined,
+        radius: undefined,
+        swlat: undefined,
+        swlng: undefined,
+      };
+
+      if ( exploreLocation.placeMode === PLACE_MODE.WORLDWIDE ) {
+        return {
+          ...clearedLocationState,
+          placeMode: PLACE_MODE.WORLDWIDE,
+        };
+      }
+
+      if ( exploreLocation.placeMode === PLACE_MODE.NEARBY ) {
+        const radius = exploreLocation.radius ?? state.nearbyRadiusKm;
+        return {
+          ...clearedLocationState,
+          placeMode: PLACE_MODE.NEARBY,
+          lat: exploreLocation.lat,
+          lng: exploreLocation.lng,
+          radius,
+        };
+      }
+
       return {
         ...state,
-        ...action.exploreLocation,
+        ...exploreLocation,
       };
+    }
     case EXPLORE_ACTION.SET_PLACE_MODE_NEARBY:
       return {
         ...state,
@@ -468,6 +564,19 @@ function exploreReducer( state: State, action: Action ) {
         swlat: undefined,
         swlng: undefined,
       };
+    case EXPLORE_ACTION.SET_USER_FILTERS: {
+      const userFilters = normalizeUserFilters( action.userFilters );
+      const firstInclude = userFilters.find( f => !f.exclude )?.user ?? null;
+      const firstExclude = userFilters.find( f => f.exclude )?.user ?? null;
+      return {
+        ...state,
+        ...action.storedState,
+        userFilters,
+        user: firstInclude,
+        user_id: firstInclude?.id ?? null,
+        excludeUser: firstExclude,
+      };
+    }
     case EXPLORE_ACTION.SET_USER:
       return {
         ...state,
@@ -475,6 +584,9 @@ function exploreReducer( state: State, action: Action ) {
         user: action.user,
         user_id: action.userId,
         excludeUser: null,
+        userFilters: action.user
+          ? [{ user: action.user as ExploreUserFilter["user"], exclude: false }]
+          : [],
       };
     case EXPLORE_ACTION.EXCLUDE_USER:
       return {
@@ -483,6 +595,9 @@ function exploreReducer( state: State, action: Action ) {
         excludeUser: action.excludeUser,
         user: null,
         user_id: null,
+        userFilters: action.excludeUser
+          ? [{ user: action.excludeUser as ExploreUserFilter["user"], exclude: true }]
+          : [],
       };
     case EXPLORE_ACTION.SET_PROJECT:
       return {
@@ -510,6 +625,16 @@ function exploreReducer( state: State, action: Action ) {
       return {
         ...state,
         casual: !state.casual,
+      };
+    case EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME:
+      return {
+        ...state,
+        unobservedByMe: !state.unobservedByMe,
+      };
+    case EXPLORE_ACTION.TOGGLE_POPULAR:
+      return {
+        ...state,
+        popular: !state.popular,
       };
     case EXPLORE_ACTION.SET_HIGHEST_TAXONOMIC_RANK:
       return {
@@ -631,6 +756,16 @@ function exploreReducer( state: State, action: Action ) {
         ...state,
         reviewedFilter: action.reviewedFilter,
       };
+    case EXPLORE_ACTION.SET_NEARBY_RADIUS: {
+      const updatedState = {
+        ...state,
+        nearbyRadiusKm: action.radius,
+      };
+      if ( state.placeMode === PLACE_MODE.NEARBY ) {
+        updatedState.radius = action.radius;
+      }
+      return updatedState;
+    }
     case EXPLORE_ACTION.SET_MAP_BOUNDARIES: {
       return {
         ...state,
@@ -641,10 +776,33 @@ function exploreReducer( state: State, action: Action ) {
         radius: undefined,
       };
     }
-    case EXPLORE_ACTION.USE_STORED_STATE:
+    case EXPLORE_ACTION.USE_STORED_STATE: {
+      const { storedState } = action;
+      const nearbyRadiusKm = storedState.nearbyRadiusKm != null
+        ? storedState.nearbyRadiusKm
+        : storedState.radius ?? DEFAULT_NEARBY_RADIUS_KM;
+      const taxonFilters = migrateTaxonFilters( storedState );
+      const userFilters = migrateUserFilters( storedState );
+      const firstIncludeUser = userFilters.find( f => !f.exclude )?.user ?? null;
+      const firstExcludeUser = userFilters.find( f => f.exclude )?.user ?? null;
+
       return {
-        ...action.storedState,
+        ...initialState,
+        ...storedState,
+        nearbyRadiusKm,
+        taxonFilters,
+        taxon: taxonFilters.find( filter => !filter.exclude )?.taxon
+          ?? storedState.taxon
+          ?? undefined,
+        taxon_id: taxonFilters.find( filter => !filter.exclude )?.taxon?.id
+          ?? storedState.taxon_id
+          ?? undefined,
+        userFilters,
+        user: firstIncludeUser ?? storedState.user ?? undefined,
+        user_id: firstIncludeUser?.id ?? storedState.user_id ?? undefined,
+        excludeUser: firstExcludeUser ?? storedState.excludeUser ?? undefined,
       };
+    }
     default: {
       throw new Error( `Unhandled action type: ${( action as Action ).type}` );
     }
@@ -670,12 +828,20 @@ const ExploreProvider = ( { children }: ExploreProviderProps ) => {
     dispatch( { type: EXPLORE_ACTION.DISCARD, snapshot } );
   };
 
+  const getDefaultExploreLocation = React.useCallback(
+    () => defaultExploreLocation( state.nearbyRadiusKm ?? DEFAULT_NEARBY_RADIUS_KM ),
+    [state.nearbyRadiusKm],
+  );
+
   const isNotInitialState: boolean = Object.keys( initialState ).some(
     key => initialState[key] !== state[key],
   );
 
   let numberOfFilters: number = Object.keys( calculatedFilters ).reduce(
     ( count, key ) => {
+      if ( key === "userFilters" ) {
+        return count + ( state.userFilters?.length > 0 ? 1 : 0 );
+      }
       if ( state[key] !== calculatedFilters[key] ) {
         return count + 1;
       }
@@ -692,7 +858,7 @@ const ExploreProvider = ( { children }: ExploreProviderProps ) => {
   const value = {
     state,
     dispatch,
-    defaultExploreLocation,
+    defaultExploreLocation: getDefaultExploreLocation,
     isNotInitialState,
     numberOfFilters,
     makeSnapshot,
@@ -715,5 +881,7 @@ function useExplore() {
 export {
   ExploreProvider,
   exploreReducer,
+  initialState as initialExploreState,
   useExplore,
 };
+export type { State as ExploreState };
