@@ -348,7 +348,6 @@
   "IGNORE-LOCATION": "ᲐᲓᲒᲘᲚᲛᲓᲔᲑᲐᲠᲔᲝᲑᲘᲡ ᲘᲒᲜᲝᲠᲘᲠᲔᲑᲐ",
   "Ignore-notifications": "შეტყობინებების იგნორირება",
   "Ignoring-location": "ადგილმდებარეობის იგნორირება",
-  "Import-Photos-From": "ფოტოების იმპორტი აქედან...",
   "IMPORT-X-OBSERVATIONS": "{ $count ->\n  [one] 1 ᲓᲐᲙᲕᲘᲠᲕᲔᲑᲘᲡ\n *[other] { $count } ᲓᲐᲙᲕᲘᲠᲕᲔᲑᲘᲡ\n} ᲘᲛᲞᲝᲠᲢᲘ",
   "Improve-suggestions-by-using-your-location": "გააუმჯობესეთ შეთავაზებები თქვენი ადგილმდებარეობის გამოყენებით",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "ᲒᲐᲐᲣᲛᲯᲝᲑᲔᲡᲔᲗ ᲔᲡ ᲨᲔᲗᲐᲕᲐᲖᲔᲑᲔᲑᲘ ᲗᲥᲕᲔᲜᲘ ᲐᲓᲒᲘᲚᲛᲓᲔᲑᲐᲠᲔᲝᲑᲘᲡ ᲒᲐᲛᲝᲧᲔᲜᲔᲑᲘᲗ",

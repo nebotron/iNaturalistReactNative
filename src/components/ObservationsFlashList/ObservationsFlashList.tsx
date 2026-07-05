@@ -173,7 +173,7 @@ const ObservationsFlashList = ( {
             uuid,
             preloadedObservation: obsNeedsSync
               ? undefined
-              : observation,
+              : item,
           },
         } );
       }

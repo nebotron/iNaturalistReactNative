@@ -65,6 +65,7 @@ Add-location-to-refresh-suggestions = Add location to refresh suggestions
 Add-observations = Add observations
 ADD-OPTIONAL-COMMENT = ADD OPTIONAL COMMENT
 Add-optional-notes = Add optional notes
+ADD-TAXON-FILTER = ADD TAXON FILTER
 Add-to-Projects = Add to Projects
 ADD-TO-PROJECTS = ADD TO PROJECTS
 Added-to-X-Projects =
@@ -72,12 +73,14 @@ Added-to-X-Projects =
         [one] Project
        *[other] Projects
     }
+ADD-USER-FILTER = ADD USER FILTER
 # Hint for a button that adds an identification
 Adds-ID = Adds ID
 # Hint for a button that adds a vote of agreement
 Adds-your-vote-of-agreement = Adds your vote of agreement
 # Hint for a button that adds a vote of disagreement
 Adds-your-vote-of-disagreement = Adds your vote of disagreement
+Adjust-brightness = Adjust brightness
 # Label for toggling app mode between default and advanced settings
 Advanced-Mode = Advanced Mode
 # Link to the advanced search screen with more search filters
@@ -213,7 +216,6 @@ Change-species-sort-order = Change species sort order
 CHANGE-START-DATE = CHANGE START DATE
 # Label for a button that changes a selected start date
 Change-start-date = Change start date
-Change-taxon = Change taxon
 # Button that changes the taxon filter on Explore
 Change-taxon-filter = Change taxon filter
 Change-user = Change user
@@ -223,6 +225,7 @@ Change-zoom = Change zoom
 CHECK-YOUR-EMAIL = CHECK YOUR EMAIL!
 # Label for a text input field during sign up to choose a username
 CHOOSE-A-USERNAME = CHOOSE A USERNAME
+Choose-photos = Choose Photos
 # Label for button that chooses a taxon
 Choose-taxon = Choose taxon
 # Label for button that chooses the best suggestion among a list of suggested
@@ -282,6 +285,8 @@ Copy-coordinates = Copy Coordinates
 # heading to describe general information about rights, attribution, and
 # licensing
 Copyright = Copyright
+# Error message when original photos could not be deleted from the device
+Could-not-delete-original-photos = Could not delete the original photos from your device.
 # Error message when no camera can be found
 Could-not-find-a-camera-on-this-device = Could not find a camera on this device
 Couldnt-create-comment = Couldn't create comment
@@ -289,6 +294,8 @@ Couldnt-create-identification-error = Couldn't create identification { $error }
 Couldnt-create-identification-unknown-error = Couldn't create identification, unknown error.
 CREATE-AN-ACCOUNT = CREATE AN ACCOUNT
 Create-observation-with-no-evidence = Create observation with no evidence
+CROP-DRAG-HINT = Drag to pan. Pinch to zoom.
+CROP-PHOTO = Crop Photo
 DATA-QUALITY = DATA QUALITY
 DATA-QUALITY-ASSESSMENT = DATA QUALITY ASSESSMENT
 # Label for button that navigates users to the data quality screen
@@ -403,8 +410,17 @@ Delete-current-observation = Delete current observation
 # Button that deletes an observation
 Delete-observation = Delete observation
 DELETE-OBSERVATION--question = DELETE OBSERVATION?
+# Title for alert asking whether to delete photos from the device after import
+Delete-original-photos--question = Delete original photos?
+# Description for alert asking whether to delete photos from the device after import
+Delete-original-photos-description = Would you like to delete the original photos from your device? This will only remove photos you removed from your observation(s) before saving, not photos saved on your observations.
 # Button label or accessibility label for an element that deletes a photo
 Delete-photo = Delete photo
+# Button that deletes imported photos from the user's device photo library
+Delete-photos = Delete photos
+Delete-saved-filter = Delete saved filter
+Delete-saved-filter-description = { $name } will be removed from your saved filters.
+Delete-saved-filter-title = DELETE SAVED FILTER?
 Delete-sound = Delete sound
 # Hint for a button that clears text you entered
 Deletes-entered-text = Deletes entered text
@@ -422,6 +438,7 @@ Deleting-x-of-y-observations-2 =
         [one] observation
        *[other] of { $total } observations
     }
+Deselect-all-photos = Deselect all
 # Label for section of ObsDetails with information about copyright, upload date, etc.
 Details = Details
 # Tab label or section title for content that describes further details, e.g.
@@ -466,6 +483,10 @@ DONATE-TO-INATURALIST = DONATE TO INATURALIST
 # Label for a button the user taps when a task is complete
 DONE = DONE
 Dont-have-an-account = <0>Don't have an account? </0><1>Sign up</1>
+Duplicate-photo-indicator = Previously uploaded photo
+Duplicate-photo-upload-message = You have already uploaded this photo to iNaturalist. Cropped or edited versions count as the same photo. Upload anyway?
+Duplicate-photo-upload-title = Upload this photo again?
+Duplicate-Photos = Duplicate Photos
 During-app-start-no-model-found = During app start there was no computer vision model found. There will be no AI camera.
 # Button for editing something
 Edit = Edit
@@ -489,6 +510,10 @@ Enable-flash = Enable flash
 Enable-location = Enable location
 # Button that subscribes the user to notifications for an observation
 Enable-notifications = Enable notifications
+# Label for the end point marker on the hotspots map
+End = End
+# Placeholder text for the end location input in the Wildlife Hotspots tool
+End-location = End location (e.g. Boston, MA)
 # Indicates a species only occurs in a specific place
 Endemic = Endemic
 # TODO this and many other uses of placeables are not currently translatable
@@ -514,6 +539,8 @@ EVIDENCE = EVIDENCE
 Exact-Date = Exact Date
 EXACT-DATE = EXACT DATE
 except = except
+Exclude-taxon = Exclude
+Exclude-user = Exclude
 EXPAND-MAP = EXPAND MAP
 # Onboarding carousel second screen description
 Experts-help-verify-and-improve-IDs = Experts help verify and improve IDs
@@ -543,6 +570,8 @@ Filter-by-observed-on-date = Filter by observations observed on a specific date
 Filter-by-uploaded-between-dates = Filter by observations uploaded between two specific dates
 Filter-by-uploaded-on-date = Filter by observations uploaded on a specific date
 Filters = Filters
+# Button that triggers the Wildlife Hotspots search
+Find-Hotspots = Find Hotspots
 # Status when an item has been flagged
 Flagged = Flagged
 Flash = Flash
@@ -592,6 +621,7 @@ ID-Withdrawn = ID Withdrawn
 IDENTIFICATION = IDENTIFICATION
 # Accessibility label for a button that shows options for an identification
 Identification-options = Identification options
+IDENTIFICATION-TIPS = IDENTIFICATION TIPS
 IDENTIFICATIONS-WITHOUT-NUMBER =
     { $count ->
         [one] IDENTIFICATION
@@ -662,6 +692,8 @@ iNaturalist-users-who-have-left-an-identification = iNaturalist users who have l
 iNaturalist-users-who-have-observed = iNaturalist users who have observed a particular taxon at a particular time and place
 iNaturalists-apps-are-designed-and-developed-3 = iNaturalist's apps are designed, developed, and supported by the iNaturalist team: Yaron Budowski, Amanda Bullington, Tony Iwane, Johannes Klein, Patrick Leary, Joanne Lin, Scott Loarie, Abhas Misraraj, Sylvain Morin, Carrie Seltzer, Alex Shepard, Thea Skaff, Angie Ta, Ken-ichi Ueda, Kirk van Gorkom, Jason Walthall, & Jane Weeden.
 iNaturalists-vision-is-a-world = iNaturalist's vision is a world where everyone can understand and sustain biodiversity through the practice of observing wild organisms and sharing information about them.
+Include-taxon = Include
+Include-user = Include
 Individual-encounters-with-organisms = Individual encounters with organisms at a particular time and location, usually with evidence
 # Title for dialog telling the user that an Internet connection is required
 Internet-Connection-Required = Internet Connection Required
@@ -702,6 +734,8 @@ July = July
 # Month of June
 June = June
 Just-make-sure-the-organism-is-wild = Just make sure the organism is wild (not a pet, zoo animal, or garden plant)
+# Button that keeps imported photos on the user's device
+Keep-photos = Keep photos
 # Shows date user last active on iNaturalist on user profile
 Last-Active-date = Last Active: { $date }
 # Latitude, longitude on a single line
@@ -723,11 +757,14 @@ LEAVE-PROJECT--question = LEAVE PROJECT?
 LEAVE-US-A-REVIEW = LEAVE US A REVIEW!
 Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
+Load-saved-filter = Load saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
 Loads-content-that-requires-an-Internet-connection = Loads content that requires an Internet connection
 LOCATION = LOCATION
 Location = Location
 Location-accuracy-is-too-imprecise = Location accuracy is too imprecise to help identifiers. Please zoom in.
+# Title for alert when a location name could not be geocoded
+Location-not-found = Location not found
 LOCATION-TOO-IMPRECISE = LOCATION TOO IMPRECISE
 LOG-IN = LOG IN
 LOG-IN-TO-INATURALIST = LOG IN TO INATURALIST
@@ -744,6 +781,9 @@ MAP = MAP
 Map-Area = Map Area
 # Month of March
 March = March
+# Title for section of observation filters for controls over whether you have
+# Button to mark an observation as reviewed by the current user
+Mark-as-reviewed = Mark as reviewed
 # Radio button option for navigation flows in Settings
 Match-Screen = Match Screen
 # Identification category
@@ -773,6 +813,7 @@ MOST-FAVED = MOST FAVED
 Most-faved = Most faved
 # Label for species sort order, this option is selected by default
 Most-Observed-Default = Most Observed (Default)
+Multiple-taxa = Multiple taxa
 # Title for section in Notifications showing notifications about observations
 # created by the viewer. Should be 16 characters or fewer or it will be ellipsized.
 MY-CONTENT--notifications = MY CONTENT
@@ -808,8 +849,16 @@ Navigates-to-your-observations = Navigates to your observations
 NEARBY = NEARBY
 # Header or button label for content that is near the user's current location
 Nearby = Nearby
+# Setting for Explore nearby search distance
+Nearby-search-radius = Nearby search radius
 # Quality grade indicating observation still needs more identifications
 Needs-ID--quality-grade = Needs ID
+# Label for the duckling badge shown next to recently joined users
+New-community-member = New community member
+# Duckling symbol shown next to recently joined users
+New-community-member-duckling = 🐥
+# Explanation shown when tapping the new community member duckling badge
+New-community-member-explanation = This person joined iNaturalist within the last 30 days. Welcome them to the community!
 # Heading when creating a new observation
 New-Observation = New Observation
 # Sort order, refers to newest or oldest date
@@ -832,6 +881,7 @@ No-results-found-for-that-search = No results found for that search.
 No-results-found-try-different-search = No results found. Try a different search or adjust your filters.
 # license code
 no-rights-reserved-cc0 = no rights reserved (CC0)
+No-saved-filters-yet = No saved filters yet.
 # Displayed in place of positional accuracy when that value is missing
 none--accuracy = none
 # Option when selecting taxonomic ranks that indicates no rank was selected
@@ -913,12 +963,14 @@ Observers-View = Observers View
 # Month of October
 October = October
 Offline-DQA-description = The DQA may not be accurate. Check your internet connection and try again.
+Offline-suggestions = Offline
 Offline-suggestions-may-differ-from-online = Offline suggestions may differ from online suggestions, and taxon images and common names may not load.
 # Generic confirmation, e.g. button on a warning alert
 OK = OK
 # Sort order, refers to newest or oldest date
 Oldest-to-newest = Oldest to newest
 Once-you-create-and-upload-observations = Once you create & upload observations, other members of our community can add identifications to help your observations reach research grade.
+Online-suggestions = Online
 # Adjective, as in geoprivacy
 Open = Open
 OPEN-EMAIL = OPEN EMAIL
@@ -932,6 +984,8 @@ Opens-AI-camera = Opens AI camera.
 # Accessibility hint for a button that opens a form for editing a comment
 Opens-edit-comment-form = Opens edit comment form.
 Opens-location-permission-prompt = Opens location permission prompt
+# Accessibility hint for the Wildlife Hotspots button in the Explore header
+Opens-route-hotspots = Opens the Wildlife Hotspots route finder
 # Accessibility hint for search button in Explore header that navigates to the search interface
 Opens-search-interface = Opens search interface.
 OR-SIGN-IN-WITH = OR SIGN IN WITH
@@ -944,6 +998,7 @@ OTHER-SUGGESTIONS = OTHER SUGGESTIONS
 # Tab on notifications showing notifications about content created by others.
 # Should be 16 characters or fewer or it will be ellipsized.
 OTHERS--notifications = OTHERS
+Overwrite-saved-filter = Overwrite saved filter
 PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
@@ -957,6 +1012,7 @@ Please-allow-Camera-Access = Please allow Camera Access
 Please-allow-Location-Access = Please allow Location Access
 # Title of screen asking for permission to access the microphone when access was denied
 Please-allow-Microphone-Access = Please allow Microphone Access
+Please-allow-Photo-Library-Access = Please allow Photo Library Access
 Please-choose-a-different-password = Please choose a different password.
 # Title of a screen asking for permission when permission has been denied
 Please-Grant-Permission = Please Grant Permission
@@ -964,9 +1020,11 @@ PLEASE-LOG-IN = PLEASE LOG IN
 Please-log-in = Please log in
 Please-log-in-again = Please log in again. We occasionally need to refresh your session to clear cached data and make sure the app is working its best.
 Please-make-sure-your-password-is-at-least-6-characters = Please make sure your password is at least 6 characters.
+Please-select-a-location-from-the-suggestions = Please select a location from the suggestions.
 Please-try-again-when-you-are-connected-to-the-internet = Please try again when you are connected to the Internet.
 Please-try-again-when-you-are-online = Please try again when you are online!
 Point-the-camera-at-an-animal-plant-or-fungus = Point the camera at an animal, plant, or fungus
+Popular-observations-filter = Popular (at least one fave)
 POTENTIAL-DISAGREEMENT = POTENTIAL DISAGREEMENT
 Potential-disagreement-description = <0>Is the evidence enough to confirm this is </0><1></1><0>?<0>
 Potential-disagreement-disagree = <0>No, but this is a member of </0><1></1>
@@ -1109,6 +1167,9 @@ Removes-your-vote-of-disagreement = Removes your vote of disagreement
 Research-Grade--quality-grade = Research Grade
 RESEARCH-GRADE--quality-grade = RESEARCH GRADE
 Research-Grade-Status = Research Grade Status
+# Label for a button that resets the state of an interface, e.g. a button that
+# resets the sound recorder to its original state
+Reset-brightness = Reset brightness
 # Reset password button
 RESET-PASSWORD = RESET PASSWORD
 # Label for a button that resets a sound recording
@@ -1117,16 +1178,12 @@ RESET-SEARCH = RESET SEARCH
 # Header of a popup confirming that the user wants to reset a sound
 # recording
 RESET-SOUND-header = RESET SOUND?
-# Label for a button that resets the state of an interface, e.g. a button that
-# resets the sound recorder to its original state
 Reset-verb = Reset
 RESTART-APP = RESTART APP
 # Label for button that restores a withdrawn identification
 Restore = Restore
 Reveal = Reveal
 REVIEW-INATURALIST = REVIEW INATURALIST
-# Title for section of observation filters for controls over whether you have
-# reviewed the observations or not
 REVIEWED = REVIEWED
 Reviewed-observations-only = Reviewed observations only
 # Label for the satellite map type
@@ -1136,9 +1193,16 @@ SAVE = SAVE
 SAVE-ALL = SAVE ALL
 # Button that saves all observations in a batch of multiple observations
 Save-all-observations = Save all observations
+Save-brightness-label = Save brightness as label
 SAVE-CHANGES = SAVE CHANGES
+SAVE-CROP = SAVE CROP
+Save-current-filters = Save current filters
 SAVE-FOR-LATER = SAVE FOR LATER
 SAVE-LOCATION = SAVE LOCATION
+Saved-filter-already-exists-description = You already have a saved filter with this name. Choose a different name.
+Saved-filter-already-exists-title = Name already in use
+Saved-filter-name-placeholder = e.g. Nearby birds
+Saved-filters = Saved filters
 Saved-Observation = Saved observation, in queue to upload
 Scientific-Name = Scientific Name
 Scientific-Name-Common-Name = Scientific Name (Common Name)
@@ -1159,6 +1223,10 @@ Search-suggestions-with-location = Search suggestions with location
 Search-suggestions-without-location = Search suggestions without location
 SEARCH-TAXA = SEARCH TAXA
 SEARCH-USERS = SEARCH USERS
+# Loading message shown while searching for wildlife hotspots
+Searching-for-hotspots = Searching for hotspots…
+# Loading message shown while fetching the route through a selected hotspot
+Loading-route = Loading route…
 # Accessibility label for navigating to journal posts screen
 See-journal-posts = See journal posts
 # Accessibility label for Observations button on UserProfile screen
@@ -1170,10 +1238,12 @@ See-project-members = See project members
 # Accessibility label for Species button on UserProfile screen
 See-species-observed-by-this-user-in-Explore = See species observed by this user in Explore
 Select-a-date-and-time-for-observation = Select a date and time for observation
+Select-all-photos = Select all
 Select-captive-or-cultivated-status = Select captive or cultivated status
 Select-geoprivacy-status = Select geoprivacy status
 Select-or-drag-media = Select or drag media
 Select-photo = Select photo
+Select-photos-from-your-device-to-create-observations = Select photos from your device to create observations
 SELECT-THIS-TAXON = SELECT THIS TAXON
 # Label for an element that let's you select a user
 Select-user = Select user
@@ -1194,6 +1264,8 @@ Show-observation-options = Show observation options.
 Showing-offline-search-results--taxa = Showing offline search results. To search for more species, try again when connected to the Internet.
 # Label for button that shows identification suggestions
 Shows-identification-suggestions = Shows identification suggestions
+# Accessibility hint for the new community member duckling badge
+Shows-information-about-new-community-members = Shows information about new community members
 # Accessibility hint for button that shows observation creation options
 Shows-observation-creation-options = Shows observation creation options
 # Accessibility label for a button that allows user to sign in with their Apple account
@@ -1243,6 +1315,10 @@ SPECIES-WITHOUT-NUMBER =
     }
 # Label for the standard map type
 Standard--map-type = Standard
+# Label for the start point marker on the hotspots map
+Start = Start
+# Placeholder text for the start location input in the Wildlife Hotspots tool
+Start-location = Start location (e.g. New York, NY)
 Start-must-be-before-end = The start date must be before the end date.
 Start-upload = Start upload
 # Accessibility hint for button that starts recording a sound
@@ -1258,6 +1334,7 @@ Stop-verb = Stop
 Stops-recording-sound = Stops recording sound
 SUBMIT = SUBMIT
 SUBMIT-ID-SUGGESTION = SUBMIT ID SUGGESTION
+SUGGEST-GENUS = SUGGEST GENUS
 SUGGEST-ID = SUGGEST ID
 # Identification category
 supporting--identification = Supporting
@@ -1336,7 +1413,11 @@ Unknown--user = Unknown
 # Generic error message
 Unknown-error = Unknown error
 Unknown-organism = Unknown organism
+# Button to remove reviewed status from an observation
+Unmark-as-reviewed = Unmark as reviewed
+Unobserved-by-me = Unobserved by me
 Unreviewed-observations-only = Unreviewed observations only
+Upload-anyway = Upload anyway
 Upload-Complete = Upload Complete
 Upload-in-progress = Upload in progress
 UPLOAD-NOW = UPLOAD NOW
@@ -1399,9 +1480,11 @@ View-photo-licensing-info = View photo licensing info
 VIEW-PROJECT-REQUIREMENTS = VIEW PROJECT REQUIREMENTS
 # Button that lets user view a list of projects related to the observation or user profile they're viewing
 VIEW-PROJECTS = VIEW PROJECTS
+View-sound = View sound
 # Label for a button that shows identification suggestions for an observation
 # or photo
 View-suggestions = View suggestions
+Viewing-offline-suggestions = Viewing offline suggestions
 Watch-your-notifications-for-identifications = Watch your notifications for identifications!
 We-are-not-confident-enough-to-make-a-top-ID-suggestion = We’re not confident enough to make a top ID suggestion, but here are some other suggestions:
 Welcome-back = Welcome back!
@@ -1411,6 +1494,8 @@ When-tapping-the-green-observation-button = When tapping the green observation b
 WIKIPEDIA = WIKIPEDIA
 Wild = Wild
 WILD-STATUS = WILD STATUS
+# Wildlife Hotspots along a route
+Wildlife-Hotspots = Wildlife Hotspots
 # Label for a button that withdraws an identification
 Withdraw = Withdraw
 # Button to Withdraw identification made by user
@@ -1619,6 +1704,7 @@ Youve-denied-permission-prompt = You’ve denied permission. Please grant permis
 Youve-previously-denied-camera-permissions = You've previously denied camera permissions, so please enable them in settings.
 Youve-previously-denied-location-permissions = You’ve previously denied location permissions, so please enable them in settings.
 Youve-previously-denied-microphone-permissions = You’ve previously denied microphone permissions, so please enable them in settings.
+Youve-previously-denied-photo-library-permissions = You've previously denied photo library permissions
 Zoom-in-as-much-as-possible-to-improve = Zoom in as much as possible to improve location accuracy and get better identifications.
 Zoom-to-current-location = Zoom to current location
 # Label for button that shows zoom level, e.g. on a camera
