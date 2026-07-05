@@ -11,6 +11,8 @@ import React, { useCallback, useMemo, useState } from "react";
 
 type Props = {
   loading: boolean,
+  latitude?: number,
+  longitude?: number,
   photos: {
     id?: number,
     url: string,
@@ -21,14 +23,18 @@ type Props = {
   sounds?: {
     file_url: string
   }[],
-  tablet?: boolean
+  tablet?: boolean,
+  timeObservedAt?: string
 }
 
 const ObsMedia = ( {
   loading,
+  latitude,
+  longitude,
   photos = [],
   sounds = [],
   tablet = false,
+  timeObservedAt,
 }: Props ): Node => {
   const [index, setIndex] = useState( 0 );
   const [mediaViewerVisible, setMediaViewerVisible] = useState( false );
@@ -45,9 +51,15 @@ const ObsMedia = ( {
         />
       )
       : (
-        <PhotoContainer photo={item} onPress={() => setMediaViewerVisible( true )} />
+        <PhotoContainer
+          photo={item}
+          onPress={() => {
+            setIndex( items.indexOf( item ) );
+            setMediaViewerVisible( true );
+          }}
+        />
       ) ),
-    [setMediaViewerVisible, items, index],
+    [setMediaViewerVisible, setIndex, items, index],
   );
 
   const currentPhotoUrl = index >= photos.length
@@ -105,8 +117,12 @@ const ObsMedia = ( {
         showModal={mediaViewerVisible}
         onClose={( ) => setMediaViewerVisible( false )}
         uri={currentPhotoUrl}
+        initialIndex={index}
+        latitude={latitude}
+        longitude={longitude}
         photos={photos}
         sounds={sounds}
+        timeObservedAt={timeObservedAt}
       />
     </View>
   );
