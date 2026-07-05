@@ -4,6 +4,7 @@ import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
 import fetchCoarseUserLocation from "../sharedHelpers/fetchCoarseUserLocation";
+import { DEFAULT_NEARBY_RADIUS_KM } from "../sharedHelpers/nearbyRadius";
 
 export enum EXPLORE_V2_ACTION {
   SET_SUBJECT = "SET_SUBJECT",
@@ -14,6 +15,7 @@ export enum EXPLORE_V2_ACTION {
   SET_LOCATION_PLACE = "SET_LOCATION_PLACE",
   SET_SORT = "SET_SORT",
   SET_FILTERS = "SET_FILTERS",
+  SET_NEARBY_RADIUS = "SET_NEARBY_RADIUS",
   RESET = "RESET"
 }
 
@@ -78,6 +80,7 @@ export interface ExploreV2State {
   location: ExploreV2LocationState;
   sortBy: OBSERVATIONS_SORT;
   filters: ExploreV2Filters;
+  nearbyRadiusKm: number;
 }
 
 export type ExploreV2Action =
@@ -97,6 +100,7 @@ export type ExploreV2Action =
   }
   | { type: EXPLORE_V2_ACTION.SET_SORT; sortBy: OBSERVATIONS_SORT }
   | { type: EXPLORE_V2_ACTION.SET_FILTERS; filters: ExploreV2Filters }
+  | { type: EXPLORE_V2_ACTION.SET_NEARBY_RADIUS; radius: number }
   | { type: EXPLORE_V2_ACTION.RESET };
 
 export const initialExploreV2State: ExploreV2State = {
@@ -104,6 +108,7 @@ export const initialExploreV2State: ExploreV2State = {
   location: { placeMode: EXPLORE_V2_PLACE_MODE.UNINITIALIZED },
   sortBy: OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST,
   filters: {},
+  nearbyRadiusKm: DEFAULT_NEARBY_RADIUS_KM,
 };
 
 export function exploreV2Reducer(
@@ -147,6 +152,17 @@ export function exploreV2Reducer(
       return { ...state, sortBy: action.sortBy };
     case EXPLORE_V2_ACTION.SET_FILTERS:
       return { ...state, filters: action.filters };
+    case EXPLORE_V2_ACTION.SET_NEARBY_RADIUS:
+      return {
+        ...state,
+        nearbyRadiusKm: action.radius,
+        location: state.location.placeMode === EXPLORE_V2_PLACE_MODE.NEARBY
+          ? {
+            ...state.location,
+            radius: action.radius,
+          }
+          : state.location,
+      };
     case EXPLORE_V2_ACTION.RESET:
       return initialExploreV2State;
     default: {
@@ -166,7 +182,9 @@ export type DefaultExploreV2Location =
     radius: number;
   };
 
-export async function defaultExploreV2Location( ): Promise<DefaultExploreV2Location> {
+export async function defaultExploreV2Location(
+  nearbyRadiusKm: number = DEFAULT_NEARBY_RADIUS_KM,
+): Promise<DefaultExploreV2Location> {
   const location = await fetchCoarseUserLocation( );
   if ( !location || !location.latitude ) {
     return { placeMode: EXPLORE_V2_PLACE_MODE.WORLDWIDE };
@@ -175,7 +193,7 @@ export async function defaultExploreV2Location( ): Promise<DefaultExploreV2Locat
     placeMode: EXPLORE_V2_PLACE_MODE.NEARBY,
     lat: location.latitude,
     lng: location.longitude,
-    radius: 1,
+    radius: nearbyRadiusKm,
   };
 }
 

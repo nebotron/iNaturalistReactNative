@@ -1,6 +1,13 @@
 import { useNavigation } from "@react-navigation/native";
 import type { ApiProject } from "api/types";
 import classNames from "classnames";
+import ExploreSavedFilterSheets from "components/Explore/ExploreSavedFilterSheets";
+import ExploreSavedFiltersSection from "components/Explore/ExploreSavedFiltersSection";
+import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
+import ExploreUserFiltersSection from "components/Explore/ExploreUserFiltersSection";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import type { ExploreUserFilter } from "components/Explore/helpers/userFilters";
 import NumberBadge from "components/Explore/NumberBadge";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
 import {
@@ -11,7 +18,6 @@ import {
   ButtonBar,
   Checkbox,
   DateTimePicker,
-  DisplayTaxon,
   Heading1,
   Heading4,
   IconicTaxonChooser,
@@ -25,7 +31,6 @@ import {
 } from "components/SharedComponents";
 import { TopAndBottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { Pressable, ScrollView, View } from "components/styledComponents";
-import UserListItem from "components/UserList/UserListItem";
 import { RealmContext } from "providers/contexts";
 import {
   DATE_OBSERVED,
@@ -46,6 +51,7 @@ import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
 import placeGuessText from "../helpers/placeGuessText";
+import ExploreTaxonSearchModal from "./ExploreTaxonSearchModal";
 
 const DROP_SHADOW = getShadow( {
   offsetHeight: 4,
@@ -58,17 +64,16 @@ interface Props {
   closeModal: () => void;
   filterByIconicTaxonUnknown: () => void;
   // TODO: type this properly when taxon has a type
-  updateTaxon: ( taxon: null | { name: string } ) => void;
-  // TODO: Param not typed yet, because ExploreUserSearch is not typed yet
-  updateUser: ( user: null | { login: string } ) => void;
+  updateTaxonFilters: ( taxonFilters: ExploreTaxonFilter[] ) => void;
+  updateUserFilters: ( userFilters: ExploreUserFilter[] ) => void;
   updateProject: ( project: ApiProject ) => void;
 }
 
 const FilterModalV2 = ( {
   closeModal,
   filterByIconicTaxonUnknown,
-  updateTaxon,
-  updateUser,
+  updateTaxonFilters,
+  updateUserFilters,
   updateProject,
 }: Props ) => {
   const navigation = useNavigation();
@@ -108,9 +113,9 @@ const FilterModalV2 = ( {
     researchGrade,
     reviewedFilter,
     sortBy,
-    taxon,
-    user,
-    excludeUser,
+    taxonFilters,
+    userFilters,
+    unobservedByMe,
     wildStatus,
   } = state;
 
@@ -129,6 +134,12 @@ const FilterModalV2 = ( {
   const PHOTO_LICENSING = "PHOTO_LICENSING";
   const CONFIRMATION = "CONFIRMATION";
   const [openSheet, setOpenSheet] = useState( NONE );
+  const [showTaxonSearchModal, setShowTaxonSearchModal] = useState( false );
+  const [showSaveFilterSheet, setShowSaveFilterSheet] = useState( false );
+  const [filterToDelete, setFilterToDelete] = useState<null | {
+    id: string;
+    name: string;
+  }>( null );
 
   const sortByButtonText = () => {
     switch ( sortBy ) {
@@ -618,7 +629,6 @@ const FilterModalV2 = ( {
   const observedEndBeforeStart = d1 > d2;
   const uploadedEndBeforeStart = createdD1 > createdD2;
   const hasError = observedEndBeforeStart || uploadedEndBeforeStart;
-  const displayUser = user || excludeUser;
 
   return (
     <TopAndBottomInsetViewWrapper testID="filter-modal">
@@ -680,60 +690,35 @@ const FilterModalV2 = ( {
       </View>
 
       <ScrollView className="py-4">
-        {/* Taxon Section */}
+        <ExploreSavedFiltersSection
+          onOpenDeleteFilter={setFilterToDelete}
+          onOpenSaveSheet={() => setShowSaveFilterSheet( true )}
+        />
+        <ExploreTaxonFiltersSection
+          iconicTaxonNames={iconicTaxonNames}
+          onOpenTaxonSearch={() => {
+            setShowTaxonSearchModal( true );
+          }}
+          taxonFilters={taxonFilters || []}
+          updateTaxonFilters={updateTaxonFilters}
+        />
         <View className="mb-7">
-          <Heading4 className="px-4 mb-5">{t( "TAXON" )}</Heading4>
-          <View className="px-4 mb-5">
-            {( taxon || ( iconicTaxonNames || [] ).indexOf( "unknown" ) >= 0 )
-              ? (
-                <Pressable
-                  className="flex-row justify-between items-center"
-                  accessibilityRole="button"
-                  accessibilityLabel={t( "Change-taxon" )}
-                  onPress={() => {
-                    navigation.navigate( "ExploreSearch", { initialSearchMode: "taxon" } );
-                  }}
-                >
-                  <DisplayTaxon
-                    handlePress={() => {
-                      navigation.navigate( "ExploreSearch", { initialSearchMode: "taxon" } );
-                    }}
-                    taxon={taxon || "unknown"}
-                  />
-                  <View className="flex-row items-center">
-                    <INatIcon name="edit" size={22} />
-                    <INatIconButton
-                      className="ml-3"
-                      icon="close"
-                      size={20}
-                      onPress={() => updateTaxon( null )}
-                      accessibilityLabel={t( "Remove-taxon-filter" )}
-                    />
-                  </View>
-                </Pressable>
-              )
-              : (
-                <Button
-                  text={t( "SEARCH-FOR-A-TAXON" )}
-                  onPress={() => {
-                    navigation.navigate( "ExploreSearch", { initialSearchMode: "taxon" } );
-                  }}
-                  accessibilityLabel={t( "Search" )}
-                />
-              )}
-          </View>
           <IconicTaxonChooser
             before
-            chosen={iconicTaxonNames || [taxon?.name?.toLowerCase()]}
+            chosen={[
+              ...( iconicTaxonNames || [] ),
+              ...( taxonFilters || [] )
+                .filter( filter => !filter.exclude )
+                .map( filter => filter.taxon?.name?.toLowerCase( ) )
+                .filter( Boolean ),
+            ]}
             onTaxonChosen={( taxonName: string ) => {
               if ( taxonName === "unknown" ) {
                 if ( ( iconicTaxonNames || [] ).indexOf( taxonName ) >= 0 ) {
-                  updateTaxon( null );
+                  updateTaxonFilters( [] );
                 } else {
                   filterByIconicTaxonUnknown();
                 }
-              } else if ( taxon?.name?.toLowerCase() === taxonName ) {
-                updateTaxon( null );
               } else {
                 const selectedTaxon = realm
                   ?.objects( "Taxon" )
@@ -741,7 +726,11 @@ const FilterModalV2 = ( {
                 const iconicTaxon = selectedTaxon.length > 0
                   ? selectedTaxon[0]
                   : null;
-                updateTaxon( iconicTaxon );
+                if ( iconicTaxon ) {
+                  updateTaxonFilters(
+                    toggleTaxonFilter( taxonFilters || [], iconicTaxon, false ),
+                  );
+                }
               }
             }}
           />
@@ -812,49 +801,22 @@ const FilterModalV2 = ( {
           </View>
 
           {/* User Section */}
-          <View className="mb-7">
-            {excludeUser
-              ? <Heading4 className="mb-5">{t( "ALL-USERS-EXCEPT" )}</Heading4>
-              : <Heading4 className="mb-5">{t( "USER" )}</Heading4>}
-            <View className="mb-5">
-              {displayUser
-                ? (
-                  <Pressable
-                    className="flex-row justify-around items-center"
-                    accessibilityRole="button"
-                    accessibilityLabel={t( "Change-user" )}
-                    onPress={() => {
-                      navigation.navigate( "ExploreSearch", { initialSearchMode: "users" } );
-                    }}
-                  >
-                    <UserListItem
-                      item={{ user: displayUser }}
-                      countText={t( "X-Observations", { count: displayUser.observations_count } )}
-                      pressable={false}
-                    />
-                    <View className="flex-row items-center">
-                      <INatIcon name="edit" size={22} />
-                      <INatIconButton
-                        className="ml-3"
-                        icon="close"
-                        size={20}
-                        onPress={() => updateUser( null )}
-                        accessibilityLabel={t( "Remove-user-filter" )}
-                      />
-                    </View>
-                  </Pressable>
-                )
-                : (
-                  <Button
-                    text={t( "FILTER-BY-A-USER" )}
-                    onPress={() => {
-                      navigation.navigate( "ExploreSearch", { initialSearchMode: "users" } );
-                    }}
-                    accessibilityLabel={t( "Filter" )}
-                  />
-                )}
+          <ExploreUserFiltersSection
+            onOpenUserSearch={() => {
+              navigation.navigate( "ExploreSearch", { initialSearchMode: "users" } );
+            }}
+            userFilters={userFilters || []}
+            updateUserFilters={updateUserFilters}
+          />
+          {currentUser && (
+            <View className="mb-7">
+              <Checkbox
+                text={t( "Unobserved-by-me" )}
+                isChecked={unobservedByMe}
+                onPress={() => dispatch( { type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME } )}
+              />
             </View>
-          </View>
+          )}
 
           {/* Project Section */}
           <View className="mb-7">
@@ -1324,6 +1286,18 @@ const FilterModalV2 = ( {
           insideModal
         />
       )}
+      <ExploreSavedFilterSheets
+        filterToDelete={filterToDelete}
+        onCloseDeleteFilter={() => setFilterToDelete( null )}
+        onCloseSaveSheet={() => setShowSaveFilterSheet( false )}
+        showSaveSheet={showSaveFilterSheet}
+      />
+      <ExploreTaxonSearchModal
+        closeModal={() => { setShowTaxonSearchModal( false ); }}
+        showModal={showTaxonSearchModal}
+        taxonFilters={taxonFilters || []}
+        updateTaxonFilters={updateTaxonFilters}
+      />
     </TopAndBottomInsetViewWrapper>
   );
 };
