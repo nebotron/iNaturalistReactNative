@@ -17,6 +17,7 @@ const flattenUploadParams = async (
   uri: string,
 ): Promise<FlattenUploadArgs> => {
   await mkdir( outputPath );
+
   const uploadUri = await resizeImage( uri, {
     // this max width/height is the same as the legacy Android app
     // we always want the width/height to be bigger than 299x299

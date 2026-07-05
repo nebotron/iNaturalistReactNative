@@ -4,7 +4,7 @@ import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import MasonryLayout from "components/ObsDetails/MasonryLayout";
 import { ActivityIndicator, Carousel } from "components/SharedComponents";
 import {
-  Image, Pressable, View,
+  FasterImageView, Pressable, View,
 } from "components/styledComponents";
 import type { Node } from "react";
 import React, {
@@ -13,7 +13,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { Dimensions } from "react-native";
+import { useWindowDimensions } from "react-native";
 import LinearGradient from "react-native-linear-gradient";
 import Photo from "realmModels/Photo";
 
@@ -37,7 +37,7 @@ const TaxonMedia = ( {
   sounds = [],
   tablet,
 }: Props ): Node => {
-  const { width } = Dimensions.get( "window" );
+  const { width } = useWindowDimensions( );
   const [index, setIndex] = useState( 0 );
   const [mediaViewerVisible, setMediaViewerVisible] = useState( false );
 
@@ -59,14 +59,13 @@ const TaxonMedia = ( {
           colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.5) 100%)"]}
           className="absolute w-full h-full z-10"
         />
-        <Image
+        <FasterImageView
           testID={`TaxonDetails.photo.${item.id}`}
           className="w-full h-full"
           source={{
-            // TODO replace this entire image component to one that supports
-            // progressive sizes and fallbacks if the large photo isn't
-            // available
-            uri: Photo.displayLargePhoto( item.url ),
+            url: Photo.displayLargePhoto( item.url ),
+            cachePolicy: "discWithCacheControl",
+            resizeMode: "cover",
           }}
           accessibilityIgnoresInvertColors
         />
@@ -102,6 +101,7 @@ const TaxonMedia = ( {
           data={items}
           renderItem={CarouselSlide}
           onSlideScroll={setIndex}
+          style={{ width }}
         />
       )
   );
