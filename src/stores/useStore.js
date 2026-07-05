@@ -87,6 +87,15 @@ const useStore = create( persist(
         }
         return memo;
       }, {} ) ),
+
+      // Last location used in the location picker
+      lastLocationPickerState: state.lastLocationPickerState,
+
+      // Explore tab filters and related search state
+      rootExploreView: state.rootExploreView,
+      rootRelativeDateOffsets: state.rootRelativeDateOffsets,
+      rootStoredParams: state.rootStoredParams,
+      savedExploreFilters: state.savedExploreFilters,
     } ),
     storage: createJSONStorage( () => zustandStorage ),
     // We need to deep merge to persist nested objects, like layout
