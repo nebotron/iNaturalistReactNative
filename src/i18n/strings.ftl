@@ -503,6 +503,8 @@ Edit-identification = Edit identification
 EDIT-LOCATION = EDIT LOCATION
 # Label for interactive element that takes you to a location choosing screen
 Edit-location = Edit location
+# Checkbox label for filtering observations without location data
+Location-Missing = Location Missing
 Edit-Observation = Edit Observation
 Edit-your-profile-change-your-settings = Edit your profile, change your notifications settings, and manage all other parts of your account.
 # Label for button that edits an observation's taxon
