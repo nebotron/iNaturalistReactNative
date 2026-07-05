@@ -1,6 +1,7 @@
 import {
   Body2,
   RadioButtonRow,
+  SwitchRow,
 } from "components/SharedComponents";
 import React from "react";
 import {
@@ -15,6 +16,8 @@ import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 const AdvancedSettings = ( ) => {
   const { t } = useTranslation();
   const {
+    autoAdjustBrightness,
+    setAutoAdjustBrightness,
     isAllAddObsOptionsMode,
     setIsAllAddObsOptionsMode,
     screenAfterPhotoEvidence,
@@ -64,6 +67,16 @@ const AdvancedSettings = ( ) => {
           checked={screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.MATCH}
           onPress={() => setScreenAfterPhotoEvidence( SCREEN_AFTER_PHOTO_EVIDENCE.MATCH )}
           label={t( "Match-Screen" )}
+        />
+      </View>
+      <View className="mt-[20px]">
+        <SwitchRow
+          testID="auto-adjust-brightness-switch"
+          classNames="ml-[6px]"
+          smallLabel
+          value={autoAdjustBrightness}
+          onValueChange={setAutoAdjustBrightness}
+          label={t( "Auto-Adjust-Brightness" )}
         />
       </View>
     </>
