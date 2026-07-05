@@ -131,6 +131,15 @@ const createLayoutSlice = set => ( {
         debugModeEnabled: !state.layout.debugModeEnabled,
       },
     } ) ),
+    // Controls whether photos in Explore are auto-brightened based on the
+    // detected subject's shadow depth (see useAutoBrightnessForUri)
+    autoAdjustBrightness: true,
+    setAutoAdjustBrightness: ( newValue: boolean ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        autoAdjustBrightness: newValue,
+      },
+    } ) ),
     // Last selected map layers type for react-native-maps MapView ("standard" or "hybrid")
     mapType: MAP_TYPES.STANDARD,
     setMapType: ( newMapType: MAP_TYPES ) => set( state => ( {
