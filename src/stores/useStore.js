@@ -91,6 +91,11 @@ const useStore = create( persist(
       // Last location used in the location picker
       lastLocationPickerState: state.lastLocationPickerState,
 
+      // Group Photos progress, so it survives an app kill
+      groupedPhotos: state.groupedPhotos,
+      firstObservationDefaults: state.firstObservationDefaults,
+      pendingGroupPhotoDeletionUris: state.pendingGroupPhotoDeletionUris,
+
       // Explore tab filters and related search state
       rootExploreView: state.rootExploreView,
       rootRelativeDateOffsets: state.rootRelativeDateOffsets,
