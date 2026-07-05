@@ -114,7 +114,7 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   }
 
   if ( params.hasLocationMissing ) {
-    filteredParams.has_geo = false;
+    filteredParams.geo = false;
   }
 
   if ( params.photoLicense !== PHOTO_LICENSE.ALL ) {
