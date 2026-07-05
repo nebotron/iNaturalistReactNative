@@ -307,6 +307,11 @@ const GroupPhotosContainer = ( ): Node => {
     resetMyObsOffsetToRestore( );
     setMyObsOffset( 0 );
     setIsCreatingObservations( false );
+    // Import is complete at this point (observations created and saved), so
+    // clear the saved Group Photos state now rather than waiting on the
+    // optional delete-original-photos prompt below, which may never resolve
+    // (e.g. dismissed without a choice), leaving stale state behind.
+    setGroupedPhotos( [] );
 
     const allPendingUris = [
       ...new Set( [...pendingDeletionUris, ...pendingGroupPhotoDeletionUris] ),
