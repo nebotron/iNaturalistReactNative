@@ -32,11 +32,13 @@ export interface Hotspot {
 const EARTH_RADIUS_KM = 6371;
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 // Max radius for each k-means cluster (2 km diameter)
-const MAX_CLUSTER_RADIUS_KM = 1;
+const MAX_CLUSTER_RADIUS_KM = 1.5;
 // Evaluate detour times for this many top-by-obs candidates
-const MAX_DETOUR_CANDIDATES = 30;
+const MAX_DETOUR_CANDIDATES = 50;
 // Extra minutes added to travel time to account for parking when ranking hotspots
 const PARKING_MINUTES = 5;
+// Bbox padding around route to look for observations
+const BBOX_PADDING_KM = 80;
 
 function toRad( deg: number ): number {
   return ( deg * Math.PI ) / 180;
@@ -111,7 +113,6 @@ export function findBestInsertion( stops: RoutePoint[], candidate: RoutePoint ):
 
 // Km per degree of latitude/longitude, used to pad the bbox by a fixed distance
 const KM_PER_DEG_LAT = ( EARTH_RADIUS_KM * Math.PI ) / 180;
-const BBOX_PADDING_KM = 100;
 
 function routeBbox( coords: RoutePoint[], paddingKm = BBOX_PADDING_KM ) {
   let minLat = Infinity;
