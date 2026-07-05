@@ -2,8 +2,7 @@ import {
   useNetInfo,
 } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
-import type { ApiPhoto, ApiSuggestion } from "api/types";
-import { Body3, Heading4 } from "components/SharedComponents";
+import type { ApiPhoto, ApiSuggestion, ApiTaxon } from "api/types";
 import { BottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import flattenUploadParams from "components/Suggestions/helpers/flattenUploadParams";
@@ -27,10 +26,10 @@ import type { RealmPhoto, RealmTaxon } from "realmModels/types";
 import fetchPlaceName from "sharedHelpers/fetchPlaceName";
 import saveObservation from "sharedHelpers/saveObservation";
 import shouldFetchObservationLocation from "sharedHelpers/shouldFetchObservationLocation";
+import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import {
   useExitObservationFlow, useLocationPermission, useSuggestions,
 } from "sharedHooks";
-import useDebugMode from "sharedHooks/useDebugMode";
 import useObservationLocation from "sharedHooks/useObservationLocation";
 import {
   internalUseSuggestionsInitialSuggestions,
@@ -121,7 +120,6 @@ const { useRealm } = RealmContext;
 
 const MatchContainer = ( ) => {
   const hasLoadedRef = useRef( false );
-  const { isDebug } = useDebugMode( );
   const scrollRef = useRef<ScrollView>( null );
   const currentObservation = useStore( state => state.currentObservation );
   const getCurrentObservation = useStore( state => state.getCurrentObservation );
@@ -153,6 +151,8 @@ const MatchContainer = ( ) => {
   const evidenceHasLocation = !!currentObservation?.latitude;
 
   const [iconicTaxon, setIconicTaxon] = useState<RealmTaxon>( );
+  const [explicitTaxon, setExplicitTaxon] = useState<ApiTaxon | RealmTaxon | undefined>( );
+  const [identificationFromVision, setIdentificationFromVision] = useState( false );
   const [currentUserLocation, setCurrentUserLocation] = useState<{
     latitude?: number;
     longitude?: number;
@@ -178,7 +178,8 @@ const MatchContainer = ( ) => {
 
   const onlineSuggestionsAttempted
      = onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_FETCHED
-      || onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_ERROR;
+      || onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_ERROR
+      || onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED;
 
   const onFetchError = useCallback(
     ( { isOnline }: { isOnline: boolean } ) => {
@@ -235,11 +236,9 @@ const MatchContainer = ( ) => {
   );
 
   const {
-    timedOut,
-    onlineSuggestionsError,
-    onlineSuggestionsUpdatedAt,
     suggestions,
     usingOfflineSuggestions,
+    tryOfflineSuggestions,
     refetchSuggestions,
   } = useSuggestions( observationPhoto, {
     shouldFetchOnlineSuggestions,
@@ -370,8 +369,17 @@ const MatchContainer = ( ) => {
 
   const onSuggestionChosen = useCallback( ( selection: ApiSuggestion ) => {
     setSelectedSuggestionId( selection.taxon.id );
+    setExplicitTaxon( selection.taxon );
+    setIdentificationFromVision( true );
     scrollToTop( );
-    // TODO: should this set owners_identification_from_vision: false?
+  }, [scrollToTop] );
+
+  const onIconicTaxonChosen = useCallback( ( chosenTaxon: RealmTaxon ) => {
+    setIconicTaxon( chosenTaxon );
+    setExplicitTaxon( chosenTaxon );
+    setIdentificationFromVision( false );
+    setSelectedSuggestionId( undefined );
+    scrollToTop( );
   }, [scrollToTop] );
 
   const createUploadParams = useCallback( async ( uri: string, showLocation: boolean ) => {
@@ -387,6 +395,23 @@ const MatchContainer = ( ) => {
 
   const setImageParams = useCallback( async ( ) => {
     if ( isConnected === false ) {
+      // Skip online suggestions; try offline model for local photos
+      dispatch( {
+        type: "SET_ONLINE_FETCH_STATUS",
+        onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
+      } );
+      if ( observationPhoto && !observationPhoto.includes( "https://" ) ) {
+        const newImageParams = await createUploadParams(
+          observationPhoto,
+          shouldUseEvidenceLocation,
+        );
+        dispatch( { type: "SET_UPLOAD_PARAMS", scoreImageParams: newImageParams } );
+      } else {
+        dispatch( {
+          type: "SET_OFFLINE_FETCH_STATUS",
+          offlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_OFFLINE_SKIPPED,
+        } );
+      }
       return;
     }
     const newImageParams = await createUploadParams( observationPhoto, shouldUseEvidenceLocation );
@@ -421,8 +446,9 @@ const MatchContainer = ( ) => {
     topSuggestion,
   );
 
-  const suggestionsLoading = onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
-    || offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
+  const suggestionsLoading = tryOfflineSuggestions
+    ? offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
+    : onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
 
   useEffect( ( ) => {
     if (
@@ -459,14 +485,18 @@ const MatchContainer = ( ) => {
 
   const handleSaveOrDiscardPress = async ( action: MatchButtonAction ) => {
     if ( action === "save" ) {
-      updateObservationKeys( {
-        taxon: taxon || iconicTaxon,
-        owners_identification_from_vision: true,
-      } );
+      if ( explicitTaxon ) {
+        updateObservationKeys( {
+          taxon: explicitTaxon,
+          owners_identification_from_vision: identificationFromVision,
+        } );
+      }
       await saveObservation( getCurrentObservation( ), cameraRollUris, realm );
     }
     stopWatch( subscriptionId );
-    exitObservationFlow( );
+    exitObservationFlow( {
+      promptDeleteOriginalPhotos: action === "save" && shouldPromptDeleteOriginalPhotos( ),
+    } );
   };
 
   const taxonIds = otherSuggestions?.map( suggestion => suggestion.taxon.id );
@@ -492,8 +522,8 @@ const MatchContainer = ( ) => {
           suggestionsLoading={suggestionsLoading}
           scrollRef={scrollRef}
           iconicTaxon={iconicTaxon}
-          setIconicTaxon={setIconicTaxon}
-          taxonToSave={taxon}
+          onIconicTaxonChosen={onIconicTaxonChosen}
+          taxonToSave={explicitTaxon}
         />
         {renderPermissionsGate( {
           // If the user grants location permission while on this screen,
@@ -509,43 +539,6 @@ const MatchContainer = ( ) => {
             if ( !hasPermissions ) navToLocationPicker( );
           },
         } )}
-        {/* eslint-disable i18next/no-literal-string */}
-        {/* eslint-disable react/jsx-one-expression-per-line */}
-        {/* eslint-disable max-len */}
-        {isDebug && (
-          <View className="bg-deeppink text-white p-3">
-            <Heading4 className="text-white">Diagnostics</Heading4>
-            <Body3 className="text-white">
-              Online fetch status:
-              {JSON.stringify( onlineFetchStatus )}
-            </Body3>
-            <Body3 className="text-white">
-              Offline fetch status:
-              {JSON.stringify( offlineFetchStatus )}
-            </Body3>
-            <Body3 className="text-white">
-              Lat/lng:
-              {JSON.stringify( currentObservation?.latitude )}
-              {JSON.stringify( currentObservation?.longitude )}
-            </Body3>
-            <Body3 className="text-white">
-              Using offline suggestions:
-              {JSON.stringify( usingOfflineSuggestions )}
-            </Body3>
-            <Body3 className="text-white">
-              Timed out:
-              {JSON.stringify( timedOut )}
-            </Body3>
-            <Body3 className="text-white">
-              Online suggestions error:
-              {JSON.stringify( onlineSuggestionsError )}
-            </Body3>
-            <Body3 className="text-white">
-              Online suggestions updated at:
-              {JSON.stringify( onlineSuggestionsUpdatedAt )}
-            </Body3>
-          </View>
-        )}
       </BottomInsetViewWrapper>
       <PreMatchLoadingScreen isLoading={suggestionsLoading} />
     </>
