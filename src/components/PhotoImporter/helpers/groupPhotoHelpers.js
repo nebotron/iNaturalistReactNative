@@ -7,9 +7,7 @@ const sortByTime = array => array.sort( ( a, b ) => {
 } );
 
 export const getGroupTimestamp = ( group: Object ): number => (
-  group.photos?.[0]?.image?.timestamp
-  || group.videos?.[0]?.asset?.timestamp
-  || 0
+  group.photos?.[0]?.image?.timestamp || 0
 );
 
 export const sortGroupsByTime = ( groups: Object[] ): Object[] => [...groups].sort(
@@ -17,17 +15,6 @@ export const sortGroupsByTime = ( groups: Object[] ): Object[] => [...groups].so
 );
 
 const dedupePhotos = photos => [...new Set( photos )];
-
-const dedupeVideos = videos => {
-  const seenUris = new Set( );
-  return videos.filter( video => {
-    if ( seenUris.has( video.uri ) ) {
-      return false;
-    }
-    seenUris.add( video.uri );
-    return true;
-  } );
-};
 
 const flattenAndOrderSelectedPhotos = ( selectedObservations: ?Object[] ): Object[] => {
   let combinedPhotos = [];
@@ -38,36 +25,8 @@ const flattenAndOrderSelectedPhotos = ( selectedObservations: ?Object[] ): Objec
   return dedupePhotos( sortByTime( combinedPhotos ) );
 };
 
-export const flattenAndOrderSelectedVideos = (
-  selectedObservations: ?Object[],
-): Object[] => {
-  let combinedVideos = [];
-  selectedObservations?.forEach( obs => {
-    combinedVideos = combinedVideos.concat( obs.videos || [] );
-  } );
-
-  return dedupeVideos( sortByTime( combinedVideos ) );
-};
-
-export const selectedGroupsHaveMixedMedia = (
-  selectedObservations: ?Object[],
-): boolean => {
-  const hasPhotos = selectedObservations?.some(
-    obs => obs.photos?.length > 0,
-  );
-  const hasVideos = selectedObservations?.some(
-    obs => obs.videos?.length > 0,
-  );
-
-  return Boolean( hasPhotos && hasVideos );
-};
-
 export const groupContainsPhoto = ( obs: Object, photo: Object ): boolean => (
   obs.photos?.includes( photo )
-);
-
-export const groupContainsVideo = ( obs: Object, video: Object ): boolean => (
-  obs.videos?.some( item => item.uri === video.uri )
 );
 
 export default flattenAndOrderSelectedPhotos;
