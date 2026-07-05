@@ -140,15 +140,6 @@ const GroupPhotos = ( {
     }
   }, [allPhotosSelected, clearSelection, selectAllPhotos] );
 
-  const renderImage = useCallback( ( item: Item ) => (
-    <GroupPhotoImage
-      item={item}
-      selectedObservations={selectedObservations}
-      selectObservationPhotos={selectObservationPhotos}
-      style={gridItemStyle}
-    />
-  ), [gridItemStyle, selectedObservations, selectObservationPhotos] );
-
   const addPhotos = useCallback( () => {
     navigation.navigate( "NoBottomTabStackNavigator", {
       screen: "PhotoLibrary",
@@ -170,8 +161,15 @@ const GroupPhotos = ( {
         </Pressable>
       );
     }
-    return renderImage( item );
-  }, [gridItemStyle, renderImage, addPhotos] );
+    return (
+      <GroupPhotoImage
+        item={item}
+        selectedObservations={selectedObservations}
+        selectObservationPhotos={selectObservationPhotos}
+        style={gridItemStyle}
+      />
+    );
+  }, [gridItemStyle, selectedObservations, selectObservationPhotos, addPhotos] );
 
   const headerComponent = useMemo( ( ) => (
     <View className="m-5">
@@ -187,9 +185,9 @@ const GroupPhotos = ( {
     return newData;
   }, [groupedPhotos, totalPhotos] );
 
-  const extraData = {
+  const extraData = useMemo( ( ) => ( {
     selectedObservations,
-  };
+  } ), [selectedObservations] );
 
   return (
     <BottomInsetViewWrapper>

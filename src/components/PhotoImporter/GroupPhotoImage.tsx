@@ -2,7 +2,7 @@ import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
 import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import { Pressable, View } from "components/styledComponents";
-import React from "react";
+import React, { useMemo } from "react";
 import type { ViewStyle } from "react-native";
 import useTranslation from "sharedHooks/useTranslation";
 
@@ -33,7 +33,10 @@ const GroupPhotoImage = ( {
   const { t } = useTranslation( );
   const firstPhoto = item.photos?.[0];
   const mediaUri = firstPhoto?.image.uri;
-  const isSelected = selectedObservations.includes( item );
+  const isSelected = useMemo(
+    ( ) => selectedObservations.includes( item ),
+    [selectedObservations, item],
+  );
   const handlePress = ( ) => selectObservationPhotos( isSelected, item );
   const mediaCount = item.photos?.length || 0;
   const hasDuplicateUpload = item.photos?.some( photo => photo.isDuplicateUpload );
@@ -69,4 +72,4 @@ const GroupPhotoImage = ( {
   );
 };
 
-export default GroupPhotoImage;
+export default React.memo( GroupPhotoImage );
