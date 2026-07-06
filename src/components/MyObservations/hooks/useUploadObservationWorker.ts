@@ -51,7 +51,6 @@ const useUploadObservationWorker = ( ) => {
   const updateTotalUploadProgress = useStore( state => state.updateTotalUploadProgress );
   const uploadQueue = useStore( state => state.uploadQueue );
   const uploadStatus = useStore( state => state.uploadStatus );
-  const setNumUnuploadedObservations = useStore( state => state.setNumUnuploadedObservations );
   const resetSyncToolbar = useStore( state => state.resetSyncToolbar );
   const initialNumObservationsInQueue = useStore( state => state.initialNumObservationsInQueue );
   const stopAllUploads = useStore( state => state.stopAllUploads );
@@ -59,31 +58,22 @@ const useUploadObservationWorker = ( ) => {
 
   const { t } = useTranslation( );
 
-  const resetNumUnsyncedObs = useCallback( ( ) => {
-    if ( !realm || realm.isClosed ) return;
-    const unsynced = Observation.filterUnsyncedObservations( realm );
-    setNumUnuploadedObservations( unsynced.length );
-  }, [realm, setNumUnuploadedObservations] );
-
   useEffect( () => {
     // eslint-disable-next-line no-undef
     let timer: number | NodeJS.Timeout;
     if ( [UPLOAD_COMPLETE, UPLOAD_CANCELLED].indexOf( uploadStatus ) >= 0 ) {
       timer = setTimeout( () => {
         resetUploadObservationsSlice( );
-        resetNumUnsyncedObs( );
       }, MS_BEFORE_TOOLBAR_RESET );
     } else {
       timer = setTimeout( () => {
         resetSyncToolbar( );
-        resetNumUnsyncedObs( );
       }, MS_BEFORE_TOOLBAR_RESET );
     }
     return () => {
       clearTimeout( timer );
     };
   }, [
-    resetNumUnsyncedObs,
     resetSyncToolbar,
     resetUploadObservationsSlice,
     uploadStatus,

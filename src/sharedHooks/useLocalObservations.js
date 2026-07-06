@@ -6,7 +6,6 @@ import {
   useState,
 } from "react";
 import Observation from "realmModels/Observation";
-import useStore from "stores/useStore";
 
 import useLayoutPrefs from "./useLayoutPrefs";
 
@@ -27,7 +26,6 @@ const missingBasicsPriority = obs => {
 const sortByMissingBasics = ( a, b ) => missingBasicsPriority( a ) - missingBasicsPriority( b );
 
 const useLocalObservations = ( ): Object => {
-  const setNumUnuploadedObservations = useStore( state => state.setNumUnuploadedObservations );
   const [observationList, setObservationList] = useState( [] );
 
   const prevListRef = useRef( {
@@ -103,7 +101,6 @@ const useLocalObservations = ( ): Object => {
         }
 
         setObservationList( mappedObservations.sort( sortByMissingBasics ) );
-        setNumUnuploadedObservations( unsyncedCount );
 
         prevListRef.current = {
           list: mappedObservations,
@@ -121,7 +118,7 @@ const useLocalObservations = ( ): Object => {
         filteredObservations?.removeAllListeners( );
       }
     };
-  }, [isDefaultMode, realm, setNumUnuploadedObservations] );
+  }, [isDefaultMode, realm] );
 
   return {
     observationList,
