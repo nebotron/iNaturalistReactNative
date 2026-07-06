@@ -318,13 +318,12 @@ const GroupPhotosContainer = ( ): Node => {
     ];
     if ( allPendingUris.length > 0 ) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const promptDeleteOriginalDevicePhotos = require(
+      const { deleteOriginalDevicePhotos } = require(
         "sharedHelpers/promptDeleteOriginalDevicePhotos",
-      ).default;
-      promptDeleteOriginalDevicePhotos( allPendingUris, ( ) => exitObservationFlow( ) );
-    } else {
-      exitObservationFlow( );
+      );
+      await deleteOriginalDevicePhotos( allPendingUris );
     }
+    exitObservationFlow( );
   };
 
   return (
