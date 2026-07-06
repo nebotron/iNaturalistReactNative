@@ -3,9 +3,12 @@ import useResumeGroupPhotos from "components/hooks/useResumeGroupPhotos";
 import useStore from "stores/useStore";
 
 const mockNavigate = jest.fn();
-jest.mock( "@react-navigation/native", () => ( {
-  ...jest.requireActual( "@react-navigation/native" ),
-  useNavigation: () => ( { navigate: mockNavigate } ),
+let mockIsReady = true;
+jest.mock( "navigation/navigationUtils", () => ( {
+  navigationRef: {
+    isReady: () => mockIsReady,
+    navigate: ( ...args ) => mockNavigate( ...args ),
+  },
 } ) );
 
 let mockOnboardingShown = true;
@@ -20,6 +23,7 @@ describe( "useResumeGroupPhotos", () => {
   beforeEach( () => {
     jest.clearAllMocks();
     mockOnboardingShown = true;
+    mockIsReady = true;
     useStore.setState( { groupedPhotos: [] } );
     jest.spyOn( useStore.persist, "hasHydrated" ).mockReturnValue( true );
   } );
@@ -43,6 +47,15 @@ describe( "useResumeGroupPhotos", () => {
 
   it( "does not navigate before onboarding has been shown", () => {
     mockOnboardingShown = false;
+    useStore.setState( { groupedPhotos: [groupPhoto( "file:///a.jpg" )] } );
+
+    renderHook( () => useResumeGroupPhotos() );
+
+    expect( mockNavigate ).not.toHaveBeenCalled();
+  } );
+
+  it( "does not navigate before the navigator is ready", () => {
+    mockIsReady = false;
     useStore.setState( { groupedPhotos: [groupPhoto( "file:///a.jpg" )] } );
 
     renderHook( () => useResumeGroupPhotos() );

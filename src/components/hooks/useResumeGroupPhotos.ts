@@ -1,4 +1,4 @@
-import { useNavigation } from "@react-navigation/native";
+import { navigationRef } from "navigation/navigationUtils";
 import { useEffect, useRef } from "react";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import useStore from "stores/useStore";
@@ -7,7 +7,6 @@ import useStore from "stores/useStore";
 // persisted store, take them straight back to the Group Photos screen so they
 // pick up exactly where they left off, rather than landing on the default tab.
 const useResumeGroupPhotos = ( ) => {
-  const navigation = useNavigation( );
   const [onboardingShown] = useOnboardingShown( );
   const resumedRef = useRef( false );
 
@@ -17,10 +16,13 @@ const useResumeGroupPhotos = ( ) => {
 
     const resume = ( ) => {
       if ( resumedRef.current ) { return; }
+      // Guard against firing before the navigator has mounted, e.g. right
+      // as the app cold-starts on the Login/Onboarding screen.
+      if ( !navigationRef.isReady( ) ) { return; }
       const { groupedPhotos } = useStore.getState( );
       if ( groupedPhotos && groupedPhotos.length > 0 ) {
         resumedRef.current = true;
-        navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
+        navigationRef.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
       }
     };
 
@@ -33,7 +35,7 @@ const useResumeGroupPhotos = ( ) => {
       unsubscribe = useStore.persist.onFinishHydration( resume );
     }
     return ( ) => unsubscribe( );
-  }, [navigation, onboardingShown] );
+  }, [onboardingShown] );
 };
 
 export default useResumeGroupPhotos;
