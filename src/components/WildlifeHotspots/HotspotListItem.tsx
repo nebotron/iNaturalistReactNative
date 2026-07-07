@@ -17,6 +17,7 @@ interface Props {
   onPress: () => void;
   onOpenInGoogleMaps?: () => void;
   onAddToRoute?: () => void;
+  onObservationCountPress?: () => void;
 }
 
 const HotspotListItem = ( {
@@ -26,6 +27,7 @@ const HotspotListItem = ( {
   onPress,
   onOpenInGoogleMaps,
   onAddToRoute,
+  onObservationCountPress,
 }: Props ) => {
   const detourText = hotspot.detourMinutes < 1
     ? "On route"
@@ -45,12 +47,17 @@ const HotspotListItem = ( {
         }`}
       >
         <View className="flex-row items-center">
-          <View className="flex-1">
+          <Pressable
+            className="flex-1"
+            onPress={onObservationCountPress}
+            accessibilityRole="button"
+            accessibilityLabel={`View ${hotspot.observationCount} observations in Explore`}
+          >
             <Body2 className="font-bold">
               {hotspot.observationCount.toLocaleString()}
               {" observations"}
             </Body2>
-          </View>
+          </Pressable>
           <View className="flex-row items-center">
             <INatIcon name="location" size={12} color={colors.darkGray} />
             <Body3 className="ml-1 text-darkGray">{detourText}</Body3>
@@ -72,29 +79,34 @@ const HotspotListItem = ( {
                   {species.preferred_common_name || species.name}
                   <Body3 className="text-darkGray">
                     {`  ·  ${species.count}`}
+                    {species.meanTimeOfDay ? `  ·  ${species.meanTimeOfDay}` : ""}
                   </Body3>
                 </Body3>
               </View>
             ) )}
           </View>
         )}
-        {selected && onAddToRoute && (
-          <Button
-            className="mt-3"
-            text="Add to Route"
-            level="focus"
-            onPress={onAddToRoute}
-            testID="HotspotListItem.addToRoute"
-          />
-        )}
-        {selected && onOpenInGoogleMaps && (
-          <Button
-            className="mt-3"
-            text="Open in Google Maps"
-            level="neutral"
-            onPress={onOpenInGoogleMaps}
-            testID="HotspotListItem.openInGoogleMaps"
-          />
+        {selected && ( onAddToRoute || onOpenInGoogleMaps ) && (
+          <View className="flex-row mt-3 space-x-2">
+            {onAddToRoute && (
+              <Button
+                className="flex-1"
+                text="Add to Route"
+                level="focus"
+                onPress={onAddToRoute}
+                testID="HotspotListItem.addToRoute"
+              />
+            )}
+            {onOpenInGoogleMaps && (
+              <Button
+                className="flex-1"
+                text="Open Map"
+                level="neutral"
+                onPress={onOpenInGoogleMaps}
+                testID="HotspotListItem.openInGoogleMaps"
+              />
+            )}
+          </View>
         )}
       </View>
     </Pressable>

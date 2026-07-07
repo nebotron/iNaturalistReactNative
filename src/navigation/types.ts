@@ -262,6 +262,9 @@ export type BaseTabStackParamList = {
     project?: object;
     place?: ApiPlace | null;
     worldwide: boolean;
+    lat?: number;
+    lng?: number;
+    radius?: number;
   };
   ExploreFilters: undefined;
   ExploreSearch: undefined;

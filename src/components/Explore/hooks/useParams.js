@@ -3,6 +3,7 @@
 import { useRoute } from "@react-navigation/native";
 import {
   EXPLORE_ACTION,
+  PLACE_MODE,
   useExplore,
 } from "providers/ExploreContext";
 import { useCallback, useEffect } from "react";
@@ -60,6 +61,17 @@ const useParams = ( ): Object => {
         type: EXPLORE_ACTION.SET_PROJECT,
         project: params.project,
         projectId: params.project.id,
+      } );
+    }
+    if ( params?.lat != null && params?.lng != null ) {
+      dispatch( {
+        type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
+        exploreLocation: {
+          placeMode: PLACE_MODE.NEARBY,
+          lat: params.lat,
+          lng: params.lng,
+          radius: params.radius ?? 2,
+        },
       } );
     }
   }, [

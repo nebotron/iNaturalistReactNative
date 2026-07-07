@@ -384,6 +384,15 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     navigation.push( "ObsDetails", { uuid } );
   }, [navigation] );
 
+  const handleObservationCountPress = useCallback( ( hotspot: Hotspot ) => {
+    navigation.navigate( "Explore", {
+      lat: hotspot.centerLatitude,
+      lng: hotspot.centerLongitude,
+      radius: 2,
+      worldwide: false,
+    } );
+  }, [navigation] );
+
   const renderStopItem = useCallback( ( {
     item: stop, getIndex, drag, isActive,
   }: RenderItemParams<Stop> ) => {
@@ -609,6 +618,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
                     onPress={() => handleHotspotPress( hotspot )}
                     onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
                     onAddToRoute={() => handleAddHotspotToRoute( hotspot )}
+                    onObservationCountPress={() => handleObservationCountPress( hotspot )}
                   />
                 ) )}
               </ScrollView>

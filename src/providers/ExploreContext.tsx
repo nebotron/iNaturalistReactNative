@@ -31,6 +31,10 @@ export enum EXPLORE_ACTION {
   DISCARD = "DISCARD",
   FILTER_BY_ICONIC_TAXON_UNKNOWN = "FILTER_BY_ICONIC_TAXON_UNKNOWN",
   RESET = "RESET",
+  SET_HOTSPOT_CLUSTER_RADIUS = "SET_HOTSPOT_CLUSTER_RADIUS",
+  SET_HOTSPOT_MAX_DETOUR_CANDIDATES = "SET_HOTSPOT_MAX_DETOUR_CANDIDATES",
+  SET_HOTSPOT_PARKING_MINUTES = "SET_HOTSPOT_PARKING_MINUTES",
+  SET_HOTSPOT_BBOX_PADDING_KM = "SET_HOTSPOT_BBOX_PADDING_KM",
   SET_DATE_OBSERVED_ALL = "SET_DATE_OBSERVED_ALL",
   SET_DATE_OBSERVED_EXACT = "SET_DATE_OBSERVED_EXACT",
   SET_DATE_OBSERVED_MONTHS = "SET_DATE_OBSERVED_MONTHS",
@@ -252,6 +256,10 @@ interface State {
   wildStatus: WILD_STATUS;
   nearbyRadiusKm: number;
   hasLocationMissing: boolean;
+  hotspotClusterRadiusKm: number;
+  hotspotMaxDetourCandidates: number;
+  hotspotParkingMinutes: number;
+  hotspotBboxPaddingKm: number;
 }
 type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.DISCARD; snapshot: State}
@@ -326,6 +334,10 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME}
   | {type: EXPLORE_ACTION.TOGGLE_POPULAR}
   | {type: EXPLORE_ACTION.TOGGLE_LOCATION_MISSING}
+  | {type: EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS; value: number}
+  | {type: EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES; value: number}
+  | {type: EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES; value: number}
+  | {type: EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM; value: number}
 type Dispatch = ( action: Action ) => void
 
 const ExploreContext = React.createContext<
@@ -396,6 +408,10 @@ const initialState: State = {
   userFilters: [],
   verifiable: true,
   nearbyRadiusKm: DEFAULT_NEARBY_RADIUS_KM,
+  hotspotClusterRadiusKm: 1.5,
+  hotspotMaxDetourCandidates: 50,
+  hotspotParkingMinutes: 5,
+  hotspotBboxPaddingKm: 80,
 };
 
 // Checks if the date is in the format XXXX-XX-XX
@@ -819,6 +835,14 @@ function exploreReducer( state: State, action: Action ) {
         excludeUser: firstExcludeUser ?? storedState.excludeUser,
       };
     }
+    case EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS:
+      return { ...state, hotspotClusterRadiusKm: Math.max( 0.5, Math.min( 5, action.value ) ) };
+    case EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES:
+      return { ...state, hotspotMaxDetourCandidates: Math.max( 10, Math.min( 100, action.value ) ) };
+    case EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES:
+      return { ...state, hotspotParkingMinutes: Math.max( 0, Math.min( 30, action.value ) ) };
+    case EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM:
+      return { ...state, hotspotBboxPaddingKm: Math.max( 20, Math.min( 200, action.value ) ) };
     default: {
       throw new Error( `Unhandled action type: ${( action as Action ).type}` );
     }

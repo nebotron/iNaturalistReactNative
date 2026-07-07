@@ -13,7 +13,7 @@ import {
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
-import { PLACE_MODE } from "providers/ExploreContext";
+import { PLACE_MODE, useExplore } from "providers/ExploreContext";
 import type { Node } from "react";
 import React, { useState } from "react";
 import {
@@ -93,6 +93,13 @@ const Explore = ( {
   updateUser,
 }: Props ): Node => {
   const { t } = useTranslation( );
+  const { state: exploreState } = useExplore( );
+  const hotspotConfig = {
+    hotspotClusterRadiusKm: exploreState.hotspotClusterRadiusKm,
+    hotspotMaxDetourCandidates: exploreState.hotspotMaxDetourCandidates,
+    hotspotParkingMinutes: exploreState.hotspotParkingMinutes,
+    hotspotBboxPaddingKm: exploreState.hotspotBboxPaddingKm,
+  };
   const [showExploreBottomSheet, setShowExploreBottomSheet] = useState( false );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreObservationsLayout" );
 
@@ -108,22 +115,25 @@ const Explore = ( {
   const a11yLabel = exploreViewA11yLabel[currentExploreView];
   const headerCount = count[currentExploreView];
 
-  const renderHeader = ( ) => (
-    <ExploreHeader
-      count={headerCount}
-      exploreView={currentExploreView}
-      exploreViewIcon={icon}
-      hasLocationPermissions={hasLocationPermissions}
-      hideBackButton={hideBackButton}
-      isFetchingHeaderCount={isFetchingHeaderCount}
-      onPressCount={( ) => setShowExploreBottomSheet( true )}
-      openFiltersModal={openFiltersModal}
-      renderLocationPermissionsGate={renderLocationPermissionsGate}
-      requestLocationPermissions={requestLocationPermissions}
-      updateLocation={updateLocation}
-      updateTaxonFilters={updateTaxonFilters}
-    />
-  );
+  const renderHeader = ( ) => {
+    if ( currentExploreView === "hotspots" ) return null;
+    return (
+      <ExploreHeader
+        count={headerCount}
+        exploreView={currentExploreView}
+        exploreViewIcon={icon}
+        hasLocationPermissions={hasLocationPermissions}
+        hideBackButton={hideBackButton}
+        isFetchingHeaderCount={isFetchingHeaderCount}
+        onPressCount={( ) => setShowExploreBottomSheet( true )}
+        openFiltersModal={openFiltersModal}
+        renderLocationPermissionsGate={renderLocationPermissionsGate}
+        requestLocationPermissions={requestLocationPermissions}
+        updateLocation={updateLocation}
+        updateTaxonFilters={updateTaxonFilters}
+      />
+    );
+  };
 
   const renderMainContent = ( ) => {
     if ( isConnected === false ) {
@@ -190,7 +200,7 @@ const Explore = ( {
         {currentExploreView === "hotspots" && (
           <WildlifeHotspotsScreen
             embedded
-            filterParams={queryParams}
+            filterParams={{ ...queryParams, ...hotspotConfig }}
           />
         )}
       </View>

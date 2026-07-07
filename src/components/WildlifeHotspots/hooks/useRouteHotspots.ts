@@ -11,6 +11,13 @@ export interface HotspotSpecies {
   name: string;
   preferred_common_name?: string;
   count: number;
+  meanTimeOfDay?: string;
+}
+
+interface HotspotSpeciesBuilder extends HotspotSpecies {
+  timeSinSum: number;
+  timeCosSum: number;
+  timeCount: number;
 }
 
 export interface HotspotObservation {
@@ -39,6 +46,34 @@ const MAX_DETOUR_CANDIDATES = 50;
 const PARKING_MINUTES = 5;
 // Bbox padding around route to look for observations
 const BBOX_PADDING_KM = 80;
+
+const HOTSPOT_PARAM_KEYS = [
+  "hotspotClusterRadiusKm",
+  "hotspotMaxDetourCandidates",
+  "hotspotParkingMinutes",
+  "hotspotBboxPaddingKm",
+];
+
+function parseTimeToMinutes( timeStr: string ): number | null {
+  const match = timeStr.match( /T(\d{2}):(\d{2})/ );
+  if ( !match ) return null;
+  return parseInt( match[1], 10 ) * 60 + parseInt( match[2], 10 );
+}
+
+function circularMeanMinutes( sinSum: number, cosSum: number, count: number ): number {
+  const meanAngle = Math.atan2( sinSum / count, cosSum / count );
+  const normalized = meanAngle < 0 ? meanAngle + 2 * Math.PI : meanAngle;
+  return ( normalized / ( 2 * Math.PI ) ) * 1440;
+}
+
+function minutesToAmPm( minutes: number ): string {
+  const total = Math.round( minutes );
+  const h = Math.floor( total / 60 ) % 24;
+  const m = total % 60;
+  const ampm = h >= 12 ? "PM" : "AM";
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `~${h12}:${m.toString().padStart( 2, "0" )} ${ampm}`;
+}
 
 function toRad( deg: number ): number {
   return ( deg * Math.PI ) / 180;
@@ -242,11 +277,11 @@ function splitToRadiusConstraint(
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function clusterByKMeans( observations: any[] ): Map<string, {
+function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_KM ): Map<string, {
   centerLat: number;
   centerLng: number;
   count: number;
-  taxa: Map<number, HotspotSpecies>;
+  taxa: Map<number, HotspotSpeciesBuilder>;
   observations: HotspotObservation[];
 }> {
   // Extract valid positions paired with their original observation
@@ -259,33 +294,49 @@ function clusterByKMeans( observations: any[] ): Map<string, {
     obsForPoint.push( obs );
   }
 
-  const clusters = splitToRadiusConstraint( points, MAX_CLUSTER_RADIUS_KM );
+  const clusters = splitToRadiusConstraint( points, maxRadiusKm );
 
   const cells = new Map<string, {
     centerLat: number;
     centerLng: number;
     count: number;
-    taxa: Map<number, HotspotSpecies>;
+    taxa: Map<number, HotspotSpeciesBuilder>;
     observations: HotspotObservation[];
   }>();
 
   for ( const { centroid, memberIndices } of clusters ) {
     const key = `${centroid.lat.toFixed( 5 )},${centroid.lng.toFixed( 5 )}`;
-    const taxa = new Map<number, HotspotSpecies>();
+    const taxa = new Map<number, HotspotSpeciesBuilder>();
     const cellObservations: HotspotObservation[] = [];
     for ( const i of memberIndices ) {
       const obs = obsForPoint[i];
       const taxon = obs.taxon;
       if ( taxon?.id ) {
         const prev = taxa.get( taxon.id );
+        const timeMinutes = obs.time_observed_at
+          ? parseTimeToMinutes( obs.time_observed_at )
+          : null;
         if ( prev ) {
           prev.count++;
+          if ( timeMinutes !== null ) {
+            const angle = ( timeMinutes / 1440 ) * 2 * Math.PI;
+            prev.timeSinSum += Math.sin( angle );
+            prev.timeCosSum += Math.cos( angle );
+            prev.timeCount++;
+          }
         } else {
+          const timeSinSum = timeMinutes !== null
+            ? Math.sin( ( timeMinutes / 1440 ) * 2 * Math.PI ) : 0;
+          const timeCosSum = timeMinutes !== null
+            ? Math.cos( ( timeMinutes / 1440 ) * 2 * Math.PI ) : 0;
           taxa.set( taxon.id, {
             id: taxon.id,
             name: taxon.name ?? "",
             preferred_common_name: taxon.preferred_common_name,
             count: 1,
+            timeSinSum,
+            timeCosSum,
+            timeCount: timeMinutes !== null ? 1 : 0,
           } );
         }
       }
@@ -331,15 +382,26 @@ export function useRouteHotspots() {
         const { coords: routePoints, durationSec: directDurationSec } = await fetchOSRMRoute( stops );
         setRouteCoords( routePoints );
 
+        // Read algorithm constants from filterParams (with fallbacks to module defaults)
+        const clusterRadiusKm = ( filterParams.hotspotClusterRadiusKm as number | undefined )
+          ?? MAX_CLUSTER_RADIUS_KM;
+        const maxDetourCandidates = ( filterParams.hotspotMaxDetourCandidates as number | undefined )
+          ?? MAX_DETOUR_CANDIDATES;
+        const parkingMinutes = ( filterParams.hotspotParkingMinutes as number | undefined )
+          ?? PARKING_MINUTES;
+        const bboxPaddingKm = ( filterParams.hotspotBboxPaddingKm as number | undefined )
+          ?? BBOX_PADDING_KM;
+
         // 2. iNaturalist calls for the whole route bounding box (API caps per_page at 200,
         // so fetch 2 pages to get up to 400 observations)
-        const bbox = routeBbox( routePoints );
-        const locationFilters = [
+        const bbox = routeBbox( routePoints, bboxPaddingKm );
+        const nonApiParamKeys = [
           "swlat", "swlng", "nelat", "nelng", "lat", "lng", "radius", "place_id",
           "per_page", "page",
+          ...HOTSPOT_PARAM_KEYS,
         ];
         const nonLocationParams = Object.fromEntries(
-          Object.entries( filterParams ).filter( ([key] ) => !locationFilters.includes( key ) ),
+          Object.entries( filterParams ).filter( ( [key] ) => !nonApiParamKeys.includes( key ) ),
         );
         const fetchPage = ( page: number ) => searchObservations( {
           ...bbox,
@@ -351,6 +413,7 @@ export function useRouteHotspots() {
           fields: {
             uuid: true,
             geojson: true,
+            time_observed_at: true,
             taxon: {
               id: true,
               name: true,
@@ -364,8 +427,8 @@ export function useRouteHotspots() {
 
         const observations = [...( page1?.results ?? [] ), ...( page2?.results ?? [] )];
 
-        // 3. Cluster observations with k-means (≤2 km diameter per cluster)
-        const cells = clusterByKMeans( observations );
+        // 3. Cluster observations with k-means (diameter ≤ 2× clusterRadiusKm per cluster)
+        const cells = clusterByKMeans( observations, clusterRadiusKm );
 
         // 4. Filter to cells within MAX_ROUTE_DISTANCE_KM, take top candidates by obs count
         const candidates: Array<{
@@ -378,9 +441,15 @@ export function useRouteHotspots() {
         }> = [];
 
         cells.forEach( ( cell, key ) => {
-          const topSpecies = [...cell.taxa.values()]
+          const topSpecies: HotspotSpecies[] = [...cell.taxa.values()]
             .sort( ( a, b ) => b.count - a.count )
-            .slice( 0, 5 );
+            .slice( 0, 5 )
+            .map( ( { timeSinSum, timeCosSum, timeCount, ...species } ) => ( {
+              ...species,
+              meanTimeOfDay: timeCount > 0
+                ? minutesToAmPm( circularMeanMinutes( timeSinSum, timeCosSum, timeCount ) )
+                : undefined,
+            } ) );
 
           candidates.push( {
             id: `hotspot-${key}`,
@@ -393,7 +462,7 @@ export function useRouteHotspots() {
         } );
 
         candidates.sort( ( a, b ) => b.count - a.count );
-        const topCandidates = candidates.slice( 0, MAX_DETOUR_CANDIDATES );
+        const topCandidates = candidates.slice( 0, maxDetourCandidates );
 
         // 5. Compute actual travel time in parallel for each candidate, inserted at
         // whichever point along the current stops minimizes the added distance
@@ -425,8 +494,8 @@ export function useRouteHotspots() {
 
         // 6. Rank by ratio of added travel time to observations (lower = better)
         withDetours.sort( ( a, b ) => {
-          const ratioA = ( a.detourMinutes + PARKING_MINUTES ) / a.observationCount;
-          const ratioB = ( b.detourMinutes + PARKING_MINUTES ) / b.observationCount;
+          const ratioA = ( a.detourMinutes + parkingMinutes ) / a.observationCount;
+          const ratioB = ( b.detourMinutes + parkingMinutes ) / b.observationCount;
           return ratioA - ratioB;
         } );
 

@@ -118,6 +118,10 @@ const FilterModalV2 = ( {
     unobservedByMe,
     wildStatus,
     hasLocationMissing,
+    hotspotClusterRadiusKm,
+    hotspotMaxDetourCandidates,
+    hotspotParkingMinutes,
+    hotspotBboxPaddingKm,
   } = state;
 
   const NONE = "NONE";
@@ -1169,17 +1173,79 @@ const FilterModalV2 = ( {
           )}
 
           {/* Photo licensing section */}
-          <View>
+          <View className="mb-7">
             <Heading4 className="mb-5">{t( "PHOTO-LICENSING" )}</Heading4>
             <Button
               text={photoLicenseValues[photoLicense]?.label}
-              className="shrink mb-7"
+              className="shrink"
               dropdown
               onPress={() => {
                 setOpenSheet( PHOTO_LICENSING );
               }}
               accessibilityLabel={t( "View-photo-licensing-info" )}
             />
+          </View>
+
+          {/* Hotspot Finder section */}
+          <View>
+            <Heading4 className="mb-5">{t( "HOTSPOT-FINDER" )}</Heading4>
+            {[
+              {
+                label: t( "Cluster-radius-km" ),
+                value: hotspotClusterRadiusKm,
+                step: 0.5,
+                action: EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS,
+                display: hotspotClusterRadiusKm.toFixed( 1 ),
+              },
+              {
+                label: t( "Max-detour-candidates" ),
+                value: hotspotMaxDetourCandidates,
+                step: 10,
+                action: EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES,
+                display: String( hotspotMaxDetourCandidates ),
+              },
+              {
+                label: t( "Parking-minutes" ),
+                value: hotspotParkingMinutes,
+                step: 5,
+                action: EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES,
+                display: String( hotspotParkingMinutes ),
+              },
+              {
+                label: t( "Search-radius-km" ),
+                value: hotspotBboxPaddingKm,
+                step: 20,
+                action: EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM,
+                display: String( hotspotBboxPaddingKm ),
+              },
+            ].map( item => (
+              <View key={item.label} className="flex-row items-center mb-4">
+                <Body3 className="flex-1">{item.label}</Body3>
+                <View className="flex-row items-center">
+                  <Pressable
+                    accessibilityRole="button"
+                    className="w-8 h-8 bg-lightGray rounded items-center justify-center"
+                    onPress={() => dispatch( {
+                      type: item.action,
+                      value: item.value - item.step,
+                    } )}
+                  >
+                    <Body2>{"−"}</Body2>
+                  </Pressable>
+                  <Body3 className="mx-3 w-12 text-center">{item.display}</Body3>
+                  <Pressable
+                    accessibilityRole="button"
+                    className="w-8 h-8 bg-lightGray rounded items-center justify-center"
+                    onPress={() => dispatch( {
+                      type: item.action,
+                      value: item.value + item.step,
+                    } )}
+                  >
+                    <Body2>{"+"}</Body2>
+                  </Pressable>
+                </View>
+              </View>
+            ) )}
           </View>
         </View>
       </ScrollView>

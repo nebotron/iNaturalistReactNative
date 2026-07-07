@@ -252,6 +252,7 @@ Closes-introduction = Closes introduction
 # Accessibility hint for button that closes the help that
 Closes-withdraw-id-sheet = Closes "Withdraw ID" sheet
 # Description of the hotspots explore view shown in the view picker sheet
+Cluster-radius-km = Cluster radius (km)
 Clusters-of-observations-along-a-route = Clusters of observations along a route you plan
 # Heading for a section that describes people and organizations that
 # collaborate with iNaturalist
@@ -617,6 +618,7 @@ Help-us-translate-the-app = Help us translate the app!
 Hide = Hide
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
+HOTSPOT-FINDER = HOTSPOT FINDER
 # Label used for a stop added to a route from a wildlife hotspot
 Hotspot = Hotspot
 Hotspots = Hotspots
@@ -802,6 +804,7 @@ Match-Screen = Match Screen
 maverick--identification = Maverick
 # Month of May
 May = May
+Max-detour-candidates = Max detour candidates
 MEDIA = MEDIA
 # label in project requirements
 Media-Type = Media Type
@@ -1017,6 +1020,7 @@ OTHER-SUGGESTIONS = OTHER SUGGESTIONS
 # Should be 16 characters or fewer or it will be ellipsized.
 OTHERS--notifications = OTHERS
 Overwrite-saved-filter = Overwrite saved filter
+Parking-minutes = Parking minutes
 PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
@@ -1232,6 +1236,7 @@ Scientific-Name-Common-Name = Scientific Name (Common Name)
 SEARCH = SEARCH
 # Title for a search interface
 Search = Search
+Search-radius-km = Search radius (km)
 # Placeholder for the location field in universal search
 Search-for-a-location = Search for a location
 Search-for-a-project = Search for a project
