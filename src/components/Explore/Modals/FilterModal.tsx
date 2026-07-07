@@ -27,7 +27,7 @@ import {
   WarningSheet,
 } from "components/SharedComponents";
 import { TopAndBottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
-import { Pressable, ScrollView, View } from "components/styledComponents";
+import { Pressable, ScrollView, TextInput, View } from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
 import { RealmContext } from "providers/contexts";
 import {
@@ -128,7 +128,24 @@ const FilterModal = ( {
     popular,
     wildStatus,
     hasLocationMissing,
+    hotspotClusterRadiusKm,
+    hotspotMaxDetourCandidates,
+    hotspotParkingMinutes,
+    hotspotBboxPaddingKm,
   } = state;
+
+  const [clusterRadiusText, setClusterRadiusText] = useState(
+    String( hotspotClusterRadiusKm ),
+  );
+  const [maxCandidatesText, setMaxCandidatesText] = useState(
+    String( hotspotMaxDetourCandidates ),
+  );
+  const [parkingMinutesText, setParkingMinutesText] = useState(
+    String( hotspotParkingMinutes ),
+  );
+  const [bboxPaddingText, setBboxPaddingText] = useState(
+    String( hotspotBboxPaddingKm ),
+  );
 
   const NONE = "NONE";
   const SORT_BY_M = "SORT_BY_M";
@@ -1222,7 +1239,7 @@ const FilterModal = ( {
           )}
 
           {/* Photo licensing section */}
-          <View>
+          <View className="mb-7">
             <Heading4 className="mb-5">{t( "PHOTO-LICENSING" )}</Heading4>
             <Button
               text={photoLicenseValues[photoLicense]?.label}
@@ -1232,6 +1249,74 @@ const FilterModal = ( {
                 setOpenSheet( PHOTO_LICENSING );
               }}
               accessibilityLabel={t( "View-photo-licensing-info" )}
+            />
+          </View>
+
+          {/* Hotspot settings section */}
+          <View>
+            <Heading4 className="mb-5">{t( "HOTSPOT-SETTINGS" )}</Heading4>
+            <Body2 className="mb-2">{t( "Hotspot-cluster-radius-km" )}</Body2>
+            <TextInput
+              accessibilityLabel={t( "Hotspot-cluster-radius-km" )}
+              className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
+              keyboardType="decimal-pad"
+              onBlur={() => {
+                const val = parseFloat( clusterRadiusText );
+                const clamped = isNaN( val ) ? hotspotClusterRadiusKm : val;
+                setClusterRadiusText( String( clamped ) );
+                dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS, value: clamped } );
+              }}
+              onChangeText={setClusterRadiusText}
+              returnKeyType="done"
+              value={clusterRadiusText}
+            />
+            <Body2 className="mb-2">{t( "Hotspot-max-detour-candidates" )}</Body2>
+            <TextInput
+              accessibilityLabel={t( "Hotspot-max-detour-candidates" )}
+              className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
+              keyboardType="number-pad"
+              onBlur={() => {
+                const val = parseInt( maxCandidatesText, 10 );
+                const clamped = isNaN( val ) ? hotspotMaxDetourCandidates : val;
+                setMaxCandidatesText( String( clamped ) );
+                dispatch( {
+                  type: EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES,
+                  value: clamped,
+                } );
+              }}
+              onChangeText={setMaxCandidatesText}
+              returnKeyType="done"
+              value={maxCandidatesText}
+            />
+            <Body2 className="mb-2">{t( "Hotspot-parking-minutes" )}</Body2>
+            <TextInput
+              accessibilityLabel={t( "Hotspot-parking-minutes" )}
+              className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
+              keyboardType="number-pad"
+              onBlur={() => {
+                const val = parseInt( parkingMinutesText, 10 );
+                const clamped = isNaN( val ) ? hotspotParkingMinutes : val;
+                setParkingMinutesText( String( clamped ) );
+                dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES, value: clamped } );
+              }}
+              onChangeText={setParkingMinutesText}
+              returnKeyType="done"
+              value={parkingMinutesText}
+            />
+            <Body2 className="mb-2">{t( "Hotspot-bbox-padding-km" )}</Body2>
+            <TextInput
+              accessibilityLabel={t( "Hotspot-bbox-padding-km" )}
+              className="border border-lightGray h-10 rounded-xl px-3 text-base"
+              keyboardType="number-pad"
+              onBlur={() => {
+                const val = parseInt( bboxPaddingText, 10 );
+                const clamped = isNaN( val ) ? hotspotBboxPaddingKm : val;
+                setBboxPaddingText( String( clamped ) );
+                dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM, value: clamped } );
+              }}
+              onChangeText={setBboxPaddingText}
+              returnKeyType="done"
+              value={bboxPaddingText}
             />
           </View>
         </View>

@@ -624,6 +624,16 @@ HOTSPOT-FINDER = HOTSPOT FINDER
 Hotspots = Hotspots
 # Accessibility label for the wildlife hotspots explore view
 Hotspots-View = Hotspots View
+# Label for the bbox padding setting in the hotspot finder filter
+Hotspot-bbox-padding-km = Search area padding (km)
+# Label for the cluster radius setting in the hotspot finder filter
+Hotspot-cluster-radius-km = Cluster radius (km)
+# Section header for hotspot finder algorithm settings in the Explore filters modal
+HOTSPOT-SETTINGS = HOTSPOT SETTINGS
+# Label for the max detour candidates setting in the hotspot finder filter
+Hotspot-max-detour-candidates = Max detour candidates
+# Label for the parking time estimate setting in the hotspot finder filter
+Hotspot-parking-minutes = Parking estimate (min)
 I-agree-to-the-Terms-of-Use = <0>I agree to the Terms of Use and Privacy Policy, and I have reviewed the Community Guidelines (</0><1>required</1><0>).</0>
 Iconic-taxon-name = Iconic taxon name: { $iconicTaxon }
 ID-in-Camera = ID in Camera
