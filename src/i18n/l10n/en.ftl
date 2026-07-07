@@ -618,9 +618,9 @@ Help-us-translate-the-app = Help us translate the app!
 Hide = Hide
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
-HOTSPOT-FINDER = HOTSPOT FINDER
 # Label used for a stop added to a route from a wildlife hotspot
 Hotspot = Hotspot
+HOTSPOT-FINDER = HOTSPOT FINDER
 Hotspots = Hotspots
 # Accessibility label for the wildlife hotspots explore view
 Hotspots-View = Hotspots View
@@ -664,7 +664,6 @@ IGNORE-LOCATION = IGNORE LOCATION
 # Button to stop recieving notifications about observation
 Ignore-notifications = Ignore notifications
 Ignoring-location = Ignoring location
-Import-Photos-From = Import Photos From
 # Shows the number of observations a user is about to import
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
@@ -802,9 +801,9 @@ Mark-as-reviewed = Mark as reviewed
 Match-Screen = Match Screen
 # Identification category
 maverick--identification = Maverick
+Max-detour-candidates = Max detour candidates
 # Month of May
 May = May
-Max-detour-candidates = Max detour candidates
 MEDIA = MEDIA
 # label in project requirements
 Media-Type = Media Type
@@ -1236,7 +1235,6 @@ Scientific-Name-Common-Name = Scientific Name (Common Name)
 SEARCH = SEARCH
 # Title for a search interface
 Search = Search
-Search-radius-km = Search radius (km)
 # Placeholder for the location field in universal search
 Search-for-a-location = Search for a location
 Search-for-a-project = Search for a project
@@ -1246,6 +1244,7 @@ Search-for-a-taxon = Search for a taxon
 Search-for-species-user-or-project = Search for species, user, or project
 SEARCH-LOCATION = SEARCH LOCATION
 SEARCH-PROJECTS = SEARCH PROJECTS
+Search-radius-km = Search radius (km)
 Search-suggestions-with-location = Search suggestions with location
 Search-suggestions-without-location = Search suggestions without location
 SEARCH-TAXA = SEARCH TAXA
