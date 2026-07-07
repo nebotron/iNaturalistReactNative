@@ -1,5 +1,6 @@
-import { mkdir, moveFile, TemporaryDirectoryPath } from "@dr.pogodin/react-native-fs";
-import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import { copyFile, mkdir } from "@dr.pogodin/react-native-fs";
+import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import {
   photoLibraryPhotosPath,
 } from "appConstants/paths";
@@ -9,28 +10,26 @@ import {
   appendPhotosToObservation,
   buildGroupedMediaItems,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
-import { ActivityAnimation, ViewWrapper } from "components/SharedComponents";
-import { t } from "i18next";
+import PhotoGallery from "components/PhotoImporter/PhotoGallery";
+import { ViewWrapper } from "components/SharedComponents";
 import type { NoBottomTabStackScreenProps } from "navigation/types";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
-  useState,
 } from "react";
 import {
-  InteractionManager,
   Platform,
-  View,
 } from "react-native";
 import type { Asset } from "react-native-image-picker";
-import { launchImageLibrary } from "react-native-image-picker";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
-import { sleep } from "sharedHelpers/util";
 import { useInputImageTracking } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
+import * as uuid from "uuid";
+
+type PhotoNode = PhotoIdentifier["node"];
 
 const logger = log.extend( "PhotoLibrary" );
 
@@ -43,11 +42,21 @@ const MAX_PHOTOS_ALLOWED = Platform.select( {
 
 const FROM_AICAMERA_MAX_PHOTOS_ALLOWED = 1;
 
+const nodeToSourceAsset = ( node: PhotoNode ): Asset => ( {
+  uri: node.image.uri,
+  fileName: node.image.filename ?? undefined,
+  width: node.image.width,
+  height: node.image.height,
+  fileSize: node.image.fileSize ?? undefined,
+  type: "image/jpeg",
+  id: node.id ?? undefined,
+  timestamp: String( node.timestamp ),
+} );
+
 const PhotoLibrary = ( ) => {
   const navigation = useNavigation<NoBottomTabStackScreenProps<"PhotoLibrary">["navigation"]>();
   const { params } = useRoute<NoBottomTabStackScreenProps<"PhotoLibrary">["route"]>();
 
-  const [photoLibraryShown, setPhotoLibraryShown] = useState( false );
   const setPhotoImporterState = useStore( state => state.setPhotoImporterState );
   const addOriginalDevicePhotoUris = useStore( state => state.addOriginalDevicePhotoUris );
   const addImportedPhotoDeviceUriMappings = useStore(
@@ -66,15 +75,9 @@ const PhotoLibrary = ( ) => {
   const realm = useRealm( );
   const { trackImagesLoaded } = useInputImageTracking( );
 
-  const skipGroupPhotos = params
-    ? params.skipGroupPhotos
-    : false;
-  const fromGroupPhotos = params
-    ? params.fromGroupPhotos
-    : false;
-  const fromAICamera = params
-    ? params.fromAICamera
-    : false;
+  const skipGroupPhotos = params?.skipGroupPhotos ?? false;
+  const fromGroupPhotos = params?.fromGroupPhotos ?? false;
+  const fromAICamera = params?.fromAICamera ?? false;
 
   const navToObsEdit = useCallback( ( ) => navigation.navigate( "ObsEdit", {
     lastScreen: "PhotoLibrary",
@@ -86,7 +89,7 @@ const PhotoLibrary = ( ) => {
       navigation.setParams( { fromGroupPhotos: false } );
     } else if ( skipGroupPhotos ) {
       navToObsEdit();
-    } else if ( params && params.previousScreen && params.previousScreen.name === "ObsDetails" ) {
+    } else if ( params?.previousScreen?.name === "ObsDetails" ) {
       if ( !params.previousScreen.params?.uuid ) {
         throw new Error( "No UUID found to route to ObsDetails screen" );
       }
@@ -96,7 +99,6 @@ const PhotoLibrary = ( ) => {
     } else {
       exitObservationFlow( );
     }
-    setPhotoLibraryShown( false );
   }, [
     exitObservationFlow,
     fromGroupPhotos,
@@ -106,111 +108,54 @@ const PhotoLibrary = ( ) => {
     skipGroupPhotos,
   ] );
 
-  const moveImagesToDocumentsDirectory = async ( selectedImages:
-    { image: Asset }[] ) => {
+  const copyImagesFromCameraRoll = useCallback( async ( nodes: PhotoNode[] ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
 
-    const moveImage = async ( { image }: { image: Asset } ) => {
-      const { fileName, uri } = image;
-      if ( !fileName ) {
-        throw new Error( "No fileName in pick photo response" );
-      }
+    const copyNode = async ( node: PhotoNode ) => {
+      const fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
       const destPath = `${path}/${fileName}`;
-      const getSourcePath = Platform.select( {
-        ios: ( ) => `${TemporaryDirectoryPath}/${fileName}`,
-        // Get image from uri on android. TemporaryDirectoryPath results in an ANR.
-        android: ( ) => {
-          if ( !uri ) {
-            throw new Error( "No URI in pick photo response" );
-          }
-          return uri;
-        },
-        default: ( ) => {
-          throw new Error( `Unsupported platform for moving picked photo: ${Platform.OS}` );
-        },
-      } );
-
-      await moveFile( getSourcePath(), destPath );
+      let sourcePath: string;
+      if ( Platform.OS === "ios" ) {
+        if ( !node.image.filepath ) {
+          throw new Error( `Photo filepath unavailable: ${node.image.uri}` );
+        }
+        sourcePath = node.image.filepath;
+      } else {
+        sourcePath = node.image.uri;
+      }
+      await copyFile( sourcePath, destPath );
       return {
         image: {
-          ...image,
-          uri: Platform.OS === "ios"
-            ? `file://${destPath}`
-            : destPath,
+          ...nodeToSourceAsset( node ),
+          uri: `file://${destPath}`,
         },
       };
     };
 
-    // Process in batches to avoid exhausting file descriptors with large selections
     const BATCH_SIZE = 10;
-    const movedImages = [];
-    for ( let i = 0; i < selectedImages.length; i += BATCH_SIZE ) {
-      const batch = selectedImages.slice( i, i + BATCH_SIZE );
+    const results = [];
+    for ( let i = 0; i < nodes.length; i += BATCH_SIZE ) {
+      const batch = nodes.slice( i, i + BATCH_SIZE );
       // eslint-disable-next-line no-await-in-loop
-      const batchResults = await Promise.all( batch.map( moveImage ) );
-      movedImages.push( ...batchResults );
+      const batchResults = await Promise.all( batch.map( copyNode ) );
+      results.push( ...batchResults );
     }
-    return movedImages;
-  };
+    return results;
+  }, [] );
 
-  const showPhotoLibrary = useCallback( async () => {
-    if ( photoLibraryShown ) {
-      return;
-    }
-
-    setPhotoLibraryShown( true );
-
-    if ( Platform.OS === "ios" ) {
-      // iOS has annoying transition of the screen - that if we don't wait enough time,
-      // the launchImageLibrary would halt and not return (and not showing any image picker)
-      await sleep( 500 );
-    }
-
-    let response;
+  const handleGalleryDone = useCallback( async ( nodes: PhotoNode[] ) => {
     try {
-      response = await launchImageLibrary( {
-        selectionLimit: fromAICamera
-          ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
-          : MAX_PHOTOS_ALLOWED,
-        mediaType: "photo",
-        includeBase64: false,
-        includeExtra: !fromAICamera,
-        // forceOldAndroidPhotoPicker is necessary because the "new" picker strips key EXIF data
-        forceOldAndroidPhotoPicker: true,
-        chooserTitle: t( "Import-Photos-From" ),
-        presentationStyle: "overFullScreen",
-      } );
-    } catch ( launchError ) {
-      logger.error( "launchImageLibrary threw unexpectedly", launchError );
-      setPhotoLibraryShown( false );
-      exitObservationFlow( );
-      return;
-    }
+      const sourceAssets = nodes.map( nodeToSourceAsset );
+      addOriginalDevicePhotoUris( getOriginalDevicePhotoUrisFromAssets( sourceAssets ) );
 
-    if ( !response || response.didCancel || !response.assets || response.errorCode ) {
-      if ( response?.errorCode ) {
-        logger.error(
-          `import from photo library error: ${response.errorCode}: ${response.errorMessage}`,
-        );
-      }
-
-      handleSelectionCancelled();
-      return;
-    }
-
-    try {
-      const photoAssets = response.assets;
-      addOriginalDevicePhotoUris(
-        getOriginalDevicePhotoUrisFromAssets( response.assets ),
-      );
-
-      const movedPhotos = photoAssets.length > 0
-        ? await moveImagesToDocumentsDirectory( photoAssets.map( image => ( { image } ) ) )
+      const copiedPhotos = nodes.length > 0
+        ? await copyImagesFromCameraRoll( nodes )
         : [];
-      const selectedPhotos = movedPhotos.length > 0
-        ? markDuplicatePhotosFromLibrary( realm, movedPhotos, photoAssets )
+      const selectedPhotos = copiedPhotos.length > 0
+        ? markDuplicatePhotosFromLibrary( realm, copiedPhotos, sourceAssets )
         : [];
+
       if ( selectedPhotos.length > 0 ) {
         addImportedPhotoDeviceUriMappings(
           selectedPhotos.map( photo => ( {
@@ -232,7 +177,6 @@ const PhotoLibrary = ( ) => {
         ] ) );
         navigation.setParams( { fromGroupPhotos: false } );
         navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
-        setPhotoLibraryShown( false );
         return;
       }
 
@@ -244,52 +188,43 @@ const PhotoLibrary = ( ) => {
             evidenceToAdd: [...evidenceToAdd, ...importedPhotoUris],
           } );
         }
-
         const updatedCurrentObservation = await appendPhotosToObservation(
           selectedPhotos,
           currentObservation,
           numOfObsPhotos,
         );
-
         const updatedObservations = [...observations];
         updatedObservations[currentObservationIndex] = updatedCurrentObservation;
         updateObservations( updatedObservations );
-
         navToObsEdit();
-        setPhotoLibraryShown( false );
         return;
       }
 
       const importedPhotoUris = selectedPhotos.map( x => x.image.uri );
-
       setPhotoImporterState( {
         photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
         groupedPhotos: buildGroupedMediaItems( selectedPhotos ),
       } );
       navigation.setParams( { fromGroupPhotos: false } );
       navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
-      setPhotoLibraryShown( false );
     } catch ( error ) {
-      logger.error( "Error importing photos from library", error );
-      setPhotoLibraryShown( false );
+      logger.error( "Error importing photos from camera roll", error );
       exitObservationFlow( );
     }
   }, [
     addImportedPhotoDeviceUriMappings,
     addOriginalDevicePhotoUris,
+    copyImagesFromCameraRoll,
     currentObservation,
     currentObservationIndex,
     evidenceToAdd,
     exitObservationFlow,
-    fromAICamera,
     fromGroupPhotos,
     groupedPhotos,
-    handleSelectionCancelled,
     navToObsEdit,
     navigation,
     numOfObsPhotos,
     observations,
-    photoLibraryShown,
     photoLibraryUris,
     realm,
     setGroupedPhotos,
@@ -299,29 +234,16 @@ const PhotoLibrary = ( ) => {
     updateObservations,
   ] );
 
-  useFocusEffect(
-    React.useCallback( () => {
-      let interactionHandle = null;
-
-      interactionHandle = InteractionManager.runAfterInteractions( () => {
-        if ( !photoLibraryShown ) {
-          showPhotoLibrary();
-        }
-      } );
-
-      return () => {
-        if ( interactionHandle ) {
-          interactionHandle.cancel();
-        }
-      };
-    }, [photoLibraryShown, showPhotoLibrary] ),
-  );
-
   return (
     <ViewWrapper testID="PhotoLibrary">
-      <View className="flex-1 w-full h-full justify-center items-center">
-        <ActivityAnimation />
-      </View>
+      <PhotoGallery
+        fromAICamera={fromAICamera}
+        maxPhotos={fromAICamera
+          ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
+          : MAX_PHOTOS_ALLOWED}
+        onCancel={handleSelectionCancelled}
+        onDone={handleGalleryDone}
+      />
     </ViewWrapper>
   );
 };
