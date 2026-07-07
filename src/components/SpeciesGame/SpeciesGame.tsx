@@ -426,6 +426,9 @@ const SpeciesGame = ( ) => {
     targetPool: PhotoEntry[],
     lookalikePool: PhotoEntry[],
   ) => {
+    // Clear the observation UUID immediately so the previous round's species name
+    // does not flash while the next round's photo and state are loading.
+    setCurrentObservationUuid( null );
     // Always pick a pool fairly (50/50). Never re-show a photo and never fall back to
     // the other pool: draw only from unused entries, paging in more from the API as needed.
     const showTarget = Math.random( ) < 0.5;
