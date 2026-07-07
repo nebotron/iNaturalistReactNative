@@ -115,25 +115,22 @@ const Explore = ( {
   const a11yLabel = exploreViewA11yLabel[currentExploreView];
   const headerCount = count[currentExploreView];
 
-  const renderHeader = ( ) => {
-    if ( currentExploreView === "hotspots" ) return null;
-    return (
-      <ExploreHeader
-        count={headerCount}
-        exploreView={currentExploreView}
-        exploreViewIcon={icon}
-        hasLocationPermissions={hasLocationPermissions}
-        hideBackButton={hideBackButton}
-        isFetchingHeaderCount={isFetchingHeaderCount}
-        onPressCount={( ) => setShowExploreBottomSheet( true )}
-        openFiltersModal={openFiltersModal}
-        renderLocationPermissionsGate={renderLocationPermissionsGate}
-        requestLocationPermissions={requestLocationPermissions}
-        updateLocation={updateLocation}
-        updateTaxonFilters={updateTaxonFilters}
-      />
-    );
-  };
+  const renderHeader = ( ) => (
+    <ExploreHeader
+      count={headerCount}
+      exploreView={currentExploreView}
+      exploreViewIcon={icon}
+      hasLocationPermissions={hasLocationPermissions}
+      hideBackButton={hideBackButton}
+      isFetchingHeaderCount={isFetchingHeaderCount}
+      onPressCount={( ) => setShowExploreBottomSheet( true )}
+      openFiltersModal={openFiltersModal}
+      renderLocationPermissionsGate={renderLocationPermissionsGate}
+      requestLocationPermissions={requestLocationPermissions}
+      updateLocation={updateLocation}
+      updateTaxonFilters={updateTaxonFilters}
+    />
+  );
 
   const renderMainContent = ( ) => {
     if ( isConnected === false ) {
