@@ -8,6 +8,7 @@ export interface PhotoSectionHeaderItem {
   type: "header";
   id: string;
   timestamp: number;
+  nodes: PhotoNode[];
 }
 
 export interface PhotoSectionPhotoItem {
@@ -26,18 +27,22 @@ const buildSectionedGalleryItems = (
   getKey: ( node: PhotoNode ) => string,
 ): PhotoGalleryListItem[] => {
   const items: PhotoGalleryListItem[] = [];
+  let currentSection: PhotoNode[] = [];
 
   photos.forEach( ( node, index ) => {
     const previous = photos[index - 1];
     const isNewSection = index === 0
       || ( previous.timestamp - node.timestamp ) > SECTION_GAP_SECONDS;
     if ( isNewSection ) {
+      currentSection = [];
       items.push( {
         type: "header",
         id: `header-${node.timestamp}-${index}`,
         timestamp: node.timestamp,
+        nodes: currentSection,
       } );
     }
+    currentSection.push( node );
     items.push( {
       type: "photo",
       id: getKey( node ),

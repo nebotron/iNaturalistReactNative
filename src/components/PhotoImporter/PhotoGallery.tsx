@@ -191,10 +191,30 @@ const PhotoGallery = ( {
     [photos],
   );
 
+  const toggleSectionSelection = useCallback( ( nodes: PhotoNode[] ) => {
+    setSelectedUris( prev => {
+      const next = new Set( prev );
+      const allSelected = nodes.every( node => next.has( getSelectionKey( node ) ) );
+      if ( allSelected ) {
+        nodes.forEach( node => next.delete( getSelectionKey( node ) ) );
+      } else {
+        for ( let i = 0; i < nodes.length; i += 1 ) {
+          if ( next.size >= maxPhotos ) {
+            break;
+          }
+          next.add( getSelectionKey( nodes[i] ) );
+        }
+      }
+      return next;
+    } );
+  }, [maxPhotos] );
+
   const renderItem = useCallback( ( { item }: { item: PhotoGalleryListItem } ) => {
     if ( item.type === "header" ) {
+      const allSelected = item.nodes.length > 0
+        && item.nodes.every( node => selectedUris.has( getSelectionKey( node ) ) );
       return (
-        <View className="px-3 py-2">
+        <View className="px-3 py-2 flex-row items-center justify-between">
           <Body2>
             {formatLongDatetime(
               formatDateStringFromTimestamp( item.timestamp ),
@@ -202,6 +222,18 @@ const PhotoGallery = ( {
               { literalTime: true },
             )}
           </Body2>
+          <INatIconButton
+            icon="checkmark"
+            onPress={( ) => toggleSectionSelection( item.nodes )}
+            accessibilityLabel={allSelected
+              ? t( "Deselect-all-photos" )
+              : t( "Select-all-photos" )}
+            size={18}
+            color={allSelected
+              ? colors.inatGreen
+              : colors.darkGray}
+            testID={`PhotoGallery.section.${item.id}`}
+          />
         </View>
       );
     }
@@ -237,7 +269,15 @@ const PhotoGallery = ( {
         </View>
       </Pressable>
     );
-  }, [selectedUris, isImported, toggleSelection, gridItemStyle, t, i18n] );
+  }, [
+    selectedUris,
+    isImported,
+    toggleSelection,
+    toggleSectionSelection,
+    gridItemStyle,
+    t,
+    i18n,
+  ] );
 
   const overrideItemLayout = useCallback( (
     layout: { span?: number },
