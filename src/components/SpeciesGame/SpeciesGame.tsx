@@ -22,7 +22,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Dimensions, StyleSheet } from "react-native";
+import { Dimensions, Linking, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
@@ -1155,6 +1155,19 @@ const SpeciesGame = ( ) => {
                 level="focus"
                 onPress={handleNext}
               />
+              {target && lookalike && (
+                <Button
+                  className="w-full mb-2"
+                  // eslint-disable-next-line i18next/no-literal-string
+                  text={`How to ID ${taxonLabel( target )} vs ${taxonLabel( lookalike )}`}
+                  onPress={() => {
+                    const query = encodeURIComponent(
+                      `how to id ${taxonLabel( target! )} vs ${taxonLabel( lookalike! )}`,
+                    );
+                    Linking.openURL( `https://www.google.com/search?q=${query}` );
+                  }}
+                />
+              )}
               {currentObservationUuid && (
                 <Pressable
                   accessibilityRole="button"
