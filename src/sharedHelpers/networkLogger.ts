@@ -72,6 +72,7 @@ function shouldSkip( url: string ) {
     || url.startsWith( "http://127.0.0.1" )
     || url.includes( "debugger-proxy" )
     || url.includes( "symbolicator" )
+    || url.endsWith( "/ping" )
   );
 }
 

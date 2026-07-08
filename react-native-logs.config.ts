@@ -1,5 +1,5 @@
 import * as RNFS from "@dr.pogodin/react-native-fs";
-import iNatLogstashTransport, { enhanceLoggerWithExtra } from "api/log";
+import { enhanceLoggerWithExtra } from "api/log";
 import {
   consoleTransport,
   fileAsyncTransport,
@@ -42,7 +42,6 @@ const baseLog = logger.createLogger( {
   transport: [
     consoleTransport,
     fileAsyncTransport,
-    iNatLogstashTransport,
   ],
 } );
 
