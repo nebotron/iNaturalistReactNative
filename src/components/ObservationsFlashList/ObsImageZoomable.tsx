@@ -2,7 +2,6 @@ import { FasterImageView } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
 } from "react";
 import { StyleSheet, View } from "react-native";
@@ -32,14 +31,13 @@ interface Props {
 }
 
 // Builds a transform that frames a normalized crop centered in the square tile.
-// scale is at least coverScale so the image always fills the tile (no letterbox
-// bars, and the crop clamping never has to snap an edge into view).
+// Uses fitCropScale so the whole subject fits; this may letterbox when the
+// subject spans a large portion of a non-square image.
 const frameCropTransform = (
   crop: NormalizedCrop,
   size: number,
   imageWidth: number,
   imageHeight: number,
-  coverScale: number,
 ): ImageZoomTransform => {
   const contain = computeContainRect( size, size, imageWidth, imageHeight );
   if ( contain.width <= 0 || contain.height <= 0 ) {
@@ -51,7 +49,7 @@ const frameCropTransform = (
     size / ( crop.w * contain.width ),
     size / ( crop.h * contain.height ),
   );
-  const scale = Math.min( MAX_SCALE, Math.max( coverScale, fitCropScale ) );
+  const scale = Math.min( MAX_SCALE, fitCropScale );
   const center = size / 2;
   const cropCenterX = contain.left + ( crop.x + crop.w / 2 ) * contain.width;
   const cropCenterY = contain.top + ( crop.y + crop.h / 2 ) * contain.height;
@@ -78,16 +76,6 @@ const ObsImageZoomable = ( {
   brightnessStyle,
 }: Props ) => {
   const transformRef = useRef<ImageZoomTransformRefs | null>( null );
-
-  // Minimum zoom at which the image still fills the square tile. Used as the
-  // floor for the initial framing so a photo lands covering the tile (no
-  // letterbox), while pinch-to-zoom can still go below it (down to scale 1) to
-  // letterbox the full image into the square viewport.
-  const coverScale = useMemo( ( ) => {
-    const contain = computeContainRect( size, size, imageWidth, imageHeight );
-    if ( contain.width <= 0 || contain.height <= 0 ) return 1;
-    return size / Math.min( contain.width, contain.height );
-  }, [size, imageWidth, imageHeight] );
 
   // On gesture end, immediately log the framed region as a ground-truth crop.
   const handleInteractionEnd = useCallback( ( ) => {
@@ -142,9 +130,9 @@ const ObsImageZoomable = ( {
   useEffect( ( ) => {
     if ( appliedRef.current ) return;
     if ( size <= 0 || imageWidth <= 0 || imageHeight <= 0 ) return;
-    const framed = frameCropTransform( initialCrop, size, imageWidth, imageHeight, coverScale );
-    // Clamp the framing so the image always covers the tile even when the subject
-    // sits against an edge (matches the crop clamping applied during gestures).
+    const framed = frameCropTransform( initialCrop, size, imageWidth, imageHeight );
+    // Clamp the framing so a subject near an edge doesn't shift the image past
+    // that edge (matches the crop clamping applied during gestures).
     const limits = computeCropPanTranslateLimits(
       {
         imageWidth, imageHeight, viewportWidth: size, viewportHeight: size, cropSize: size,
@@ -158,7 +146,7 @@ const ObsImageZoomable = ( {
       focalY: clamp( framed.focalY, limits.minTotalTranslateY, limits.maxTotalTranslateY ),
     } );
     appliedRef.current = true;
-  }, [uri, size, imageWidth, imageHeight, initialCrop, coverScale, applyTransform] );
+  }, [uri, size, imageWidth, imageHeight, initialCrop, applyTransform] );
 
   const layerStyle = { width: size, height: size };
 
