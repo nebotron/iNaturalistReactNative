@@ -7,7 +7,6 @@ import NumberBadge from "components/Explore/NumberBadge";
 import {
   BackButton,
   Body3,
-  DisplayTaxon,
   INatIcon,
   INatIconButton,
 } from "components/SharedComponents";
@@ -58,7 +57,6 @@ const Header = ( {
   const iconicTaxonNames = state.iconic_taxa || [];
   const hasUnknownIconicTaxon = iconicTaxonNames.indexOf( "unknown" ) >= 0;
   const taxonFilterCount = ( taxonFilters || [] ).length;
-  const hasTaxonFilters = taxonFilterCount > 0 || hasUnknownIconicTaxon;
   const showMultipleTaxa = hasUnknownIconicTaxon
     ? taxonFilterCount > 0
     : taxonFilterCount > 1;
@@ -70,17 +68,28 @@ const Header = ( {
 
   const placeGuess = placeGuessText( state.placeMode, t, state.place_guess );
 
+  const taxonFilterText = ( ) => {
+    if ( showMultipleTaxa ) return t( "Multiple-taxa" );
+    if ( hasUnknownIconicTaxon || !singleTaxonFilter ) {
+      return singleTaxonFilter
+        ? t( "Unknown--taxon" )
+        : t( "All-organisms" );
+    }
+    return singleTaxonFilter.taxon?.preferred_common_name
+      || singleTaxonFilter.taxon?.name;
+  };
+
   const surfaceStyle = {
     backgroundColor: colors.darkGray,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    marginBottom: -40,
+    marginBottom: -20,
   };
 
   return (
     <View className="z-10">
       <Surface style={surfaceStyle} elevation={5}>
-        <View className="bg-white px-6 py-4 flex-row justify-between items-center">
+        <View className="bg-white px-6 py-2 flex-row justify-between items-center">
           <View className="flex-1 flex-row">
             {!hideBackButton && (
               <BackButton
@@ -88,73 +97,35 @@ const Header = ( {
                 testID="Explore.BackButton"
               />
             ) }
-            <View className="flex-1">
-              {hasTaxonFilters
-                ? (
-                  <View>
-                    {showMultipleTaxa
-                      ? (
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={t( "Change-taxon-filter" )}
-                          className="flex-row items-center"
-                          onPress={() => setShowTaxonSearch( true )}
-                        >
-                          <INatIcon name="label-outline" size={15} />
-                          <Body3
-                            maxFontSizeMultiplier={1.5}
-                            className="ml-3"
-                          >
-                            {t( "Multiple-taxa" )}
-                          </Body3>
-                        </Pressable>
-                      )
-                      : (
-                        <>
-                          {hasUnknownIconicTaxon && (
-                            <DisplayTaxon
-                              accessibilityLabel={t( "Change-taxon-filter" )}
-                              taxon="unknown"
-                              showInfoButton={false}
-                              showCheckmark={false}
-                              handlePress={() => setShowTaxonSearch( true )}
-                            />
-                          )}
-                          {singleTaxonFilter && (
-                            <DisplayTaxon
-                              accessibilityLabel={t( "Change-taxon-filter" )}
-                              taxon={singleTaxonFilter.taxon}
-                              showInfoButton={false}
-                              showCheckmark={false}
-                              handlePress={() => setShowTaxonSearch( true )}
-                            />
-                          )}
-                        </>
-                      )}
-                  </View>
-                )
-                : (
-                  <Pressable
-                    accessibilityRole="button"
-                    className="flex-row items-center"
-                    onPress={() => setShowTaxonSearch( true )}
-                  >
-                    <INatIcon name="label-outline" size={15} />
-                    <Body3
-                      maxFontSizeMultiplier={1.5}
-                      className="ml-3"
-                    >
-                      {t( "All-organisms" )}
-                    </Body3>
-                  </Pressable>
-                )}
+            <View className="flex-1 flex-row justify-between">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t( "Change-taxon-filter" )}
+                className="flex-1 flex-row items-center"
+                onPress={() => setShowTaxonSearch( true )}
+              >
+                <INatIcon name="label-outline" size={15} />
+                <Body3
+                  maxFontSizeMultiplier={1.5}
+                  className="ml-3 shrink"
+                  numberOfLines={1}
+                >
+                  {taxonFilterText( )}
+                </Body3>
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 onPress={( ) => setShowLocationSearch( true )}
-                className="flex-row items-center pt-3"
+                className="flex-1 flex-row items-center ml-3"
               >
                 <INatIcon name="location" size={15} />
-                <Body3 maxFontSizeMultiplier={1.5} className="ml-3">{placeGuess}</Body3>
+                <Body3
+                  maxFontSizeMultiplier={1.5}
+                  className="ml-3 shrink"
+                  numberOfLines={1}
+                >
+                  {placeGuess}
+                </Body3>
               </Pressable>
             </View>
           </View>
