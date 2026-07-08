@@ -31,6 +31,14 @@ import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTrans
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import {
+  computeLookalikesFromObs,
+  getCachedLookalikes,
+  INATURALIST_API,
+  type LookalikeCacheEntry,
+  LOOKALIKE_RADIUS_KM,
+  setCachedLookalikes,
+} from "sharedHelpers/speciesGameLookalikes";
+import {
   recordGuess,
   getStats,
   getUsedUuids,
@@ -40,7 +48,6 @@ import useSubjectDetectionForUri, {
   preloadSubjectDetectionForUri,
   resolveSubjectDetectionForUri,
 } from "sharedHelpers/useSubjectDetectionForUri";
-import { zustandStorage } from "stores/useStore";
 
 type ObservationType = "egg" | "juvenile" | "adult";
 type SexType = "male" | "female";
@@ -62,72 +69,14 @@ const SEX_VALUE_IDS: Record<SexType, number> = {
   male: 11,
 };
 
-const INATURALIST_API = "https://api.inaturalist.org/v1";
 const POOL_SIZE = 20;
 // Max pages of observations we'll page through per taxon to keep supplying fresh,
 // never-before-seen images (POOL_SIZE * MAX_POOL_PAGES photos per taxon).
 const MAX_POOL_PAGES = 25;
-const LOOKALIKE_RADIUS_KM = 500;
 const LOCATION_FILTER_RADIUS_KM = 1000;
 const MAX_ZOOM_SCALE = 5;
-const LOOKALIKE_CACHE_KEY = "speciesGameLookalikes";
 const MAX_LOOKALIKE_OBS = 1000;
-const FETCH_MORE_OBS_COUNT = 400;
-const LOOKALIKE_PAGE_SIZE = 200;
 
-interface LookalikeCacheEntry {
-  entries: { taxonId: number; count: number; observationUuids: string[] }[];
-  topId: number | null;
-  obsScanned: number;
-}
-
-function computeLookalikesFromObs(
-  results: unknown[],
-  targetId: number,
-  seed?: { taxonId: number; count: number; observationUuids: string[] }[],
-): { topId: number | null; entries: { taxonId: number; count: number; observationUuids: string[] }[] } {
-  const counts: Record<number, { count: number; observationUuids: string[] }> = {};
-  for ( const s of seed ?? [] ) {
-    counts[s.taxonId] = { count: s.count, observationUuids: [...s.observationUuids] };
-  }
-  for ( const obs of results ) {
-    for ( const ident of ( obs as { identifications?: unknown[] } ).identifications ?? [] ) {
-      const altId: number | undefined = ( ident as { taxon?: { id?: number } } ).taxon?.id;
-      const rankLevel: number | undefined
-        = ( ident as { taxon?: { rank_level?: number } } ).taxon?.rank_level;
-      if ( altId && altId !== targetId && rankLevel === 10 ) {
-        if ( !counts[altId] ) counts[altId] = { count: 0, observationUuids: [] };
-        counts[altId].count += 1;
-        const uuid = ( obs as { uuid?: string } ).uuid;
-        if ( uuid && !counts[altId].observationUuids.includes( uuid ) ) {
-          counts[altId].observationUuids.push( uuid );
-        }
-      }
-    }
-  }
-  const entries = Object.entries( counts )
-    .map( ( [id, d] ) => ( {
-      taxonId: Number( id ),
-      count: d.count,
-      observationUuids: d.observationUuids,
-    } ) )
-    .sort( ( a, b ) => b.count - a.count );
-  return { topId: entries.length > 0 ? entries[0].taxonId : null, entries };
-}
-
-function getCachedLookalikes( taxonId: number ): LookalikeCacheEntry | null {
-  const raw = zustandStorage.getItem( `${LOOKALIKE_CACHE_KEY}_${taxonId}` );
-  if ( !raw || typeof raw !== "string" ) return null;
-  try {
-    return JSON.parse( raw ) as LookalikeCacheEntry;
-  } catch {
-    return null;
-  }
-}
-
-function setCachedLookalikes( taxonId: number, value: LookalikeCacheEntry ): void {
-  zustandStorage.setItem( `${LOOKALIKE_CACHE_KEY}_${taxonId}`, JSON.stringify( value ) );
-}
 
 const BUTTON_ROW_HEIGHT = 56;
 const OBSERVATION_TYPES: { label: string; value: ObservationType }[] = [
@@ -195,14 +144,6 @@ interface PhotoEntry {
   observationUuid: string;
 }
 
-interface LookalikeEntry {
-  taxonId: number;
-  name: string;
-  commonName?: string;
-  count: number;
-  observationUuids: string[];
-}
-
 interface LookalikeCandidate {
   info: TaxonInfo;
   pool: PhotoEntry[];
@@ -246,11 +187,6 @@ const SpeciesGame = ( ) => {
   const [currentObservationUuid, setCurrentObservationUuid] = useState<string | null>( null );
   // true = guessed target, false = guessed lookalike, "skip" = I don't know, null = not yet guessed
   const [guessedTarget, setGuessedTarget] = useState<boolean | "skip" | null>( null );
-  const [showLookalikesModal, setShowLookalikesModal] = useState( false );
-  const [lookalikesData, setLookalikesData] = useState<LookalikeEntry[]>( [] );
-  const [usedMisidentifications, setUsedMisidentifications] = useState( false );
-  const [obsScannedCount, setObsScannedCount] = useState( 0 );
-  const [isFetchingMoreObs, setIsFetchingMoreObs] = useState( false );
   const [selectedObsTypes, setSelectedObsTypes] = useState<ObservationType[]>( [] );
   const [selectedSexes, setSelectedSexes] = useState<SexType[]>( [] );
   const [showFilterModal, setShowFilterModal] = useState( false );
@@ -532,68 +468,6 @@ const SpeciesGame = ( ) => {
     return { id, name: t.name, preferredCommonName: t.preferred_common_name };
   }, [] );
 
-  // Fetches another batch of random observations of the target taxon and merges any
-  // newly found misidentifications into the cached lookalike data and the modal display.
-  const handleFetchMoreObservations = useCallback( async ( ) => {
-    setIsFetchingMoreObs( true );
-    try {
-      const cached = getCachedLookalikes( taxonId );
-      const baseObsScanned = cached?.obsScanned ?? obsScannedCount;
-      const seedEntries = cached?.entries ?? [];
-
-      const location = userLocationRef.current;
-      const locationParams = location
-        ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
-        : "";
-      const baseUrl = `${INATURALIST_API}/observations`
-        + `?taxon_id=${taxonId}${locationParams}&per_page=${LOOKALIKE_PAGE_SIZE}&order_by=random`;
-      const startPage = Math.floor( baseObsScanned / LOOKALIKE_PAGE_SIZE ) + 1;
-      const pageCount = FETCH_MORE_OBS_COUNT / LOOKALIKE_PAGE_SIZE;
-      const pages = Array.from( { length: pageCount }, ( _, i ) => startPage + i );
-
-      const responses = await Promise.all( pages.map( p => fetch( `${baseUrl}&page=${p}` ) ) );
-      const newResults: unknown[] = [];
-      for ( const res of responses ) {
-        if ( res.ok ) {
-          // eslint-disable-next-line no-await-in-loop
-          const d = await res.json( );
-          newResults.push( ...( d.results ?? [] ) );
-        }
-      }
-
-      const merged = computeLookalikesFromObs( newResults, taxonId, seedEntries );
-      const newObsScanned = baseObsScanned + newResults.length;
-      setCachedLookalikes( taxonId, {
-        entries: merged.entries,
-        topId: merged.topId,
-        obsScanned: newObsScanned,
-      } );
-      setObsScannedCount( newObsScanned );
-      setUsedMisidentifications( merged.entries.length > 0 );
-
-      const knownNames = new Map(
-        lookalikesData.map( e => [e.taxonId, { name: e.name, commonName: e.commonName }] ),
-      );
-      const withNames = await Promise.all(
-        merged.entries.slice( 0, 10 ).map( async entry => {
-          const known = knownNames.get( entry.taxonId );
-          if ( known ) return { ...entry, ...known };
-          const info = await fetchTaxonInfo( entry.taxonId );
-          return {
-            taxonId: entry.taxonId,
-            count: entry.count,
-            observationUuids: entry.observationUuids,
-            name: info?.name ?? String( entry.taxonId ),
-            commonName: info?.preferredCommonName,
-          };
-        } ),
-      );
-      setLookalikesData( withNames );
-    } finally {
-      setIsFetchingMoreObs( false );
-    }
-  }, [taxonId, obsScannedCount, lookalikesData, fetchTaxonInfo] );
-
   useEffect( ( ) => {
     let cancelled = false;
 
@@ -613,11 +487,10 @@ const SpeciesGame = ( ) => {
         userLocationRef.current = userLocation;
 
         // Find the most-confused species via identification disagreements.
-        const {
-          topId: misidentifiedId,
-          entries: misidentEntries,
-          obsScanned,
-        } = await findMisidentifiedLookalikes( taxonId, userLocation );
+        const { entries: misidentEntries } = await findMisidentifiedLookalikes(
+          taxonId,
+          userLocation,
+        );
 
         // Filter misidentification candidates to species actually found within 1000km.
         const locationFilterParams = userLocation
@@ -707,30 +580,6 @@ const SpeciesGame = ( ) => {
           preferredCommonName: taxon.preferred_common_name,
         } );
         setLookalike( firstLookalike.info );
-
-        // Fetch names for all misidentification-based lookalikes in the background
-        // so the game starts immediately without waiting.
-        if ( misidentifiedId !== null && nearbyMisidentEntries.length > 0 ) {
-          setUsedMisidentifications( true );
-          setObsScannedCount( obsScanned );
-          Promise.all(
-            nearbyMisidentEntries
-              .filter( e => e.taxonId !== taxonId )
-              .slice( 0, 10 )
-              .map( async entry => {
-                const info = await fetchTaxonInfo( entry.taxonId );
-                return {
-                  taxonId: entry.taxonId,
-                  count: entry.count,
-                  observationUuids: entry.observationUuids,
-                  name: info?.name ?? String( entry.taxonId ),
-                  commonName: info?.preferredCommonName,
-                };
-              } ),
-          ).then( withNames => {
-            if ( !cancelled ) setLookalikesData( withNames );
-          } ).catch( ( ) => { /* best-effort, ignore errors */ } );
-        }
 
         startRound( targetPool, firstLookalike.pool );
 
@@ -936,102 +785,6 @@ const SpeciesGame = ( ) => {
     </View>
   );
 
-  const lookalikesModalContent = (
-    <View
-      className="bg-white rounded-t-3xl"
-      style={modalContainerStyle}
-    >
-      <View className="items-center pt-3 pb-1">
-        <View className="w-10 h-1 bg-lightGray rounded-full" />
-      </View>
-      {/* eslint-disable-next-line i18next/no-literal-string */}
-      <Body1 className="text-center font-bold px-4 pt-2 pb-1">
-        Why these species?
-      </Body1>
-
-      <ScrollView className="px-4" style={gameStyles.modalScrollView}>
-        {usedMisidentifications
-          ? (
-            <>
-              <Body2 className="text-center text-darkGray pb-3">
-                {`Based on ${obsScannedCount} random observations of ${taxonLabel( target! )}`
-                  + " near your location, these species were most often identified instead:"}
-              </Body2>
-              {lookalikesData.length === 0
-                ? <ActivityIndicator />
-                : lookalikesData.map( entry => (
-                  <View key={entry.taxonId} className="mb-4 p-3 bg-lightGray rounded-lg">
-                    <Pressable
-                      onPress={() => {
-                        setShowLookalikesModal( false );
-                        navigation.navigate(
-                          "TaxonDetails" as never,
-                          { id: entry.taxonId } as never,
-                        );
-                      }}
-                    >
-                      <Body1 className="font-bold text-inatGreen">
-                        {entry.commonName ?? entry.name}
-                      </Body1>
-                      {entry.commonName && (
-                        <Body2 className="italic text-inatGreen">{entry.name}</Body2>
-                      )}
-                    </Pressable>
-                    <Body2 className="mt-1">
-                      {`Misidentified ${entry.count} time${entry.count !== 1
-                        ? "s"
-                        : ""}`}
-                    </Body2>
-                    <View className="flex-row flex-wrap mt-1 gap-x-3">
-                      {entry.observationUuids.map( ( uuid, i ) => (
-                        <Pressable
-                          accessibilityRole="button"
-                          key={uuid}
-                          onPress={() => {
-                            setShowLookalikesModal( false );
-                            navigation.navigate(
-                              "ObsDetails" as never,
-                              { uuid } as never,
-                            );
-                          }}
-                        >
-                          <Body2 className="text-inatGreen underline">
-                            {`Obs ${i + 1}`}
-                          </Body2>
-                        </Pressable>
-                      ) )}
-                    </View>
-                  </View>
-                ) )}
-            </>
-          )
-          : (
-            <Body2 className="text-center text-darkGray pb-3">
-              {"No misidentification data was found near your location. "
-                + `${taxonLabel( lookalike! )} is a related species in the same taxonomic group.`}
-            </Body2>
-          )}
-        <View className="pt-2 pb-2">
-          <Button
-            text="Search 400 More Observations"
-            onPress={handleFetchMoreObservations}
-            disabled={isFetchingMoreObs}
-            loading={isFetchingMoreObs}
-            className="w-full"
-          />
-        </View>
-        <View className="pt-2 pb-6">
-          <Button
-            text="Close"
-            onPress={() => setShowLookalikesModal( false )}
-            level="focus"
-            className="w-full"
-          />
-        </View>
-      </ScrollView>
-    </View>
-  );
-
   return (
     <SharedStackViewWrapper>
       {/* Filter modal */}
@@ -1039,13 +792,6 @@ const SpeciesGame = ( ) => {
         showModal={showFilterModal}
         closeModal={() => setShowFilterModal( false )}
         modal={filterModalContent}
-      />
-
-      {/* Lookalikes explanation modal */}
-      <Modal
-        showModal={showLookalikesModal}
-        closeModal={() => setShowLookalikesModal( false )}
-        modal={lookalikesModalContent}
       />
 
       {/* Header bar */}
@@ -1073,7 +819,14 @@ const SpeciesGame = ( ) => {
           <Pressable
             accessibilityRole="button"
             className="w-11 h-11 items-center justify-center"
-            onPress={() => setShowLookalikesModal( true )}
+            onPress={() => navigation.navigate(
+              "SpeciesGameWhySpecies" as never,
+              {
+                taxonId,
+                targetLabel: taxonLabel( target ),
+                lookalikeLabel: taxonLabel( lookalike ),
+              } as never,
+            )}
           >
             <Body1 className="text-inatGreen font-bold">?</Body1>
           </Pressable>

@@ -205,6 +205,12 @@ export type SharedStackParamList = {
   SpeciesGame: {
     taxonId: number;
   };
+  // From SpeciesGame header "?" button
+  SpeciesGameWhySpecies: {
+    taxonId: number;
+    targetLabel: string;
+    lookalikeLabel: string;
+  };
 };
 
 // Note from the documentation:

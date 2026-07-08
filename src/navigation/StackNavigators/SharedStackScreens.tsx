@@ -10,6 +10,7 @@ import PhotoSharing from "components/PhotoSharing";
 import { Heading4 } from "components/SharedComponents";
 import ImageCropEditor from "components/SharedComponents/ImageCrop/ImageCropEditor";
 import SpeciesGame from "components/SpeciesGame/SpeciesGame";
+import SpeciesGameWhySpecies from "components/SpeciesGame/SpeciesGameWhySpecies";
 import SuggestionsContainer from "components/Suggestions/SuggestionsContainer";
 import SuggestionsTaxonSearch from "components/Suggestions/SuggestionsTaxonSearch";
 import TaxonDetails from "components/TaxonDetails/TaxonDetails";
@@ -58,6 +59,7 @@ const FadeInMatchContainer = ( ) => fadeInComponent(
 const FadeInAddToProjects = ( ) => fadeInComponent( <AddToProjects /> );
 const FadeInImageCropEditor = ( ) => fadeInComponent( <ImageCropEditor /> );
 const FadeInSpeciesGame = ( ) => fadeInComponent( <SpeciesGame /> );
+const FadeInSpeciesGameWhySpecies = ( ) => fadeInComponent( <SpeciesGameWhySpecies /> );
 
 const BASE_SCREEN_OPTIONS = {
   contentStyle: {
@@ -96,6 +98,10 @@ const SharedStackScreens = ( ) => (
       <Stack.Screen
         name="SpeciesGame"
         component={FadeInSpeciesGame}
+      />
+      <Stack.Screen
+        name="SpeciesGameWhySpecies"
+        component={FadeInSpeciesGameWhySpecies}
       />
     </Stack.Group>
     {/* Screens with centered header */}
