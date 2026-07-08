@@ -74,6 +74,13 @@ const useParams = ( ): Object => {
         },
       } );
     }
+    if ( params?.d1 && params?.d2 ) {
+      dispatch( {
+        type: EXPLORE_ACTION.SET_DATE_OBSERVED_RANGE,
+        d1: params.d1,
+        d2: params.d2,
+      } );
+    }
   }, [
     dispatch,
     params,

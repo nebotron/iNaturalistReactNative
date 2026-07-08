@@ -4,7 +4,7 @@ import {
   Button,
   INatIcon,
 } from "components/SharedComponents";
-import { Pressable, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import React from "react";
 import colors from "styles/tailwindColors";
 
@@ -13,22 +13,16 @@ import type { Hotspot, HotspotSpecies } from "./hooks/useRouteHotspots";
 interface Props {
   hotspot: Hotspot;
   rank: number;
-  selected: boolean;
-  onPress: () => void;
   onOpenInGoogleMaps?: () => void;
   onAddToRoute?: () => void;
-  onObservationCountPress?: () => void;
   onSpeciesCountPress?: ( species: HotspotSpecies ) => void;
 }
 
 const HotspotListItem = ( {
   hotspot,
   rank,
-  selected,
-  onPress,
   onOpenInGoogleMaps,
   onAddToRoute,
-  onObservationCountPress,
   onSpeciesCountPress,
 }: Props ) => {
   const detourText = hotspot.detourMinutes < 1
@@ -36,30 +30,17 @@ const HotspotListItem = ( {
     : `+${hotspot.detourMinutes} min detour`;
 
   return (
-    <Pressable
-      onPress={onPress}
-      accessibilityRole="button"
+    <View
       accessibilityLabel={`Hotspot ${rank}, ${hotspot.observationCount} observations`}
     >
-      <View
-        className={`mx-3 mb-3 rounded-xl p-4 ${
-          selected
-            ? "bg-white border-2 border-inatGreen"
-            : "bg-white border border-lightGray"
-        }`}
-      >
+      <View className="mx-3 mb-3 rounded-xl p-4 bg-white border border-lightGray">
         <View className="flex-row items-center">
-          <Pressable
-            className="flex-1"
-            onPress={onObservationCountPress}
-            accessibilityRole="button"
-            accessibilityLabel={`View ${hotspot.observationCount} observations in Explore`}
-          >
+          <View className="flex-1">
             <Body2 className="font-bold">
               {hotspot.observationCount.toLocaleString()}
               {" observations"}
             </Body2>
-          </Pressable>
+          </View>
           <View className="flex-row items-center">
             <INatIcon name="location" size={12} color={colors.darkGray} />
             <Body3 className="ml-1 text-darkGray">{detourText}</Body3>
@@ -83,7 +64,7 @@ const HotspotListItem = ( {
                   <Body3
                     className="text-inatGreen underline"
                     onPress={() => onSpeciesCountPress?.( species )}
-                    accessibilityRole="button"
+                    accessibilityRole="link"
                     accessibilityLabel={`View ${species.count} observations of ${species.preferred_common_name || species.name} in Explore`}
                   >
                     {species.count}
@@ -94,7 +75,7 @@ const HotspotListItem = ( {
             ) )}
           </View>
         )}
-        {selected && ( onAddToRoute || onOpenInGoogleMaps ) && (
+        {( onAddToRoute || onOpenInGoogleMaps ) && (
           <View className="flex-row mt-3 space-x-2">
             {onAddToRoute && (
               <Button
@@ -117,7 +98,7 @@ const HotspotListItem = ( {
           </View>
         )}
       </View>
-    </Pressable>
+    </View>
   );
 };
 

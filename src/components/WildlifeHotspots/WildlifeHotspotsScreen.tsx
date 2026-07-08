@@ -32,10 +32,17 @@ import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
 import type { Hotspot, HotspotSpecies, RoutePoint } from "./hooks/useRouteHotspots";
-import { fetchOSRMRoute, findBestInsertion, useRouteHotspots } from "./hooks/useRouteHotspots";
+import { findBestInsertion, useRouteHotspots } from "./hooks/useRouteHotspots";
 import HotspotListItem from "./HotspotListItem";
 
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
+
+const LOCATION_AND_HOTSPOT_KEYS = [
+  "lat", "lng", "radius", "swlat", "swlng", "nelat", "nelng", "place_id",
+  "per_page", "page",
+  "hotspotClusterRadiusKm", "hotspotMaxDetourCandidates", "hotspotObsPerPage",
+  "hotspotParkingMinutes", "hotspotBboxPaddingKm",
+];
 
 interface NominatimResult {
   place_id: number;
@@ -215,9 +222,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     { id: makeStopId(), text: "", point: null },
   ] );
   const [userLocation, setUserLocation] = useState<LatLng | null>( null );
-  const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>( null );
-  const [hotspotRouteCoords, setHotspotRouteCoords] = useState<RoutePoint[]>( [] );
-  const [hotspotRouteLoading, setHotspotRouteLoading] = useState( false );
   const [activeSuggestions, setActiveSuggestions] = useState<{
     stopId: string;
     suggestions: NominatimResult[];
@@ -318,56 +322,9 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
 
   useEffect( () => {
     if ( confirmedStopPoints.length !== stops.length || stops.length < 2 ) return;
-    setSelectedHotspotId( null );
-    setHotspotRouteCoords( [] );
     findHotspots( confirmedStopPoints, filterParams );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops, findHotspots, filterParams] );
-
-  const handleHotspotPress = useCallback( async ( hotspot: Hotspot ) => {
-    const isDeselecting = selectedHotspotId === hotspot.id;
-    setSelectedHotspotId( isDeselecting
-      ? null
-      : hotspot.id );
-    if ( isDeselecting ) {
-      setHotspotRouteCoords( [] );
-      return;
-    }
-    if ( mapRef.current ) {
-      mapRef.current.animateToRegion( {
-        latitude: hotspot.centerLatitude,
-        longitude: hotspot.centerLongitude,
-        latitudeDelta: 0.5,
-        longitudeDelta: 0.5,
-      }, 400 );
-    }
-    if ( confirmedStopPoints.length < 2 ) return;
-    setHotspotRouteLoading( true );
-    try {
-      const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
-      const insertIdx = findBestInsertion( confirmedStopPoints, via );
-      const withVia = [
-        ...confirmedStopPoints.slice( 0, insertIdx ),
-        via,
-        ...confirmedStopPoints.slice( insertIdx ),
-      ];
-      const { coords } = await fetchOSRMRoute( withVia );
-      setHotspotRouteCoords( coords );
-      if ( mapRef.current ) {
-        mapRef.current.fitToCoordinates( coords.map( toMapCoord ), {
-          edgePadding: {
-            top: 60, right: 40, bottom: 60, left: 40,
-          },
-          animated: true,
-        } );
-      }
-    } catch {
-      // silently ignore route fetch failure for hotspot
-    } finally {
-      setHotspotRouteLoading( false );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedHotspotId, stops] );
 
   const handleAddHotspotToRoute = useCallback( ( hotspot: Hotspot ) => {
     if ( confirmedStopPoints.length < 2 ) return;
@@ -375,26 +332,16 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     const insertIdx = findBestInsertion( confirmedStopPoints, via );
     const newStop: Stop = { id: makeStopId(), text: t( "Hotspot" ), point: via };
     setStops( prev => [...prev.slice( 0, insertIdx ), newStop, ...prev.slice( insertIdx )] );
-    setSelectedHotspotId( null );
-    setHotspotRouteCoords( [] );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops, t] );
 
-  const handleObservationPress = useCallback( ( uuid: string ) => {
-    navigation.push( "ObsDetails", { uuid } );
-  }, [navigation] );
-
-  const handleObservationCountPress = useCallback( ( hotspot: Hotspot ) => {
-    navigation.navigate( "Explore", {
-      lat: hotspot.centerLatitude,
-      lng: hotspot.centerLongitude,
-      radius: 2,
-      worldwide: false,
-    } );
-  }, [navigation] );
-
   const handleSpeciesCountPress = useCallback( ( hotspot: Hotspot, species: HotspotSpecies ) => {
-    navigation.navigate( "Explore", {
+    const extraParams = Object.fromEntries(
+      Object.entries( filterParams ).filter( ( [key] ) => !LOCATION_AND_HOTSPOT_KEYS.includes( key ) ),
+    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ( navigation as any ).navigate( "Explore", {
+      ...extraParams,
       taxon: {
         id: species.id,
         name: species.name,
@@ -405,7 +352,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
       radius: 2,
       worldwide: false,
     } );
-  }, [navigation] );
+  }, [navigation, filterParams] );
 
   const renderStopItem = useCallback( ( {
     item: stop, getIndex, drag, isActive,
@@ -555,13 +502,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
               strokeWidth={3}
             />
           )}
-          {hotspotRouteCoords.length > 1 && (
-            <Polyline
-              coordinates={hotspotRouteCoords.map( toMapCoord )}
-              strokeColor={colors.inatGreen}
-              strokeWidth={4}
-            />
-          )}
           {hotspots.map( hotspot => (
             <Marker
               key={hotspot.id}
@@ -569,41 +509,19 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
                 latitude: hotspot.centerLatitude,
                 longitude: hotspot.centerLongitude,
               }}
-              pinColor={
-                selectedHotspotId === hotspot.id
-                  ? colors.inatGreen
-                  : colors.warningYellow
-              }
-              onPress={() => handleHotspotPress( hotspot )}
+              pinColor={colors.warningYellow}
             />
           ) )}
-          {hotspots
-            .find( h => h.id === selectedHotspotId )
-            ?.observations.map( obs => (
-              <Marker
-                key={obs.uuid}
-                coordinate={{ latitude: obs.latitude, longitude: obs.longitude }}
-                anchor={{ x: 0.5, y: 0.5 }}
-                onPress={() => handleObservationPress( obs.uuid )}
-              >
-                <View
-                  className="w-2.5 h-2.5 rounded-full border border-white"
-                  style={{ backgroundColor: colors.inatGreen }}
-                />
-              </Marker>
-            ) )}
         </MapView>
 
-        {( loading || hotspotRouteLoading ) && (
+        {loading && (
           <View
             className={"absolute top-0 left-0 right-0 bottom-0 "
               + "items-center justify-center bg-white/60"}
           >
             <ActivityIndicator size={48} />
             <Body2 className="mt-3 text-darkGray">
-              {loading
-                ? t( "Searching-for-hotspots" )
-                : t( "Loading-route" )}
+              {t( "Searching-for-hotspots" )}
             </Body2>
           </View>
         )}
@@ -628,11 +546,8 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
                     key={hotspot.id}
                     hotspot={hotspot}
                     rank={idx + 1}
-                    selected={selectedHotspotId === hotspot.id}
-                    onPress={() => handleHotspotPress( hotspot )}
                     onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
                     onAddToRoute={() => handleAddHotspotToRoute( hotspot )}
-                    onObservationCountPress={() => handleObservationCountPress( hotspot )}
                     onSpeciesCountPress={species => handleSpeciesCountPress( hotspot, species )}
                   />
                 ) )}
