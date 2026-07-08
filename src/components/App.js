@@ -4,6 +4,7 @@ import { useNavigation } from "@react-navigation/native";
 import RootStackNavigator from "navigation/RootStackNavigator";
 import type { Node } from "react";
 import React, { useCallback } from "react";
+import { installNetworkInterceptor } from "sharedHelpers/networkLogger";
 import {
   useCurrentUser,
   useShare,
@@ -16,6 +17,8 @@ import useResumeGroupPhotos from "./hooks/useResumeGroupPhotos";
 import NetworkService from "./NetworkService";
 import StartupService from "./StartupService";
 import UploadService from "./UploadService";
+
+installNetworkInterceptor( );
 
 type SharedItem = {
   mimeType: string,
