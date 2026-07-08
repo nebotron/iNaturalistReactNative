@@ -110,6 +110,11 @@ const ContextHeader = ( {
                 {subtitle && <Heading4>{subtitle}</Heading4>}
               </View>
             )}
+          {options.headerRight && (
+            <View className="absolute right-0 top-0 h-full justify-center pr-1">
+              {options.headerRight( {} )}
+            </View>
+          )}
         </View>
       </View>
     </View>
