@@ -1,4 +1,6 @@
-import { copyFile, mkdir } from "@dr.pogodin/react-native-fs";
+import {
+  copyAssetsFileIOS, copyFile, mkdir,
+} from "@dr.pogodin/react-native-fs";
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
@@ -115,16 +117,14 @@ const PhotoLibrary = ( ) => {
     const copyNode = async ( node: PhotoNode ) => {
       const fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
       const destPath = `${path}/${fileName}`;
-      let sourcePath: string;
       if ( Platform.OS === "ios" ) {
-        if ( !node.image.filepath ) {
-          throw new Error( `Photo filepath unavailable: ${node.image.uri}` );
-        }
-        sourcePath = node.image.filepath;
+        // PHAsset ph:// identifiers have no filesystem path to copyFile from;
+        // export the asset's bytes directly, as ensureLocalImageForCrop does.
+        // 99999 caps at the asset's natural size without upscaling.
+        await copyAssetsFileIOS( node.image.uri, destPath, 99999, 99999 );
       } else {
-        sourcePath = node.image.uri;
+        await copyFile( node.image.uri, destPath );
       }
-      await copyFile( sourcePath, destPath );
       return {
         image: {
           ...nodeToSourceAsset( node ),
