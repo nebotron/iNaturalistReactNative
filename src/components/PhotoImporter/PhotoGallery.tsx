@@ -8,11 +8,16 @@ import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
+import buildSectionedGalleryItems, {
+  type PhotoGalleryListItem,
+} from "components/PhotoImporter/helpers/photoGallerySections";
+import { Body2 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -20,6 +25,10 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
+import {
+  formatDateStringFromTimestamp,
+  formatLongDatetime,
+} from "sharedHelpers/dateAndTime";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
@@ -49,19 +58,21 @@ const getDeviceUriFromNode = ( node: PhotoNode ): string | null => {
   return normalizeDevicePhotoUri( node.image.uri );
 };
 
+const getSelectionKey = ( node: PhotoNode ) => node.image.uri;
+
 const PhotoGallery = ( {
   fromAICamera = false,
   maxPhotos,
   onCancel,
   onDone,
 }: Props ) => {
-  const { t } = useTranslation( );
+  const { t, i18n } = useTranslation( );
   const realm = useRealm( );
   const {
     gridItemStyle,
     gridItemWidth,
     numColumns,
-  } = useGridLayout( );
+  } = useGridLayout( undefined, "threeUp" );
 
   const [photos, setPhotos] = useState<PhotoNode[]>( [] );
   const [hasNextPage, setHasNextPage] = useState( true );
@@ -121,8 +132,6 @@ const PhotoGallery = ( {
     }
   }, [hasNextPage, endCursor, loadPhotos] );
 
-  const getSelectionKey = ( node: PhotoNode ) => node.image.uri;
-
   const toggleSelection = useCallback( ( node: PhotoNode ) => {
     const key = getSelectionKey( node );
     setSelectedUris( prev => {
@@ -149,7 +158,55 @@ const PhotoGallery = ( {
     return importedUris.has( uri );
   }, [importedUris] );
 
-  const renderItem = useCallback( ( { item: node }: { item: PhotoNode } ) => {
+  const hasImportedPhotos = importedUris.size > 0;
+
+  // Photos newer than the most recently imported one, i.e. everything
+  // that's shown up since the last time photos were imported from here.
+  const photosSinceLastImport = useMemo( ( ) => {
+    if ( !hasImportedPhotos ) {
+      return [];
+    }
+    const lastImportedIndex = photos.findIndex( isImported );
+    if ( lastImportedIndex === -1 ) {
+      return photos;
+    }
+    return photos.slice( 0, lastImportedIndex );
+  }, [photos, isImported, hasImportedPhotos] );
+
+  const selectSinceLastImport = useCallback( ( ) => {
+    setSelectedUris( prev => {
+      const next = new Set( prev );
+      for ( let i = 0; i < photosSinceLastImport.length; i += 1 ) {
+        if ( next.size >= maxPhotos ) {
+          break;
+        }
+        next.add( getSelectionKey( photosSinceLastImport[i] ) );
+      }
+      return next;
+    } );
+  }, [photosSinceLastImport, maxPhotos] );
+
+  const galleryItems = useMemo(
+    ( ) => buildSectionedGalleryItems( photos, getSelectionKey ),
+    [photos],
+  );
+
+  const renderItem = useCallback( ( { item }: { item: PhotoGalleryListItem } ) => {
+    if ( item.type === "header" ) {
+      return (
+        <View className="px-3 py-2">
+          <Body2>
+            {formatLongDatetime(
+              formatDateStringFromTimestamp( item.timestamp ),
+              i18n,
+              { literalTime: true },
+            )}
+          </Body2>
+        </View>
+      );
+    }
+
+    const { node } = item;
     const key = getSelectionKey( node );
     const selected = selectedUris.has( key );
     const imported = isImported( node );
@@ -180,7 +237,16 @@ const PhotoGallery = ( {
         </View>
       </Pressable>
     );
-  }, [selectedUris, isImported, toggleSelection, gridItemStyle, t] );
+  }, [selectedUris, isImported, toggleSelection, gridItemStyle, t, i18n] );
+
+  const overrideItemLayout = useCallback( (
+    layout: { span?: number },
+    item: PhotoGalleryListItem,
+  ) => {
+    if ( item.type === "header" ) {
+      layout.span = numColumns;
+    }
+  }, [numColumns] );
 
   if ( loading ) {
     return (
@@ -205,6 +271,17 @@ const PhotoGallery = ( {
           color={colors.darkGray}
         />
         <View className="flex-1" />
+        {hasImportedPhotos && (
+          <INatIconButton
+            icon="date"
+            onPress={selectSinceLastImport}
+            accessibilityLabel={t( "Select-photos-since-last-import" )}
+            disabled={photosSinceLastImport.length === 0}
+            size={22}
+            color={colors.darkGray}
+            testID="PhotoGallery.selectSinceLastImport"
+          />
+        )}
         {selectedCount > 0 && (
           <INatIconButton
             icon="checkmark"
@@ -217,10 +294,12 @@ const PhotoGallery = ( {
         )}
       </View>
       <FlashList
-        data={photos}
+        data={galleryItems}
         numColumns={numColumns}
         renderItem={renderItem}
-        keyExtractor={( node, index ) => `${node.image.uri}${index}`}
+        keyExtractor={item => item.id}
+        getItemType={item => item.type}
+        overrideItemLayout={overrideItemLayout}
         onEndReached={loadMore}
         onEndReachedThreshold={0.5}
         estimatedItemSize={gridItemWidth}

@@ -13,7 +13,9 @@ const flashListStyle = {
   paddingBottom: TAB_BAR_HEIGHT + HALF_GUTTER,
 };
 
-export type GridLayoutVariant = "default" | "fullWidth";
+export type GridLayoutVariant = "default" | "fullWidth" | "threeUp";
+
+const THREE_UP_COLUMNS = 3;
 
 const useGridLayout = (
   layout?: "list",
@@ -24,6 +26,9 @@ const useGridLayout = (
   } = useDeviceOrientation();
 
   const calculateNumColumns = () => {
+    if ( variant === "threeUp" ) {
+      return THREE_UP_COLUMNS;
+    }
     if ( variant === "fullWidth" || layout === "list" || screenWidth <= BREAKPOINTS.sm ) {
       return 1;
     }
@@ -41,16 +46,21 @@ const useGridLayout = (
         : Math.min( screenWidth, screenHeight ) );
     }
 
-    const combinedGutter = ( numColumns + 1 ) * GUTTER;
     const gridWidth = isTablet
       ? screenWidth
       : Math.min( screenWidth, screenHeight );
+
+    if ( variant === "threeUp" ) {
+      return Math.floor( gridWidth / numColumns );
+    }
+
+    const combinedGutter = ( numColumns + 1 ) * GUTTER;
     return Math.floor( ( gridWidth - combinedGutter ) / numColumns );
   };
   const gridItemWidth = calculateGridItemWidth();
 
   const gridItemStyle = useMemo( ( ) => {
-    if ( variant === "fullWidth" ) {
+    if ( variant === "fullWidth" || variant === "threeUp" ) {
       return {
         height: gridItemWidth,
         width: gridItemWidth,
@@ -75,6 +85,15 @@ const useGridLayout = (
       };
     }
 
+    if ( variant === "threeUp" ) {
+      return {
+        paddingTop: 0,
+        paddingLeft: 0,
+        paddingRight: 0,
+        paddingBottom: 0,
+      };
+    }
+
     return flashListStyle;
   }, [variant] );
 
@@ -83,7 +102,7 @@ const useGridLayout = (
     gridItemStyle,
     gridItemWidth,
     numColumns,
-    squareCorners: variant === "fullWidth",
+    squareCorners: variant === "fullWidth" || variant === "threeUp",
   };
 };
 

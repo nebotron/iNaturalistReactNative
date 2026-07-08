@@ -1282,6 +1282,8 @@ Select-geoprivacy-status = Select geoprivacy status
 Select-or-drag-media = Select or drag media
 Select-photo = Select photo
 Select-photos-from-your-device-to-create-observations = Select photos from your device to create observations
+# Accessibility label for a button that selects every photo taken since the last imported photo
+Select-photos-since-last-import = Select photos since last import
 SELECT-THIS-TAXON = SELECT THIS TAXON
 # Label for an element that let's you select a user
 Select-user = Select user
