@@ -1,17 +1,18 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { fetchSpeciesCounts, searchObservations } from "api/observations";
 import type { ApiObservation, ApiTaxon } from "api/types";
-import { ActivityIndicator, Body1, Body4, DisplayTaxonName } from "components/SharedComponents";
+import { ActivityIndicator, Body1, Body4, DisplayTaxonName, RotatingINatIconButton } from "components/SharedComponents";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import type { TabStackScreenProps } from "navigation/types";
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
 import Taxon from "realmModels/Taxon";
 import Photo from "realmModels/Photo";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
 import { useFontScale, useCurrentUser, useGridLayout, useTranslation, useAuthenticatedQuery } from "sharedHooks";
+import colors from "styles/tailwindColors";
 import { zustandStorage } from "stores/useStore";
 
 // Max page size the API allows
@@ -213,7 +214,7 @@ const LifeListContainer = ( ) => {
     numColumns,
   } = useGridLayout( );
 
-  const { data: lifers, isLoading } = useAuthenticatedQuery(
+  const { data: lifers, isLoading, isFetching, refetch } = useAuthenticatedQuery(
     ["fetchLifers", currentUser?.id],
     optsWithAuth => fetchLifers( currentUser?.id, optsWithAuth ),
     {
@@ -227,9 +228,31 @@ const LifeListContainer = ( ) => {
     },
   );
 
+  const handleRefresh = useCallback( ( ) => {
+    if ( currentUser ) {
+      zustandStorage.removeItem( cacheKey( currentUser.id ) );
+      zustandStorage.removeItem( maxObservationIdCacheKey( currentUser.id ) );
+    }
+    refetch( );
+  }, [currentUser, refetch] );
+
   useEffect( ( ) => {
-    navigation.setOptions( { headerTitle: t( "MY-LIFERS" ) } );
-  }, [navigation, t] );
+    navigation.setOptions( {
+      headerTitle: t( "MY-LIFERS" ),
+      headerRight: ( ) => (
+        <RotatingINatIconButton
+          icon="rotate-right"
+          onPress={handleRefresh}
+          color={String( colors?.darkGray )}
+          rotating={isFetching}
+          disabled={isFetching}
+          accessibilityLabel={t( "Reset-verb" )}
+          size={22}
+          testID="LifersRefreshButton"
+        />
+      ),
+    } );
+  }, [navigation, t, handleRefresh, isFetching] );
 
   if ( isLoading ) {
     return (
