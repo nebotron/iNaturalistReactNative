@@ -50,6 +50,7 @@ const BBOX_PADDING_KM = 80;
 const HOTSPOT_PARAM_KEYS = [
   "hotspotClusterRadiusKm",
   "hotspotMaxDetourCandidates",
+  "hotspotObsPerPage",
   "hotspotParkingMinutes",
   "hotspotBboxPaddingKm",
 ];
@@ -391,6 +392,7 @@ export function useRouteHotspots() {
           ?? PARKING_MINUTES;
         const bboxPaddingKm = ( filterParams.hotspotBboxPaddingKm as number | undefined )
           ?? BBOX_PADDING_KM;
+        const obsPerPage = ( filterParams.hotspotObsPerPage as number | undefined ) ?? 200;
 
         // 2. iNaturalist calls for the whole route bounding box (API caps per_page at 200,
         // so fetch 2 pages to get up to 400 observations)
@@ -405,7 +407,7 @@ export function useRouteHotspots() {
         );
         const fetchPage = ( page: number ) => searchObservations( {
           ...bbox,
-          per_page: 200,
+          per_page: obsPerPage,
           page,
           verifiable: true,
           order_by: "observed_on",

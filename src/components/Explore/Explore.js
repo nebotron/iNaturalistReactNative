@@ -97,6 +97,7 @@ const Explore = ( {
   const hotspotConfig = {
     hotspotClusterRadiusKm: exploreState.hotspotClusterRadiusKm,
     hotspotMaxDetourCandidates: exploreState.hotspotMaxDetourCandidates,
+    hotspotObsPerPage: exploreState.hotspotObsPerPage,
     hotspotParkingMinutes: exploreState.hotspotParkingMinutes,
     hotspotBboxPaddingKm: exploreState.hotspotBboxPaddingKm,
   };

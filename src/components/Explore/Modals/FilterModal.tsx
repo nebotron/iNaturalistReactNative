@@ -130,6 +130,7 @@ const FilterModal = ( {
     hasLocationMissing,
     hotspotClusterRadiusKm,
     hotspotMaxDetourCandidates,
+    hotspotObsPerPage,
     hotspotParkingMinutes,
     hotspotBboxPaddingKm,
   } = state;
@@ -139,6 +140,9 @@ const FilterModal = ( {
   );
   const [maxCandidatesText, setMaxCandidatesText] = useState(
     String( hotspotMaxDetourCandidates ),
+  );
+  const [obsPerPageText, setObsPerPageText] = useState(
+    String( hotspotObsPerPage ),
   );
   const [parkingMinutesText, setParkingMinutesText] = useState(
     String( hotspotParkingMinutes ),
@@ -1287,6 +1291,21 @@ const FilterModal = ( {
               onChangeText={setMaxCandidatesText}
               returnKeyType="done"
               value={maxCandidatesText}
+            />
+            <Body2 className="mb-2">{t( "Hotspot-obs-per-page" )}</Body2>
+            <TextInput
+              accessibilityLabel={t( "Hotspot-obs-per-page" )}
+              className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
+              keyboardType="number-pad"
+              onBlur={() => {
+                const val = parseInt( obsPerPageText, 10 );
+                const clamped = isNaN( val ) ? hotspotObsPerPage : val;
+                setObsPerPageText( String( clamped ) );
+                dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE, value: clamped } );
+              }}
+              onChangeText={setObsPerPageText}
+              returnKeyType="done"
+              value={obsPerPageText}
             />
             <Body2 className="mb-2">{t( "Hotspot-parking-minutes" )}</Body2>
             <TextInput
