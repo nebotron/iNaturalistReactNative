@@ -8,7 +8,7 @@ import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import colors from "styles/tailwindColors";
 
-import type { Hotspot } from "./hooks/useRouteHotspots";
+import type { Hotspot, HotspotSpecies } from "./hooks/useRouteHotspots";
 
 interface Props {
   hotspot: Hotspot;
@@ -18,6 +18,7 @@ interface Props {
   onOpenInGoogleMaps?: () => void;
   onAddToRoute?: () => void;
   onObservationCountPress?: () => void;
+  onSpeciesCountPress?: ( species: HotspotSpecies ) => void;
 }
 
 const HotspotListItem = ( {
@@ -28,6 +29,7 @@ const HotspotListItem = ( {
   onOpenInGoogleMaps,
   onAddToRoute,
   onObservationCountPress,
+  onSpeciesCountPress,
 }: Props ) => {
   const detourText = hotspot.detourMinutes < 1
     ? "On route"
@@ -77,10 +79,16 @@ const HotspotListItem = ( {
                   numberOfLines={1}
                 >
                   {species.preferred_common_name || species.name}
-                  <Body3 className="text-darkGray">
-                    {`  ·  ${species.count}`}
-                    {species.meanTimeOfDay ? `  ·  ${species.meanTimeOfDay}` : ""}
+                  {"  ·  "}
+                  <Body3
+                    className="text-inatGreen underline"
+                    onPress={() => onSpeciesCountPress?.( species )}
+                    accessibilityRole="button"
+                    accessibilityLabel={`View ${species.count} observations of ${species.preferred_common_name || species.name} in Explore`}
+                  >
+                    {species.count}
                   </Body3>
+                  {species.meanTimeOfDay ? `  ·  ${species.meanTimeOfDay}` : ""}
                 </Body3>
               </View>
             ) )}

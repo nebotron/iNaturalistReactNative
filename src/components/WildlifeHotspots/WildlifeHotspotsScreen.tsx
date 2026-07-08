@@ -31,7 +31,7 @@ import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
-import type { Hotspot, RoutePoint } from "./hooks/useRouteHotspots";
+import type { Hotspot, HotspotSpecies, RoutePoint } from "./hooks/useRouteHotspots";
 import { fetchOSRMRoute, findBestInsertion, useRouteHotspots } from "./hooks/useRouteHotspots";
 import HotspotListItem from "./HotspotListItem";
 
@@ -393,6 +393,20 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     } );
   }, [navigation] );
 
+  const handleSpeciesCountPress = useCallback( ( hotspot: Hotspot, species: HotspotSpecies ) => {
+    navigation.navigate( "Explore", {
+      taxon: {
+        id: species.id,
+        name: species.name,
+        preferred_common_name: species.preferred_common_name,
+      },
+      lat: hotspot.centerLatitude,
+      lng: hotspot.centerLongitude,
+      radius: 2,
+      worldwide: false,
+    } );
+  }, [navigation] );
+
   const renderStopItem = useCallback( ( {
     item: stop, getIndex, drag, isActive,
   }: RenderItemParams<Stop> ) => {
@@ -619,6 +633,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
                     onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
                     onAddToRoute={() => handleAddHotspotToRoute( hotspot )}
                     onObservationCountPress={() => handleObservationCountPress( hotspot )}
+                    onSpeciesCountPress={species => handleSpeciesCountPress( hotspot, species )}
                   />
                 ) )}
               </ScrollView>
