@@ -88,7 +88,9 @@ function computeLookalikesFromObs(
 ): { topId: number | null; entries: { taxonId: number; count: number; observationUuids: string[] }[] } {
   const counts: Record<number, { count: number; observationUuids: string[] }> = {};
   for ( const s of seed ?? [] ) {
-    counts[s.taxonId] = { count: s.count, observationUuids: [...s.observationUuids] };
+    if ( s.taxonId !== targetId ) {
+      counts[s.taxonId] = { count: s.count, observationUuids: [...s.observationUuids] };
+    }
   }
   for ( const obs of results ) {
     for ( const ident of ( obs as { identifications?: unknown[] } ).identifications ?? [] ) {
@@ -575,7 +577,7 @@ const SpeciesGame = ( ) => {
         lookalikesData.map( e => [e.taxonId, { name: e.name, commonName: e.commonName }] ),
       );
       const withNames = await Promise.all(
-        merged.entries.slice( 0, 10 ).map( async entry => {
+        merged.entries.filter( e => e.taxonId !== taxonId ).slice( 0, 10 ).map( async entry => {
           const known = knownNames.get( entry.taxonId );
           if ( known ) return { ...entry, ...known };
           const info = await fetchTaxonInfo( entry.taxonId );
