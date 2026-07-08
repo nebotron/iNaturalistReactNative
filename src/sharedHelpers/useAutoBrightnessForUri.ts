@@ -6,19 +6,20 @@ import measureImageBrightness from "./measureImageBrightness";
 import type { NormalizedCrop } from "./normalizedCropTypes";
 
 // Log-linear fit of brightness multiplier ~ shadow-percentile (10th
-// percentile luminance) of the detected subject crop, against 21 human
+// percentile luminance) of the detected subject crop, against 73 human
 // picked "ideal brightness" labels from brightness_log_raw.json — see
 // scripts/explore_brightness_crop_models.py. Darker subject shadows predict
-// a stronger brightening choice (LOOCV MAE 0.573 vs 0.641 for a naive
-// constant guess — the best of ~20 candidate models tried).
-const SHADOW_ADJUSTMENT_SLOPE = -1.463;
-const SHADOW_ADJUSTMENT_INTERCEPT = 0.804;
+// a stronger brightening choice (LOOCV MAE 0.531 vs 0.639 for a naive
+// constant guess, and vs 0.612 for the previous 21-label fit re-scored on
+// this larger set).
+const SHADOW_ADJUSTMENT_SLOPE = -1.510521;
+const SHADOW_ADJUSTMENT_INTERCEPT = 0.597565;
 
 // luminance here is the 10th-percentile luminance ("shadow depth") of the
 // subject crop, as measured natively by measureImageBrightness.
 const computeAdjustment = ( luminance: number ): number => {
   const adjustment = Math.exp(
-    SHADOW_ADJUSTMENT_SLOPE * luminance + SHADOW_ADJUSTMENT_INTERCEPT
+    SHADOW_ADJUSTMENT_SLOPE * luminance + SHADOW_ADJUSTMENT_INTERCEPT,
   );
   return Math.max( 0.4, Math.min( 3.0, adjustment ) );
 };
@@ -26,9 +27,10 @@ const computeAdjustment = ( luminance: number ): number => {
 // Cache keyed by `${uri}:${cropKey}` so a re-detected crop triggers a fresh measurement.
 const cache = new Map<string, number>( );
 
-const cacheKey = ( uri: string, crop: NormalizedCrop | null ) => crop
-  ? `${uri}:${crop.x.toFixed(3)},${crop.y.toFixed(3)},${crop.w.toFixed(3)},${crop.h.toFixed(3)}`
-  : uri;
+const cacheKey = ( uri: string, crop: NormalizedCrop | null ) => ( crop
+  ? `${uri}:${crop.x.toFixed( 3 )},${crop.y.toFixed( 3 )},`
+    + `${crop.w.toFixed( 3 )},${crop.h.toFixed( 3 )}`
+  : uri );
 
 // uri    — image to measure; pass undefined to disable
 // crop   — subject crop from detectSubjectInImage; pass undefined to wait for
@@ -49,13 +51,17 @@ const useAutoBrightnessForUri = (
   };
 
   const [brightness, setBrightness] = useState<number>( ( ) => (
-    uri ? computeInitial( uri, crop ) : 1.0
+    uri
+      ? computeInitial( uri, crop )
+      : 1.0
   ) );
 
   if ( prevUri !== uri || prevCrop !== crop ) {
     setPrevUri( uri );
     setPrevCrop( crop );
-    setBrightness( uri ? computeInitial( uri, crop ) : 1.0 );
+    setBrightness( uri
+      ? computeInitial( uri, crop )
+      : 1.0 );
   }
 
   useEffect( ( ) => subscribeToBrightnessLog( ( ) => {
