@@ -356,7 +356,7 @@
   "Hotspot-cluster-radius-km": "Cluster radius (km)",
   "HOTSPOT-FINDER": "HOTSPOT FINDER",
   "Hotspot-max-detour-candidates": "Max detour candidates",
-  "Hotspot-obs-per-page": "Observations per page (max 200)",
+  "Hotspot-obs-per-page": "Total observations to fetch",
   "Hotspot-parking-minutes": "Parking estimate (min)",
   "HOTSPOT-SETTINGS": "HOTSPOT SETTINGS",
   "Hotspots": "Hotspots",

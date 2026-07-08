@@ -392,10 +392,11 @@ export function useRouteHotspots() {
           ?? PARKING_MINUTES;
         const bboxPaddingKm = ( filterParams.hotspotBboxPaddingKm as number | undefined )
           ?? BBOX_PADDING_KM;
-        const obsPerPage = ( filterParams.hotspotObsPerPage as number | undefined ) ?? 200;
+        const totalObs = ( filterParams.hotspotObsPerPage as number | undefined ) ?? 200;
+        const API_PAGE_SIZE = 200; // iNaturalist API cap
 
-        // 2. iNaturalist calls for the whole route bounding box (API caps per_page at 200,
-        // so fetch 2 pages to get up to 400 observations)
+        // 2. iNaturalist calls for the whole route bounding box, paginating until
+        // we reach the requested total (each page is capped at 200 by the API)
         const bbox = routeBbox( routePoints, bboxPaddingKm );
         const nonApiParamKeys = [
           "swlat", "swlng", "nelat", "nelng", "lat", "lng", "radius", "place_id",
@@ -407,7 +408,7 @@ export function useRouteHotspots() {
         );
         const fetchPage = ( page: number ) => searchObservations( {
           ...bbox,
-          per_page: obsPerPage,
+          per_page: API_PAGE_SIZE,
           page,
           verifiable: true,
           order_by: "observed_on",
@@ -425,9 +426,12 @@ export function useRouteHotspots() {
           },
           ...nonLocationParams,
         } );
-        const [page1, page2] = await Promise.all( [fetchPage( 1 ), fetchPage( 2 )] );
+        const numPages = Math.ceil( totalObs / API_PAGE_SIZE );
+        const pages = await Promise.all(
+          Array.from( { length: numPages }, ( _, i ) => fetchPage( i + 1 ) ),
+        );
 
-        const observations = [...( page1?.results ?? [] ), ...( page2?.results ?? [] )];
+        const observations = pages.flatMap( p => p?.results ?? [] ).slice( 0, totalObs );
 
         // 3. Cluster observations with k-means (diameter ≤ 2× clusterRadiusKm per cluster)
         const cells = clusterByKMeans( observations, clusterRadiusKm );

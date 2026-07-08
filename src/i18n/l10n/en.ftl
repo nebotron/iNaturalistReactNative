@@ -628,7 +628,7 @@ HOTSPOT-FINDER = HOTSPOT FINDER
 # Label for the max detour candidates setting in the hotspot finder filter
 Hotspot-max-detour-candidates = Max detour candidates
 # Label for the observations per page setting in the hotspot finder filter
-Hotspot-obs-per-page = Observations per page (max 200)
+Hotspot-obs-per-page = Total observations to fetch
 # Label for the parking time estimate setting in the hotspot finder filter
 Hotspot-parking-minutes = Parking estimate (min)
 # Section header for hotspot finder algorithm settings in the Explore filters modal
