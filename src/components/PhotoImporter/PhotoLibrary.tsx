@@ -11,9 +11,10 @@ import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHel
 import {
   appendPhotosToObservation,
   buildGroupedMediaItems,
+  buildGroupedSoundItem,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import {
-  createObservationsFromVideoNode,
+  extractVideoMedia,
   isVideoNode,
 } from "components/PhotoImporter/helpers/videoImportHelpers";
 import PhotoGallery from "components/PhotoImporter/PhotoGallery";
@@ -33,7 +34,6 @@ import { log } from "sharedHelpers/logger";
 import { useInputImageTracking } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
-import Observation from "realmModels/Observation";
 import * as uuid from "uuid";
 
 type PhotoNode = PhotoIdentifier["node"];
@@ -166,22 +166,35 @@ const PhotoLibrary = ( ) => {
       const videoNodes = nodes.filter( isVideoNode );
       const photoNodes = nodes.filter( n => !isVideoNode( n ) );
 
-      // Process video nodes: extract audio + convert to GIF → two observations each.
-      // Save them directly to Realm so they appear in My Observations.
-      if ( videoNodes.length > 0 ) {
-        const videoObsArrays = await Promise.all(
-          videoNodes.map( createObservationsFromVideoNode ),
-        );
-        const videoObservations = videoObsArrays.flat();
-        await Promise.all(
-          videoObservations.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
-        );
-      }
-
-      if ( photoNodes.length === 0 && videoNodes.length > 0 ) {
-        // Only videos were selected; skip the photo import flow.
-        exitObservationFlow();
-        return;
+      // Extract GIF + audio from each video node and build GroupedMediaItems
+      // so they appear in the GroupPhotos screen alongside regular photos.
+      const videoGroupItems = [];
+      for ( const videoNode of videoNodes ) {
+        // eslint-disable-next-line no-await-in-loop
+        const { gifUri, audioUri } = await extractVideoMedia( videoNode );
+        if ( gifUri ) {
+          videoGroupItems.push( {
+            photos: [
+              {
+                image: {
+                  uri: gifUri,
+                  type: "image/gif",
+                  fileName: gifUri.split( "/" ).pop( ),
+                  width: videoNode.image.width,
+                  height: videoNode.image.height,
+                  fileSize: undefined,
+                  id: undefined,
+                  timestamp: videoNode.timestamp,
+                },
+              },
+            ],
+          } );
+        }
+        if ( audioUri ) {
+          videoGroupItems.push(
+            buildGroupedSoundItem( audioUri, videoNode.timestamp ),
+          );
+        }
       }
 
       const sourceAssets = photoNodes.map( nodeToSourceAsset );
@@ -211,6 +224,7 @@ const PhotoLibrary = ( ) => {
       if ( fromGroupPhotos ) {
         setGroupedPhotos( sortGroupsByTime( [
           ...groupedPhotos,
+          ...videoGroupItems,
           ...buildGroupedMediaItems( selectedPhotos ),
         ] ) );
         navigation.setParams( { fromGroupPhotos: false } );
@@ -241,7 +255,10 @@ const PhotoLibrary = ( ) => {
       const importedPhotoUris = selectedPhotos.map( x => x.image.uri );
       setPhotoImporterState( {
         photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
-        groupedPhotos: buildGroupedMediaItems( selectedPhotos ),
+        groupedPhotos: sortGroupsByTime( [
+          ...videoGroupItems,
+          ...buildGroupedMediaItems( selectedPhotos ),
+        ] ),
       } );
       navigation.setParams( { fromGroupPhotos: false } );
       navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );

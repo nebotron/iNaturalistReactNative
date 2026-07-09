@@ -7,7 +7,7 @@ const sortByTime = array => array.sort( ( a, b ) => {
 } );
 
 export const getGroupTimestamp = ( group: Object ): number => (
-  group.photos?.[0]?.image?.timestamp || 0
+  group.photos?.[0]?.image?.timestamp || group.timestamp || 0
 );
 
 export const sortGroupsByTime = ( groups: Object[] ): Object[] => [...groups].sort(
