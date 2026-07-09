@@ -89,7 +89,7 @@ const Header = ( {
   return (
     <View className="z-10">
       <Surface style={surfaceStyle} elevation={5}>
-        <View className="bg-white px-6 py-2 flex-row justify-between items-center">
+        <View className="bg-white px-4 py-1 flex-row justify-between items-center">
           <View className="flex-1 flex-row">
             {!hideBackButton && (
               <BackButton
@@ -107,7 +107,7 @@ const Header = ( {
                 <INatIcon name="label-outline" size={15} />
                 <Body3
                   maxFontSizeMultiplier={1.5}
-                  className="ml-3 shrink"
+                  className="ml-2 shrink"
                   numberOfLines={1}
                 >
                   {taxonFilterText( )}
@@ -116,12 +116,12 @@ const Header = ( {
               <Pressable
                 accessibilityRole="button"
                 onPress={( ) => setShowLocationSearch( true )}
-                className="flex-1 flex-row items-center ml-3"
+                className="flex-1 flex-row items-center ml-2"
               >
                 <INatIcon name="location" size={15} />
                 <Body3
                   maxFontSizeMultiplier={1.5}
-                  className="ml-3 shrink"
+                  className="ml-2 shrink"
                   numberOfLines={1}
                 >
                   {placeGuess}

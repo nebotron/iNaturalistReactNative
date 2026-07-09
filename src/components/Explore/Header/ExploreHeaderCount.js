@@ -57,7 +57,7 @@ const ExploreHeaderCount = ( {
           />
           <Body2
             maxFontSizeMultiplier={1.5}
-            className="text-white ml-3"
+            className="text-white ml-2"
           >
             {renderText( )}
           </Body2>
@@ -69,7 +69,7 @@ const ExploreHeaderCount = ( {
 
   return (
     <Pressable
-      className="h-[40px] flex-row items-center justify-center"
+      className="h-[32px] flex-row items-center justify-center"
       onPress={onPress}
       accessibilityRole="summary"
     >
