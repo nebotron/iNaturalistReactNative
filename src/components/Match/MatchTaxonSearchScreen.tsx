@@ -20,7 +20,7 @@ const { useRealm } = RealmContext;
 const MatchTaxonSearchScreen = ( ) => {
   const [taxonQuery, setTaxonQuery] = useState( "" );
   const [selectedTaxon, setSelectedTaxon] = useState<ApiTaxon | null>( null );
-  const { taxa, isLoading, isLocal } = useTaxonSearch( taxonQuery );
+  const { taxa, isLoading } = useTaxonSearch( taxonQuery );
   const { t } = useTranslation( );
   const realm = useRealm( );
   const navigation = useNavigation<
@@ -79,7 +79,6 @@ const MatchTaxonSearchScreen = ( ) => {
   return (
     <TaxonSearch
       isLoading={isLoading}
-      isLocal={isLocal}
       query={taxonQuery}
       renderItem={renderTaxonResult}
       setQuery={setTaxonQuery}

@@ -34,7 +34,6 @@ describe( "ExploreTaxonSearch", ( ) => {
     jest.spyOn( useTaxonSearch, "default" ).mockImplementation( () => ( {
       taxa: [mockTaxon],
       isLoading: false,
-      isLocal: false,
     } ) );
     jest.spyOn( useTaxon, "default" ).mockImplementation( () => ( {
       taxon: mockTaxon,

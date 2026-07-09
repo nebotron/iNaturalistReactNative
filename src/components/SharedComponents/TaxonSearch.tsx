@@ -1,7 +1,5 @@
 import EmptySearchResults from "components/Explore/SearchScreens/EmptySearchResults";
-import INatIcon from "components/SharedComponents/INatIcon";
 import SearchBar from "components/SharedComponents/SearchBar";
-import Body2 from "components/SharedComponents/Typography/Body2";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
@@ -22,7 +20,6 @@ interface Props {
   query?: string;
   setQuery: ( newQuery: string ) => void;
   isLoading?: boolean;
-  isLocal?: boolean;
   renderItem: (
     { item, index }: { item: RealmTaxon; index: number }
   ) => React.ReactElement<unknown>;
@@ -31,7 +28,6 @@ interface Props {
 
 const TaxonSearch = ( {
   isLoading = false,
-  isLocal = false,
   query = "",
   renderItem,
   setQuery,
@@ -77,16 +73,6 @@ const TaxonSearch = ( {
           testID="SearchTaxon"
           autoFocus={query === ""}
         />
-        { isLocal && (
-          <View className="flex-row items-center space-x-[19px] mt-[21px]">
-            <View accessibilityElementsHidden importantForAccessibility="no" aria-hidden>
-              <INatIcon name="offline" size={34} />
-            </View>
-            <Body2 className="flex-1">
-              { t( "Showing-offline-search-results--taxa" )}
-            </Body2>
-          </View>
-        ) }
       </View>
       <FlatList
         keyboardShouldPersistTaps="always"

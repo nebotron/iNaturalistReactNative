@@ -63,7 +63,6 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
         taxa: iconicTaxa,
         refetch: () => undefined,
         isLoading: false,
-        isLocal: false,
       };
     }
 
@@ -73,7 +72,6 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
         taxa: localTaxa,
         refetch: () => undefined,
         isLoading: false,
-        isLocal: true,
       };
     }
 
@@ -82,7 +80,6 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       taxa: [],
       refetch: () => undefined,
       isLoading: false,
-      isLocal: true,
     };
   }, [taxonQuery, localTaxa, iconicTaxa] );
 };

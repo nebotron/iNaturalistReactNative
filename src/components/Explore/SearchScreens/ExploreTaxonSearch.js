@@ -37,7 +37,6 @@ const ExploreTaxonSearch = ( {
   const {
     taxa,
     isLoading,
-    isLocal,
   } = useTaxonSearch( taxonQuery );
 
   const onTaxonSelected = useCallback( taxon => {
@@ -86,7 +85,6 @@ const ExploreTaxonSearch = ( {
       />
       <TaxonSearch
         isLoading={isLoading}
-        isLocal={isLocal}
         query={taxonQuery}
         renderItem={renderItem}
         setQuery={setTaxonQuery}
