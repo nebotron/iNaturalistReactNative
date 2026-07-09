@@ -40,6 +40,7 @@ interface PhotoItem {
 
 interface Item {
   photos?: PhotoItem[];
+  soundUri?: string;
 }
 
 type GroupPhotosListItem = Item | { empty: true };
@@ -100,7 +101,7 @@ const GroupPhotos = ( {
   const extractKey = ( item: GroupPhotosListItem, index: number ) => (
     isEmptyGridItem( item )
       ? "empty"
-      : `${item.photos?.[0]?.image.uri}${index}`
+      : `${item.photos?.[0]?.image.uri ?? item.soundUri ?? ""}${index}`
   );
 
   const noObsSelected = selectedObservations.length === 0;
