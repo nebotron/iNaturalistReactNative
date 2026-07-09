@@ -1,5 +1,5 @@
 import {
-  CachesDirectoryPath, copyAssetsFileIOS, downloadFile, exists, mkdir, stat,
+  CachesDirectoryPath, copyAssetsFileIOS, copyFile, downloadFile, exists, mkdir, stat,
   unlink,
 } from "@dr.pogodin/react-native-fs";
 import { cropSourcesPath } from "appConstants/paths";
@@ -36,7 +36,9 @@ async function getCachedOrNull( filePath: string ): Promise<string | null> {
 const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
   if ( uri.match( /^https?:\/\// ) ) {
     await mkdir( cropSourcesPath );
-    const downloadUrl = uri.replace( /(square|small|medium|original)/i, "large" );
+    // Use 'medium' instead of 'large' for faster downloads and ML detection.
+    // Since crops are normalized (%), this works at any resolution.
+    const downloadUrl = uri.replace( /(square|small|medium|large|original)/i, "medium" );
     const destPath = `${cropSourcesPath}/${urlToFilename( downloadUrl )}`;
     const cached = await getCachedOrNull( destPath );
     if ( cached ) return cached;
@@ -72,11 +74,18 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
     const destPath = `${cropSourcesPath}/${urlToFilename( uri )}`;
     const cached = await getCachedOrNull( destPath );
     if ( cached ) return cached;
-    return resizeImage( uri, {
-      width: 99999,
-      outputPath: cropSourcesPath,
-      imageOptions: { mode: "contain", onlyScaleDown: true },
-    } );
+    // First try efficient copy. Fall back to resizeImage if copy fails
+    // (e.g., some content providers may not support direct copy).
+    try {
+      await copyFile( uri, destPath );
+      return `file://${destPath}`;
+    } catch {
+      return resizeImage( uri, {
+        width: 99999,
+        outputPath: cropSourcesPath,
+        imageOptions: { mode: "contain", onlyScaleDown: true },
+      } );
+    }
   }
 
   if ( uri.startsWith( "/" ) ) {
