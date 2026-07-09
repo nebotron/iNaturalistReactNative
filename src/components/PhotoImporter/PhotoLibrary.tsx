@@ -18,8 +18,10 @@ import type { NoBottomTabStackScreenProps } from "navigation/types";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
+  useState,
 } from "react";
 import {
+  Alert,
   Platform,
 } from "react-native";
 import type { Asset } from "react-native-image-picker";
@@ -76,6 +78,8 @@ const PhotoLibrary = ( ) => {
   const exitObservationFlow = useExitObservationFlow( );
   const realm = useRealm( );
   const { trackImagesLoaded } = useInputImageTracking( );
+
+  const [isProcessing, setIsProcessing] = useState( false );
 
   const skipGroupPhotos = params?.skipGroupPhotos ?? false;
   const fromGroupPhotos = params?.fromGroupPhotos ?? false;
@@ -145,6 +149,7 @@ const PhotoLibrary = ( ) => {
   }, [] );
 
   const handleGalleryDone = useCallback( async ( nodes: PhotoNode[] ) => {
+    setIsProcessing( true );
     try {
       const sourceAssets = nodes.map( nodeToSourceAsset );
       addOriginalDevicePhotoUris( getOriginalDevicePhotoUrisFromAssets( sourceAssets ) );
@@ -209,7 +214,12 @@ const PhotoLibrary = ( ) => {
       navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
     } catch ( error ) {
       logger.error( "Error importing photos from camera roll", error );
-      exitObservationFlow( );
+      setIsProcessing( false );
+      Alert.alert(
+        "Import Failed",
+        "Could not import the selected photos. Please try again with fewer photos or free up device storage.",
+        [{ text: "OK", onPress: exitObservationFlow }],
+      );
     }
   }, [
     addImportedPhotoDeviceUriMappings,
@@ -238,6 +248,7 @@ const PhotoLibrary = ( ) => {
     <ViewWrapper testID="PhotoLibrary">
       <PhotoGallery
         fromAICamera={fromAICamera}
+        isProcessing={isProcessing}
         maxPhotos={fromAICamera
           ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
           : MAX_PHOTOS_ALLOWED}

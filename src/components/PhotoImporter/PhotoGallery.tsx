@@ -39,6 +39,7 @@ type PhotoNode = PhotoIdentifier["node"];
 
 interface Props {
   fromAICamera?: boolean;
+  isProcessing?: boolean;
   maxPhotos: number;
   onCancel: () => void;
   onDone: ( selectedNodes: PhotoNode[] ) => void;
@@ -62,6 +63,7 @@ const getSelectionKey = ( node: PhotoNode ) => node.image.uri;
 
 const PhotoGallery = ( {
   fromAICamera = false,
+  isProcessing = false,
   maxPhotos,
   onCancel,
   onDone,
@@ -292,6 +294,14 @@ const PhotoGallery = ( {
     return (
       <View className="flex-1 justify-center items-center">
         <ActivityIndicator />
+      </View>
+    );
+  }
+
+  if ( isProcessing ) {
+    return (
+      <View className="flex-1 justify-center items-center">
+        <ActivityIndicator size="large" />
       </View>
     );
   }
