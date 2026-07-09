@@ -1,81 +1,25 @@
-import { useNetInfo } from "@react-native-community/netinfo";
-import { fetchSearchResults } from "api/search";
-import type { ApiOpts } from "api/types";
 import { RealmContext } from "providers/contexts";
 import {
   useCallback, useEffect, useMemo, useState,
 } from "react";
 import type Realm from "realm";
-import { UpdateMode } from "realm";
-import Taxon from "realmModels/Taxon";
 import type { RealmTaxon } from "realmModels/types";
-import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import validateRealmSearch from "sharedHelpers/validateRealmSearch";
-import { useAuthenticatedQuery, useIconicTaxa } from "sharedHooks";
+import { useIconicTaxa } from "sharedHooks";
 
 const { useRealm } = RealmContext;
-
-// we're already getting all this taxon information anytime we make this API
-// call, so we might as well store it in realm. we can remove this if we're
-// worried about the cache getting too large
-function saveTaxaToRealm( taxa: Taxon[], realm: Realm ) {
-  safeRealmWrite( realm, ( ) => {
-    taxa.forEach( remoteTaxon => {
-      realm.create(
-        "Taxon",
-        Taxon.forUpdate( remoteTaxon ),
-        UpdateMode.Modified,
-      );
-    } );
-  }, "saving remote taxon from useTaxonSearch" );
-}
 
 const useTaxonSearch = ( taxonQueryArg = "" ) => {
   const realm = useRealm( );
   const iconicTaxa = useIconicTaxa( { reload: false } );
-  const { isConnected } = useNetInfo( );
-  // Remove leading and trailing whitespace, no need to perform new queries or
-  // potentially get different results b/c of meaningless whitespace
   const taxonQuery = taxonQueryArg.trim();
   const [localTaxa, setLocalTaxa] = useState<RealmTaxon[] | null>( null );
-
-  const shouldFetchRemote = taxonQuery.length > 0;
-
-  const {
-    data: remoteTaxa, refetch, isLoading, isFetched,
-  } = useAuthenticatedQuery(
-    ["fetchTaxonSuggestions", taxonQuery],
-    async ( optsWithAuth: ApiOpts ) => {
-      const apiTaxa = await fetchSearchResults(
-        {
-          q: taxonQuery,
-          sources: "taxa",
-          fields: {
-            taxon: Taxon.LIMITED_TAXON_FIELDS,
-          },
-        },
-        optsWithAuth,
-      );
-      return apiTaxa?.map( taxon => Taxon.mapApiToRealm( taxon ) ) || [];
-    },
-    {
-      enabled: shouldFetchRemote,
-    },
-  );
 
   const safeRealmSearch = useCallback( async ( searchString: string ) => {
     try {
       const { cleanedQuery } = validateRealmSearch( searchString );
       return await realm.objects( "Taxon" ).filtered(
-        // "name TEXT $0"
-        // + " || preferredCommonName TEXT $0"
-        // + " || name CONTAINS[c] $0"
-
-        // "name CONTAINS[c] $0"
-        // + " || preferredCommonName CONTAINS[c] $0"
-
         "_searchableName TEXT $0 || _searchableName CONTAINS[c] $0"
-
         + " LIMIT(50)",
         cleanedQuery,
       );
@@ -86,35 +30,12 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
 
   useEffect( ( ) => {
     let isSubscribed = true;
-    const saveOrSearchRealmTaxa = async ( ) => {
-      // save taxa to realm if we have results from the API
-      if ( realm && remoteTaxa?.length > 0 ) {
-        saveTaxaToRealm( remoteTaxa, realm );
-      }
-
+    const searchLocalTaxa = async ( ) => {
       if ( taxonQuery.length === 0 ) {
         if ( isSubscribed ) setLocalTaxa( null );
         return;
       }
 
-      if ( isLoading ) return;
-
-      // Don't fall back to local results until the remote query has actually
-      // run at least once. useAuthenticatedQuery starts with enabled=false
-      // while it resolves the auth state, which makes isLoading=false even
-      // though no remote fetch has happened yet — without this check we'd
-      // flash the "Showing offline search results" callout in that window.
-      // Skip the gate when we know we're offline and will need remote taxa
-      if ( shouldFetchRemote && !isFetched && isConnected !== false ) return;
-
-      // When remote has results, no need to surface local results
-      if ( remoteTaxa && remoteTaxa.length > 0 ) {
-        if ( isSubscribed ) setLocalTaxa( null );
-        return;
-      }
-
-      // Always search local Realm immediately, in parallel with any remote
-      // fetch, so results appear even while the network is slow or offline.
       try {
         const results = await safeRealmSearch( taxonQuery );
         if ( isSubscribed ) setLocalTaxa( results );
@@ -124,19 +45,14 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       }
     };
 
-    saveOrSearchRealmTaxa( );
+    searchLocalTaxa( );
 
     return ( ) => {
       isSubscribed = false;
     };
   }, [
-    isConnected,
-    isFetched,
-    isLoading,
     realm,
-    remoteTaxa,
     safeRealmSearch,
-    shouldFetchRemote,
     taxonQuery,
   ] );
 
@@ -151,36 +67,24 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       };
     }
 
-    // Show remote taxa if available (highest quality)
-    if ( remoteTaxa && remoteTaxa.length > 0 ) {
-      return {
-        taxa: remoteTaxa,
-        refetch,
-        isLoading,
-        isLocal: false,
-      };
-    }
-
-    // Show local taxa as a baseline while remote is loading or when offline.
-    // Only show the "offline" badge once the remote fetch has finished with no
-    // results, so we don't falsely indicate offline while still loading.
+    // Show local taxa from offline search
     if ( localTaxa !== null && localTaxa.length > 0 ) {
       return {
         taxa: localTaxa,
         refetch: () => undefined,
-        isLoading,
-        isLocal: !isLoading,
+        isLoading: false,
+        isLocal: true,
       };
     }
 
-    // No results yet (loading or genuinely empty)
+    // No results (loading or empty)
     return {
       taxa: [],
-      refetch,
-      isLoading,
-      isLocal: false,
+      refetch: () => undefined,
+      isLoading: false,
+      isLocal: true,
     };
-  }, [taxonQuery, remoteTaxa, localTaxa, iconicTaxa, refetch, isLoading] );
+  }, [taxonQuery, localTaxa, iconicTaxa] );
 };
 
 export default useTaxonSearch;
