@@ -153,6 +153,10 @@ const GroupPhotosContainer = ( ): Node => {
     const newObsList = [];
 
     groupedPhotos.forEach( obs => {
+      if ( obs.soundUri !== undefined ) {
+        newObsList.push( obs );
+        return;
+      }
       const containsSelected = mostRecentPhoto && obs.photos?.includes( mostRecentPhoto );
 
       if ( containsSelected ) {
@@ -260,6 +264,12 @@ const GroupPhotosContainer = ( ): Node => {
     }
 
     groupedPhotos.forEach( obs => {
+      if ( obs.soundUri !== undefined ) {
+        if ( !selectedObservations.includes( obs ) ) {
+          removedFromGroup.push( obs );
+        }
+        return;
+      }
       const filteredGroupedPhotos = obs.photos?.filter(
         item => !orderedPhotos.includes( item ),
       ) || [];

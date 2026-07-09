@@ -2,8 +2,6 @@ import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { videoLibraryPath } from "appConstants/paths";
 import { CachesDirectoryPath, mkdir } from "@dr.pogodin/react-native-fs";
 import { NativeModules, Platform } from "react-native";
-import Observation from "realmModels/Observation";
-import type { RealmObservationPojo } from "realmModels/types";
 import * as uuid from "uuid";
 
 type PhotoNode = PhotoIdentifier["node"];
@@ -28,13 +26,20 @@ function videoUriFromNode( node: PhotoNode ): string {
   return node.image.uri; // ph:// on iOS
 }
 
-// Creates two observations from a single video node:
-//   1. A sound observation with the extracted audio
-//   2. A photo observation with the video converted to a GIF
-// Returns both as plain JS objects ready for Realm insertion.
-export async function createObservationsFromVideoNode(
+export interface ExtractedVideoMedia {
+  gifUri: string | null;
+  audioUri: string | null;
+}
+
+// Extracts a GIF and audio from a video node, returning their local URIs.
+// Either may be null if extraction fails (e.g. no audio track).
+export async function extractVideoMedia(
   node: PhotoNode,
-): Promise<RealmObservationPojo[]> {
+): Promise<ExtractedVideoMedia> {
+  if ( !ImageCropper ) {
+    throw new Error( "ImageCropper native module unavailable" );
+  }
+
   const id = uuid.v4();
   const videoUri = videoUriFromNode( node );
 
@@ -42,39 +47,11 @@ export async function createObservationsFromVideoNode(
   const audioCache = `${CachesDirectoryPath}/video_audio_${id}.m4a`;
   const gifDest = `${videoLibraryPath}/${id}.gif`;
 
-  if ( !ImageCropper ) {
-    throw new Error( "ImageCropper native module unavailable" );
-  }
-
   // Audio extraction is optional — videos may have no audio track.
-  // GIF conversion is attempted in parallel; if audio fails we skip the sound obs.
   const [audioUri, gifUri] = await Promise.all( [
     ImageCropper.extractAudioFromVideo( videoUri, audioCache ).catch( () => null ),
-    ImageCropper.convertVideoToGif( videoUri, gifDest ),
+    ImageCropper.convertVideoToGif( videoUri, gifDest ).catch( () => null ),
   ] );
 
-  const observations: RealmObservationPojo[] = [];
-
-  if ( audioUri ) {
-    const soundObs = await Observation.createObsWithSoundPath( audioUri );
-    observations.push( soundObs );
-  }
-
-  const gifObs = await Observation.createObservationWithPhotos( [
-    {
-      image: {
-        uri: gifUri,
-        type: "image/gif",
-        fileName: `${id}.gif`,
-        width: node.image.width,
-        height: node.image.height,
-        fileSize: undefined,
-        id: undefined,
-        timestamp: String( node.timestamp ),
-      },
-    },
-  ] );
-  observations.push( gifObs );
-
-  return observations;
+  return { gifUri, audioUri };
 }

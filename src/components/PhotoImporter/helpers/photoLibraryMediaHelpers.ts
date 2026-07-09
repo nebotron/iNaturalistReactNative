@@ -11,6 +11,9 @@ export interface GroupedMediaPhotoItem {
 
 export interface GroupedMediaItem {
   photos?: GroupedMediaPhotoItem[];
+  soundUri?: string;
+  // Used for sorting sound items that have no photos
+  timestamp?: number;
 }
 
 export const buildGroupedMediaItems = (
@@ -22,9 +25,19 @@ export const buildGroupedMediaItems = (
     - ( a.photos[0].image.timestamp as number || 0 )
   ) );
 
+export const buildGroupedSoundItem = (
+  soundUri: string,
+  timestamp?: number,
+): GroupedMediaItem => ( { soundUri, timestamp } );
+
 export const createObservationFromGroupedMedia = (
   group: GroupedMediaItem,
-): Promise<RealmObservationPojo> => Observation.createObservationWithPhotos( group.photos || [] );
+): Promise<RealmObservationPojo> => {
+  if ( group.soundUri ) {
+    return Observation.createObsWithSoundPath( group.soundUri );
+  }
+  return Observation.createObservationWithPhotos( group.photos || [] );
+};
 
 export const appendPhotosToObservation = async (
   photos: { image: Asset }[],
