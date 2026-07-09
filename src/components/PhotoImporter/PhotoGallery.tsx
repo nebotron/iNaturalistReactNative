@@ -100,7 +100,7 @@ const PhotoGallery = ( {
         first: PAGE_SIZE,
         assetType: "All",
         after,
-        include: ["filename", "fileSize", "filepath", "imageSize", "playableDuration"],
+        include: ["filename", "fileSize", "filepath", "imageSize"],
       } );
       const nodes = result.edges.map( e => e.node );
       setPhotos( prev => ( after
