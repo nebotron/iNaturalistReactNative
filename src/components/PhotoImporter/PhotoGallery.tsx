@@ -12,8 +12,8 @@ import buildSectionedGalleryItems, {
   type PhotoGalleryListItem,
 } from "components/PhotoImporter/helpers/photoGallerySections";
 import { Body2 } from "components/SharedComponents";
-import SwitchRow from "components/SharedComponents/SwitchRow";
 import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers";
+import { Switch } from "react-native-paper";
 import { Pressable, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -28,10 +28,7 @@ import {
   Platform,
   Text,
 } from "react-native";
-import {
-  formatDateStringFromTimestamp,
-  formatLongDatetime,
-} from "sharedHelpers/dateAndTime";
+import { formatDateStringFromTimestamp } from "sharedHelpers/dateAndTime";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
@@ -225,13 +222,9 @@ const PhotoGallery = ( {
       const allSelected = item.nodes.length > 0
         && item.nodes.every( node => selectedUris.has( getSelectionKey( node ) ) );
       return (
-        <View className="px-3 py-2 flex-row items-center justify-between">
+        <View className="px-3 py-1 flex-row items-center justify-between">
           <Body2>
-            {formatLongDatetime(
-              formatDateStringFromTimestamp( item.timestamp ),
-              i18n,
-              { literalTime: true },
-            )}
+            {formatDateStringFromTimestamp( item.timestamp )}
           </Body2>
           <INatIconButton
             icon="checkmark"
@@ -293,7 +286,6 @@ const PhotoGallery = ( {
     toggleSectionSelection,
     gridItemStyle,
     t,
-    i18n,
   ] );
 
   const overrideItemLayout = useCallback( (
@@ -318,7 +310,7 @@ const PhotoGallery = ( {
   return (
     <View className="flex-1">
       <View
-        className="flex-row items-center px-2 pt-2 pb-1"
+        className="flex-row items-center px-2 py-1 gap-1"
       >
         <INatIconButton
           icon="close"
@@ -327,6 +319,19 @@ const PhotoGallery = ( {
           size={22}
           color={colors.darkGray}
         />
+        {hasImportedPhotos && (
+          <View className="flex-row items-center gap-2 px-2">
+            <Text style={{ fontSize: 12, color: colors.darkGray }}>
+              {t( "Hide-already-saved-photos" )}
+            </Text>
+            <Switch
+              value={hideImported}
+              onValueChange={setHideImported}
+              color={colors.inatGreen}
+              testID="PhotoGallery.hideImported"
+            />
+          </View>
+        )}
         <View className="flex-1" />
         {hasImportedPhotos && (
           <INatIconButton
@@ -350,15 +355,6 @@ const PhotoGallery = ( {
           />
         )}
       </View>
-      {hasImportedPhotos && (
-        <SwitchRow
-          classNames="px-4 py-1"
-          label={t( "Hide-already-saved-photos" )}
-          onValueChange={setHideImported}
-          testID="PhotoGallery.hideImported"
-          value={hideImported}
-        />
-      )}
       <FlashList
         data={galleryItems}
         numColumns={numColumns}
