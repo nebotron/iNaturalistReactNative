@@ -15,6 +15,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -37,6 +38,58 @@ import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
+
+type PreloadResult = {
+  localUri: string;
+  size: { w: number; h: number };
+  crop: NormalizedCrop;
+};
+
+// Module-level cache so preloaded data survives navigation.replace cycles
+const preloadCache = new Map<string, PreloadResult>( );
+const preloadInFlight = new Set<string>( );
+
+async function loadImageData(
+  imageUri: string,
+  cropSourceUri: string,
+  existingSavedCrop: NormalizedCrop | null,
+): Promise<PreloadResult | null> {
+  const resolvedUri = await ensureLocalImageForCrop( cropSourceUri );
+  const size = await new Promise<{ w: number; h: number } | null>( resolve => {
+    RNImage.getSize(
+      resolvedUri,
+      ( w, h ) => resolve( { w, h } ),
+      ( ) => resolve( null ),
+    );
+  } );
+  if ( !size ) {
+    return null;
+  }
+  const crop = existingSavedCrop
+    ?? await getCropForUri( imageUri, resolvedUri, size.w, size.h );
+  return { localUri: resolvedUri, size, crop };
+}
+
+function preloadImage(
+  imageUri: string,
+  cropSourceUri: string,
+  existingSavedCrop: NormalizedCrop | null,
+) {
+  if ( preloadCache.has( imageUri ) || preloadInFlight.has( imageUri ) ) {
+    return;
+  }
+  preloadInFlight.add( imageUri );
+  loadImageData( imageUri, cropSourceUri, existingSavedCrop )
+    .then( result => {
+      if ( result ) {
+        preloadCache.set( imageUri, result );
+      }
+    } )
+    .catch( ( ) => {} )
+    .finally( ( ) => {
+      preloadInFlight.delete( imageUri );
+    } );
+}
 
 type Route = RouteProp<SharedStackParamList, "ImageCropEditor">;
 
@@ -98,6 +151,9 @@ const ImageCropEditor = ( ) => {
     navigation.setOptions( { headerShown: false } );
   }, [navigation] );
 
+  // Track which imageUri's preload we've already kicked off to avoid re-triggering
+  const preloadedUrisRef = useRef( new Set<string>( ) );
+
   useEffect( ( ) => {
     if ( !imageUri ) {
       return ( ) => {};
@@ -132,34 +188,35 @@ const ImageCropEditor = ( ) => {
           }
         }
 
-        const resolvedUri = await ensureLocalImageForCrop( cropSourceUri );
+        // Use preloaded data if available to skip all async work
+        const cached = preloadCache.get( imageUri );
+        if ( cached ) {
+          if ( !cancelled ) {
+            setLocalImageUri( cached.localUri );
+            setImageSize( cached.size );
+            if ( existingSavedCrop ) {
+              setSavedInitialCrop( existingSavedCrop );
+            }
+            setDetectedCrop( existingSavedCrop ?? cached.crop );
+          }
+          return;
+        }
+
+        const result = await loadImageData( imageUri, cropSourceUri, existingSavedCrop );
         if ( cancelled ) {
           return;
         }
-        setLocalImageUri( resolvedUri );
-        const size = await new Promise<{ w: number; h: number } | null>( resolve => {
-          RNImage.getSize(
-            resolvedUri,
-            ( w, h ) => resolve( { w, h } ),
-            ( ) => resolve( null ),
-          );
-        } );
-        if ( cancelled ) {
-          return;
-        }
-        if ( !size ) {
+        if ( !result ) {
           setImageSize( null );
           return;
         }
-        setImageSize( size );
+        preloadCache.set( imageUri, result );
+        setLocalImageUri( result.localUri );
+        setImageSize( result.size );
         if ( existingSavedCrop ) {
           setSavedInitialCrop( existingSavedCrop );
         }
-        const initialCrop = existingSavedCrop
-          || await getCropForUri( imageUri || "", resolvedUri, size.w, size.h );
-        if ( !cancelled ) {
-          setDetectedCrop( initialCrop );
-        }
+        setDetectedCrop( existingSavedCrop ?? result.crop );
       } catch {
         if ( !cancelled ) {
           setLocalImageUri( null );
@@ -181,6 +238,23 @@ const ImageCropEditor = ( ) => {
     imageUri,
     observationPhotoUuid,
   ] );
+
+  // Preload pending images in the background once the current image is displayed
+  useEffect( ( ) => {
+    if ( loadingSource || !pendingImageUris?.length || context !== "groupPhotos" ) {
+      return;
+    }
+    for ( const uri of pendingImageUris ) {
+      if ( preloadedUrisRef.current.has( uri ) ) {
+        continue;
+      }
+      preloadedUrisRef.current.add( uri );
+      const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, uri );
+      const cropSourceUri = groupedPhoto?.image.cropOriginalUri || uri;
+      const existingSavedCrop = groupedPhoto?.image.crop ?? null;
+      preloadImage( uri, cropSourceUri, existingSavedCrop );
+    }
+  }, [context, groupedPhotos, loadingSource, pendingImageUris] );
 
   const labels = useMemo( ( ) => ( {
     confirm: t( "SAVE-CROP" ),
