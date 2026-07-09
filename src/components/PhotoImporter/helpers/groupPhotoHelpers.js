@@ -1,11 +1,5 @@
 // @flow
 
-const sortByTime = array => array.sort( ( a, b ) => {
-  const aTimestamp = a.timestamp || a.asset?.timestamp || a.image?.timestamp || 0;
-  const bTimestamp = b.timestamp || b.asset?.timestamp || b.image?.timestamp || 0;
-  return bTimestamp - aTimestamp;
-} );
-
 export const getGroupTimestamp = ( group: Object ): number => (
   group.photos?.[0]?.image?.timestamp || group.timestamp || 0
 );
@@ -22,7 +16,7 @@ const flattenAndOrderSelectedPhotos = ( selectedObservations: ?Object[] ): Objec
     combinedPhotos = combinedPhotos.concat( obs.photos || [] );
   } );
 
-  return dedupePhotos( sortByTime( combinedPhotos ) );
+  return dedupePhotos( combinedPhotos );
 };
 
 export const groupContainsPhoto = ( obs: Object, photo: Object ): boolean => (
