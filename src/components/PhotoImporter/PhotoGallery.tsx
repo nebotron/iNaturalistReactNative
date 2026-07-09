@@ -12,6 +12,7 @@ import buildSectionedGalleryItems, {
   type PhotoGalleryListItem,
 } from "components/PhotoImporter/helpers/photoGallerySections";
 import { Body2 } from "components/SharedComponents";
+import SwitchRow from "components/SharedComponents/SwitchRow";
 import { Pressable, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -80,6 +81,7 @@ const PhotoGallery = ( {
   const [endCursor, setEndCursor] = useState<string | undefined>( undefined );
   const [selectedUris, setSelectedUris] = useState<Set<string>>( new Set( ) );
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
+  const [hideImported, setHideImported] = useState( true );
   const isFetchingRef = useRef( false );
 
   useEffect( ( ) => {
@@ -186,9 +188,16 @@ const PhotoGallery = ( {
     } );
   }, [photosSinceLastImport, maxPhotos] );
 
+  const visiblePhotos = useMemo(
+    ( ) => ( hideImported
+      ? photos.filter( node => !isImported( node ) )
+      : photos ),
+    [photos, hideImported, isImported],
+  );
+
   const galleryItems = useMemo(
-    ( ) => buildSectionedGalleryItems( photos, getSelectionKey ),
-    [photos],
+    ( ) => buildSectionedGalleryItems( visiblePhotos, getSelectionKey ),
+    [visiblePhotos],
   );
 
   const toggleSectionSelection = useCallback( ( nodes: PhotoNode[] ) => {
@@ -333,6 +342,15 @@ const PhotoGallery = ( {
           />
         )}
       </View>
+      {hasImportedPhotos && (
+        <SwitchRow
+          classNames="px-4 py-1"
+          label={t( "Hide-already-saved-photos" )}
+          onValueChange={setHideImported}
+          testID="PhotoGallery.hideImported"
+          value={hideImported}
+        />
+      )}
       <FlashList
         data={galleryItems}
         numColumns={numColumns}
