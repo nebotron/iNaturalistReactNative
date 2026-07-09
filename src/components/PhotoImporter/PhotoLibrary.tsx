@@ -20,7 +20,7 @@ import React, {
   useCallback,
 } from "react";
 import {
-  Platform,
+  NativeModules, Platform,
 } from "react-native";
 import type { Asset } from "react-native-image-picker";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
@@ -118,14 +118,22 @@ const PhotoLibrary = ( ) => {
       const fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
       const destPath = `${path}/${fileName}`;
       if ( Platform.OS === "ios" ) {
-        // PHAsset ph:// identifiers have no filesystem path to copyFile from;
-        // export the asset's bytes directly, as ensureLocalImageForCrop does.
-        // 99999 caps at the asset's natural size without upscaling.
-        await copyAssetsFileIOS( node.image.uri, destPath, 99999, 99999 );
+        // Use PHAssetResourceManager.writeData (via ImageCropper.exportPHAsset)
+        // to write the original file bytes verbatim — no decode/re-encode,
+        // so all EXIF (GPS, timestamp, camera details) is preserved.
+        const { ImageCropper } = NativeModules as {
+          ImageCropper?: { exportPHAsset: ( phUri: string, destPath: string ) => Promise<string> };
+        };
+        if ( ImageCropper?.exportPHAsset ) {
+          await ImageCropper.exportPHAsset( node.image.uri, destPath );
+        } else {
+          // Fallback if native module unavailable (re-encodes, may lose EXIF).
+          await copyAssetsFileIOS( node.image.uri, destPath, 99999, 99999 );
+        }
       } else {
         // On Android 10+, content:// URIs served by MediaStore strip GPS EXIF
-        // data from the byte stream. Using the actual file path (filepath)
-        // bypasses the MediaStore provider and preserves all EXIF metadata.
+        // from the byte stream. Using the actual file path (filepath) bypasses
+        // the MediaStore provider and preserves all EXIF metadata.
         const sourceUri = node.image.filepath ?? node.image.uri;
         await copyFile( sourceUri, destPath );
       }

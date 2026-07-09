@@ -1,8 +1,9 @@
-import { copyAssetsFileIOS, mkdir } from "@dr.pogodin/react-native-fs";
+import { copyAssetsFileIOS, copyFile, mkdir } from "@dr.pogodin/react-native-fs";
 import { Realm } from "@realm/react";
 import type { ApiPhoto } from "api/types";
 import { photoUploadPath } from "appConstants/paths";
-import { Platform } from "react-native";
+import { NativeModules, Platform } from "react-native";
+import * as uuid from "uuid";
 import type { RealmPhoto } from "realmModels/types";
 import {
   cropOriginalUriFromPath,
@@ -11,7 +12,6 @@ import {
   savedNormalizedCrop,
 } from "sharedHelpers/cropPhotoMetadata";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import resizeImage from "sharedHelpers/resizeImage";
 import { unlink } from "sharedHelpers/util";
 
 class Photo extends Realm.Object {
@@ -33,43 +33,29 @@ class Photo extends Realm.Object {
   }
 
   static async resizeImageForUpload( pathOrUri: string ): Promise<string> {
-    const width = 2048;
     await mkdir( photoUploadPath );
-    let outFilename = pathOrUri.split( "/" ).slice( -1 ).pop( );
 
-    // If pathOrUri is an ios localIdentifier, make up a filename based on that
-    const iosLocalIdentifierMatches = pathOrUri.match( /^ph:\/\/([^/]+)/ );
-    if ( iosLocalIdentifierMatches ) {
-      outFilename = `${iosLocalIdentifierMatches[1]}.jpeg`;
-    }
+    // Derive extension from the original file; fall back to .jpeg.
+    const origExt = pathOrUri.match( /\.(\w+)$/ )?.[1] ?? "jpeg";
+    const outPath = `${photoUploadPath}/${uuid.v4()}.${origExt}`;
 
-    // If pathOrUri is an ios localIdentifier, we don't have an actual local
-    // file path that react-native-image-resizer can use, so instead we're
-    // using @dr.pogodin/react-native-fs resizing. If consistency becomes a problem, we
-    // could instead use RNFS to copy the file locally and then resize it
-    // with the resizer.
+    // iOS PHAsset: export raw original bytes using PHAssetResourceManager.
+    // This writes the file verbatim — no decode/re-encode, all EXIF preserved.
     if ( Platform.OS === "ios" && pathOrUri.match( /^ph:/ ) ) {
-      const outPath = `${photoUploadPath}/${outFilename}`;
-      const outUri = await copyAssetsFileIOS( pathOrUri, outPath, width, width );
-      return outUri;
+      const { ImageCropper } = NativeModules as {
+        ImageCropper?: { exportPHAsset: ( phUri: string, destPath: string ) => Promise<string> };
+      };
+      if ( ImageCropper?.exportPHAsset ) {
+        return ImageCropper.exportPHAsset( pathOrUri, outPath );
+      }
+      // Fallback if native module unavailable (re-encodes, may lose EXIF).
+      return copyAssetsFileIOS( pathOrUri, outPath, 99999, 99999 );
     }
 
-    // Work around path / uri bug: https://github.com/bamlab/react-native-image-resizer/issues/328
-    let uriForResize = pathOrUri;
-    if ( Platform.OS === "ios" && uriForResize.match( /^\// ) ) {
-      uriForResize = `file://${uriForResize}`;
-    }
-
-    const uri = await resizeImage( uriForResize, {
-      width,
-      outputPath: photoUploadPath,
-      imageOptions: {
-        mode: "contain",
-        onlyScaleDown: true,
-      },
-    } );
-
-    return uri;
+    // All other cases (file:// or absolute path): raw byte copy, no re-encode.
+    const sourcePath = pathOrUri.replace( /^file:\/\//, "" );
+    await copyFile( sourcePath, outPath );
+    return `file://${outPath}`;
   }
 
   static async new( uri: string ) {

@@ -1,4 +1,5 @@
 #import <ImageIO/ImageIO.h>
+#import <Photos/Photos.h>
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
@@ -518,6 +519,60 @@ RCT_EXPORT_METHOD( preserveImageMetadata
     reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
   }
   resolve( dest );
+}
+
+// Exports a PHAsset to a local file using PHAssetResourceManager, which writes
+// the original file bytes verbatim — preserving all EXIF metadata (GPS,
+// timestamp, camera make/model, etc.) without re-encoding.
+RCT_EXPORT_METHOD( exportPHAsset
+                  : ( NSString * )phUri destPath
+                  : ( NSString * )destPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *localIdentifier = [phUri hasPrefix:@"ph://"]
+    ? [phUri substringFromIndex:5]
+    : phUri;
+
+  PHFetchResult<PHAsset *> *result =
+    [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
+  PHAsset *asset = result.firstObject;
+  if ( !asset ) {
+    reject( @"EXPORT_FAILED", @"PHAsset not found", nil );
+    return;
+  }
+
+  PHAssetResource *photoResource = nil;
+  for ( PHAssetResource *r in [PHAssetResource assetResourcesForAsset:asset] ) {
+    if ( r.type == PHAssetResourceTypePhoto ) {
+      photoResource = r;
+      break;
+    }
+  }
+  if ( !photoResource ) {
+    reject( @"EXPORT_FAILED", @"No photo resource found for asset", nil );
+    return;
+  }
+
+  NSString *dest = [destPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[dest stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+
+  PHAssetResourceRequestOptions *options = [[PHAssetResourceRequestOptions alloc] init];
+  options.networkAccessAllowed = YES;
+
+  [[PHAssetResourceManager defaultManager]
+    writeData:photoResource
+    toFile:[NSURL fileURLWithPath:dest]
+    options:options
+    completionHandler:^( NSError *error ) {
+      if ( error ) {
+        reject( @"EXPORT_FAILED", error.localizedDescription, error );
+      } else {
+        resolve( [NSString stringWithFormat:@"file://%@", dest] );
+      }
+    }];
 }
 
 RCT_EXPORT_METHOD( detectSubjectBounds
