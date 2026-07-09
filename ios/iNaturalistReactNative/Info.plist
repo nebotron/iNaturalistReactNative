@@ -69,6 +69,8 @@
 	<string>iNaturalist uses the camera to add photos to your observations of nature.</string>
 	<key>NSHumanReadableCopyright</key>
 	<string>© iNaturalist</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Track your location in the background so we can compare it to your photos' GPS data.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Add GPS coordinates to observations, show your location on maps, and more.</string>
 	<key>NSMicrophoneUsageDescription</key>
@@ -83,6 +85,10 @@
 	</array>
 	<key>RCTNewArchEnabled</key>
 	<true/>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Lato-Bold.ttf</string>

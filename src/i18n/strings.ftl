@@ -517,6 +517,9 @@ EMAIL-DEBUG-LOGS = EMAIL DEBUG LOGS
 Enable-flash = Enable flash
 # Button that enables the camera to use location for suggestions
 Enable-location = Enable location
+Enable-location-access-to-track-your-location-in-the-background =
+    Enable location access, including background access, to track your
+    location and compare it to your photos.
 # Button that subscribes the user to notifications for an observation
 Enable-notifications = Enable notifications
 # Placeholder text for the end location input in the Wildlife Hotspots tool
@@ -790,8 +793,13 @@ Loads-content-that-requires-an-Internet-connection = Loads content that requires
 LOCATION = LOCATION
 Location = Location
 Location-accuracy-is-too-imprecise = Location accuracy is too imprecise to help identifiers. Please zoom in.
+LOCATION-HISTORY = LOCATION HISTORY
+Location-history-lets-you-compare-photos-to-your-tracked-location =
+    See how closely your photos' built-in GPS location matches where you were
+    actually tracked at that time.
 # Checkbox label for filtering observations without location data
 Location-Missing = Location Missing
+Location-Permission-Required = Location Permission Required
 LOCATION-TOO-IMPRECISE = LOCATION TOO IMPRECISE
 LOG-IN = LOG IN
 LOG-IN-TO-INATURALIST = LOG IN TO INATURALIST
@@ -829,6 +837,8 @@ MEMBERS-WITHOUT-NUMBER =
 Membership-in-this-project-is-by-invitation-only = Membership in this project is by invitation only. If you'd like to join, please contact one of the curators and request an invitation.
 # Accessibility label for a button that opens a menu of options
 Menu = Menu
+# Distance between a photo's EXIF location and the tracked location history
+Meters-Away = { $meters } m away
 Missing-Date = Missing Date
 MISSING-EVIDENCE = MISSING EVIDENCE
 Monthly-Donor = Monthly Donor
@@ -909,6 +919,7 @@ No-Location = No Location
 No-Media = No Media
 # As in a machine learning model that powers automated suggestions
 No-model-found = No model found
+No-photos-with-location-data-yet = No photos with location data yet
 No-projects-match-that-search = No projects match that search
 # Used for explore screen when search params lead to a search with no data
 No-results-found-for-that-search = No results found for that search.
@@ -916,6 +927,7 @@ No-results-found-try-different-search = No results found. Try a different search
 # license code
 no-rights-reserved-cc0 = no rights reserved (CC0)
 No-saved-filters-yet = No saved filters yet.
+No-tracked-location-nearby = No tracked location nearby
 # Displayed in place of positional accuracy when that value is missing
 none--accuracy = none
 # Option when selecting taxonomic ranks that indicates no rank was selected
@@ -1300,8 +1312,6 @@ Share-map = Share map
 Share-your-observation-where-it-can-help-scientists = Share your observation, where it can help scientists across the world better understand biodiversity.
 SHOP-INATURALIST-MERCH = SHOP INATURALIST MERCH
 Show-observation-options = Show observation options.
-# Message when offline search results are being displayed
-Showing-offline-search-results--taxa = Showing offline search results. To search for more species, try again when connected to the Internet.
 # Label for button that shows identification suggestions
 Shows-identification-suggestions = Shows identification suggestions
 # Accessibility hint for the new community member duckling badge
@@ -1439,6 +1449,10 @@ To-view-nearby-projects-please-enable-location = To view nearby projects, please
 To-view-this-observations-Collection-and-Umbrella-Projects = To view this observation’s Collection and Umbrella Projects, go to its observation page once it’s uploaded.
 Toggle-map-type = Toggle map type
 TOP-ID-SUGGESTION = TOP ID SUGGESTION
+# Switch label for enabling continuous background location tracking
+Track-location-in-the-background = Track location in the background
+# Title of the Android foreground service notification while tracking location
+Tracking-your-location = Tracking your location
 Traditional-Project = Traditional Project
 Traditional-Projects = Traditional Projects
 Umbrella-Project = Umbrella Project
@@ -1583,6 +1597,12 @@ X-JOURNAL_POSTS =
     { $count ->
         [one] { $count } JOURNAL POST
        *[other] { $count } JOURNAL POSTS
+    }
+# Count of background-tracked location history points
+X-Location-Points-Recorded =
+    { $count ->
+        [one] { $count } location point recorded
+       *[other] { $count } location points recorded
     }
 # Subheader for number of project members screen
 X-MEMBERS =

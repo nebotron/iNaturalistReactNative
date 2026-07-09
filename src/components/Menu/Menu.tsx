@@ -21,14 +21,12 @@ import Observation from "realmModels/Observation";
 import User from "realmModels/User";
 import { valueToBreakpoint } from "sharedHelpers/breakpoint";
 import { log } from "sharedHelpers/logger";
-import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
 import {
   useCurrentUser, useDebugMode, useFeatureFlag,
   useLayoutPrefs, useTranslation,
 } from "sharedHooks";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
-import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import MenuItem from "./MenuItem";
@@ -131,6 +129,11 @@ const Menu = ( ) => {
       label: t( "PROJECTS" ),
       navigation: "Projects",
       icon: "briefcase",
+    },
+    locationHistory: {
+      label: t( "LOCATION-HISTORY" ),
+      navigation: "LocationHistory",
+      icon: "location",
     },
     about: {
       label: t( "ABOUT" ),

@@ -6,6 +6,7 @@ import Comment from "./Comment";
 import Flag from "./Flag";
 import Identification from "./Identification";
 import InputImageRecord from "./InputImageRecord";
+import LocationHistoryPoint from "./LocationHistoryPoint";
 import Observation from "./Observation";
 import ObservationField from "./ObservationField";
 import ObservationFieldValue from "./ObservationFieldValue";
@@ -30,6 +31,7 @@ export default {
     Flag,
     Identification,
     InputImageRecord,
+    LocationHistoryPoint,
     Observation,
     ObservationField,
     ObservationFieldValue,
@@ -47,7 +49,7 @@ export default {
     User,
     Vote,
   ],
-  schemaVersion: 73,
+  schemaVersion: 74,
   path: `${DocumentDirectoryPath}/db.realm`,
   // https://github.com/realm/realm-js/pull/6076 embedded constraints
   migrationOptions: {

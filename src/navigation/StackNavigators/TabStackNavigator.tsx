@@ -15,11 +15,12 @@ import RootExploreContainer from "components/Explore/RootExploreContainer";
 import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
 import LifeListContainer from "components/LifeList/LifeListContainer";
+import LocationHistory from "components/LocationHistory/LocationHistory";
 import MaverickIdentificationsContainer
   from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
-import NetworkLog from "components/NetworkLog/NetworkLog";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
+import NetworkLog from "components/NetworkLog/NetworkLog";
 import Notifications from "components/Notifications/Notifications";
 import DQAContainer from "components/ObsDetails/DQAContainer";
 import ObsDetailsScreen from "components/ObsDetailsSharedComponents/ObsDetailsScreen";
@@ -94,6 +95,11 @@ const notificationsTitle = () => (
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const networkLogTitle = () => <Heading4 numberOfLines={1}>NETWORK LOG</Heading4>;
+const locationHistoryTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "LOCATION-HISTORY" )}
+  </Heading4>
+);
 
 // eslint-disable-next-line i18next/no-literal-string
 const debugTitle = () => <Heading4 className="text-white">DEBUG</Heading4>;
@@ -330,6 +336,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             name="MaverickIdentifications"
             component={FadeInMaverickIdentifications}
             options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="LocationHistory"
+            component={LocationHistory}
+            options={{
+              headerTitle: locationHistoryTitle,
+            }}
           />
         </Stack.Group>
         {/* Developer Stack Group */}

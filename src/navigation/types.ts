@@ -364,6 +364,7 @@ export type BaseTabStackParamList = {
   WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   CropLogViewer: undefined;
   NetworkLog: undefined;
+  LocationHistory: undefined;
   Debug: undefined;
   UILibrary: undefined;
   UiLibraryItem: undefined;
