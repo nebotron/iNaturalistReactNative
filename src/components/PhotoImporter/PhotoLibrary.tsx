@@ -123,7 +123,11 @@ const PhotoLibrary = ( ) => {
         // 99999 caps at the asset's natural size without upscaling.
         await copyAssetsFileIOS( node.image.uri, destPath, 99999, 99999 );
       } else {
-        await copyFile( node.image.uri, destPath );
+        // On Android 10+, content:// URIs served by MediaStore strip GPS EXIF
+        // data from the byte stream. Using the actual file path (filepath)
+        // bypasses the MediaStore provider and preserves all EXIF metadata.
+        const sourceUri = node.image.filepath ?? node.image.uri;
+        await copyFile( sourceUri, destPath );
       }
       return {
         image: {
