@@ -149,27 +149,49 @@ const GroupPhotosContainer = ( ): Node => {
     }
 
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
+    if ( orderedPhotos.length === 0 ) {
+      return;
+    }
     const mostRecentPhoto = orderedPhotos[0];
+    // Collect soundUris from all selected items (sound-only or mixed groups)
+    const selectedSoundUris = selectedObservations
+      .filter( obs => obs.soundUri )
+      .map( obs => obs.soundUri );
     const newObsList = [];
 
     groupedPhotos.forEach( obs => {
-      if ( obs.soundUri !== undefined ) {
-        newObsList.push( obs );
+      // Sound-only items: merge into combined group if selected, else keep
+      if ( obs.soundUri !== undefined && !obs.photos?.length ) {
+        if ( !selectedObservations.includes( obs ) ) {
+          newObsList.push( obs );
+        }
         return;
       }
       const containsSelected = mostRecentPhoto && obs.photos?.includes( mostRecentPhoto );
 
       if ( containsSelected ) {
-        newObsList.push( { photos: orderedPhotos } );
+        const combinedGroup = { photos: orderedPhotos };
+        if ( selectedSoundUris.length > 0 ) {
+          combinedGroup.soundUri = selectedSoundUris[0];
+        }
+        newObsList.push( combinedGroup );
       } else {
         const filteredPhotos = obs.photos?.filter(
           item => !orderedPhotos.includes( item ),
         );
         if ( filteredPhotos?.length > 0 ) {
-          newObsList.push( { photos: filteredPhotos } );
+          const group = obs.soundUri
+            ? { photos: filteredPhotos, soundUri: obs.soundUri }
+            : { photos: filteredPhotos };
+          newObsList.push( group );
         }
       }
     } );
+
+    // Extra selected sounds (beyond the first) remain as separate items
+    for ( let i = 1; i < selectedSoundUris.length; i++ ) {
+      newObsList.push( { soundUri: selectedSoundUris[i] } );
+    }
 
     setPendingScrollOffset( findScrollTargetIndex(
       newObsList,
@@ -184,7 +206,8 @@ const GroupPhotosContainer = ( ): Node => {
     let maxCombinedItems = 0;
 
     selectedObservations.forEach( obs => {
-      const numItems = obs.photos?.length || 0;
+      // Count photos + sound as separate items for the threshold check
+      const numItems = ( obs.photos?.length || 0 ) + ( obs.soundUri ? 1 : 0 );
       if ( numItems > maxCombinedItems ) {
         maxCombinedItems = numItems;
       }
@@ -206,6 +229,10 @@ const GroupPhotosContainer = ( ): Node => {
         filteredGroupedPhotos.forEach( photo => {
           separatedItems.push( { photos: [photo] } );
         } );
+        // If the group had a sound, keep it as a separate item
+        if ( obs.soundUri ) {
+          separatedItems.push( { soundUri: obs.soundUri, timestamp: obs.timestamp } );
+        }
       } else {
         separatedItems.push( obs );
       }

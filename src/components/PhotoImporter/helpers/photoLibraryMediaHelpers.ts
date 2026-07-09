@@ -1,6 +1,7 @@
 import type { Asset } from "react-native-image-picker";
 import Observation from "realmModels/Observation";
 import ObservationPhoto from "realmModels/ObservationPhoto";
+import ObservationSound from "realmModels/ObservationSound";
 import type { RealmObservationPojo } from "realmModels/types";
 
 export interface GroupedMediaPhotoItem {
@@ -30,9 +31,14 @@ export const buildGroupedSoundItem = (
   timestamp?: number,
 ): GroupedMediaItem => ( { soundUri, timestamp } );
 
-export const createObservationFromGroupedMedia = (
+export const createObservationFromGroupedMedia = async (
   group: GroupedMediaItem,
 ): Promise<RealmObservationPojo> => {
+  if ( group.photos && group.photos.length > 0 && group.soundUri ) {
+    const obs = await Observation.createObservationWithPhotos( group.photos );
+    const sound = await ObservationSound.new( group.soundUri );
+    return Observation.appendObsSounds( [sound], obs );
+  }
   if ( group.soundUri ) {
     return Observation.createObsWithSoundPath( group.soundUri );
   }

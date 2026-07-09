@@ -254,7 +254,10 @@ const ImageCropEditor = ( ) => {
               photo => photo.image.uri !== imageUri,
             );
             if ( !photos?.length ) {
-              return null;
+              // If the group had a sound, keep it as a sound-only item
+              return group.soundUri
+                ? { soundUri: group.soundUri, timestamp: group.timestamp }
+                : null;
             }
             return photos
               ? { ...group, photos }
