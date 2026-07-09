@@ -17,4 +17,6 @@ export const soundUploadPath = `${DocumentDirectoryPath}/soundUploads`;
 
 export const rollbackPhotosPath = `${DocumentDirectoryPath}/rollbackPhotos`;
 
+export const videoLibraryPath = `${DocumentDirectoryPath}/videoLibrary`;
+
 export const cropSourcesPath = `${CachesDirectoryPath}/inatCropSources`;

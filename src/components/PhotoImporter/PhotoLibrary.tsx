@@ -12,6 +12,10 @@ import {
   appendPhotosToObservation,
   buildGroupedMediaItems,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
+import {
+  createObservationsFromVideoNode,
+  isVideoNode,
+} from "components/PhotoImporter/helpers/videoImportHelpers";
 import PhotoGallery from "components/PhotoImporter/PhotoGallery";
 import { ViewWrapper } from "components/SharedComponents";
 import type { NoBottomTabStackScreenProps } from "navigation/types";
@@ -29,6 +33,7 @@ import { log } from "sharedHelpers/logger";
 import { useInputImageTracking } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
+import Observation from "realmModels/Observation";
 import * as uuid from "uuid";
 
 type PhotoNode = PhotoIdentifier["node"];
@@ -158,11 +163,32 @@ const PhotoLibrary = ( ) => {
 
   const handleGalleryDone = useCallback( async ( nodes: PhotoNode[] ) => {
     try {
-      const sourceAssets = nodes.map( nodeToSourceAsset );
+      const videoNodes = nodes.filter( isVideoNode );
+      const photoNodes = nodes.filter( n => !isVideoNode( n ) );
+
+      // Process video nodes: extract audio + convert to GIF → two observations each.
+      // Save them directly to Realm so they appear in My Observations.
+      if ( videoNodes.length > 0 ) {
+        const videoObsArrays = await Promise.all(
+          videoNodes.map( createObservationsFromVideoNode ),
+        );
+        const videoObservations = videoObsArrays.flat();
+        await Promise.all(
+          videoObservations.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
+        );
+      }
+
+      if ( photoNodes.length === 0 && videoNodes.length > 0 ) {
+        // Only videos were selected; skip the photo import flow.
+        exitObservationFlow();
+        return;
+      }
+
+      const sourceAssets = photoNodes.map( nodeToSourceAsset );
       addOriginalDevicePhotoUris( getOriginalDevicePhotoUrisFromAssets( sourceAssets ) );
 
-      const copiedPhotos = nodes.length > 0
-        ? await copyImagesFromCameraRoll( nodes )
+      const copiedPhotos = photoNodes.length > 0
+        ? await copyImagesFromCameraRoll( photoNodes )
         : [];
       const selectedPhotos = copiedPhotos.length > 0
         ? markDuplicatePhotosFromLibrary( realm, copiedPhotos, sourceAssets )

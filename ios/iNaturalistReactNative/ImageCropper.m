@@ -1,3 +1,4 @@
+#import <AVFoundation/AVFoundation.h>
 #import <ImageIO/ImageIO.h>
 #import <Photos/Photos.h>
 #import <React/RCTBridgeModule.h>
@@ -611,6 +612,166 @@ RCT_EXPORT_METHOD( measureImageBrightness
 
   float shadowPercentile = measureShadowPercentile( image, normCrop );
   resolve( @( shadowPercentile ) );
+}
+
+// ─── Video helpers ───────────────────────────────────────────────────────────
+
+// Resolves a ph:// or file:// video URI to an AVAsset asynchronously.
+static void resolveVideoAsset(
+  NSString *videoUri,
+  void (^completion)(AVAsset * _Nullable asset, NSError * _Nullable error)
+) {
+  if ( [videoUri hasPrefix:@"ph://"] ) {
+    NSString *localIdentifier = [videoUri substringFromIndex:5];
+    PHFetchResult<PHAsset *> *result =
+      [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
+    PHAsset *phAsset = result.firstObject;
+    if ( !phAsset ) {
+      completion( nil, [NSError errorWithDomain:@"ImageCropper"
+                                          code:-1
+                                      userInfo:@{NSLocalizedDescriptionKey: @"PHAsset not found"}] );
+      return;
+    }
+    PHVideoRequestOptions *opts = [[PHVideoRequestOptions alloc] init];
+    opts.networkAccessAllowed = YES;
+    opts.version = PHVideoRequestOptionsVersionOriginal;
+    [[PHImageManager defaultManager]
+      requestAVAssetForVideo:phAsset
+      options:opts
+      resultHandler:^( AVAsset *avAsset, AVAudioMix *__unused mix, NSDictionary *__unused info ) {
+        if ( avAsset ) {
+          completion( avAsset, nil );
+        } else {
+          completion( nil, [NSError errorWithDomain:@"ImageCropper"
+                                              code:-1
+                                          userInfo:@{NSLocalizedDescriptionKey: @"Could not load video asset"}] );
+        }
+      }];
+  } else {
+    NSString *path = [videoUri stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSURL *url = [NSURL fileURLWithPath:path];
+    completion( [AVURLAsset URLAssetWithURL:url options:nil], nil );
+  }
+}
+
+RCT_EXPORT_METHOD( extractAudioFromVideo
+                  : ( NSString * )videoUri destPath
+                  : ( NSString * )destPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *outputPath = [destPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[outputPath stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+
+  resolveVideoAsset( videoUri, ^( AVAsset *asset, NSError *error ) {
+    if ( !asset ) {
+      reject( @"AUDIO_EXTRACT_FAILED", error.localizedDescription, error );
+      return;
+    }
+    AVAssetExportSession *exporter = [[AVAssetExportSession alloc]
+      initWithAsset:asset presetName:AVAssetExportPresetAppleM4A];
+    if ( !exporter ) {
+      reject( @"AUDIO_EXTRACT_FAILED", @"Could not create export session", nil );
+      return;
+    }
+    exporter.outputURL = [NSURL fileURLWithPath:outputPath];
+    exporter.outputFileType = AVFileTypeAppleM4A;
+    [exporter exportAsynchronouslyWithCompletionHandler:^{
+      if ( exporter.status == AVAssetExportSessionStatusCompleted ) {
+        resolve( [NSString stringWithFormat:@"file://%@", outputPath] );
+      } else {
+        reject( @"AUDIO_EXTRACT_FAILED",
+                exporter.error.localizedDescription ?: @"Export failed",
+                exporter.error );
+      }
+    }];
+  } );
+}
+
+RCT_EXPORT_METHOD( convertVideoToGif
+                  : ( NSString * )videoUri destPath
+                  : ( NSString * )destPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *outputPath = [destPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[outputPath stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+
+  resolveVideoAsset( videoUri, ^( AVAsset *asset, NSError *resolveError ) {
+    if ( !asset ) {
+      reject( @"GIF_FAILED", resolveError.localizedDescription, resolveError );
+      return;
+    }
+
+    Float64 durationSecs = CMTimeGetSeconds( asset.duration );
+    if ( durationSecs <= 0 ) durationSecs = 1.0;
+
+    // Cap at 10 seconds, 2 fps → max 20 frames
+    const int FPS = 2;
+    const int MAX_FRAMES = 20;
+    Float64 capped = MIN( durationSecs, 10.0 );
+    int numFrames = (int)( capped * FPS );
+    if ( numFrames < 1 ) numFrames = 1;
+    if ( numFrames > MAX_FRAMES ) numFrames = MAX_FRAMES;
+
+    AVAssetImageGenerator *gen = [[AVAssetImageGenerator alloc] initWithAsset:asset];
+    gen.appliesPreferredTrackTransform = YES;
+    gen.maximumSize = CGSizeMake( 480, 480 );
+    gen.requestedTimeToleranceBefore = CMTimeMakeWithSeconds( 0.5, 600 );
+    gen.requestedTimeToleranceAfter  = CMTimeMakeWithSeconds( 0.5, 600 );
+
+    NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
+    CGImageDestinationRef gifDest = CGImageDestinationCreateWithURL(
+      (__bridge CFURLRef)outputURL, CFSTR( "com.compuserve.gif" ), numFrames, nil );
+    if ( !gifDest ) {
+      reject( @"GIF_FAILED", @"Could not create GIF destination", nil );
+      return;
+    }
+
+    NSDictionary *fileProps = @{
+      (__bridge NSString *)kCGImagePropertyGIFDictionary: @{
+        (__bridge NSString *)kCGImagePropertyGIFLoopCount: @0,
+      },
+    };
+    CGImageDestinationSetProperties( gifDest, (__bridge CFDictionaryRef)fileProps );
+
+    NSDictionary *frameProps = @{
+      (__bridge NSString *)kCGImagePropertyGIFDictionary: @{
+        (__bridge NSString *)kCGImagePropertyGIFDelayTime: @( 1.0 / FPS ),
+      },
+    };
+
+    int framesAdded = 0;
+    for ( int i = 0; i < numFrames; i++ ) {
+      Float64 t = ( capped / numFrames ) * i;
+      CMTime requested = CMTimeMakeWithSeconds( t, 600 );
+      CMTime actual;
+      CGImageRef frame = [gen copyCGImageAtTime:requested actualTime:&actual error:nil];
+      if ( frame ) {
+        CGImageDestinationAddImage( gifDest, frame, (__bridge CFDictionaryRef)frameProps );
+        CGImageRelease( frame );
+        framesAdded++;
+      }
+    }
+
+    if ( framesAdded == 0 ) {
+      CFRelease( gifDest );
+      reject( @"GIF_FAILED", @"No frames could be extracted", nil );
+      return;
+    }
+
+    BOOL ok = CGImageDestinationFinalize( gifDest );
+    CFRelease( gifDest );
+    if ( ok ) {
+      resolve( [NSString stringWithFormat:@"file://%@", outputPath] );
+    } else {
+      reject( @"GIF_FAILED", @"Could not write GIF file", nil );
+    }
+  } );
 }
 
 @end

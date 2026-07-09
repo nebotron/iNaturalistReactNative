@@ -13,6 +13,7 @@ import buildSectionedGalleryItems, {
 } from "components/PhotoImporter/helpers/photoGallerySections";
 import { Body2 } from "components/SharedComponents";
 import SwitchRow from "components/SharedComponents/SwitchRow";
+import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers";
 import { Pressable, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -25,6 +26,7 @@ import React, {
 import {
   ActivityIndicator,
   Platform,
+  Text,
 } from "react-native";
 import {
   formatDateStringFromTimestamp,
@@ -96,9 +98,9 @@ const PhotoGallery = ( {
     try {
       const result = await CameraRoll.getPhotos( {
         first: PAGE_SIZE,
-        assetType: "Photos",
+        assetType: "All",
         after,
-        include: ["filename", "fileSize", "filepath", "imageSize"],
+        include: ["filename", "fileSize", "filepath", "imageSize", "playableDuration"],
       } );
       const nodes = result.edges.map( e => e.node );
       setPhotos( prev => ( after
@@ -252,6 +254,7 @@ const PhotoGallery = ( {
     const selected = selectedUris.has( key );
     const imported = isImported( node );
 
+    const isVideo = isVideoNode( node );
     return (
       <Pressable
         accessibilityRole="button"
@@ -267,6 +270,11 @@ const PhotoGallery = ( {
             squareCorners
             style={gridItemStyle}
           />
+          {isVideo && (
+            <View className="absolute bottom-1 right-1 z-10 bg-black/60 px-1 rounded">
+              <Text style={{ color: "white", fontSize: 10 }}>{"▶ GIF"}</Text>
+            </View>
+          )}
           {imported && (
             <DuplicateUploadBadge
               accessibilityLabel={t( "Duplicate-photo-indicator" )}

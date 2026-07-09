@@ -4,6 +4,12 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
 import android.graphics.RectF
+import android.media.MediaCodec
+import android.media.MediaExtractor
+import android.media.MediaFormat
+import android.media.MediaMetadataRetriever
+import android.media.MediaMuxer
+import android.net.Uri
 import androidx.exifinterface.media.ExifInterface
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext
@@ -17,6 +23,7 @@ import com.google.mlkit.vision.objects.ObjectDetection
 import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import java.io.File
 import java.io.FileOutputStream
+import java.nio.ByteBuffer
 
 class ImageCropperModule(
   reactContext: ReactApplicationContext,
@@ -339,6 +346,109 @@ class ImageCropperModule(
     } catch ( _error: Exception ) {
       // Cropped image is still usable without metadata.
     }
+  }
+
+  @ReactMethod
+  fun extractAudioFromVideo( videoUri: String, destPath: String, promise: Promise ) {
+    Thread {
+      try {
+        val normalizedOutput = destPath.replace( "file://", "" )
+        File( normalizedOutput ).parentFile?.mkdirs()
+
+        val extractor = MediaExtractor()
+        if ( videoUri.startsWith( "content://" ) ) {
+          extractor.setDataSource( reactApplicationContext, Uri.parse( videoUri ), null )
+        } else {
+          extractor.setDataSource( videoUri.replace( "file://", "" ) )
+        }
+
+        var audioTrack = -1
+        var audioFormat: MediaFormat? = null
+        for ( i in 0 until extractor.trackCount ) {
+          val fmt = extractor.getTrackFormat( i )
+          val mime = fmt.getString( MediaFormat.KEY_MIME ) ?: continue
+          if ( mime.startsWith( "audio/" ) ) { audioTrack = i; audioFormat = fmt; break }
+        }
+        if ( audioTrack < 0 || audioFormat == null ) {
+          extractor.release()
+          promise.reject( "AUDIO_EXTRACT_FAILED", "No audio track found" )
+          return@Thread
+        }
+
+        extractor.selectTrack( audioTrack )
+        val muxer = MediaMuxer( normalizedOutput, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4 )
+        val muxerTrack = muxer.addTrack( audioFormat )
+        muxer.start()
+
+        val buf = ByteBuffer.allocate( 1024 * 1024 )
+        val info = MediaCodec.BufferInfo()
+        while ( true ) {
+          val size = extractor.readSampleData( buf, 0 )
+          if ( size < 0 ) break
+          info.offset = 0; info.size = size
+          info.presentationTimeUs = extractor.sampleTime
+          info.flags = extractor.sampleFlags
+          muxer.writeSampleData( muxerTrack, buf, info )
+          extractor.advance()
+        }
+        muxer.stop(); muxer.release(); extractor.release()
+        promise.resolve( "file://$normalizedOutput" )
+      } catch ( e: Exception ) {
+        promise.reject( "AUDIO_EXTRACT_FAILED", e.message, e )
+      }
+    }.start()
+  }
+
+  @ReactMethod
+  fun convertVideoToGif( videoUri: String, destPath: String, promise: Promise ) {
+    Thread {
+      try {
+        val normalizedInput = videoUri.replace( "file://", "" )
+        val normalizedOutput = destPath.replace( "file://", "" )
+        File( normalizedOutput ).parentFile?.mkdirs()
+
+        val retriever = MediaMetadataRetriever()
+        if ( videoUri.startsWith( "content://" ) ) {
+          retriever.setDataSource( reactApplicationContext, Uri.parse( videoUri ) )
+        } else {
+          retriever.setDataSource( normalizedInput )
+        }
+
+        val durationMs = retriever.extractMetadata( MediaMetadataRetriever.METADATA_KEY_DURATION )
+          ?.toLongOrNull() ?: 1000L
+        val cappedMs = minOf( durationMs, 10_000L )
+        val fps = 2
+        val numFrames = minOf( ( cappedMs * fps / 1000 ).toInt(), 20 ).coerceAtLeast( 1 )
+
+        val maxDim = 480
+        FileOutputStream( normalizedOutput ).use { fos ->
+          val gif = GifWriter( fos )
+          gif.start()
+          for ( i in 0 until numFrames ) {
+            val timeUs = ( cappedMs * 1000L / numFrames ) * i
+            val bmp = retriever.getFrameAtTime( timeUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC )
+              ?: continue
+            val scaled = if ( bmp.width > maxDim || bmp.height > maxDim ) {
+              val ratio = minOf( maxDim.toFloat() / bmp.width, maxDim.toFloat() / bmp.height )
+              Bitmap.createScaledBitmap(
+                bmp,
+                ( bmp.width * ratio ).toInt().coerceAtLeast( 1 ),
+                ( bmp.height * ratio ).toInt().coerceAtLeast( 1 ),
+                true,
+              )
+            } else bmp
+            gif.addFrame( scaled )
+            if ( scaled != bmp ) scaled.recycle()
+            bmp.recycle()
+          }
+          gif.finish()
+        }
+        retriever.release()
+        promise.resolve( "file://$normalizedOutput" )
+      } catch ( e: Exception ) {
+        promise.reject( "GIF_FAILED", e.message, e )
+      }
+    }.start()
   }
 
   companion object {
