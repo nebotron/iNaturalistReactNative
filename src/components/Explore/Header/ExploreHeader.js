@@ -83,7 +83,7 @@ const Header = ( {
     backgroundColor: colors.darkGray,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    marginBottom: -40,
+    marginBottom: -32,
   };
 
   return (
