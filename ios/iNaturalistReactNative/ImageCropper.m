@@ -563,7 +563,7 @@ RCT_EXPORT_METHOD( exportPHAsset
   options.networkAccessAllowed = YES;
 
   [[PHAssetResourceManager defaultManager]
-    writeData:photoResource
+    writeDataForAssetResource:photoResource
     toFile:[NSURL fileURLWithPath:dest]
     options:options
     completionHandler:^( NSError *error ) {

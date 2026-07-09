@@ -616,6 +616,8 @@ Help-create-Research-Grade-data-used-in-science-and-conservation = Help create R
 Help-protect-species = Help protect species
 Help-us-translate-the-app = Help us translate the app!
 Hide = Hide
+# Label for a toggle that hides photos already saved as observations
+Hide-already-saved-photos = Hide already saved photos
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
 # Label used for a stop added to a route from a wildlife hotspot
@@ -1282,7 +1284,6 @@ Select-photo = Select photo
 Select-photos-from-your-device-to-create-observations = Select photos from your device to create observations
 # Accessibility label for a button that selects every photo taken since the last imported photo
 Select-photos-since-last-import = Select photos since last import
-Hide-already-saved-photos = Hide already saved photos
 SELECT-THIS-TAXON = SELECT THIS TAXON
 # Label for an element that let's you select a user
 Select-user = Select user
