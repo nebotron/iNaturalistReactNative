@@ -13,6 +13,7 @@ import {
 import { BottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import React, { useCallback, useMemo } from "react";
+import { preloadImage } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import { getShadow } from "styles/global";
@@ -118,6 +119,13 @@ const GroupPhotos = ( {
     if ( selectedPhotoUris.length === 0 ) {
       return;
     }
+    // Preload all selected photos (including the first) before navigating so
+    // ImageCropEditor finds cached data ready during the nav transition
+    const allPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
+    for ( const photo of allPhotos ) {
+      const { uri, cropOriginalUri, crop } = photo.image;
+      preloadImage( uri, cropOriginalUri || uri, crop ?? null );
+    }
     const [firstUri, ...remainingUris] = selectedPhotoUris;
     navigation.navigate( "ImageCropEditor", {
       imageUri: firstUri,
@@ -127,7 +135,7 @@ const GroupPhotos = ( {
       context: "groupPhotos",
       onCropSaved: clearSelection,
     } );
-  }, [clearSelection, navigation, selectedPhotoUris] );
+  }, [clearSelection, navigation, selectedObservations, selectedPhotoUris] );
 
   const allPhotosSelected = groupedPhotos.length > 0
     && selectedObservations.length === groupedPhotos.length;
