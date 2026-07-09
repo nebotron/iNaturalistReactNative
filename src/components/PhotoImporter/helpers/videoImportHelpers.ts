@@ -42,28 +42,39 @@ export async function createObservationsFromVideoNode(
   const audioCache = `${CachesDirectoryPath}/video_audio_${id}.m4a`;
   const gifDest = `${videoLibraryPath}/${id}.gif`;
 
+  if ( !ImageCropper ) {
+    throw new Error( "ImageCropper native module unavailable" );
+  }
+
+  // Audio extraction is optional — videos may have no audio track.
+  // GIF conversion is attempted in parallel; if audio fails we skip the sound obs.
   const [audioUri, gifUri] = await Promise.all( [
-    ImageCropper!.extractAudioFromVideo( videoUri, audioCache ),
-    ImageCropper!.convertVideoToGif( videoUri, gifDest ),
+    ImageCropper.extractAudioFromVideo( videoUri, audioCache ).catch( () => null ),
+    ImageCropper.convertVideoToGif( videoUri, gifDest ),
   ] );
 
-  const [soundObs, gifObs] = await Promise.all( [
-    Observation.createObsWithSoundPath( audioUri ),
-    Observation.createObservationWithPhotos( [
-      {
-        image: {
-          uri: gifUri,
-          type: "image/gif",
-          fileName: `${id}.gif`,
-          width: node.image.width,
-          height: node.image.height,
-          fileSize: undefined,
-          id: undefined,
-          timestamp: String( node.timestamp ),
-        },
+  const observations: RealmObservationPojo[] = [];
+
+  if ( audioUri ) {
+    const soundObs = await Observation.createObsWithSoundPath( audioUri );
+    observations.push( soundObs );
+  }
+
+  const gifObs = await Observation.createObservationWithPhotos( [
+    {
+      image: {
+        uri: gifUri,
+        type: "image/gif",
+        fileName: `${id}.gif`,
+        width: node.image.width,
+        height: node.image.height,
+        fileSize: undefined,
+        id: undefined,
+        timestamp: String( node.timestamp ),
       },
-    ] ),
+    },
   ] );
+  observations.push( gifObs );
 
-  return [soundObs, gifObs];
+  return observations;
 }
