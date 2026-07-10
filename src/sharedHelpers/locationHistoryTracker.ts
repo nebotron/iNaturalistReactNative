@@ -1,3 +1,4 @@
+import Geolocation from "@react-native-community/geolocation";
 import {
   LOCATION_PERMISSIONS,
 } from "components/SharedComponents/PermissionGateContainer";
@@ -40,6 +41,22 @@ const getBackgroundLocationPermissions = ( ) => {
 };
 
 const BACKGROUND_LOCATION_PERMISSIONS = getBackgroundLocationPermissions();
+
+// @react-native-community/geolocation only calls the native code that flips
+// on CLLocationManager's allowsBackgroundLocationUpdates (required for
+// updates to keep arriving once the app is backgrounded) when it's the one
+// driving the authorization request, i.e. skipPermissionRequests must be
+// false and authorizationLevel must be explicitly "always". The rest of the
+// app relies on manually-gated permission prompts, so this config is only
+// switched on for the moment we start our own watch, then switched back.
+const IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG = {
+  skipPermissionRequests: false,
+  authorizationLevel: "always",
+} as const;
+
+const DEFAULT_GEOLOCATION_CONFIG = {
+  skipPermissionRequests: true,
+} as const;
 
 let watchId: number | null = null;
 let realmInstance: Realm | null = null;
@@ -153,13 +170,14 @@ const requestLocationHistoryTrackingPermissions = async ( ): Promise<boolean> =>
 };
 
 export const startLocationHistoryTracking = async ( ): Promise<boolean> => {
-  const granted = await requestLocationHistoryTrackingPermissions();
-  if ( !granted ) return false;
-
   try {
+    const granted = await requestLocationHistoryTrackingPermissions();
+    if ( !granted ) return false;
+
     if ( Platform.OS === "android" && !BackgroundService.isRunning( ) ) {
       await BackgroundService.start( backgroundTask, getBackgroundServiceOptions( ) );
     } else if ( Platform.OS !== "android" && watchId === null ) {
+      Geolocation.setRNConfiguration( IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG );
       watchId = watchPosition(
         recordPosition,
         error => logger.warn( "watchPosition error", error ),
@@ -169,6 +187,7 @@ export const startLocationHistoryTracking = async ( ): Promise<boolean> => {
           useSignificantChanges: true,
         },
       );
+      Geolocation.setRNConfiguration( DEFAULT_GEOLOCATION_CONFIG );
     }
     store.set( TRACKING_ENABLED_KEY, true );
     return true;
