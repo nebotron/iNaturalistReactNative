@@ -3,6 +3,7 @@ import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 type PhotoNode = PhotoIdentifier["node"];
 
 const SECTION_GAP_SECONDS = 5 * 60;
+const MAX_SECTION_SIZE = 100;
 
 export interface PhotoSectionHeaderItem {
   type: "header";
@@ -19,15 +20,39 @@ export interface PhotoSectionPhotoItem {
 
 export type PhotoGalleryListItem = PhotoSectionHeaderItem | PhotoSectionPhotoItem;
 
+// nodes is assumed sorted newest-first. Splits on the largest time-gap
+// between consecutive photos, recursively, until every chunk is no larger
+// than MAX_SECTION_SIZE.
+const splitOversizedSection = ( nodes: PhotoNode[] ): PhotoNode[][] => {
+  if ( nodes.length <= MAX_SECTION_SIZE ) {
+    return [nodes];
+  }
+  let splitIndex = 1;
+  let maxGap = -Infinity;
+  for ( let i = 1; i < nodes.length; i += 1 ) {
+    const gap = nodes[i - 1].timestamp - nodes[i].timestamp;
+    if ( gap > maxGap ) {
+      maxGap = gap;
+      splitIndex = i;
+    }
+  }
+  return [
+    ...splitOversizedSection( nodes.slice( 0, splitIndex ) ),
+    ...splitOversizedSection( nodes.slice( splitIndex ) ),
+  ];
+};
+
 // photos is assumed sorted newest-first, as returned by CameraRoll.getPhotos.
 // Inserts a header before the first photo of each run whose gap to the
-// previous (newer) photo exceeds SECTION_GAP_SECONDS.
+// previous (newer) photo exceeds SECTION_GAP_SECONDS. Sections larger than
+// MAX_SECTION_SIZE are further split on their largest internal time-gaps.
 const buildSectionedGalleryItems = (
   photos: PhotoNode[],
   getKey: ( node: PhotoNode ) => string,
 ): PhotoGalleryListItem[] => {
   const items: PhotoGalleryListItem[] = [];
   let currentSection: PhotoNode[] = [];
+  const sections: PhotoNode[][] = [];
 
   photos.forEach( ( node, index ) => {
     const previous = photos[index - 1];
@@ -35,20 +60,29 @@ const buildSectionedGalleryItems = (
       || ( previous.timestamp - node.timestamp ) > SECTION_GAP_SECONDS;
     if ( isNewSection ) {
       currentSection = [];
-      items.push( {
-        type: "header",
-        id: `header-${node.timestamp}-${index}`,
-        timestamp: node.timestamp,
-        nodes: currentSection,
-      } );
+      sections.push( currentSection );
     }
     currentSection.push( node );
-    items.push( {
-      type: "photo",
-      id: getKey( node ),
-      node,
-    } );
   } );
+
+  sections
+    .flatMap( splitOversizedSection )
+    .forEach( ( nodes, index ) => {
+      const [firstNode] = nodes;
+      items.push( {
+        type: "header",
+        id: `header-${firstNode.timestamp}-${index}`,
+        timestamp: firstNode.timestamp,
+        nodes,
+      } );
+      nodes.forEach( node => {
+        items.push( {
+          type: "photo",
+          id: getKey( node ),
+          node,
+        } );
+      } );
+    } );
 
   return items;
 };
