@@ -12,7 +12,7 @@ import {
 } from "components/SharedComponents";
 import { BottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
-import React, { useCallback, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import { preloadImage } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { useGridLayout, useTranslation } from "sharedHooks";
@@ -116,19 +116,23 @@ const GroupPhotos = ( {
   );
   const canCropSelectedPhotos = selectedPhotoUris.length > 0;
   const canDuplicateSelectedPhotos = selectedMediaCount > 0;
-  const cropSelectedPhotos = useCallback( () => {
-    if ( selectedPhotoUris.length === 0 ) {
-      return;
-    }
-    // Preload only the first image before navigating so ImageCropEditor finds
-    // its data ready during the nav transition. The remaining images are
-    // preloaded in the background by ImageCropEditor once the first is ready,
-    // so their loads don't contend with the first image's.
-    const allPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
-    const [firstPhoto] = allPhotos;
+
+  // Preload the first selected image as soon as it's selected so its data is
+  // usually ready by the time the user taps crop. The remaining images are
+  // preloaded in the background by ImageCropEditor once the first is ready,
+  // so their loads don't contend with the first image's. preloadImage caches
+  // and dedupes, so re-running on selection changes is cheap.
+  useEffect( ( ) => {
+    const [firstPhoto] = flattenAndOrderSelectedPhotos( selectedObservations );
     if ( firstPhoto ) {
       const { uri, cropOriginalUri, crop } = firstPhoto.image;
       preloadImage( uri, cropOriginalUri || uri, crop ?? null );
+    }
+  }, [selectedObservations] );
+
+  const cropSelectedPhotos = useCallback( () => {
+    if ( selectedPhotoUris.length === 0 ) {
+      return;
     }
     const [firstUri, ...remainingUris] = selectedPhotoUris;
     navigation.navigate( "ImageCropEditor", {
@@ -139,7 +143,7 @@ const GroupPhotos = ( {
       context: "groupPhotos",
       onCropSaved: clearSelection,
     } );
-  }, [clearSelection, navigation, selectedObservations, selectedPhotoUris] );
+  }, [clearSelection, navigation, selectedPhotoUris] );
 
   const allPhotosSelected = groupedPhotos.length > 0
     && selectedObservations.length === groupedPhotos.length;

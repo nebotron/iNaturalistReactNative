@@ -588,6 +588,28 @@ RCT_EXPORT_METHOD( exportPHAsset
     }];
 }
 
+// Loads an EXIF-oriented image downscaled to maxPixel on its longest side via
+// ImageIO, which subsamples during decode instead of decoding the full
+// resolution. Detection outputs normalized coords, so a downscaled input
+// yields the same bounds at a fraction of the decode cost.
+static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
+{
+  NSURL *url = [NSURL fileURLWithPath:path];
+  CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)url, nil );
+  if ( !src ) return nil;
+  NSDictionary *opts = @{
+    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+    (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform:   @YES,
+    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:          @( maxPixel ),
+  };
+  CGImageRef cg = CGImageSourceCreateThumbnailAtIndex( src, 0, (__bridge CFDictionaryRef)opts );
+  CFRelease( src );
+  if ( !cg ) return nil;
+  UIImage *image = [UIImage imageWithCGImage:cg];
+  CGImageRelease( cg );
+  return image;
+}
+
 RCT_EXPORT_METHOD( detectSubjectBounds
                   : ( NSString * )inputPath model
                   : ( NSString * )model resolver
@@ -595,7 +617,8 @@ RCT_EXPORT_METHOD( detectSubjectBounds
                   : ( RCTPromiseRejectBlock )reject )
 {
   NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  UIImage  *image = [UIImage imageWithContentsOfFile:input];
+  UIImage  *image = downscaledImageAtPath( input, 1024 )
+    ?: [UIImage imageWithContentsOfFile:input];
   if ( !image ) { resolve( [NSNull null] ); return; }
 
   NSDictionary *bounds = detectSubjectBoundsForImage( image );
