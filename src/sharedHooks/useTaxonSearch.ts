@@ -2,6 +2,7 @@ import { RealmContext } from "providers/contexts";
 import {
   useCallback, useEffect, useMemo, useState,
 } from "react";
+import Taxon from "realmModels/Taxon";
 import type { RealmTaxon } from "realmModels/types";
 import validateRealmSearch from "sharedHelpers/validateRealmSearch";
 import { useIconicTaxa } from "sharedHooks";
@@ -20,6 +21,13 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
   // "Brown-headed Cowbird" for a query of "brownheaded", did not come
   // back), so we fetch the cached taxa and match manually to guarantee
   // correct, hyphen/whitespace-agnostic substring matching offline.
+  //
+  // We normalize each taxon's name on the fly instead of reading the
+  // stored _searchableName, because that field is null for taxa written
+  // through the observation-save path (Observation.mapApiToRealm ->
+  // Taxon.mapApiToRealm never calls compileSearchableName) and may be
+  // stale on taxa cached before the current normalization. Recomputing
+  // guarantees every cached taxon matches all hyphen/space variants.
   const safeRealmSearch = useCallback( async ( searchString: string ) => {
     try {
       const { cleanedQuery } = validateRealmSearch( searchString );
@@ -28,7 +36,8 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       const allTaxa = realm.objects( "Taxon" );
       for ( let i = 0; i < allTaxa.length && matches.length < 50; i += 1 ) {
         const taxon = allTaxa[i];
-        if ( taxon._searchableName?.toLowerCase( ).includes( lowerQuery ) ) {
+        const searchableName = Taxon.compileSearchableName( taxon ).toLowerCase( );
+        if ( searchableName.includes( lowerQuery ) ) {
           matches.push( taxon );
         }
       }
