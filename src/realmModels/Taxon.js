@@ -230,7 +230,6 @@ class Taxon extends Realm.Object {
       },
       _searchableName: {
         type: "string",
-        indexed: "full-text",
         optional: true,
       },
       rank: "string?",

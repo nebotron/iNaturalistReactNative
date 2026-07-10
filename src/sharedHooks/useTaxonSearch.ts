@@ -19,8 +19,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     try {
       const { cleanedQuery } = validateRealmSearch( searchString );
       return await realm.objects( "Taxon" ).filtered(
-        "_searchableName TEXT $0 || _searchableName CONTAINS[c] $0"
-        + " LIMIT(50)",
+        "_searchableName CONTAINS[c] $0 LIMIT(50)",
         cleanedQuery,
       );
     } catch ( error ) {
