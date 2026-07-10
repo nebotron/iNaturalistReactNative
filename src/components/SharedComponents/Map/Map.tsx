@@ -54,6 +54,7 @@ const getDefaultRegion = ( initialLatitude, initialLongitude ) => ( {
 
 interface Props {
   children?: React.ReactNode;
+  mapChildren?: React.ReactNode;
   className?: string;
   currentLocationButtonClassName?: string;
   initialRegion?: Region;
@@ -87,6 +88,7 @@ interface Props {
 // for people who don't use GMaps (i.e. users in China)
 const Map = ( {
   children,
+  mapChildren,
   className = "flex-1",
   currentLocationButtonClassName,
   initialRegion,
@@ -527,6 +529,7 @@ const Map = ( {
             />
           )
         ) }
+        {mapChildren}
       </MapView>
       <CurrentLocationButton
         showCurrentLocationButton={showCurrentLocationButton}

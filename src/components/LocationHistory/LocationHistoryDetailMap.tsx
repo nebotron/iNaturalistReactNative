@@ -1,4 +1,3 @@
-import { useNavigation } from "@react-navigation/native";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import Map from "components/SharedComponents/Map/Map";
 import { Marker } from "react-native-maps";
@@ -19,7 +18,6 @@ const LocationHistoryDetailMap = (
   props: TabStackScreenProps<"LocationHistoryDetailMap">,
 ) => {
   const { params } = props.route;
-  const navigation = useNavigation();
 
   const {
     observationLat,
@@ -64,29 +62,31 @@ const LocationHistoryDetailMap = (
         initialRegion={initialRegion}
         showCurrentLocationButton
         showSwitchMapTypeButton
-        showsUserLocation
         zoomEnabled
         scrollEnabled
-      >
-        <Marker
-          coordinate={{ latitude: observationLat, longitude: observationLng }}
-          title="Photo Location"
-          description={observationDate}
-          pinColor={colors.inatGreen}
-        />
-        {hasTrackedLocation && (
-          <Marker
-            coordinate={{ latitude: trackedLat, longitude: trackedLng }}
-            title="Tracked Location"
-            description={
-              distanceMeters === null
-                ? "No nearby tracked location"
-                : `${Math.round(distanceMeters)} meters away`
-            }
-            pinColor={colors.blue}
-          />
+        mapChildren={(
+          <>
+            <Marker
+              coordinate={{ latitude: observationLat, longitude: observationLng }}
+              title="Photo Location"
+              description={observationDate}
+              pinColor={colors.inatGreen}
+            />
+            {hasTrackedLocation && (
+              <Marker
+                coordinate={{ latitude: trackedLat, longitude: trackedLng }}
+                title="Tracked Location"
+                description={
+                  distanceMeters === null
+                    ? "No nearby tracked location"
+                    : `${Math.round(distanceMeters)} meters away`
+                }
+                pinColor={colors.blue}
+              />
+            )}
+          </>
         )}
-      </Map>
+      />
     </ScreenShell>
   );
 };
