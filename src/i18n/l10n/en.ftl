@@ -849,10 +849,10 @@ Menu = Menu
 Meters-Away = { $meters } m away
 Missing-Date = Missing Date
 MISSING-EVIDENCE = MISSING EVIDENCE
-# Status shown when a photo has no EXIF location but a tracked location is available
-Missing-photo-location = Missing photo location
 # Status shown when a photo has neither an EXIF location nor a nearby tracked location
 Missing-photo-and-tracked-location = Missing photo and tracked location
+# Status shown when a photo has no EXIF location but a tracked location is available
+Missing-photo-location = Missing photo location
 Monthly-Donor = Monthly Donor
 Months = Months
 MONTHS = MONTHS
@@ -1062,9 +1062,9 @@ PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
 Photo-importer = Photo importer
+PHOTO-LICENSING = PHOTO LICENSING
 # Legend label for the marker showing a photo's EXIF location
 Photo-location = Photo location
-PHOTO-LICENSING = PHOTO LICENSING
 Photos = Photos
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Title of screen asking for permission to access the camera when access was denied
