@@ -31,6 +31,14 @@ const { useQuery, useRealm } = RealmContext;
 // they're within this many milliseconds of each other
 const MAX_MATCH_GAP_MS = 12 * 60 * 60 * 1000;
 
+// observed_on is only populated once an observation has round-tripped
+// through the server; newly-created, not-yet-synced observations only have
+// observed_on_string set, so it must be used as a fallback everywhere we
+// need an observation's date.
+const getObservedOnMs = ( obs: RealmObservation ) => new Date(
+  obs.observed_on_string ?? obs.observed_on ?? 0,
+).getTime();
+
 const findNearestPoint = ( points: ArrayLike<LocationHistoryPoint>, targetMs: number ) => {
   if ( points.length === 0 ) return null;
 
@@ -109,9 +117,9 @@ const LocationHistory = ( ) => {
       query: obsList => obsList
         .filtered(
           "( _deleted_at == nil OR _pending_deletion == false OR _pending_deletion == nil ) "
-          + "AND latitude != null AND longitude != null AND observed_on != nil",
-        )
-        .sorted( "observed_on", true ),
+          + "AND latitude != null AND longitude != null "
+          + "AND ( observed_on != nil OR observed_on_string != nil )",
+        ),
     },
     [],
   ) as unknown as RealmObservation[];
@@ -122,19 +130,20 @@ const LocationHistory = ( ) => {
       query: obsList => obsList
         .filtered(
           "( _deleted_at == nil OR _pending_deletion == false OR _pending_deletion == nil ) "
-          + "AND ( latitude == nil OR longitude == nil ) AND observed_on != nil",
+          + "AND ( latitude == nil OR longitude == nil ) "
+          + "AND ( observed_on != nil OR observed_on_string != nil )",
         ),
     },
     [],
   ) as unknown as RealmObservation[];
 
   const applicableObservations = useMemo( ( ) => observationsMissingLocation.filter( obs => {
-    const targetMs = new Date( obs.observed_on ?? 0 ).getTime();
+    const targetMs = getObservedOnMs( obs );
     return !!findNearestPoint( historyPoints, targetMs );
   } ), [observationsMissingLocation, historyPoints] );
 
   const photoComparisons = useMemo( ( ) => observations.map( obs => {
-    const targetMs = new Date( obs.observed_on ?? 0 ).getTime();
+    const targetMs = getObservedOnMs( obs );
     const nearestPoint = findNearestPoint( historyPoints, targetMs );
     const distanceMeters = nearestPoint && obs.latitude != null && obs.longitude != null
       ? distanceInMeters(
@@ -147,11 +156,12 @@ const LocationHistory = ( ) => {
 
     return {
       uuid: obs.uuid,
-      observed_on: obs.observed_on ?? null,
+      observed_on: obs.observed_on_string ?? obs.observed_on ?? null,
       photoUri: Photo.displayLocalOrRemoteSquarePhoto( photoFromObservation( obs ) ),
       distanceMeters,
+      targetMs,
     };
-  } ), [observations, historyPoints] );
+  } ).sort( ( a, b ) => b.targetMs - a.targetMs ), [observations, historyPoints] );
 
   const handleToggleTracking = useCallback( async ( newValue: boolean ) => {
     if ( newValue ) {
@@ -172,7 +182,7 @@ const LocationHistory = ( ) => {
     setIsApplyingLocation( true );
     let appliedCount = 0;
     for ( const obs of applicableObservations ) {
-      const targetMs = new Date( obs.observed_on ?? 0 ).getTime();
+      const targetMs = getObservedOnMs( obs );
       const nearestPoint = findNearestPoint( historyPoints, targetMs );
       if ( nearestPoint ) {
         // eslint-disable-next-line no-await-in-loop
