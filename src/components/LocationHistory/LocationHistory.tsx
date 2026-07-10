@@ -210,13 +210,12 @@ const LocationHistory = ( ) => {
   }, [applicableObservations, historyPoints, realm, t] );
 
   const handlePhotoLocationPress = useCallback( ( item ) => {
-    if ( item.observationLat != null && item.observationLng != null
-      && item.trackedLat != null && item.trackedLng != null ) {
+    if ( item.observationLat != null && item.observationLng != null ) {
       navigation.navigate( "LocationHistoryDetailMap", {
         observationLat: item.observationLat,
         observationLng: item.observationLng,
-        trackedLat: item.trackedLat,
-        trackedLng: item.trackedLng,
+        trackedLat: item.trackedLat || item.observationLat,
+        trackedLng: item.trackedLng || item.observationLng,
         observationDate: item.observed_on || "",
         distanceMeters: item.distanceMeters,
       } );

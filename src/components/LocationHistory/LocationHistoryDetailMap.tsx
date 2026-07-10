@@ -30,7 +30,18 @@ const LocationHistoryDetailMap = (
     distanceMeters,
   } = params as LocationHistoryDetailMapParams;
 
+  const hasTrackedLocation = trackedLat !== observationLat || trackedLng !== observationLng;
+
   const initialRegion = useMemo(() => {
+    if (!hasTrackedLocation) {
+      return {
+        latitude: observationLat,
+        longitude: observationLng,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
+      };
+    }
+
     const minLat = Math.min(observationLat, trackedLat);
     const maxLat = Math.max(observationLat, trackedLat);
     const minLng = Math.min(observationLng, trackedLng);
@@ -45,7 +56,7 @@ const LocationHistoryDetailMap = (
       latitudeDelta: Math.max(latDelta, 0.1),
       longitudeDelta: Math.max(lngDelta, 0.1),
     };
-  }, [observationLat, observationLng, trackedLat, trackedLng]);
+  }, [observationLat, observationLng, trackedLat, trackedLng, hasTrackedLocation]);
 
   return (
     <ScreenShell>
@@ -63,16 +74,18 @@ const LocationHistoryDetailMap = (
           description={observationDate}
           pinColor={colors.inatGreen}
         />
-        <Marker
-          coordinate={{ latitude: trackedLat, longitude: trackedLng }}
-          title="Tracked Location"
-          description={
-            distanceMeters === null
-              ? "No nearby tracked location"
-              : `${Math.round(distanceMeters)} meters away`
-          }
-          pinColor={colors.blue}
-        />
+        {hasTrackedLocation && (
+          <Marker
+            coordinate={{ latitude: trackedLat, longitude: trackedLng }}
+            title="Tracked Location"
+            description={
+              distanceMeters === null
+                ? "No nearby tracked location"
+                : `${Math.round(distanceMeters)} meters away`
+            }
+            pinColor={colors.blue}
+          />
+        )}
       </Map>
     </ScreenShell>
   );
