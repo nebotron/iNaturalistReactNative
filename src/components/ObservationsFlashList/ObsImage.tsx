@@ -110,6 +110,7 @@ const ObsImage = ( {
           // only React Native's own Image loader resolves those on iOS.
           ? (
             <Image
+              key={uri.uri}
               className={classNames( CLASS_NAMES )}
               style={brightnessStyle}
               testID="ObsList.photo"
@@ -119,6 +120,7 @@ const ObsImage = ( {
           )
           : (
             <FasterImageView
+              key={uri.uri}
               className={classNames( CLASS_NAMES )}
               style={brightnessStyle}
               testID="ObsList.photo"
