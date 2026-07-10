@@ -112,8 +112,9 @@ const GroupPhotosContainer = ( ): Node => {
         photoCount: totalPhotos,
         observationCount: groupedPhotos.length,
       } ),
+      onBackPress: ( ) => exitObservationFlow( ),
     } );
-  }, [totalPhotos, groupedPhotos, navigation] );
+  }, [totalPhotos, groupedPhotos, navigation, exitObservationFlow] );
 
   const selectAllPhotos = () => {
     setSelectedIndices( groupedPhotos.map( ( _obs, index ) => index ) );

@@ -37,7 +37,9 @@ const ContextHeader = ( {
   };
 
   const handleBackNavigation = ( ) => {
-    if ( navigation.canGoBack( ) ) {
+    if ( options.onBackPress ) {
+      options.onBackPress( );
+    } else if ( navigation.canGoBack( ) ) {
       navigation.goBack( );
     } else {
       navigation.navigate( "TabNavigator", {
