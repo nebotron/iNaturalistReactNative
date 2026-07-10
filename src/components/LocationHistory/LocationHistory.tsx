@@ -155,12 +155,13 @@ const LocationHistory = ( ) => {
 
   const handleToggleTracking = useCallback( async ( newValue: boolean ) => {
     if ( newValue ) {
-      const started = await startLocationHistoryTracking();
-      if ( !started ) {
-        Alert.alert(
-          t( "Location-Permission-Required" ),
-          t( "Enable-location-access-to-track-your-location-in-the-background" ),
-        );
+      const result = await startLocationHistoryTracking();
+      if ( !result.success ) {
+        const description = t( "Enable-location-access-to-track-your-location-in-the-background" );
+        const message = result.reason
+          ? `${description}\n\n${result.reason}`
+          : description;
+        Alert.alert( t( "Location-Permission-Required" ), message );
       }
     } else {
       await stopLocationHistoryTracking();

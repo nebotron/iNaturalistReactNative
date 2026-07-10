@@ -157,22 +157,44 @@ const getBackgroundServiceOptions = ( ) => ( {
   parameters: {},
 } );
 
-const requestLocationHistoryTrackingPermissions = async ( ): Promise<boolean> => {
+export interface StartTrackingResult {
+  success: boolean;
+  // Human-readable diagnostic detail, only set when success is false
+  reason?: string;
+}
+
+const describePermissionResults = ( results: Record<string, string> ): string => (
+  Object.entries( results )
+    .map( ( [permission, status] ) => `${permission}: ${status}` )
+    .join( ", " )
+);
+
+const requestLocationHistoryTrackingPermissions = async ( ): Promise<StartTrackingResult> => {
   const foregroundResult = await requestMultiple( LOCATION_PERMISSIONS );
   const foregroundGranted = Object.values( foregroundResult )
     .every( result => result === RESULTS.GRANTED );
-  if ( !foregroundGranted ) return false;
+  if ( !foregroundGranted ) {
+    return { success: false, reason: describePermissionResults( foregroundResult ) };
+  }
 
-  if ( BACKGROUND_LOCATION_PERMISSIONS.length === 0 ) return true;
+  if ( BACKGROUND_LOCATION_PERMISSIONS.length === 0 ) return { success: true };
 
   const backgroundResult = await requestMultiple( BACKGROUND_LOCATION_PERMISSIONS );
-  return Object.values( backgroundResult ).every( result => result === RESULTS.GRANTED );
+  const backgroundGranted = Object.values( backgroundResult )
+    .every( result => result === RESULTS.GRANTED );
+  if ( !backgroundGranted ) {
+    return { success: false, reason: describePermissionResults( backgroundResult ) };
+  }
+  return { success: true };
 };
 
-export const startLocationHistoryTracking = async ( ): Promise<boolean> => {
+export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResult> => {
   try {
-    const granted = await requestLocationHistoryTrackingPermissions();
-    if ( !granted ) return false;
+    const permissionResult = await requestLocationHistoryTrackingPermissions();
+    if ( !permissionResult.success ) {
+      logger.warn( "Location history tracking permissions not granted", permissionResult.reason );
+      return permissionResult;
+    }
 
     if ( Platform.OS === "android" && !BackgroundService.isRunning( ) ) {
       await BackgroundService.start( backgroundTask, getBackgroundServiceOptions( ) );
@@ -190,10 +212,13 @@ export const startLocationHistoryTracking = async ( ): Promise<boolean> => {
       Geolocation.setRNConfiguration( DEFAULT_GEOLOCATION_CONFIG );
     }
     store.set( TRACKING_ENABLED_KEY, true );
-    return true;
+    return { success: true };
   } catch ( error ) {
     logger.error( "Failed to start location history tracking", error );
-    return false;
+    const reason = error instanceof Error
+      ? error.message
+      : String( error );
+    return { success: false, reason };
   }
 };
 
