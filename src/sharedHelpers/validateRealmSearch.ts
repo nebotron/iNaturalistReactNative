@@ -10,7 +10,12 @@ const validateRealmSearch = ( searchString: string ) => {
   const hasNonAlphanumeric = /[^a-zA-Z0-9\s]/.test( searchString );
 
   if ( hasNonAlphanumeric ) {
-    const cleanedString = searchString.replace( /[^a-zA-Z0-9\s]/g, "" );
+    // Treat hyphens as word separators (e.g. "Ring-billed Gull") instead of
+    // stripping them, so a search of "Ring-billed" still matches.
+    const cleanedString = searchString
+      .replace( /-/g, " " )
+      .replace( /[^a-zA-Z0-9\s]/g, "" )
+      .replace( /\s+/g, " " );
 
     if ( !cleanedString.trim( ) ) {
       throw new Error( "Search string contains only non-alphanumeric characters" );
