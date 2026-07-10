@@ -125,7 +125,7 @@ const backgroundTask = async ( ) => {
       recordPosition,
       error => logger.warn( "watchPosition error", error ),
       {
-        enableHighAccuracy: false,
+        enableHighAccuracy: true,
         distanceFilter: MIN_DISTANCE_METERS,
         interval: MIN_INTERVAL_MS,
         fastestInterval: MIN_INTERVAL_MS,
@@ -204,7 +204,7 @@ export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResu
         recordPosition,
         error => logger.warn( "watchPosition error", error ),
         {
-          enableHighAccuracy: false,
+          enableHighAccuracy: true,
           distanceFilter: MIN_DISTANCE_METERS,
           useSignificantChanges: true,
         },
