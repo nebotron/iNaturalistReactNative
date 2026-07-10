@@ -133,6 +133,7 @@ const ObsImage = ( {
         <ObsImageZoomable
           key={uri?.uri}
           uri={displayUri}
+          logUri={uri.uri}
           imageWidth={detection.imageWidth}
           imageHeight={detection.imageHeight}
           initialCrop={detection.crop}

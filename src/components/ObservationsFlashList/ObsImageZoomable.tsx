@@ -22,6 +22,7 @@ const MAX_SCALE = 100;
 
 interface Props {
   uri: string;
+  logUri: string;
   imageWidth: number;
   imageHeight: number;
   initialCrop: NormalizedCrop;
@@ -67,6 +68,7 @@ const frameCropTransform = (
 // one finger scrolls the list; two fingers are required to pan or zoom.
 const ObsImageZoomable = ( {
   uri,
+  logUri,
   imageWidth,
   imageHeight,
   initialCrop,
@@ -75,6 +77,8 @@ const ObsImageZoomable = ( {
   const transformRef = useRef<ImageZoomTransformRefs | null>( null );
 
   // On gesture end, immediately log the framed region as a ground-truth crop.
+  // Keyed by logUri (the canonical remote photo URL) rather than uri (which
+  // may be a tone-mapped local file path) so the entry is findable on lookup.
   const handleInteractionEnd = useCallback( ( ) => {
     if ( !transformRef.current ) return;
     const crop = imageZoomTransformToNormalizedCrop(
@@ -85,8 +89,8 @@ const ObsImageZoomable = ( {
       size,
       readImageZoomTransform( transformRef.current ),
     );
-    saveAnimalCrop( uri, crop );
-  }, [uri, imageWidth, imageHeight, size] );
+    saveAnimalCrop( logUri, crop );
+  }, [logUri, imageWidth, imageHeight, size] );
 
   const cropPanContext: CropPanContext = {
     imageWidth,
