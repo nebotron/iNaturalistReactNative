@@ -1,13 +1,14 @@
-import { fetchUnviewedObservationUpdatesCount } from "api/observations";
-import type { ApiOpts } from "api/types";
+import { useFocusEffect } from "@react-navigation/native";
 import { NotificationOnboarding } from "components/OnboardingModal/PivotCards";
 import { Tabs } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
-import React, { useEffect, useRef, useState } from "react";
+import React, {
+  useCallback, useEffect, useRef, useState,
+} from "react";
 import { EventRegister } from "react-native-event-listeners";
 import {
-  useAuthenticatedQuery, useCurrentUser, useLayoutPrefs, useTranslation,
+  useCurrentUser, useLayoutPrefs, useTranslation, useUnviewedNotificationsCount,
 } from "sharedHooks";
 
 import NotificationsContainer from "./NotificationsContainer";
@@ -29,22 +30,16 @@ const Notifications = ( ) => {
   const { isDefaultMode } = useLayoutPrefs( );
   const currentUser = useCurrentUser( );
 
-  const { data: ownerUnviewed } = useAuthenticatedQuery(
-    ["NotificationsTab", "notificationsCount", OWNER_TAB],
-    ( optsWithAuth: ApiOpts ) => fetchUnviewedObservationUpdatesCount(
-      { observations_by: "owner" },
-      optsWithAuth,
-    ),
-    { enabled: !!currentUser },
-  );
+  const {
+    ownerUnviewedCount: ownerUnviewed,
+    followingUnviewedCount: otherUnviewed,
+    refetch: refetchUnviewedCounts,
+  } = useUnviewedNotificationsCount( );
 
-  const { data: otherUnviewed } = useAuthenticatedQuery(
-    ["NotificationsTab", "notificationsCount", OTHER_TAB],
-    ( optsWithAuth: ApiOpts ) => fetchUnviewedObservationUpdatesCount(
-      { observations_by: "following" },
-      optsWithAuth,
-    ),
-    { enabled: !!currentUser },
+  useFocusEffect(
+    useCallback( ( ) => {
+      refetchUnviewedCounts( );
+    }, [refetchUnviewedCounts] ),
   );
 
   useEffect( ( ) => {
