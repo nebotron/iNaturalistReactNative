@@ -626,7 +626,7 @@ Help-protect-species = Help protect species
 Help-us-translate-the-app = Help us translate the app!
 Hide = Hide
 # Label for a toggle that hides photos already saved as observations
-Hide-already-saved-photos = Hide already saved photos
+Hide-already-saved-photos = Hide Saved
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
 # Label used for a stop added to a route from a wildlife hotspot

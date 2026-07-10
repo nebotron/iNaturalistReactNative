@@ -344,16 +344,15 @@ const PhotoGallery = ( {
             testID="PhotoGallery.selectSinceLastImport"
           />
         )}
-        {selectedCount > 0 && (
-          <INatIconButton
-            icon="checkmark"
-            onPress={handleDone}
-            accessibilityLabel={t( "DONE" )}
-            size={22}
-            color={colors.inatGreen}
-            testID="PhotoGallery.done"
-          />
-        )}
+        <INatIconButton
+          icon="checkmark"
+          onPress={handleDone}
+          accessibilityLabel={t( "DONE" )}
+          disabled={selectedCount === 0}
+          size={22}
+          color={colors.inatGreen}
+          testID="PhotoGallery.done"
+        />
       </View>
       <FlashList
         data={galleryItems}
