@@ -170,7 +170,7 @@ const GroupPhotosContainer = ( ): Node => {
       const containsSelected = mostRecentPhoto && obs.photos?.includes( mostRecentPhoto );
 
       if ( containsSelected ) {
-        const combinedGroup = { photos: orderedPhotos };
+        const combinedGroup = { photos: orderedPhotos, soundUri: null };
         if ( selectedSoundUris.length > 0 ) {
           combinedGroup.soundUri = selectedSoundUris[0];
         }
@@ -189,7 +189,7 @@ const GroupPhotosContainer = ( ): Node => {
     } );
 
     // Extra selected sounds (beyond the first) remain as separate items
-    for ( let i = 1; i < selectedSoundUris.length; i++ ) {
+    for ( let i = 1; i < selectedSoundUris.length; i += 1 ) {
       newObsList.push( { soundUri: selectedSoundUris[i] } );
     }
 
@@ -207,7 +207,9 @@ const GroupPhotosContainer = ( ): Node => {
 
     selectedObservations.forEach( obs => {
       // Count photos + sound as separate items for the threshold check
-      const numItems = ( obs.photos?.length || 0 ) + ( obs.soundUri ? 1 : 0 );
+      const numItems = ( obs.photos?.length || 0 ) + ( obs.soundUri
+        ? 1
+        : 0 );
       if ( numItems > maxCombinedItems ) {
         maxCombinedItems = numItems;
       }

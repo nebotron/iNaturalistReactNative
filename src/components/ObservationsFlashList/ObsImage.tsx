@@ -5,8 +5,8 @@ import React, {
   useCallback, useState,
 } from "react";
 import type { LayoutChangeEvent } from "react-native";
-import useAutoBrightnessForUri from "sharedHelpers/useAutoBrightnessForUri";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
+import useToneMappedBrightnessUri from "sharedHelpers/useToneMappedBrightnessUri";
 
 import ObsImageZoomable from "./ObsImageZoomable";
 
@@ -66,12 +66,8 @@ const ObsImage = ( {
     ? detection?.crop // undefined until detection resolves
     : null; // no detection → full-image measurement
 
-  const autoBrightness = useAutoBrightnessForUri( brightnessUri, brightnessCrop );
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const brightnessStyle: any = autoBrightness !== 1.0
-    ? { filter: [{ brightness: autoBrightness }] }
-    : null;
+  const toneMappedUri = useToneMappedBrightnessUri( brightnessUri, brightnessCrop );
+  const displayUri = toneMappedUri ?? uri?.uri;
 
   // Once subject detection resolves and the tile is measured, render the
   // photo through the shared image-zoom engine so a two-finger gesture zooms
@@ -104,43 +100,41 @@ const ObsImage = ( {
           size={iconicTaxonIconSize}
         />
       </View>
-      { uri?.uri && !showZoomable && (
-        uri.uri.startsWith( "ph://" )
+      { displayUri && !showZoomable && (
+        displayUri.startsWith( "ph://" )
           // FasterImageView (SDWebImage) can't load ph:// PHAsset identifiers;
-          // only React Native's own Image loader resolves those on iOS.
+          // only React Native's own Image loader resolves those on iOS. Once
+          // tone-mapped, displayUri is always a plain file:// path instead.
           ? (
             <Image
               className={classNames( CLASS_NAMES )}
-              style={brightnessStyle}
               testID="ObsList.photo"
               resizeMode="cover"
-              source={{ uri: uri.uri }}
+              source={{ uri: displayUri }}
             />
           )
           : (
             <FasterImageView
               className={classNames( CLASS_NAMES )}
-              style={brightnessStyle}
               testID="ObsList.photo"
               accessibilityIgnoresInvertColors
               fadeDuration={0}
               source={{
-                url: uri.uri,
+                url: displayUri,
                 cachePolicy: "discWithCacheControl",
                 resizeMode: "cover",
               }}
             />
           )
       ) }
-      { showZoomable && detection && uri?.uri && containerSize && (
+      { showZoomable && detection && displayUri && containerSize && (
         <ObsImageZoomable
-          key={uri.uri}
-          uri={uri.uri}
+          key={uri?.uri}
+          uri={displayUri}
           imageWidth={detection.imageWidth}
           imageHeight={detection.imageHeight}
           initialCrop={detection.crop}
           size={containerSize}
-          brightnessStyle={brightnessStyle}
         />
       ) }
       { opaque && (

@@ -24,6 +24,7 @@ import com.google.mlkit.vision.objects.defaults.ObjectDetectorOptions
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
+import kotlin.math.roundToInt
 
 class ImageCropperModule(
   reactContext: ReactApplicationContext,
@@ -285,6 +286,72 @@ class ImageCropperModule(
       promise.resolve( normalizedOutput )
     } catch ( error: Exception ) {
       promise.reject( "CROP_FAILED", error.message, error )
+    }
+  }
+
+  // Rational tone curve: output = k·x / (1 + (k-1)·x). Fixed points at 0→0 and
+  // 1→1, so unlike a flat multiply it can never push highlights past white or
+  // crush shadows to black: shadows lift by roughly k, while near-white
+  // pixels barely move (slope 1/k near x=1).
+  private fun toneCurveChannel( value: Int, k: Float ): Int {
+    val x = value / 255f
+    val y = ( k * x ) / ( 1f + ( k - 1f ) * x )
+    return ( y * 255f ).roundToInt().coerceIn( 0, 255 )
+  }
+
+  // Applies toneCurveChannel() per pixel/channel to the whole image (scaled
+  // down to fit within maxDimension on its longest side, since this is used
+  // for thumbnail display) and writes the result as a JPEG to outputPath.
+  @ReactMethod
+  fun adjustImageBrightness(
+    inputPath: String,
+    adjustment: Double,
+    maxDimension: Int,
+    outputPath: String,
+    promise: Promise,
+  ) {
+    try {
+      val normalizedInput = inputPath.replace( "file://", "" )
+      val normalizedOutput = outputPath.replace( "file://", "" )
+      val rawBitmap = BitmapFactory.decodeFile( normalizedInput )
+      if ( rawBitmap == null ) {
+        promise.reject( "BRIGHTNESS_FAILED", "Could not decode image" )
+        return
+      }
+      val oriented = applyExifRotation( normalizedInput, rawBitmap )
+      if ( oriented != rawBitmap ) rawBitmap.recycle()
+
+      val scale = minOf( 1f, maxDimension.toFloat() / maxOf( oriented.width, oriented.height ) )
+      val w = maxOf( 1, ( oriented.width * scale ).toInt() )
+      val h = maxOf( 1, ( oriented.height * scale ).toInt() )
+      val scaled = if ( scale < 1f ) {
+        Bitmap.createScaledBitmap( oriented, w, h, true )
+      } else {
+        oriented
+      }
+      if ( scaled != oriented ) oriented.recycle()
+
+      val k = adjustment.toFloat()
+      val pixels = IntArray( w * h )
+      scaled.getPixels( pixels, 0, w, 0, 0, w, h )
+      for ( i in pixels.indices ) {
+        val p = pixels[i]
+        val a = ( p ushr 24 ) and 0xFF
+        val r = toneCurveChannel( ( p ushr 16 ) and 0xFF, k )
+        val g = toneCurveChannel( ( p ushr 8 ) and 0xFF, k )
+        val b = toneCurveChannel( p and 0xFF, k )
+        pixels[i] = ( a shl 24 ) or ( r shl 16 ) or ( g shl 8 ) or b
+      }
+      scaled.setPixels( pixels, 0, w, 0, 0, w, h )
+
+      File( normalizedOutput ).parentFile?.mkdirs()
+      FileOutputStream( normalizedOutput ).use { out ->
+        scaled.compress( Bitmap.CompressFormat.JPEG, 90, out )
+      }
+      scaled.recycle()
+      promise.resolve( normalizedOutput )
+    } catch ( error: Exception ) {
+      promise.reject( "BRIGHTNESS_FAILED", error.message, error )
     }
   }
 
