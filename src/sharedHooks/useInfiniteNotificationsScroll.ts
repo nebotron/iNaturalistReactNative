@@ -187,6 +187,15 @@ const useInfiniteNotificationsScroll = (
     }
   }, [isFetching] );
 
+  // Stable sort: unviewed notifications float to the top, newest-first
+  // within each group (the server already returns pages newest-first).
+  const notifications = useMemo(
+    ( ) => flatten( data?.pages ).sort(
+      ( a: Notification, b: Notification ) => Number( a.viewed ) - Number( b.viewed ),
+    ),
+    [data],
+  );
+
   return {
     refetch,
     isError,
@@ -197,7 +206,7 @@ const useInfiniteNotificationsScroll = (
     fetchNextPage: currentUser
       ? fetchNextPage
       : ( ) => undefined,
-    notifications: flatten( data?.pages ),
+    notifications,
   };
 };
 
