@@ -11,7 +11,9 @@ export type PreloadResult = {
 
 // Module-level cache so preloaded data survives navigation.replace cycles
 export const preloadCache = new Map<string, PreloadResult>( );
-export const preloadInFlight = new Set<string>( );
+// Track in-flight loads by their promise so callers can await (and dedupe)
+// an ongoing preload instead of kicking off duplicate, contending work.
+export const preloadInFlight = new Map<string, Promise<PreloadResult | null>>( );
 
 export async function loadImageData(
   imageUri: string,
@@ -34,23 +36,33 @@ export async function loadImageData(
   return { localUri: resolvedUri, size, crop };
 }
 
+// Returns a promise resolving to the preload result. Reuses the module-level
+// cache and dedupes concurrent loads for the same imageUri so the same
+// expensive asset export + subject detection never runs twice at once.
 export function preloadImage(
   imageUri: string,
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
-) {
-  if ( preloadCache.has( imageUri ) || preloadInFlight.has( imageUri ) ) {
-    return;
+): Promise<PreloadResult | null> {
+  const cached = preloadCache.get( imageUri );
+  if ( cached ) {
+    return Promise.resolve( cached );
   }
-  preloadInFlight.add( imageUri );
-  loadImageData( imageUri, cropSourceUri, existingSavedCrop )
+  const inFlight = preloadInFlight.get( imageUri );
+  if ( inFlight ) {
+    return inFlight;
+  }
+  const promise = loadImageData( imageUri, cropSourceUri, existingSavedCrop )
     .then( result => {
       if ( result ) {
         preloadCache.set( imageUri, result );
       }
+      return result;
     } )
-    .catch( ( ) => {} )
+    .catch( ( ) => null )
     .finally( ( ) => {
       preloadInFlight.delete( imageUri );
     } );
+  preloadInFlight.set( imageUri, promise );
+  return promise;
 }
