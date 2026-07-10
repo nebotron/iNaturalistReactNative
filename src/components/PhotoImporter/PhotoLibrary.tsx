@@ -25,7 +25,7 @@ import React, {
   useCallback,
 } from "react";
 import {
-  NativeModules, Platform,
+  Alert, NativeModules, Platform,
 } from "react-native";
 import type { Asset } from "react-native-image-picker";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
@@ -264,6 +264,12 @@ const PhotoLibrary = ( ) => {
       navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
     } catch ( error ) {
       logger.error( "Error importing photos from camera roll", error );
+      Alert.alert(
+        "Error importing photos",
+        error instanceof Error
+          ? `${error.message}\n\n${error.stack ?? ""}`
+          : String( error ),
+      );
       exitObservationFlow( );
     }
   }, [
