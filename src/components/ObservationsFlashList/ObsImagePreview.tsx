@@ -227,7 +227,7 @@ const ObsImagePreview = ( {
           className={classNames(
             "flex items-center justify-center",
             "rounded-full",
-            "absolute m-2.5 right-0",
+            "absolute top-2.5 right-2.5",
             {
               "bg-white": selected,
               "w-[24px] h-[24px]": selected,
