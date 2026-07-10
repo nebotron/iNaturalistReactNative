@@ -1,18 +1,22 @@
 import { photoFromObservation } from "components/ObservationsFlashList/util";
 import {
   Body2,
+  Button,
   List2,
   SwitchRow,
 } from "components/SharedComponents";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { Image, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
-import React, { useCallback, useMemo } from "react";
+import React, {
+  useCallback, useMemo, useState,
+} from "react";
 import { Alert, FlatList } from "react-native";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
 import Observation from "realmModels/Observation";
 import Photo from "realmModels/Photo";
 import type { RealmObservation } from "realmModels/types";
+import applyTrackedLocationToObservation from "sharedHelpers/applyTrackedLocationToPhotos";
 import distanceInMeters from "sharedHelpers/geoDistance";
 import {
   startLocationHistoryTracking,
@@ -21,7 +25,7 @@ import {
 } from "sharedHelpers/locationHistoryTracker";
 import { useTranslation } from "sharedHooks";
 
-const { useQuery } = RealmContext;
+const { useQuery, useRealm } = RealmContext;
 
 // Photo location and tracked location are considered comparable only if
 // they're within this many milliseconds of each other
@@ -87,7 +91,9 @@ const PhotoLocationRow = ( { item }: { item: {
 
 const LocationHistory = ( ) => {
   const { t } = useTranslation();
+  const realm = useRealm();
   const [trackingEnabled] = useLocationHistoryTrackingEnabled();
+  const [isApplyingLocation, setIsApplyingLocation] = useState( false );
 
   const historyPoints = useQuery(
     {
@@ -109,6 +115,23 @@ const LocationHistory = ( ) => {
     },
     [],
   ) as unknown as RealmObservation[];
+
+  const observationsMissingLocation = useQuery(
+    {
+      type: Observation,
+      query: obsList => obsList
+        .filtered(
+          "( _deleted_at == nil OR _pending_deletion == false OR _pending_deletion == nil ) "
+          + "AND ( latitude == nil OR longitude == nil ) AND observed_on != nil",
+        ),
+    },
+    [],
+  ) as unknown as RealmObservation[];
+
+  const applicableObservations = useMemo( ( ) => observationsMissingLocation.filter( obs => {
+    const targetMs = new Date( obs.observed_on ?? 0 ).getTime();
+    return !!findNearestPoint( historyPoints, targetMs );
+  } ), [observationsMissingLocation, historyPoints] );
 
   const photoComparisons = useMemo( ( ) => observations.map( obs => {
     const targetMs = new Date( obs.observed_on ?? 0 ).getTime();
@@ -144,6 +167,29 @@ const LocationHistory = ( ) => {
     }
   }, [t] );
 
+  const handleApplyLocation = useCallback( async ( ) => {
+    setIsApplyingLocation( true );
+    let appliedCount = 0;
+    for ( const obs of applicableObservations ) {
+      const targetMs = new Date( obs.observed_on ?? 0 ).getTime();
+      const nearestPoint = findNearestPoint( historyPoints, targetMs );
+      if ( nearestPoint ) {
+        // eslint-disable-next-line no-await-in-loop
+        const applied = await applyTrackedLocationToObservation( realm, obs, {
+          latitude: nearestPoint.latitude,
+          longitude: nearestPoint.longitude,
+          accuracy: nearestPoint.accuracy,
+        } );
+        if ( applied ) appliedCount += 1;
+      }
+    }
+    setIsApplyingLocation( false );
+    Alert.alert(
+      t( "Location-Applied" ),
+      t( "X-Photos-Updated-With-Tracked-Location", { count: appliedCount } ),
+    );
+  }, [applicableObservations, historyPoints, realm, t] );
+
   return (
     <ScreenShell>
       <FlatList
@@ -162,9 +208,22 @@ const LocationHistory = ( ) => {
             <Body2 className="text-darkGray mb-3">
               {t( "Location-history-lets-you-compare-photos-to-your-tracked-location" )}
             </Body2>
-            <List2>
+            <List2 className="mb-3">
               {t( "X-Location-Points-Recorded", { count: historyPoints.length } )}
             </List2>
+            {applicableObservations.length > 0 && (
+              <Button
+                text={t(
+                  "Apply-Tracked-Location-to-X-Photos",
+                  { count: applicableObservations.length },
+                )}
+                onPress={handleApplyLocation}
+                loading={isApplyingLocation}
+                disabled={isApplyingLocation}
+                level="focus"
+                testID="LocationHistory.ApplyLocationButton"
+              />
+            )}
           </View>
         )}
         ListEmptyComponent={(

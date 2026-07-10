@@ -150,6 +150,12 @@ APP-LANGUAGE = APP LANGUAGE
 apple-full-name = { JOIN($namePrefix, $givenName, $middleName, $nickname, $familyName, $nameSuffix, separator: " ") }
 APPLY-FILTERS = APPLY FILTERS
 Apply-filters = Apply filters
+# Button that writes tracked location history into photos missing GPS EXIF data
+Apply-Tracked-Location-to-X-Photos =
+    { $count ->
+        [one] Apply Tracked Location to { $count } Photo
+       *[other] Apply Tracked Location to { $count } Photos
+    }
 # Month of April
 April = April
 Are-you-an-educator = Are you an educator wanting to use iNaturalist with your students?
@@ -793,6 +799,8 @@ Loads-content-that-requires-an-Internet-connection = Loads content that requires
 LOCATION = LOCATION
 Location = Location
 Location-accuracy-is-too-imprecise = Location accuracy is too imprecise to help identifiers. Please zoom in.
+# Alert title after applying tracked location to photos missing GPS data
+Location-Applied = Location Applied
 LOCATION-HISTORY = LOCATION HISTORY
 Location-history-lets-you-compare-photos-to-your-tracked-location =
     See how closely your photos' built-in GPS location matches where you were
@@ -1654,6 +1662,12 @@ X-PHOTOS =
     { $photoCount ->
         [one] 1 PHOTO
        *[other] { $photoCount } PHOTOS
+    }
+# Result message after writing tracked location into photos missing GPS data
+X-Photos-Updated-With-Tracked-Location =
+    { $count ->
+        [one] Updated { $count } photo with your tracked location.
+       *[other] Updated { $count } photos with your tracked location.
     }
 # Displays number of photos and observations a user has selected from the camera roll
 X-PHOTOS-X-OBSERVATIONS =
