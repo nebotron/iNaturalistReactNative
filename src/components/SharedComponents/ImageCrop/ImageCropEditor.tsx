@@ -32,7 +32,6 @@ import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import {
-  loadImageData,
   preloadCache,
   preloadImage,
 } from "sharedHelpers/imageCropPreload";
@@ -152,7 +151,9 @@ const ImageCropEditor = ( ) => {
           return;
         }
 
-        const result = await loadImageData( imageUri, cropSourceUri, existingSavedCrop );
+        // Reuse an in-flight preload for this URI (kicked off before navigation)
+        // instead of starting a second, contending load of the same image.
+        const result = await preloadImage( imageUri, cropSourceUri, existingSavedCrop );
         if ( cancelled ) {
           return;
         }
@@ -160,7 +161,6 @@ const ImageCropEditor = ( ) => {
           setImageSize( null );
           return;
         }
-        preloadCache.set( imageUri, result );
         setLocalImageUri( result.localUri );
         setImageSize( result.size );
         if ( existingSavedCrop ) {
