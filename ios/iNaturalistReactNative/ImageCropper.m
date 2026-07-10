@@ -372,6 +372,18 @@ static float measureShadowPercentile( UIImage *image, CGRect normCrop )
   return p10;
 }
 
+// ─── Brightness adjustment (detail-preserving tone curve) ───────────────────
+
+// Rational tone curve: output = k·x / (1 + (k-1)·x), for x in [0,1].
+// Fixed points at x=0→0 and x=1→1, so unlike a flat multiply it can never
+// push highlights past white or crush shadows to black: near x=1 the slope
+// is 1/k (highlights compress as k grows), near x=0 the slope is k (shadows
+// lift by roughly the requested factor).
+static inline float toneCurve( float x, float k )
+{
+  return ( k * x ) / ( 1.0f + ( k - 1.0f ) * x );
+}
+
 // ─── Public detection entry point ────────────────────────────────────────────
 
 // Try YOLO; fall back to Vision attention saliency when nothing is detected.
@@ -612,6 +624,84 @@ RCT_EXPORT_METHOD( measureImageBrightness
 
   float shadowPercentile = measureShadowPercentile( image, normCrop );
   resolve( @( shadowPercentile ) );
+}
+
+// Applies toneCurve() per pixel/channel to the whole image (scaled down to fit
+// within maxDimension on its longest side, since this is used for thumbnail
+// display) and writes the result as a JPEG to outputPath.
+RCT_EXPORT_METHOD( adjustImageBrightness
+                  : ( NSString * )inputPath adjustment
+                  : ( nonnull NSNumber * )adjustment maxDimension
+                  : ( nonnull NSNumber * )maxDimension outputPath
+                  : ( NSString * )outputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  UIImage  *image  = [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { reject( @"BRIGHTNESS_FAILED", @"Could not load image", nil ); return; }
+
+  float k      = [adjustment floatValue];
+  float maxDim = [maxDimension floatValue];
+  float imgW   = (float)image.size.width;
+  float imgH   = (float)image.size.height;
+  float scale  = MIN( 1.0f, maxDim / MAX( imgW, imgH ) );
+  int   W      = MAX( 1, (int)roundf( imgW * scale ) );
+  int   H      = MAX( 1, (int)roundf( imgH * scale ) );
+
+  // drawInRect: applies the UIImage's orientation, so this also normalizes
+  // orientation to "up" the same way measureShadowPercentile does above.
+  UIGraphicsBeginImageContextWithOptions( CGSizeMake( W, H ), YES, 1.0 );
+  [image drawInRect:CGRectMake( 0, 0, W, H )];
+  UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );
+  UIGraphicsEndImageContext( );
+  if ( !scaled.CGImage ) { reject( @"BRIGHTNESS_FAILED", @"Could not scale image", nil ); return; }
+
+  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
+  unsigned char  *raw = (unsigned char *)malloc( (size_t)W * H * 4 );
+  CGContextRef    bmp = CGBitmapContextCreate(
+    raw, W, H, 8, (size_t)4 * W, cs,
+    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, W, H ), scaled.CGImage );
+  CGColorSpaceRelease( cs );
+
+  int pixelCount = W * H;
+  for ( int i = 0; i < pixelCount; i++ ) {
+    unsigned char *px = raw + i * 4;
+    px[0] = (unsigned char)roundf( toneCurve( px[0] / 255.0f, k ) * 255.0f );
+    px[1] = (unsigned char)roundf( toneCurve( px[1] / 255.0f, k ) * 255.0f );
+    px[2] = (unsigned char)roundf( toneCurve( px[2] / 255.0f, k ) * 255.0f );
+  }
+
+  CGImageRef adjustedRef = CGBitmapContextCreateImage( bmp );
+  CGContextRelease( bmp );
+  free( raw );
+  if ( !adjustedRef ) { reject( @"BRIGHTNESS_FAILED", @"Could not create adjusted image", nil ); return; }
+
+  NSMutableData *destData = [NSMutableData data];
+  CGImageDestinationRef destination = CGImageDestinationCreateWithData(
+    (__bridge CFMutableDataRef)destData, CFSTR( "public.jpeg" ), 1, nil );
+  if ( !destination ) {
+    CGImageRelease( adjustedRef );
+    reject( @"BRIGHTNESS_FAILED", @"Could not create image destination", nil );
+    return;
+  }
+  CGImageDestinationAddImage( destination, adjustedRef, (__bridge CFDictionaryRef)@{
+    (NSString *)kCGImageDestinationLossyCompressionQuality: @( 0.9 ),
+  } );
+  BOOL finalized = CGImageDestinationFinalize( destination );
+  CFRelease( destination );
+  CGImageRelease( adjustedRef );
+  if ( !finalized ) { reject( @"BRIGHTNESS_FAILED", @"Could not encode adjusted image", nil ); return; }
+
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+  if ( ![destData writeToFile:output atomically:YES] ) {
+    reject( @"BRIGHTNESS_FAILED", @"Could not write adjusted image", nil ); return;
+  }
+  resolve( output );
 }
 
 // ─── Video helpers ───────────────────────────────────────────────────────────
