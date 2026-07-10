@@ -40,11 +40,22 @@ const getObservedOnMs = ( obs: RealmObservation ) => new Date(
   obs.observed_on_string ?? obs.observed_on ?? 0,
 ).getTime();
 
-const findNearestPoint = ( points: ArrayLike<LocationHistoryPoint>, targetMs: number ) => {
-  if ( points.length === 0 ) return null;
+interface InterpolatedLocation {
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+}
 
+const toLocation = ( point: LocationHistoryPoint ): InterpolatedLocation => ( {
+  latitude: point.latitude,
+  longitude: point.longitude,
+  accuracy: point.accuracy,
+} );
+
+// Finds the first index whose recordedAt is >= targetMs (or points.length if none)
+const upperBound = ( points: ArrayLike<LocationHistoryPoint>, targetMs: number ) => {
   let lo = 0;
-  let hi = points.length - 1;
+  let hi = points.length;
   while ( lo < hi ) {
     const mid = Math.floor( ( lo + hi ) / 2 );
     if ( points[mid].recordedAt.getTime() < targetMs ) {
@@ -53,21 +64,47 @@ const findNearestPoint = ( points: ArrayLike<LocationHistoryPoint>, targetMs: nu
       hi = mid;
     }
   }
+  return lo;
+};
 
-  let best = points[lo];
-  let bestGap = Math.abs( best.recordedAt.getTime() - targetMs );
-  if ( lo > 0 ) {
-    const prev = points[lo - 1];
-    const prevGap = Math.abs( prev.recordedAt.getTime() - targetMs );
-    if ( prevGap < bestGap ) {
-      best = prev;
-      bestGap = prevGap;
-    }
+// Linearly interpolates between the two tracked points bracketing targetMs,
+// falling back to the single closest point when targetMs is outside the
+// tracked range entirely.
+const findInterpolatedLocation = (
+  points: ArrayLike<LocationHistoryPoint>,
+  targetMs: number,
+): InterpolatedLocation | null => {
+  if ( points.length === 0 ) return null;
+
+  const idx = upperBound( points, targetMs );
+  const next = idx < points.length ? points[idx] : null;
+  const prev = idx > 0 ? points[idx - 1] : null;
+
+  if ( !prev && !next ) return null;
+
+  if ( !prev ) {
+    const gap = ( next as LocationHistoryPoint ).recordedAt.getTime() - targetMs;
+    return gap <= MAX_MATCH_GAP_MS ? toLocation( next as LocationHistoryPoint ) : null;
   }
 
-  return bestGap <= MAX_MATCH_GAP_MS
-    ? best
-    : null;
+  if ( !next ) {
+    const gap = targetMs - prev.recordedAt.getTime();
+    return gap <= MAX_MATCH_GAP_MS ? toLocation( prev ) : null;
+  }
+
+  const prevMs = prev.recordedAt.getTime();
+  const nextMs = next.recordedAt.getTime();
+  if ( prevMs === targetMs ) return toLocation( prev );
+
+  const minGap = Math.min( targetMs - prevMs, nextMs - targetMs );
+  if ( minGap > MAX_MATCH_GAP_MS ) return null;
+
+  const weight = ( targetMs - prevMs ) / ( nextMs - prevMs );
+  return {
+    latitude: prev.latitude + weight * ( next.latitude - prev.latitude ),
+    longitude: prev.longitude + weight * ( next.longitude - prev.longitude ),
+    accuracy: Math.max( prev.accuracy ?? 0, next.accuracy ?? 0 ) || null,
+  };
 };
 
 const PhotoLocationRow = ( { item, onPress }: { item: {
@@ -170,7 +207,7 @@ const LocationHistory = ( ) => {
 
   const applicableObservations = useMemo( ( ) => observationsMissingLocation.filter( obs => {
     const targetMs = getObservedOnMs( obs );
-    return !!findNearestPoint( historyPoints, targetMs );
+    return !!findInterpolatedLocation( historyPoints, targetMs );
   } ), [observationsMissingLocation, historyPoints] );
 
   const photoComparisons = useMemo( ( ) => [
@@ -178,15 +215,15 @@ const LocationHistory = ( ) => {
     ...observationsMissingLocation,
   ].map( obs => {
     const targetMs = getObservedOnMs( obs );
-    const nearestPoint = findNearestPoint( historyPoints, targetMs );
+    const trackedLocation = findInterpolatedLocation( historyPoints, targetMs );
     const hasPhotoLocation = obs.latitude != null && obs.longitude != null;
-    const hasTrackedLocation = !!nearestPoint;
-    const distanceMeters = nearestPoint && hasPhotoLocation
+    const hasTrackedLocation = !!trackedLocation;
+    const distanceMeters = trackedLocation && hasPhotoLocation
       ? distanceInMeters(
         obs.latitude,
         obs.longitude,
-        nearestPoint.latitude,
-        nearestPoint.longitude,
+        trackedLocation.latitude,
+        trackedLocation.longitude,
       )
       : null;
 
@@ -200,8 +237,8 @@ const LocationHistory = ( ) => {
       hasTrackedLocation,
       observationLat: obs.latitude,
       observationLng: obs.longitude,
-      trackedLat: nearestPoint?.latitude,
-      trackedLng: nearestPoint?.longitude,
+      trackedLat: trackedLocation?.latitude,
+      trackedLng: trackedLocation?.longitude,
     };
   } ).sort( ( a, b ) => b.targetMs - a.targetMs ),
   [observations, observationsMissingLocation, historyPoints] );
@@ -226,13 +263,13 @@ const LocationHistory = ( ) => {
     let appliedCount = 0;
     for ( const obs of applicableObservations ) {
       const targetMs = getObservedOnMs( obs );
-      const nearestPoint = findNearestPoint( historyPoints, targetMs );
-      if ( nearestPoint ) {
+      const trackedLocation = findInterpolatedLocation( historyPoints, targetMs );
+      if ( trackedLocation ) {
         // eslint-disable-next-line no-await-in-loop
         const applied = await applyTrackedLocationToObservation( realm, obs, {
-          latitude: nearestPoint.latitude,
-          longitude: nearestPoint.longitude,
-          accuracy: nearestPoint.accuracy,
+          latitude: trackedLocation.latitude,
+          longitude: trackedLocation.longitude,
+          accuracy: trackedLocation.accuracy,
         } );
         if ( applied ) appliedCount += 1;
       }

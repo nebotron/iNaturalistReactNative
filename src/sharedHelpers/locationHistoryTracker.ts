@@ -25,9 +25,9 @@ const logger = log.extend( "locationHistoryTracker" );
 const TRACKING_ENABLED_KEY = "locationHistoryTrackingEnabled";
 const BACKGROUND_TASK_NAME = "location-history-tracking";
 // Only record a new point if the user has moved this far...
-const MIN_DISTANCE_METERS = 50;
+const MIN_DISTANCE_METERS = 10;
 // ...or this much time has passed since the last recorded point
-const MIN_INTERVAL_MS = 2 * 60 * 1000;
+const MIN_INTERVAL_MS = 1 * 60 * 1000;
 const POLL_MS = 1000;
 
 const usesAndroidBackgroundLocationPermission = Platform.OS === "android" && Platform.Version >= 29;
