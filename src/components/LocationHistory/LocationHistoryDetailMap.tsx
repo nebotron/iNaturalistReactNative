@@ -71,7 +71,7 @@ const LocationHistoryDetailMap = (
               ? "No nearby tracked location"
               : `${Math.round(distanceMeters)} meters away`
           }
-          pinColor={colors.inatBlue}
+          pinColor={colors.blue}
         />
       </Map>
     </ScreenShell>
