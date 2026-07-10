@@ -1,7 +1,10 @@
+import { List2 } from "components/SharedComponents";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import Map from "components/SharedComponents/Map/Map";
+import { View } from "components/styledComponents";
 import { Marker } from "react-native-maps";
 import React, { useMemo } from "react";
+import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 import type { TabStackScreenProps } from "navigation/types";
 
@@ -86,7 +89,23 @@ const LocationHistoryDetailMap = (
             )}
           </>
         )}
-      />
+      >
+        <View
+          className="absolute bottom-5 left-5 bg-white rounded-lg py-2 px-3"
+          style={getShadow()}
+        >
+          <View className="flex-row items-center">
+            <View className="w-3 h-3 rounded-full mr-2 bg-inatGreen" />
+            <List2>Photo location</List2>
+          </View>
+          {hasTrackedLocation && (
+            <View className="flex-row items-center mt-1">
+              <View className="w-3 h-3 rounded-full mr-2 bg-blue" />
+              <List2>Tracked location</List2>
+            </View>
+          )}
+        </View>
+      </Map>
     </ScreenShell>
   );
 };

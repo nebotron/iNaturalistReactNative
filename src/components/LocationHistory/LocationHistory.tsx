@@ -75,11 +75,24 @@ const PhotoLocationRow = ( { item, onPress }: { item: {
   observed_on: string | null;
   photoUri: string | null;
   distanceMeters: number | null;
+  hasPhotoLocation: boolean;
+  hasTrackedLocation: boolean;
 }; onPress?: () => void; } ) => {
   const { t } = useTranslation();
 
+  let statusText: string;
+  if ( !item.hasPhotoLocation && !item.hasTrackedLocation ) {
+    statusText = t( "Missing-photo-and-tracked-location" );
+  } else if ( !item.hasPhotoLocation ) {
+    statusText = t( "Missing-photo-location" );
+  } else if ( !item.hasTrackedLocation ) {
+    statusText = t( "No-tracked-location-nearby" );
+  } else {
+    statusText = t( "Meters-Away", { meters: Math.round( item.distanceMeters as number ) } );
+  }
+
   return (
-    <Pressable onPress={onPress}>
+    <Pressable onPress={onPress} disabled={!onPress}>
       <View className="flex-row items-center p-3 border-b border-lightGray">
         {item.photoUri && (
           <Image
@@ -89,11 +102,25 @@ const PhotoLocationRow = ( { item, onPress }: { item: {
         )}
         <View className="ml-3 flex-1">
           <Body2>{item.observed_on}</Body2>
-          <List2>
-            {item.distanceMeters === null
-              ? t( "No-tracked-location-nearby" )
-              : t( "Meters-Away", { meters: Math.round( item.distanceMeters ) } )}
-          </List2>
+          <List2>{statusText}</List2>
+          <View className="flex-row items-center mt-1">
+            <View
+              className={`w-2.5 h-2.5 rounded-full mr-1.5 ${
+                item.hasPhotoLocation
+                  ? "bg-inatGreen"
+                  : "bg-warningRed"
+              }`}
+            />
+            <List2 className="mr-3">{t( "Photo-location" )}</List2>
+            <View
+              className={`w-2.5 h-2.5 rounded-full mr-1.5 ${
+                item.hasTrackedLocation
+                  ? "bg-blue"
+                  : "bg-warningRed"
+              }`}
+            />
+            <List2>{t( "Tracked-location" )}</List2>
+          </View>
         </View>
       </View>
     </Pressable>
@@ -146,10 +173,15 @@ const LocationHistory = ( ) => {
     return !!findNearestPoint( historyPoints, targetMs );
   } ), [observationsMissingLocation, historyPoints] );
 
-  const photoComparisons = useMemo( ( ) => observations.map( obs => {
+  const photoComparisons = useMemo( ( ) => [
+    ...observations,
+    ...observationsMissingLocation,
+  ].map( obs => {
     const targetMs = getObservedOnMs( obs );
     const nearestPoint = findNearestPoint( historyPoints, targetMs );
-    const distanceMeters = nearestPoint && obs.latitude != null && obs.longitude != null
+    const hasPhotoLocation = obs.latitude != null && obs.longitude != null;
+    const hasTrackedLocation = !!nearestPoint;
+    const distanceMeters = nearestPoint && hasPhotoLocation
       ? distanceInMeters(
         obs.latitude,
         obs.longitude,
@@ -164,12 +196,15 @@ const LocationHistory = ( ) => {
       photoUri: Photo.displayLocalOrRemoteSquarePhoto( photoFromObservation( obs ) ),
       distanceMeters,
       targetMs,
+      hasPhotoLocation,
+      hasTrackedLocation,
       observationLat: obs.latitude,
       observationLng: obs.longitude,
       trackedLat: nearestPoint?.latitude,
       trackedLng: nearestPoint?.longitude,
     };
-  } ).sort( ( a, b ) => b.targetMs - a.targetMs ), [observations, historyPoints] );
+  } ).sort( ( a, b ) => b.targetMs - a.targetMs ),
+  [observations, observationsMissingLocation, historyPoints] );
 
   const handleToggleTracking = useCallback( async ( newValue: boolean ) => {
     if ( newValue ) {
@@ -230,7 +265,9 @@ const LocationHistory = ( ) => {
         renderItem={( { item } ) => (
           <PhotoLocationRow
             item={item}
-            onPress={() => handlePhotoLocationPress( item )}
+            onPress={item.hasPhotoLocation
+              ? () => handlePhotoLocationPress( item )
+              : undefined}
           />
         )}
         ListHeaderComponent={(

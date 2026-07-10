@@ -849,6 +849,10 @@ Menu = Menu
 Meters-Away = { $meters } m away
 Missing-Date = Missing Date
 MISSING-EVIDENCE = MISSING EVIDENCE
+# Status shown when a photo has no EXIF location but a tracked location is available
+Missing-photo-location = Missing photo location
+# Status shown when a photo has neither an EXIF location nor a nearby tracked location
+Missing-photo-and-tracked-location = Missing photo and tracked location
 Monthly-Donor = Monthly Donor
 Months = Months
 MONTHS = MONTHS
@@ -1058,6 +1062,8 @@ PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
 Photo-importer = Photo importer
+# Legend label for the marker showing a photo's EXIF location
+Photo-location = Photo location
 PHOTO-LICENSING = PHOTO LICENSING
 Photos = Photos
 Photos-you-take-will-appear-here = Photos you take will appear here
@@ -1459,6 +1465,8 @@ Toggle-map-type = Toggle map type
 TOP-ID-SUGGESTION = TOP ID SUGGESTION
 # Switch label for enabling continuous background location tracking
 Track-location-in-the-background = Track location in the background
+# Legend label for the marker showing a location from tracked history
+Tracked-location = Tracked location
 # Title of the Android foreground service notification while tracking location
 Tracking-your-location = Tracking your location
 Traditional-Project = Traditional Project
