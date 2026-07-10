@@ -1,5 +1,5 @@
 import {
-  copyAssetsFileIOS, copyFile, mkdir,
+  copyAssetsFileIOS, copyFile, mkdir, unlink,
 } from "@dr.pogodin/react-native-fs";
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -25,7 +25,7 @@ import React, {
   useCallback,
 } from "react";
 import {
-  Alert, NativeModules, Platform,
+  NativeModules, Platform,
 } from "react-native";
 import type { Asset } from "react-native-image-picker";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
@@ -122,6 +122,12 @@ const PhotoLibrary = ( ) => {
     const copyNode = async ( node: PhotoNode ) => {
       const fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
       const destPath = `${path}/${fileName}`;
+      // Remove any file left by a previous import of the same asset. Both
+      // PHAssetResourceManager.writeData (iOS) and copyFile (Android) fail if
+      // the destination already exists — iOS surfaces this as the opaque
+      // "PHPhotosErrorDomain error -1", which was aborting the whole import
+      // when a still-selected, already-imported photo was re-imported.
+      await unlink( destPath ).catch( ( ) => undefined );
       if ( Platform.OS === "ios" ) {
         // Use PHAssetResourceManager.writeData (via ImageCropper.exportPHAsset)
         // to write the original file bytes verbatim — no decode/re-encode,
@@ -264,12 +270,6 @@ const PhotoLibrary = ( ) => {
       navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
     } catch ( error ) {
       logger.error( "Error importing photos from camera roll", error );
-      Alert.alert(
-        "Error importing photos",
-        error instanceof Error
-          ? `${error.message}\n\n${error.stack ?? ""}`
-          : String( error ),
-      );
       exitObservationFlow( );
     }
   }, [
