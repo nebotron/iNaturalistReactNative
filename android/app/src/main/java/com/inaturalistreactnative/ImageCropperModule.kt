@@ -63,6 +63,24 @@ class ImageCropperModule(
   }
 
 
+  // Decodes a bitmap subsampled to roughly maxDimension on its longest side.
+  // Detection outputs normalized coords, so a downscaled input yields the same
+  // bounds without paying the full-resolution decode cost.
+  private fun decodeDownscaled( path: String, maxDimension: Int ): Bitmap? {
+    val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile( path, boundsOptions )
+    val largestSide = maxOf( boundsOptions.outWidth, boundsOptions.outHeight )
+    val decodeOptions = BitmapFactory.Options()
+    if ( largestSide > 0 ) {
+      var sampleSize = 1
+      while ( largestSide / ( sampleSize * 2 ) >= maxDimension ) {
+        sampleSize *= 2
+      }
+      decodeOptions.inSampleSize = sampleSize
+    }
+    return BitmapFactory.decodeFile( path, decodeOptions )
+  }
+
   @ReactMethod
   fun detectSubjectBounds(
     inputPath: String,
@@ -71,7 +89,7 @@ class ImageCropperModule(
   ) {
     try {
       val normalizedInput = inputPath.replace( "file://", "" )
-      val rawBitmap = BitmapFactory.decodeFile( normalizedInput )
+      val rawBitmap = decodeDownscaled( normalizedInput, 1024 )
       if ( rawBitmap == null ) {
         promise.resolve( null )
         return
