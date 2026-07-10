@@ -120,11 +120,14 @@ const GroupPhotos = ( {
     if ( selectedPhotoUris.length === 0 ) {
       return;
     }
-    // Preload all selected photos (including the first) before navigating so
-    // ImageCropEditor finds cached data ready during the nav transition
+    // Preload only the first image before navigating so ImageCropEditor finds
+    // its data ready during the nav transition. The remaining images are
+    // preloaded in the background by ImageCropEditor once the first is ready,
+    // so their loads don't contend with the first image's.
     const allPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
-    for ( const photo of allPhotos ) {
-      const { uri, cropOriginalUri, crop } = photo.image;
+    const [firstPhoto] = allPhotos;
+    if ( firstPhoto ) {
+      const { uri, cropOriginalUri, crop } = firstPhoto.image;
       preloadImage( uri, cropOriginalUri || uri, crop ?? null );
     }
     const [firstUri, ...remainingUris] = selectedPhotoUris;
