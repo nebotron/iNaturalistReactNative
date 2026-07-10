@@ -59,7 +59,14 @@ const useNavigateWithTaxonSelected = (
       await saveAndAdvance( bulkUploadMode ? UPLOAD : "save" );
       if ( numObservations > 1 ) {
         if ( routeName === "SuggestionsTaxonSearch" ) {
-          navigation.goBack( );
+          // Explicitly navigate back to Suggestions (now showing the next
+          // observation in the bulk flow) rather than relying on goBack,
+          // which can silently no-op if there's no history to pop to.
+          if ( navigation.canGoBack( ) ) {
+            navigation.goBack( );
+          } else {
+            navigation.navigate( "Suggestions", { entryScreen, lastScreen } );
+          }
         }
         return;
       }
