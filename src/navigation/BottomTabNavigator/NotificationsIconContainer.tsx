@@ -21,28 +21,40 @@ const NotificationsIconContainer = ( {
   const currentUser = useCurrentUser( );
   const observationMarkedAsViewedAt = useStore( state => state.observationMarkedAsViewedAt );
 
-  // TODO: enable fields if it makes sense
-  // https://linear.app/inaturalist/issue/MOB-1362/enable-fields-for-unviewed-updates-count-in-notificationsicon
-  const { data: unviewedUpdatesCount, refetch } = useAuthenticatedQuery(
-    [
-      "notificationsCount",
-    ],
-    optsWithAuth => fetchUnviewedObservationUpdatesCount( {}, optsWithAuth ),
+  // Match the same owner/following split used by the Notifications screen tabs,
+  // so this badge and the in-app tab dots reflect the same "unviewed" scope.
+  const { data: ownerUnviewedCount, refetch: refetchOwner } = useAuthenticatedQuery(
+    ["notificationsCount", "owner"],
+    optsWithAuth => fetchUnviewedObservationUpdatesCount(
+      { observations_by: "owner" },
+      optsWithAuth,
+    ),
     {
       enabled: !!currentUser,
-      // We want to check for notifications at a set interval, but
-      // keep a stable query key so we don't create unbounded cached queries.
+      refetchInterval: 60_000,
+    },
+  );
+
+  const { data: followingUnviewedCount, refetch: refetchFollowing } = useAuthenticatedQuery(
+    ["notificationsCount", "following"],
+    optsWithAuth => fetchUnviewedObservationUpdatesCount(
+      { observations_by: "following" },
+      optsWithAuth,
+    ),
+    {
+      enabled: !!currentUser,
       refetchInterval: 60_000,
     },
   );
 
   useEffect( () => {
     if ( currentUser ) {
-      refetch();
+      refetchOwner();
+      refetchFollowing();
     }
-  }, [observationMarkedAsViewedAt, refetch, currentUser] );
+  }, [observationMarkedAsViewedAt, refetchOwner, refetchFollowing, currentUser] );
 
-  const hasUnread = ( unviewedUpdatesCount ?? 0 ) > 0;
+  const hasUnread = ( ownerUnviewedCount ?? 0 ) > 0 || ( followingUnviewedCount ?? 0 ) > 0;
 
   return (
     <NotificationsIcon
