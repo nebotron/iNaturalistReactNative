@@ -1,3 +1,4 @@
+import { useNavigation } from "@react-navigation/native";
 import { photoFromObservation } from "components/ObservationsFlashList/util";
 import {
   Body2,
@@ -11,7 +12,7 @@ import { RealmContext } from "providers/contexts";
 import React, {
   useCallback, useMemo, useState,
 } from "react";
-import { Alert, FlatList } from "react-native";
+import { Alert, FlatList, Pressable } from "react-native";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
 import Observation from "realmModels/Observation";
 import Photo from "realmModels/Photo";
@@ -69,37 +70,40 @@ const findNearestPoint = ( points: ArrayLike<LocationHistoryPoint>, targetMs: nu
     : null;
 };
 
-const PhotoLocationRow = ( { item }: { item: {
+const PhotoLocationRow = ( { item, onPress }: { item: {
   uuid: string;
   observed_on: string | null;
   photoUri: string | null;
   distanceMeters: number | null;
-}; } ) => {
+}; onPress?: () => void; } ) => {
   const { t } = useTranslation();
 
   return (
-    <View className="flex-row items-center p-3 border-b border-lightGray">
-      {item.photoUri && (
-        <Image
-          source={{ uri: item.photoUri }}
-          className="w-16 h-16 rounded"
-        />
-      )}
-      <View className="ml-3 flex-1">
-        <Body2>{item.observed_on}</Body2>
-        <List2>
-          {item.distanceMeters === null
-            ? t( "No-tracked-location-nearby" )
-            : t( "Meters-Away", { meters: Math.round( item.distanceMeters ) } )}
-        </List2>
+    <Pressable onPress={onPress}>
+      <View className="flex-row items-center p-3 border-b border-lightGray">
+        {item.photoUri && (
+          <Image
+            source={{ uri: item.photoUri }}
+            className="w-16 h-16 rounded"
+          />
+        )}
+        <View className="ml-3 flex-1">
+          <Body2>{item.observed_on}</Body2>
+          <List2>
+            {item.distanceMeters === null
+              ? t( "No-tracked-location-nearby" )
+              : t( "Meters-Away", { meters: Math.round( item.distanceMeters ) } )}
+          </List2>
+        </View>
       </View>
-    </View>
+    </Pressable>
   );
 };
 
 const LocationHistory = ( ) => {
   const { t } = useTranslation();
   const realm = useRealm();
+  const navigation = useNavigation();
   const [trackingEnabled] = useLocationHistoryTrackingEnabled();
   const [isApplyingLocation, setIsApplyingLocation] = useState( false );
 
@@ -160,6 +164,10 @@ const LocationHistory = ( ) => {
       photoUri: Photo.displayLocalOrRemoteSquarePhoto( photoFromObservation( obs ) ),
       distanceMeters,
       targetMs,
+      observationLat: obs.latitude,
+      observationLng: obs.longitude,
+      trackedLat: nearestPoint?.latitude,
+      trackedLng: nearestPoint?.longitude,
     };
   } ).sort( ( a, b ) => b.targetMs - a.targetMs ), [observations, historyPoints] );
 
@@ -201,12 +209,31 @@ const LocationHistory = ( ) => {
     );
   }, [applicableObservations, historyPoints, realm, t] );
 
+  const handlePhotoLocationPress = useCallback( ( item ) => {
+    if ( item.observationLat != null && item.observationLng != null
+      && item.trackedLat != null && item.trackedLng != null ) {
+      navigation.navigate( "LocationHistoryDetailMap", {
+        observationLat: item.observationLat,
+        observationLng: item.observationLng,
+        trackedLat: item.trackedLat,
+        trackedLng: item.trackedLng,
+        observationDate: item.observed_on || "",
+        distanceMeters: item.distanceMeters,
+      } );
+    }
+  }, [navigation] );
+
   return (
     <ScreenShell>
       <FlatList
         data={photoComparisons}
         keyExtractor={item => item.uuid}
-        renderItem={( { item } ) => <PhotoLocationRow item={item} />}
+        renderItem={( { item } ) => (
+          <PhotoLocationRow
+            item={item}
+            onPress={() => handlePhotoLocationPress( item )}
+          />
+        )}
         ListHeaderComponent={(
           <View className="p-4 border-b border-lightGray">
             <SwitchRow

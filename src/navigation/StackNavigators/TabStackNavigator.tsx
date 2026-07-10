@@ -16,6 +16,7 @@ import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
 import LifeListContainer from "components/LifeList/LifeListContainer";
 import LocationHistory from "components/LocationHistory/LocationHistory";
+import LocationHistoryDetailMap from "components/LocationHistory/LocationHistoryDetailMap";
 import MaverickIdentificationsContainer
   from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
@@ -96,6 +97,11 @@ const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const networkLogTitle = () => <Heading4 numberOfLines={1}>NETWORK LOG</Heading4>;
 const locationHistoryTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "LOCATION-HISTORY" )}
+  </Heading4>
+);
+const locationHistoryDetailMapTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "LOCATION-HISTORY" )}
   </Heading4>
@@ -342,6 +348,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={LocationHistory}
             options={{
               headerTitle: locationHistoryTitle,
+            }}
+          />
+          <Stack.Screen
+            name="LocationHistoryDetailMap"
+            component={LocationHistoryDetailMap}
+            options={{
+              headerTitle: locationHistoryDetailMapTitle,
             }}
           />
         </Stack.Group>
