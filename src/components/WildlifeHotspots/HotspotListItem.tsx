@@ -17,7 +17,6 @@ interface Props {
   onPress: () => void;
   onOpenInGoogleMaps?: () => void;
   onAddToRoute?: () => void;
-  onObservationCountPress?: () => void;
   onSpeciesCountPress?: ( species: HotspotSpecies ) => void;
 }
 
@@ -28,7 +27,6 @@ const HotspotListItem = ( {
   onPress,
   onOpenInGoogleMaps,
   onAddToRoute,
-  onObservationCountPress,
   onSpeciesCountPress,
 }: Props ) => {
   const detourText = hotspot.detourMinutes < 1
@@ -49,17 +47,12 @@ const HotspotListItem = ( {
         }`}
       >
         <View className="flex-row items-center">
-          <Pressable
-            className="flex-1"
-            onPress={onObservationCountPress}
-            accessibilityRole="button"
-            accessibilityLabel={`View ${hotspot.observationCount} observations in Explore`}
-          >
+          <View className="flex-1">
             <Body2 className="font-bold">
               {hotspot.observationCount.toLocaleString()}
               {" observations"}
             </Body2>
-          </Pressable>
+          </View>
           <View className="flex-row items-center">
             <INatIcon name="location" size={12} color={colors.darkGray} />
             <Body3 className="ml-1 text-darkGray">{detourText}</Body3>
