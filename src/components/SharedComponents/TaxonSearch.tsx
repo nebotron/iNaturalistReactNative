@@ -1,3 +1,4 @@
+import Button from "components/SharedComponents/Buttons/Button";
 import EmptySearchResults from "components/Explore/SearchScreens/EmptySearchResults";
 import SearchBar from "components/SharedComponents/SearchBar";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
@@ -20,6 +21,8 @@ interface Props {
   query?: string;
   setQuery: ( newQuery: string ) => void;
   isLoading?: boolean;
+  isUpdatingLocalDb?: boolean;
+  updateLocalSpeciesDb?: ( ) => void;
   renderItem: (
     { item, index }: { item: RealmTaxon; index: number }
   ) => React.ReactElement<unknown>;
@@ -28,10 +31,12 @@ interface Props {
 
 const TaxonSearch = ( {
   isLoading = false,
+  isUpdatingLocalDb = false,
   query = "",
   renderItem,
   setQuery,
   taxa = EMPTY_TAXA,
+  updateLocalSpeciesDb,
 }: Props ) => {
   const { hasBottomTabBar } = useStackHost( );
   const { bottom } = useSafeAreaInsets( );
@@ -56,9 +61,21 @@ const TaxonSearch = ( {
   // Make sure all of the results can be scrolled to even with the keyboard
   // up
   const footerComponent = ( ) => (
-    keyboardShown
-      ? <View style={{ paddingBottom: paddingBottom + keyboardHeight }} />
-      : <View style={{ paddingBottom }} />
+    <>
+      {query.length > 0 && updateLocalSpeciesDb && (
+        <Button
+          className="mx-6 mt-3"
+          onPress={updateLocalSpeciesDb}
+          loading={isUpdatingLocalDb}
+          disabled={isUpdatingLocalDb}
+          text={t( "UPDATE-LOCAL-SPECIES-DATABASE" )}
+          testID="TaxonSearch.updateLocalSpeciesDb"
+        />
+      )}
+      {keyboardShown
+        ? <View style={{ paddingBottom: paddingBottom + keyboardHeight }} />
+        : <View style={{ paddingBottom }} />}
+    </>
   );
 
   return (

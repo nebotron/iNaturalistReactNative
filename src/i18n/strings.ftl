@@ -1493,6 +1493,9 @@ Unknown-organism = Unknown organism
 Unmark-as-reviewed = Unmark as reviewed
 Unobserved-by-me = Unobserved by me
 Unreviewed-observations-only = Unreviewed observations only
+# Button at the bottom of species search results that fetches matching taxa
+# from the server and saves them locally for future offline searches
+UPDATE-LOCAL-SPECIES-DATABASE = UPDATE LOCAL SPECIES DATABASE
 Upload-anyway = Upload anyway
 Upload-Complete = Upload Complete
 Upload-in-progress = Upload in progress
