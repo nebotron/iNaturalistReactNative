@@ -31,6 +31,7 @@ const styles = StyleSheet.create( {
 } );
 
 type SharedZoomableImageProps = ImageZoomProps & {
+  brightness?: number;
   onLongPress?: () => void;
   onScaleChange?: ( scale: number ) => void;
   onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
@@ -68,6 +69,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     testID,
     cropPanContext,
     onSwipeToClose,
+    brightness = 1,
     onLongPress,
     onScaleChange,
     onImageDimensionsChange,
@@ -158,6 +160,11 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     [gestures, longPressGesture],
   );
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const brightnessFilter: any = brightness !== 1
+    ? { filter: [{ brightness }] }
+    : null;
+
   // The GestureDetector must attach to a view that is NOT transformed: gesture
   // coordinates (e.g. pinch focalX/focalY) are reported relative to the attached
   // view, so attaching to the transformed image itself creates a feedback loop
@@ -167,7 +174,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
       <View style={[styles.image, style]} onLayout={onZoomableLayout}>
         <Animated.Image
           testID={testID}
-          style={[StyleSheet.absoluteFill, animatedStyle]}
+          style={[StyleSheet.absoluteFill, animatedStyle, brightnessFilter]}
           source={{ uri }}
           resizeMode="contain"
           onLoad={event => {

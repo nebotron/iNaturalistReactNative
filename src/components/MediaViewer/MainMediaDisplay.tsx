@@ -99,9 +99,11 @@ const MainMediaDisplay = ( {
     ...sounds.map( sound => ( { ...sound, type: "sound" as const } ) ),
   ] ), [photos, sounds] );
 
-  // Live gamma-based (debounced) preview for whichever photo the brightness
-  // slider is currently editing, so dragging the slider previews the same
-  // detail-preserving tone curve that gets saved (see adjustImageBrightness).
+  // Live preview for whichever photo the brightness slider is currently
+  // editing. The CSS filter below gives instant feedback on every slider
+  // tick; once the debounced gamma tone curve (the same one that gets
+  // saved — see adjustImageBrightness) finishes processing, it replaces
+  // the filter so the final look matches exactly.
   const selectedPhoto = photos[selectedMediaIndex];
   const selectedPhotoUri = selectedPhoto
     ? Photo.displayLocalOrRemoteLargePhoto( selectedPhoto )
@@ -113,6 +115,9 @@ const MainMediaDisplay = ( {
     selectedPhotoUri,
     brightness,
     liveBrightnessMaxDimension,
+  );
+  const liveBrightnessReady = Boolean(
+    liveBrightnessUri && liveBrightnessUri !== selectedPhotoUri,
   );
 
   // On the render right after a photo is removed, selectedMediaIndex can still
@@ -162,9 +167,15 @@ const MainMediaDisplay = ( {
     const uri = Photo.displayLocalOrRemoteLargePhoto( photo );
     const hasAttribution = photo?.attribution;
     const isSelected = photoIndex === selectedMediaIndex;
-    const displayUri = isSelected && brightness !== BRIGHTNESS_DEFAULT
-      ? ( liveBrightnessUri ?? uri )
+    const isEditingBrightness = isSelected && brightness !== BRIGHTNESS_DEFAULT;
+    const displayUri = isEditingBrightness && liveBrightnessReady
+      ? liveBrightnessUri
       : uri;
+    // Instant coarse preview while the precise gamma tone curve is still
+    // processing (or hasn't started yet, e.g. right as the slider moves).
+    const displayBrightness = isEditingBrightness && !liveBrightnessReady
+      ? brightness
+      : BRIGHTNESS_DEFAULT;
     return (
       <View className="flex-1">
         <CustomImageZoom
@@ -172,6 +183,7 @@ const MainMediaDisplay = ( {
           resetKey={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
+          brightness={displayBrightness}
           zoomRef={( ref: SharedZoomableImageRef | null ) => {
             if ( photoIndex === selectedMediaIndex ) {
               currentZoomRefRef.current = ref;

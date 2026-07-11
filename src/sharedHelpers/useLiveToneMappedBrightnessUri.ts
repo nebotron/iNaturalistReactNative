@@ -10,6 +10,19 @@ const DEBOUNCE_MS = 100;
 const cache = new Map<string, string>( );
 const cacheKey = ( uri: string, adjustment: number ) => `${uri}:${adjustment.toFixed( 2 )}`;
 
+// djb2 hash → stable hex filename for a given cache key (uris can be long
+// remote urls, so hash rather than sanitize-and-use-directly as a filename)
+function hashKey( key: string ): string {
+  let hash = 5381;
+  for ( let i = 0; i < key.length; i += 1 ) {
+    // eslint-disable-next-line no-bitwise
+    hash = ( ( hash << 5 ) + hash ) ^ key.charCodeAt( i );
+    // eslint-disable-next-line no-bitwise
+    hash >>>= 0; // keep unsigned 32-bit
+  }
+  return hash.toString( 16 );
+}
+
 let outputDirReady: Promise<void> | null = null;
 const ensureOutputDir = ( ) => {
   if ( !outputDirReady ) outputDirReady = mkdir( brightnessAdjustedPath ).catch( ( ) => {} );
@@ -56,8 +69,7 @@ const useLiveToneMappedBrightnessUri = (
           const localUri = await ensureLocalImageForCrop( uri );
           if ( cancelled ) return;
 
-          const outputPath = `${brightnessAdjustedPath}/live-`
-            + `${key.replace( /[^a-z0-9]/gi, "_" )}.jpg`;
+          const outputPath = `${brightnessAdjustedPath}/live-${hashKey( key )}.jpg`;
           const result = await adjustImageBrightness(
             localUri,
             adjustment,
