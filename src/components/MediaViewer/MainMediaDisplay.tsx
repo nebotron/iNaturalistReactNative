@@ -92,6 +92,7 @@ const MainMediaDisplay = ( {
   const [brightnessSaved, setBrightnessSaved] = useState( false );
   const [brightnessSaving, setBrightnessSaving] = useState( false );
   const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
+  const [isSlidingBrightness, setIsSlidingBrightness] = useState( false );
   const imageDimensionsRef = useRef<{ width: number; height: number } | null>( null );
   const currentZoomRefRef = useRef<SharedZoomableImageRef | null>( null );
   const items = useMemo( ( ) => ( [
@@ -119,7 +120,12 @@ const MainMediaDisplay = ( {
     brightness,
     liveBrightnessMaxDimension,
   );
-  const liveBrightnessReady = Boolean(
+  // Don't swap in the processed image mid-drag: a background debounced
+  // result can land while the finger is still moving, and swapping the
+  // Image source there (then swapping back on the next tick) is what
+  // caused the flashing. Hold the CSS-filtered raw preview steady until
+  // the gesture ends.
+  const liveBrightnessReady = !isSlidingBrightness && Boolean(
     liveBrightnessUri && liveBrightnessUri !== selectedPhotoUri,
   );
 
@@ -271,6 +277,8 @@ const MainMediaDisplay = ( {
                 thumbTintColor={colors.white}
                 value={brightness}
                 onValueChange={val => { setBrightness( val ); setBrightnessSaved( false ); }}
+                onSlidingStart={( ) => setIsSlidingBrightness( true )}
+                onSlidingComplete={( ) => setIsSlidingBrightness( false )}
                 tapToSeek
                 accessibilityLabel={t( "Adjust-brightness" )}
               />
