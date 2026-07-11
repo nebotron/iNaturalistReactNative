@@ -14,6 +14,15 @@ export enum MAP_TYPES {
   HYBRID = "hybrid",
 }
 
+export enum AUTO_BRIGHTNESS_MODE {
+  OFF = "Off",
+  // Flat multiply applied live via a CSS brightness filter
+  MULTIPLY = "Multiply",
+  // Detail-preserving tone curve baked into the image natively (see
+  // adjustImageBrightness / useToneMappedBrightnessUri)
+  GAMMA = "Gamma"
+}
+
 const createLayoutSlice = set => ( {
   // Vestigial un-namespaced values
   isAdvancedUser: false,
@@ -131,13 +140,13 @@ const createLayoutSlice = set => ( {
         debugModeEnabled: !state.layout.debugModeEnabled,
       },
     } ) ),
-    // Controls whether photos in Explore are auto-brightened based on the
+    // Controls whether/how photos in Explore are auto-brightened based on the
     // detected subject's shadow depth (see useAutoBrightnessForUri)
-    autoAdjustBrightness: true,
-    setAutoAdjustBrightness: ( newValue: boolean ) => set( state => ( {
+    autoBrightnessMode: AUTO_BRIGHTNESS_MODE.GAMMA,
+    setAutoBrightnessMode: ( newValue: AUTO_BRIGHTNESS_MODE ) => set( state => ( {
       layout: {
         ...state.layout,
-        autoAdjustBrightness: newValue,
+        autoBrightnessMode: newValue,
       },
     } ) ),
     // Last selected map layers type for react-native-maps MapView ("standard" or "hybrid")

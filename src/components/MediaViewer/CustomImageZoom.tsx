@@ -26,7 +26,6 @@ interface Props {
   zoomRef?: Ref<SharedZoomableImageRef>;
   autoReset?: boolean;
   cropPanContext?: CropPanContext;
-  brightness?: number;
   onLongPress?: () => void;
   onInteractionEnd?: () => void;
   onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
@@ -46,7 +45,6 @@ const CustomImageZoom = ( {
   zoomRef,
   autoReset = true,
   cropPanContext,
-  brightness = 1,
   onLongPress,
   onInteractionEnd,
   onImageDimensionsChange,
@@ -87,7 +85,6 @@ const CustomImageZoom = ( {
       }}
       cropPanContext={cropPanContext}
       onSwipeToClose={onSwipeToClose}
-      brightness={brightness}
       onLongPress={onLongPress}
       onImageDimensionsChange={onImageDimensionsChange}
       onScaleChange={onScaleChange}

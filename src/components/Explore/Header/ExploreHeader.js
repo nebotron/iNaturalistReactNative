@@ -15,12 +15,25 @@ import { useExplore } from "providers/ExploreContext";
 import type { Node } from "react";
 import React, { useState } from "react";
 import { Surface } from "react-native-paper";
-import { useTranslation } from "sharedHooks";
+import { useLayoutPrefs, useTranslation } from "sharedHooks";
+import { AUTO_BRIGHTNESS_MODE } from "stores/createLayoutSlice";
 
 import colors from "styles/tailwindColors";
 
 import placeGuessText from "../helpers/placeGuessText";
 import ExploreHeaderCount from "./ExploreHeaderCount";
+
+const NEXT_AUTO_BRIGHTNESS_MODE = {
+  [AUTO_BRIGHTNESS_MODE.OFF]: AUTO_BRIGHTNESS_MODE.MULTIPLY,
+  [AUTO_BRIGHTNESS_MODE.MULTIPLY]: AUTO_BRIGHTNESS_MODE.GAMMA,
+  [AUTO_BRIGHTNESS_MODE.GAMMA]: AUTO_BRIGHTNESS_MODE.OFF,
+};
+
+const AUTO_BRIGHTNESS_LABEL_KEY = {
+  [AUTO_BRIGHTNESS_MODE.OFF]: "Auto-Brightness-Off",
+  [AUTO_BRIGHTNESS_MODE.MULTIPLY]: "Auto-Brightness-Multiply",
+  [AUTO_BRIGHTNESS_MODE.GAMMA]: "Auto-Brightness-Gamma",
+};
 
 type Props = {
   count: ?number,
@@ -52,6 +65,7 @@ const Header = ( {
   updateTaxonFilters,
 }: Props ): Node => {
   const { t } = useTranslation( );
+  const { autoBrightnessMode, setAutoBrightnessMode } = useLayoutPrefs( );
   const { state, numberOfFilters } = useExplore( );
   const { taxonFilters } = state;
   const iconicTaxonNames = state.iconic_taxa || [];
@@ -130,6 +144,24 @@ const Header = ( {
             </View>
           </View>
           <View className="flex-row items-center">
+            <INatIconButton
+              icon={autoBrightnessMode === AUTO_BRIGHTNESS_MODE.OFF
+                ? "flash-off"
+                : "flash-on"}
+              color={colors.white}
+              className={classNames(
+                autoBrightnessMode !== AUTO_BRIGHTNESS_MODE.OFF
+                  ? "bg-inatGreen"
+                  : "bg-darkGray",
+                "rounded-md mr-2",
+              )}
+              onPress={() => setAutoBrightnessMode(
+                NEXT_AUTO_BRIGHTNESS_MODE[autoBrightnessMode],
+              )}
+              accessibilityLabel={`${t( "Auto-Adjust-Brightness" )}: `
+                + `${t( AUTO_BRIGHTNESS_LABEL_KEY[autoBrightnessMode] )}`}
+              testID="Explore.autoBrightnessToggle"
+            />
             <View>
               <INatIconButton
                 icon="sliders"

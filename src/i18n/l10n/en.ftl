@@ -170,6 +170,12 @@ attribution-cc-by-sa = some rights reserved (CC BY-SA)
 August = August
 # Label for toggling automatic photo brightness adjustment in Explore
 Auto-Adjust-Brightness = Auto Adjust Brightness
+# Auto brightness mode: flat multiply, applied live as a filter
+Auto-Brightness-Multiply = Multiply
+# Auto brightness mode: disabled
+Auto-Brightness-Off = Off
+# Auto brightness mode: detail-preserving gamma tone curve
+Auto-Brightness-Gamma = Gamma
 # Returns user to login screen
 BACK-TO-LOGIN = BACK TO LOGIN
 Blog = Blog

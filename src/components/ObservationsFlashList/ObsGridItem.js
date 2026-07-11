@@ -8,6 +8,7 @@ import type { Node } from "react";
 import React, { useMemo } from "react";
 import Photo from "realmModels/Photo";
 import { useLayoutPrefs } from "sharedHooks";
+import { AUTO_BRIGHTNESS_MODE } from "stores/createLayoutSlice";
 
 import useTopSpeciesSuggestion from "./hooks/useTopSpeciesSuggestion";
 import ObsImagePreview from "./ObsImagePreview";
@@ -50,7 +51,7 @@ const ObsGridItem = ( {
   width = "w-[200px]",
   squareCorners = false,
 }: Props ): Node => {
-  const { autoAdjustBrightness } = useLayoutPrefs( );
+  const { autoBrightnessMode } = useLayoutPrefs( );
   const showExploreImageActions = explore
     && currentUser;
   const isOwnObs = !!currentUser && observation?.user?.login === currentUser?.login;
@@ -83,7 +84,9 @@ const ObsGridItem = ( {
   return (
     <ObsImagePreview
       key={observation.uuid}
-      autoAdjustBrightness={explore && !isOwnObs && autoAdjustBrightness}
+      autoBrightnessMode={explore && !isOwnObs
+        ? autoBrightnessMode
+        : AUTO_BRIGHTNESS_MODE.OFF}
       autoDetectSubject={explore && !isOwnObs}
       source={{
         uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),

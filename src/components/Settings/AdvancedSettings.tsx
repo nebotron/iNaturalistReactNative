@@ -1,7 +1,6 @@
 import {
   Body2,
   RadioButtonRow,
-  SwitchRow,
 } from "components/SharedComponents";
 import React from "react";
 import {
@@ -11,13 +10,13 @@ import {
   useLayoutPrefs,
   useTranslation,
 } from "sharedHooks";
-import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
+import { AUTO_BRIGHTNESS_MODE, SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 
 const AdvancedSettings = ( ) => {
   const { t } = useTranslation();
   const {
-    autoAdjustBrightness,
-    setAutoAdjustBrightness,
+    autoBrightnessMode,
+    setAutoBrightnessMode,
     isAllAddObsOptionsMode,
     setIsAllAddObsOptionsMode,
     screenAfterPhotoEvidence,
@@ -70,13 +69,30 @@ const AdvancedSettings = ( ) => {
         />
       </View>
       <View className="mt-[20px]">
-        <SwitchRow
-          testID="auto-adjust-brightness-switch"
-          classNames="ml-[6px]"
+        <Body2>{ t( "Auto-Adjust-Brightness" ) }</Body2>
+        <RadioButtonRow
+          classNames="ml-[6px] mt-[15px]"
+          testID="auto-brightness-off"
           smallLabel
-          value={autoAdjustBrightness}
-          onValueChange={setAutoAdjustBrightness}
-          label={t( "Auto-Adjust-Brightness" )}
+          checked={autoBrightnessMode === AUTO_BRIGHTNESS_MODE.OFF}
+          onPress={() => setAutoBrightnessMode( AUTO_BRIGHTNESS_MODE.OFF )}
+          label={t( "Auto-Brightness-Off" )}
+        />
+        <RadioButtonRow
+          classNames="ml-[6px] mt-[15px]"
+          testID="auto-brightness-multiply"
+          smallLabel
+          checked={autoBrightnessMode === AUTO_BRIGHTNESS_MODE.MULTIPLY}
+          onPress={() => setAutoBrightnessMode( AUTO_BRIGHTNESS_MODE.MULTIPLY )}
+          label={t( "Auto-Brightness-Multiply" )}
+        />
+        <RadioButtonRow
+          classNames="ml-[6px] mt-[15px]"
+          testID="auto-brightness-gamma"
+          smallLabel
+          checked={autoBrightnessMode === AUTO_BRIGHTNESS_MODE.GAMMA}
+          onPress={() => setAutoBrightnessMode( AUTO_BRIGHTNESS_MODE.GAMMA )}
+          label={t( "Auto-Brightness-Gamma" )}
         />
       </View>
     </>

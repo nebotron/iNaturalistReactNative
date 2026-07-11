@@ -27,6 +27,8 @@ interface Props {
   imageHeight: number;
   initialCrop: NormalizedCrop;
   size: number;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  brightnessFilterStyle?: any;
 }
 
 // Builds a transform that frames a normalized crop centered in the square tile.
@@ -73,6 +75,7 @@ const ObsImageZoomable = ( {
   imageHeight,
   initialCrop,
   size,
+  brightnessFilterStyle,
 }: Props ) => {
   const transformRef = useRef<ImageZoomTransformRefs | null>( null );
 
@@ -163,7 +166,7 @@ const ObsImageZoomable = ( {
             testID="ObsList.photo"
             accessibilityIgnoresInvertColors
             fadeDuration={0}
-            style={StyleSheet.absoluteFill}
+            style={[StyleSheet.absoluteFill, brightnessFilterStyle]}
             source={{
               url: uri,
               cachePolicy: "discWithCacheControl",

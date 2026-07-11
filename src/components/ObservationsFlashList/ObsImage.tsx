@@ -5,13 +5,15 @@ import React, {
   useCallback, useState,
 } from "react";
 import type { LayoutChangeEvent } from "react-native";
+import useAutoBrightnessForUri from "sharedHelpers/useAutoBrightnessForUri";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import useToneMappedBrightnessUri from "sharedHelpers/useToneMappedBrightnessUri";
+import { AUTO_BRIGHTNESS_MODE } from "stores/createLayoutSlice";
 
 import ObsImageZoomable from "./ObsImageZoomable";
 
 interface Props {
-  autoAdjustBrightness?: boolean;
+  autoBrightnessMode?: AUTO_BRIGHTNESS_MODE;
   autoDetectSubject?: boolean;
   iconicTaxonIconSize?: number;
   iconicTaxonName?: string;
@@ -31,7 +33,7 @@ const CLASS_NAMES = [
 ] as const;
 
 const ObsImage = ( {
-  autoAdjustBrightness = false,
+  autoBrightnessMode = AUTO_BRIGHTNESS_MODE.OFF,
   autoDetectSubject = false,
   iconicTaxonName,
   imageClassName,
@@ -59,15 +61,37 @@ const ObsImage = ( {
   // crop===undefined: detection still in progress (brightness hook waits)
   // crop===null:      no subject detection requested (measure full image)
   // crop===NormalizedCrop: detection done; measure only the subject region
-  const brightnessUri = autoAdjustBrightness && uri?.uri
+  const isGammaMode = autoBrightnessMode === AUTO_BRIGHTNESS_MODE.GAMMA;
+  const isMultiplyMode = autoBrightnessMode === AUTO_BRIGHTNESS_MODE.MULTIPLY;
+  const brightnessUri = ( isGammaMode || isMultiplyMode ) && uri?.uri
     ? uri.uri
     : undefined;
   const brightnessCrop = autoDetectSubject
     ? detection?.crop // undefined until detection resolves
     : null; // no detection → full-image measurement
 
-  const toneMappedUri = useToneMappedBrightnessUri( brightnessUri, brightnessCrop );
-  const displayUri = toneMappedUri ?? uri?.uri;
+  // Gamma mode bakes a detail-preserving tone curve into a native-processed,
+  // cached copy of the image. Multiply mode instead applies the same
+  // computed adjustment live as a flat CSS brightness filter.
+  const toneMappedUri = useToneMappedBrightnessUri(
+    isGammaMode
+      ? brightnessUri
+      : undefined,
+    brightnessCrop,
+  );
+  const multiplyAdjustment = useAutoBrightnessForUri(
+    isMultiplyMode
+      ? brightnessUri
+      : undefined,
+    brightnessCrop,
+  );
+  const displayUri = ( isGammaMode
+    ? toneMappedUri
+    : undefined ) ?? uri?.uri;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const brightnessFilterStyle: any = isMultiplyMode && multiplyAdjustment !== 1
+    ? { filter: [{ brightness: multiplyAdjustment }] }
+    : undefined;
 
   // Once subject detection resolves and the tile is measured, render the
   // photo through the shared image-zoom engine so a two-finger gesture zooms
@@ -109,6 +133,7 @@ const ObsImage = ( {
             <Image
               key={uri.uri}
               className={classNames( CLASS_NAMES )}
+              style={brightnessFilterStyle}
               testID="ObsList.photo"
               resizeMode="cover"
               source={{ uri: displayUri }}
@@ -118,6 +143,7 @@ const ObsImage = ( {
             <FasterImageView
               key={uri.uri}
               className={classNames( CLASS_NAMES )}
+              style={brightnessFilterStyle}
               testID="ObsList.photo"
               accessibilityIgnoresInvertColors
               fadeDuration={0}
@@ -138,6 +164,7 @@ const ObsImage = ( {
           imageHeight={detection.imageHeight}
           initialCrop={detection.crop}
           size={containerSize}
+          brightnessFilterStyle={brightnessFilterStyle}
         />
       ) }
       { opaque && (

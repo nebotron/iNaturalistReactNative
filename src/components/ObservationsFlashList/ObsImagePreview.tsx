@@ -13,6 +13,7 @@ import React, {
 import type { LayoutChangeEvent, ViewStyle } from "react-native";
 import { FlatList } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { AUTO_BRIGHTNESS_MODE } from "stores/createLayoutSlice";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -25,7 +26,7 @@ const ICON_DROP_SHADOW = getShadow( {
 } );
 
 interface Props extends PropsWithChildren {
-  autoAdjustBrightness?: boolean;
+  autoBrightnessMode?: AUTO_BRIGHTNESS_MODE;
   autoDetectSubject?: boolean;
   className?: string;
   hasSound?: boolean;
@@ -65,7 +66,7 @@ const getBorderRadiusClass = (
 };
 
 const ObsImagePreview = ( {
-  autoAdjustBrightness = false,
+  autoBrightnessMode = AUTO_BRIGHTNESS_MODE.OFF,
   autoDetectSubject = false,
   children,
   className,
@@ -319,7 +320,7 @@ const ObsImagePreview = ( {
     ( info: { item: { uri: string } | null } ) => (
       <View style={carouselWidthStyle} className="h-full">
         <ObsImage
-          autoAdjustBrightness={autoAdjustBrightness}
+          autoBrightnessMode={autoBrightnessMode}
           autoDetectSubject={autoDetectSubject}
           initialContainerSize={containerWidth ?? undefined}
           uri={info.item ?? undefined}
@@ -334,7 +335,7 @@ const ObsImagePreview = ( {
       </View>
     ),
     [
-      autoAdjustBrightness,
+      autoBrightnessMode,
       autoDetectSubject,
       carouselWidthStyle,
       containerWidth,
@@ -378,7 +379,7 @@ const ObsImagePreview = ( {
     content = (
       <>
         <ObsImage
-          autoAdjustBrightness={autoAdjustBrightness}
+          autoBrightnessMode={autoBrightnessMode}
           autoDetectSubject={autoDetectSubject}
           uri={source}
           opaque={opaque}

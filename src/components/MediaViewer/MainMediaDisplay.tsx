@@ -8,7 +8,7 @@ import { View } from "components/styledComponents";
 import React, {
   useCallback, useMemo, useRef, useState,
 } from "react";
-import { ActivityIndicator, StyleSheet } from "react-native";
+import { ActivityIndicator, PixelRatio, StyleSheet } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
 import {
   Gesture,
@@ -22,6 +22,7 @@ import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { saveBrightness } from "sharedHelpers/brightnessLog";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import { openExternalWebBrowser } from "sharedHelpers/util";
+import useLiveToneMappedBrightnessUri from "sharedHelpers/useLiveToneMappedBrightnessUri";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
@@ -98,6 +99,22 @@ const MainMediaDisplay = ( {
     ...sounds.map( sound => ( { ...sound, type: "sound" as const } ) ),
   ] ), [photos, sounds] );
 
+  // Live gamma-based (debounced) preview for whichever photo the brightness
+  // slider is currently editing, so dragging the slider previews the same
+  // detail-preserving tone curve that gets saved (see adjustImageBrightness).
+  const selectedPhoto = photos[selectedMediaIndex];
+  const selectedPhotoUri = selectedPhoto
+    ? Photo.displayLocalOrRemoteLargePhoto( selectedPhoto )
+    : undefined;
+  const liveBrightnessMaxDimension = Math.round(
+    Math.max( screenWidth, screenHeight ) * PixelRatio.get( ),
+  );
+  const liveBrightnessUri = useLiveToneMappedBrightnessUri(
+    selectedPhotoUri,
+    brightness,
+    liveBrightnessMaxDimension,
+  );
+
   // On the render right after a photo is removed, selectedMediaIndex can still
   // point at the deleted index
   const safeDefaultIndex = Math.max(
@@ -144,14 +161,17 @@ const MainMediaDisplay = ( {
   const renderPhoto = ( photo: PhotoItem, photoIndex: number ) => {
     const uri = Photo.displayLocalOrRemoteLargePhoto( photo );
     const hasAttribution = photo?.attribution;
+    const isSelected = photoIndex === selectedMediaIndex;
+    const displayUri = isSelected && brightness !== BRIGHTNESS_DEFAULT
+      ? ( liveBrightnessUri ?? uri )
+      : uri;
     return (
       <View className="flex-1">
         <CustomImageZoom
-          uri={uri}
+          uri={displayUri}
           resetKey={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
-          brightness={brightness}
           zoomRef={( ref: SharedZoomableImageRef | null ) => {
             if ( photoIndex === selectedMediaIndex ) {
               currentZoomRefRef.current = ref;
