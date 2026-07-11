@@ -360,7 +360,11 @@ const MainMediaDisplay = ( {
 
   const renderItem: CarouselRenderItem<PhotoItem | SoundItem> = ( { item } ) => {
     if ( item.type === "photo" ) {
-      const photoIndex = photos.indexOf( item as PhotoItem );
+      // `item` is drawn from `items` (a freshly-mapped array), never from
+      // `photos` itself, so `photos.indexOf(item)` can never match by
+      // reference and always returns -1. `items` lists photos before
+      // sounds in the same order as `photos`, so its index lines up.
+      const photoIndex = items.indexOf( item );
       return renderPhoto( item as PhotoItem, photoIndex );
     }
     return renderSound( item as SoundItem );
