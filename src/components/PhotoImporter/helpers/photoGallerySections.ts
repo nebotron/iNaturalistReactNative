@@ -46,9 +46,13 @@ const splitOversizedSection = ( nodes: PhotoNode[] ): PhotoNode[][] => {
 // Inserts a header before the first photo of each run whose gap to the
 // previous (newer) photo exceeds SECTION_GAP_SECONDS. Sections larger than
 // MAX_SECTION_SIZE are further split on their largest internal time-gaps.
+// When morePhotosMayFollow is true, the trailing section is withheld: more
+// photos could still be loaded that belong to it (or split it further), so
+// it isn't finalized yet and shouldn't be shown.
 const buildSectionedGalleryItems = (
   photos: PhotoNode[],
   getKey: ( node: PhotoNode ) => string,
+  morePhotosMayFollow: boolean = false,
 ): PhotoGalleryListItem[] => {
   const items: PhotoGalleryListItem[] = [];
   let currentSection: PhotoNode[] = [];
@@ -65,7 +69,11 @@ const buildSectionedGalleryItems = (
     currentSection.push( node );
   } );
 
-  sections
+  const finalizedSections = morePhotosMayFollow
+    ? sections.slice( 0, -1 )
+    : sections;
+
+  finalizedSections
     .flatMap( splitOversizedSection )
     .forEach( ( nodes, index ) => {
       const [firstNode] = nodes;

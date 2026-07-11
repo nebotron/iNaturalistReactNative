@@ -195,8 +195,8 @@ const PhotoGallery = ( {
   );
 
   const galleryItems = useMemo(
-    ( ) => buildSectionedGalleryItems( visiblePhotos, getSelectionKey ),
-    [visiblePhotos],
+    ( ) => buildSectionedGalleryItems( visiblePhotos, getSelectionKey, hasNextPage ),
+    [visiblePhotos, hasNextPage],
   );
 
   const toggleSectionSelection = useCallback( ( nodes: PhotoNode[] ) => {
