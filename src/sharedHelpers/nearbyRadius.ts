@@ -2,7 +2,7 @@ export const NEARBY_RADIUS_OPTIONS_KM = [1, 5, 10, 25, 50] as const;
 
 export type NearbyRadiusKm = typeof NEARBY_RADIUS_OPTIONS_KM[number];
 
-export const DEFAULT_NEARBY_RADIUS_KM = 1;
+export const DEFAULT_NEARBY_RADIUS_KM = 100;
 
 export const MIN_NEARBY_RADIUS_KM = 1;
 
