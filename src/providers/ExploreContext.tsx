@@ -459,13 +459,8 @@ async function defaultExploreLocation(
 // state
 function exploreReducer( state: State, action: Action ) {
   switch ( action.type ) {
-    // Reset the state to the initial state, but place mode
-    // should be set to worldwide no matter if location and not nearby
     case EXPLORE_ACTION.RESET:
-      return {
-        ...initialState,
-        placeMode: PLACE_MODE.WORLDWIDE,
-      };
+      return initialState;
     case EXPLORE_ACTION.DISCARD:
       return action.snapshot;
     case EXPLORE_ACTION.CHANGE_TAXON: {

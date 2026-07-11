@@ -48,8 +48,6 @@ const RootExploreContainerWithContext = ( ): Node => {
     hasBlockedPermissions: hasBlockedLocationPermissions,
     checkPermissions,
   } = useLocationPermission( );
-  const previousHasLocationPermissions = useRef();
-
   const {
     state, dispatch, makeSnapshot, defaultExploreLocation,
   } = useExplore( );
@@ -59,8 +57,8 @@ const RootExploreContainerWithContext = ( ): Node => {
   const [canFetch, setCanFetch] = useState( false );
 
   useEffect( () => {
-    async function locationPermissionsChanged() {
-      if ( hasLocationPermissions && !previousHasLocationPermissions.current
+    async function resolveNearbyLocation() {
+      if ( hasLocationPermissions
         && state.placeMode === PLACE_MODE.NEARBY && !state.lat ) {
         const exploreLocation = await defaultExploreLocation();
         dispatch( {
@@ -68,11 +66,9 @@ const RootExploreContainerWithContext = ( ): Node => {
           exploreLocation,
         } );
       }
-
-      previousHasLocationPermissions.current = hasLocationPermissions;
     }
 
-    locationPermissionsChanged();
+    resolveNearbyLocation();
   }, [defaultExploreLocation, dispatch, hasLocationPermissions, state] );
 
   useEffect( () => {
