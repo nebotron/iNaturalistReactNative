@@ -35,6 +35,26 @@ const AUTO_BRIGHTNESS_LABEL_KEY = {
   [AUTO_BRIGHTNESS_MODE.GAMMA]: "Auto-Brightness-Gamma",
 };
 
+// Multiply and gamma each get a distinct glyph (× and γ) since there's no
+// dedicated icon in the INatIcon font for either; off reuses the flash-off
+// icon, which already reads clearly as "disabled".
+const AutoBrightnessGlyph = ( { mode }: { mode: string } ) => {
+  if ( mode === AUTO_BRIGHTNESS_MODE.OFF ) {
+    return <INatIcon name="flash-off" size={18} color={colors.white} />;
+  }
+  const glyph = mode === AUTO_BRIGHTNESS_MODE.MULTIPLY
+    ? "×"
+    : "γ";
+  return (
+    <Body3
+      className="text-white font-bold text-[18px] leading-[18px]"
+      maxFontSizeMultiplier={1}
+    >
+      {glyph}
+    </Body3>
+  );
+};
+
 type Props = {
   count: ?number,
   exploreView: string,
@@ -145,10 +165,6 @@ const Header = ( {
           </View>
           <View className="flex-row items-center">
             <INatIconButton
-              icon={autoBrightnessMode === AUTO_BRIGHTNESS_MODE.OFF
-                ? "flash-off"
-                : "flash-on"}
-              color={colors.white}
               className={classNames(
                 autoBrightnessMode !== AUTO_BRIGHTNESS_MODE.OFF
                   ? "bg-inatGreen"
@@ -161,7 +177,9 @@ const Header = ( {
               accessibilityLabel={`${t( "Auto-Adjust-Brightness" )}: `
                 + `${t( AUTO_BRIGHTNESS_LABEL_KEY[autoBrightnessMode] )}`}
               testID="Explore.autoBrightnessToggle"
-            />
+            >
+              <AutoBrightnessGlyph mode={autoBrightnessMode} />
+            </INatIconButton>
             <View>
               <INatIconButton
                 icon="sliders"
