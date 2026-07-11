@@ -92,7 +92,6 @@ const MainMediaDisplay = ( {
   const [brightnessSaved, setBrightnessSaved] = useState( false );
   const [brightnessSaving, setBrightnessSaving] = useState( false );
   const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
-  const [isSlidingBrightness, setIsSlidingBrightness] = useState( false );
   const imageDimensionsRef = useRef<{ width: number; height: number } | null>( null );
   const currentZoomRefRef = useRef<SharedZoomableImageRef | null>( null );
   const items = useMemo( ( ) => ( [
@@ -101,10 +100,8 @@ const MainMediaDisplay = ( {
   ] ), [photos, sounds] );
 
   // Live preview for whichever photo the brightness slider is currently
-  // editing. The CSS filter below gives instant feedback on every slider
-  // tick; once the debounced gamma tone curve (the same one that gets
-  // saved — see adjustImageBrightness) finishes processing, it replaces
-  // the filter so the final look matches exactly.
+  // editing: always the most recently computed gamma tone-mapped preview
+  // (the same curve that gets saved — see adjustImageBrightness).
   const selectedPhoto = photos[selectedMediaIndex];
   const selectedPhotoUri = selectedPhoto
     ? Photo.displayLocalOrRemoteLargePhoto( selectedPhoto )
@@ -119,14 +116,6 @@ const MainMediaDisplay = ( {
     selectedPhotoUri,
     brightness,
     liveBrightnessMaxDimension,
-  );
-  // Don't swap in the processed image mid-drag: a background debounced
-  // result can land while the finger is still moving, and swapping the
-  // Image source there (then swapping back on the next tick) is what
-  // caused the flashing. Hold the CSS-filtered raw preview steady until
-  // the gesture ends.
-  const liveBrightnessReady = !isSlidingBrightness && Boolean(
-    liveBrightnessUri && liveBrightnessUri !== selectedPhotoUri,
   );
 
   // On the render right after a photo is removed, selectedMediaIndex can still
@@ -177,14 +166,9 @@ const MainMediaDisplay = ( {
     const hasAttribution = photo?.attribution;
     const isSelected = photoIndex === selectedMediaIndex;
     const isEditingBrightness = isSelected && brightness !== BRIGHTNESS_DEFAULT;
-    const displayUri = isEditingBrightness && liveBrightnessReady
+    const displayUri = isEditingBrightness && liveBrightnessUri
       ? liveBrightnessUri
       : uri;
-    // Instant coarse preview while the precise gamma tone curve is still
-    // processing (or hasn't started yet, e.g. right as the slider moves).
-    const displayBrightness = isEditingBrightness && !liveBrightnessReady
-      ? brightness
-      : BRIGHTNESS_DEFAULT;
     return (
       <View className="flex-1">
         <CustomImageZoom
@@ -192,7 +176,6 @@ const MainMediaDisplay = ( {
           resetKey={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
-          brightness={displayBrightness}
           zoomRef={( ref: SharedZoomableImageRef | null ) => {
             if ( photoIndex === selectedMediaIndex ) {
               currentZoomRefRef.current = ref;
@@ -277,8 +260,6 @@ const MainMediaDisplay = ( {
                 thumbTintColor={colors.white}
                 value={brightness}
                 onValueChange={val => { setBrightness( val ); setBrightnessSaved( false ); }}
-                onSlidingStart={( ) => setIsSlidingBrightness( true )}
-                onSlidingComplete={( ) => setIsSlidingBrightness( false )}
                 tapToSeek
                 accessibilityLabel={t( "Adjust-brightness" )}
               />

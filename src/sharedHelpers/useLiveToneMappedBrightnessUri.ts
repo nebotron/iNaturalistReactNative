@@ -32,34 +32,34 @@ const ensureOutputDir = ( ) => {
 // Debounces a live-adjusted brightness value (e.g. from a slider) and
 // applies it via the same detail-preserving gamma tone curve used for auto
 // brightness (see adjustImageBrightness), so the live preview matches what
-// gets saved. Falls back to the raw uri while unadjusted or still processing.
+// gets saved. While a new adjustment is being processed, keeps showing the
+// most recently computed tone-mapped preview rather than reverting to the
+// raw uri, so the preview never flashes back to unadjusted mid-drag.
 const useLiveToneMappedBrightnessUri = (
   uri: string | undefined,
   adjustment: number,
   maxDimension: number,
 ): string | undefined => {
-  const computeInitial = ( u: string | undefined, adj: number ) => {
-    if ( !u || adj === 1.0 ) return u;
-    return cache.get( cacheKey( u, adj ) ) ?? u;
-  };
-
   const [prevUri, setPrevUri] = useState( uri );
-  const [prevAdjustment, setPrevAdjustment] = useState( adjustment );
-  const [processedUri, setProcessedUri] = useState<string | undefined>(
-    ( ) => computeInitial( uri, adjustment ),
-  );
+  const [processedUri, setProcessedUri] = useState<string | undefined>( uri );
 
-  if ( prevUri !== uri || prevAdjustment !== adjustment ) {
+  if ( prevUri !== uri ) {
     setPrevUri( uri );
-    setPrevAdjustment( adjustment );
-    setProcessedUri( computeInitial( uri, adjustment ) );
+    setProcessedUri( uri );
   }
 
   useEffect( ( ) => {
-    if ( !uri || adjustment === 1.0 ) return ( ) => {};
+    if ( !uri || adjustment === 1.0 ) {
+      setProcessedUri( uri );
+      return ( ) => {};
+    }
 
     const key = cacheKey( uri, adjustment );
-    if ( cache.has( key ) ) return ( ) => {};
+    const cached = cache.get( key );
+    if ( cached ) {
+      setProcessedUri( cached );
+      return ( ) => {};
+    }
 
     let cancelled = false;
     const timer = setTimeout( ( ) => {
