@@ -11,9 +11,9 @@ interface ImageCropperModule {
 
 const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
-// Applies a detail-preserving tone curve (see toneCurve/toneCurveChannel in
-// the native implementations) instead of a flat multiply, so brightening
-// can't clip highlights to white and darkening can't crush shadows to black.
+// Applies exposure (a linear-light multiply, see toneCurve in the native
+// implementation) rather than multiplying gamma-encoded pixel values
+// directly, which would compress midtone/highlight contrast and look flat.
 // Returns a file:// uri for the adjusted image, or null on failure.
 const adjustImageBrightness = async (
   imageUri: string,

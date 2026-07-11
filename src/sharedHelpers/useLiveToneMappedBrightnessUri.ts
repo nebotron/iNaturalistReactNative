@@ -30,9 +30,9 @@ const ensureOutputDir = ( ) => {
 };
 
 // Debounces a live-adjusted brightness value (e.g. from a slider) and
-// applies it via the same detail-preserving gamma tone curve used for auto
-// brightness (see adjustImageBrightness), so the live preview matches what
-// gets saved. Falls back to the raw uri while unadjusted or still processing.
+// applies it via the same exposure adjustment used for auto brightness (see
+// adjustImageBrightness), so the live preview matches what gets saved. Falls
+// back to the raw uri while unadjusted or still processing.
 const useLiveToneMappedBrightnessUri = (
   uri: string | undefined,
   adjustment: number,

@@ -372,16 +372,28 @@ static float measureShadowPercentile( UIImage *image, CGRect normCrop )
   return p10;
 }
 
-// ─── Brightness adjustment (detail-preserving tone curve) ───────────────────
+// ─── Brightness adjustment (exposure) ────────────────────────────────────────
 
-// Rational tone curve: output = k·x / (1 + (k-1)·x), for x in [0,1].
-// Fixed points at x=0→0 and x=1→1, so unlike a flat multiply it can never
-// push highlights past white or crush shadows to black: near x=1 the slope
-// is 1/k (highlights compress as k grows), near x=0 the slope is k (shadows
-// lift by roughly the requested factor).
+static inline float srgbToLinear( float c )
+{
+  return c <= 0.04045f ? c / 12.92f : powf( ( c + 0.055f ) / 1.055f, 2.4f );
+}
+
+static inline float linearToSrgb( float c )
+{
+  return c <= 0.0031308f ? c * 12.92f : 1.055f * powf( c, 1.0f / 2.4f ) - 0.055f;
+}
+
+// Exposure: multiplies scene-referred (linear-light) values by k, the same
+// way a camera's exposure control or a photo editor's Exposure slider works,
+// rather than multiplying the gamma-encoded pixel values directly. Gamma
+// encoding packs most of an image's tonal range into a small range of
+// encoded values near the top, so multiplying it directly compresses
+// midtone/highlight contrast and looks flat; doing the multiply in linear
+// light preserves relative contrast between tones instead.
 static inline float toneCurve( float x, float k )
 {
-  return ( k * x ) / ( 1.0f + ( k - 1.0f ) * x );
+  return linearToSrgb( fminf( srgbToLinear( x ) * k, 1.0f ) );
 }
 
 // ─── Public detection entry point ────────────────────────────────────────────

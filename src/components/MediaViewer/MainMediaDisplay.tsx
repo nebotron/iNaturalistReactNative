@@ -46,13 +46,20 @@ interface SoundItem {
   type: "sound";
 }
 
-const BRIGHTNESS_MIN = 0.1;
-const BRIGHTNESS_MAX = 5.0;
+// Exposure slider: values are in stops (EV), converted to a linear
+// multiplier (2^stops) for processing/saving, matching how a camera's
+// exposure compensation control works.
+const EXPOSURE_STOPS_MIN = -2;
+const EXPOSURE_STOPS_MAX = 2;
+const EXPOSURE_STOPS_DEFAULT = 0;
+const EXPOSURE_TICK_STOPS = [-2, -1, 0, 1, 2];
 const BRIGHTNESS_DEFAULT = 1.0;
+const stopsToMultiplier = ( stops: number ) => 2 ** stops;
 const styles = StyleSheet.create( {
   gestureHandlerRoot: { flex: 1 },
 } );
 const sliderStyle = { flex: 1, height: 40 };
+const tickRowStyle = { justifyContent: "space-between" as const, bottom: 2 };
 const roundIconButtonClass = "bg-black/50 items-center justify-center "
   + "rounded-full h-[40px] w-[40px] ml-2";
 
@@ -88,7 +95,8 @@ const MainMediaDisplay = ( {
   const { t } = useTranslation( );
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   const [zooming, setZooming] = useState( false );
-  const [brightness, setBrightness] = useState( BRIGHTNESS_DEFAULT );
+  const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
+  const brightness = stopsToMultiplier( brightnessStops );
   const [brightnessSaved, setBrightnessSaved] = useState( false );
   const [brightnessSaving, setBrightnessSaving] = useState( false );
   const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
@@ -101,7 +109,7 @@ const MainMediaDisplay = ( {
 
   // Live preview for whichever photo the brightness slider is currently
   // editing. The CSS filter below gives instant feedback on every slider
-  // tick; once the debounced gamma tone curve (the same one that gets
+  // tick; once the debounced exposure adjustment (the same one that gets
   // saved — see adjustImageBrightness) finishes processing, it replaces
   // the filter so the final look matches exactly.
   const selectedPhoto = photos[selectedMediaIndex];
@@ -262,18 +270,32 @@ const MainMediaDisplay = ( {
         { showBrightnessSlider && (
           <View className="absolute bottom-16 left-0 right-0 px-4 py-2">
             <View className="bg-black/60 rounded-xl px-3 py-2 flex-row items-center">
-              <Slider
-                style={sliderStyle}
-                minimumValue={BRIGHTNESS_MIN}
-                maximumValue={BRIGHTNESS_MAX}
-                minimumTrackTintColor={colors.inatGreen}
-                maximumTrackTintColor={colors.white}
-                thumbTintColor={colors.white}
-                value={brightness}
-                onValueChange={val => { setBrightness( val ); setBrightnessSaved( false ); }}
-                tapToSeek
-                accessibilityLabel={t( "Adjust-brightness" )}
-              />
+              <View className="flex-1 justify-center">
+                <Slider
+                  style={sliderStyle}
+                  minimumValue={EXPOSURE_STOPS_MIN}
+                  maximumValue={EXPOSURE_STOPS_MAX}
+                  minimumTrackTintColor={colors.inatGreen}
+                  maximumTrackTintColor={colors.white}
+                  thumbTintColor={colors.white}
+                  value={brightnessStops}
+                  onValueChange={val => {
+                    setBrightnessStops( val );
+                    setBrightnessSaved( false );
+                  }}
+                  tapToSeek
+                  accessibilityLabel={t( "Adjust-brightness" )}
+                />
+                <View
+                  className="absolute left-0 right-0 flex-row px-1"
+                  style={tickRowStyle}
+                  pointerEvents="none"
+                >
+                  { EXPOSURE_TICK_STOPS.map( stop => (
+                    <View key={stop} className="w-px h-2 bg-white/70" />
+                  ) ) }
+                </View>
+              </View>
               { brightness !== BRIGHTNESS_DEFAULT && (
                 <>
                   { brightnessSaving
@@ -304,7 +326,7 @@ const MainMediaDisplay = ( {
                       />
                     ) }
                   <TransparentCircleButton
-                    onPress={( ) => setBrightness( BRIGHTNESS_DEFAULT )}
+                    onPress={( ) => setBrightnessStops( EXPOSURE_STOPS_DEFAULT )}
                     icon="close"
                     color={colors.white}
                     accessibilityLabel={t( "Reset-brightness" )}
