@@ -14,7 +14,6 @@ import {
 import Realm from "realm";
 import realmConfig from "realmModels/index";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
-import distanceInMeters from "sharedHelpers/geoDistance";
 import { clearWatch, watchPosition } from "sharedHelpers/geolocationWrapper";
 import { store } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
@@ -24,9 +23,11 @@ const logger = log.extend( "locationHistoryTracker" );
 
 const TRACKING_ENABLED_KEY = "locationHistoryTrackingEnabled";
 const BACKGROUND_TASK_NAME = "location-history-tracking";
-// Only record a new point if the user has moved this far...
+// The OS only delivers a new fix once the user has moved this far (the watch's
+// distanceFilter), which keeps background tracking power-efficient. Every fix
+// it does deliver is stored; accuracy filtering happens at interpolation time.
 const MIN_DISTANCE_METERS = 10;
-// ...or this much time has passed since the last recorded point
+// Requested update interval for the Android background watch
 const MIN_INTERVAL_MS = 1 * 60 * 1000;
 const POLL_MS = 1000;
 
@@ -60,7 +61,6 @@ const DEFAULT_GEOLOCATION_CONFIG = {
 
 let watchId: number | null = null;
 let realmInstance: Realm | null = null;
-let lastRecorded: { latitude: number; longitude: number; timestamp: number } | null = null;
 
 const sleep = ( ms: number ) => new Promise<void>( resolve => {
   setTimeout( resolve, ms );
@@ -87,19 +87,9 @@ const recordPosition = async ( position: {
   const { latitude, longitude, accuracy } = position.coords;
   const now = Date.now();
 
-  if ( lastRecorded ) {
-    const elapsedMs = now - lastRecorded.timestamp;
-    const movedMeters = distanceInMeters(
-      lastRecorded.latitude,
-      lastRecorded.longitude,
-      latitude,
-      longitude,
-    );
-    if ( elapsedMs < MIN_INTERVAL_MS && movedMeters < MIN_DISTANCE_METERS ) {
-      return;
-    }
-  }
-  lastRecorded = { latitude, longitude, timestamp: now };
+  // Store every fix the watch delivers. We intentionally don't thin points at
+  // capture time - keeping the full history lets the interpolation phase pick
+  // the most accurate fixes for a given moment (see interpolateTrackedLocation).
 
   try {
     const realm = await getRealmInstance();
