@@ -111,10 +111,9 @@ const MainMediaDisplay = ( {
   ] ), [photos, sounds] );
 
   // Live preview for whichever photo the brightness slider is currently
-  // editing. The CSS filter below gives instant feedback on every slider
-  // tick; once the debounced exposure adjustment (the same one that gets
-  // saved — see adjustImageBrightness) finishes processing, it replaces
-  // the filter so the final look matches exactly.
+  // editing, using the debounced exposure adjustment (the same one that gets
+  // saved — see adjustImageBrightness) so the preview matches the final look
+  // exactly.
   const selectedPhoto = photos[selectedMediaIndex];
   const selectedPhotoUri = selectedPhoto
     ? Photo.displayLocalOrRemoteLargePhoto( selectedPhoto )
@@ -182,14 +181,14 @@ const MainMediaDisplay = ( {
     const hasAttribution = photo?.attribution;
     const isSelected = photoIndex === selectedMediaIndex;
     const isEditingBrightness = isSelected && brightness !== BRIGHTNESS_DEFAULT;
+    // Only ever show the exposure-based adjustment (power->linear->power, see
+    // adjustImageBrightness). Until the debounced processing finishes we show
+    // the unadjusted image rather than a CSS brightness filter, which uses a
+    // different (gamma-encoded multiply) computation and made the preview
+    // flash between the two as processing completed and restarted per tick.
     const displayUri = isEditingBrightness && liveBrightnessReady
       ? liveBrightnessUri
       : uri;
-    // Instant coarse preview while the precise gamma tone curve is still
-    // processing (or hasn't started yet, e.g. right as the slider moves).
-    const displayBrightness = isEditingBrightness && !liveBrightnessReady
-      ? brightness
-      : BRIGHTNESS_DEFAULT;
     return (
       <View className="flex-1">
         <CustomImageZoom
@@ -197,7 +196,7 @@ const MainMediaDisplay = ( {
           resetKey={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
-          brightness={displayBrightness}
+          brightness={BRIGHTNESS_DEFAULT}
           zoomRef={( ref: SharedZoomableImageRef | null ) => {
             if ( photoIndex === selectedMediaIndex ) {
               currentZoomRefRef.current = ref;
