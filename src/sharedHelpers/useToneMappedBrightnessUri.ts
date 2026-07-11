@@ -9,9 +9,10 @@ import ensureLocalImageForCrop from "./ensureLocalImageForCrop";
 import type { NormalizedCrop } from "./normalizedCropTypes";
 import useAutoBrightnessForUri from "./useAutoBrightnessForUri";
 
-// Thumbnail-sized output: this is only used for grid tiles, so there's no
-// need to process (or cache) full-resolution images.
-const MAX_DIMENSION = 640;
+// No downscaling: the same processed image is also used when a grid tile is
+// pinch-zoomed (see ObsImageZoomable), so capping to a thumbnail size would
+// make zoomed-in photos blurry. 99999 only caps the size, never upscales.
+const MAX_DIMENSION = 99999;
 const CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 
 // djb2 hash → stable hex filename for a given cache key

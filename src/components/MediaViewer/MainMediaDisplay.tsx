@@ -8,7 +8,7 @@ import { View } from "components/styledComponents";
 import React, {
   useCallback, useMemo, useRef, useState,
 } from "react";
-import { ActivityIndicator, PixelRatio, StyleSheet } from "react-native";
+import { ActivityIndicator, StyleSheet } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
 import {
   Gesture,
@@ -49,6 +49,10 @@ interface SoundItem {
 const BRIGHTNESS_MIN = 0.1;
 const BRIGHTNESS_MAX = 5.0;
 const BRIGHTNESS_DEFAULT = 1.0;
+// No downscaling: photos can be pinch-zoomed up to 100x in this viewer, so
+// capping to screen size would make the gamma-adjusted preview blurry when
+// zoomed in. 99999 only caps the size, never upscales.
+const NO_DOWNSCALE_MAX_DIMENSION = 99999;
 const styles = StyleSheet.create( {
   gestureHandlerRoot: { flex: 1 },
 } );
@@ -108,13 +112,10 @@ const MainMediaDisplay = ( {
   const selectedPhotoUri = selectedPhoto
     ? Photo.displayLocalOrRemoteLargePhoto( selectedPhoto )
     : undefined;
-  const liveBrightnessMaxDimension = Math.round(
-    Math.max( screenWidth, screenHeight ) * PixelRatio.get( ),
-  );
   const liveBrightnessUri = useLiveToneMappedBrightnessUri(
     selectedPhotoUri,
     brightness,
-    liveBrightnessMaxDimension,
+    NO_DOWNSCALE_MAX_DIMENSION,
   );
   const liveBrightnessReady = Boolean(
     liveBrightnessUri && liveBrightnessUri !== selectedPhotoUri,
