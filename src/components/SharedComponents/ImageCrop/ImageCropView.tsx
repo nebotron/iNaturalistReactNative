@@ -228,14 +228,20 @@ const ImageCropView = ( {
       crop,
     );
     zoomRef.current.applyTransform( transform );
-    updateDownsizeStatus( );
+    // square2048Crop never exceeds UPLOAD_MAX_SIDE by construction, so clear
+    // the warning directly instead of reading the transform back -- that read
+    // can run before the just-applied worklet update reaches JS, and would
+    // otherwise fall inside the hysteresis band and stay stuck on if the crop
+    // was already oversized before this snap (the button's main use case).
+    setWillBeDownsized( false );
+    onCropChange?.( crop );
   }, [
     boxSize,
     cropAreaHeight,
     imageHeight,
     imageWidth,
+    onCropChange,
     windowWidth,
-    updateDownsizeStatus,
   ] );
 
   const handleConfirm = useCallback( async ( ) => {
