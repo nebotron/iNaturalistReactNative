@@ -3,11 +3,8 @@ import { TransparentCircleButton } from "components/SharedComponents";
 import {
   Image, Pressable, View,
 } from "components/styledComponents";
-import React, { useCallback, useState } from "react";
-import type { LayoutChangeEvent } from "react-native";
+import React, { useCallback } from "react";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
-import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
-import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import { useTranslation } from "sharedHooks";
 
 interface Props {
@@ -18,53 +15,15 @@ interface Props {
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
 }
 
-const PhotoThumbnail = ( { uri }: { uri: string } ) => {
-  const [containerSize, setContainerSize] = useState<number | null>( null );
-  // Frame the thumbnail with the subject detector bounding box by default, or
-  // the crop log entry if one exists.
-  const detection = useSubjectDetectionForUri( uri );
-
-  const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
-    setContainerSize( event.nativeEvent.layout.width );
-  }, [] );
-
-  const cropStyles = detection && containerSize
-    ? computeCropStyles(
-      detection.crop,
-      containerSize,
-      detection.imageWidth,
-      detection.imageHeight,
-    )
-    : null;
-
-  return (
-    // aspect-square (not h-full) guarantees a definite square box: h-full never
-    // resolves here because the ancestors hug their content, so once the crop
-    // wrapper (position: absolute) is the only child the box would otherwise
-    // collapse or inherit the image's aspect ratio, shifting/over-zooming the
-    // crop that computeCropStyles frames assuming a square box.
-    <View className="w-full aspect-square" onLayout={handleLayout}>
-      {cropStyles
-        ? (
-          <View style={cropStyles.wrapperStyle}>
-            <Image
-              source={{ uri }}
-              accessibilityIgnoresInvertColors
-              style={cropStyles.imageStyle}
-              resizeMode="stretch"
-            />
-          </View>
-        )
-        : (
-          <Image
-            source={{ uri }}
-            accessibilityIgnoresInvertColors
-            className="w-full h-full"
-          />
-        )}
-    </View>
-  );
-};
+const PhotoThumbnail = ( { uri }: { uri: string } ) => (
+  <View className="w-full aspect-square">
+    <Image
+      source={{ uri }}
+      accessibilityIgnoresInvertColors
+      className="w-full h-full"
+    />
+  </View>
+);
 
 const ObsPhotoSelectionList = ( {
   onCropPhoto,
