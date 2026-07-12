@@ -27,12 +27,16 @@ const TOOLBAR_HEIGHT = 104;
 const CROP_BUTTON_SIZE = 88;
 const CROP_ICON_SIZE = 36;
 const UPLOAD_MAX_SIDE = 2048;
-// Different formulas compute the cropped side length (round-tripping through
-// the zoom transform vs. deriving it directly from scale), which can disagree
-// by a fraction of a pixel right at the threshold. Round before comparing so
-// an exactly-2048px crop doesn't flicker between the normal and warning
-// border color.
-const exceedsUploadMax = ( sizePx: number ) => Math.round( sizePx ) > UPLOAD_MAX_SIDE;
+// Two-finger panning is implemented as a pinch with a scale ratio that stays
+// near 1, so ordinary hand tremor makes the live scale (and thus the cropped
+// side length) drift by a few pixels even when the user isn't deliberately
+// zooming. Right at the 2048 threshold that drift flips the warning border on
+// and off. Use hysteresis instead of a single-sample comparison so crossing
+// the threshold briefly during a gesture doesn't flicker the indicator.
+const DOWNSIZE_HYSTERESIS_PX = 8;
+const isDownsized = ( sizePx: number, wasDownsized: boolean ) => ( wasDownsized
+  ? sizePx > UPLOAD_MAX_SIDE - DOWNSIZE_HYSTERESIS_PX
+  : sizePx > UPLOAD_MAX_SIDE + DOWNSIZE_HYSTERESIS_PX );
 
 const styles = StyleSheet.create( {
   confirmSlot: {
@@ -123,9 +127,8 @@ const ImageCropView = ( {
       boxSize,
       transform,
     );
-    setWillBeDownsized(
-      exceedsUploadMax( Math.max( crop.w * imageWidth, crop.h * imageHeight ) ),
-    );
+    const sizePx = Math.max( crop.w * imageWidth, crop.h * imageHeight );
+    setWillBeDownsized( prev => isDownsized( sizePx, prev ) );
     onCropChange?.( crop );
   }, [boxSize, cropAreaHeight, imageHeight, imageWidth, onCropChange, windowWidth] );
 
@@ -137,12 +140,11 @@ const ImageCropView = ( {
     if ( contain.width <= 0 || contain.height <= 0 ) {
       return;
     }
-    setWillBeDownsized(
-      exceedsUploadMax( Math.max(
-        boxSize * imageWidth / ( scale * contain.width ),
-        boxSize * imageHeight / ( scale * contain.height ),
-      ) ),
+    const sizePx = Math.max(
+      boxSize * imageWidth / ( scale * contain.width ),
+      boxSize * imageHeight / ( scale * contain.height ),
     );
+    setWillBeDownsized( prev => isDownsized( sizePx, prev ) );
   }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
 
   useEffect( ( ) => {
@@ -171,9 +173,8 @@ const ImageCropView = ( {
     zoomRef.current.applyTransform( transform );
     appliedInitialCropKey.current = cropKey;
     // Read directly from crop; applyTransform (a worklet) may not have propagated to JS yet.
-    setWillBeDownsized(
-      exceedsUploadMax( Math.max( initialCrop.w * imageWidth, initialCrop.h * imageHeight ) ),
-    );
+    const initialSizePx = Math.max( initialCrop.w * imageWidth, initialCrop.h * imageHeight );
+    setWillBeDownsized( prev => isDownsized( initialSizePx, prev ) );
   }, [
     boxSize,
     cropAreaHeight,
