@@ -1,5 +1,4 @@
 import {
-  findDuplicateUploadedDevicePhotoUris,
   getDevicePhotoUrisFromObservation,
   getPreviouslyUploadedDevicePhotoUrisSet,
   isPreviouslyUploadedDevicePhotoUri,
@@ -166,65 +165,6 @@ describe( "duplicateUploadedDevicePhotos", ( ) => {
         expect.objectContaining( { uri: "ph://UPLOADED-PHOTO" } ),
         "modified",
       );
-    } );
-  } );
-
-  describe( "findDuplicateUploadedDevicePhotoUris", ( ) => {
-    it( "finds device photo URIs that were already uploaded in another observation", ( ) => {
-      const realm = {
-        objects: jest.fn( modelName => {
-          if ( modelName === "UploadedDevicePhotoUri" ) {
-            return [];
-          }
-          return {
-            filtered: jest.fn( ).mockReturnValue( [
-              {
-                observationPhotos: [
-                  { originalDevicePhotoUri: "ph://ALREADY-UPLOADED" },
-                ],
-              },
-            ] ),
-          };
-        } ),
-        objectForPrimaryKey: jest.fn( ).mockReturnValue( {
-          observationPhotos: [
-            { originalDevicePhotoUri: "ph://ALREADY-UPLOADED" },
-            { originalDevicePhotoUri: "ph://NEW-PHOTO" },
-          ],
-        } ),
-      };
-
-      expect(
-        findDuplicateUploadedDevicePhotoUris(
-          realm,
-          ["pending-uuid"],
-        ),
-      ).toEqual( ["ph://ALREADY-UPLOADED"] );
-    } );
-
-    it( "returns an empty list when no device photo URIs match uploaded observations", ( ) => {
-      const realm = {
-        objects: jest.fn( modelName => {
-          if ( modelName === "UploadedDevicePhotoUri" ) {
-            return [];
-          }
-          return {
-            filtered: jest.fn( ).mockReturnValue( [] ),
-          };
-        } ),
-        objectForPrimaryKey: jest.fn( ).mockReturnValue( {
-          observationPhotos: [
-            { originalDevicePhotoUri: "ph://NEW-PHOTO" },
-          ],
-        } ),
-      };
-
-      expect(
-        findDuplicateUploadedDevicePhotoUris(
-          realm,
-          ["pending-uuid"],
-        ),
-      ).toEqual( [] );
     } );
   } );
 } );

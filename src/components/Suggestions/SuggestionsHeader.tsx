@@ -11,7 +11,6 @@ import ObsPhotoSelectionList from "./ObsPhotoSelectionList";
 import SuggestionsModelToggle from "./SuggestionsModelToggle";
 
 interface Props {
-  duplicatePhotoUris?: Set<string>;
   interactionsDisabled: boolean;
   onCropPhoto?: ( _uri: string ) => void;
   onPressPhoto: ( _uri: string ) => void;
@@ -27,7 +26,6 @@ interface Props {
 }
 
 const SuggestionsHeader = ( {
-  duplicatePhotoUris,
   interactionsDisabled,
   onCropPhoto,
   onPressPhoto,
@@ -47,7 +45,6 @@ const SuggestionsHeader = ( {
     <>
       <View className="mx-5">
         <ObsPhotoSelectionList
-          duplicatePhotoUris={duplicatePhotoUris}
           onCropPhoto={onCropPhoto}
           photoUris={photoUris}
           selectedPhotoUri={selectedPhotoUri}

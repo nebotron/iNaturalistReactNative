@@ -3,10 +3,6 @@ import {
   useCallback,
 } from "react";
 import Observation from "realmModels/Observation";
-import { confirmNoDuplicatePhotosBeforeUpload } from "sharedHelpers/duplicateUploadedDevicePhotos";
-import {
-  useTranslation,
-} from "sharedHooks";
 import useStore from "stores/useStore";
 
 export const MS_BEFORE_TOOLBAR_RESET = 5_000;
@@ -24,8 +20,6 @@ export default ( canUpload: boolean ) => {
 
   const unsyncedList = Observation.filterUnsyncedObservations( realm );
 
-  const { t } = useTranslation( );
-
   const createUploadQueueAllUnsynced = useCallback( async (
     skipSomeUuids: string[] | undefined,
   ) => {
@@ -39,14 +33,6 @@ export default ( canUpload: boolean ) => {
       } )
       .map( obs => obs.uuid );
     if ( uploadsUuids.length === 0 ) {
-      return;
-    }
-    const confirmed = await confirmNoDuplicatePhotosBeforeUpload(
-      realm,
-      uploadsUuids,
-      t,
-    );
-    if ( !confirmed ) {
       return;
     }
     const uuidsQuery = uploadsUuids
@@ -67,7 +53,6 @@ export default ( canUpload: boolean ) => {
     setCannotUploadObservations,
     setStartUploadObservations,
     setTotalToolbarIncrements,
-    t,
     unsyncedList,
   ] );
 

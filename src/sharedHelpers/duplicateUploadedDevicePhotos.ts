@@ -1,4 +1,3 @@
-import { Alert } from "react-native";
 import type { Asset } from "react-native-image-picker";
 import type Realm from "realm";
 import type { RealmObservation } from "realmModels/types";
@@ -105,61 +104,4 @@ export const markDuplicatePhotosFromLibrary = (
       originalDevicePhotoUri: deviceUri ?? undefined,
     };
   } );
-};
-
-export const findDuplicateUploadedDevicePhotoUris = (
-  realm: Realm,
-  uuidsToUpload: string[],
-): string[] => {
-  const previouslyUploadedUris = getPreviouslyUploadedDevicePhotoUrisSet(
-    realm,
-    uuidsToUpload,
-  );
-
-  const duplicateUris = new Set<string>( );
-  uuidsToUpload.forEach( uuid => {
-    const observation = realm.objectForPrimaryKey<RealmObservation>( "Observation", uuid );
-    if ( !observation ) {
-      return;
-    }
-    getDevicePhotoUrisFromObservation( observation ).forEach( uri => {
-      if ( previouslyUploadedUris.has( uri ) ) {
-        duplicateUris.add( uri );
-      }
-    } );
-  } );
-
-  return [...duplicateUris];
-};
-
-export const confirmUploadDespiteDuplicatePhotos = (
-  t: ( key: string ) => string,
-): Promise<boolean> => new Promise( resolve => {
-  Alert.alert(
-    t( "Duplicate-photo-upload-title" ),
-    t( "Duplicate-photo-upload-message" ),
-    [
-      {
-        text: t( "Cancel" ),
-        style: "cancel",
-        onPress: () => resolve( false ),
-      },
-      {
-        text: t( "Upload-anyway" ),
-        onPress: () => resolve( true ),
-      },
-    ],
-  );
-} );
-
-export const confirmNoDuplicatePhotosBeforeUpload = async (
-  realm: Realm,
-  uuidsToUpload: string[],
-  t: ( key: string ) => string,
-): Promise<boolean> => {
-  const duplicateUris = findDuplicateUploadedDevicePhotoUris( realm, uuidsToUpload );
-  if ( duplicateUris.length === 0 ) {
-    return true;
-  }
-  return confirmUploadDespiteDuplicatePhotos( t );
 };

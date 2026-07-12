@@ -1,7 +1,5 @@
 import classnames from "classnames";
 import { TransparentCircleButton } from "components/SharedComponents";
-import DuplicateUploadBadge from
-  "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import {
   Image, Pressable, View,
 } from "components/styledComponents";
@@ -13,7 +11,6 @@ import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import { useTranslation } from "sharedHooks";
 
 interface Props {
-  duplicatePhotoUris?: Set<string>;
   onCropPhoto?: ( _uri: string ) => void;
   photoUris: string[];
   selectedPhotoUri: string;
@@ -70,7 +67,6 @@ const PhotoThumbnail = ( { uri }: { uri: string } ) => {
 };
 
 const ObsPhotoSelectionList = ( {
-  duplicatePhotoUris,
   onCropPhoto,
   photoUris, selectedPhotoUri, onPressPhoto, onReorderPhotos,
 }: Props ) => {
@@ -100,14 +96,6 @@ const ObsPhotoSelectionList = ( {
           testID={`ObsPhotoSelectionList.border.${item}`}
         >
           <PhotoThumbnail uri={item} />
-          {duplicatePhotoUris?.has( item ) && (
-            <DuplicateUploadBadge
-              accessibilityLabel={t( "Duplicate-photo-indicator" )}
-              className="absolute top-1 left-1 z-10"
-              size={18}
-              testID={`ObsPhotoSelectionList.duplicate.${item}`}
-            />
-          )}
           {selectedPhotoUri === item && onCropPhoto && (
             <TransparentCircleButton
               onPress={( ) => onCropPhoto( item )}
@@ -120,7 +108,7 @@ const ObsPhotoSelectionList = ( {
         </View>
       </Pressable>
     </ScaleDecorator>
-  ), [duplicatePhotoUris, onCropPhoto, selectedPhotoUri, onPressPhoto, t] );
+  ), [onCropPhoto, selectedPhotoUri, onPressPhoto, t] );
 
   return (
     <DraggableFlatList

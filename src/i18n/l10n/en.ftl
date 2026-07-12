@@ -505,8 +505,6 @@ DONATE-TO-INATURALIST = DONATE TO INATURALIST
 DONE = DONE
 Dont-have-an-account = <0>Don't have an account? </0><1>Sign up</1>
 Duplicate-photo-indicator = Previously uploaded photo
-Duplicate-photo-upload-message = You have already uploaded this photo to iNaturalist. Cropped or edited versions count as the same photo. Upload anyway?
-Duplicate-photo-upload-title = Upload this photo again?
 Duplicate-Photos = Duplicate Photos
 During-app-start-no-model-found = During app start there was no computer vision model found. There will be no AI camera.
 # Button for editing something
@@ -1493,7 +1491,6 @@ Unknown-organism = Unknown organism
 Unmark-as-reviewed = Unmark as reviewed
 Unobserved-by-me = Unobserved by me
 Unreviewed-observations-only = Unreviewed observations only
-Upload-anyway = Upload anyway
 Upload-Complete = Upload Complete
 Upload-in-progress = Upload in progress
 UPLOAD-NOW = UPLOAD NOW

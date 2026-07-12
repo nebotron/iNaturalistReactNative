@@ -5,20 +5,14 @@ import {
   IconicTaxonIcon,
   PhotoCount,
 } from "components/SharedComponents";
-import DuplicateUploadBadge from
-  "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import {
   Image, Pressable, View,
 } from "components/styledComponents";
 import compact from "lodash/compact";
-import { RealmContext } from "providers/contexts";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Image as RNImage } from "react-native";
 import Photo from "realmModels/Photo";
 import type { RealmObservationPhoto, RealmPhoto, RealmTaxon } from "realmModels/types";
-import { getPreviouslyUploadedDevicePhotoUrisSet } from
-  "sharedHelpers/duplicateUploadedDevicePhotos";
-import { useTranslation } from "sharedHooks";
 
 interface Props {
   observationUuid?: string;
@@ -29,18 +23,13 @@ interface Props {
   hideTaxonPhotos?: boolean;
 }
 
-const { useRealm } = RealmContext;
-
 const PhotosSection = ( {
-  observationUuid,
   representativePhoto,
   taxon,
   obsPhotos,
   navToTaxonDetails,
   hideTaxonPhotos,
 }: Props ) => {
-  const { t } = useTranslation( );
-  const realm = useRealm( );
   const [displayPortraitLayout, setDisplayPortraitLayout] = useState<boolean | null>( null );
   const [mediaViewerVisible, setMediaViewerVisible] = useState( false );
 
@@ -82,21 +71,6 @@ const PhotosSection = ( {
       ? obsPhotos.map( obsPhoto => obsPhoto.photo )
       : [],
   );
-
-  const hasDuplicateUpload = useMemo( ( ) => {
-    const excludeUuid = observationUuid
-      ? [observationUuid]
-      : [];
-    const uploadedDevicePhotoUris = getPreviouslyUploadedDevicePhotoUrisSet(
-      realm,
-      excludeUuid,
-    );
-
-    return obsPhotos.some( obsPhoto => (
-      obsPhoto.originalDevicePhotoUri
-      && uploadedDevicePhotoUris.has( obsPhoto.originalDevicePhotoUri )
-    ) );
-  }, [observationUuid, obsPhotos, realm] );
 
   useEffect( ( ) => {
     const checkImageOrientation = async ( ) => {
@@ -182,15 +156,6 @@ const PhotosSection = ( {
           <PhotoCount count={observationPhotos.length} />
         </View>
       )}
-      {hasDuplicateUpload && (
-        <DuplicateUploadBadge
-          accessibilityLabel={t( "Duplicate-photo-indicator" )}
-          className="absolute top-5 left-5 z-10"
-          size={24}
-          testID="MatchScreen.duplicatePhoto"
-        />
-      )}
-
     </Pressable>
   );
 

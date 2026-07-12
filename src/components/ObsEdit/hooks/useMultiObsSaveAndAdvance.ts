@@ -3,13 +3,11 @@ import useUploadObservations from "components/MyObservations/hooks/useUploadObse
 import { RealmContext } from "providers/contexts";
 import { useCallback, useState } from "react";
 import type { RealmObservation } from "realmModels/types";
-import { confirmNoDuplicatePhotosBeforeUpload } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import saveObservation from "sharedHelpers/saveObservation";
 import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import {
   useCurrentUser,
   useExitObservationFlow,
-  useTranslation,
 } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -31,7 +29,6 @@ const useMultiObsSaveAndAdvance = ( {
   transitionAnimation,
 }: Options ) => {
   const { isConnected } = useNetInfo( );
-  const { t } = useTranslation( );
   const currentUser = useCurrentUser( );
   const cameraRollUris = useStore( state => state.cameraRollUris );
   const addToUploadQueue = useStore( state => state.addToUploadQueue );
@@ -78,14 +75,6 @@ const useMultiObsSaveAndAdvance = ( {
     }
     if ( type === UPLOAD ) {
       const { uuid } = savedObservation;
-      const confirmed = await confirmNoDuplicatePhotosBeforeUpload(
-        realm,
-        [uuid],
-        t,
-      );
-      if ( !confirmed ) {
-        return false;
-      }
       addTotalToolbarIncrements( savedObservation );
       addToUploadQueue( uuid );
       startUploadsFromMultiObsEdit( );
@@ -114,7 +103,6 @@ const useMultiObsSaveAndAdvance = ( {
     setMyObsOffset,
     setSavedOrUploadedMultiObsFlow,
     startUploadsFromMultiObsEdit,
-    t,
     transitionAnimation,
   ] );
 

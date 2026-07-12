@@ -19,8 +19,6 @@ import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 import TaxonModel from "realmModels/Taxon";
 import type { RealmPhoto } from "realmModels/types";
-import { getPreviouslyUploadedDevicePhotoUrisSet } from
-  "sharedHelpers/duplicateUploadedDevicePhotos";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import {
@@ -155,26 +153,6 @@ const SuggestionsContainer = ( ) => {
     ( ) => ObservationPhoto.mapObsPhotoUris( currentObservation ),
     [currentObservation],
   );
-  const duplicatePhotoUris = useMemo( ( ) => {
-    const observationPhotos = currentObservation?.observationPhotos || [];
-    const excludeUuid = currentObservation?.uuid
-      ? [currentObservation.uuid]
-      : [];
-    const uploadedDevicePhotoUris = getPreviouslyUploadedDevicePhotoUrisSet(
-      realm,
-      excludeUuid,
-    );
-
-    return new Set(
-      observationPhotos
-        .filter( obsPhoto => (
-          obsPhoto.originalDevicePhotoUri
-          && uploadedDevicePhotoUris.has( obsPhoto.originalDevicePhotoUri )
-        ) )
-        .map( obsPhoto => Photo.displayLocalOrRemoteSquarePhoto( obsPhoto.photo ) )
-        .filter( ( uri ): uri is string => !!uri ),
-    );
-  }, [currentObservation, realm] );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
   const { trackImageDeleted } = useInputImageTracking( );
@@ -665,7 +643,6 @@ const SuggestionsContainer = ( ) => {
         onReorderPhotos={handleReorderPhotos}
         onSelectGenus={handleSelectGenus}
         onTaxonChosen={navigateWithTaxonSelected}
-        duplicatePhotoUris={duplicatePhotoUris}
         photoUris={photoUris}
         selectedPhotoUri={selectedPhotoUri}
         showImproveWithLocationButton={!!showImproveWithLocationButton}

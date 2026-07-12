@@ -31,7 +31,6 @@ type Props = {
   onReorderPhotos?: Function,
   onSelectGenus: Function,
   onTaxonChosen: Function,
-  duplicatePhotoUris?: Set<string>,
   photoUris: string[],
   selectedPhotoUri: string,
   showImproveWithLocationButton: boolean,
@@ -56,7 +55,6 @@ const Suggestions = ( {
   onReorderPhotos,
   onSelectGenus,
   onTaxonChosen,
-  duplicatePhotoUris,
   photoUris,
   selectedPhotoUri,
   showImproveWithLocationButton,
@@ -127,7 +125,6 @@ const Suggestions = ( {
 
   const renderHeader = useMemo( ( ) => (
     <SuggestionsHeader
-      duplicatePhotoUris={duplicatePhotoUris}
       interactionsDisabled={interactionsDisabled}
       onCropPhoto={onCropPhoto}
       onPressPhoto={onPressPhoto}
@@ -146,7 +143,6 @@ const Suggestions = ( {
     onCropPhoto,
     onPressPhoto,
     onReorderPhotos,
-    duplicatePhotoUris,
     photoUris,
     selectedPhotoUri,
     improveWithLocationButtonOnPress,

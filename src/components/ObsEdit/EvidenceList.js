@@ -5,8 +5,6 @@ import deleteRemoteObservationSound from "api/observationSounds";
 import classnames from "classnames";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import { ActivityIndicator, INatIcon, INatIconButton } from "components/SharedComponents";
-import DuplicateUploadBadge from
-  "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import { Image, Pressable, View } from "components/styledComponents";
 import findIndex from "lodash/findIndex";
 import sortBy from "lodash/sortBy";
@@ -20,8 +18,6 @@ import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatli
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import ObservationSound from "realmModels/ObservationSound";
 import Photo from "realmModels/Photo";
-import { getPreviouslyUploadedDevicePhotoUrisSet } from
-  "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
 import { useAuthenticatedMutation } from "sharedHooks";
 import useInputImageTracking from "sharedHooks/useInputImageTracking";
@@ -73,25 +69,6 @@ const EvidenceList = ( {
     [observationPhotos],
   );
 
-  const duplicatePhotoUris = useMemo( ( ) => {
-    const excludeUuid = currentObservation?.uuid
-      ? [currentObservation.uuid]
-      : [];
-    const uploadedDevicePhotoUris = getPreviouslyUploadedDevicePhotoUrisSet(
-      realm,
-      excludeUuid,
-    );
-
-    return new Set(
-      observationPhotos
-        .filter( obsPhoto => (
-          obsPhoto.originalDevicePhotoUri
-          && uploadedDevicePhotoUris.has( obsPhoto.originalDevicePhotoUri )
-        ) )
-        .map( obsPhoto => Photo.displayLocalOrRemoteSquarePhoto( obsPhoto.photo ) )
-        .filter( Boolean ),
-    );
-  }, [currentObservation?.uuid, observationPhotos, realm] );
   const mediaUris = useMemo( ( ) => ( [
     ...photoUris,
     ...observationSounds.map( obsSound => obsSound.sound.file_url ),
@@ -134,19 +111,11 @@ const EvidenceList = ( {
               className="w-fit h-full flex items-center justify-center"
               accessibilityIgnoresInvertColors
             />
-            {duplicatePhotoUris.has( obsPhotoUri ) && (
-              <DuplicateUploadBadge
-                accessibilityLabel={t( "Duplicate-photo-indicator" )}
-                className="absolute top-1 left-1 z-10"
-                size={14}
-                testID={`EvidenceList.duplicate.${obsPhotoUri}`}
-              />
-            )}
           </View>
         </Pressable>
       </ScaleDecorator>
     ),
-    [duplicatePhotoUris, setSelectedMediaUri, t],
+    [setSelectedMediaUri, t],
   );
 
   const renderFooter = useMemo( ( ) => (
