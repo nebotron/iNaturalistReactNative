@@ -22,6 +22,7 @@ import type { RealmPhoto } from "realmModels/types";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import {
+  useCurrentUser,
   useLastScreen,
   useLocationPermission,
   useSuggestions,
@@ -145,7 +146,16 @@ const SuggestionsContainer = ( ) => {
   const { params } = useRoute( );
   const { isConnected } = useNetInfo( );
   const currentObservation = useStore( state => state.currentObservation );
+  const currentUser = useCurrentUser( );
   const realm = useRealm( );
+
+  // Observations created locally have no stored user, so they belong to the
+  // current user. Only when a user is present and differs is this someone
+  // else's observation (e.g. suggesting an ID from ObsDetails), in which case
+  // we frame the photo with subject detection for the thumbnail and CV request.
+  const belongsToCurrentUser = !currentObservation?.user?.login
+    || currentObservation.user.login === currentUser?.login;
+  const detectSubject = !belongsToCurrentUser;
   const innerPhotos = ObservationPhoto.mapInnerPhotos( currentObservation );
   // ObservationPhoto.mapObsPhotoUris returns *new* strings with every call,
   // so these values need to be stabilized
@@ -352,7 +362,7 @@ const SuggestionsContainer = ( ) => {
   }, [usingOfflineSuggestions] );
 
   const createUploadParams = useCallback( async ( uri: string, showLocation: boolean ) => {
-    const newImageParams = await flattenUploadParams( uri );
+    const newImageParams = await flattenUploadParams( uri, detectSubject );
     if ( showLocation && currentObservation?.latitude ) {
       newImageParams.lat = currentObservation?.latitude;
       newImageParams.lng = currentObservation?.longitude;
@@ -360,6 +370,7 @@ const SuggestionsContainer = ( ) => {
     return newImageParams;
   }, [
     currentObservation,
+    detectSubject,
   ] );
 
   const onPressPhoto = useCallback(
@@ -530,7 +541,7 @@ const SuggestionsContainer = ( ) => {
   const onPermissionGranted = useCallback( async ( ) => {
     const userLocation = await fetchCoarseUserLocation( );
     updateObservationKeys( userLocation );
-    const newImageParams = await flattenUploadParams( selectedPhotoUri );
+    const newImageParams = await flattenUploadParams( selectedPhotoUri, detectSubject );
     newImageParams.lat = userLocation?.latitude;
     newImageParams.lng = userLocation?.longitude;
     dispatch( {
@@ -538,7 +549,7 @@ const SuggestionsContainer = ( ) => {
       shouldUseEvidenceLocation: true,
       scoreImageParams: newImageParams,
     } );
-  }, [selectedPhotoUri, updateObservationKeys] );
+  }, [detectSubject, selectedPhotoUri, updateObservationKeys] );
 
   const afterMediaDeleted = useCallback( ( ) => {
     const freshObservation = useStore.getState( ).currentObservation;
@@ -630,6 +641,7 @@ const SuggestionsContainer = ( ) => {
   return (
     <>
       <Suggestions
+        detectSubject={detectSubject}
         genusEligibleTaxonIds={genusEligibleTaxonIds}
         handleSkip={( ) => navigateWithTaxonSelected( undefined )}
         hideLocationToggleButton={hideLocationToggleButton}

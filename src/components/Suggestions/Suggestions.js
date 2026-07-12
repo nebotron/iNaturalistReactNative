@@ -18,6 +18,7 @@ import SuggestionsFooter from "./SuggestionsFooter";
 import SuggestionsHeader from "./SuggestionsHeader";
 
 type Props = {
+  detectSubject?: boolean,
   genusEligibleTaxonIds?: Set<number>,
   handleSkip: Function,
   hideLocationToggleButton: boolean,
@@ -42,6 +43,7 @@ type Props = {
 };
 
 const Suggestions = ( {
+  detectSubject,
   genusEligibleTaxonIds,
   handleSkip,
   hideLocationToggleButton,
@@ -125,6 +127,7 @@ const Suggestions = ( {
 
   const renderHeader = useMemo( ( ) => (
     <SuggestionsHeader
+      detectSubject={detectSubject}
       interactionsDisabled={interactionsDisabled}
       onCropPhoto={onCropPhoto}
       onPressPhoto={onPressPhoto}
@@ -139,6 +142,7 @@ const Suggestions = ( {
       showImproveWithLocationButton={showImproveWithLocationButton}
     />
   ), [
+    detectSubject,
     interactionsDisabled,
     onCropPhoto,
     onPressPhoto,

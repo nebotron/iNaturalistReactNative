@@ -3,11 +3,15 @@ import { TransparentCircleButton } from "components/SharedComponents";
 import {
   Image, Pressable, View,
 } from "components/styledComponents";
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
+import type { LayoutChangeEvent } from "react-native";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
+import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
+import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import { useTranslation } from "sharedHooks";
 
 interface Props {
+  detectSubject?: boolean;
   onCropPhoto?: ( _uri: string ) => void;
   photoUris: string[];
   selectedPhotoUri: string;
@@ -15,17 +19,57 @@ interface Props {
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
 }
 
-const PhotoThumbnail = ( { uri }: { uri: string } ) => (
-  <View className="w-full aspect-square">
-    <Image
-      source={{ uri }}
-      accessibilityIgnoresInvertColors
-      className="w-full h-full"
-    />
-  </View>
-);
+// For images that aren't the user's own, frame the thumbnail with the subject
+// detector bounding box (or the crop log entry if one exists) by default. The
+// user's own photos are shown plain.
+const PhotoThumbnail = ( { uri, detectSubject }: { uri: string; detectSubject?: boolean } ) => {
+  const [containerSize, setContainerSize] = useState<number | null>( null );
+  const detection = useSubjectDetectionForUri( detectSubject ? uri : undefined );
+
+  const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
+    setContainerSize( event.nativeEvent.layout.width );
+  }, [] );
+
+  const cropStyles = detection && containerSize
+    ? computeCropStyles(
+      detection.crop,
+      containerSize,
+      detection.imageWidth,
+      detection.imageHeight,
+    )
+    : null;
+
+  return (
+    // aspect-square (not h-full) guarantees a definite square box: h-full never
+    // resolves here because the ancestors hug their content, so once the crop
+    // wrapper (position: absolute) is the only child the box would otherwise
+    // collapse or inherit the image's aspect ratio, shifting/over-zooming the
+    // crop that computeCropStyles frames assuming a square box.
+    <View className="w-full aspect-square" onLayout={handleLayout}>
+      {cropStyles
+        ? (
+          <View style={cropStyles.wrapperStyle}>
+            <Image
+              source={{ uri }}
+              accessibilityIgnoresInvertColors
+              style={cropStyles.imageStyle}
+              resizeMode="stretch"
+            />
+          </View>
+        )
+        : (
+          <Image
+            source={{ uri }}
+            accessibilityIgnoresInvertColors
+            className="w-full h-full"
+          />
+        )}
+    </View>
+  );
+};
 
 const ObsPhotoSelectionList = ( {
+  detectSubject,
   onCropPhoto,
   photoUris, selectedPhotoUri, onPressPhoto, onReorderPhotos,
 }: Props ) => {
@@ -54,7 +98,7 @@ const ObsPhotoSelectionList = ( {
           )}
           testID={`ObsPhotoSelectionList.border.${item}`}
         >
-          <PhotoThumbnail uri={item} />
+          <PhotoThumbnail uri={item} detectSubject={detectSubject} />
           {selectedPhotoUri === item && onCropPhoto && (
             <TransparentCircleButton
               onPress={( ) => onCropPhoto( item )}
@@ -67,7 +111,7 @@ const ObsPhotoSelectionList = ( {
         </View>
       </Pressable>
     </ScaleDecorator>
-  ), [onCropPhoto, selectedPhotoUri, onPressPhoto, t] );
+  ), [detectSubject, onCropPhoto, selectedPhotoUri, onPressPhoto, t] );
 
   return (
     <DraggableFlatList
