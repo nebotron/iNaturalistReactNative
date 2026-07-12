@@ -66,3 +66,59 @@ export function preloadImage(
   preloadInFlight.set( imageUri, promise );
   return promise;
 }
+
+type PreloadRequest = {
+  imageUri: string;
+  cropSourceUri: string;
+  existingSavedCrop: NormalizedCrop | null;
+};
+
+// Each preload runs a heavy native asset export + subject detection. Kicking
+// off a whole batch at once saturates the device and stalls rendering (e.g.
+// the first crop image appearing). Cap how many run concurrently and process
+// the rest from a queue in order, so the nearest-needed images load first.
+const PRELOAD_CONCURRENCY = 2;
+const preloadQueue: PreloadRequest[] = [];
+const preloadQueued = new Set<string>( );
+let activePreloadCount = 0;
+
+function pumpPreloadQueue( ) {
+  while ( activePreloadCount < PRELOAD_CONCURRENCY && preloadQueue.length > 0 ) {
+    const request = preloadQueue.shift( )!;
+    preloadQueued.delete( request.imageUri );
+    // May have been resolved or started directly (e.g. the user advanced to it)
+    // since it was enqueued; don't waste a slot on already-done/running work.
+    if ( preloadCache.has( request.imageUri ) || preloadInFlight.has( request.imageUri ) ) {
+      continue;
+    }
+    activePreloadCount += 1;
+    preloadImage(
+      request.imageUri,
+      request.cropSourceUri,
+      request.existingSavedCrop,
+    ).finally( ( ) => {
+      activePreloadCount -= 1;
+      pumpPreloadQueue( );
+    } );
+  }
+}
+
+// Enqueue a background preload that respects PRELOAD_CONCURRENCY. Already
+// cached, in-flight, or queued URIs are skipped so callers can re-enqueue
+// freely (e.g. on every navigation.replace) without piling up duplicate work.
+export function enqueuePreload(
+  imageUri: string,
+  cropSourceUri: string,
+  existingSavedCrop: NormalizedCrop | null,
+) {
+  if (
+    preloadCache.has( imageUri )
+    || preloadInFlight.has( imageUri )
+    || preloadQueued.has( imageUri )
+  ) {
+    return;
+  }
+  preloadQueued.add( imageUri );
+  preloadQueue.push( { imageUri, cropSourceUri, existingSavedCrop } );
+  pumpPreloadQueue( );
+}
