@@ -73,15 +73,17 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     delete filteredParams.months;
   }
 
-  // h1/h2 can be 0 (12am), which is falsy, so they must be set explicitly
-  // rather than relying on the generic falsy-value filtering above
-  if ( params.timeOfDay === TIME_OF_DAY.RANGE ) {
-    filteredParams.h1 = params.h1;
-    filteredParams.h2 = params.h2;
-  } else {
-    delete filteredParams.h1;
-    delete filteredParams.h2;
+  // The API doesn't support an hour range (h1/h2); it only supports a list
+  // of discrete hours, like month, so expand the selected range into hours.
+  // Wraps around midnight when h1 > h2, e.g. 22 -> 2 becomes [22, 23, 0, 1, 2]
+  if ( params.timeOfDay === TIME_OF_DAY.RANGE && params.h1 != null && params.h2 != null ) {
+    const span = ( ( params.h2 - params.h1 + 24 ) % 24 ) + 1;
+    filteredParams.hour = new Array( span )
+      .fill( 0 )
+      .map( ( _, i ) => ( params.h1 + i ) % 24 );
   }
+  delete filteredParams.h1;
+  delete filteredParams.h2;
 
   // MEDIA.ALL is the default media filter and for it we don't need to pass any params
   if ( params.media === MEDIA.PHOTOS ) {

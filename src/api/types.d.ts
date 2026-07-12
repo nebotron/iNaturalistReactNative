@@ -279,8 +279,7 @@ export interface ApiObservationsSearchParams extends ApiParams {
   created_d2?: string;
   d1?: string;
   d2?: string;
-  h1?: number;
-  h2?: number;
+  hour?: number[];
   id_above?: number;
   id_below?: number;
   order?: typeof ORDER_ASC | typeof ORDER_DESC;
