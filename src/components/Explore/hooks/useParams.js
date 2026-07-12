@@ -7,11 +7,17 @@ import {
   PLACE_MODE,
   useExplore,
 } from "providers/ExploreContext";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 const useParams = ( ): Object => {
   const { params } = useRoute( );
   const { state, dispatch, defaultExploreLocation } = useExplore( );
+  // Navigation params represent a one-time intent (e.g. "open Explore filtered
+  // to this taxon"). We only want to apply them when the params themselves
+  // change, not every time explore state changes. Otherwise removing a taxon
+  // (or loading a saved filter) re-runs this effect and immediately re-applies
+  // the still-present params, making the taxon impossible to remove.
+  const appliedParamsRef = useRef( null );
 
   const updateContextWithParams = useCallback( async ( ) => {
     const setWorldwide = ( ) => {
@@ -97,8 +103,13 @@ const useParams = ( ): Object => {
   ] );
 
   useEffect( ( ) => {
+    if ( appliedParamsRef.current === params ) {
+      return;
+    }
+    appliedParamsRef.current = params;
     updateContextWithParams( );
   }, [
+    params,
     updateContextWithParams,
   ] );
 
