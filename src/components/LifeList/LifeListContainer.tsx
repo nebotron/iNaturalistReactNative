@@ -27,23 +27,44 @@ interface Lifer {
 
 // The lifer list is expensive to compute (it requires paging through a
 // user's entire observation history), so once computed it's cached to disk
-// forever, keyed by the highest observation id seen so far. Subsequent
-// fetches only need to look at observations newer than that id to find any
-// new lifers, instead of recomputing the whole list from scratch.
-const cacheKey = ( userId: number ) => `lifers-${userId}`;
-const maxObservationIdCacheKey = ( userId: number ) => `lifersMaxObservationId-${userId}`;
+// forever, keyed by the time of the last sync. Subsequent fetches only need
+// to look at observations created or updated since that time (e.g. newly
+// uploaded, or newly reaching research grade) instead of recomputing the
+// whole list from scratch.
+// v2: research-grade-only, keyed by last sync time instead of max observation id
+const cacheKey = ( userId: number ) => `lifers-v2-${userId}`;
+const lastSyncCacheKey = ( userId: number ) => `lifersLastSync-v2-${userId}`;
 
-function readCachedLifers( userId: number ): { lifers: Lifer[], maxObservationId: number } {
+function readCachedLifers( userId: number ): { lifers: Lifer[], lastSync: string | null } {
   const rawLifers = zustandStorage.getItem( cacheKey( userId ) );
   return {
     lifers: rawLifers ? JSON.parse( rawLifers ) : [],
-    maxObservationId: Number( zustandStorage.getItem( maxObservationIdCacheKey( userId ) ) ) || 0,
+    lastSync: zustandStorage.getItem( lastSyncCacheKey( userId ) ) || null,
   };
 }
 
-function writeCachedLifers( userId: number, lifers: Lifer[], maxObservationId: number ): void {
+function writeCachedLifers( userId: number, lifers: Lifer[], lastSync: string ): void {
   zustandStorage.setItem( cacheKey( userId ), JSON.stringify( lifers ) );
-  zustandStorage.setItem( maxObservationIdCacheKey( userId ), maxObservationId );
+  zustandStorage.setItem( lastSyncCacheKey( userId ), lastSync );
+}
+
+// Keep the earliest research-grade observation seen so far for a species.
+function addLiferIfEarliest( map: Map<number, Lifer>, obs: ApiObservation ): void {
+  const taxon = obs.taxon;
+  // Only track species-level observations (rank_level === 10)
+  if ( !taxon?.id || taxon.rank_level !== Taxon.SPECIES_LEVEL ) return;
+  const existing = map.get( taxon.id );
+  const observedOn = obs.observed_on ?? null;
+  const isEarlier = observedOn && existing?.observed_on
+    && new Date( observedOn ) < new Date( existing.observed_on );
+  if ( !existing || isEarlier ) {
+    map.set( taxon.id, {
+      observed_on: observedOn,
+      uuid: obs.uuid,
+      observation_photos: obs.observation_photos,
+      taxon,
+    } );
+  }
 }
 
 async function fetchLifers(
@@ -52,88 +73,84 @@ async function fetchLifers(
 ): Promise<Lifer[]> {
   if ( !userId ) return [];
 
-  const { lifers: cachedLifers, maxObservationId } = readCachedLifers( userId );
+  const { lifers: cachedLifers, lastSync } = readCachedLifers( userId );
   const firstObservationBySpeciesId = new Map<number, Lifer>(
     cachedLifers.map( lifer => [lifer.taxon.id, lifer] ),
   );
 
-  // Cheap request (per_page: 0) for the total number of distinct species
-  // this user has observed, so we can tell whether the cached list is
-  // already complete and, if not, the paging loop below can stop as soon as
-  // every remaining species has been found.
-  const { total_results: totalSpecies } = await fetchSpeciesCounts(
-    { user_id: userId, per_page: 0 },
-    opts,
-  );
+  // Recorded before fetching so any observations that change again while
+  // this sync is in flight get picked up by the next sync.
+  const syncStartedAt = new Date( ).toISOString( );
+  const commonParams = {
+    user_id: userId,
+    quality_grade: "research",
+    order_by: "id",
+    order: "asc",
+    per_page: PAGE_SIZE,
+    fields: {
+      id: true,
+      observed_on: true,
+      uuid: true,
+      observation_photos: {
+        photo: {
+          url: true,
+          license_code: true,
+          attribution: true,
+        },
+      },
+      taxon: Taxon.LIMITED_TAXON_FIELDS,
+    },
+  };
 
-  if ( firstObservationBySpeciesId.size < totalSpecies ) {
-    // The API can't return "first observation per species" directly, so we
-    // page through observations newer than the newest one we've already
-    // looked at and keep only the first (i.e. oldest) observation we see of
-    // each species-level taxon we haven't already cached. Using the
-    // largest allowed page size keeps the number of requests to a minimum.
-    let newMaxObservationId = maxObservationId;
+  if ( lastSync ) {
+    // Only fetch observations created or updated since the last sync,
+    // instead of re-paging through the user's entire observation history.
     let page = 1;
     let hasMorePages = true;
     while ( hasMorePages ) {
       // eslint-disable-next-line no-await-in-loop
       const response = await searchObservations(
-        {
-          user_id: userId,
-          id_above: maxObservationId || undefined,
-          order_by: "id",
-          order: "asc",
-          per_page: PAGE_SIZE,
-          page,
-          fields: {
-            id: true,
-            observed_on: true,
-            uuid: true,
-            observation_photos: {
-              photo: {
-                url: true,
-                license_code: true,
-                attribution: true,
-              },
-            },
-            taxon: Taxon.LIMITED_TAXON_FIELDS,
-          },
-        },
+        { ...commonParams, updated_since: lastSync, page },
         opts,
       );
       const results: ApiObservation[] = response?.results ?? [];
-      results.forEach( obs => {
-        const taxon = obs.taxon;
-        // Only track species-level observations (rank_level === 10)
-        if ( taxon?.id && taxon.rank_level === Taxon.SPECIES_LEVEL ) {
-          if ( !firstObservationBySpeciesId.has( taxon.id ) ) {
-            firstObservationBySpeciesId.set( taxon.id, {
-              observed_on: obs.observed_on ?? null,
-              uuid: obs.uuid,
-              observation_photos: obs.observation_photos,
-              taxon,
-            } );
-          }
-        }
-        if ( obs.id && obs.id > newMaxObservationId ) { newMaxObservationId = obs.id; }
-      } );
+      results.forEach( obs => addLiferIfEarliest( firstObservationBySpeciesId, obs ) );
+      hasMorePages = results.length === PAGE_SIZE;
+      page += 1;
+    }
+  } else {
+    // First run: no prior sync to diff against. Cheap request (per_page: 0)
+    // for the total number of distinct research-grade species this user
+    // has observed, so the paging loop below can stop as soon as every
+    // species has been found instead of paging to the end.
+    const { total_results: totalSpecies } = await fetchSpeciesCounts(
+      { user_id: userId, quality_grade: "research", per_page: 0 },
+      opts,
+    );
+
+    let page = 1;
+    let hasMorePages = true;
+    while ( hasMorePages ) {
+      // eslint-disable-next-line no-await-in-loop
+      const response = await searchObservations(
+        { ...commonParams, page },
+        opts,
+      );
+      const results: ApiObservation[] = response?.results ?? [];
+      results.forEach( obs => addLiferIfEarliest( firstObservationBySpeciesId, obs ) );
       hasMorePages = results.length === PAGE_SIZE
         && firstObservationBySpeciesId.size < totalSpecies;
       page += 1;
     }
-
-    writeCachedLifers(
-      userId,
-      Array.from( firstObservationBySpeciesId.values( ) ),
-      newMaxObservationId,
-    );
   }
 
-  return Array.from( firstObservationBySpeciesId.values( ) ).sort(
+  const lifers = Array.from( firstObservationBySpeciesId.values( ) ).sort(
     ( a, b ) => (
       new Date( b.observed_on ?? 0 ).getTime( ) - new Date( a.observed_on ?? 0 ).getTime( )
     ),
   );
+  writeCachedLifers( userId, lifers, syncStartedAt );
+  return lifers;
 }
 
 interface LiferGridItemProps {
@@ -229,12 +246,8 @@ const LifeListContainer = ( ) => {
   );
 
   const handleRefresh = useCallback( ( ) => {
-    if ( currentUser ) {
-      zustandStorage.removeItem( cacheKey( currentUser.id ) );
-      zustandStorage.removeItem( maxObservationIdCacheKey( currentUser.id ) );
-    }
     refetch( );
-  }, [currentUser, refetch] );
+  }, [refetch] );
 
   useEffect( ( ) => {
     navigation.setOptions( {
