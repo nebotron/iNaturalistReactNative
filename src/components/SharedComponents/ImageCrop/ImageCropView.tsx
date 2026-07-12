@@ -114,6 +114,25 @@ const ImageCropView = ( {
   const boxLeft = ( windowWidth - boxSize ) / 2;
   const boxTop = ( cropAreaHeight - boxSize ) / 2;
 
+  // The cropped side length in image pixels is purely a function of zoom
+  // scale -- the box is centered and square in screen space, so panning
+  // (translation) can never change it. Deriving it from scale alone, rather
+  // than from the crop's x/y/w/h (which round-trips through the pan position),
+  // guarantees panning can't perturb the downsize check.
+  const cropSidePxFromScale = useCallback( ( scale: number ) => {
+    if ( boxSize <= 0 || cropAreaHeight <= 0 || scale <= 0 ) {
+      return 0;
+    }
+    const contain = computeContainRect( windowWidth, cropAreaHeight, imageWidth, imageHeight );
+    if ( contain.width <= 0 || contain.height <= 0 ) {
+      return 0;
+    }
+    return Math.max(
+      boxSize * imageWidth / ( scale * contain.width ),
+      boxSize * imageHeight / ( scale * contain.height ),
+    );
+  }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
+
   const updateDownsizeStatus = useCallback( ( ) => {
     if ( !zoomRef.current || boxSize <= 0 || cropAreaHeight <= 0 ) {
       return;
@@ -127,25 +146,26 @@ const ImageCropView = ( {
       boxSize,
       transform,
     );
-    const sizePx = Math.max( crop.w * imageWidth, crop.h * imageHeight );
+    const sizePx = cropSidePxFromScale( transform.scale );
     setWillBeDownsized( prev => isDownsized( sizePx, prev ) );
     onCropChange?.( crop );
-  }, [boxSize, cropAreaHeight, imageHeight, imageWidth, onCropChange, windowWidth] );
+  }, [
+    boxSize,
+    cropAreaHeight,
+    cropSidePxFromScale,
+    imageHeight,
+    imageWidth,
+    onCropChange,
+    windowWidth,
+  ] );
 
   const handleScaleChange = useCallback( ( scale: number ) => {
-    if ( boxSize <= 0 || cropAreaHeight <= 0 || scale <= 0 ) {
+    const sizePx = cropSidePxFromScale( scale );
+    if ( sizePx <= 0 ) {
       return;
     }
-    const contain = computeContainRect( windowWidth, cropAreaHeight, imageWidth, imageHeight );
-    if ( contain.width <= 0 || contain.height <= 0 ) {
-      return;
-    }
-    const sizePx = Math.max(
-      boxSize * imageWidth / ( scale * contain.width ),
-      boxSize * imageHeight / ( scale * contain.height ),
-    );
     setWillBeDownsized( prev => isDownsized( sizePx, prev ) );
-  }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
+  }, [cropSidePxFromScale] );
 
   useEffect( ( ) => {
     if (
