@@ -43,6 +43,8 @@ export enum EXPLORE_ACTION {
   SET_DATE_UPLOADED_ALL = "SET_DATE_UPLOADED_ALL",
   SET_DATE_UPLOADED_EXACT = "SET_DATE_UPLOADED_EXACT",
   SET_DATE_UPLOADED_RANGE = "SET_DATE_UPLOADED_RANGE",
+  SET_TIME_OF_DAY_ALL = "SET_TIME_OF_DAY_ALL",
+  SET_TIME_OF_DAY_RANGE = "SET_TIME_OF_DAY_RANGE",
   SET_ESTABLISHMENT_MEAN = "SET_ESTABLISHMENT_MEAN",
   SET_EXPLORE_LOCATION = "SET_EXPLORE_LOCATION",
   SET_HIGHEST_TAXONOMIC_RANK = "SET_HIGHEST_TAXONOMIC_RANK",
@@ -130,6 +132,11 @@ export enum DATE_UPLOADED {
   DATE_RANGE = "DATE_RANGE"
 }
 
+export enum TIME_OF_DAY {
+  ALL = "ALL",
+  RANGE = "RANGE"
+}
+
 export enum MEDIA {
   ALL = "ALL",
   PHOTOS = "PHOTOS",
@@ -213,6 +220,8 @@ interface State {
   dateObserved: DATE_OBSERVED;
   dateUploaded: DATE_UPLOADED;
   establishmentMean: ESTABLISHMENT_MEAN;
+  h1: number | null | undefined;
+  h2: number | null | undefined;
   hrank: TAXONOMIC_RANK | undefined | null;
   iconic_taxa: string[] | undefined;
   lat?: number;
@@ -245,6 +254,7 @@ interface State {
   taxon: object | undefined | null;
   taxon_id: number | undefined | null;
   taxonFilters: ExploreTaxonFilter[];
+  timeOfDay: TIME_OF_DAY;
   // TODO: technically this is not any object but a "User"
   // and should be typed as such (e.g., in realm model)
   user: object | undefined | null;
@@ -325,6 +335,8 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.SET_DATE_UPLOADED_ALL}
   | {type: EXPLORE_ACTION.SET_DATE_UPLOADED_EXACT; createdOn: string}
   | {type: EXPLORE_ACTION.SET_DATE_UPLOADED_RANGE; createdD1: string; createdD2: string}
+  | {type: EXPLORE_ACTION.SET_TIME_OF_DAY_ALL}
+  | {type: EXPLORE_ACTION.SET_TIME_OF_DAY_RANGE; h1: number; h2: number}
   | {type: EXPLORE_ACTION.SET_MEDIA; media: MEDIA}
   | {type: EXPLORE_ACTION.SET_ESTABLISHMENT_MEAN; establishmentMean: ESTABLISHMENT_MEAN}
   | {type: EXPLORE_ACTION.SET_WILD_STATUS; wildStatus: WILD_STATUS}
@@ -368,6 +380,7 @@ const calculatedFilters = {
   lrank: null,
   dateObserved: DATE_OBSERVED.ALL,
   dateUploaded: DATE_UPLOADED.ALL,
+  timeOfDay: TIME_OF_DAY.ALL,
   media: MEDIA.ALL,
   establishmentMean: ESTABLISHMENT_MEAN.ANY,
   wildStatus: WILD_STATUS.ALL,
@@ -384,6 +397,8 @@ const defaultFilters = {
   created_on: undefined,
   d1: undefined,
   d2: undefined,
+  h1: undefined,
+  h2: undefined,
   iconic_taxa: undefined,
   months: undefined,
   observed_on: undefined,
@@ -422,6 +437,11 @@ const initialState: State = {
 function isValidDateFormat( date: string ): boolean {
   const regex = /^\d{4}-\d{2}-\d{2}$/;
   return regex.test( date );
+}
+
+// Checks if the hour is a whole number between 0 and 23
+function isValidHour( hour: number ): boolean {
+  return Number.isInteger( hour ) && hour >= 0 && hour <= 23;
 }
 
 async function defaultExploreLocation(
@@ -760,6 +780,26 @@ function exploreReducer( state: State, action: Action ) {
         created_on: null,
         created_d1: action.createdD1,
         created_d2: action.createdD2,
+      };
+    case EXPLORE_ACTION.SET_TIME_OF_DAY_ALL:
+      return {
+        ...state,
+        timeOfDay: TIME_OF_DAY.ALL,
+        h1: null,
+        h2: null,
+      };
+    case EXPLORE_ACTION.SET_TIME_OF_DAY_RANGE:
+      if ( !isValidHour( action.h1 ) ) {
+        throw new Error( "Invalid hour given" );
+      }
+      if ( !isValidHour( action.h2 ) ) {
+        throw new Error( "Invalid hour given" );
+      }
+      return {
+        ...state,
+        timeOfDay: TIME_OF_DAY.RANGE,
+        h1: action.h1,
+        h2: action.h2,
       };
     case EXPLORE_ACTION.SET_MEDIA:
       return {

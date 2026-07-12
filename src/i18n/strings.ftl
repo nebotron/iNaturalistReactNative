@@ -534,6 +534,8 @@ Enable-location-access-to-track-your-location-in-the-background =
 Enable-notifications = Enable notifications
 # Placeholder text for the end location input in the Wildlife Hotspots tool
 End-location = End location (e.g. Boston, MA)
+# Label for the end of a time-of-day range filter, e.g. 11 PM
+End-Time = End Time
 # Indicates a species only occurs in a specific place
 Endemic = Endemic
 # TODO this and many other uses of placeables are not currently translatable
@@ -587,6 +589,7 @@ FILTER-BY-A-PROJECT = FILTER BY A PROJECT
 FILTER-BY-A-USER = FILTER BY A USER
 Filter-by-observed-between-dates = Filter by observations observed between two specific dates
 Filter-by-observed-during-months = Filter by observations observed during specific months
+Filter-by-observed-during-time-range = Filter by observations observed during a specific time of day
 Filter-by-observed-on-date = Filter by observations observed on a specific date
 Filter-by-uploaded-between-dates = Filter by observations uploaded between two specific dates
 Filter-by-uploaded-on-date = Filter by observations uploaded on a specific date
@@ -1386,6 +1389,8 @@ Standard--map-type = Standard
 # Placeholder text for the start location input in the Wildlife Hotspots tool
 Start-location = Start location (e.g. New York, NY)
 Start-must-be-before-end = The start date must be before the end date.
+# Label for the start of a time-of-day range filter, e.g. 6 AM
+Start-Time = Start Time
 Start-upload = Start upload
 # Accessibility hint for button that starts recording a sound
 Starts-recording-sound = Starts recording sound
@@ -1461,6 +1466,13 @@ This-sound-was-hidden-for-violating-community-guidelines-or-terms = This sound w
 This-user-has-no-followers = This user has no followers.
 This-user-has-not-joined-any-projects = This user has not joined any projects.
 This-user-is-not-following-anyone = This user is not following anyone.
+# Label for a filter that limits observations to a time of day range, e.g. 6 AM to 11 PM
+Time-of-day = Time of day
+TIME-OF-DAY = TIME OF DAY
+# Label for controls over a range of times of day
+Time-Range = Time Range
+# Label for controls over a range of times of day
+TIME-RANGE = TIME RANGE
 To-sync-your-observations-to-iNaturalist = To sync your observations to iNaturalist, please log in.
 To-view-nearby-organisms-please-enable-location = To view nearby organisms, please enable location.
 To-view-nearby-projects-please-enable-location = To view nearby projects, please enable location.

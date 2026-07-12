@@ -1,5 +1,6 @@
 import type { ApiPlace, ApiProject } from "api/types";
 import classNames from "classnames";
+import { format } from "date-fns";
 import ExploreSavedFilterSheets from "components/Explore/ExploreSavedFilterSheets";
 import ExploreSavedFiltersSection from "components/Explore/ExploreSavedFiltersSection";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
@@ -40,6 +41,7 @@ import {
   REVIEWED,
   SORT_BY,
   TAXONOMIC_RANK,
+  TIME_OF_DAY,
   useExplore,
   WILD_STATUS,
 } from "providers/ExploreContext";
@@ -107,6 +109,8 @@ const FilterModal = ( {
     dateObserved,
     dateUploaded,
     establishmentMean,
+    h1,
+    h2,
     hrank,
     iconic_taxa: iconicTaxonNames,
     lrank,
@@ -122,6 +126,7 @@ const FilterModal = ( {
     reviewedFilter,
     sortBy,
     taxonFilters,
+    timeOfDay,
     user,
     excludeUser,
     unobservedByMe,
@@ -163,6 +168,9 @@ const FilterModal = ( {
   const UPLOADED_EXACT = "UPLOADED_EXACT";
   const UPLOADED_START = "UPLOADED_START";
   const UPLOADED_END = "UPLOADED_END";
+  const TIME_OF_DAY_M = "TIME_OF_DAY_M";
+  const TIME_START = "TIME_START";
+  const TIME_END = "TIME_END";
   const PHOTO_LICENSING = "PHOTO_LICENSING";
   const CONFIRMATION = "CONFIRMATION";
   const [openSheet, setOpenSheet] = useState( NONE );
@@ -407,6 +415,29 @@ const FilterModal = ( {
       value: DATE_UPLOADED.DATE_RANGE,
     },
   };
+
+  const timeOfDayValues = {
+    [TIME_OF_DAY.ALL]: {
+      label: t( "All" ),
+      labelCaps: t( "ALL" ),
+      value: TIME_OF_DAY.ALL,
+    },
+    [TIME_OF_DAY.RANGE]: {
+      label: t( "Time-Range" ),
+      labelCaps: t( "TIME-RANGE" ),
+      text: t( "Filter-by-observed-during-time-range" ),
+      value: TIME_OF_DAY.RANGE,
+    },
+  };
+
+  const hourValues = Array.from( { length: 24 }, ( _, hour ) => hour )
+    .reduce( ( values, hour ) => ( {
+      ...values,
+      [hour]: {
+        label: format( new Date( 2020, 0, 1, hour ), "h a" ),
+        value: hour,
+      },
+    } ), {} );
 
   const monthValues = {
     1: {
@@ -659,6 +690,20 @@ const FilterModal = ( {
       newD1: createdD1,
       newD2: date.toISOString().split( "T" )[0],
     } );
+  };
+
+  const updateTimeOfDay = ( { newTimeOfDay, newH1, newH2 } ) => {
+    if ( newTimeOfDay === TIME_OF_DAY.ALL ) {
+      dispatch( {
+        type: EXPLORE_ACTION.SET_TIME_OF_DAY_ALL,
+      } );
+    } else if ( newTimeOfDay === TIME_OF_DAY.RANGE ) {
+      dispatch( {
+        type: EXPLORE_ACTION.SET_TIME_OF_DAY_RANGE,
+        h1: newH1 ?? h1 ?? 0,
+        h2: newH2 ?? h2 ?? 23,
+      } );
+    }
   };
 
   const observedEndBeforeStart = d1 > d2;
@@ -1159,6 +1204,44 @@ const FilterModal = ( {
             )}
           </View>
 
+          {/* Time of day section */}
+          <View className="mb-7">
+            <Heading4 className="mb-5">{t( "TIME-OF-DAY" )}</Heading4>
+            <Button
+              text={timeOfDayValues[timeOfDay]?.labelCaps}
+              className="shrink mb-7"
+              dropdown
+              onPress={() => {
+                setOpenSheet( TIME_OF_DAY_M );
+              }}
+              accessibilityLabel={t( "Time-of-day" )}
+            />
+            {timeOfDay === TIME_OF_DAY.RANGE && (
+              <>
+                <Body2 className="ml-1 mb-3">{t( "Start-Time" )}</Body2>
+                <Button
+                  text={hourValues[h1 ?? 0]?.label}
+                  className="shrink mb-7"
+                  dropdown
+                  onPress={() => {
+                    setOpenSheet( TIME_START );
+                  }}
+                  accessibilityLabel={t( "Start-Time" )}
+                />
+                <Body2 className="ml-1 mb-3">{t( "End-Time" )}</Body2>
+                <Button
+                  text={hourValues[h2 ?? 23]?.label}
+                  className="shrink mb-7"
+                  dropdown
+                  onPress={() => {
+                    setOpenSheet( TIME_END );
+                  }}
+                  accessibilityLabel={t( "End-Time" )}
+                />
+              </>
+            )}
+          </View>
+
           {/* Media section */}
           <View className="mb-3">
             <Heading4 className="mb-5">{t( "MEDIA" )}</Heading4>
@@ -1410,6 +1493,45 @@ const FilterModal = ( {
           onPressClose={() => setOpenSheet( NONE )}
           radioValues={dateUploadedValues}
           selectedValue={dateUploaded}
+          insideModal
+        />
+      )}
+      {openSheet === TIME_OF_DAY_M && (
+        <RadioButtonSheet
+          headerText={t( "TIME-OF-DAY" )}
+          confirm={newTimeOfDay => {
+            updateTimeOfDay( { newTimeOfDay } );
+            setOpenSheet( NONE );
+          }}
+          onPressClose={() => setOpenSheet( NONE )}
+          radioValues={timeOfDayValues}
+          selectedValue={timeOfDay}
+          insideModal
+        />
+      )}
+      {openSheet === TIME_START && (
+        <PickerSheet
+          headerText={t( "Start-Time" )}
+          confirm={newH1 => {
+            updateTimeOfDay( { newTimeOfDay: TIME_OF_DAY.RANGE, newH1 } );
+            setOpenSheet( NONE );
+          }}
+          onPressClose={() => setOpenSheet( NONE )}
+          pickerValues={hourValues}
+          selectedValue={h1 ?? 0}
+          insideModal
+        />
+      )}
+      {openSheet === TIME_END && (
+        <PickerSheet
+          headerText={t( "End-Time" )}
+          confirm={newH2 => {
+            updateTimeOfDay( { newTimeOfDay: TIME_OF_DAY.RANGE, newH2 } );
+            setOpenSheet( NONE );
+          }}
+          onPressClose={() => setOpenSheet( NONE )}
+          pickerValues={hourValues}
+          selectedValue={h2 ?? 23}
           insideModal
         />
       )}
