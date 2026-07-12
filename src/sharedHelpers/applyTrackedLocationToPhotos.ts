@@ -40,15 +40,15 @@ const applyTrackedLocationToObservation = async (
     .map( photo => Photo.getLocalPhotoUri( photo?.localFilePath ) )
     .filter( ( uri ): uri is string => !!uri );
 
-  if ( localUris.length === 0 ) return false;
+  if ( localUris.length > 0 ) {
+    const tags = toGpsExifTags( match );
 
-  const tags = toGpsExifTags( match );
-
-  try {
-    await Promise.all( localUris.map( uri => Exify.write( uri, tags ) ) );
-  } catch ( error ) {
-    logger.error( "Failed to write EXIF GPS data", error );
-    return false;
+    try {
+      await Promise.all( localUris.map( uri => Exify.write( uri, tags ) ) );
+    } catch ( error ) {
+      logger.error( "Failed to write EXIF GPS data", error );
+      return false;
+    }
   }
 
   const mutableObservation = observation as RealmObservation & {
