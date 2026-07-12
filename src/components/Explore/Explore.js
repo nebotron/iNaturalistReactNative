@@ -25,6 +25,7 @@ import colors from "styles/tailwindColors";
 
 import ExploreHeader from "./Header/ExploreHeader";
 import IdentifiersView from "./IdentifiersView";
+import IdentifyView from "./IdentifyView";
 import ObservationsView from "./ObservationsView";
 import ObservationsViewBar from "./ObservationsViewBar";
 import ObserversView from "./ObserversView";
@@ -37,6 +38,7 @@ const DROP_SHADOW = getShadow( {
 
 const exploreViewIcon = {
   observations: "binoculars",
+  identify: "id-agree",
   species: "leaf",
   observers: "observers",
   identifiers: "identifiers",
@@ -106,6 +108,7 @@ const Explore = ( {
 
   const exploreViewA11yLabel = {
     observations: t( "Observations-View" ),
+    identify: t( "Identify-View" ),
     species: t( "Species-View" ),
     observers: t( "Observers-View" ),
     identifiers: t( "Identifiers-View" ),
@@ -171,6 +174,13 @@ const Explore = ( {
             requestLocationPermissions={requestLocationPermissions}
           />
         )}
+        {currentExploreView === "identify" && (
+          <IdentifyView
+            canFetch={canFetch}
+            queryParams={queryParams}
+            handleUpdateCount={handleUpdateCount}
+          />
+        )}
         {currentExploreView === "species" && (
           <SpeciesView
             canFetch={canFetch}
@@ -223,6 +233,13 @@ const Explore = ( {
         label: t( "Observations" ),
         text: t( "Individual-encounters-with-organisms" ),
         value: "observations",
+      },
+      identify: {
+        buttonText: t( "IDENTIFY" ),
+        icon: "id-agree",
+        label: t( "Identify" ),
+        text: t( "Identify-observations-one-at-a-time" ),
+        value: "identify",
       },
       observers: {
         buttonText: t( "EXPLORE-OBSERVERS" ),

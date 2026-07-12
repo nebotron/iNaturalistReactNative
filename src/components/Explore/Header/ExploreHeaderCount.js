@@ -29,7 +29,7 @@ const ExploreHeaderCount = ( {
   const { t } = useTranslation( );
 
   const renderText = ( ) => {
-    if ( exploreView === "observations" ) {
+    if ( exploreView === "observations" || exploreView === "identify" ) {
       return t( "X-Observations", { count } );
     }
     if ( exploreView === "species" ) {

@@ -673,6 +673,12 @@ Identifiers = Identifiers
 Identifiers-View = Identifiers View
 # Short for: Identify with AI. Label for a button that will load identifications for a given photo/sound
 IDENTIFY = IDENTIFY
+# Label for the Identify view in Explore
+Identify = Identify
+# Description of the Identify view in Explore
+Identify-observations-one-at-a-time = Review observations that match your filters one at a time
+# Accessibility label for the Identify view in Explore
+Identify-View = Identify View
 # Title of screen asking for permission to access the camera
 Identify-organisms-in-real-time-with-your-camera = Identify organisms in real time with your camera
 # Onboarding slides
@@ -940,6 +946,8 @@ No-Media = No Media
 No-model-found = No model found
 No-photos-with-location-data-yet = No photos with location data yet
 No-projects-match-that-search = No projects match that search
+# Shown when a list or view has no matching results
+No-results-found = No results found
 # Used for explore screen when search params lead to a search with no data
 No-results-found-for-that-search = No results found for that search.
 No-results-found-try-different-search = No results found. Try a different search or adjust your filters.
@@ -1560,6 +1568,8 @@ VIEW-FOLLOWERS = VIEW FOLLOWERS
 VIEW-FOLLOWING = VIEW FOLLOWING
 View-in-browser = View in browser
 VIEW-IN-EXPLORE = VIEW IN EXPLORE
+# Accessibility label for tapping an image to open the full observation
+View-observation = View observation
 VIEW-INATURALIST-HELP = VIEW INATURALIST HELP
 # Button or accessibility label for an element that lets the user view a
 # photo
