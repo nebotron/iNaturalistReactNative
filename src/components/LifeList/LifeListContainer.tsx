@@ -67,6 +67,55 @@ function addLiferIfEarliest( map: Map<number, Lifer>, obs: ApiObservation ): voi
   }
 }
 
+// Like addLiferIfEarliest, but also handles an observation that no longer
+// qualifies (e.g. an ID was retracted and it dropped below research grade).
+// If it was our recorded lifer for that species, remove it and flag the
+// species so its remaining research-grade observations get re-checked.
+function syncLiferFromUpdate(
+  map: Map<number, Lifer>,
+  obs: ApiObservation,
+  speciesNeedingRecheck: Set<number>,
+): void {
+  const taxon = obs.taxon;
+  if ( !taxon?.id || taxon.rank_level !== Taxon.SPECIES_LEVEL ) return;
+
+  if ( obs.quality_grade !== "research" ) {
+    const existing = map.get( taxon.id );
+    if ( existing?.uuid === obs.uuid ) {
+      map.delete( taxon.id );
+      speciesNeedingRecheck.add( taxon.id );
+    }
+    return;
+  }
+  addLiferIfEarliest( map, obs );
+  speciesNeedingRecheck.delete( taxon.id );
+}
+
+// Find the earliest remaining research-grade observation for a species
+// whose previous lifer observation was retracted, if any is left.
+async function recheckSpecies(
+  map: Map<number, Lifer>,
+  userId: number,
+  taxonId: number,
+  fields: Object,
+  opts: { api_token: string | null },
+): Promise<void> {
+  const response = await searchObservations(
+    {
+      user_id: userId,
+      taxon_id: taxonId,
+      quality_grade: "research",
+      order_by: "observed_on",
+      order: "asc",
+      per_page: 1,
+      fields,
+    },
+    opts,
+  );
+  const obs = response?.results?.[0];
+  if ( obs ) addLiferIfEarliest( map, obs );
+}
+
 async function fetchLifers(
   userId: number | undefined,
   opts: { api_token: string | null },
@@ -81,30 +130,35 @@ async function fetchLifers(
   // Recorded before fetching so any observations that change again while
   // this sync is in flight get picked up by the next sync.
   const syncStartedAt = new Date( ).toISOString( );
+  const fields = {
+    id: true,
+    observed_on: true,
+    uuid: true,
+    quality_grade: true,
+    observation_photos: {
+      photo: {
+        url: true,
+        license_code: true,
+        attribution: true,
+      },
+    },
+    taxon: Taxon.LIMITED_TAXON_FIELDS,
+  };
   const commonParams = {
     user_id: userId,
-    quality_grade: "research",
     order_by: "id",
     order: "asc",
     per_page: PAGE_SIZE,
-    fields: {
-      id: true,
-      observed_on: true,
-      uuid: true,
-      observation_photos: {
-        photo: {
-          url: true,
-          license_code: true,
-          attribution: true,
-        },
-      },
-      taxon: Taxon.LIMITED_TAXON_FIELDS,
-    },
+    fields,
   };
 
   if ( lastSync ) {
     // Only fetch observations created or updated since the last sync,
     // instead of re-paging through the user's entire observation history.
+    // Grade isn't filtered server-side here so a retraction (an
+    // observation dropping below research grade) is visible and can be
+    // used to invalidate a stale cached lifer.
+    const speciesNeedingRecheck = new Set<number>( );
     let page = 1;
     let hasMorePages = true;
     while ( hasMorePages ) {
@@ -114,15 +168,21 @@ async function fetchLifers(
         opts,
       );
       const results: ApiObservation[] = response?.results ?? [];
-      results.forEach( obs => addLiferIfEarliest( firstObservationBySpeciesId, obs ) );
+      results.forEach( obs => (
+        syncLiferFromUpdate( firstObservationBySpeciesId, obs, speciesNeedingRecheck )
+      ) );
       hasMorePages = results.length === PAGE_SIZE;
       page += 1;
     }
+    await Promise.all( Array.from( speciesNeedingRecheck ).map( taxonId => (
+      recheckSpecies( firstObservationBySpeciesId, userId, taxonId, fields, opts )
+    ) ) );
   } else {
-    // First run: no prior sync to diff against. Cheap request (per_page: 0)
-    // for the total number of distinct research-grade species this user
-    // has observed, so the paging loop below can stop as soon as every
-    // species has been found instead of paging to the end.
+    // First run: no prior sync to diff against, so the server can filter to
+    // research grade directly. Cheap request (per_page: 0) for the total
+    // number of distinct research-grade species this user has observed, so
+    // the paging loop below can stop as soon as every species has been
+    // found instead of paging to the end.
     const { total_results: totalSpecies } = await fetchSpeciesCounts(
       { user_id: userId, quality_grade: "research", per_page: 0 },
       opts,
@@ -133,7 +193,7 @@ async function fetchLifers(
     while ( hasMorePages ) {
       // eslint-disable-next-line no-await-in-loop
       const response = await searchObservations(
-        { ...commonParams, page },
+        { ...commonParams, quality_grade: "research", page },
         opts,
       );
       const results: ApiObservation[] = response?.results ?? [];
