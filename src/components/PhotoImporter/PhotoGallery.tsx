@@ -199,6 +199,16 @@ const PhotoGallery = ( {
     [visiblePhotos, hasNextPage],
   );
 
+  // The last section is withheld while more pages remain, since it may
+  // still grow or split further. If that leaves nothing to show, the list
+  // is empty and onEndReached never fires, so keep fetching automatically
+  // until a finalized section appears or there are no more photos.
+  useEffect( ( ) => {
+    if ( !loading && hasNextPage && photos.length > 0 && galleryItems.length === 0 ) {
+      loadMore( );
+    }
+  }, [loading, hasNextPage, photos.length, galleryItems.length, loadMore] );
+
   const toggleSectionSelection = useCallback( ( nodes: PhotoNode[] ) => {
     setSelectedUris( prev => {
       const next = new Set( prev );
