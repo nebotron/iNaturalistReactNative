@@ -27,6 +27,12 @@ const TOOLBAR_HEIGHT = 104;
 const CROP_BUTTON_SIZE = 88;
 const CROP_ICON_SIZE = 36;
 const UPLOAD_MAX_SIDE = 2048;
+// Different formulas compute the cropped side length (round-tripping through
+// the zoom transform vs. deriving it directly from scale), which can disagree
+// by a fraction of a pixel right at the threshold. Round before comparing so
+// an exactly-2048px crop doesn't flicker between the normal and warning
+// border color.
+const exceedsUploadMax = ( sizePx: number ) => Math.round( sizePx ) > UPLOAD_MAX_SIDE;
 
 const styles = StyleSheet.create( {
   confirmSlot: {
@@ -118,7 +124,7 @@ const ImageCropView = ( {
       transform,
     );
     setWillBeDownsized(
-      Math.max( crop.w * imageWidth, crop.h * imageHeight ) > UPLOAD_MAX_SIDE,
+      exceedsUploadMax( Math.max( crop.w * imageWidth, crop.h * imageHeight ) ),
     );
     onCropChange?.( crop );
   }, [boxSize, cropAreaHeight, imageHeight, imageWidth, onCropChange, windowWidth] );
@@ -132,10 +138,10 @@ const ImageCropView = ( {
       return;
     }
     setWillBeDownsized(
-      Math.max(
+      exceedsUploadMax( Math.max(
         boxSize * imageWidth / ( scale * contain.width ),
         boxSize * imageHeight / ( scale * contain.height ),
-      ) > UPLOAD_MAX_SIDE,
+      ) ),
     );
   }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
 
@@ -166,7 +172,7 @@ const ImageCropView = ( {
     appliedInitialCropKey.current = cropKey;
     // Read directly from crop; applyTransform (a worklet) may not have propagated to JS yet.
     setWillBeDownsized(
-      Math.max( initialCrop.w * imageWidth, initialCrop.h * imageHeight ) > UPLOAD_MAX_SIDE,
+      exceedsUploadMax( Math.max( initialCrop.w * imageWidth, initialCrop.h * imageHeight ) ),
     );
   }, [
     boxSize,
