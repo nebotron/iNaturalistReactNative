@@ -65,14 +65,22 @@ const upperBound = ( points: ArrayLike<TrackedPoint>, targetMs: number ): number
   return lo;
 };
 
+// Drops unreliable fixes once, up front. Callers interpolating for many
+// timestamps against the same point set (e.g. one per observation) should
+// filter once with this and reuse the result via interpolateFromUsablePoints,
+// rather than re-filtering the full point set on every call.
+export const filterUsableTrackedPoints = (
+  rawPoints: ArrayLike<TrackedPoint>,
+): TrackedPoint[] => filterByAccuracy( rawPoints );
+
 // Linearly interpolates between the two tracked points bracketing targetMs,
 // falling back to the single closest point when targetMs is outside the
-// tracked range entirely. Unreliable fixes are filtered out first.
-export const findInterpolatedLocation = (
-  rawPoints: ArrayLike<TrackedPoint>,
+// tracked range entirely. `points` must already be accuracy-filtered (see
+// filterUsableTrackedPoints) and sorted by recordedAt.
+export const interpolateFromUsablePoints = (
+  points: TrackedPoint[],
   targetMs: number,
 ): InterpolatedLocation | null => {
-  const points = filterByAccuracy( rawPoints );
   if ( points.length === 0 ) return null;
 
   const idx = upperBound( points, targetMs );
@@ -113,5 +121,16 @@ export const findInterpolatedLocation = (
     accuracy: Math.max( prev.accuracy ?? 0, next.accuracy ?? 0 ) || null,
   };
 };
+
+// Convenience one-shot wrapper for callers interpolating a single timestamp.
+// Prefer filterUsableTrackedPoints + interpolateFromUsablePoints when calling
+// repeatedly against the same point set.
+export const findInterpolatedLocation = (
+  rawPoints: ArrayLike<TrackedPoint>,
+  targetMs: number,
+): InterpolatedLocation | null => interpolateFromUsablePoints(
+  filterUsableTrackedPoints( rawPoints ),
+  targetMs,
+);
 
 export default findInterpolatedLocation;
