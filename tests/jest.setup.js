@@ -222,7 +222,7 @@ jest.mock( "navigation/BottomTabNavigator/tabScreenOptions", () => ( {
   __esModule: true,
   default: {
     lazy: true,
-    freezeOnBlur: true,
+    freezeOnBlur: false,
     headerShown: false,
     animation: "none",
   },
