@@ -365,6 +365,7 @@ const PhotoGallery = ( {
         onEndReachedThreshold={0.5}
         estimatedItemSize={gridItemWidth}
         extraData={{ selectedUris, importedUris }}
+        drawDistance={1000}
       />
     </View>
   );
