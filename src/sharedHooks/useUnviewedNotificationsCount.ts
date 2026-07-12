@@ -1,18 +1,59 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { fetchUnviewedObservationUpdatesCount } from "api/observations";
-import type { ApiOpts } from "api/types";
-import { useCallback, useEffect } from "react";
+import type { ApiObservationsUpdatesParams, ApiOpts } from "api/types";
+import { getJWT } from "components/LoginSignUp/AuthenticationService";
+import { RealmContext } from "providers/contexts";
+import {
+  useCallback, useEffect, useRef,
+} from "react";
 import useStore from "stores/useStore";
 
+import {
+  fetchNotificationsPage,
+  getNotificationsQueryKey,
+} from "./useInfiniteNotificationsScroll";
 import useAuthenticatedQuery from "./useAuthenticatedQuery";
 import useCurrentUser from "./useCurrentUser";
+
+const { useRealm } = RealmContext;
 
 // Poll infrequently in the background; callers can force an immediate
 // refetch (e.g. on focusing the Notifications tab) via the returned refetch.
 const REFETCH_INTERVAL = 300_000;
 
+const TAB_PARAMS: Record<"owner" | "following", ApiObservationsUpdatesParams> = {
+  owner: { observations_by: "owner" },
+  following: { observations_by: "following" },
+};
+
 const useUnviewedNotificationsCount = () => {
   const currentUser = useCurrentUser( );
+  const realm = useRealm( );
+  const queryClient = useQueryClient( );
   const observationMarkedAsViewedAt = useStore( state => state.observationMarkedAsViewedAt );
+  // Tracks previous counts so we only prefetch when a background poll
+  // reveals *new* unviewed notifications, not on initial mount.
+  const prevCounts = useRef<{ owner?: number, following?: number }>( {} );
+
+  const prefetchIfIncreased = useCallback( async ( tab: "owner" | "following", count?: number ) => {
+    const prevCount = prevCounts.current[tab];
+    prevCounts.current[tab] = count;
+    if ( count === undefined || prevCount === undefined || count <= prevCount ) return;
+
+    const params = TAB_PARAMS[tab];
+    const apiToken = await getJWT( );
+    queryClient.prefetchInfiniteQuery( {
+      queryKey: [...getNotificationsQueryKey( params ), undefined, currentUser],
+      queryFn: ( { pageParam }: { pageParam: number } ) => fetchNotificationsPage(
+        params,
+        pageParam,
+        { api_token: apiToken },
+        realm,
+        currentUser?.id,
+      ),
+      initialPageParam: 1,
+    } );
+  }, [queryClient, realm, currentUser] );
 
   const { data: ownerUnviewedCount, refetch: refetchOwner } = useAuthenticatedQuery(
     ["notificationsCount", "owner"],
@@ -40,6 +81,14 @@ const useUnviewedNotificationsCount = () => {
   useEffect( ( ) => {
     if ( currentUser ) refetch( );
   }, [observationMarkedAsViewedAt, currentUser, refetch] );
+
+  useEffect( ( ) => {
+    prefetchIfIncreased( "owner", ownerUnviewedCount as number | undefined );
+  }, [ownerUnviewedCount, prefetchIfIncreased] );
+
+  useEffect( ( ) => {
+    prefetchIfIncreased( "following", followingUnviewedCount as number | undefined );
+  }, [followingUnviewedCount, prefetchIfIncreased] );
 
   return {
     // undefined while the initial fetch is still in flight, so callers can
