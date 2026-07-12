@@ -1,6 +1,7 @@
 // @flow
 
 import { useRoute } from "@react-navigation/native";
+import { toExploreTaxonFilterTaxon } from "components/Explore/helpers/taxonFilters";
 import {
   EXPLORE_ACTION,
   PLACE_MODE,
@@ -10,7 +11,7 @@ import { useCallback, useEffect } from "react";
 
 const useParams = ( ): Object => {
   const { params } = useRoute( );
-  const { dispatch, defaultExploreLocation } = useExplore( );
+  const { state, dispatch, defaultExploreLocation } = useExplore( );
 
   const updateContextWithParams = useCallback( async ( ) => {
     const setWorldwide = ( ) => {
@@ -39,6 +40,20 @@ const useParams = ( ): Object => {
         type: EXPLORE_ACTION.SET_TAXON_FILTERS,
         taxonFilters: [{ taxon: params.taxon, exclude: false }],
       } );
+    }
+    if ( params?.selectedTaxonForFilter ) {
+      const normalizedTaxon = toExploreTaxonFilterTaxon( params.selectedTaxonForFilter );
+      const alreadySelected = ( state.taxonFilters || [] )
+        .some( filter => filter.taxon.id === normalizedTaxon.id );
+      if ( !alreadySelected ) {
+        dispatch( {
+          type: EXPLORE_ACTION.SET_TAXON_FILTERS,
+          taxonFilters: [
+            ...( state.taxonFilters || [] ),
+            { taxon: normalizedTaxon, exclude: false },
+          ],
+        } );
+      }
     }
     if ( params?.place ) {
       dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_PLACE } );
@@ -78,6 +93,7 @@ const useParams = ( ): Object => {
     dispatch,
     params,
     defaultExploreLocation,
+    state.taxonFilters,
   ] );
 
   useEffect( ( ) => {

@@ -102,7 +102,7 @@ const TaxonDetails = ( ): Node => {
   const navigation = useNavigation( );
   const { params } = useRoute( );
   const {
-    id, hideNavButtons, firstPhotoID, representativePhoto, rankLevel,
+    id, hideNavButtons, firstPhotoID, representativePhoto, rankLevel, selectableForExplore,
   } = params;
   const { t } = useTranslation( );
   const { isConnected } = useNetInfo( );
@@ -146,7 +146,7 @@ const TaxonDetails = ( ): Node => {
     mappableObservation = Observation.mapApiToRealm( remoteObservation );
   }
 
-  const showSelectButton = fromSuggestions || fromObsEdit;
+  const showSelectButton = fromSuggestions || fromObsEdit || !!selectableForExplore;
 
   // Determine if this taxon was automatically suggested or if the user chose
   // it themselves. If the user reached TaxonDetails from Match or
@@ -309,7 +309,11 @@ const TaxonDetails = ( ): Node => {
       if ( taxonForDisplay?.ancestors?.length ) {
         return (
           <View className="mx-3">
-            <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
+            <Taxonomy
+              taxon={taxonForDisplay}
+              hideNavButtons={hideNavButtons}
+              selectableForExplore={selectableForExplore}
+            />
           </View>
         );
       }
@@ -331,7 +335,11 @@ const TaxonDetails = ( ): Node => {
       }
       return (
         <View className="mx-3">
-          <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
+          <Taxonomy
+            taxon={taxonForDisplay}
+            hideNavButtons={hideNavButtons}
+            selectableForExplore={selectableForExplore}
+          />
         </View>
       );
     }
@@ -346,7 +354,11 @@ const TaxonDetails = ( ): Node => {
       <View className="mx-3">
         <EstablishmentMeans taxon={taxon} />
         <Wikipedia taxon={taxon} />
-        <Taxonomy taxon={taxonForDisplay} hideNavButtons={hideNavButtons} />
+        <Taxonomy
+          taxon={taxonForDisplay}
+          hideNavButtons={hideNavButtons}
+          selectableForExplore={selectableForExplore}
+        />
         <TaxonMapPreview
           observation={mappableObservation}
           taxon={taxon}
@@ -539,7 +551,14 @@ const TaxonDetails = ( ): Node => {
             level="focus"
             text={t( "SELECT-THIS-TAXON" )}
             onPress={( ) => {
-              if ( fromSuggestions && !currentUser ) {
+              if ( selectableForExplore ) {
+                const exploreRouteName = history.includes( "RootExplore" )
+                  ? "RootExplore"
+                  : "Explore";
+                navigation.dispatch(
+                  StackActions.popTo( exploreRouteName, { selectedTaxonForFilter: taxon } ),
+                );
+              } else if ( fromSuggestions && !currentUser ) {
                 setSheetVisible( true );
               } else {
                 updateTaxon( );

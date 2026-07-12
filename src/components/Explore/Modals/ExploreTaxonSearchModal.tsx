@@ -32,7 +32,7 @@ const ExploreTaxonSearchModal = ( {
         <ExploreTaxonSearch
           closeModal={closeModal}
           onPressInfo={( taxon: RealmTaxon | ApiTaxon ) => {
-            navigation.push( "TaxonDetails", { id: taxon.id } );
+            navigation.push( "TaxonDetails", { id: taxon.id, selectableForExplore: true } );
             closeModal();
             if ( onPressInfo ) {
               onPressInfo( );
