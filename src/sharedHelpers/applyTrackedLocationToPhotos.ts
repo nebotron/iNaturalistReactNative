@@ -1,3 +1,4 @@
+import type { ExifTags } from "@lodev09/react-native-exify";
 import * as Exify from "@lodev09/react-native-exify";
 import { photosFromObservation } from "components/ObservationsFlashList/util";
 import type Realm from "realm";
@@ -14,15 +15,11 @@ export interface TrackedLocationMatch {
   accuracy?: number | null;
 }
 
-const toGpsExifTags = ( { latitude, longitude, accuracy }: TrackedLocationMatch ) => ( {
-  GPSLatitude: Math.abs( latitude ),
-  GPSLatitudeRef: latitude >= 0
-    ? "N"
-    : "S",
-  GPSLongitude: Math.abs( longitude ),
-  GPSLongitudeRef: longitude >= 0
-    ? "E"
-    : "W",
+// Matches the signed-value convention used elsewhere in this codebase
+// (saveObservation.ts, MediaViewer.tsx) for writing GPS tags via Exify.write
+const toGpsExifTags = ( { latitude, longitude, accuracy }: TrackedLocationMatch ): ExifTags => ( {
+  GPSLatitude: latitude,
+  GPSLongitude: longitude,
   ...( accuracy != null
     ? { GPSHPositioningError: accuracy }
     : {} ),

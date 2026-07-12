@@ -135,13 +135,10 @@ const LocationHistory = ( ) => {
     [],
   ) as unknown as RealmObservation[];
 
-  const applicableObservations = useMemo( ( ) => [
-    ...observations,
-    ...observationsMissingLocation,
-  ].filter( obs => {
+  const applicableObservations = useMemo( ( ) => observationsMissingLocation.filter( obs => {
     const targetMs = getObservedOnMs( obs );
     return !!findInterpolatedLocation( historyPoints, targetMs );
-  } ), [observations, observationsMissingLocation, historyPoints] );
+  } ), [observationsMissingLocation, historyPoints] );
 
   const photoComparisons = useMemo(
     ( ) => [
