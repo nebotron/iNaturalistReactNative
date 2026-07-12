@@ -218,7 +218,15 @@ const ImageCropView = ( {
     if ( !zoomRef.current || boxSize <= 0 || cropAreaHeight <= 0 ) {
       return;
     }
-    const crop = square2048Crop( imageWidth, imageHeight );
+    const currentCrop = imageZoomTransformToNormalizedCrop(
+      imageWidth,
+      imageHeight,
+      windowWidth,
+      cropAreaHeight,
+      boxSize,
+      zoomRef.current.readTransform( ),
+    );
+    const crop = square2048Crop( imageWidth, imageHeight, currentCrop );
     const transform = normalizedCropToImageZoomTransform(
       imageWidth,
       imageHeight,

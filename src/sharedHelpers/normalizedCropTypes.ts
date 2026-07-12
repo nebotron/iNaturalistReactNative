@@ -339,6 +339,7 @@ export function displayDeltaToNormalized(
 export function square2048Crop(
   imageWidth: number,
   imageHeight: number,
+  currentCrop?: NormalizedCrop | null,
 ): NormalizedCrop {
   if ( imageWidth <= 0 || imageHeight <= 0 ) {
     return {
@@ -350,9 +351,15 @@ export function square2048Crop(
   const w = cropSize / imageWidth;
   const h = cropSize / imageHeight;
 
+  // Keep the new crop centered on the current crop's center when one is
+  // provided, so resizing to 2048 doesn't jump the region back to the middle
+  // of the image. clampCrop keeps it inside the image bounds.
+  const cx = currentCrop ? currentCrop.x + currentCrop.w / 2 : 0.5;
+  const cy = currentCrop ? currentCrop.y + currentCrop.h / 2 : 0.5;
+
   return clampCrop( {
-    x: ( 1 - w ) / 2,
-    y: ( 1 - h ) / 2,
+    x: cx - w / 2,
+    y: cy - h / 2,
     w,
     h,
   } );

@@ -218,4 +218,26 @@ describe( "square2048Crop", ( ) => {
     expect( crop.x + crop.w ).toBeLessThanOrEqual( 1 );
     expect( crop.y + crop.h ).toBeLessThanOrEqual( 1 );
   } );
+
+  it( "keeps the new crop centered on the current crop's center", ( ) => {
+    const current = {
+      x: 0.5, y: 0.5, w: 0.1, h: 0.1,
+    };
+    const crop = square2048Crop( 4000, 3000, current );
+    const cx = current.x + current.w / 2;
+    const cy = current.y + current.h / 2;
+    expect( crop.x + crop.w / 2 ).toBeCloseTo( cx, 5 );
+    expect( crop.y + crop.h / 2 ).toBeCloseTo( cy, 5 );
+  } );
+
+  it( "clamps a current-centered crop to image boundaries", ( ) => {
+    const current = {
+      x: 0.95, y: 0.95, w: 0.05, h: 0.05,
+    };
+    const crop = square2048Crop( 4000, 3000, current );
+    expect( crop.x ).toBeGreaterThanOrEqual( 0 );
+    expect( crop.y ).toBeGreaterThanOrEqual( 0 );
+    expect( crop.x + crop.w ).toBeLessThanOrEqual( 1 );
+    expect( crop.y + crop.h ).toBeLessThanOrEqual( 1 );
+  } );
 } );
