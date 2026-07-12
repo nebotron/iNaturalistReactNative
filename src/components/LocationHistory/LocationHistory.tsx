@@ -19,7 +19,10 @@ import Photo from "realmModels/Photo";
 import type { RealmObservation } from "realmModels/types";
 import applyTrackedLocationToObservation from "sharedHelpers/applyTrackedLocationToPhotos";
 import distanceInMeters from "sharedHelpers/geoDistance";
-import { findInterpolatedLocation } from "sharedHelpers/interpolateTrackedLocation";
+import {
+  filterUsableTrackedPoints,
+  interpolateFromUsablePoints,
+} from "sharedHelpers/interpolateTrackedLocation";
 import {
   startLocationHistoryTracking,
   stopLocationHistoryTracking,
@@ -135,10 +138,18 @@ const LocationHistory = ( ) => {
     [],
   ) as unknown as RealmObservation[];
 
+  // Accuracy-filtering the tracked points is O(n) in the number of recorded
+  // points, so it's done once here and reused for every observation below,
+  // rather than re-filtering the full history on every lookup.
+  const usableHistoryPoints = useMemo(
+    ( ) => filterUsableTrackedPoints( historyPoints ),
+    [historyPoints],
+  );
+
   const applicableObservations = useMemo( ( ) => observationsMissingLocation.filter( obs => {
     const targetMs = getObservedOnMs( obs );
-    return !!findInterpolatedLocation( historyPoints, targetMs );
-  } ), [observationsMissingLocation, historyPoints] );
+    return !!interpolateFromUsablePoints( usableHistoryPoints, targetMs );
+  } ), [observationsMissingLocation, usableHistoryPoints] );
 
   const photoComparisons = useMemo(
     ( ) => [
@@ -146,7 +157,7 @@ const LocationHistory = ( ) => {
       ...observationsMissingLocation,
     ].map( obs => {
       const targetMs = getObservedOnMs( obs );
-      const trackedLocation = findInterpolatedLocation( historyPoints, targetMs );
+      const trackedLocation = interpolateFromUsablePoints( usableHistoryPoints, targetMs );
       const hasPhotoLocation = obs.latitude != null && obs.longitude != null;
       const hasTrackedLocation = !!trackedLocation;
       const distanceMeters = trackedLocation && hasPhotoLocation
@@ -172,7 +183,7 @@ const LocationHistory = ( ) => {
         trackedLng: trackedLocation?.longitude,
       };
     } ).sort( ( a, b ) => b.targetMs - a.targetMs ),
-    [observations, observationsMissingLocation, historyPoints],
+    [observations, observationsMissingLocation, usableHistoryPoints],
   );
 
   const handleToggleTracking = useCallback( async ( newValue: boolean ) => {
@@ -195,7 +206,7 @@ const LocationHistory = ( ) => {
     let appliedCount = 0;
     for ( const obs of applicableObservations ) {
       const targetMs = getObservedOnMs( obs );
-      const trackedLocation = findInterpolatedLocation( historyPoints, targetMs );
+      const trackedLocation = interpolateFromUsablePoints( usableHistoryPoints, targetMs );
       if ( trackedLocation ) {
         // eslint-disable-next-line no-await-in-loop
         const applied = await applyTrackedLocationToObservation( realm, obs, {
@@ -211,7 +222,7 @@ const LocationHistory = ( ) => {
       t( "Location-Applied" ),
       t( "X-Photos-Updated-With-Tracked-Location", { count: appliedCount } ),
     );
-  }, [applicableObservations, historyPoints, realm, t] );
+  }, [applicableObservations, usableHistoryPoints, realm, t] );
 
   const handlePhotoLocationPress = useCallback( item => {
     if ( item.observationLat != null && item.observationLng != null ) {
