@@ -38,16 +38,20 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     try {
       const { cleanedQuery } = validateRealmSearch( searchString );
       const lowerQuery = cleanedQuery.toLowerCase();
-      const matches: RealmTaxon[] = [];
+      const matches: { taxon: RealmTaxon, isExact: boolean }[] = [];
       const allTaxa = realm.objects( "Taxon" );
       for ( let i = 0; i < allTaxa.length && matches.length < 50; i += 1 ) {
         const taxon = allTaxa[i];
         const searchableName = Taxon.compileSearchableName( taxon ).toLowerCase( );
         if ( searchableName.includes( lowerQuery ) ) {
-          matches.push( taxon );
+          const isExact = searchableName.split( ";" ).includes( lowerQuery );
+          matches.push( { taxon, isExact } );
         }
       }
-      return matches;
+      // Exact name matches (scientific or common name equal to the query)
+      // should appear before partial/substring matches.
+      matches.sort( ( a, b ) => Number( b.isExact ) - Number( a.isExact ) );
+      return matches.map( match => match.taxon );
     } catch ( error ) {
       throw new Error( `Search failed: ${error.message}` );
     }
