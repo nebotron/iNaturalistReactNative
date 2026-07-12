@@ -102,6 +102,9 @@ export type SharedStackParamList = {
     // TODO: do we really use both?
     vision?: boolean;
     usesVision?: boolean;
+    // Opened from the Explore taxon filter search (or a relative drill-down from it);
+    // shows a select button that adds this taxon to the Explore taxon filters
+    selectableForExplore?: boolean;
   };
   // From App.js
   // item is SharedItem
@@ -239,7 +242,11 @@ export type MyObservationsStackParamList = {
 export type BaseTabStackParamList = {
   Menu: undefined;
   ObsList: undefined;
-  RootExplore: undefined;
+  RootExplore: {
+    // Set when a taxon is selected on TaxonDetails (opened from the Explore taxon
+    // filter search, or a relative drill-down from it) to add it to the taxon filters
+    selectedTaxonForFilter?: object;
+  } | undefined;
   // TODO: type for other routes to Explore
   // From UserProfile
   // {
@@ -265,6 +272,9 @@ export type BaseTabStackParamList = {
     lat?: number;
     lng?: number;
     radius?: number;
+    // Set when a taxon is selected on TaxonDetails (opened from the Explore taxon
+    // filter search, or a relative drill-down from it) to add it to the taxon filters
+    selectedTaxonForFilter?: object;
   };
   ExploreFilters: undefined;
   ExploreSearch: undefined;

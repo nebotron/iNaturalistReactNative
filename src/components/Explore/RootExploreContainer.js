@@ -30,6 +30,7 @@ import Explore from "./Explore";
 import ExploreV2 from "./ExploreV2";
 import mapParamsToAPI from "./helpers/mapParamsToAPI";
 import useExploreHeaderCount from "./hooks/useExploreHeaderCount";
+import useParams from "./hooks/useParams";
 
 const RootExploreContainerWithContext = ( ): Node => {
   const navigation = useNavigation( );
@@ -55,6 +56,8 @@ const RootExploreContainerWithContext = ( ): Node => {
   const [showFiltersModal, setShowFiltersModal] = useState( false );
 
   const [canFetch, setCanFetch] = useState( false );
+
+  useParams( );
 
   useEffect( () => {
     async function resolveNearbyLocation() {
