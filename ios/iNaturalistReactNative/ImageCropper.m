@@ -1,4 +1,5 @@
 #import <AVFoundation/AVFoundation.h>
+#import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
 #import <Photos/Photos.h>
 #import <React/RCTBridgeModule.h>
@@ -598,6 +599,43 @@ RCT_EXPORT_METHOD( exportPHAsset
         resolve( [NSString stringWithFormat:@"file://%@", dest] );
       }
     }];
+}
+
+// Updates the location metadata of an existing Photos-library asset. Unlike
+// exportPHAsset, this mutates the user's actual Photos library (not just an
+// app-local copy), so tracked-location corrections show up in the Photos app.
+RCT_EXPORT_METHOD( updateAssetLocation
+                  : ( NSString * )phUri latitude
+                  : ( nonnull NSNumber * )latitude longitude
+                  : ( nonnull NSNumber * )longitude resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *localIdentifier = [phUri hasPrefix:@"ph://"]
+    ? [phUri substringFromIndex:5]
+    : phUri;
+
+  PHFetchResult<PHAsset *> *result =
+    [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
+  PHAsset *asset = result.firstObject;
+  if ( !asset ) {
+    reject( @"UPDATE_LOCATION_FAILED", @"PHAsset not found", nil );
+    return;
+  }
+
+  CLLocation *location = [[CLLocation alloc] initWithLatitude:[latitude doubleValue]
+                                                     longitude:[longitude doubleValue]];
+
+  [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+    PHAssetChangeRequest *changeRequest = [PHAssetChangeRequest changeRequestForAsset:asset];
+    changeRequest.location = location;
+  } completionHandler:^( BOOL success, NSError *error ) {
+    if ( success ) {
+      resolve( @YES );
+    } else {
+      reject( @"UPDATE_LOCATION_FAILED", error.localizedDescription, error );
+    }
+  }];
 }
 
 // Loads an EXIF-oriented image downscaled to maxPixel on its longest side via
