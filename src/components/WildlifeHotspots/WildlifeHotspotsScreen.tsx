@@ -7,7 +7,7 @@ import {
   INatIcon,
   ViewWrapper,
 } from "components/SharedComponents";
-import { ScrollView, TextInput, View } from "components/styledComponents";
+import { TextInput, View } from "components/styledComponents";
 import type { TabStackScreenProps } from "navigation/types";
 import React, {
   useCallback,
@@ -20,6 +20,7 @@ import {
   Linking,
   StyleSheet,
   TouchableOpacity,
+  useWindowDimensions,
 } from "react-native";
 import type { RenderItemParams } from "react-native-draggable-flatlist";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
@@ -28,6 +29,7 @@ import MapView, {
   Marker,
   Polyline,
 } from "react-native-maps";
+import Carousel from "react-native-reanimated-carousel";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
@@ -208,6 +210,7 @@ const styles = StyleSheet.create( {
 const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsProp }: Props ) => {
   const { t } = useTranslation();
   const navigation = useNavigation();
+  const { width: windowWidth } = useWindowDimensions();
   const mapRef = useRef<MapView>( null );
   const filterParams = filterParamsProp ?? route?.params?.filterParams ?? {};
 
@@ -390,6 +393,13 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     setHotspotRouteCoords( [] );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops, t] );
+
+  const handleHotspotSwipe = useCallback( ( index: number ) => {
+    const hotspot = hotspots[index];
+    if ( hotspot && hotspot.id !== selectedHotspotId ) {
+      handleHotspotPress( hotspot );
+    }
+  }, [hotspots, selectedHotspotId, handleHotspotPress] );
 
   const handleObservationPress = useCallback( ( uuid: string ) => {
     navigation.push( "ObsDetails", { uuid } );
@@ -627,9 +637,9 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
         )}
       </View>
 
-      {/* Hotspot list */}
+      {/* Hotspot cards */}
       {( hotspots.length > 0 || error ) && (
-        <View className="max-h-56 bg-lightGray border-t border-lightGray">
+        <View className="flex-1 bg-lightGray border-t border-lightGray">
           {error
             ? (
               <View className="p-4 items-center">
@@ -637,23 +647,27 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
               </View>
             )
             : (
-              <ScrollView
-                contentContainerStyle={styles.hotspotListContent}
-                showsVerticalScrollIndicator
-              >
-                {hotspots.map( ( hotspot, idx ) => (
-                  <HotspotListItem
-                    key={hotspot.id}
-                    hotspot={hotspot}
-                    rank={idx + 1}
-                    selected={selectedHotspotId === hotspot.id}
-                    onPress={() => handleHotspotPress( hotspot )}
-                    onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
-                    onAddToRoute={() => handleAddHotspotToRoute( hotspot )}
-                    onSpeciesCountPress={species => handleSpeciesCountPress( hotspot, species )}
-                  />
-                ) )}
-              </ScrollView>
+              <Carousel
+                key={`WildlifeHotspotsCarousel-${windowWidth}-${hotspots.length}`}
+                testID="WildlifeHotspotsScreen.carousel"
+                data={hotspots}
+                width={windowWidth}
+                loop={false}
+                onSnapToItem={handleHotspotSwipe}
+                renderItem={( { item: hotspot, index } ) => (
+                  <View className="flex-1" style={styles.hotspotListContent}>
+                    <HotspotListItem
+                      hotspot={hotspot}
+                      rank={index + 1}
+                      selected={selectedHotspotId === hotspot.id}
+                      onPress={() => handleHotspotPress( hotspot )}
+                      onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
+                      onAddToRoute={() => handleAddHotspotToRoute( hotspot )}
+                      onSpeciesCountPress={species => handleSpeciesCountPress( hotspot, species )}
+                    />
+                  </View>
+                )}
+              />
             )}
         </View>
       )}
