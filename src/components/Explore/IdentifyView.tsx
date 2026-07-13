@@ -14,7 +14,7 @@ import {
   INatIconButton,
 } from "components/SharedComponents";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
-import { View } from "components/styledComponents";
+import { Pressable, View } from "components/styledComponents";
 import React, {
   forwardRef,
   memo,
@@ -25,7 +25,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Dimensions, StyleSheet } from "react-native";
+import { Dimensions, Image, StyleSheet } from "react-native";
 import Photo from "realmModels/Photo";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
@@ -291,15 +291,22 @@ const IdentifyView = ( {
       : EXPOSURE_STOPS_DEFAULT );
   }, [currentPhotoUrl] );
 
-  // Preload subject detection for the first photo of the next few observations.
+  // Warm the image cache and subject detection for the current observation's
+  // other photos and the first photo of upcoming observations, so advancing or
+  // paging shows them with no download/detection delay.
   useEffect( ( ) => {
-    observations
+    const upcoming = observations
       .slice( currentIndex + 1, currentIndex + 1 + PREFETCH_THRESHOLD )
-      .forEach( obs => {
-        const url = photosForObs( obs )[0];
-        if ( url ) preloadSubjectDetectionForUri( url );
-      } );
-  }, [observations, currentIndex] );
+      .map( obs => photosForObs( obs )[0] )
+      .filter( ( url ): url is string => !!url );
+    [...photoUrls, ...upcoming].forEach( url => {
+      Image.prefetch( url ).catch( ( ) => undefined );
+      preloadSubjectDetectionForUri( url );
+    } );
+    // observations' array identity changes every render; key off stable signals
+    // so we don't re-prefetch on every re-render (e.g. during a pinch).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [observationUuid, currentIndex, observations.length] );
 
   const goToNext = useCallback( ( ) => {
     setCurrentIndex( prev => {
@@ -324,6 +331,12 @@ const IdentifyView = ( {
       params: { uuid: observationUuid, preloadedObservation: observation },
     } as never );
   }, [navigation, observation, observationUuid] );
+
+  const openTaxonDetails = useCallback( ( ) => {
+    const id = observation?.taxon?.id;
+    if ( !id ) return;
+    navigation.navigate( "TaxonDetails" as never, { id } as never );
+  }, [navigation, observation?.taxon?.id] );
 
   const handleBrightnessComplete = useCallback( ( value: number ) => {
     setBrightnessStops( value );
@@ -383,12 +396,10 @@ const IdentifyView = ( {
     reviewMutate( { uuid: observationUuid } );
   };
 
-  const navButtonClass = "bg-black/50 items-center justify-center rounded-full h-[44px] w-[44px]";
-
   return (
     <View className="flex-1" style={styles.container}>
-      {/* Square, zoomable/pannable image with subject detection. Tapping opens
-          the full observation; dedicated buttons page between photos. */}
+      {/* Square, zoomable/pannable image with subject detection. Nothing is
+          drawn over the image; tapping it opens the full observation. */}
       <View
         // We need these dynamic dimensions to keep the image square
         // eslint-disable-next-line react-native/no-inline-styles
@@ -413,42 +424,34 @@ const IdentifyView = ( {
               <ActivityIndicator />
             </View>
           )}
-
-        {/* Left / right photo navigation */}
-        {hasMultiplePhotos && (
-          <>
-            <View className="absolute left-2 inset-y-0 justify-center">
-              <INatIconButton
-                icon="chevron-left-circle"
-                size={30}
-                color={colors.white}
-                className={navButtonClass}
-                disabled={selectedPhotoIndex === 0}
-                accessibilityLabel={t( "Previous-slide" )}
-                onPress={( ) => goToPhoto( -1 )}
-                testID="IdentifyView.prevPhoto"
-              />
-            </View>
-            <View className="absolute right-2 inset-y-0 justify-center">
-              <INatIconButton
-                icon="chevron-right-circle"
-                size={30}
-                color={colors.white}
-                className={navButtonClass}
-                disabled={selectedPhotoIndex === photoUrls.length - 1}
-                accessibilityLabel={t( "Next-slide" )}
-                onPress={( ) => goToPhoto( 1 )}
-                testID="IdentifyView.nextPhoto"
-              />
-            </View>
-            <View className="absolute top-3 right-3 bg-black/50 rounded-full px-3 py-1">
-              <Body2 className="text-white">
-                {`${selectedPhotoIndex + 1}/${photoUrls.length}`}
-              </Body2>
-            </View>
-          </>
-        )}
       </View>
+
+      {/* Left / right photo navigation (below the image) */}
+      {hasMultiplePhotos && (
+        <View className="flex-row items-center justify-center pt-1">
+          <INatIconButton
+            icon="chevron-left-circle"
+            size={30}
+            color={colors.inatGreen}
+            disabled={selectedPhotoIndex === 0}
+            accessibilityLabel={t( "Previous-slide" )}
+            onPress={( ) => goToPhoto( -1 )}
+            testID="IdentifyView.prevPhoto"
+          />
+          <Body2 className="mx-4">
+            {`${selectedPhotoIndex + 1}/${photoUrls.length}`}
+          </Body2>
+          <INatIconButton
+            icon="chevron-right-circle"
+            size={30}
+            color={colors.inatGreen}
+            disabled={selectedPhotoIndex === photoUrls.length - 1}
+            accessibilityLabel={t( "Next-slide" )}
+            onPress={( ) => goToPhoto( 1 )}
+            testID="IdentifyView.nextPhoto"
+          />
+        </View>
+      )}
 
       {/* Zoom + brightness sliders (below the image, not covering it) */}
       <View className="px-4 pt-1">
@@ -486,11 +489,17 @@ const IdentifyView = ( {
         </View>
       </View>
 
-      {/* Current id'ed taxon — common name only */}
+      {/* Current id'ed taxon — common name only, tap for species details */}
       <View className="px-4 py-2 items-center justify-center">
         {taxon
           ? (
-            <DisplayTaxonName taxon={taxon} showOneNameOnly />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t( "View-taxon" )}
+              onPress={openTaxonDetails}
+            >
+              <DisplayTaxonName taxon={taxon} showOneNameOnly />
+            </Pressable>
           )
           : (
             <Body2>{t( "Unknown--taxon" )}</Body2>

@@ -1558,6 +1558,8 @@ VIEW-FOLLOWING = VIEW FOLLOWING
 View-in-browser = View in browser
 # Accessibility label for tapping an image to open the full observation
 View-observation = View observation
+# Accessibility label for tapping a taxon name to open its details page
+View-taxon = View taxon
 VIEW-IN-EXPLORE = VIEW IN EXPLORE
 VIEW-INATURALIST-HELP = VIEW INATURALIST HELP
 # Button or accessibility label for an element that lets the user view a
