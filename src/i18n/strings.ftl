@@ -934,6 +934,8 @@ New-Observation = New Observation
 # Sort order, refers to newest or oldest date
 Newest-to-oldest = Newest to oldest
 Next-observation = Next observation
+# Label for a button that advances to the next item
+Next = Next
 # Accessibility label for a button that goes to the next slide on onboarding cards
 Next-slide = Next slide
 # Error message when no camera can be found
@@ -1266,6 +1268,8 @@ Restore = Restore
 Reveal = Reveal
 REVIEW-INATURALIST = REVIEW INATURALIST
 REVIEWED = REVIEWED
+# Label for a button that marks an observation as reviewed
+Reviewed = Reviewed
 Reviewed-observations-only = Reviewed observations only
 # Label for the satellite map type
 Satellite--map-type = Satellite

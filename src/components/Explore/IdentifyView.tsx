@@ -424,48 +424,46 @@ const IdentifyView = ( {
             </View>
           </>
         )}
+      </View>
 
-        {/* Always-visible zoom + brightness sliders */}
-        <View className="absolute bottom-2 left-2 right-2">
-          <View className="bg-black/60 rounded-xl px-3 py-1">
-            <View className="flex-row items-center">
-              <INatIcon name="magnifying-glass" size={18} color={colors.white} />
-              <Slider
-                style={styles.slider}
-                minimumValue={0}
-                maximumValue={1}
-                minimumTrackTintColor={colors.inatGreen}
-                maximumTrackTintColor={colors.white}
-                thumbTintColor={colors.white}
-                value={zoomScaleToPos( zoomScale )}
-                onValueChange={handleZoomChange}
-                onSlidingComplete={( ) => photoRef.current?.saveCrop( )}
-                tapToSeek
-                accessibilityLabel={t( "Adjust-zoom" )}
-              />
-            </View>
-            <View className="flex-row items-center">
-              <INatIcon name="sliders" size={18} color={colors.white} />
-              <Slider
-                style={styles.slider}
-                minimumValue={EXPOSURE_STOPS_MIN}
-                maximumValue={EXPOSURE_STOPS_MAX}
-                minimumTrackTintColor={colors.inatGreen}
-                maximumTrackTintColor={colors.white}
-                thumbTintColor={colors.white}
-                value={brightnessStops}
-                onValueChange={setBrightnessStops}
-                onSlidingComplete={handleBrightnessComplete}
-                tapToSeek
-                accessibilityLabel={t( "Adjust-brightness" )}
-              />
-            </View>
-          </View>
+      {/* Zoom + brightness sliders (below the image, not covering it) */}
+      <View className="px-4 pt-1">
+        <View className="flex-row items-center">
+          <INatIcon name="magnifying-glass" size={18} color={colors.darkGray} />
+          <Slider
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={1}
+            minimumTrackTintColor={colors.inatGreen}
+            maximumTrackTintColor={colors.lightGray}
+            thumbTintColor={colors.inatGreen}
+            value={zoomScaleToPos( zoomScale )}
+            onValueChange={handleZoomChange}
+            onSlidingComplete={( ) => photoRef.current?.saveCrop( )}
+            tapToSeek
+            accessibilityLabel={t( "Adjust-zoom" )}
+          />
+        </View>
+        <View className="flex-row items-center">
+          <INatIcon name="sliders" size={18} color={colors.darkGray} />
+          <Slider
+            style={styles.slider}
+            minimumValue={EXPOSURE_STOPS_MIN}
+            maximumValue={EXPOSURE_STOPS_MAX}
+            minimumTrackTintColor={colors.inatGreen}
+            maximumTrackTintColor={colors.lightGray}
+            thumbTintColor={colors.inatGreen}
+            value={brightnessStops}
+            onValueChange={setBrightnessStops}
+            onSlidingComplete={handleBrightnessComplete}
+            tapToSeek
+            accessibilityLabel={t( "Adjust-brightness" )}
+          />
         </View>
       </View>
 
       {/* Current id'ed taxon — common name only */}
-      <View className="px-4 py-3 items-center justify-center">
+      <View className="px-4 py-2 items-center justify-center">
         {taxon
           ? (
             <DisplayTaxonName taxon={taxon} showOneNameOnly />
@@ -492,7 +490,7 @@ const IdentifyView = ( {
         <View className="flex-1">
           <Button
             className="w-full h-full"
-            text={t( "Mark-as-reviewed" )}
+            text={t( "Reviewed" )}
             adjustsFontSizeToFit
             disabled={reviewDisabled}
             loading={reviewing}
@@ -503,7 +501,7 @@ const IdentifyView = ( {
         <View className="flex-1">
           <Button
             className="w-full h-full"
-            text={t( "Next-observation" )}
+            text={t( "Next" )}
             adjustsFontSizeToFit
             onPress={goToNext}
             testID="IdentifyView.next"
