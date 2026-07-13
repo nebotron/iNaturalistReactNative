@@ -17,9 +17,14 @@ import React, {
   useState,
 } from "react";
 import Observation from "realmModels/Observation";
+import applyTrackedLocationToObservation from "sharedHelpers/applyTrackedLocationToPhotos";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
+import {
+  filterUsableTrackedPoints,
+  interpolateFromUsablePoints,
+} from "sharedHelpers/interpolateTrackedLocation";
 import { useExitObservationFlow, useGridLayout } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -342,6 +347,30 @@ const GroupPhotosContainer = ( ): Node => {
     await Promise.all(
       observationsToSave.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
     );
+
+    // Auto-fill location from tracked location history for any imported
+    // observation whose photos didn't carry GPS EXIF data
+    const missingLocationUuids = observationsToSave
+      .filter( obs => obs.latitude == null || obs.longitude == null )
+      .map( obs => obs.uuid );
+    if ( missingLocationUuids.length > 0 ) {
+      const usablePoints = filterUsableTrackedPoints(
+        realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
+      );
+      if ( usablePoints.length > 0 ) {
+        await Promise.all( missingLocationUuids.map( uuid => {
+          const savedObs = realm.objectForPrimaryKey( "Observation", uuid );
+          if ( !savedObs ) return null;
+          const targetMs = new Date(
+            savedObs.observed_on_string ?? savedObs.observed_on ?? 0,
+          ).getTime();
+          const trackedLocation = interpolateFromUsablePoints( usablePoints, targetMs );
+          return trackedLocation
+            ? applyTrackedLocationToObservation( realm, savedObs, trackedLocation )
+            : null;
+        } ) );
+      }
+    }
 
     resetMyObsOffsetToRestore( );
     setMyObsOffset( 0 );
