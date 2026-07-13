@@ -1,6 +1,7 @@
 import {
   Body2,
   Body3,
+  Body4,
   Button,
   INatIcon,
 } from "components/SharedComponents";
@@ -47,6 +48,16 @@ const HotspotListItem = ( {
         }`}
       >
         <View className="flex-row items-center">
+          <View
+            className="w-6 h-6 rounded-full items-center justify-center mr-2 border border-white"
+            style={{
+              backgroundColor: selected
+                ? colors.inatGreen
+                : colors.warningYellow,
+            }}
+          >
+            <Body4 className="text-white font-bold">{rank}</Body4>
+          </View>
           <View className="flex-1">
             <Body2 className="font-bold">
               {hotspot.observationCount.toLocaleString()}

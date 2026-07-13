@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Body2,
   Body3,
+  Body4,
   INatIcon,
   ViewWrapper,
 } from "components/SharedComponents";
@@ -572,20 +573,27 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
               strokeWidth={4}
             />
           )}
-          {hotspots.map( hotspot => (
+          {hotspots.map( ( hotspot, idx ) => (
             <Marker
               key={hotspot.id}
               coordinate={{
                 latitude: hotspot.centerLatitude,
                 longitude: hotspot.centerLongitude,
               }}
-              pinColor={
-                selectedHotspotId === hotspot.id
-                  ? colors.inatGreen
-                  : colors.warningYellow
-              }
+              anchor={{ x: 0.5, y: 0.5 }}
               onPress={() => handleHotspotPress( hotspot )}
-            />
+            >
+              <View
+                className="w-6 h-6 rounded-full items-center justify-center border border-white"
+                style={{
+                  backgroundColor: selectedHotspotId === hotspot.id
+                    ? colors.inatGreen
+                    : colors.warningYellow,
+                }}
+              >
+                <Body4 className="text-white font-bold">{idx + 1}</Body4>
+              </View>
+            </Marker>
           ) )}
           {hotspots
             .find( h => h.id === selectedHotspotId )
