@@ -15,11 +15,17 @@ import {
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
 import { View } from "components/styledComponents";
 import React, {
-  useCallback, useEffect, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import { Dimensions, StyleSheet } from "react-native";
+import type { PanGesture } from "react-native-gesture-handler";
+import type { CarouselRenderItem } from "react-native-reanimated-carousel";
+import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
+import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
+import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri, {
@@ -34,6 +40,10 @@ const EXPOSURE_STOPS_MIN = -1;
 const EXPOSURE_STOPS_MAX = 4;
 const EXPOSURE_STOPS_DEFAULT = 0;
 const stopsToGain = ( stops: number ) => 2 ** stops;
+const gainToStops = ( gain: number ) => Math.min(
+  EXPOSURE_STOPS_MAX,
+  Math.max( EXPOSURE_STOPS_MIN, Math.log2( gain ) ),
+);
 // Fetch the next page once we're within this many observations of the end.
 const PREFETCH_THRESHOLD = 5;
 
@@ -76,9 +86,85 @@ const cropToZoomTransform = (
   };
 };
 
-const photoUriForObs = ( obs?: ApiObservation ): string | undefined => (
-  Photo.displayLargePhoto( obs?.observation_photos?.[0]?.photo?.url )
+const photosForObs = ( obs?: ApiObservation ): string[] => (
+  ( obs?.observation_photos ?? [] )
+    .map( op => Photo.displayLargePhoto( op?.photo?.url ) )
+    .filter( ( url ): url is string => !!url )
 );
+
+interface IdentifyPhotoProps {
+  uri: string;
+  size: number;
+  brightness: number;
+  onSingleTap: ( ) => void;
+}
+
+// A single swipeable, subject-framed photo. Two-finger gestures pan/zoom (one
+// finger is left free so the carousel can page); the framed viewport is saved
+// to the crop log (which syncs to Firebase) whenever a gesture ends.
+const IdentifyPhoto = ( {
+  uri,
+  size,
+  brightness,
+  onSingleTap,
+}: IdentifyPhotoProps ) => {
+  const imageRef = useRef<SharedZoomableImageRef | null>( null );
+  const dimsRef = useRef<{ width: number; height: number } | null>( null );
+  const appliedRef = useRef( false );
+  const detection = useSubjectDetectionForUri( uri );
+
+  // When a recycled carousel slot receives a new photo, clear the previous
+  // framing so the new photo re-frames to its own subject.
+  useEffect( ( ) => {
+    appliedRef.current = false;
+    imageRef.current?.applyTransform( IDENTITY_TRANSFORM );
+  }, [uri] );
+
+  // Frame the detected (or previously logged) subject once detection resolves.
+  useEffect( ( ) => {
+    if ( appliedRef.current || !detection || !imageRef.current ) return;
+    imageRef.current.applyTransform( cropToZoomTransform(
+      detection.crop,
+      size,
+      detection.imageWidth,
+      detection.imageHeight,
+    ) );
+    appliedRef.current = true;
+  }, [detection, size] );
+
+  const handleInteractionEnd = useCallback( ( ) => {
+    // Let the gesture's settling animation finish before reading the transform.
+    setTimeout( ( ) => {
+      const dims = dimsRef.current;
+      if ( !imageRef.current || !dims ) return;
+      const crop = imageZoomTransformToNormalizedCrop(
+        dims.width,
+        dims.height,
+        size,
+        size,
+        size,
+        imageRef.current.readTransform( ),
+      );
+      saveAnimalCrop( uri, crop );
+    }, 400 );
+  }, [size, uri] );
+
+  return (
+    <SharedZoomableImage
+      ref={imageRef}
+      uri={uri}
+      style={styles.image}
+      brightness={brightness}
+      maxScale={100}
+      isDoubleTapEnabled
+      isSingleFingerPanEnabled={false}
+      onSingleTap={onSingleTap}
+      onInteractionEnd={handleInteractionEnd}
+      onImageDimensionsChange={dims => { dimsRef.current = dims; }}
+      testID="IdentifyView.image"
+    />
+  );
+};
 
 interface Props {
   canFetch?: boolean;
@@ -104,11 +190,10 @@ const IdentifyView = ( {
   } = useInfiniteExploreScroll( { params: queryParams, enabled: !!canFetch } );
 
   const [currentIndex, setCurrentIndex] = useState( 0 );
+  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState( 0 );
   const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
   const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
   const brightness = stopsToGain( brightnessStops );
-
-  const imageRef = useRef<SharedZoomableImageRef | null>( null );
 
   useEffect( ( ) => {
     handleUpdateCount( "identify", totalResults );
@@ -123,39 +208,41 @@ const IdentifyView = ( {
   }, [queryKey] );
 
   const observation = observations[currentIndex];
-  const photoUri = photoUriForObs( observation );
+  const observationUuid = observation?.uuid;
+  const photoUrls = useMemo(
+    ( ) => photosForObs( observation ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [observationUuid],
+  );
+  const currentPhotoUrl = photoUrls[selectedPhotoIndex];
 
-  const detection = useSubjectDetectionForUri( photoUri );
-
-  // Reset zoom to the full image when the photo changes.
+  // Reset to the first photo whenever the observation changes.
   useEffect( ( ) => {
-    imageRef.current?.applyTransform( IDENTITY_TRANSFORM );
-  }, [photoUri] );
+    setSelectedPhotoIndex( 0 );
+  }, [observationUuid] );
 
-  // Zoom to the detected subject once detection resolves for the current photo.
+  // Load any previously-saved brightness for the visible photo so saved
+  // adjustments round-trip.
   useEffect( ( ) => {
-    if ( !detection || !imageRef.current ) return;
-    imageRef.current.applyTransform( cropToZoomTransform(
-      detection.crop,
-      windowWidth,
-      detection.imageWidth,
-      detection.imageHeight,
-    ) );
-  }, [detection, windowWidth] );
+    const saved = currentPhotoUrl
+      ? getBrightness( currentPhotoUrl )
+      : null;
+    setBrightnessStops( saved
+      ? gainToStops( saved )
+      : EXPOSURE_STOPS_DEFAULT );
+  }, [currentPhotoUrl] );
 
-  // Preload subject detection for the next few observations so they appear
-  // already cropped to the subject.
+  // Preload subject detection for the first photo of the next few observations.
   useEffect( ( ) => {
     observations
       .slice( currentIndex + 1, currentIndex + 1 + PREFETCH_THRESHOLD )
       .forEach( obs => {
-        const url = photoUriForObs( obs );
+        const url = photosForObs( obs )[0];
         if ( url ) preloadSubjectDetectionForUri( url );
       } );
   }, [observations, currentIndex] );
 
   const goToNext = useCallback( ( ) => {
-    setBrightnessStops( EXPOSURE_STOPS_DEFAULT );
     setCurrentIndex( prev => {
       const next = prev + 1;
       if ( next >= observations.length - PREFETCH_THRESHOLD ) fetchNextPage( );
@@ -164,13 +251,32 @@ const IdentifyView = ( {
   }, [fetchNextPage, observations.length] );
 
   const openObsDetails = useCallback( ( ) => {
-    if ( !observation?.uuid ) return;
+    if ( !observationUuid ) return;
     navigation.navigate( {
-      key: `Obs-ExploreIdentify-${observation.uuid}`,
+      key: `Obs-ExploreIdentify-${observationUuid}`,
       name: "ObsDetails",
-      params: { uuid: observation.uuid, preloadedObservation: observation },
+      params: { uuid: observationUuid, preloadedObservation: observation },
     } as never );
-  }, [navigation, observation] );
+  }, [navigation, observation, observationUuid] );
+
+  const handleBrightnessComplete = useCallback( ( value: number ) => {
+    setBrightnessStops( value );
+    if ( currentPhotoUrl ) saveBrightness( currentPhotoUrl, stopsToGain( value ) );
+  }, [currentPhotoUrl] );
+
+  const renderPhoto = useCallback<CarouselRenderItem<string>>(
+    ( { item, index } ) => (
+      <IdentifyPhoto
+        uri={item}
+        size={windowWidth}
+        brightness={index === selectedPhotoIndex
+          ? brightness
+          : 1}
+        onSingleTap={openObsDetails}
+      />
+    ),
+    [brightness, openObsDetails, selectedPhotoIndex, windowWidth],
+  );
 
   if ( isLoading && observations.length === 0 ) {
     return (
@@ -192,25 +298,34 @@ const IdentifyView = ( {
 
   return (
     <View className="flex-1" style={styles.container}>
-      {/* Square, zoomable, pannable image with subject detection. Tapping opens
-          the full observation. */}
+      {/* Square, swipeable, zoomable image carousel with subject detection.
+          Tapping opens the full observation. */}
       <View
         // We need these dynamic dimensions to keep the image square
         // eslint-disable-next-line react-native/no-inline-styles
         style={{ width: windowWidth, height: windowWidth }}
         className="bg-black overflow-hidden"
       >
-        {photoUri
+        {photoUrls.length > 0
           ? (
-            <SharedZoomableImage
-              ref={imageRef}
-              uri={photoUri}
-              style={styles.image}
-              brightness={brightness}
-              maxScale={100}
-              isDoubleTapEnabled
-              onSingleTap={openObsDetails}
-              testID="IdentifyView.image"
+            <Carousel
+              // Remount per observation so paging resets to the first photo.
+              key={observationUuid}
+              data={photoUrls}
+              renderItem={renderPhoto}
+              width={windowWidth}
+              height={windowWidth}
+              loop={false}
+              onSnapToItem={setSelectedPhotoIndex}
+              onConfigurePanGesture={( panGesture: PanGesture ) => {
+                // Page only on clearly horizontal single-finger drags, leaving
+                // two-finger gestures for the image's own pan/zoom.
+                panGesture
+                  .activeOffsetX( [-10, 10] )
+                  .failOffsetY( [-15, 15] )
+                  .maxPointers( 1 );
+              }}
+              testID="IdentifyView.carousel"
             />
           )
           : (
@@ -218,6 +333,15 @@ const IdentifyView = ( {
               <ActivityIndicator />
             </View>
           )}
+
+        {/* Photo counter */}
+        {photoUrls.length > 1 && (
+          <View className="absolute top-3 right-3 bg-black/50 rounded-full px-3 py-1">
+            <Body2 className="text-white">
+              {`${selectedPhotoIndex + 1}/${photoUrls.length}`}
+            </Body2>
+          </View>
+        )}
 
         {/* Brightness toggle + slider overlaid on the image */}
         <View className="absolute bottom-3 left-3">
@@ -244,6 +368,7 @@ const IdentifyView = ( {
                 thumbTintColor={colors.white}
                 value={brightnessStops}
                 onValueChange={setBrightnessStops}
+                onSlidingComplete={handleBrightnessComplete}
                 tapToSeek
                 accessibilityLabel={t( "Adjust-brightness" )}
               />
