@@ -311,6 +311,16 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     setActiveSuggestions( null );
   }, [] );
 
+  const handleAddStopAfter = useCallback( ( id: string ) => {
+    setStops( prev => {
+      const idx = prev.findIndex( s => s.id === id );
+      if ( idx === -1 ) return prev;
+      const newStop: Stop = { id: makeStopId(), text: "", point: null };
+      return [...prev.slice( 0, idx + 1 ), newStop, ...prev.slice( idx + 1 )];
+    } );
+    setActiveSuggestions( null );
+  }, [] );
+
   const handleReorderStops = useCallback( ( { data }: { data: Stop[] } ) => {
     setStops( data );
     setActiveSuggestions( null );
@@ -445,6 +455,14 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
               <INatIcon name="close" size={16} color={colors.darkGray} />
             </TouchableOpacity>
           )}
+          <TouchableOpacity
+            onPress={() => handleAddStopAfter( stop.id )}
+            className="ml-2 p-1"
+            accessibilityRole="button"
+            accessibilityLabel={t( "Add-stop" )}
+          >
+            <INatIcon name="plus" size={16} color={colors.inatGreen} />
+          </TouchableOpacity>
         </View>
       </ScaleDecorator>
     );
@@ -455,6 +473,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     handleStopTextChange,
     handleStopSuggestionsChange,
     handleRemoveStop,
+    handleAddStopAfter,
   ] );
 
   const handleOpenInGoogleMaps = useCallback( ( hotspot: Hotspot ) => {
