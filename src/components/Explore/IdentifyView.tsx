@@ -74,7 +74,7 @@ const IDENTITY_TRANSFORM: ImageZoomTransform = {
 const styles = StyleSheet.create( {
   image: { flex: 1 },
   slider: { flex: 1, height: 36, marginLeft: 8 },
-  container: { paddingTop: 40 },
+  container: { paddingTop: 30 },
   buttonRow: { height: 60 },
 } );
 
@@ -111,7 +111,7 @@ const photosForObs = ( obs?: ApiObservation ): string[] => (
 );
 
 interface IdentifyPhotoHandle {
-  applyCenteredZoom: ( scale: number ) => void;
+  applyZoom: ( scale: number ) => void;
   saveCrop: ( ) => void;
 }
 
@@ -152,14 +152,37 @@ const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhotoProps>(
     saveAnimalCrop( uri, crop );
   }, [size, uri] );
 
-  useImperativeHandle( ref, ( ) => ( {
-    applyCenteredZoom: ( scale: number ) => {
-      imageRef.current?.applyTransform( {
+  // Rescale the image while keeping whatever is currently at the viewport
+  // centre fixed there (rather than snapping back to the image centre).
+  const applyZoom = useCallback( ( scale: number ) => {
+    const img = imageRef.current;
+    const dims = dimsRef.current;
+    if ( !img ) return;
+    const contain = dims
+      ? computeContainRect( size, size, dims.width, dims.height )
+      : null;
+    if ( !dims || !contain || contain.width <= 0 || contain.height <= 0 ) {
+      img.applyTransform( {
         scale, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
       } );
-    },
-    saveCrop,
-  } ), [saveCrop] );
+      return;
+    }
+    const crop = imageZoomTransformToNormalizedCrop(
+      dims.width, dims.height, size, size, size, img.readTransform( ),
+    );
+    const centre = size / 2;
+    const cxScreen = contain.left + ( crop.x + crop.w / 2 ) * contain.width;
+    const cyScreen = contain.top + ( crop.y + crop.h / 2 ) * contain.height;
+    img.applyTransform( {
+      scale,
+      translateX: 0,
+      translateY: 0,
+      focalX: ( centre - cxScreen ) * scale,
+      focalY: ( centre - cyScreen ) * scale,
+    } );
+  }, [size] );
+
+  useImperativeHandle( ref, ( ) => ( { applyZoom, saveCrop } ), [applyZoom, saveCrop] );
 
   // Frame the detected (or previously logged) subject once detection resolves.
   useEffect( ( ) => {
@@ -187,6 +210,7 @@ const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhotoProps>(
       minScale={MIN_ZOOM}
       maxScale={MAX_ZOOM}
       isDoubleTapEnabled
+      isSingleTapEnabled
       onSingleTap={onSingleTap}
       onScaleChange={onScaleChange}
       onInteractionEnd={handleInteractionEnd}
@@ -315,7 +339,7 @@ const IdentifyView = ( {
   const handleZoomChange = useCallback( ( pos: number ) => {
     const scale = zoomPosToScale( pos );
     setZoomScale( scale );
-    photoRef.current?.applyCenteredZoom( scale );
+    photoRef.current?.applyZoom( scale );
   }, [] );
 
   const { mutate: agreeMutate, isPending: agreeing } = useAuthenticatedMutation(
