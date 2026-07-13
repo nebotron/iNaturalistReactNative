@@ -83,6 +83,7 @@ Adds-your-vote-of-agreement = Adds your vote of agreement
 # Hint for a button that adds a vote of disagreement
 Adds-your-vote-of-disagreement = Adds your vote of disagreement
 Adjust-brightness = Adjust brightness
+Adjust-zoom = Adjust zoom
 # Label for toggling app mode between default and advanced settings
 Advanced-Mode = Advanced Mode
 # Link to the advanced search screen with more search filters

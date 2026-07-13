@@ -28,6 +28,9 @@ const ExploreHeaderCount = ( {
 }: Props ): Node => {
   const { t } = useTranslation( );
 
+  // The Identify view reclaims this space for its own interface.
+  if ( exploreView === "identify" ) { return null; }
+
   const renderText = ( ) => {
     if ( exploreView === "observations" || exploreView === "identify" ) {
       return t( "X-Observations", { count } );

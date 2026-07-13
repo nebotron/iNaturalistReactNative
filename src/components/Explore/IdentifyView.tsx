@@ -1,26 +1,31 @@
 import Slider from "@react-native-community/slider";
 import { useNavigation } from "@react-navigation/native";
+import { createIdentification } from "api/identifications";
+import { markAsReviewed } from "api/observations";
 import type { ApiObservation, ApiObservationsSearchParams } from "api/types";
 import useInfiniteExploreScroll from "components/Explore/hooks/useInfiniteExploreScroll";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
-import AgreeButton from "components/ObsDetails/AgreeButton";
-import ReviewButton from "components/ObsDetails/ReviewButton";
 import {
   ActivityIndicator,
   Body2,
   Button,
+  INatIcon,
   INatIconButton,
 } from "components/SharedComponents";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
 import { View } from "components/styledComponents";
 import React, {
-  useCallback, useEffect, useMemo, useRef, useState,
+  forwardRef,
+  memo,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
 } from "react";
 import { Dimensions, StyleSheet } from "react-native";
-import type { PanGesture } from "react-native-gesture-handler";
-import type { CarouselRenderItem } from "react-native-reanimated-carousel";
-import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
@@ -31,10 +36,13 @@ import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri, {
   preloadSubjectDetectionForUri,
 } from "sharedHelpers/useSubjectDetectionForUri";
-import { useCurrentUser, useTranslation } from "sharedHooks";
+import {
+  useAuthenticatedMutation,
+  useCurrentUser,
+  useTranslation,
+} from "sharedHooks";
 import colors from "styles/tailwindColors";
 
-const MAX_ZOOM_SCALE = 5;
 // Exposure slider in stops (EV); the gain applied to the image is 2^stops.
 const EXPOSURE_STOPS_MIN = -1;
 const EXPOSURE_STOPS_MAX = 4;
@@ -44,6 +52,18 @@ const gainToStops = ( gain: number ) => Math.min(
   EXPOSURE_STOPS_MAX,
   Math.max( EXPOSURE_STOPS_MIN, Math.log2( gain ) ),
 );
+
+// Zoom slider: exponential mapping so equal slider travel is equal zoom ratio.
+// Slider position runs 0..1; scale runs MIN_ZOOM..MAX_ZOOM as MIN * (MAX/MIN)^pos.
+const MIN_ZOOM = 1;
+const MAX_ZOOM = 50;
+const clampZoom = ( scale: number ) => Math.min( MAX_ZOOM, Math.max( MIN_ZOOM, scale ) );
+const zoomPosToScale = ( pos: number ) => MIN_ZOOM * ( MAX_ZOOM / MIN_ZOOM ) ** pos;
+const zoomScaleToPos = ( scale: number ) => Math.min(
+  1,
+  Math.max( 0, Math.log( clampZoom( scale ) / MIN_ZOOM ) / Math.log( MAX_ZOOM / MIN_ZOOM ) ),
+);
+
 // Fetch the next page once we're within this many observations of the end.
 const PREFETCH_THRESHOLD = 5;
 
@@ -53,8 +73,9 @@ const IDENTITY_TRANSFORM: ImageZoomTransform = {
 
 const styles = StyleSheet.create( {
   image: { flex: 1 },
-  slider: { flex: 1, height: 40 },
-  container: { paddingTop: 45 },
+  slider: { flex: 1, height: 36, marginLeft: 8 },
+  container: { paddingTop: 40 },
+  buttonRow: { height: 60 },
 } );
 
 // Convert a normalized subject-detection crop into an image-zoom transform that
@@ -70,13 +91,10 @@ const cropToZoomTransform = (
   const center = viewportSize / 2;
   const cx = contain.left + ( crop.x + crop.w / 2 ) * contain.width;
   const cy = contain.top + ( crop.y + crop.h / 2 ) * contain.height;
-  const scale = Math.min(
-    MAX_ZOOM_SCALE,
-    Math.max( 1, Math.min(
-      viewportSize / ( crop.w * contain.width ),
-      viewportSize / ( crop.h * contain.height ),
-    ) ),
-  );
+  const scale = clampZoom( Math.min(
+    viewportSize / ( crop.w * contain.width ),
+    viewportSize / ( crop.h * contain.height ),
+  ) );
   return {
     scale,
     translateX: 0,
@@ -92,33 +110,56 @@ const photosForObs = ( obs?: ApiObservation ): string[] => (
     .filter( ( url ): url is string => !!url )
 );
 
+interface IdentifyPhotoHandle {
+  applyCenteredZoom: ( scale: number ) => void;
+  saveCrop: ( ) => void;
+}
+
 interface IdentifyPhotoProps {
   uri: string;
   size: number;
   brightness: number;
   onSingleTap: ( ) => void;
+  onScaleChange: ( scale: number ) => void;
 }
 
-// A single swipeable, subject-framed photo. Two-finger gestures pan/zoom (one
-// finger is left free so the carousel can page); the framed viewport is saved
-// to the crop log (which syncs to Firebase) whenever a gesture ends.
-const IdentifyPhoto = ( {
+// A single subject-framed photo with one- or two-finger pan/zoom. The framed
+// viewport is saved to the crop log (which syncs to Firebase) whenever a
+// gesture or slider zoom ends.
+const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhotoProps>( ( {
   uri,
   size,
   brightness,
   onSingleTap,
-}: IdentifyPhotoProps ) => {
+  onScaleChange,
+}, ref ) => {
   const imageRef = useRef<SharedZoomableImageRef | null>( null );
   const dimsRef = useRef<{ width: number; height: number } | null>( null );
   const appliedRef = useRef( false );
   const detection = useSubjectDetectionForUri( uri );
 
-  // When a recycled carousel slot receives a new photo, clear the previous
-  // framing so the new photo re-frames to its own subject.
-  useEffect( ( ) => {
-    appliedRef.current = false;
-    imageRef.current?.applyTransform( IDENTITY_TRANSFORM );
-  }, [uri] );
+  const saveCrop = useCallback( ( ) => {
+    const dims = dimsRef.current;
+    if ( !imageRef.current || !dims ) return;
+    const crop = imageZoomTransformToNormalizedCrop(
+      dims.width,
+      dims.height,
+      size,
+      size,
+      size,
+      imageRef.current.readTransform( ),
+    );
+    saveAnimalCrop( uri, crop );
+  }, [size, uri] );
+
+  useImperativeHandle( ref, ( ) => ( {
+    applyCenteredZoom: ( scale: number ) => {
+      imageRef.current?.applyTransform( {
+        scale, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
+      } );
+    },
+    saveCrop,
+  } ), [saveCrop] );
 
   // Frame the detected (or previously logged) subject once detection resolves.
   useEffect( ( ) => {
@@ -134,20 +175,8 @@ const IdentifyPhoto = ( {
 
   const handleInteractionEnd = useCallback( ( ) => {
     // Let the gesture's settling animation finish before reading the transform.
-    setTimeout( ( ) => {
-      const dims = dimsRef.current;
-      if ( !imageRef.current || !dims ) return;
-      const crop = imageZoomTransformToNormalizedCrop(
-        dims.width,
-        dims.height,
-        size,
-        size,
-        size,
-        imageRef.current.readTransform( ),
-      );
-      saveAnimalCrop( uri, crop );
-    }, 400 );
-  }, [size, uri] );
+    setTimeout( saveCrop, 400 );
+  }, [saveCrop] );
 
   return (
     <SharedZoomableImage
@@ -155,16 +184,19 @@ const IdentifyPhoto = ( {
       uri={uri}
       style={styles.image}
       brightness={brightness}
-      maxScale={100}
+      minScale={MIN_ZOOM}
+      maxScale={MAX_ZOOM}
       isDoubleTapEnabled
-      isSingleFingerPanEnabled={false}
       onSingleTap={onSingleTap}
+      onScaleChange={onScaleChange}
       onInteractionEnd={handleInteractionEnd}
       onImageDimensionsChange={dims => { dimsRef.current = dims; }}
       testID="IdentifyView.image"
     />
   );
-};
+} ) );
+
+IdentifyPhoto.displayName = "IdentifyPhoto";
 
 interface Props {
   canFetch?: boolean;
@@ -181,6 +213,7 @@ const IdentifyView = ( {
   const navigation = useNavigation( );
   const currentUser = useCurrentUser( );
   const windowWidth = Dimensions.get( "window" ).width;
+  const photoRef = useRef<IdentifyPhotoHandle | null>( null );
 
   const {
     observations,
@@ -192,7 +225,7 @@ const IdentifyView = ( {
   const [currentIndex, setCurrentIndex] = useState( 0 );
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState( 0 );
   const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
-  const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
+  const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
   const brightness = stopsToGain( brightnessStops );
 
   useEffect( ( ) => {
@@ -215,15 +248,17 @@ const IdentifyView = ( {
     [observationUuid],
   );
   const currentPhotoUrl = photoUrls[selectedPhotoIndex];
+  const hasMultiplePhotos = photoUrls.length > 1;
 
   // Reset to the first photo whenever the observation changes.
   useEffect( ( ) => {
     setSelectedPhotoIndex( 0 );
   }, [observationUuid] );
 
-  // Load any previously-saved brightness for the visible photo so saved
-  // adjustments round-trip.
+  // Reset zoom and load any previously-saved brightness for the visible photo
+  // so saved adjustments round-trip.
   useEffect( ( ) => {
+    setZoomScale( MIN_ZOOM );
     const saved = currentPhotoUrl
       ? getBrightness( currentPhotoUrl )
       : null;
@@ -250,6 +285,13 @@ const IdentifyView = ( {
     } );
   }, [fetchNextPage, observations.length] );
 
+  const goToPhoto = useCallback( ( delta: number ) => {
+    setSelectedPhotoIndex( prev => Math.min(
+      photoUrls.length - 1,
+      Math.max( 0, prev + delta ),
+    ) );
+  }, [photoUrls.length] );
+
   const openObsDetails = useCallback( ( ) => {
     if ( !observationUuid ) return;
     navigation.navigate( {
@@ -264,18 +306,25 @@ const IdentifyView = ( {
     if ( currentPhotoUrl ) saveBrightness( currentPhotoUrl, stopsToGain( value ) );
   }, [currentPhotoUrl] );
 
-  const renderPhoto = useCallback<CarouselRenderItem<string>>(
-    ( { item, index } ) => (
-      <IdentifyPhoto
-        uri={item}
-        size={windowWidth}
-        brightness={index === selectedPhotoIndex
-          ? brightness
-          : 1}
-        onSingleTap={openObsDetails}
-      />
-    ),
-    [brightness, openObsDetails, selectedPhotoIndex, windowWidth],
+  // Keep the zoom slider in sync with pinch/double-tap/subject-framing zoom.
+  const handleScaleChange = useCallback(
+    ( scale: number ) => setZoomScale( clampZoom( scale ) ),
+    [],
+  );
+
+  const handleZoomChange = useCallback( ( pos: number ) => {
+    const scale = zoomPosToScale( pos );
+    setZoomScale( scale );
+    photoRef.current?.applyCenteredZoom( scale );
+  }, [] );
+
+  const { mutate: agreeMutate, isPending: agreeing } = useAuthenticatedMutation(
+    ( params, optsWithAuth ) => createIdentification( params, optsWithAuth ),
+    { onSuccess: ( ) => goToNext( ) },
+  );
+  const { mutate: reviewMutate, isPending: reviewing } = useAuthenticatedMutation(
+    ( params, optsWithAuth ) => markAsReviewed( params, optsWithAuth ),
+    { onSuccess: ( ) => goToNext( ) },
   );
 
   if ( isLoading && observations.length === 0 ) {
@@ -295,37 +344,44 @@ const IdentifyView = ( {
   }
 
   const taxon = observation.taxon;
+  const isOwnObs = observation.user?.id != null && observation.user.id === currentUser?.id;
+  const agreeDisabled = !currentUser || !taxon?.id || isOwnObs || agreeing;
+  const reviewDisabled = !currentUser || reviewing;
+
+  const handleAgree = ( ) => {
+    if ( !observationUuid || !taxon?.id ) return;
+    agreeMutate( {
+      identification: { observation_id: observationUuid, taxon_id: taxon.id },
+    } );
+  };
+  const handleReview = ( ) => {
+    if ( !observationUuid ) return;
+    reviewMutate( { uuid: observationUuid } );
+  };
+
+  const navButtonClass = "bg-black/50 items-center justify-center rounded-full h-[44px] w-[44px]";
 
   return (
     <View className="flex-1" style={styles.container}>
-      {/* Square, swipeable, zoomable image carousel with subject detection.
-          Tapping opens the full observation. */}
+      {/* Square, zoomable/pannable image with subject detection. Tapping opens
+          the full observation; dedicated buttons page between photos. */}
       <View
         // We need these dynamic dimensions to keep the image square
         // eslint-disable-next-line react-native/no-inline-styles
         style={{ width: windowWidth, height: windowWidth }}
         className="bg-black overflow-hidden"
       >
-        {photoUrls.length > 0
+        {currentPhotoUrl
           ? (
-            <Carousel
-              // Remount per observation so paging resets to the first photo.
-              key={observationUuid}
-              data={photoUrls}
-              renderItem={renderPhoto}
-              width={windowWidth}
-              height={windowWidth}
-              loop={false}
-              onSnapToItem={setSelectedPhotoIndex}
-              onConfigurePanGesture={( panGesture: PanGesture ) => {
-                // Page only on clearly horizontal single-finger drags, leaving
-                // two-finger gestures for the image's own pan/zoom.
-                panGesture
-                  .activeOffsetX( [-10, 10] )
-                  .failOffsetY( [-15, 15] )
-                  .maxPointers( 1 );
-              }}
-              testID="IdentifyView.carousel"
+            <IdentifyPhoto
+              // Remount per photo so each frames to its own subject.
+              key={currentPhotoUrl}
+              ref={photoRef}
+              uri={currentPhotoUrl}
+              size={windowWidth}
+              brightness={brightness}
+              onSingleTap={openObsDetails}
+              onScaleChange={handleScaleChange}
             />
           )
           : (
@@ -334,31 +390,62 @@ const IdentifyView = ( {
             </View>
           )}
 
-        {/* Photo counter */}
-        {photoUrls.length > 1 && (
-          <View className="absolute top-3 right-3 bg-black/50 rounded-full px-3 py-1">
-            <Body2 className="text-white">
-              {`${selectedPhotoIndex + 1}/${photoUrls.length}`}
-            </Body2>
-          </View>
+        {/* Left / right photo navigation */}
+        {hasMultiplePhotos && (
+          <>
+            <View className="absolute left-2 inset-y-0 justify-center">
+              <INatIconButton
+                icon="chevron-left-circle"
+                size={30}
+                color={colors.white}
+                className={navButtonClass}
+                disabled={selectedPhotoIndex === 0}
+                accessibilityLabel={t( "Previous-slide" )}
+                onPress={( ) => goToPhoto( -1 )}
+                testID="IdentifyView.prevPhoto"
+              />
+            </View>
+            <View className="absolute right-2 inset-y-0 justify-center">
+              <INatIconButton
+                icon="chevron-right-circle"
+                size={30}
+                color={colors.white}
+                className={navButtonClass}
+                disabled={selectedPhotoIndex === photoUrls.length - 1}
+                accessibilityLabel={t( "Next-slide" )}
+                onPress={( ) => goToPhoto( 1 )}
+                testID="IdentifyView.nextPhoto"
+              />
+            </View>
+            <View className="absolute top-3 right-3 bg-black/50 rounded-full px-3 py-1">
+              <Body2 className="text-white">
+                {`${selectedPhotoIndex + 1}/${photoUrls.length}`}
+              </Body2>
+            </View>
+          </>
         )}
 
-        {/* Brightness toggle + slider overlaid on the image */}
-        <View className="absolute bottom-3 left-3">
-          <INatIconButton
-            icon="sliders"
-            size={20}
-            color={showBrightnessSlider || brightness !== 1
-              ? colors.inatGreen
-              : colors.white}
-            className="bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px]"
-            accessibilityLabel={t( "Adjust-brightness" )}
-            onPress={( ) => setShowBrightnessSlider( ( prev: boolean ) => !prev )}
-          />
-        </View>
-        {showBrightnessSlider && (
-          <View className="absolute bottom-16 left-3 right-3">
-            <View className="bg-black/60 rounded-xl px-3 flex-row items-center">
+        {/* Always-visible zoom + brightness sliders */}
+        <View className="absolute bottom-2 left-2 right-2">
+          <View className="bg-black/60 rounded-xl px-3 py-1">
+            <View className="flex-row items-center">
+              <INatIcon name="magnifying-glass" size={18} color={colors.white} />
+              <Slider
+                style={styles.slider}
+                minimumValue={0}
+                maximumValue={1}
+                minimumTrackTintColor={colors.inatGreen}
+                maximumTrackTintColor={colors.white}
+                thumbTintColor={colors.white}
+                value={zoomScaleToPos( zoomScale )}
+                onValueChange={handleZoomChange}
+                onSlidingComplete={( ) => photoRef.current?.saveCrop( )}
+                tapToSeek
+                accessibilityLabel={t( "Adjust-zoom" )}
+              />
+            </View>
+            <View className="flex-row items-center">
+              <INatIcon name="sliders" size={18} color={colors.white} />
               <Slider
                 style={styles.slider}
                 minimumValue={EXPOSURE_STOPS_MIN}
@@ -374,53 +461,54 @@ const IdentifyView = ( {
               />
             </View>
           </View>
-        )}
+        </View>
       </View>
 
-      {/* Current id'ed taxon */}
+      {/* Current id'ed taxon — common name only */}
       <View className="px-4 py-3 items-center justify-center">
         {taxon
           ? (
-            <DisplayTaxonName taxon={taxon} />
+            <DisplayTaxonName taxon={taxon} showOneNameOnly />
           )
           : (
             <Body2>{t( "Unknown--taxon" )}</Body2>
           )}
       </View>
 
-      {/* Agree and mark-reviewed actions */}
-      {currentUser && (
-        <View className="flex-row items-center justify-center px-4 gap-x-10">
-          <View className="items-center">
-            <AgreeButton
-              observation={observation}
-              currentUser={currentUser}
-              directAgree
-              positionClassName=""
-              afterAgree={goToNext}
-            />
-            <Body2 className="mt-1">{t( "Agree" )}</Body2>
-          </View>
-          <View className="items-center">
-            <ReviewButton
-              observation={observation}
-              currentUser={currentUser}
-              positionClassName=""
-              afterToggleReview={goToNext}
-            />
-            <Body2 className="mt-1">{t( "Mark-as-reviewed" )}</Body2>
-          </View>
+      {/* Agree / Mark reviewed / Next — three equal buttons */}
+      <View className="flex-row px-4 gap-2" style={styles.buttonRow}>
+        <View className="flex-1">
+          <Button
+            className="w-full h-full"
+            text={t( "Agree" )}
+            level="focus"
+            adjustsFontSizeToFit
+            disabled={agreeDisabled}
+            loading={agreeing}
+            onPress={handleAgree}
+            testID="IdentifyView.agree"
+          />
         </View>
-      )}
-
-      {/* Go to next without marking reviewed */}
-      <View className="px-4 pt-3">
-        <Button
-          text={t( "Next-observation" )}
-          onPress={goToNext}
-          accessibilityLabel={t( "Next-observation" )}
-          testID="IdentifyView.next"
-        />
+        <View className="flex-1">
+          <Button
+            className="w-full h-full"
+            text={t( "Mark-as-reviewed" )}
+            adjustsFontSizeToFit
+            disabled={reviewDisabled}
+            loading={reviewing}
+            onPress={handleReview}
+            testID="IdentifyView.review"
+          />
+        </View>
+        <View className="flex-1">
+          <Button
+            className="w-full h-full"
+            text={t( "Next-observation" )}
+            adjustsFontSizeToFit
+            onPress={goToNext}
+            testID="IdentifyView.next"
+          />
+        </View>
       </View>
     </View>
   );
