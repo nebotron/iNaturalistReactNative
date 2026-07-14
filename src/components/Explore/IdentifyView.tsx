@@ -162,31 +162,32 @@ const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhotoProps>(
 
   // Rescale the image while keeping whatever is currently at the viewport
   // centre fixed there (rather than snapping back to the image centre).
+  // Derived directly from the current transform (not by round-tripping
+  // through a normalized crop), since the crop rectangle gets clamped to the
+  // image bounds whenever the view is letterboxed -- e.g. by aspect ratio, or
+  // by panning past the image edge -- which would otherwise throw off the
+  // fixed point and make the image drift as the slider moves.
   const applyZoom = useCallback( ( scale: number ) => {
     const img = imageRef.current;
-    const dims = dimsRef.current;
     if ( !img ) return;
-    const contain = dims
-      ? computeContainRect( size, size, dims.width, dims.height )
-      : null;
-    if ( !dims || !contain || contain.width <= 0 || contain.height <= 0 ) {
+    const current = img.readTransform( );
+    if ( current.scale <= 0 ) {
       img.applyTransform( {
         scale, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
       } );
       return;
     }
-    const crop = imageZoomTransformToNormalizedCrop(
-      dims.width, dims.height, size, size, size, img.readTransform( ),
-    );
     const centre = size / 2;
-    const cxScreen = contain.left + ( crop.x + crop.w / 2 ) * contain.width;
-    const cyScreen = contain.top + ( crop.y + crop.h / 2 ) * contain.height;
+    const totalTx = current.translateX + current.focalX;
+    const totalTy = current.translateY + current.focalY;
+    const localX = centre - totalTx / current.scale;
+    const localY = centre - totalTy / current.scale;
     img.applyTransform( {
       scale,
       translateX: 0,
       translateY: 0,
-      focalX: ( centre - cxScreen ) * scale,
-      focalY: ( centre - cyScreen ) * scale,
+      focalX: ( centre - localX ) * scale,
+      focalY: ( centre - localY ) * scale,
     } );
   }, [size] );
 
