@@ -376,6 +376,7 @@ export type BaseTabStackParamList = {
   NetworkLog: undefined;
   LocationHistory: undefined;
   LocationHistoryDetailMap: {
+    uuid: string;
     observationLat: number;
     observationLng: number;
     trackedLat: number;

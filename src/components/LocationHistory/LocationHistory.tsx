@@ -227,6 +227,7 @@ const LocationHistory = ( ) => {
   const handlePhotoLocationPress = useCallback( item => {
     if ( item.observationLat != null && item.observationLng != null ) {
       navigation.navigate( "LocationHistoryDetailMap", {
+        uuid: item.uuid,
         observationLat: item.observationLat,
         observationLng: item.observationLng,
         trackedLat: item.trackedLat || item.observationLat,
