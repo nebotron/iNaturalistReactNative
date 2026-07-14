@@ -63,6 +63,7 @@ export const useGestures = ( {
   onResetAnimationEnd,
   cropPanContext,
   onSwipeToClose,
+  allowLetterboxPan = false,
 }: ZoomableUseGesturesProps ) => {
   const isInteracting = useRef( false );
   const isPinching = useRef( false );
@@ -188,9 +189,16 @@ export const useGestures = ( {
     }
 
     if ( scale.value > 1 ) {
-      const rightLimit = limits.right( width, scale );
+      // With letterboxing allowed, clamp only so the viewport center stays over
+      // the image ( width * scale / 2 ) rather than requiring the image to cover
+      // the whole viewport ( width * ( scale - 1 ) / 2 ).
+      const rightLimit = allowLetterboxPan
+        ? ( width * scale.value ) / 2
+        : limits.right( width, scale );
       const leftLimit = -rightLimit;
-      const bottomLimit = limits.bottom( height, scale );
+      const bottomLimit = allowLetterboxPan
+        ? ( height * scale.value ) / 2
+        : limits.bottom( height, scale );
       const topLimit = -bottomLimit;
       const totalTranslateX = sum( translate.x, focal.x );
       const totalTranslateY = sum( translate.y, focal.y );
@@ -330,12 +338,17 @@ export const useGestures = ( {
       };
     }
 
-    const rightLimit = limits.right( width, scale );
+    const rightLimit = allowLetterboxPan
+      ? ( width * scale.value ) / 2
+      : limits.right( width, scale );
+    const bottomLimit = allowLetterboxPan
+      ? ( height * scale.value ) / 2
+      : limits.bottom( height, scale );
     return {
       leftLimit: -rightLimit,
       rightLimit,
-      topLimit: -limits.bottom( height, scale ),
-      bottomLimit: limits.bottom( height, scale ),
+      topLimit: -bottomLimit,
+      bottomLimit,
     };
   };
 

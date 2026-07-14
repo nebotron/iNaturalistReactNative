@@ -56,7 +56,7 @@ const gainToStops = ( gain: number ) => Math.min(
 // Zoom slider: exponential mapping so equal slider travel is equal zoom ratio.
 // Slider position runs 0..1; scale runs MIN_ZOOM..MAX_ZOOM as MIN * (MAX/MIN)^pos.
 const MIN_ZOOM = 1;
-const MAX_ZOOM = 50;
+const MAX_ZOOM = 20;
 const clampZoom = ( scale: number ) => Math.min( MAX_ZOOM, Math.max( MIN_ZOOM, scale ) );
 const zoomPosToScale = ( pos: number ) => MIN_ZOOM * ( MAX_ZOOM / MIN_ZOOM ) ** pos;
 const zoomScaleToPos = ( scale: number ) => Math.min(
@@ -209,6 +209,7 @@ const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhotoProps>(
       brightness={brightness}
       minScale={MIN_ZOOM}
       maxScale={MAX_ZOOM}
+      allowLetterboxPan
       isDoubleTapEnabled
       isSingleTapEnabled
       onSingleTap={onSingleTap}

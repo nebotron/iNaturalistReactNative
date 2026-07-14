@@ -180,6 +180,13 @@ export interface ZoomProps {
    */
   cropPanContext?: CropPanContext;
   /**
+   * Allow letterboxing (black bars) while panning a zoomed image, clamping only
+   * so the center of the viewport stays over the image rather than requiring the
+   * image to cover the whole viewport.
+   * @default false
+   */
+  allowLetterboxPan?: boolean;
+  /**
    * When provided, a downward swipe gesture (when not zoomed) will call this to close the viewer.
    * Moving the swipe-to-close gesture into the same GestureDetector as the zoom gestures
    * eliminates cross-detector coordination overhead that causes lag and jitter.
@@ -259,6 +266,7 @@ export type ZoomableUseGesturesProps = Pick<
     | "onResetAnimationEnd"
     | "cropPanContext"
     | "onSwipeToClose"
+    | "allowLetterboxPan"
   >;
 
 export interface ZoomableRef {

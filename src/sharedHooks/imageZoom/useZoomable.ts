@@ -28,6 +28,7 @@ export const useZoomable = ( {
   ref,
   cropPanContext,
   onSwipeToClose,
+  allowLetterboxPan,
 }: UseZoomableProps ) => {
   const {
     width, height, center, onZoomableLayout,
@@ -67,6 +68,7 @@ export const useZoomable = ( {
     onResetAnimationEnd,
     cropPanContext,
     onSwipeToClose,
+    allowLetterboxPan,
   } );
   useZoomableHandle( ref, reset, zoom, applyTransform );
 

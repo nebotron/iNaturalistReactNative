@@ -70,6 +70,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     testID,
     cropPanContext,
     onSwipeToClose,
+    allowLetterboxPan,
     brightness = 1,
     onLongPress,
     onScaleChange,
@@ -114,6 +115,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     ref: undefined,
     cropPanContext,
     onSwipeToClose,
+    allowLetterboxPan,
   } );
 
   useEffect( ( ) => {
