@@ -889,7 +889,6 @@ RCT_EXPORT_METHOD( convertVideoToGif
 
     AVAssetImageGenerator *gen = [[AVAssetImageGenerator alloc] initWithAsset:asset];
     gen.appliesPreferredTrackTransform = YES;
-    gen.maximumSize = CGSizeMake( 480, 480 );
     gen.requestedTimeToleranceBefore = CMTimeMakeWithSeconds( 0.5, 600 );
     gen.requestedTimeToleranceAfter  = CMTimeMakeWithSeconds( 0.5, 600 );
 
