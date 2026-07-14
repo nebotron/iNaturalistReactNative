@@ -7,7 +7,7 @@ downloads the original images, re-runs subject detection, and evaluates how well
 different padding values and detection strategies match the crops you actually chose.
 
 Two metrics (both 0–1, higher = better):
-  recall    = fraction of the ground-truth crop (shrunk 5% per side) covered
+  recall    = fraction of the ground-truth crop (shrunk 8% per side) covered
               by the AI crop (must be ≈1.0 — the AI crop should always
               contain the subject)
   precision = fraction of the AI crop's square viewport that overlaps with
@@ -129,7 +129,7 @@ def iou(a: Crop, b: Crop) -> float:
     return inter / union if union > 0 else 0.0
 
 
-RECALL_TRUTH_SHRINK = 0.05  # shrink ground truth 5% per side when scoring recall
+RECALL_TRUTH_SHRINK = 0.08  # shrink ground truth 8% per side when scoring recall
 
 
 def shrink_crop(c: Crop, frac: float = RECALL_TRUTH_SHRINK) -> Crop:
