@@ -7,7 +7,6 @@ import {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
-  withDecay,
   withTiming,
 } from "react-native-reanimated";
 
@@ -403,37 +402,16 @@ export const useGestures = ( {
       } = getPanClampLimits( );
 
       if ( !cropPanContext && scale.value > 1 && isDoubleTapEnabled ) {
-        translate.x.value = withDecay(
-          {
-            velocity: event.velocityX,
-            velocityFactor: 0.6,
-            rubberBandEffect: true,
-            rubberBandFactor: 0.9,
-            clamp: [leftLimit, rightLimit],
-          },
-          () => {
-            if ( event.velocityX >= event.velocityY ) {
-              runOnJS( onPanEnded )( event, success );
-            }
-          },
-        );
-        translate.y.value = withDecay(
-          {
-            velocity: event.velocityY,
-            velocityFactor: 0.6,
-            rubberBandEffect: true,
-            rubberBandFactor: 0.9,
-            clamp: [topLimit, bottomLimit],
-          },
-          () => {
-            if ( event.velocityY > event.velocityX ) {
-              runOnJS( onPanEnded )( event, success );
-            }
-          },
-        );
-      } else {
-        runOnJS( onPanEnded )( event, success );
+        const clampedX = clamp( translate.x.value, leftLimit, rightLimit );
+        const clampedY = clamp( translate.y.value, topLimit, bottomLimit );
+        if ( clampedX !== translate.x.value ) {
+          translate.x.value = withTiming( clampedX, withTimingConfig );
+        }
+        if ( clampedY !== translate.y.value ) {
+          translate.y.value = withTiming( clampedY, withTimingConfig );
+        }
       }
+      runOnJS( onPanEnded )( event, success );
     } );
 
   // A single pinch gesture handles both zooming and two-finger panning by
