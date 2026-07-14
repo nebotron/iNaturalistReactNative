@@ -119,7 +119,6 @@ const backgroundTask = async ( ) => {
         distanceFilter: MIN_DISTANCE_METERS,
         interval: MIN_INTERVAL_MS,
         fastestInterval: MIN_INTERVAL_MS,
-        useSignificantChanges: true,
       },
     );
 
@@ -190,13 +189,19 @@ export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResu
       await BackgroundService.start( backgroundTask, getBackgroundServiceOptions( ) );
     } else if ( Platform.OS !== "android" && watchId === null ) {
       Geolocation.setRNConfiguration( IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG );
+      // Standard location updates (startUpdatingLocation) rather than the
+      // significant-location-change service. The latter ignores
+      // desiredAccuracy/distanceFilter and only yields coarse, cell-tower-level
+      // fixes (often kilometers off), which corrupts photo geotagging. Because
+      // we request "always" authorization above, iOS enables background
+      // location updates, so high-accuracy fixes keep arriving while
+      // backgrounded, throttled by distanceFilter to stay power-efficient.
       watchId = watchPosition(
         recordPosition,
         error => logger.warn( "watchPosition error", error ),
         {
           enableHighAccuracy: true,
           distanceFilter: MIN_DISTANCE_METERS,
-          useSignificantChanges: true,
         },
       );
       Geolocation.setRNConfiguration( DEFAULT_GEOLOCATION_CONFIG );

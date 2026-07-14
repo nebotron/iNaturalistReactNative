@@ -1,5 +1,6 @@
 import {
   findInterpolatedLocation,
+  MAX_INTERPOLATION_SPAN_MS,
   MAX_MATCH_GAP_MS,
   MAX_USABLE_ACCURACY_M,
 } from "sharedHelpers/interpolateTrackedLocation";
@@ -52,5 +53,35 @@ describe( "findInterpolatedLocation", ( ) => {
   it( "returns null when the closest point is beyond the max match gap", ( ) => {
     const points = [point( 0, 1, 2, 5 )];
     expect( findInterpolatedLocation( points, MAX_MATCH_GAP_MS + 1 ) ).toBeNull( );
+  } );
+
+  it( "snaps to the nearest fix instead of interpolating across a long gap", ( ) => {
+    // Two accurate fixes far apart in time bracket the target. A straight-line
+    // midpoint would be off the real route, so we snap to the temporally
+    // nearest fix rather than interpolating.
+    const span = MAX_INTERPOLATION_SPAN_MS + 60 * 1000;
+    const points = [
+      point( 0, 0, 0, 5 ),
+      point( span, 10, 20, 5 ),
+    ];
+    // Target is nearer the first fix
+    const nearPrev = findInterpolatedLocation( points, 60 * 1000 );
+    expect( nearPrev.latitude ).toEqual( 0 );
+    expect( nearPrev.longitude ).toEqual( 0 );
+    // Target is nearer the second fix
+    const nearNext = findInterpolatedLocation( points, span - 60 * 1000 );
+    expect( nearNext.latitude ).toEqual( 10 );
+    expect( nearNext.longitude ).toEqual( 20 );
+  } );
+
+  it( "still interpolates when the bracketing fixes are close in time", ( ) => {
+    const span = MAX_INTERPOLATION_SPAN_MS - 1000;
+    const points = [
+      point( 0, 0, 0, 5 ),
+      point( span, 10, 20, 5 ),
+    ];
+    const result = findInterpolatedLocation( points, span / 2 );
+    expect( result.latitude ).toBeCloseTo( 5 );
+    expect( result.longitude ).toBeCloseTo( 10 );
   } );
 } );

@@ -4,9 +4,18 @@
 // thinning at capture time), so the responsibility for discarding unreliable
 // fixes lives here, when we interpolate a location for a given timestamp.
 
-// Photo location and tracked location are considered comparable only if
-// they're within this many milliseconds of each other
-export const MAX_MATCH_GAP_MS = 12 * 60 * 60 * 1000;
+// A tracked fix is only used for a given photo when the nearest fix in time is
+// within this many milliseconds of the photo. Kept moderate so a stationary
+// user (who generates no new fixes until they move past distanceFilter) still
+// matches, while a stale fix from hours earlier - when the user may have
+// travelled kilometers - is rejected rather than tagged onto the photo.
+export const MAX_MATCH_GAP_MS = 60 * 60 * 1000;
+
+// Straight-line interpolation between two bracketing fixes is only trustworthy
+// when they're close together in time. Across a longer gap the real path is
+// unknown, so a linear midpoint can land kilometers off route; beyond this span
+// we snap to the temporally nearest fix instead of interpolating.
+export const MAX_INTERPOLATION_SPAN_MS = 5 * 60 * 1000;
 
 // A fix whose reported accuracy radius (in meters) is worse than this is
 // treated as unreliable and filtered out before interpolating, as long as
@@ -109,10 +118,21 @@ export const interpolateFromUsablePoints = (
 
   const prevMs = prev.recordedAt.getTime();
   const nextMs = next.recordedAt.getTime();
-  if ( prevMs === targetMs ) return toLocation( prev );
 
-  const minGap = Math.min( targetMs - prevMs, nextMs - targetMs );
+  const gapToPrev = targetMs - prevMs;
+  const gapToNext = nextMs - targetMs;
+  const minGap = Math.min( gapToPrev, gapToNext );
   if ( minGap > MAX_MATCH_GAP_MS ) return null;
+
+  // When the bracketing fixes are far apart in time, don't invent a straight-
+  // line midpoint - snap to whichever fix is closest to the photo's time.
+  if ( nextMs - prevMs > MAX_INTERPOLATION_SPAN_MS ) {
+    return toLocation( gapToPrev <= gapToNext
+      ? prev
+      : next );
+  }
+
+  if ( prevMs === targetMs ) return toLocation( prev );
 
   const weight = ( targetMs - prevMs ) / ( nextMs - prevMs );
   return {
