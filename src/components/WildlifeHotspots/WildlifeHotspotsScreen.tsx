@@ -109,6 +109,7 @@ interface AddressInputProps {
   loading: boolean;
   dotColor: string;
   nearbyLatLng?: LatLng;
+  onEmptyBlur?: () => void;
 }
 
 // Suggestions are reported up to the parent, which renders the dropdown as a
@@ -122,6 +123,7 @@ const AddressInput = ( {
   loading,
   dotColor,
   nearbyLatLng,
+  onEmptyBlur,
 }: AddressInputProps ) => {
   const [searching, setSearching] = useState( false );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>( null );
@@ -152,7 +154,8 @@ const AddressInput = ( {
 
   const handleBlur = useCallback( () => {
     requestIdRef.current += 1;
-  }, [] );
+    if ( value.trim().length === 0 ) onEmptyBlur?.();
+  }, [value, onEmptyBlur] );
 
   return (
     <View className="flex-1">
@@ -294,6 +297,13 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
         : prev;
     } );
   }, [] );
+
+  const handleStopEmptyBlur = useCallback( ( id: string ) => {
+    if ( !userLocation ) return;
+    setStops( prev => prev.map( s => ( s.id === id
+      ? { ...s, text: t( "Current-location" ), point: userLocation }
+      : s ) ) );
+  }, [userLocation, t] );
 
   const handleRemoveStop = useCallback( ( id: string ) => {
     setStops( prev => ( prev.length > 2
@@ -442,6 +452,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
             loading={false}
             dotColor={stopDotColor( index, stops.length )}
             nearbyLatLng={stops[index - 1]?.point ?? userLocation ?? undefined}
+            onEmptyBlur={() => handleStopEmptyBlur( stop.id )}
           />
           {index > 0 && index < stops.length - 1 && (
             <TouchableOpacity
@@ -470,6 +481,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     t,
     handleStopTextChange,
     handleStopSuggestionsChange,
+    handleStopEmptyBlur,
     handleRemoveStop,
     handleAddStopAfter,
   ] );
