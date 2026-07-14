@@ -11,6 +11,8 @@ import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
   runOnJS,
   useAnimatedReaction,
+  useAnimatedStyle,
+  useSharedValue,
 } from "react-native-reanimated";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { ImageZoomTransformRefs } from "sharedHooks/imageZoom/readImageZoomTransform";
@@ -21,6 +23,7 @@ import { useZoomable } from "sharedHooks/imageZoom/useZoomable";
 export type SharedZoomableImageRef = ImageZoomRef & {
   readTransform: ( ) => ImageZoomTransform;
   applyTransform: ( transform: ImageZoomTransform ) => void;
+  setBrightness: ( value: number ) => void;
 };
 
 const styles = StyleSheet.create( {
@@ -81,6 +84,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
   ref,
 ) => {
   const transformRef = useRef<ImageZoomTransformRefs | null>( null );
+  const brightnessSV = useSharedValue( brightness );
 
   const {
     animatedStyle,
@@ -122,6 +126,22 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     transformRef.current = transform;
   }, [transform] );
 
+  // Kept on a shared value (rather than only a JS style prop) so a caller
+  // driving rapid updates -- e.g. a slider dragged live -- can bypass a full
+  // React re-render per tick via setBrightness, exactly like applyTransform
+  // does for zoom/pan.
+  useEffect( ( ) => {
+    brightnessSV.value = brightness;
+  }, [brightness, brightnessSV] );
+
+  const brightnessAnimatedStyle = useAnimatedStyle( ( ) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const style: any = brightnessSV.value !== 1
+      ? { filter: [{ brightness: brightnessSV.value }] }
+      : {};
+    return style;
+  } );
+
   useAnimatedReaction(
     ( ) => transform.scale.value,
     scale => {
@@ -148,7 +168,10 @@ const SharedZoomableImage: ForwardRefRenderFunction<
       }
       return readImageZoomTransform( transformRef.current );
     },
-  } ), [applyTransform, reset, zoom] );
+    setBrightness: ( value: number ) => {
+      brightnessSV.value = value;
+    },
+  } ), [applyTransform, brightnessSV, reset, zoom] );
 
   const longPressGesture = useMemo(
     () => ( onLongPress
@@ -164,11 +187,6 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     [gestures, longPressGesture],
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const brightnessFilter: any = brightness !== 1
-    ? { filter: [{ brightness }] }
-    : null;
-
   // The GestureDetector must attach to a view that is NOT transformed: gesture
   // coordinates (e.g. pinch focalX/focalY) are reported relative to the attached
   // view, so attaching to the transformed image itself creates a feedback loop
@@ -178,7 +196,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
       <View style={[styles.image, style]} onLayout={onZoomableLayout}>
         <Animated.Image
           testID={testID}
-          style={[StyleSheet.absoluteFill, animatedStyle, brightnessFilter]}
+          style={[StyleSheet.absoluteFill, animatedStyle, brightnessAnimatedStyle]}
           source={{ uri }}
           resizeMode="contain"
           onLoad={event => {

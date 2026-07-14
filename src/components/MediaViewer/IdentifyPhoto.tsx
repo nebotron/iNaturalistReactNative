@@ -69,6 +69,7 @@ const cropToZoomTransform = (
 export interface IdentifyPhotoHandle {
   applyZoom: ( scale: number ) => void;
   saveCrop: ( ) => void;
+  setBrightness: ( value: number ) => void;
 }
 
 interface IdentifyPhotoProps {
@@ -149,7 +150,15 @@ export const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhoto
     } );
   }, [size] );
 
-  useImperativeHandle( ref, ( ) => ( { applyZoom, saveCrop } ), [applyZoom, saveCrop] );
+  const setBrightness = useCallback( ( value: number ) => {
+    imageRef.current?.setBrightness( value );
+  }, [] );
+
+  useImperativeHandle(
+    ref,
+    ( ) => ( { applyZoom, saveCrop, setBrightness } ),
+    [applyZoom, saveCrop, setBrightness],
+  );
 
   // Frame the detected (or previously logged) subject once detection resolves.
   useEffect( ( ) => {

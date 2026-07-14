@@ -40,6 +40,7 @@ import {
 import {
   EXPOSURE_STOPS_MAX,
   EXPOSURE_STOPS_MIN,
+  stopsToGain,
 } from "sharedHooks/useIdentifyPhotoBrightness";
 import colors from "styles/tailwindColors";
 
@@ -108,6 +109,14 @@ const IdentifyView = ( {
   const {
     brightness, displayUri, brightnessStops, setBrightnessStops, handleBrightnessComplete,
   } = useIdentifyPhotoBrightness( currentPhotoUrl );
+
+  // Applies the slider's live value directly to the image (bypassing a full
+  // re-render per tick, same as handleZoomChange does for zoom) so the
+  // preview tracks the finger exactly, not just the value at release.
+  const handleBrightnessChange = useCallback( ( value: number ) => {
+    setBrightnessStops( value );
+    photoRef.current?.setBrightness( stopsToGain( value ) );
+  }, [setBrightnessStops] );
 
   // Reset to the first photo whenever the observation changes.
   useEffect( ( ) => {
@@ -290,7 +299,7 @@ const IdentifyView = ( {
         exposureStopsMax={EXPOSURE_STOPS_MAX}
         onZoomChange={handleZoomChange}
         onZoomComplete={( ) => photoRef.current?.saveCrop( )}
-        onBrightnessChange={setBrightnessStops}
+        onBrightnessChange={handleBrightnessChange}
         onBrightnessComplete={handleBrightnessComplete}
         zoomAccessibilityLabel={t( "Adjust-zoom" )}
         brightnessAccessibilityLabel={t( "Adjust-brightness" )}
