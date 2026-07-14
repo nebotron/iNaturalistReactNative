@@ -59,7 +59,9 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
     const saved = currentPhotoUrl
       ? getBrightness( currentPhotoUrl )
       : null;
-    setManualStops( saved !== null ? gainToStops( saved ) : null );
+    setManualStops( saved !== null
+      ? gainToStops( saved )
+      : null );
   }, [currentPhotoUrl] );
 
   const handleBrightnessComplete = useCallback( ( value: number ) => {
@@ -68,7 +70,11 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
   }, [currentPhotoUrl] );
 
   return {
-    brightness, displayUri, brightnessStops, setBrightnessStops: setManualStops, handleBrightnessComplete,
+    brightness,
+    displayUri,
+    brightnessStops,
+    setBrightnessStops: setManualStops,
+    handleBrightnessComplete,
   };
 };
 
