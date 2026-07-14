@@ -28,6 +28,7 @@ import React, {
 import { Dimensions, Image, StyleSheet } from "react-native";
 import Photo from "realmModels/Photo";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import useAutoBrightnessForUri from "sharedHelpers/useAutoBrightnessForUri";
 import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
@@ -36,11 +37,14 @@ import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri, {
   preloadSubjectDetectionForUri,
 } from "sharedHelpers/useSubjectDetectionForUri";
+import useToneMappedBrightnessUri from "sharedHelpers/useToneMappedBrightnessUri";
 import {
   useAuthenticatedMutation,
   useCurrentUser,
+  useLayoutPrefs,
   useTranslation,
 } from "sharedHooks";
+import { AUTO_BRIGHTNESS_MODE } from "stores/createLayoutSlice";
 import colors from "styles/tailwindColors";
 
 // Exposure slider in stops (EV); the gain applied to the image is 2^stops.
@@ -117,6 +121,7 @@ interface IdentifyPhotoHandle {
 
 interface IdentifyPhotoProps {
   uri: string;
+  displayUri?: string;
   size: number;
   brightness: number;
   onSingleTap: ( ) => void;
@@ -125,9 +130,12 @@ interface IdentifyPhotoProps {
 
 // A single subject-framed photo with one- or two-finger pan/zoom. The framed
 // viewport is saved to the crop log (which syncs to Firebase) whenever a
-// gesture or slider zoom ends.
+// gesture or slider zoom ends. `uri` keys subject detection and crop
+// persistence; `displayUri` (e.g. a gamma tone-mapped copy) is what's shown
+// if it differs.
 const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhotoProps>( ( {
   uri,
+  displayUri,
   size,
   brightness,
   onSingleTap,
@@ -204,7 +212,7 @@ const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhotoProps>(
   return (
     <SharedZoomableImage
       ref={imageRef}
-      uri={uri}
+      uri={displayUri ?? uri}
       style={styles.image}
       brightness={brightness}
       minScale={MIN_ZOOM}
@@ -237,6 +245,7 @@ const IdentifyView = ( {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
   const currentUser = useCurrentUser( );
+  const { autoBrightnessMode } = useLayoutPrefs( );
   const windowWidth = Dimensions.get( "window" ).width;
   const photoRef = useRef<IdentifyPhotoHandle | null>( null );
 
@@ -251,7 +260,6 @@ const IdentifyView = ( {
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState( 0 );
   const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
   const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
-  const brightness = stopsToGain( brightnessStops );
 
   useEffect( ( ) => {
     handleUpdateCount( "identify", totalResults );
@@ -273,6 +281,39 @@ const IdentifyView = ( {
     [observationUuid],
   );
   const currentPhotoUrl = photoUrls[selectedPhotoIndex];
+  const savedBrightness = currentPhotoUrl
+    ? getBrightness( currentPhotoUrl )
+    : null;
+  const hasManualBrightness = savedBrightness !== null;
+
+  // A manually saved brightness always wins; otherwise fall back to the
+  // global auto-brightness switch (Off / Multiply / Gamma), same as the rest
+  // of the app (see ObsImage).
+  const isGammaMode = !hasManualBrightness && autoBrightnessMode === AUTO_BRIGHTNESS_MODE.GAMMA;
+  const isMultiplyMode = !hasManualBrightness
+    && autoBrightnessMode === AUTO_BRIGHTNESS_MODE.MULTIPLY;
+  const autoBrightnessUri = ( isGammaMode || isMultiplyMode )
+    ? currentPhotoUrl
+    : undefined;
+  const autoGain = useAutoBrightnessForUri(
+    isMultiplyMode
+      ? autoBrightnessUri
+      : undefined,
+    null,
+  );
+  const toneMappedUri = useToneMappedBrightnessUri(
+    isGammaMode
+      ? autoBrightnessUri
+      : undefined,
+    null,
+  );
+  const baseGain = isMultiplyMode
+    ? autoGain
+    : 1;
+  const brightness = baseGain * stopsToGain( brightnessStops );
+  const displayUri = isGammaMode
+    ? toneMappedUri
+    : undefined;
 
   // Reset to the first photo whenever the observation changes.
   useEffect( ( ) => {
@@ -280,7 +321,8 @@ const IdentifyView = ( {
   }, [observationUuid] );
 
   // Reset zoom and load any previously-saved brightness for the visible photo
-  // so saved adjustments round-trip.
+  // so saved adjustments round-trip. Auto-brightness (when active) is applied
+  // separately as a baseline, so the slider itself resets to 0 stops.
   useEffect( ( ) => {
     setZoomScale( MIN_ZOOM );
     const saved = currentPhotoUrl
@@ -340,8 +382,8 @@ const IdentifyView = ( {
 
   const handleBrightnessComplete = useCallback( ( value: number ) => {
     setBrightnessStops( value );
-    if ( currentPhotoUrl ) saveBrightness( currentPhotoUrl, stopsToGain( value ) );
-  }, [currentPhotoUrl] );
+    if ( currentPhotoUrl ) saveBrightness( currentPhotoUrl, baseGain * stopsToGain( value ) );
+  }, [currentPhotoUrl, baseGain] );
 
   // Keep the zoom slider in sync with pinch/double-tap/subject-framing zoom.
   const handleScaleChange = useCallback(
@@ -413,6 +455,7 @@ const IdentifyView = ( {
               key={currentPhotoUrl}
               ref={photoRef}
               uri={currentPhotoUrl}
+              displayUri={displayUri}
               size={windowWidth}
               brightness={brightness}
               onSingleTap={openObsDetails}
