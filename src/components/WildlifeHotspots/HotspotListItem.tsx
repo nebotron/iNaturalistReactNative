@@ -72,11 +72,11 @@ const HotspotListItem = ( {
         </View>
 
         {hotspot.topSpecies.length > 0 && (
-          <View className="mt-3">
+          <View className="mt-1">
             {hotspot.topSpecies.map( species => (
               <View
                 key={String( species.id )}
-                className="flex-row items-center mb-1"
+                className="flex-row items-center mb-0.5"
               >
                 <INatIcon name="leaf" size={10} color={colors.inatGreen} />
                 <Body3
@@ -100,7 +100,7 @@ const HotspotListItem = ( {
           </View>
         )}
         {( onAddToRoute || onOpenInGoogleMaps ) && (
-          <View className="flex-row mt-3 space-x-2">
+          <View className="flex-row mt-1 space-x-2">
             {onAddToRoute && (
               <Button
                 className="flex-1"
