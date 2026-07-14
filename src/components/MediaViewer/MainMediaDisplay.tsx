@@ -259,7 +259,7 @@ const MainMediaDisplay = ( {
         <View className="absolute bottom-4 left-4">
           <INatIconButton
             onPress={( ) => setShowBrightnessSlider( prev => !prev )}
-            icon="sliders"
+            icon="sun"
             color={showBrightnessSlider || brightness !== BRIGHTNESS_DEFAULT
               ? colors.inatGreen
               : colors.white}
