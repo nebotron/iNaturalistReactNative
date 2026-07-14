@@ -11,6 +11,8 @@ import {
   ZoomBrightnessSliders,
   zoomPosToScale,
 } from "components/MediaViewer/IdentifyPhoto";
+import useTopSpeciesSuggestion
+  from "components/ObservationsFlashList/hooks/useTopSpeciesSuggestion";
 import {
   ActivityIndicator,
   Body2,
@@ -159,11 +161,16 @@ const IdentifyView = ( {
     } as never );
   }, [navigation, observation, observationUuid] );
 
+  // If the community taxon is genus or broader, suggest the most likely
+  // species-level CV taxon instead of the coarser community taxon.
+  const topSpeciesSuggestion = useTopSpeciesSuggestion( observation );
+  const taxon = topSpeciesSuggestion || observation?.taxon;
+
   const openTaxonDetails = useCallback( ( ) => {
-    const id = observation?.taxon?.id;
+    const id = taxon?.id;
     if ( !id ) return;
     navigation.navigate( "TaxonDetails" as never, { id } as never );
-  }, [navigation, observation?.taxon?.id] );
+  }, [navigation, taxon?.id] );
 
   // Keep the zoom slider in sync with pinch/double-tap/subject-framing zoom.
   const handleScaleChange = useCallback(
@@ -200,7 +207,6 @@ const IdentifyView = ( {
     );
   }
 
-  const { taxon } = observation;
   const isOwnObs = observation.user?.id != null && observation.user.id === currentUser?.id;
   const agreeDisabled = !currentUser || !taxon?.id || isOwnObs;
   const reviewDisabled = !currentUser;
