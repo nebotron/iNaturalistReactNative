@@ -202,6 +202,8 @@ type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
 
 // Used only until the hidden measurement view below reports the real height.
 const FALLBACK_HOTSPOT_CARD_HEIGHT = 200;
+// Guards against the measured height being clipped by sub-pixel rounding.
+const HOTSPOT_CARD_HEIGHT_BUFFER = 6;
 
 const styles = StyleSheet.create( {
   stopInputsContainer: {
@@ -656,7 +658,9 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
           aria-hidden
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          onLayout={( { nativeEvent } ) => setHotspotCardHeight( nativeEvent.layout.height )}
+          onLayout={( { nativeEvent } ) => setHotspotCardHeight(
+            Math.ceil( nativeEvent.layout.height ) + HOTSPOT_CARD_HEIGHT_BUFFER,
+          )}
         >
           <HotspotListItem
             hotspot={hotspots[visibleHotspotIndex] ?? hotspots[0]}
