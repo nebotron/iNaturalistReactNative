@@ -177,13 +177,11 @@ const IdentifyView = ( {
     photoRef.current?.applyZoom( scale );
   }, [] );
 
-  const { mutate: agreeMutate, isPending: agreeing } = useAuthenticatedMutation(
+  const { mutate: agreeMutate } = useAuthenticatedMutation(
     ( params, optsWithAuth ) => createIdentification( params, optsWithAuth ),
-    { onSuccess: ( ) => goToNext( ) },
   );
-  const { mutate: reviewMutate, isPending: reviewing } = useAuthenticatedMutation(
+  const { mutate: reviewMutate } = useAuthenticatedMutation(
     ( params, optsWithAuth ) => markAsReviewed( params, optsWithAuth ),
-    { onSuccess: ( ) => goToNext( ) },
   );
 
   if ( isLoading && observations.length === 0 ) {
@@ -204,18 +202,20 @@ const IdentifyView = ( {
 
   const { taxon } = observation;
   const isOwnObs = observation.user?.id != null && observation.user.id === currentUser?.id;
-  const agreeDisabled = !currentUser || !taxon?.id || isOwnObs || agreeing;
-  const reviewDisabled = !currentUser || reviewing;
+  const agreeDisabled = !currentUser || !taxon?.id || isOwnObs;
+  const reviewDisabled = !currentUser;
 
   const handleAgree = ( ) => {
     if ( !observationUuid || !taxon?.id ) return;
     agreeMutate( {
       identification: { observation_id: observationUuid, taxon_id: taxon.id },
     } );
+    goToNext( );
   };
   const handleReview = ( ) => {
     if ( !observationUuid ) return;
     reviewMutate( { uuid: observationUuid } );
+    goToNext( );
   };
 
   return (
@@ -298,7 +298,6 @@ const IdentifyView = ( {
             text={t( "Agree" )}
             level="focus"
             disabled={agreeDisabled}
-            loading={agreeing}
             onPress={handleAgree}
             testID="IdentifyView.agree"
           />
@@ -308,7 +307,6 @@ const IdentifyView = ( {
             className="w-full h-full"
             text={t( "Reviewed" )}
             disabled={reviewDisabled}
-            loading={reviewing}
             onPress={handleReview}
             testID="IdentifyView.review"
           />
