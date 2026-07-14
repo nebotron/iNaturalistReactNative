@@ -5,21 +5,24 @@ import ensureLocalImageForCrop from "./ensureLocalImageForCrop";
 import measureImageBrightness from "./measureImageBrightness";
 import type { NormalizedCrop } from "./normalizedCropTypes";
 
-// Log-linear fit of brightness multiplier ~ shadow-percentile (10th
-// percentile luminance) of the detected subject crop, against 73 human
-// picked "ideal brightness" labels from brightness_log_raw.json — see
-// scripts/explore_brightness_crop_models.py. Darker subject shadows predict
-// a stronger brightening choice (LOOCV MAE 0.531 vs 0.639 for a naive
-// constant guess, and vs 0.612 for the previous 21-label fit re-scored on
-// this larger set).
-const SHADOW_ADJUSTMENT_SLOPE = -1.510521;
-const SHADOW_ADJUSTMENT_INTERCEPT = 0.597565;
+// Log-linear fit of brightness multiplier ~ (geometric-mean, median)
+// luminance of the detected subject crop, against 100 human-picked "ideal
+// brightness" labels from brightness_log_raw.json — see
+// scripts/explore_brightness_crop_models.py. The opposite-signed
+// coefficients key on how far the shadow tail drags the geomean below the
+// median: a heavy dark tail under a mid-bright median (e.g. a backlit
+// subject) predicts a strong brightening choice (LOOCV MAE 0.683 vs 0.756
+// for the previous single-feature p10 fit and 0.974 for a naive constant
+// guess).
+const GEOMEAN_COEF = -4.167017;
+const MEDIAN_COEF = 2.612363;
+const INTERCEPT = 0.827665;
 
-// luminance here is the 10th-percentile luminance ("shadow depth") of the
-// subject crop, as measured natively by measureImageBrightness.
-const computeAdjustment = ( luminance: number ): number => {
+// geomean/median are luminances of the subject crop in [0, 1], as measured
+// natively by measureImageBrightness.
+const computeAdjustment = ( geomean: number, median: number ): number => {
   const adjustment = Math.exp(
-    SHADOW_ADJUSTMENT_SLOPE * luminance + SHADOW_ADJUSTMENT_INTERCEPT,
+    GEOMEAN_COEF * geomean + MEDIAN_COEF * median + INTERCEPT,
   );
   return Math.max( 0.4, Math.min( 3.0, adjustment ) );
 };
@@ -98,7 +101,7 @@ const useAutoBrightnessForUri = (
         const luminance = await measureImageBrightness( localUri, crop );
         if ( cancelled || luminance === null ) return;
 
-        const adjustment = computeAdjustment( luminance );
+        const adjustment = computeAdjustment( luminance.geomean, luminance.median );
         cache.set( key, adjustment );
         setBrightness( adjustment );
       } catch {

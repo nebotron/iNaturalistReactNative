@@ -1,6 +1,11 @@
 import { NativeModules } from "react-native";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 
+export interface CropLuminance {
+  geomean: number;
+  median: number;
+}
+
 interface ImageCropperModule {
   measureImageBrightness: (
     path: string,
@@ -8,18 +13,18 @@ interface ImageCropperModule {
     cropY: number | null,
     cropW: number | null,
     cropH: number | null,
-  ) => Promise<number>;
+  ) => Promise<CropLuminance | null>;
 }
 
 const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
-// Returns the 10th-percentile perceptual luminance ("shadow depth") in [0, 1]
+// Returns the geometric-mean and median perceptual luminance (each in [0, 1])
 // within the given crop region, or null on failure. Pass crop=null to
 // measure the full image.
 const measureImageBrightness = async (
   imageUri: string,
   crop: NormalizedCrop | null = null,
-): Promise<number | null> => {
+): Promise<CropLuminance | null> => {
   const imageCropper = ( NativeModules as { ImageCropper?: ImageCropperModule } ).ImageCropper;
   if ( !imageCropper?.measureImageBrightness ) return null;
   try {
@@ -30,7 +35,9 @@ const measureImageBrightness = async (
       crop ? crop.w : null,
       crop ? crop.h : null,
     );
-    return result >= 0 ? result : null;
+    return result && result.geomean >= 0 && result.median >= 0
+      ? result
+      : null;
   } catch {
     return null;
   }

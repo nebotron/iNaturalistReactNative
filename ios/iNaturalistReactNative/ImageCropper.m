@@ -321,15 +321,13 @@ static int compareFloatsAsc( const void *a, const void *b )
 }
 
 // Samples a 64×64 pixel grid within normCrop (0-1 coords) and returns the
-// 10th-percentile perceptual luminance [0,1] — i.e. how dark the shadows are
-// within the region. Pass CGRectMake(0,0,1,1) for the full image.
-//
-// Fit via scripts/explore_brightness_crop_models.py against
-// brightness_log_raw.json (21 human-labeled ideal-brightness examples):
-// shadow depth in the subject crop was the strongest available predictor of
-// the brightness multiplier a person actually chose (log-linear, LOOCV MAE
-// 0.573 vs 0.641 for a naive constant guess).
-static float measureShadowPercentile( UIImage *image, CGRect normCrop )
+// geometric-mean and median perceptual luminance [0,1] of the region via the
+// out params. Pass CGRectMake(0,0,1,1) for the full image. Returns NO on
+// failure. Definitions must stay in sync with
+// scripts/compute_brightness_crop_features.py (geomean clips luminance at
+// 1e-4 before the log; median averages the two middle samples).
+static BOOL measureCropLuminance( UIImage *image, CGRect normCrop,
+                                  float *outGeomean, float *outMedian )
 {
   const int N  = 64;
   float imgW   = (float)image.size.width;
@@ -348,7 +346,7 @@ static float measureShadowPercentile( UIImage *image, CGRect normCrop )
   UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );
   UIGraphicsEndImageContext( );
 
-  if ( !scaled.CGImage ) return -1.0f;
+  if ( !scaled.CGImage ) return NO;
 
   CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
   unsigned char  *raw = (unsigned char *)calloc( (size_t)N * N * 4, 1 );
@@ -360,17 +358,20 @@ static float measureShadowPercentile( UIImage *image, CGRect normCrop )
   CGColorSpaceRelease( cs );
 
   float *lums = (float *)malloc( (size_t)N * N * sizeof( float ) );
+  double logSum = 0.0;
   for ( int i = 0; i < N * N; i++ ) {
     float r = raw[i * 4 + 0] / 255.0f;
     float g = raw[i * 4 + 1] / 255.0f;
     float b = raw[i * 4 + 2] / 255.0f;
     lums[i] = 0.299f * r + 0.587f * g + 0.114f * b;
+    logSum += log( fmax( lums[i], 1e-4f ) );
   }
   free( raw );
   qsort( lums, N * N, sizeof( float ), compareFloatsAsc );
-  float p10 = lums[(int)( 0.10f * ( N * N - 1 ) )];
+  *outGeomean = (float)exp( logSum / ( N * N ) );
+  *outMedian  = 0.5f * ( lums[N * N / 2 - 1] + lums[N * N / 2] );
   free( lums );
-  return p10;
+  return YES;
 }
 
 // ─── Brightness adjustment (exposure) ────────────────────────────────────────
@@ -688,15 +689,20 @@ RCT_EXPORT_METHOD( measureImageBrightness
 {
   NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
   UIImage  *image = [UIImage imageWithContentsOfFile:input];
-  if ( !image ) { resolve( @( -1.0 ) ); return; }
+  if ( !image ) { resolve( [NSNull null] ); return; }
 
   CGRect normCrop = ( cropX && cropY && cropW && cropH )
     ? CGRectMake( [cropX floatValue], [cropY floatValue],
                   [cropW floatValue], [cropH floatValue] )
     : CGRectMake( 0, 0, 1, 1 );
 
-  float shadowPercentile = measureShadowPercentile( image, normCrop );
-  resolve( @( shadowPercentile ) );
+  float geomean = -1.0f;
+  float median  = -1.0f;
+  if ( !measureCropLuminance( image, normCrop, &geomean, &median ) ) {
+    resolve( [NSNull null] );
+    return;
+  }
+  resolve( @{ @"geomean": @( geomean ), @"median": @( median ) } );
 }
 
 // Applies toneCurve() per pixel/channel to the whole image (scaled down to fit
@@ -724,7 +730,7 @@ RCT_EXPORT_METHOD( adjustImageBrightness
   int   H      = MAX( 1, (int)roundf( imgH * scale ) );
 
   // drawInRect: applies the UIImage's orientation, so this also normalizes
-  // orientation to "up" the same way measureShadowPercentile does above.
+  // orientation to "up" the same way measureCropLuminance does above.
   UIGraphicsBeginImageContextWithOptions( CGSizeMake( W, H ), YES, 1.0 );
   [image drawInRect:CGRectMake( 0, 0, W, H )];
   UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );
