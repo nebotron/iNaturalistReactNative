@@ -59,9 +59,11 @@ type Props = {
   count: ?number,
   exploreView: string,
   exploreViewIcon: string,
+  exploreViewLabel: string,
   hasLocationPermissions?: boolean,
   hideBackButton: boolean,
   isFetchingHeaderCount: boolean,
+  onPressChangeView: Function,
   onPressCount?: Function,
   openFiltersModal: Function,
   renderLocationPermissionsGate: Function,
@@ -74,9 +76,11 @@ const Header = ( {
   count,
   exploreView,
   exploreViewIcon,
+  exploreViewLabel,
   hasLocationPermissions,
   hideBackButton,
   isFetchingHeaderCount,
+  onPressChangeView,
   onPressCount,
   openFiltersModal,
   renderLocationPermissionsGate,
@@ -164,6 +168,13 @@ const Header = ( {
             </View>
           </View>
           <View className="flex-row items-center">
+            <INatIconButton
+              icon={exploreViewIcon}
+              color={colors.white}
+              className="bg-darkGray rounded-md mr-2"
+              onPress={onPressChangeView}
+              accessibilityLabel={exploreViewLabel}
+            />
             <INatIconButton
               className={classNames(
                 autoBrightnessMode !== AUTO_BRIGHTNESS_MODE.OFF

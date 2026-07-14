@@ -1,12 +1,10 @@
 // @flow
 
 import { refresh } from "@react-native-community/netinfo";
-import classnames from "classnames";
 import ExploreFiltersModal from "components/Explore/Modals/ExploreFiltersModal";
 import {
   Body2,
   Button,
-  INatIconButton,
   OfflineNotice,
   RadioButtonSheet,
   ViewWrapper,
@@ -20,8 +18,6 @@ import {
   useStoredLayout,
   useTranslation,
 } from "sharedHooks";
-import { getShadow } from "styles/global";
-import colors from "styles/tailwindColors";
 
 import ExploreHeader from "./Header/ExploreHeader";
 import IdentifiersView from "./IdentifiersView";
@@ -30,11 +26,6 @@ import ObservationsView from "./ObservationsView";
 import ObservationsViewBar from "./ObservationsViewBar";
 import ObserversView from "./ObserversView";
 import SpeciesView from "./SpeciesView";
-
-const DROP_SHADOW = getShadow( {
-  offsetHeight: 4,
-  elevation: 6,
-} );
 
 const exploreViewIcon = {
   observations: "binoculars",
@@ -124,10 +115,12 @@ const Explore = ( {
       count={headerCount}
       exploreView={currentExploreView}
       exploreViewIcon={icon}
+      exploreViewLabel={a11yLabel}
       hasLocationPermissions={hasLocationPermissions}
       hideBackButton={hideBackButton}
       isFetchingHeaderCount={isFetchingHeaderCount}
       onPressCount={( ) => setShowExploreBottomSheet( true )}
+      onPressChangeView={( ) => setShowExploreBottomSheet( true )}
       openFiltersModal={openFiltersModal}
       renderLocationPermissionsGate={renderLocationPermissionsGate}
       requestLocationPermissions={requestLocationPermissions}
@@ -281,8 +274,6 @@ const Explore = ( {
     );
   };
 
-  const whiteCircleClass = "bg-white rounded-full h-[55px] w-[55px] border-[1px] border-lightGray";
-
   return (
     <>
       <ViewWrapper testID="Explore" wrapperClassName="overflow-hidden">
@@ -295,18 +286,6 @@ const Explore = ( {
             />
           )}
           {renderMainContent()}
-          <INatIconButton
-            icon={icon}
-            color={colors.inatGreen}
-            size={27}
-            className={classnames(
-              whiteCircleClass,
-              "absolute bottom-5 z-10 right-5",
-            )}
-            accessibilityLabel={a11yLabel}
-            onPress={() => setShowExploreBottomSheet( true )}
-            style={DROP_SHADOW}
-          />
         </View>
       </ViewWrapper>
       <ExploreFiltersModal
