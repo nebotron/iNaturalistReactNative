@@ -17,11 +17,14 @@ export const gainToStops = ( gain: number ) => Math.min(
 
 // Computes the display brightness/uri for the current photo from the
 // app-wide auto-brightness mode (Off / Multiply / Gamma), which always wins
-// -- live, including mid-drag -- and exposes the exposure-slider state
-// (a stops adjustment layered on top of that baseline) used to fine-tune it.
+// -- live, including mid-drag. The exposure slider shows the *total*
+// effective stops: while there's no manual override it tracks the
+// auto-brightness baseline live (including once the async computation
+// resolves), so the thumb visibly moves when auto-brightness adjusts the
+// photo; dragging it sets an absolute manual override for that photo.
 const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
   const { autoBrightnessMode } = useLayoutPrefs( );
-  const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
+  const [manualStops, setManualStops] = useState<number | null>( null );
 
   const isGammaMode = autoBrightnessMode === AUTO_BRIGHTNESS_MODE.GAMMA;
   const isMultiplyMode = autoBrightnessMode === AUTO_BRIGHTNESS_MODE.MULTIPLY;
@@ -43,30 +46,29 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
   const baseGain = isMultiplyMode
     ? autoGain
     : 1;
-  const brightness = baseGain * stopsToGain( brightnessStops );
+  const brightnessStops = manualStops ?? gainToStops( baseGain );
+  const brightness = stopsToGain( brightnessStops );
   const displayUri = isGammaMode
     ? toneMappedUri
     : undefined;
 
   // Load any previously-saved brightness whenever the visible photo changes,
-  // so saved adjustments round-trip. Auto-brightness (when active) is
-  // applied separately as a baseline, so the slider itself resets to 0 stops.
+  // so saved adjustments round-trip; otherwise clear the override so the
+  // slider follows the auto-brightness baseline.
   useEffect( ( ) => {
     const saved = currentPhotoUrl
       ? getBrightness( currentPhotoUrl )
       : null;
-    setBrightnessStops( saved
-      ? gainToStops( saved )
-      : EXPOSURE_STOPS_DEFAULT );
+    setManualStops( saved !== null ? gainToStops( saved ) : null );
   }, [currentPhotoUrl] );
 
   const handleBrightnessComplete = useCallback( ( value: number ) => {
-    setBrightnessStops( value );
-    if ( currentPhotoUrl ) saveBrightness( currentPhotoUrl, baseGain * stopsToGain( value ) );
-  }, [currentPhotoUrl, baseGain] );
+    setManualStops( value );
+    if ( currentPhotoUrl ) saveBrightness( currentPhotoUrl, stopsToGain( value ) );
+  }, [currentPhotoUrl] );
 
   return {
-    brightness, displayUri, brightnessStops, setBrightnessStops, handleBrightnessComplete,
+    brightness, displayUri, brightnessStops, setBrightnessStops: setManualStops, handleBrightnessComplete,
   };
 };
 
