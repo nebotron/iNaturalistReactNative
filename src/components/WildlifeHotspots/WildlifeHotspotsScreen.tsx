@@ -200,9 +200,16 @@ type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
   filterParams?: Record<string, unknown>;
 };
 
+// Used only until the hidden measurement view below reports the real height.
+const FALLBACK_HOTSPOT_CARD_HEIGHT = 200;
+
 const styles = StyleSheet.create( {
   stopInputsContainer: {
     zIndex: 10,
+  },
+  hiddenHotspotMeasure: {
+    position: "absolute",
+    opacity: 0,
   },
 } );
 
@@ -225,6 +232,8 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     stopId: string;
     suggestions: NominatimResult[];
   } | null>( null );
+  const [visibleHotspotIndex, setVisibleHotspotIndex] = useState( 0 );
+  const [hotspotCardHeight, setHotspotCardHeight] = useState<number | null>( null );
 
   const {
     hotspots, routeCoords, loading, error, findHotspots,
@@ -392,11 +401,17 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   }, [stops, t] );
 
   const handleHotspotSwipe = useCallback( ( index: number ) => {
+    setVisibleHotspotIndex( index );
     const hotspot = hotspots[index];
     if ( hotspot && hotspot.id !== selectedHotspotId ) {
       handleHotspotPress( hotspot );
     }
   }, [hotspots, selectedHotspotId, handleHotspotPress] );
+
+  useEffect( () => {
+    setVisibleHotspotIndex( 0 );
+    setHotspotCardHeight( null );
+  }, [hotspots] );
 
   const handleObservationPress = useCallback( ( uuid: string ) => {
     navigation.push( "ObsDetails", { uuid } );
@@ -628,9 +643,34 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
         )}
       </View>
 
+      {/* Hidden copy of the currently visible hotspot card, used only to measure
+          its natural content height so the section below can match it exactly. */}
+      {hotspots.length > 0 && (
+        <View
+          style={[styles.hiddenHotspotMeasure, { width: windowWidth }]}
+          pointerEvents="none"
+          aria-hidden
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+          onLayout={( { nativeEvent } ) => setHotspotCardHeight( nativeEvent.layout.height )}
+        >
+          <HotspotListItem
+            hotspot={hotspots[visibleHotspotIndex] ?? hotspots[0]}
+            rank={visibleHotspotIndex + 1}
+            selected={selectedHotspotId === ( hotspots[visibleHotspotIndex] ?? hotspots[0] ).id}
+            onPress={() => null}
+            onOpenInGoogleMaps={() => null}
+            onAddToRoute={() => null}
+          />
+        </View>
+      )}
+
       {/* Hotspot cards */}
       {( hotspots.length > 0 || error ) && (
-        <View className="h-64 bg-lightGray border-t border-lightGray">
+        <View
+          className="bg-lightGray border-t border-lightGray"
+          style={{ height: hotspotCardHeight ?? FALLBACK_HOTSPOT_CARD_HEIGHT }}
+        >
           {error
             ? (
               <View className="p-4 items-center">
