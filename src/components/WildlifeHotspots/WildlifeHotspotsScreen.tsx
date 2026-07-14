@@ -411,6 +411,10 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   useEffect( () => {
     setVisibleHotspotIndex( 0 );
     setHotspotCardHeight( null );
+    if ( hotspots.length > 0 ) {
+      handleHotspotPress( hotspots[0] );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotspots] );
 
   const handleObservationPress = useCallback( ( uuid: string ) => {
