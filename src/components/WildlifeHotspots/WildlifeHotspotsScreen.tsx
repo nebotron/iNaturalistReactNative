@@ -201,10 +201,6 @@ const styles = StyleSheet.create( {
   stopInputsContainer: {
     zIndex: 10,
   },
-  hotspotListContent: {
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
 } );
 
 const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsProp }: Props ) => {
@@ -297,15 +293,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
         ? null
         : prev;
     } );
-  }, [] );
-
-  const handleAddStop = useCallback( () => {
-    setStops( prev => [
-      ...prev.slice( 0, prev.length - 1 ),
-      { id: makeStopId(), text: "", point: null },
-      prev[prev.length - 1],
-    ] );
-    setActiveSuggestions( null );
   }, [] );
 
   const handleRemoveStop = useCallback( ( id: string ) => {
@@ -536,14 +523,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
             ) )}
           </View>
         )}
-        <TouchableOpacity
-          onPress={handleAddStop}
-          className="flex-row items-center mt-1"
-          accessibilityRole="button"
-        >
-          <INatIcon name="plus" size={14} color={colors.inatGreen} />
-          <Body3 className="ml-1 text-inatGreen">{t( "Add-stop" )}</Body3>
-        </TouchableOpacity>
       </View>
 
       {/* Map */}
@@ -655,7 +634,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
                 loop={false}
                 onSnapToItem={handleHotspotSwipe}
                 renderItem={( { item: hotspot, index } ) => (
-                  <View className="flex-1" style={styles.hotspotListContent}>
+                  <View className="flex-1">
                     <HotspotListItem
                       hotspot={hotspot}
                       rank={index + 1}

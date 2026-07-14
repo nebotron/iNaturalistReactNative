@@ -36,12 +36,13 @@ const HotspotListItem = ( {
 
   return (
     <Pressable
+      className="flex-1"
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Hotspot ${rank}, ${hotspot.observationCount} observations`}
     >
       <View
-        className={`mx-3 mb-3 rounded-xl p-4 ${
+        className={`flex-1 ${
           selected
             ? "bg-white border-2 border-inatGreen"
             : "bg-white border border-lightGray"
@@ -98,7 +99,7 @@ const HotspotListItem = ( {
             ) )}
           </View>
         )}
-        {selected && ( onAddToRoute || onOpenInGoogleMaps ) && (
+        {( onAddToRoute || onOpenInGoogleMaps ) && (
           <View className="flex-row mt-3 space-x-2">
             {onAddToRoute && (
               <Button
