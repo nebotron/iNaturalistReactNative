@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useCallback, useEffect, useRef, useState,
+} from "react";
 import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import useAutoBrightnessForUri from "sharedHelpers/useAutoBrightnessForUri";
 import useToneMappedBrightnessUri from "sharedHelpers/useToneMappedBrightnessUri";
@@ -22,13 +24,17 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
   const { autoBrightnessMode } = useLayoutPrefs( );
   const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
 
-  const savedBrightness = currentPhotoUrl
-    ? getBrightness( currentPhotoUrl )
-    : null;
-  const hasManualBrightness = savedBrightness !== null;
+  // A manually saved brightness wins over the global auto-brightness switch
+  // (Off / Multiply / Gamma) so a saved label round-trips when revisiting a
+  // photo -- but an explicit press of the toggle (see the effect below)
+  // always retakes control of the photo currently on screen, so the switch
+  // is never silently a no-op.
+  const [manualOverrideActive, setManualOverrideActive] = useState(
+    ( ) => !!currentPhotoUrl && getBrightness( currentPhotoUrl ) !== null,
+  );
 
-  const isGammaMode = !hasManualBrightness && autoBrightnessMode === AUTO_BRIGHTNESS_MODE.GAMMA;
-  const isMultiplyMode = !hasManualBrightness
+  const isGammaMode = !manualOverrideActive && autoBrightnessMode === AUTO_BRIGHTNESS_MODE.GAMMA;
+  const isMultiplyMode = !manualOverrideActive
     && autoBrightnessMode === AUTO_BRIGHTNESS_MODE.MULTIPLY;
   const autoBrightnessUri = ( isGammaMode || isMultiplyMode )
     ? currentPhotoUrl
@@ -60,13 +66,27 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
     const saved = currentPhotoUrl
       ? getBrightness( currentPhotoUrl )
       : null;
+    setManualOverrideActive( saved !== null );
     setBrightnessStops( saved
       ? gainToStops( saved )
       : EXPOSURE_STOPS_DEFAULT );
   }, [currentPhotoUrl] );
 
+  // An explicit press of the auto-brightness toggle always retakes control of
+  // the photo on screen, even if it has a saved manual brightness -- so the
+  // toggle is never silently a no-op. (Skipped on mount/photo-change, which
+  // are handled by the effect above.)
+  const prevAutoBrightnessModeRef = useRef( autoBrightnessMode );
+  useEffect( ( ) => {
+    if ( prevAutoBrightnessModeRef.current === autoBrightnessMode ) return;
+    prevAutoBrightnessModeRef.current = autoBrightnessMode;
+    setManualOverrideActive( false );
+    setBrightnessStops( EXPOSURE_STOPS_DEFAULT );
+  }, [autoBrightnessMode] );
+
   const handleBrightnessComplete = useCallback( ( value: number ) => {
     setBrightnessStops( value );
+    setManualOverrideActive( true );
     if ( currentPhotoUrl ) saveBrightness( currentPhotoUrl, baseGain * stopsToGain( value ) );
   }, [currentPhotoUrl, baseGain] );
 
