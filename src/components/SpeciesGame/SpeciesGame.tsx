@@ -1,7 +1,13 @@
 import { prefetch } from "@candlefinance/faster-image";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
-import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
+import type { IdentifyPhotoHandle } from "components/MediaViewer/IdentifyPhoto";
+import {
+  clampZoom,
+  IdentifyPhoto,
+  MIN_ZOOM,
+  ZoomBrightnessSliders,
+  zoomPosToScale,
+} from "components/MediaViewer/IdentifyPhoto";
 import {
   ActivityIndicator,
   Body1,
@@ -24,22 +30,25 @@ import React, {
 } from "react";
 import { Dimensions, Linking, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
-import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
-import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
-import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import {
-  recordGuess,
+  addUsedUuid,
   getStats,
   getUsedUuids,
-  addUsedUuid,
+  recordGuess,
 } from "sharedHelpers/speciesGameStats";
-import useSubjectDetectionForUri, {
+import {
   preloadSubjectDetectionForUri,
   resolveSubjectDetectionForUri,
 } from "sharedHelpers/useSubjectDetectionForUri";
+import {
+  useIdentifyPhotoBrightness,
+  useTranslation,
+} from "sharedHooks";
+import {
+  EXPOSURE_STOPS_MAX,
+  EXPOSURE_STOPS_MIN,
+} from "sharedHooks/useIdentifyPhotoBrightness";
 import { zustandStorage } from "stores/useStore";
 
 type ObservationType = "egg" | "juvenile" | "adult";
@@ -69,7 +78,6 @@ const POOL_SIZE = 20;
 const MAX_POOL_PAGES = 25;
 const LOOKALIKE_RADIUS_KM = 500;
 const LOCATION_FILTER_RADIUS_KM = 1000;
-const MAX_ZOOM_SCALE = 5;
 const LOOKALIKE_CACHE_KEY = "speciesGameLookalikes";
 const MAX_LOOKALIKE_OBS = 1000;
 const FETCH_MORE_OBS_COUNT = 400;
@@ -85,7 +93,10 @@ function computeLookalikesFromObs(
   results: unknown[],
   targetId: number,
   seed?: { taxonId: number; count: number; observationUuids: string[] }[],
-): { topId: number | null; entries: { taxonId: number; count: number; observationUuids: string[] }[] } {
+): {
+  topId: number | null;
+  entries: { taxonId: number; count: number; observationUuids: string[] }[];
+} {
   const counts: Record<number, { count: number; observationUuids: string[] }> = {};
   for ( const s of seed ?? [] ) {
     counts[s.taxonId] = { count: s.count, observationUuids: [...s.observationUuids] };
@@ -98,7 +109,7 @@ function computeLookalikesFromObs(
       if ( altId && altId !== targetId && rankLevel === 10 ) {
         if ( !counts[altId] ) counts[altId] = { count: 0, observationUuids: [] };
         counts[altId].count += 1;
-        const uuid = ( obs as { uuid?: string } ).uuid;
+        const { uuid } = ( obs as { uuid?: string } );
         if ( uuid && !counts[altId].observationUuids.includes( uuid ) ) {
           counts[altId].observationUuids.push( uuid );
         }
@@ -112,7 +123,12 @@ function computeLookalikesFromObs(
       observationUuids: d.observationUuids,
     } ) )
     .sort( ( a, b ) => b.count - a.count );
-  return { topId: entries.length > 0 ? entries[0].taxonId : null, entries };
+  return {
+    topId: entries.length > 0
+      ? entries[0].taxonId
+      : null,
+    entries,
+  };
 }
 
 function getCachedLookalikes( taxonId: number ): LookalikeCacheEntry | null {
@@ -141,7 +157,6 @@ const SEX_TYPES: { label: string; value: SexType }[] = [
 ];
 
 const gameStyles = StyleSheet.create( {
-  imageStyle: { flex: 1 },
   buttonRow: { height: BUTTON_ROW_HEIGHT },
   modalScrollView: { flex: 1 },
   filterCheckbox: {
@@ -150,39 +165,8 @@ const gameStyles = StyleSheet.create( {
     borderRadius: 6,
     marginBottom: 8,
   },
+  filterCheckboxSelected: { backgroundColor: "#E0F2F1" },
 } );
-
-function cropToZoomTransform(
-  crop: NormalizedCrop,
-  viewportSize: number,
-  imageWidth: number,
-  imageHeight: number,
-): ImageZoomTransform {
-  const contain = computeContainRect( viewportSize, viewportSize, imageWidth, imageHeight );
-  if ( contain.width <= 0 || contain.height <= 0 ) {
-    return {
-      scale: 1, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
-    };
-  }
-  const centerX = viewportSize / 2;
-  const centerY = viewportSize / 2;
-  const cx = contain.left + ( crop.x + crop.w / 2 ) * contain.width;
-  const cy = contain.top + ( crop.y + crop.h / 2 ) * contain.height;
-  const scale = Math.min(
-    MAX_ZOOM_SCALE,
-    Math.max( 1, Math.min(
-      viewportSize / ( crop.w * contain.width ),
-      viewportSize / ( crop.h * contain.height ),
-    ) ),
-  );
-  return {
-    scale,
-    translateX: 0,
-    translateY: 0,
-    focalX: ( centerX - cx ) * scale,
-    focalY: ( centerY - cy ) * scale,
-  };
-}
 
 interface TaxonInfo {
   id: number;
@@ -227,20 +211,10 @@ const SpeciesGame = ( ) => {
   const [loadError, setLoadError] = useState<string | null>( null );
   const [target, setTarget] = useState<TaxonInfo | null>( null );
   const [lookalike, setLookalike] = useState<TaxonInfo | null>( null );
-  const [round, setRound] = useState( 1 );
+  const [, setRound] = useState( 1 );
   const [score, setScore] = useState( 0 );
   const [totalGuesses, setTotalGuesses] = useState( 0 );
   const [isTargetShown, setIsTargetShown] = useState( true );
-
-  // Load accumulated stats and used UUIDs from previous sessions on mount
-  useEffect( ( ) => {
-    const savedStats = getStats( taxonId );
-    if ( savedStats ) {
-      setScore( savedStats.correct );
-      setTotalGuesses( savedStats.total );
-    }
-    usedUuidsRef.current = getUsedUuids( taxonId );
-  }, [taxonId] );
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState<string | null>( null );
   const [imageLoading, setImageLoading] = useState( false );
   const [currentObservationUuid, setCurrentObservationUuid] = useState<string | null>( null );
@@ -264,54 +238,40 @@ const SpeciesGame = ( ) => {
   // Next API page already loaded per taxon id, so refills fetch new observations.
   const poolPagesRef = useRef<Record<number, number>>( {} );
 
+  // Load accumulated stats and used UUIDs from previous sessions on mount
+  useEffect( ( ) => {
+    const savedStats = getStats( taxonId );
+    if ( savedStats ) {
+      setScore( savedStats.correct );
+      setTotalGuesses( savedStats.total );
+    }
+    usedUuidsRef.current = getUsedUuids( taxonId );
+  }, [taxonId] );
+
   const windowWidth = Dimensions.get( "window" ).width;
   const { bottom: bottomInset } = useSafeAreaInsets( );
-  const imageRef = useRef<SharedZoomableImageRef>( null );
-  const detection = useSubjectDetectionForUri( currentPhotoUrl ?? undefined );
+  const { t } = useTranslation( );
+  const photoRef = useRef<IdentifyPhotoHandle | null>( null );
+  const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
+  const {
+    brightness, displayUri, brightnessStops, setBrightnessStops, handleBrightnessComplete,
+  } = useIdentifyPhotoBrightness( currentPhotoUrl ?? undefined );
 
-  const detectionRef = useRef( detection );
-  useEffect( ( ) => { detectionRef.current = detection; }, [detection] );
-  const currentPhotoUrlRef = useRef( currentPhotoUrl );
-  useEffect( ( ) => { currentPhotoUrlRef.current = currentPhotoUrl; }, [currentPhotoUrl] );
+  // Reset zoom for the visible photo (brightness resets itself via
+  // useIdentifyPhotoBrightness).
+  useEffect( ( ) => { setZoomScale( MIN_ZOOM ); }, [currentPhotoUrl] );
 
-  // Reset zoom to full image when the photo URL changes.
-  useEffect( ( ) => {
-    imageRef.current?.applyTransform( {
-      scale: 1, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
-    } );
-  }, [currentPhotoUrl] );
+  const handleScaleChange = useCallback(
+    ( scale: number ) => setZoomScale( clampZoom( scale ) ),
+    [],
+  );
+  const handleZoomChange = useCallback( ( pos: number ) => {
+    const scale = zoomPosToScale( pos );
+    setZoomScale( scale );
+    photoRef.current?.applyZoom( scale );
+  }, [] );
 
-  // Zoom to detected subject when detection is available.
-  useEffect( ( ) => {
-    if ( !detection || !imageRef.current ) return;
-    const transform = cropToZoomTransform(
-      detection.crop,
-      windowWidth,
-      detection.imageWidth,
-      detection.imageHeight,
-    );
-    imageRef.current.applyTransform( transform );
-  }, [detection, windowWidth] );
-
-  const handleInteractionEnd = useCallback( ( ) => {
-    setTimeout( ( ) => {
-      const url = currentPhotoUrlRef.current;
-      const det = detectionRef.current;
-      if ( !url || !det || !imageRef.current ) return;
-      const transform = imageRef.current.readTransform( );
-      const crop = imageZoomTransformToNormalizedCrop(
-        det.imageWidth,
-        det.imageHeight,
-        windowWidth,
-        windowWidth,
-        windowWidth,
-        transform,
-      );
-      saveAnimalCrop( url, crop );
-    }, 400 );
-  }, [windowWidth] );
-
-  const taxonLabel = ( t: TaxonInfo ) => t.preferredCommonName || t.name;
+  const taxonLabel = ( taxonInfo: TaxonInfo ) => taxonInfo.preferredCommonName || taxonInfo.name;
 
   const selectWeightedLookalike = useCallback( ( ): LookalikeCandidate | null => {
     const cs = lookalikeCandidatesRef.current;
@@ -388,8 +348,12 @@ const SpeciesGame = ( ) => {
     try {
       more = await fetchPhotoPool(
         id,
-        selectedObsTypes.length > 0 ? selectedObsTypes : undefined,
-        selectedSexes.length > 0 ? selectedSexes : undefined,
+        selectedObsTypes.length > 0
+          ? selectedObsTypes
+          : undefined,
+        selectedSexes.length > 0
+          ? selectedSexes
+          : undefined,
         page,
       );
     } catch {
@@ -662,8 +626,12 @@ const SpeciesGame = ( ) => {
 
         const targetPool = await fetchPhotoPool(
           taxonId,
-          selectedObsTypes.length > 0 ? selectedObsTypes : undefined,
-          selectedSexes.length > 0 ? selectedSexes : undefined,
+          selectedObsTypes.length > 0
+            ? selectedObsTypes
+            : undefined,
+          selectedSexes.length > 0
+            ? selectedSexes
+            : undefined,
         );
         if ( cancelled ) return;
         if ( targetPool.length === 0 ) {
@@ -683,8 +651,12 @@ const SpeciesGame = ( ) => {
             fetchTaxonInfo( candidateId ),
             fetchPhotoPool(
               candidateId,
-              selectedObsTypes.length > 0 ? selectedObsTypes : undefined,
-              selectedSexes.length > 0 ? selectedSexes : undefined,
+              selectedObsTypes.length > 0
+                ? selectedObsTypes
+                : undefined,
+              selectedSexes.length > 0
+                ? selectedSexes
+                : undefined,
             ),
           ] );
           if ( info && pool.length > 0 ) {
@@ -748,8 +720,12 @@ const SpeciesGame = ( ) => {
               fetchTaxonInfo( id ),
               fetchPhotoPool(
                 id,
-                selectedObsTypes.length > 0 ? selectedObsTypes : undefined,
-                selectedSexes.length > 0 ? selectedSexes : undefined,
+                selectedObsTypes.length > 0
+                  ? selectedObsTypes
+                  : undefined,
+                selectedSexes.length > 0
+                  ? selectedSexes
+                  : undefined,
               ),
             ] );
             if ( info && pool.length > 0 ) {
@@ -857,12 +833,12 @@ const SpeciesGame = ( ) => {
       </Body1>
 
       <ScrollView className="px-4" style={gameStyles.modalScrollView}>
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         <Body2 className="text-center text-darkGray pb-3">
-          {/* eslint-disable-next-line i18next/no-literal-string */}
           Select one or more life stages to filter observations:
         </Body2>
 
-        {OBSERVATION_TYPES.map( ( obsType ) => {
+        {OBSERVATION_TYPES.map( obsType => {
           const isSelected = selectedObsTypes.includes( obsType.value );
           return (
             <Pressable
@@ -876,13 +852,15 @@ const SpeciesGame = ( ) => {
               }}
               style={[
                 gameStyles.filterCheckbox,
-                isSelected && { backgroundColor: "#E0F2F1" },
+                isSelected && gameStyles.filterCheckboxSelected,
               ]}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: isSelected }}
             >
               <Body1>
-                {isSelected ? "✓ " : "  "}
+                {isSelected
+                  ? "✓ "
+                  : "  "}
                 {obsType.label}
               </Body1>
             </Pressable>
@@ -893,7 +871,7 @@ const SpeciesGame = ( ) => {
         <Body1 className="text-center font-bold px-4 pt-4 pb-1">
           Filter by Sex
         </Body1>
-        {SEX_TYPES.map( ( sexType ) => {
+        {SEX_TYPES.map( sexType => {
           const isSelected = selectedSexes.includes( sexType.value );
           return (
             <Pressable
@@ -907,13 +885,15 @@ const SpeciesGame = ( ) => {
               }}
               style={[
                 gameStyles.filterCheckbox,
-                isSelected && { backgroundColor: "#E0F2F1" },
+                isSelected && gameStyles.filterCheckboxSelected,
               ]}
               accessibilityRole="checkbox"
               accessibilityState={{ checked: isSelected }}
             >
               <Body1>
-                {isSelected ? "✓ " : "  "}
+                {isSelected
+                  ? "✓ "
+                  : "  "}
                 {sexType.label}
               </Body1>
             </Pressable>
@@ -966,6 +946,7 @@ const SpeciesGame = ( ) => {
                 : lookalikesData.map( entry => (
                   <View key={entry.taxonId} className="mb-4 p-3 bg-lightGray rounded-lg">
                     <Pressable
+                      accessibilityRole="button"
                       onPress={() => {
                         setShowLookalikesModal( false );
                         navigation.navigate(
@@ -1070,9 +1051,14 @@ const SpeciesGame = ( ) => {
                 : "Open filter"
             }
           >
-            <Body1 className={`font-bold ${selectedObsTypes.length > 0 || selectedSexes.length > 0 ? "text-inatGreen" : "text-darkGray"}`}>
+            {/* eslint-disable i18next/no-literal-string */}
+            <Body1 className={`font-bold ${selectedObsTypes.length > 0 || selectedSexes.length > 0
+              ? "text-inatGreen"
+              : "text-darkGray"}`}
+            >
               ≡
             </Body1>
+            {/* eslint-enable i18next/no-literal-string */}
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -1085,17 +1071,24 @@ const SpeciesGame = ( ) => {
       </View>
 
       {/* Photo area — square to match crop */}
-      <View style={{ width: windowWidth, height: windowWidth, overflow: "hidden" }}>
+      <View
+        // We need these dynamic dimensions to keep the image square
+        // eslint-disable-next-line react-native/no-inline-styles
+        style={{ width: windowWidth, height: windowWidth }}
+        className="overflow-hidden"
+      >
         {currentPhotoUrl
           ? (
             <>
-              <SharedZoomableImage
-                ref={imageRef}
+              <IdentifyPhoto
+                // Remount per photo so each frames to its own subject.
+                key={currentPhotoUrl}
+                ref={photoRef}
                 uri={currentPhotoUrl}
-                style={gameStyles.imageStyle}
-                isDoubleTapEnabled
-                maxScale={100}
-                onInteractionEnd={handleInteractionEnd}
+                displayUri={displayUri}
+                size={windowWidth}
+                brightness={brightness}
+                onScaleChange={handleScaleChange}
                 onLoad={() => setImageLoading( false )}
                 onError={() => setImageLoading( false )}
               />
@@ -1115,6 +1108,20 @@ const SpeciesGame = ( ) => {
             </View>
           )}
       </View>
+
+      {/* Zoom + brightness sliders (below the image, not covering it) */}
+      <ZoomBrightnessSliders
+        zoomScale={zoomScale}
+        brightnessStops={brightnessStops}
+        exposureStopsMin={EXPOSURE_STOPS_MIN}
+        exposureStopsMax={EXPOSURE_STOPS_MAX}
+        onZoomChange={handleZoomChange}
+        onZoomComplete={( ) => photoRef.current?.saveCrop( )}
+        onBrightnessChange={setBrightnessStops}
+        onBrightnessComplete={handleBrightnessComplete}
+        zoomAccessibilityLabel={t( "Adjust-zoom" )}
+        brightnessAccessibilityLabel={t( "Adjust-brightness" )}
+      />
 
       {/* Bottom panel */}
       <View className="bg-white px-4 pt-4" style={bottomPanelStyle}>
