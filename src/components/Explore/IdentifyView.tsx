@@ -272,7 +272,6 @@ const IdentifyView = ( {
     [observationUuid],
   );
   const currentPhotoUrl = photoUrls[selectedPhotoIndex];
-  const hasMultiplePhotos = photoUrls.length > 1;
 
   // Reset to the first photo whenever the observation changes.
   useEffect( ( ) => {
@@ -426,32 +425,32 @@ const IdentifyView = ( {
           )}
       </View>
 
-      {/* Left / right photo navigation (below the image) */}
-      {hasMultiplePhotos && (
-        <View className="flex-row items-center justify-center pt-1">
-          <INatIconButton
-            icon="chevron-left-circle"
-            size={30}
-            color={colors.inatGreen}
-            disabled={selectedPhotoIndex === 0}
-            accessibilityLabel={t( "Previous-slide" )}
-            onPress={( ) => goToPhoto( -1 )}
-            testID="IdentifyView.prevPhoto"
-          />
-          <Body2 className="mx-4">
-            {`${selectedPhotoIndex + 1}/${photoUrls.length}`}
-          </Body2>
-          <INatIconButton
-            icon="chevron-right-circle"
-            size={30}
-            color={colors.inatGreen}
-            disabled={selectedPhotoIndex === photoUrls.length - 1}
-            accessibilityLabel={t( "Next-slide" )}
-            onPress={( ) => goToPhoto( 1 )}
-            testID="IdentifyView.nextPhoto"
-          />
-        </View>
-      )}
+      {/* Left / right photo navigation (below the image). Always rendered,
+          even for a single photo, so the layout doesn't shift by photo count;
+          the chevrons are simply disabled when there's nothing to page to. */}
+      <View className="flex-row items-center justify-center pt-1">
+        <INatIconButton
+          icon="chevron-left-circle"
+          size={30}
+          color={colors.inatGreen}
+          disabled={selectedPhotoIndex === 0}
+          accessibilityLabel={t( "Previous-slide" )}
+          onPress={( ) => goToPhoto( -1 )}
+          testID="IdentifyView.prevPhoto"
+        />
+        <Body2 className="mx-4">
+          {`${selectedPhotoIndex + 1}/${photoUrls.length}`}
+        </Body2>
+        <INatIconButton
+          icon="chevron-right-circle"
+          size={30}
+          color={colors.inatGreen}
+          disabled={selectedPhotoIndex === photoUrls.length - 1}
+          accessibilityLabel={t( "Next-slide" )}
+          onPress={( ) => goToPhoto( 1 )}
+          testID="IdentifyView.nextPhoto"
+        />
+      </View>
 
       {/* Zoom + brightness sliders (below the image, not covering it) */}
       <View className="px-4 pt-1">
@@ -489,23 +488,6 @@ const IdentifyView = ( {
         </View>
       </View>
 
-      {/* Current id'ed taxon — common name only, tap for species details */}
-      <View className="px-4 py-2 items-center justify-center">
-        {taxon
-          ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={t( "View-taxon" )}
-              onPress={openTaxonDetails}
-            >
-              <DisplayTaxonName taxon={taxon} showOneNameOnly />
-            </Pressable>
-          )
-          : (
-            <Body2>{t( "Unknown--taxon" )}</Body2>
-          )}
-      </View>
-
       {/* Agree / Mark reviewed / Next — three equal buttons */}
       <View className="flex-row px-4 gap-2" style={styles.buttonRow}>
         <View className="flex-1">
@@ -537,6 +519,23 @@ const IdentifyView = ( {
             testID="IdentifyView.next"
           />
         </View>
+      </View>
+
+      {/* Current id'ed taxon — common name only, tap for species details */}
+      <View className="px-4 py-2 items-center justify-center">
+        {taxon
+          ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t( "View-taxon" )}
+              onPress={openTaxonDetails}
+            >
+              <DisplayTaxonName taxon={taxon} showOneNameOnly />
+            </Pressable>
+          )
+          : (
+            <Body2>{t( "Unknown--taxon" )}</Body2>
+          )}
       </View>
     </View>
   );
