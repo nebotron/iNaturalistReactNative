@@ -42,7 +42,7 @@ const HotspotListItem = ( {
       accessibilityLabel={`Hotspot ${rank}, ${hotspot.observationCount} observations`}
     >
       <View
-        className={`flex-1 ${
+        className={`flex-1 p-2 ${
           selected
             ? "bg-white border-2 border-inatGreen"
             : "bg-white border border-lightGray"

@@ -618,7 +618,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
 
       {/* Hotspot cards */}
       {( hotspots.length > 0 || error ) && (
-        <View className="flex-1 bg-lightGray border-t border-lightGray">
+        <View className="h-64 bg-lightGray border-t border-lightGray">
           {error
             ? (
               <View className="p-4 items-center">
