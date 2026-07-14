@@ -516,7 +516,7 @@ const IdentifyView = ( {
           />
         </View>
         <View className="flex-row items-center">
-          <INatIcon name="sliders" size={18} color={colors.darkGray} />
+          <INatIcon name="sun" size={18} color={colors.darkGray} />
           <Slider
             style={styles.slider}
             minimumValue={EXPOSURE_STOPS_MIN}
