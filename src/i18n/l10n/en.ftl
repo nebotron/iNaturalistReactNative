@@ -171,12 +171,12 @@ attribution-cc-by-sa = some rights reserved (CC BY-SA)
 August = August
 # Label for toggling automatic photo brightness adjustment in Explore
 Auto-Adjust-Brightness = Auto Adjust Brightness
+# Auto brightness mode: detail-preserving gamma tone curve
+Auto-Brightness-Gamma = Gamma
 # Auto brightness mode: flat multiply, applied live as a filter
 Auto-Brightness-Multiply = Multiply
 # Auto brightness mode: disabled
 Auto-Brightness-Off = Off
-# Auto brightness mode: detail-preserving gamma tone curve
-Auto-Brightness-Gamma = Gamma
 # Returns user to login screen
 BACK-TO-LOGIN = BACK TO LOGIN
 Blog = Blog
@@ -535,6 +535,8 @@ Enable-location-access-to-track-your-location-in-the-background =
 Enable-notifications = Enable notifications
 # Placeholder text for the end location input in the Wildlife Hotspots tool
 End-location = End location (e.g. Boston, MA)
+# Label for the end of a time-of-day range filter, e.g. 11 PM
+End-Time = End Time
 # Indicates a species only occurs in a specific place
 Endemic = Endemic
 # TODO this and many other uses of placeables are not currently translatable
@@ -588,6 +590,7 @@ FILTER-BY-A-PROJECT = FILTER BY A PROJECT
 FILTER-BY-A-USER = FILTER BY A USER
 Filter-by-observed-between-dates = Filter by observations observed between two specific dates
 Filter-by-observed-during-months = Filter by observations observed during specific months
+Filter-by-observed-during-time-range = Filter by observations observed during a specific time of day
 Filter-by-observed-on-date = Filter by observations observed on a specific date
 Filter-by-uploaded-between-dates = Filter by observations uploaded between two specific dates
 Filter-by-uploaded-on-date = Filter by observations uploaded on a specific date
@@ -675,12 +678,12 @@ IDENTIFY = IDENTIFY
 Identify = Identify
 # Description of the Identify view in Explore
 Identify-observations-one-at-a-time = Review observations that match your filters one at a time
-# Accessibility label for the Identify view in Explore
-Identify-View = Identify View
 # Title of screen asking for permission to access the camera
 Identify-organisms-in-real-time-with-your-camera = Identify organisms in real time with your camera
 # Onboarding slides
 Identify-species-anywhere = Identify species anywhere
+# Accessibility label for the Identify view in Explore
+Identify-View = Identify View
 If-an-account-with-that-email-exists = If an account with that email exists, we've sent password reset instructions to your email.
 # Body of an error alert when signing in with a third party fails (e.g. Apple, Google)
 If-you-have-an-existing-account-try-sign-in-reset = If you have an existing iNat account, try signing in with your username and password, or try resetting your password using the email address associated with your account.
@@ -930,9 +933,9 @@ New-community-member-explanation = This person joined iNaturalist within the las
 New-Observation = New Observation
 # Sort order, refers to newest or oldest date
 Newest-to-oldest = Newest to oldest
-Next-observation = Next observation
 # Label for a button that advances to the next item
 Next = Next
+Next-observation = Next observation
 # Accessibility label for a button that goes to the next slide on onboarding cards
 Next-slide = Next slide
 # Error message when no camera can be found
@@ -946,8 +949,9 @@ No-Media = No Media
 No-model-found = No model found
 No-photos-with-location-data-yet = No photos with location data yet
 No-projects-match-that-search = No projects match that search
-# Used for explore screen when search params lead to a search with no data
+# Shown when a list or view has no matching results
 No-results-found = No results found
+# Used for explore screen when search params lead to a search with no data
 No-results-found-for-that-search = No results found for that search.
 No-results-found-try-different-search = No results found. Try a different search or adjust your filters.
 # license code
@@ -1398,6 +1402,8 @@ Standard--map-type = Standard
 # Placeholder text for the start location input in the Wildlife Hotspots tool
 Start-location = Start location (e.g. New York, NY)
 Start-must-be-before-end = The start date must be before the end date.
+# Label for the start of a time-of-day range filter, e.g. 6 AM
+Start-Time = Start Time
 Start-upload = Start upload
 # Accessibility hint for button that starts recording a sound
 Starts-recording-sound = Starts recording sound
@@ -1473,6 +1479,13 @@ This-sound-was-hidden-for-violating-community-guidelines-or-terms = This sound w
 This-user-has-no-followers = This user has no followers.
 This-user-has-not-joined-any-projects = This user has not joined any projects.
 This-user-is-not-following-anyone = This user is not following anyone.
+# Label for a filter that limits observations to a time of day range, e.g. 6 AM to 11 PM
+Time-of-day = Time of day
+TIME-OF-DAY = TIME OF DAY
+# Label for controls over a range of times of day
+Time-Range = Time Range
+# Label for controls over a range of times of day
+TIME-RANGE = TIME RANGE
 To-sync-your-observations-to-iNaturalist = To sync your observations to iNaturalist, please log in.
 To-view-nearby-organisms-please-enable-location = To view nearby organisms, please enable location.
 To-view-nearby-projects-please-enable-location = To view nearby projects, please enable location.
@@ -1503,6 +1516,9 @@ Unknown-organism = Unknown organism
 Unmark-as-reviewed = Unmark as reviewed
 Unobserved-by-me = Unobserved by me
 Unreviewed-observations-only = Unreviewed observations only
+# Button at the bottom of species search results that fetches matching taxa
+# from the server and saves them locally for future offline searches
+UPDATE-LOCAL-SPECIES-DATABASE = UPDATE LOCAL SPECIES DATABASE
 Upload-Complete = Upload Complete
 Upload-in-progress = Upload in progress
 UPLOAD-NOW = UPLOAD NOW
@@ -1556,12 +1572,9 @@ VIEW-FOLLOWERS = VIEW FOLLOWERS
 # Button on user profile that displays a list of users that the user is following
 VIEW-FOLLOWING = VIEW FOLLOWING
 View-in-browser = View in browser
-# Accessibility label for tapping an image to open the full observation
-View-observation = View observation
-# Accessibility label for tapping a taxon name to open its details page
-View-taxon = View taxon
 VIEW-IN-EXPLORE = VIEW IN EXPLORE
 VIEW-INATURALIST-HELP = VIEW INATURALIST HELP
+# Accessibility label for tapping an image to open the full observation
 # Button or accessibility label for an element that lets the user view a
 # photo
 View-photo = View photo
@@ -1573,6 +1586,8 @@ View-sound = View sound
 # Label for a button that shows identification suggestions for an observation
 # or photo
 View-suggestions = View suggestions
+# Accessibility label for tapping a taxon name to open its details page
+View-taxon = View taxon
 Viewing-offline-suggestions = Viewing offline suggestions
 Watch-your-notifications-for-identifications = Watch your notifications for identifications!
 We-are-not-confident-enough-to-make-a-top-ID-suggestion = We’re not confident enough to make a top ID suggestion, but here are some other suggestions:

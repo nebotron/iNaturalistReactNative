@@ -171,12 +171,12 @@ attribution-cc-by-sa = some rights reserved (CC BY-SA)
 August = August
 # Label for toggling automatic photo brightness adjustment in Explore
 Auto-Adjust-Brightness = Auto Adjust Brightness
+# Auto brightness mode: detail-preserving gamma tone curve
+Auto-Brightness-Gamma = Gamma
 # Auto brightness mode: flat multiply, applied live as a filter
 Auto-Brightness-Multiply = Multiply
 # Auto brightness mode: disabled
 Auto-Brightness-Off = Off
-# Auto brightness mode: detail-preserving gamma tone curve
-Auto-Brightness-Gamma = Gamma
 # Returns user to login screen
 BACK-TO-LOGIN = BACK TO LOGIN
 Blog = Blog
@@ -678,12 +678,12 @@ IDENTIFY = IDENTIFY
 Identify = Identify
 # Description of the Identify view in Explore
 Identify-observations-one-at-a-time = Review observations that match your filters one at a time
-# Accessibility label for the Identify view in Explore
-Identify-View = Identify View
 # Title of screen asking for permission to access the camera
 Identify-organisms-in-real-time-with-your-camera = Identify organisms in real time with your camera
 # Onboarding slides
 Identify-species-anywhere = Identify species anywhere
+# Accessibility label for the Identify view in Explore
+Identify-View = Identify View
 If-an-account-with-that-email-exists = If an account with that email exists, we've sent password reset instructions to your email.
 # Body of an error alert when signing in with a third party fails (e.g. Apple, Google)
 If-you-have-an-existing-account-try-sign-in-reset = If you have an existing iNat account, try signing in with your username and password, or try resetting your password using the email address associated with your account.
@@ -863,10 +863,10 @@ Menu = Menu
 Meters-Away = { $meters } m away
 Missing-Date = Missing Date
 MISSING-EVIDENCE = MISSING EVIDENCE
-# Status shown when a photo has no EXIF location but a tracked location is available
-Missing-photo-location = Missing photo location
 # Status shown when a photo has neither an EXIF location nor a nearby tracked location
 Missing-photo-and-tracked-location = Missing photo and tracked location
+# Status shown when a photo has no EXIF location but a tracked location is available
+Missing-photo-location = Missing photo location
 Monthly-Donor = Monthly Donor
 Months = Months
 MONTHS = MONTHS
@@ -933,9 +933,9 @@ New-community-member-explanation = This person joined iNaturalist within the las
 New-Observation = New Observation
 # Sort order, refers to newest or oldest date
 Newest-to-oldest = Newest to oldest
-Next-observation = Next observation
 # Label for a button that advances to the next item
 Next = Next
+Next-observation = Next observation
 # Accessibility label for a button that goes to the next slide on onboarding cards
 Next-slide = Next slide
 # Error message when no camera can be found
@@ -1080,9 +1080,9 @@ PASSWORD = PASSWORD
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
 Photo-importer = Photo importer
+PHOTO-LICENSING = PHOTO LICENSING
 # Legend label for the marker showing a photo's EXIF location
 Photo-location = Photo location
-PHOTO-LICENSING = PHOTO LICENSING
 Photos = Photos
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Title of screen asking for permission to access the camera when access was denied
@@ -1573,11 +1573,8 @@ VIEW-FOLLOWERS = VIEW FOLLOWERS
 VIEW-FOLLOWING = VIEW FOLLOWING
 View-in-browser = View in browser
 VIEW-IN-EXPLORE = VIEW IN EXPLORE
-# Accessibility label for tapping an image to open the full observation
-View-observation = View observation
-# Accessibility label for tapping a taxon name to open its details page
-View-taxon = View taxon
 VIEW-INATURALIST-HELP = VIEW INATURALIST HELP
+# Accessibility label for tapping an image to open the full observation
 # Button or accessibility label for an element that lets the user view a
 # photo
 View-photo = View photo
@@ -1589,6 +1586,8 @@ View-sound = View sound
 # Label for a button that shows identification suggestions for an observation
 # or photo
 View-suggestions = View suggestions
+# Accessibility label for tapping a taxon name to open its details page
+View-taxon = View taxon
 Viewing-offline-suggestions = Viewing offline suggestions
 Watch-your-notifications-for-identifications = Watch your notifications for identifications!
 We-are-not-confident-enough-to-make-a-top-ID-suggestion = We’re not confident enough to make a top ID suggestion, but here are some other suggestions:
