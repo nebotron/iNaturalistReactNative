@@ -425,6 +425,7 @@ const SpeciesGame = ( ) => {
   const startRound = useCallback( async (
     targetPool: PhotoEntry[],
     lookalikePool: PhotoEntry[],
+    nextLookalike?: TaxonInfo,
   ) => {
     // Clear the observation UUID immediately so the previous round's species name
     // does not flash while the next round's photo and state are loading.
@@ -448,6 +449,10 @@ const SpeciesGame = ( ) => {
     // preloaded while the previous round was being played.
     if ( entry ) await resolveSubjectDetectionForUri( entry.url );
 
+    // Only now update the displayed lookalike, so the "How to ID X vs Y" button on the
+    // previous round's reveal screen doesn't spoil the upcoming species while this
+    // round's photo was still being fetched above.
+    if ( nextLookalike ) setLookalike( nextLookalike );
     setIsTargetShown( chosen.id === taxonId );
     setCurrentPhotoUrl( entry?.url ?? null );
     setImageLoading( !!entry?.url );
@@ -798,9 +803,8 @@ const SpeciesGame = ( ) => {
     if ( selected ) {
       lookalikePoolRef.current = selected.pool;
       lookalikeIdRef.current = selected.info.id;
-      setLookalike( selected.info );
     }
-    startRound( targetPoolRef.current, lookalikePoolRef.current );
+    startRound( targetPoolRef.current, lookalikePoolRef.current, selected?.info );
   }, [startRound, selectWeightedLookalike] );
 
   const accuracyStr = totalGuesses > 0
