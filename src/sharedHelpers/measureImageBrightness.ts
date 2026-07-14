@@ -30,10 +30,18 @@ const measureImageBrightness = async (
   try {
     const result = await imageCropper.measureImageBrightness(
       stripFilePrefix( imageUri ),
-      crop ? crop.x : null,
-      crop ? crop.y : null,
-      crop ? crop.w : null,
-      crop ? crop.h : null,
+      crop
+        ? crop.x
+        : null,
+      crop
+        ? crop.y
+        : null,
+      crop
+        ? crop.w
+        : null,
+      crop
+        ? crop.h
+        : null,
     );
     return result && result.geomean >= 0 && result.median >= 0
       ? result
