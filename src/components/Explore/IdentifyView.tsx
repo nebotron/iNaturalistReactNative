@@ -513,7 +513,6 @@ const IdentifyView = ( {
             className="w-full h-full"
             text={t( "Agree" )}
             level="focus"
-            adjustsFontSizeToFit
             disabled={agreeDisabled}
             loading={agreeing}
             onPress={handleAgree}
@@ -524,7 +523,6 @@ const IdentifyView = ( {
           <Button
             className="w-full h-full"
             text={t( "Reviewed" )}
-            adjustsFontSizeToFit
             disabled={reviewDisabled}
             loading={reviewing}
             onPress={handleReview}
@@ -535,7 +533,6 @@ const IdentifyView = ( {
           <Button
             className="w-full h-full"
             text={t( "Next" )}
-            adjustsFontSizeToFit
             onPress={goToNext}
             testID="IdentifyView.next"
           />
