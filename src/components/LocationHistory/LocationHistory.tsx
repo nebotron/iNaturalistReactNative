@@ -40,14 +40,14 @@ const getObservedOnMs = ( obs: RealmObservation ) => new Date(
   obs.observed_on_string ?? obs.observed_on ?? 0,
 ).getTime();
 
-const PhotoLocationRow = ( { item, onPress }: { item: {
+const PhotoLocationRow = ( { item, onPress, onPhotoPress }: { item: {
   uuid: string;
   observed_on: string | null;
   photoUri: string | null;
   distanceMeters: number | null;
   hasPhotoLocation: boolean;
   hasTrackedLocation: boolean;
-}; onPress?: () => void; } ) => {
+}; onPress?: () => void; onPhotoPress?: () => void; } ) => {
   const { t } = useTranslation();
 
   let statusText: string;
@@ -65,10 +65,16 @@ const PhotoLocationRow = ( { item, onPress }: { item: {
     <Pressable accessibilityRole="button" onPress={onPress} disabled={!onPress}>
       <View className="flex-row items-center p-3 border-b border-lightGray">
         {item.photoUri && (
-          <Image
-            source={{ uri: item.photoUri }}
-            className="w-16 h-16 rounded"
-          />
+          <Pressable
+            accessibilityRole="button"
+            onPress={onPhotoPress}
+            disabled={!onPhotoPress}
+          >
+            <Image
+              source={{ uri: item.photoUri }}
+              className="w-16 h-16 rounded"
+            />
+          </Pressable>
         )}
         <View className="ml-3 flex-1">
           <Body2>{item.observed_on}</Body2>
@@ -238,6 +244,10 @@ const LocationHistory = ( ) => {
     }
   }, [navigation] );
 
+  const handlePhotoPress = useCallback( item => {
+    navigation.navigate( "ObsDetails", { uuid: item.uuid } );
+  }, [navigation] );
+
   return (
     <ScreenShell>
       <FlatList
@@ -249,6 +259,7 @@ const LocationHistory = ( ) => {
             onPress={item.hasPhotoLocation
               ? () => handlePhotoLocationPress( item )
               : undefined}
+            onPhotoPress={() => handlePhotoPress( item )}
           />
         )}
         ListHeaderComponent={(
