@@ -14,6 +14,7 @@ export interface TrackedLocationMatch {
   latitude: number;
   longitude: number;
   accuracy?: number | null;
+  placeGuess?: string | null;
 }
 
 const { ImageCropper } = NativeModules as {
@@ -54,9 +55,11 @@ const toGpsExifTags = ( { latitude, longitude, accuracy }: TrackedLocationMatch 
     : {} ),
 } );
 
-// Writes the matched tracked-location GPS data into every local photo file
-// belonging to an observation, then updates the observation's own
-// latitude/longitude to match. Returns whether anything was written.
+// Updates an observation's location to the matched coordinates and, as a
+// best-effort side effect, writes the matching GPS data into any local photo
+// files (and their originating Photos library assets). Remote-only
+// observations have no local files to write, but their coordinates are still
+// updated. Returns whether the observation was updated.
 const applyTrackedLocationToObservation = async (
   realm: Realm,
   observation: RealmObservation,
@@ -67,24 +70,23 @@ const applyTrackedLocationToObservation = async (
     .map( op => Photo.getLocalPhotoUri( op.photo?.localFilePath ) )
     .filter( ( uri ): uri is string => !!uri );
 
-  if ( localUris.length === 0 ) return false;
+  // Best-effort EXIF + Photos library updates for any local photo files.
+  if ( localUris.length > 0 ) {
+    const tags = toGpsExifTags( match );
+    try {
+      await Promise.all( localUris.map( uri => Exify.write( uri, tags ) ) );
+    } catch ( error ) {
+      logger.error( "Failed to write EXIF GPS data", error );
+    }
 
-  const tags = toGpsExifTags( match );
-
-  try {
-    await Promise.all( localUris.map( uri => Exify.write( uri, tags ) ) );
-  } catch ( error ) {
-    logger.error( "Failed to write EXIF GPS data", error );
-    return false;
+    const importedPhotoDeviceUriByLocalUri = useStore.getState( ).importedPhotoDeviceUriByLocalUri;
+    await Promise.all( observationPhotos.map( op => {
+      const localUri = Photo.getLocalPhotoUri( op.photo?.localFilePath );
+      const devicePhotoUri = normalizeDevicePhotoUri( op.originalDevicePhotoUri )
+        ?? lookupImportedPhotoDeviceUri( importedPhotoDeviceUriByLocalUri, localUri );
+      return applyLocationToDevicePhotoLibrary( devicePhotoUri, match );
+    } ) );
   }
-
-  const importedPhotoDeviceUriByLocalUri = useStore.getState( ).importedPhotoDeviceUriByLocalUri;
-  await Promise.all( observationPhotos.map( op => {
-    const localUri = Photo.getLocalPhotoUri( op.photo?.localFilePath );
-    const devicePhotoUri = normalizeDevicePhotoUri( op.originalDevicePhotoUri )
-      ?? lookupImportedPhotoDeviceUri( importedPhotoDeviceUriByLocalUri, localUri );
-    return applyLocationToDevicePhotoLibrary( devicePhotoUri, match );
-  } ) );
 
   const mutableObservation = observation as RealmObservation & {
     _updated_at?: Date;
@@ -96,6 +98,9 @@ const applyTrackedLocationToObservation = async (
     mutableObservation.longitude = match.longitude;
     if ( match.accuracy != null ) {
       mutableObservation.positional_accuracy = match.accuracy;
+    }
+    if ( match.placeGuess != null ) {
+      mutableObservation.place_guess = match.placeGuess;
     }
     mutableObservation._updated_at = new Date( );
     mutableObservation.needs_sync = true;

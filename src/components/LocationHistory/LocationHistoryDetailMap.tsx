@@ -4,10 +4,11 @@ import { List2 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, { useCallback, useMemo } from "react";
-import { Alert } from "react-native";
 import { Marker } from "react-native-maps";
 import type { RealmObservation } from "realmModels/types";
 import applyTrackedLocationToObservation from "sharedHelpers/applyTrackedLocationToPhotos";
+import { UPLOAD_PENDING } from "stores/createUploadObservationsSlice";
+import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 import type { TabStackScreenProps } from "navigation/types";
@@ -42,6 +43,11 @@ const LocationHistoryDetailMap = (
   } = params as LocationHistoryDetailMapParams;
 
   const observation = useObject<RealmObservation>( "Observation", uuid );
+
+  const addTotalToolbarIncrements = useStore( state => state.addTotalToolbarIncrements );
+  const addToUploadQueue = useStore( state => state.addToUploadQueue );
+  const setStartUploadObservations = useStore( state => state.setStartUploadObservations );
+  const uploadStatus = useStore( state => state.uploadStatus );
 
   const hasTrackedLocation = trackedLat !== observationLat || trackedLng !== observationLng;
 
@@ -99,21 +105,31 @@ const LocationHistoryDetailMap = (
   ), [hasTrackedLocation] );
 
   const handleSave = useCallback( async location => {
-    if ( !observation ) {
-      navigation.goBack( );
-      return;
+    if ( observation ) {
+      await applyTrackedLocationToObservation( realm, observation, {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        accuracy: location.positional_accuracy,
+        placeGuess: location.place_guess,
+      } );
+      // No confirmation modal: immediately queue the updated observation for
+      // upload.
+      addTotalToolbarIncrements( observation );
+      addToUploadQueue( observation.uuid );
+      if ( uploadStatus === UPLOAD_PENDING ) {
+        setStartUploadObservations( );
+      }
     }
-    await applyTrackedLocationToObservation( realm, observation, {
-      latitude: location.latitude,
-      longitude: location.longitude,
-      accuracy: location.positional_accuracy,
-    } );
-    Alert.alert(
-      "Location Updated",
-      "The observation location has been updated.",
-      [{ text: "OK", onPress: ( ) => navigation.goBack( ) }],
-    );
-  }, [observation, realm, navigation] );
+    navigation.goBack( );
+  }, [
+    observation,
+    realm,
+    navigation,
+    addTotalToolbarIncrements,
+    addToUploadQueue,
+    setStartUploadObservations,
+    uploadStatus,
+  ] );
 
   return (
     <LocationPickerContainer
