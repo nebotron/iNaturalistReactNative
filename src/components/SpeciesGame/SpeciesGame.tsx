@@ -550,6 +550,47 @@ const SpeciesGame = ( ) => {
       setObsScannedCount( newObsScanned );
       setUsedMisidentifications( merged.entries.length > 0 );
 
+      // Add any newly discovered species to the game's candidate pool so the IDing
+      // game actually uses every lookalike surfaced by the "? List", not just the
+      // ones known at initial load time.
+      const existingCandidateIds = new Set(
+        lookalikeCandidatesRef.current.map( c => c.info.id ),
+      );
+      const newWeightedCandidates = merged.entries.filter(
+        e => e.taxonId !== taxonId && !existingCandidateIds.has( e.taxonId ),
+      );
+      if ( newWeightedCandidates.length > 0 ) {
+        const newCandidateResults = await Promise.all(
+          newWeightedCandidates.map( async ( { taxonId: id, count } ) => {
+            const [info, pool] = await Promise.all( [
+              fetchTaxonInfo( id ),
+              fetchPhotoPool(
+                id,
+                selectedObsTypes.length > 0
+                  ? selectedObsTypes
+                  : undefined,
+                selectedSexes.length > 0
+                  ? selectedSexes
+                  : undefined,
+              ),
+            ] );
+            if ( info && pool.length > 0 ) {
+              return { info, pool, weight: count } as LookalikeCandidate;
+            }
+            return null;
+          } ),
+        );
+        const validNewCandidates = newCandidateResults.filter(
+          ( r ): r is LookalikeCandidate => r !== null,
+        );
+        if ( validNewCandidates.length > 0 ) {
+          lookalikeCandidatesRef.current = [
+            ...lookalikeCandidatesRef.current,
+            ...validNewCandidates,
+          ];
+        }
+      }
+
       const knownNames = new Map(
         lookalikesData.map( e => [e.taxonId, { name: e.name, commonName: e.commonName }] ),
       );
@@ -571,7 +612,15 @@ const SpeciesGame = ( ) => {
     } finally {
       setIsFetchingMoreObs( false );
     }
-  }, [taxonId, obsScannedCount, lookalikesData, fetchTaxonInfo] );
+  }, [
+    taxonId,
+    obsScannedCount,
+    lookalikesData,
+    fetchTaxonInfo,
+    fetchPhotoPool,
+    selectedObsTypes,
+    selectedSexes,
+  ] );
 
   useEffect( ( ) => {
     let cancelled = false;
