@@ -26,9 +26,9 @@ const BACKGROUND_TASK_NAME = "location-history-tracking";
 // The OS only delivers a new fix once the user has moved this far (the watch's
 // distanceFilter), which keeps background tracking power-efficient. Every fix
 // it does deliver is stored; accuracy filtering happens at interpolation time.
-const MIN_DISTANCE_METERS = 10;
+const MIN_DISTANCE_METERS = 50;
 // Requested update interval for the Android background watch
-const MIN_INTERVAL_MS = 1 * 60 * 1000;
+const MIN_INTERVAL_MS = 2 * 60 * 1000;
 const POLL_MS = 1000;
 
 const usesAndroidBackgroundLocationPermission = Platform.OS === "android" && Platform.Version >= 29;
