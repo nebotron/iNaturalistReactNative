@@ -26,6 +26,7 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
   const { autoBrightnessMode } = useLayoutPrefs( );
   const [manualStops, setManualStops] = useState<number | null>( null );
 
+  const isOffMode = autoBrightnessMode === AUTO_BRIGHTNESS_MODE.OFF;
   const isGammaMode = autoBrightnessMode === AUTO_BRIGHTNESS_MODE.GAMMA;
   const isMultiplyMode = autoBrightnessMode === AUTO_BRIGHTNESS_MODE.MULTIPLY;
   const autoBrightnessUri = ( isGammaMode || isMultiplyMode )
@@ -53,7 +54,11 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
     ? autoGain
     : 1;
   const brightnessStops = manualStops ?? gainToStops( baseGain );
-  const brightness = stopsToGain( brightnessStops );
+  // Off mode ignores the exposure slider entirely and always shows the
+  // original image, regardless of any auto or manual adjustment.
+  const brightness = isOffMode
+    ? 1
+    : stopsToGain( brightnessStops );
   const displayUri = isGammaMode
     ? toneMappedUri
     : undefined;
@@ -75,12 +80,23 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
     if ( currentPhotoUrl ) saveBrightness( currentPhotoUrl, stopsToGain( value ) );
   }, [currentPhotoUrl] );
 
+  // What a caller driving a live preview (e.g. dragging the slider) should
+  // show for a given stops value -- same Off-mode override as `brightness`,
+  // so a caller can't accidentally bypass it by computing stopsToGain itself.
+  const previewBrightness = useCallback( ( stops: number ) => (
+    isOffMode
+      ? 1
+      : stopsToGain( stops )
+  ), [isOffMode] );
+
   return {
     brightness,
     displayUri,
     brightnessStops,
     setBrightnessStops: setManualStops,
     handleBrightnessComplete,
+    previewBrightness,
+    isOffMode,
   };
 };
 

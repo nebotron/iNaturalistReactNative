@@ -48,7 +48,6 @@ import {
 import {
   EXPOSURE_STOPS_MAX,
   EXPOSURE_STOPS_MIN,
-  stopsToGain,
 } from "sharedHooks/useIdentifyPhotoBrightness";
 import { zustandStorage } from "stores/useStore";
 
@@ -256,6 +255,7 @@ const SpeciesGame = ( ) => {
   const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
   const {
     brightness, displayUri, brightnessStops, setBrightnessStops, handleBrightnessComplete,
+    previewBrightness, isOffMode,
   } = useIdentifyPhotoBrightness( currentPhotoUrl ?? undefined );
 
   // Reset zoom for the visible photo (brightness resets itself via
@@ -267,8 +267,8 @@ const SpeciesGame = ( ) => {
   // preview tracks the finger exactly, not just the value at release.
   const handleBrightnessChange = useCallback( ( value: number ) => {
     setBrightnessStops( value );
-    photoRef.current?.setBrightness( stopsToGain( value ) );
-  }, [setBrightnessStops] );
+    photoRef.current?.setBrightness( previewBrightness( value ) );
+  }, [previewBrightness, setBrightnessStops] );
 
   const handleScaleChange = useCallback(
     ( scale: number ) => setZoomScale( clampZoom( scale ) ),
@@ -1122,6 +1122,7 @@ const SpeciesGame = ( ) => {
       <ZoomBrightnessSliders
         zoomScale={zoomScale}
         brightnessStops={brightnessStops}
+        brightnessDisabled={isOffMode}
         exposureStopsMin={EXPOSURE_STOPS_MIN}
         exposureStopsMax={EXPOSURE_STOPS_MAX}
         onZoomChange={handleZoomChange}

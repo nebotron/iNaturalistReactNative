@@ -1,4 +1,5 @@
 import Slider from "@react-native-community/slider";
+import classNames from "classnames";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import { INatIcon } from "components/SharedComponents";
@@ -204,6 +205,7 @@ IdentifyPhoto.displayName = "IdentifyPhoto";
 interface ZoomBrightnessSlidersProps {
   zoomScale: number;
   brightnessStops: number;
+  brightnessDisabled?: boolean;
   exposureStopsMin: number;
   exposureStopsMax: number;
   onZoomChange: ( pos: number ) => void;
@@ -218,6 +220,7 @@ interface ZoomBrightnessSlidersProps {
 export const ZoomBrightnessSliders = ( {
   zoomScale,
   brightnessStops,
+  brightnessDisabled,
   exposureStopsMin,
   exposureStopsMax,
   onZoomChange,
@@ -244,10 +247,13 @@ export const ZoomBrightnessSliders = ( {
         accessibilityLabel={zoomAccessibilityLabel}
       />
     </View>
-    <View className="flex-row items-center">
+    {/* Off mode ignores the exposure slider entirely and always shows the
+        original image, so disable it rather than let it silently do nothing. */}
+    <View className={classNames( "flex-row items-center", { "opacity-50": brightnessDisabled } )}>
       <INatIcon name="sun" size={18} color={colors.darkGray} />
       <Slider
         style={styles.slider}
+        disabled={brightnessDisabled}
         minimumValue={exposureStopsMin}
         maximumValue={exposureStopsMax}
         minimumTrackTintColor={colors.inatGreen}
