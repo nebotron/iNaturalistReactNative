@@ -53,13 +53,19 @@ const BACKGROUND_LOCATION_PERMISSIONS = getBackgroundLocationPermissions();
 const IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG = {
   skipPermissionRequests: false,
   authorizationLevel: "always",
+  // Keep CLLocationManager.allowsBackgroundLocationUpdates on so the
+  // continuous watch keeps delivering fixes while the app is backgrounded.
+  enableBackgroundLocationUpdates: true,
 } as const;
 
 const DEFAULT_GEOLOCATION_CONFIG = {
   skipPermissionRequests: true,
+  // Preserve background updates when we flip the config back, otherwise the
+  // continuous watch we just started would stop firing in the background.
+  enableBackgroundLocationUpdates: true,
 } as const;
 
-let watchId: number | null = null;
+let watchIds: number[] = [];
 let realmInstance: Realm | null = null;
 
 const sleep = ( ms: number ) => new Promise<void>( resolve => {
@@ -81,7 +87,10 @@ const getRealmInstance = async ( ): Promise<Realm> => {
   return realmInstance;
 };
 
-const recordPosition = async ( position: {
+// `source` labels which watch delivered the fix (continuous vs
+// significant-changes vs the Android background service) so the logs show
+// whether and how the OS is actually waking the app in the background.
+const recordPosition = ( source: string ) => async ( position: {
   coords: { latitude: number; longitude: number; accuracy: number | null };
 } ) => {
   const { latitude, longitude, accuracy } = position.coords;
@@ -104,6 +113,7 @@ const recordPosition = async ( position: {
         } ),
       );
     }, "recording location history point" );
+    logger.info( `Recorded location fix from ${source}`, { accuracy, recordedAt: now } );
   } catch ( error ) {
     logger.error( "Failed to save location history point", error );
   }
@@ -111,8 +121,8 @@ const recordPosition = async ( position: {
 
 const backgroundTask = async ( ) => {
   await new Promise<void>( resolve => {
-    watchId = watchPosition(
-      recordPosition,
+    watchIds = [watchPosition(
+      recordPosition( "android-background" ),
       error => logger.warn( "watchPosition error", error ),
       {
         enableHighAccuracy: true,
@@ -121,7 +131,7 @@ const backgroundTask = async ( ) => {
         fastestInterval: MIN_INTERVAL_MS,
         useSignificantChanges: true,
       },
-    );
+    )];
 
     const keepJsAlive = async ( ) => {
       while ( BackgroundService.isRunning( ) ) {
@@ -188,17 +198,34 @@ export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResu
 
     if ( Platform.OS === "android" && !BackgroundService.isRunning( ) ) {
       await BackgroundService.start( backgroundTask, getBackgroundServiceOptions( ) );
-    } else if ( Platform.OS !== "android" && watchId === null ) {
+    } else if ( Platform.OS !== "android" && watchIds.length === 0 ) {
       Geolocation.setRNConfiguration( IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG );
-      watchId = watchPosition(
-        recordPosition,
-        error => logger.warn( "watchPosition error", error ),
+      // Hybrid iOS tracking:
+      // 1. A continuous high-accuracy watch honours distanceFilter and gives a
+      //    dense track while the app is running (foreground or backgrounded and
+      //    kept alive by the location background mode).
+      // 2. A significant-change watch is what lets iOS relaunch the app after it
+      //    has been suspended or terminated, so tracking resumes on its own. It
+      //    is coarse (~500m / cell-tower), so it fills the gaps between relaunch
+      //    and the continuous watch coming back up rather than driving density.
+      const continuousWatchId = watchPosition(
+        recordPosition( "ios-continuous" ),
+        error => logger.warn( "watchPosition error (continuous)", error ),
         {
           enableHighAccuracy: true,
           distanceFilter: MIN_DISTANCE_METERS,
+          useSignificantChanges: false,
+        },
+      );
+      const significantWatchId = watchPosition(
+        recordPosition( "ios-significant" ),
+        error => logger.warn( "watchPosition error (significant)", error ),
+        {
+          enableHighAccuracy: true,
           useSignificantChanges: true,
         },
       );
+      watchIds = [continuousWatchId, significantWatchId];
       Geolocation.setRNConfiguration( DEFAULT_GEOLOCATION_CONFIG );
     }
     store.set( TRACKING_ENABLED_KEY, true );
@@ -213,10 +240,8 @@ export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResu
 };
 
 export const stopLocationHistoryTracking = async ( ) => {
-  if ( watchId !== null ) {
-    clearWatch( watchId );
-    watchId = null;
-  }
+  watchIds.forEach( clearWatch );
+  watchIds = [];
   if ( BackgroundService.isRunning( ) ) {
     try {
       await BackgroundService.stop( );
