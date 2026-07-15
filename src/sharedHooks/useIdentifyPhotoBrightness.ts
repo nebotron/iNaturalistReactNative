@@ -31,17 +31,23 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
   const autoBrightnessUri = ( isGammaMode || isMultiplyMode )
     ? currentPhotoUrl
     : undefined;
+  // skipManualOverride=true: this hook already layers manualStops on top of
+  // the auto baseline below, so the baseline itself must stay the pure model
+  // prediction -- otherwise saving a manual value here would feed back into
+  // its own baseline and rebake a new Gamma image moments after release.
   const autoGain = useAutoBrightnessForUri(
     isMultiplyMode
       ? autoBrightnessUri
       : undefined,
     null,
+    true,
   );
   const toneMappedUri = useToneMappedBrightnessUri(
     isGammaMode
       ? autoBrightnessUri
       : undefined,
     null,
+    true,
   );
   const baseGain = isMultiplyMode
     ? autoGain

@@ -50,8 +50,9 @@ const cache = new Map<string, string>( );
 const useToneMappedBrightnessUri = (
   uri?: string,
   crop?: NormalizedCrop | null,
+  skipManualOverride?: boolean,
 ): string | undefined => {
-  const adjustment = useAutoBrightnessForUri( uri, crop );
+  const adjustment = useAutoBrightnessForUri( uri, crop, skipManualOverride );
 
   const computeInitial = ( u: string | undefined, adj: number ) => {
     if ( !u || adj === 1.0 ) return u;

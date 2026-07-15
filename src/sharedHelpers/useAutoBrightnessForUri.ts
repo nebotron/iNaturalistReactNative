@@ -35,19 +35,29 @@ const cacheKey = ( uri: string, crop: NormalizedCrop | null ) => ( crop
     + `${crop.w.toFixed( 3 )},${crop.h.toFixed( 3 )}`
   : uri );
 
-// uri    — image to measure; pass undefined to disable
-// crop   — subject crop from detectSubjectInImage; pass undefined to wait for
-//          detection to finish, null to measure the full image
+// uri               — image to measure; pass undefined to disable
+// crop              — subject crop from detectSubjectInImage; pass undefined
+//                      to wait for detection to finish, null to measure the
+//                      full image
+// skipManualOverride — when true, ignore any saved label for this uri and
+//                      compute a pure model prediction instead. Callers that
+//                      layer their own manual override on top of this value
+//                      (e.g. useIdentifyPhotoBrightness) need this so saving
+//                      that override doesn't feed back into -- and distort --
+//                      the baseline it's layered on top of.
 const useAutoBrightnessForUri = (
   uri?: string,
   crop?: NormalizedCrop | null,
+  skipManualOverride?: boolean,
 ): number => {
   const [prevUri, setPrevUri] = useState<string | undefined>( uri );
   const [prevCrop, setPrevCrop] = useState<NormalizedCrop | null | undefined>( crop );
   const [brightnessLogVersion, setBrightnessLogVersion] = useState( 0 );
 
   const computeInitial = ( u: string, c: NormalizedCrop | null | undefined ) => {
-    const logged = getBrightness( u );
+    const logged = skipManualOverride
+      ? null
+      : getBrightness( u );
     if ( logged !== null ) return logged;
     if ( c === undefined ) return 1.0; // still waiting for detection
     return cache.get( cacheKey( u, c ) ) ?? 1.0;
@@ -67,15 +77,20 @@ const useAutoBrightnessForUri = (
       : 1.0 );
   }
 
-  useEffect( ( ) => subscribeToBrightnessLog( ( ) => {
-    setBrightnessLogVersion( v => v + 1 );
-  } ), [] );
+  useEffect( ( ) => {
+    if ( skipManualOverride ) return ( ) => {};
+    return subscribeToBrightnessLog( ( ) => {
+      setBrightnessLogVersion( v => v + 1 );
+    } );
+  }, [skipManualOverride] );
 
   useEffect( ( ) => {
     if ( !uri ) return ( ) => {};
 
     // Manual label always wins; no need to run detection.
-    const logged = getBrightness( uri );
+    const logged = skipManualOverride
+      ? null
+      : getBrightness( uri );
     if ( logged !== null ) {
       setBrightness( logged );
       return ( ) => {};
@@ -112,7 +127,7 @@ const useAutoBrightnessForUri = (
     return ( ) => {
       cancelled = true;
     };
-  }, [uri, crop, brightnessLogVersion] );
+  }, [uri, crop, brightnessLogVersion, skipManualOverride] );
 
   return brightness;
 };
