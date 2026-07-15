@@ -17,6 +17,7 @@ import Journal from "components/Journal/Journal";
 import LifeListContainer from "components/LifeList/LifeListContainer";
 import LocationHistory from "components/LocationHistory/LocationHistory";
 import LocationHistoryDetailMap from "components/LocationHistory/LocationHistoryDetailMap";
+import LocationHistoryPointsMap from "components/LocationHistory/LocationHistoryPointsMap";
 import MaverickIdentificationsContainer
   from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
@@ -346,6 +347,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           <Stack.Screen
             name="LocationHistory"
             component={LocationHistory}
+            options={{
+              headerTitle: locationHistoryTitle,
+            }}
+          />
+          <Stack.Screen
+            name="LocationHistoryPointsMap"
+            component={LocationHistoryPointsMap}
             options={{
               headerTitle: locationHistoryTitle,
             }}

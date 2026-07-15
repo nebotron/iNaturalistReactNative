@@ -277,6 +277,14 @@ const LocationHistory = ( ) => {
             <List2 className="mb-3">
               {t( "X-Location-Points-Recorded", { count: historyPoints.length } )}
             </List2>
+            {historyPoints.length > 0 && (
+              <Button
+                className="mb-3"
+                text={t( "View-all-location-points" )}
+                onPress={( ) => navigation.navigate( "LocationHistoryPointsMap" )}
+                testID="LocationHistory.ViewPointsButton"
+              />
+            )}
             {applicableObservations.length > 0 && (
               <Button
                 text={t(

@@ -375,6 +375,7 @@ export type BaseTabStackParamList = {
   CropLogViewer: undefined;
   NetworkLog: undefined;
   LocationHistory: undefined;
+  LocationHistoryPointsMap: undefined;
   LocationHistoryDetailMap: {
     uuid: string;
     observationLat: number;

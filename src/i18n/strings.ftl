@@ -533,6 +533,8 @@ Enable-location-access-to-track-your-location-in-the-background =
     location and compare it to your photos.
 # Button that subscribes the user to notifications for an observation
 Enable-notifications = Enable notifications
+# Label for the last point in a location history path
+End = End
 # Placeholder text for the end location input in the Wildlife Hotspots tool
 End-location = End location (e.g. Boston, MA)
 # Label for the end of a time-of-day range filter, e.g. 11 PM
@@ -805,6 +807,8 @@ LEAVE-PROJECT--question = LEAVE PROJECT?
 LEAVE-US-A-REVIEW = LEAVE US A REVIEW!
 Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
+# Label for the list view toggle in location history
+List = List
 Load-saved-filter = Load saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
 # Loading message shown while fetching the route through a selected hotspot
@@ -835,6 +839,8 @@ Looks-like-you-havent-observed-this-yet-time-to-keep-exploring =
 Lowest = Lowest
 LOWEST-RANK = LOWEST RANK
 MAP = MAP
+# Label for the map view toggle in location history
+Map = Map
 Map-Area = Map Area
 # Month of March
 March = March
@@ -944,6 +950,8 @@ No-Camera-Available = No Camera Available
 No-email-app-installed = No email app installed
 No-email-app-installed-body = If you have another way of sending email, the address is { $address }
 No-Location = No Location
+# Empty state shown when no background location points have been recorded
+No-location-points-recorded-yet = No location points recorded yet
 No-Media = No Media
 # As in a machine learning model that powers automated suggestions
 No-model-found = No model found
@@ -1399,6 +1407,8 @@ SPECIES-WITHOUT-NUMBER =
     }
 # Label for the standard map type
 Standard--map-type = Standard
+# Label for the first point in a location history path
+Start = Start
 # Placeholder text for the start location input in the Wildlife Hotspots tool
 Start-location = Start location (e.g. New York, NY)
 Start-must-be-before-end = The start date must be before the end date.
@@ -1571,6 +1581,8 @@ VIEW-EDUCATORS-GUIDE = VIEW EDUCATOR'S GUIDE
 VIEW-FOLLOWERS = VIEW FOLLOWERS
 # Button on user profile that displays a list of users that the user is following
 VIEW-FOLLOWING = VIEW FOLLOWING
+# Button that opens the full list and map of recorded location history points
+View-all-location-points = View all location points
 View-in-browser = View in browser
 VIEW-IN-EXPLORE = VIEW IN EXPLORE
 VIEW-INATURALIST-HELP = VIEW INATURALIST HELP
