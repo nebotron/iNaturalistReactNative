@@ -127,8 +127,27 @@ const reducer = ( state, action ) => {
   }
 };
 
-const LocationPickerContainer = ( ): Node => {
-  const currentObservation = useStore( state => state.currentObservation );
+type ContainerProps = {
+  // Use this observation instead of the store's currentObservation (e.g. the
+  // location history flow, which edits a specific saved observation).
+  observation?: Object,
+  // Called with the chosen location instead of writing back to the store.
+  // Receives { latitude, longitude, positional_accuracy, place_guess } and is
+  // responsible for any navigation afterwards.
+  onSave?: ( _location: Object ) => void,
+  // Extra markers/overlays rendered inside and on top of the map.
+  mapChildren?: Node,
+  legend?: Node,
+};
+
+const LocationPickerContainer = ( {
+  observation: observationProp,
+  onSave,
+  mapChildren,
+  legend,
+}: ContainerProps = {} ): Node => {
+  const currentObservationFromStore = useStore( state => state.currentObservation );
+  const currentObservation = observationProp ?? currentObservationFromStore;
   const lastLocationPickerState = useStore( state => state.lastLocationPickerState );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const setLastLocationPickerState = useStore( state => state.setLastLocationPickerState );
@@ -272,6 +291,16 @@ const LocationPickerContainer = ( ): Node => {
 
   const handleSave = ( ) => {
     if ( region && hasValidMapCoordinates( region.latitude, region.longitude ) ) {
+      if ( onSave ) {
+        // Caller owns persistence and navigation in this mode.
+        onSave( {
+          latitude: region.latitude,
+          longitude: region.longitude,
+          positional_accuracy: accuracy,
+          place_guess: locationName,
+        } );
+        return;
+      }
       const keysToUpdate = {
         latitude: region.latitude,
         longitude: region.longitude,
@@ -310,6 +339,8 @@ const LocationPickerContainer = ( ): Node => {
       selectPlaceResult={selectPlaceResult}
       updateLocationName={updateLocationName}
       onMapLayout={onMapLayout}
+      mapChildren={mapChildren}
+      legend={legend}
     />
   );
 };

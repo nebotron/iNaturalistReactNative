@@ -27,6 +27,8 @@ type Props = {
   loading: boolean,
   locationName: string,
   initialRegion: Object,
+  legend?: Node,
+  mapChildren?: Node,
   onCurrentLocationPress: Function,
   onMapReady: Function,
   onRegionChangeComplete: Function,
@@ -43,6 +45,8 @@ const LocationPicker = ( {
   hidePlaceResults,
   loading,
   locationName,
+  legend,
+  mapChildren,
   regionToAnimate,
   initialRegion,
   onCurrentLocationPress,
@@ -114,6 +118,7 @@ const LocationPicker = ( {
           <Map
             className="h-full"
             initialRegion={initialRegion}
+            mapChildren={mapChildren}
             onCurrentLocationPress={onCurrentLocationPress}
             onMapReady={onMapReady}
             onRegionChangeComplete={onRegionChangeComplete}
@@ -124,7 +129,9 @@ const LocationPicker = ( {
             showsUserLocation
             testID="LocationPicker.Map"
             onMapLayout={onMapLayout}
-          />
+          >
+            {legend}
+          </Map>
         </View>
         <Footer handleSave={handleSave} />
       </SharedStackViewWrapper>

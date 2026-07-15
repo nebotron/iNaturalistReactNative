@@ -102,12 +102,6 @@ const locationHistoryTitle = () => (
     {t( "LOCATION-HISTORY" )}
   </Heading4>
 );
-const locationHistoryDetailMapTitle = () => (
-  <Heading4 accessibilityRole="header" numberOfLines={1}>
-    {t( "LOCATION-HISTORY" )}
-  </Heading4>
-);
-
 // eslint-disable-next-line i18next/no-literal-string
 const debugTitle = () => <Heading4 className="text-white">DEBUG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
@@ -362,7 +356,9 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             name="LocationHistoryDetailMap"
             component={LocationHistoryDetailMap}
             options={{
-              headerTitle: locationHistoryDetailMapTitle,
+              // Reuses the LocationPicker interface, which renders its own
+              // header and close button, so hide the native stack header.
+              headerShown: false,
             }}
           />
         </Stack.Group>

@@ -1,12 +1,10 @@
 import { useNavigation } from "@react-navigation/native";
-import { Button, INatIcon, List2 } from "components/SharedComponents";
-import { ScreenShell } from "components/SharedComponents/ViewWrapper";
-import Map from "components/SharedComponents/Map/Map";
+import LocationPickerContainer from "components/LocationPicker/LocationPickerContainer";
+import { List2 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo } from "react";
 import { Alert } from "react-native";
-import type { Region } from "react-native-maps";
 import { Marker } from "react-native-maps";
 import type { RealmObservation } from "realmModels/types";
 import applyTrackedLocationToObservation from "sharedHelpers/applyTrackedLocationToPhotos";
@@ -45,134 +43,85 @@ const LocationHistoryDetailMap = (
 
   const observation = useObject<RealmObservation>( "Observation", uuid );
 
-  // The corrected observation location. The user moves it by dragging the map
-  // under the fixed center pin (see LocationPicker for the same pattern). It's
-  // null until the map has been moved, so the Save button only appears then.
-  const [editedLocation, setEditedLocation] = useState<{
-    latitude: number;
-    longitude: number;
-  } | null>( null );
-  const [isSaving, setIsSaving] = useState( false );
-
-  // onRegionChangeComplete fires once on the initial render; we ignore that so
-  // the Save button doesn't appear until the user actually drags the map.
-  const isFirstRegionChange = useRef( true );
-
   const hasTrackedLocation = trackedLat !== observationLat || trackedLng !== observationLng;
 
-  // Center the map on the photo location (so the fixed center pin starts on it)
-  // and widen the zoom enough to keep the tracked-location marker in view.
-  const initialRegion = useMemo(() => {
-    const latSpan = hasTrackedLocation
-      ? Math.abs( observationLat - trackedLat ) * 2 * 1.2
-      : 0;
-    const lngSpan = hasTrackedLocation
-      ? Math.abs( observationLng - trackedLng ) * 2 * 1.2
-      : 0;
+  // Reference markers shown under the crosshair: the photo's current location
+  // (green) and, if available, the interpolated tracked location (blue). The
+  // user drags the map to move the crosshair onto the desired spot.
+  const mapChildren = useMemo( ( ) => (
+    <>
+      <Marker
+        coordinate={{ latitude: observationLat, longitude: observationLng }}
+        title="Photo location"
+        description={observationDate}
+        pinColor={colors.inatGreen}
+      />
+      {hasTrackedLocation && (
+        <Marker
+          coordinate={{ latitude: trackedLat, longitude: trackedLng }}
+          title="Tracked location"
+          description={
+            distanceMeters === null
+              ? "No nearby tracked location"
+              : `${Math.round( distanceMeters )} meters away`
+          }
+          pinColor={colors.blue}
+        />
+      )}
+    </>
+  ), [
+    observationLat,
+    observationLng,
+    trackedLat,
+    trackedLng,
+    observationDate,
+    distanceMeters,
+    hasTrackedLocation,
+  ] );
 
-    return {
-      latitude: observationLat,
-      longitude: observationLng,
-      latitudeDelta: Math.max( latSpan, 0.02 ),
-      longitudeDelta: Math.max( lngSpan, 0.02 ),
-    };
-  }, [observationLat, observationLng, trackedLat, trackedLng, hasTrackedLocation]);
+  const legend = useMemo( ( ) => (
+    <View
+      className="absolute bottom-5 left-5 bg-white rounded-lg py-2 px-3"
+      style={getShadow()}
+      pointerEvents="none"
+    >
+      <View className="flex-row items-center">
+        <View className="w-3 h-3 rounded-full mr-2 bg-inatGreen" />
+        <List2>Photo location</List2>
+      </View>
+      {hasTrackedLocation && (
+        <View className="flex-row items-center mt-1">
+          <View className="w-3 h-3 rounded-full mr-2 bg-blue" />
+          <List2>Tracked location</List2>
+        </View>
+      )}
+    </View>
+  ), [hasTrackedLocation] );
 
-  const handleRegionChangeComplete = useCallback( ( newRegion: Region ) => {
-    if ( isFirstRegionChange.current ) {
-      isFirstRegionChange.current = false;
+  const handleSave = useCallback( async location => {
+    if ( !observation ) {
+      navigation.goBack( );
       return;
     }
-    setEditedLocation( {
-      latitude: newRegion.latitude,
-      longitude: newRegion.longitude,
-    } );
-  }, [] );
-
-  const handleSave = useCallback( async ( ) => {
-    if ( !editedLocation || !observation ) return;
-    setIsSaving( true );
     await applyTrackedLocationToObservation( realm, observation, {
-      latitude: editedLocation.latitude,
-      longitude: editedLocation.longitude,
+      latitude: location.latitude,
+      longitude: location.longitude,
+      accuracy: location.positional_accuracy,
     } );
-    setIsSaving( false );
     Alert.alert(
       "Location Updated",
       "The observation location has been updated.",
       [{ text: "OK", onPress: ( ) => navigation.goBack( ) }],
     );
-  }, [editedLocation, observation, realm, navigation] );
+  }, [observation, realm, navigation] );
 
   return (
-    <ScreenShell>
-      <Map
-        initialRegion={initialRegion}
-        onRegionChangeComplete={handleRegionChangeComplete}
-        showCurrentLocationButton
-        showSwitchMapTypeButton
-        zoomEnabled
-        scrollEnabled
-        mapChildren={(
-          hasTrackedLocation && (
-            <Marker
-              coordinate={{ latitude: trackedLat, longitude: trackedLng }}
-              title="Tracked Location"
-              description={
-                distanceMeters === null
-                  ? "No nearby tracked location"
-                  : `${Math.round(distanceMeters)} meters away`
-              }
-              pinColor={colors.blue}
-            />
-          )
-        )}
-      >
-        {/* Fixed center pin: the map moves under it, so its tip always marks
-            the photo location. pointerEvents none so drags reach the map. */}
-        <View
-          className="absolute inset-0 items-center justify-center"
-          pointerEvents="none"
-        >
-          <INatIcon
-            name="map-marker-outline"
-            size={40}
-            color={colors.inatGreen}
-            // Offset up by half the icon height so the pin's tip, not its
-            // center, sits on the map center.
-            style={{ marginBottom: 40 }}
-          />
-        </View>
-        <View
-          className="absolute bottom-5 left-5 bg-white rounded-lg py-2 px-3"
-          style={getShadow()}
-        >
-          <View className="flex-row items-center">
-            <View className="w-3 h-3 rounded-full mr-2 bg-inatGreen" />
-            <List2>Photo location</List2>
-          </View>
-          {hasTrackedLocation && (
-            <View className="flex-row items-center mt-1">
-              <View className="w-3 h-3 rounded-full mr-2 bg-blue" />
-              <List2>Tracked location</List2>
-            </View>
-          )}
-          <List2 className="mt-1 text-darkGray">Drag the map to update</List2>
-        </View>
-        {editedLocation && (
-          <View className="absolute bottom-5 right-5 left-5 items-end">
-            <Button
-              text="Save location"
-              onPress={handleSave}
-              loading={isSaving}
-              disabled={isSaving}
-              level="focus"
-              testID="LocationHistoryDetailMap.SaveButton"
-            />
-          </View>
-        )}
-      </Map>
-    </ScreenShell>
+    <LocationPickerContainer
+      observation={observation}
+      onSave={handleSave}
+      mapChildren={mapChildren}
+      legend={legend}
+    />
   );
 };
 
