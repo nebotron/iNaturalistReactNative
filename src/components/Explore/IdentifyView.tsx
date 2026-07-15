@@ -17,6 +17,7 @@ import {
   ActivityIndicator,
   Body2,
   Button,
+  INatIcon,
   INatIconButton,
 } from "components/SharedComponents";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
@@ -342,10 +343,16 @@ const IdentifyView = ( {
         {taxon
           ? (
             <Pressable
+              className="flex-row items-center gap-x-2"
               accessibilityRole="button"
               accessibilityLabel={t( "View-taxon" )}
               onPress={openTaxonDetails}
             >
+              {/* Flag taxa sourced from the CV detector rather than the
+                  community, using the same sparkly icon used elsewhere. */}
+              {topSpeciesSuggestion && (
+                <INatIcon name="sparkly-label" size={18} />
+              )}
               <DisplayTaxonName taxon={taxon} showOneNameOnly />
             </Pressable>
           )

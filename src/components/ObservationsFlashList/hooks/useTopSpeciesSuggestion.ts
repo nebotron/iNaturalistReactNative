@@ -11,7 +11,7 @@ interface CVResult {
 // likely species-level ID from the CV algorithm so we can suggest agreeing
 // with a species instead of the coarser community taxon.
 const useTopSpeciesSuggestion = (
-  observation?: { id?: number, taxon?: { rank_level?: number } },
+  observation?: { id?: number; taxon?: { rank_level?: number } },
   enabled: boolean = true,
 ) => {
   const currentUser = useCurrentUser( );
@@ -29,15 +29,18 @@ const useTopSpeciesSuggestion = (
     },
   );
 
-  if ( !isGenusOrBroader ) {
-    return undefined;
-  }
-
-  const results = ( data as { results?: CVResult[] } )?.results;
-  const topSpeciesResult = results?.find(
-    result => result.taxon?.rank_level === Taxon.SPECIES_LEVEL,
-  );
-  return topSpeciesResult?.taxon;
+  // Pick the highest-scoring result that is species-level or finer (e.g. a
+  // subspecies), so a genus-or-broader observation gets bumped to the CV's
+  // most likely species. Results usually arrive score-sorted, but sort
+  // defensively so "most likely" doesn't depend on server ordering.
+  const results = isGenusOrBroader
+    ? ( data as { results?: CVResult[] } )?.results ?? []
+    : [];
+  const topSpecies = results
+    .filter( result => typeof result.taxon?.rank_level === "number"
+      && result.taxon.rank_level <= Taxon.SPECIES_LEVEL )
+    .sort( ( a, b ) => ( b.combined_score ?? 0 ) - ( a.combined_score ?? 0 ) )[0];
+  return topSpecies?.taxon;
 };
 
 export default useTopSpeciesSuggestion;
