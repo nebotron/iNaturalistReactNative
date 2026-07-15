@@ -1,41 +1,51 @@
-import { Body2, List2 } from "components/SharedComponents";
+import { Body2, INatIconButton, List2 } from "components/SharedComponents";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import Map from "components/SharedComponents/Map/Map";
 import { View } from "components/styledComponents";
-import type { i18n as i18next } from "i18next";
 import { RealmContext } from "providers/contexts";
 import React, { useMemo, useState } from "react";
-import { FlatList, Pressable } from "react-native";
-import { Marker, Polyline } from "react-native-maps";
+import type { Region } from "react-native-maps";
+import { Circle, Marker } from "react-native-maps";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
-import { formatLongDatetime } from "sharedHelpers/dateAndTime";
+import { formatLongDate } from "sharedHelpers/dateAndTime";
 import { useTranslation } from "sharedHooks";
-import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
 const { useQuery } = RealmContext;
 
-const PointRow = ( { index, point, i18n }: {
-  index: number;
-  point: LocationHistoryPoint;
-  i18n: i18next;
-} ) => (
-  <View className="flex-row items-center p-3 border-b border-lightGray">
-    <Body2 className="w-8 text-darkGray">{index + 1}</Body2>
-    <View className="flex-1">
-      <Body2>
-        {formatLongDatetime( point.recordedAt.toISOString(), i18n )}
-      </Body2>
-      <List2 className="text-darkGray">
-        {`${point.latitude.toFixed( 5 )}, ${point.longitude.toFixed( 5 )}`}
-      </List2>
-    </View>
-  </View>
-);
+const pad = ( n: number ) => String( n ).padStart( 2, "0" );
+
+// Local calendar-day key, e.g. "2026-07-15", used to bucket points by the day
+// they were recorded in the device's timezone.
+const dayKeyForDate = ( date: Date ) => `${date.getFullYear()}-${
+  pad( date.getMonth() + 1 )}-${pad( date.getDate() )}`;
+
+// 24-hour "HH:mm" label in the device's local time.
+const timeLabelForDate = ( date: Date ) => `${pad( date.getHours() )}:${pad( date.getMinutes() )}`;
+
+interface Day {
+  key: string;
+  points: LocationHistoryPoint[];
+}
+
+const regionForPoints = ( points: LocationHistoryPoint[] ): Region | undefined => {
+  if ( points.length === 0 ) return undefined;
+  const lats = points.map( p => p.latitude );
+  const lngs = points.map( p => p.longitude );
+  const minLat = Math.min( ...lats );
+  const maxLat = Math.max( ...lats );
+  const minLng = Math.min( ...lngs );
+  const maxLng = Math.max( ...lngs );
+  return {
+    latitude: ( minLat + maxLat ) / 2,
+    longitude: ( minLng + maxLng ) / 2,
+    latitudeDelta: Math.max( ( maxLat - minLat ) * 1.4, 0.005 ),
+    longitudeDelta: Math.max( ( maxLng - minLng ) * 1.4, 0.005 ),
+  };
+};
 
 const LocationHistoryPointsMap = ( ) => {
   const { t, i18n } = useTranslation();
-  const [showMap, setShowMap] = useState( false );
 
   const historyPoints = useQuery(
     {
@@ -45,129 +55,109 @@ const LocationHistoryPointsMap = ( ) => {
     [],
   );
 
-  const coordinates = useMemo(
-    ( ) => historyPoints.map( point => ( {
-      latitude: point.latitude,
-      longitude: point.longitude,
-    } ) ),
-    [historyPoints],
+  // Bucket the (ascending) points into days, preserving chronological order.
+  // NB: the imported Map component shadows the JS Map constructor here, so we
+  // group with a plain object + ordered array instead.
+  const days = useMemo<Day[]>( ( ) => {
+    const ordered: Day[] = [];
+    const byKey: Record<string, Day> = {};
+    historyPoints.forEach( point => {
+      const key = dayKeyForDate( point.recordedAt );
+      if ( byKey[key] ) {
+        byKey[key].points.push( point );
+      } else {
+        const day = { key, points: [point] };
+        byKey[key] = day;
+        ordered.push( day );
+      }
+    } );
+    return ordered;
+  }, [historyPoints] );
+
+  // null means "no explicit selection yet", which defaults to the most recent
+  // day. Navigating sets an explicit index.
+  const [selectedIndex, setSelectedIndex] = useState<number | null>( null );
+  const effectiveIndex = selectedIndex ?? days.length - 1;
+  const currentDay = days[effectiveIndex];
+
+  const region = useMemo(
+    ( ) => ( currentDay
+      ? regionForPoints( currentDay.points )
+      : undefined ),
+    [currentDay],
   );
 
-  const initialRegion = useMemo( ( ) => {
-    if ( coordinates.length === 0 ) return undefined;
-    const lats = coordinates.map( c => c.latitude );
-    const lngs = coordinates.map( c => c.longitude );
-    const minLat = Math.min( ...lats );
-    const maxLat = Math.max( ...lats );
-    const minLng = Math.min( ...lngs );
-    const maxLng = Math.max( ...lngs );
-    return {
-      latitude: ( minLat + maxLat ) / 2,
-      longitude: ( minLng + maxLng ) / 2,
-      latitudeDelta: Math.max( ( maxLat - minLat ) * 1.4, 0.02 ),
-      longitudeDelta: Math.max( ( maxLng - minLng ) * 1.4, 0.02 ),
-    };
-  }, [coordinates] );
-
-  const toggle = (
-    <View className="flex-row p-3 border-b border-lightGray">
-      <Pressable
-        accessibilityRole="button"
-        className="flex-1 items-center py-2"
-        onPress={( ) => setShowMap( false )}
-        testID="LocationHistoryPointsMap.ListToggle"
-      >
-        <Body2 className={showMap
-          ? "text-darkGray"
-          : "text-inatGreen"}
-        >
-          {t( "List" )}
-        </Body2>
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        className="flex-1 items-center py-2"
-        onPress={( ) => setShowMap( true )}
-        testID="LocationHistoryPointsMap.MapToggle"
-      >
-        <Body2 className={showMap
-          ? "text-inatGreen"
-          : "text-darkGray"}
-        >
-          {t( "Map" )}
-        </Body2>
-      </Pressable>
-    </View>
-  );
-
-  if ( showMap ) {
+  if ( days.length === 0 || !currentDay ) {
     return (
       <ScreenShell>
-        {toggle}
-        {coordinates.length === 0
-          ? (
-            <View className="p-4">
-              <Body2>{t( "No-location-points-recorded-yet" )}</Body2>
-            </View>
-          )
-          : (
-            <Map
-              initialRegion={initialRegion}
-              showCurrentLocationButton
-              showSwitchMapTypeButton
-              zoomEnabled
-              scrollEnabled
-              mapChildren={(
-                <>
-                  {coordinates.length > 1 && (
-                    <Polyline
-                      coordinates={coordinates}
-                      strokeColor={colors.inatGreen}
-                      strokeWidth={3}
-                    />
-                  )}
-                  <Marker
-                    coordinate={coordinates[0]}
-                    title={t( "Start" )}
-                    pinColor={colors.inatGreen}
-                  />
-                  {coordinates.length > 1 && (
-                    <Marker
-                      coordinate={coordinates[coordinates.length - 1]}
-                      title={t( "End" )}
-                      pinColor={colors.warningRed}
-                    />
-                  )}
-                </>
-              )}
-            >
-              <View
-                className="absolute bottom-5 left-5 bg-white rounded-lg py-2 px-3"
-                style={getShadow()}
-              >
-                <List2>
-                  {t( "X-Location-Points-Recorded", { count: coordinates.length } )}
-                </List2>
-              </View>
-            </Map>
-          )}
+        <View className="p-4">
+          <Body2>{t( "No-location-points-recorded-yet" )}</Body2>
+        </View>
       </ScreenShell>
     );
   }
 
   return (
     <ScreenShell>
-      {toggle}
-      <FlatList
-        data={historyPoints}
-        keyExtractor={item => item.uuid}
-        renderItem={( { item, index } ) => (
-          <PointRow index={index} point={item} i18n={i18n} />
-        )}
-        ListEmptyComponent={(
-          <View className="p-4">
-            <Body2>{t( "No-location-points-recorded-yet" )}</Body2>
-          </View>
+      <View className="flex-row items-center justify-between p-3 border-b border-lightGray">
+        <INatIconButton
+          icon="chevron-left-circle"
+          size={30}
+          accessibilityLabel={t( "Previous-day" )}
+          disabled={effectiveIndex <= 0}
+          onPress={( ) => setSelectedIndex( Math.max( effectiveIndex - 1, 0 ) )}
+        />
+        <View className="items-center">
+          <Body2>{formatLongDate( currentDay.key, i18n )}</Body2>
+          <List2 className="text-darkGray">
+            {t( "X-Location-Points-Recorded", { count: currentDay.points.length } )}
+          </List2>
+        </View>
+        <INatIconButton
+          icon="chevron-right-circle"
+          size={30}
+          accessibilityLabel={t( "Next-day" )}
+          disabled={effectiveIndex >= days.length - 1}
+          onPress={( ) => setSelectedIndex( Math.min( effectiveIndex + 1, days.length - 1 ) )}
+        />
+      </View>
+      <Map
+        initialRegion={region}
+        regionToAnimate={region}
+        showCurrentLocationButton
+        showSwitchMapTypeButton
+        zoomEnabled
+        scrollEnabled
+        mapChildren={(
+          <>
+            {currentDay.points.map( point => {
+              const coordinate = {
+                latitude: point.latitude,
+                longitude: point.longitude,
+              };
+              return (
+                <React.Fragment key={point.uuid}>
+                  {point.accuracy != null && point.accuracy > 0 && (
+                    <Circle
+                      center={coordinate}
+                      radius={point.accuracy}
+                      strokeColor={colors.inatGreen}
+                      strokeWidth={1}
+                      fillColor={`${colors.inatGreen}22`}
+                    />
+                  )}
+                  <Marker coordinate={coordinate} anchor={{ x: 0.5, y: 0.5 }}>
+                    <View className="items-center">
+                      <View className="bg-white rounded px-1 border border-inatGreen">
+                        <List2>{timeLabelForDate( point.recordedAt )}</List2>
+                      </View>
+                      <View className="w-2 h-2 rounded-full bg-inatGreen mt-0.5" />
+                    </View>
+                  </Marker>
+                </React.Fragment>
+              );
+            } )}
+          </>
         )}
       />
     </ScreenShell>

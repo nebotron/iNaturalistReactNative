@@ -533,8 +533,6 @@ Enable-location-access-to-track-your-location-in-the-background =
     location and compare it to your photos.
 # Button that subscribes the user to notifications for an observation
 Enable-notifications = Enable notifications
-# Label for the last point in a location history path
-End = End
 # Placeholder text for the end location input in the Wildlife Hotspots tool
 End-location = End location (e.g. Boston, MA)
 # Label for the end of a time-of-day range filter, e.g. 11 PM
@@ -807,8 +805,6 @@ LEAVE-PROJECT--question = LEAVE PROJECT?
 LEAVE-US-A-REVIEW = LEAVE US A REVIEW!
 Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
-# Label for the list view toggle in location history
-List = List
 Load-saved-filter = Load saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
 # Loading message shown while fetching the route through a selected hotspot
@@ -839,8 +835,6 @@ Looks-like-you-havent-observed-this-yet-time-to-keep-exploring =
 Lowest = Lowest
 LOWEST-RANK = LOWEST RANK
 MAP = MAP
-# Label for the map view toggle in location history
-Map = Map
 Map-Area = Map Area
 # Month of March
 March = March
@@ -941,6 +935,8 @@ New-Observation = New Observation
 Newest-to-oldest = Newest to oldest
 # Label for a button that advances to the next item
 Next = Next
+# Accessibility label for a button that shows the next day in location history
+Next-day = Next day
 Next-observation = Next observation
 # Accessibility label for a button that goes to the next slide on onboarding cards
 Next-slide = Next slide
@@ -1116,6 +1112,8 @@ Potential-disagreement-description = <0>Is the evidence enough to confirm this i
 Potential-disagreement-disagree = <0>No, but this is a member of </0><1></1>
 Potential-disagreement-unsure = <0>I don't know but I am sure this is </0><1></1>
 Press-and-hold-to-view-more-options = Press and hold to view more options
+# Accessibility label for a button that shows the previous day in location history
+Previous-day = Previous day
 Previous-observation = Previous observation
 # Accessibility label for a button that goes to the previous slide on onboarding cards
 Previous-slide = Previous slide
@@ -1407,8 +1405,6 @@ SPECIES-WITHOUT-NUMBER =
     }
 # Label for the standard map type
 Standard--map-type = Standard
-# Label for the first point in a location history path
-Start = Start
 # Placeholder text for the start location input in the Wildlife Hotspots tool
 Start-location = Start location (e.g. New York, NY)
 Start-must-be-before-end = The start date must be before the end date.
