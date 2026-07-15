@@ -393,9 +393,25 @@ static inline float linearToSrgb( float c )
 // encoded values near the top, so multiplying it directly compresses
 // midtone/highlight contrast and looks flat; doing the multiply in linear
 // light preserves relative contrast between tones instead.
-static inline float toneCurve( float x, float k )
+//
+// The multiply is applied to all three channels together and, when it pushes
+// the brightest channel past white, the whole pixel is scaled back so that
+// channel lands exactly on 1.0. Clipping each channel independently would let
+// them reach white at different points and shift the pixel's hue (a saturated
+// orange skews yellow as its red channel clips first, for example); scaling by
+// the shared maximum keeps the R:G:B ratio — and therefore the color — intact.
+static inline void applyExposurePreservingColor( unsigned char *px, float k )
 {
-  return linearToSrgb( fminf( srgbToLinear( x ) * k, 1.0f ) );
+  float r = srgbToLinear( px[0] / 255.0f ) * k;
+  float g = srgbToLinear( px[1] / 255.0f ) * k;
+  float b = srgbToLinear( px[2] / 255.0f ) * k;
+
+  float m = fmaxf( r, fmaxf( g, b ) );
+  if ( m > 1.0f ) { r /= m; g /= m; b /= m; }
+
+  px[0] = (unsigned char)roundf( linearToSrgb( r ) * 255.0f );
+  px[1] = (unsigned char)roundf( linearToSrgb( g ) * 255.0f );
+  px[2] = (unsigned char)roundf( linearToSrgb( b ) * 255.0f );
 }
 
 // ─── Public detection entry point ────────────────────────────────────────────
@@ -705,9 +721,9 @@ RCT_EXPORT_METHOD( measureImageBrightness
   resolve( @{ @"geomean": @( geomean ), @"median": @( median ) } );
 }
 
-// Applies toneCurve() per pixel/channel to the whole image (scaled down to fit
-// within maxDimension on its longest side, since this is used for thumbnail
-// display) and writes the result as a JPEG to outputPath.
+// Applies the color-preserving exposure adjustment per pixel to the whole image
+// (scaled down to fit within maxDimension on its longest side, since this is
+// used for thumbnail display) and writes the result as a JPEG to outputPath.
 RCT_EXPORT_METHOD( adjustImageBrightness
                   : ( NSString * )inputPath adjustment
                   : ( nonnull NSNumber * )adjustment maxDimension
@@ -747,10 +763,7 @@ RCT_EXPORT_METHOD( adjustImageBrightness
 
   int pixelCount = W * H;
   for ( int i = 0; i < pixelCount; i++ ) {
-    unsigned char *px = raw + i * 4;
-    px[0] = (unsigned char)roundf( toneCurve( px[0] / 255.0f, k ) * 255.0f );
-    px[1] = (unsigned char)roundf( toneCurve( px[1] / 255.0f, k ) * 255.0f );
-    px[2] = (unsigned char)roundf( toneCurve( px[2] / 255.0f, k ) * 255.0f );
+    applyExposurePreservingColor( raw + i * 4, k );
   }
 
   CGImageRef adjustedRef = CGBitmapContextCreateImage( bmp );
