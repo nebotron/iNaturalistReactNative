@@ -98,7 +98,7 @@ export const predictOffline = async ( {
   return returnValue;
 };
 
-const getOfflinePredictionCacheKey = (
+export const getOfflinePredictionCacheKey = (
   photoUri: string,
   latitude?: number,
   longitude?: number,
