@@ -1566,6 +1566,8 @@ Using-location = Using location
 Verified-IDs-are-used-for-science-and-conservation = Verified IDs are used for science and conservation
 # Listing of app and build versions
 Version-app-build = Version { $appVersion } ({ $buildVersion })
+# Button that opens the full list and map of recorded location history points
+View-all-location-points = View all location points
 VIEW-ALL-X-PLACES = VIEW ALL { $count } PLACES
 VIEW-ALL-X-PROJECTS = VIEW ALL { $count } PROJECTS
 VIEW-ALL-X-TAXA = VIEW ALL { $count } TAXA
@@ -1577,8 +1579,6 @@ VIEW-EDUCATORS-GUIDE = VIEW EDUCATOR'S GUIDE
 VIEW-FOLLOWERS = VIEW FOLLOWERS
 # Button on user profile that displays a list of users that the user is following
 VIEW-FOLLOWING = VIEW FOLLOWING
-# Button that opens the full list and map of recorded location history points
-View-all-location-points = View all location points
 View-in-browser = View in browser
 VIEW-IN-EXPLORE = VIEW IN EXPLORE
 VIEW-INATURALIST-HELP = VIEW INATURALIST HELP
@@ -1831,7 +1831,6 @@ Youve-previously-denied-camera-permissions = You've previously denied camera per
 Youve-previously-denied-location-permissions = You’ve previously denied location permissions, so please enable them in settings.
 Youve-previously-denied-microphone-permissions = You’ve previously denied microphone permissions, so please enable them in settings.
 Youve-previously-denied-photo-library-permissions = You've previously denied photo library permissions
-Zoom-in-as-much-as-possible-to-improve = Zoom in as much as possible to improve location accuracy and get better identifications.
 Zoom-to-current-location = Zoom to current location
 # Label for button that shows zoom level, e.g. on a camera
 zoom-x = { $zoom }×

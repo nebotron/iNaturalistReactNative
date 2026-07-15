@@ -145,7 +145,7 @@ const LocationPickerContainer = ( {
   onSave,
   mapChildren,
   legend,
-}: ContainerProps = {} ): Node => {
+}: ContainerProps ): Node => {
   const currentObservationFromStore = useStore( state => state.currentObservation );
   const currentObservation = observationProp ?? currentObservationFromStore;
   const lastLocationPickerState = useStore( state => state.lastLocationPickerState );
