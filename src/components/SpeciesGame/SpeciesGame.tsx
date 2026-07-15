@@ -1134,7 +1134,7 @@ const SpeciesGame = ( ) => {
       />
 
       {/* Bottom panel */}
-      <View className="bg-white px-4 pt-4" style={bottomPanelStyle}>
+      <View className="bg-white px-4 pt-2" style={bottomPanelStyle}>
         {phase === "playing"
           ? (
             <>
