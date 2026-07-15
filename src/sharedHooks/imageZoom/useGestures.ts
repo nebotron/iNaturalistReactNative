@@ -187,7 +187,7 @@ export const useGestures = ( {
       return;
     }
 
-    if ( scale.value > 1 ) {
+    if ( scale.value > 1 || allowLetterboxPan ) {
       // With letterboxing allowed, clamp only so the viewport center stays over
       // the image ( width * scale / 2 ) rather than requiring the image to cover
       // the whole viewport ( width * ( scale - 1 ) / 2 ).
@@ -358,7 +358,7 @@ export const useGestures = ( {
     .minPointers( 1 )
     .maxPointers( 1 )
     .onTouchesDown( ( _, manager ) => {
-      if ( !cropPanContext && scale.value <= 1 ) {
+      if ( !cropPanContext && !allowLetterboxPan && scale.value <= 1 ) {
         manager.fail();
       }
     } )
