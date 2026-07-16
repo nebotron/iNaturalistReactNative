@@ -1,5 +1,5 @@
 import * as RNFS from "@dr.pogodin/react-native-fs";
-import { enhanceLoggerWithExtra } from "api/log";
+import firebaseLogTransport, { enhanceLoggerWithExtra } from "api/log";
 import {
   consoleTransport,
   fileAsyncTransport,
@@ -42,14 +42,15 @@ const baseLog = logger.createLogger( {
   transport: [
     consoleTransport,
     fileAsyncTransport,
+    firebaseLogTransport,
   ],
 } );
 
 // given the general react-native-logs logger with debug(), warn(), etx,
 // add wrappers for debugWithExtra(), etc which provides more intentional
-// log interfaces for the iNatLogstash API `extra` proprty. `iNatLogstashTransport`
-// handles this extra data specially while other transports treat it as any other normal
-// log param.
+// log interfaces for Firebase Crashlytics's custom `extra` attributes.
+// `firebaseLogTransport` handles this extra data specially while other
+// transports treat it as any other normal log param.
 export const log = enhanceLoggerWithExtra( baseLog );
 
 export const logWithoutRemote = logger.createLogger( {
