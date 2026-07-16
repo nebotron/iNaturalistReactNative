@@ -298,6 +298,10 @@ def main() -> None:
     raw = _fetch_firebase(base_url)
 
     # Support both list format (Firebase/crop_training.json) and keyed-object format
+    if isinstance(raw, dict) and any(
+        isinstance(v, dict) and "url" in v for v in raw.values()
+    ):
+        raw = [v for v in raw.values() if isinstance(v, dict) and "url" in v]
     if isinstance(raw, list):
         entries_raw = [(entry["url"], entry) for entry in raw]
     else:

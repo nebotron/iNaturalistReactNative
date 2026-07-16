@@ -40,9 +40,12 @@ def fetch_firebase( base_url: str ) -> list:
     req = urllib.request.Request( url, headers={ "User-Agent": "iNat-crop-pull/1.0" } )
     with urllib.request.urlopen( req, timeout=15 ) as r:
         data = json.loads( r.read() )
-    if data is None:
-        return []
-    return data
+    if isinstance( data, dict ):
+        # Url-keyed object (value carries the url): keep the values.
+        return [v for v in data.values() if isinstance( v, dict ) and "url" in v]
+    if isinstance( data, list ):
+        return [e for e in data if e]
+    return []
 
 
 def merge( existing: list, incoming: list ) -> list:

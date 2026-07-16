@@ -27,15 +27,6 @@ const load = ( ): AnimalCropLog => {
   }
 };
 
-const _logToArray = ( logObj: AnimalCropLog ) => Object.entries( logObj )
-  .map( ( [url, crop] ) => ( {
-    url,
-    x: crop.x,
-    y: crop.y,
-    w: crop.w,
-    h: crop.h,
-  } ) );
-
 /**
  * Requires in .env:
  *   CROP_LOG_FIREBASE_URL=https://<project-id>.firebaseio.com
@@ -57,17 +48,18 @@ export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[] | null
     if ( Array.isArray( data ) ) {
       return data.filter( Boolean );
     }
-    // Handle legacy object format: { "url": { x, y, w, h } }
+    // Handle object formats: url-keyed { "<key>": { url, x, y, w, h } } (the
+    // value carries the url), and legacy { "<url>": { x, y, w, h } }.
     if ( data && typeof data === "object" ) {
-      return ( Object.entries( data ) as [string, NormalizedCrop][] )
-        .filter( ( [url] ) => url.startsWith( "http" ) )
-        .map( ( [url, crop] ) => ( {
-          url,
+      return ( Object.entries( data ) as [string, Partial<CropLogEntry> & NormalizedCrop][] )
+        .map( ( [key, crop] ) => ( {
+          url: typeof crop.url === "string" ? crop.url : key,
           x: crop.x,
           y: crop.y,
           w: crop.w,
           h: crop.h,
-        } ) );
+        } ) )
+        .filter( entry => entry.url.startsWith( "http" ) );
     }
     // null/absent node = genuinely empty log
     return [];
@@ -77,43 +69,36 @@ export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[] | null
   }
 };
 
-const _mergeByUrl = ( a: CropLogEntry[], b: CropLogEntry[] ): CropLogEntry[] => {
-  const byUrl = new Map<string, CropLogEntry>( );
-  [...a, ...b].forEach( entry => byUrl.set( entry.url, entry ) );
-  return Array.from( byUrl.values( ) );
-};
+// Firebase keys can't contain . $ # [ ] / — encodeURIComponent escapes all of
+// those except the dot, which we handle explicitly.
+const fbKey = ( url: string ): string => encodeURIComponent( url ).replace( /\./g, "%2E" );
 
-const _putToFirebase = ( entries: CropLogEntry[] ) => {
+// Write a single entry to its own URL-keyed child. Keying by the photo URL
+// means re-saving a photo overwrites its entry instead of appending a
+// duplicate, and writing one child never downloads the (ever-growing) log to
+// merge — that read-before-write was the biggest source of Firebase download
+// traffic — while other entries are left untouched. The log DB allows
+// unauthenticated writes, so no auth token is needed here.
+const putToFirebase = ( entry: CropLogEntry ) => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
-  fetch( `${baseUrl}/crop_log.json`, {
+  fetch( `${baseUrl}/crop_log/${fbKey( entry.url )}.json`, {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify( entries ),
+    body: JSON.stringify( entry ),
   } )
     .then( r => { if ( !r.ok ) logger.warn( "Firebase sync failed", r.status ); } )
     .catch( err => logger.warn( "Firebase sync error", err ) );
 };
 
-// Merges with whatever is already on Firebase so entries synced from other
-// devices/installs aren't clobbered by an overwrite based on incomplete
-// local data.
-async function syncToFirebase( localLogArray: CropLogEntry[] ) {
+// URL-keyed storage lets us delete the single child directly — no download.
+const deleteFromFirebase = ( photoUrl: string ) => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
-  const remote = await fetchCropLogFromFirebase( );
-  if ( remote === null ) return; // can't read remote — don't clobber it
-  _putToFirebase( _mergeByUrl( remote, localLogArray ) );
-}
-
-async function deleteFromFirebase( photoUrl: string, localLogArray: CropLogEntry[] ) {
-  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
-  if ( !baseUrl ) return;
-  const remote = await fetchCropLogFromFirebase( );
-  if ( remote === null ) return; // can't read remote — don't clobber it
-  const merged = _mergeByUrl( remote, localLogArray ).filter( e => e.url !== photoUrl );
-  _putToFirebase( merged );
-}
+  fetch( `${baseUrl}/crop_log/${fbKey( photoUrl )}.json`, { method: "DELETE" } )
+    .then( r => { if ( !r.ok ) logger.warn( "Firebase delete failed", r.status ); } )
+    .catch( err => logger.warn( "Firebase delete error", err ) );
+};
 
 // Normalise photo URLs to the "large" size so crops saved from the crop
 // tool (which stores large URLs) are found when the explore page looks up
@@ -127,14 +112,16 @@ export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
   const current = load( );
   current[photoUrl] = crop;
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
-  syncToFirebase( _logToArray( current ) );
+  putToFirebase( {
+    url: photoUrl, x: crop.x, y: crop.y, w: crop.w, h: crop.h,
+  } );
 };
 
 export const deleteAnimalCrop = ( photoUrl: string ) => {
   const current = load( );
   delete current[photoUrl];
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
-  deleteFromFirebase( photoUrl, _logToArray( current ) );
+  deleteFromFirebase( photoUrl );
 };
 
 export const getAnimalCrop = ( url: string ): NormalizedCrop | null => {

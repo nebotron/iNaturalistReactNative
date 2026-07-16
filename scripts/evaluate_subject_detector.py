@@ -688,6 +688,11 @@ def main() -> None:
     # Support two formats:
     #   1. Array of {url, x, y, w, h}  (crop_training.json / Firebase)
     #   2. Object keyed by URL with {crop: {x,y,w,h}, kept: bool}  (old feedback export)
+    #   3. Object keyed by url with {url, x, y, w, h}  (Firebase log)
+    if isinstance(raw, dict) and any(
+        isinstance(v, dict) and "url" in v for v in raw.values()
+    ):
+        raw = [v for v in raw.values() if isinstance(v, dict) and "url" in v]
     if isinstance(raw, list):
         entries_raw = [(entry["url"], {"crop": entry, "kept": True}) for entry in raw]
     else:

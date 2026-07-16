@@ -149,6 +149,10 @@ def main():
         sys.exit("CROP_LOG_FIREBASE_URL not set in .env")
 
     raw = _fetch_firebase(base_url)
+    if isinstance(raw, dict) and any(
+        isinstance(v, dict) and "url" in v for v in raw.values()
+    ):
+        raw = [v for v in raw.values() if isinstance(v, dict) and "url" in v]
     if isinstance(raw, list):
         entries_raw = [(e["url"], e) for e in raw]
     else:
