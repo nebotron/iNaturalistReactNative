@@ -3,11 +3,14 @@
 Pull the latest animal crop log from Firebase Realtime Database and merge it
 into crop_training.json.
 
-Set CROP_LOG_FIREBASE_URL in .env or as an environment variable.
+Requires these set in .env or as environment variables:
+    CROP_LOG_FIREBASE_URL
+    FIREBASE_WEB_API_KEY
+    CLAUDE_FIREBASE_EMAIL
+    CLAUDE_FIREBASE_PASSWORD
 
 Usage:
     python3 scripts/pull_crop_log.py
-    CROP_LOG_FIREBASE_URL=https://project.firebaseio.com python3 scripts/pull_crop_log.py
 """
 
 from __future__ import annotations
@@ -34,8 +37,30 @@ def load_env() -> None:
         os.environ.setdefault( k.strip(), v.strip() )
 
 
-def fetch_firebase( base_url: str ) -> list:
-    url = f"{base_url.rstrip('/')}/crop_log.json"
+def sign_in() -> str:
+    api_key = os.environ.get( "FIREBASE_WEB_API_KEY", "" ).strip()
+    email = os.environ.get( "CLAUDE_FIREBASE_EMAIL", "" ).strip()
+    password = os.environ.get( "CLAUDE_FIREBASE_PASSWORD", "" ).strip()
+    if not ( api_key and email and password ):
+        sys.exit(
+            "FIREBASE_WEB_API_KEY, CLAUDE_FIREBASE_EMAIL, and CLAUDE_FIREBASE_PASSWORD "
+            "must be set (in .env or the environment) to read from Firebase."
+        )
+    url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={api_key}"
+    body = json.dumps( {
+        "email": email,
+        "password": password,
+        "returnSecureToken": True,
+    } ).encode()
+    req = urllib.request.Request(
+        url, data=body, headers={ "Content-Type": "application/json" }, method="POST"
+    )
+    with urllib.request.urlopen( req, timeout=15 ) as r:
+        return json.loads( r.read() )["idToken"]
+
+
+def fetch_firebase( base_url: str, id_token: str ) -> list:
+    url = f"{base_url.rstrip('/')}/crop_log.json?auth={id_token}"
     req = urllib.request.Request( url, headers={ "User-Agent": "iNat-crop-pull/1.0" } )
     with urllib.request.urlopen( req, timeout=15 ) as r:
         data = json.loads( r.read() )
@@ -61,8 +86,10 @@ def main() -> None:
             "Add it to .env or export it as an environment variable."
         )
 
+    id_token = sign_in()
+
     print( f"Fetching crop log from {base_url} …" )
-    incoming = fetch_firebase( base_url )
+    incoming = fetch_firebase( base_url, id_token )
     print( f"  Got {len(incoming)} entries from Firebase." )
 
     existing: list = []
