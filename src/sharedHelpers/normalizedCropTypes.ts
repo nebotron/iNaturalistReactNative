@@ -3,6 +3,10 @@ export interface NormalizedCrop {
   y: number;
   w: number;
   h: number;
+  // Exposure multiplier predicted by the subject-detection model's baked-in
+  // brightness head, clamped to [0.4, 3.0] in-graph. Only present on crops
+  // produced by detectSubjectInImage.
+  brightness?: number;
 }
 
 export const MIN_CROP_FRACTION = 0.05;
@@ -218,13 +222,17 @@ export function computeCropStyles(
     scaledH = ( imageHeight / imageWidth ) * scaledW;
     const cropDisplayH = crop.h * scaledH;
     horizontalOffset = 0;
-    verticalOffset = cropDisplayH < boxSize ? ( boxSize - cropDisplayH ) / 2 : 0;
+    verticalOffset = cropDisplayH < boxSize
+      ? ( boxSize - cropDisplayH ) / 2
+      : 0;
   } else {
     // Portrait: scale so the crop fills the full box height
     scaledH = boxSize / crop.h;
     scaledW = ( imageWidth / imageHeight ) * scaledH;
     const cropDisplayW = crop.w * scaledW;
-    horizontalOffset = cropDisplayW < boxSize ? ( boxSize - cropDisplayW ) / 2 : 0;
+    horizontalOffset = cropDisplayW < boxSize
+      ? ( boxSize - cropDisplayW ) / 2
+      : 0;
     verticalOffset = 0;
   }
 
@@ -354,8 +362,12 @@ export function square2048Crop(
   // Keep the new crop centered on the current crop's center when one is
   // provided, so resizing to 2048 doesn't jump the region back to the middle
   // of the image. clampCrop keeps it inside the image bounds.
-  const cx = currentCrop ? currentCrop.x + currentCrop.w / 2 : 0.5;
-  const cy = currentCrop ? currentCrop.y + currentCrop.h / 2 : 0.5;
+  const cx = currentCrop
+    ? currentCrop.x + currentCrop.w / 2
+    : 0.5;
+  const cy = currentCrop
+    ? currentCrop.y + currentCrop.h / 2
+    : 0.5;
 
   return clampCrop( {
     x: cx - w / 2,

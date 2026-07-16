@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Compute crop-region luminance features for every image in
-brightness_log_raw.json, using the deployed subject detector to find the
+brightness_training.json, using the deployed subject detector to find the
 crop (same as production: brightness is measured over the detected subject
 region, not the full frame). Writes /tmp/brightness_crop_features.json for
 scripts/explore_brightness_crop_models.py to consume.

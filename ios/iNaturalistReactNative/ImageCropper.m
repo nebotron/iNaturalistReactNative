@@ -92,6 +92,10 @@ typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 static OrtEnv     *s_ortEnv     = NULL;
 static OrtSession *s_ortSession = NULL;
 static BOOL        s_yoloFailed = NO;
+// The current model also exposes a "brightness" output (a ridge head baked
+// into the graph — see scripts/bake_brightness_head.py). Detected at init so
+// an older single-output model file keeps working.
+static BOOL        s_hasBrightnessOutput = NO;
 
 static void initYOLOSession( void )
 {
@@ -113,7 +117,12 @@ static void initYOLOSession( void )
 
     OrtStatus *status = ort->CreateSession( s_ortEnv, [path UTF8String], opts, &s_ortSession );
     ort->ReleaseSessionOptions( opts );
-    if ( status ) { ort->ReleaseStatus( status ); s_yoloFailed = YES; }
+    if ( status ) { ort->ReleaseStatus( status ); s_yoloFailed = YES; return; }
+
+    size_t outputCount = 0;
+    if ( !ort->SessionGetOutputCount( s_ortSession, &outputCount ) ) {
+      s_hasBrightnessOutput = outputCount >= 2;
+    }
   } );
 }
 
@@ -183,7 +192,10 @@ static int compareBoxByConf( const void *a, const void *b )
 }
 
 // Returns {x,y,width,height} in top-left normalised coords, or nil if nothing detected.
-static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
+// When the model carries the baked-in brightness head, *outBrightness receives the
+// predicted exposure multiplier (already clamped in-graph) even if no box passes the
+// gate; it is left untouched otherwise.
+static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, float *outBrightness )
 {
   initYOLOSession();
   if ( s_yoloFailed || !s_ortSession ) return nil;
@@ -211,19 +223,30 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   }
 
   const char *inputNames[]  = { "images" };
-  const char *outputNames[] = { "output0" };
-  OrtValue   *outputTensor  = NULL;
+  const char *outputNames[] = { "output0", "brightness" };
+  size_t      numOutputs    = s_hasBrightnessOutput ? 2 : 1;
+  OrtValue   *outputs[2]    = { NULL, NULL };
 
   status = ort->Run( s_ortSession, NULL,
                      inputNames,  (const OrtValue *const *)&inputTensor,  1,
-                     outputNames, 1, &outputTensor );
+                     outputNames, numOutputs, outputs );
   ort->ReleaseValue( inputTensor );
   free( inputData );
 
-  if ( status || !outputTensor ) {
+  if ( status || !outputs[0] ) {
     if ( status ) ort->ReleaseStatus( status );
+    if ( outputs[1] ) ort->ReleaseValue( outputs[1] );
     return nil;
   }
+
+  if ( outputs[1] && outBrightness ) {
+    float *bright = NULL;
+    if ( !ort->GetTensorMutableData( outputs[1], (void **)&bright ) && bright ) {
+      *outBrightness = bright[0];
+    }
+  }
+  if ( outputs[1] ) ort->ReleaseValue( outputs[1] );
+  OrtValue *outputTensor = outputs[0];
 
   // output0: [1, 5, 8400] — rows 0-3 = cx,cy,w,h; row 4 = objectness score (1 class)
   float *out;
@@ -417,19 +440,30 @@ static inline void applyExposurePreservingColor( unsigned char *px, float k )
 // ─── Public detection entry point ────────────────────────────────────────────
 
 // Try YOLO; fall back to Vision attention saliency when nothing is detected.
+// The model's brightness prediction (computed on the same forward pass) is
+// attached to whichever bounds are returned.
 static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
 {
   if ( image.CGImage == NULL ) return nil;
 
-  NSDictionary *yoloBounds = detectSubjectBoundsYOLO( image );
-  if ( yoloBounds ) return yoloBounds;
+  float brightness = -1.0f;
+  NSDictionary *bounds = detectSubjectBoundsYOLO( image, &brightness );
 
-  CGImagePropertyOrientation orientation = orientationFromUIImage( image );
-  VNImageRequestHandler *handler =
-    [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
-                                       orientation:orientation
-                                           options:@{}];
-  return detectSubjectBoundsSaliency( handler );
+  if ( !bounds ) {
+    CGImagePropertyOrientation orientation = orientationFromUIImage( image );
+    VNImageRequestHandler *handler =
+      [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
+                                         orientation:orientation
+                                             options:@{}];
+    bounds = detectSubjectBoundsSaliency( handler );
+  }
+
+  if ( bounds && brightness > 0.0f ) {
+    NSMutableDictionary *withBrightness = [bounds mutableCopy];
+    withBrightness[@"brightness"] = @( brightness );
+    bounds = withBrightness;
+  }
+  return bounds;
 }
 
 // ─── Image metadata helpers ──────────────────────────────────────────────────

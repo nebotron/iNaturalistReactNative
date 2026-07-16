@@ -5,15 +5,19 @@ import ensureLocalImageForCrop from "./ensureLocalImageForCrop";
 import measureImageBrightness from "./measureImageBrightness";
 import type { NormalizedCrop } from "./normalizedCropTypes";
 
-// Log-linear fit of brightness multiplier ~ (geometric-mean, median)
-// luminance of the detected subject crop, against 100 human-picked "ideal
-// brightness" labels from brightness_log_raw.json — see
-// scripts/explore_brightness_crop_models.py. The opposite-signed
-// coefficients key on how far the shadow tail drags the geomean below the
-// median: a heavy dark tail under a mid-bright median (e.g. a backlit
-// subject) predicts a strong brightening choice (LOOCV MAE 0.683 vs 0.756
-// for the previous single-feature p10 fit and 0.974 for a naive constant
-// guess).
+// Preferred source: the subject-detection model's baked-in brightness head
+// (crop.brightness, predicted on the same forward pass as the box — see
+// scripts/bake_brightness_head.py; LOOCV MAE 0.568 on 193 labels vs 0.665
+// for the formula below). The stats formula remains as the fallback for
+// crops that didn't come from the detector (manual/logged crops, full-image
+// measurement, saliency-only results from an old model file).
+//
+// Fallback: log-linear fit of brightness multiplier ~ (geometric-mean,
+// median) luminance of the subject crop, against 100 human-picked "ideal
+// brightness" labels — see scripts/explore_brightness_crop_models.py. The
+// opposite-signed coefficients key on how far the shadow tail drags the
+// geomean below the median: a heavy dark tail under a mid-bright median
+// (e.g. a backlit subject) predicts a strong brightening choice.
 const GEOMEAN_COEF = -4.167017;
 const MEDIAN_COEF = 2.612363;
 const INTERCEPT = 0.827665;
@@ -60,6 +64,7 @@ const useAutoBrightnessForUri = (
       : getBrightness( u );
     if ( logged !== null ) return logged;
     if ( c === undefined ) return 1.0; // still waiting for detection
+    if ( c?.brightness != null ) return c.brightness;
     return cache.get( cacheKey( u, c ) ) ?? 1.0;
   };
 
@@ -98,6 +103,13 @@ const useAutoBrightnessForUri = (
 
     // crop===undefined means subject detection hasn't finished yet — wait.
     if ( crop === undefined ) return ( ) => {};
+
+    // The detection model already predicted brightness on the same forward
+    // pass that produced this crop — no separate measurement needed.
+    if ( crop?.brightness != null ) {
+      setBrightness( crop.brightness );
+      return ( ) => {};
+    }
 
     const key = cacheKey( uri, crop );
     const existing = cache.get( key );
