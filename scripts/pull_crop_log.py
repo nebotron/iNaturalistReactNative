@@ -35,7 +35,8 @@ def load_env() -> None:
 
 
 def fetch_firebase( base_url: str ) -> list:
-    url = f"{base_url.rstrip('/')}/crop_log.json"
+    from firebase_auth import firebase_auth_query
+    url = f"{base_url.rstrip('/')}/crop_log.json{firebase_auth_query()}"
     req = urllib.request.Request( url, headers={ "User-Agent": "iNat-crop-pull/1.0" } )
     with urllib.request.urlopen( req, timeout=15 ) as r:
         data = json.loads( r.read() )

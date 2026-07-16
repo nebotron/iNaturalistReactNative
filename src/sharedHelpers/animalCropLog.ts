@@ -1,4 +1,5 @@
 import Config from "react-native-config";
+import firebaseAuthQuery from "sharedHelpers/firebaseRtdbAuth";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { zustandStorage } from "stores/useStore";
@@ -39,12 +40,19 @@ const _logToArray = ( logObj: AnimalCropLog ) => Object.entries( logObj )
  * Requires in .env:
  *   CROP_LOG_FIREBASE_URL=https://<project-id>.firebaseio.com
  */
-export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[]> => {
+// Returns null when the fetch fails (offline, permission denied, …) so that
+// sync callers can abort instead of treating failure as "remote is empty"
+// and overwriting the remote log with only this device's crops.
+export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[] | null> => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
-  if ( !baseUrl ) return [];
+  if ( !baseUrl ) return null;
   try {
-    const res = await fetch( `${baseUrl}/crop_log.json` );
-    if ( !res.ok ) return [];
+    const auth = await firebaseAuthQuery( );
+    const res = await fetch( `${baseUrl}/crop_log.json${auth}` );
+    if ( !res.ok ) {
+      logger.warn( "Firebase fetch failed", res.status );
+      return null;
+    }
     const data = await res.json( );
     if ( Array.isArray( data ) ) {
       return data.filter( Boolean );
@@ -61,10 +69,11 @@ export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[]> => {
           h: crop.h,
         } ) );
     }
+    // null/absent node = genuinely empty log
     return [];
   } catch ( err ) {
     logger.warn( "Firebase fetch error", err );
-    return [];
+    return null;
   }
 };
 
@@ -93,6 +102,7 @@ async function syncToFirebase( localLogArray: CropLogEntry[] ) {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
   const remote = await fetchCropLogFromFirebase( );
+  if ( remote === null ) return; // can't read remote — don't clobber it
   _putToFirebase( _mergeByUrl( remote, localLogArray ) );
 }
 
@@ -100,6 +110,7 @@ async function deleteFromFirebase( photoUrl: string, localLogArray: CropLogEntry
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
   const remote = await fetchCropLogFromFirebase( );
+  if ( remote === null ) return; // can't read remote — don't clobber it
   const merged = _mergeByUrl( remote, localLogArray ).filter( e => e.url !== photoUrl );
   _putToFirebase( merged );
 }

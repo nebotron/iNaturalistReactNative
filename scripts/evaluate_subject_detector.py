@@ -637,8 +637,10 @@ def _load_env() -> None:
 
 
 def _fetch_firebase(base_url: str) -> list:
+    from firebase_auth import firebase_auth_query
     url = f"{base_url.rstrip('/')}/crop_log.json"
     print(f"Fetching crop log from {url} …")
+    url += firebase_auth_query()
     req = urllib.request.Request(url, headers={"User-Agent": "iNat-crop-eval/1.0"})
     with urllib.request.urlopen(req, timeout=15) as r:
         data = json.loads(r.read())

@@ -35,7 +35,8 @@ def load_env() -> None:
 
 
 def fetch( base_url: str, path: str ) -> object:
-    url = f"{base_url.rstrip('/')}/{path}"
+    from firebase_auth import firebase_auth_query
+    url = f"{base_url.rstrip('/')}/{path}{firebase_auth_query()}"
     req = urllib.request.Request( url, headers={ "User-Agent": "iNat-pull-logs/1.0" } )
     with urllib.request.urlopen( req, timeout=15 ) as r:
         return json.loads( r.read() )

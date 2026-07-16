@@ -1,6 +1,7 @@
 import Clipboard from "@react-native-clipboard/clipboard";
 import { Alert } from "react-native";
 import Config from "react-native-config";
+import firebaseAuthQuery from "sharedHelpers/firebaseRtdbAuth";
 import { log } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
 
@@ -35,12 +36,20 @@ const _logToArray = ( logObj: BrightnessLog ): BrightnessLogEntry[] => Object.en
  * Labeled brightness values are stored at {baseUrl}/brightness_log.json
  * alongside the crop log, for use in offline brightness tuning scripts.
  */
-export const fetchBrightnessLogFromFirebase = async ( ): Promise<BrightnessLogEntry[]> => {
+// Returns null when the fetch fails (offline, permission denied, …) so that
+// sync callers can abort instead of treating failure as "remote is empty"
+// and overwriting the remote log with only this device's labels.
+export const fetchBrightnessLogFromFirebase = async ( )
+: Promise<BrightnessLogEntry[] | null> => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
-  if ( !baseUrl ) return [];
+  if ( !baseUrl ) return null;
   try {
-    const res = await fetch( `${baseUrl}/brightness_log.json` );
-    if ( !res.ok ) return [];
+    const auth = await firebaseAuthQuery( );
+    const res = await fetch( `${baseUrl}/brightness_log.json${auth}` );
+    if ( !res.ok ) {
+      logger.warn( "Firebase fetch failed", res.status );
+      return null;
+    }
     const data = await res.json( );
     if ( Array.isArray( data ) ) return data.filter( Boolean );
     if ( data && typeof data === "object" ) {
@@ -48,10 +57,11 @@ export const fetchBrightnessLogFromFirebase = async ( ): Promise<BrightnessLogEn
         .filter( ( [url] ) => url.startsWith( "http" ) )
         .map( ( [url, brightness] ) => ( { url, brightness } ) );
     }
+    // null/absent node = genuinely empty log
     return [];
   } catch ( err ) {
     logger.warn( "Firebase fetch error", err );
-    return [];
+    return null;
   }
 };
 
@@ -83,6 +93,7 @@ async function syncToFirebase( localArray: BrightnessLogEntry[] ): Promise<void>
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
   const remote = await fetchBrightnessLogFromFirebase( );
+  if ( remote === null ) return; // can't read remote — don't clobber it
   await _putToFirebase( _mergeByUrl( remote, localArray ) );
 }
 
@@ -90,6 +101,7 @@ async function deleteFromFirebase( photoUrl: string, localArray: BrightnessLogEn
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
   const remote = await fetchBrightnessLogFromFirebase( );
+  if ( remote === null ) return; // can't read remote — don't clobber it
   const merged = _mergeByUrl( remote, localArray ).filter( e => e.url !== photoUrl );
   _putToFirebase( merged );
 }

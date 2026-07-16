@@ -1,4 +1,4 @@
-/* eslint-disable i18next/no-literal-strings */
+/* eslint-disable i18next/no-literal-string */
 import { INatIcon } from "components/SharedComponents";
 import { Text, View } from "components/styledComponents";
 import React, {
@@ -177,7 +177,7 @@ const CropLogViewer = ( ) => {
     ( async ( ) => {
       const remote = await fetchCropLogFromFirebase( );
       if ( cancelled ) return;
-      setEntries( [...remote].reverse( ) );
+      setEntries( [...( remote ?? [] )].reverse( ) );
       setLoading( false );
     } )( );
     return ( ) => { cancelled = true; };
