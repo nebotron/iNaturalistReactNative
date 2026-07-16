@@ -53,7 +53,7 @@ def pull_crop_log( base_url: str ) -> bool:
     print( "Fetching crop log …" )
     data = fetch( base_url, "crop_log.json" )
     if isinstance( data, dict ):
-        # Push-keyed object from the appended Firebase log: keep the values.
+        # Url-keyed object (value carries the url): keep the values.
         incoming = [v for v in data.values() if isinstance( v, dict ) and "url" in v]
     elif isinstance( data, list ):
         incoming = [e for e in data if e]
@@ -85,11 +85,13 @@ def pull_brightness_log( base_url: str ) -> bool:
         incoming = []
         for key, val in data.items():
             if isinstance( val, dict ) and "url" in val:
-                # Push-keyed object from the appended Firebase log.
+                # Url-keyed object (value carries the url).
                 incoming.append( { "url": val["url"], "brightness": val.get( "brightness" ) } )
             elif key.startswith( "http" ):
                 # Legacy { url: brightness } object.
                 incoming.append( { "url": key, "brightness": val } )
+    else:
+        incoming = []
     print( f"  Got {len(incoming)} entries from Firebase." )
 
     existing: list = []

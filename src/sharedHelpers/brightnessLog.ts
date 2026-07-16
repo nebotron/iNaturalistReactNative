@@ -43,7 +43,7 @@ export const fetchBrightnessLogFromFirebase = async ( ): Promise<BrightnessLogEn
     if ( !res.ok ) return [];
     const data = await res.json( );
     if ( Array.isArray( data ) ) return data.filter( Boolean );
-    // Handle push-keyed { "<id>": { url, brightness } } from the appended log,
+    // Handle keyed { "<key>": { url, brightness } } (value carries the url),
     // and legacy { "<url>": brightness }.
     if ( data && typeof data === "object" ) {
       return ( Object.entries( data ) as [string, BrightnessLogEntry | number][] )
@@ -59,16 +59,20 @@ export const fetchBrightnessLogFromFirebase = async ( ): Promise<BrightnessLogEn
   }
 };
 
-// Append a single entry via POST. Firebase generates a unique child key, so we
-// never download the (ever-growing) log to merge before writing — that
-// read-before-write was the single biggest source of Firebase download
-// traffic — while still preserving entries from other devices/installs.
-const appendToFirebase = async ( entry: BrightnessLogEntry ): Promise<void> => {
+// Firebase keys can't contain . $ # [ ] / — encodeURIComponent escapes all of
+// those except the dot, which we handle explicitly.
+const fbKey = ( url: string ): string => encodeURIComponent( url ).replace( /\./g, "%2E" );
+
+// Write a single entry to its own URL-keyed child. Keying by the photo URL
+// means re-saving a photo overwrites its entry instead of appending a
+// duplicate, and writing one child never downloads the log to merge — that
+// read-before-write was the biggest source of Firebase download traffic.
+const putToFirebase = async ( entry: BrightnessLogEntry ): Promise<void> => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
   try {
-    const r = await fetch( `${baseUrl}/brightness_log.json`, {
-      method: "POST",
+    const r = await fetch( `${baseUrl}/brightness_log/${fbKey( entry.url )}.json`, {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify( entry ),
     } );
@@ -78,25 +82,14 @@ const appendToFirebase = async ( entry: BrightnessLogEntry ): Promise<void> => {
   }
 };
 
-// Deletes are rare (dev-only), so here we do read the log once to find the
-// child keys matching this URL, then remove just those children.
-async function deleteFromFirebase( photoUrl: string ) {
+// URL-keyed storage lets us delete the single child directly — no download.
+const deleteFromFirebase = ( photoUrl: string ) => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
-  try {
-    const res = await fetch( `${baseUrl}/brightness_log.json` );
-    if ( !res.ok ) return;
-    const data = await res.json( );
-    if ( !data || typeof data !== "object" ) return;
-    await Promise.all(
-      ( Object.entries( data ) as [string, BrightnessLogEntry][] )
-        .filter( ( [, entry] ) => entry?.url === photoUrl )
-        .map( ( [key] ) => fetch( `${baseUrl}/brightness_log/${key}.json`, { method: "DELETE" } ) ),
-    );
-  } catch ( err ) {
-    logger.warn( "Firebase delete error", err );
-  }
-}
+  fetch( `${baseUrl}/brightness_log/${fbKey( photoUrl )}.json`, { method: "DELETE" } )
+    .then( r => { if ( !r.ok ) logger.warn( "Firebase delete failed", r.status ); } )
+    .catch( err => logger.warn( "Firebase delete error", err ) );
+};
 
 const normalizePhotoUrl = ( url: string ): string => url.replace(
   /\/(square|small|medium|large|original)(\.(?:jpe?g|png|webp|gif))/i,
@@ -119,7 +112,7 @@ export const saveBrightness = ( photoUrl: string, brightness: number ): Promise<
   if ( !url.startsWith( "http" ) || url.includes( "static.inaturalist.org" ) ) {
     return Promise.resolve( );
   }
-  return appendToFirebase( { url, brightness } );
+  return putToFirebase( { url, brightness } );
 };
 
 export const deleteBrightness = ( photoUrl: string ) => {

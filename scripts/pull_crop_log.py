@@ -40,7 +40,7 @@ def fetch_firebase( base_url: str ) -> list:
     with urllib.request.urlopen( req, timeout=15 ) as r:
         data = json.loads( r.read() )
     if isinstance( data, dict ):
-        # Push-keyed object from the appended Firebase log: keep the values.
+        # Url-keyed object (value carries the url): keep the values.
         return [v for v in data.values() if isinstance( v, dict ) and "url" in v]
     if isinstance( data, list ):
         return [e for e in data if e]

@@ -40,8 +40,8 @@ export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[]> => {
     if ( Array.isArray( data ) ) {
       return data.filter( Boolean );
     }
-    // Handle object formats: push-keyed { "<id>": { url, x, y, w, h } } from
-    // the appended log, and legacy { "<url>": { x, y, w, h } }.
+    // Handle object formats: keyed { "<key>": { url, x, y, w, h } } (the value
+    // carries the url), and legacy { "<url>": { x, y, w, h } }.
     if ( data && typeof data === "object" ) {
       return ( Object.entries( data ) as [string, Partial<CropLogEntry> & NormalizedCrop][] )
         .map( ( [key, crop] ) => ( {
@@ -60,16 +60,20 @@ export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[]> => {
   }
 };
 
-// Append a single entry via POST. Firebase generates a unique child key, so we
-// never download the (ever-growing) log to merge before writing. That
-// read-before-write was the single biggest source of Firebase download
-// traffic, and appending still preserves entries from other devices/installs
-// instead of clobbering them with a whole-log overwrite.
-const appendToFirebase = ( entry: CropLogEntry ) => {
+// Firebase keys can't contain . $ # [ ] / — encodeURIComponent escapes all of
+// those except the dot, which we handle explicitly.
+const fbKey = ( url: string ): string => encodeURIComponent( url ).replace( /\./g, "%2E" );
+
+// Write a single entry to its own URL-keyed child. Keying by the photo URL
+// means re-saving a photo overwrites its entry instead of appending a
+// duplicate, and writing one child never downloads the (ever-growing) log to
+// merge — that read-before-write was the biggest source of Firebase download
+// traffic — while other entries are left untouched.
+const putToFirebase = ( entry: CropLogEntry ) => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
-  fetch( `${baseUrl}/crop_log.json`, {
-    method: "POST",
+  fetch( `${baseUrl}/crop_log/${fbKey( entry.url )}.json`, {
+    method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify( entry ),
   } )
@@ -77,25 +81,14 @@ const appendToFirebase = ( entry: CropLogEntry ) => {
     .catch( err => logger.warn( "Firebase sync error", err ) );
 };
 
-// Deletes are rare (dev-only), so here we do read the log once to find the
-// child keys matching this URL, then remove just those children.
-async function deleteFromFirebase( photoUrl: string ) {
+// URL-keyed storage lets us delete the single child directly — no download.
+const deleteFromFirebase = ( photoUrl: string ) => {
   const baseUrl = Config.CROP_LOG_FIREBASE_URL;
   if ( !baseUrl ) return;
-  try {
-    const res = await fetch( `${baseUrl}/crop_log.json` );
-    if ( !res.ok ) return;
-    const data = await res.json( );
-    if ( !data || typeof data !== "object" ) return;
-    await Promise.all(
-      ( Object.entries( data ) as [string, CropLogEntry][] )
-        .filter( ( [, entry] ) => entry?.url === photoUrl )
-        .map( ( [key] ) => fetch( `${baseUrl}/crop_log/${key}.json`, { method: "DELETE" } ) ),
-    );
-  } catch ( err ) {
-    logger.warn( "Firebase delete error", err );
-  }
-}
+  fetch( `${baseUrl}/crop_log/${fbKey( photoUrl )}.json`, { method: "DELETE" } )
+    .then( r => { if ( !r.ok ) logger.warn( "Firebase delete failed", r.status ); } )
+    .catch( err => logger.warn( "Firebase delete error", err ) );
+};
 
 // Normalise photo URLs to the "large" size so crops saved from the crop
 // tool (which stores large URLs) are found when the explore page looks up
@@ -109,7 +102,7 @@ export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
   const current = load( );
   current[photoUrl] = crop;
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
-  appendToFirebase( {
+  putToFirebase( {
     url: photoUrl, x: crop.x, y: crop.y, w: crop.w, h: crop.h,
   } );
 };
