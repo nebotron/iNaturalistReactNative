@@ -10,6 +10,8 @@ import {
 import { fetchSpeciesCounts } from "api/observations";
 import MatchSaveDiscardButtons from "components/Match/SaveDiscardButtons";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
+import { UPLOAD } from "components/ObsEdit/BottomButtons";
+import useMultiObsSaveAndAdvance from "components/ObsEdit/hooks/useMultiObsSaveAndAdvance";
 import {
   ActivityIndicator,
   Body1,
@@ -60,6 +62,7 @@ import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import EstablishmentMeans from "./EstablishmentMeans";
+import IdentificationTips from "./IdentificationTips";
 import TaxonDetailsHeader, {
   OPTIONS as TAXON_DETAILS_HEADER_RIGHT_OPTIONS,
   SEARCH as TAXON_DETAILS_HEADER_RIGHT_SEARCH,
@@ -69,7 +72,6 @@ import TaxonDetailsTitle from "./TaxonDetailsTitle";
 import TaxonMapPreview from "./TaxonMapPreview";
 import TaxonMedia from "./TaxonMedia";
 import Taxonomy from "./Taxonomy";
-import IdentificationTips from "./IdentificationTips";
 import Wikipedia from "./Wikipedia";
 
 const SCROLL_VIEW_STYLE = {
@@ -93,6 +95,10 @@ const TaxonDetails = ( ): Node => {
   // Plug into global state
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const currentEditingObservation = useStore( state => state.currentObservation );
+  const currentObservationIndex = useStore( state => state.currentObservationIndex );
+  const observations = useStore( state => state.observations );
+  const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
+  const bulkUploadMode = useStore( state => state.bulkUploadMode );
   const getCurrentObservation = useStore( state => state.getCurrentObservation );
   const setExploreView = useStore( state => state.setExploreView );
   const cameraRollUris = useStore( state => state.cameraRollUris );
@@ -129,6 +135,25 @@ const TaxonDetails = ( ): Node => {
   const fromObsEdit = usableHistory.includes( "ObsEdit" );
   const fromMatch = usableHistory.includes( "Match" );
   const usableRoutes = navState?.routes.slice( usableStackIndex, history.length ) || [];
+
+  // Find the Suggestions/SuggestionsTaxonSearch screen this TaxonDetails (or
+  // chain of ancestor TaxonDetails screens) was pushed from, so we can tell
+  // whether we're in the ObsEdit bulk identification flow, even after
+  // drilling into one or more ancestor taxa.
+  const bulkFlowRoute = find(
+    usableRoutes.slice().reverse(),
+    r => r.name === "Suggestions" || r.name === "SuggestionsTaxonSearch",
+  );
+  const { entryScreen: bulkEntryScreen, lastScreen: bulkLastScreen } = bulkFlowRoute?.params || {};
+  const isMultiObsCreateFlow = (
+    observations.length > 1 || savedOrUploadedMultiObsFlow
+  ) && bulkEntryScreen === "ObsEdit" && bulkLastScreen === "ObsEdit";
+  const { saveAndAdvance } = useMultiObsSaveAndAdvance( {
+    currentObservation: currentEditingObservation,
+    currentObservationIndex,
+    observations,
+    transitionAnimation: ( ) => undefined,
+  } );
 
   // previous ObsDetails observation uuid
   const obsUuid = fromObsDetails
@@ -516,7 +541,7 @@ const TaxonDetails = ( ): Node => {
               pointerEvents="box-none"
             >
               {isConnected && !isTablet && photos.length > 1 && displayScrollDots()}
-              {(taxon || showGameButton) && displayTaxonTitle()}
+              {( taxon || showGameButton ) && displayTaxonTitle()}
             </View>
           </View>
           <View className="bg-white py-5 h-full flex-1">
@@ -550,7 +575,7 @@ const TaxonDetails = ( ): Node => {
             className="max-w-[500px] w-full"
             level="focus"
             text={t( "SELECT-THIS-TAXON" )}
-            onPress={( ) => {
+            onPress={async ( ) => {
               if ( selectableForExplore ) {
                 const exploreRouteName = history.includes( "RootExplore" )
                   ? "RootExplore"
@@ -570,6 +595,14 @@ const TaxonDetails = ( ): Node => {
                       identAt: Date.now(),
                     } ),
                   );
+                } else if ( isMultiObsCreateFlow ) {
+                  const numObservations = useStore.getState( ).observations.length;
+                  await saveAndAdvance( bulkUploadMode
+                    ? UPLOAD
+                    : "save" );
+                  if ( numObservations > 1 ) {
+                    navigation.dispatch( StackActions.popTo( "ObsEdit" ) );
+                  }
                 } else {
                   navigation.dispatch( StackActions.popTo( "ObsEdit" ) );
                 }
