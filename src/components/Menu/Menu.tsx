@@ -163,6 +163,12 @@ const Menu = ( ) => {
       navigation: "NetworkLog",
       icon: "globe-outline",
     },
+    devicePhotoCleanup: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "DELETE UNFAVED PHOTOS",
+      navigation: "DevicePhotoCleanup",
+      icon: "trash-outline",
+    },
     settings: {
       testID: "settings",
       label: t( "SETTINGS" ),

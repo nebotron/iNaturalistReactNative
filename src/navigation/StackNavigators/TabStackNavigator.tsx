@@ -3,6 +3,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import About from "components/About";
 import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
+import DevicePhotoCleanup from "components/DevicePhotoCleanup/DevicePhotoCleanup";
 import Log from "components/Developer/Log";
 import UiLibrary from "components/Developer/UiLibrary";
 import UiLibraryItem from "components/Developer/UiLibraryItem";
@@ -97,6 +98,8 @@ const notificationsTitle = () => (
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const networkLogTitle = () => <Heading4 numberOfLines={1}>NETWORK LOG</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>DELETE UNFAVED PHOTOS</Heading4>;
 const locationHistoryTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "LOCATION-HISTORY" )}
@@ -331,6 +334,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={NetworkLog}
             options={{
               headerTitle: networkLogTitle,
+            }}
+          />
+          <Stack.Screen
+            name="DevicePhotoCleanup"
+            component={DevicePhotoCleanup}
+            options={{
+              headerTitle: devicePhotoCleanupTitle,
             }}
           />
           <Stack.Screen
