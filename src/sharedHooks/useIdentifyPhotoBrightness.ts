@@ -37,7 +37,7 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
   // prediction -- otherwise saving a manual value here would feed back into
   // its own baseline and rebake a new Gamma image moments after release.
   const autoGain = useAutoBrightnessForUri(
-    isMultiplyMode
+    ( isMultiplyMode || isGammaMode )
       ? autoBrightnessUri
       : undefined,
     null,
@@ -50,7 +50,7 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
     null,
     true,
   );
-  const baseGain = isMultiplyMode
+  const baseGain = ( isMultiplyMode || isGammaMode )
     ? autoGain
     : 1;
   const brightnessStops = manualStops ?? gainToStops( baseGain );
