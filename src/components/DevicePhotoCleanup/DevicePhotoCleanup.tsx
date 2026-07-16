@@ -1,10 +1,12 @@
 /* eslint-disable i18next/no-literal-strings */
 import {
   Body2,
+  BottomSheet,
   Button,
+  ButtonBar,
   Heading4,
+  List2,
   ViewWrapper,
-  WarningSheet,
 } from "components/SharedComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -24,6 +26,9 @@ import findUnfavoritedDevicePhotoDays from "sharedHelpers/unfavoritedDevicePhoto
 const { useRealm } = RealmContext;
 
 const THUMB_SIZE = 78;
+// Cap how many thumbnails we render in the confirmation preview strip so a
+// huge selection doesn't bog the sheet down; the count still reflects all.
+const CONFIRM_PREVIEW_LIMIT = 30;
 
 const styles = StyleSheet.create( {
   thumb: {
@@ -122,18 +127,62 @@ const DevicePhotoCleanup = ( ) => {
         />
       </View>
       {showConfirm && (
-        <WarningSheet
+        <BottomSheet
           onPressClose={( ) => setShowConfirm( false )}
           headerText="DELETE PHOTOS?"
-          text={`This will permanently delete ${allUris.length} photo${allUris.length === 1
-            ? ""
-            : "s"} from your device's photo library. Your iNaturalist observations will keep their own copies.`}
-          buttonText="DELETE"
-          confirm={confirmDelete}
-          handleSecondButtonPress={( ) => setShowConfirm( false )}
-          secondButtonText="CANCEL"
-          loading={deleting}
-        />
+        >
+          <View className="p-5">
+            <Heading4 className="mb-1">
+              {`Deleting ${allUris.length} photo${allUris.length === 1
+                ? ""
+                : "s"}`}
+            </Heading4>
+            <List2 className="mb-4">
+              These will be permanently removed from your device&apos;s photo
+              library. Your iNaturalist observations keep their own copies.
+            </List2>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              className="mb-5"
+            >
+              {allUris.slice( 0, CONFIRM_PREVIEW_LIMIT ).map( uri => (
+                <Image
+                  key={uri}
+                  source={{ uri }}
+                  style={styles.thumb}
+                  resizeMode="cover"
+                />
+              ) )}
+              {allUris.length > CONFIRM_PREVIEW_LIMIT && (
+                <View
+                  style={styles.thumb}
+                  className="items-center justify-center bg-lightGray"
+                >
+                  <Body2>{`+${allUris.length - CONFIRM_PREVIEW_LIMIT}`}</Body2>
+                </View>
+              )}
+            </ScrollView>
+            <ButtonBar
+              buttonConfiguration={[
+                {
+                  title: "CANCEL",
+                  onPress: ( ) => setShowConfirm( false ),
+                  isPrimary: false,
+                },
+                {
+                  title: `DELETE ${allUris.length}`,
+                  onPress: confirmDelete,
+                  level: "warning",
+                  loading: deleting,
+                  disabled: deleting,
+                  isPrimary: false,
+                  className: "grow ml-3",
+                },
+              ]}
+            />
+          </View>
+        </BottomSheet>
       )}
     </ViewWrapper>
   );
