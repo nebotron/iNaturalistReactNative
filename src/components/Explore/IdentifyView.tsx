@@ -108,16 +108,14 @@ const IdentifyView = ( {
   const currentPhotoUrl = photoUrls[selectedPhotoIndex];
   const {
     brightness, displayUri, brightnessStops, setBrightnessStops, handleBrightnessComplete,
-    previewBrightness, isOffMode,
+    isOffMode,
   } = useIdentifyPhotoBrightness( currentPhotoUrl );
 
-  // Applies the slider's live value directly to the image (bypassing a full
-  // re-render per tick, same as handleZoomChange does for zoom) so the
-  // preview tracks the finger exactly, not just the value at release.
+  // Update the exposure override live; the image re-renders with the new
+  // brightness filter each tick.
   const handleBrightnessChange = useCallback( ( value: number ) => {
     setBrightnessStops( value );
-    photoRef.current?.setBrightness( previewBrightness( value ) );
-  }, [previewBrightness, setBrightnessStops] );
+  }, [setBrightnessStops] );
 
   // Reset to the first photo whenever the observation changes.
   useEffect( ( ) => {

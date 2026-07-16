@@ -54,11 +54,16 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
     ? autoGain
     : 1;
   const brightnessStops = manualStops ?? gainToStops( baseGain );
-  // Off mode ignores the exposure slider entirely and always shows the
-  // original image, regardless of any auto or manual adjustment.
+  // Gamma mode bakes baseGain into displayUri, so the CSS brightness filter
+  // must only apply whatever is left on top of it -- otherwise the baseline is
+  // applied twice. Multiply mode bakes nothing, so the filter carries the full
+  // gain. Off mode ignores the slider entirely and shows the original image.
+  const bakedGain = isGammaMode
+    ? baseGain
+    : 1;
   const brightness = isOffMode
     ? 1
-    : stopsToGain( brightnessStops );
+    : stopsToGain( brightnessStops ) / bakedGain;
   const displayUri = isGammaMode
     ? toneMappedUri
     : undefined;
@@ -80,22 +85,12 @@ const useIdentifyPhotoBrightness = ( currentPhotoUrl?: string ) => {
     if ( currentPhotoUrl ) saveBrightness( currentPhotoUrl, stopsToGain( value ) );
   }, [currentPhotoUrl] );
 
-  // What a caller driving a live preview (e.g. dragging the slider) should
-  // show for a given stops value -- same Off-mode override as `brightness`,
-  // so a caller can't accidentally bypass it by computing stopsToGain itself.
-  const previewBrightness = useCallback( ( stops: number ) => (
-    isOffMode
-      ? 1
-      : stopsToGain( stops )
-  ), [isOffMode] );
-
   return {
     brightness,
     displayUri,
     brightnessStops,
     setBrightnessStops: setManualStops,
     handleBrightnessComplete,
-    previewBrightness,
     isOffMode,
   };
 };

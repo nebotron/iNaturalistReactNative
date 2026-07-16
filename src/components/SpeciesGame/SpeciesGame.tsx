@@ -256,20 +256,18 @@ const SpeciesGame = ( ) => {
   const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
   const {
     brightness, displayUri, brightnessStops, setBrightnessStops, handleBrightnessComplete,
-    previewBrightness, isOffMode,
+    isOffMode,
   } = useIdentifyPhotoBrightness( currentPhotoUrl ?? undefined );
 
   // Reset zoom for the visible photo (brightness resets itself via
   // useIdentifyPhotoBrightness).
   useEffect( ( ) => { setZoomScale( MIN_ZOOM ); }, [currentPhotoUrl] );
 
-  // Applies the slider's live value directly to the image (bypassing a full
-  // re-render per tick, same as handleZoomChange does for zoom) so the
-  // preview tracks the finger exactly, not just the value at release.
+  // Update the exposure override live; the image re-renders with the new
+  // brightness filter each tick.
   const handleBrightnessChange = useCallback( ( value: number ) => {
     setBrightnessStops( value );
-    photoRef.current?.setBrightness( previewBrightness( value ) );
-  }, [previewBrightness, setBrightnessStops] );
+  }, [setBrightnessStops] );
 
   const handleScaleChange = useCallback(
     ( scale: number ) => setZoomScale( clampZoom( scale ) ),
