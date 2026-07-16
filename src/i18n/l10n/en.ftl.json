@@ -1051,6 +1051,7 @@
   "X-SOUNDS": "{ $count ->\n  [one] 1 SOUND\n *[other] { $count } SOUNDS\n}",
   "X-Species": "{ $count ->\n  [one] { $count } Species\n *[other] { $count } Species\n}",
   "X-SPECIES--below-number": "{ $count ->\n  [one] SPECIES\n *[other] SPECIES\n}",
+  "X-taxa": "{ $count ->\n  [one] { $count } taxon\n *[other] { $count } taxa\n}",
   "x-uploaded": "{ $count ->\n  [one] { $count } uploaded\n *[other] { $count } uploaded\n}",
   "x-uploading": "{ $count ->\n  [one] { $count } uploading\n *[other] { $count } uploading\n}",
   "x-uploads-failed": "{ $count ->\n  [one] { $count } upload failed\n *[other] { $count } uploads failed\n}",

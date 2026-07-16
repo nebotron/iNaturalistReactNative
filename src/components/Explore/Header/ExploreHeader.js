@@ -107,7 +107,7 @@ const Header = ( {
   const placeGuess = placeGuessText( state.placeMode, t, state.place_guess );
 
   const taxonFilterText = ( ) => {
-    if ( showMultipleTaxa ) return t( "Multiple-taxa" );
+    if ( showMultipleTaxa ) return t( "X-taxa", { count: taxonFilterCount } );
     if ( hasUnknownIconicTaxon || !singleTaxonFilter ) {
       return singleTaxonFilter
         ? t( "Unknown--taxon" )

@@ -1762,6 +1762,12 @@ X-SPECIES--below-number =
         [one] SPECIES
        *[other] SPECIES
     }
+# Number of taxa selected in the Explore header taxon filter
+X-taxa =
+    { $count ->
+        [one] { $count } taxon
+       *[other] { $count } taxa
+    }
 # Number of observations uploaded in ObsEdit multiple observation screen
 x-uploaded =
     { $count ->
