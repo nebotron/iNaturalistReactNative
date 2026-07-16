@@ -52,7 +52,13 @@ def merge_by_url( existing: list, incoming: list ) -> list:
 def pull_crop_log( base_url: str ) -> bool:
     print( "Fetching crop log …" )
     data = fetch( base_url, "crop_log.json" )
-    incoming = data if isinstance( data, list ) else []
+    if isinstance( data, dict ):
+        # Push-keyed object from the appended Firebase log: keep the values.
+        incoming = [v for v in data.values() if isinstance( v, dict ) and "url" in v]
+    elif isinstance( data, list ):
+        incoming = [e for e in data if e]
+    else:
+        incoming = []
     print( f"  Got {len(incoming)} entries from Firebase." )
 
     existing: list = []
@@ -76,13 +82,14 @@ def pull_brightness_log( base_url: str ) -> bool:
     if isinstance( data, list ):
         incoming = [e for e in data if e and "url" in e]
     elif isinstance( data, dict ):
-        incoming = [
-            { "url": url, "brightness": brightness }
-            for url, brightness in data.items()
-            if url.startswith( "http" )
-        ]
-    else:
         incoming = []
+        for key, val in data.items():
+            if isinstance( val, dict ) and "url" in val:
+                # Push-keyed object from the appended Firebase log.
+                incoming.append( { "url": val["url"], "brightness": val.get( "brightness" ) } )
+            elif key.startswith( "http" ):
+                # Legacy { url: brightness } object.
+                incoming.append( { "url": key, "brightness": val } )
     print( f"  Got {len(incoming)} entries from Firebase." )
 
     existing: list = []
