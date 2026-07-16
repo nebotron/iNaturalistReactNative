@@ -12,6 +12,7 @@ import type { TabStackScreenProps } from "navigation/types";
 import React, {
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -32,6 +33,7 @@ import MapView, {
 import Carousel from "react-native-reanimated-carousel";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { useTranslation } from "sharedHooks";
+import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import type { Hotspot, HotspotSpecies, RoutePoint } from "./hooks/useRouteHotspots";
@@ -39,6 +41,12 @@ import { fetchOSRMRoute, findBestInsertion, useRouteHotspots } from "./hooks/use
 import HotspotListItem from "./HotspotListItem";
 
 const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
+
+// Synthetic place_id marking the "current location" row in the dropdown, which
+// resolves to the device location rather than a searched address.
+const CURRENT_LOCATION_PLACE_ID = -1;
+// Number of recently entered addresses to offer before the user types.
+const RECENT_ADDRESS_COUNT = 4;
 
 interface NominatimResult {
   place_id: number;
@@ -110,6 +118,9 @@ interface AddressInputProps {
   dotColor: string;
   nearbyLatLng?: LatLng;
   onEmptyBlur?: () => void;
+  // Shown in the dropdown before the user types (recent addresses + current
+  // location), so the field can be filled without searching.
+  presetSuggestions: NominatimResult[];
 }
 
 // Suggestions are reported up to the parent, which renders the dropdown as a
@@ -124,6 +135,7 @@ const AddressInput = ( {
   dotColor,
   nearbyLatLng,
   onEmptyBlur,
+  presetSuggestions,
 }: AddressInputProps ) => {
   const [searching, setSearching] = useState( false );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>( null );
@@ -136,7 +148,10 @@ const AddressInput = ( {
     if ( debounceRef.current ) clearTimeout( debounceRef.current );
     const requestId = ++requestIdRef.current;
     if ( text.trim().length < 3 ) {
-      onSuggestionsChange( [] );
+      // Before anything is typed, offer recent addresses and current location.
+      onSuggestionsChange( text.trim().length === 0
+        ? presetSuggestions
+        : [] );
       return;
     }
     debounceRef.current = setTimeout( async () => {
@@ -146,7 +161,7 @@ const AddressInput = ( {
       if ( requestIdRef.current !== requestId ) return;
       onSuggestionsChange( results );
     }, 200 );
-  }, [onChangeText, nearbyLatLng, onSuggestionsChange] );
+  }, [onChangeText, nearbyLatLng, onSuggestionsChange, presetSuggestions] );
 
   const handleClear = useCallback( () => {
     handleChange( "" );
@@ -237,9 +252,26 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   const [visibleHotspotIndex, setVisibleHotspotIndex] = useState( 0 );
   const [hotspotCardHeight, setHotspotCardHeight] = useState<number | null>( null );
 
+  const addressHistory = useStore( state => state.layout.hotspotAddressHistory );
+  const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
+
   const {
     hotspots, routeCoords, loading, error, findHotspots,
   } = useRouteHotspots();
+
+  // Rows shown in the dropdown before the user types: current location first,
+  // then the most recent addresses.
+  const presetSuggestions: NominatimResult[] = useMemo( () => [
+    ...( userLocation
+      ? [{
+        place_id: CURRENT_LOCATION_PLACE_ID,
+        display_name: t( "Current-location" ),
+        lat: String( userLocation.latitude ),
+        lon: String( userLocation.longitude ),
+      }]
+      : [] ),
+    ...addressHistory.slice( 0, RECENT_ADDRESS_COUNT ),
+  ], [userLocation, addressHistory, t] );
 
   const confirmedStopPoints = stops
     .filter( s => s.point )
@@ -293,9 +325,19 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
         point: { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) },
       }
       : s ) ) );
+    // Remember searched addresses (but not the synthetic current-location row)
+    // so they can be offered again before typing next time.
+    if ( result.place_id !== CURRENT_LOCATION_PLACE_ID ) {
+      addHotspotAddress( {
+        place_id: result.place_id,
+        display_name: result.display_name,
+        lat: result.lat,
+        lon: result.lon,
+      } );
+    }
     setActiveSuggestions( null );
     Keyboard.dismiss();
-  }, [] );
+  }, [addHotspotAddress] );
 
   const handleStopSuggestionsChange = useCallback( (
     stopId: string,
@@ -474,6 +516,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
             dotColor={stopDotColor( index, stops.length )}
             nearbyLatLng={stops[index - 1]?.point ?? userLocation ?? undefined}
             onEmptyBlur={() => handleStopEmptyBlur( stop.id )}
+            presetSuggestions={presetSuggestions}
           />
           {index > 0 && index < stops.length - 1 && (
             <TouchableOpacity
@@ -500,6 +543,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     stops,
     userLocation,
     t,
+    presetSuggestions,
     handleStopTextChange,
     handleStopSuggestionsChange,
     handleStopEmptyBlur,
