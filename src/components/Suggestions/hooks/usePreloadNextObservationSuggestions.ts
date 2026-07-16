@@ -11,34 +11,10 @@ const { useRealm } = RealmContext;
 
 const logger = log.extend( "usePreloadNextObservationSuggestions" );
 
-// Cap on how many model runs (offline + online combined) happen at once.
+// Cap on how many runs of each model (offline and online) happen at once.
 const MODEL_CONCURRENCY = 3;
 
 const delay = ( ms: number ) => new Promise<void>( resolve => { setTimeout( resolve, ms ); } );
-
-// Minimal counting semaphore so the offline and online passes can share a
-// single concurrency budget.
-const createSemaphore = ( max: number ) => {
-  let active = 0;
-  const waiters: Array<( ) => void> = [];
-  const acquire = ( ) => new Promise<void>( resolve => {
-    if ( active < max ) {
-      active += 1;
-      resolve( );
-    } else {
-      waiters.push( resolve );
-    }
-  } );
-  const release = ( ) => {
-    active -= 1;
-    const next = waiters.shift( );
-    if ( next ) {
-      active += 1;
-      next( );
-    }
-  };
-  return { acquire, release };
-};
 
 // Orchestrates identification for the bulk (multi-observation) flow:
 //   1. Run the offline model for every queued observation, recording the
@@ -50,11 +26,11 @@ const createSemaphore = ( max: number ) => {
 //   3. Continuously reorder the not-yet-viewed observations so the next one to
 //      ID is the best available: those whose online ID has finished come first,
 //      otherwise the most confident offline ID.
-// The offline and online passes run concurrently under a shared budget of
-// MODEL_CONCURRENCY so the device and network aren't overwhelmed, while the
-// user rarely waits: every observation gets an instant offline suggestion and
-// online results are pre-warmed into the cache before their observation is
-// reached.
+// The offline and online passes run concurrently, each capped at
+// MODEL_CONCURRENCY workers so neither the device nor the network is
+// overwhelmed, while the user rarely waits: every observation gets an instant
+// offline suggestion and online results are pre-warmed into the cache before
+// their observation is reached.
 const usePreloadNextObservationSuggestions = ( ) => {
   const queryClient = useQueryClient( );
   const realm = useRealm( );
@@ -111,7 +87,6 @@ const usePreloadNextObservationSuggestions = ( ) => {
       setObservations( [...head, ...sorted] );
     };
 
-    const semaphore = createSemaphore( MODEL_CONCURRENCY );
     let offlineAllDone = false;
 
     // OFFLINE PASS: score every queued observation with the on-device model,
@@ -130,18 +105,13 @@ const usePreloadNextObservationSuggestions = ( ) => {
             // eslint-disable-next-line no-continue
             continue;
           }
-          // eslint-disable-next-line no-await-in-loop
-          await semaphore.acquire( );
           try {
-            if ( cancelled ) { return; }
             // eslint-disable-next-line no-await-in-loop
             const confidence = await scoreObservationOffline( realm, obs );
             offlineConfidence.set( obs.uuid, confidence );
           } catch ( error ) {
             offlineConfidence.set( obs.uuid, -1 );
             logger.error( "Failed to score observation offline", error );
-          } finally {
-            semaphore.release( );
           }
           // Surface the most confident offline ID first as scores come in.
           applyReorder( false );
@@ -194,16 +164,11 @@ const usePreloadNextObservationSuggestions = ( ) => {
             // eslint-disable-next-line no-continue
             continue;
           }
-          // eslint-disable-next-line no-await-in-loop
-          await semaphore.acquire( );
           try {
-            if ( cancelled ) { return; }
             // eslint-disable-next-line no-await-in-loop
             await prefetchObservationSuggestions( queryClient, obs );
           } catch ( error ) {
             logger.error( "Failed to preload online suggestions", error );
-          } finally {
-            semaphore.release( );
           }
           onlineComplete.add( uuid );
           // An observation with a finished online ID jumps to the front.
