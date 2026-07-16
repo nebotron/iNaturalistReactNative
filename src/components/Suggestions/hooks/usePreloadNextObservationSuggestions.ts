@@ -11,17 +11,50 @@ const { useRealm } = RealmContext;
 
 const logger = log.extend( "usePreloadNextObservationSuggestions" );
 
+// Cap on how many model runs (offline + online combined) happen at once.
+const MODEL_CONCURRENCY = 3;
+
+const delay = ( ms: number ) => new Promise<void>( resolve => { setTimeout( resolve, ms ); } );
+
+// Minimal counting semaphore so the offline and online passes can share a
+// single concurrency budget.
+const createSemaphore = ( max: number ) => {
+  let active = 0;
+  const waiters: Array<( ) => void> = [];
+  const acquire = ( ) => new Promise<void>( resolve => {
+    if ( active < max ) {
+      active += 1;
+      resolve( );
+    } else {
+      waiters.push( resolve );
+    }
+  } );
+  const release = ( ) => {
+    active -= 1;
+    const next = waiters.shift( );
+    if ( next ) {
+      active += 1;
+      next( );
+    }
+  };
+  return { acquire, release };
+};
+
 // Orchestrates identification for the bulk (multi-observation) flow:
-//   1. Run the offline model for every queued observation up front, recording
-//      the confidence of each one's top species.
-//   2. Fire online ID requests, least-confident-offline first, since those are
-//      the ones most likely to benefit from the online model.
+//   1. Run the offline model for every queued observation, recording the
+//      confidence of each one's top species.
+//   2. Request online IDs, least-confident-offline first, since those are the
+//      ones most likely to benefit from the online model. Online requests can
+//      start as soon as any offline result is in; they don't wait for the whole
+//      offline pass to finish.
 //   3. Continuously reorder the not-yet-viewed observations so the next one to
 //      ID is the best available: those whose online ID has finished come first,
 //      otherwise the most confident offline ID.
-// Everything is pipelined so the user rarely waits: the offline pass makes an
-// instant suggestion available for every observation, and online results are
-// pre-warmed into the cache before their observation is reached.
+// The offline and online passes run concurrently under a shared budget of
+// MODEL_CONCURRENCY so the device and network aren't overwhelmed, while the
+// user rarely waits: every observation gets an instant offline suggestion and
+// online results are pre-warmed into the cache before their observation is
+// reached.
 const usePreloadNextObservationSuggestions = ( ) => {
   const queryClient = useQueryClient( );
   const realm = useRealm( );
@@ -78,64 +111,111 @@ const usePreloadNextObservationSuggestions = ( ) => {
       setObservations( [...head, ...sorted] );
     };
 
-    const run = async ( ) => {
-      // PHASE 1: offline model for every queued observation.
-      const queue = useStore.getState( ).observations;
-      // eslint-disable-next-line no-restricted-syntax
-      for ( const obs of queue ) {
-        if ( cancelled ) { return; }
-        if ( !obs?.uuid || offlineConfidence.has( obs.uuid ) ) {
-          // eslint-disable-next-line no-continue
-          continue;
-        }
-        try {
+    const semaphore = createSemaphore( MODEL_CONCURRENCY );
+    let offlineAllDone = false;
+
+    // OFFLINE PASS: score every queued observation with the on-device model,
+    // MODEL_CONCURRENCY workers pulling from the queue.
+    const runOfflinePass = async ( ) => {
+      const queue = useStore.getState( ).observations.filter(
+        ( obs: RealmObservationPojo ) => !!obs?.uuid,
+      );
+      let cursor = 0;
+      const worker = async ( ) => {
+        while ( !cancelled ) {
+          const obs = queue[cursor];
+          cursor += 1;
+          if ( !obs ) { return; }
+          if ( offlineConfidence.has( obs.uuid ) ) {
+            // eslint-disable-next-line no-continue
+            continue;
+          }
           // eslint-disable-next-line no-await-in-loop
-          const confidence = await scoreObservationOffline( realm, obs );
-          offlineConfidence.set( obs.uuid, confidence );
-        } catch ( error ) {
-          offlineConfidence.set( obs.uuid, -1 );
-          logger.error( "Failed to score observation offline", error );
+          await semaphore.acquire( );
+          try {
+            if ( cancelled ) { return; }
+            // eslint-disable-next-line no-await-in-loop
+            const confidence = await scoreObservationOffline( realm, obs );
+            offlineConfidence.set( obs.uuid, confidence );
+          } catch ( error ) {
+            offlineConfidence.set( obs.uuid, -1 );
+            logger.error( "Failed to score observation offline", error );
+          } finally {
+            semaphore.release( );
+          }
+          // Surface the most confident offline ID first as scores come in.
+          applyReorder( false );
         }
-        // Surface the most confident offline ID first as scores come in.
-        applyReorder( false );
-      }
+      };
+      const workerCount = Math.min( MODEL_CONCURRENCY, queue.length );
+      await Promise.all( Array.from( { length: workerCount }, ( ) => worker( ) ) );
+      offlineAllDone = true;
       if ( cancelled ) { return; }
       // With every offline confidence known, position the first observation too.
       applyReorder( true );
-
-      // PHASE 2: online requests, least confident offline first.
-      const onlineOrder = Array.from( offlineConfidence.entries( ) )
-        .sort( ( a, b ) => a[1] - b[1] )
-        .map( ( [uuid] ) => uuid );
-      // eslint-disable-next-line no-restricted-syntax
-      for ( const uuid of onlineOrder ) {
-        if ( cancelled ) { return; }
-        if ( onlineStarted.has( uuid ) ) {
-          // eslint-disable-next-line no-continue
-          continue;
-        }
-        const obs = useStore.getState( ).observations.find(
-          ( candidate: RealmObservationPojo ) => candidate?.uuid === uuid,
-        );
-        if ( !obs ) {
-          // Already identified and removed from the queue.
-          // eslint-disable-next-line no-continue
-          continue;
-        }
-        onlineStarted.add( uuid );
-        try {
-          // eslint-disable-next-line no-await-in-loop
-          await prefetchObservationSuggestions( queryClient, obs );
-        } catch ( error ) {
-          logger.error( "Failed to preload online suggestions", error );
-        }
-        onlineComplete.add( uuid );
-        // An observation with a finished online ID jumps to the front.
-        applyReorder( false );
-      }
     };
 
-    run( );
+    // ONLINE PASS: MODEL_CONCURRENCY workers, each repeatedly requesting an
+    // online ID for the least-confident observation whose offline score is in
+    // but hasn't been requested yet. Runs alongside the offline pass rather
+    // than waiting for it to finish.
+    const runOnlinePass = async ( ) => {
+      const claimLeastConfident = ( ): string | null => {
+        let claimed: string | null = null;
+        let claimedConfidence = Infinity;
+        offlineConfidence.forEach( ( confidence, uuid ) => {
+          if ( onlineStarted.has( uuid ) || confidence >= claimedConfidence ) {
+            return;
+          }
+          claimed = uuid;
+          claimedConfidence = confidence;
+        } );
+        if ( claimed ) {
+          onlineStarted.add( claimed );
+        }
+        return claimed;
+      };
+      const worker = async ( ) => {
+        while ( !cancelled ) {
+          const uuid = claimLeastConfident( );
+          if ( !uuid ) {
+            if ( offlineAllDone ) { return; }
+            // Wait for more offline results to arrive.
+            // eslint-disable-next-line no-await-in-loop
+            await delay( 30 );
+            // eslint-disable-next-line no-continue
+            continue;
+          }
+          const obs = useStore.getState( ).observations.find(
+            ( candidate: RealmObservationPojo ) => candidate?.uuid === uuid,
+          );
+          if ( !obs ) {
+            // Already identified and removed from the queue.
+            // eslint-disable-next-line no-continue
+            continue;
+          }
+          // eslint-disable-next-line no-await-in-loop
+          await semaphore.acquire( );
+          try {
+            if ( cancelled ) { return; }
+            // eslint-disable-next-line no-await-in-loop
+            await prefetchObservationSuggestions( queryClient, obs );
+          } catch ( error ) {
+            logger.error( "Failed to preload online suggestions", error );
+          } finally {
+            semaphore.release( );
+          }
+          onlineComplete.add( uuid );
+          // An observation with a finished online ID jumps to the front.
+          applyReorder( false );
+        }
+      };
+      await Promise.all( Array.from( { length: MODEL_CONCURRENCY }, ( ) => worker( ) ) );
+    };
+
+    Promise.all( [runOfflinePass( ), runOnlinePass( )] ).catch( error => {
+      logger.error( "Bulk identify orchestration failed", error );
+    } );
 
     return ( ) => {
       cancelled = true;
