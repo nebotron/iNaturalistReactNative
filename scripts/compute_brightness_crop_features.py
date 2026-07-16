@@ -20,7 +20,7 @@ from evaluate_subject_detector import resolve_image
 from eval_onnx_variants import MODELS, _raw_detections, algo_union
 
 REPO_ROOT = Path(__file__).parent.parent
-CACHE_DIR = Path("/tmp/inat_brightness_cache")
+CACHE_DIR = Path("/tmp/inat_eval_cache")
 CACHE_DIR.mkdir(parents=True, exist_ok=True)
 DEPLOYED_MODEL = MODELS["yolov8n_current"]
 
@@ -65,7 +65,7 @@ def crop_features(image_path: str, bounds: tuple[float, float, float, float] | N
 
 
 def main() -> None:
-    raw = json.loads((REPO_ROOT / "brightness_log_raw.json").read_text())
+    raw = json.loads((REPO_ROOT / "brightness_training.json").read_text())
     print(f"Loaded {len(raw)} brightness labels")
 
     rows = []
