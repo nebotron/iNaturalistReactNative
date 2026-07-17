@@ -3,7 +3,15 @@ import { Pressable, View } from "components/styledComponents";
 import NotificationsIconContainer from "navigation/BottomTabNavigator/NotificationsIconContainer";
 import type { PropsWithChildren } from "react";
 import * as React from "react";
+import type { GestureResponderEvent } from "react-native";
 import colors from "styles/tailwindColors";
+
+// Accidental contact from a palm or the base of the thumb tends to register
+// as several simultaneous touch points and/or as a very brief graze, whereas
+// a deliberate tab tap is a single, sustained touch. Ignoring multi-touch
+// presses and grazes shorter than this threshold rejects most accidental
+// taps without adding perceptible latency to real taps.
+const MIN_PRESS_DURATION_MS = 60;
 
 interface IconFrameProps extends PropsWithChildren{
   testID: string;
@@ -39,6 +47,25 @@ const NavButton = ( {
   accessibilityLabel,
   accessibilityHint,
 }: Props ) => {
+  const pressStartRef = React.useRef<number | null>( null );
+  const rejectedRef = React.useRef( false );
+
+  const handlePressIn = React.useCallback( ( event: GestureResponderEvent ) => {
+    // A palm covers a broad area and registers as more than one active touch
+    const touchCount = event?.nativeEvent?.touches?.length ?? 1;
+    rejectedRef.current = touchCount > 1;
+    pressStartRef.current = Date.now( );
+  }, [] );
+
+  const handlePress = React.useCallback( ( ) => {
+    if ( rejectedRef.current ) return;
+    const start = pressStartRef.current;
+    // Only enforce the duration guard when we actually observed the touch
+    // begin, so programmatic and accessibility activations still work
+    if ( start != null && Date.now( ) - start < MIN_PRESS_DURATION_MS ) return;
+    onPress( );
+  }, [onPress] );
+
   let iconComponent;
   if ( userIconUri ) {
     iconComponent = (
@@ -73,7 +100,8 @@ const NavButton = ( {
   return (
     <Pressable
       className="min-h-[44px] min-w-[44px] items-center justify-end"
-      onPress={onPress}
+      onPressIn={handlePressIn}
+      onPress={handlePress}
       key={`NavButton-${accessibilityLabel}`}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="tab"
