@@ -140,3 +140,11 @@ Model installed to `ios/iNaturalistReactNative/yolov8n.onnx` (done automatically
 - *Concurrent-session hazard again:* another session's "Trying to get brightness from subject detector" commit swept up this session's in-progress scripts mid-flight (content survived; didn't rewrite history). Also two pre-existing pre-commit blockers (a Flow error in `LocationPickerContainer`, unused i18n key `Zoom-in-as-much-as-possible-to-improve`) had to be fixed in a separate tiny commit first — same pattern as 2026-07-13.
 
 **Next time:** the head is cheap to refit as labels grow — rerun `extract_yolo_brightness_features2.py` (only needs the f=1.0 pass unless re-testing augmentation) then `bake_brightness_head.py`; both verify parity automatically. If the *detector* is retrained, the head MUST be re-extracted and re-baked on the new backbone (features change). `eval_onnx_variants.py`'s `sess.run(None,...)[0]` still picks output0 with the 2-output model, so all crop evals work unchanged.
+
+### Session 2026-07-16/17: Firebase locked down — reads need creds, app is write-only
+
+Database rules changed: **reads require auth, writes stay open**. The app carries NO credentials by design (user directive) — its log sync is write-only, PUT/DELETE of single url-keyed children at `crop_log/<encoded-url>` and `brightness_log/<encoded-url>` (keys = `encodeURIComponent(url)` with `.`→`%2E`; values carry the url). The remote nodes are therefore *objects*, not arrays; all pull scripts (`pull_logs.py`, `pull_crop_log.py`, `evaluate_subject_detector._fetch_firebase`) handle both formats. The in-app CropLogViewer shows the device-local log only.
+
+Scripts authenticate via `scripts/firebase_auth.py`: set in `.env` either `FIREBASE_DB_SECRET` (legacy database secret, used directly as `?auth=`) or `FIREBASE_API_KEY` + `FIREBASE_EMAIL` + `FIREBASE_PASSWORD` (Identity Toolkit email/password sign-in). **As of 2026-07-17 the Web API key was still missing from .env** (email/password alone can't sign in — Google's REST API requires the project's Web API key; it's not in the repo, all GoogleService-Info.plists are placeholders, project id `inaturalist-9001d`). If pulls 401, that's why.
+
+Also fixed en route: the app's old read-merge-PUT sync would have clobbered the remote log with local-only data whenever a read failed; per-entry writes eliminate that class of bug entirely.
