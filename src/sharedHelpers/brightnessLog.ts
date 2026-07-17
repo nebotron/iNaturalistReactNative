@@ -1,7 +1,6 @@
 import Clipboard from "@react-native-clipboard/clipboard";
 import { Alert } from "react-native";
 import Config from "react-native-config";
-import firebaseAuthQuery from "sharedHelpers/firebaseRtdbAuth";
 import { log } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
 
@@ -29,45 +28,10 @@ const _logToArray = ( logObj: BrightnessLog ): BrightnessLogEntry[] => Object.en
   .filter( ( [url] ) => url.startsWith( "http" ) && !url.includes( "static.inaturalist.org" ) )
   .map( ( [url, brightness] ) => ( { url, brightness } ) );
 
-/**
- * Requires in .env:
- *   CROP_LOG_FIREBASE_URL=https://<project-id>.firebaseio.com
- *
- * Labeled brightness values are stored at {baseUrl}/brightness_log.json
- * alongside the crop log, for use in offline brightness tuning scripts.
- */
-// Returns null when the fetch fails (offline, permission denied, …) so that
-// sync callers can abort instead of treating failure as "remote is empty"
-// and overwriting the remote log with only this device's labels.
-export const fetchBrightnessLogFromFirebase = async ( )
-: Promise<BrightnessLogEntry[] | null> => {
-  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
-  if ( !baseUrl ) return null;
-  try {
-    const auth = await firebaseAuthQuery( );
-    const res = await fetch( `${baseUrl}/brightness_log.json${auth}` );
-    if ( !res.ok ) {
-      logger.warn( "Firebase fetch failed", res.status );
-      return null;
-    }
-    const data = await res.json( );
-    if ( Array.isArray( data ) ) return data.filter( Boolean );
-    // Handle url-keyed { "<key>": { url, brightness } } (value carries the url)
-    // and legacy { "<url>": brightness }.
-    if ( data && typeof data === "object" ) {
-      return ( Object.entries( data ) as [string, BrightnessLogEntry | number][] )
-        .map( ( [key, val] ) => ( val && typeof val === "object"
-          ? { url: val.url, brightness: val.brightness }
-          : { url: key, brightness: val as number } ) )
-        .filter( entry => typeof entry.url === "string" && entry.url.startsWith( "http" ) );
-    }
-    // null/absent node = genuinely empty log
-    return [];
-  } catch ( err ) {
-    logger.warn( "Firebase fetch error", err );
-    return null;
-  }
-};
+// The app never reads the Firebase log (reads require auth and the app
+// carries no credentials — sync is write-only). Labeled brightness values
+// land at {CROP_LOG_FIREBASE_URL}/brightness_log for the offline tuning
+// scripts, which authenticate from .env.
 
 // Firebase keys can't contain . $ # [ ] / — encodeURIComponent escapes all of
 // those except the dot, which we handle explicitly.

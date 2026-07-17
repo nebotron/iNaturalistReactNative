@@ -646,6 +646,9 @@ def _fetch_firebase(base_url: str) -> list:
         data = json.loads(r.read())
     if data is None:
         sys.exit("Firebase returned null — no crop log data found.")
+    if isinstance(data, dict):
+        # Url-keyed object (value carries the url): keep the values.
+        data = [v for v in data.values() if isinstance(v, dict) and "url" in v]
     print(f"  Got {len(data)} entries.\n")
     return data
 

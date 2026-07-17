@@ -1,5 +1,4 @@
 import Config from "react-native-config";
-import firebaseAuthQuery from "sharedHelpers/firebaseRtdbAuth";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { zustandStorage } from "stores/useStore";
@@ -27,47 +26,19 @@ const load = ( ): AnimalCropLog => {
   }
 };
 
-/**
- * Requires in .env:
- *   CROP_LOG_FIREBASE_URL=https://<project-id>.firebaseio.com
- */
-// Returns null when the fetch fails (offline, permission denied, …) so that
-// sync callers can abort instead of treating failure as "remote is empty"
-// and overwriting the remote log with only this device's crops.
-export const fetchCropLogFromFirebase = async ( ): Promise<CropLogEntry[] | null> => {
-  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
-  if ( !baseUrl ) return null;
-  try {
-    const auth = await firebaseAuthQuery( );
-    const res = await fetch( `${baseUrl}/crop_log.json${auth}` );
-    if ( !res.ok ) {
-      logger.warn( "Firebase fetch failed", res.status );
-      return null;
-    }
-    const data = await res.json( );
-    if ( Array.isArray( data ) ) {
-      return data.filter( Boolean );
-    }
-    // Handle object formats: url-keyed { "<key>": { url, x, y, w, h } } (the
-    // value carries the url), and legacy { "<url>": { x, y, w, h } }.
-    if ( data && typeof data === "object" ) {
-      return ( Object.entries( data ) as [string, Partial<CropLogEntry> & NormalizedCrop][] )
-        .map( ( [key, crop] ) => ( {
-          url: typeof crop.url === "string" ? crop.url : key,
-          x: crop.x,
-          y: crop.y,
-          w: crop.w,
-          h: crop.h,
-        } ) )
-        .filter( entry => entry.url.startsWith( "http" ) );
-    }
-    // null/absent node = genuinely empty log
-    return [];
-  } catch ( err ) {
-    logger.warn( "Firebase fetch error", err );
-    return null;
-  }
-};
+// The app never reads the Firebase log (reads require auth and the app
+// carries no credentials — sync is write-only). Viewers show the local log,
+// which contains everything this device ever labeled.
+export const getAnimalCropLogAsArray = ( ): CropLogEntry[] => Object.entries( load( ) )
+  .filter( ( [url] ) => url.startsWith( "http" ) )
+  .map( ( [url, crop] ) => ( {
+    url,
+    x: crop.x,
+    y: crop.y,
+    w: crop.w,
+    h: crop.h,
+  } ) )
+  .reverse( );
 
 // Firebase keys can't contain . $ # [ ] / — encodeURIComponent escapes all of
 // those except the dot, which we handle explicitly.

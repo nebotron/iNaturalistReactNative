@@ -17,7 +17,7 @@ import {
 } from "react-native";
 import {
   deleteAnimalCrop,
-  fetchCropLogFromFirebase,
+  getAnimalCropLogAsArray,
 } from "sharedHelpers/animalCropLog";
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
@@ -169,19 +169,10 @@ const ListEmpty = ( ) => (
 );
 
 const CropLogViewer = ( ) => {
-  const [entries, setEntries] = useState<Entry[]>( [] );
-  const [loading, setLoading] = useState( true );
-
-  useEffect( ( ) => {
-    let cancelled = false;
-    ( async ( ) => {
-      const remote = await fetchCropLogFromFirebase( );
-      if ( cancelled ) return;
-      setEntries( [...( remote ?? [] )].reverse( ) );
-      setLoading( false );
-    } )( );
-    return ( ) => { cancelled = true; };
-  }, [] );
+  // The app can't read the remote log (write-only sync, no credentials), so
+  // the viewer shows this device's local log — the same entries it synced up.
+  const [entries, setEntries] = useState<Entry[]>( ( ) => getAnimalCropLogAsArray( ) );
+  const loading = false;
 
   const handleDelete = useCallback( ( url: string ) => {
     Alert.alert(
