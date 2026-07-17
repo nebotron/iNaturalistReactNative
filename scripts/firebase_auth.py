@@ -21,6 +21,11 @@ _cached: dict | None = None
 
 def firebase_auth_query() -> str:
     global _cached
+    # A legacy database secret works directly as the auth token — no sign-in.
+    secret = os.environ.get("FIREBASE_DB_SECRET", "").strip()
+    if secret:
+        return f"?auth={urllib.parse.quote(secret)}"
+
     api_key = os.environ.get("FIREBASE_API_KEY", "").strip()
     email = os.environ.get("FIREBASE_EMAIL", "").strip()
     password = os.environ.get("FIREBASE_PASSWORD", "").strip()
