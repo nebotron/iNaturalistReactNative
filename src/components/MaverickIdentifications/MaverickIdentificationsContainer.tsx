@@ -1,20 +1,24 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { searchIdentifications } from "api/identifications";
-import type { ApiIdentification, ApiTaxon } from "api/types";
+import type { ApiIdentification, ApiObservation, ApiTaxon } from "api/types";
+import { THUMBNAIL_CLASS } from "appConstants/classNames";
 import {
   ActivityIndicator,
   Body1,
   Body4,
   DateDisplay,
-  DisplayTaxon,
+  DisplayTaxonName,
   Divider,
+  IconicTaxonIcon,
 } from "components/SharedComponents";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
-import { View } from "components/styledComponents";
+import { Image, Pressable, View } from "components/styledComponents";
 import type { TabStackScreenProps } from "navigation/types";
 import React, { useEffect } from "react";
+import Photo from "realmModels/Photo";
 import Taxon from "realmModels/Taxon";
+import { accessibleTaxonName } from "sharedHelpers/taxon";
 import { useAuthenticatedQuery, useCurrentUser, useTranslation } from "sharedHooks";
 
 // Max page size the API allows
@@ -24,6 +28,10 @@ interface MaverickIdentification extends ApiIdentification {
   id: number;
   uuid: string;
   taxon: ApiTaxon;
+  observation?: {
+    uuid?: string;
+    observation_photos?: ApiObservation["observation_photos"];
+  };
 }
 
 async function fetchMaverickIdentifications(
@@ -52,6 +60,11 @@ async function fetchMaverickIdentifications(
           taxon: Taxon.LIMITED_TAXON_FIELDS,
           observation: {
             uuid: true,
+            observation_photos: {
+              photo: {
+                url: true,
+              },
+            },
           },
         },
       },
@@ -73,27 +86,59 @@ interface MaverickIdentificationItemProps {
 const MaverickIdentificationItem = ( { item }: MaverickIdentificationItemProps ) => {
   const navigation = useNavigation( );
   const route = useRoute( );
+  const currentUser = useCurrentUser( );
+  const { t } = useTranslation( );
   const obsUuid = item.observation?.uuid;
+  const obsPhoto = item.observation?.observation_photos?.[0]?.photo;
+  const photoUri = obsPhoto && Photo.displayLocalOrRemoteMediumPhoto( obsPhoto );
+  const accessibleName = item.taxon
+    ? accessibleTaxonName( item.taxon, currentUser, t )
+    : undefined;
 
   return (
     <View>
       <View className="mx-[15px] my-[11px]">
-        <DisplayTaxon
-          taxon={item.taxon}
+        <Pressable
+          accessibilityRole="button"
+          className="flex-row items-center shrink"
           testID={`MaverickIdentificationItem.${item.uuid}`}
-          handlePress={( ) => obsUuid && navigation.navigate( {
+          accessibilityLabel={accessibleName}
+          onPress={( ) => obsUuid && navigation.navigate( {
             key: `${route.key}-MaverickIdentificationItem-ObsDetails-${item.uuid}`,
             name: "ObsDetails",
             params: { uuid: obsUuid },
           } )}
-          bottomTextComponent={( ) => (
-            <Body4>
-              {item.created_at && (
-                <DateDisplay asDifference dateString={item.created_at} hideIcon />
+        >
+          {photoUri
+            ? (
+              <Image
+                source={{ uri: photoUri }}
+                className={THUMBNAIL_CLASS}
+                accessibilityIgnoresInvertColors
+                testID="MaverickIdentificationItem.image"
+              />
+            )
+            : (
+              <IconicTaxonIcon
+                imageClassName={THUMBNAIL_CLASS}
+                iconicTaxonName={item.taxon?.iconic_taxon_name}
+              />
+            )}
+          <View className="ml-3 shrink">
+            <DisplayTaxonName
+              taxon={item.taxon}
+              scientificNameFirst={currentUser?.prefers_scientific_name_first}
+              prefersCommonNames={currentUser?.prefers_common_names}
+              bottomTextComponent={( ) => (
+                <Body4>
+                  {item.created_at && (
+                    <DateDisplay asDifference dateString={item.created_at} hideIcon />
+                  )}
+                </Body4>
               )}
-            </Body4>
-          )}
-        />
+            />
+          </View>
+        </Pressable>
       </View>
       <Divider />
     </View>
