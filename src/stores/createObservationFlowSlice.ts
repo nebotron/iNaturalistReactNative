@@ -97,6 +97,9 @@ interface ObservationFlowActions {
   addImportedPhotoDeviceUriMappings: (
     mappings: { localUri: string; deviceUri: string | null | undefined }[],
   ) => void;
+  attachDeviceUrisToObservationPhotos: (
+    mappings: { localUri: string; deviceUri: string | null | undefined }[],
+  ) => void;
   setSavingPhoto: ( saving: boolean ) => void;
   setCameraState: ( options: CameraStateOptions ) => void;
   setCurrentObservationIndex: ( index: number ) => void;
@@ -387,6 +390,64 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
       );
     } );
     return { importedPhotoDeviceUriByLocalUri };
+  } ),
+  // Persists each device library ph:// URI onto its observation photo (matched
+  // by local URI) so later features like device photo cleanup can find the
+  // original device photo. Camera-captured photos are created before we know
+  // their device library URI, so without this their originalDevicePhotoUri
+  // stays null and they never match.
+  attachDeviceUrisToObservationPhotos: ( mappings ) => set( state => {
+    const validMappings = mappings
+      .map( ( { localUri, deviceUri } ) => ( {
+        localUri,
+        deviceUri: normalizeDevicePhotoUri( deviceUri ),
+      } ) )
+      .filter(
+        ( m ): m is { localUri: string; deviceUri: string } => !!( m.localUri && m.deviceUri ),
+      );
+    if ( validMappings.length === 0 ) {
+      return {};
+    }
+
+    // Also record the local -> device URI mapping so other consumers (e.g.
+    // tracked-location updates) can resolve device photos by local URI.
+    const importedPhotoDeviceUriByLocalUri = {
+      ...state.importedPhotoDeviceUriByLocalUri,
+    };
+    validMappings.forEach( ( { localUri, deviceUri } ) => {
+      registerImportedPhotoDeviceUriMappings(
+        importedPhotoDeviceUriByLocalUri,
+        localUri,
+        deviceUri,
+      );
+    } );
+
+    const observations = state.observations.map( observation => {
+      const obsPhotos = observation?.observationPhotos;
+      if ( !obsPhotos || obsPhotos.length === 0 ) {
+        return observation;
+      }
+      obsPhotos.forEach( obsPhoto => {
+        if ( obsPhoto.originalDevicePhotoUri ) {
+          return;
+        }
+        const match = validMappings.find(
+          m => observationPhotoMatchesUri( obsPhoto, m.localUri ),
+        );
+        if ( match ) {
+          obsPhoto.originalDevicePhotoUri = match.deviceUri;
+        }
+      } );
+      return observation;
+    } );
+
+    return {
+      importedPhotoDeviceUriByLocalUri,
+      observations,
+      currentObservation: observations.length > 0
+        ? observations[state.currentObservationIndex]
+        : state.currentObservation,
+    };
   } ),
   setSavingPhoto: ( saving: boolean ) => set( { savingPhoto: saving } ),
   setCameraState: ( options: CameraStateOptions ) => set( state => ( {
