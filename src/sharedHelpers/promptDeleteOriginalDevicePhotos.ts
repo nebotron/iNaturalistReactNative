@@ -6,32 +6,12 @@ import i18next from "i18next";
 import { Alert, Platform } from "react-native";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
-import { zustandStorage } from "stores/useStore";
 
 const logger = log.extend( "promptDeleteOriginalDevicePhotos" );
-
-const DELETE_ORIGINAL_PHOTOS_PREFERENCE_KEY = "deleteOriginalPhotosAfterImport";
-
-type DeleteOriginalPhotosPreference = "delete" | "keep";
 
 interface DeleteOriginalDevicePhotosOptions {
   userInitiated?: boolean;
 }
-
-const getDeleteOriginalPhotosPreference = ( ):
-DeleteOriginalPhotosPreference | null => {
-  const value = zustandStorage.getItem( DELETE_ORIGINAL_PHOTOS_PREFERENCE_KEY );
-  if ( value === "delete" || value === "keep" ) {
-    return value;
-  }
-  return null;
-};
-
-const setDeleteOriginalPhotosPreference = (
-  preference: DeleteOriginalPhotosPreference,
-) => {
-  zustandStorage.setItem( DELETE_ORIGINAL_PHOTOS_PREFERENCE_KEY, preference );
-};
 
 const filterDeletableDevicePhotoUris = ( photoUris: string[] ): string[] => (
   [...new Set(
@@ -94,6 +74,7 @@ export const deleteOriginalDevicePhotos = async (
   }
 };
 
+// Deletes the original device photos that were imported, without prompting.
 const promptDeleteOriginalDevicePhotos = (
   photoUris: string[],
   onComplete: () => void,
@@ -104,38 +85,7 @@ const promptDeleteOriginalDevicePhotos = (
     return;
   }
 
-  const preference = getDeleteOriginalPhotosPreference( );
-  if ( preference === "delete" ) {
-    void deleteOriginalDevicePhotos( uniqueUris ).finally( onComplete );
-    return;
-  }
-  if ( preference === "keep" ) {
-    onComplete( );
-    return;
-  }
-
-  Alert.alert(
-    i18next.t( "Delete-original-photos--question" ),
-    i18next.t( "Delete-original-photos-description" ),
-    [
-      {
-        text: i18next.t( "Keep-photos" ),
-        style: "cancel",
-        onPress: () => {
-          setDeleteOriginalPhotosPreference( "keep" );
-          onComplete( );
-        },
-      },
-      {
-        text: i18next.t( "Delete-photos" ),
-        style: "destructive",
-        onPress: () => {
-          setDeleteOriginalPhotosPreference( "delete" );
-          void deleteOriginalDevicePhotos( uniqueUris ).finally( onComplete );
-        },
-      },
-    ],
-  );
+  void deleteOriginalDevicePhotos( uniqueUris ).finally( onComplete );
 };
 
 export default promptDeleteOriginalDevicePhotos;
