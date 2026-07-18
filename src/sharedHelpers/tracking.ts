@@ -3,6 +3,7 @@ import {
   setAnalyticsCollectionEnabled,
 } from "@react-native-firebase/analytics";
 import { getPerformance } from "@react-native-firebase/perf";
+import { isFirebaseConfigured } from "sharedHelpers/firebaseApp";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "tracking.ts" );
@@ -13,6 +14,7 @@ export const logFirebaseEvent = (
   eventId: string,
   parameters?: FirebaseParameters,
 ) => {
+  if ( !isFirebaseConfigured( ) ) return;
   try {
     const analytics = getAnalytics();
     logEvent( analytics, eventId, parameters );
@@ -22,6 +24,7 @@ export const logFirebaseEvent = (
 };
 
 export const setFirebaseDataCollectionEnabled = ( enabled: boolean ) => {
+  if ( !isFirebaseConfigured( ) ) return;
   try {
     setAnalyticsCollectionEnabled( getAnalytics(), enabled );
     // This looks unusual but is actually the preferred solution
@@ -35,6 +38,7 @@ export const setFirebaseDataCollectionEnabled = ( enabled: boolean ) => {
 export const logFirebaseScreenView = (
   screenName: string,
 ) => {
+  if ( !isFirebaseConfigured( ) ) return;
   try {
     const analytics = getAnalytics();
     logEvent( analytics, "screen_view", {

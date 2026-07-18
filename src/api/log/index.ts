@@ -5,6 +5,7 @@ import {
   setAttributes,
 } from "@react-native-firebase/crashlytics";
 import type { transportFunctionType } from "react-native-logs";
+import { isFirebaseConfigured } from "sharedHelpers/firebaseApp";
 import { isObject, isObjectWithPrimitiveValues } from "sharedHelpers/runtimeTypeUtil";
 
 import { extraSentinelKey } from "./enhanceLoggerWithExtra";
@@ -73,6 +74,9 @@ type firebaseLogTransportOptions = object;
 const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> = async props => {
   // Don't bother to log from dev builds
   if ( __DEV__ ) return;
+
+  // Without a configured [DEFAULT] app every Crashlytics call throws
+  if ( !isFirebaseConfigured( ) ) return;
 
   // pull potential `extra` out of the rest params
   const { messageParams, extra } = extractExtra( props.rawMsg );
