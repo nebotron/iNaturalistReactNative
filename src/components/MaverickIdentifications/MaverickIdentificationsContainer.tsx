@@ -1,7 +1,7 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { searchIdentifications } from "api/identifications";
+import { fetchTaxon } from "api/taxa";
 import type { ApiIdentification, ApiObservation, ApiTaxon } from "api/types";
-import { THUMBNAIL_CLASS } from "appConstants/classNames";
 import {
   ActivityIndicator,
   Body1,
@@ -9,11 +9,11 @@ import {
   DateDisplay,
   DisplayTaxonName,
   Divider,
-  IconicTaxonIcon,
 } from "components/SharedComponents";
+import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
-import { Image, Pressable, View } from "components/styledComponents";
+import { Pressable, View } from "components/styledComponents";
 import type { TabStackScreenProps } from "navigation/types";
 import React, { useEffect } from "react";
 import Photo from "realmModels/Photo";
@@ -24,6 +24,9 @@ import { useAuthenticatedQuery, useCurrentUser, useTranslation } from "sharedHoo
 // Max page size the API allows
 const PAGE_SIZE = 200;
 
+// Max number of taxon ids the /v1/taxa batch endpoint accepts per request
+const TAXA_BATCH_SIZE = 30;
+
 interface MaverickIdentification extends ApiIdentification {
   id: number;
   uuid: string;
@@ -32,6 +35,48 @@ interface MaverickIdentification extends ApiIdentification {
     uuid?: string;
     observation_photos?: ApiObservation["observation_photos"];
   };
+}
+
+// The /v1/identifications endpoint returns a shallow taxon (id/rank only,
+// no name), so the species name never renders. Backfill the missing names by
+// batch-fetching the full taxa and merging them onto each identification.
+async function enrichTaxonNames(
+  identifications: MaverickIdentification[],
+  opts: { api_token: string | null },
+): Promise<void> {
+  const taxonIds = [...new Set(
+    identifications
+      .filter( identification => identification.taxon && !identification.taxon.name )
+      .map( identification => identification.taxon.id )
+      .filter( ( id ): id is number => Boolean( id ) ),
+  )];
+  if ( taxonIds.length === 0 ) return;
+
+  const batches: number[][] = [];
+  for ( let i = 0; i < taxonIds.length; i += TAXA_BATCH_SIZE ) {
+    batches.push( taxonIds.slice( i, i + TAXA_BATCH_SIZE ) );
+  }
+  const responses = await Promise.all(
+    batches.map( batch => fetchTaxon( batch, {}, opts ) ),
+  );
+
+  const taxaById = new Map<number, ApiTaxon>( );
+  responses.forEach( response => {
+    const results = ( response as { results?: ApiTaxon[] } | null )?.results ?? [];
+    results.forEach( taxon => {
+      if ( taxon.id ) taxaById.set( taxon.id, taxon );
+    } );
+  } );
+
+  identifications.forEach( identification => {
+    const taxonId = identification.taxon?.id;
+    const fullTaxon = taxonId
+      ? taxaById.get( taxonId )
+      : undefined;
+    if ( fullTaxon ) {
+      identification.taxon = { ...identification.taxon, ...fullTaxon };
+    }
+  } );
 }
 
 async function fetchMaverickIdentifications(
@@ -76,6 +121,8 @@ async function fetchMaverickIdentifications(
     page += 1;
   }
 
+  await enrichTaxonNames( identifications, opts );
+
   return identifications;
 }
 
@@ -109,21 +156,16 @@ const MaverickIdentificationItem = ( { item }: MaverickIdentificationItemProps )
             params: { uuid: obsUuid },
           } )}
         >
-          {photoUri
-            ? (
-              <Image
-                source={{ uri: photoUri }}
-                className={THUMBNAIL_CLASS}
-                accessibilityIgnoresInvertColors
-                testID="MaverickIdentificationItem.image"
-              />
-            )
-            : (
-              <IconicTaxonIcon
-                imageClassName={THUMBNAIL_CLASS}
-                iconicTaxonName={item.taxon?.iconic_taxon_name}
-              />
-            )}
+          <ObsImagePreview
+            source={photoUri
+              ? { uri: photoUri }
+              : undefined}
+            autoDetectSubject={!!photoUri}
+            isSmall
+            hidePhotoCount
+            iconicTaxonName={item.taxon?.iconic_taxon_name}
+            testID="MaverickIdentificationItem.image"
+          />
           <View className="ml-3 shrink">
             <DisplayTaxonName
               taxon={item.taxon}
