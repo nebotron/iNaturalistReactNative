@@ -29,6 +29,9 @@ const usePrepareStoreAndNavigate = ( ) => {
   const cameraUris = useStore( state => state.cameraUris );
   const currentObservation = useStore( state => state.currentObservation );
   const addCameraRollUris = useStore( state => state.addCameraRollUris );
+  const attachDeviceUrisToObservationPhotos = useStore(
+    state => state.attachDeviceUrisToObservationPhotos,
+  );
   const currentObservationIndex = useStore( state => state.currentObservationIndex );
   const observations = useStore( state => state.observations );
   const setSavingPhoto = useStore( state => state.setSavingPhoto );
@@ -59,6 +62,18 @@ const usePrepareStoreAndNavigate = ( ) => {
       // Save these camera roll URIs, so later on observation editor can update
       // the EXIF metadata of these photos, once we retrieve a location.
       addCameraRollUris( savedPhotoUris );
+      // Persist each saved photo's device library URI onto its observation
+      // photo so features like device photo cleanup can match the original.
+      // savePhotosToPhotoLibrary preserves order, so only map when every photo
+      // saved successfully and the counts line up.
+      if ( savedPhotoUris.length === uris.length ) {
+        attachDeviceUrisToObservationPhotos(
+          uris.map( ( localUri: string, index: number ) => ( {
+            localUri,
+            deviceUri: savedPhotoUris[index],
+          } ) ),
+        );
+      }
     }
     // When we've persisted photos to the observation, we don't need them in
     // state anymore
@@ -66,6 +81,7 @@ const usePrepareStoreAndNavigate = ( ) => {
     return null;
   }, [
     addCameraRollUris,
+    attachDeviceUrisToObservationPhotos,
     deviceStorageFull,
     setCameraState,
     setSavingPhoto,

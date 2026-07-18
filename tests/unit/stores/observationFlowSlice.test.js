@@ -121,4 +121,61 @@ describe( "observation flow slice", ( ) => {
       expect( state.currentObservation?.uuid ).toBe( obs1.uuid );
     } );
   } );
+
+  describe( "attachDeviceUrisToObservationPhotos", ( ) => {
+    it( "persists the device library URI onto the matching observation photo", ( ) => {
+      const localUri = "file:///documents/photo-1.jpg";
+      const obs = factory( "LocalObservation", {
+        uuid: "obs-camera",
+        observationPhotos: [
+          { uuid: "op-1", photo: {}, originalPhotoUri: localUri },
+        ],
+      } );
+
+      useStore.setState( {
+        observations: [obs],
+        currentObservationIndex: 0,
+        currentObservation: obs,
+      } );
+
+      useStore.getState( ).attachDeviceUrisToObservationPhotos( [
+        { localUri, deviceUri: "ph://ABC123" },
+      ] );
+
+      const state = useStore.getState( );
+      expect(
+        state.observations[0].observationPhotos[0].originalDevicePhotoUri,
+      ).toBe( "ph://ABC123" );
+    } );
+
+    it( "does not overwrite an existing originalDevicePhotoUri", ( ) => {
+      const localUri = "file:///documents/photo-2.jpg";
+      const obs = factory( "LocalObservation", {
+        uuid: "obs-gallery",
+        observationPhotos: [
+          {
+            uuid: "op-2",
+            photo: {},
+            originalPhotoUri: localUri,
+            originalDevicePhotoUri: "ph://ORIGINAL",
+          },
+        ],
+      } );
+
+      useStore.setState( {
+        observations: [obs],
+        currentObservationIndex: 0,
+        currentObservation: obs,
+      } );
+
+      useStore.getState( ).attachDeviceUrisToObservationPhotos( [
+        { localUri, deviceUri: "ph://REPLACEMENT" },
+      ] );
+
+      const state = useStore.getState( );
+      expect(
+        state.observations[0].observationPhotos[0].originalDevicePhotoUri,
+      ).toBe( "ph://ORIGINAL" );
+    } );
+  } );
 } );
