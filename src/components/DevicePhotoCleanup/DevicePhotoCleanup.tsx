@@ -1,5 +1,6 @@
 /* eslint-disable i18next/no-literal-strings */
 import {
+  ActivityIndicator,
   Body2,
   BottomSheet,
   Button,
@@ -11,6 +12,7 @@ import {
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -22,6 +24,7 @@ import {
 } from "react-native";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import findUnfavoritedDevicePhotoDays from "sharedHelpers/unfavoritedDevicePhotos";
+import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
 
 const { useRealm } = RealmContext;
 
@@ -41,14 +44,30 @@ const styles = StyleSheet.create( {
 
 const DevicePhotoCleanup = ( ) => {
   const realm = useRealm( );
-  const initialDays = useMemo(
-    ( ) => findUnfavoritedDevicePhotoDays( realm ),
-    [realm],
-  );
-  const [days, setDays] = useState( initialDays );
+  const [days, setDays] = useState<UnfavoritedPhotoDay[]>( [] );
+  const [loading, setLoading] = useState( true );
   const [showConfirm, setShowConfirm] = useState( false );
   const [deleting, setDeleting] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
+
+  useEffect( ( ) => {
+    let cancelled = false;
+    setLoading( true );
+    findUnfavoritedDevicePhotoDays( realm )
+      .then( result => {
+        if ( !cancelled ) {
+          setDays( result );
+        }
+      } )
+      .finally( ( ) => {
+        if ( !cancelled ) {
+          setLoading( false );
+        }
+      } );
+    return ( ) => {
+      cancelled = true;
+    };
+  }, [realm] );
 
   const allUris = useMemo(
     ( ) => days.flatMap( day => day.uris ),
@@ -73,6 +92,19 @@ const DevicePhotoCleanup = ( ) => {
               ? ""
               : "s"}`}
           </Heading4>
+        </View>
+      </ViewWrapper>
+    );
+  }
+
+  if ( loading ) {
+    return (
+      <ViewWrapper>
+        <View className="p-5 items-center justify-center flex-1">
+          <ActivityIndicator size={40} />
+          <Body2 className="mt-4 text-center">
+            Scanning your photo library…
+          </Body2>
         </View>
       </ViewWrapper>
     );
