@@ -1,11 +1,5 @@
-import {
-  getCrashlytics,
-  log as crashlyticsLog,
-  recordError,
-  setAttributes,
-} from "@react-native-firebase/crashlytics";
+import Config from "react-native-config";
 import type { transportFunctionType } from "react-native-logs";
-import { isFirebaseConfigured } from "sharedHelpers/firebaseApp";
 import { isObject, isObjectWithPrimitiveValues } from "sharedHelpers/runtimeTypeUtil";
 
 import { extraSentinelKey } from "./enhanceLoggerWithExtra";
@@ -19,14 +13,6 @@ function isError( value: unknown ): value is { message?: string; stack?: string 
     return true;
   }
   return false;
-}
-
-// Crashlytics.recordError expects a real Error instance
-function toError( value: { message?: string; stack?: string } ): Error {
-  if ( value instanceof Error ) return value;
-  const error = new Error( value.message ?? "Unknown error" );
-  if ( value.stack ) error.stack = value.stack;
-  return error;
 }
 
 // If we have anything that looks like:
@@ -70,33 +56,33 @@ function extractExtra( rawMsg: unknown ) {
 // our transport has no options but this needs to be explicitly `object` for generic typing
 type firebaseLogTransportOptions = object;
 
-// Custom transport for logging to Firebase Crashlytics
+// Custom transport that appends each log line as a push-ID child of
+// {CROP_LOG_FIREBASE_URL}/app_log. The log DB allows unauthenticated
+// writes, so no auth token is needed (same as the crop/brightness logs).
 const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> = async props => {
   // Don't bother to log from dev builds
   if ( __DEV__ ) return;
 
-  // Without a configured [DEFAULT] app every Crashlytics call throws
-  if ( !isFirebaseConfigured( ) ) return;
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl ) return;
 
   // pull potential `extra` out of the rest params
   const { messageParams, extra } = extractExtra( props.rawMsg );
 
   // if message is an Error or is an array ending in an error, extract it
-  // so we can report it as a non-fatal error, not just a log line
+  // so we can report its stack alongside the message
   let message: string;
-  let error: Error | undefined;
+  let error: { message?: string; stack?: string } | undefined;
   if ( typeof ( messageParams ) === "string" ) {
     message = messageParams;
   } else if ( isError( messageParams ) ) {
-    error = toError( messageParams );
-    ( { message } = error );
+    error = messageParams;
+    message = error.message ?? "Unknown error";
   } else if ( Array.isArray( messageParams ) ) {
-    // specially handle the cases where the last arg is
-    // an error: so we can attach appropriate error metadata
     const last = messageParams.at( -1 );
     if ( isError( last ) ) {
-      error = toError( last );
-      message = [...messageParams.slice( 0, -1 ), error.message].join( " " );
+      error = last;
+      message = [...messageParams.slice( 0, -1 ), error.message ?? "Unknown error"].join( " " );
     } else {
       message = messageParams.join( " " );
     }
@@ -104,20 +90,26 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
     message = JSON.stringify( messageParams );
   }
 
+  const entry = {
+    timestamp: new Date( ).toISOString( ),
+    level: props.level.text,
+    extension: props.extension,
+    message,
+    ...( extra ?? {} ),
+    ...( error?.stack
+      ? { stack: error.stack }
+      : {} ),
+  };
+
   try {
-    const crashlytics = getCrashlytics();
-    if ( extra ) {
-      const stringifiedExtra = Object.fromEntries(
-        Object.entries( extra ).map( ( [key, value] ) => [key, String( value )] ),
-      );
-      await setAttributes( crashlytics, stringifiedExtra );
-    }
-    crashlyticsLog( crashlytics, `[${props.level.text}] [${props.extension}] ${message}` );
-    if ( error ) {
-      recordError( crashlytics, error );
-    }
-  } catch ( crashlyticsError ) {
-    console.error( "[ERROR log.ts] failed to log to Crashlytics", crashlyticsError );
+    const r = await fetch( `${baseUrl}/app_log.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify( entry ),
+    } );
+    if ( !r.ok ) console.warn( "[ERROR log.ts] failed to sync log entry", r.status );
+  } catch ( syncError ) {
+    console.warn( "[ERROR log.ts] failed to sync log entry", syncError );
   }
 };
 

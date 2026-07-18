@@ -67,9 +67,6 @@ PODS:
   - FBLazyVector (0.83.9)
   - Firebase/CoreOnly (12.10.0):
     - FirebaseCore (~> 12.10.0)
-  - Firebase/Crashlytics (12.10.0):
-    - Firebase/CoreOnly
-    - FirebaseCrashlytics (~> 12.10.0)
   - Firebase/Performance (12.10.0):
     - Firebase/CoreOnly
     - FirebasePerformance (~> 12.10.0)
@@ -92,15 +89,6 @@ PODS:
     - FirebaseCore (~> 12.10.0)
   - FirebaseCoreInternal (12.10.0):
     - "GoogleUtilities/NSData+zlib (~> 8.1)"
-  - FirebaseCrashlytics (12.10.0):
-    - FirebaseCore (~> 12.10.0)
-    - FirebaseInstallations (~> 12.10.0)
-    - FirebaseRemoteConfigInterop (~> 12.10.0)
-    - FirebaseSessions (~> 12.10.0)
-    - GoogleDataTransport (~> 10.1)
-    - GoogleUtilities/Environment (~> 8.1)
-    - nanopb (~> 3.30910.0)
-    - PromisesObjC (~> 2.4)
   - FirebaseInstallations (12.10.0):
     - FirebaseCore (~> 12.10.0)
     - GoogleUtilities/Environment (~> 8.1)
@@ -3466,37 +3454,6 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - RNFBCrashlytics (23.8.8):
-    - boost
-    - DoubleConversion
-    - fast_float
-    - Firebase/Crashlytics (= 12.10.0)
-    - FirebaseCoreExtension
-    - fmt
-    - glog
-    - hermes-engine
-    - RCT-Folly
-    - RCT-Folly/Fabric
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Core
-    - React-debug
-    - React-Fabric
-    - React-featureflags
-    - React-graphics
-    - React-ImageManager
-    - React-jsi
-    - React-NativeModulesApple
-    - React-RCTFabric
-    - React-renderercss
-    - React-rendererdebug
-    - React-utils
-    - ReactCodegen
-    - ReactCommon/turbomodule/bridging
-    - ReactCommon/turbomodule/core
-    - RNFBApp
-    - SocketRocket
-    - Yoga
   - RNFBPerf (23.8.8):
     - boost
     - DoubleConversion
@@ -4184,7 +4141,6 @@ DEPENDENCIES:
   - RNDeviceInfo (from `../node_modules/react-native-device-info`)
   - "RNFBAnalytics (from `../node_modules/@react-native-firebase/analytics`)"
   - "RNFBApp (from `../node_modules/@react-native-firebase/app`)"
-  - "RNFBCrashlytics (from `../node_modules/@react-native-firebase/crashlytics`)"
   - "RNFBPerf (from `../node_modules/@react-native-firebase/perf`)"
   - RNGestureHandler (from `../node_modules/react-native-gesture-handler`)
   - "RNGoogleSignin (from `../node_modules/@react-native-google-signin/google-signin`)"
@@ -4211,7 +4167,6 @@ SPEC REPOS:
     - FirebaseCore
     - FirebaseCoreExtension
     - FirebaseCoreInternal
-    - FirebaseCrashlytics
     - FirebaseInstallations
     - FirebasePerformance
     - FirebaseRemoteConfig
@@ -4465,8 +4420,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/@react-native-firebase/analytics"
   RNFBApp:
     :path: "../node_modules/@react-native-firebase/app"
-  RNFBCrashlytics:
-    :path: "../node_modules/@react-native-firebase/crashlytics"
   RNFBPerf:
     :path: "../node_modules/@react-native-firebase/perf"
   RNGestureHandler:
@@ -4513,7 +4466,6 @@ SPEC CHECKSUMS:
   FirebaseCore: f4428e22415ea3b3eca652c2098413dabf2a23a9
   FirebaseCoreExtension: 3473a6ec16a91aee29fb75994a86c0220d2cddf3
   FirebaseCoreInternal: e7bbaeb00ab73011298f35ed223aa7371e212948
-  FirebaseCrashlytics: cd1baeb80302ec5ea1012f732ab94df7d76f09f7
   FirebaseInstallations: 047343aa91fd6a1ebfa3eb374ddecf36a8aaddfd
   FirebasePerformance: 0d2f76080b03f2c527c56bbd53bc4381c445b5dc
   FirebaseRemoteConfig: 684a4427fc0ce308cdb63f7b400e353809285b4e
@@ -4641,7 +4593,6 @@ SPEC CHECKSUMS:
   RNDeviceInfo: 36d7f232bfe7c9b5c494cb7793230424ed32c388
   RNFBAnalytics: 223d73ff7869b088a177a09b015c6e6b0fa74836
   RNFBApp: 3f43568008b1abdef6b743ecb62829ff9fb27b0d
-  RNFBCrashlytics: 11f5d651f74e66d9b7ac3d4ce93b246d1378521d
   RNFBPerf: f071c3710149382557a7ca0d315610a50e505847
   RNGestureHandler: c6327cf6e2bd384dc90351ccfff0da8142d62f54
   RNGoogleSignin: b126da02b9402311c8093e72b064a7e85d139921
