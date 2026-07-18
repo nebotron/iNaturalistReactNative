@@ -1,6 +1,7 @@
 // @flow
 
 import { useNavigation } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import { duplicateGroupedMediaGroups } from
   "components/PhotoImporter/helpers/duplicateGroupedMedia";
 import {
@@ -18,6 +19,10 @@ import React, {
 } from "react";
 import Observation from "realmModels/Observation";
 import applyTrackedLocationToObservation from "sharedHelpers/applyTrackedLocationToPhotos";
+import { log } from "sharedHelpers/logger";
+import {
+  prefetchSuggestionsForObservations,
+} from "sharedHelpers/prefetchObservationSuggestions";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
@@ -35,6 +40,8 @@ import flattenAndOrderSelectedPhotos, {
 
 const { useRealm } = RealmContext;
 
+const logger = log.extend( "GroupPhotosContainer" );
+
 function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
   if ( uri == null ) return null;
   const index = newPhotos.findIndex( obs => obs.photos?.some( p => p.image.uri === uri ) );
@@ -47,6 +54,7 @@ function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
 
 const GroupPhotosContainer = ( ): Node => {
   const navigation = useNavigation( );
+  const queryClient = useQueryClient( );
   const { gridItemStyle } = useGridLayout( undefined, "fullWidth" );
   const itemHeight = gridItemStyle.height;
   const realm = useRealm( );
@@ -347,6 +355,12 @@ const GroupPhotosContainer = ( ): Node => {
     await Promise.all(
       observationsToSave.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
     );
+
+    // Start scoring each new observation's photo right away (offline + online),
+    // caching both so the Suggestions screen loads instantly and no photo is
+    // ever scored twice. Fire-and-forget so import isn't blocked on CV.
+    prefetchSuggestionsForObservations( queryClient, observationsToSave, realm )
+      .catch( error => logger.error( "Failed to prefetch group photo suggestions", error ) );
 
     // Auto-fill location from tracked location history for any imported
     // observation whose photos didn't carry GPS EXIF data

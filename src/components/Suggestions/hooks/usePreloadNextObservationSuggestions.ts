@@ -1,13 +1,17 @@
 import { useQueryClient } from "@tanstack/react-query";
+import { RealmContext } from "providers/contexts";
 import { useEffect } from "react";
 import { log } from "sharedHelpers/logger";
 import prefetchObservationSuggestions from "sharedHelpers/prefetchObservationSuggestions";
 import useStore from "stores/useStore";
 
+const { useRealm } = RealmContext;
+
 const logger = log.extend( "usePreloadNextObservationSuggestions" );
 
 const usePreloadNextObservationSuggestions = ( ) => {
   const queryClient = useQueryClient( );
+  const realm = useRealm( );
   const observations = useStore( state => state.observations );
   const currentObservationIndex = useStore( state => state.currentObservationIndex );
   const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
@@ -22,11 +26,11 @@ const usePreloadNextObservationSuggestions = ( ) => {
       if ( !obs ) {
         return;
       }
-      prefetchObservationSuggestions( queryClient, obs ).catch( error => {
+      prefetchObservationSuggestions( queryClient, obs, realm ).catch( error => {
         logger.error( "Failed to preload next observation suggestions", error );
       } );
     } );
-  }, [nextObs1, nextObs2, nextObs3, queryClient] );
+  }, [nextObs1, nextObs2, nextObs3, queryClient, realm] );
 };
 
 export default usePreloadNextObservationSuggestions;
