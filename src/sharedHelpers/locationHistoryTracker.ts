@@ -200,14 +200,18 @@ export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResu
       await BackgroundService.start( backgroundTask, getBackgroundServiceOptions( ) );
     } else if ( Platform.OS !== "android" && watchIds.length === 0 ) {
       Geolocation.setRNConfiguration( IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG );
-      // Hybrid iOS tracking:
-      // 1. A continuous high-accuracy watch honours distanceFilter and gives a
-      //    dense track while the app is running (foreground or backgrounded and
-      //    kept alive by the location background mode).
-      // 2. A significant-change watch is what lets iOS relaunch the app after it
-      //    has been suspended or terminated, so tracking resumes on its own. It
-      //    is coarse (~500m / cell-tower), so it fills the gaps between relaunch
-      //    and the continuous watch coming back up rather than driving density.
+      // iOS background tracking uses a single continuous high-accuracy watch.
+      // @react-native-community/geolocation drives one shared CLLocationManager
+      // and only applies the *first* watchPosition's options (later watches just
+      // attach extra callbacks), so pairing this with a second "significant
+      // changes" watch would never actually start significant-change monitoring -
+      // it would only record the continuous fixes twice. Instead we keep the
+      // continuous watch delivering in the background via
+      // allowsBackgroundLocationUpdates (enableBackgroundLocationUpdates) and,
+      // crucially, pausesLocationUpdatesAutomatically = NO (see the geolocation
+      // patch). Without that, iOS pauses updates whenever it thinks the user is
+      // stationary and does not resume for a long time - the main cause of long
+      // gaps in the tracked location history.
       const continuousWatchId = watchPosition(
         recordPosition( "ios-continuous" ),
         error => logger.warn( "watchPosition error (continuous)", error ),
@@ -217,15 +221,7 @@ export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResu
           useSignificantChanges: false,
         },
       );
-      const significantWatchId = watchPosition(
-        recordPosition( "ios-significant" ),
-        error => logger.warn( "watchPosition error (significant)", error ),
-        {
-          enableHighAccuracy: true,
-          useSignificantChanges: true,
-        },
-      );
-      watchIds = [continuousWatchId, significantWatchId];
+      watchIds = [continuousWatchId];
       Geolocation.setRNConfiguration( DEFAULT_GEOLOCATION_CONFIG );
     }
     store.set( TRACKING_ENABLED_KEY, true );
