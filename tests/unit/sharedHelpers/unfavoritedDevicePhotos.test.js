@@ -48,16 +48,27 @@ describe( "findUnfavoritedDevicePhotoDays", ( ) => {
     expect( flatUris( days ) ).toContain( "ph://EXACT" );
   } );
 
-  it( "matches a legacy photo with no stored URI by capture time", async ( ) => {
+  it( "matches a legacy photo with no stored URI by exact capture time", async ( ) => {
     const realm = makeRealm( [
       // Legacy observation: unfavorited, no device URI stored.
       makeObservation( { faved: false, timeMs: UNFAV_TIME } ),
     ] );
-    mockLibrary( [{ id: "LEGACY", timeMs: UNFAV_TIME + 5000 }] );
+    mockLibrary( [{ id: "LEGACY", timeMs: UNFAV_TIME }] );
 
     const days = await findUnfavoritedDevicePhotoDays( realm );
 
     expect( flatUris( days ) ).toContain( "ph://LEGACY" );
+  } );
+
+  it( "does not match a photo taken a second away (zero tolerance)", async ( ) => {
+    const realm = makeRealm( [
+      makeObservation( { faved: false, timeMs: UNFAV_TIME } ),
+    ] );
+    mockLibrary( [{ id: "OFF_BY_ONE", timeMs: UNFAV_TIME + 1000 }] );
+
+    const days = await findUnfavoritedDevicePhotoDays( realm );
+
+    expect( flatUris( days ) ).not.toContain( "ph://OFF_BY_ONE" );
   } );
 
   it( "protects photos whose capture time matches a favorited observation", async ( ) => {
@@ -66,8 +77,8 @@ describe( "findUnfavoritedDevicePhotoDays", ( ) => {
       makeObservation( { faved: true, timeMs: FAV_TIME } ),
     ] );
     mockLibrary( [
-      { id: "KEEP", timeMs: FAV_TIME + 2000 },
-      { id: "DELETE", timeMs: UNFAV_TIME + 2000 },
+      { id: "KEEP", timeMs: FAV_TIME },
+      { id: "DELETE", timeMs: UNFAV_TIME },
     ] );
 
     const days = await findUnfavoritedDevicePhotoDays( realm );
