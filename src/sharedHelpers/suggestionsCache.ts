@@ -50,3 +50,19 @@ export function setCachedSuggestions<T>( key: string, value: T ): void {
 export function clearSuggestionsCache( ): void {
   store.clearAll( );
 }
+
+// Cache-key builders shared by the online/offline suggestion hooks and the
+// prefetch helper, so a photo scored ahead of time lands under the exact key
+// the Suggestions screen later reads from (i.e. each photo is only ever
+// processed once).
+export const onlineSuggestionsCacheKey = (
+  queryKey: unknown[],
+  hasCurrentUser: boolean,
+  locale: string,
+): string => JSON.stringify( [...queryKey, "online", hasCurrentUser, locale] );
+
+export const offlineSuggestionsCacheKey = (
+  photoUri: string,
+  latitude?: number,
+  longitude?: number,
+): string => `offline|${photoUri}|${latitude ?? ""}|${longitude ?? ""}`;

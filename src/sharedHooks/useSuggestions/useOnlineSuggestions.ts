@@ -10,7 +10,11 @@ import {
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
-import { getCachedSuggestions, setCachedSuggestions } from "sharedHelpers/suggestionsCache";
+import {
+  getCachedSuggestions,
+  onlineSuggestionsCacheKey,
+  setCachedSuggestions,
+} from "sharedHelpers/suggestionsCache";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
@@ -110,7 +114,7 @@ const useOnlineSuggestions = (
       // Calling the API is expensive (network + server-side scoring), so
       // avoid re-fetching for a query/auth state we've already resolved,
       // even across app restarts.
-      const cacheKey = JSON.stringify( [...queryKey, "online", !!currentUser, locale] );
+      const cacheKey = onlineSuggestionsCacheKey( queryKey, !!currentUser, locale );
       const cachedSuggestions = getCachedSuggestions<OnlineSuggestionsQueryResponse>( cacheKey );
       if ( cachedSuggestions ) {
         return cachedSuggestions;

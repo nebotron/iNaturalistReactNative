@@ -8,7 +8,11 @@ import type Realm from "realm";
 import type { RealmTaxon } from "realmModels/types";
 import { log } from "sharedHelpers/logger";
 import { predictImage } from "sharedHelpers/mlModel";
-import { getCachedSuggestions, setCachedSuggestions } from "sharedHelpers/suggestionsCache";
+import {
+  getCachedSuggestions,
+  offlineSuggestionsCacheKey,
+  setCachedSuggestions,
+} from "sharedHelpers/suggestionsCache";
 import type { Prediction } from "vision-camera-plugin-inatvision";
 
 import type { UseSuggestionsOfflineSuggestion } from "./types";
@@ -98,12 +102,6 @@ export const predictOffline = async ( {
   return returnValue;
 };
 
-const getOfflinePredictionCacheKey = (
-  photoUri: string,
-  latitude?: number,
-  longitude?: number,
-): string => `offline|${photoUri}|${latitude ?? ""}|${longitude ?? ""}`;
-
 const useOfflineSuggestions = (
   photoUri: string,
   options: {
@@ -133,7 +131,7 @@ const useOfflineSuggestions = (
 
   const fetchOfflineSuggestions = useCallback( async () => {
     if ( !photoUri ) return;
-    const cacheKey = getOfflinePredictionCacheKey( photoUri, latitude, longitude );
+    const cacheKey = offlineSuggestionsCacheKey( photoUri, latitude, longitude );
     // Running the on-device model is expensive, so avoid re-running it for a
     // photo (+ location) we've already scanned, even across app restarts.
     const cachedSuggestions = getCachedSuggestions<OfflineSuggestionsResponse>( cacheKey );
