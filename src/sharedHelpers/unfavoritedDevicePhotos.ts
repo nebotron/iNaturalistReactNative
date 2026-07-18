@@ -30,14 +30,21 @@ export interface UnfavoritedPhotoDay {
   uris: string[];
 }
 
-// A device photo whose capture time is within this many milliseconds of an
-// observation is treated as belonging to that observation. Older observations
-// (created before we stored a device photo URI) have no exact link to their
-// library asset, so we fall back to matching on capture time. The window is
-// wide enough to absorb sub-second rounding and burst photos that share one
-// observation, but tight enough that unrelated photos don't get swept in. The
-// user still reviews the matched thumbnails before anything is deleted.
-const CAPTURE_TIME_TOLERANCE_MS = 60 * 1000;
+// A device photo is treated as belonging to an observation only when their
+// capture times are identical. Older observations (created before we stored a
+// device photo URI) have no exact link to their library asset, so we fall back
+// to matching on capture time. Both sides are compared at whole-second
+// precision (EXIF timestamps have no sub-second component), so this is an exact
+// same-second match with zero tolerance.
+const CAPTURE_TIME_TOLERANCE_MS = 0;
+
+// The library scan query bounds are padded slightly wider than the observation
+// range so a photo sitting exactly on a boundary isn't excluded by the query
+// (fromTime/toTime range semantics) before it can be matched. Matching itself
+// stays exact.
+const SCAN_PADDING_MS = 1000;
+
+const toWholeSecondMs = ( ms: number ): number => Math.floor( ms / 1000 ) * 1000;
 
 const PAGE_SIZE = 100;
 // Safety valve so an enormous library can't loop forever.
@@ -62,7 +69,7 @@ const getObservationTimeMs = ( observation: RealmObservation ): number | null =>
   const time = new Date( raw ).getTime( );
   return Number.isNaN( time )
     ? null
-    : time;
+    : toWholeSecondMs( time );
 };
 
 const deviceUriFromAssetNode = ( node: PhotoNode ): string | null => {
@@ -137,7 +144,7 @@ const loadDeviceAssets = async (
         assets.push( {
           uri,
           timestampMs: typeof node.timestamp === "number"
-            ? node.timestamp * 1000
+            ? toWholeSecondMs( node.timestamp * 1000 )
             : null,
         } );
       } );
@@ -238,8 +245,8 @@ const findUnfavoritedDevicePhotoDays = async (
     }
   } );
   if ( fromTime !== undefined && toTime !== undefined ) {
-    fromTime -= CAPTURE_TIME_TOLERANCE_MS;
-    toTime += CAPTURE_TIME_TOLERANCE_MS;
+    fromTime -= SCAN_PADDING_MS;
+    toTime += SCAN_PADDING_MS;
   }
 
   const assets = await loadDeviceAssets( fromTime, toTime );
@@ -253,8 +260,8 @@ const findUnfavoritedDevicePhotoDays = async (
     }
     const isExactUnfavorited = exactUnfavoritedUris.has( uri );
     if ( timestampMs !== null ) {
-      // Protect anything close to a favorited observation, unless this exact
-      // photo is explicitly linked to an unfavorited one.
+      // Protect anything sharing a favorited observation's capture time, unless
+      // this exact photo is explicitly linked to an unfavorited one.
       const nearFavorited = hasTimeWithinTolerance(
         favoritedTimes,
         timestampMs,
