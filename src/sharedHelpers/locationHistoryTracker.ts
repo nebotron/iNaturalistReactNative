@@ -113,7 +113,7 @@ const recordPosition = ( source: string ) => async ( position: {
         } ),
       );
     }, "recording location history point" );
-    logger.info( `Recorded location fix from ${source}`, { accuracy, recordedAt: now } );
+    logger.infoWithExtra( `Recorded location fix from ${source}`, { accuracy, recordedAt: now } );
   } catch ( error ) {
     logger.error( "Failed to save location history point", error );
   }
