@@ -356,35 +356,57 @@ const GroupPhotosContainer = ( ): Node => {
       observationsToSave.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
     );
 
-    // Start scoring each new observation's photo right away (offline + online),
-    // caching both so the Suggestions screen loads instantly and no photo is
-    // ever scored twice. Fire-and-forget so import isn't blocked on CV.
-    prefetchSuggestionsForObservations( queryClient, observationsToSave, realm )
-      .catch( error => logger.error( "Failed to prefetch group photo suggestions", error ) );
-
     // Auto-fill location from tracked location history for any imported
-    // observation whose photos didn't carry GPS EXIF data
-    const missingLocationUuids = observationsToSave
-      .filter( obs => obs.latitude == null || obs.longitude == null )
-      .map( obs => obs.uuid );
-    if ( missingLocationUuids.length > 0 ) {
+    // observation whose photos didn't carry GPS EXIF data. This runs before
+    // the ID requests below so computer vision scoring (and its cache key) use
+    // the observation's final location rather than no location.
+    const trackedLocationByUuid = {};
+    const missingLocationObs = observationsToSave
+      .filter( obs => obs.latitude == null || obs.longitude == null );
+    if ( missingLocationObs.length > 0 ) {
       const usablePoints = filterUsableTrackedPoints(
         realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
       );
       if ( usablePoints.length > 0 ) {
-        await Promise.all( missingLocationUuids.map( uuid => {
-          const savedObs = realm.objectForPrimaryKey( "Observation", uuid );
-          if ( !savedObs ) return null;
+        await Promise.all( missingLocationObs.map( async obs => {
+          const savedObs = realm.objectForPrimaryKey( "Observation", obs.uuid );
+          if ( !savedObs ) return;
           const targetMs = new Date(
             savedObs.observed_on_string ?? savedObs.observed_on ?? 0,
           ).getTime();
           const trackedLocation = interpolateFromUsablePoints( usablePoints, targetMs );
-          return trackedLocation
-            ? applyTrackedLocationToObservation( realm, savedObs, trackedLocation )
-            : null;
+          if ( !trackedLocation ) return;
+          await applyTrackedLocationToObservation( realm, savedObs, trackedLocation );
+          trackedLocationByUuid[obs.uuid] = trackedLocation;
         } ) );
       }
     }
+
+    // Mirror any auto-filled locations back onto the in-memory observations so
+    // the Suggestions screen and the ID-request cache key below both reflect
+    // the observation's final location.
+    const locatedObservations = observationsToSave.map( obs => {
+      const trackedLocation = trackedLocationByUuid[obs.uuid];
+      if ( !trackedLocation ) return obs;
+      return {
+        ...obs,
+        latitude: trackedLocation.latitude,
+        longitude: trackedLocation.longitude,
+        ...( trackedLocation.accuracy != null
+          ? { positional_accuracy: trackedLocation.accuracy }
+          : {} ),
+      };
+    } );
+    if ( Object.keys( trackedLocationByUuid ).length > 0 ) {
+      setObservations( locatedObservations );
+    }
+
+    // Now that locations are populated, start scoring each new observation's
+    // photo (offline + online), caching both so the Suggestions screen loads
+    // instantly and no photo is ever scored twice. Fire-and-forget so import
+    // isn't blocked on CV.
+    prefetchSuggestionsForObservations( queryClient, locatedObservations, realm )
+      .catch( error => logger.error( "Failed to prefetch group photo suggestions", error ) );
 
     resetMyObsOffsetToRestore( );
     setMyObsOffset( 0 );
