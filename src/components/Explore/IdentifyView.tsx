@@ -107,8 +107,7 @@ const IdentifyView = ( {
   );
   const currentPhotoUrl = photoUrls[selectedPhotoIndex];
   const {
-    brightness, displayUri, brightnessStops, setBrightnessStops, handleBrightnessComplete,
-    isOffMode,
+    brightness, brightnessStops, setBrightnessStops, handleBrightnessComplete,
   } = useIdentifyPhotoBrightness( currentPhotoUrl );
 
   // Update the exposure override live; the image re-renders with the new
@@ -249,7 +248,6 @@ const IdentifyView = ( {
               key={currentPhotoUrl}
               ref={photoRef}
               uri={currentPhotoUrl}
-              displayUri={displayUri}
               size={windowWidth}
               brightness={brightness}
               onSingleTap={openObsDetails}
@@ -294,7 +292,6 @@ const IdentifyView = ( {
       <ZoomBrightnessSliders
         zoomScale={zoomScale}
         brightnessStops={brightnessStops}
-        brightnessDisabled={isOffMode}
         exposureStopsMin={EXPOSURE_STOPS_MIN}
         exposureStopsMax={EXPOSURE_STOPS_MAX}
         onZoomChange={handleZoomChange}

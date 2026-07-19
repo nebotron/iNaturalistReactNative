@@ -1,5 +1,4 @@
 import Slider from "@react-native-community/slider";
-import classNames from "classnames";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import { INatIcon } from "components/SharedComponents";
@@ -87,8 +86,7 @@ interface IdentifyPhotoProps {
 // A single subject-framed photo with one- or two-finger pan/zoom. The framed
 // viewport is saved to the crop log (which syncs to Firebase) whenever a
 // gesture or slider zoom ends. `uri` keys subject detection and crop
-// persistence; `displayUri` (e.g. a gamma tone-mapped copy) is what's shown
-// if it differs.
+// persistence; `displayUri`, if provided and different, is what's shown.
 export const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhotoProps>( ( {
   uri,
   displayUri,
@@ -200,7 +198,6 @@ IdentifyPhoto.displayName = "IdentifyPhoto";
 interface ZoomBrightnessSlidersProps {
   zoomScale: number;
   brightnessStops: number;
-  brightnessDisabled?: boolean;
   exposureStopsMin: number;
   exposureStopsMax: number;
   onZoomChange: ( pos: number ) => void;
@@ -216,7 +213,6 @@ interface ZoomBrightnessSlidersProps {
 export const ZoomBrightnessSliders = ( {
   zoomScale,
   brightnessStops,
-  brightnessDisabled,
   exposureStopsMin,
   exposureStopsMax,
   onZoomChange,
@@ -244,13 +240,10 @@ export const ZoomBrightnessSliders = ( {
         accessibilityLabel={zoomAccessibilityLabel}
       />
     </View>
-    {/* Off mode ignores the exposure slider entirely and always shows the
-        original image, so disable it rather than let it silently do nothing. */}
-    <View className={classNames( "flex-row items-center", { "opacity-50": brightnessDisabled } )}>
+    <View className="flex-row items-center">
       <INatIcon name="sun" size={18} color={iconColor} />
       <Slider
         style={styles.slider}
-        disabled={brightnessDisabled}
         minimumValue={exposureStopsMin}
         maximumValue={exposureStopsMax}
         minimumTrackTintColor={colors.inatGreen}

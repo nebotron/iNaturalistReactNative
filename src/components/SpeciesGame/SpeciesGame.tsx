@@ -255,8 +255,7 @@ const SpeciesGame = ( ) => {
   const photoRef = useRef<IdentifyPhotoHandle | null>( null );
   const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
   const {
-    brightness, displayUri, brightnessStops, setBrightnessStops, handleBrightnessComplete,
-    isOffMode,
+    brightness, brightnessStops, setBrightnessStops, handleBrightnessComplete,
   } = useIdentifyPhotoBrightness( currentPhotoUrl ?? undefined );
 
   // Reset zoom for the visible photo (brightness resets itself via
@@ -1142,7 +1141,6 @@ const SpeciesGame = ( ) => {
                 key={currentPhotoUrl}
                 ref={photoRef}
                 uri={currentPhotoUrl}
-                displayUri={displayUri}
                 size={windowWidth}
                 brightness={brightness}
                 onScaleChange={handleScaleChange}
@@ -1170,7 +1168,6 @@ const SpeciesGame = ( ) => {
       <ZoomBrightnessSliders
         zoomScale={zoomScale}
         brightnessStops={brightnessStops}
-        brightnessDisabled={isOffMode}
         exposureStopsMin={EXPOSURE_STOPS_MIN}
         exposureStopsMax={EXPOSURE_STOPS_MAX}
         onZoomChange={handleZoomChange}

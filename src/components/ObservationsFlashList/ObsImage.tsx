@@ -7,13 +7,11 @@ import React, {
 import type { LayoutChangeEvent } from "react-native";
 import useAutoBrightnessForUri from "sharedHelpers/useAutoBrightnessForUri";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
-import useToneMappedBrightnessUri from "sharedHelpers/useToneMappedBrightnessUri";
-import { AUTO_BRIGHTNESS_MODE } from "stores/createLayoutSlice";
 
 import ObsImageZoomable from "./ObsImageZoomable";
 
 interface Props {
-  autoBrightnessMode?: AUTO_BRIGHTNESS_MODE;
+  autoBrightness?: boolean;
   autoDetectSubject?: boolean;
   iconicTaxonIconSize?: number;
   iconicTaxonName?: string;
@@ -33,7 +31,7 @@ const CLASS_NAMES = [
 ] as const;
 
 const ObsImage = ( {
-  autoBrightnessMode = AUTO_BRIGHTNESS_MODE.OFF,
+  autoBrightness = false,
   autoDetectSubject = false,
   iconicTaxonName,
   imageClassName,
@@ -61,35 +59,22 @@ const ObsImage = ( {
   // crop===undefined: detection still in progress (brightness hook waits)
   // crop===null:      no subject detection requested (measure full image)
   // crop===NormalizedCrop: detection done; measure only the subject region
-  const isGammaMode = autoBrightnessMode === AUTO_BRIGHTNESS_MODE.GAMMA;
-  const isMultiplyMode = autoBrightnessMode === AUTO_BRIGHTNESS_MODE.MULTIPLY;
-  const brightnessUri = ( isGammaMode || isMultiplyMode ) && uri?.uri
+  const brightnessUri = autoBrightness && uri?.uri
     ? uri.uri
     : undefined;
   const brightnessCrop = autoDetectSubject
     ? detection?.crop // undefined until detection resolves
     : null; // no detection → full-image measurement
 
-  // Gamma mode bakes a detail-preserving tone curve into a native-processed,
-  // cached copy of the image. Multiply mode instead applies the same
-  // computed adjustment live as a flat CSS brightness filter.
-  const toneMappedUri = useToneMappedBrightnessUri(
-    isGammaMode
-      ? brightnessUri
-      : undefined,
-    brightnessCrop,
-  );
+  // Auto-brightness applies the computed adjustment live as a flat CSS
+  // brightness filter (multiplicative).
   const multiplyAdjustment = useAutoBrightnessForUri(
-    isMultiplyMode
-      ? brightnessUri
-      : undefined,
+    brightnessUri,
     brightnessCrop,
   );
-  const displayUri = ( isGammaMode
-    ? toneMappedUri
-    : undefined ) ?? uri?.uri;
+  const displayUri = uri?.uri;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const brightnessFilterStyle: any = isMultiplyMode && multiplyAdjustment !== 1
+  const brightnessFilterStyle: any = multiplyAdjustment !== 1
     ? { filter: [{ brightness: multiplyAdjustment }] }
     : undefined;
 
@@ -127,8 +112,7 @@ const ObsImage = ( {
       { displayUri && !showZoomable && (
         displayUri.startsWith( "ph://" )
           // FasterImageView (SDWebImage) can't load ph:// PHAsset identifiers;
-          // only React Native's own Image loader resolves those on iOS. Once
-          // tone-mapped, displayUri is always a plain file:// path instead.
+          // only React Native's own Image loader resolves those on iOS.
           ? (
             <Image
               key={uri.uri}
