@@ -209,7 +209,6 @@ interface ZoomBrightnessSlidersProps {
   onBrightnessComplete: ( value: number ) => void;
   zoomAccessibilityLabel: string;
   brightnessAccessibilityLabel: string;
-  iconColor?: string;
 }
 
 // The zoom + brightness sliders shown below a photo (not covering it).
@@ -225,11 +224,10 @@ export const ZoomBrightnessSliders = ( {
   onBrightnessComplete,
   zoomAccessibilityLabel,
   brightnessAccessibilityLabel,
-  iconColor = colors.darkGray,
 }: ZoomBrightnessSlidersProps ) => (
   <View className="px-4 pt-1">
     <View className="flex-row items-center">
-      <INatIcon name="magnifying-glass" size={18} color={iconColor} />
+      <INatIcon name="magnifying-glass" size={18} color={colors.darkGray} />
       <Slider
         style={styles.slider}
         minimumValue={0}
@@ -247,7 +245,7 @@ export const ZoomBrightnessSliders = ( {
     {/* Off mode ignores the exposure slider entirely and always shows the
         original image, so disable it rather than let it silently do nothing. */}
     <View className={classNames( "flex-row items-center", { "opacity-50": brightnessDisabled } )}>
-      <INatIcon name="sun" size={18} color={iconColor} />
+      <INatIcon name="sun" size={18} color={colors.darkGray} />
       <Slider
         style={styles.slider}
         disabled={brightnessDisabled}
