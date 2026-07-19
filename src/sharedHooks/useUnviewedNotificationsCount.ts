@@ -61,7 +61,7 @@ const useUnviewedNotificationsCount = () => {
       { observations_by: "owner" },
       optsWithAuth,
     ),
-    { enabled: !!currentUser, refetchInterval: REFETCH_INTERVAL },
+    { enabled: !!currentUser, refetchInterval: REFETCH_INTERVAL, requireLoggedIn: true },
   );
 
   const { data: followingUnviewedCount, refetch: refetchFollowing } = useAuthenticatedQuery(
@@ -70,7 +70,7 @@ const useUnviewedNotificationsCount = () => {
       { observations_by: "following" },
       optsWithAuth,
     ),
-    { enabled: !!currentUser, refetchInterval: REFETCH_INTERVAL },
+    { enabled: !!currentUser, refetchInterval: REFETCH_INTERVAL, requireLoggedIn: true },
   );
 
   const refetch = useCallback( ( ) => {
