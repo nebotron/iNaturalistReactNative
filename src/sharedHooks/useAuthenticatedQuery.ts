@@ -2,6 +2,7 @@ import type { QueryKey, UseQueryOptions } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { getJWT, isLoggedIn } from "components/LoginSignUp/AuthenticationService";
 import { useEffect, useState } from "react";
+import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
 
 const LOGGED_IN_UNKNOWN = null;
 
@@ -59,6 +60,12 @@ const useAuthenticatedQuery = <Response>(
       return queryFunction( options );
     },
     ...queryOptions,
+    retry: queryOptions.retry !== false
+      ? ( failureCount, error ) => reactQueryRetry( failureCount, error, {
+        queryKey,
+      } )
+      : false,
+    retryDelay: ( failureCount, error ) => handleRetryDelay( failureCount, error ),
     // Authenticated queries should not run until we know whether or not the
     // user is signed in
     enabled: userLoggedIn !== LOGGED_IN_UNKNOWN && queryOptions.enabled,
