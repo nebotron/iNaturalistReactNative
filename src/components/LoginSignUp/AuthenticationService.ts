@@ -245,6 +245,7 @@ const signOut = async (
   await deleteSensitiveItem( "jwtGeneratedAt" );
   await deleteSensitiveItem( "username" );
   await deleteSensitiveItem( "accessToken" );
+  await deleteSensitiveItem( "refreshToken" );
 
   // clear all directories containing user generated data within Documents Directory
   await removeAllFilesFromDirectory( computerVisionPath );
@@ -316,20 +317,87 @@ const getAnonymousJWT = (): string => {
 // during downtime.
 let jwtRefreshPromise: Promise<string | null> | null = null;
 
+/**
+ * Exchanges the stored OAuth refresh token for a new access token, so an
+ * expired/rejected access token can be renewed without asking the user to
+ * re-enter their password. Returns null if there is no refresh token or the
+ * exchange fails (in which case the caller falls back to prompting for login).
+ */
+async function refreshAccessToken( ): Promise<string | null> {
+  const refreshToken = await getSensitiveItem( "refreshToken" );
+  if ( !refreshToken ) {
+    return null;
+  }
+  const api = createAPI( );
+  let response;
+  try {
+    response = await api.post<OauthTokenResponse>( "/oauth/token", {
+      format: "json",
+      grant_type: "refresh_token",
+      client_id: Config.OAUTH_CLIENT_ID,
+      client_secret: Config.OAUTH_CLIENT_SECRET,
+      refresh_token: refreshToken,
+    } );
+  } catch ( refreshError ) {
+    logger.error( "Failed to refresh access token: ", refreshError );
+    return null;
+  }
+  const newAccessToken = response.data?.access_token;
+  if ( !response.ok || !newAccessToken ) {
+    return null;
+  }
+  await setSensitiveItem( "accessToken", newAccessToken );
+  // Doorkeeper rotates refresh tokens, so persist the new one when returned.
+  if ( response.data?.refresh_token ) {
+    await setSensitiveItem( "refreshToken", response.data.refresh_token );
+  }
+  return newAccessToken;
+}
+
+function requestApiToken( accessToken: string ) {
+  const api = createAPI( { Authorization: `Bearer ${accessToken}` } );
+  return api.get<{api_token: string}>( "/users/api_token.json" );
+}
+
 async function fetchFreshJWT( logContext: string | null ): Promise<string | null> {
   try {
-    const accessToken = await getSensitiveItem( "accessToken" );
+    let accessToken = await getSensitiveItem( "accessToken" );
     // accessToken should always be a string here, since we're logged in,
     // i.e. in the function call to loggedIn() above we must have found accessToken
-    // to not be null at least in the last 5000 ms
-    const api = createAPI( { Authorization: `Bearer ${accessToken}` } );
+    // to not be null at least in the last 5000 ms. If it's momentarily
+    // unreadable (e.g. the keychain is locked), try the refresh token rather
+    // than sending an empty bearer token and bouncing the user to login.
+    if ( !accessToken ) {
+      accessToken = await refreshAccessToken( );
+      if ( !accessToken ) {
+        return null;
+      }
+    }
     let response;
     try {
-      response = await api.get<{api_token: string}>( "/users/api_token.json" );
+      response = await requestApiToken( accessToken );
     } catch ( getUsersApiTokenError ) {
       logger.error( "Failed to fetch JWT: ", getUsersApiTokenError );
       if ( !getUsersApiTokenError ) { return null; }
       throw getUsersApiTokenError;
+    }
+
+    // A 401 means the OAuth access token was rejected. Before forcing the user
+    // to re-enter their password, try to silently obtain a new access token
+    // with the stored refresh token and retry once.
+    if ( response.status === 401 ) {
+      const refreshedAccessToken = await refreshAccessToken( );
+      if ( refreshedAccessToken ) {
+        if ( logContext ) {
+          logger.info( `JWT [${logContext}]: Access token refreshed, retrying` );
+        }
+        try {
+          response = await requestApiToken( refreshedAccessToken );
+        } catch ( retryError ) {
+          logger.error( "Failed to fetch JWT after refreshing access token: ", retryError );
+          throw retryError;
+        }
+      }
     }
 
     if ( !response.ok ) {
@@ -436,6 +504,7 @@ interface RailsApiResponse {
 
 interface OauthTokenResponse extends RailsApiResponse {
   access_token?: string;
+  refresh_token?: string;
 }
 
 function errorDescriptionFromResponse( response: ApiResponse<OauthTokenResponse> ): string {
@@ -456,6 +525,7 @@ interface UsersEditResponse extends RailsApiResponse {
 
 interface UserDetails {
   accessToken: string;
+  refreshToken?: string;
   username: string;
   userId: number;
 }
@@ -506,6 +576,7 @@ async function afterVerifyCredentials(
 
   return {
     accessToken,
+    refreshToken: tokenResponse.data?.refresh_token,
     username: iNatUsername,
     userId: iNatID,
   };
@@ -559,7 +630,9 @@ async function afterAuthenticateUser(
     return { success: false };
   }
 
-  const { userId, username: remoteUsername, accessToken } = userDetails;
+  const {
+    userId, username: remoteUsername, accessToken, refreshToken,
+  } = userDetails;
   if ( !userId ) {
     return { success: false };
   }
@@ -567,6 +640,11 @@ async function afterAuthenticateUser(
   // Save authentication details to secure storage
   await setSensitiveItem( "username", remoteUsername );
   await setSensitiveItem( "accessToken", accessToken );
+  // Persist the refresh token (if the server issued one) so we can silently
+  // renew an expired access token instead of forcing the user to log in again.
+  if ( refreshToken ) {
+    await setSensitiveItem( "refreshToken", refreshToken );
+  }
 
   // Save userId to local, encrypted storage
   const currentUser = { id: userId, login: remoteUsername, signedIn: true };
