@@ -365,11 +365,11 @@ const ImageCropView = ( {
     [insets.top],
   );
 
-  const toolbarStyle = useMemo(
-    ( ) => ( {
-      minHeight: TOOLBAR_HEIGHT + insets.bottom,
-      paddingBottom: insets.bottom,
-    } ),
+  // Padding for the shared bottom control panel (sliders + buttons). The panel
+  // clears the home indicator itself so the sliders and buttons are never
+  // pushed under the safe area.
+  const bottomPanelStyle = useMemo(
+    ( ) => ( { paddingBottom: insets.bottom } ),
     [insets.bottom],
   );
 
@@ -432,7 +432,7 @@ const ImageCropView = ( {
       </Text>
 
       <View
-        className="flex-1"
+        className="flex-1 overflow-hidden"
         onLayout={event => {
           setCropAreaHeight( event.nativeEvent.layout.height );
         }}
@@ -473,7 +473,10 @@ const ImageCropView = ( {
         )}
       </View>
 
-      <View className="bg-[#1c1c1c] pb-1">
+      {/* Single bottom control panel: the zoom + brightness sliders sit
+          directly above the button row inside one opaque container, so the
+          buttons can never overlap or hide the (lower) brightness slider. */}
+      <View className="bg-[#1c1c1c] pt-1" style={bottomPanelStyle}>
         <ZoomBrightnessSliders
           zoomScale={zoomScale}
           brightnessStops={brightnessStops}
@@ -487,53 +490,53 @@ const ImageCropView = ( {
           brightnessAccessibilityLabel={t( "Adjust-brightness" )}
           iconColor={colors.white}
         />
-      </View>
 
-      <View
-        className="flex-row items-center justify-center gap-4 bg-[#1c1c1c] px-10"
-        style={[styles.toolbar, toolbarStyle]}
-      >
-        {onDelete && labels.delete
-          ? (
-            <INatIconButton
-              icon="trash-outline"
-              accessibilityLabel={labels.delete}
-              color={colors.warningRed}
-              height={CROP_BUTTON_SIZE}
-              width={CROP_BUTTON_SIZE}
-              size={CROP_ICON_SIZE}
-              onPress={onDelete}
-              disabled={saving}
-            />
-          )
-          : <View style={styles.confirmSlot} />}
-        <INatIconButton
-          icon="crop"
-          accessibilityLabel="2048×2048"
-          color={colors.inatGreen}
-          height={CROP_BUTTON_SIZE}
-          width={CROP_BUTTON_SIZE}
-          size={CROP_ICON_SIZE}
-          onPress={handleSet2048}
-          disabled={saving}
-        />
-        {saving
-          ? (
-            <View style={styles.confirmSlot}>
-              <ActivityIndicator color={colors.inatGreen} />
-            </View>
-          )
-          : (
-            <INatIconButton
-              icon="checkmark"
-              accessibilityLabel={labels.confirm}
-              color={colors.inatGreen}
-              height={CROP_BUTTON_SIZE}
-              width={CROP_BUTTON_SIZE}
-              size={CROP_ICON_SIZE}
-              onPress={handleConfirm}
-            />
-          )}
+        <View
+          className="flex-row items-center justify-center gap-4 px-10"
+          style={styles.toolbar}
+        >
+          {onDelete && labels.delete
+            ? (
+              <INatIconButton
+                icon="trash-outline"
+                accessibilityLabel={labels.delete}
+                color={colors.warningRed}
+                height={CROP_BUTTON_SIZE}
+                width={CROP_BUTTON_SIZE}
+                size={CROP_ICON_SIZE}
+                onPress={onDelete}
+                disabled={saving}
+              />
+            )
+            : <View style={styles.confirmSlot} />}
+          <INatIconButton
+            icon="crop"
+            accessibilityLabel="2048×2048"
+            color={colors.inatGreen}
+            height={CROP_BUTTON_SIZE}
+            width={CROP_BUTTON_SIZE}
+            size={CROP_ICON_SIZE}
+            onPress={handleSet2048}
+            disabled={saving}
+          />
+          {saving
+            ? (
+              <View style={styles.confirmSlot}>
+                <ActivityIndicator color={colors.inatGreen} />
+              </View>
+            )
+            : (
+              <INatIconButton
+                icon="checkmark"
+                accessibilityLabel={labels.confirm}
+                color={colors.inatGreen}
+                height={CROP_BUTTON_SIZE}
+                width={CROP_BUTTON_SIZE}
+                size={CROP_ICON_SIZE}
+                onPress={handleConfirm}
+              />
+            )}
+        </View>
       </View>
     </View>
   );
