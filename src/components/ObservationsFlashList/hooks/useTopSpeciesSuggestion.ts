@@ -1,6 +1,11 @@
 import { scoreObservation } from "api/computerVision";
+import { useEffect } from "react";
 import Taxon from "realmModels/Taxon";
 import { useAuthenticatedQuery, useCurrentUser } from "sharedHooks";
+
+import { log } from "../../../../react-native-logs.config";
+
+const logger = log.extend( "useTopSpeciesSuggestion" );
 
 interface RankedTaxon {
   id?: number;
@@ -65,15 +70,53 @@ const useTopSpeciesSuggestion = (
   const communityRankLevel = rankLevelForTaxon( observation?.taxon );
   const isGenusOrBroader = communityRankLevel != null
     && communityRankLevel >= Taxon.GENUS_LEVEL;
+  const queryEnabled = enabled && isGenusOrBroader && !!currentUser && !!observation?.id;
 
-  const { data } = useAuthenticatedQuery(
+  const {
+    data, error, status, fetchStatus,
+  } = useAuthenticatedQuery(
     ["useTopSpeciesSuggestion", observation?.id],
     optsWithAuth => scoreObservation( { id: observation?.id as number }, optsWithAuth ),
     {
-      enabled: enabled && isGenusOrBroader && !!currentUser && !!observation?.id,
+      enabled: queryEnabled,
       staleTime: Infinity,
     },
   );
+
+  // TEMP diagnostics: why isn't the species suggestion appearing? Log the
+  // enablement decision once per observation.
+  useEffect( ( ) => {
+    if ( !enabled || !observation?.id ) return;
+    logger.info(
+      `obs ${observation?.id}: taxon=${observation?.taxon?.id} `
+      + `rank=${observation?.taxon?.rank} rank_level=${observation?.taxon?.rank_level} `
+      + `communityRankLevel=${communityRankLevel} isGenusOrBroader=${isGenusOrBroader} `
+      + `currentUser=${!!currentUser?.id} queryEnabled=${queryEnabled} `
+      + `status=${status} fetchStatus=${fetchStatus}`,
+    );
+  }, [
+    enabled, observation?.id, observation?.taxon?.id, observation?.taxon?.rank,
+    observation?.taxon?.rank_level, communityRankLevel, isGenusOrBroader,
+    currentUser?.id, queryEnabled, status, fetchStatus,
+  ] );
+
+  // TEMP diagnostics: log the CV response shape so we can see whether results
+  // come back and whether they carry rank/rank_level.
+  useEffect( ( ) => {
+    if ( !queryEnabled ) return;
+    if ( error ) {
+      logger.error( `obs ${observation?.id} score_observation error:`, error );
+      return;
+    }
+    if ( !data ) return;
+    const rawResults = ( data as { results?: CVResult[] } )?.results ?? [];
+    logger.info(
+      `obs ${observation?.id} score_observation results=${rawResults.length} `
+      + `top=${rawResults.slice( 0, 5 ).map(
+        r => `${r.taxon?.id}:${r.taxon?.rank}:${r.taxon?.rank_level}:${r.combined_score}`,
+      ).join( "," )}`,
+    );
+  }, [queryEnabled, observation?.id, data, error] );
 
   // Pick the highest-scoring result that is species-level or finer (e.g. a
   // subspecies), so a genus-or-broader observation gets bumped to the CV's
