@@ -655,6 +655,9 @@ RCT_EXPORT_METHOD( exportPHAsset
 // Updates the location metadata of an existing Photos-library asset. Unlike
 // exportPHAsset, this mutates the user's actual Photos library (not just an
 // app-local copy), so tracked-location corrections show up in the Photos app.
+// Only fills in location for assets that are missing it: if the asset already
+// carries a location we leave it untouched (resolving @NO) rather than
+// overwriting the photo's own GPS metadata.
 RCT_EXPORT_METHOD( updateAssetLocation
                   : ( NSString * )phUri latitude
                   : ( nonnull NSNumber * )latitude longitude
@@ -671,6 +674,11 @@ RCT_EXPORT_METHOD( updateAssetLocation
   PHAsset *asset = result.firstObject;
   if ( !asset ) {
     reject( @"UPDATE_LOCATION_FAILED", @"PHAsset not found", nil );
+    return;
+  }
+
+  if ( asset.location != nil ) {
+    resolve( @NO );
     return;
   }
 

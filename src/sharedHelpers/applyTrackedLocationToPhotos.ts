@@ -23,9 +23,11 @@ const { ImageCropper } = NativeModules as {
   };
 };
 
-// Best-effort: also updates the location metadata on the original Photos
-// library asset (if we know its ph:// identifier), so tracked-location
-// corrections are reflected in the Photos app, not just the app's own copy.
+// Best-effort: also fills in the location metadata on the original Photos
+// library asset (if we know its ph:// identifier), so tracked-location is
+// reflected in the Photos app, not just the app's own copy. The native side
+// only applies to assets that are missing location, leaving photos that
+// already carry their own GPS data untouched.
 const applyLocationToDevicePhotoLibrary = async (
   originalDevicePhotoUri: string | null | undefined,
   match: TrackedLocationMatch,
