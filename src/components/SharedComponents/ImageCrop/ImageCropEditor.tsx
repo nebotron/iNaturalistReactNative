@@ -410,6 +410,20 @@ const ImageCropEditor = ( ) => {
     updateObservationKeys,
   ] );
 
+  // Key the exposure slider's brightness label to the same identifier the
+  // animal-crop log uses for this photo, so the two logs correlate.
+  const brightnessLogKey = useMemo( ( ) => {
+    if ( context === "observationEdit" && observationPhotoUuid && currentObservation ) {
+      const obsPhoto = currentObservation.observationPhotos?.find(
+        op => op.uuid === observationPhotoUuid,
+      );
+      if ( obsPhoto?.photo ) {
+        return Photo.displayLocalOrRemoteLargePhoto( obsPhoto.photo ) || imageUri || null;
+      }
+    }
+    return imageUri || null;
+  }, [context, currentObservation, imageUri, observationPhotoUuid] );
+
   if ( !imageUri ) {
     return (
       <ViewWrapper>
@@ -447,6 +461,7 @@ const ImageCropEditor = ( ) => {
       framePadding={CROP_FRAME_PADDING}
       initialCrop={activeInitialCrop}
       labels={labels}
+      brightnessLogKey={brightnessLogKey}
       onConfirm={handleConfirm}
       onDelete={handleDelete}
     />

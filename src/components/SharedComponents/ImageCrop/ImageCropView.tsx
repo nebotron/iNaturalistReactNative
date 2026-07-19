@@ -1,4 +1,10 @@
 import CustomImageZoom from "components/MediaViewer/CustomImageZoom";
+import {
+  clampZoom,
+  MIN_ZOOM,
+  ZoomBrightnessSliders,
+  zoomPosToScale,
+} from "components/MediaViewer/IdentifyPhoto";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import { INatIconButton } from "components/SharedComponents";
 import { Text, View } from "components/styledComponents";
@@ -16,10 +22,19 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import { normalizedCropToImageZoomTransform } from "sharedHelpers/normalizedCropToImageZoomTransform";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect, square2048Crop } from "sharedHelpers/normalizedCropTypes";
+import {
+  EXPOSURE_STOPS_DEFAULT,
+  EXPOSURE_STOPS_MAX,
+  EXPOSURE_STOPS_MIN,
+  gainToStops,
+  stopsToGain,
+} from "sharedHooks/useIdentifyPhotoBrightness";
+import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
 const DIM_COLOR = "rgba(0, 0, 0, 0.55)";
@@ -79,6 +94,10 @@ interface Props {
   framePadding: number;
   initialCrop?: NormalizedCrop | null;
   labels: ImageCropLabels;
+  // Key under which the exposure slider reads/writes the brightness log. The
+  // slider is preview-only -- it never alters the cropped output -- so this is
+  // just what the saved brightness label is keyed to.
+  brightnessLogKey?: string | null;
   onConfirm: ( crop: NormalizedCrop ) => void | Promise<void>;
   onCropChange?: ( crop: NormalizedCrop ) => void;
   onDelete?: () => void;
@@ -91,10 +110,12 @@ const ImageCropView = ( {
   framePadding,
   initialCrop,
   labels,
+  brightnessLogKey,
   onConfirm,
   onCropChange,
   onDelete,
 }: Props ) => {
+  const { t } = useTranslation( );
   const insets = useSafeAreaInsets( );
   const { width: windowWidth } = useWindowDimensions( );
   const zoomRef = useRef<SharedZoomableImageRef>( null );
@@ -102,6 +123,16 @@ const ImageCropView = ( {
   const [cropAreaHeight, setCropAreaHeight] = useState( 0 );
   const [saving, setSaving] = useState( false );
   const [willBeDownsized, setWillBeDownsized] = useState( false );
+  const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
+  const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
+  const brightness = stopsToGain( brightnessStops );
+
+  // Load any previously-saved brightness for this photo so the label
+  // round-trips; otherwise reset to neutral for a new photo.
+  useEffect( ( ) => {
+    const saved = brightnessLogKey ? getBrightness( brightnessLogKey ) : null;
+    setBrightnessStops( saved !== null ? gainToStops( saved ) : EXPOSURE_STOPS_DEFAULT );
+  }, [brightnessLogKey] );
 
   const boxSize = useMemo( ( ) => {
     const maxSide = Math.min( windowWidth, cropAreaHeight );
@@ -160,12 +191,60 @@ const ImageCropView = ( {
   ] );
 
   const handleScaleChange = useCallback( ( scale: number ) => {
+    // Keep the zoom slider in sync with pinch / double-tap / initial framing.
+    setZoomScale( clampZoom( scale ) );
     const sizePx = cropSidePxFromScale( scale );
     if ( sizePx <= 0 ) {
       return;
     }
     setWillBeDownsized( prev => isDownsized( sizePx, prev ) );
   }, [cropSidePxFromScale] );
+
+  // Rescale the image while keeping whatever sits at the crop-box centre (the
+  // viewport centre) fixed there, rather than snapping back to the image
+  // centre. Mirrors the identify screen's slider zoom.
+  const applyZoom = useCallback( ( scale: number ) => {
+    const img = zoomRef.current;
+    if ( !img || windowWidth <= 0 || cropAreaHeight <= 0 ) {
+      return;
+    }
+    const centreX = windowWidth / 2;
+    const centreY = cropAreaHeight / 2;
+    const current = img.readTransform( );
+    if ( current.scale <= 0 ) {
+      img.applyTransform( {
+        scale, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
+      } );
+      return;
+    }
+    const totalTx = current.translateX + current.focalX;
+    const totalTy = current.translateY + current.focalY;
+    const localX = centreX - totalTx / current.scale;
+    const localY = centreY - totalTy / current.scale;
+    img.applyTransform( {
+      scale,
+      translateX: 0,
+      translateY: 0,
+      focalX: ( centreX - localX ) * scale,
+      focalY: ( centreY - localY ) * scale,
+    } );
+  }, [cropAreaHeight, windowWidth] );
+
+  const handleZoomChange = useCallback( ( pos: number ) => {
+    const scale = zoomPosToScale( pos );
+    setZoomScale( scale );
+    applyZoom( scale );
+  }, [applyZoom] );
+
+  // Preview-only exposure: drives the CSS brightness filter live and, on
+  // release, records the label to the brightness log. It never feeds into the
+  // cropped file (onConfirm reads the untouched source).
+  const handleBrightnessComplete = useCallback( ( value: number ) => {
+    setBrightnessStops( value );
+    if ( brightnessLogKey ) {
+      saveBrightness( brightnessLogKey, stopsToGain( value ) );
+    }
+  }, [brightnessLogKey] );
 
   useEffect( ( ) => {
     if (
@@ -368,6 +447,7 @@ const ImageCropView = ( {
               zoomRef={zoomRef}
               autoReset={!initialCrop}
               cropPanContext={cropPanContext}
+              brightness={brightness}
               testID={`ImageCropView.${sourceUri}`}
               onInteractionEnd={updateDownsizeStatus}
               onScaleChange={handleScaleChange}
@@ -391,6 +471,22 @@ const ImageCropView = ( {
             />
           </>
         )}
+      </View>
+
+      <View className="bg-[#1c1c1c] pb-1">
+        <ZoomBrightnessSliders
+          zoomScale={zoomScale}
+          brightnessStops={brightnessStops}
+          exposureStopsMin={EXPOSURE_STOPS_MIN}
+          exposureStopsMax={EXPOSURE_STOPS_MAX}
+          onZoomChange={handleZoomChange}
+          onZoomComplete={updateDownsizeStatus}
+          onBrightnessChange={setBrightnessStops}
+          onBrightnessComplete={handleBrightnessComplete}
+          zoomAccessibilityLabel={t( "Adjust-zoom" )}
+          brightnessAccessibilityLabel={t( "Adjust-brightness" )}
+          iconColor={colors.white}
+        />
       </View>
 
       <View
