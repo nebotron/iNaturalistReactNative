@@ -1,11 +1,26 @@
 import { scoreObservation } from "api/computerVision";
 import { useEffect } from "react";
+import Config from "react-native-config";
 import Taxon from "realmModels/Taxon";
 import { useAuthenticatedQuery, useCurrentUser } from "sharedHooks";
 
-import { log } from "../../../../react-native-logs.config";
-
-const logger = log.extend( "useTopSpeciesSuggestion" );
+// TEMP diagnostics: post straight to the RTDB app_log so entries show up even
+// in __DEV__ builds (the normal firebase log transport is skipped in dev).
+// Remove once the CV species suggestion is confirmed working.
+const logDiag = ( message: string ) => {
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl ) return;
+  fetch( `${baseUrl}/app_log.json`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify( {
+      timestamp: new Date( ).toISOString( ),
+      level: "info",
+      extension: "useTopSpeciesSuggestion",
+      message,
+    } ),
+  } ).catch( ( ) => undefined );
+};
 
 interface RankedTaxon {
   id?: number;
@@ -87,7 +102,7 @@ const useTopSpeciesSuggestion = (
   // enablement decision once per observation.
   useEffect( ( ) => {
     if ( !enabled || !observation?.id ) return;
-    logger.info(
+    logDiag(
       `obs ${observation?.id}: taxon=${observation?.taxon?.id} `
       + `rank=${observation?.taxon?.rank} rank_level=${observation?.taxon?.rank_level} `
       + `communityRankLevel=${communityRankLevel} isGenusOrBroader=${isGenusOrBroader} `
@@ -105,12 +120,16 @@ const useTopSpeciesSuggestion = (
   useEffect( ( ) => {
     if ( !queryEnabled ) return;
     if ( error ) {
-      logger.error( `obs ${observation?.id} score_observation error:`, error );
+      logDiag(
+        `obs ${observation?.id} score_observation ERROR: `
+        + `${( error as { status?: number } )?.status ?? ""} `
+        + `${( error as Error )?.message ?? String( error )}`.slice( 0, 400 ),
+      );
       return;
     }
     if ( !data ) return;
     const rawResults = ( data as { results?: CVResult[] } )?.results ?? [];
-    logger.info(
+    logDiag(
       `obs ${observation?.id} score_observation results=${rawResults.length} `
       + `top=${rawResults.slice( 0, 5 ).map(
         r => `${r.taxon?.id}:${r.taxon?.rank}:${r.taxon?.rank_level}:${r.combined_score}`,
