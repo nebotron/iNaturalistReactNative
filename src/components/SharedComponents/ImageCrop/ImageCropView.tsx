@@ -473,18 +473,21 @@ const ImageCropView = ( {
         )}
       </View>
 
-      <ZoomBrightnessSliders
-        zoomScale={zoomScale}
-        brightnessStops={brightnessStops}
-        exposureStopsMin={EXPOSURE_STOPS_MIN}
-        exposureStopsMax={EXPOSURE_STOPS_MAX}
-        onZoomChange={handleZoomChange}
-        onZoomComplete={updateDownsizeStatus}
-        onBrightnessChange={setBrightnessStops}
-        onBrightnessComplete={handleBrightnessComplete}
-        zoomAccessibilityLabel={t( "Adjust-zoom" )}
-        brightnessAccessibilityLabel={t( "Adjust-brightness" )}
-      />
+      <View className="bg-[#1c1c1c] pb-1">
+        <ZoomBrightnessSliders
+          zoomScale={zoomScale}
+          brightnessStops={brightnessStops}
+          exposureStopsMin={EXPOSURE_STOPS_MIN}
+          exposureStopsMax={EXPOSURE_STOPS_MAX}
+          onZoomChange={handleZoomChange}
+          onZoomComplete={updateDownsizeStatus}
+          onBrightnessChange={setBrightnessStops}
+          onBrightnessComplete={handleBrightnessComplete}
+          zoomAccessibilityLabel={t( "Adjust-zoom" )}
+          brightnessAccessibilityLabel={t( "Adjust-brightness" )}
+          iconColor={colors.white}
+        />
+      </View>
 
       <View
         className="flex-row items-center justify-center gap-4 bg-[#1c1c1c] px-10"
