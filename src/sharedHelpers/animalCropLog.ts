@@ -41,8 +41,13 @@ export const getAnimalCropLogAsArray = ( ): CropLogEntry[] => Object.entries( lo
   .reverse( );
 
 // Firebase keys can't contain . $ # [ ] / — encodeURIComponent escapes all of
-// those except the dot, which we handle explicitly.
-const fbKey = ( url: string ): string => encodeURIComponent( url ).replace( /\./g, "%2E" );
+// those except the dot, which we handle explicitly. The RTDB REST API also
+// percent-decodes the path once, so a singly-encoded key decodes back into
+// those forbidden tokens ("Invalid token in path", HTTP 400) — double-encode
+// so the server's decode yields a literal, still-escaped key.
+const fbKey = ( url: string ): string => encodeURIComponent(
+  encodeURIComponent( url ).replace( /\./g, "%2E" )
+);
 
 // Write a single entry to its own URL-keyed child. Keying by the photo URL
 // means re-saving a photo overwrites its entry instead of appending a
