@@ -23,6 +23,7 @@ import { useTranslation } from "sharedHooks";
 import useStore, { zustandStorage } from "stores/useStore";
 
 interface Props {
+  onLoadFilter: () => void;
   onOpenDeleteFilter: ( filter: {
     id: string;
     name: string;
@@ -31,6 +32,7 @@ interface Props {
 }
 
 const ExploreSavedFiltersSection = ( {
+  onLoadFilter,
   onOpenDeleteFilter,
   onOpenSaveSheet,
 }: Props ) => {
@@ -97,6 +99,9 @@ const ExploreSavedFiltersSection = ( {
     if ( savedFilter.observationsLayout ) {
       zustandStorage.setItem( "exploreObservationsLayout", savedFilter.observationsLayout );
     }
+
+    // Immediately apply the filter and show the results
+    onLoadFilter( );
   };
 
   const overwriteSavedFilter = ( savedFilterId: string ) => {

@@ -696,6 +696,7 @@ const FilterModalV2 = ( {
 
       <ScrollView className="py-4">
         <ExploreSavedFiltersSection
+          onLoadFilter={closeModal}
           onOpenDeleteFilter={setFilterToDelete}
           onOpenSaveSheet={() => setShowSaveFilterSheet( true )}
         />
