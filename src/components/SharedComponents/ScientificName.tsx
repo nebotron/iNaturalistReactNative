@@ -65,7 +65,7 @@ const ScientificName = ( {
         {text}
       </FontComponent>
     );
-  } ) ?? [];
+  } );
 
   if ( rank && rankLevel && rankLevel > Taxon.SPECIES_LEVEL ) {
     scientificNameArray.unshift( " " );
