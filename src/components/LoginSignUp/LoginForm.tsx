@@ -152,11 +152,10 @@ const LoginForm = ( {
   ] );
 
   const scrollToItem = useCallback( ( ) => {
-    if ( !firstInputFieldRef.current || !scrollViewRef?.current ) return;
     firstInputFieldRef.current.measureLayout(
       scrollViewRef.current,
       ( _, y ) => {
-        scrollViewRef.current?.scrollTo( { y, animated: true } );
+        scrollViewRef.current.scrollTo( { y, animated: true } );
       },
       () => console.log( "Failed to measure" ),
     );
