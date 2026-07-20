@@ -1277,7 +1277,6 @@ SAVE = SAVE
 SAVE-ALL = SAVE ALL
 # Button that saves all observations in a batch of multiple observations
 Save-all-observations = Save all observations
-Save-brightness-label = Save brightness as label
 SAVE-CHANGES = SAVE CHANGES
 SAVE-CROP = SAVE CROP
 Save-current-filters = Save current filters

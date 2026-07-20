@@ -19,6 +19,6 @@ Take all of the commits on main not on iNaturalist/main and arrange them more lo
 - Use nearest neighbor interpolation when rendering images
 - etc
 
-The resulting set of commits should not contain reverts, or fixes for bugs in earlier commits. Each commit should be free-standing and correct. Each commit should contain only changes directly related to its title.
+The resulting set of commits should not contain reverts, or fixes for bugs in earlier commits. Each commit should be free-standing and correct. Each commit should contain only changes directly related to its title. The final set of changes should be identical to the initial set, just arranged more logically.
 
-Present the final set of commits as a numbered list so the user can ask to combine, split, or drop commits.
+Present the final set of commits as a numbered list so the user can ask to combine or split them.

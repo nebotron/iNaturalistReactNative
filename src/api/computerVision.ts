@@ -29,7 +29,9 @@ const scoreObservation = async (
   opts = {},
 ): Promise<object> => {
   try {
-    return inatjs.computervision.score_observation( {
+    // Must await so a rejected request is caught here and routed through
+    // handleError; a bare `return` would leak the raw inatjs error.
+    return await inatjs.computervision.score_observation( {
       ...PARAMS,
       ...params,
       fields: {

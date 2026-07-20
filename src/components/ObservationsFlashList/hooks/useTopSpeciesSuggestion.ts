@@ -120,10 +120,22 @@ const useTopSpeciesSuggestion = (
   useEffect( ( ) => {
     if ( !queryEnabled ) return;
     if ( error ) {
+      const err = error as {
+        name?: string;
+        message?: string;
+        status?: number;
+        json?: unknown;
+        response?: { status?: number; url?: string };
+      };
       logDiag(
         `obs ${observation?.id} score_observation ERROR: `
-        + `${( error as { status?: number } )?.status ?? ""} ${
-          `${( error as Error )?.message ?? String( error )}`.slice( 0, 400 )}`,
+        + `name=${err?.name} `
+        + `status=${err?.status ?? err?.response?.status} `
+        + `url=${err?.response?.url} `
+        + `msg=${err?.message} ${
+          `json=${err?.json
+            ? JSON.stringify( err.json )
+            : ""}`.slice( 0, 500 )}`,
       );
       return;
     }
