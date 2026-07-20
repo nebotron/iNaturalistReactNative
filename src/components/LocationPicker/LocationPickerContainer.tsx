@@ -25,6 +25,14 @@ import type { LocationPickerObservation, LocationPickerPlace } from "./types";
 const CROSSHAIRRADIUS = 254 / 2;
 
 const initializeMap = ( state, action ) => {
+  // Only initialize the map once. Re-initializing on later focus events or
+  // dependency changes (e.g. when currentObservation is a live Realm object
+  // whose reference changes) would discard the location the user has already
+  // picked, snapping the crosshair back to the original location.
+  if ( state.initialized ) {
+    return state;
+  }
+
   const {
     currentObservation,
     lastLocationPickerState,
@@ -54,6 +62,7 @@ const initializeMap = ( state, action ) => {
     accuracy: accuracy ?? 0,
     locationName,
     hidePlaceResults: true,
+    initialized: true,
   };
 
   if ( region ) {
@@ -67,6 +76,7 @@ const initializeMap = ( state, action ) => {
 const initialState = {
   accuracy: 0,
   hidePlaceResults: true,
+  initialized: false,
   isFirstMapRender: true,
   loading: true,
   locationName: "",
