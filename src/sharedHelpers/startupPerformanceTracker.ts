@@ -65,8 +65,21 @@ class StartupPerformanceTracker {
       // performance.now() is in the same time domain as the native marks
       // (ms since performance.timeOrigin ≈ native launch). Only meaningful for
       // an uninterrupted foreground cold start — see backgroundedSinceLaunch.
-      const screenInteractiveMs = ( originMs !== undefined && !this.backgroundedSinceLaunch )
+      // The background flag misses "inactive" gaps (screen lock, Control
+      // Center, a call banner) that don't emit a "background" event yet still
+      // stall requestIdleCallback, folding minutes/hours of idle into the
+      // value. A real cold start reaches interactive in a few seconds, so
+      // clamp implausible values to "NA" rather than pollute the metric.
+      const MAX_PLAUSIBLE_INTERACTIVE_MS = 60_000;
+      const rawInteractiveMs = originMs !== undefined
         ? Math.round( performance.now() - originMs )
+        : undefined;
+      const screenInteractiveMs = (
+        rawInteractiveMs !== undefined
+        && !this.backgroundedSinceLaunch
+        && rawInteractiveMs <= MAX_PLAUSIBLE_INTERACTIVE_MS
+      )
+        ? rawInteractiveMs
         : "NA";
 
       logger.infoWithExtra( "startup_tti", {

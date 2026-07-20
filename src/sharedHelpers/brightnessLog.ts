@@ -1,11 +1,13 @@
 import Clipboard from "@react-native-clipboard/clipboard";
 import { Alert } from "react-native";
 import Config from "react-native-config";
-import { log } from "sharedHelpers/logger";
+import { logWithoutRemote } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
 
 const BRIGHTNESS_LOG_KEY = "brightnessLog";
-const logger = log.extend( "brightnessLog" );
+// Sync failures are about Firebase itself; routing them remotely POSTs an extra
+// app_log entry per failure — a feedback loop. Keep them local-only.
+const logger = logWithoutRemote.extend( "brightnessLog" );
 
 export type BrightnessLog = Record<string, number>;
 

@@ -1,10 +1,13 @@
 import Config from "react-native-config";
-import { log } from "sharedHelpers/logger";
+import { logWithoutRemote } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { zustandStorage } from "stores/useStore";
 
 const ANIMAL_CROP_LOG_KEY = "animalCropLog";
-const logger = log.extend( "animalCropLog" );
+// Sync failures are about Firebase itself and spike when a build/DB regresses;
+// routing them through the remote logger POSTs an extra app_log entry per
+// failure — a feedback loop that floods the log. Keep them local-only.
+const logger = logWithoutRemote.extend( "animalCropLog" );
 
 export type AnimalCropLog = Record<string, NormalizedCrop>;
 
@@ -49,6 +52,13 @@ const fbKey = ( url: string ): string => encodeURIComponent(
   encodeURIComponent( url ).replace( /\./g, "%2E" ),
 );
 
+// Only remote photo URLs are worth syncing: local `file://`/`ph://` paths are
+// ephemeral (they point at one device's temporary upload dir, so the offline
+// training scripts can never fetch them) and, being long, their encoded keys
+// overflow Firebase's 768-byte key limit and fail the PUT with HTTP 400.
+// Skipping them cut ~47% of never-usable crop_log writes and the 400 flood.
+const isSyncableUrl = ( url: string ): boolean => url.startsWith( "http" );
+
 // Write a single entry to its own URL-keyed child. Keying by the photo URL
 // means re-saving a photo overwrites its entry instead of appending a
 // duplicate, and writing one child never downloads the (ever-growing) log to
@@ -88,6 +98,7 @@ export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
   const current = load( );
   current[photoUrl] = crop;
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
+  if ( !isSyncableUrl( photoUrl ) ) return;
   putToFirebase( {
     url: photoUrl, x: crop.x, y: crop.y, w: crop.w, h: crop.h,
   } );
@@ -97,6 +108,7 @@ export const deleteAnimalCrop = ( photoUrl: string ) => {
   const current = load( );
   delete current[photoUrl];
   zustandStorage.setItem( ANIMAL_CROP_LOG_KEY, JSON.stringify( current ) );
+  if ( !isSyncableUrl( photoUrl ) ) return;
   deleteFromFirebase( photoUrl );
 };
 
