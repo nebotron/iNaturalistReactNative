@@ -16,10 +16,14 @@ import realmConfig from "realmModels/index";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
 import { clearWatch, watchPosition } from "sharedHelpers/geolocationWrapper";
 import { store } from "sharedHelpers/installData";
-import { log } from "sharedHelpers/logger";
+import { log, logWithoutRemote } from "sharedHelpers/logger";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 
 const logger = log.extend( "locationHistoryTracker" );
+// Per-fix breadcrumbs fire on every GPS tick (the single largest remote-log
+// source after button taps): useful in a device log, not worth a remote POST
+// each. Errors/warns still go through `logger` so they reach Firebase.
+const breadcrumbLogger = logWithoutRemote.extend( "locationHistoryTracker" );
 
 const TRACKING_ENABLED_KEY = "locationHistoryTrackingEnabled";
 const BACKGROUND_TASK_NAME = "location-history-tracking";
@@ -113,7 +117,7 @@ const recordPosition = ( source: string ) => async ( position: {
         } ),
       );
     }, "recording location history point" );
-    logger.infoWithExtra( `Recorded location fix from ${source}`, { accuracy, recordedAt: now } );
+    breadcrumbLogger.info( `Recorded location fix from ${source} (accuracy ${accuracy})` );
   } catch ( error ) {
     logger.error( "Failed to save location history point", error );
   }

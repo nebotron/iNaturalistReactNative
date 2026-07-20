@@ -35,6 +35,10 @@ const searchObservations = async ( params: Object = {}, opts: Object = {} ): Pro
           durationMs: elapsedMs,
           // Not sure if asking for smaller page has performance benefits, but log it just in case
           per_page: params?.per_page,
+          // Correlate the slow tail (p99 has been tens of seconds) with payload
+          // size: how many results came back vs. how many were requested.
+          resultCount: response?.results?.length,
+          totalResults: response?.total_results,
         },
       );
     } catch ( e ) {
