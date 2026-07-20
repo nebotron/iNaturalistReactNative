@@ -119,10 +119,13 @@ const ObsGridItem = ( {
         />
       )}
       <View
-        className={`absolute bottom-0 left-0 right-0 items-start p-2${
+        // Use explicit per-side padding when reserving space for the photo
+        // count: a `p-2` + `pr-10` combo doesn't reliably override padding-right
+        // in NativeWind, which let long species names run under the count icon.
+        className={`absolute bottom-0 left-0 right-0 items-start ${
           reservePhotoCountSpace
-            ? " pr-10"
-            : ""
+            ? "pt-2 pb-2 pl-2 pr-12"
+            : "p-2"
         }`}
       >
         {!hideObsUploadStatus && (
