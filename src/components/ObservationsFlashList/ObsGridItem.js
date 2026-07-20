@@ -74,6 +74,10 @@ const ObsGridItem = ( {
   ] );
 
   const photo = photoFromObservation( observation );
+  // On the Me page ( non-explore ) the photo count renders at the bottom-right,
+  // so reserve space to keep a long species name from overlapping it.
+  const reservePhotoCountSpace = !explore
+    && photoCountFromObservation( observation ) > 1;
   const allPhotos = useMemo( ( ) => photosFromObservation( observation ).map(
     p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
   ), [observation] );
@@ -118,7 +122,13 @@ const ObsGridItem = ( {
           currentUser={currentUser}
         />
       )}
-      <View className="absolute bottom-0 items-start p-2">
+      <View
+        className={`absolute bottom-0 left-0 right-0 items-start p-2${
+          reservePhotoCountSpace
+            ? " pr-10"
+            : ""
+        }`}
+      >
         {!hideObsUploadStatus && (
           <ObsUploadStatus
             classNameMargin="mb-1"
