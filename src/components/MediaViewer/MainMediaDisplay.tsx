@@ -8,7 +8,7 @@ import { Text, View } from "components/styledComponents";
 import React, {
   useCallback, useMemo, useRef, useState,
 } from "react";
-import { ActivityIndicator, PixelRatio, StyleSheet } from "react-native";
+import { PixelRatio, StyleSheet } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
 import {
   Gesture,
@@ -19,7 +19,7 @@ import type { CarouselRenderItem, ICarouselInstance } from "react-native-reanima
 import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
-import { saveBrightness } from "sharedHelpers/brightnessLog";
+import { deleteBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import useLiveToneMappedBrightnessUri from "sharedHelpers/useLiveToneMappedBrightnessUri";
@@ -63,8 +63,6 @@ const styles = StyleSheet.create( {
 const sliderStyle = { flex: 1, height: 40 };
 const tickRowStyle = { justifyContent: "space-between" as const, bottom: 2 };
 const labelRowStyle = { justifyContent: "space-between" as const };
-const roundIconButtonClass = "bg-black/50 items-center justify-center "
-  + "rounded-full h-[40px] w-[40px] ml-2";
 
 interface Props {
   autoPlaySound?: boolean; // automatically start playing a sound when it is visible
@@ -100,8 +98,6 @@ const MainMediaDisplay = ( {
   const [zooming, setZooming] = useState( false );
   const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
   const brightness = stopsToGain( brightnessStops );
-  const [brightnessSaved, setBrightnessSaved] = useState( false );
-  const [brightnessSaving, setBrightnessSaving] = useState( false );
   const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
   const imageDimensionsRef = useRef<{ width: number; height: number } | null>( null );
   const currentZoomRefRef = useRef<SharedZoomableImageRef | null>( null );
@@ -147,6 +143,19 @@ const MainMediaDisplay = ( {
   const handleImageDimensionsChange = useCallback( ( dims: { width: number; height: number } ) => {
     imageDimensionsRef.current = dims;
   }, [] );
+
+  // Save the adjustment to Firebase automatically when the user finishes
+  // dragging the slider (matching the Identify page), rather than requiring a
+  // separate save tap.
+  const handleBrightnessComplete = useCallback( ( value: number ) => {
+    const photo = photos[selectedMediaIndex];
+    if ( !photo?.url ) return;
+    if ( value === EXPOSURE_STOPS_DEFAULT ) {
+      deleteBrightness( photo.url );
+    } else {
+      saveBrightness( photo.url, stopsToGain( value ) );
+    }
+  }, [photos, selectedMediaIndex] );
 
   const handleInteractionEnd = useCallback( ( ) => {
     const currentIndex = selectedMediaIndex;
@@ -282,10 +291,8 @@ const MainMediaDisplay = ( {
                     maximumTrackTintColor={colors.white}
                     thumbTintColor={colors.white}
                     value={brightnessStops}
-                    onValueChange={val => {
-                      setBrightnessStops( val );
-                      setBrightnessSaved( false );
-                    }}
+                    onValueChange={setBrightnessStops}
+                    onSlidingComplete={handleBrightnessComplete}
                     tapToSeek
                     accessibilityLabel={t( "Adjust-brightness" )}
                   />
@@ -308,43 +315,17 @@ const MainMediaDisplay = ( {
                 </View>
               </View>
               { brightness !== BRIGHTNESS_DEFAULT && (
-                <>
-                  { brightnessSaving
-                    ? (
-                      <View className={roundIconButtonClass}>
-                        <ActivityIndicator
-                          size="small"
-                          color={colors.white}
-                        />
-                      </View>
-                    )
-                    : (
-                      <INatIconButton
-                        className={roundIconButtonClass}
-                        onPress={async ( ) => {
-                          setBrightnessSaving( true );
-                          await saveBrightness( photo.url, brightness );
-                          setBrightnessSaving( false );
-                          setBrightnessSaved( true );
-                        }}
-                        icon="label"
-                        color={brightnessSaved
-                          ? colors.white
-                          : colors.inatGreen}
-                        size={20}
-                        accessibilityLabel={t( "Save-brightness-label" )}
-                        testID="MediaViewer.saveBrightnessButton"
-                      />
-                    ) }
-                  <TransparentCircleButton
-                    onPress={( ) => setBrightnessStops( EXPOSURE_STOPS_DEFAULT )}
-                    icon="close"
-                    color={colors.white}
-                    accessibilityLabel={t( "Reset-brightness" )}
-                    testID="MediaViewer.resetBrightnessButton"
-                    optionalClasses="ml-2"
-                  />
-                </>
+                <TransparentCircleButton
+                  onPress={( ) => {
+                    setBrightnessStops( EXPOSURE_STOPS_DEFAULT );
+                    if ( photo?.url ) deleteBrightness( photo.url );
+                  }}
+                  icon="close"
+                  color={colors.white}
+                  accessibilityLabel={t( "Reset-brightness" )}
+                  testID="MediaViewer.resetBrightnessButton"
+                  optionalClasses="ml-2"
+                />
               ) }
             </View>
           </View>
