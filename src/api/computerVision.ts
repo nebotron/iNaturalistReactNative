@@ -25,7 +25,9 @@ const scoreImage = async (
 };
 
 const scoreObservation = async (
-  params: { id: number },
+  // `id` is the v2 route param, which expects the observation UUID (the v2
+  // endpoint converts it to a serial id server-side).
+  params: { id: number | string },
   opts = {},
 ): Promise<object> => {
   try {

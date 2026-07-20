@@ -78,20 +78,23 @@ const rankLevelForTaxon = ( taxon?: RankedTaxon ): number | undefined => {
 // likely species-level ID from the CV algorithm so we can suggest agreeing
 // with a species instead of the coarser community taxon.
 const useTopSpeciesSuggestion = (
-  observation?: { id?: number; taxon?: RankedTaxon },
+  observation?: { id?: number; uuid?: string; taxon?: RankedTaxon },
   enabled: boolean = true,
 ) => {
   const currentUser = useCurrentUser( );
   const communityRankLevel = rankLevelForTaxon( observation?.taxon );
   const isGenusOrBroader = communityRankLevel != null
     && communityRankLevel >= Taxon.GENUS_LEVEL;
-  const queryEnabled = enabled && isGenusOrBroader && !!currentUser && !!observation?.id;
+  // The v2 score_observation endpoint keys on the observation UUID, not the
+  // numeric id.
+  const uuid = observation?.uuid;
+  const queryEnabled = enabled && isGenusOrBroader && !!currentUser && !!uuid;
 
   const {
     data, error, status, fetchStatus,
   } = useAuthenticatedQuery(
-    ["useTopSpeciesSuggestion", observation?.id],
-    optsWithAuth => scoreObservation( { id: observation?.id as number }, optsWithAuth ),
+    ["useTopSpeciesSuggestion", uuid],
+    optsWithAuth => scoreObservation( { id: uuid as string }, optsWithAuth ),
     {
       enabled: queryEnabled,
       staleTime: Infinity,
@@ -103,14 +106,14 @@ const useTopSpeciesSuggestion = (
   useEffect( ( ) => {
     if ( !enabled || !observation?.id ) return;
     logDiag(
-      `obs ${observation?.id}: taxon=${observation?.taxon?.id} `
+      `obs ${observation?.id} uuid=${uuid}: taxon=${observation?.taxon?.id} `
       + `rank=${observation?.taxon?.rank} rank_level=${observation?.taxon?.rank_level} `
       + `communityRankLevel=${communityRankLevel} isGenusOrBroader=${isGenusOrBroader} `
       + `currentUser=${!!currentUser?.id} queryEnabled=${queryEnabled} `
       + `status=${status} fetchStatus=${fetchStatus}`,
     );
   }, [
-    enabled, observation?.id, observation?.taxon?.id, observation?.taxon?.rank,
+    enabled, observation?.id, uuid, observation?.taxon?.id, observation?.taxon?.rank,
     observation?.taxon?.rank_level, communityRankLevel, isGenusOrBroader,
     currentUser?.id, queryEnabled, status, fetchStatus,
   ] );
