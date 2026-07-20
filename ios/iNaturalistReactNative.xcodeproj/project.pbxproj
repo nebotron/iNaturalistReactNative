@@ -35,6 +35,7 @@
 		AE4DC81B3A87484CB3FD6750 /* Lato-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 4B0AEEF6CA584BCF9880EB35 /* Lato-Regular.ttf */; };
 		E5DFC1C6FBFA45739CE91C69 /* Lato-MediumItalic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 69DF855D92EA4ADFB73B47F1 /* Lato-MediumItalic.ttf */; };
 		IC1B2C3D4E5F60718293A4B5 /* ImageCropper.m in Sources */ = {isa = PBXBuildFile; fileRef = IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */; };
+		LR1B2C3D4E5F60718293A4B5 /* LocationRelaunch.m in Sources */ = {isa = PBXBuildFile; fileRef = LR1B2C3D4E5F60718293A4B6 /* LocationRelaunch.m */; };
 		YO4BF6B1234567890ABCDEF0 /* yolov8n.onnx in Resources */ = {isa = PBXBuildFile; fileRef = YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */; };
 /* End PBXBuildFile section */
 
@@ -103,6 +104,8 @@
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F15C1390617A309CE0A194B2 /* Pods_iNaturalistReactNative_ShareExtension.framework */ = {isa = PBXFileReference; explicitFileType = wrapper.framework; includeInIndex = 0; path = Pods_iNaturalistReactNative_ShareExtension.framework; sourceTree = BUILT_PRODUCTS_DIR; };
 		IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = ImageCropper.m; path = iNaturalistReactNative/ImageCropper.m; sourceTree = "<group>"; };
+		LR1B2C3D4E5F60718293A4B6 /* LocationRelaunch.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = LocationRelaunch.m; path = iNaturalistReactNative/LocationRelaunch.m; sourceTree = "<group>"; };
+		LR1B2C3D4E5F60718293A4B7 /* LocationRelaunch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = LocationRelaunch.h; path = iNaturalistReactNative/LocationRelaunch.h; sourceTree = "<group>"; };
 		YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = yolov8n.onnx; path = iNaturalistReactNative/yolov8n.onnx; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -144,6 +147,8 @@
 				19A5877328F8E3310016D128 /* iNaturalistReactNative-Bridging-Header.h */,
 				26972DBD235E42B68E3D5DBC /* Settings.bundle */,
 				IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */,
+				LR1B2C3D4E5F60718293A4B7 /* LocationRelaunch.h */,
+				LR1B2C3D4E5F60718293A4B6 /* LocationRelaunch.m */,
 				YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */,
 			);
 			name = iNaturalistReactNative;
@@ -512,6 +517,7 @@
 				197A169D2A7C2567001A03DC /* cvmodel.mlmodel in Sources */,
 				13B07FC11A68108700A75B9A /* main.m in Sources */,
 				IC1B2C3D4E5F60718293A4B5 /* ImageCropper.m in Sources */,
+				LR1B2C3D4E5F60718293A4B5 /* LocationRelaunch.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
