@@ -1,46 +1,39 @@
 // @flow
 
 import { refresh } from "@react-native-community/netinfo";
-import classnames from "classnames";
 import ExploreFiltersModal from "components/Explore/Modals/ExploreFiltersModal";
 import {
   Body2,
   Button,
-  INatIconButton,
   OfflineNotice,
   RadioButtonSheet,
   ViewWrapper,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
-import { PLACE_MODE } from "providers/ExploreContext";
+import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
+import { PLACE_MODE, useExplore } from "providers/ExploreContext";
 import type { Node } from "react";
 import React, { useState } from "react";
-import { Alert } from "react-native";
 import {
-  useDebugMode,
   useStoredLayout,
   useTranslation,
 } from "sharedHooks";
-import { getShadow } from "styles/global";
-import colors from "styles/tailwindColors";
 
 import ExploreHeader from "./Header/ExploreHeader";
 import IdentifiersView from "./IdentifiersView";
+import IdentifyView from "./IdentifyView";
 import ObservationsView from "./ObservationsView";
 import ObservationsViewBar from "./ObservationsViewBar";
 import ObserversView from "./ObserversView";
 import SpeciesView from "./SpeciesView";
 
-const DROP_SHADOW = getShadow( {
-  offsetHeight: 4,
-  elevation: 6,
-} );
-
 const exploreViewIcon = {
   observations: "binoculars",
+  identify: "id-agree",
   species: "leaf",
   observers: "observers",
   identifiers: "identifiers",
+  hotspots: "location",
 };
 
 type Props = {
@@ -64,7 +57,7 @@ type Props = {
   startFetching: Function,
   updateLocation: Function,
   updateProject: Function,
-  updateTaxon: Function,
+  updateTaxonFilters: Function,
   updateUser: Function
 }
 
@@ -89,19 +82,28 @@ const Explore = ( {
   startFetching,
   updateLocation,
   updateProject,
-  updateTaxon,
+  updateTaxonFilters,
   updateUser,
 }: Props ): Node => {
   const { t } = useTranslation( );
+  const { state: exploreState } = useExplore( );
+  const hotspotConfig = {
+    hotspotClusterRadiusKm: exploreState.hotspotClusterRadiusKm,
+    hotspotMaxDetourCandidates: exploreState.hotspotMaxDetourCandidates,
+    hotspotObsPerPage: exploreState.hotspotObsPerPage,
+    hotspotParkingMinutes: exploreState.hotspotParkingMinutes,
+    hotspotBboxPaddingKm: exploreState.hotspotBboxPaddingKm,
+  };
   const [showExploreBottomSheet, setShowExploreBottomSheet] = useState( false );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreObservationsLayout" );
-  const { isDebug } = useDebugMode( );
 
   const exploreViewA11yLabel = {
     observations: t( "Observations-View" ),
+    identify: t( "Identify-View" ),
     species: t( "Species-View" ),
     observers: t( "Observers-View" ),
     identifiers: t( "Identifiers-View" ),
+    hotspots: t( "Hotspots-View" ),
   };
 
   const icon = exploreViewIcon[currentExploreView];
@@ -113,15 +115,17 @@ const Explore = ( {
       count={headerCount}
       exploreView={currentExploreView}
       exploreViewIcon={icon}
+      exploreViewLabel={a11yLabel}
       hasLocationPermissions={hasLocationPermissions}
       hideBackButton={hideBackButton}
       isFetchingHeaderCount={isFetchingHeaderCount}
       onPressCount={( ) => setShowExploreBottomSheet( true )}
+      onPressChangeView={( ) => setShowExploreBottomSheet( true )}
       openFiltersModal={openFiltersModal}
       renderLocationPermissionsGate={renderLocationPermissionsGate}
       requestLocationPermissions={requestLocationPermissions}
       updateLocation={updateLocation}
-      updateTaxon={updateTaxon}
+      updateTaxonFilters={updateTaxonFilters}
     />
   );
 
@@ -163,6 +167,13 @@ const Explore = ( {
             requestLocationPermissions={requestLocationPermissions}
           />
         )}
+        {currentExploreView === "identify" && (
+          <IdentifyView
+            canFetch={canFetch}
+            queryParams={queryParams}
+            handleUpdateCount={handleUpdateCount}
+          />
+        )}
         {currentExploreView === "species" && (
           <SpeciesView
             canFetch={canFetch}
@@ -185,6 +196,12 @@ const Explore = ( {
             isConnected={isConnected}
             queryParams={queryParams}
             handleUpdateCount={handleUpdateCount}
+          />
+        )}
+        {currentExploreView === "hotspots" && (
+          <WildlifeHotspotsScreen
+            embedded
+            filterParams={{ ...queryParams, ...hotspotConfig }}
           />
         )}
       </View>
@@ -210,6 +227,13 @@ const Explore = ( {
         text: t( "Individual-encounters-with-organisms" ),
         value: "observations",
       },
+      identify: {
+        buttonText: t( "IDENTIFY" ),
+        icon: "id-agree",
+        label: t( "Identify" ),
+        text: t( "Identify-observations-one-at-a-time" ),
+        value: "identify",
+      },
       observers: {
         buttonText: t( "EXPLORE-OBSERVERS" ),
         icon: "observers",
@@ -223,6 +247,13 @@ const Explore = ( {
         label: t( "Identifiers" ),
         text: t( "iNaturalist-users-who-have-left-an-identification" ),
         value: "identifiers",
+      },
+      hotspots: {
+        buttonText: t( "EXPLORE-HOTSPOTS" ),
+        icon: "location",
+        label: t( "Hotspots" ),
+        text: t( "Clusters-of-observations-along-a-route" ),
+        value: "hotspots",
       },
     };
 
@@ -243,8 +274,6 @@ const Explore = ( {
     );
   };
 
-  const whiteCircleClass = "bg-white rounded-full h-[55px] w-[55px] border-[1px] border-lightGray";
-
   return (
     <>
       <ViewWrapper testID="Explore" wrapperClassName="overflow-hidden">
@@ -257,47 +286,6 @@ const Explore = ( {
             />
           )}
           {renderMainContent()}
-          {isDebug && (
-            <INatIconButton
-              icon="triangle-exclamation"
-              className={classnames(
-                "absolute",
-                "bg-white",
-                "bottom-[100px]",
-                "h-[55px]",
-                "right-5",
-                "rounded-full",
-                "w-[55px]",
-                "z-10",
-              )}
-              color="white"
-              size={27}
-              style={[
-                DROP_SHADOW,
-                // eslint-disable-next-line react-native/no-inline-styles
-                { backgroundColor: "deeppink" },
-              ]}
-              accessibilityLabel="Diagnostics"
-              onPress={() => {
-                Alert.alert(
-                  "Explore Info",
-                  `queryParams: ${JSON.stringify( queryParams )}`,
-                );
-              }}
-            />
-          )}
-          <INatIconButton
-            icon={icon}
-            color={colors.inatGreen}
-            size={27}
-            className={classnames(
-              whiteCircleClass,
-              "absolute bottom-5 z-10 right-5",
-            )}
-            accessibilityLabel={a11yLabel}
-            onPress={() => setShowExploreBottomSheet( true )}
-            style={DROP_SHADOW}
-          />
         </View>
       </ViewWrapper>
       <ExploreFiltersModal
@@ -306,7 +294,7 @@ const Explore = ( {
         filterByIconicTaxonUnknown={filterByIconicTaxonUnknown}
         renderLocationPermissionsGate={renderLocationPermissionsGate}
         requestLocationPermissions={requestLocationPermissions}
-        updateTaxon={updateTaxon}
+        updateTaxonFilters={updateTaxonFilters}
         updateLocation={updateLocation}
         updateUser={updateUser}
         updateProject={updateProject}

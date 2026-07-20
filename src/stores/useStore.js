@@ -1,4 +1,4 @@
-import merge from "lodash/merge";
+import mergeWith from "lodash/mergeWith";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -87,11 +87,33 @@ const useStore = create( persist(
         }
         return memo;
       }, {} ) ),
+
+      // Last location used in the location picker
+      lastLocationPickerState: state.lastLocationPickerState,
+
+      // Group Photos progress, so it survives an app kill
+      groupedPhotos: state.groupedPhotos,
+      firstObservationDefaults: state.firstObservationDefaults,
+      pendingGroupPhotoDeletionUris: state.pendingGroupPhotoDeletionUris,
+
+      // Explore tab filters and related search state
+      rootExploreView: state.rootExploreView,
+      rootRelativeDateOffsets: state.rootRelativeDateOffsets,
+      rootStoredParams: state.rootStoredParams,
+      savedExploreFilters: state.savedExploreFilters,
     } ),
     storage: createJSONStorage( () => zustandStorage ),
     // We need to deep merge to persist nested objects, like layout
     // https://zustand.docs.pmnd.rs/middlewares/persist#persisting-a-state-with-nested-objects
-    merge: ( persisted, current ) => merge( current, persisted ),
+    // Arrays must be replaced wholesale rather than merged index-by-index:
+    // lodash's default array merging leaves stale trailing elements behind
+    // when the persisted array (e.g. groupedPhotos cleared after a Group
+    // Photos import) is shorter than what's currently in memory.
+    merge: ( persisted, current ) => mergeWith( current, persisted, ( _objValue, srcValue ) => (
+      Array.isArray( srcValue )
+        ? srcValue
+        : undefined
+    ) ),
   },
 ) );
 

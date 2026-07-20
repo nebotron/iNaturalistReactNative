@@ -1,7 +1,9 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import About from "components/About";
+import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
+import DevicePhotoCleanup from "components/DevicePhotoCleanup/DevicePhotoCleanup";
 import Log from "components/Developer/Log";
 import UiLibrary from "components/Developer/UiLibrary";
 import UiLibraryItem from "components/Developer/UiLibraryItem";
@@ -13,8 +15,15 @@ import ExploreV2Container from "components/Explore/ExploreV2/ExploreV2Container"
 import RootExploreContainer from "components/Explore/RootExploreContainer";
 import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
+import LifeListContainer from "components/LifeList/LifeListContainer";
+import LocationHistory from "components/LocationHistory/LocationHistory";
+import LocationHistoryDetailMap from "components/LocationHistory/LocationHistoryDetailMap";
+import LocationHistoryPointsMap from "components/LocationHistory/LocationHistoryPointsMap";
+import MaverickIdentificationsContainer
+  from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
+import NetworkLog from "components/NetworkLog/NetworkLog";
 import Notifications from "components/Notifications/Notifications";
 import DQAContainer from "components/ObsDetails/DQAContainer";
 import ObsDetailsScreen from "components/ObsDetailsSharedComponents/ObsDetailsScreen";
@@ -28,6 +37,7 @@ import { Heading4 } from "components/SharedComponents";
 import FollowersList from "components/UserProfile/FollowersList";
 import FollowingList from "components/UserProfile/FollowingList";
 import UserProfile from "components/UserProfile/UserProfile";
+import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
 import { t } from "i18next";
 import ContextHeader from "navigation/ContextHeader";
 import {
@@ -84,7 +94,17 @@ const notificationsTitle = () => (
     {t( "NOTIFICATIONS" )}
   </Heading4>
 );
-
+// eslint-disable-next-line i18next/no-literal-string
+const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const networkLogTitle = () => <Heading4 numberOfLines={1}>NETWORK LOG</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>DELETE UNFAVED PHOTOS</Heading4>;
+const locationHistoryTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "LOCATION-HISTORY" )}
+  </Heading4>
+);
 // eslint-disable-next-line i18next/no-literal-string
 const debugTitle = () => <Heading4 className="text-white">DEBUG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
@@ -111,6 +131,10 @@ const FadeInProjectList = ( ) => fadeInComponent( <ProjectListContainer /> );
 const FadeInFollowersList = ( ) => fadeInComponent( <FollowersList /> );
 const FadeInFollowingList = ( ) => fadeInComponent( <FollowingList /> );
 const FadeInJournal = ( ) => fadeInComponent( <Journal /> );
+const FadeInLifeList = ( ) => fadeInComponent( <LifeListContainer /> );
+const FadeInMaverickIdentifications = (
+  ( ) => fadeInComponent( <MaverickIdentificationsContainer /> )
+);
 
 const BASE_SCREEN_OPTIONS = {
   headerBackButtonDisplayMode: "minimal",
@@ -213,6 +237,11 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={ExploreSearchContainer}
           />
           <Stack.Screen
+            name="WildlifeHotspots"
+            component={WildlifeHotspotsScreen}
+            options={hideHeader}
+          />
+          <Stack.Screen
             name="ObsDetails"
             component={FadeInObsDetailsScreen}
             options={OBS_DETAILS_OPTIONS}
@@ -287,6 +316,60 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             name="Journal"
             component={FadeInJournal}
             options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="LifeList"
+            component={FadeInLifeList}
+            options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="CropLogViewer"
+            component={CropLogViewer}
+            options={{
+              headerTitle: cropLogTitle,
+            }}
+          />
+          <Stack.Screen
+            name="NetworkLog"
+            component={NetworkLog}
+            options={{
+              headerTitle: networkLogTitle,
+            }}
+          />
+          <Stack.Screen
+            name="DevicePhotoCleanup"
+            component={DevicePhotoCleanup}
+            options={{
+              headerTitle: devicePhotoCleanupTitle,
+            }}
+          />
+          <Stack.Screen
+            name="MaverickIdentifications"
+            component={FadeInMaverickIdentifications}
+            options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="LocationHistory"
+            component={LocationHistory}
+            options={{
+              headerTitle: locationHistoryTitle,
+            }}
+          />
+          <Stack.Screen
+            name="LocationHistoryPointsMap"
+            component={LocationHistoryPointsMap}
+            options={{
+              headerTitle: locationHistoryTitle,
+            }}
+          />
+          <Stack.Screen
+            name="LocationHistoryDetailMap"
+            component={LocationHistoryDetailMap}
+            options={{
+              // Reuses the LocationPicker interface, which renders its own
+              // header and close button, so hide the native stack header.
+              headerShown: false,
+            }}
           />
         </Stack.Group>
         {/* Developer Stack Group */}

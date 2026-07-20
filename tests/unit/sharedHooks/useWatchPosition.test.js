@@ -94,6 +94,44 @@ describe( "useWatchPosition with accurate location", ( ) => {
   } );
 } );
 
+describe( "useWatchPosition with fluctuating accuracy", ( ) => {
+  // Fixes that never reach the target accuracy, delivered best-in-the-middle
+  // so the final reading is worse than one we already saw
+  const fluctuatingPositions = [
+    { coords: { latitude: 1, longitude: 1, accuracy: 40 } },
+    { coords: { latitude: 2, longitude: 2, accuracy: 15 } },
+    { coords: { latitude: 3, longitude: 3, accuracy: 60 } },
+  ];
+
+  beforeEach( ( ) => {
+    mockWatchPositionSuccess.mockClear( );
+    Geolocation.watchPosition.mockReset( );
+    Geolocation.watchPosition.mockImplementation( success => {
+      setTimeout( ( ) => {
+        mockWatchPositionSuccess( ( ) => success( fluctuatingPositions[0] ) );
+        setTimeout( ( ) => {
+          mockWatchPositionSuccess( ( ) => success( fluctuatingPositions[1] ) );
+          setTimeout( ( ) => {
+            mockWatchPositionSuccess( ( ) => success( fluctuatingPositions[2] ) );
+          }, 100 );
+        }, 100 );
+      }, 100 );
+      return 0;
+    } );
+  } );
+
+  it( "should keep the most accurate fix, not the latest one", async ( ) => {
+    const { result } = renderHook( ( ) => useWatchPosition( { shouldFetchLocation: true } ) );
+    // Wait until the final (worse) fix has been delivered
+    await waitFor( ( ) => {
+      expect( mockWatchPositionSuccess ).toHaveBeenCalledTimes( 3 );
+    } );
+    // The retained location should be the best fix (15), not the latest (60)
+    expect( result.current.userLocation.positional_accuracy )
+      .toEqual( fluctuatingPositions[1].coords.accuracy );
+  } );
+} );
+
 describe( "useWatchPosition when shouldn't fetch", ( ) => {
   beforeEach( ( ) => {
     Geolocation.watchPosition.mockReset( );

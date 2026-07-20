@@ -1,19 +1,41 @@
 /* eslint-disable no-unused-vars */
 /* eslint-disable no-shadow */
+// Please don't change this to an aliased path or the e2e mock will not get
+// used in our e2e tests on Github Actions
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import {
+  migrateTaxonFilters,
+  normalizeTaxonFilters,
+} from "components/Explore/helpers/taxonFilters";
+import type { ExploreUserFilter } from "components/Explore/helpers/userFilters";
+import {
+  migrateUserFilters,
+  normalizeUserFilters,
+  toExploreUserFilterUser,
+} from "components/Explore/helpers/userFilters";
 import isEqual from "lodash/isEqual";
 import * as React from "react";
 import type { LatLng } from "react-native-maps";
 
-// Please don't change this to an aliased path or the e2e mock will not get
-// used in our e2e tests on Github Actions
 import fetchCoarseUserLocation from "../sharedHelpers/fetchCoarseUserLocation";
+import { DEFAULT_NEARBY_RADIUS_KM } from "../sharedHelpers/nearbyRadius";
+
+export type { ExploreTaxonFilter };
+export type { ExploreUserFilter };
 
 export enum EXPLORE_ACTION {
   CHANGE_SORT_BY = "CHANGE_SORT_BY",
   CHANGE_TAXON = "CHANGE_TAXON",
+  SET_TAXON_FILTERS = "SET_TAXON_FILTERS",
+  SET_USER_FILTERS = "SET_USER_FILTERS",
   DISCARD = "DISCARD",
   FILTER_BY_ICONIC_TAXON_UNKNOWN = "FILTER_BY_ICONIC_TAXON_UNKNOWN",
   RESET = "RESET",
+  SET_HOTSPOT_CLUSTER_RADIUS = "SET_HOTSPOT_CLUSTER_RADIUS",
+  SET_HOTSPOT_MAX_DETOUR_CANDIDATES = "SET_HOTSPOT_MAX_DETOUR_CANDIDATES",
+  SET_HOTSPOT_OBS_PER_PAGE = "SET_HOTSPOT_OBS_PER_PAGE",
+  SET_HOTSPOT_PARKING_MINUTES = "SET_HOTSPOT_PARKING_MINUTES",
+  SET_HOTSPOT_BBOX_PADDING_KM = "SET_HOTSPOT_BBOX_PADDING_KM",
   SET_DATE_OBSERVED_ALL = "SET_DATE_OBSERVED_ALL",
   SET_DATE_OBSERVED_EXACT = "SET_DATE_OBSERVED_EXACT",
   SET_DATE_OBSERVED_MONTHS = "SET_DATE_OBSERVED_MONTHS",
@@ -21,6 +43,8 @@ export enum EXPLORE_ACTION {
   SET_DATE_UPLOADED_ALL = "SET_DATE_UPLOADED_ALL",
   SET_DATE_UPLOADED_EXACT = "SET_DATE_UPLOADED_EXACT",
   SET_DATE_UPLOADED_RANGE = "SET_DATE_UPLOADED_RANGE",
+  SET_TIME_OF_DAY_ALL = "SET_TIME_OF_DAY_ALL",
+  SET_TIME_OF_DAY_RANGE = "SET_TIME_OF_DAY_RANGE",
   SET_ESTABLISHMENT_MEAN = "SET_ESTABLISHMENT_MEAN",
   SET_EXPLORE_LOCATION = "SET_EXPLORE_LOCATION",
   SET_HIGHEST_TAXONOMIC_RANK = "SET_HIGHEST_TAXONOMIC_RANK",
@@ -38,10 +62,14 @@ export enum EXPLORE_ACTION {
   SET_TAXON_NAME = "SET_TAXON_NAME",
   SET_USER = "SET_USER",
   SET_EXCLUDE_USER = "SET_EXCLUDE_USER",
+  TOGGLE_UNOBSERVED_BY_ME = "TOGGLE_UNOBSERVED_BY_ME",
+  TOGGLE_POPULAR = "TOGGLE_POPULAR",
   SET_WILD_STATUS = "SET_WILD_STATUS",
+  SET_NEARBY_RADIUS = "SET_NEARBY_RADIUS",
   TOGGLE_CASUAL = "TOGGLE_CASUAL",
   TOGGLE_NEEDS_ID = "TOGGLE_NEEDS_ID",
   TOGGLE_RESEARCH_GRADE = "TOGGLE_RESEARCH_GRADE",
+  TOGGLE_LOCATION_MISSING = "TOGGLE_LOCATION_MISSING",
   USE_STORED_STATE = "USE_STORED_STATE"
 }
 
@@ -102,6 +130,11 @@ export enum DATE_UPLOADED {
   ALL = "ALL",
   EXACT_DATE = "EXACT_DATE",
   DATE_RANGE = "DATE_RANGE"
+}
+
+export enum TIME_OF_DAY {
+  ALL = "ALL",
+  RANGE = "RANGE"
 }
 
 export enum MEDIA {
@@ -187,6 +220,8 @@ interface State {
   dateObserved: DATE_OBSERVED;
   dateUploaded: DATE_UPLOADED;
   establishmentMean: ESTABLISHMENT_MEAN;
+  h1: number | null | undefined;
+  h2: number | null | undefined;
   hrank: TAXONOMIC_RANK | undefined | null;
   iconic_taxa: string[] | undefined;
   lat?: number;
@@ -218,13 +253,25 @@ interface State {
   // and should be typed as such (e.g., in realm model)
   taxon: object | undefined | null;
   taxon_id: number | undefined | null;
+  taxonFilters: ExploreTaxonFilter[];
+  timeOfDay: TIME_OF_DAY;
   // TODO: technically this is not any object but a "User"
   // and should be typed as such (e.g., in realm model)
   user: object | undefined | null;
   user_id: number | undefined | null;
   excludeUser: object | undefined | null;
+  userFilters: ExploreUserFilter[];
+  unobservedByMe: boolean;
+  popular: boolean;
   verifiable: boolean;
   wildStatus: WILD_STATUS;
+  nearbyRadiusKm: number;
+  hasLocationMissing: boolean;
+  hotspotClusterRadiusKm: number;
+  hotspotMaxDetourCandidates: number;
+  hotspotObsPerPage: number;
+  hotspotParkingMinutes: number;
+  hotspotBboxPaddingKm: number;
 }
 type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.DISCARD; snapshot: State}
@@ -241,6 +288,16 @@ type Action = {type: EXPLORE_ACTION.RESET}
     taxon: { id: number } | null;
     taxonId: number;
     taxonName: string;
+    storedState?: State;
+  }
+  | {
+    type: EXPLORE_ACTION.SET_TAXON_FILTERS;
+    taxonFilters: ExploreTaxonFilter[];
+    storedState?: State;
+  }
+  | {
+    type: EXPLORE_ACTION.SET_USER_FILTERS;
+    userFilters: ExploreUserFilter[];
     storedState?: State;
   }
   | { type: EXPLORE_ACTION.FILTER_BY_ICONIC_TAXON_UNKNOWN }
@@ -278,13 +335,24 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.SET_DATE_UPLOADED_ALL}
   | {type: EXPLORE_ACTION.SET_DATE_UPLOADED_EXACT; createdOn: string}
   | {type: EXPLORE_ACTION.SET_DATE_UPLOADED_RANGE; createdD1: string; createdD2: string}
+  | {type: EXPLORE_ACTION.SET_TIME_OF_DAY_ALL}
+  | {type: EXPLORE_ACTION.SET_TIME_OF_DAY_RANGE; h1: number; h2: number}
   | {type: EXPLORE_ACTION.SET_MEDIA; media: MEDIA}
   | {type: EXPLORE_ACTION.SET_ESTABLISHMENT_MEAN; establishmentMean: ESTABLISHMENT_MEAN}
   | {type: EXPLORE_ACTION.SET_WILD_STATUS; wildStatus: WILD_STATUS}
+  | {type: EXPLORE_ACTION.SET_NEARBY_RADIUS; radius: number}
   | {type: EXPLORE_ACTION.SET_REVIEWED; reviewedFilter: REVIEWED}
   | {type: EXPLORE_ACTION.SET_PHOTO_LICENSE; photoLicense: PHOTO_LICENSE}
   | {type: EXPLORE_ACTION.SET_MAP_BOUNDARIES; mapBoundaries: MapBoundaries}
   | {type: EXPLORE_ACTION.USE_STORED_STATE; storedState: State}
+  | {type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME}
+  | {type: EXPLORE_ACTION.TOGGLE_POPULAR}
+  | {type: EXPLORE_ACTION.TOGGLE_LOCATION_MISSING}
+  | {type: EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS; value: number}
+  | {type: EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES; value: number}
+  | {type: EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE; value: number}
+  | {type: EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES; value: number}
+  | {type: EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM; value: number}
 type Dispatch = ( action: Action ) => void
 
 const ExploreContext = React.createContext<
@@ -301,8 +369,10 @@ const ExploreContext = React.createContext<
 
 // Every key in this object represents a numbered filter in the UI
 const calculatedFilters = {
-  user_id: undefined,
+  userFilters: [] as ExploreUserFilter[],
   project_id: undefined,
+  unobservedByMe: false,
+  popular: false,
   researchGrade: true,
   needsID: true,
   casual: false,
@@ -310,11 +380,13 @@ const calculatedFilters = {
   lrank: null,
   dateObserved: DATE_OBSERVED.ALL,
   dateUploaded: DATE_UPLOADED.ALL,
+  timeOfDay: TIME_OF_DAY.ALL,
   media: MEDIA.ALL,
   establishmentMean: ESTABLISHMENT_MEAN.ANY,
   wildStatus: WILD_STATUS.ALL,
   reviewedFilter: REVIEWED.ALL,
   photoLicense: PHOTO_LICENSE.ALL,
+  hasLocationMissing: false,
 };
 
 // Sort by: is NOT a filter criteria, but should return to default state when reset is pressed
@@ -325,12 +397,16 @@ const defaultFilters = {
   created_on: undefined,
   d1: undefined,
   d2: undefined,
+  h1: undefined,
+  h2: undefined,
   iconic_taxa: undefined,
   months: undefined,
   observed_on: undefined,
   project: undefined,
   sortBy: SORT_BY.DATE_UPLOADED_NEWEST,
   user: undefined,
+  user_id: undefined,
+  excludeUser: undefined,
 };
 
 const initialState: State = {
@@ -346,7 +422,15 @@ const initialState: State = {
   return_bounds: undefined,
   taxon: undefined,
   taxon_id: undefined,
+  taxonFilters: [],
+  userFilters: [],
   verifiable: true,
+  nearbyRadiusKm: DEFAULT_NEARBY_RADIUS_KM,
+  hotspotClusterRadiusKm: 1.5,
+  hotspotMaxDetourCandidates: 50,
+  hotspotObsPerPage: 200,
+  hotspotParkingMinutes: 5,
+  hotspotBboxPaddingKm: 80,
 };
 
 // Checks if the date is in the format XXXX-XX-XX
@@ -355,7 +439,14 @@ function isValidDateFormat( date: string ): boolean {
   return regex.test( date );
 }
 
-async function defaultExploreLocation( ): Promise<DefaultLocation> {
+// Checks if the hour is a whole number between 0 and 23
+function isValidHour( hour: number ): boolean {
+  return Number.isInteger( hour ) && hour >= 0 && hour <= 23;
+}
+
+async function defaultExploreLocation(
+  nearbyRadiusKm: number = DEFAULT_NEARBY_RADIUS_KM,
+): Promise<DefaultLocation> {
   const location = await fetchCoarseUserLocation( );
   if ( !location || !location.latitude ) {
     return {
@@ -374,7 +465,7 @@ async function defaultExploreLocation( ): Promise<DefaultLocation> {
     placeMode: PLACE_MODE.NEARBY,
     lat: location?.latitude,
     lng: location?.longitude,
-    radius: 1,
+    radius: nearbyRadiusKm,
     place_id: undefined,
     swlat: undefined,
     swlng: undefined,
@@ -388,13 +479,8 @@ async function defaultExploreLocation( ): Promise<DefaultLocation> {
 // state
 function exploreReducer( state: State, action: Action ) {
   switch ( action.type ) {
-    // Reset the state to the initial state, but place mode
-    // should be set to worldwide no matter if location and not nearby
     case EXPLORE_ACTION.RESET:
-      return {
-        ...initialState,
-        placeMode: PLACE_MODE.WORLDWIDE,
-      };
+      return initialState;
     case EXPLORE_ACTION.DISCARD:
       return action.snapshot;
     case EXPLORE_ACTION.CHANGE_TAXON: {
@@ -404,13 +490,28 @@ function exploreReducer( state: State, action: Action ) {
         iconic_taxa: undefined,
       };
       if ( action.taxon ) {
+        newState.taxonFilters = [{ taxon: action.taxon, exclude: false }];
         newState.taxon = action.taxon;
         newState.taxon_id = action.taxon.id;
       } else {
+        newState.taxonFilters = [];
         newState.taxon = null;
         newState.taxon_id = null;
       }
       return newState;
+    }
+    case EXPLORE_ACTION.SET_TAXON_FILTERS: {
+      const taxonFilters = normalizeTaxonFilters( action.taxonFilters );
+      const includeFilters = taxonFilters.filter( filter => !filter.exclude );
+      const firstInclude = includeFilters[0]?.taxon ?? null;
+      return {
+        ...state,
+        ...action.storedState,
+        iconic_taxa: undefined,
+        taxonFilters,
+        taxon: firstInclude,
+        taxon_id: firstInclude?.id ?? null,
+      };
     }
     // Every iconic taxon filter is essentially a taxon filter... except
     // "unknown", which is a search for observations not associated with an
@@ -424,14 +525,49 @@ function exploreReducer( state: State, action: Action ) {
         iconic_taxa: ["unknown"],
         taxon: undefined,
         taxon_id: undefined,
+        taxonFilters: [],
       };
       return newState;
     }
-    case EXPLORE_ACTION.SET_EXPLORE_LOCATION:
+    case EXPLORE_ACTION.SET_EXPLORE_LOCATION: {
+      const { exploreLocation } = action;
+      const clearedLocationState = {
+        ...state,
+        lat: undefined,
+        lng: undefined,
+        nelat: undefined,
+        nelng: undefined,
+        place: undefined,
+        place_guess: "",
+        place_id: undefined,
+        radius: undefined,
+        swlat: undefined,
+        swlng: undefined,
+      };
+
+      if ( exploreLocation.placeMode === PLACE_MODE.WORLDWIDE ) {
+        return {
+          ...clearedLocationState,
+          placeMode: PLACE_MODE.WORLDWIDE,
+        };
+      }
+
+      if ( exploreLocation.placeMode === PLACE_MODE.NEARBY ) {
+        const radius = exploreLocation.radius ?? state.nearbyRadiusKm;
+        return {
+          ...clearedLocationState,
+          placeMode: PLACE_MODE.NEARBY,
+          lat: exploreLocation.lat,
+          lng: exploreLocation.lng,
+          radius,
+        };
+      }
+
       return {
         ...state,
-        ...action.exploreLocation,
+        ...exploreLocation,
       };
+    }
     case EXPLORE_ACTION.SET_PLACE_MODE_NEARBY:
       return {
         ...state,
@@ -468,22 +604,49 @@ function exploreReducer( state: State, action: Action ) {
         swlat: undefined,
         swlng: undefined,
       };
-    case EXPLORE_ACTION.SET_USER:
+    case EXPLORE_ACTION.SET_USER_FILTERS: {
+      const userFilters = normalizeUserFilters( action.userFilters );
+      const firstInclude = userFilters.find( f => !f.exclude )?.user ?? null;
+      const firstExclude = userFilters.find( f => f.exclude )?.user ?? null;
       return {
         ...state,
         ...action.storedState,
-        user: action.user,
+        userFilters,
+        user: firstInclude,
+        user_id: firstInclude?.id ?? null,
+        excludeUser: firstExclude,
+      };
+    }
+    case EXPLORE_ACTION.SET_USER: {
+      const normalizedUser = action.user
+        ? toExploreUserFilterUser( action.user as ExploreUserFilter["user"] )
+        : null;
+      return {
+        ...state,
+        ...action.storedState,
+        user: normalizedUser,
         user_id: action.userId,
         excludeUser: null,
+        userFilters: normalizedUser
+          ? [{ user: normalizedUser, exclude: false }]
+          : [],
       };
-    case EXPLORE_ACTION.EXCLUDE_USER:
+    }
+    case EXPLORE_ACTION.EXCLUDE_USER: {
+      const normalizedExcludeUser = action.excludeUser
+        ? toExploreUserFilterUser( action.excludeUser as ExploreUserFilter["user"] )
+        : null;
       return {
         ...state,
         ...action.storedState,
-        excludeUser: action.excludeUser,
+        excludeUser: normalizedExcludeUser,
         user: null,
         user_id: null,
+        userFilters: normalizedExcludeUser
+          ? [{ user: normalizedExcludeUser, exclude: true }]
+          : [],
       };
+    }
     case EXPLORE_ACTION.SET_PROJECT:
       return {
         ...state,
@@ -510,6 +673,21 @@ function exploreReducer( state: State, action: Action ) {
       return {
         ...state,
         casual: !state.casual,
+      };
+    case EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME:
+      return {
+        ...state,
+        unobservedByMe: !state.unobservedByMe,
+      };
+    case EXPLORE_ACTION.TOGGLE_POPULAR:
+      return {
+        ...state,
+        popular: !state.popular,
+      };
+    case EXPLORE_ACTION.TOGGLE_LOCATION_MISSING:
+      return {
+        ...state,
+        hasLocationMissing: !state.hasLocationMissing,
       };
     case EXPLORE_ACTION.SET_HIGHEST_TAXONOMIC_RANK:
       return {
@@ -603,6 +781,26 @@ function exploreReducer( state: State, action: Action ) {
         created_d1: action.createdD1,
         created_d2: action.createdD2,
       };
+    case EXPLORE_ACTION.SET_TIME_OF_DAY_ALL:
+      return {
+        ...state,
+        timeOfDay: TIME_OF_DAY.ALL,
+        h1: null,
+        h2: null,
+      };
+    case EXPLORE_ACTION.SET_TIME_OF_DAY_RANGE:
+      if ( !isValidHour( action.h1 ) ) {
+        throw new Error( "Invalid hour given" );
+      }
+      if ( !isValidHour( action.h2 ) ) {
+        throw new Error( "Invalid hour given" );
+      }
+      return {
+        ...state,
+        timeOfDay: TIME_OF_DAY.RANGE,
+        h1: action.h1,
+        h2: action.h2,
+      };
     case EXPLORE_ACTION.SET_MEDIA:
       return {
         ...state,
@@ -631,6 +829,16 @@ function exploreReducer( state: State, action: Action ) {
         ...state,
         reviewedFilter: action.reviewedFilter,
       };
+    case EXPLORE_ACTION.SET_NEARBY_RADIUS: {
+      const updatedState = {
+        ...state,
+        nearbyRadiusKm: action.radius,
+      };
+      if ( state.placeMode === PLACE_MODE.NEARBY ) {
+        updatedState.radius = action.radius;
+      }
+      return updatedState;
+    }
     case EXPLORE_ACTION.SET_MAP_BOUNDARIES: {
       return {
         ...state,
@@ -641,10 +849,41 @@ function exploreReducer( state: State, action: Action ) {
         radius: undefined,
       };
     }
-    case EXPLORE_ACTION.USE_STORED_STATE:
+    case EXPLORE_ACTION.USE_STORED_STATE: {
+      const { storedState } = action;
+      const nearbyRadiusKm = storedState.nearbyRadiusKm != null
+        ? storedState.nearbyRadiusKm
+        : storedState.radius ?? DEFAULT_NEARBY_RADIUS_KM;
+      const taxonFilters = migrateTaxonFilters( storedState );
+      const userFilters = migrateUserFilters( storedState );
+      const firstIncludeUser = userFilters.find( f => !f.exclude )?.user ?? null;
+      const firstExcludeUser = userFilters.find( f => f.exclude )?.user ?? null;
+
       return {
-        ...action.storedState,
+        ...initialState,
+        ...storedState,
+        nearbyRadiusKm,
+        taxonFilters,
+        taxon: taxonFilters.find( filter => !filter.exclude )?.taxon
+          ?? storedState.taxon,
+        taxon_id: taxonFilters.find( filter => !filter.exclude )?.taxon?.id
+          ?? storedState.taxon_id,
+        userFilters,
+        user: firstIncludeUser ?? storedState.user,
+        user_id: firstIncludeUser?.id ?? storedState.user_id,
+        excludeUser: firstExcludeUser ?? storedState.excludeUser,
       };
+    }
+    case EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS:
+      return { ...state, hotspotClusterRadiusKm: Math.max( 0.5, Math.min( 5, action.value ) ) };
+    case EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES:
+      return { ...state, hotspotMaxDetourCandidates: Math.max( 10, Math.min( 100, action.value ) ) };
+    case EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE:
+      return { ...state, hotspotObsPerPage: Math.max( 50, action.value ) };
+    case EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES:
+      return { ...state, hotspotParkingMinutes: Math.max( 0, Math.min( 30, action.value ) ) };
+    case EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM:
+      return { ...state, hotspotBboxPaddingKm: Math.max( 20, Math.min( 200, action.value ) ) };
     default: {
       throw new Error( `Unhandled action type: ${( action as Action ).type}` );
     }
@@ -670,12 +909,20 @@ const ExploreProvider = ( { children }: ExploreProviderProps ) => {
     dispatch( { type: EXPLORE_ACTION.DISCARD, snapshot } );
   };
 
+  const getDefaultExploreLocation = React.useCallback(
+    () => defaultExploreLocation( state.nearbyRadiusKm ?? DEFAULT_NEARBY_RADIUS_KM ),
+    [state.nearbyRadiusKm],
+  );
+
   const isNotInitialState: boolean = Object.keys( initialState ).some(
     key => initialState[key] !== state[key],
   );
 
   let numberOfFilters: number = Object.keys( calculatedFilters ).reduce(
     ( count, key ) => {
+      if ( key === "userFilters" ) {
+        return count + ( state.userFilters?.length > 0 ? 1 : 0 );
+      }
       if ( state[key] !== calculatedFilters[key] ) {
         return count + 1;
       }
@@ -692,7 +939,7 @@ const ExploreProvider = ( { children }: ExploreProviderProps ) => {
   const value = {
     state,
     dispatch,
-    defaultExploreLocation,
+    defaultExploreLocation: getDefaultExploreLocation,
     isNotInitialState,
     numberOfFilters,
     makeSnapshot,
@@ -715,5 +962,7 @@ function useExplore() {
 export {
   ExploreProvider,
   exploreReducer,
+  initialState as initialExploreState,
   useExplore,
 };
+export type { State as ExploreState };

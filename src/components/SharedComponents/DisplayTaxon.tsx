@@ -40,7 +40,9 @@ const DisplayTaxon = ( {
     : taxon?.iconic_taxon_name;
 
   const taxonPhoto = taxon?.default_photo?.url;
-  const accessibleName = accessibleTaxonName( taxon, currentUser, t );
+  const accessibleName = taxon
+    ? accessibleTaxonName( taxon, currentUser, t )
+    : undefined;
 
   return (
     <Pressable

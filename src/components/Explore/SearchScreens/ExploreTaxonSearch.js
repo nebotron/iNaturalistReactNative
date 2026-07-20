@@ -1,6 +1,9 @@
 // @flow
 
 import {
+  normalizeTaxonFilters,
+} from "components/Explore/helpers/taxonFilters";
+import {
   SearchHeader,
   TaxonResult,
   TaxonSearch,
@@ -17,13 +20,15 @@ import useTaxonSearch from "sharedHooks/useTaxonSearch";
 type Props = {
   closeModal: Function,
   onPressInfo?: Function,
-  updateTaxon: Function
+  taxonFilters?: Object[],
+  updateTaxonFilters: Function,
 };
 
 const ExploreTaxonSearch = ( {
   closeModal,
   onPressInfo,
-  updateTaxon,
+  taxonFilters = [],
+  updateTaxonFilters,
 }: Props ): Node => {
   const { t } = useTranslation( );
   const [taxonQuery, setTaxonQuery] = useState( "" );
@@ -31,35 +36,50 @@ const ExploreTaxonSearch = ( {
   const {
     taxa,
     isLoading,
-    isLocal,
+    isUpdatingLocalDb,
+    updateLocalSpeciesDb,
   } = useTaxonSearch( taxonQuery );
 
-  const onTaxonSelected = useCallback( async newTaxon => {
-    updateTaxon( newTaxon );
-    closeModal();
-  }, [closeModal, updateTaxon] );
+  const onTaxonSelected = useCallback( taxon => {
+    const alreadyAdded = taxonFilters.some( f => f.taxon.id === taxon.id );
+    if ( !alreadyAdded ) {
+      updateTaxonFilters( normalizeTaxonFilters( [
+        ...taxonFilters,
+        { taxon, exclude: false },
+      ] ) );
+    }
+    closeModal( );
+  }, [closeModal, taxonFilters, updateTaxonFilters] );
 
-  const resetTaxon = useCallback(
-    ( ) => {
-      updateTaxon( null );
-      closeModal();
-    },
-    [updateTaxon, closeModal],
-  );
+  const resetTaxon = useCallback( ( ) => {
+    updateTaxonFilters( [] );
+    closeModal( );
+  }, [updateTaxonFilters, closeModal] );
 
-  const renderItem = useCallback( ( { item: taxon, index } ) => (
-    <TaxonResult
-      first={index === 0}
-      fetchRemote={false}
-      handleTaxonOrEditPress={() => onTaxonSelected( taxon )}
-      onPressInfo={onPressInfo}
-      showCheckmark={false}
-      taxon={taxon}
-      testID={`Search.taxa.${taxon.id}`}
-    />
-  ), [
+  const getFilterForTaxon = useCallback( taxonId => (
+    taxonFilters.find( filter => filter.taxon.id === taxonId )
+  ), [taxonFilters] );
+
+  const renderItem = useCallback( ( { item: taxon, index } ) => {
+    const filter = getFilterForTaxon( taxon.id );
+    return (
+      <TaxonResult
+        accessibilityLabel={t( "Choose-taxon" )}
+        first={index === 0}
+        fetchRemote={false}
+        handleCheckmarkPress={() => onTaxonSelected( taxon )}
+        handleTaxonOrEditPress={() => onTaxonSelected( taxon )}
+        onPressInfo={onPressInfo}
+        showCheckmark={!!filter}
+        taxon={taxon}
+        testID={`Search.taxa.${taxon.id}`}
+      />
+    );
+  }, [
+    getFilterForTaxon,
     onPressInfo,
     onTaxonSelected,
+    t,
   ] );
 
   return (
@@ -72,11 +92,12 @@ const ExploreTaxonSearch = ( {
       />
       <TaxonSearch
         isLoading={isLoading}
-        isLocal={isLocal}
+        isUpdatingLocalDb={isUpdatingLocalDb}
         query={taxonQuery}
         renderItem={renderItem}
         setQuery={setTaxonQuery}
         taxa={taxa}
+        updateLocalSpeciesDb={updateLocalSpeciesDb}
       />
     </ViewWrapper>
   );

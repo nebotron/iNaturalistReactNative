@@ -7,6 +7,7 @@ import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 // used in our e2e tests on Github Actions
 import fetchCoarseUserLocation from "../sharedHelpers/fetchCoarseUserLocation";
 import { checkLocationPermissions } from "../sharedHelpers/geolocationWrapper";
+import { DEFAULT_NEARBY_RADIUS_KM } from "../sharedHelpers/nearbyRadius";
 
 export enum EXPLORE_V2_ACTION {
   SET_SUBJECT = "SET_SUBJECT",
@@ -18,6 +19,7 @@ export enum EXPLORE_V2_ACTION {
   SET_SORT = "SET_SORT",
   SET_FILTERS = "SET_FILTERS",
   SET_ACTIVE_TAB = "SET_ACTIVE_TAB",
+  SET_NEARBY_RADIUS = "SET_NEARBY_RADIUS",
   RESET = "RESET"
 }
 
@@ -85,6 +87,7 @@ export interface ExploreV2State {
   sortBy: OBSERVATIONS_SORT;
   filters: ExploreV2Filters;
   activeTab: ExploreV2Tab;
+  nearbyRadiusKm: number;
 }
 
 export type ExploreV2Action =
@@ -105,6 +108,7 @@ export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_SORT; sortBy: OBSERVATIONS_SORT }
   | { type: EXPLORE_V2_ACTION.SET_FILTERS; filters: ExploreV2Filters }
   | { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB; tab: ExploreV2Tab }
+  | { type: EXPLORE_V2_ACTION.SET_NEARBY_RADIUS; radius: number }
   | { type: EXPLORE_V2_ACTION.RESET };
 
 export const initialExploreV2State: ExploreV2State = {
@@ -113,6 +117,7 @@ export const initialExploreV2State: ExploreV2State = {
   sortBy: OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST,
   filters: {},
   activeTab: OBSERVATIONS_TAB,
+  nearbyRadiusKm: DEFAULT_NEARBY_RADIUS_KM,
 };
 
 export function exploreV2Reducer(
@@ -158,6 +163,17 @@ export function exploreV2Reducer(
       return { ...state, filters: action.filters };
     case EXPLORE_V2_ACTION.SET_ACTIVE_TAB:
       return { ...state, activeTab: action.tab };
+    case EXPLORE_V2_ACTION.SET_NEARBY_RADIUS:
+      return {
+        ...state,
+        nearbyRadiusKm: action.radius,
+        location: state.location.placeMode === EXPLORE_V2_PLACE_MODE.NEARBY
+          ? {
+            ...state.location,
+            radius: action.radius,
+          }
+          : state.location,
+      };
     case EXPLORE_V2_ACTION.RESET:
       return initialExploreV2State;
     default: {
@@ -178,14 +194,16 @@ export type DefaultExploreV2Location =
     radius: number;
   };
 
-export async function defaultExploreV2Location( ): Promise<DefaultExploreV2Location> {
+export async function defaultExploreV2Location(
+  nearbyRadiusKm: number = DEFAULT_NEARBY_RADIUS_KM,
+): Promise<DefaultExploreV2Location> {
   const location = await fetchCoarseUserLocation( );
   if ( location && location.latitude ) {
     return {
       placeMode: EXPLORE_V2_PLACE_MODE.NEARBY,
       lat: location.latitude,
       lng: location.longitude,
-      radius: 1,
+      radius: nearbyRadiusKm,
     };
   }
   // No coordinates, fallback to worldwide if we already have perms

@@ -1,10 +1,11 @@
 import {
+  fireEvent,
   screen,
   userEvent,
   waitFor,
 } from "@testing-library/react-native";
+import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import inatjs from "inaturalistjs";
-import * as rnImagePicker from "react-native-image-picker";
 import useStore from "stores/useStore";
 // import os from "os";
 // import path from "path";
@@ -50,27 +51,55 @@ beforeAll( uniqueRealmBeforeAll );
 afterAll( uniqueRealmAfterAll );
 // /UNIQUE REALM SETUP
 
-const mockMultipleAssets = [{
-  uri: faker.image.url( ),
-  fileName: `${faker.string.uuid()}.jpg`,
-}, {
-  uri: faker.image.url( ),
-  fileName: `${faker.string.uuid()}.jpg`,
-}];
+const mockNode1 = {
+  id: "MOCK-ID-1",
+  type: "image",
+  group_name: "Camera Roll",
+  image: {
+    filename: `${faker.string.uuid()}.jpg`,
+    filepath: "/path/to/photo1.jpg",
+    extension: "jpg",
+    uri: "file:///path/to/photo1.jpg",
+    height: 1920,
+    width: 1080,
+    fileSize: 123456,
+    playableDuration: NaN,
+    orientation: 1,
+  },
+  timestamp: 1234567890,
+  location: null,
+};
 
-jest.mock( "react-native-image-picker", ( ) => ( {
-  launchImageLibrary: jest.fn( ),
-} ) );
+const mockNode2 = {
+  ...mockNode1,
+  id: "MOCK-ID-2",
+  image: {
+    ...mockNode1.image,
+    filename: `${faker.string.uuid()}.jpg`,
+    filepath: "/path/to/photo2.jpg",
+    uri: "file:///path/to/photo2.jpg",
+  },
+  timestamp: 1234567891,
+};
+
+const makeGetPhotosResult = ( nodes ) => ( {
+  page_info: { end_cursor: undefined, has_next_page: false },
+  edges: nodes.map( node => ( { node } ) ),
+} );
 
 const actor = userEvent.setup( );
 
 const navigateToObsEditViaGroupPhotos = async ( ) => {
-  jest.spyOn( rnImagePicker, "launchImageLibrary" ).mockImplementation(
-    ( ) => ( {
-      assets: mockMultipleAssets,
-    } ),
+  jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+    makeGetPhotosResult( [mockNode1, mockNode2] ),
   );
   await navigateToPhotoImporterFromMyObs( );
+  await waitFor( ( ) => {
+    expect( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) ).toBeTruthy( );
+  }, { timeout: 10_000 } );
+  fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
+  fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode2.image.uri}` ) );
+  fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
   await waitFor( ( ) => {
     expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
   }, { timeout: 10_000 } );

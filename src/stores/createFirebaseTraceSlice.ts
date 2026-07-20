@@ -1,5 +1,6 @@
 import type { FirebasePerformanceTypes } from "@react-native-firebase/perf";
 import { getPerformance } from "@react-native-firebase/perf";
+import { isFirebaseConfigured } from "sharedHelpers/firebaseApp";
 import type { StateCreator } from "zustand";
 
 import { log } from "../../react-native-logs.config";
@@ -60,6 +61,7 @@ const createFirebaseTraceSlice: StateCreator<FirebaseTraceSlice>
   activeFirebaseTraces: {},
 
   startFirebaseTrace: async ( traceId: string, attributes: FirebaseTraceAttributes = {} ) => {
+    if ( !isFirebaseConfigured( ) ) return;
     const perf = getPerformance();
     const trace = await perf.startTrace( traceId );
 

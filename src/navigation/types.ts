@@ -97,9 +97,14 @@ export type SharedStackParamList = {
     };
     hideNavButtons?: boolean;
     lastScreen?: "Suggestions";
+    // Hint from callers that know the taxon rank without full taxon data (e.g. SpeciesGame)
+    rankLevel?: number;
     // TODO: do we really use both?
     vision?: boolean;
     usesVision?: boolean;
+    // Opened from the Explore taxon filter search (or a relative drill-down from it);
+    // shows a select button that adds this taxon to the Explore taxon filters
+    selectableForExplore?: boolean;
   };
   // From App.js
   // item is SharedItem
@@ -190,6 +195,19 @@ export type SharedStackParamList = {
     initialUrl: string;
     loggedIn: boolean;
   };
+  // From EvidenceList.js and GroupPhotos.tsx
+  ImageCropEditor: {
+    imageUri: string;
+    context: "groupPhotos" | "observationEdit";
+    observationPhotoUuid?: string;
+    onCropSaved?: () => void;
+    pendingImageUris?: string[];
+  };
+  // From TaxonDetails
+  // { taxonId: number }
+  SpeciesGame: {
+    taxonId: number;
+  };
 };
 
 // Note from the documentation:
@@ -224,7 +242,11 @@ export type MyObservationsStackParamList = {
 export type BaseTabStackParamList = {
   Menu: undefined;
   ObsList: undefined;
-  RootExplore: undefined;
+  RootExplore: {
+    // Set when a taxon is selected on TaxonDetails (opened from the Explore taxon
+    // filter search, or a relative drill-down from it) to add it to the taxon filters
+    selectedTaxonForFilter?: object;
+  } | undefined;
   // TODO: type for other routes to Explore
   // From UserProfile
   // {
@@ -247,6 +269,12 @@ export type BaseTabStackParamList = {
     project?: object;
     place?: ApiPlace | null;
     worldwide: boolean;
+    lat?: number;
+    lng?: number;
+    radius?: number;
+    // Set when a taxon is selected on TaxonDetails (opened from the Explore taxon
+    // filter search, or a relative drill-down from it) to add it to the taxon filters
+    selectedTaxonForFilter?: object;
   };
   ExploreFilters: undefined;
   ExploreSearch: undefined;
@@ -276,6 +304,7 @@ export type BaseTabStackParamList = {
     identAt?: number;
     identTaxonId?: number;
     identTaxonFromVision?: boolean;
+    preloadedObservation?: object;
   };
   Notifications: undefined;
   // From ProjectRequirements, InlineUserBase, UserList
@@ -345,6 +374,23 @@ export type BaseTabStackParamList = {
     userId?: number;
     userLogin?: string;
   } | undefined;
+  LifeList: undefined;
+  MaverickIdentifications: undefined;
+  WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
+  CropLogViewer: undefined;
+  NetworkLog: undefined;
+  DevicePhotoCleanup: undefined;
+  LocationHistory: undefined;
+  LocationHistoryPointsMap: undefined;
+  LocationHistoryDetailMap: {
+    uuid: string;
+    observationLat: number;
+    observationLng: number;
+    trackedLat: number;
+    trackedLng: number;
+    observationDate: string;
+    distanceMeters: number | null;
+  };
   Debug: undefined;
   UILibrary: undefined;
   UiLibraryItem: undefined;

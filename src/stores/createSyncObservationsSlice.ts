@@ -93,6 +93,7 @@ const createSyncObservationsSlice: StateCreator<SyncObservationsSlice> = ( set, 
       currentDeleteCount: 1,
       deleteError: null,
       deleteQueue: [],
+      initialNumDeletionsInQueue: 0,
       syncingStatus: SYNC_PENDING,
     } );
   },

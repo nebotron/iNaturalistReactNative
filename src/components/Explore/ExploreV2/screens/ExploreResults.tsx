@@ -4,8 +4,6 @@ import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2Tabs
   from "components/Explore/ExploreV2/components/ExploreV2Tabs";
-import ExploreV2DebugSheet
-  from "components/Explore/ExploreV2/ExploreV2DebugSheet";
 import buildExploreV2QueryParams
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import ExploreV2SpeciesView
@@ -152,7 +150,6 @@ const ExploreResults = ( ) => {
                     params={speciesCountParams}
                   />
                 )}
-              <ExploreV2DebugSheet />
               {state.activeTab === OBSERVATIONS_TAB && ( // todo sort btn on species in MOB-1334
                 <SortButton
                   onPress={() => setShowSortSheet( true )}

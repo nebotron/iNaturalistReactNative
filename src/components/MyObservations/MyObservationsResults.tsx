@@ -16,7 +16,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Alert } from "react-native";
 import Observation from "realmModels/Observation";
 import Taxon from "realmModels/Taxon";
 import type { RealmObservation } from "realmModels/types";
@@ -35,7 +34,6 @@ import {
   useNavigateToObsEdit,
   useObservationsUpdates,
   useStoredLayout,
-  useTranslation,
 } from "sharedHooks";
 import useLocalObservationIds from "sharedHooks/useLocalObservationIds";
 import useObservationCounts from "sharedHooks/useObservationCounts";
@@ -65,7 +63,6 @@ export enum ACTIVE_SHEET {
 
 const MyObservationsResults = ( ) => {
   const { isDefaultMode, loggedInWhileInDefaultMode } = useLayoutPrefs();
-  const { t } = useTranslation( );
   const realm = useRealm( );
   const navigation = useNavigation( );
   const listRef = useRef<FlashListRef<RealmObservation>>( null );
@@ -149,14 +146,8 @@ const MyObservationsResults = ( ) => {
   };
 
   const confirmInternetConnection = useCallback( ( ) => {
-    if ( !isConnected ) {
-      Alert.alert(
-        t( "Internet-Connection-Required" ),
-        t( "Please-try-again-when-you-are-connected-to-the-internet" ),
-      );
-    }
     return isConnected;
-  }, [t, isConnected] );
+  }, [isConnected] );
 
   const confirmLoggedIn = useCallback( ( ) => {
     if ( !currentUser ) {
@@ -170,21 +161,11 @@ const MyObservationsResults = ( ) => {
     if ( !confirmInternetConnection( ) ) { return; }
 
     startManualSync( );
-    const syncOptions = isDefaultMode
-      ? {
-        skipSomeUploads: Observation
-          .filterUnsyncedObservations( realm )
-          .filter( ( obs: Observation ) => obs.missingBasics() )
-          .map( obs => obs.uuid ),
-      }
-      : { };
-    syncManually( syncOptions );
+    syncManually( {} );
   }, [
     confirmLoggedIn,
     confirmInternetConnection,
     startManualSync,
-    isDefaultMode,
-    realm,
     syncManually,
   ] );
 
