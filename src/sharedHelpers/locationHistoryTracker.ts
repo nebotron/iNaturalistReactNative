@@ -3,7 +3,7 @@ import {
   LOCATION_PERMISSIONS,
 } from "components/SharedComponents/PermissionGateContainer";
 import { t } from "i18next";
-import { Platform } from "react-native";
+import { NativeModules, Platform } from "react-native";
 import BackgroundService from "react-native-background-actions";
 import { useMMKVBoolean } from "react-native-mmkv";
 import {
@@ -69,6 +69,26 @@ const DEFAULT_GEOLOCATION_CONFIG = {
   enableBackgroundLocationUpdates: true,
 } as const;
 
+// iOS-only native significant-location-change monitor. It runs its own
+// CLLocationManager alongside the continuous watch so iOS relaunches the app
+// after terminating it in the background - a standard-location watch can't do
+// that, which is the cause of the multi-hour gaps in the tracked history. Fixes
+// it captures while JS is down are buffered natively and drained on startup.
+interface LocationRelaunchModule {
+  start: ( ) => void;
+  stop: ( ) => void;
+  drainPendingLocations: ( ) => Promise<Array<{
+    latitude: number;
+    longitude: number;
+    accuracy: number | null;
+    timestamp: number;
+  }>>;
+}
+
+const locationRelaunch = ( NativeModules as {
+  LocationRelaunch?: LocationRelaunchModule;
+} ).LocationRelaunch;
+
 let watchIds: number[] = [];
 let realmInstance: Realm | null = null;
 
@@ -91,35 +111,59 @@ const getRealmInstance = async ( ): Promise<Realm> => {
   return realmInstance;
 };
 
+// Store every fix a watch delivers. We intentionally don't thin points at
+// capture time - keeping the full history lets the interpolation phase pick the
+// most accurate fixes for a given moment (see interpolateTrackedLocation).
 // `source` labels which watch delivered the fix (continuous vs
 // significant-changes vs the Android background service) so the logs show
 // whether and how the OS is actually waking the app in the background.
-const recordPosition = ( source: string ) => async ( position: {
-  coords: { latitude: number; longitude: number; accuracy: number | null };
+const recordFix = async ( source: string, fix: {
+  latitude: number;
+  longitude: number;
+  accuracy: number | null;
+  recordedAt: Date;
 } ) => {
-  const { latitude, longitude, accuracy } = position.coords;
-  const now = Date.now();
-
-  // Store every fix the watch delivers. We intentionally don't thin points at
-  // capture time - keeping the full history lets the interpolation phase pick
-  // the most accurate fixes for a given moment (see interpolateTrackedLocation).
-
   try {
     const realm = await getRealmInstance();
     safeRealmWrite( realm, ( ) => {
       realm.create(
         "LocationHistoryPoint",
-        LocationHistoryPoint.mapPositionToRealm( {
-          latitude,
-          longitude,
-          accuracy,
-          recordedAt: new Date( now ),
-        } ),
+        LocationHistoryPoint.mapPositionToRealm( fix ),
       );
     }, "recording location history point" );
-    breadcrumbLogger.info( `Recorded location fix from ${source} (accuracy ${accuracy})` );
+    breadcrumbLogger.info( `Recorded location fix from ${source} (accuracy ${fix.accuracy})` );
   } catch ( error ) {
     logger.error( "Failed to save location history point", error );
+  }
+};
+
+const recordPosition = ( source: string ) => async ( position: {
+  coords: { latitude: number; longitude: number; accuracy: number | null };
+} ) => {
+  const { latitude, longitude, accuracy } = position.coords;
+  await recordFix( source, {
+    latitude, longitude, accuracy, recordedAt: new Date(),
+  } );
+};
+
+// Drain any significant-change fixes the native monitor buffered while JS was
+// down (e.g. after iOS terminated and later relaunched the app) and store them
+// with their original timestamps so the gap gets backfilled.
+const recordPendingSignificantChanges = async ( ) => {
+  if ( !locationRelaunch?.drainPendingLocations ) return;
+  try {
+    const pending = await locationRelaunch.drainPendingLocations();
+    for ( const fix of pending ) {
+      // eslint-disable-next-line no-await-in-loop
+      await recordFix( "ios-significant", {
+        latitude: fix.latitude,
+        longitude: fix.longitude,
+        accuracy: fix.accuracy,
+        recordedAt: new Date( fix.timestamp ),
+      } );
+    }
+  } catch ( error ) {
+    logger.warn( "Failed to drain pending significant-change locations", error );
   }
 };
 
@@ -227,6 +271,12 @@ export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResu
       );
       watchIds = [continuousWatchId];
       Geolocation.setRNConfiguration( DEFAULT_GEOLOCATION_CONFIG );
+
+      // Keep significant-change monitoring running so iOS relaunches us after
+      // terminating the app in the background, then backfill anything it
+      // buffered while JS was down.
+      locationRelaunch?.start();
+      await recordPendingSignificantChanges();
     }
     store.set( TRACKING_ENABLED_KEY, true );
     return { success: true };
@@ -242,6 +292,7 @@ export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResu
 export const stopLocationHistoryTracking = async ( ) => {
   watchIds.forEach( clearWatch );
   watchIds = [];
+  locationRelaunch?.stop();
   if ( BackgroundService.isRunning( ) ) {
     try {
       await BackgroundService.stop( );
