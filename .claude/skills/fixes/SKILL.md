@@ -25,7 +25,12 @@ Diff with `git diff <merge-base>..HEAD` and judge changes on the net diff,
 not on individual commit messages (the fork often breaks something and then
 fixes it within its own history, which nets to zero against the base).
 
-Make a numbered list of changes in that diff which are pure bug-fixes for bugs
-or performance issues on iNaturalist/main, and do not add any completely new
-functionality. Fixes to the fork's own new features do not count — only fixes
-to behavior that already exists on iNaturalist/main.
+Find changes in that diff which are pure bug-fixes for bugs or performance
+issues in features that already exist in the original app (iNaturalist/main),
+and which do not add any completely new functionality. Only fixes to
+pre-existing behavior qualify — a fix to a feature the fork itself added does
+NOT count, even if the fix is otherwise clean.
+
+Output only a numbered list of the candidate fixes. Do not mention, list, or
+explain candidates you considered and rejected, and do not add commentary
+before or after the list.
