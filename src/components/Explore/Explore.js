@@ -259,6 +259,7 @@ const Explore = ( {
 
     return (
       <RadioButtonSheet
+        immediate
         onPressClose={() => setShowExploreBottomSheet( false )}
         headerText={t( "EXPLORE" )}
         hidden={!showExploreBottomSheet}
