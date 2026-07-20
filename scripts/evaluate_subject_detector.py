@@ -449,6 +449,11 @@ def resolve_image(key: str, photos_dir: Optional[Path], cache_dir: Path) -> Opti
         photo_id = re.search(r"/photos/(\d+)/", orig_url)
         name = (photo_id.group(1) if photo_id
                 else re.sub(r"[^a-zA-Z0-9]", "_", orig_url)) + ".jpg"
+        # Guard against junk entries (e.g. a bogus non-numeric photo id) whose
+        # sanitized filename overflows the OS 255-char limit and would crash
+        # every caller with "File name too long".
+        if len(name) > 200:
+            return None
         dest = cache_dir / name
         if dest.is_file():
             return str(dest)
