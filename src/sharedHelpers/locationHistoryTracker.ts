@@ -7,6 +7,7 @@ import { NativeModules, Platform } from "react-native";
 import BackgroundService from "react-native-background-actions";
 import { useMMKVBoolean } from "react-native-mmkv";
 import {
+  checkMultiple,
   PERMISSIONS,
   requestMultiple,
   RESULTS,
@@ -217,8 +218,26 @@ const describePermissionResults = ( results: Record<string, string> ): string =>
     .join( ", " )
 );
 
-const requestLocationHistoryTrackingPermissions = async ( ): Promise<StartTrackingResult> => {
-  const foregroundResult = await requestMultiple( LOCATION_PERMISSIONS );
+// When resuming, we only *check* permissions rather than request them. Resume
+// runs on every launch, including the background relaunches iOS triggers via
+// the significant-change monitor - and a permission *request* can't present UI
+// in the background, so `requestMultiple` never resolves as granted there. That
+// would leave the continuous watch dead after the first background termination,
+// so only the sparse significant-change fixes get recorded: large gaps in the
+// history even while the user is actively moving. Permissions were already
+// granted when the user first enabled tracking, so a non-blocking check is all
+// the resume path needs.
+const resolvePermissions = ( mode: "request" | "check" ) => (
+  mode === "request"
+    ? requestMultiple
+    : checkMultiple
+);
+
+const ensureLocationHistoryTrackingPermissions = async (
+  mode: "request" | "check",
+): Promise<StartTrackingResult> => {
+  const resolve = resolvePermissions( mode );
+  const foregroundResult = await resolve( LOCATION_PERMISSIONS );
   const foregroundGranted = Object.values( foregroundResult )
     .every( result => result === RESULTS.GRANTED );
   if ( !foregroundGranted ) {
@@ -227,7 +246,7 @@ const requestLocationHistoryTrackingPermissions = async ( ): Promise<StartTracki
 
   if ( BACKGROUND_LOCATION_PERMISSIONS.length === 0 ) return { success: true };
 
-  const backgroundResult = await requestMultiple( BACKGROUND_LOCATION_PERMISSIONS );
+  const backgroundResult = await resolve( BACKGROUND_LOCATION_PERMISSIONS );
   const backgroundGranted = Object.values( backgroundResult )
     .every( result => result === RESULTS.GRANTED );
   if ( !backgroundGranted ) {
@@ -236,9 +255,15 @@ const requestLocationHistoryTrackingPermissions = async ( ): Promise<StartTracki
   return { success: true };
 };
 
-export const startLocationHistoryTracking = async ( ): Promise<StartTrackingResult> => {
+export const startLocationHistoryTracking = async (
+  { requestPermissions = true }: { requestPermissions?: boolean } = {},
+): Promise<StartTrackingResult> => {
   try {
-    const permissionResult = await requestLocationHistoryTrackingPermissions();
+    const permissionResult = await ensureLocationHistoryTrackingPermissions(
+      requestPermissions
+        ? "request"
+        : "check",
+    );
     if ( !permissionResult.success ) {
       logger.warn( "Location history tracking permissions not granted", permissionResult.reason );
       return permissionResult;
@@ -306,6 +331,9 @@ export const stopLocationHistoryTracking = async ( ) => {
 // Resumes tracking on app launch if the user had previously enabled it
 export const resumeLocationHistoryTrackingIfEnabled = async ( ) => {
   if ( isLocationHistoryTrackingEnabled( ) ) {
-    await startLocationHistoryTracking( );
+    // Resume can run in the background (iOS significant-change relaunch), where
+    // permissions can only be checked, not requested. See
+    // ensureLocationHistoryTrackingPermissions.
+    await startLocationHistoryTracking( { requestPermissions: false } );
   }
 };
