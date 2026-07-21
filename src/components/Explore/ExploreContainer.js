@@ -36,7 +36,9 @@ const ExploreContainerWithContext = ( ): Node => {
 
   const currentUser = useCurrentUser();
 
-  const { state, dispatch, makeSnapshot } = useExplore();
+  const {
+    state, dispatch, makeSnapshot, defaultExploreLocation,
+  } = useExplore();
 
   const [showFiltersModal, setShowFiltersModal] = useState( false );
 
@@ -48,12 +50,18 @@ const ExploreContainerWithContext = ( ): Node => {
 
   useParams( );
 
-  const updateLocation = ( place: Object ) => {
+  const updateLocation = async ( place: Object ) => {
     if ( place === "worldwide" ) {
       dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_WORLDWIDE } );
       dispatch( {
         type: EXPLORE_ACTION.SET_PLACE,
         placeId: null,
+      } );
+    } else if ( place === "nearby" ) {
+      const exploreLocation = await defaultExploreLocation( );
+      dispatch( {
+        type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
+        exploreLocation,
       } );
     } else {
       navigation.setParams( { place } );
@@ -150,7 +158,10 @@ const ExploreContainerWithContext = ( ): Node => {
         openFiltersModal={openFiltersModal}
         queryParams={queryParams}
         showFiltersModal={showFiltersModal}
-        updateTaxon={taxon => dispatch( { type: EXPLORE_ACTION.CHANGE_TAXON, taxon } )}
+        updateTaxonFilters={taxonFilters => dispatch( {
+          type: EXPLORE_ACTION.SET_TAXON_FILTERS,
+          taxonFilters,
+        } )}
         updateLocation={updateLocation}
         updateUser={updateUser}
         updateProject={updateProject}

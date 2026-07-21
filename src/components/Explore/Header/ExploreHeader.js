@@ -7,7 +7,6 @@ import NumberBadge from "components/Explore/NumberBadge";
 import {
   BackButton,
   Body3,
-  DisplayTaxon,
   INatIcon,
   INatIconButton,
 } from "components/SharedComponents";
@@ -17,6 +16,7 @@ import type { Node } from "react";
 import React, { useState } from "react";
 import { Surface } from "react-native-paper";
 import { useTranslation } from "sharedHooks";
+
 import colors from "styles/tailwindColors";
 
 import placeGuessText from "../helpers/placeGuessText";
@@ -26,51 +26,74 @@ type Props = {
   count: ?number,
   exploreView: string,
   exploreViewIcon: string,
+  exploreViewLabel: string,
   hasLocationPermissions?: boolean,
   hideBackButton: boolean,
   isFetchingHeaderCount: boolean,
+  onPressChangeView: Function,
   onPressCount?: Function,
   openFiltersModal: Function,
   renderLocationPermissionsGate: Function,
   requestLocationPermissions: Function,
   updateLocation: Function,
-  updateTaxon: Function
+  updateTaxonFilters: Function
 }
 
 const Header = ( {
   count,
   exploreView,
   exploreViewIcon,
+  exploreViewLabel,
   hasLocationPermissions,
   hideBackButton,
   isFetchingHeaderCount,
+  onPressChangeView,
   onPressCount,
   openFiltersModal,
   renderLocationPermissionsGate,
   requestLocationPermissions,
   updateLocation,
-  updateTaxon,
+  updateTaxonFilters,
 }: Props ): Node => {
   const { t } = useTranslation( );
   const { state, numberOfFilters } = useExplore( );
-  const { taxon } = state;
+  const { taxonFilters } = state;
   const iconicTaxonNames = state.iconic_taxa || [];
+  const hasUnknownIconicTaxon = iconicTaxonNames.indexOf( "unknown" ) >= 0;
+  const taxonFilterCount = ( taxonFilters || [] ).length;
+  const showMultipleTaxa = hasUnknownIconicTaxon
+    ? taxonFilterCount > 0
+    : taxonFilterCount > 1;
+  const singleTaxonFilter = taxonFilterCount === 1
+    ? taxonFilters[0]
+    : null;
   const [showTaxonSearch, setShowTaxonSearch] = useState( false );
   const [showLocationSearch, setShowLocationSearch] = useState( false );
 
   const placeGuess = placeGuessText( state.placeMode, t, state.place_guess );
 
+  const taxonFilterText = ( ) => {
+    if ( showMultipleTaxa ) return t( "X-taxa", { count: taxonFilterCount } );
+    if ( hasUnknownIconicTaxon || !singleTaxonFilter ) {
+      return singleTaxonFilter
+        ? t( "Unknown--taxon" )
+        : t( "All-organisms" );
+    }
+    return singleTaxonFilter.taxon?.preferred_common_name
+      || singleTaxonFilter.taxon?.name;
+  };
+
   const surfaceStyle = {
     backgroundColor: colors.darkGray,
     borderBottomLeftRadius: 20,
     borderBottomRightRadius: 20,
-    marginBottom: -40,
+    marginBottom: -32,
   };
 
   return (
     <View className="z-10">
       <Surface style={surfaceStyle} elevation={5}>
-        <View className="bg-white px-6 py-4 flex-row justify-between items-center">
+        <View className="bg-white px-4 py-1 flex-row justify-between items-center">
           <View className="flex-1 flex-row">
             {!hideBackButton && (
               <BackButton
@@ -78,61 +101,66 @@ const Header = ( {
                 testID="Explore.BackButton"
               />
             ) }
-            <View className="flex-1">
-              {( taxon || iconicTaxonNames.indexOf( "unknown" ) >= 0 )
-                ? (
-                  <DisplayTaxon
-                    accessibilityLabel={t( "Change-taxon-filter" )}
-                    taxon={taxon || "unknown"}
-                    showInfoButton={false}
-                    showCheckmark={false}
-                    handlePress={() => setShowTaxonSearch( true )}
-                  />
-                )
-                : (
-                  <Pressable
-                    accessibilityRole="button"
-                    className="flex-row items-center"
-                    onPress={() => setShowTaxonSearch( true )}
-                  >
-                    <INatIcon name="label-outline" size={15} />
-                    <Body3
-                      maxFontSizeMultiplier={1.5}
-                      className="ml-3"
-                    >
-                      {t( "All-organisms" )}
-                    </Body3>
-                  </Pressable>
-                )}
+            <View className="flex-1 flex-row justify-between">
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t( "Change-taxon-filter" )}
+                className="flex-1 flex-row items-center"
+                onPress={() => setShowTaxonSearch( true )}
+              >
+                <INatIcon name="label-outline" size={15} />
+                <Body3
+                  maxFontSizeMultiplier={1.5}
+                  className="ml-2 shrink"
+                  numberOfLines={1}
+                >
+                  {taxonFilterText( )}
+                </Body3>
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 onPress={( ) => setShowLocationSearch( true )}
-                className="flex-row items-center pt-3"
+                className="flex-1 flex-row items-center ml-2"
               >
                 <INatIcon name="location" size={15} />
-                <Body3 maxFontSizeMultiplier={1.5} className="ml-3">{placeGuess}</Body3>
+                <Body3
+                  maxFontSizeMultiplier={1.5}
+                  className="ml-2 shrink"
+                  numberOfLines={1}
+                >
+                  {placeGuess}
+                </Body3>
               </Pressable>
             </View>
           </View>
-          <View>
+          <View className="flex-row items-center">
             <INatIconButton
-              icon="sliders"
+              icon={exploreViewIcon}
               color={colors.white}
-              className={classNames(
-                numberOfFilters !== 0
-                  ? "bg-inatGreen"
-                  : "bg-darkGray",
-                "rounded-md",
-              )}
-              onPress={() => openFiltersModal()}
-              accessibilityLabel={t( "Filters" )}
-              accessibilityHint={t( "Navigates-to-explore" )}
+              className="bg-darkGray rounded-md mr-2"
+              onPress={onPressChangeView}
+              accessibilityLabel={exploreViewLabel}
             />
-            {numberOfFilters !== 0 && (
-              <View className="absolute top-[-10] right-[-10]">
-                <NumberBadge number={numberOfFilters} light />
-              </View>
-            )}
+            <View>
+              <INatIconButton
+                icon="sliders"
+                color={colors.white}
+                className={classNames(
+                  numberOfFilters !== 0
+                    ? "bg-inatGreen"
+                    : "bg-darkGray",
+                  "rounded-md",
+                )}
+                onPress={() => openFiltersModal()}
+                accessibilityLabel={t( "Filters" )}
+                accessibilityHint={t( "Navigates-to-explore" )}
+              />
+              {numberOfFilters !== 0 && (
+                <View className="absolute top-[-10] right-[-10]">
+                  <NumberBadge number={numberOfFilters} light />
+                </View>
+              )}
+            </View>
           </View>
         </View>
         <ExploreHeaderCount
@@ -146,7 +174,8 @@ const Header = ( {
       <ExploreTaxonSearchModal
         showModal={showTaxonSearch}
         closeModal={() => { setShowTaxonSearch( false ); }}
-        updateTaxon={updateTaxon}
+        taxonFilters={taxonFilters || []}
+        updateTaxonFilters={updateTaxonFilters}
       />
       <ExploreLocationSearchModal
         closeModal={() => { setShowLocationSearch( false ); }}
