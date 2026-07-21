@@ -1,6 +1,7 @@
 import {
   getRelativeDateOffsets,
   hasSavedExploreFilterName,
+  isSavedExploreFilterActive,
   prepareExploreStateForStorage,
   resolveRelativeDates,
   sortSavedExploreFilters,
@@ -70,6 +71,43 @@ describe( "savedExploreFilters helpers", ( ) => {
 
     expect( offsets.relativeD1 ).toBe( -7 );
     expect( offsets.relativeD2 ).toBe( 0 );
+  } );
+
+  it( "matches the active filter after JSON persistence drops undefined keys", ( ) => {
+    const currentParams = prepareExploreStateForStorage( {
+      ...initialExploreState,
+      needsID: true,
+    } );
+
+    // Simulate the persistence round-trip: JSON.stringify drops undefined keys,
+    // so the rehydrated params has a different key set than the live state.
+    const persistedFilter = {
+      id: "1",
+      name: "Needs ID",
+      createdAt: 1,
+      params: JSON.parse( JSON.stringify( currentParams ) ),
+    };
+
+    expect( isSavedExploreFilterActive( currentParams, persistedFilter ) ).toBe( true );
+  } );
+
+  it( "does not match when the current filter differs from a saved filter", ( ) => {
+    const savedParams = prepareExploreStateForStorage( {
+      ...initialExploreState,
+      needsID: true,
+    } );
+    const persistedFilter = {
+      id: "1",
+      name: "Needs ID",
+      createdAt: 1,
+      params: JSON.parse( JSON.stringify( savedParams ) ),
+    };
+    const currentParams = prepareExploreStateForStorage( {
+      ...initialExploreState,
+      needsID: false,
+    } );
+
+    expect( isSavedExploreFilterActive( currentParams, persistedFilter ) ).toBe( false );
   } );
 
   it( "resolveRelativeDates round-trips correctly (no timezone drift)", ( ) => {
