@@ -198,9 +198,15 @@ export interface ApiComment {
 
 export interface ApiIdentification {
   body?: string;
+  category?: "improving" | "supporting" | "leading" | "maverick";
+  created_at?: string;
+  current?: boolean;
+  hidden?: boolean;
+  id?: number;
+  observation?: { uuid?: string };
   taxon?: ApiTaxon;
   user?: ApiUser;
-  hidden?: boolean;
+  uuid?: string;
 }
 
 export interface ApiNotification {
@@ -286,6 +292,8 @@ export interface ApiObservationsSearchParams extends ApiParams {
   created_d2?: string;
   d1?: string;
   d2?: string;
+  hour?: number[];
+  id_above?: number;
   id_below?: number;
   order?: typeof ORDER_ASC | typeof ORDER_DESC;
   order_by?: typeof ORDER_BY_CREATED_AT |

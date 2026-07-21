@@ -23,7 +23,7 @@ const TaxonSearchButton = ( ) => {
             entryScreen,
             lastScreen: lastScreen === "ObsDetails"
               ? "ObsDetails"
-              : "Suggestions",
+              : "ObsEdit",
           },
         )
       }

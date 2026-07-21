@@ -18,6 +18,7 @@ describe( "Match", ( ) => {
     observation: factory( "LocalObservation" ),
     obsPhotos: [factory( "LocalObservationPhoto" )],
     onSuggestionChosen: jest.fn(),
+    onIconicTaxonChosen: jest.fn(),
     handleSaveOrDiscardPress: jest.fn(),
     navToTaxonDetails: jest.fn(),
     handleAddLocationPressed: jest.fn(),

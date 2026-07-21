@@ -4,34 +4,23 @@ import React from "react";
 import { useTranslation } from "sharedHooks";
 
 import SuggestionsLoading from "./SuggestionsLoading";
-import SuggestionsOffline from "./SuggestionsOffline";
 
 interface Props {
   hasTopSuggestion?: boolean;
   isLoading: boolean;
   onTaxonChosen: ( ) => void;
-  reloadSuggestions: ( ) => void;
-  urlWillCrashOffline: boolean;
 }
 
 const SuggestionsEmpty = ( {
   hasTopSuggestion = false,
   isLoading,
   onTaxonChosen,
-  reloadSuggestions,
-  urlWillCrashOffline,
 }: Props ) => {
   const { t } = useTranslation( );
   const { params } = useRoute( );
   const { lastScreen } = params;
 
   const textClass = "mt-10 px-10 text-center";
-
-  if ( urlWillCrashOffline ) {
-    return (
-      <SuggestionsOffline reloadSuggestions={reloadSuggestions} />
-    );
-  }
 
   if ( isLoading ) {
     return (
