@@ -46,12 +46,23 @@ import {
   WILD_STATUS,
 } from "providers/ExploreContext";
 import React, { useState } from "react";
+import { formatObsFieldDate } from "sharedHelpers/dateAndTime";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
 import placeGuessText from "../helpers/placeGuessText";
 import ExploreTaxonSearchModal from "./ExploreTaxonSearchModal";
+
+// Parse a "YYYY-MM-DD" string as a local date (midnight local time). Using
+// `new Date( "YYYY-MM-DD" )` would parse it as UTC and then display it in the
+// local time zone, shifting the picker's initial date by a day for users
+// behind UTC. Pairs with formatObsFieldDate, which writes local date parts.
+const parseLocalDate = ( dateStr?: string ): Date => {
+  if ( !dateStr ) return new Date( );
+  const [year, month, day] = dateStr.split( "-" ).map( Number );
+  return new Date( year, month - 1, day );
+};
 
 const DROP_SHADOW = getShadow( {
   offsetHeight: 4,
@@ -565,14 +576,14 @@ const FilterModalV2 = ( {
   const updateObservedExact = date => {
     updateDateObserved( {
       newDateObserved: DATE_OBSERVED.EXACT_DATE,
-      newObservedOn: date.toISOString().split( "T" )[0],
+      newObservedOn: formatObsFieldDate( date ),
     } );
   };
 
   const updateObservedStart = date => {
     updateDateObserved( {
       newDateObserved: DATE_OBSERVED.DATE_RANGE,
-      newD1: date.toISOString().split( "T" )[0],
+      newD1: formatObsFieldDate( date ),
       newD2: d2,
     } );
   };
@@ -581,7 +592,7 @@ const FilterModalV2 = ( {
     updateDateObserved( {
       newDateObserved: DATE_OBSERVED.DATE_RANGE,
       newD1: d1,
-      newD2: date.toISOString().split( "T" )[0],
+      newD2: formatObsFieldDate( date ),
     } );
   };
 
@@ -618,7 +629,7 @@ const FilterModalV2 = ( {
   const updateUploadedStart = date => {
     updateDateUploaded( {
       newDateUploaded: DATE_UPLOADED.DATE_RANGE,
-      newD1: date.toISOString().split( "T" )[0],
+      newD1: formatObsFieldDate( date ),
       newD2: createdD2,
     } );
   };
@@ -627,7 +638,7 @@ const FilterModalV2 = ( {
     updateDateUploaded( {
       newDateUploaded: DATE_UPLOADED.DATE_RANGE,
       newD1: createdD1,
-      newD2: date.toISOString().split( "T" )[0],
+      newD2: formatObsFieldDate( date ),
     } );
   };
 
@@ -924,7 +935,7 @@ const FilterModalV2 = ( {
                   accessibilityLabel={t( "Change-date" )}
                 />
                 <DateTimePicker
-                  date={observedOn ? new Date( observedOn ) : new Date( )}
+                  date={parseLocalDate( observedOn )}
                   isDateTimePickerVisible={openSheet === OBSERVED_EXACT}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedExact( date )}
@@ -973,13 +984,13 @@ const FilterModalV2 = ( {
                   </View>
                 )}
                 <DateTimePicker
-                  date={d1 ? new Date( d1 ) : new Date( )}
+                  date={parseLocalDate( d1 )}
                   isDateTimePickerVisible={openSheet === OBSERVED_START}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedStart( date )}
                 />
                 <DateTimePicker
-                  date={d2 ? new Date( d2 ) : new Date( )}
+                  date={parseLocalDate( d2 )}
                   isDateTimePickerVisible={openSheet === OBSERVED_END}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedEnd( date )}
@@ -1023,12 +1034,12 @@ const FilterModalV2 = ( {
                   accessibilityLabel={t( "Change-date" )}
                 />
                 <DateTimePicker
-                  date={createdOn ? new Date( createdOn ) : new Date( )}
+                  date={parseLocalDate( createdOn )}
                   isDateTimePickerVisible={openSheet === UPLOADED_EXACT}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateDateUploaded( {
                     newDateUploaded: DATE_UPLOADED.EXACT_DATE,
-                    newD1: date.toISOString().split( "T" )[0],
+                    newD1: formatObsFieldDate( date ),
                   } )}
                 />
               </View>
@@ -1075,13 +1086,13 @@ const FilterModalV2 = ( {
                   </View>
                 )}
                 <DateTimePicker
-                  date={createdD1 ? new Date( createdD1 ) : new Date( )}
+                  date={parseLocalDate( createdD1 )}
                   isDateTimePickerVisible={openSheet === UPLOADED_START}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateUploadedStart( date )}
                 />
                 <DateTimePicker
-                  date={createdD2 ? new Date( createdD2 ) : new Date( )}
+                  date={parseLocalDate( createdD2 )}
                   isDateTimePickerVisible={openSheet === UPLOADED_END}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateUploadedEnd( date )}
