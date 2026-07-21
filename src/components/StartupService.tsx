@@ -9,6 +9,7 @@ import DeviceInfo from "react-native-device-info";
 import Orientation from "react-native-orientation-locker";
 import Realm from "realm";
 import { IS_FRESH_INSTALL, store } from "sharedHelpers/installData";
+import { resumeLocationHistoryTrackingIfEnabled } from "sharedHelpers/locationHistoryTracker";
 import { log } from "sharedHelpers/logger";
 import { addARCameraFiles } from "sharedHelpers/mlModel";
 
@@ -78,6 +79,8 @@ const StartupService = ( ) => {
         // skipping location permissions here since we're manually showing
         // permission gates and don't want to pop up the native notification
         Geolocation.setRNConfiguration( geolocationConfig );
+
+        await resumeLocationHistoryTrackingIfEnabled( );
 
         if ( !isTablet ) {
           Orientation.lockToPortrait( );
