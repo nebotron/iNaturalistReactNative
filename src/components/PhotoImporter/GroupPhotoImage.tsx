@@ -6,6 +6,7 @@ import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import type { ViewStyle } from "react-native";
 import { PixelRatio } from "react-native";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
@@ -13,6 +14,7 @@ import colors from "styles/tailwindColors";
 interface PhotoItem {
   image: {
     uri: string;
+    crop?: NormalizedCrop;
   };
   isDuplicateUpload?: boolean;
 }
@@ -44,13 +46,23 @@ const GroupPhotoImage = ( {
   const hasDuplicateUpload = item.photos?.some( photo => photo.isDuplicateUpload );
 
   // Render a small cached thumbnail rather than decoding the full-resolution
-  // original (ph:// asset or file:// crop) into every cell, which janks
-  // scrolling. Sized to the grid cell so it stays crisp.
+  // original into every cell, which janks scrolling. Sized to the grid cell so
+  // it stays crisp.
   const cellWidth = typeof style?.width === "number"
     ? style.width
     : 0;
   const thumbMaxPixel = PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
-  const displayUri = useDeviceImageThumbnail( firstPhoto?.image.uri, thumbMaxPixel );
+  const thumbnailUri = useDeviceImageThumbnail( firstPhoto?.image.uri, thumbMaxPixel );
+
+  // A cropped photo must always show its crop, so fall back to the cropped
+  // file (image.uri already points at the baked crop) until the thumbnail is
+  // ready rather than flashing a placeholder. Large uncropped originals keep
+  // waiting on the thumbnail so scrolling doesn't decode them full-resolution.
+  const hasCrop = Boolean( firstPhoto?.image.crop );
+  const displayUri = thumbnailUri
+    ?? ( hasCrop
+      ? firstPhoto?.image.uri
+      : undefined );
 
   if ( item.soundUri ) {
     return (
