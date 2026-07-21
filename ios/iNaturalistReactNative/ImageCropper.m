@@ -728,6 +728,66 @@ RCT_EXPORT_METHOD( detectSubjectBounds
   resolve( bounds ?: [NSNull null] );
 }
 
+// Writes a downscaled JPEG thumbnail (maxPixel px on the longest side) of a
+// device photo to outputPath, so a photo grid can scroll without decoding
+// full-resolution originals into every cell. ph:// PHAssets go through
+// PHImageManager, which serves fast pre-rendered thumbnails rather than the
+// full-resolution original; file:// paths use ImageIO subsampling. Resolves a
+// file:// uri, or rejects on failure.
+RCT_EXPORT_METHOD( createThumbnail
+                  : ( NSString * )inputPath maxPixel
+                  : ( nonnull NSNumber * )maxPixel outputPath
+                  : ( NSString * )outputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  CGFloat   maxDim = [maxPixel floatValue];
+
+  void (^writeThumbnail)( UIImage * ) = ^( UIImage *image ) {
+    if ( !image ) { reject( @"THUMBNAIL_FAILED", @"Could not load image", nil ); return; }
+    NSData *data = UIImageJPEGRepresentation( image, 0.8 );
+    if ( !data ) { reject( @"THUMBNAIL_FAILED", @"Could not encode thumbnail", nil ); return; }
+    [[NSFileManager defaultManager]
+      createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+      withIntermediateDirectories:YES attributes:nil error:nil];
+    if ( ![data writeToFile:output atomically:YES] ) {
+      reject( @"THUMBNAIL_FAILED", @"Could not write thumbnail", nil ); return;
+    }
+    resolve( [NSString stringWithFormat:@"file://%@", output] );
+  };
+
+  if ( [inputPath hasPrefix:@"ph://"] ) {
+    NSString *localId = [inputPath substringFromIndex:5];
+    PHAsset *asset =
+      [PHAsset fetchAssetsWithLocalIdentifiers:@[localId] options:nil].firstObject;
+    if ( !asset ) { reject( @"THUMBNAIL_FAILED", @"PHAsset not found", nil ); return; }
+
+    PHImageRequestOptions *opts = [[PHImageRequestOptions alloc] init];
+    opts.networkAccessAllowed = YES;
+    opts.deliveryMode         = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    opts.resizeMode           = PHImageRequestOptionsResizeModeFast;
+
+    __block BOOL handled = NO;
+    [[PHImageManager defaultManager]
+      requestImageForAsset:asset
+      targetSize:CGSizeMake( maxDim, maxDim )
+      contentMode:PHImageContentModeAspectFill
+      options:opts
+      resultHandler:^( UIImage *result, NSDictionary *info ) {
+        // HighQualityFormat delivers a single result, but guard against any
+        // extra (degraded) callback so resolve/reject only ever fire once.
+        if ( handled || [info[PHImageResultIsDegradedKey] boolValue] ) return;
+        handled = YES;
+        writeThumbnail( result );
+      }];
+    return;
+  }
+
+  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  writeThumbnail( downscaledImageAtPath( input, maxDim ) );
+}
+
 // cropX/cropY/cropW/cropH are normalized [0,1] coords of the subject region;
 // pass null for all four to measure the full image.
 RCT_EXPORT_METHOD( measureImageBrightness

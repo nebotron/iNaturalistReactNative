@@ -22,3 +22,5 @@ export const videoLibraryPath = `${DocumentDirectoryPath}/videoLibrary`;
 export const cropSourcesPath = `${CachesDirectoryPath}/inatCropSources`;
 
 export const brightnessAdjustedPath = `${CachesDirectoryPath}/inatBrightnessAdjusted`;
+
+export const deviceThumbnailsPath = `${CachesDirectoryPath}/inatDeviceThumbnails`;
