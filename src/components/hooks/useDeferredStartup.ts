@@ -16,6 +16,7 @@ import User from "realmModels/User";
 import {
   clearComputerVisionPhotos,
   clearExpiredCropSources,
+  clearExpiredDeviceThumbnails,
   clearGalleryPhotos,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,
@@ -102,6 +103,7 @@ const useDeferredStartup = ( ) => {
     const id7 = deferTask( "clearSyncedMediaForUpload", () => clearSyncedMediaForUpload( realm ) );
     const id8 = deferTask( "clearRollbackPhotos", clearRollbackPhotos );
     const id11 = deferTask( "clearExpiredCropSources", clearExpiredCropSources );
+    const id13 = deferTask( "clearExpiredDeviceThumbnails", clearExpiredDeviceThumbnails );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
     const id10 = deferTask( "warmIntlCache", () => {
@@ -132,6 +134,7 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id10 );
       cancelIdleCallback( id11 );
       cancelIdleCallback( id12 );
+      cancelIdleCallback( id13 );
     };
   }, [i18n, realm] );
 };

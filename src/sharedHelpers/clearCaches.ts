@@ -4,6 +4,7 @@ import {
 import {
   computerVisionPath,
   cropSourcesPath,
+  deviceThumbnailsPath,
   photoLibraryPhotosPath,
   photoUploadPath,
   rollbackPhotosPath,
@@ -131,10 +132,10 @@ const clearRollbackPhotos = async ( ) => {
   await removeAllFilesFromDirectory( rollbackPhotosPath );
 };
 
-const clearExpiredCropSources = async ( ) => {
-  const dirExists = await exists( cropSourcesPath );
+const clearExpiredFilesByTtl = async ( dir: string ) => {
+  const dirExists = await exists( dir );
   if ( !dirExists ) return;
-  const files = await readDir( cropSourcesPath );
+  const files = await readDir( dir );
   const now = Date.now();
   await Promise.all(
     files
@@ -143,9 +144,16 @@ const clearExpiredCropSources = async ( ) => {
   );
 };
 
+const clearExpiredCropSources = ( ) => clearExpiredFilesByTtl( cropSourcesPath );
+
+// Device-photo grid thumbnails (see useDeviceImageThumbnail) are pure display
+// cache, safe to drop once stale; they regenerate on demand.
+const clearExpiredDeviceThumbnails = ( ) => clearExpiredFilesByTtl( deviceThumbnailsPath );
+
 export {
   clearComputerVisionPhotos,
   clearExpiredCropSources,
+  clearExpiredDeviceThumbnails,
   clearGalleryPhotos,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,

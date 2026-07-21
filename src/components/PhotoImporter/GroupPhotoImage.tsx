@@ -5,6 +5,8 @@ import { INatIcon } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import type { ViewStyle } from "react-native";
+import { PixelRatio } from "react-native";
+import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
@@ -41,6 +43,15 @@ const GroupPhotoImage = ( {
   const mediaCount = item.photos?.length || 0;
   const hasDuplicateUpload = item.photos?.some( photo => photo.isDuplicateUpload );
 
+  // Render a small cached thumbnail rather than decoding the full-resolution
+  // original (ph:// asset or file:// crop) into every cell, which janks
+  // scrolling. Sized to the grid cell so it stays crisp.
+  const cellWidth = typeof style?.width === "number"
+    ? style.width
+    : 0;
+  const thumbMaxPixel = PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
+  const displayUri = useDeviceImageThumbnail( firstPhoto?.image.uri, thumbMaxPixel );
+
   if ( item.soundUri ) {
     return (
       <Pressable
@@ -58,7 +69,9 @@ const GroupPhotoImage = ( {
     );
   }
 
-  const source = firstPhoto && { uri: firstPhoto.image.uri };
+  const source = displayUri
+    ? { uri: displayUri }
+    : undefined;
 
   return (
     <Pressable
