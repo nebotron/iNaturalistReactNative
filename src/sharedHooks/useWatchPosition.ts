@@ -54,14 +54,31 @@ const useWatchPosition = ( options: {
       if ( age > MAX_POSITION_AGE_MS ) {
         return;
       }
-      setUserLocation( {
+      // Ignore fixes without a usable accuracy value. A fix with no (or a
+      // non-positive) reported accuracy can't be compared against others and
+      // shouldn't be allowed to overwrite a good fix we already have.
+      const accuracy = position?.coords?.accuracy;
+      if ( typeof accuracy !== "number" || accuracy <= 0 ) return;
+      const newLocation = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
-        positional_accuracy: position.coords.accuracy,
+        positional_accuracy: accuracy,
         altitude: position.coords.altitude,
         altitudinal_accuracy: position.coords.altitudeAccuracy,
+      };
+      // GPS accuracy fluctuates between fixes, so keep the most accurate fix
+      // we've seen this session rather than blindly overwriting with the latest
+      // one. This prevents a good fix from being replaced by a subsequent worse
+      // reading (especially when the target accuracy is never reached).
+      setUserLocation( previousLocation => {
+        if ( !previousLocation ) return newLocation;
+        const previousAccuracy = previousLocation.positional_accuracy;
+        if ( typeof previousAccuracy !== "number" ) return newLocation;
+        return accuracy < previousAccuracy
+          ? newLocation
+          : previousLocation;
       } );
-      if ( position.coords.accuracy < TARGET_POSITIONAL_ACCURACY ) {
+      if ( accuracy < TARGET_POSITIONAL_ACCURACY ) {
         stop( );
       }
     };

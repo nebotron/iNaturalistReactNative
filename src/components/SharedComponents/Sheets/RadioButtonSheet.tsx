@@ -15,6 +15,7 @@ interface Props {
   confirm: ( _checkedValue: RadioSheetPrimitive ) => void;
   confirmText?: string;
   headerText: string;
+  immediate?: boolean;
   insideModal?: boolean;
   loading?: boolean;
   onPressClose?: ( ) => void;
@@ -38,6 +39,7 @@ const RadioButtonSheet = ( {
   confirm,
   confirmText,
   headerText,
+  immediate,
   insideModal,
   loading,
   onPressClose,
@@ -60,7 +62,12 @@ const RadioButtonSheet = ( {
         value={radioValues[radioRow].value.toString( )}
         icon={radioValues[radioRow].icon}
         checked={checkedValue === radioValues[radioRow].value}
-        onPress={() => setCheckedValue( radioValues[radioRow].value )}
+        onPress={() => {
+          setCheckedValue( radioValues[radioRow].value );
+          if ( immediate ) {
+            confirm( radioValues[radioRow].value );
+          }
+        }}
         label={radioValues[radioRow].label}
         description={radioValues[radioRow].text}
         labelComponent={radioValues[radioRow].labelComponent}
@@ -84,16 +91,18 @@ const RadioButtonSheet = ( {
           {Object.keys( radioValues ).map( radioRow => radioButtonRow( radioRow ) )}
         </View>
         {bottomComponent}
-        <Button
-          level="primary"
-          onPress={( ) => {
-            confirm( checkedValue );
-          }}
-          disabled={confirmBlockedByDirtyCheck || loading}
-          loading={loading}
-          text={radioValues[checkedValue]?.buttonText ?? confirmLabel}
-          accessibilityLabel={radioValues[checkedValue]?.buttonText ?? confirmLabel}
-        />
+        {!immediate && (
+          <Button
+            level="primary"
+            onPress={( ) => {
+              confirm( checkedValue );
+            }}
+            disabled={confirmBlockedByDirtyCheck || loading}
+            loading={loading}
+            text={radioValues[checkedValue]?.buttonText ?? confirmLabel}
+            accessibilityLabel={radioValues[checkedValue]?.buttonText ?? confirmLabel}
+          />
+        )}
       </View>
     </BottomSheet>
   );

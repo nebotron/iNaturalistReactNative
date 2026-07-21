@@ -1,0 +1,21 @@
+diff --git a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
+index 0000000..1111111 100644
+--- a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
++++ b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
+@@ -187,6 +187,16 @@
+   _locationManager.distanceFilter  = distanceFilter;
+   _locationManager.desiredAccuracy = desiredAccuracy;
+   _usingSignificantChanges = useSignificantChanges;
++
++  // iNaturalist patch: pausesLocationUpdatesAutomatically defaults to YES, so
++  // iOS pauses background location updates whenever it decides the user is
++  // stationary and does not resume them on its own for a long time, which
++  // leaves long gaps in the tracked location history. Keep updates flowing
++  // continuously whenever we've opted into background updates (i.e. our
++  // location history tracker); foreground-only watches are unaffected.
++  if (_locationConfiguration.enableBackgroundLocationUpdates) {
++    _locationManager.pausesLocationUpdatesAutomatically = NO;
++  }
+
+   if (@available(iOS 14.0, *)) {
+     if (

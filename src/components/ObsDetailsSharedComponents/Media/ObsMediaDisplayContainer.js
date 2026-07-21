@@ -51,9 +51,12 @@ const ObsMediaDisplayContainer = ( {
   return (
     <ObsMediaDisplay
       loading={!observation}
+      latitude={observation?.latitude}
+      longitude={observation?.longitude}
       photos={photos}
       sounds={sounds}
       tablet={tablet}
+      timeObservedAt={observation?.time_observed_at}
     />
   );
 };

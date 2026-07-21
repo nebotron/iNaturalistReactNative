@@ -1,6 +1,7 @@
 /* eslint-disable react/no-unused-prop-types */
+import { prefetch } from "@candlefinance/faster-image";
 import { useNavigation } from "@react-navigation/native";
-import type { FlashListRef } from "@shopify/flash-list";
+import type { FlashListRef, ViewToken } from "@shopify/flash-list";
 import {
   ActivityIndicator,
   Body3,
@@ -12,7 +13,9 @@ import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import type {
@@ -20,6 +23,7 @@ import type {
 } from "react-native";
 import { Animated } from "react-native";
 import RealmObservation from "realmModels/Observation";
+import Photo from "realmModels/Photo";
 import {
   useCurrentUser,
   useGridLayout,
@@ -30,6 +34,7 @@ import {
 import useStore from "stores/useStore";
 
 import ObsPressable from "./ObsPressable";
+import { photoFromObservation, photosFromObservation } from "./util";
 
 const { useRealm } = RealmContext;
 
@@ -56,6 +61,7 @@ interface Props {
   layout: "list" | "grid";
   obsListKey: string;
   onEndReached: () => void;
+  onExploreObservationAction?: () => void;
   onLayout?: ( event: LayoutChangeEvent ) => void;
   onScroll?: ( event: NativeSyntheticEvent<NativeScrollEvent> ) => void;
   // this ref is being forwarded to the underlying CustomFlashList and used as an imperative handle
@@ -65,6 +71,7 @@ interface Props {
   listHeaderContent?: React.ReactElement | null;
   showNoResults?: boolean;
   showObservationsEmptyScreen?: boolean;
+  fullWidthGrid?: boolean;
   testID: string;
 }
 
@@ -86,12 +93,14 @@ const ObservationsFlashList = ( {
   layout,
   obsListKey = "unknown",
   onEndReached,
+  onExploreObservationAction,
   onLayout,
   onScroll,
   ref,
   listHeaderContent,
   showNoResults,
   showObservationsEmptyScreen,
+  fullWidthGrid = false,
   testID,
 }: Props ) => {
   const {
@@ -115,7 +124,15 @@ const ObservationsFlashList = ( {
     flashListStyle,
     gridItemStyle,
     numColumns,
-  } = useGridLayout( layout );
+    squareCorners,
+  } = useGridLayout(
+    layout === "list"
+      ? "list"
+      : undefined,
+    fullWidthGrid
+      ? "fullWidth"
+      : "default",
+  );
   const { t } = useTranslation( );
 
   const renderItem = useCallback( ( { item }: { item: { uuid: string; empty: boolean } } ) => {
@@ -123,7 +140,9 @@ const ObservationsFlashList = ( {
     if ( item.empty ) {
       return (
         <View
-          className="rounded-[15px] border-dotted border-4 border-lightGray"
+          className={fullWidthGrid
+            ? "border-dotted border-4 border-lightGray"
+            : "rounded-[15px] border-dotted border-4 border-lightGray"}
           style={gridItemStyle}
         />
       );
@@ -148,10 +167,21 @@ const ObservationsFlashList = ( {
         navigation.navigate( {
           key: `Obs-${obsListKey}-${uuid}`,
           name: "ObsDetails",
-          params: { uuid },
+          // Pass explore observation so ObsDetails can render immediately
+          // while the full remote fetch completes in the background
+          params: {
+            uuid,
+            preloadedObservation: obsNeedsSync
+              ? undefined
+              : item,
+          },
         } );
       }
     };
+
+    // Add a unique key to ensure component recreation
+    // so images don't get recycled and show on the wrong taxon
+    const itemKey = `uuid-${uuid}`;
 
     return (
       <ObsPressable
@@ -168,11 +198,14 @@ const ObservationsFlashList = ( {
           ? item
           : undefined}
         uuid={uuid}
+        key={itemKey}
+        onExploreObservationAction={onExploreObservationAction}
         onItemPress={onItemPress}
         onUploadButtonPress={onUploadButtonPress}
         queued={queued}
         unsynced={obsNeedsSync}
         uploadProgress={uploadProgress}
+        squareCorners={squareCorners}
       />
     );
   }, [
@@ -190,9 +223,12 @@ const ObservationsFlashList = ( {
     navigateToObsEdit,
     navigation,
     obsListKey,
+    onExploreObservationAction,
     realm,
     totalUploadProgress,
     uploadQueue,
+    squareCorners,
+    fullWidthGrid,
   ] );
 
   const itemSeparatorComponent = useMemo( ( ) => {
@@ -260,10 +296,70 @@ const ObservationsFlashList = ( {
     }
   }, [dataCanBeFetched, onEndReached] );
 
-  const handleEndReached = useCallback( ( ) => {
-    if ( !dataCanBeFetched || explore ) return;
+  // Use a ref so the stable callback below always sees the current data
+  const dataRef = useRef<unknown[]>( data );
+  useEffect( ( ) => {
+    dataRef.current = data;
+  }, [data] );
 
-    if ( fetchFromLastObservation && data.length > 0 ) {
+  const handleViewableItemsChanged = useCallback(
+    ( { viewableItems }: { viewableItems: ViewToken<unknown>[] } ) => {
+      if ( !explore ) return;
+
+      const maxVisibleIndex = viewableItems.reduce(
+        ( max, token ) => Math.max( max, token.index ?? -1 ),
+        -1,
+      );
+      if ( maxVisibleIndex < 0 ) return;
+
+      const currentData = dataRef.current;
+
+      // Priority 1: first photo of next 5 items in the vertical scroll
+      const nextItemUrls: string[] = [];
+      for (
+        let i = maxVisibleIndex + 1;
+        i <= maxVisibleIndex + 5 && i < currentData.length;
+        i += 1
+      ) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const obs = currentData[i] as any;
+        if ( !obs?.empty ) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const photo = photoFromObservation( obs );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const url = Photo.displayLocalOrRemoteOriginalPhoto( photo as any );
+          if ( url ) nextItemUrls.push( url );
+        }
+      }
+
+      // Priority 2: carousel photos beyond the first for currently visible items
+      const carouselUrls: string[] = [];
+      for ( const token of viewableItems ) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const obs = token.item as any;
+        if ( !obs?.empty ) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const photos = photosFromObservation( obs );
+          for ( let i = 1; i < photos.length; i += 1 ) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const url = Photo.displayLocalOrRemoteOriginalPhoto( photos[i] as any );
+            if ( url ) carouselUrls.push( url );
+          }
+        }
+      }
+
+      const allUrls = [...nextItemUrls, ...carouselUrls];
+      if ( allUrls.length > 0 ) {
+        prefetch( allUrls );
+      }
+    },
+    [explore],
+  );
+
+  const handleEndReached = useCallback( ( ) => {
+    if ( !dataCanBeFetched ) return;
+
+    if ( !explore && fetchFromLastObservation && data.length > 0 ) {
       const lastItem = data[data.length - 1];
       if ( lastItem?.uuid && !lastItem?.empty ) {
         const lastObs = realm.objectForPrimaryKey( "Observation", lastItem.uuid );
@@ -302,6 +398,7 @@ const ObservationsFlashList = ( {
       onEndReached={handleEndReached}
       onMomentumScrollEnd={onMomentumScrollEnd}
       onScroll={onScroll}
+      onViewableItemsChanged={handleViewableItemsChanged}
       renderItem={renderItem}
       refreshControl={refreshControl}
       testID={testID}

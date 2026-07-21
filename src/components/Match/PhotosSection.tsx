@@ -15,6 +15,7 @@ import Photo from "realmModels/Photo";
 import type { RealmObservationPhoto, RealmPhoto, RealmTaxon } from "realmModels/types";
 
 interface Props {
+  observationUuid?: string;
   representativePhoto?: ApiPhoto;
   taxon?: ApiTaxon | RealmTaxon;
   obsPhotos: RealmObservationPhoto[];
@@ -155,7 +156,6 @@ const PhotosSection = ( {
           <PhotoCount count={observationPhotos.length} />
         </View>
       )}
-
     </Pressable>
   );
 

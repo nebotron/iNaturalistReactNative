@@ -12,7 +12,9 @@ import useNavigateWithTaxonSelected from "./hooks/useNavigateWithTaxonSelected";
 
 const SuggestionsTaxonSearch = ( ) => {
   const [taxonQuery, setTaxonQuery] = useState( "" );
-  const { taxa, isLoading, isLocal } = useTaxonSearch( taxonQuery );
+  const {
+    taxa, isLoading, isUpdatingLocalDb, updateLocalSpeciesDb,
+  } = useTaxonSearch( taxonQuery );
   const { t } = useTranslation( );
 
   const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: false } );
@@ -32,11 +34,12 @@ const SuggestionsTaxonSearch = ( ) => {
   return (
     <TaxonSearch
       isLoading={isLoading}
-      isLocal={isLocal}
+      isUpdatingLocalDb={isUpdatingLocalDb}
       query={taxonQuery}
       renderItem={renderTaxonResult}
       setQuery={setTaxonQuery}
       taxa={taxa}
+      updateLocalSpeciesDb={updateLocalSpeciesDb}
     />
   );
 };

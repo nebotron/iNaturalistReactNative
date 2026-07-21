@@ -5,6 +5,7 @@ import inatjs from "inaturalistjs";
 import handleError from "./error";
 
 const ANCESTOR_FIELDS = {
+  id: true,
   name: true,
   preferred_common_name: true,
   rank: true,

@@ -1,6 +1,7 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import type { NavigationRoute, ParamListBase } from "@react-navigation/native";
 import { CommonActions } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   SCREEN_NAME_MENU,
   SCREEN_NAME_NOTIFICATIONS,
@@ -50,9 +51,12 @@ const getActiveTab = ( activeTabName: TabName ): ScreenName => {
   }
 };
 
+const HIDDEN_TAB_BAR_SCREENS = ["ImageCropEditor"];
+
 const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
   const { t } = useTranslation( );
   const currentUser = useCurrentUser( );
+  const queryClient = useQueryClient( );
 
   const activeTabIndex = state?.index;
   const activeTabName = state?.routes[activeTabIndex]?.name as TabName;
@@ -79,6 +83,10 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
         } );
         needsReset = true;
       }
+    }
+
+    if ( targetTabName === "ExploreTab" ) {
+      queryClient.removeQueries( { queryKey: ["useInfiniteExploreScroll"] } );
     }
 
     // If pressing the currently active tab, reset its stack
@@ -110,7 +118,7 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
     } else {
       navigation.navigate( targetTabName );
     }
-  }, [navigation, activeTabName] );
+  }, [navigation, activeTabName, queryClient] );
 
   const tabs: TabConfig[] = useMemo( ( ) => ( [
     {
@@ -156,6 +164,16 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
     t,
     handleTabPress,
   ] );
+
+  // Hide tab bar on crop/labeling screens — checked after all hooks
+  const activeTabRoute = state?.routes[activeTabIndex];
+  const tabStackState = activeTabRoute?.state;
+  const activeScreenName = tabStackState
+    ? tabStackState.routes[tabStackState.index ?? 0]?.name
+    : null;
+  if ( activeScreenName && HIDDEN_TAB_BAR_SCREENS.includes( activeScreenName ) ) {
+    return null;
+  }
 
   return (
     <CustomTabBar

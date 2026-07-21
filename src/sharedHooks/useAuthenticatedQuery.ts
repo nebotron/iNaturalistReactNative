@@ -14,6 +14,10 @@ export type AuthenticatedQueryOptions<Response> = Omit<
   enabled?: boolean;
   retry?: boolean;
   refetchInterval?: number;
+  // Keep the query disabled until the user is actually signed in (a token
+  // exists). Without this a query can fire with a null JWT — e.g. a stale
+  // Realm currentUser but no stored credentials — and 401 on every poll.
+  requireLoggedIn?: boolean;
 }
 
 export type QueryFunction<Response>
@@ -67,8 +71,12 @@ const useAuthenticatedQuery = <Response>(
       : false,
     retryDelay: ( failureCount, error ) => handleRetryDelay( failureCount, error ),
     // Authenticated queries should not run until we know whether or not the
-    // user is signed in
-    enabled: userLoggedIn !== LOGGED_IN_UNKNOWN && queryOptions.enabled,
+    // user is signed in; when requireLoggedIn is set, also wait until they are
+    // actually signed in so we never call an authenticated endpoint with a
+    // null token.
+    enabled: userLoggedIn !== LOGGED_IN_UNKNOWN
+      && ( !queryOptions.requireLoggedIn || userLoggedIn === true )
+      && queryOptions.enabled,
   } );
 };
 

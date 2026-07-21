@@ -10,9 +10,11 @@ import {
   SCREEN_NAME_SEARCH_MY_OBSERVATIONS,
 } from "navigation/StackNavigators/MyObservationsStackNavigator";
 import type { MyObservationsStackScreenProps } from "navigation/types";
+import { RealmContext } from "providers/contexts";
 import { useMyObservations } from "providers/MyObservationsContext";
 import React from "react";
 import { Alert } from "react-native";
+import Observation from "realmModels/Observation";
 import type {
   RealmUser,
 } from "realmModels/types";
@@ -32,6 +34,8 @@ import colors from "styles/tailwindColors";
 
 import SimpleUploadBannerContainer from "./SimpleUploadBannerContainer";
 
+const { useRealm } = RealmContext;
+
 interface Props {
   currentUser?: RealmUser;
   numUploadableObservations: number;
@@ -49,11 +53,15 @@ const MyObservationsSimpleHeader = ( {
   const navigation = useNavigation<
     MyObservationsStackScreenProps<"MyObservationsResults">["navigation"]
   >( );
+  const realm = useRealm( );
   const searchMyObservationsEnabled = useFeatureFlag(
     FeatureFlag.SearchMyObservationsEnabled,
   );
   const { state: myObsState } = useMyObservations( );
   const searchActive = myObsState.searchedTaxon !== null;
+  const setObservations = useStore( state => state.setObservations );
+  const resetObservationFlowSlice = useStore( state => state.resetObservationFlowSlice );
+  const setBulkUploadMode = useStore( state => state.setBulkUploadMode );
 
   const handleSearchButtonPress = ( ) => {
     if ( !isConnected ) {
@@ -64,6 +72,22 @@ const MyObservationsSimpleHeader = ( {
     } else {
       navigation.navigate( SCREEN_NAME_SEARCH_MY_OBSERVATIONS );
     }
+  };
+
+  const handleBulkIDPress = ( ) => {
+    const unsyncedObs = Observation.filterUnsyncedObservations( realm );
+    const unknownUnsyncedObs = unsyncedObs.filtered( "taxon == nil" );
+    if ( unknownUnsyncedObs.length === 0 ) {
+      Alert.alert( "No Unuploaded Observations", "All your observations have been uploaded." );
+      return;
+    }
+    resetObservationFlowSlice( );
+    setObservations( Array.from( unknownUnsyncedObs ) );
+    setBulkUploadMode( true );
+    navigation.navigate( "Suggestions", {
+      entryScreen: "ObsEdit",
+      lastScreen: "ObsEdit",
+    } );
   };
 
   // TODO: all the code related to showing the sync button is pretty convoluted and'
@@ -119,6 +143,17 @@ const MyObservationsSimpleHeader = ( {
                   : colors.darkGray}
                 accessibilityLabel={t( "Opens-search-interface" )}
                 size={20}
+              />
+            )}
+            {numUploadableObservations > 0 && (
+              <INatIconButton
+                icon="sparkly-label"
+                // eslint-disable-next-line i18next/no-literal-string
+                accessibilityLabel="Add IDs to unuploaded observations"
+                onPress={handleBulkIDPress}
+                color={String( colors?.inatGreen )}
+                size={26}
+                testID="BulkIDButton"
               />
             )}
             <RotatingINatIconButton

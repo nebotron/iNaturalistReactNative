@@ -1,12 +1,12 @@
 import calculateConfidence from "components/Match/calculateConfidence";
-import {
-  TaxonResult,
-} from "components/SharedComponents";
+import { TaxonResult } from "components/SharedComponents";
+import { View } from "components/styledComponents";
 import React from "react";
 
 interface Props {
   accessibilityLabel: string;
-  onTaxonChosen: ( ) => void;
+  onSelectGenus?: ( ) => void;
+  onTaxonChosen: ( taxon: object ) => void;
   suggestion: {
     taxon: {
       id: number;
@@ -21,24 +21,29 @@ interface Props {
 
 const Suggestion = ( {
   accessibilityLabel,
+  onSelectGenus,
   suggestion,
   onTaxonChosen,
 }: Props ) => (
-  <TaxonResult
-    accessibilityLabel={accessibilityLabel}
-    activeColor="bg-inatGreen"
-    confidencePercentage={calculateConfidence( suggestion )}
-    confidencePosition="text"
-    fetchRemote={false}
-    first
-    showCheckmark
-    handleCheckmarkPress={onTaxonChosen}
-    hideNavButtons
-    lastScreen="Suggestions"
-    taxon={suggestion?.taxon}
-    testID={`SuggestionsList.taxa.${suggestion?.taxon?.id}`}
-    vision
-  />
+  <View testID={`Suggestion.${suggestion?.taxon?.id}`}>
+    <TaxonResult
+      accessibilityLabel={accessibilityLabel}
+      activeColor="bg-inatGreen"
+      confidencePercentage={calculateConfidence( suggestion )}
+      confidencePosition="text"
+      fetchRemote={false}
+      first
+      hideInfoButton
+      showCheckmark
+      handleCheckmarkPress={onTaxonChosen}
+      hideNavButtons
+      lastScreen="Suggestions"
+      onSelectGenus={onSelectGenus}
+      taxon={suggestion?.taxon}
+      testID={`SuggestionsList.taxa.${suggestion?.taxon?.id}`}
+      vision
+    />
+  </View>
 );
 
 export default Suggestion;

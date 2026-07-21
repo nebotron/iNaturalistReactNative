@@ -1,0 +1,1000 @@
+#import <AVFoundation/AVFoundation.h>
+#import <CoreLocation/CoreLocation.h>
+#import <ImageIO/ImageIO.h>
+#import <Photos/Photos.h>
+#import <React/RCTBridgeModule.h>
+#import <UIKit/UIKit.h>
+#import <Vision/Vision.h>
+#include <stdlib.h>
+#include "onnxruntime_c_api.h"
+
+@interface ImageCropper : NSObject <RCTBridgeModule>
+@end
+
+@implementation ImageCropper
+
+RCT_EXPORT_MODULE( );
+
+// ─── Orientation helpers ────────────────────────────────────────────────────
+
+static CGImagePropertyOrientation orientationFromUIImage( UIImage *image )
+{
+  switch ( image.imageOrientation ) {
+    case UIImageOrientationUp:            return kCGImagePropertyOrientationUp;
+    case UIImageOrientationDown:          return kCGImagePropertyOrientationDown;
+    case UIImageOrientationLeft:          return kCGImagePropertyOrientationLeft;
+    case UIImageOrientationRight:         return kCGImagePropertyOrientationRight;
+    case UIImageOrientationUpMirrored:    return kCGImagePropertyOrientationUpMirrored;
+    case UIImageOrientationDownMirrored:  return kCGImagePropertyOrientationDownMirrored;
+    case UIImageOrientationLeftMirrored:  return kCGImagePropertyOrientationLeftMirrored;
+    case UIImageOrientationRightMirrored: return kCGImagePropertyOrientationRightMirrored;
+    default:                              return kCGImagePropertyOrientationUp;
+  }
+}
+
+// ─── Vision helpers (saliency fallback) ─────────────────────────────────────
+
+static NSDictionary *normalizedBoundsFromVisionRect( CGRect rect )
+{
+  if ( rect.size.width <= 0 || rect.size.height <= 0 ) return nil;
+  return @{
+    @"x":      @( rect.origin.x ),
+    @"y":      @( 1.0 - rect.origin.y - rect.size.height ),
+    @"width":  @( rect.size.width ),
+    @"height": @( rect.size.height ),
+  };
+}
+
+static CGRect unionVisionRect( CGRect existing, CGRect next, BOOL hasExisting )
+{
+  if ( !hasExisting ) return next;
+  CGFloat minX = MIN( existing.origin.x, next.origin.x );
+  CGFloat minY = MIN( existing.origin.y, next.origin.y );
+  CGFloat maxX = MAX( existing.origin.x + existing.size.width,  next.origin.x + next.size.width );
+  CGFloat maxY = MAX( existing.origin.y + existing.size.height, next.origin.y + next.size.height );
+  return CGRectMake( minX, minY, maxX - minX, maxY - minY );
+}
+
+// Attention-based saliency — used only when YOLO finds no subject
+static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler )
+{
+  VNGenerateAttentionBasedSaliencyImageRequest *req =
+    [[VNGenerateAttentionBasedSaliencyImageRequest alloc] init];
+  NSError *error = nil;
+  if ( ![handler performRequests:@[req] error:&error] ) return nil;
+
+  CGRect unionRect = CGRectZero;
+  BOOL   hasUnion  = NO;
+  for ( VNSaliencyImageObservation *obs in req.results ) {
+    for ( VNRectangleObservation *salientObj in obs.salientObjects ) {
+      unionRect = unionVisionRect( unionRect, salientObj.boundingBox, hasUnion );
+      hasUnion  = YES;
+    }
+  }
+  return hasUnion ? normalizedBoundsFromVisionRect( unionRect ) : nil;
+}
+
+// ─── YOLO / ONNX Runtime detection ──────────────────────────────────────────
+
+#define YOLO_INPUT_SIZE  640
+#define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
+#define YOLO_IOU_THRESH  0.45f
+// If the best post-NMS box is below this threshold the detection is likely spurious;
+// returning nil triggers the Vision attention-saliency fallback instead.
+#define YOLO_GATE_CONF   0.25f
+// Union: include box if its confidence is at least this fraction of the best box.
+// Cap at this many boxes to prevent noisy low-conf detections from bloating the union.
+#define YOLO_UNION_THRESH 0.60f
+#define YOLO_UNION_MAX_K  3
+
+typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
+
+static OrtEnv     *s_ortEnv     = NULL;
+static OrtSession *s_ortSession = NULL;
+static BOOL        s_yoloFailed = NO;
+// The current model also exposes a "brightness" output (a ridge head baked
+// into the graph — see scripts/bake_brightness_head.py). Detected at init so
+// an older single-output model file keeps working.
+static BOOL        s_hasBrightnessOutput = NO;
+
+static void initYOLOSession( void )
+{
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{
+    NSString *path = [[NSBundle mainBundle] pathForResource:@"yolov8n" ofType:@"onnx"];
+    if ( !path ) { s_yoloFailed = YES; return; }
+
+    const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
+
+    if ( ort->CreateEnv( ORT_LOGGING_LEVEL_WARNING, "iNat", &s_ortEnv ) ) {
+      s_yoloFailed = YES; return;
+    }
+
+    OrtSessionOptions *opts;
+    if ( ort->CreateSessionOptions( &opts ) ) { s_yoloFailed = YES; return; }
+    ort->SetIntraOpNumThreads( opts, 2 );
+    ort->SetInterOpNumThreads( opts, 1 );
+
+    OrtStatus *status = ort->CreateSession( s_ortEnv, [path UTF8String], opts, &s_ortSession );
+    ort->ReleaseSessionOptions( opts );
+    if ( status ) { ort->ReleaseStatus( status ); s_yoloFailed = YES; return; }
+
+    size_t outputCount = 0;
+    if ( !ort->SessionGetOutputCount( s_ortSession, &outputCount ) ) {
+      s_hasBrightnessOutput = outputCount >= 2;
+    }
+  } );
+}
+
+// Returns a [3 × N × N] float32 tensor (CHW, normalized 0-1) from a letterboxed image.
+static float *preprocessForYOLO( UIImage *image,
+                                  float *outPadLeft, float *outPadTop, float *outScale )
+{
+  const int N  = YOLO_INPUT_SIZE;
+  float     iW = (float)image.size.width;
+  float     iH = (float)image.size.height;
+  float     s  = MIN( (float)N / iW, (float)N / iH );
+  float     nW = iW * s, nH = iH * s;
+  float     pL = ( N - nW ) / 2.0f;
+  float     pT = ( N - nH ) / 2.0f;
+
+  *outScale   = s;
+  *outPadLeft = pL;
+  *outPadTop  = pT;
+
+  // Draw letterboxed image onto a gray 640×640 canvas
+  UIGraphicsBeginImageContextWithOptions( CGSizeMake( N, N ), YES, 1.0 );
+  CGContextRef gc = UIGraphicsGetCurrentContext();
+  CGContextSetFillColorWithColor( gc, [UIColor colorWithWhite:127.0 / 255.0 alpha:1.0].CGColor );
+  CGContextFillRect( gc, CGRectMake( 0, 0, N, N ) );
+  [image drawInRect:CGRectMake( pL, pT, nW, nH )];
+  UIImage *lb = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+
+  // Render into RGBA byte buffer
+  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB();
+  unsigned char  *raw = (unsigned char *)calloc( (size_t)N * N * 4, 1 );
+  CGContextRef    bmp = CGBitmapContextCreate(
+    raw, N, N, 8, (size_t)4 * N, cs,
+    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, N, N ), lb.CGImage );
+  CGContextRelease( bmp );
+  CGColorSpaceRelease( cs );
+
+  // RGBA → normalized float32 CHW
+  int     plane  = N * N;
+  float  *tensor = (float *)malloc( (size_t)3 * plane * sizeof( float ) );
+  for ( int i = 0; i < plane; i++ ) {
+    tensor[0 * plane + i] = raw[i * 4 + 0] / 255.0f;
+    tensor[1 * plane + i] = raw[i * 4 + 1] / 255.0f;
+    tensor[2 * plane + i] = raw[i * 4 + 2] / 255.0f;
+  }
+  free( raw );
+  return tensor;
+}
+
+static float boxIOU( YOLOBox a, YOLOBox b )
+{
+  float ix1 = MAX( a.x1, b.x1 ), iy1 = MAX( a.y1, b.y1 );
+  float ix2 = MIN( a.x2, b.x2 ), iy2 = MIN( a.y2, b.y2 );
+  if ( ix2 <= ix1 || iy2 <= iy1 ) return 0.0f;
+  float inter = ( ix2 - ix1 ) * ( iy2 - iy1 );
+  float ua    = ( a.x2 - a.x1 ) * ( a.y2 - a.y1 )
+              + ( b.x2 - b.x1 ) * ( b.y2 - b.y1 ) - inter;
+  return ua > 0.0f ? inter / ua : 0.0f;
+}
+
+static int compareBoxByConf( const void *a, const void *b )
+{
+  float ca = ( (const YOLOBox *)a )->conf;
+  float cb = ( (const YOLOBox *)b )->conf;
+  return ( cb > ca ) ? 1 : ( cb < ca ) ? -1 : 0;
+}
+
+// Returns {x,y,width,height} in top-left normalised coords, or nil if nothing detected.
+// When the model carries the baked-in brightness head, *outBrightness receives the
+// predicted exposure multiplier (already clamped in-graph) even if no box passes the
+// gate; it is left untouched otherwise.
+static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, float *outBrightness )
+{
+  initYOLOSession();
+  if ( s_yoloFailed || !s_ortSession ) return nil;
+
+  const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
+  const int     N   = YOLO_INPUT_SIZE;
+
+  float padLeft, padTop, scale;
+  float *inputData = preprocessForYOLO( image, &padLeft, &padTop, &scale );
+
+  OrtMemoryInfo *memInfo;
+  ort->CreateCpuMemoryInfo( OrtArenaAllocator, OrtMemTypeDefault, &memInfo );
+
+  int64_t   inputShape[] = { 1, 3, N, N };
+  OrtValue *inputTensor  = NULL;
+  OrtStatus *status = ort->CreateTensorWithDataAsOrtValue(
+    memInfo, inputData, (size_t)3 * N * N * sizeof( float ),
+    inputShape, 4, ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &inputTensor );
+  ort->ReleaseMemoryInfo( memInfo );
+
+  if ( status || !inputTensor ) {
+    if ( status ) ort->ReleaseStatus( status );
+    free( inputData );
+    return nil;
+  }
+
+  const char *inputNames[]  = { "images" };
+  const char *outputNames[] = { "output0", "brightness" };
+  size_t      numOutputs    = s_hasBrightnessOutput ? 2 : 1;
+  OrtValue   *outputs[2]    = { NULL, NULL };
+
+  status = ort->Run( s_ortSession, NULL,
+                     inputNames,  (const OrtValue *const *)&inputTensor,  1,
+                     outputNames, numOutputs, outputs );
+  ort->ReleaseValue( inputTensor );
+  free( inputData );
+
+  if ( status || !outputs[0] ) {
+    if ( status ) ort->ReleaseStatus( status );
+    if ( outputs[1] ) ort->ReleaseValue( outputs[1] );
+    return nil;
+  }
+
+  if ( outputs[1] && outBrightness ) {
+    float *bright = NULL;
+    if ( !ort->GetTensorMutableData( outputs[1], (void **)&bright ) && bright ) {
+      *outBrightness = bright[0];
+    }
+  }
+  if ( outputs[1] ) ort->ReleaseValue( outputs[1] );
+  OrtValue *outputTensor = outputs[0];
+
+  // output0: [1, 5, 8400] — rows 0-3 = cx,cy,w,h; row 4 = objectness score (1 class)
+  float *out;
+  ort->GetTensorMutableData( outputTensor, (void **)&out );
+
+  const int numPreds  = 8400;
+
+  YOLOBox *dets  = (YOLOBox *)malloc( (size_t)numPreds * sizeof( YOLOBox ) );
+  int      nDets = 0;
+
+  for ( int j = 0; j < numPreds; j++ ) {
+    float maxScore = out[4 * numPreds + j];
+    if ( maxScore < YOLO_CONF_THRESH ) continue;
+
+    float cx = out[0 * numPreds + j];
+    float cy = out[1 * numPreds + j];
+    float bw = out[2 * numPreds + j];
+    float bh = out[3 * numPreds + j];
+    dets[nDets++] = (YOLOBox){ cx - bw / 2.0f, cy - bh / 2.0f,
+                                cx + bw / 2.0f, cy + bh / 2.0f, maxScore };
+  }
+  ort->ReleaseValue( outputTensor );
+
+  if ( nDets == 0 ) { free( dets ); return nil; }
+
+  // Greedy NMS — then union kept boxes with conf ≥ 50% of the best box's conf.
+  // Filtering low-confidence outliers avoids an over-large union when a few
+  // spurious detections fall on the background.
+  qsort( dets, (size_t)nDets, sizeof( YOLOBox ), compareBoxByConf );
+  BOOL *suppressed = (BOOL *)calloc( (size_t)nDets, sizeof( BOOL ) );
+
+  // First pass: NMS to get the kept set and the best (first) box confidence.
+  float bestConf = -1.0f;
+  int   kept     = 0;
+  for ( int i = 0; i < nDets; i++ ) {
+    if ( suppressed[i] ) continue;
+    if ( bestConf < 0.0f ) bestConf = dets[i].conf;
+    kept++;
+    for ( int k = i + 1; k < nDets; k++ ) {
+      if ( !suppressed[k] && boxIOU( dets[i], dets[k] ) > YOLO_IOU_THRESH )
+        suppressed[k] = YES;
+    }
+  }
+
+  if ( kept == 0 ) { free( dets ); free( suppressed ); return nil; }
+
+  // Gate: if the strongest detection is still weak, the model is uncertain — fall
+  // back to Vision attention saliency rather than crop to a likely-wrong location.
+  if ( bestConf < YOLO_GATE_CONF ) { free( dets ); free( suppressed ); return nil; }
+
+  // Second pass: union top-K boxes at ≥ YOLO_UNION_THRESH of best confidence.
+  float confThreshold = YOLO_UNION_THRESH * bestConf;
+  float uX1 = FLT_MAX, uY1 = FLT_MAX, uX2 = -FLT_MAX, uY2 = -FLT_MAX;
+  int   used = 0;
+  for ( int i = 0; i < nDets; i++ ) {
+    if ( suppressed[i] )                   continue;
+    if ( dets[i].conf < confThreshold )    continue;
+    if ( used >= YOLO_UNION_MAX_K )        break;
+    uX1 = MIN( uX1, dets[i].x1 );
+    uY1 = MIN( uY1, dets[i].y1 );
+    uX2 = MAX( uX2, dets[i].x2 );
+    uY2 = MAX( uY2, dets[i].y2 );
+    used++;
+  }
+  if ( used == 0 ) {  // fallback: use best box
+    uX1 = dets[0].x1; uY1 = dets[0].y1;
+    uX2 = dets[0].x2; uY2 = dets[0].y2;
+  }
+  free( dets );
+  free( suppressed );
+
+  // Map 640×640 box back to original normalised image coordinates
+  float imgW = (float)image.size.width;
+  float imgH = (float)image.size.height;
+
+  float x = ( uX1 - padLeft ) / scale / imgW;
+  float y = ( uY1 - padTop  ) / scale / imgH;
+  float w = ( uX2 - uX1     ) / scale / imgW;
+  float h = ( uY2 - uY1     ) / scale / imgH;
+
+  x = MAX( 0.0f, MIN( 1.0f, x ) );
+  y = MAX( 0.0f, MIN( 1.0f, y ) );
+  w = MAX( 0.01f, MIN( 1.0f - x, w ) );
+  h = MAX( 0.01f, MIN( 1.0f - y, h ) );
+
+  return @{ @"x": @(x), @"y": @(y), @"width": @(w), @"height": @(h) };
+}
+
+// ─── Brightness measurement ──────────────────────────────────────────────────
+
+static int compareFloatsAsc( const void *a, const void *b )
+{
+  float fa = *(const float *)a, fb = *(const float *)b;
+  return ( fa > fb ) - ( fa < fb );
+}
+
+// Samples a 64×64 pixel grid within normCrop (0-1 coords) and returns the
+// geometric-mean and median perceptual luminance [0,1] of the region via the
+// out params. Pass CGRectMake(0,0,1,1) for the full image. Returns NO on
+// failure. Definitions must stay in sync with
+// scripts/compute_brightness_crop_features.py (geomean clips luminance at
+// 1e-4 before the log; median averages the two middle samples).
+static BOOL measureCropLuminance( UIImage *image, CGRect normCrop,
+                                  float *outGeomean, float *outMedian )
+{
+  const int N  = 64;
+  float imgW   = (float)image.size.width;
+  float imgH   = (float)image.size.height;
+
+  // Scale the full image so the crop region fills the N×N canvas.
+  float scaleX = N / ( normCrop.size.width  * imgW );
+  float scaleY = N / ( normCrop.size.height * imgH );
+  float drawW  = imgW * scaleX;
+  float drawH  = imgH * scaleY;
+  float drawX  = -normCrop.origin.x * imgW * scaleX;
+  float drawY  = -normCrop.origin.y * imgH * scaleY;
+
+  UIGraphicsBeginImageContextWithOptions( CGSizeMake( N, N ), YES, 1.0 );
+  [image drawInRect:CGRectMake( drawX, drawY, drawW, drawH )];
+  UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );
+  UIGraphicsEndImageContext( );
+
+  if ( !scaled.CGImage ) return NO;
+
+  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
+  unsigned char  *raw = (unsigned char *)calloc( (size_t)N * N * 4, 1 );
+  CGContextRef    bmp = CGBitmapContextCreate(
+    raw, N, N, 8, (size_t)4 * N, cs,
+    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, N, N ), scaled.CGImage );
+  CGContextRelease( bmp );
+  CGColorSpaceRelease( cs );
+
+  float *lums = (float *)malloc( (size_t)N * N * sizeof( float ) );
+  double logSum = 0.0;
+  for ( int i = 0; i < N * N; i++ ) {
+    float r = raw[i * 4 + 0] / 255.0f;
+    float g = raw[i * 4 + 1] / 255.0f;
+    float b = raw[i * 4 + 2] / 255.0f;
+    lums[i] = 0.299f * r + 0.587f * g + 0.114f * b;
+    logSum += log( fmax( lums[i], 1e-4f ) );
+  }
+  free( raw );
+  qsort( lums, N * N, sizeof( float ), compareFloatsAsc );
+  *outGeomean = (float)exp( logSum / ( N * N ) );
+  *outMedian  = 0.5f * ( lums[N * N / 2 - 1] + lums[N * N / 2] );
+  free( lums );
+  return YES;
+}
+
+// ─── Brightness adjustment (exposure) ────────────────────────────────────────
+
+static inline float srgbToLinear( float c )
+{
+  return c <= 0.04045f ? c / 12.92f : powf( ( c + 0.055f ) / 1.055f, 2.4f );
+}
+
+static inline float linearToSrgb( float c )
+{
+  return c <= 0.0031308f ? c * 12.92f : 1.055f * powf( c, 1.0f / 2.4f ) - 0.055f;
+}
+
+// Exposure: multiplies scene-referred (linear-light) values by k, the same
+// way a camera's exposure control or a photo editor's Exposure slider works,
+// rather than multiplying the gamma-encoded pixel values directly. Gamma
+// encoding packs most of an image's tonal range into a small range of
+// encoded values near the top, so multiplying it directly compresses
+// midtone/highlight contrast and looks flat; doing the multiply in linear
+// light preserves relative contrast between tones instead.
+//
+// The multiply is applied to all three channels together and, when it pushes
+// the brightest channel past white, the whole pixel is scaled back so that
+// channel lands exactly on 1.0. Clipping each channel independently would let
+// them reach white at different points and shift the pixel's hue (a saturated
+// orange skews yellow as its red channel clips first, for example); scaling by
+// the shared maximum keeps the R:G:B ratio — and therefore the color — intact.
+static inline void applyExposurePreservingColor( unsigned char *px, float k )
+{
+  float r = srgbToLinear( px[0] / 255.0f ) * k;
+  float g = srgbToLinear( px[1] / 255.0f ) * k;
+  float b = srgbToLinear( px[2] / 255.0f ) * k;
+
+  float m = fmaxf( r, fmaxf( g, b ) );
+  if ( m > 1.0f ) { r /= m; g /= m; b /= m; }
+
+  px[0] = (unsigned char)roundf( linearToSrgb( r ) * 255.0f );
+  px[1] = (unsigned char)roundf( linearToSrgb( g ) * 255.0f );
+  px[2] = (unsigned char)roundf( linearToSrgb( b ) * 255.0f );
+}
+
+// ─── Public detection entry point ────────────────────────────────────────────
+
+// Try YOLO; fall back to Vision attention saliency when nothing is detected.
+// The model's brightness prediction (computed on the same forward pass) is
+// attached to whichever bounds are returned.
+static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
+{
+  if ( image.CGImage == NULL ) return nil;
+
+  float brightness = -1.0f;
+  NSDictionary *bounds = detectSubjectBoundsYOLO( image, &brightness );
+
+  if ( !bounds ) {
+    CGImagePropertyOrientation orientation = orientationFromUIImage( image );
+    VNImageRequestHandler *handler =
+      [[VNImageRequestHandler alloc] initWithCGImage:image.CGImage
+                                         orientation:orientation
+                                             options:@{}];
+    bounds = detectSubjectBoundsSaliency( handler );
+  }
+
+  if ( bounds && brightness > 0.0f ) {
+    NSMutableDictionary *withBrightness = [bounds mutableCopy];
+    withBrightness[@"brightness"] = @( brightness );
+    bounds = withBrightness;
+  }
+  return bounds;
+}
+
+// ─── Image metadata helpers ──────────────────────────────────────────────────
+
+static void updateMetadataForCrop( NSMutableDictionary *metadata, NSInteger width, NSInteger height )
+{
+  metadata[(NSString *)kCGImagePropertyPixelWidth]  = @( width );
+  metadata[(NSString *)kCGImagePropertyPixelHeight] = @( height );
+  metadata[(NSString *)kCGImagePropertyOrientation] = @( 1 );
+
+  NSString            *exifKey = (__bridge NSString *)kCGImagePropertyExifDictionary;
+  NSMutableDictionary *exif    = [[metadata[exifKey] mutableCopy] ?: @{} mutableCopy];
+  exif[(NSString *)kCGImagePropertyExifPixelXDimension] = @( width );
+  exif[(NSString *)kCGImagePropertyExifPixelYDimension] = @( height );
+  metadata[exifKey] = exif;
+
+  NSString            *tiffKey = (__bridge NSString *)kCGImagePropertyTIFFDictionary;
+  NSMutableDictionary *tiff    = [[metadata[tiffKey] mutableCopy] ?: @{} mutableCopy];
+  tiff[@"ImageWidth"]                                      = @( width );
+  tiff[@"ImageLength"]                                     = @( height );
+  tiff[(NSString *)kCGImagePropertyTIFFOrientation]        = @( 1 );
+  metadata[tiffKey] = tiff;
+}
+
+static NSData *jpegDataFromCroppedImage(
+  CGImageRef       croppedRef,
+  NSDictionary    *sourceMetadata,
+  NSInteger        width,
+  NSInteger        height
+)
+{
+  NSMutableDictionary *metadata = sourceMetadata
+    ? [sourceMetadata mutableCopy]
+    : [NSMutableDictionary dictionary];
+  updateMetadataForCrop( metadata, width, height );
+  metadata[(NSString *)kCGImageDestinationLossyCompressionQuality] = @( 1.0 );
+
+  NSMutableData      *destinationData = [NSMutableData data];
+  CGImageDestinationRef destination   = CGImageDestinationCreateWithData(
+    (__bridge CFMutableDataRef)destinationData, CFSTR( "public.jpeg" ), 1, nil );
+  if ( destination == NULL ) return nil;
+
+  CGImageDestinationAddImage( destination, croppedRef, (__bridge CFDictionaryRef)metadata );
+  BOOL finalized = CGImageDestinationFinalize( destination );
+  CFRelease( destination );
+  return finalized ? destinationData : nil;
+}
+
+// ─── Exported React Native methods ───────────────────────────────────────────
+
+RCT_EXPORT_METHOD( cropImage
+                  : ( NSString * )inputPath originX
+                  : ( nonnull NSNumber * )originX originY
+                  : ( nonnull NSNumber * )originY width
+                  : ( nonnull NSNumber * )width height
+                  : ( nonnull NSNumber * )height outputPath
+                  : ( NSString * )outputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSURL    *inputURL    = [NSURL fileURLWithPath:input];
+  CGImageSourceRef src  = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
+  NSDictionary *srcMeta = nil;
+  if ( src ) {
+    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+    CFRelease( src );
+  }
+
+  UIImage *image = [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
+
+  UIImage *orientedImage = image;
+  if ( image.imageOrientation != UIImageOrientationUp ) {
+    UIGraphicsBeginImageContextWithOptions( image.size, NO, 1.0 );
+    [image drawInRect:CGRectMake( 0, 0, image.size.width, image.size.height )];
+    orientedImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+  }
+
+  CGRect        cropRect   = CGRectMake( [originX integerValue], [originY integerValue],
+                                         [width integerValue],   [height integerValue] );
+  CGImageRef    croppedRef = CGImageCreateWithImageInRect( orientedImage.CGImage, cropRect );
+  if ( !croppedRef ) { reject( @"CROP_FAILED", @"Crop failed", nil ); return; }
+
+  NSData *data = jpegDataFromCroppedImage( croppedRef,
+                                           srcMeta,
+                                           [width integerValue],
+                                           [height integerValue] );
+  CGImageRelease( croppedRef );
+  if ( !data ) { reject( @"CROP_FAILED", @"Could not encode cropped image", nil ); return; }
+
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+  if ( ![data writeToFile:output atomically:YES] ) {
+    reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
+  }
+  resolve( output );
+}
+
+RCT_EXPORT_METHOD( preserveImageMetadata
+                  : ( NSString * )sourcePath destPath
+                  : ( NSString * )destPath width
+                  : ( nonnull NSNumber * )width height
+                  : ( nonnull NSNumber * )height resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *source  = [sourcePath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString *dest    = [destPath   stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSURL    *srcURL  = [NSURL fileURLWithPath:source];
+  CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)srcURL, nil );
+  NSDictionary *srcMeta = nil;
+  if ( src ) {
+    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+    CFRelease( src );
+  }
+
+  UIImage *croppedImage = [UIImage imageWithContentsOfFile:dest];
+  if ( !croppedImage ) { reject( @"CROP_FAILED", @"Could not load cropped image", nil ); return; }
+  CGImageRef croppedRef = croppedImage.CGImage;
+  if ( !croppedRef )    { reject( @"CROP_FAILED", @"Could not read cropped image", nil ); return; }
+
+  NSData *data = jpegDataFromCroppedImage( croppedRef, srcMeta,
+                                           [width integerValue], [height integerValue] );
+  if ( !data ) { reject( @"CROP_FAILED", @"Could not encode cropped image with metadata", nil ); return; }
+  if ( ![data writeToFile:dest atomically:YES] ) {
+    reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
+  }
+  resolve( dest );
+}
+
+// Exports a PHAsset to a local file using PHAssetResourceManager, which writes
+// the original file bytes verbatim — preserving all EXIF metadata (GPS,
+// timestamp, camera make/model, etc.) without re-encoding.
+RCT_EXPORT_METHOD( exportPHAsset
+                  : ( NSString * )phUri destPath
+                  : ( NSString * )destPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *localIdentifier = [phUri hasPrefix:@"ph://"]
+    ? [phUri substringFromIndex:5]
+    : phUri;
+
+  PHFetchResult<PHAsset *> *result =
+    [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
+  PHAsset *asset = result.firstObject;
+  if ( !asset ) {
+    reject( @"EXPORT_FAILED", @"PHAsset not found", nil );
+    return;
+  }
+
+  PHAssetResource *photoResource = nil;
+  for ( PHAssetResource *r in [PHAssetResource assetResourcesForAsset:asset] ) {
+    if ( r.type == PHAssetResourceTypePhoto ) {
+      photoResource = r;
+      break;
+    }
+  }
+  if ( !photoResource ) {
+    reject( @"EXPORT_FAILED", @"No photo resource found for asset", nil );
+    return;
+  }
+
+  NSString *dest = [destPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[dest stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+
+  PHAssetResourceRequestOptions *options = [[PHAssetResourceRequestOptions alloc] init];
+  options.networkAccessAllowed = YES;
+
+  [[PHAssetResourceManager defaultManager]
+    writeDataForAssetResource:photoResource
+    toFile:[NSURL fileURLWithPath:dest]
+    options:options
+    completionHandler:^( NSError *error ) {
+      if ( error ) {
+        reject( @"EXPORT_FAILED", error.localizedDescription, error );
+      } else {
+        resolve( [NSString stringWithFormat:@"file://%@", dest] );
+      }
+    }];
+}
+
+// Updates the location metadata of an existing Photos-library asset. Unlike
+// exportPHAsset, this mutates the user's actual Photos library (not just an
+// app-local copy), so tracked-location corrections show up in the Photos app.
+// Only fills in location for assets that are missing it: if the asset already
+// carries a location we leave it untouched (resolving @NO) rather than
+// overwriting the photo's own GPS metadata.
+RCT_EXPORT_METHOD( updateAssetLocation
+                  : ( NSString * )phUri latitude
+                  : ( nonnull NSNumber * )latitude longitude
+                  : ( nonnull NSNumber * )longitude resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *localIdentifier = [phUri hasPrefix:@"ph://"]
+    ? [phUri substringFromIndex:5]
+    : phUri;
+
+  PHFetchResult<PHAsset *> *result =
+    [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
+  PHAsset *asset = result.firstObject;
+  if ( !asset ) {
+    reject( @"UPDATE_LOCATION_FAILED", @"PHAsset not found", nil );
+    return;
+  }
+
+  if ( asset.location != nil ) {
+    resolve( @NO );
+    return;
+  }
+
+  CLLocation *location = [[CLLocation alloc] initWithLatitude:[latitude doubleValue]
+                                                     longitude:[longitude doubleValue]];
+
+  [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+    PHAssetChangeRequest *changeRequest = [PHAssetChangeRequest changeRequestForAsset:asset];
+    changeRequest.location = location;
+  } completionHandler:^( BOOL success, NSError *error ) {
+    if ( success ) {
+      resolve( @YES );
+    } else {
+      reject( @"UPDATE_LOCATION_FAILED", error.localizedDescription, error );
+    }
+  }];
+}
+
+// Loads an EXIF-oriented image downscaled to maxPixel on its longest side via
+// ImageIO, which subsamples during decode instead of decoding the full
+// resolution. Detection outputs normalized coords, so a downscaled input
+// yields the same bounds at a fraction of the decode cost.
+static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
+{
+  NSURL *url = [NSURL fileURLWithPath:path];
+  CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)url, nil );
+  if ( !src ) return nil;
+  NSDictionary *opts = @{
+    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+    (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform:   @YES,
+    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:          @( maxPixel ),
+  };
+  CGImageRef cg = CGImageSourceCreateThumbnailAtIndex( src, 0, (__bridge CFDictionaryRef)opts );
+  CFRelease( src );
+  if ( !cg ) return nil;
+  UIImage *image = [UIImage imageWithCGImage:cg];
+  CGImageRelease( cg );
+  return image;
+}
+
+RCT_EXPORT_METHOD( detectSubjectBounds
+                  : ( NSString * )inputPath model
+                  : ( NSString * )model resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  UIImage  *image = downscaledImageAtPath( input, 1024 )
+    ?: [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { resolve( [NSNull null] ); return; }
+
+  NSDictionary *bounds = detectSubjectBoundsForImage( image );
+  resolve( bounds ?: [NSNull null] );
+}
+
+// cropX/cropY/cropW/cropH are normalized [0,1] coords of the subject region;
+// pass null for all four to measure the full image.
+RCT_EXPORT_METHOD( measureImageBrightness
+                  : ( NSString * )inputPath cropX
+                  : ( NSNumber * )cropX cropY
+                  : ( NSNumber * )cropY cropW
+                  : ( NSNumber * )cropW cropH
+                  : ( NSNumber * )cropH resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  UIImage  *image = [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { resolve( [NSNull null] ); return; }
+
+  CGRect normCrop = ( cropX && cropY && cropW && cropH )
+    ? CGRectMake( [cropX floatValue], [cropY floatValue],
+                  [cropW floatValue], [cropH floatValue] )
+    : CGRectMake( 0, 0, 1, 1 );
+
+  float geomean = -1.0f;
+  float median  = -1.0f;
+  if ( !measureCropLuminance( image, normCrop, &geomean, &median ) ) {
+    resolve( [NSNull null] );
+    return;
+  }
+  resolve( @{ @"geomean": @( geomean ), @"median": @( median ) } );
+}
+
+// Applies the color-preserving exposure adjustment per pixel to the whole image
+// (scaled down to fit within maxDimension on its longest side, since this is
+// used for thumbnail display) and writes the result as a JPEG to outputPath.
+RCT_EXPORT_METHOD( adjustImageBrightness
+                  : ( NSString * )inputPath adjustment
+                  : ( nonnull NSNumber * )adjustment maxDimension
+                  : ( nonnull NSNumber * )maxDimension outputPath
+                  : ( NSString * )outputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  UIImage  *image  = [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { reject( @"BRIGHTNESS_FAILED", @"Could not load image", nil ); return; }
+
+  float k      = [adjustment floatValue];
+  float maxDim = [maxDimension floatValue];
+  float imgW   = (float)image.size.width;
+  float imgH   = (float)image.size.height;
+  float scale  = MIN( 1.0f, maxDim / MAX( imgW, imgH ) );
+  int   W      = MAX( 1, (int)roundf( imgW * scale ) );
+  int   H      = MAX( 1, (int)roundf( imgH * scale ) );
+
+  // drawInRect: applies the UIImage's orientation, so this also normalizes
+  // orientation to "up" the same way measureCropLuminance does above.
+  UIGraphicsBeginImageContextWithOptions( CGSizeMake( W, H ), YES, 1.0 );
+  [image drawInRect:CGRectMake( 0, 0, W, H )];
+  UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );
+  UIGraphicsEndImageContext( );
+  if ( !scaled.CGImage ) { reject( @"BRIGHTNESS_FAILED", @"Could not scale image", nil ); return; }
+
+  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
+  unsigned char  *raw = (unsigned char *)malloc( (size_t)W * H * 4 );
+  CGContextRef    bmp = CGBitmapContextCreate(
+    raw, W, H, 8, (size_t)4 * W, cs,
+    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, W, H ), scaled.CGImage );
+  CGColorSpaceRelease( cs );
+
+  int pixelCount = W * H;
+  for ( int i = 0; i < pixelCount; i++ ) {
+    applyExposurePreservingColor( raw + i * 4, k );
+  }
+
+  CGImageRef adjustedRef = CGBitmapContextCreateImage( bmp );
+  CGContextRelease( bmp );
+  free( raw );
+  if ( !adjustedRef ) { reject( @"BRIGHTNESS_FAILED", @"Could not create adjusted image", nil ); return; }
+
+  NSMutableData *destData = [NSMutableData data];
+  CGImageDestinationRef destination = CGImageDestinationCreateWithData(
+    (__bridge CFMutableDataRef)destData, CFSTR( "public.jpeg" ), 1, nil );
+  if ( !destination ) {
+    CGImageRelease( adjustedRef );
+    reject( @"BRIGHTNESS_FAILED", @"Could not create image destination", nil );
+    return;
+  }
+  CGImageDestinationAddImage( destination, adjustedRef, (__bridge CFDictionaryRef)@{
+    (NSString *)kCGImageDestinationLossyCompressionQuality: @( 0.9 ),
+  } );
+  BOOL finalized = CGImageDestinationFinalize( destination );
+  CFRelease( destination );
+  CGImageRelease( adjustedRef );
+  if ( !finalized ) { reject( @"BRIGHTNESS_FAILED", @"Could not encode adjusted image", nil ); return; }
+
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+  if ( ![destData writeToFile:output atomically:YES] ) {
+    reject( @"BRIGHTNESS_FAILED", @"Could not write adjusted image", nil ); return;
+  }
+  resolve( output );
+}
+
+// ─── Video helpers ───────────────────────────────────────────────────────────
+
+// Resolves a ph:// or file:// video URI to an AVAsset asynchronously.
+static void resolveVideoAsset(
+  NSString *videoUri,
+  void (^completion)(AVAsset * _Nullable asset, NSError * _Nullable error)
+) {
+  if ( [videoUri hasPrefix:@"ph://"] ) {
+    NSString *localIdentifier = [videoUri substringFromIndex:5];
+    PHFetchResult<PHAsset *> *result =
+      [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
+    PHAsset *phAsset = result.firstObject;
+    if ( !phAsset ) {
+      completion( nil, [NSError errorWithDomain:@"ImageCropper"
+                                          code:-1
+                                      userInfo:@{NSLocalizedDescriptionKey: @"PHAsset not found"}] );
+      return;
+    }
+    PHVideoRequestOptions *opts = [[PHVideoRequestOptions alloc] init];
+    opts.networkAccessAllowed = YES;
+    opts.version = PHVideoRequestOptionsVersionOriginal;
+    [[PHImageManager defaultManager]
+      requestAVAssetForVideo:phAsset
+      options:opts
+      resultHandler:^( AVAsset *avAsset, AVAudioMix *__unused mix, NSDictionary *__unused info ) {
+        if ( avAsset ) {
+          completion( avAsset, nil );
+        } else {
+          completion( nil, [NSError errorWithDomain:@"ImageCropper"
+                                              code:-1
+                                          userInfo:@{NSLocalizedDescriptionKey: @"Could not load video asset"}] );
+        }
+      }];
+  } else {
+    NSString *path = [videoUri stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSURL *url = [NSURL fileURLWithPath:path];
+    completion( [AVURLAsset URLAssetWithURL:url options:nil], nil );
+  }
+}
+
+RCT_EXPORT_METHOD( extractAudioFromVideo
+                  : ( NSString * )videoUri destPath
+                  : ( NSString * )destPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *outputPath = [destPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[outputPath stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+
+  resolveVideoAsset( videoUri, ^( AVAsset *asset, NSError *error ) {
+    if ( !asset ) {
+      reject( @"AUDIO_EXTRACT_FAILED", error.localizedDescription, error );
+      return;
+    }
+    AVAssetExportSession *exporter = [[AVAssetExportSession alloc]
+      initWithAsset:asset presetName:AVAssetExportPresetAppleM4A];
+    if ( !exporter ) {
+      reject( @"AUDIO_EXTRACT_FAILED", @"Could not create export session", nil );
+      return;
+    }
+    exporter.outputURL = [NSURL fileURLWithPath:outputPath];
+    exporter.outputFileType = AVFileTypeAppleM4A;
+    [exporter exportAsynchronouslyWithCompletionHandler:^{
+      if ( exporter.status == AVAssetExportSessionStatusCompleted ) {
+        resolve( [NSString stringWithFormat:@"file://%@", outputPath] );
+      } else {
+        reject( @"AUDIO_EXTRACT_FAILED",
+                exporter.error.localizedDescription ?: @"Export failed",
+                exporter.error );
+      }
+    }];
+  } );
+}
+
+RCT_EXPORT_METHOD( convertVideoToGif
+                  : ( NSString * )videoUri destPath
+                  : ( NSString * )destPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *outputPath = [destPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[outputPath stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+
+  resolveVideoAsset( videoUri, ^( AVAsset *asset, NSError *resolveError ) {
+    if ( !asset ) {
+      reject( @"GIF_FAILED", resolveError.localizedDescription, resolveError );
+      return;
+    }
+
+    Float64 durationSecs = CMTimeGetSeconds( asset.duration );
+    if ( durationSecs <= 0 ) durationSecs = 1.0;
+
+    // Cap at 10 seconds, 2 fps → max 20 frames
+    const int FPS = 2;
+    const int MAX_FRAMES = 20;
+    Float64 capped = MIN( durationSecs, 10.0 );
+    int numFrames = (int)( capped * FPS );
+    if ( numFrames < 1 ) numFrames = 1;
+    if ( numFrames > MAX_FRAMES ) numFrames = MAX_FRAMES;
+
+    AVAssetImageGenerator *gen = [[AVAssetImageGenerator alloc] initWithAsset:asset];
+    gen.appliesPreferredTrackTransform = YES;
+    gen.requestedTimeToleranceBefore = CMTimeMakeWithSeconds( 0.5, 600 );
+    gen.requestedTimeToleranceAfter  = CMTimeMakeWithSeconds( 0.5, 600 );
+
+    NSURL *outputURL = [NSURL fileURLWithPath:outputPath];
+    CGImageDestinationRef gifDest = CGImageDestinationCreateWithURL(
+      (__bridge CFURLRef)outputURL, CFSTR( "com.compuserve.gif" ), numFrames, nil );
+    if ( !gifDest ) {
+      reject( @"GIF_FAILED", @"Could not create GIF destination", nil );
+      return;
+    }
+
+    NSDictionary *fileProps = @{
+      (__bridge NSString *)kCGImagePropertyGIFDictionary: @{
+        (__bridge NSString *)kCGImagePropertyGIFLoopCount: @0,
+      },
+    };
+    CGImageDestinationSetProperties( gifDest, (__bridge CFDictionaryRef)fileProps );
+
+    NSDictionary *frameProps = @{
+      (__bridge NSString *)kCGImagePropertyGIFDictionary: @{
+        (__bridge NSString *)kCGImagePropertyGIFDelayTime: @( 1.0 / FPS ),
+      },
+    };
+
+    int framesAdded = 0;
+    for ( int i = 0; i < numFrames; i++ ) {
+      Float64 t = ( capped / numFrames ) * i;
+      CMTime requested = CMTimeMakeWithSeconds( t, 600 );
+      CMTime actual;
+      CGImageRef frame = [gen copyCGImageAtTime:requested actualTime:&actual error:nil];
+      if ( frame ) {
+        CGImageDestinationAddImage( gifDest, frame, (__bridge CFDictionaryRef)frameProps );
+        CGImageRelease( frame );
+        framesAdded++;
+      }
+    }
+
+    if ( framesAdded == 0 ) {
+      CFRelease( gifDest );
+      reject( @"GIF_FAILED", @"No frames could be extracted", nil );
+      return;
+    }
+
+    BOOL ok = CGImageDestinationFinalize( gifDest );
+    CFRelease( gifDest );
+    if ( ok ) {
+      resolve( [NSString stringWithFormat:@"file://%@", outputPath] );
+    } else {
+      reject( @"GIF_FAILED", @"Could not write GIF file", nil );
+    }
+  } );
+}
+
+@end

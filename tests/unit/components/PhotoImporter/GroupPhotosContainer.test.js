@@ -125,4 +125,33 @@ describe( "GroupPhotosContainer", ( ) => {
     const photoCount = screen.queryByTestId( "photo-count" );
     expect( photoCount ).toBeFalsy( );
   } );
+
+  it( "duplicates selected photos", async ( ) => {
+    useStore.setState( { groupedPhotos: mockGroupedPhotos } );
+    renderComponent( <GroupPhotosContainer /> );
+
+    const firstPhotoPressable = screen.getByTestId(
+      `GroupPhotos.${mockGroupedPhotos[0].photos[0].image.uri}`,
+    );
+    fireEvent.press( firstPhotoPressable );
+
+    const duplicatePhotosButton = screen.getByTestId( "GroupPhotos.duplicate" );
+    fireEvent.press( duplicatePhotosButton );
+
+    await screen.findByTestId(
+      `GroupPhotos.${mockGroupedPhotos[0].photos[0].image.uri}`,
+    );
+
+    const { groupedPhotos } = useStore.getState( );
+    expect( groupedPhotos ).toHaveLength( 4 );
+    expect( groupedPhotos[1].photos[0].image.uri ).not.toEqual(
+      mockGroupedPhotos[0].photos[0].image.uri,
+    );
+    expect( groupedPhotos[2].photos[0].image.uri ).toEqual(
+      mockGroupedPhotos[1].photos[0].image.uri,
+    );
+    expect( groupedPhotos[3].photos[0].image.uri ).toEqual(
+      mockGroupedPhotos[2].photos[0].image.uri,
+    );
+  } );
 } );
