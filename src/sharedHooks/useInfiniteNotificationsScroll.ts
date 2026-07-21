@@ -73,11 +73,13 @@ async function fetchObsByUUIDs(
     uuids,
     {
       fields: {
+        ...Observation.ADVANCED_MODE_LIST_FIELDS,
+        // Ensure login is fetched; ADVANCED_MODE_LIST_FIELDS only requests user.id,
+        // which would otherwise override the login field via the spread above
         user: {
           id: true,
           login: true,
         },
-        ...Observation.ADVANCED_MODE_LIST_FIELDS,
       },
     },
     authOptions,
