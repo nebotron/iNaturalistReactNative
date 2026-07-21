@@ -437,6 +437,41 @@ static inline void applyExposurePreservingColor( unsigned char *px, float k )
   px[2] = (unsigned char)roundf( linearToSrgb( b ) * 255.0f );
 }
 
+// Applies applyExposurePreservingColor to an RGBA buffer, but avoids the six
+// per-pixel powf() calls (three srgbToLinear, three linearToSrgb) for the
+// common case. The channel input is a byte, so there are only 256 possible
+// scene-linear values after the exposure multiply — precompute them once per
+// call, along with the encoded sRGB byte each maps to when the pixel does not
+// clip. A pixel whose brightest channel stays at or below white then costs
+// three table lookups instead of six transcendentals, producing output
+// bit-identical to the per-pixel path (the LUT entries ARE that computation,
+// evaluated on the same 256 inputs). Only pixels that push a channel past
+// white — where the color-preserving normalization couples the channels — fall
+// through to the exact powf path, and those are the minority in a photo.
+static void applyExposurePreservingColorBuffer(
+  unsigned char *raw, int pixelCount, float k )
+{
+  float         linAfter[256];  // scene-linear value after the exposure multiply
+  unsigned char srgbByte[256];  // encoded output byte when the pixel does not clip
+  for ( int i = 0; i < 256; i++ ) {
+    float lin   = srgbToLinear( i / 255.0f ) * k;  // >= 0 for k > 0
+    linAfter[i] = lin;
+    float clamped = lin > 1.0f ? 1.0f : lin;
+    srgbByte[i] = (unsigned char)roundf( linearToSrgb( clamped ) * 255.0f );
+  }
+
+  for ( int i = 0; i < pixelCount; i++ ) {
+    unsigned char *px = raw + i * 4;
+    if ( fmaxf( linAfter[px[0]], fmaxf( linAfter[px[1]], linAfter[px[2]] ) ) > 1.0f ) {
+      applyExposurePreservingColor( px, k );
+    } else {
+      px[0] = srgbByte[px[0]];
+      px[1] = srgbByte[px[1]];
+      px[2] = srgbByte[px[2]];
+    }
+  }
+}
+
 // ─── Public detection entry point ────────────────────────────────────────────
 
 // Try YOLO; fall back to Vision attention saliency when nothing is detected.
@@ -803,10 +838,7 @@ RCT_EXPORT_METHOD( adjustImageBrightness
   CGContextDrawImage( bmp, CGRectMake( 0, 0, W, H ), scaled.CGImage );
   CGColorSpaceRelease( cs );
 
-  int pixelCount = W * H;
-  for ( int i = 0; i < pixelCount; i++ ) {
-    applyExposurePreservingColor( raw + i * 4, k );
-  }
+  applyExposurePreservingColorBuffer( raw, W * H, k );
 
   CGImageRef adjustedRef = CGBitmapContextCreateImage( bmp );
   CGContextRelease( bmp );
