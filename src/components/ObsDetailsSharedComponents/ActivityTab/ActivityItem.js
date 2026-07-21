@@ -20,6 +20,12 @@ import { t } from "i18next";
 import isEmpty from "lodash/isEmpty";
 import type { Node } from "react";
 import React from "react";
+import Taxon from "realmModels/Taxon";
+
+const isSpeciesOrSubspeciesTaxon = taxon => (
+  taxon?.rank_level === Taxon.SPECIES_LEVEL
+  || taxon?.rank_level === Taxon.SUBSPECIES_LEVEL
+);
 
 type Props = {
   currentUserId?: number,
@@ -63,6 +69,7 @@ const ActivityItem = ( {
   const showAgreeButton = user?.id !== currentUserId
     && userAgreedId !== taxon?.id
     && taxon?.is_active
+    && isSpeciesOrSubspeciesTaxon( taxon )
     && isFirstDisplay
     && currentUserId;
 
