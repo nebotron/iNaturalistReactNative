@@ -381,6 +381,7 @@ If-youre-seeing-this-error = Εάν βλέπετε αυτό και είστε σ
 IGNORE-LOCATION = ΑΓΝΟΗΣΗ ΤΟΠΟΘΕΣΙΑΣ
 Ignore-notifications = Παράβλεψη ειδοποιήσεων
 Ignoring-location = Παράβλεψη τοποθεσίας
+Import-Photos-From = Εισαγωγή φωτογραφιών από
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
         [one] 1 OBSERVATION

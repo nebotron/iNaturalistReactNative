@@ -381,6 +381,7 @@ If-youre-seeing-this-error = If you're seeing this and you're online, iNat staff
 IGNORE-LOCATION = IGNORE LOCATION
 Ignore-notifications = Ignoruoti pranešimus
 Ignoring-location = Vietvės ignoravimas
+Import-Photos-From = Import Photos From
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
         [one] 1 OBSERVATION
