@@ -285,6 +285,12 @@ export const startLocationHistoryTracking = async (
       // patch). Without that, iOS pauses updates whenever it thinks the user is
       // stationary and does not resume for a long time - the main cause of long
       // gaps in the tracked location history.
+      //
+      // enableHighAccuracy is left on, but the patch downgrades this specific
+      // (background) watch to kCLLocationAccuracyNearestTenMeters and sets
+      // activityType = fitness - ~10m is plenty to geotag photos and draws far
+      // less battery than kCLLocationAccuracyBest. Foreground getCurrentPosition
+      // (observation geotagging) is unaffected and keeps best accuracy.
       const continuousWatchId = watchPosition(
         recordPosition( "ios-continuous" ),
         error => logger.warn( "watchPosition error (continuous)", error ),

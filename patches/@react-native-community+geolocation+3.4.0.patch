@@ -2,7 +2,7 @@ diff --git a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation
 index 0000000..1111111 100644
 --- a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
 +++ b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
-@@ -187,6 +187,16 @@
+@@ -187,6 +187,29 @@
    _locationManager.distanceFilter  = distanceFilter;
    _locationManager.desiredAccuracy = desiredAccuracy;
    _usingSignificantChanges = useSignificantChanges;
@@ -15,6 +15,19 @@ index 0000000..1111111 100644
 +  // location history tracker); foreground-only watches are unaffected.
 +  if (_locationConfiguration.enableBackgroundLocationUpdates) {
 +    _locationManager.pausesLocationUpdatesAutomatically = NO;
++
++    // Scope battery tuning to the location-history background watch only. It is
++    // the sole caller that begins updates while skipPermissionRequests == NO
++    // (see IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG); every other consumer,
++    // e.g. getCurrentPosition for observation geotagging, runs with
++    // skipPermissionRequests == YES and must keep full (best) accuracy.
++    if (!_locationConfiguration.skipPermissionRequests) {
++      // ~10 m is plenty to geotag photos and draws far less power than
++      // kCLLocationAccuracyBest, and CLActivityTypeFitness tells iOS this is a
++      // moving-on-foot session so it can manage the location radio accordingly.
++      _locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters;
++      _locationManager.activityType = CLActivityTypeFitness;
++    }
 +  }
 
    if (@available(iOS 14.0, *)) {
