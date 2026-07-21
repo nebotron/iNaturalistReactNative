@@ -28,7 +28,7 @@ import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
 import AttributionButton from "./AttributionButton";
-import CustomImageZoom from "./CustomImageZoom";
+import CustomImageZoom, { SUBJECT_CROP_FRAME_FRACTION } from "./CustomImageZoom";
 import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 
 interface PhotoItem {
@@ -176,7 +176,8 @@ const MainMediaDisplay = ( {
         imageDims.height,
         screenWidth,
         screenHeight,
-        Math.min( screenWidth, screenHeight ) * 0.8, // crop frame is ~80% of viewport
+        // Must match the framing fraction so a framed subject round-trips.
+        Math.min( screenWidth, screenHeight ) * SUBJECT_CROP_FRAME_FRACTION,
         transform,
       );
       saveAnimalCrop( photoUrl, crop );
@@ -205,6 +206,8 @@ const MainMediaDisplay = ( {
           resetKey={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
+          autoDetectSubject
+          detectUri={uri}
           brightness={BRIGHTNESS_DEFAULT}
           zoomRef={( ref: SharedZoomableImageRef | null ) => {
             if ( photoIndex === selectedMediaIndex ) {
