@@ -5,15 +5,14 @@ import {
   waitFor,
   within,
 } from "@testing-library/react-native";
+import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import initI18next from "i18n/initI18next";
 import inatjs from "inaturalistjs";
-import * as rnImagePicker from "react-native-image-picker";
 import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 import factory, { makeResponse } from "tests/factory";
 import {
   mockInteractionManagerRunAfterInteractions,
   navigateToPhotoImporterFromMyObs,
-  saveObsEditObservation,
   waitForMyObsGridItems,
 } from "tests/helpers/addObsBottomSheet";
 import faker from "tests/helpers/faker";
@@ -80,15 +79,39 @@ describe( "Photo Deletion with existing saved observation", () => {
   } );
 
   async function createSavedObservationWithImportedPhoto() {
-    jest.spyOn( rnImagePicker, "launchImageLibrary" ).mockImplementation( () => ( {
-      assets: [{
-        uri: faker.image.url(),
-        fileName: `${faker.string.uuid()}.jpg`,
-      }],
-    } ) );
+    const mockNode = {
+      id: "MOCK-ID-1",
+      type: "image",
+      group_name: "Camera Roll",
+      image: {
+        filename: `${faker.string.uuid()}.jpg`,
+        filepath: "/path/to/photo.jpg",
+        extension: "jpg",
+        uri: "file:///path/to/photo.jpg",
+        height: 1920,
+        width: 1080,
+        fileSize: 123456,
+        playableDuration: NaN,
+        orientation: 1,
+      },
+      timestamp: 1234567890,
+      location: null,
+    };
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue( {
+      page_info: { end_cursor: undefined, has_next_page: false },
+      edges: [{ node: mockNode }],
+    } );
     await navigateToPhotoImporterFromMyObs();
-    await screen.findByText( /New Observation/ );
-    await saveObsEditObservation();
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) ).toBeTruthy( );
+    }, { timeout: 10_000 } );
+    fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) );
+    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+    await waitFor( ( ) => {
+      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+    }, { timeout: 10_000 } );
+    const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
+    await actor.press( importButton );
     const obsGridItems = await waitForMyObsGridItems();
     await actor.press( obsGridItems[0] );
     await screen.findByText( "EVIDENCE" );
