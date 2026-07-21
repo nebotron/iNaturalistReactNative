@@ -1,6 +1,7 @@
 import classnames from "classnames";
 import {
   getRelativeDateOffsets,
+  isSavedExploreFilterActive,
   prepareExploreStateForStorage,
   resolveRelativeDates,
   sortSavedExploreFilters,
@@ -13,7 +14,6 @@ import {
   INatIconButton,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
-import isEqual from "lodash/isEqual";
 import {
   EXPLORE_ACTION,
   useExplore,
@@ -52,20 +52,9 @@ const ExploreSavedFiltersSection = ( {
 
   const activeSavedFilterId = useMemo( ( ) => {
     const currentParams = prepareExploreStateForStorage( state );
-    const activeFilter = sortedSavedFilters.find( savedFilter => {
-      const resolvedParams = resolveRelativeDates(
-        savedFilter.params,
-        {
-          relativeD1: savedFilter.relativeD1,
-          relativeD2: savedFilter.relativeD2,
-          relativeObservedOn: savedFilter.relativeObservedOn,
-          relativeCreatedD1: savedFilter.relativeCreatedD1,
-          relativeCreatedD2: savedFilter.relativeCreatedD2,
-          relativeCreatedOn: savedFilter.relativeCreatedOn,
-        },
-      );
-      return isEqual( currentParams, resolvedParams );
-    } );
+    const activeFilter = sortedSavedFilters.find(
+      savedFilter => isSavedExploreFilterActive( currentParams, savedFilter ),
+    );
     return activeFilter?.id;
   }, [state, sortedSavedFilters] );
 

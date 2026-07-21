@@ -1,3 +1,4 @@
+import isEqual from "lodash/isEqual";
 import type { DATE_OBSERVED, DATE_UPLOADED, ExploreState } from "providers/ExploreContext";
 
 // Days offset from today for each date field (0 = today, -30 = 30 days ago).
@@ -122,6 +123,34 @@ export const resolveRelativeDates = (
       ? offsetToIsoDate( relativeCreatedOn )
       : params.created_on,
   };
+};
+
+// Saved filters are persisted with JSON.stringify (see the zustand persist
+// config), which drops every key whose value is `undefined`. The live Explore
+// state, by contrast, keeps those keys (the reducer sets fields to `undefined`
+// rather than deleting them). Round-tripping both operands through JSON before
+// comparing normalizes that asymmetry so a rehydrated filter can still match
+// the current state.
+const normalizeExploreParamsForComparison = (
+  params: ExploreState,
+): ExploreState => JSON.parse( JSON.stringify( params ) );
+
+export const isSavedExploreFilterActive = (
+  currentParams: ExploreState,
+  savedFilter: SavedExploreFilter,
+): boolean => {
+  const resolvedParams = resolveRelativeDates( savedFilter.params, {
+    relativeD1: savedFilter.relativeD1,
+    relativeD2: savedFilter.relativeD2,
+    relativeObservedOn: savedFilter.relativeObservedOn,
+    relativeCreatedD1: savedFilter.relativeCreatedD1,
+    relativeCreatedD2: savedFilter.relativeCreatedD2,
+    relativeCreatedOn: savedFilter.relativeCreatedOn,
+  } );
+  return isEqual(
+    normalizeExploreParamsForComparison( currentParams ),
+    normalizeExploreParamsForComparison( resolvedParams ),
+  );
 };
 
 export const sortSavedExploreFilters = (
