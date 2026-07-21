@@ -1,4 +1,5 @@
-import { scoreObservation } from "api/computerVision";
+import scoreImage from "api/computerVision";
+import flattenUploadParams from "components/Suggestions/helpers/flattenUploadParams";
 import Taxon from "realmModels/Taxon";
 import { useAuthenticatedQuery, useCurrentUser } from "sharedHooks";
 
@@ -11,6 +12,15 @@ interface RankedTaxon {
 interface CVResult {
   combined_score?: number;
   taxon?: RankedTaxon;
+}
+
+interface SuggestionObservation {
+  id?: number;
+  uuid?: string;
+  taxon?: RankedTaxon;
+  latitude?: number;
+  longitude?: number;
+  user?: { id?: number };
 }
 
 // API taxa reliably carry a `rank` string but not always a numeric
@@ -54,25 +64,54 @@ const rankLevelForTaxon = ( taxon?: RankedTaxon ): number | undefined => {
     : undefined;
 };
 
-// If an observation's community taxon is genus or broader, look up the most
-// likely species-level ID from the CV algorithm so we can suggest agreeing
-// with a species instead of the coarser community taxon.
+// If an observation's community taxon is genus or broader, suggest the most
+// likely species-level ID from the computer vision model. To keep this in sync
+// with the "Suggest ID" (Suggestions) screen, we score through the exact same
+// path it uses: the `score_image` endpoint, fed the subject-cropped/resized
+// photo plus the observation's location. (The previous implementation used
+// `score_observation`, a different endpoint with different inputs, which
+// produced suggestions that disagreed with the Suggestions screen.)
 const useTopSpeciesSuggestion = (
-  observation?: { id?: number; uuid?: string; taxon?: RankedTaxon },
+  observation?: SuggestionObservation,
+  photoUrl?: string,
   enabled: boolean = true,
 ) => {
   const currentUser = useCurrentUser( );
   const communityRankLevel = rankLevelForTaxon( observation?.taxon );
   const isGenusOrBroader = communityRankLevel != null
     && communityRankLevel >= Taxon.GENUS_LEVEL;
-  // The v2 score_observation endpoint keys on the observation UUID, not the
-  // numeric id.
-  const uuid = observation?.uuid;
-  const queryEnabled = enabled && isGenusOrBroader && !!currentUser && !!uuid;
+
+  // Mirror the Suggestions screen: subject-detect and crop other people's
+  // photos, but score the current user's own photos full-frame.
+  const belongsToCurrentUser = observation?.user?.id != null
+    && observation.user.id === currentUser?.id;
+  const detectSubject = !belongsToCurrentUser;
+
+  // Mirror the Suggestions screen's location toggle, which defaults on exactly
+  // when the observation has a location: pass lat/lng only when present.
+  const hasLocation = observation?.latitude != null;
+  const latitude = hasLocation
+    ? observation?.latitude
+    : undefined;
+  const longitude = hasLocation
+    ? observation?.longitude
+    : undefined;
+
+  const queryEnabled = enabled && isGenusOrBroader && !!currentUser && !!photoUrl;
 
   const { data } = useAuthenticatedQuery(
-    ["useTopSpeciesSuggestion", uuid],
-    optsWithAuth => scoreObservation( { id: uuid as string }, optsWithAuth ),
+    ["useTopSpeciesSuggestion", photoUrl, latitude, longitude, detectSubject],
+    async optsWithAuth => {
+      // Prepare the image the same way the Suggestions screen does (subject
+      // crop + resize + upload) so the score_image request carries identical
+      // inputs and yields matching results.
+      const params = await flattenUploadParams( photoUrl as string, detectSubject );
+      if ( latitude != null ) {
+        params.lat = latitude;
+        params.lng = longitude;
+      }
+      return scoreImage( params, optsWithAuth );
+    },
     {
       enabled: queryEnabled,
       staleTime: Infinity,
