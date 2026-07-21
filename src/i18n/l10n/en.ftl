@@ -243,6 +243,8 @@ Choose-taxon = Choose taxon
 # Label for button that chooses the best suggestion among a list of suggested
 # taxa for an identification
 Choose-top-taxon = Choose top taxon
+# Label for button that chooses a folder on a USB drive for automatic photo import
+CHOOSE-USB-FOLDER = CHOOSE USB FOLDER
 # Label for a button that clears content, like the text entered in a text
 # field
 Clear = Clear
@@ -603,6 +605,8 @@ FOLLOWING-X-PEOPLE =
        *[other] FOLLOWING { $count } PEOPLE
     }
 For-most-other-projects-observations-will-automatically-be-included = For most other projects, observations that meet project requirements will automatically be included in projects.
+# Label for button that stops automatic photo import from a USB drive folder
+FORGET-USB-FOLDER = FORGET USB FOLDER
 # Forgot password link
 Forgot-Password = Forgot Password
 GEOPRIVACY = GEOPRIVACY
@@ -1545,6 +1549,12 @@ Uploading-x-of-y-observations =
         [one] Uploading { $currentUploadCount } observation
        *[other] Uploading { $currentUploadCount } of { $total } observations
     }
+# Describes automatic USB photo import before a folder has been chosen
+USB-import-description = Choose a folder on a USB drive or in Files. New photos in that folder will be imported automatically when you open the app.
+# Describes automatic USB photo import once a folder has been chosen
+USB-import-watching-folder = New photos in "{ $folder }" will be imported automatically when you open the app.
+# Section header in settings for automatic photo import from a USB drive
+USB-PHOTO-IMPORT = USB PHOTO IMPORT
 Use-iNaturalist-to-identify-any-living-thing = Use iNaturalist to identify any living thing
 # Text for a button prompting the user to grant access to location
 USE-LOCATION = USE LOCATION

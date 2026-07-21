@@ -14,6 +14,7 @@ import AppStateListener from "./AppStateListener";
 import useDeferredStartup from "./hooks/useDeferredStartup";
 import useLinking from "./hooks/useLinking";
 import useResumeGroupPhotos from "./hooks/useResumeGroupPhotos";
+import useUsbAutoImport from "./hooks/useUsbAutoImport";
 import NetworkService from "./NetworkService";
 import StartupService from "./StartupService";
 import UploadService from "./UploadService";
@@ -69,6 +70,7 @@ const App = ( { children }: Props ): Node => {
   useShare( onShare );
   useDeferredStartup( );
   useResumeGroupPhotos( );
+  useUsbAutoImport( );
 
   // this children prop is here for the sake of testing with jest
   // normally we would never do this in code
