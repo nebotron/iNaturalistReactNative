@@ -1,6 +1,7 @@
 import Geolocation from "@react-native-community/geolocation";
 import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import ObsEdit from "components/ObsEdit/ObsEdit";
+import UploadService from "components/UploadService";
 import inatjs from "inaturalistjs";
 import React from "react";
 import useStore from "stores/useStore";
@@ -38,7 +39,12 @@ const mockLocationName = "San Francisco, CA";
 
 const mockCurrentUser = factory( "LocalUser" );
 
-const renderObsEdit = ( ) => renderComponent( <ObsEdit /> );
+const renderObsEdit = ( ) => renderComponent(
+  <>
+    <UploadService />
+    <ObsEdit />
+  </>,
+);
 
 const mockTaxon = factory( "RemoteTaxon", {
   name: faker.person.firstName( ),
@@ -72,7 +78,7 @@ const mockObservation = factory( "RemoteObservation", {
 
 const mockObservations = [mockObservation];
 
-const mockMultipleObservations = Array.from(
+const makeMockMultipleObservations = ( ) => Array.from(
   { length: 6 },
   () => factory( "RemoteObservation", {
     latitude: 37.99,
@@ -193,7 +199,10 @@ describe( "location fetching", () => {
 } );
 
 describe( "multiple observation upload/save progress", ( ) => {
+  let mockMultipleObservations;
   beforeEach( async ( ) => {
+    mockMultipleObservations = makeMockMultipleObservations( );
+    useStore.getState( ).resetUploadObservationsSlice( );
     await signIn( mockCurrentUser, { realm: global.mockRealms[__filename] } );
     useStore.setState( {
       observations: mockMultipleObservations,
@@ -202,6 +211,7 @@ describe( "multiple observation upload/save progress", ( ) => {
   } );
 
   afterEach( async ( ) => {
+    useStore.getState( ).resetUploadObservationsSlice( );
     useStore.setState( { } );
   } );
 
