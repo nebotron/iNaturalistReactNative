@@ -1,10 +1,10 @@
-import type { ExifTags } from "@lodev09/react-native-exify";
-import * as Exify from "@lodev09/react-native-exify";
 import {
   copyFile,
   downloadFile,
   TemporaryDirectoryPath,
 } from "@dr.pogodin/react-native-fs";
+import type { ExifTags } from "@lodev09/react-native-exify";
+import * as Exify from "@lodev09/react-native-exify";
 import { WarningSheet } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, {
@@ -189,7 +189,9 @@ const MediaViewer = ( {
     if ( timeObservedAt ) {
       const d = new Date( timeObservedAt );
       const pad = ( n: number ) => String( n ).padStart( 2, "0" );
-      exifToWrite.DateTimeOriginal = `${d.getFullYear()}:${pad( d.getMonth() + 1 )}:${pad( d.getDate() )} ${pad( d.getHours() )}:${pad( d.getMinutes() )}:${pad( d.getSeconds() )}`;
+      const datePart = `${d.getFullYear()}:${pad( d.getMonth() + 1 )}:${pad( d.getDate() )}`;
+      const timePart = `${pad( d.getHours() )}:${pad( d.getMinutes() )}:${pad( d.getSeconds() )}`;
+      exifToWrite.DateTimeOriginal = `${datePart} ${timePart}`;
     }
     if ( Object.keys( exifToWrite ).length > 0 ) {
       try {

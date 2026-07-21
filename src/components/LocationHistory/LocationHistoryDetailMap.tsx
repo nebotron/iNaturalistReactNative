@@ -93,11 +93,13 @@ const LocationHistoryDetailMap = (
     >
       <View className="flex-row items-center">
         <View className="w-3 h-3 rounded-full mr-2 bg-inatGreen" />
+        {/* eslint-disable-next-line i18next/no-literal-string */}
         <List2>Photo location</List2>
       </View>
       {hasTrackedLocation && (
         <View className="flex-row items-center mt-1">
           <View className="w-3 h-3 rounded-full mr-2 bg-blue" />
+          {/* eslint-disable-next-line i18next/no-literal-string */}
           <List2>Tracked location</List2>
         </View>
       )}

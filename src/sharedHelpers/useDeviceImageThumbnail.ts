@@ -106,8 +106,7 @@ const useDeviceImageThumbnail = (
 ): string | undefined => {
   const available = Boolean( ImageCropper?.createThumbnail );
   const [thumbUri, setThumbUri] = useState<string | undefined>( ( ) => {
-    if ( !uri ) return undefined;
-    if ( !available ) return uri;
+    if ( !uri || !available ) return uri;
     return memoryCache.get( cacheKey( uri, maxPixel ) );
   } );
 

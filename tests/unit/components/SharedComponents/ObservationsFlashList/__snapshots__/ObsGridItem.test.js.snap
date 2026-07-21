@@ -2,6 +2,7 @@
 
 exports[`ObsGridItem for an observation with a photo should render 1`] = `
 <View
+  onLayout={[Function]}
   style={
     [
       [
@@ -120,11 +121,11 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
             ]
           }
         >
-          
+          
         </Text>
       </View>
     </View>
-    <FasterImageView
+    <View
       accessibilityIgnoresInvertColors={true}
       fadeDuration={0}
       source={
@@ -163,6 +164,7 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
       }
     }
     locations={null}
+    pointerEvents="none"
     startPoint={
       {
         "x": 0,
@@ -194,6 +196,12 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
           },
           {
             "bottom": 0,
+          },
+          {
+            "left": 0,
+          },
+          {
+            "right": 0,
           },
           {
             "alignItems": "flex-start",
@@ -249,6 +257,7 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
 
 exports[`ObsGridItem for an observation without a photo should render 1`] = `
 <View
+  onLayout={[Function]}
   style={
     [
       [
@@ -367,7 +376,7 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
             ]
           }
         >
-          
+          
         </Text>
       </View>
     </View>
@@ -386,6 +395,7 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
       }
     }
     locations={null}
+    pointerEvents="none"
     startPoint={
       {
         "x": 0,
@@ -417,6 +427,12 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
           },
           {
             "bottom": 0,
+          },
+          {
+            "left": 0,
+          },
+          {
+            "right": 0,
           },
           {
             "alignItems": "flex-start",

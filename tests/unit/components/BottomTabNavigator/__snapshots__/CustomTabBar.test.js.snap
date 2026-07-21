@@ -156,7 +156,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
               ]
             }
           >
-            
+            
           </Text>
         </View>
         <Text
@@ -290,7 +290,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
               ]
             }
           >
-            
+            
           </Text>
         </View>
         <Text
@@ -579,7 +579,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
                               ]
                             }
                           >
-                            
+                            
                           </Text>
                         </View>
                       </View>
@@ -790,7 +790,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
                               ]
                             }
                           >
-                            
+                            
                           </Text>
                         </View>
                       </View>
@@ -978,7 +978,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
                               ]
                             }
                           >
-                            
+                            
                           </Text>
                         </View>
                       </View>
@@ -1114,7 +1114,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
                           ]
                         }
                       >
-                        
+                        
                       </Text>
                     </View>
                     <Text
@@ -1153,7 +1153,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
             </View>
           </RCTScrollView>
           <View
-            accessibilityHint="Shows observation creation options"
+            accessibilityHint="Navigates to photo importer"
             accessibilityLabel="Add observations"
             accessibilityRole="button"
             accessibilityState={
@@ -1286,7 +1286,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
                     ]
                   }
                 >
-                  
+                  
                 </Text>
               </View>
             </BVLinearGradient>
@@ -1385,7 +1385,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
               ]
             }
           >
-            
+            
           </Text>
         </View>
         <Text
@@ -1530,7 +1530,7 @@ exports[`CustomTabBar with advanced user layout should render correctly 1`] = `
                 ]
               }
             >
-              
+              
             </Text>
           </View>
         </View>

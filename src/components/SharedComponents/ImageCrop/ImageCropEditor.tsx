@@ -199,14 +199,13 @@ const ImageCropEditor = ( ) => {
     }
     const handle = InteractionManager.runAfterInteractions( ( ) => {
       for ( const uri of pendingImageUris ) {
-        if ( preloadedUrisRef.current.has( uri ) ) {
-          continue;
+        if ( !preloadedUrisRef.current.has( uri ) ) {
+          preloadedUrisRef.current.add( uri );
+          const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, uri );
+          const cropSourceUri = groupedPhoto?.image.cropOriginalUri || uri;
+          const existingSavedCrop = groupedPhoto?.image.crop ?? null;
+          enqueuePreload( uri, cropSourceUri, existingSavedCrop );
         }
-        preloadedUrisRef.current.add( uri );
-        const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, uri );
-        const cropSourceUri = groupedPhoto?.image.cropOriginalUri || uri;
-        const existingSavedCrop = groupedPhoto?.image.crop ?? null;
-        enqueuePreload( uri, cropSourceUri, existingSavedCrop );
       }
     } );
     return ( ) => handle.cancel( );

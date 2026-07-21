@@ -43,24 +43,23 @@ export const formatHttpResponseBody = (
   apiError: INatApiError | Error,
 ): string | undefined => {
   const inatError = apiError as INatApiError;
+  let result: string | undefined;
 
   if ( inatError.json ) {
     try {
-      return JSON.stringify( inatError.json, null, 2 );
+      result = JSON.stringify( inatError.json, null, 2 );
     } catch {
-      return String( inatError.json );
+      result = String( inatError.json );
     }
-  }
-
-  if ( typeof inatError.status === "number" && apiError.message ) {
+  } else if ( typeof inatError.status === "number" && apiError.message ) {
     try {
-      return JSON.stringify( JSON.parse( apiError.message ), null, 2 );
+      result = JSON.stringify( JSON.parse( apiError.message ), null, 2 );
     } catch {
-      return apiError.message;
+      result = apiError.message;
     }
   }
 
-  return undefined;
+  return result;
 };
 
 const truncateHttpResponseBody = ( body: string ): string => {

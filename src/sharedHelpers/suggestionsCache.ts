@@ -25,12 +25,15 @@ const getKeyIndex = ( ): string[] => {
 
 export function getCachedSuggestions<T>( key: string ): T | undefined {
   const raw = store.getString( key );
-  if ( !raw ) return undefined;
-  try {
-    return JSON.parse( raw ) as T;
-  } catch {
-    return undefined;
+  let result: T | undefined;
+  if ( raw ) {
+    try {
+      result = JSON.parse( raw ) as T;
+    } catch {
+      result = undefined;
+    }
   }
+  return result;
 }
 
 export function setCachedSuggestions<T>( key: string, value: T ): void {

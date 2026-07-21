@@ -94,39 +94,40 @@ const readExifFromMultiplePhotos = async ( photoUris: string[] ) => {
 
   for ( const uri of normalizedUris.slice( 0, MAX_EXIF_PHOTOS_TO_SCAN ) ) {
     try {
+      // Read photos one at a time so we can stop early once we have complete
+      // EXIF data, rather than reading every photo up front
+      // eslint-disable-next-line no-await-in-loop
       const currentPhotoExif = await Exify.read( uri );
-      if ( !currentPhotoExif ) {
-        continue;
-      }
+      if ( currentPhotoExif ) {
+        const {
+          GPSLatitude,
+          GPSLatitudeRef,
+          GPSLongitude,
+          GPSLongitudeRef,
+          GPSHPositioningError,
+        } = currentPhotoExif;
 
-      const {
-        GPSLatitude,
-        GPSLatitudeRef,
-        GPSLongitude,
-        GPSLongitudeRef,
-        GPSHPositioningError,
-      } = currentPhotoExif;
+        if ( !unifiedExif.latitude && GPSLatitude ) {
+          unifiedExif.latitude
+            = GPSLatitudeRef === "S"
+              ? -GPSLatitude
+              : GPSLatitude;
+        }
+        if ( !unifiedExif.longitude && GPSLongitude ) {
+          unifiedExif.longitude = GPSLongitudeRef === "W"
+            ? -GPSLongitude
+            : GPSLongitude;
+        }
+        if ( !unifiedExif.observed_on_string ) {
+          unifiedExif.observed_on_string = formatExifDateAsString( currentPhotoExif ) || null;
+        }
+        if ( GPSHPositioningError && !unifiedExif.positional_accuracy ) {
+          unifiedExif.positional_accuracy = GPSHPositioningError;
+        }
 
-      if ( !unifiedExif.latitude && GPSLatitude ) {
-        unifiedExif.latitude
-          = GPSLatitudeRef === "S"
-            ? -GPSLatitude
-            : GPSLatitude;
-      }
-      if ( !unifiedExif.longitude && GPSLongitude ) {
-        unifiedExif.longitude = GPSLongitudeRef === "W"
-          ? -GPSLongitude
-          : GPSLongitude;
-      }
-      if ( !unifiedExif.observed_on_string ) {
-        unifiedExif.observed_on_string = formatExifDateAsString( currentPhotoExif ) || null;
-      }
-      if ( GPSHPositioningError && !unifiedExif.positional_accuracy ) {
-        unifiedExif.positional_accuracy = GPSHPositioningError;
-      }
-
-      if ( hasCompleteUnifiedExif( unifiedExif ) ) {
-        break;
+        if ( hasCompleteUnifiedExif( unifiedExif ) ) {
+          break;
+        }
       }
     } catch ( reason ) {
       logger.error( "Failed to read EXIF data from a photo:", reason );

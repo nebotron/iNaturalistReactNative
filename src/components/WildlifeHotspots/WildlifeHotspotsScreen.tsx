@@ -146,7 +146,8 @@ const AddressInput = ( {
   const handleChange = useCallback( ( text: string ) => {
     onChangeText( text );
     if ( debounceRef.current ) clearTimeout( debounceRef.current );
-    const requestId = ++requestIdRef.current;
+    requestIdRef.current += 1;
+    const requestId = requestIdRef.current;
     if ( text.trim().length < 3 ) {
       // Before anything is typed, offer recent addresses and current location.
       onSuggestionsChange( text.trim().length === 0

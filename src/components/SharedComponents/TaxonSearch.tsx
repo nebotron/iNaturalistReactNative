@@ -1,5 +1,5 @@
-import Button from "components/SharedComponents/Buttons/Button";
 import EmptySearchResults from "components/Explore/SearchScreens/EmptySearchResults";
+import Button from "components/SharedComponents/Buttons/Button";
 import SearchBar from "components/SharedComponents/SearchBar";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";

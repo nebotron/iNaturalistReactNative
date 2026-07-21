@@ -1,9 +1,9 @@
+import { toExploreTaxonFilterTaxon } from "components/Explore/helpers/taxonFilters";
 import {
   EXPLORE_ACTION,
   exploreReducer,
   PLACE_MODE,
 } from "providers/ExploreContext";
-import { toExploreTaxonFilterTaxon } from "components/Explore/helpers/taxonFilters";
 import factory from "tests/factory";
 
 describe( "ExploreContext", ( ) => {

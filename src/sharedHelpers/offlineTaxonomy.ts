@@ -67,21 +67,20 @@ async function buildTaxonomyCache(): Promise<Map<number, OfflineTaxonEntry>> {
     // CSV: parent_taxon_id,taxon_id,rank_level,leaf_class_id,iconic_class_id,
     //        spatial_class_id,spatial_threshold,name
     const lines = content.split( "\n" );
-    for ( let i = 1; i < lines.length; i++ ) {
+    for ( let i = 1; i < lines.length; i += 1 ) {
       const line = lines[i].trim();
-      if ( !line ) continue;
       const parts = line.split( "," );
-      if ( parts.length < 8 ) continue;
       const taxonId = Number( parts[1] );
       const rankLevel = Number( parts[2] );
       const name = parts[7];
-      if ( !taxonId || !name ) continue;
-      map.set( taxonId, {
-        id: taxonId,
-        name,
-        rank_level: rankLevel,
-        rank: RANK_LEVEL_TO_RANK[rankLevel] ?? "stateofmatter",
-      } );
+      if ( line && parts.length >= 8 && taxonId && name ) {
+        map.set( taxonId, {
+          id: taxonId,
+          name,
+          rank_level: rankLevel,
+          rank: RANK_LEVEL_TO_RANK[rankLevel] ?? "stateofmatter",
+        } );
+      }
     }
   }
 

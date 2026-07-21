@@ -38,7 +38,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     try {
       const { cleanedQuery } = validateRealmSearch( searchString );
       const lowerQuery = cleanedQuery.toLowerCase();
-      const matches: { taxon: RealmTaxon, isExact: boolean }[] = [];
+      const matches: { taxon: RealmTaxon; isExact: boolean }[] = [];
       const allTaxa = realm.objects( "Taxon" );
       for ( let i = 0; i < allTaxa.length && matches.length < 50; i += 1 ) {
         const taxon = allTaxa[i];
@@ -64,8 +64,8 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     if ( taxonQuery.length === 0 ) return;
     setIsUpdatingLocalDb( true );
     try {
-      const api_token = await getJWT( );
-      const remoteTaxa = await searchTaxa( { q: taxonQuery }, { api_token } );
+      const apiToken = await getJWT( );
+      const remoteTaxa = await searchTaxa( { q: taxonQuery }, { api_token: apiToken } );
       if ( remoteTaxa && remoteTaxa.length > 0 ) {
         const mappedTaxa = remoteTaxa.map(
           ( remoteTaxon: ApiTaxon ) => Taxon.mapApiToRealm( remoteTaxon, realm ),

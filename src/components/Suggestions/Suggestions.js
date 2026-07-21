@@ -94,7 +94,9 @@ const Suggestions = ( {
         accessibilityLabel={t( "Choose-taxon" )}
         suggestion={suggestion}
         onTaxonChosen={handleTaxonChosen}
-        onSelectGenus={showGenusButton ? ( ) => handleSelectGenus( suggestion ) : undefined}
+        onSelectGenus={showGenusButton
+          ? ( ) => handleSelectGenus( suggestion )
+          : undefined}
       />
     );
   }, [genusEligibleTaxonIds, handleSelectGenus, handleTaxonChosen, t] );
@@ -182,7 +184,9 @@ const Suggestions = ( {
           accessibilityLabel={t( "Choose-top-taxon" )}
           suggestion={item}
           onTaxonChosen={handleTaxonChosen}
-          onSelectGenus={showGenusButton ? ( ) => handleSelectGenus( item ) : undefined}
+          onSelectGenus={showGenusButton
+            ? ( ) => handleSelectGenus( item )
+            : undefined}
         />
       </View>
     );

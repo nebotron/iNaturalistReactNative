@@ -24,7 +24,9 @@ interface Props {
 // user's own photos are shown plain.
 const PhotoThumbnail = ( { uri, detectSubject }: { uri: string; detectSubject?: boolean } ) => {
   const [containerSize, setContainerSize] = useState<number | null>( null );
-  const detection = useSubjectDetectionForUri( detectSubject ? uri : undefined );
+  const detection = useSubjectDetectionForUri( detectSubject
+    ? uri
+    : undefined );
 
   const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
     setContainerSize( event.nativeEvent.layout.width );

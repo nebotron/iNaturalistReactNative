@@ -24,7 +24,9 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
-import { normalizedCropToImageZoomTransform } from "sharedHelpers/normalizedCropToImageZoomTransform";
+import {
+  normalizedCropToImageZoomTransform,
+} from "sharedHelpers/normalizedCropToImageZoomTransform";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect, square2048Crop } from "sharedHelpers/normalizedCropTypes";
 import {
@@ -162,8 +164,8 @@ const ImageCropView = ( {
       return 0;
     }
     return Math.max(
-      boxSize * imageWidth / ( scale * contain.width ),
-      boxSize * imageHeight / ( scale * contain.height ),
+      ( boxSize * imageWidth ) / ( scale * contain.width ),
+      ( boxSize * imageHeight ) / ( scale * contain.height ),
     );
   }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
 
@@ -259,7 +261,8 @@ const ImageCropView = ( {
       return;
     }
 
-    const cropKey = `${sourceUri}:${initialCrop.x}:${initialCrop.y}:${initialCrop.w}:${initialCrop.h}:${boxSize}`;
+    const cropKey = `${sourceUri}:${initialCrop.x}:${initialCrop.y}:${initialCrop.w}`
+      + `:${initialCrop.h}:${boxSize}`;
     if ( appliedInitialCropKey.current === cropKey ) {
       return;
     }
@@ -406,19 +409,17 @@ const ImageCropView = ( {
     height: boxSize,
   } ), [boxLeft, boxSize, boxTop] );
 
-  const cropPanContext = useMemo( ( ) => {
-    if ( boxSize <= 0 || cropAreaHeight <= 0 ) {
-      return undefined;
-    }
-
-    return {
-      imageWidth,
-      imageHeight,
-      viewportWidth: windowWidth,
-      viewportHeight: cropAreaHeight,
-      cropSize: boxSize,
-    };
-  }, [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
+  const cropPanContext = useMemo( ( ) => (
+    boxSize <= 0 || cropAreaHeight <= 0
+      ? undefined
+      : {
+        imageWidth,
+        imageHeight,
+        viewportWidth: windowWidth,
+        viewportHeight: cropAreaHeight,
+        cropSize: boxSize,
+      }
+  ), [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
 
   return (
     <View className="flex-1 bg-black">

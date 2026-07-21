@@ -34,6 +34,9 @@ const THUMB_SIZE = 78;
 const CONFIRM_PREVIEW_LIMIT = 30;
 
 const styles = StyleSheet.create( {
+  scrollContent: {
+    paddingBottom: 100,
+  },
   thumb: {
     borderRadius: 4,
     height: THUMB_SIZE,
@@ -132,7 +135,7 @@ const DevicePhotoCleanup = ( ) => {
             : "s"} in your library match observations you haven't favorited.`}
         </Body2>
       </View>
-      <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
         {days.map( day => (
           <View key={day.dateKey} className="px-3 pb-3">
             <Heading4 className="px-2 py-2">{day.label}</Heading4>

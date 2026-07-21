@@ -78,12 +78,12 @@ const DEFAULT_GEOLOCATION_CONFIG = {
 interface LocationRelaunchModule {
   start: ( ) => void;
   stop: ( ) => void;
-  drainPendingLocations: ( ) => Promise<Array<{
+  drainPendingLocations: ( ) => Promise<{
     latitude: number;
     longitude: number;
     accuracy: number | null;
     timestamp: number;
-  }>>;
+  }[]>;
 }
 
 const locationRelaunch = ( NativeModules as {

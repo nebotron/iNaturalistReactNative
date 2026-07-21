@@ -1,3 +1,4 @@
+import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import {
   fireEvent,
   screen,
@@ -5,7 +6,6 @@ import {
   waitFor,
   within,
 } from "@testing-library/react-native";
-import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import initI18next from "i18n/initI18next";
 import inatjs from "inaturalistjs";
 import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";

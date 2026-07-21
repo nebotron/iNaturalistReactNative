@@ -1,15 +1,22 @@
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
+import { INatIcon } from "components/SharedComponents";
 import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
-import { INatIcon } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import type { ViewStyle } from "react-native";
-import { PixelRatio } from "react-native";
+import { PixelRatio, StyleSheet } from "react-native";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
+
+const styles = StyleSheet.create( {
+  selectedBorder: {
+    borderWidth: 4,
+    borderColor: colors.inatGreen,
+  },
+} );
 
 interface PhotoItem {
   image: {
@@ -73,7 +80,7 @@ const GroupPhotoImage = ( {
       >
         <View
           className="items-center justify-center bg-lightGray"
-          style={[style, isSelected && { borderWidth: 4, borderColor: colors.inatGreen }]}
+          style={[style, isSelected && styles.selectedBorder]}
         >
           <INatIcon name="sound" size={32} color={colors.darkGray} />
         </View>

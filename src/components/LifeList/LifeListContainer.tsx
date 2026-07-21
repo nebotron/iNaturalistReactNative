@@ -10,6 +10,7 @@ import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import type { TabStackScreenProps } from "navigation/types";
 import React, { useCallback, useEffect } from "react";
+import type { ListRenderItemInfo } from "react-native";
 import Photo from "realmModels/Photo";
 import Taxon from "realmModels/Taxon";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
@@ -323,23 +324,32 @@ const LifeListContainer = ( ) => {
     refetch( );
   }, [refetch] );
 
+  const renderRefreshButton = useCallback( ( ) => (
+    <RotatingINatIconButton
+      icon="rotate-right"
+      onPress={handleRefresh}
+      color={String( colors?.darkGray )}
+      rotating={isFetching}
+      disabled={isFetching}
+      accessibilityLabel={t( "Reset-verb" )}
+      size={22}
+      testID="LifersRefreshButton"
+    />
+  ), [handleRefresh, isFetching, t] );
+
   useEffect( ( ) => {
     navigation.setOptions( {
       headerTitle: t( "MY-LIFERS" ),
-      headerRight: ( ) => (
-        <RotatingINatIconButton
-          icon="rotate-right"
-          onPress={handleRefresh}
-          color={String( colors?.darkGray )}
-          rotating={isFetching}
-          disabled={isFetching}
-          accessibilityLabel={t( "Reset-verb" )}
-          size={22}
-          testID="LifersRefreshButton"
-        />
-      ),
+      headerRight: renderRefreshButton,
     } );
-  }, [navigation, t, handleRefresh, isFetching] );
+  }, [navigation, t, renderRefreshButton] );
+
+  const renderItem = useCallback( ( { item }: ListRenderItemInfo<Lifer> ) => (
+    <LiferGridItem
+      item={item}
+      style={gridItemStyle}
+    />
+  ), [gridItemStyle] );
 
   if ( isLoading ) {
     return (
@@ -357,12 +367,7 @@ const LifeListContainer = ( ) => {
         numColumns={numColumns}
         contentContainerStyle={flashListStyle}
         keyExtractor={( item: Lifer ) => `${item.uuid}`}
-        renderItem={( { item }: { item: Lifer } ) => (
-          <LiferGridItem
-            item={item}
-            style={gridItemStyle}
-          />
-        )}
+        renderItem={renderItem}
         ListHeaderComponent={isFetching
           ? (
             <View className="items-center py-4">

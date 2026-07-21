@@ -408,6 +408,7 @@ const MyObservationsSimple = ( {
             <ObservationsFlashList
               data={dataFilledWithEmptyBoxes}
               dataCanBeFetched={!!currentUser}
+              fullWidthGrid={layout === "grid"}
               fetchFromLastObservation={fetchFromLastObservation}
               handlePullToRefresh={handlePullToRefresh}
               handleIndividualUploadPress={handleIndividualUploadPress}

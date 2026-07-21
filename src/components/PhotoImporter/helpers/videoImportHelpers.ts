@@ -7,7 +7,9 @@ import * as uuid from "uuid";
 type PhotoNode = PhotoIdentifier["node"];
 
 // iOS CameraRoll returns "video" (not "video/mp4"); Android returns MIME types.
-export const isVideoNode = ( node: PhotoNode ): boolean => Boolean( node.type?.startsWith( "video" ) );
+export const isVideoNode = ( node: PhotoNode ): boolean => Boolean(
+  node.type?.startsWith( "video" ),
+);
 
 const { ImageCropper } = NativeModules as {
   ImageCropper?: {

@@ -23,11 +23,13 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
 
   useEffect( ( ) => {
     try {
-      const savedStateString = zustandMMKVBackingStorage.getString( PERSISTED_NAVIGATION_STATE_KEY );
+      const savedStateString = zustandMMKVBackingStorage.getString(
+        PERSISTED_NAVIGATION_STATE_KEY,
+      );
       if ( savedStateString ) {
         setInitialState( JSON.parse( savedStateString ) );
       }
-    } catch ( e ) {
+    } catch {
       // If the persisted state can't be restored (e.g. corrupted or from an
       // older app version), just fall back to the default initial route
     } finally {
@@ -52,7 +54,7 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
     }
     try {
       zustandMMKVBackingStorage.set( PERSISTED_NAVIGATION_STATE_KEY, JSON.stringify( state ) );
-    } catch ( e ) {
+    } catch {
       // Some routes carry non-serializable params (e.g. Realm objects); if
       // the current state can't be saved, just skip persisting this change
     }

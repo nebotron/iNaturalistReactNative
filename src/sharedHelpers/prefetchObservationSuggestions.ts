@@ -14,7 +14,9 @@ import {
   setCachedSuggestions,
 } from "sharedHelpers/suggestionsCache";
 import { predictOffline } from "sharedHooks/useSuggestions/useOfflineSuggestions";
-import type { OnlineSuggestionsQueryResponse } from "sharedHooks/useSuggestions/useOnlineSuggestions";
+import type {
+  OnlineSuggestionsQueryResponse,
+} from "sharedHooks/useSuggestions/useOnlineSuggestions";
 
 interface OnlineSuggestionsApiResponse {
   results: OnlineSuggestionsQueryResponse["results"];
@@ -100,6 +102,9 @@ const prefetchObservationSuggestions = async (
   const authQueryKey = [...queryKey, true, userLoggedIn];
 
   await queryClient.prefetchQuery( {
+    // The key deliberately mirrors useOnlineSuggestions so the prefetch shares
+    // its cache entry; the extra queryFn values are inputs, not cache identity.
+    // eslint-disable-next-line @tanstack/query/exhaustive-deps
     queryKey: authQueryKey,
     queryFn: async ( ) => {
       const apiToken = await getJWT( true );

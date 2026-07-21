@@ -3,7 +3,6 @@ import { Realm } from "@realm/react";
 import type { ApiPhoto } from "api/types";
 import { photoUploadPath } from "appConstants/paths";
 import { NativeModules, Platform } from "react-native";
-import * as uuid from "uuid";
 import type { RealmPhoto } from "realmModels/types";
 import {
   cropOriginalUriFromPath,
@@ -13,6 +12,7 @@ import {
 } from "sharedHelpers/cropPhotoMetadata";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { unlink } from "sharedHelpers/util";
+import * as uuid from "uuid";
 
 class Photo extends Realm.Object {
   static PHOTO_FIELDS = {

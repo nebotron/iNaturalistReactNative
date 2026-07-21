@@ -143,7 +143,7 @@ function insertionCostKm( stops: RoutePoint[], idx: number, candidate: RoutePoin
 export function findBestInsertion( stops: RoutePoint[], candidate: RoutePoint ): number {
   let bestIdx = stops.length;
   let bestCost = Infinity;
-  for ( let i = 0; i < stops.length - 1; i++ ) {
+  for ( let i = 0; i < stops.length - 1; i += 1 ) {
     const cost = insertionCostKm( stops, i, candidate );
     if ( cost < bestCost ) {
       bestCost = cost;
@@ -204,14 +204,15 @@ function runKMeans(
   while ( seedIndices.length < effectiveK ) {
     let bestIdx = -1;
     let bestDist = -1;
-    for ( let i = 0; i < n; i++ ) {
-      if ( seedIndices.includes( i ) ) continue;
-      let minD = Infinity;
-      for ( const si of seedIndices ) {
-        const d = haversineKm( points[i].lat, points[i].lng, points[si].lat, points[si].lng );
-        if ( d < minD ) minD = d;
+    for ( let i = 0; i < n; i += 1 ) {
+      if ( !seedIndices.includes( i ) ) {
+        let minD = Infinity;
+        for ( const si of seedIndices ) {
+          const d = haversineKm( points[i].lat, points[i].lng, points[si].lat, points[si].lng );
+          if ( d < minD ) minD = d;
+        }
+        if ( minD > bestDist ) { bestDist = minD; bestIdx = i; }
       }
-      if ( minD > bestDist ) { bestDist = minD; bestIdx = i; }
     }
     if ( bestIdx < 0 ) break;
     seedIndices.push( bestIdx );
@@ -220,37 +221,39 @@ function runKMeans(
   let centroids: LatLng[] = seedIndices.map( i => ( { ...points[i] } ) );
   let assignments = new Array<number>( n ).fill( 0 );
 
-  for ( let iter = 0; iter < maxIter; iter++ ) {
+  for ( let iter = 0; iter < maxIter; iter += 1 ) {
+    const currentCentroids = centroids;
     const newAssign = points.map( p => {
       let minD = Infinity;
       let best = 0;
-      for ( let c = 0; c < centroids.length; c++ ) {
-        const d = haversineKm( p.lat, p.lng, centroids[c].lat, centroids[c].lng );
+      for ( let c = 0; c < currentCentroids.length; c += 1 ) {
+        const d = haversineKm( p.lat, p.lng, currentCentroids[c].lat, currentCentroids[c].lng );
         if ( d < minD ) { minD = d; best = c; }
       }
       return best;
     } );
 
-    if ( iter > 0 && !newAssign.some( ( a, i ) => a !== assignments[i] ) ) break;
+    const prevAssignments = assignments;
+    if ( iter > 0 && !newAssign.some( ( a, i ) => a !== prevAssignments[i] ) ) break;
     assignments = newAssign;
 
-    const sums = centroids.map( () => ( { lat: 0, lng: 0, n: 0 } ) );
-    for ( let i = 0; i < n; i++ ) {
+    const sums = currentCentroids.map( () => ( { lat: 0, lng: 0, n: 0 } ) );
+    for ( let i = 0; i < n; i += 1 ) {
       const c = assignments[i];
       sums[c].lat += points[i].lat;
       sums[c].lng += points[i].lng;
-      sums[c].n++;
+      sums[c].n += 1;
     }
     centroids = sums.map( ( s, ci ) => ( s.n > 0
       ? { lat: s.lat / s.n, lng: s.lng / s.n }
-      : centroids[ci] ) );
+      : currentCentroids[ci] ) );
   }
 
   const groups: { centroid: LatLng; memberIndices: number[] }[] = centroids.map( c => ( {
     centroid: c,
     memberIndices: [],
   } ) );
-  for ( let i = 0; i < n; i++ ) groups[assignments[i]].memberIndices.push( i );
+  for ( let i = 0; i < n; i += 1 ) groups[assignments[i]].memberIndices.push( i );
   return groups.filter( g => g.memberIndices.length > 0 );
 }
 
@@ -295,9 +298,10 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
   const obsForPoint: typeof observations = [];
   for ( const obs of observations ) {
     const coords = getObsCoords( obs );
-    if ( !coords ) continue;
-    points.push( coords );
-    obsForPoint.push( obs );
+    if ( coords ) {
+      points.push( coords );
+      obsForPoint.push( obs );
+    }
   }
 
   const clusters = splitToRadiusConstraint( points, maxRadiusKm );
@@ -323,12 +327,12 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
           ? parseTimeToMinutes( obs.time_observed_at )
           : null;
         if ( prev ) {
-          prev.count++;
+          prev.count += 1;
           if ( timeMinutes !== null ) {
             const angle = ( timeMinutes / 1440 ) * 2 * Math.PI;
             prev.timeSinSum += Math.sin( angle );
             prev.timeCosSum += Math.cos( angle );
-            prev.timeCount++;
+            prev.timeCount += 1;
           }
         } else {
           const timeSinSum = timeMinutes !== null
@@ -389,14 +393,18 @@ export function useRouteHotspots() {
 
       try {
         // 1. Get the actual road route (through every stop, in order) and baseline travel time
-        const { coords: routePoints, durationSec: directDurationSec } = await fetchOSRMRoute( stops );
+        const {
+          coords: routePoints,
+          durationSec: directDurationSec,
+        } = await fetchOSRMRoute( stops );
         setRouteCoords( routePoints );
 
         // Read algorithm constants from filterParams (with fallbacks to module defaults)
         const clusterRadiusKm = ( filterParams.hotspotClusterRadiusKm as number | undefined )
           ?? MAX_CLUSTER_RADIUS_KM;
-        const maxDetourCandidates = ( filterParams.hotspotMaxDetourCandidates as number | undefined )
-          ?? MAX_DETOUR_CANDIDATES;
+        const maxDetourCandidates = (
+          filterParams.hotspotMaxDetourCandidates as number | undefined
+        ) ?? MAX_DETOUR_CANDIDATES;
         const parkingMinutes = ( filterParams.hotspotParkingMinutes as number | undefined )
           ?? PARKING_MINUTES;
         const bboxPaddingKm = ( filterParams.hotspotBboxPaddingKm as number | undefined )

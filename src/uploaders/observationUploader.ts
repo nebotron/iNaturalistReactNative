@@ -19,8 +19,8 @@ import {
   uploadObservationMedia,
 } from "uploaders/mediaUploader";
 import { RecoverableError, RECOVERY_BY } from "uploaders/utils/errorHandling";
-import withRetry from "uploaders/utils/retry";
 import { trackObservationUpload } from "uploaders/utils/progressTracker";
+import withRetry from "uploaders/utils/retry";
 import { attachUploadFailureDetails } from "uploaders/utils/uploadFailureDetails";
 
 const logger = log.extend( "observationUploader" );

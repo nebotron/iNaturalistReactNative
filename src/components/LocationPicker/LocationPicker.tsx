@@ -5,8 +5,8 @@ import {
   KeyboardDismissableView,
   Map,
 } from "components/SharedComponents";
-import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { hasValidMapCoordinates } from "components/SharedComponents/Map/helpers/mapHelpers";
+import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import React from "react";
 import type { LayoutChangeEvent } from "react-native";

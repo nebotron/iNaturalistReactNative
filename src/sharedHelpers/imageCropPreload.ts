@@ -82,15 +82,12 @@ const preloadQueue: PreloadRequest[] = [];
 const preloadQueued = new Set<string>( );
 let activePreloadCount = 0;
 
-function pumpPreloadQueue( ) {
-  while ( activePreloadCount < PRELOAD_CONCURRENCY && preloadQueue.length > 0 ) {
-    const request = preloadQueue.shift( )!;
-    preloadQueued.delete( request.imageUri );
-    // May have been resolved or started directly (e.g. the user advanced to it)
-    // since it was enqueued; don't waste a slot on already-done/running work.
-    if ( preloadCache.has( request.imageUri ) || preloadInFlight.has( request.imageUri ) ) {
-      continue;
-    }
+function startNextPreload( ) {
+  const request = preloadQueue.shift( )!;
+  preloadQueued.delete( request.imageUri );
+  // May have been resolved or started directly (e.g. the user advanced to it)
+  // since it was enqueued; don't waste a slot on already-done/running work.
+  if ( !preloadCache.has( request.imageUri ) && !preloadInFlight.has( request.imageUri ) ) {
     activePreloadCount += 1;
     preloadImage(
       request.imageUri,
@@ -98,8 +95,15 @@ function pumpPreloadQueue( ) {
       request.existingSavedCrop,
     ).finally( ( ) => {
       activePreloadCount -= 1;
+      // eslint-disable-next-line no-use-before-define
       pumpPreloadQueue( );
     } );
+  }
+}
+
+function pumpPreloadQueue( ) {
+  while ( activePreloadCount < PRELOAD_CONCURRENCY && preloadQueue.length > 0 ) {
+    startNextPreload( );
   }
 }
 

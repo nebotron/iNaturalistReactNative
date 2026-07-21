@@ -15,7 +15,8 @@ import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashLi
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import type { TabStackScreenProps } from "navigation/types";
-import React, { useEffect } from "react";
+import React, { useCallback, useEffect } from "react";
+import type { ListRenderItemInfo } from "react-native";
 import Photo from "realmModels/Photo";
 import Taxon from "realmModels/Taxon";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
@@ -142,6 +143,14 @@ const MaverickIdentificationItem = ( { item }: MaverickIdentificationItemProps )
     ? accessibleTaxonName( item.taxon, currentUser, t )
     : undefined;
 
+  const renderBottomText = useCallback( ( ) => (
+    <Body4>
+      {item.created_at && (
+        <DateDisplay asDifference dateString={item.created_at} hideIcon />
+      )}
+    </Body4>
+  ), [item.created_at] );
+
   return (
     <View>
       <View className="mx-[15px] my-[11px]">
@@ -171,13 +180,7 @@ const MaverickIdentificationItem = ( { item }: MaverickIdentificationItemProps )
               taxon={item.taxon}
               scientificNameFirst={currentUser?.prefers_scientific_name_first}
               prefersCommonNames={currentUser?.prefers_common_names}
-              bottomTextComponent={( ) => (
-                <Body4>
-                  {item.created_at && (
-                    <DateDisplay asDifference dateString={item.created_at} hideIcon />
-                  )}
-                </Body4>
-              )}
+              bottomTextComponent={renderBottomText}
             />
           </View>
         </Pressable>
@@ -204,6 +207,10 @@ const MaverickIdentificationsContainer = ( ) => {
     navigation.setOptions( { headerTitle: t( "MY-MAVERICK-IDS" ) } );
   }, [navigation, t] );
 
+  const renderItem = useCallback( ( { item }: ListRenderItemInfo<MaverickIdentification> ) => (
+    <MaverickIdentificationItem item={item} />
+  ), [] );
+
   if ( isLoading ) {
     return (
       <ScreenShell>
@@ -218,9 +225,7 @@ const MaverickIdentificationsContainer = ( ) => {
       <CustomFlashList
         data={identifications ?? []}
         keyExtractor={( item: MaverickIdentification ) => `${item.uuid}`}
-        renderItem={( { item }: { item: MaverickIdentification } ) => (
-          <MaverickIdentificationItem item={item} />
-        )}
+        renderItem={renderItem}
         ListEmptyComponent={(
           <View className="self-center mt-5 p-4">
             <Body1 className="align-center text-center">

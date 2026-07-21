@@ -16,7 +16,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import Observation from "realmModels/Observation";
 import Taxon from "realmModels/Taxon";
 import type { RealmObservation } from "realmModels/types";
 import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
@@ -145,9 +144,7 @@ const MyObservationsResults = ( ) => {
       : "grid" );
   };
 
-  const confirmInternetConnection = useCallback( ( ) => {
-    return isConnected;
-  }, [isConnected] );
+  const confirmInternetConnection = useCallback( ( ) => isConnected, [isConnected] );
 
   const confirmLoggedIn = useCallback( ( ) => {
     if ( !currentUser ) {

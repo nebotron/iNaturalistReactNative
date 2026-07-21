@@ -245,15 +245,15 @@ const Map = ( {
   // In Android, we always return a state, either region or androidLocalRegion,
   // unless the user is actively dragging (to avoid fighting the gesture).
   const setRegion = ( ) => {
-    if ( Platform.OS !== "android" && initialRegion ) {
-      return undefined;
+    let region;
+    if ( Platform.OS === "android" ) {
+      region = isUserDragging
+        ? undefined
+        : androidLocalRegion;
+    } else if ( !initialRegion ) {
+      region = defaultInitialRegion;
     }
-    if ( Platform.OS === "android" && isUserDragging ) {
-      return undefined;
-    }
-    return Platform.OS === "android"
-      ? androidLocalRegion
-      : defaultInitialRegion;
+    return region;
   };
 
   const handleCurrentLocationPress = useCallback( ( ) => {

@@ -276,7 +276,9 @@ const SuggestionsContainer = ( ) => {
   // in Realm so the button appears immediately instead of after a lookup.
   const genusEligibleTaxonIds = useMemo( ( ) => {
     const allSuggestions = [
-      ...( suggestions.topSuggestion ? [suggestions.topSuggestion] : [] ),
+      ...( suggestions.topSuggestion
+        ? [suggestions.topSuggestion]
+        : [] ),
       ...( suggestions.otherSuggestions || [] ),
     ];
     const eligibleIds = new Set<number>( );

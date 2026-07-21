@@ -1242,7 +1242,8 @@ const FilterModalV2 = ( {
                       value: item.value - item.step,
                     } )}
                   >
-                    <Body2>{"−"}</Body2>
+                    {/* eslint-disable-next-line i18next/no-literal-string */}
+                    <Body2>−</Body2>
                   </Pressable>
                   <Body3 className="mx-3 w-12 text-center">{item.display}</Body3>
                   <Pressable
@@ -1253,7 +1254,7 @@ const FilterModalV2 = ( {
                       value: item.value + item.step,
                     } )}
                   >
-                    <Body2>{"+"}</Body2>
+                    <Body2>+</Body2>
                   </Pressable>
                 </View>
               </View>

@@ -89,7 +89,6 @@ const Match = ( {
             <HeaderEditIcon observation={observation} lastScreen="Match" taxon={iconicTaxon} />
           </View>
           <PhotosSection
-            observationUuid={observation?.uuid}
             taxon={taxon}
             obsPhotos={obsPhotos}
             navToTaxonDetails={navToTaxonDetails}
@@ -151,7 +150,6 @@ const Match = ( {
             <HeaderEditIcon observation={observation} lastScreen="Match" />
           </View>
           <PhotosSection
-            observationUuid={observation?.uuid}
             taxon={taxon}
             obsPhotos={obsPhotos}
             navToTaxonDetails={navToTaxonDetails}
@@ -198,7 +196,6 @@ const Match = ( {
           <HeaderEditIcon observation={observation} lastScreen="Match" taxon={taxonToSave} />
         </View>
         <PhotosSection
-          observationUuid={observation?.uuid}
           representativePhoto={topSuggestion?.taxon?.representative_photo}
           taxon={taxon}
           obsPhotos={obsPhotos}

@@ -1,6 +1,5 @@
 import type { ApiPlace, ApiProject } from "api/types";
 import classNames from "classnames";
-import { format } from "date-fns";
 import ExploreSavedFilterSheets from "components/Explore/ExploreSavedFilterSheets";
 import ExploreSavedFiltersSection from "components/Explore/ExploreSavedFiltersSection";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
@@ -28,8 +27,11 @@ import {
   WarningSheet,
 } from "components/SharedComponents";
 import { TopAndBottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
-import { Pressable, ScrollView, TextInput, View } from "components/styledComponents";
+import {
+  Pressable, ScrollView, TextInput, View,
+} from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
+import { format } from "date-fns";
 import { RealmContext } from "providers/contexts";
 import {
   DATE_OBSERVED,
@@ -1039,7 +1041,9 @@ const FilterModal = ( {
                   accessibilityLabel={t( "Change-date" )}
                 />
                 <DateTimePicker
-                  date={observedOn ? new Date( observedOn ) : new Date( )}
+                  date={observedOn
+                    ? new Date( observedOn )
+                    : new Date( )}
                   isDateTimePickerVisible={openSheet === OBSERVED_EXACT}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedExact( date )}
@@ -1088,13 +1092,17 @@ const FilterModal = ( {
                   </View>
                 )}
                 <DateTimePicker
-                  date={d1 ? new Date( d1 ) : new Date( )}
+                  date={d1
+                    ? new Date( d1 )
+                    : new Date( )}
                   isDateTimePickerVisible={openSheet === OBSERVED_START}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedStart( date )}
                 />
                 <DateTimePicker
-                  date={d2 ? new Date( d2 ) : new Date( )}
+                  date={d2
+                    ? new Date( d2 )
+                    : new Date( )}
                   isDateTimePickerVisible={openSheet === OBSERVED_END}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateObservedEnd( date )}
@@ -1138,7 +1146,9 @@ const FilterModal = ( {
                   accessibilityLabel={t( "Change-date" )}
                 />
                 <DateTimePicker
-                  date={createdOn ? new Date( createdOn ) : new Date( )}
+                  date={createdOn
+                    ? new Date( createdOn )
+                    : new Date( )}
                   isDateTimePickerVisible={openSheet === UPLOADED_EXACT}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateDateUploaded( {
@@ -1190,13 +1200,17 @@ const FilterModal = ( {
                   </View>
                 )}
                 <DateTimePicker
-                  date={createdD1 ? new Date( createdD1 ) : new Date( )}
+                  date={createdD1
+                    ? new Date( createdD1 )
+                    : new Date( )}
                   isDateTimePickerVisible={openSheet === UPLOADED_START}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateUploadedStart( date )}
                 />
                 <DateTimePicker
-                  date={createdD2 ? new Date( createdD2 ) : new Date( )}
+                  date={createdD2
+                    ? new Date( createdD2 )
+                    : new Date( )}
                   isDateTimePickerVisible={openSheet === UPLOADED_END}
                   toggleDateTimePicker={() => setOpenSheet( NONE )}
                   onDatePicked={date => updateUploadedEnd( date )}
@@ -1350,7 +1364,9 @@ const FilterModal = ( {
               keyboardType="decimal-pad"
               onBlur={() => {
                 const val = parseFloat( clusterRadiusText );
-                const clamped = isNaN( val ) ? hotspotClusterRadiusKm : val;
+                const clamped = isNaN( val )
+                  ? hotspotClusterRadiusKm
+                  : val;
                 setClusterRadiusText( String( clamped ) );
                 dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS, value: clamped } );
               }}
@@ -1365,7 +1381,9 @@ const FilterModal = ( {
               keyboardType="number-pad"
               onBlur={() => {
                 const val = parseInt( maxCandidatesText, 10 );
-                const clamped = isNaN( val ) ? hotspotMaxDetourCandidates : val;
+                const clamped = isNaN( val )
+                  ? hotspotMaxDetourCandidates
+                  : val;
                 setMaxCandidatesText( String( clamped ) );
                 dispatch( {
                   type: EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES,
@@ -1383,7 +1401,9 @@ const FilterModal = ( {
               keyboardType="number-pad"
               onBlur={() => {
                 const val = parseInt( obsPerPageText, 10 );
-                const clamped = isNaN( val ) ? hotspotObsPerPage : val;
+                const clamped = isNaN( val )
+                  ? hotspotObsPerPage
+                  : val;
                 setObsPerPageText( String( clamped ) );
                 dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE, value: clamped } );
               }}
@@ -1398,7 +1418,9 @@ const FilterModal = ( {
               keyboardType="number-pad"
               onBlur={() => {
                 const val = parseInt( parkingMinutesText, 10 );
-                const clamped = isNaN( val ) ? hotspotParkingMinutes : val;
+                const clamped = isNaN( val )
+                  ? hotspotParkingMinutes
+                  : val;
                 setParkingMinutesText( String( clamped ) );
                 dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES, value: clamped } );
               }}
@@ -1413,7 +1435,9 @@ const FilterModal = ( {
               keyboardType="number-pad"
               onBlur={() => {
                 const val = parseInt( bboxPaddingText, 10 );
-                const clamped = isNaN( val ) ? hotspotBboxPaddingKm : val;
+                const clamped = isNaN( val )
+                  ? hotspotBboxPaddingKm
+                  : val;
                 setBboxPaddingText( String( clamped ) );
                 dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM, value: clamped } );
               }}

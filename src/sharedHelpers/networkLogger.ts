@@ -16,6 +16,10 @@ let entries: NetworkLogEntry[] = [];
 const listeners = new Set<() => void>( );
 let counter = 0;
 
+function notifyListeners( ) {
+  listeners.forEach( l => l( ) );
+}
+
 export function clearNetworkLog( ): void {
   entries = [];
   notifyListeners( );
@@ -32,10 +36,6 @@ export function useNetworkLog( ) {
   useEffect( () => subscribeToNetworkLog( () => setSnapshot( entries ) ), [] );
 
   return { entries: snapshot, clearNetworkLog };
-}
-
-function notifyListeners( ) {
-  listeners.forEach( l => l( ) );
 }
 
 function addEntry( entry: NetworkLogEntry ) {
@@ -72,20 +72,22 @@ function shouldSkip( url: string ) {
   );
 }
 
+function resolveFetchUrl( input: Parameters<typeof fetch>[0] ): string {
+  if ( typeof input === "string" ) return input;
+  if ( input instanceof URL ) return input.toString( );
+  return ( input as Request ).url;
+}
+
 function patchFetch( ) {
   const orig = global.fetch as typeof fetch;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if ( !orig || ( orig as any ).__nlPatched ) return;
 
   const patched = async (
-    input: RequestInfo | URL,
-    init?: RequestInit,
+    input: Parameters<typeof fetch>[0],
+    init?: Parameters<typeof fetch>[1],
   ): Promise<Response> => {
-    const url = typeof input === "string"
-      ? input
-      : input instanceof URL
-        ? input.toString( )
-        : ( input as Request ).url;
+    const url = resolveFetchUrl( input );
 
     if ( shouldSkip( url ) ) return orig( input, init );
 
@@ -97,7 +99,8 @@ function patchFetch( ) {
     ).toUpperCase( );
 
     const startTime = Date.now( );
-    const id = `f-${++counter}`;
+    counter += 1;
+    const id = `f-${counter}`;
 
     addEntry( {
       id,
@@ -159,7 +162,8 @@ function patchXHR( ) {
       return origSend.apply( this, args );
     }
 
-    const id = `x-${++counter}`;
+    counter += 1;
+    const id = `x-${counter}`;
     const startTime = Date.now( );
     this._nlId = id;
     this._nlStart = startTime;

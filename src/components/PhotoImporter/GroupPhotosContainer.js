@@ -19,10 +19,6 @@ import React, {
 } from "react";
 import Observation from "realmModels/Observation";
 import applyTrackedLocationToObservation from "sharedHelpers/applyTrackedLocationToPhotos";
-import { log } from "sharedHelpers/logger";
-import {
-  prefetchSuggestionsForObservations,
-} from "sharedHelpers/prefetchObservationSuggestions";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
@@ -30,6 +26,10 @@ import {
   filterUsableTrackedPoints,
   interpolateFromUsablePoints,
 } from "sharedHelpers/interpolateTrackedLocation";
+import { log } from "sharedHelpers/logger";
+import {
+  prefetchSuggestionsForObservations,
+} from "sharedHelpers/prefetchObservationSuggestions";
 import { useExitObservationFlow, useGridLayout } from "sharedHooks";
 import useStore from "stores/useStore";
 

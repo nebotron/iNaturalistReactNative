@@ -18,7 +18,9 @@ const NotificationsTab = ( { id, text }: TabComponentProps ) => {
   const {
     ownerUnviewedCount, followingUnviewedCount, refetch,
   } = useUnviewedNotificationsCount( );
-  const numUnviewed = id === OWNER_TAB ? ownerUnviewedCount : followingUnviewedCount;
+  const numUnviewed = id === OWNER_TAB
+    ? ownerUnviewedCount
+    : followingUnviewedCount;
 
   useEffect( ( ) => {
     const listener = EventRegister.addEventListener(

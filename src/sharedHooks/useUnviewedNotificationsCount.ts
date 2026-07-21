@@ -43,6 +43,9 @@ const useUnviewedNotificationsCount = () => {
     const params = TAB_PARAMS[tab];
     const apiToken = await getJWT( );
     queryClient.prefetchInfiniteQuery( {
+      // realm is a stable context value, deliberately kept out of the key so
+      // this matches the query key used in useInfiniteNotificationsScroll
+      // eslint-disable-next-line @tanstack/query/exhaustive-deps
       queryKey: [...getNotificationsQueryKey( params ), undefined, currentUser],
       queryFn: ( { pageParam }: { pageParam: number } ) => fetchNotificationsPage(
         params,

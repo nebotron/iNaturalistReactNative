@@ -19,7 +19,9 @@ async function withRetry<T>( fn: () => Promise<T> ): Promise<T> {
       throw error;
     }
     const delay = RETRY_DELAY_MS + Math.random() * RETRY_JITTER_MS;
-    await new Promise( resolve => setTimeout( resolve, delay ) );
+    await new Promise( resolve => {
+      setTimeout( resolve, delay );
+    } );
     return fn();
   }
 }

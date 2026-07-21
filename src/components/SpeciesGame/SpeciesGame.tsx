@@ -99,8 +99,9 @@ function computeLookalikesFromObs(
 } {
   const counts: Record<number, { count: number; observationUuids: string[] }> = {};
   for ( const s of seed ?? [] ) {
-    if ( s.taxonId === targetId ) continue;
-    counts[s.taxonId] = { count: s.count, observationUuids: [...s.observationUuids] };
+    if ( s.taxonId !== targetId ) {
+      counts[s.taxonId] = { count: s.count, observationUuids: [...s.observationUuids] };
+    }
   }
   for ( const obs of results ) {
     for ( const ident of ( obs as { identifications?: unknown[] } ).identifications ?? [] ) {

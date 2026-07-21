@@ -8,7 +8,7 @@ export { default as handleUploadError } from "./utils/errorHandling";
 export { default as markRecordUploaded } from "./utils/realmSync";
 export {
   attachUploadFailureDetails,
-  formatUploadFailureAlertBody,
   formatHttpResponseBody,
+  formatUploadFailureAlertBody,
   getUploadFailureDetails,
 } from "./utils/uploadFailureDetails";

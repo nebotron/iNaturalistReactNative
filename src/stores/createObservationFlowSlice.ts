@@ -396,7 +396,7 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
   // original device photo. Camera-captured photos are created before we know
   // their device library URI, so without this their originalDevicePhotoUri
   // stays null and they never match.
-  attachDeviceUrisToObservationPhotos: ( mappings ) => set( state => {
+  attachDeviceUrisToObservationPhotos: mappings => set( state => {
     const validMappings = mappings
       .map( ( { localUri, deviceUri } ) => ( {
         localUri,

@@ -3,7 +3,10 @@ import { NativeModules, Platform } from "react-native";
 import type Realm from "realm";
 import Photo from "realmModels/Photo";
 import type { RealmObservation } from "realmModels/types";
-import { lookupImportedPhotoDeviceUri, normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import {
+  lookupImportedPhotoDeviceUri,
+  normalizeDevicePhotoUri,
+} from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import useStore from "stores/useStore";

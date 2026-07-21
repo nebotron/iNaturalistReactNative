@@ -37,7 +37,7 @@ interface RootExploreSlice {
 
 const createRootExploreSlice: StateCreator<RootExploreSlice> = ( set, get ) => ( {
   ...DEFAULT_STATE,
-  setRootStoredParams: ( rootStoredParams ) => set( ( ) => ( {
+  setRootStoredParams: rootStoredParams => set( ( ) => ( {
     rootStoredParams,
     rootRelativeDateOffsets: getRelativeDateOffsets( rootStoredParams as ExploreState ),
   } ) ),

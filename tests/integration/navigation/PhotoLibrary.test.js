@@ -1,9 +1,9 @@
+import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import {
   fireEvent,
   screen,
   waitFor,
 } from "@testing-library/react-native";
-import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import initI18next from "i18n/initI18next";
 import {
   navigateToPhotoImporterFromMyObs,
@@ -73,7 +73,7 @@ const mockNode2 = {
   },
 };
 
-const makeGetPhotosResult = ( nodes ) => ( {
+const makeGetPhotosResult = nodes => ( {
   page_info: { end_cursor: undefined, has_next_page: false },
   edges: nodes.map( node => ( { node } ) ),
 } );

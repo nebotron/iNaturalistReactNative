@@ -1,4 +1,4 @@
-import { copyFile, mkdir } from "@dr.pogodin/react-native-fs";
+import { copyFile } from "@dr.pogodin/react-native-fs";
 import {
   duplicateGroupedMediaGroups,
   duplicateGroupedPhotoItem,

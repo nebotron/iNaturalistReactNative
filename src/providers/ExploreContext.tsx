@@ -877,7 +877,10 @@ function exploreReducer( state: State, action: Action ) {
     case EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS:
       return { ...state, hotspotClusterRadiusKm: Math.max( 0.5, Math.min( 5, action.value ) ) };
     case EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES:
-      return { ...state, hotspotMaxDetourCandidates: Math.max( 10, Math.min( 100, action.value ) ) };
+      return {
+        ...state,
+        hotspotMaxDetourCandidates: Math.max( 10, Math.min( 100, action.value ) ),
+      };
     case EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE:
       return { ...state, hotspotObsPerPage: Math.max( 50, action.value ) };
     case EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES:
@@ -921,7 +924,9 @@ const ExploreProvider = ( { children }: ExploreProviderProps ) => {
   let numberOfFilters: number = Object.keys( calculatedFilters ).reduce(
     ( count, key ) => {
       if ( key === "userFilters" ) {
-        return count + ( state.userFilters?.length > 0 ? 1 : 0 );
+        return count + ( state.userFilters?.length > 0
+          ? 1
+          : 0 );
       }
       if ( state[key] !== calculatedFilters[key] ) {
         return count + 1;

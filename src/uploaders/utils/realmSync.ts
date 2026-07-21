@@ -1,6 +1,6 @@
 import type { Realm } from "@realm/react";
-import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { linkCropFeedbackUploadedUrlForPhoto } from "sharedHelpers/cropFeedbackLog";
+import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 
 function findRecordInRealm(
   realm: Realm,

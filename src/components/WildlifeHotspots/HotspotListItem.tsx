@@ -83,7 +83,10 @@ const HotspotListItem = ( {
                     className="text-inatGreen underline"
                     onPress={() => onSpeciesCountPress?.( species )}
                     accessibilityRole="button"
-                    accessibilityLabel={`View ${species.count} observations of ${species.preferred_common_name || species.name} in Explore`}
+                    accessibilityLabel={
+                      `View ${species.count} observations of `
+                      + `${species.preferred_common_name || species.name} in Explore`
+                    }
                   >
                     {species.count}
                   </Body3>

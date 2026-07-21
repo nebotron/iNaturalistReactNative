@@ -21,8 +21,8 @@ import Photo from "realmModels/Photo";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { deleteBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
-import { openExternalWebBrowser } from "sharedHelpers/util";
 import useLiveToneMappedBrightnessUri from "sharedHelpers/useLiveToneMappedBrightnessUri";
+import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
@@ -56,7 +56,9 @@ const EXPOSURE_STOPS_DEFAULT = 0;
 const EXPOSURE_TICK_STOPS = [-1, 0, 1, 2, 3, 4];
 const BRIGHTNESS_DEFAULT = 1.0;
 const stopsToGain = ( stops: number ) => 2 ** stops;
-const formatStop = ( stop: number ) => ( stop > 0 ? `+${stop}` : `${stop}` );
+const formatStop = ( stop: number ) => ( stop > 0
+  ? `+${stop}`
+  : `${stop}` );
 const styles = StyleSheet.create( {
   gestureHandlerRoot: { flex: 1 },
 } );

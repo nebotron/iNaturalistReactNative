@@ -1,5 +1,6 @@
 import { renderHook, waitFor } from "@testing-library/react-native";
-import useNavigateWithTaxonSelected from "components/Suggestions/hooks/useNavigateWithTaxonSelected";
+import useNavigateWithTaxonSelected
+  from "components/Suggestions/hooks/useNavigateWithTaxonSelected";
 import useStore from "stores/useStore";
 import factory from "tests/factory";
 

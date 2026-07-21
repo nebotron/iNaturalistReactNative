@@ -16,7 +16,6 @@ import type { Node } from "react";
 import React, { useState } from "react";
 import { Surface } from "react-native-paper";
 import { useTranslation } from "sharedHooks";
-
 import colors from "styles/tailwindColors";
 
 import placeGuessText from "../helpers/placeGuessText";
