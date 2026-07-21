@@ -382,6 +382,7 @@ If-youre-seeing-this-error = Jeśli widzisz to i jesteś online, pracownicy iNat
 IGNORE-LOCATION = IGNORUJ LOKALIZACJĘ
 Ignore-notifications = Ignoruj powiadomienia
 Ignoring-location = Ignorowanie lokalizacji
+Import-Photos-From = Importuj zdjęcia z
 IMPORT-X-OBSERVATIONS =
     IMPORTUJ { $count ->
         [one] 1 OBSERWACJĘ
