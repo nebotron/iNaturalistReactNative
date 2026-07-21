@@ -1,5 +1,3 @@
-import Clipboard from "@react-native-clipboard/clipboard";
-import { Alert } from "react-native";
 import Config from "react-native-config";
 import { logWithoutRemote } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
@@ -11,7 +9,7 @@ const logger = logWithoutRemote.extend( "brightnessLog" );
 
 export type BrightnessLog = Record<string, number>;
 
-export interface BrightnessLogEntry {
+interface BrightnessLogEntry {
   url: string;
   brightness: number; // ideal brightness multiplier (1.0 = no change)
 }
@@ -25,10 +23,6 @@ const load = ( ): BrightnessLog => {
     return {};
   }
 };
-
-const _logToArray = ( logObj: BrightnessLog ): BrightnessLogEntry[] => Object.entries( logObj )
-  .filter( ( [url] ) => url.startsWith( "http" ) && !url.includes( "static.inaturalist.org" ) )
-  .map( ( [url, brightness] ) => ( { url, brightness } ) );
 
 // The app never reads the Firebase log (reads require auth and the app
 // carries no credentials — sync is write-only). Labeled brightness values
@@ -107,15 +101,4 @@ export const deleteBrightness = ( photoUrl: string ) => {
 export const getBrightness = ( url: string ): number | null => {
   const logObj = load( );
   return logObj[url] ?? logObj[normalizePhotoUrl( url )] ?? null;
-};
-
-export const getBrightnessLogCount = ( ): number => Object.keys( load( ) ).length;
-
-export const getBrightnessLogAsArray = ( ) => _logToArray( load( ) ).reverse( );
-
-export const copyBrightnessLogToClipboard = ( ) => {
-  const current = load( );
-  const count = Object.keys( current ).length;
-  Clipboard.setString( JSON.stringify( current, null, 2 ) );
-  Alert.alert( "Copied", `${count} brightness labels copied to clipboard.` );
 };

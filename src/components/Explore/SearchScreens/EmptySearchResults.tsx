@@ -1,7 +1,9 @@
 import { useNetInfo } from "@react-native-community/netinfo";
-import ActivityIndicator from "components/SharedComponents/ActivityIndicator";
-import OfflineNotice from "components/SharedComponents/OfflineNotice";
-import Body2 from "components/SharedComponents/Typography/Body2";
+import {
+  ActivityIndicator,
+  Body2,
+  OfflineNotice,
+} from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React from "react";
 import {

@@ -16,16 +16,12 @@ let entries: NetworkLogEntry[] = [];
 const listeners = new Set<() => void>( );
 let counter = 0;
 
-export function getNetworkLogEntries( ): NetworkLogEntry[] {
-  return entries;
-}
-
 export function clearNetworkLog( ): void {
   entries = [];
   notifyListeners( );
 }
 
-export function subscribeToNetworkLog( listener: () => void ): () => void {
+function subscribeToNetworkLog( listener: () => void ): () => void {
   listeners.add( listener );
   return () => listeners.delete( listener );
 }

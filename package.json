@@ -60,7 +60,6 @@
     "@react-native-community/datetimepicker": "^8.4.4",
     "@react-native-community/geolocation": "^3.4.0",
     "@react-native-community/hooks": "^3.0.0",
-    "@react-native-community/image-editor": "^4.3.0",
     "@react-native-community/netinfo": "^11.4.1",
     "@react-native-community/slider": "^5.1.1",
     "@react-native-firebase/analytics": "^23.8.8",

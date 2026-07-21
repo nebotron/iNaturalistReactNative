@@ -13,7 +13,7 @@ export interface PreloadResult {
 export const preloadCache = new Map<string, PreloadResult>( );
 // Track in-flight loads by their promise so callers can await (and dedupe)
 // an ongoing preload instead of kicking off duplicate, contending work.
-export const preloadInFlight = new Map<string, Promise<PreloadResult | null>>( );
+const preloadInFlight = new Map<string, Promise<PreloadResult | null>>( );
 
 export async function loadImageData(
   imageUri: string,

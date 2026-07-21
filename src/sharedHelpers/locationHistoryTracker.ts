@@ -97,7 +97,7 @@ const sleep = ( ms: number ) => new Promise<void>( resolve => {
   setTimeout( resolve, ms );
 } );
 
-export const isLocationHistoryTrackingEnabled = ( ) => (
+const isLocationHistoryTrackingEnabled = ( ) => (
   store.getBoolean( TRACKING_ENABLED_KEY ) ?? false
 );
 

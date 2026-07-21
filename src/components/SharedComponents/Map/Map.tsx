@@ -1,5 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import classnames from "classnames";
+import { Body1 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, {
   useCallback,
@@ -17,7 +18,8 @@ import type {
 import MapView, { UrlTile } from "react-native-maps";
 import type Observation from "realmModels/Observation";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
-import { useDeviceOrientation } from "sharedHooks";
+import mapTracker from "sharedHelpers/mapPerformanceTracker";
+import { useDebugMode, useDeviceOrientation } from "sharedHooks";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import type { MAP_TYPES } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
@@ -59,6 +61,7 @@ interface Props {
   className?: string;
   currentLocationButtonClassName?: string;
   initialRegion?: Region;
+  isLoading?: boolean;
   mapHeight?: DimensionValue; // allows for height to be defined as px or percentage
   mapViewClassName?: string;
   observation?: Observation;
@@ -93,6 +96,7 @@ const Map = ( {
   className = "flex-1",
   currentLocationButtonClassName,
   initialRegion,
+  isLoading = true,
   mapHeight,
   mapViewClassName,
   observation,
@@ -118,6 +122,12 @@ const Map = ( {
   zoomTapEnabled = true,
   onMapLayout,
 }: Props ) => {
+  const tilesMarkedVisible = useRef( false );
+  const [performanceMetrics, setPerformanceMetrics] = useState( {
+    mapReadyTime: 0,
+    tilesVisibleTime: 0,
+  } );
+  const { isDebug } = useDebugMode( );
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   const [currentZoom, setCurrentZoom] = useState( 0 );
   const navigation = useNavigation( );
@@ -450,6 +460,28 @@ const Map = ( {
     ? fuzzRegion( unfuzzedMapRegion )
     : unfuzzedMapRegion;
 
+  const renderDebugZoomLevel = ( ) => {
+    if ( isDebug ) {
+      return (
+        <View
+          className={classnames(
+            "absolute",
+            "left-5",
+            "bottom-[140px]",
+            "bg-deeppink",
+            "p-1",
+            "z-10",
+          )}
+        >
+          <Body1 className="text-white">
+            {`Zoom: ${currentZoom}`}
+          </Body1>
+        </View>
+      );
+    }
+    return null;
+  };
+
   const currentUserCanViewCoords = observation && !!(
     !observation.obscured || observation.privateLatitude
   );
@@ -471,10 +503,48 @@ const Map = ( {
   };
 
   const handleMapReady = ( ) => {
+    mapTracker.markMapReady( );
+
     if ( onMapReady ) {
       onMapReady( );
     }
   };
+
+  useEffect( ( ) => {
+    // debug mode only: display performance metrics
+    // eslint-disable-next-line no-undef
+    if ( isDebug ) {
+      mapTracker.reset( );
+
+      const updateInterval = setInterval( ( ) => {
+        const metrics = mapTracker.getSummary( );
+        setPerformanceMetrics( metrics );
+      }, 500 );
+
+      return ( ) => {
+        clearInterval( updateInterval );
+      };
+    }
+    return () => undefined;
+  }, [isDebug] );
+
+  useEffect( ( ) => {
+    // Detect when tiles are likely to be visible based on key conditions,
+    // since we can't get this info directly from UrlTile
+    if ( isDebug
+        && currentZoom > 0
+        && shouldOverlayObsTiles
+        && !isLoading
+        && !tilesMarkedVisible.current ) {
+      // Add a small delay to ensure tiles have had time to render --
+      // I wouldn't call this super accurate but it was helpful enough for a ballpark
+      // and to get an idea of the average time it takes to load tiles
+      setTimeout( ( ) => {
+        mapTracker.markTilesVisible( );
+        tilesMarkedVisible.current = true;
+      }, 300 );
+    }
+  }, [currentZoom, shouldOverlayObsTiles, isLoading, isDebug] );
 
   return (
     <View
@@ -483,6 +553,7 @@ const Map = ( {
       className={mapContainerClass}
       onLayout={onMapLayout}
     >
+      {renderDebugZoomLevel( )}
       <MapView
         cameraZoomRange={cameraZoomRange}
         className={className}
@@ -551,6 +622,27 @@ const Map = ( {
         switchMapTypeButtonClassName={switchMapTypeButtonClassName}
       />
       {children}
+      {isDebug && (
+        <View
+          className={classnames(
+            "absolute",
+            "left-5",
+            "bottom-[280px]",
+            "bg-deeppink",
+            "p-1",
+            "z-10",
+          )}
+        >
+          <Body1 className="text-white">
+            {`Map Ready: ${performanceMetrics.mapReadyTime}ms`}
+          </Body1>
+          <Body1 className="text-white">
+            {`Tiles Visible: ${performanceMetrics.tilesVisibleTime > 0
+              ? `${performanceMetrics.tilesVisibleTime}ms`
+              : "Not yet visible"}`}
+          </Body1>
+        </View>
+      )}
     </View>
   );
 };

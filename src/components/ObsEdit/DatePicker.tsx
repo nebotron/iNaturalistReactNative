@@ -54,6 +54,7 @@ const DatePicker = ( { currentObservation, updateObservationKeys }: Props ) => {
     <>
       <DateTimePicker
         date={observationDateForPicker}
+        mode="datetime"
         isDateTimePickerVisible={showModal}
         onDatePicked={handlePicked}
         toggleDateTimePicker={closeModal}

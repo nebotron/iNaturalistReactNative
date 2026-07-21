@@ -12,6 +12,7 @@ import {
   Body1,
   InfiniteScrollLoadingWheel,
   OfflineNotice,
+  PerformanceDebugView,
   RadioButtonSheet,
   Tabs,
   ViewWrapper,
@@ -521,6 +522,11 @@ const MyObservationsSimple = ( {
           />
         </>
       )}
+      <PerformanceDebugView
+        showListMetrics
+        showScrollMetrics
+        position="bottom-left"
+      />
     </>
   );
 };

@@ -9,7 +9,7 @@ export interface NormalizedCrop {
   brightness?: number;
 }
 
-export const MIN_CROP_FRACTION = 0.05;
+const MIN_CROP_FRACTION = 0.05;
 
 export function defaultSquareCrop(
   imageWidth: number,
@@ -89,7 +89,7 @@ export function clampCropPosition( crop: NormalizedCrop ): NormalizedCrop {
   };
 }
 
-export function cropScaledDimensions(
+function cropScaledDimensions(
   crop: NormalizedCrop,
   boxSize: number,
   imageWidth: number,
@@ -264,16 +264,6 @@ export function computeCropStyles(
   };
 }
 
-/** @deprecated Use computeCropStyles, which returns {wrapperStyle, imageStyle} */
-export function cropImageStyle(
-  crop: NormalizedCrop,
-  boxSize: number,
-  imageWidth: number,
-  imageHeight: number,
-) {
-  return computeCropStyles( crop, boxSize, imageWidth, imageHeight ).imageStyle;
-}
-
 export function computeContainRect(
   containerWidth: number,
   containerHeight: number,
@@ -326,21 +316,6 @@ export function cropToDisplayRect(
     top: imageRect.top + crop.y * imageRect.height,
     width: crop.w * imageRect.width,
     height: crop.h * imageRect.height,
-  };
-}
-
-export function displayDeltaToNormalized(
-  dx: number,
-  dy: number,
-  imageRect: { width: number; height: number },
-) {
-  if ( imageRect.width <= 0 || imageRect.height <= 0 ) {
-    return { dx: 0, dy: 0 };
-  }
-
-  return {
-    dx: dx / imageRect.width,
-    dy: dy / imageRect.height,
   };
 }
 
