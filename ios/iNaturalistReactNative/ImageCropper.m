@@ -397,78 +397,26 @@ static BOOL measureCropLuminance( UIImage *image, CGRect normCrop,
   return YES;
 }
 
-// ─── Brightness adjustment (exposure) ────────────────────────────────────────
+// ─── Brightness adjustment (linear multiply) ─────────────────────────────────
 
-static inline float srgbToLinear( float c )
+// Brightness: multiplies each channel's encoded value by the gain k and clamps
+// to [0, 255], the same operation the CSS brightness() filter applies to the
+// live slider preview — so the baked result matches what the slider showed. The
+// gain is identical for every pixel, so precompute the 256 possible outputs
+// once and apply them with a single table lookup per channel.
+static void applyBrightnessMultiplyBuffer( unsigned char *raw, int pixelCount, float k )
 {
-  return c <= 0.04045f ? c / 12.92f : powf( ( c + 0.055f ) / 1.055f, 2.4f );
-}
-
-static inline float linearToSrgb( float c )
-{
-  return c <= 0.0031308f ? c * 12.92f : 1.055f * powf( c, 1.0f / 2.4f ) - 0.055f;
-}
-
-// Exposure: multiplies scene-referred (linear-light) values by k, the same
-// way a camera's exposure control or a photo editor's Exposure slider works,
-// rather than multiplying the gamma-encoded pixel values directly. Gamma
-// encoding packs most of an image's tonal range into a small range of
-// encoded values near the top, so multiplying it directly compresses
-// midtone/highlight contrast and looks flat; doing the multiply in linear
-// light preserves relative contrast between tones instead.
-//
-// The multiply is applied to all three channels together and, when it pushes
-// the brightest channel past white, the whole pixel is scaled back so that
-// channel lands exactly on 1.0. Clipping each channel independently would let
-// them reach white at different points and shift the pixel's hue (a saturated
-// orange skews yellow as its red channel clips first, for example); scaling by
-// the shared maximum keeps the R:G:B ratio — and therefore the color — intact.
-static inline void applyExposurePreservingColor( unsigned char *px, float k )
-{
-  float r = srgbToLinear( px[0] / 255.0f ) * k;
-  float g = srgbToLinear( px[1] / 255.0f ) * k;
-  float b = srgbToLinear( px[2] / 255.0f ) * k;
-
-  float m = fmaxf( r, fmaxf( g, b ) );
-  if ( m > 1.0f ) { r /= m; g /= m; b /= m; }
-
-  px[0] = (unsigned char)roundf( linearToSrgb( r ) * 255.0f );
-  px[1] = (unsigned char)roundf( linearToSrgb( g ) * 255.0f );
-  px[2] = (unsigned char)roundf( linearToSrgb( b ) * 255.0f );
-}
-
-// Applies applyExposurePreservingColor to an RGBA buffer, but avoids the six
-// per-pixel powf() calls (three srgbToLinear, three linearToSrgb) for the
-// common case. The channel input is a byte, so there are only 256 possible
-// scene-linear values after the exposure multiply — precompute them once per
-// call, along with the encoded sRGB byte each maps to when the pixel does not
-// clip. A pixel whose brightest channel stays at or below white then costs
-// three table lookups instead of six transcendentals, producing output
-// bit-identical to the per-pixel path (the LUT entries ARE that computation,
-// evaluated on the same 256 inputs). Only pixels that push a channel past
-// white — where the color-preserving normalization couples the channels — fall
-// through to the exact powf path, and those are the minority in a photo.
-static void applyExposurePreservingColorBuffer(
-  unsigned char *raw, int pixelCount, float k )
-{
-  float         linAfter[256];  // scene-linear value after the exposure multiply
-  unsigned char srgbByte[256];  // encoded output byte when the pixel does not clip
+  unsigned char lut[256];
   for ( int i = 0; i < 256; i++ ) {
-    float lin   = srgbToLinear( i / 255.0f ) * k;  // >= 0 for k > 0
-    linAfter[i] = lin;
-    float clamped = lin > 1.0f ? 1.0f : lin;
-    srgbByte[i] = (unsigned char)roundf( linearToSrgb( clamped ) * 255.0f );
+    float v = roundf( i * k );
+    lut[i] = v <= 0.0f ? 0 : ( v >= 255.0f ? 255 : (unsigned char)v );
   }
 
   for ( int i = 0; i < pixelCount; i++ ) {
     unsigned char *px = raw + i * 4;
-    if ( fmaxf( linAfter[px[0]], fmaxf( linAfter[px[1]], linAfter[px[2]] ) ) > 1.0f ) {
-      applyExposurePreservingColor( px, k );
-    } else {
-      px[0] = srgbByte[px[0]];
-      px[1] = srgbByte[px[1]];
-      px[2] = srgbByte[px[2]];
-    }
+    px[0] = lut[px[0]];
+    px[1] = lut[px[1]];
+    px[2] = lut[px[2]];
   }
 }
 
@@ -572,17 +520,28 @@ RCT_EXPORT_METHOD( cropImage
   UIImage *image = [UIImage imageWithContentsOfFile:input];
   if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
 
-  UIImage *orientedImage = image;
-  if ( image.imageOrientation != UIImageOrientationUp ) {
-    UIGraphicsBeginImageContextWithOptions( image.size, NO, 1.0 );
-    [image drawInRect:CGRectMake( 0, 0, image.size.width, image.size.height )];
-    orientedImage = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-  }
+  CGRect     cropRect   = CGRectMake( [originX integerValue], [originY integerValue],
+                                      [width integerValue],   [height integerValue] );
+  CGImageRef croppedRef = NULL;
 
-  CGRect        cropRect   = CGRectMake( [originX integerValue], [originY integerValue],
-                                         [width integerValue],   [height integerValue] );
-  CGImageRef    croppedRef = CGImageCreateWithImageInRect( orientedImage.CGImage, cropRect );
+  if ( image.imageOrientation == UIImageOrientationUp ) {
+    croppedRef = CGImageCreateWithImageInRect( image.CGImage, cropRect );
+  } else {
+    // The crop rect is in the display (EXIF-oriented) coordinate space, but
+    // image.CGImage is stored in the raw sensor orientation, so cropping it
+    // directly would take the wrong region. Rather than redraw the entire
+    // full-resolution image just to normalize orientation and then crop out a
+    // small region — a large transient allocation on every image — draw only
+    // the crop-sized region: drawInRect applies the orientation, and offsetting
+    // the full image by -origin lands the wanted region in the small context.
+    // Integer offsets at 1:1 scale, so the pixels match a full redraw + crop.
+    UIGraphicsBeginImageContextWithOptions( cropRect.size, NO, 1.0 );
+    [image drawInRect:CGRectMake( -cropRect.origin.x, -cropRect.origin.y,
+                                  image.size.width, image.size.height )];
+    UIImage *croppedImage = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
+  }
   if ( !croppedRef ) { reject( @"CROP_FAILED", @"Crop failed", nil ); return; }
 
   NSData *data = jpegDataFromCroppedImage( croppedRef,
@@ -798,9 +757,9 @@ RCT_EXPORT_METHOD( measureImageBrightness
   resolve( @{ @"geomean": @( geomean ), @"median": @( median ) } );
 }
 
-// Applies the color-preserving exposure adjustment per pixel to the whole image
-// (scaled down to fit within maxDimension on its longest side, since this is
-// used for thumbnail display) and writes the result as a JPEG to outputPath.
+// Multiplies every pixel by the brightness gain (scaled down to fit within
+// maxDimension on its longest side, since this is used for thumbnail display)
+// and writes the result as a JPEG to outputPath.
 RCT_EXPORT_METHOD( adjustImageBrightness
                   : ( NSString * )inputPath adjustment
                   : ( nonnull NSNumber * )adjustment maxDimension
@@ -838,7 +797,7 @@ RCT_EXPORT_METHOD( adjustImageBrightness
   CGContextDrawImage( bmp, CGRectMake( 0, 0, W, H ), scaled.CGImage );
   CGColorSpaceRelease( cs );
 
-  applyExposurePreservingColorBuffer( raw, W * H, k );
+  applyBrightnessMultiplyBuffer( raw, W * H, k );
 
   CGImageRef adjustedRef = CGBitmapContextCreateImage( bmp );
   CGContextRelease( bmp );

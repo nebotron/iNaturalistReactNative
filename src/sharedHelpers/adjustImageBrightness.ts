@@ -11,13 +11,11 @@ interface ImageCropperModule {
 
 const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
-// Applies exposure (a linear-light multiply, see applyExposurePreservingColor
-// in the native implementation) rather than multiplying gamma-encoded pixel
-// values directly, which would compress midtone/highlight contrast and look
-// flat. The multiply is color-preserving: highlights that clip are scaled by
-// their shared maximum so the pixel's hue stays put instead of skewing as
-// individual channels reach white. Returns a file:// uri for the adjusted
-// image, or null on failure.
+// Multiplies each channel by the brightness gain and clamps to [0, 255] (see
+// applyBrightnessMultiplyBuffer in the native implementation), the same
+// operation the CSS brightness() filter applies to the live slider preview, so
+// the baked result matches what the slider showed. Returns a file:// uri for
+// the adjusted image, or null on failure.
 const adjustImageBrightness = async (
   imageUri: string,
   adjustment: number,
