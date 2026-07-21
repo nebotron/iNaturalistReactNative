@@ -10,6 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { checkMultiple, RESULTS } from "react-native-permissions";
+import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 
 import { displayName as appName } from "../../../../app.json";
@@ -20,6 +21,20 @@ type SaveToCameraRollOptionsWithLocation = SaveToCameraRollOptions & {
   latitude?: number;
   longitude?: number;
   horizontalAccuracy?: number;
+};
+
+const extractDevicePhotoUriFromSavedAsset = (
+  savedAsset: Awaited<ReturnType<typeof CameraRoll.saveAsset>>,
+): string | null => {
+  const uri = savedAsset?.node?.image?.uri;
+  const id = savedAsset?.node?.id;
+  if ( id && ( !uri || uri.match( /placeholder/ ) ) ) {
+    return normalizeDevicePhotoUri( `ph://${id}` );
+  }
+  if ( uri && !uri.match( /placeholder/ ) ) {
+    return normalizeDevicePhotoUri( uri );
+  }
+  return null;
 };
 
 // Save URIs to camera photo library (if a photo was taken using the app,
@@ -62,8 +77,11 @@ async function savePhotosToPhotoLibrary(
           saveOptions.longitude = location.longitude;
           saveOptions.horizontalAccuracy = location.positional_accuracy;
         }
-        const savedPhotoUri = await CameraRoll.save( uri, saveOptions );
-        savedUris.push( savedPhotoUri );
+        const savedAsset = await CameraRoll.saveAsset( uri, saveOptions );
+        const savedPhotoUri = extractDevicePhotoUriFromSavedAsset( savedAsset );
+        if ( savedPhotoUri ) {
+          savedUris.push( savedPhotoUri );
+        }
         return savedUris;
       } catch ( cameraRollSaveError ) {
         // should never get here since in usePrepareStoreAndNavigate we check for device full
