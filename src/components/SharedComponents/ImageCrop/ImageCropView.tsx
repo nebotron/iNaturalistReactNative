@@ -7,7 +7,7 @@ import {
 } from "components/MediaViewer/IdentifyPhoto";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import { INatIconButton } from "components/SharedComponents";
-import { Text, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
@@ -91,7 +91,6 @@ interface Props {
   sourceUri: string;
   imageWidth: number;
   imageHeight: number;
-  framePadding: number;
   initialCrop?: NormalizedCrop | null;
   labels: ImageCropLabels;
   // Key under which the exposure slider reads/writes the brightness log. The
@@ -107,7 +106,6 @@ const ImageCropView = ( {
   sourceUri,
   imageWidth,
   imageHeight,
-  framePadding,
   initialCrop,
   labels,
   brightnessLogKey,
@@ -139,12 +137,13 @@ const ImageCropView = ( {
   }, [brightnessLogKey] );
 
   const boxSize = useMemo( ( ) => {
+    // Full screen width, capped by the available crop area height.
     const maxSide = Math.min( windowWidth, cropAreaHeight );
     if ( maxSide <= 0 ) {
       return 0;
     }
-    return maxSide * ( 1 - 2 * framePadding );
-  }, [cropAreaHeight, framePadding, windowWidth] );
+    return maxSide;
+  }, [cropAreaHeight, windowWidth] );
 
   const boxLeft = ( windowWidth - boxSize ) / 2;
   const boxTop = ( cropAreaHeight - boxSize ) / 2;
@@ -364,11 +363,6 @@ const ImageCropView = ( {
     windowWidth,
   ] );
 
-  const instructionStyle = useMemo(
-    ( ) => ( { paddingTop: insets.top + 8 } ),
-    [insets.top],
-  );
-
   // Padding for the shared bottom control panel (sliders + buttons). The panel
   // clears the home indicator itself so the sliders and buttons are never
   // pushed under the safe area.
@@ -428,13 +422,6 @@ const ImageCropView = ( {
 
   return (
     <View className="flex-1 bg-black">
-      <Text
-        className="px-4 py-2 text-center text-white"
-        style={instructionStyle}
-      >
-        {labels.instructions}
-      </Text>
-
       <View
         className="flex-1 overflow-hidden"
         onLayout={event => {
