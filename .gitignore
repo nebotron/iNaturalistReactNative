@@ -122,3 +122,8 @@ yolov8n.pt
 # Python
 __pycache__/
 *.pyc
+
+# Subject-detector training/eval artifacts (regenerable; not app assets)
+datasets/
+runs/
+*.eval.csv
