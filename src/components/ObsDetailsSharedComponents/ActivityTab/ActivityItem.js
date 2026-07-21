@@ -21,6 +21,7 @@ import isEmpty from "lodash/isEmpty";
 import type { Node } from "react";
 import React from "react";
 import Taxon from "realmModels/Taxon";
+import colors from "styles/tailwindColors";
 
 const isSpeciesOrSubspeciesTaxon = taxon => (
   taxon?.rank_level === Taxon.SPECIES_LEVEL
@@ -69,9 +70,10 @@ const ActivityItem = ( {
   const showAgreeButton = user?.id !== currentUserId
     && userAgreedId !== taxon?.id
     && taxon?.is_active
-    && isSpeciesOrSubspeciesTaxon( taxon )
     && isFirstDisplay
     && currentUserId;
+  // The button is shown but disabled for taxa broader than species
+  const agreeDisabled = !isSpeciesOrSubspeciesTaxon( taxon );
 
   const navToTaxonDetails = ( ) => (
     navigation.navigate( {
@@ -128,6 +130,10 @@ const ActivityItem = ( {
                 onPress={( ) => openAgreeWithIdSheet( item.taxon )}
                 icon="id-agree"
                 size={33}
+                disabled={agreeDisabled}
+                color={agreeDisabled
+                  ? colors.mediumGray
+                  : undefined}
                 accessibilityLabel={t( "Agree" )}
               />
             )}
