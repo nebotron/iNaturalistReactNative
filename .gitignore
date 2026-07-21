@@ -127,3 +127,5 @@ __pycache__/
 datasets/
 runs/
 *.eval.csv
+crop_training.json
+brightness_training.json
