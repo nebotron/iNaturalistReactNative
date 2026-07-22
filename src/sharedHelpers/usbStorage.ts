@@ -18,6 +18,27 @@ export interface UsbPhoto {
   timestamp: number;
 }
 
+// Why a scan produced no photos, surfaced for diagnostics. "ok" means the drive
+// was scanned; the other values are the early-return reasons in UsbStorage.m.
+export type UsbImportReason =
+  | "ok"
+  | "no-folder-saved"
+  | "access-denied"
+  | "drive-disconnected";
+
+export interface UsbImportResult {
+  available: boolean;
+  reason: UsbImportReason;
+  photos: UsbPhoto[];
+  // Present only when available (reason === "ok").
+  regularFileCount?: number;
+  imageFileCount?: number;
+  alreadyImportedCount?: number;
+  copyFailureCount?: number;
+  // Added JS-side: how many relative paths are tracked as already imported.
+  knownCount?: number;
+}
+
 interface UsbStorageModule {
   pickFolder: ( ) => Promise<string | null>;
   getFolderName: ( ) => Promise<string | null>;
@@ -26,7 +47,7 @@ interface UsbStorageModule {
     destDir: string,
     knownNames: string[],
     maxCount: number
-  ) => Promise<{ available: boolean; photos: UsbPhoto[] }>;
+  ) => Promise<UsbImportResult>;
 }
 
 const usbStorage = Platform.OS === "ios"
@@ -53,18 +74,24 @@ export const forgetUsbFolder = async ( ) => {
   store.delete( IMPORTED_NAMES_KEY );
 };
 
-export const importNewUsbImages = async ( ): Promise<UsbPhoto[]> => {
-  if ( !usbStorage ) return [];
-  const { photos } = await usbStorage.importNewImages(
+export const importNewUsbImages = async ( ): Promise<UsbImportResult> => {
+  if ( !usbStorage ) {
+    return { available: false, reason: "no-folder-saved", photos: [] };
+  }
+  const knownNames = getImportedNames( );
+  const result = await usbStorage.importNewImages(
     usbImportPhotosPath,
-    getImportedNames( ),
+    knownNames,
     MAX_PHOTOS_PER_SCAN,
   );
+  const { photos } = result;
   if ( photos.length > 0 ) {
     store.set( IMPORTED_NAMES_KEY, JSON.stringify( [
-      ...getImportedNames( ),
+      ...knownNames,
       ...photos.map( photo => photo.name ),
     ] ) );
   }
-  return photos;
+  // Surface how many paths we already consider imported: an unexpectedly large
+  // count here explains a scan that finds files on the drive but imports none.
+  return { ...result, knownCount: knownNames.length } as UsbImportResult;
 };

@@ -25,17 +25,41 @@ const SCAN_INTERVAL_MS = 10_000;
 const useUsbAutoImport = ( ) => {
   const [onboardingShown] = useOnboardingShown( );
   const scanning = useRef( false );
+  // The scan runs every SCAN_INTERVAL_MS while foregrounded, and each remote
+  // log line is a network POST, so logging every tick would flood the log.
+  // Only emit a diagnostic when its text changes from the last one.
+  const lastDiag = useRef<string>( "" );
+  const logDiag = useCallback( ( msg: string ) => {
+    if ( msg === lastDiag.current ) return;
+    lastDiag.current = msg;
+    logger.info( `[diag] ${msg}` );
+  }, [] );
 
   const scan = useCallback( async ( ) => {
-    if ( !isUsbImportSupported( ) || scanning.current ) return;
-    if ( !onboardingShown || !navigationRef.isReady( ) ) return;
+    if ( !isUsbImportSupported( ) ) { logDiag( "skip: not supported on this platform" ); return; }
+    // A scan already in flight is normal overlap, not a diagnostic-worthy state.
+    if ( scanning.current ) return;
+    if ( !onboardingShown ) { logDiag( "skip: onboarding not shown yet" ); return; }
+    if ( !navigationRef.isReady( ) ) { logDiag( "skip: navigation not ready" ); return; }
     // Don't clobber an import/grouping session that's already underway: if the
     // user is still working through a previous batch (groupedPhotos non-empty,
     // cleared once observations are created), leave it be until they finish.
-    if ( useStore.getState( ).groupedPhotos.length > 0 ) return;
+    if ( useStore.getState( ).groupedPhotos.length > 0 ) {
+      logDiag( "skip: grouping session already in progress" );
+      return;
+    }
     scanning.current = true;
     try {
-      const photos = await importNewUsbImages( );
+      const result = await importNewUsbImages( );
+      const { photos } = result;
+      // Summarize every scan outcome so a silent no-op is explainable: an
+      // unavailable drive names its reason; an available one reports the file
+      // counts that show whether nothing was found vs. all already imported.
+      logDiag( result.available
+        ? `scan ok: ${photos.length} new photos; imageFiles=${result.imageFileCount}, `
+          + `alreadyImported=${result.alreadyImportedCount}, known=${result.knownCount}, `
+          + `regularFiles=${result.regularFileCount}, copyFailures=${result.copyFailureCount}`
+        : `scan produced no photos: ${result.reason}` );
       if ( photos.length === 0 ) return;
       logger.info( `Auto-importing ${photos.length} photos from USB folder` );
       const {
@@ -64,7 +88,7 @@ const useUsbAutoImport = ( ) => {
     } finally {
       scanning.current = false;
     }
-  }, [onboardingShown] );
+  }, [onboardingShown, logDiag] );
 
   useEffect( ( ) => {
     if ( !isUsbImportSupported( ) || !onboardingShown ) return undefined;
@@ -79,7 +103,11 @@ const useUsbAutoImport = ( ) => {
       // Nothing to watch until the user has chosen a folder; don't wake the JS
       // thread on an interval for the many users who never set one up.
       const folder = await getUsbFolderName( );
-      if ( !folder ) return;
+      if ( !folder ) {
+        logDiag( "not polling: no USB folder configured" );
+        return;
+      }
+      logDiag( `polling USB folder "${folder}" every ${SCAN_INTERVAL_MS}ms` );
       scan( );
       interval = setInterval( scan, SCAN_INTERVAL_MS );
     };
@@ -93,7 +121,7 @@ const useUsbAutoImport = ( ) => {
       stopPolling( );
       subscription.remove( );
     };
-  }, [scan, onboardingShown] );
+  }, [scan, onboardingShown, logDiag] );
 };
 
 export default useUsbAutoImport;

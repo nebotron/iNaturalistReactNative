@@ -122,13 +122,20 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
                            reject:(RCTPromiseRejectBlock)reject)
 {
   NSURL *folder = resolveSavedFolder( );
-  if ( !folder || ![folder startAccessingSecurityScopedResource] ) {
-    resolve( @{ @"available": @NO, @"photos": @[] } );
+  if ( !folder ) {
+    // No bookmark saved: the user never picked a folder (or it was forgotten).
+    resolve( @{ @"available": @NO, @"reason": @"no-folder-saved", @"photos": @[] } );
+    return;
+  }
+  if ( ![folder startAccessingSecurityScopedResource] ) {
+    // Bookmark resolved but iOS refused security-scoped access to it.
+    resolve( @{ @"available": @NO, @"reason": @"access-denied", @"photos": @[] } );
     return;
   }
   if ( ![folder checkResourceIsReachableAndReturnError:nil] ) {
+    // Folder resolved but isn't on disk right now — the drive is unplugged.
     [folder stopAccessingSecurityScopedResource];
-    resolve( @{ @"available": @NO, @"photos": @[] } );
+    resolve( @{ @"available": @NO, @"reason": @"drive-disconnected", @"photos": @[] } );
     return;
   }
 
@@ -145,14 +152,24 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
 
   NSMutableArray<NSDictionary *> *candidates = [NSMutableArray array];
   NSUInteger folderPathLength = folder.path.length;
+  // Diagnostic counters so the JS layer can tell an empty/disconnected drive
+  // from one whose images have all already been imported.
+  NSUInteger regularFileCount = 0;
+  NSUInteger imageFileCount = 0;
+  NSUInteger alreadyImportedCount = 0;
   for ( NSURL *file in enumerator ) {
     NSNumber *isRegular = nil;
     [file getResourceValue:&isRegular forKey:NSURLIsRegularFileKey error:nil];
+    if ( isRegular.boolValue ) regularFileCount++;
     if ( !isRegular.boolValue || !isImageFile( file.lastPathComponent ) ) continue;
+    imageFileCount++;
     // Relative path is the stable identity of a file on the drive; camera
     // filenames like DSC_0001.JPG repeat across DCIM subfolders.
     NSString *relativePath = [file.path substringFromIndex:folderPathLength + 1];
-    if ( [known containsObject:relativePath] ) continue;
+    if ( [known containsObject:relativePath] ) {
+      alreadyImportedCount++;
+      continue;
+    }
     NSDate *modified = nil;
     [file getResourceValue:&modified forKey:NSURLContentModificationDateKey error:nil];
     [candidates addObject:@{
@@ -170,6 +187,7 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
   NSUInteger cap = maxCount > 0 ? (NSUInteger)maxCount : NSUIntegerMax;
 
   NSMutableArray<NSDictionary *> *photos = [NSMutableArray array];
+  NSUInteger copyFailureCount = 0;
   for ( NSDictionary *candidate in candidates ) {
     if ( photos.count >= cap ) break;
     NSURL *src = candidate[@"url"];
@@ -181,6 +199,7 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
     NSError *copyError = nil;
     // Byte-for-byte copy, so all EXIF (GPS, timestamp) is preserved.
     if ( ![fm copyItemAtURL:src toURL:[NSURL fileURLWithPath:destPath] error:&copyError] ) {
+      copyFailureCount++;
       continue;
     }
 
@@ -211,7 +230,16 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
   }
 
   [folder stopAccessingSecurityScopedResource];
-  resolve( @{ @"available": @YES, @"photos": photos } );
+  resolve( @{
+    @"available": @YES,
+    @"reason": @"ok",
+    @"photos": photos,
+    // Diagnostics: let JS log why a scan produced no photos.
+    @"regularFileCount": @( regularFileCount ),
+    @"imageFileCount": @( imageFileCount ),
+    @"alreadyImportedCount": @( alreadyImportedCount ),
+    @"copyFailureCount": @( copyFailureCount ),
+  } );
 }
 
 @end
