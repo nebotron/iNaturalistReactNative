@@ -1,5 +1,7 @@
 import Config from "react-native-config";
 import type { transportFunctionType } from "react-native-logs";
+// The git commit the bundle was built from (see scripts/writeAppCommit.js).
+import APP_COMMIT from "sharedHelpers/appCommit";
 // Only referenced inside function bodies (never at module load), so the
 // api/log <-> logger import cycle resolves before either warn() runs.
 // logWithoutRemote omits this very transport, so logging a sync failure
@@ -99,6 +101,8 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
     timestamp: new Date( ).toISOString( ),
     level: props.level.text,
     extension: props.extension,
+    // commit lets a log line be traced back to the exact code that produced it
+    commit: APP_COMMIT,
     message,
     ...( extra ?? {} ),
     ...( error?.stack
@@ -106,15 +110,34 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
       : {} ),
   };
 
-  try {
-    const r = await fetch( `${baseUrl}/app_log.json`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify( entry ),
-    } );
-    if ( !r.ok ) logWithoutRemote.warn( "[log.ts] failed to sync log entry", r.status );
-  } catch ( syncError ) {
-    logWithoutRemote.warn( "[log.ts] failed to sync log entry", syncError );
+  const body = JSON.stringify( entry );
+  // Errors are the entries we most need to keep, so give them a few retries
+  // rather than dropping them on a transient network failure. Non-errors sync
+  // once to avoid amplifying high-volume info logging.
+  const maxAttempts = props.level.text === "error"
+    ? 3
+    : 1;
+  for ( let attempt = 1; attempt <= maxAttempts; attempt += 1 ) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await fetch( `${baseUrl}/app_log.json`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      } );
+      if ( r.ok ) return;
+      if ( attempt === maxAttempts ) {
+        logWithoutRemote.warn( "[log.ts] failed to sync log entry", r.status );
+        return;
+      }
+    } catch ( syncError ) {
+      if ( attempt === maxAttempts ) {
+        logWithoutRemote.warn( "[log.ts] failed to sync log entry", syncError );
+        return;
+      }
+    }
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise( resolve => { setTimeout( resolve, 500 * attempt ); } );
   }
 };
 
