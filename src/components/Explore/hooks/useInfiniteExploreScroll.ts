@@ -51,6 +51,10 @@ const useInfiniteExploreScroll = (
       // the most data we display in the UI on any Observations view in Explore
       // is the same amount of data we show for the Advanced list mode in MyObservations
       ...Observation.ADVANCED_MODE_LIST_FIELDS,
+      // geojson is the reliable coordinate source on API observations (top-level
+      // latitude/longitude are often absent); the Identify auto-CV reads it to
+      // score with location, matching the Suggest ID screen.
+      geojson: true,
       user: { // included here for "exclude by current user" in explore filters
         id: true,
         uuid: true,
