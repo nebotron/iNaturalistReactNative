@@ -4,15 +4,13 @@ import {
   iosRequestReadWriteGalleryPermission,
 } from "@react-native-camera-roll/camera-roll";
 import { FlashList } from "@shopify/flash-list";
-import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
 import type { PhotoGalleryListItem } from "components/PhotoImporter/helpers/photoGallerySections";
 import buildSectionedGalleryItems from "components/PhotoImporter/helpers/photoGallerySections";
+import PhotoGalleryImage from "components/PhotoImporter/PhotoGalleryImage";
 import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers";
 import { Body2 } from "components/SharedComponents";
 import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
-import DuplicateUploadBadge from
-  "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
-import { Pressable, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
@@ -254,40 +252,18 @@ const PhotoGallery = ( {
     const key = getSelectionKey( node );
     const selected = selectedUris.has( key );
     const imported = isImported( node );
-
     const isVideo = isVideoNode( node );
     return (
-      <Pressable
-        accessibilityRole="button"
-        onPress={( ) => toggleSelection( node )}
-        testID={`PhotoGallery.${key}`}
-      >
-        <View className="relative">
-          <ObsImagePreview
-            source={{ uri: node.image.uri }}
-            selected={selected}
-            selectable
-            hideGradientOverlay
-            squareCorners
-            style={gridItemStyle}
-          />
-          {isVideo && (
-            <View className="absolute bottom-1 right-1 z-10 bg-black/60 px-1 rounded">
-              { /* eslint-disable-next-line
-                react-native/no-inline-styles, i18next/no-literal-string */ }
-              <Text style={{ color: "white", fontSize: 10 }}>▶ GIF</Text>
-            </View>
-          )}
-          {imported && (
-            <DuplicateUploadBadge
-              accessibilityLabel={t( "Duplicate-photo-indicator" )}
-              className="absolute top-2 left-2 z-10"
-              size={20}
-              testID={`PhotoGallery.imported.${key}`}
-            />
-          )}
-        </View>
-      </Pressable>
+      <PhotoGalleryImage
+        node={node}
+        selectionKey={key}
+        selected={selected}
+        imported={imported}
+        isVideo={isVideo}
+        cellWidth={gridItemWidth}
+        gridItemStyle={gridItemStyle}
+        onPress={toggleSelection}
+      />
     );
   }, [
     selectedUris,
@@ -295,6 +271,7 @@ const PhotoGallery = ( {
     toggleSelection,
     toggleSectionSelection,
     gridItemStyle,
+    gridItemWidth,
     t,
   ] );
 
