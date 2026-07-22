@@ -18,6 +18,9 @@ interface SuggestionObservation {
   id?: number;
   uuid?: string;
   taxon?: RankedTaxon;
+  // API observations carry location as GeoJSON [lng, lat]; top-level
+  // latitude/longitude are often absent, so geojson is the reliable source.
+  geojson?: { coordinates?: [number, number] };
   latitude?: number;
   longitude?: number;
   user?: { id?: number };
@@ -94,14 +97,14 @@ const useTopSpeciesSuggestion = (
   const detectSubject = !belongsToCurrentUser;
 
   // Mirror the Suggestions screen's location toggle, which defaults on exactly
-  // when the observation has a location: pass lat/lng only when present.
-  const hasLocation = observation?.latitude != null;
-  const latitude = hasLocation
-    ? observation?.latitude
-    : undefined;
-  const longitude = hasLocation
-    ? observation?.longitude
-    : undefined;
+  // when the observation has a location: pass lat/lng only when present. Read
+  // coordinates from geojson (the reliable source on API observations, matching
+  // realmModels/Observation), falling back to top-level latitude/longitude.
+  // Without this, location was almost never sent and the CV scored without geo
+  // context, yielding entirely different species than the Suggest ID screen.
+  const coordinates = observation?.geojson?.coordinates;
+  const latitude = coordinates?.[1] ?? observation?.latitude;
+  const longitude = coordinates?.[0] ?? observation?.longitude;
 
   const queryEnabled = enabled && isGenusOrBroader && !!currentUser && !!photoUrl;
 
