@@ -192,6 +192,11 @@ const fetchUnviewedObservationUpdatesCount = async (
   params: Object = {},
   opts: Object = {},
 ): Promise<number> => {
+  // This endpoint always 401s without a token. isLoggedIn() can be true (an
+  // accessToken exists) while getJWT() returns null because a JWT refresh
+  // failed, so the query still fires tokenless. Skip the guaranteed-failing
+  // request rather than logging an auth error on every background poll.
+  if ( !opts?.api_token ) return 0;
   try {
     const { total_results: updatesCount } = await inatjs.observations.updates( {
       ...params,
