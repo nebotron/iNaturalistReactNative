@@ -1,10 +1,10 @@
-import type { ExifTags } from "@lodev09/react-native-exify";
 import {
   ActivityIndicator,
   BottomSheet,
 } from "components/SharedComponents";
 import { Text, View } from "components/styledComponents";
 import React, { useEffect, useState } from "react";
+import type { PhotoMetadata } from "sharedHelpers/readPhotoExif";
 import readPhotoExif from "sharedHelpers/readPhotoExif";
 import useTranslation from "sharedHooks/useTranslation";
 
@@ -20,8 +20,8 @@ interface Props {
 }
 
 // Tags most useful for understanding capture conditions, shown first and in
-// this order. SubjectDistance is the focus/subject distance cameras such as the
-// Canon R7 record for each frame.
+// this order. FocusDistance is decoded from the Canon MakerNote; SubjectDistance
+// is the equivalent standard EXIF tag other cameras record.
 const PRIORITY_TAGS = [
   "Make",
   "Model",
@@ -29,6 +29,9 @@ const PRIORITY_TAGS = [
   "LensModel",
   "FocalLength",
   "FocalLengthIn35mmFilm",
+  "FocusDistance",
+  "FocusDistanceLower",
+  "FocusDistanceUpper",
   "SubjectDistance",
   "SubjectDistanceRange",
   "FNumber",
@@ -60,24 +63,24 @@ const formatValue = ( value: unknown ): string => {
 
 // Order tags with the priority list first (in its defined order), then all
 // remaining tags alphabetically.
-const orderedEntries = ( tags: ExifTags ): [string, unknown][] => {
+const orderedEntries = ( tags: PhotoMetadata ): [string, unknown][] => {
   const keys = Object.keys( tags ).filter(
-    key => tags[key as keyof ExifTags] !== undefined
-      && tags[key as keyof ExifTags] !== null
-      && tags[key as keyof ExifTags] !== "",
+    key => tags[key] !== undefined
+      && tags[key] !== null
+      && tags[key] !== "",
   );
   const priority = PRIORITY_TAGS.filter( key => keys.includes( key ) );
   const rest = keys
     .filter( key => !PRIORITY_TAGS.includes( key ) )
     .sort( ( a, b ) => a.localeCompare( b ) );
   return [...priority, ...rest].map(
-    key => [key, tags[key as keyof ExifTags]] as [string, unknown],
+    key => [key, tags[key]] as [string, unknown],
   );
 };
 
 const MetadataSheet = ( { photo, onClose, insideModal }: Props ) => {
   const { t } = useTranslation( );
-  const [tags, setTags] = useState<ExifTags | null>( null );
+  const [tags, setTags] = useState<PhotoMetadata | null>( null );
   const [loading, setLoading] = useState( true );
 
   useEffect( ( ) => {
