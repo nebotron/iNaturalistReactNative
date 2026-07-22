@@ -29,6 +29,7 @@ import { log } from "sharedHelpers/logger";
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
+import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import { useExitObservationFlow, useGridLayout } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -62,9 +63,6 @@ const GroupPhotosContainer = ( ): Node => {
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
   const pendingGroupPhotoDeletionUris = useStore( state => state.pendingGroupPhotoDeletionUris );
-  const addPendingGroupPhotoDeletionUri = useStore(
-    state => state.addPendingGroupPhotoDeletionUri,
-  );
   const resetMyObsOffsetToRestore = useStore( state => state.resetMyObsOffsetToRestore );
   const setMyObsOffset = useStore( state => state.setMyObsOffset );
 
@@ -293,17 +291,16 @@ const GroupPhotosContainer = ( ): Node => {
     }
   };
 
-  const removePhotos = () => {
+  const removePhotos = async () => {
     const removedFromGroup = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
 
-    // Stage the removed photos' device URIs for deletion in the persisted
-    // store (not local state) so the deletions survive an app kill/resume of
-    // the Group Photos flow, matching the crop-editor removal path.
-    orderedPhotos
+    // Resolve the removed photos' device URIs so they can be deleted from the
+    // device's photo library right away, matching the user's expectation that
+    // deleting a photo here also removes it from their phone.
+    const deviceUrisToDelete = orderedPhotos
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
-      .filter( Boolean )
-      .forEach( uri => addPendingGroupPhotoDeletionUri( uri ) );
+      .filter( Boolean );
 
     groupedPhotos.forEach( obs => {
       if ( obs.soundUri !== undefined ) {
@@ -328,6 +325,10 @@ const GroupPhotosContainer = ( ): Node => {
     ) );
     setGroupedPhotos( removedFromGroup );
     setSelectedIndices( [] );
+
+    if ( deviceUrisToDelete.length > 0 ) {
+      await deleteOriginalDevicePhotos( deviceUrisToDelete, { userInitiated: true } );
+    }
   };
 
   const navBasedOnUserSettings = async ( ) => {
