@@ -4,6 +4,7 @@ import { AppState } from "react-native";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import {
+  getUsbFolderName,
   importNewUsbImages,
   isUsbImportSupported,
 } from "sharedHelpers/usbStorage";
@@ -11,11 +12,16 @@ import useStore from "stores/useStore";
 
 const logger = log.extend( "useUsbAutoImport" );
 
-// Checks the user's chosen USB folder (see UsbImportSetting) on launch and
-// whenever the app returns to the foreground — the moments a just-plugged-in
-// drive becomes visible, since iOS offers no attach notification. New images
-// are copied into app storage and dropped into the GroupPhotos flow, same as
-// photos shared into the app (see PhotoSharing).
+// How often to re-check the watched folder while the app is foregrounded.
+const SCAN_INTERVAL_MS = 10_000;
+
+// Checks the user's chosen USB folder (see UsbImportSetting) on launch and,
+// while the app is foregrounded, on a short interval. iOS offers no attach
+// notification, and a drive is commonly plugged in *after* the app is already
+// open — a moment that fires neither a launch nor a foreground event — so
+// polling is the only way to notice it. New images are copied into app storage
+// and dropped into the GroupPhotos flow, same as photos shared into the app
+// (see PhotoSharing).
 const useUsbAutoImport = ( ) => {
   const [onboardingShown] = useOnboardingShown( );
   const scanning = useRef( false );
@@ -23,6 +29,10 @@ const useUsbAutoImport = ( ) => {
   const scan = useCallback( async ( ) => {
     if ( !isUsbImportSupported( ) || scanning.current ) return;
     if ( !onboardingShown || !navigationRef.isReady( ) ) return;
+    // Don't clobber an import/grouping session that's already underway: if the
+    // user is still working through a previous batch (groupedPhotos non-empty,
+    // cleared once observations are created), leave it be until they finish.
+    if ( useStore.getState( ).groupedPhotos.length > 0 ) return;
     scanning.current = true;
     try {
       const photos = await importNewUsbImages( );
@@ -57,12 +67,33 @@ const useUsbAutoImport = ( ) => {
   }, [onboardingShown] );
 
   useEffect( ( ) => {
-    scan( );
+    if ( !isUsbImportSupported( ) || !onboardingShown ) return undefined;
+
+    let interval: ReturnType<typeof setInterval> | undefined;
+    const stopPolling = ( ) => {
+      if ( interval ) clearInterval( interval );
+      interval = undefined;
+    };
+    const startPolling = async ( ) => {
+      stopPolling( );
+      // Nothing to watch until the user has chosen a folder; don't wake the JS
+      // thread on an interval for the many users who never set one up.
+      const folder = await getUsbFolderName( );
+      if ( !folder ) return;
+      scan( );
+      interval = setInterval( scan, SCAN_INTERVAL_MS );
+    };
+
+    startPolling( );
     const subscription = AppState.addEventListener( "change", nextAppState => {
-      if ( nextAppState === "active" ) scan( );
+      if ( nextAppState === "active" ) startPolling( );
+      else stopPolling( );
     } );
-    return ( ) => subscription.remove( );
-  }, [scan] );
+    return ( ) => {
+      stopPolling( );
+      subscription.remove( );
+    };
+  }, [scan, onboardingShown] );
 };
 
 export default useUsbAutoImport;
