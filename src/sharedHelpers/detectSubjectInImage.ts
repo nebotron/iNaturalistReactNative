@@ -5,9 +5,10 @@ import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
 import type { NormalizedBounds } from "sharedHelpers/subjectBoundsToNormalizedCrop";
 import { subjectBoundsToNormalizedCrop } from "sharedHelpers/subjectBoundsToNormalizedCrop";
 
-import SUBJECT_DETECTION_MODEL_PADDING from "./subjectDetectionModels";
-
 const logger = log.extend( "detectSubjectInImage" );
+
+// No extra padding: the detector's bounds are already framed as we want them.
+const SUBJECT_DETECTION_PADDING = 0;
 
 interface ImageCropperModule {
   detectSubjectBounds: (
@@ -40,7 +41,7 @@ const detectSubjectInImage = async (
       bounds,
       imageWidth,
       imageHeight,
-      SUBJECT_DETECTION_MODEL_PADDING,
+      SUBJECT_DETECTION_PADDING,
     );
     if ( typeof bounds.brightness === "number" && bounds.brightness > 0 ) {
       crop.brightness = bounds.brightness;

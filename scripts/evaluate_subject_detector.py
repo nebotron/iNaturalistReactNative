@@ -2,8 +2,9 @@
 """
 Evaluate and tune the iNaturalist subject detector using exported crop feedback.
 
-Reads the JSON exported via Menu → "Copy crop feedback JSON" (or crop_training.json),
-downloads the original images, re-runs subject detection, and evaluates how well
+Reads the crop feedback JSON (crop_training.json, pulled from Firebase via
+scripts/pull_logs.py), downloads the original images, re-runs subject detection,
+and evaluates how well
 different padding values and detection strategies match the crops you actually chose.
 
 Two metrics (both 0–1, higher = better):
