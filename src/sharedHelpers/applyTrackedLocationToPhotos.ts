@@ -7,6 +7,10 @@ import {
   lookupImportedPhotoDeviceUri,
   normalizeDevicePhotoUri,
 } from "sharedHelpers/getOriginalDevicePhotoUri";
+import {
+  filterUsableTrackedPoints,
+  interpolateFromUsablePoints,
+} from "sharedHelpers/interpolateTrackedLocation";
 import { log } from "sharedHelpers/logger";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import useStore from "stores/useStore";
@@ -112,6 +116,36 @@ const applyTrackedLocationToObservation = async (
   }, "applying tracked location to observation" );
 
   return true;
+};
+
+// Auto-fills an observation's location from tracked location history when it
+// has no location of its own (i.e. its photos carried no GPS EXIF data). Used
+// on import/save so a tracked location is applied automatically, matching the
+// group-photos import behavior. No-ops when the observation already has a
+// location, when tracking recorded no usable nearby fix, or when the
+// observation has no timestamp to match against. Returns whether a location
+// was applied.
+export const autoApplyTrackedLocationIfMissing = async (
+  realm: Realm,
+  observation: RealmObservation,
+): Promise<boolean> => {
+  if ( observation.latitude != null && observation.longitude != null ) return false;
+
+  const observedOn = observation.observed_on_string ?? observation.observed_on;
+  if ( !observedOn ) return false;
+
+  const usablePoints = filterUsableTrackedPoints(
+    realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
+  );
+  if ( usablePoints.length === 0 ) return false;
+
+  const trackedLocation = interpolateFromUsablePoints(
+    usablePoints,
+    new Date( observedOn ).getTime(),
+  );
+  if ( !trackedLocation ) return false;
+
+  return applyTrackedLocationToObservation( realm, observation, trackedLocation );
 };
 
 export default applyTrackedLocationToObservation;
