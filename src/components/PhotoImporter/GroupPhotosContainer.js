@@ -42,6 +42,23 @@ const { useRealm } = RealmContext;
 
 const logger = log.extend( "GroupPhotosContainer" );
 
+// Guard against a single grouped-media item stalling the whole import. The
+// native image resizer (Photo.resizeImageForUpload) can occasionally hang on a
+// problem photo; without this the import would wait forever and never save any
+// observations.
+const CREATE_OBSERVATION_TIMEOUT_MS = 60000;
+
+function createObservationWithTimeout( group ) {
+  return new Promise( ( resolve, reject ) => {
+    const timer = setTimeout( ( ) => {
+      reject( new Error( "Timed out creating observation from grouped media" ) );
+    }, CREATE_OBSERVATION_TIMEOUT_MS );
+    createObservationFromGroupedMedia( group )
+      .then( resolve, reject )
+      .finally( ( ) => clearTimeout( timer ) );
+  } );
+}
+
 function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
   if ( uri == null ) return null;
   const index = newPhotos.findIndex( obs => obs.photos?.some( p => p.image.uri === uri ) );
@@ -344,14 +361,27 @@ const GroupPhotosContainer = ( ): Node => {
     exitObservationFlow( );
 
     // Process in batches to avoid spawning hundreds of concurrent native image
-    // resize operations (Photo.resizeImageForUpload) which exhausts resources
+    // resize operations (Photo.resizeImageForUpload) which exhausts resources.
+    // Use allSettled with a per-item timeout so one problem photo can't hang or
+    // abort the entire import; failed groups are logged and skipped.
     const BATCH_SIZE = 10;
     const newObservations = [];
     for ( let i = 0; i < groupsToImport.length; i += BATCH_SIZE ) {
       const batch = groupsToImport.slice( i, i + BATCH_SIZE );
       // eslint-disable-next-line no-await-in-loop
-      const batchResults = await Promise.all( batch.map( createObservationFromGroupedMedia ) );
-      newObservations.push( ...batchResults );
+      const batchResults = await Promise.allSettled(
+        batch.map( createObservationWithTimeout ),
+      );
+      batchResults.forEach( result => {
+        if ( result.status === "fulfilled" ) {
+          newObservations.push( result.value );
+        } else {
+          logger.error( "Failed to create observation from group photos", result.reason );
+        }
+      } );
+    }
+    if ( newObservations.length === 0 ) {
+      return;
     }
     const observationsToSave = newObservations.map( ( newObs, idx ) => ( {
       ...( idx === 0
@@ -361,9 +391,12 @@ const GroupPhotosContainer = ( ): Node => {
       ...newObs,
     } ) );
 
-    await Promise.all(
+    const saveResults = await Promise.allSettled(
       observationsToSave.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
     );
+    saveResults
+      .filter( result => result.status === "rejected" )
+      .forEach( result => logger.error( "Failed to save imported observation", result.reason ) );
 
     // Auto-fill location from tracked location history for any imported
     // observation whose photos didn't carry GPS EXIF data. This runs before
@@ -377,7 +410,7 @@ const GroupPhotosContainer = ( ): Node => {
         realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
       );
       if ( usablePoints.length > 0 ) {
-        await Promise.all( missingLocationObs.map( async obs => {
+        await Promise.allSettled( missingLocationObs.map( async obs => {
           const savedObs = realm.objectForPrimaryKey( "Observation", obs.uuid );
           if ( !savedObs ) return;
           const targetMs = new Date(
