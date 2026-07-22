@@ -63,6 +63,7 @@ const styles = StyleSheet.create( {
   gestureHandlerRoot: { flex: 1 },
 } );
 const sliderStyle = { flex: 1, height: 40 };
+const iconBtnClass = "bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px]";
 const tickRowStyle = { justifyContent: "space-between" as const, bottom: 2 };
 const labelRowStyle = { justifyContent: "space-between" as const };
 
@@ -75,6 +76,7 @@ interface Props {
   onClose: ( ) => void;
   onDeleteSound: ( uri: string ) => void;
   onLongPressPhoto?: ( uri: string ) => void;
+  onShowMetadata?: ( photo: Omit<PhotoItem, "type"> ) => void;
   photos: Omit<PhotoItem, "type">[];
   sounds?: Omit<SoundItem, "type">[];
   selectedMediaIndex: number;
@@ -90,6 +92,7 @@ const MainMediaDisplay = ( {
   onDeleteSound,
   onClose,
   onLongPressPhoto,
+  onShowMetadata,
   photos,
   sounds = [],
   selectedMediaIndex,
@@ -270,18 +273,29 @@ const MainMediaDisplay = ( {
               </View>
             )
         }
-        <View className="absolute bottom-4 left-4">
+        <View className="absolute bottom-4 left-4 flex-row items-center">
           <INatIconButton
             onPress={( ) => setShowBrightnessSlider( prev => !prev )}
             icon="sun"
             color={showBrightnessSlider || brightness !== BRIGHTNESS_DEFAULT
               ? colors.inatGreen
               : colors.white}
-            className="bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px]"
+            className={iconBtnClass}
             accessibilityLabel={t( "Adjust-brightness" )}
             testID="MediaViewer.brightnessButton"
             size={20}
           />
+          { onShowMetadata && (
+            <INatIconButton
+              onPress={( ) => onShowMetadata( photo )}
+              icon="info-circle-outline"
+              color={colors.white}
+              className={`${iconBtnClass} ml-2`}
+              accessibilityLabel={t( "View-photo-metadata" )}
+              testID="MediaViewer.metadataButton"
+              size={20}
+            />
+          ) }
         </View>
         { showBrightnessSlider && (
           <View className="absolute bottom-16 left-0 right-0 px-4 py-2">

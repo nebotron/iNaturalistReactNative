@@ -25,6 +25,7 @@ import useTranslation from "sharedHooks/useTranslation";
 import MainMediaDisplay from "./MainMediaDisplay";
 import MediaSelector from "./MediaSelector";
 import MediaViewerHeader from "./MediaViewerHeader";
+import MetadataSheet from "./MetadataSheet";
 
 interface MediaToDelete {
   type: "sound" | "photo";
@@ -100,6 +101,7 @@ const MediaViewer = ( {
   } );
   const { t } = useTranslation( );
   const [mediaToDelete, setMediaToDelete] = useState<MediaToDelete | null>( null );
+  const [metadataPhoto, setMetadataPhoto] = useState<PhotoItem | null>( null );
 
   const horizontalScroll = useRef<ICarouselInstance>( null );
 
@@ -235,6 +237,7 @@ const MediaViewer = ( {
         onDeletePhoto={photoUri => setMediaToDelete( { type: "photo", uri: photoUri } )}
         onDeleteSound={soundUri => setMediaToDelete( { type: "sound", uri: soundUri } )}
         onLongPressPhoto={handleLongPressPhoto}
+        onShowMetadata={setMetadataPhoto}
       />
       <MediaSelector
         editable={editable}
@@ -256,6 +259,13 @@ const MediaViewer = ( {
           handleSecondButtonPress={( ) => setMediaToDelete( null )}
           insideModal
           testID="MediaViewer.DiscardMediaWarningSheet"
+        />
+      )}
+      {metadataPhoto && (
+        <MetadataSheet
+          photo={metadataPhoto}
+          onClose={( ) => setMetadataPhoto( null )}
+          insideModal
         />
       )}
     </View>
