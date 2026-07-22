@@ -175,9 +175,6 @@ export function zoomCropFromCenter(
   } );
 }
 
-/** @deprecated Use zoomCropFromCenter */
-export const zoomSquareCropFromCenter = zoomCropFromCenter;
-
 export function panSquareCrop(
   crop: NormalizedCrop,
   deltaX: number,

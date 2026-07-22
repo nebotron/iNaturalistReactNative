@@ -8,7 +8,7 @@ import {
   pinchCropAtFocalPoint,
   square2048Crop,
   squareCropSidePixels,
-  zoomSquareCropFromCenter,
+  zoomCropFromCenter,
 } from "sharedHelpers/normalizedCropTypes";
 
 describe( "defaultSquareCrop", ( ) => {
@@ -77,20 +77,20 @@ describe( "cropToDisplayRect", ( ) => {
 describe( "zoomCropFromCenter", ( ) => {
   it( "zooms in while keeping a square crop", ( ) => {
     const start = defaultSquareCrop( 2000, 1000 );
-    const zoomed = zoomSquareCropFromCenter( start, 2, 2000, 1000 );
+    const zoomed = zoomCropFromCenter( start, 2, 2000, 1000 );
     expect( squareCropSidePixels( zoomed, 2000, 1000 ) )
       .toBeCloseTo( squareCropSidePixels( start, 2000, 1000 ) / 2, 0 );
   } );
 
   it( "can zoom in past the old minimum crop fraction", ( ) => {
     const start = defaultSquareCrop( 2000, 1000 );
-    const zoomed = zoomSquareCropFromCenter( start, 200, 2000, 1000 );
+    const zoomed = zoomCropFromCenter( start, 200, 2000, 1000 );
     expect( squareCropSidePixels( zoomed, 2000, 1000 ) ).toBe( 5 );
   } );
 
   it( "can zoom out to the full image", ( ) => {
     const start = defaultSquareCrop( 2000, 1000 );
-    const zoomed = zoomSquareCropFromCenter( start, 0.5, 2000, 1000 );
+    const zoomed = zoomCropFromCenter( start, 0.5, 2000, 1000 );
     expect( zoomed ).toEqual( {
       x: 0, y: 0, w: 1, h: 1,
     } );

@@ -87,15 +87,8 @@ const ExploreV2SpeciesView = ( { enabled, isConnected, params }: Props ) => {
       enabled: !!( currentUser && chunk.length > 0 ),
       // we don't really need to worry about a user's life list changing on this screen
       staleTime: Infinity,
-      retry: ( failureCount: number, error: unknown ) => reactQueryRetry(
-        failureCount,
-        error,
-        { queryKey: ["exploreV2SpeciesCountsSeen"] },
-      ),
-      retryDelay: ( failureCount: number, error: unknown ) => handleRetryDelay(
-        failureCount,
-        error,
-      ),
+      retry: reactQueryRetry,
+      retryDelay: handleRetryDelay,
     } ) ),
     combine: results => {
       const ids: number[] = [];
