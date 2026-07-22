@@ -17,14 +17,10 @@ import realmConfig from "realmModels/index";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
 import { clearWatch, watchPosition } from "sharedHelpers/geolocationWrapper";
 import { store } from "sharedHelpers/installData";
-import { log, logWithoutRemote } from "sharedHelpers/logger";
+import { log } from "sharedHelpers/logger";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 
 const logger = log.extend( "locationHistoryTracker" );
-// Per-fix breadcrumbs fire on every GPS tick (the single largest remote-log
-// source after button taps): useful in a device log, not worth a remote POST
-// each. Errors/warns still go through `logger` so they reach Firebase.
-const breadcrumbLogger = logWithoutRemote.extend( "locationHistoryTracker" );
 
 const TRACKING_ENABLED_KEY = "locationHistoryTrackingEnabled";
 const BACKGROUND_TASK_NAME = "location-history-tracking";
@@ -115,10 +111,7 @@ const getRealmInstance = async ( ): Promise<Realm> => {
 // Store every fix a watch delivers. We intentionally don't thin points at
 // capture time - keeping the full history lets the interpolation phase pick the
 // most accurate fixes for a given moment (see interpolateTrackedLocation).
-// `source` labels which watch delivered the fix (continuous vs
-// significant-changes vs the Android background service) so the logs show
-// whether and how the OS is actually waking the app in the background.
-const recordFix = async ( source: string, fix: {
+const recordFix = async ( fix: {
   latitude: number;
   longitude: number;
   accuracy: number | null;
@@ -132,17 +125,16 @@ const recordFix = async ( source: string, fix: {
         LocationHistoryPoint.mapPositionToRealm( fix ),
       );
     }, "recording location history point" );
-    breadcrumbLogger.info( `Recorded location fix from ${source} (accuracy ${fix.accuracy})` );
   } catch ( error ) {
     logger.error( "Failed to save location history point", error );
   }
 };
 
-const recordPosition = ( source: string ) => async ( position: {
+const recordPosition = ( ) => async ( position: {
   coords: { latitude: number; longitude: number; accuracy: number | null };
 } ) => {
   const { latitude, longitude, accuracy } = position.coords;
-  await recordFix( source, {
+  await recordFix( {
     latitude, longitude, accuracy, recordedAt: new Date(),
   } );
 };
@@ -156,7 +148,7 @@ const recordPendingSignificantChanges = async ( ) => {
     const pending = await locationRelaunch.drainPendingLocations();
     for ( const fix of pending ) {
       // eslint-disable-next-line no-await-in-loop
-      await recordFix( "ios-significant", {
+      await recordFix( {
         latitude: fix.latitude,
         longitude: fix.longitude,
         accuracy: fix.accuracy,
@@ -171,7 +163,7 @@ const recordPendingSignificantChanges = async ( ) => {
 const backgroundTask = async ( ) => {
   await new Promise<void>( resolve => {
     watchIds = [watchPosition(
-      recordPosition( "android-background" ),
+      recordPosition( ),
       error => logger.warn( "watchPosition error", error ),
       {
         enableHighAccuracy: true,
@@ -292,7 +284,7 @@ export const startLocationHistoryTracking = async (
       // less battery than kCLLocationAccuracyBest. Foreground getCurrentPosition
       // (observation geotagging) is unaffected and keeps best accuracy.
       const continuousWatchId = watchPosition(
-        recordPosition( "ios-continuous" ),
+        recordPosition( ),
         error => logger.warn( "watchPosition error (continuous)", error ),
         {
           enableHighAccuracy: true,
