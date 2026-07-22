@@ -302,6 +302,12 @@ const GroupPhotosContainer = ( ): Node => {
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
       .filter( Boolean );
 
+    logger.info(
+      `removePhotos: resolved ${deviceUrisToDelete.length} device URI(s) `
+      + `from ${orderedPhotos.length} removed photo(s)`,
+      { deviceUrisToDelete },
+    );
+
     groupedPhotos.forEach( obs => {
       if ( obs.soundUri !== undefined ) {
         if ( !selectedObservations.includes( obs ) ) {

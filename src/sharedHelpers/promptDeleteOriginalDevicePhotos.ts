@@ -58,6 +58,7 @@ export const deleteOriginalDevicePhotos = async (
 
   const hasPermission = await ensureDeletePhotosPermission( );
   if ( !hasPermission ) {
+    logger.warn( "Skipped deleting device photos: photo library permission not granted" );
     if ( options.userInitiated ) {
       Alert.alert(
         i18next.t( "Something-went-wrong" ),
@@ -68,7 +69,9 @@ export const deleteOriginalDevicePhotos = async (
   }
 
   try {
+    logger.info( `Deleting ${uniqueUris.length} device photo(s)`, { uniqueUris } );
     await CameraRoll.deletePhotos( uniqueUris );
+    logger.info( `Deleted ${uniqueUris.length} device photo(s)` );
   } catch ( deleteError ) {
     logger.error( "Error deleting original device photos", deleteError, { uniqueUris } );
     Alert.alert(
