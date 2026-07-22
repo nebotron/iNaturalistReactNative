@@ -91,7 +91,13 @@ const useUsbAutoImport = ( ) => {
   }, [onboardingShown, logDiag] );
 
   useEffect( ( ) => {
-    if ( !isUsbImportSupported( ) || !onboardingShown ) return undefined;
+    // Report why the hook does or doesn't engage. This runs before the guard
+    // below, so it fires even in the cases (native module missing, onboarding
+    // not finished) that otherwise leave the feature completely silent — the
+    // scan-level skip logs are unreachable when this guard returns early.
+    const supported = isUsbImportSupported( );
+    logDiag( `hook mounted: supported=${supported}, onboardingShown=${onboardingShown}` );
+    if ( !supported || !onboardingShown ) return undefined;
 
     let interval: ReturnType<typeof setInterval> | undefined;
     const stopPolling = ( ) => {
@@ -100,16 +106,22 @@ const useUsbAutoImport = ( ) => {
     };
     const startPolling = async ( ) => {
       stopPolling( );
-      // Nothing to watch until the user has chosen a folder; don't wake the JS
-      // thread on an interval for the many users who never set one up.
-      const folder = await getUsbFolderName( );
-      if ( !folder ) {
-        logDiag( "not polling: no USB folder configured" );
-        return;
+      try {
+        // Nothing to watch until the user has chosen a folder; don't wake the JS
+        // thread on an interval for the many users who never set one up.
+        const folder = await getUsbFolderName( );
+        if ( !folder ) {
+          logDiag( "not polling: no USB folder configured" );
+          return;
+        }
+        logDiag( `polling USB folder "${folder}" every ${SCAN_INTERVAL_MS}ms` );
+        scan( );
+        interval = setInterval( scan, SCAN_INTERVAL_MS );
+      } catch ( error ) {
+        // A rejected native call would otherwise be an unhandled promise
+        // rejection with no trace of why polling never started.
+        logger.error( "USB polling failed to start", error );
       }
-      logDiag( `polling USB folder "${folder}" every ${SCAN_INTERVAL_MS}ms` );
-      scan( );
-      interval = setInterval( scan, SCAN_INTERVAL_MS );
     };
 
     startPolling( );
