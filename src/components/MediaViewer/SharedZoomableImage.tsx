@@ -1,4 +1,4 @@
-import type { ForwardRefRenderFunction } from "react";
+import type { ForwardRefRenderFunction, ReactNode } from "react";
 import React, {
   forwardRef,
   useEffect,
@@ -37,6 +37,11 @@ type SharedZoomableImageProps = ImageZoomProps & {
   onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
   onLoad?: () => void;
   onError?: () => void;
+  // Optional custom image renderer. When provided it is drawn inside the
+  // zoom-transformed layer instead of the default Animated.Image, letting
+  // callers use a different image backend (e.g. FasterImageView for the
+  // disk-cached Explore grid) while sharing the same gesture engine.
+  renderImage?: () => ReactNode;
 };
 
 const SharedZoomableImage: ForwardRefRenderFunction<
@@ -77,6 +82,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     onImageDimensionsChange,
     onLoad,
     onError,
+    renderImage,
   },
   ref,
 ) => {
@@ -179,18 +185,26 @@ const SharedZoomableImage: ForwardRefRenderFunction<
   return (
     <GestureDetector gesture={composedGestures}>
       <View style={[styles.image, style]} onLayout={onZoomableLayout}>
-        <Animated.Image
-          testID={testID}
-          style={[StyleSheet.absoluteFill, animatedStyle, brightnessFilter]}
-          source={{ uri }}
-          resizeMode="contain"
-          onLoad={event => {
-            const { width, height } = event.nativeEvent.source;
-            onImageDimensionsChange?.( { width, height } );
-            onLoad?.( );
-          }}
-          onError={onError}
-        />
+        {renderImage
+          ? (
+            <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
+              {renderImage( )}
+            </Animated.View>
+          )
+          : (
+            <Animated.Image
+              testID={testID}
+              style={[StyleSheet.absoluteFill, animatedStyle, brightnessFilter]}
+              source={{ uri }}
+              resizeMode="contain"
+              onLoad={event => {
+                const { width, height } = event.nativeEvent.source;
+                onImageDimensionsChange?.( { width, height } );
+                onLoad?.( );
+              }}
+              onError={onError}
+            />
+          )}
       </View>
     </GestureDetector>
   );

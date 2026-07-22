@@ -1,22 +1,18 @@
+import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
+import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import { FasterImageView } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
   useRef,
 } from "react";
-import { StyleSheet, View } from "react-native";
-import { GestureDetector } from "react-native-gesture-handler";
-import Animated from "react-native-reanimated";
+import { StyleSheet } from "react-native";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
-import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
-import type { ImageZoomTransformRefs } from "sharedHooks/imageZoom/readImageZoomTransform";
-import readImageZoomTransform from "sharedHooks/imageZoom/readImageZoomTransform";
-import { useZoomable } from "sharedHooks/imageZoom/useZoomable";
 
 const MAX_SCALE = 100;
 
@@ -64,10 +60,12 @@ const frameCropTransform = (
 };
 
 // Renders an Explore-grid photo cropped to the detected subject, with a
-// two-finger pinch/pan that reuses the shared image-zoom engine so the gesture
-// behaves identically to the crop editor, MediaViewer and IDing game (smooth,
-// UI-thread, image tracks the fingers). Single-finger panning is disabled so
-// one finger scrolls the list; two fingers are required to pan or zoom.
+// two-finger pinch/pan that reuses the shared image-zoom engine (via
+// SharedZoomableImage) so the gesture behaves identically to the crop editor,
+// MediaViewer and IDing game. Single-finger panning is disabled so one finger
+// scrolls the list; two fingers are required to pan or zoom. The grid uses
+// FasterImageView (disk cache) rather than the default Animated.Image, injected
+// through SharedZoomableImage's renderImage prop.
 const ObsImageZoomable = ( {
   uri,
   logUri,
@@ -77,25 +75,9 @@ const ObsImageZoomable = ( {
   size,
   brightnessFilterStyle,
 }: Props ) => {
-  const transformRef = useRef<ImageZoomTransformRefs | null>( null );
+  const zoomRef = useRef<SharedZoomableImageRef | null>( null );
 
-  // On gesture end, immediately log the framed region as a ground-truth crop.
-  // Keyed by logUri (the canonical remote photo URL) rather than uri (which
-  // may be a tone-mapped local file path) so the entry is findable on lookup.
-  const handleInteractionEnd = useCallback( ( ) => {
-    if ( !transformRef.current ) return;
-    const crop = imageZoomTransformToNormalizedCrop(
-      imageWidth,
-      imageHeight,
-      size,
-      size,
-      size,
-      readImageZoomTransform( transformRef.current ),
-    );
-    saveAnimalCrop( logUri, crop );
-  }, [logUri, imageWidth, imageHeight, size] );
-
-  const cropPanContext: CropPanContext = {
+  const cropPanContext = {
     imageWidth,
     imageHeight,
     viewportWidth: size,
@@ -103,79 +85,75 @@ const ObsImageZoomable = ( {
     cropSize: size,
   };
 
-  const {
-    animatedStyle,
-    gestures,
-    onZoomableLayout,
-    transform,
-    applyTransform,
-  } = useZoomable( {
-    // scale 1 renders the whole image contained (letterboxed) in the square, so
-    // allowing pinch down to 1 lets the user shrink the photo until it fully fits.
-    minScale: 1,
-    maxScale: MAX_SCALE,
-    isPinchEnabled: true,
-    isSingleFingerPanEnabled: false,
-    isDoubleTapEnabled: false,
-    isSingleTapEnabled: false,
-    cropPanContext,
-    onInteractionEnd: handleInteractionEnd,
-    ref: null,
-  } );
+  // On gesture end, immediately log the framed region as a ground-truth crop.
+  // Keyed by logUri (the canonical remote photo URL) rather than uri (which
+  // may be a tone-mapped local file path) so the entry is findable on lookup.
+  const handleInteractionEnd = useCallback( ( ) => {
+    if ( !zoomRef.current ) return;
+    const crop = imageZoomTransformToNormalizedCrop(
+      imageWidth,
+      imageHeight,
+      size,
+      size,
+      size,
+      zoomRef.current.readTransform( ),
+    );
+    saveAnimalCrop( logUri, crop );
+  }, [logUri, imageWidth, imageHeight, size] );
 
-  useEffect( ( ) => {
-    transformRef.current = transform;
-  }, [transform] );
-
-  // Frame the detected (or previously logged) crop once the layout and image
-  // dimensions are known. Applied a single time per photo; the engine keeps
-  // the live transform across subsequent gestures.
+  // Frame the detected (or previously logged) crop once the image dimensions
+  // are known. applyTransform only sets shared values, so it is safe to call
+  // regardless of layout timing (same path as the crop editor). Applied a
+  // single time per photo; the engine keeps the live transform thereafter.
   const appliedRef = useRef( false );
   useEffect( ( ) => {
     if ( appliedRef.current ) return;
+    const zoom = zoomRef.current;
+    if ( !zoom ) return;
     if ( size <= 0 || imageWidth <= 0 || imageHeight <= 0 ) return;
     const framed = frameCropTransform( initialCrop, size, imageWidth, imageHeight );
     // Clamp the framing so a subject near an edge doesn't shift the image past
     // that edge (matches the crop clamping applied during gestures).
-    const limits = computeCropPanTranslateLimits(
-      {
-        imageWidth, imageHeight, viewportWidth: size, viewportHeight: size, cropSize: size,
-      },
-      framed,
-    );
+    const limits = computeCropPanTranslateLimits( cropPanContext, framed );
     const clamp = ( v: number, lo: number, hi: number ) => Math.min( Math.max( v, lo ), hi );
-    applyTransform( {
+    zoom.applyTransform( {
       ...framed,
       focalX: clamp( framed.focalX, limits.minTotalTranslateX, limits.maxTotalTranslateX ),
       focalY: clamp( framed.focalY, limits.minTotalTranslateY, limits.maxTotalTranslateY ),
     } );
     appliedRef.current = true;
-  }, [uri, size, imageWidth, imageHeight, initialCrop, applyTransform] );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uri, size, imageWidth, imageHeight, initialCrop] );
 
-  const layerStyle = { width: size, height: size };
-
-  // The GestureDetector must attach to a view that is NOT transformed: gesture
-  // coordinates (e.g. pinch focalX/focalY) are reported relative to the attached
-  // view, so attaching to the transformed view itself creates a feedback loop
-  // that makes two-finger panning lag far behind the fingers.
   return (
-    <GestureDetector gesture={gestures}>
-      <View style={layerStyle} onLayout={onZoomableLayout}>
-        <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
-          <FasterImageView
-            testID="ObsList.photo"
-            accessibilityIgnoresInvertColors
-            fadeDuration={0}
-            style={[StyleSheet.absoluteFill, brightnessFilterStyle]}
-            source={{
-              url: uri,
-              cachePolicy: "discWithCacheControl",
-              resizeMode: "contain",
-            }}
-          />
-        </Animated.View>
-      </View>
-    </GestureDetector>
+    <SharedZoomableImage
+      ref={zoomRef}
+      uri={uri}
+      style={{ width: size, height: size }}
+      // scale 1 renders the whole image contained (letterboxed) in the square, so
+      // allowing pinch down to 1 lets the user shrink the photo until it fully fits.
+      minScale={1}
+      maxScale={MAX_SCALE}
+      isPinchEnabled
+      isSingleFingerPanEnabled={false}
+      isDoubleTapEnabled={false}
+      isSingleTapEnabled={false}
+      cropPanContext={cropPanContext}
+      onInteractionEnd={handleInteractionEnd}
+      renderImage={( ) => (
+        <FasterImageView
+          testID="ObsList.photo"
+          accessibilityIgnoresInvertColors
+          fadeDuration={0}
+          style={[StyleSheet.absoluteFill, brightnessFilterStyle]}
+          source={{
+            url: uri,
+            cachePolicy: "discWithCacheControl",
+            resizeMode: "contain",
+          }}
+        />
+      )}
+    />
   );
 };
 
