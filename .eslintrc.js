@@ -185,6 +185,11 @@ module.exports = {
     "/coverage/*",
     "/vendor/*",
     "**/flow-typed",
+    // Adapted third-party zoom/gesture library. Its reanimated worklets trip
+    // dozens of react-hooks false-positives ("value cannot be modified") and
+    // clash with our style rules (no-plusplus, import/prefer-default-export);
+    // linting it would mean rewriting working vendored code, so exclude it
+    // wholesale like the other vendored sources above.
     "src/sharedHooks/imageZoom/**",
   ],
   settings: {
