@@ -59,7 +59,6 @@ const GroupPhotosContainer = ( ): Node => {
   const itemHeight = gridItemStyle.height;
   const realm = useRealm( );
   const exitObservationFlow = useExitObservationFlow( );
-  const setObservations = useStore( state => state.setObservations );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
@@ -68,7 +67,6 @@ const GroupPhotosContainer = ( ): Node => {
   const setMyObsOffset = useStore( state => state.setMyObsOffset );
 
   const [selectedIndices, setSelectedIndices] = useState( [] );
-  const [isCreatingObservations, setIsCreatingObservations] = useState( false );
   const [isDuplicatingPhotos, setIsDuplicatingPhotos] = useState( false );
   const [pendingDeletionUris, setPendingDeletionUris] = useState( [] );
 
@@ -331,14 +329,26 @@ const GroupPhotosContainer = ( ): Node => {
   };
 
   const navBasedOnUserSettings = async ( ) => {
-    setIsCreatingObservations( true );
+    // Capture everything we need before navigating away, since exiting the
+    // flow resets the store slice (groupedPhotos, pending deletion uris, etc.)
+    const groupsToImport = groupedPhotos;
+    const allPendingUris = [
+      ...new Set( [...pendingDeletionUris, ...pendingGroupPhotoDeletionUris] ),
+    ];
+
+    // Send the user to the Me page (My Observations) immediately. Observation
+    // creation, saving, CV prefetch, and the optional delete-originals prompt
+    // all continue in the background below.
+    resetMyObsOffsetToRestore( );
+    setMyObsOffset( 0 );
+    exitObservationFlow( );
 
     // Process in batches to avoid spawning hundreds of concurrent native image
     // resize operations (Photo.resizeImageForUpload) which exhausts resources
     const BATCH_SIZE = 10;
     const newObservations = [];
-    for ( let i = 0; i < groupedPhotos.length; i += BATCH_SIZE ) {
-      const batch = groupedPhotos.slice( i, i + BATCH_SIZE );
+    for ( let i = 0; i < groupsToImport.length; i += BATCH_SIZE ) {
+      const batch = groupsToImport.slice( i, i + BATCH_SIZE );
       // eslint-disable-next-line no-await-in-loop
       const batchResults = await Promise.all( batch.map( createObservationFromGroupedMedia ) );
       newObservations.push( ...batchResults );
@@ -350,7 +360,6 @@ const GroupPhotosContainer = ( ): Node => {
       ),
       ...newObs,
     } ) );
-    setObservations( observationsToSave );
 
     await Promise.all(
       observationsToSave.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
@@ -383,8 +392,8 @@ const GroupPhotosContainer = ( ): Node => {
     }
 
     // Mirror any auto-filled locations back onto the in-memory observations so
-    // the Suggestions screen and the ID-request cache key below both reflect
-    // the observation's final location.
+    // the CV prefetch (and its cache key) reflects the observation's final
+    // location.
     const locatedObservations = observationsToSave.map( obs => {
       const trackedLocation = trackedLocationByUuid[obs.uuid];
       if ( !trackedLocation ) return obs;
@@ -397,9 +406,6 @@ const GroupPhotosContainer = ( ): Node => {
           : {} ),
       };
     } );
-    if ( Object.keys( trackedLocationByUuid ).length > 0 ) {
-      setObservations( locatedObservations );
-    }
 
     // Now that locations are populated, start scoring each new observation's
     // photo (offline + online), caching both so the Suggestions screen loads
@@ -408,18 +414,6 @@ const GroupPhotosContainer = ( ): Node => {
     prefetchSuggestionsForObservations( queryClient, locatedObservations, realm )
       .catch( error => logger.error( "Failed to prefetch group photo suggestions", error ) );
 
-    resetMyObsOffsetToRestore( );
-    setMyObsOffset( 0 );
-    setIsCreatingObservations( false );
-    // Import is complete at this point (observations created and saved), so
-    // clear the saved Group Photos state now rather than waiting on the
-    // optional delete-original-photos prompt below, which may never resolve
-    // (e.g. dismissed without a choice), leaving stale state behind.
-    setGroupedPhotos( [] );
-
-    const allPendingUris = [
-      ...new Set( [...pendingDeletionUris, ...pendingGroupPhotoDeletionUris] ),
-    ];
     if ( allPendingUris.length > 0 ) {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { deleteOriginalDevicePhotos } = require(
@@ -427,7 +421,6 @@ const GroupPhotosContainer = ( ): Node => {
       );
       await deleteOriginalDevicePhotos( allPendingUris );
     }
-    exitObservationFlow( );
   };
 
   return (
@@ -437,7 +430,6 @@ const GroupPhotosContainer = ( ): Node => {
       duplicatePhotos={duplicatePhotos}
       flashListRef={flashListRef}
       groupedPhotos={groupedPhotos}
-      isCreatingObservations={isCreatingObservations}
       isDuplicatingPhotos={isDuplicatingPhotos}
       navBasedOnUserSettings={navBasedOnUserSettings}
       onScroll={onScroll}
