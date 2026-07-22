@@ -34,7 +34,11 @@ const ensureDeletePhotosPermission = async ( ): Promise<boolean> => {
     return true;
   }
   const status = await iosRequestReadWriteGalleryPermission( );
-  return status === "granted";
+  // "limited" access (the user picked specific photos) still lets us delete
+  // those photos — iOS shows its own deletion confirmation — so treat it the
+  // same as full access. Rejecting it here silently skipped deletion for the
+  // many users who grant limited access.
+  return status === "granted" || status === "limited";
 };
 
 export const deleteOriginalDevicePhotos = async (

@@ -48,4 +48,13 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://ONE"] );
     expect( Alert.alert ).not.toHaveBeenCalled( );
   } );
+
+  it( "deletes when access is limited", async ( ) => {
+    mockIosRequestReadWriteGalleryPermission.mockResolvedValue( "limited" );
+
+    await deleteOriginalDevicePhotos( ["ph://ONE"], { userInitiated: true } );
+
+    expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://ONE"] );
+    expect( Alert.alert ).not.toHaveBeenCalled( );
+  } );
 } );
