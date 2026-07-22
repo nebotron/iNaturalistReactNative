@@ -945,6 +945,8 @@ No-Location = No Location
 # Empty state shown when no background location points have been recorded
 No-location-points-recorded-yet = No location points recorded yet
 No-Media = No Media
+# Shown in the photo metadata viewer when a photo has no readable EXIF metadata
+No-metadata-available = No metadata available
 # As in a machine learning model that powers automated suggestions
 No-model-found = No model found
 No-photos-with-location-data-yet = No photos with location data yet
@@ -1083,6 +1085,8 @@ Photo-importer = Photo importer
 PHOTO-LICENSING = PHOTO LICENSING
 # Legend label for the marker showing a photo's EXIF location
 Photo-location = Photo location
+# Header for a sheet listing a photo's full EXIF metadata
+Photo-metadata = Photo metadata
 Photos = Photos
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Title of screen asking for permission to access the camera when access was denied
@@ -1593,6 +1597,8 @@ VIEW-INATURALIST-HELP = VIEW INATURALIST HELP
 # photo
 View-photo = View photo
 View-photo-licensing-info = View photo licensing info
+# Accessibility label for a button that opens a photo's full EXIF metadata
+View-photo-metadata = View photo metadata
 VIEW-PROJECT-REQUIREMENTS = VIEW PROJECT REQUIREMENTS
 # Button that lets user view a list of projects related to the observation or user profile they're viewing
 VIEW-PROJECTS = VIEW PROJECTS
