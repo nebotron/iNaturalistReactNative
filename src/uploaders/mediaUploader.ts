@@ -101,6 +101,19 @@ const uploadSingleEvidence = async (
   observationUUID: string,
   realm: Realm,
 ): Promise<MediaApiResponse | null> => {
+  // Make sure the photo's on-disk upload file isn't too large for the API,
+  // re-resizing (and persisting the smaller file) when it is. Without this,
+  // photos left oversized by an older code path 413 on every attempt.
+  if ( type === "Photo" && action === "upload" ) {
+    const photo = evidence as RealmPhoto;
+    const uploadableUri = await Photo.ensureUploadableLocalFile( photo.localFilePath );
+    if ( uploadableUri && uploadableUri !== Photo.getLocalPhotoUri( photo.localFilePath ) ) {
+      realm.write( () => {
+        photo.localFilePath = uploadableUri;
+      } );
+    }
+  }
+
   const params = prepareMediaForUpload(
     evidence,
     type,

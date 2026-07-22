@@ -1,6 +1,35 @@
+import { stat } from "@dr.pogodin/react-native-fs";
 import Photo from "realmModels/Photo";
 
 describe( "Photo", ( ) => {
+  describe( "ensureUploadableLocalFile", ( ) => {
+    const localFilePath = "file:///tmp/photoUploads/big.jpg";
+
+    it( "returns null when there is no local upload file", async ( ) => {
+      expect( await Photo.ensureUploadableLocalFile( undefined ) ).toBeNull( );
+    } );
+
+    it( "keeps the existing file when it is small enough", async ( ) => {
+      stat.mockResolvedValueOnce( { size: 1024 * 1024 } );
+      const uri = await Photo.ensureUploadableLocalFile( localFilePath );
+      expect( uri ).toContain( "big.jpg" );
+    } );
+
+    it( "re-resizes the file when it is too large to upload", async ( ) => {
+      stat.mockResolvedValueOnce( { size: 20 * 1024 * 1024 } );
+      const uri = await Photo.ensureUploadableLocalFile( localFilePath );
+      // The resizer mock echoes the source filename back from its output path
+      expect( uri ).toContain( "photoUploads" );
+      expect( uri ).toContain( "big.jpg" );
+    } );
+
+    it( "leaves the file alone when it cannot be stat'd", async ( ) => {
+      stat.mockRejectedValueOnce( new Error( "ENOENT" ) );
+      const uri = await Photo.ensureUploadableLocalFile( localFilePath );
+      expect( uri ).toContain( "big.jpg" );
+    } );
+  } );
+
   describe( "hasLocalEdits", ( ) => {
     it( "returns true when a local file was edited after the last sync", ( ) => {
       const syncedAt = new Date( "2024-01-01T12:00:00Z" );

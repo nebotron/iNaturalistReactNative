@@ -1,4 +1,4 @@
-import { copyAssetsFileIOS, mkdir } from "@dr.pogodin/react-native-fs";
+import { copyAssetsFileIOS, mkdir, stat } from "@dr.pogodin/react-native-fs";
 import { Realm } from "@realm/react";
 import type { ApiPhoto } from "api/types";
 import { photoUploadPath } from "appConstants/paths";
@@ -10,9 +10,21 @@ import {
   preserveCropOriginalPath,
   savedNormalizedCrop,
 } from "sharedHelpers/cropPhotoMetadata";
+import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import resizeImage from "sharedHelpers/resizeImage";
 import { unlink } from "sharedHelpers/util";
+
+const logger = log.extend( "Photo" );
+
+// The largest dimension we allow for uploaded photos. Kept well under the
+// API's payload limit so POST /v2/photos doesn't reject uploads with HTTP 413.
+const UPLOAD_MAX_DIMENSION = 2048;
+
+// Photos whose upload file is larger than this get re-resized before upload.
+// Normal resized uploads are a couple of MB; anything much larger is a
+// full-resolution original left behind by an older code path and will 413.
+const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
 
 class Photo extends Realm.Object {
   static PHOTO_FIELDS = {
@@ -37,7 +49,7 @@ class Photo extends Realm.Object {
     // limit. Uploading full-resolution originals made /v2/photos reject the
     // request with HTTP 413 (Payload Too Large), failing the whole upload.
     // The resizer keeps EXIF metadata (keepMeta) and only scales down.
-    const width = 2048;
+    const width = UPLOAD_MAX_DIMENSION;
     await mkdir( photoUploadPath );
 
     // iOS PHAsset: resize on copy. We don't have a real local file path that
@@ -59,6 +71,41 @@ class Photo extends Realm.Object {
 
     return resizeImage( uriForResize, {
       width,
+      outputPath: photoUploadPath,
+      imageOptions: {
+        mode: "contain",
+        onlyScaleDown: true,
+      },
+    } );
+  }
+
+  // Guarantee the on-disk upload file is small enough to accept before we send
+  // it. resizeImageForUpload downsizes photos when they're created, but photos
+  // captured by an older code path (which copied full-resolution originals
+  // verbatim) still have oversized files on disk and 413 on every upload
+  // attempt. Re-resize those down to the normal upload dimension. Returns the
+  // (possibly new) file:// uri to upload, or null when there's no local file.
+  static async ensureUploadableLocalFile(
+    localFilePath?: string,
+  ): Promise<string | null> {
+    const uri = Photo.getLocalPhotoUri( localFilePath );
+    if ( !uri ) return null;
+
+    let size = NaN;
+    try {
+      size = Number( ( await stat( uri.replace( /^file:\/\//, "" ) ) ).size );
+    } catch {
+      // If we can't stat it, leave it alone and let the upload proceed.
+      return uri;
+    }
+    // Only re-resize when we know the file is genuinely too big.
+    if ( !Number.isFinite( size ) || size <= UPLOAD_MAX_BYTES ) return uri;
+
+    logger.info(
+      `Re-resizing oversized upload photo (${size} bytes) before upload`,
+    );
+    return resizeImage( uri, {
+      width: UPLOAD_MAX_DIMENSION,
       outputPath: photoUploadPath,
       imageOptions: {
         mode: "contain",
