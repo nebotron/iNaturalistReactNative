@@ -63,12 +63,14 @@ const GroupPhotosContainer = ( ): Node => {
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
   const pendingGroupPhotoDeletionUris = useStore( state => state.pendingGroupPhotoDeletionUris );
+  const addPendingGroupPhotoDeletionUri = useStore(
+    state => state.addPendingGroupPhotoDeletionUri,
+  );
   const resetMyObsOffsetToRestore = useStore( state => state.resetMyObsOffsetToRestore );
   const setMyObsOffset = useStore( state => state.setMyObsOffset );
 
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isDuplicatingPhotos, setIsDuplicatingPhotos] = useState( false );
-  const [pendingDeletionUris, setPendingDeletionUris] = useState( [] );
 
   const selectedObservations = useMemo(
     ( ) => selectedIndices
@@ -296,12 +298,13 @@ const GroupPhotosContainer = ( ): Node => {
     const removedFromGroup = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
 
-    const urisToDelete = orderedPhotos
+    // Stage the removed photos' device URIs for deletion in the persisted
+    // store (not local state) so the deletions survive an app kill/resume of
+    // the Group Photos flow, matching the crop-editor removal path.
+    orderedPhotos
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
-      .filter( Boolean );
-    if ( urisToDelete.length > 0 ) {
-      setPendingDeletionUris( prev => [...new Set( [...prev, ...urisToDelete] )] );
-    }
+      .filter( Boolean )
+      .forEach( uri => addPendingGroupPhotoDeletionUri( uri ) );
 
     groupedPhotos.forEach( obs => {
       if ( obs.soundUri !== undefined ) {
@@ -332,9 +335,7 @@ const GroupPhotosContainer = ( ): Node => {
     // Capture everything we need before navigating away, since exiting the
     // flow resets the store slice (groupedPhotos, pending deletion uris, etc.)
     const groupsToImport = groupedPhotos;
-    const allPendingUris = [
-      ...new Set( [...pendingDeletionUris, ...pendingGroupPhotoDeletionUris] ),
-    ];
+    const allPendingUris = [...new Set( pendingGroupPhotoDeletionUris )];
 
     // Send the user to the Me page (My Observations) immediately. Observation
     // creation, saving, CV prefetch, and the optional delete-originals prompt
