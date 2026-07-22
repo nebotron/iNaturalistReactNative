@@ -146,6 +146,7 @@ const AddObsButton = ( ): React.Node => {
     closeBottomSheet( );
   };
   const navToARCamera = ( ) => { navAndCloseBottomSheet( "Camera", { camera: "AI" } ); };
+  const navToPhotoLibrary = ( ) => { navAndCloseBottomSheet( "PhotoLibrary" ); };
 
   // #endregion
 
@@ -175,11 +176,11 @@ const AddObsButton = ( ): React.Node => {
       <GradientButton
         sizeClassName="w-[69px] h-[69px] mb-[5px]"
         onLongPress={() => {
-          if ( !isAllAddObsOptionsMode ) openBottomSheet();
+          openBottomSheet();
         }}
         onPress={() => {
           if ( isAllAddObsOptionsMode ) {
-            openBottomSheet();
+            navToPhotoLibrary();
           } else {
             navToARCamera();
           }
@@ -187,7 +188,7 @@ const AddObsButton = ( ): React.Node => {
         accessibilityLabel={t( "Add-observations" )}
         accessibilityHint={
           isAllAddObsOptionsMode
-            ? t( "Shows-observation-creation-options" )
+            ? t( "Navigates-to-photo-importer" )
             : t( "Opens-AI-camera" )
         }
         iconName={isAllAddObsOptionsMode && "plus"}

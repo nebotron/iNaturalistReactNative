@@ -15,6 +15,7 @@ import {
 
 import AdvancedSettings from "./AdvancedSettings";
 import LoggedInDefaultSettings from "./LoggedInDefaultSettings";
+import UsbImportSetting from "./UsbImportSetting";
 
 const Settings = ( ) => {
   const { t } = useTranslation();
@@ -46,6 +47,7 @@ const Settings = ( ) => {
         />
         {isAdvancedMode && <AdvancedSettings />}
         {currentUser && <LoggedInDefaultSettings />}
+        <UsbImportSetting />
       </View>
     </ScrollViewWrapper>
   );

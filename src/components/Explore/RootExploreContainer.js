@@ -5,8 +5,12 @@ import {
 } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import {
+  resolveRelativeDates,
+} from "components/Explore/helpers/savedExploreFilters";
+import {
   EXPLORE_ACTION,
   ExploreProvider,
+  exploreReducer,
   PLACE_MODE,
   useExplore,
 } from "providers/ExploreContext";
@@ -24,6 +28,7 @@ import useStore from "stores/useStore";
 import Explore from "./Explore";
 import mapParamsToAPI from "./helpers/mapParamsToAPI";
 import useExploreHeaderCount from "./hooks/useExploreHeaderCount";
+import useParams from "./hooks/useParams";
 
 const RootExploreContainerWithContext = ( ): Node => {
   const navigation = useNavigation( );
@@ -41,8 +46,6 @@ const RootExploreContainerWithContext = ( ): Node => {
     hasBlockedPermissions: hasBlockedLocationPermissions,
     checkPermissions,
   } = useLocationPermission( );
-  const previousHasLocationPermissions = useRef();
-
   const {
     state, dispatch, makeSnapshot, defaultExploreLocation,
   } = useExplore( );
@@ -51,9 +54,11 @@ const RootExploreContainerWithContext = ( ): Node => {
 
   const [canFetch, setCanFetch] = useState( false );
 
+  useParams( );
+
   useEffect( () => {
-    async function locationPermissionsChanged() {
-      if ( hasLocationPermissions && !previousHasLocationPermissions.current
+    async function resolveNearbyLocation() {
+      if ( hasLocationPermissions
         && state.placeMode === PLACE_MODE.NEARBY && !state.lat ) {
         const exploreLocation = await defaultExploreLocation();
         dispatch( {
@@ -61,11 +66,9 @@ const RootExploreContainerWithContext = ( ): Node => {
           exploreLocation,
         } );
       }
-
-      previousHasLocationPermissions.current = hasLocationPermissions;
     }
 
-    locationPermissionsChanged();
+    resolveNearbyLocation();
   }, [defaultExploreLocation, dispatch, hasLocationPermissions, state] );
 
   useEffect( () => {
@@ -84,12 +87,13 @@ const RootExploreContainerWithContext = ( ): Node => {
       } );
     } else if ( place === "nearby" ) {
       const exploreLocation = await defaultExploreLocation( );
-      // exploreLocation has a placeMode already
-      // dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_NEARBY } );
-      dispatch( {
+      const action = {
         type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
         exploreLocation,
-      } );
+      };
+      dispatch( action );
+      const newState = exploreReducer( state, action );
+      setRootStoredParams( newState );
     } else {
       navigation.setParams( { place } );
       dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_PLACE } );
@@ -100,7 +104,7 @@ const RootExploreContainerWithContext = ( ): Node => {
         placeGuess: place?.display_name,
       } );
     }
-  }, [checkPermissions, defaultExploreLocation, dispatch, navigation] );
+  }, [checkPermissions, defaultExploreLocation, dispatch, navigation, setRootStoredParams, state] );
 
   // Object | null
   const updateUser = ( user: Object, exclude ) => {
@@ -154,25 +158,31 @@ const RootExploreContainerWithContext = ( ): Node => {
     makeSnapshot( );
   };
 
-  useEffect( ( ) => {
-    const unsubscribe = navigation.addListener( "focus", ( ) => {
-      const storedState = Object.keys( rootStoredParams ).length > 0 || false;
-
-      if ( storedState ) {
-        dispatch( { type: EXPLORE_ACTION.USE_STORED_STATE, storedState: rootStoredParams } );
-      }
-    } );
-
-    return unsubscribe;
-  }, [navigation, dispatch, rootStoredParams] );
+  const skipNextExploreStateSyncRef = useRef(
+    Object.keys( rootStoredParams ).length > 0,
+  );
 
   useEffect( ( ) => {
-    const unsubscribe = navigation.addListener( "blur", ( ) => {
-      setRootStoredParams( state );
-    } );
+    const storedParams = useStore.getState( ).rootStoredParams;
+    if ( Object.keys( storedParams ).length === 0 ) {
+      return;
+    }
+    const relativeDates = useStore.getState( ).rootRelativeDateOffsets ?? {};
 
-    return unsubscribe;
-  }, [navigation, setRootStoredParams, state] );
+    dispatch( {
+      type: EXPLORE_ACTION.USE_STORED_STATE,
+      storedState: resolveRelativeDates( storedParams, relativeDates ),
+    } );
+  }, [dispatch] );
+
+  useEffect( ( ) => {
+    if ( skipNextExploreStateSyncRef.current ) {
+      skipNextExploreStateSyncRef.current = false;
+      return;
+    }
+
+    setRootStoredParams( state );
+  }, [setRootStoredParams, state] );
 
   useEffect( () => {
     if ( state.placeMode === PLACE_MODE.NEARBY
@@ -227,7 +237,10 @@ const RootExploreContainerWithContext = ( ): Node => {
         openFiltersModal={openFiltersModal}
         queryParams={queryParams}
         showFiltersModal={showFiltersModal}
-        updateTaxon={taxon => dispatch( { type: EXPLORE_ACTION.CHANGE_TAXON, taxon } )}
+        updateTaxonFilters={taxonFilters => dispatch( {
+          type: EXPLORE_ACTION.SET_TAXON_FILTERS,
+          taxonFilters,
+        } )}
         updateLocation={updateLocation}
         updateUser={updateUser}
         updateProject={updateProject}

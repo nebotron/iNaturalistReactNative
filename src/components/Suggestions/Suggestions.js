@@ -18,43 +18,53 @@ import SuggestionsFooter from "./SuggestionsFooter";
 import SuggestionsHeader from "./SuggestionsHeader";
 
 type Props = {
-  debugData: Object,
+  detectSubject?: boolean,
+  genusEligibleTaxonIds?: Set<number>,
   handleSkip: Function,
   hideLocationToggleButton: boolean,
   hideSkip?: boolean,
   improveWithLocationButtonOnPress: () => void,
+  interactionsDisabled: boolean,
   isLoading: boolean,
   shouldUseEvidenceLocation: boolean,
+  onCropPhoto?: Function,
   onPressPhoto: Function,
+  onReorderPhotos?: Function,
+  onSelectGenus: Function,
   onTaxonChosen: Function,
   photoUris: string[],
-  reloadSuggestions: Function,
   selectedPhotoUri: string,
   showImproveWithLocationButton: boolean,
+  showModelToggle: boolean,
   suggestions: Object,
   toggleLocation: Function,
-  urlWillCrashOffline: boolean,
-  usingOfflineSuggestions: boolean
+  toggleSuggestionsModel: Function,
+  useOfflineModel: boolean
 };
 
 const Suggestions = ( {
-  debugData,
+  detectSubject,
+  genusEligibleTaxonIds,
   handleSkip,
   hideLocationToggleButton,
   hideSkip,
   improveWithLocationButtonOnPress,
+  interactionsDisabled,
   isLoading,
   shouldUseEvidenceLocation,
+  onCropPhoto,
   onPressPhoto,
+  onReorderPhotos,
+  onSelectGenus,
   onTaxonChosen,
   photoUris,
-  reloadSuggestions,
   selectedPhotoUri,
   showImproveWithLocationButton,
+  showModelToggle,
   suggestions,
   toggleLocation,
-  urlWillCrashOffline,
-  usingOfflineSuggestions,
+  toggleSuggestionsModel,
+  useOfflineModel,
 }: Props ): Node => {
   const { t } = useTranslation( );
   const {
@@ -65,29 +75,42 @@ const Suggestions = ( {
   const taxonIds = otherSuggestions?.map( s => s.taxon.id );
   const observers = useObservers( taxonIds );
   const isEmptyList = !topSuggestion && otherSuggestions?.length === 0;
-  const showOfflineText = !isLoading && usingOfflineSuggestions && !isEmptyList;
+  const showOfflineModelInfo = !isLoading && useOfflineModel && !isEmptyList;
 
-  const renderSuggestion = useCallback( ( { item: suggestion } ) => (
-    <Suggestion
-      accessibilityLabel={t( "Choose-taxon" )}
-      suggestion={suggestion}
-      onTaxonChosen={onTaxonChosen}
-    />
-  ), [onTaxonChosen, t] );
+  const handleTaxonChosen = useCallback( ( ...args ) => {
+    if ( interactionsDisabled ) { return; }
+    onTaxonChosen( ...args );
+  }, [interactionsDisabled, onTaxonChosen] );
+
+  const handleSelectGenus = useCallback( suggestion => {
+    if ( interactionsDisabled ) { return; }
+    onSelectGenus( suggestion );
+  }, [interactionsDisabled, onSelectGenus] );
+
+  const renderSuggestion = useCallback( ( { item: suggestion } ) => {
+    const showGenusButton = genusEligibleTaxonIds?.has( suggestion.taxon.id );
+    return (
+      <Suggestion
+        accessibilityLabel={t( "Choose-taxon" )}
+        suggestion={suggestion}
+        onTaxonChosen={handleTaxonChosen}
+        onSelectGenus={showGenusButton
+          ? ( ) => handleSelectGenus( suggestion )
+          : undefined}
+      />
+    );
+  }, [genusEligibleTaxonIds, handleSelectGenus, handleTaxonChosen, t] );
 
   const renderEmptyList = useMemo( ( ) => (
     <SuggestionsEmpty
       hasTopSuggestion={!!topSuggestion}
       isLoading={isLoading}
       onTaxonChosen={onTaxonChosen}
-      reloadSuggestions={reloadSuggestions}
-      urlWillCrashOffline={urlWillCrashOffline}
     />
-  ), [isLoading, topSuggestion, onTaxonChosen, urlWillCrashOffline, reloadSuggestions] );
+  ), [isLoading, topSuggestion, onTaxonChosen] );
 
   const renderFooter = useMemo( ( ) => (
     <SuggestionsFooter
-      debugData={debugData}
       handleSkip={handleSkip}
       hideLocationToggleButton={hideLocationToggleButton}
       hideSkip={hideSkip}
@@ -96,7 +119,6 @@ const Suggestions = ( {
       toggleLocation={toggleLocation}
     />
   ), [
-    debugData,
     handleSkip,
     hideLocationToggleButton,
     hideSkip,
@@ -107,22 +129,34 @@ const Suggestions = ( {
 
   const renderHeader = useMemo( ( ) => (
     <SuggestionsHeader
+      detectSubject={detectSubject}
+      interactionsDisabled={interactionsDisabled}
+      onCropPhoto={onCropPhoto}
       onPressPhoto={onPressPhoto}
+      onReorderPhotos={onReorderPhotos}
       photoUris={photoUris}
-      reloadSuggestions={reloadSuggestions}
       selectedPhotoUri={selectedPhotoUri}
-      showOfflineText={showOfflineText}
+      showOfflineModelInfo={showOfflineModelInfo}
+      showModelToggle={showModelToggle}
+      toggleSuggestionsModel={toggleSuggestionsModel}
+      useOfflineModel={useOfflineModel}
       improveWithLocationButtonOnPress={improveWithLocationButtonOnPress}
       showImproveWithLocationButton={showImproveWithLocationButton}
     />
   ), [
+    detectSubject,
+    interactionsDisabled,
+    onCropPhoto,
     onPressPhoto,
+    onReorderPhotos,
     photoUris,
-    reloadSuggestions,
     selectedPhotoUri,
     improveWithLocationButtonOnPress,
     showImproveWithLocationButton,
-    showOfflineText,
+    showOfflineModelInfo,
+    showModelToggle,
+    toggleSuggestionsModel,
+    useOfflineModel,
   ] );
 
   const renderSectionHeader = ( { section } ) => {
@@ -143,12 +177,16 @@ const Suggestions = ( {
         </Body1>
       );
     }
+    const showGenusButton = genusEligibleTaxonIds?.has( item.taxon.id );
     return (
       <View className="bg-inatGreen/[.13]">
         <Suggestion
           accessibilityLabel={t( "Choose-top-taxon" )}
           suggestion={item}
-          onTaxonChosen={onTaxonChosen}
+          onTaxonChosen={handleTaxonChosen}
+          onSelectGenus={showGenusButton
+            ? ( ) => handleSelectGenus( item )
+            : undefined}
         />
       </View>
     );

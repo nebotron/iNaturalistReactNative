@@ -1,24 +1,13 @@
-import { getUserAgent } from "api/userAgent";
-import { create } from "apisauce";
-// eslint-disable-next-line import/no-cycle
-import { getAnonymousJWT, getJWT } from "components/LoginSignUp/AuthenticationService";
 import Config from "react-native-config";
 import type { transportFunctionType } from "react-native-logs";
-import { getInstallID } from "sharedHelpers/installData";
+// Only referenced inside function bodies (never at module load), so the
+// api/log <-> logger import cycle resolves before either warn() runs.
+// logWithoutRemote omits this very transport, so logging a sync failure
+// through it can't feed back into itself.
+import { logWithoutRemote } from "sharedHelpers/logger";
 import { isObject, isObjectWithPrimitiveValues } from "sharedHelpers/runtimeTypeUtil";
 
 import { extraSentinelKey } from "./enhanceLoggerWithExtra";
-
-const API_HOST: string
-    = Config.API_URL || process.env.API_URL || "https://api.inaturalist.org/v2";
-
-const api = create( {
-  baseURL: API_HOST,
-  headers: {
-    "User-Agent": getUserAgent( ),
-    "X-Installation-ID": getInstallID( ),
-  },
-} );
 
 // at least answers: does it look enough like an Error for logging purposes?
 function isError( value: unknown ): value is { message?: string; stack?: string } {
@@ -34,7 +23,7 @@ function isError( value: unknown ): value is { message?: string; stack?: string 
 // If we have anything that looks like:
 // [someObj, 'asdfasdf', 3, { [extraSentinelKey]: { id: 1, ... } }]
 // where the _last_ rest param is an obj w/ exactly this sentinel property w/ primitive fields,
-// we infer that last item as intended for the special `extra` API field
+// we infer that last item as intended for the special `extra` field
 // we return that separately and strip it from the "normal" rest params for later handling
 function extractExtra( rawMsg: unknown ) {
   const nonExtraResult = {
@@ -56,10 +45,10 @@ function extractExtra( rawMsg: unknown ) {
   ) {
     return nonExtraResult;
   }
-  // make sure our extra is actually valid for the API
+  // make sure our extra is actually valid
   const extraCandidate = extraWrapperCandidate[extraSentinelKey];
   if ( !isObjectWithPrimitiveValues( extraCandidate ) ) {
-    console.warn( "[ERROR log.ts] `extra` must be a non-nested object with primitive values" );
+    logWithoutRemote.warn( "[log.ts] `extra` must be a non-nested object with primitive values" );
     return nonExtraResult;
   }
   return {
@@ -70,87 +59,65 @@ function extractExtra( rawMsg: unknown ) {
 }
 
 // our transport has no options but this needs to be explicitly `object` for generic typing
-type iNatLogstashTransportOptions = object;
+type firebaseLogTransportOptions = object;
 
-// Custom transport for posting to iNat API logging
-const iNatLogstashTransport: transportFunctionType<iNatLogstashTransportOptions> = async props => {
+// Custom transport that appends each log line as a push-ID child of
+// {CROP_LOG_FIREBASE_URL}/app_log. The log DB allows unauthenticated
+// writes, so no auth token is needed (same as the crop/brightness logs).
+const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> = async props => {
   // Don't bother to log from dev builds
   if ( __DEV__ ) return;
 
-  // Note on `console.errors`: we use logging to report errors, so validating input
-  // and making sure we have an auth token are some of a few cases where we really do want
-  // to squelch all errors to avoid recursion
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl ) return;
 
   // pull potential `extra` out of the rest params
   const { messageParams, extra } = extractExtra( props.rawMsg );
 
-  let userToken;
-  try {
-    userToken = await getJWT();
-  } catch ( _getJWTError ) {
-    console.error( "[ERROR log.ts] failed to retrieve user JWT while logging" );
-  }
-  const anonymousToken = getAnonymousJWT();
-  // Can't log w/o auth token
-  if ( !userToken && !anonymousToken ) {
-    console.error( "[ERROR log.ts] failed to retrieve user or anonymous JWT while logging" );
-    return;
-  }
-  // if message is an Error or is an array ending in an error, extract
-  // error_type and backtrace
-  let message;
-  let backtrace;
-  let errorType;
+  // if message is an Error or is an array ending in an error, extract it
+  // so we can report its stack alongside the message
+  let message: string;
+  let error: { message?: string; stack?: string } | undefined;
   if ( typeof ( messageParams ) === "string" ) {
     message = messageParams;
   } else if ( isError( messageParams ) ) {
-    // eslint-disable-next-line prefer-destructuring
-    message = messageParams;
-    errorType = messageParams.constructor?.name;
-    backtrace = messageParams.stack;
+    error = messageParams;
+    message = error.message ?? "Unknown error";
   } else if ( Array.isArray( messageParams ) ) {
-    // specially handle the cases where the last arg is
-    // an error: so we can attach appropriate error metadata
     const last = messageParams.at( -1 );
     if ( isError( last ) ) {
-      // eslint-disable-next-line prefer-destructuring
-      message = last.message;
-      errorType = last.constructor?.name;
-      backtrace = last.stack;
+      error = last;
+      message = [...messageParams.slice( 0, -1 ), error.message ?? "Unknown error"].join( " " );
     } else {
       message = messageParams.join( " " );
     }
   } else {
-    message = messageParams;
+    message = JSON.stringify( messageParams );
   }
-  const formData = {
+
+  const entry = {
+    timestamp: new Date( ).toISOString( ),
     level: props.level.text,
+    extension: props.extension,
     message,
-    context: props.extension,
-    extra,
-    timestamp: new Date().toISOString(),
-    error_type: errorType,
-    backtrace,
+    ...( extra ?? {} ),
+    ...( error?.stack
+      ? { stack: error.stack }
+      : {} ),
   };
+
   try {
-    await api.post( "/log", formData, {
-      headers: {
-        Authorization: [
-          userToken,
-          anonymousToken,
-        ].flat( ).join( ", " ),
-      },
+    const r = await fetch( `${baseUrl}/app_log.json`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify( entry ),
     } );
-  } catch ( e ) {
-    const postLogError = e as Error;
-    if ( postLogError.message.match( /Network request failed/ ) ) {
-      // If we're offline, we can't post logs to the server
-      return;
-    }
-    throw postLogError;
+    if ( !r.ok ) logWithoutRemote.warn( "[log.ts] failed to sync log entry", r.status );
+  } catch ( syncError ) {
+    logWithoutRemote.warn( "[log.ts] failed to sync log entry", syncError );
   }
 };
 
 export { default as enhanceLoggerWithExtra } from "./enhanceLoggerWithExtra";
 
-export default iNatLogstashTransport;
+export default firebaseLogTransport;

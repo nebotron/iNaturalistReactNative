@@ -15,6 +15,8 @@ import { useEffect } from "react";
 import User from "realmModels/User";
 import {
   clearComputerVisionPhotos,
+  clearExpiredCropSources,
+  clearExpiredDeviceThumbnails,
   clearGalleryPhotos,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,
@@ -100,6 +102,8 @@ const useDeferredStartup = ( ) => {
     const id6 = deferTask( "clearComputerVisionPhotos", clearComputerVisionPhotos );
     const id7 = deferTask( "clearSyncedMediaForUpload", () => clearSyncedMediaForUpload( realm ) );
     const id8 = deferTask( "clearRollbackPhotos", clearRollbackPhotos );
+    const id11 = deferTask( "clearExpiredCropSources", clearExpiredCropSources );
+    const id13 = deferTask( "clearExpiredDeviceThumbnails", clearExpiredDeviceThumbnails );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
     const id10 = deferTask( "warmIntlCache", () => {
@@ -109,7 +113,7 @@ const useDeferredStartup = ( ) => {
       formatApiDatetime( "1970", i18n, { timeZone: "Etc/UTC" } );
       return Promise.resolve();
     } );
-    const id11 = deferTask( "syncJoinedProjects", async () => {
+    const id12 = deferTask( "syncJoinedProjects", async () => {
       const currentUserId = User.currentUser( realm )?.id;
       if ( !currentUserId ) {
         return;
@@ -129,6 +133,8 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id9 );
       cancelIdleCallback( id10 );
       cancelIdleCallback( id11 );
+      cancelIdleCallback( id12 );
+      cancelIdleCallback( id13 );
     };
   }, [i18n, realm] );
 };

@@ -1,3 +1,10 @@
+import {
+  copyFile,
+  downloadFile,
+  TemporaryDirectoryPath,
+} from "@dr.pogodin/react-native-fs";
+import type { ExifTags } from "@lodev09/react-native-exify";
+import * as Exify from "@lodev09/react-native-exify";
 import { WarningSheet } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, {
@@ -7,7 +14,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { StatusBar } from "react-native";
+import { Share, StatusBar } from "react-native";
 import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Photo from "realmModels/Photo";
@@ -44,11 +51,17 @@ interface Props {
   header?: (
     { onClose, photoCount }: { onClose: ( ) => void; photoCount: number}
   ) => React.JSX.Element;
+  initialIndex?: number;
+  latitude?: number | null;
+  longitude?: number | null;
   onClose?: ( ) => void;
+  onCropPhoto?: Function;
   onDeletePhoto?: ( uri: string ) => void;
   onDeleteSound?: ( uri: string ) => void;
+  onReorderPhotos?: Function;
   photos?: PhotoItem[];
   sounds?: SoundItem[];
+  timeObservedAt?: string | null;
   uri?: string | null;
 }
 
@@ -57,11 +70,17 @@ const MediaViewer = ( {
   editable,
   deleting,
   header,
+  initialIndex,
+  latitude,
+  longitude,
   onClose = ( ) => undefined,
+  onCropPhoto,
   onDeletePhoto,
   onDeleteSound,
+  onReorderPhotos,
   photos = [],
   sounds = [],
+  timeObservedAt,
   uri,
 }: Props ) => {
   const insets = useSafeAreaInsets();
@@ -70,11 +89,15 @@ const MediaViewer = ( {
     ...sounds.map( sound => sound.file_url ),
   ] ), [photos, sounds] );
 
-  const [selectedMediaIndex, setSelectedMediaIndex] = useState(
-    uris.indexOf( uri ) <= 0
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState( ( ) => {
+    if ( initialIndex != null && initialIndex >= 0 ) {
+      return initialIndex;
+    }
+    const uriIndex = uris.indexOf( uri );
+    return uriIndex <= 0
       ? 0
-      : uris.indexOf( uri ),
-  );
+      : uriIndex;
+  } );
   const { t } = useTranslation( );
   const [mediaToDelete, setMediaToDelete] = useState<MediaToDelete | null>( null );
 
@@ -90,16 +113,45 @@ const MediaViewer = ( {
     horizontalScroll?.current?.scrollTo( { index, animated: true } );
   }, [setSelectedMediaIndex] );
 
-  // If we've removed an item the selectedPhoto index might refer to a item
-  // that no longer exists, so change it to the previous one
-  useEffect( ( ) => {
-    if ( uris.length > 0 && selectedMediaIndex >= uris.length ) {
-      const newIndex = Math.max( 0, selectedMediaIndex - 1 );
+  const handleReorderPhotos = useCallback( ( { data: newPhotoUris } ) => {
+    if ( !onReorderPhotos ) {
+      return;
+    }
+
+    const currentlySelectedUri = uris[selectedMediaIndex];
+    onReorderPhotos( { data: newPhotoUris } );
+
+    const newUris = [
+      ...newPhotoUris,
+      ...sounds.map( sound => sound.file_url ),
+    ];
+    const newIndex = newUris.indexOf( currentlySelectedUri );
+    if ( newIndex >= 0 ) {
       setSelectedMediaIndex( newIndex );
       horizontalScroll?.current?.scrollTo( {
         index: newIndex,
-        animated: false,
+        animated: true,
       } );
+    }
+  }, [
+    onReorderPhotos,
+    selectedMediaIndex,
+    sounds,
+    uris,
+  ] );
+
+  // If we've removed an item the selectedPhoto index might refer to a item
+  // that no longer exists, so change it to the previous one
+  useEffect( ( ) => {
+    if ( selectedMediaIndex >= uris.length ) {
+      const newIndex = Math.max( 0, selectedMediaIndex - 1 );
+      setSelectedMediaIndex( newIndex );
+      if ( uris.length > 0 ) {
+        horizontalScroll?.current?.scrollTo( {
+          index: newIndex,
+          animated: false,
+        } );
+      }
     }
   }, [selectedMediaIndex, setSelectedMediaIndex, uris.length] );
 
@@ -117,6 +169,40 @@ const MediaViewer = ( {
     mediaToDelete?.uri,
     setMediaToDelete,
   ] );
+
+  const handleLongPressPhoto = useCallback( async ( photoUri: string ) => {
+    const tempPath = `${TemporaryDirectoryPath}/share_photo.jpg`;
+
+    // Get a local file we can annotate and share
+    if ( photoUri.startsWith( "file://" ) ) {
+      await copyFile( photoUri.replace( "file://", "" ), tempPath );
+    } else {
+      await downloadFile( { fromUrl: photoUri, toFile: tempPath } ).promise;
+    }
+
+    // Embed location and time metadata
+    const exifToWrite: ExifTags = {};
+    if ( latitude != null && longitude != null ) {
+      exifToWrite.GPSLatitude = latitude;
+      exifToWrite.GPSLongitude = longitude;
+    }
+    if ( timeObservedAt ) {
+      const d = new Date( timeObservedAt );
+      const pad = ( n: number ) => String( n ).padStart( 2, "0" );
+      const datePart = `${d.getFullYear()}:${pad( d.getMonth() + 1 )}:${pad( d.getDate() )}`;
+      const timePart = `${pad( d.getHours() )}:${pad( d.getMinutes() )}:${pad( d.getSeconds() )}`;
+      exifToWrite.DateTimeOriginal = `${datePart} ${timePart}`;
+    }
+    if ( Object.keys( exifToWrite ).length > 0 ) {
+      try {
+        await Exify.write( `file://${tempPath}`, exifToWrite );
+      } catch ( _e ) {
+        // Continue sharing even if EXIF write fails
+      }
+    }
+
+    Share.share( { url: `file://${tempPath}` } );
+  }, [latitude, longitude, timeObservedAt] );
 
   return (
     <View
@@ -145,13 +231,17 @@ const MediaViewer = ( {
         selectedMediaIndex={selectedMediaIndex}
         horizontalScroll={horizontalScroll}
         setSelectedMediaIndex={setSelectedMediaIndex}
+        onCropPhoto={onCropPhoto}
         onDeletePhoto={photoUri => setMediaToDelete( { type: "photo", uri: photoUri } )}
         onDeleteSound={soundUri => setMediaToDelete( { type: "sound", uri: soundUri } )}
+        onLongPressPhoto={handleLongPressPhoto}
       />
       <MediaSelector
+        editable={editable}
         photos={photos}
         sounds={sounds}
         scrollToIndex={scrollToIndex}
+        onReorderPhotos={handleReorderPhotos}
         isLargeScreen={isLargeScreen}
         selectedMediaIndex={selectedMediaIndex}
       />

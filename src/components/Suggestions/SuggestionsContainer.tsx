@@ -2,31 +2,43 @@ import {
   useNetInfo,
 } from "@react-native-community/netinfo";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { fetchTaxon } from "api/taxa";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
-import isEqual from "lodash/isEqual";
+import findIndex from "lodash/findIndex";
+import sortBy from "lodash/sortBy";
+import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
   useEffect,
   useMemo,
   useReducer,
+  useRef,
+  useState,
 } from "react";
 import ObservationPhoto from "realmModels/ObservationPhoto";
+import Photo from "realmModels/Photo";
+import TaxonModel from "realmModels/Taxon";
+import type { RealmPhoto } from "realmModels/types";
+import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
+import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import {
+  useCurrentUser,
   useLastScreen,
   useLocationPermission,
   useSuggestions,
 } from "sharedHooks";
-import {
-  internalUseSuggestionsInitialSuggestions,
-} from "sharedHooks/useSuggestions/filterSuggestions";
+import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import type { TopSuggestionType } from "sharedHooks/useSuggestions/types";
 import useStore from "stores/useStore";
 
 import fetchCoarseUserLocation from "../../sharedHelpers/fetchCoarseUserLocation";
 import flattenUploadParams from "./helpers/flattenUploadParams";
 import useNavigateWithTaxonSelected from "./hooks/useNavigateWithTaxonSelected";
+import usePreloadNextObservationSuggestions from "./hooks/usePreloadNextObservationSuggestions";
 import Suggestions from "./Suggestions";
 import TaxonSearchButton from "./TaxonSearchButton";
+
+const { useRealm } = RealmContext;
 
 export enum FETCH_STATUSES {
   FETCH_STATUS_LOADING = "loading",
@@ -104,10 +116,25 @@ const reducer = ( state, action ) => {
         shouldUseEvidenceLocation: action.shouldUseEvidenceLocation,
         queryKey: getQueryKey( state.selectedPhotoUri, action.shouldUseEvidenceLocation ),
       };
+    case "SWITCH_SUGGESTIONS_MODEL":
+      return {
+        ...state,
+        onlineFetchStatus: action.useOfflineModel
+          ? FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED
+          : FETCH_STATUSES.FETCH_STATUS_LOADING,
+      };
     case "TOGGLE_MEDIA_VIEWER":
       return {
         ...state,
         mediaViewerVisible: action.mediaViewerVisible,
+      };
+    case "RESET_OBSERVATION":
+      return {
+        ...initialState,
+        selectedPhotoUri: action.selectedPhotoUri,
+        scoreImageParams: action.scoreImageParams,
+        shouldUseEvidenceLocation: action.shouldUseEvidenceLocation,
+        queryKey: getQueryKey( action.selectedPhotoUri, action.shouldUseEvidenceLocation ),
       };
     default:
       throw new Error( );
@@ -119,6 +146,16 @@ const SuggestionsContainer = ( ) => {
   const { params } = useRoute( );
   const { isConnected } = useNetInfo( );
   const currentObservation = useStore( state => state.currentObservation );
+  const currentUser = useCurrentUser( );
+  const realm = useRealm( );
+
+  // Observations created locally have no stored user, so they belong to the
+  // current user. Only when a user is present and differs is this someone
+  // else's observation (e.g. suggesting an ID from ObsDetails), in which case
+  // we frame the photo with subject detection for the thumbnail and CV request.
+  const belongsToCurrentUser = !currentObservation?.user?.login
+    || currentObservation.user.login === currentUser?.login;
+  const detectSubject = !belongsToCurrentUser;
   const innerPhotos = ObservationPhoto.mapInnerPhotos( currentObservation );
   // ObservationPhoto.mapObsPhotoUris returns *new* strings with every call,
   // so these values need to be stabilized
@@ -127,6 +164,13 @@ const SuggestionsContainer = ( ) => {
     [currentObservation],
   );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
+  const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
+  const { trackImageDeleted } = useInputImageTracking( );
+
+  const observationPhotos = useMemo(
+    ( ) => currentObservation?.observationPhotos || [],
+    [currentObservation?.observationPhotos],
+  );
 
   const evidenceHasLocation = !!currentObservation?.latitude;
 
@@ -135,6 +179,11 @@ const SuggestionsContainer = ( ) => {
     selectedPhotoUri: photoUris[0],
     shouldUseEvidenceLocation: evidenceHasLocation,
   } );
+  const [preferOfflineModel, setPreferOfflineModel] = useState( false );
+  const previousObservationUuidRef = useRef<string | undefined>( currentObservation?.uuid );
+  const [interactionsDisabled, setInteractionsDisabled] = useState( false );
+
+  usePreloadNextObservationSuggestions( );
 
   const {
     hasPermissions,
@@ -163,12 +212,14 @@ const SuggestionsContainer = ( ) => {
     shouldUseEvidenceLocation,
   } = state;
 
-  const shouldFetchOnlineSuggestions = ( hasPermissions !== undefined )
-      && onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
+  const shouldFetchOnlineSuggestions = !preferOfflineModel
+    && ( hasPermissions !== undefined )
+    && onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
 
   const onlineSuggestionsAttempted
    = onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_FETCHED
-      || onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_ERROR;
+      || onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_ERROR
+      || onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED;
 
   const onFetchError = useCallback(
     ( { isOnline }: { isOnline: boolean } ) => {
@@ -182,16 +233,9 @@ const SuggestionsContainer = ( ) => {
           type: "SET_OFFLINE_FETCH_STATUS",
           offlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_OFFLINE_ERROR,
         } );
-        // If offline is finished, and online still in loading state it means it never started
-        if ( onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING ) {
-          dispatch( {
-            type: "SET_ONLINE_FETCH_STATUS",
-            onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
-          } );
-        }
       }
     },
-    [onlineFetchStatus],
+    [],
   );
 
   const onFetched = useCallback(
@@ -201,37 +245,21 @@ const SuggestionsContainer = ( ) => {
           type: "SET_ONLINE_FETCH_STATUS",
           onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_FETCHED,
         } );
-        // Currently we start offline only when online has an error, so
-        // we can register offline as skipped if online is successful
-        dispatch( {
-          type: "SET_OFFLINE_FETCH_STATUS",
-          offlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_OFFLINE_SKIPPED,
-        } );
       } else {
         dispatch( {
           type: "SET_OFFLINE_FETCH_STATUS",
           offlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_OFFLINE_FETCHED,
         } );
-        // If offline is finished, and online still in loading state it means it never started
-        if ( onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING ) {
-          dispatch( {
-            type: "SET_ONLINE_FETCH_STATUS",
-            onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
-          } );
-        }
       }
     },
-    [onlineFetchStatus],
+    [],
   );
 
   const {
-    timedOut,
     resetTimeout,
-    onlineSuggestions,
-    onlineSuggestionsError,
-    onlineSuggestionsUpdatedAt,
     suggestions,
     usingOfflineSuggestions,
+    tryOfflineSuggestions,
     urlWillCrashOffline,
   } = useSuggestions( selectedPhotoUri, {
     shouldFetchOnlineSuggestions,
@@ -240,10 +268,103 @@ const SuggestionsContainer = ( ) => {
     scoreImageParams,
     queryKey,
     onlineSuggestionsAttempted,
+    preferOfflineModel,
   } );
 
+  // Taxa ranked at species level or finer (or of unknown rank) can show a
+  // "suggest genus" button; this is decided synchronously from data already
+  // in Realm so the button appears immediately instead of after a lookup.
+  const genusEligibleTaxonIds = useMemo( ( ) => {
+    const allSuggestions = [
+      ...( suggestions.topSuggestion
+        ? [suggestions.topSuggestion]
+        : [] ),
+      ...( suggestions.otherSuggestions || [] ),
+    ];
+    const eligibleIds = new Set<number>( );
+    allSuggestions.forEach( suggestion => {
+      const taxonId = suggestion.taxon.id;
+      const realmTaxon = realm.objectForPrimaryKey( "Taxon", taxonId );
+      const rankLevel = suggestion.taxon.rank_level ?? realmTaxon?.rank_level;
+      if ( rankLevel == null || rankLevel <= TaxonModel.SPECIES_LEVEL ) {
+        eligibleIds.add( taxonId );
+      }
+    } );
+    return eligibleIds;
+  }, [suggestions, realm] );
+
+  // The actual genus taxon is only looked up once the user taps the button
+  const findGenusForSuggestion = useCallback( async suggestion => {
+    const taxonId = suggestion.taxon.id;
+    const realmTaxon = realm.objectForPrimaryKey( "Taxon", taxonId );
+    const ancestorIds = Array.from( realmTaxon?.ancestor_ids || [] );
+    let foundGenusId: number | null = null;
+
+    if ( ancestorIds.length > 0 ) {
+      const genusFromRealm = realm.objects( "Taxon" ).filtered(
+        "id IN $0 AND rank_level == $1",
+        ancestorIds,
+        TaxonModel.GENUS_LEVEL,
+      )[0];
+      if ( genusFromRealm ) foundGenusId = genusFromRealm.id;
+    }
+
+    if ( !foundGenusId && ancestorIds.length > 0 ) {
+      try {
+        const offlineAncestors = await getAncestorsFromTaxonomyFile( ancestorIds );
+        const genusAncestor = offlineAncestors.find(
+          a => a.rank_level === TaxonModel.GENUS_LEVEL,
+        );
+        foundGenusId = genusAncestor?.id ?? null;
+      } catch { /* Taxonomy file unavailable */ }
+    }
+
+    if ( !foundGenusId ) {
+      try {
+        const taxonWithAncestors = await fetchTaxon( taxonId );
+        const genusAncestor = taxonWithAncestors?.ancestors?.find(
+          ( a: { rank_level?: number } ) => a.rank_level === TaxonModel.GENUS_LEVEL,
+        );
+        foundGenusId = genusAncestor?.id ?? null;
+      } catch { /* API unavailable */ }
+    }
+
+    if ( !foundGenusId ) return null;
+
+    let fullGenusTaxon = realm.objectForPrimaryKey( "Taxon", foundGenusId );
+    if ( !fullGenusTaxon ) {
+      fullGenusTaxon = await fetchTaxonAndSave( foundGenusId, realm );
+    }
+
+    return fullGenusTaxon || null;
+  }, [realm] );
+
+  const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: true } );
+
+  const handleSelectGenus = useCallback( async suggestion => {
+    const genusTaxon = await findGenusForSuggestion( suggestion );
+    if ( genusTaxon ) {
+      navigateWithTaxonSelected( genusTaxon );
+    }
+  }, [findGenusForSuggestion, navigateWithTaxonSelected] );
+
+  // when the displayed suggestions swap from offline to online (or vice versa),
+  // briefly disable taps so an in-flight tap doesn't land on a different
+  // suggestion after the list reflows
+  const previousUsingOfflineSuggestionsRef = useRef( usingOfflineSuggestions );
+  useEffect( ( ) => {
+    const hasSwapped = previousUsingOfflineSuggestionsRef.current !== usingOfflineSuggestions;
+    previousUsingOfflineSuggestionsRef.current = usingOfflineSuggestions;
+    if ( !hasSwapped ) {
+      return ( ) => { };
+    }
+    setInteractionsDisabled( true );
+    const timer = setTimeout( ( ) => setInteractionsDisabled( false ), 300 );
+    return ( ) => { clearTimeout( timer ); };
+  }, [usingOfflineSuggestions] );
+
   const createUploadParams = useCallback( async ( uri: string, showLocation: boolean ) => {
-    const newImageParams = await flattenUploadParams( uri );
+    const newImageParams = await flattenUploadParams( uri, detectSubject );
     if ( showLocation && currentObservation?.latitude ) {
       newImageParams.lat = currentObservation?.latitude;
       newImageParams.lng = currentObservation?.longitude;
@@ -251,9 +372,8 @@ const SuggestionsContainer = ( ) => {
     return newImageParams;
   }, [
     currentObservation,
+    detectSubject,
   ] );
-
-  const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: true } );
 
   const onPressPhoto = useCallback(
     async ( uri: string ) => {
@@ -269,17 +389,27 @@ const SuggestionsContainer = ( ) => {
           selectedPhotoUri: uri,
           scoreImageParams: newImageParams,
         } );
+        if ( preferOfflineModel ) {
+          dispatch( {
+            type: "SET_ONLINE_FETCH_STATUS",
+            onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
+          } );
+        }
       }
     },
     [
       createUploadParams,
       selectedPhotoUri,
       shouldUseEvidenceLocation,
+      preferOfflineModel,
     ],
   );
 
-  const isLoading = onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
-    || offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
+  // offline suggestions load first, so loading only depends on them unless
+  // offline is unavailable (e.g. a remote photo with no connection)
+  const isLoading = tryOfflineSuggestions
+    ? offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
+    : onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
 
   const toggleLocation = useCallback( async ( { showLocation }: { showLocation: boolean } ) => {
     const newImageParams = await createUploadParams( selectedPhotoUri, showLocation );
@@ -289,30 +419,32 @@ const SuggestionsContainer = ( ) => {
       shouldUseEvidenceLocation: showLocation,
       scoreImageParams: newImageParams,
     } );
+    if ( preferOfflineModel ) {
+      dispatch( {
+        type: "SET_ONLINE_FETCH_STATUS",
+        onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
+      } );
+    }
   }, [
     createUploadParams,
     resetTimeout,
     selectedPhotoUri,
+    preferOfflineModel,
   ] );
 
-  const reloadSuggestions = useCallback( ( ) => {
-    // used when offline text is tapped to try to get online
-    // suggestions
-    if ( !isConnected ) { return; }
+  const toggleSuggestionsModel = useCallback( ( nextUseOfflineModel: boolean ) => {
+    if ( nextUseOfflineModel === preferOfflineModel ) {
+      return;
+    }
+    setPreferOfflineModel( nextUseOfflineModel );
     resetTimeout( );
-    dispatch(
-      {
-        type: "SET_ONLINE_FETCH_STATUS",
-        onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_LOADING,
-      },
-    );
-    dispatch(
-      {
-        type: "SET_OFFLINE_FETCH_STATUS",
-        offlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_LOADING,
-      },
-    );
-  }, [isConnected, resetTimeout] );
+    dispatch( {
+      type: "SWITCH_SUGGESTIONS_MODEL",
+      useOfflineModel: nextUseOfflineModel,
+    } );
+  }, [resetTimeout, preferOfflineModel] );
+
+  const showModelToggle = isConnected && !urlWillCrashOffline;
 
   const hideLocationToggleButton = usingOfflineSuggestions
     || isLoading
@@ -322,6 +454,23 @@ const SuggestionsContainer = ( ) => {
 
   const setImageParams = useCallback( async ( ) => {
     if ( isConnected === false ) {
+      // Skip online suggestions; try offline model for local photos
+      dispatch( {
+        type: "SET_ONLINE_FETCH_STATUS",
+        onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_ONLINE_SKIPPED,
+      } );
+      if ( selectedPhotoUri && !selectedPhotoUri.includes( "https://" ) ) {
+        const newImageParams = await createUploadParams(
+          selectedPhotoUri,
+          shouldUseEvidenceLocation,
+        );
+        dispatch( { type: "SET_UPLOAD_PARAMS", scoreImageParams: newImageParams } );
+      } else {
+        dispatch( {
+          type: "SET_OFFLINE_FETCH_STATUS",
+          offlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_OFFLINE_SKIPPED,
+        } );
+      }
       return;
     }
     const newImageParams = await createUploadParams( selectedPhotoUri, shouldUseEvidenceLocation );
@@ -333,14 +482,50 @@ const SuggestionsContainer = ( ) => {
     shouldUseEvidenceLocation,
   ] );
 
+  useEffect( ( ) => {
+    const observationUuid = currentObservation?.uuid;
+    if ( !observationUuid || previousObservationUuidRef.current === observationUuid ) {
+      return;
+    }
+    const hadPreviousObservation = previousObservationUuidRef.current !== undefined;
+    previousObservationUuidRef.current = observationUuid;
+
+    if ( !hadPreviousObservation ) {
+      return;
+    }
+
+    const resetForNextObservation = async ( ) => {
+      const nextPhotoUri = photoUris[0];
+      if ( !nextPhotoUri ) {
+        return;
+      }
+      const newImageParams = isConnected === false
+        ? null
+        : await createUploadParams( nextPhotoUri, evidenceHasLocation );
+      setPreferOfflineModel( false );
+      dispatch( {
+        type: "RESET_OBSERVATION",
+        selectedPhotoUri: nextPhotoUri,
+        scoreImageParams: newImageParams,
+        shouldUseEvidenceLocation: evidenceHasLocation,
+      } );
+    };
+
+    resetForNextObservation( );
+  }, [
+    createUploadParams,
+    currentObservation?.uuid,
+    evidenceHasLocation,
+    isConnected,
+    photoUris,
+  ] );
+
   const headerRight = useCallback( ( ) => <TaxonSearchButton />, [] );
 
-  const shouldSetImageParams = useMemo(
-    // TODO: part of MOB-1081, see `internalUseSuggestionsInitialSuggestions`
-    // we shouldn't rely on implementation internals to consumer drive state
-    () => isEqual( internalUseSuggestionsInitialSuggestions, suggestions ),
-    [suggestions],
-  );
+  // Only set image params when they haven't been set yet. Offline suggestions
+  // can finish loading before the focus event fires, so we can't use suggestion
+  // state as the signal — scoreImageParams being null is the true indicator.
+  const shouldSetImageParams = scoreImageParams === null;
 
   useEffect( ( ) => {
     const unsubscribe = navigation.addListener( "focus", ( ) => {
@@ -358,7 +543,7 @@ const SuggestionsContainer = ( ) => {
   const onPermissionGranted = useCallback( async ( ) => {
     const userLocation = await fetchCoarseUserLocation( );
     updateObservationKeys( userLocation );
-    const newImageParams = await flattenUploadParams( selectedPhotoUri );
+    const newImageParams = await flattenUploadParams( selectedPhotoUri, detectSubject );
     newImageParams.lat = userLocation?.latitude;
     newImageParams.lng = userLocation?.longitude;
     dispatch( {
@@ -366,49 +551,132 @@ const SuggestionsContainer = ( ) => {
       shouldUseEvidenceLocation: true,
       scoreImageParams: newImageParams,
     } );
-  }, [selectedPhotoUri, updateObservationKeys] );
+  }, [detectSubject, selectedPhotoUri, updateObservationKeys] );
 
-  const debugData = {
-    timedOut,
-    onlineFetchStatus,
-    onlineSuggestions,
-    onlineSuggestionsError,
-    onlineSuggestionsUpdatedAt,
-    selectedPhotoUri,
+  const afterMediaDeleted = useCallback( ( ) => {
+    const freshObservation = useStore.getState( ).currentObservation;
+    const freshPhotoUris = ObservationPhoto.mapObsPhotoUris( freshObservation );
+    if ( freshPhotoUris.length === 0 ) {
+      dispatch( { type: "TOGGLE_MEDIA_VIEWER", mediaViewerVisible: false } );
+      navigation.goBack( );
+      return;
+    }
+    const newUri = freshPhotoUris[freshPhotoUris.length - 1];
+    createUploadParams( newUri, shouldUseEvidenceLocation ).then( params => {
+      dispatch( {
+        type: "SELECT_PHOTO",
+        selectedPhotoUri: newUri,
+        scoreImageParams: params,
+      } );
+    } );
+  }, [createUploadParams, navigation, shouldUseEvidenceLocation] );
+
+  const onDeletePhoto = useCallback( async ( uriToDelete: string ) => {
+    await ObservationPhoto.deletePhoto( uriToDelete, currentObservation );
+    deletePhotoFromObservation( uriToDelete );
+    trackImageDeleted( uriToDelete );
+    afterMediaDeleted( );
+  }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation, trackImageDeleted] );
+
+  const onCropPhoto = useCallback( ( photo: RealmPhoto ) => {
+    const cropUri = Photo.displayCropSourcePhoto( photo );
+    if ( !cropUri ) { return; }
+
+    const obsPhoto = observationPhotos.find( candidate => {
+      const candidateUri = Photo.displayCropSourcePhoto( candidate.photo );
+      const candidateLargeUri = Photo.displayLocalOrRemoteLargePhoto( candidate.photo );
+      const candidateSquareUri = Photo.displayLocalOrRemoteSquarePhoto( candidate.photo );
+      return candidateUri === cropUri
+        || candidateLargeUri === Photo.displayLocalOrRemoteLargePhoto( photo )
+        || candidateSquareUri === Photo.displayLocalOrRemoteSquarePhoto( photo );
+    } );
+    if ( !obsPhoto ) { return; }
+
+    dispatch( { type: "TOGGLE_MEDIA_VIEWER", mediaViewerVisible: false } );
+    navigation.navigate( "ImageCropEditor", {
+      imageUri: cropUri,
+      context: "observationEdit",
+      observationPhotoUuid: obsPhoto.uuid,
+      onCropSaved: ( ) => {
+        const freshObservation = useStore.getState( ).currentObservation;
+        const freshPhotoUris = ObservationPhoto.mapObsPhotoUris( freshObservation );
+        const photoIdx = ( currentObservation?.observationPhotos || [] )
+          .findIndex( op => op.uuid === obsPhoto.uuid );
+        const newUri = freshPhotoUris[photoIdx] ?? freshPhotoUris[0];
+        if ( newUri ) {
+          createUploadParams( newUri, shouldUseEvidenceLocation ).then( params => {
+            dispatch( {
+              type: "SELECT_PHOTO",
+              selectedPhotoUri: newUri,
+              scoreImageParams: params,
+            } );
+          } );
+        }
+      },
+    } );
+  }, [
+    createUploadParams,
+    currentObservation,
+    navigation,
+    observationPhotos,
     shouldUseEvidenceLocation,
-    topSuggestionType: suggestions?.topSuggestionType,
-    offlineFetchStatus,
-    usingOfflineSuggestions,
-    suggestions,
-  };
+  ] );
+
+  const onCropPhotoUri = useCallback( ( uri: string ) => {
+    const photoIdx = photoUris.indexOf( uri );
+    if ( photoIdx === -1 ) { return; }
+    const photo = innerPhotos[photoIdx] as RealmPhoto;
+    if ( !photo ) { return; }
+    onCropPhoto( photo );
+  }, [innerPhotos, onCropPhoto, photoUris] );
+
+  const handleReorderPhotos = useCallback( ( { data: newPhotoUris }: { data: string[] } ) => {
+    const newObsPhotos = observationPhotos.map( obsPhoto => {
+      const photoUri = Photo.displayLocalOrRemoteMediumPhoto( obsPhoto.photo );
+      const newPosition = findIndex( newPhotoUris, p => p === photoUri );
+      return { ...obsPhoto, position: newPosition };
+    } );
+    const sortedObsPhotos = sortBy( newObsPhotos, obsPhoto => obsPhoto.position );
+    updateObservationKeys( { observationPhotos: sortedObsPhotos } );
+  }, [observationPhotos, updateObservationKeys] );
 
   return (
     <>
       <Suggestions
-        debugData={debugData}
+        detectSubject={detectSubject}
+        genusEligibleTaxonIds={genusEligibleTaxonIds}
         handleSkip={( ) => navigateWithTaxonSelected( undefined )}
         hideLocationToggleButton={hideLocationToggleButton}
         hideSkip={params?.hideSkip}
         improveWithLocationButtonOnPress={improveWithLocationButtonOnPress}
+        interactionsDisabled={interactionsDisabled}
         isLoading={isLoading}
         shouldUseEvidenceLocation={shouldUseEvidenceLocation}
+        onCropPhoto={onCropPhotoUri}
         onPressPhoto={onPressPhoto}
+        onReorderPhotos={handleReorderPhotos}
+        onSelectGenus={handleSelectGenus}
         onTaxonChosen={navigateWithTaxonSelected}
         photoUris={photoUris}
-        reloadSuggestions={reloadSuggestions}
         selectedPhotoUri={selectedPhotoUri}
         showImproveWithLocationButton={!!showImproveWithLocationButton}
+        showModelToggle={showModelToggle}
         suggestions={suggestions}
         toggleLocation={toggleLocation}
-        urlWillCrashOffline={urlWillCrashOffline}
-        usingOfflineSuggestions={usingOfflineSuggestions}
+        toggleSuggestionsModel={toggleSuggestionsModel}
+        useOfflineModel={usingOfflineSuggestions}
       />
       <MediaViewerModal
+        editable={lastScreen === "ObsEdit" || lastScreen === "Camera"}
         showModal={mediaViewerVisible}
         onClose={( ) => dispatch( {
           type: "TOGGLE_MEDIA_VIEWER",
           mediaViewerVisible: false,
         } )}
+        onDeletePhoto={onDeletePhoto}
+        onCropPhoto={onCropPhoto}
+        onReorderPhotos={handleReorderPhotos}
+        initialIndex={photoUris.indexOf( selectedPhotoUri )}
         uri={selectedPhotoUri}
         photos={innerPhotos}
       />

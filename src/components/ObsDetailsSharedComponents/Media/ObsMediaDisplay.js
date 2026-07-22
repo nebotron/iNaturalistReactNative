@@ -15,16 +15,22 @@ import colors from "styles/tailwindColors";
 
 type Props = {
   loading: boolean,
+  latitude?: number,
+  longitude?: number,
   photos: Object[],
   sounds: Object[],
-  tablet?: boolean
+  tablet?: boolean,
+  timeObservedAt?: string
 }
 
 const ObsMediaDisplay = ( {
   loading,
+  latitude,
+  longitude,
   photos = [],
   sounds = [],
   tablet = false,
+  timeObservedAt,
 }: Props ): Node => {
   const { t } = useTranslation( );
 
@@ -35,9 +41,12 @@ const ObsMediaDisplay = ( {
       <View className="bg-black">
         <ObsMedia
           loading={loading}
+          latitude={latitude}
+          longitude={longitude}
           photos={photos}
           sounds={sounds}
           tablet={tablet}
+          timeObservedAt={timeObservedAt}
         />
         {!loading && items.length > 1 && (
           <View className="absolute bottom-5 left-5">

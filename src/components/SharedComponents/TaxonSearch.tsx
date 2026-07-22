@@ -1,9 +1,6 @@
 import EmptySearchResults from "components/Explore/SearchScreens/EmptySearchResults";
-import {
-  Body2,
-  INatIcon,
-  SearchBar,
-} from "components/SharedComponents";
+import Button from "components/SharedComponents/Buttons/Button";
+import SearchBar from "components/SharedComponents/SearchBar";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
@@ -24,7 +21,8 @@ interface Props {
   query?: string;
   setQuery: ( newQuery: string ) => void;
   isLoading?: boolean;
-  isLocal?: boolean;
+  isUpdatingLocalDb?: boolean;
+  updateLocalSpeciesDb?: ( ) => void;
   renderItem: (
     { item, index }: { item: RealmTaxon; index: number }
   ) => React.ReactElement<unknown>;
@@ -33,11 +31,12 @@ interface Props {
 
 const TaxonSearch = ( {
   isLoading = false,
-  isLocal = false,
+  isUpdatingLocalDb = false,
   query = "",
   renderItem,
   setQuery,
   taxa = EMPTY_TAXA,
+  updateLocalSpeciesDb,
 }: Props ) => {
   const { hasBottomTabBar } = useStackHost( );
   const { bottom } = useSafeAreaInsets( );
@@ -62,9 +61,21 @@ const TaxonSearch = ( {
   // Make sure all of the results can be scrolled to even with the keyboard
   // up
   const footerComponent = ( ) => (
-    keyboardShown
-      ? <View style={{ paddingBottom: paddingBottom + keyboardHeight }} />
-      : <View style={{ paddingBottom }} />
+    <>
+      {query.length > 0 && updateLocalSpeciesDb && (
+        <Button
+          className="mx-6 mt-3"
+          onPress={updateLocalSpeciesDb}
+          loading={isUpdatingLocalDb}
+          disabled={isUpdatingLocalDb}
+          text={t( "UPDATE-LOCAL-SPECIES-DATABASE" )}
+          testID="TaxonSearch.updateLocalSpeciesDb"
+        />
+      )}
+      {keyboardShown
+        ? <View style={{ paddingBottom: paddingBottom + keyboardHeight }} />
+        : <View style={{ paddingBottom }} />}
+    </>
   );
 
   return (
@@ -79,16 +90,6 @@ const TaxonSearch = ( {
           testID="SearchTaxon"
           autoFocus={query === ""}
         />
-        { isLocal && (
-          <View className="flex-row items-center space-x-[19px] mt-[21px]">
-            <View accessibilityElementsHidden importantForAccessibility="no" aria-hidden>
-              <INatIcon name="offline" size={34} />
-            </View>
-            <Body2 className="flex-1">
-              { t( "Showing-offline-search-results--taxa" )}
-            </Body2>
-          </View>
-        ) }
       </View>
       <FlatList
         keyboardShouldPersistTaps="always"

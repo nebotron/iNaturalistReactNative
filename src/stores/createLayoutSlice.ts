@@ -139,6 +139,48 @@ const createLayoutSlice = set => ( {
         mapType: newMapType,
       },
     } ) ),
+    // Recently entered addresses in the Wildlife Hotspots address search,
+    // most-recent first. Used to prefill the address dropdown before typing.
+    hotspotAddressHistory: [] as {
+      place_id: number;
+      display_name: string;
+      lat: string;
+      lon: string;
+    }[],
+    addHotspotAddress: ( address: {
+      place_id: number;
+      display_name: string;
+      lat: string;
+      lon: string;
+    } ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotAddressHistory: [
+          address,
+          ...state.layout.hotspotAddressHistory.filter(
+            a => a.display_name !== address.display_name,
+          ),
+        ].slice( 0, 10 ),
+      },
+    } ) ),
+    // Last viewport seen by the user in the Explore map
+    lastExploreMapRegion: null as {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    } | null,
+    setLastExploreMapRegion: ( region: {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    } ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        lastExploreMapRegion: region,
+      },
+    } ) ),
   },
 } );
 

@@ -3,12 +3,8 @@ import {
 } from "@dr.pogodin/react-native-fs";
 import { unlink } from "sharedHelpers/util";
 
-const TRASHABLE_VINTAGE_MS
-  = 1000 // 1 second
-  * 60 // 1 minute
-  * 60 // 1 hour
-  * 24 // 1 day
-  * 30; // 1 month
+// 60s is enough to cover any Realm write race; filesToKeep already protects unsynced photos
+const TRASHABLE_VINTAGE_MS = 60 * 1000;
 
 const MAX_FOLDER_SIZE = 5 * 1024 * 1024 * 1024; // 5GB in bytes
 const TOO_NEW_THRESHOLD = 24 * 60 * 60 * 1000; // Files modified in the last 1 day (in milliseconds)

@@ -2,9 +2,11 @@ import { getCurrentRoute } from "navigation/navigationUtils";
 import React from "react";
 import type { GestureResponderEvent, PressableProps, View } from "react-native";
 import { Pressable } from "react-native";
-import { log } from "sharedHelpers/logger";
+import { logWithoutRemote } from "sharedHelpers/logger";
 
-const logger = log.extend( "PressableWithTracking" );
+// Local-only breadcrumb: useful when reading a device log, not worth a remote
+// POST per tap (this was the single largest source of remote log volume).
+const logger = logWithoutRemote.extend( "PressableWithTracking" );
 
 interface Props extends PressableProps {
   ref?: React.Ref<View>;

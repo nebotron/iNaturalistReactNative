@@ -9,6 +9,8 @@ interface Props {
     id: number;
     icon_url?: string;
     login: string;
+    created_at?: string;
+    createdAt?: string;
   };
   isConnected: boolean;
 }
