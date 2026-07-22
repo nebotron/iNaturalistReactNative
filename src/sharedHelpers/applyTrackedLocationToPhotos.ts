@@ -7,6 +7,7 @@ import {
   lookupImportedPhotoDeviceUri,
   normalizeDevicePhotoUri,
 } from "sharedHelpers/getOriginalDevicePhotoUri";
+import type { TrackedPoint } from "sharedHelpers/interpolateTrackedLocation";
 import {
   filterUsableTrackedPoints,
   interpolateFromUsablePoints,
@@ -120,31 +121,53 @@ const applyTrackedLocationToObservation = async (
 
 // Auto-fills an observation's location from tracked location history when it
 // has no location of its own (i.e. its photos carried no GPS EXIF data). Used
-// on import/save so a tracked location is applied automatically, matching the
-// group-photos import behavior. No-ops when the observation already has a
-// location, when tracking recorded no usable nearby fix, or when the
-// observation has no timestamp to match against. Returns whether a location
-// was applied.
+// on import/save so a tracked location is applied automatically to both the
+// observation and its Photos library assets. No-ops when the observation
+// already has a location, when it has no timestamp to match against, when
+// tracking recorded no fixes, or when no fix falls within the match window of
+// the observation's time. Returns whether a location was applied.
+//
+// `precomputedUsablePoints` lets a caller importing many observations at once
+// filter the (potentially large) point history a single time and reuse it,
+// rather than re-filtering per observation. Callers with a single observation
+// can omit it.
 export const autoApplyTrackedLocationIfMissing = async (
   realm: Realm,
   observation: RealmObservation,
+  precomputedUsablePoints?: TrackedPoint[],
 ): Promise<boolean> => {
   if ( observation.latitude != null && observation.longitude != null ) return false;
 
   const observedOn = observation.observed_on_string ?? observation.observed_on;
-  if ( !observedOn ) return false;
+  if ( !observedOn ) {
+    logger.info( `No timestamp on observation ${observation.uuid}; skipping tracked location` );
+    return false;
+  }
 
-  const usablePoints = filterUsableTrackedPoints(
+  const usablePoints = precomputedUsablePoints ?? filterUsableTrackedPoints(
     realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
   );
-  if ( usablePoints.length === 0 ) return false;
+  if ( usablePoints.length === 0 ) {
+    logger.info( "No usable tracked location points recorded; skipping tracked location" );
+    return false;
+  }
 
   const trackedLocation = interpolateFromUsablePoints(
     usablePoints,
     new Date( observedOn ).getTime(),
   );
-  if ( !trackedLocation ) return false;
+  if ( !trackedLocation ) {
+    logger.info(
+      `No tracked location within match window of ${observedOn} `
+      + `for observation ${observation.uuid}`,
+    );
+    return false;
+  }
 
+  logger.info(
+    `Applying tracked location ${trackedLocation.latitude},${trackedLocation.longitude} `
+    + `to observation ${observation.uuid}`,
+  );
   return applyTrackedLocationToObservation( realm, observation, trackedLocation );
 };
 

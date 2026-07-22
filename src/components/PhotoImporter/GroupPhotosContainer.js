@@ -18,13 +18,12 @@ import React, {
   useState,
 } from "react";
 import Observation from "realmModels/Observation";
-import applyTrackedLocationToObservation from "sharedHelpers/applyTrackedLocationToPhotos";
+import { autoApplyTrackedLocationIfMissing } from "sharedHelpers/applyTrackedLocationToPhotos";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import {
   filterUsableTrackedPoints,
-  interpolateFromUsablePoints,
 } from "sharedHelpers/interpolateTrackedLocation";
 import { log } from "sharedHelpers/logger";
 import {
@@ -374,22 +373,23 @@ const GroupPhotosContainer = ( ): Node => {
     const missingLocationObs = observationsToSave
       .filter( obs => obs.latitude == null || obs.longitude == null );
     if ( missingLocationObs.length > 0 ) {
+      // Filter the (potentially large) point history once and reuse it for
+      // every observation, rather than re-filtering per observation.
       const usablePoints = filterUsableTrackedPoints(
         realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
       );
-      if ( usablePoints.length > 0 ) {
-        await Promise.all( missingLocationObs.map( async obs => {
-          const savedObs = realm.objectForPrimaryKey( "Observation", obs.uuid );
-          if ( !savedObs ) return;
-          const targetMs = new Date(
-            savedObs.observed_on_string ?? savedObs.observed_on ?? 0,
-          ).getTime();
-          const trackedLocation = interpolateFromUsablePoints( usablePoints, targetMs );
-          if ( !trackedLocation ) return;
-          await applyTrackedLocationToObservation( realm, savedObs, trackedLocation );
-          trackedLocationByUuid[obs.uuid] = trackedLocation;
-        } ) );
-      }
+      await Promise.all( missingLocationObs.map( async obs => {
+        const savedObs = realm.objectForPrimaryKey( "Observation", obs.uuid );
+        if ( !savedObs ) return;
+        const applied = await autoApplyTrackedLocationIfMissing( realm, savedObs, usablePoints );
+        if ( applied ) {
+          trackedLocationByUuid[obs.uuid] = {
+            latitude: savedObs.latitude,
+            longitude: savedObs.longitude,
+            accuracy: savedObs.positional_accuracy ?? null,
+          };
+        }
+      } ) );
     }
 
     // Mirror any auto-filled locations back onto the in-memory observations so
