@@ -63,11 +63,78 @@ const ImageCropEditor = ( ) => {
   const onCropSaved = params?.onCropSaved;
   const pendingImageUris = params?.pendingImageUris;
 
-  const [localImageUri, setLocalImageUri] = useState<string | null>( null );
-  const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>( null );
-  const [detectedCrop, setDetectedCrop] = useState<NormalizedCrop | null>( null );
-  const [savedInitialCrop, setSavedInitialCrop] = useState<NormalizedCrop | null>( null );
-  const [loadingSource, setLoadingSource] = useState( true );
+  // Resolve the crop source URI and any previously-saved crop for the current
+  // image. Pure read of props/store, shared by the synchronous cache seed and
+  // the async load effect below.
+  const resolveCropContext = useCallback( ( ): {
+    cropSourceUri: string;
+    existingSavedCrop: NormalizedCrop | null;
+  } => {
+    if ( !imageUri ) {
+      return { cropSourceUri: "", existingSavedCrop: null };
+    }
+    if ( context === "observationEdit" && observationPhotoUuid && currentObservation ) {
+      const obsPhoto = currentObservation.observationPhotos?.find(
+        op => op.uuid === observationPhotoUuid,
+      );
+      const photo = obsPhoto?.photo;
+      if ( photo ) {
+        return {
+          cropSourceUri: Photo.displayCropEditorSourcePhoto( photo ) || imageUri,
+          existingSavedCrop: Photo.savedNormalizedCrop( photo ),
+        };
+      }
+    } else if ( context === "groupPhotos" ) {
+      const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
+      if ( groupedPhoto ) {
+        return {
+          cropSourceUri: groupedPhoto.image.cropOriginalUri || imageUri,
+          existingSavedCrop: groupedPhoto.image.crop ?? null,
+        };
+      }
+    }
+    return { cropSourceUri: imageUri, existingSavedCrop: null };
+  }, [context, currentObservation, groupedPhotos, imageUri, observationPhotoUuid] );
+
+  // Seed state synchronously from the preload cache (computed once at mount) so
+  // advancing between already-preloaded images in a bulk crop renders the image
+  // on the first paint instead of flashing the loading spinner while the async
+  // effect re-reads the same cached data.
+  const seedRef = useRef<{
+    localUri: string;
+    size: { w: number; h: number };
+    savedCrop: NormalizedCrop | null;
+    detectedCrop: NormalizedCrop;
+  } | null | undefined>( undefined );
+  if ( seedRef.current === undefined ) {
+    const cached = imageUri
+      ? preloadCache.get( imageUri )
+      : null;
+    if ( cached ) {
+      const { existingSavedCrop } = resolveCropContext( );
+      seedRef.current = {
+        localUri: cached.localUri,
+        size: cached.size,
+        savedCrop: existingSavedCrop,
+        detectedCrop: existingSavedCrop ?? cached.crop,
+      };
+    } else {
+      seedRef.current = null;
+    }
+  }
+  const seed = seedRef.current;
+
+  const [localImageUri, setLocalImageUri] = useState<string | null>( seed?.localUri ?? null );
+  const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(
+    seed?.size ?? null,
+  );
+  const [detectedCrop, setDetectedCrop] = useState<NormalizedCrop | null>(
+    seed?.detectedCrop ?? null,
+  );
+  const [savedInitialCrop, setSavedInitialCrop] = useState<NormalizedCrop | null>(
+    seed?.savedCrop ?? null,
+  );
+  const [loadingSource, setLoadingSource] = useState( !seed );
 
   const getCropFeedbackSourceKey = useCallback( ( ) => {
     if ( context === "groupPhotos" && imageUri ) {
@@ -107,6 +174,21 @@ const ImageCropEditor = ( ) => {
       return ( ) => {};
     }
 
+    const { cropSourceUri, existingSavedCrop } = resolveCropContext( );
+
+    // Use preloaded data if available to skip all async work. Applying it
+    // directly (without first resetting to the loading state) avoids a spinner
+    // flash when advancing between already-preloaded images in a bulk crop.
+    const cached = preloadCache.get( imageUri );
+    if ( cached ) {
+      setLocalImageUri( cached.localUri );
+      setImageSize( cached.size );
+      setSavedInitialCrop( existingSavedCrop );
+      setDetectedCrop( existingSavedCrop ?? cached.crop );
+      setLoadingSource( false );
+      return ( ) => {};
+    }
+
     let cancelled = false;
     setLoadingSource( true );
     setLocalImageUri( null );
@@ -116,40 +198,6 @@ const ImageCropEditor = ( ) => {
 
     ( async ( ) => {
       try {
-        let cropSourceUri = imageUri;
-        let existingSavedCrop: NormalizedCrop | null = null;
-
-        if ( context === "observationEdit" && observationPhotoUuid && currentObservation ) {
-          const obsPhoto = currentObservation.observationPhotos?.find(
-            op => op.uuid === observationPhotoUuid,
-          );
-          const photo = obsPhoto?.photo;
-          if ( photo ) {
-            cropSourceUri = Photo.displayCropEditorSourcePhoto( photo ) || imageUri;
-            existingSavedCrop = Photo.savedNormalizedCrop( photo );
-          }
-        } else if ( context === "groupPhotos" ) {
-          const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
-          if ( groupedPhoto ) {
-            cropSourceUri = groupedPhoto.image.cropOriginalUri || imageUri;
-            existingSavedCrop = groupedPhoto.image.crop ?? null;
-          }
-        }
-
-        // Use preloaded data if available to skip all async work
-        const cached = preloadCache.get( imageUri );
-        if ( cached ) {
-          if ( !cancelled ) {
-            setLocalImageUri( cached.localUri );
-            setImageSize( cached.size );
-            if ( existingSavedCrop ) {
-              setSavedInitialCrop( existingSavedCrop );
-            }
-            setDetectedCrop( existingSavedCrop ?? cached.crop );
-          }
-          return;
-        }
-
         // Reuse an in-flight preload for this URI (kicked off before navigation)
         // instead of starting a second, contending load of the same image.
         const result = await preloadImage( imageUri, cropSourceUri, existingSavedCrop );
@@ -180,13 +228,7 @@ const ImageCropEditor = ( ) => {
     return ( ) => {
       cancelled = true;
     };
-  }, [
-    context,
-    currentObservation,
-    groupedPhotos,
-    imageUri,
-    observationPhotoUuid,
-  ] );
+  }, [imageUri, resolveCropContext] );
 
   // Preload pending images in the background once the current image is
   // displayed. Deferred past interactions so the burst of heavy native asset
