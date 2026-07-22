@@ -99,8 +99,20 @@ def _get_session(model_path: Path) -> ort.InferenceSession:
     return _sessions[key]
 
 
+_det_cache: dict[tuple[str, str], list] = {}
+
+
 def _raw_detections(image_path: str, model_path: Path) -> list[tuple[float, float, float, float, float]]:
     """Returns (x,y,w,h,conf) list in normalized image coords, sorted by conf desc."""
+    ck = (image_path, str(model_path))
+    if ck in _det_cache:
+        return _det_cache[ck]
+    dets = _raw_detections_uncached(image_path, model_path)
+    _det_cache[ck] = dets
+    return dets
+
+
+def _raw_detections_uncached(image_path: str, model_path: Path) -> list[tuple[float, float, float, float, float]]:
     try:
         img = PILImage.open(image_path).convert("RGB")
         orig_w, orig_h = img.size
@@ -258,7 +270,7 @@ def main():
     skipped = 0
     for key, crop_data in entries_raw:
         c = crop_data.get("crop", crop_data)
-        if not isinstance(c, dict) or "x" not in c:
+        if not isinstance(c, dict) or any(k not in c for k in ("x", "y", "w", "h")):
             continue
         truth = Crop(c["x"], c["y"], c["w"], c["h"])
         image_path = resolve_image(key, None, CACHE_DIR)
