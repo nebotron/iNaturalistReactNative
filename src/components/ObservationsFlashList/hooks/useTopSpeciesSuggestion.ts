@@ -64,6 +64,12 @@ const rankLevelForTaxon = ( taxon?: RankedTaxon ): number | undefined => {
     : undefined;
 };
 
+// Mirror the Suggestions screen's confidence gate: it only promotes a result
+// to the top suggestion when the single highest-scoring result clears this
+// combined_score threshold (see filterSuggestions.ts). combined_score is on a
+// 0-100 scale.
+const TOP_RESULT_SCORE_THRESHOLD = 78;
+
 // If an observation's community taxon is genus or broader, suggest the most
 // likely species-level ID from the computer vision model. To keep this in sync
 // with the "Suggest ID" (Suggestions) screen, we score through the exact same
@@ -118,20 +124,26 @@ const useTopSpeciesSuggestion = (
     },
   );
 
-  // Pick the highest-scoring result that is species-level or finer (e.g. a
-  // subspecies), so a genus-or-broader observation gets bumped to the CV's
-  // most likely species. Results usually arrive score-sorted, but sort
-  // defensively so "most likely" doesn't depend on server ordering.
+  // Only bump a genus-or-broader observation to a CV species when the CV is
+  // actually confident: take its single highest-scoring result and suggest it
+  // only if that result is species-level (or finer) AND clears the same
+  // confidence threshold the Suggestions screen uses. Previously we picked the
+  // best species regardless of score, which surfaced wildly wrong species
+  // whenever the CV wasn't confident about any species. Results usually arrive
+  // score-sorted, but sort defensively so this doesn't depend on server order.
   const results = isGenusOrBroader
     ? ( data as { results?: CVResult[] } )?.results ?? []
     : [];
-  const topSpecies = results
-    .filter( result => {
-      const rankLevel = rankLevelForTaxon( result.taxon );
-      return rankLevel != null && rankLevel <= Taxon.SPECIES_LEVEL;
-    } )
+  const topResult = [...results]
     .sort( ( a, b ) => ( b.combined_score ?? 0 ) - ( a.combined_score ?? 0 ) )[0];
-  return topSpecies?.taxon;
+  const topRankLevel = rankLevelForTaxon( topResult?.taxon );
+  const isConfidentSpecies = topResult != null
+    && ( topResult.combined_score ?? 0 ) > TOP_RESULT_SCORE_THRESHOLD
+    && topRankLevel != null
+    && topRankLevel <= Taxon.SPECIES_LEVEL;
+  return isConfidentSpecies
+    ? topResult?.taxon
+    : undefined;
 };
 
 export default useTopSpeciesSuggestion;
