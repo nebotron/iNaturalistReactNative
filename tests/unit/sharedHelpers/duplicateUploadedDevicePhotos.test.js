@@ -1,7 +1,6 @@
 import {
   getDevicePhotoUrisFromObservation,
   getPreviouslyUploadedDevicePhotoUrisSet,
-  isPreviouslyUploadedDevicePhotoUri,
   markDuplicatePhotosFromLibrary,
   recordUploadedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
@@ -69,45 +68,6 @@ describe( "duplicateUploadedDevicePhotos", ( ) => {
       expect(
         getPreviouslyUploadedDevicePhotoUrisSet( realm ),
       ).toEqual( new Set( ["ph://INDEXED-PHOTO"] ) );
-    } );
-  } );
-
-  describe( "isPreviouslyUploadedDevicePhotoUri", ( ) => {
-    it( "returns true when the device photo URI was uploaded before", ( ) => {
-      const realm = {
-        objects: jest.fn( modelName => {
-          if ( modelName === "UploadedDevicePhotoUri" ) {
-            return [{ uri: "ph://ALREADY-UPLOADED" }];
-          }
-          return {
-            filtered: jest.fn( ).mockReturnValue( [] ),
-          };
-        } ),
-      };
-
-      expect(
-        isPreviouslyUploadedDevicePhotoUri( realm, "ph://ALREADY-UPLOADED" ),
-      ).toBe( true );
-    } );
-
-    it( "returns false when the device photo URI is missing or unknown", ( ) => {
-      const realm = {
-        objects: jest.fn( modelName => {
-          if ( modelName === "UploadedDevicePhotoUri" ) {
-            return [];
-          }
-          return {
-            filtered: jest.fn( ).mockReturnValue( [] ),
-          };
-        } ),
-      };
-
-      expect(
-        isPreviouslyUploadedDevicePhotoUri( realm, "ph://NEW-PHOTO" ),
-      ).toBe( false );
-      expect(
-        isPreviouslyUploadedDevicePhotoUri( realm, null ),
-      ).toBe( false );
     } );
   } );
 

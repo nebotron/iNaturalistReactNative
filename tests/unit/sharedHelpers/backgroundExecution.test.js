@@ -2,7 +2,6 @@ import BackgroundService from "react-native-background-actions";
 import {
   beginBackgroundUploadTask,
   endBackgroundUploadTask,
-  isBackgroundUploadTaskRunning,
 } from "sharedHelpers/backgroundExecution";
 
 jest.mock( "react-native-background-actions", ( ) => ( {
@@ -22,11 +21,6 @@ describe( "backgroundExecution", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
     BackgroundService.isRunning.mockReturnValue( false );
-  } );
-
-  it( "reports whether the background upload task is running", ( ) => {
-    BackgroundService.isRunning.mockReturnValue( true );
-    expect( isBackgroundUploadTaskRunning( ) ).toBe( true );
   } );
 
   it( "starts the background upload task when it is not already running", async ( ) => {

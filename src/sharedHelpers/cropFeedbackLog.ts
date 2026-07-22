@@ -1,5 +1,3 @@
-import Clipboard from "@react-native-clipboard/clipboard";
-import { Alert } from "react-native";
 import { cropOriginalUriFromPath } from "sharedHelpers/cropPhotoMetadata";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { zustandStorage } from "stores/useStore";
@@ -73,7 +71,7 @@ const findCropFeedbackKey = (
   ) );
 };
 
-export const linkCropFeedbackUploadedUrl = (
+const linkCropFeedbackUploadedUrl = (
   sourceKey: string,
   uploadedUrl: string,
 ) => {
@@ -109,29 +107,4 @@ export const linkCropFeedbackUploadedUrlForPhoto = (
     const localUri = cropOriginalUriFromPath( photo.localFilePath ) || photo.localFilePath;
     linkCropFeedbackUploadedUrl( localUri, uploadedUrl );
   }
-};
-
-export const getCropFeedbackExportObject = ( ): Record<string, {
-  crop: NormalizedCrop | null;
-  kept: boolean;
-}> => {
-  const data = loadCropFeedback( );
-  return Object.values( data ).reduce( ( exportObject, entry ) => {
-    const key = entry.uploadedUrl || entry.sourceKey;
-    exportObject[key] = {
-      crop: entry.crop,
-      kept: entry.kept,
-    };
-    return exportObject;
-  }, {} as Record<string, { crop: NormalizedCrop | null; kept: boolean }> );
-};
-
-export const copyCropFeedbackToClipboard = ( ) => {
-  const exportObject = getCropFeedbackExportObject( );
-  const json = JSON.stringify( exportObject, null, 2 );
-  Clipboard.setString( json );
-  Alert.alert(
-    "Copied crop feedback",
-    `${Object.keys( exportObject ).length} entries copied to the clipboard as JSON.`,
-  );
 };

@@ -34,8 +34,6 @@ const getBackgroundServiceOptions = ( ) => ( {
   parameters: {},
 } );
 
-export const isBackgroundUploadTaskRunning = ( ) => BackgroundService.isRunning( );
-
 export const beginBackgroundUploadTask = async ( ): Promise<boolean> => {
   if ( BackgroundService.isRunning( ) ) {
     return true;

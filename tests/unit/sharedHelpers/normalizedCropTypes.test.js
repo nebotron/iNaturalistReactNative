@@ -1,14 +1,8 @@
 import {
   clampCrop,
   computeContainRect,
-  cropToDisplayRect,
   defaultSquareCrop,
-  panCropFromScreenTranslation,
-  panSquareCrop,
-  pinchCropAtFocalPoint,
   square2048Crop,
-  squareCropSidePixels,
-  zoomCropFromCenter,
 } from "sharedHelpers/normalizedCropTypes";
 
 describe( "defaultSquareCrop", ( ) => {
@@ -52,131 +46,6 @@ describe( "computeContainRect", ( ) => {
     expect( rect.width ).toBe( 300 );
     expect( rect.height ).toBe( 150 );
     expect( rect.top ).toBe( 75 );
-  } );
-} );
-
-describe( "cropToDisplayRect", ( ) => {
-  it( "maps normalized crop to display coordinates", ( ) => {
-    const rect = cropToDisplayRect(
-      {
-        x: 0.25, y: 0, w: 0.5, h: 1,
-      },
-      {
-        left: 0, top: 50, width: 200, height: 100,
-      },
-    );
-    expect( rect ).toEqual( {
-      left: 50,
-      top: 50,
-      width: 100,
-      height: 100,
-    } );
-  } );
-} );
-
-describe( "zoomCropFromCenter", ( ) => {
-  it( "zooms in while keeping a square crop", ( ) => {
-    const start = defaultSquareCrop( 2000, 1000 );
-    const zoomed = zoomCropFromCenter( start, 2, 2000, 1000 );
-    expect( squareCropSidePixels( zoomed, 2000, 1000 ) )
-      .toBeCloseTo( squareCropSidePixels( start, 2000, 1000 ) / 2, 0 );
-  } );
-
-  it( "can zoom in past the old minimum crop fraction", ( ) => {
-    const start = defaultSquareCrop( 2000, 1000 );
-    const zoomed = zoomCropFromCenter( start, 200, 2000, 1000 );
-    expect( squareCropSidePixels( zoomed, 2000, 1000 ) ).toBe( 5 );
-  } );
-
-  it( "can zoom out to the full image", ( ) => {
-    const start = defaultSquareCrop( 2000, 1000 );
-    const zoomed = zoomCropFromCenter( start, 0.5, 2000, 1000 );
-    expect( zoomed ).toEqual( {
-      x: 0, y: 0, w: 1, h: 1,
-    } );
-  } );
-} );
-
-describe( "panCropFromScreenTranslation", ( ) => {
-  it( "moves the image one screen pixel per finger pixel", ( ) => {
-    const start = defaultSquareCrop( 2000, 1000 );
-    const boxSize = 300;
-    const moved = panCropFromScreenTranslation(
-      start,
-      30,
-      0,
-      boxSize,
-      2000,
-      1000,
-    );
-    expect( moved.x ).toBeCloseTo( start.x - 30 / ( boxSize / start.w ), 5 );
-    expect( moved.w ).toBe( start.w );
-    expect( moved.h ).toBe( start.h );
-  } );
-} );
-
-describe( "pinchCropAtFocalPoint", ( ) => {
-  it( "keeps the focal point anchored while zooming", ( ) => {
-    const start = defaultSquareCrop( 2000, 1000 );
-    const boxSize = 300;
-    const focal = boxSize / 2;
-    const zoomed = pinchCropAtFocalPoint(
-      start,
-      2,
-      focal,
-      focal,
-      focal,
-      focal,
-      boxSize,
-      2000,
-      1000,
-    );
-
-    const anchorX = start.x + ( focal / boxSize ) * start.w;
-    const anchorY = start.y + ( focal / boxSize ) * start.h;
-    expect( anchorX ).toBeCloseTo(
-      zoomed.x + ( focal / boxSize ) * zoomed.w,
-      5,
-    );
-    expect( anchorY ).toBeCloseTo(
-      zoomed.y + ( focal / boxSize ) * zoomed.h,
-      5,
-    );
-  } );
-
-  it( "pans when the focal point moves without scaling", ( ) => {
-    const start = defaultSquareCrop( 2000, 1000 );
-    const boxSize = 300;
-    const moved = pinchCropAtFocalPoint(
-      start,
-      1,
-      boxSize / 2,
-      boxSize / 2,
-      boxSize / 2 + 30,
-      boxSize / 2,
-      boxSize,
-      2000,
-      1000,
-    );
-    const panned = panCropFromScreenTranslation(
-      start,
-      30,
-      0,
-      boxSize,
-      2000,
-      1000,
-    );
-    expect( moved ).toEqual( panned );
-  } );
-} );
-
-describe( "panSquareCrop", ( ) => {
-  it( "moves the crop region", ( ) => {
-    const crop = {
-      x: 0.25, y: 0, w: 0.5, h: 1,
-    };
-    const moved = panSquareCrop( crop, 0.1, 0 );
-    expect( moved.x ).toBe( 0.35 );
   } );
 } );
 

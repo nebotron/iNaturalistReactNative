@@ -57,14 +57,6 @@ export function clampCrop(
   };
 }
 
-export function squareCropSidePixels(
-  crop: NormalizedCrop,
-  imageWidth: number,
-  imageHeight: number,
-): number {
-  return Math.min( crop.w * imageWidth, crop.h * imageHeight );
-}
-
 export function clampCropPosition( crop: NormalizedCrop ): NormalizedCrop {
   "worklet";
 
@@ -87,104 +79,6 @@ export function clampCropPosition( crop: NormalizedCrop ): NormalizedCrop {
     x,
     y,
   };
-}
-
-function cropScaledDimensions(
-  crop: NormalizedCrop,
-  boxSize: number,
-  imageWidth: number,
-  imageHeight: number,
-) {
-  const scaledW = boxSize / crop.w;
-  const scaledH = ( imageHeight / imageWidth ) * scaledW;
-
-  return { scaledW, scaledH };
-}
-
-export function panCropFromScreenTranslation(
-  startCrop: NormalizedCrop,
-  translationX: number,
-  translationY: number,
-  boxSize: number,
-  imageWidth: number,
-  imageHeight: number,
-): NormalizedCrop {
-  const { scaledW, scaledH } = cropScaledDimensions(
-    startCrop,
-    boxSize,
-    imageWidth,
-    imageHeight,
-  );
-
-  return clampCropPosition( {
-    ...startCrop,
-    x: startCrop.x - translationX / scaledW,
-    y: startCrop.y - translationY / scaledH,
-  } );
-}
-
-export function pinchCropAtFocalPoint(
-  startCrop: NormalizedCrop,
-  scale: number,
-  startFocalInFrameX: number,
-  startFocalInFrameY: number,
-  currentFocalInFrameX: number,
-  currentFocalInFrameY: number,
-  boxSize: number,
-  imageWidth: number,
-  imageHeight: number,
-): NormalizedCrop {
-  const safeScale = Math.max( scale, 0.01 );
-  const minW = 1 / imageWidth;
-  const minH = 1 / imageHeight;
-  const newW = Math.max( minW, Math.min( 1, startCrop.w / safeScale ) );
-  const newH = Math.max( minH, Math.min( 1, startCrop.h / safeScale ) );
-
-  const anchorX = startCrop.x
-    + ( startFocalInFrameX / boxSize ) * startCrop.w;
-  const anchorY = startCrop.y
-    + ( startFocalInFrameY / boxSize ) * startCrop.h;
-
-  return clampCropPosition( {
-    x: anchorX - ( currentFocalInFrameX / boxSize ) * newW,
-    y: anchorY - ( currentFocalInFrameY / boxSize ) * newH,
-    w: newW,
-    h: newH,
-  } );
-}
-
-export function zoomCropFromCenter(
-  crop: NormalizedCrop,
-  pinchScale: number,
-  imageWidth: number,
-  imageHeight: number,
-): NormalizedCrop {
-  const safeScale = Math.max( pinchScale, 0.01 );
-  const minW = 1 / imageWidth;
-  const minH = 1 / imageHeight;
-  const cx = crop.x + crop.w / 2;
-  const cy = crop.y + crop.h / 2;
-  const newW = Math.max( minW, Math.min( 1, crop.w / safeScale ) );
-  const newH = Math.max( minH, Math.min( 1, crop.h / safeScale ) );
-
-  return clampCropPosition( {
-    x: cx - newW / 2,
-    y: cy - newH / 2,
-    w: newW,
-    h: newH,
-  } );
-}
-
-export function panSquareCrop(
-  crop: NormalizedCrop,
-  deltaX: number,
-  deltaY: number,
-): NormalizedCrop {
-  return clampCropPosition( {
-    ...crop,
-    x: crop.x + deltaX,
-    y: crop.y + deltaY,
-  } );
 }
 
 /**
@@ -301,18 +195,6 @@ export function computeContainRect(
     top: 0,
     width,
     height,
-  };
-}
-
-export function cropToDisplayRect(
-  crop: NormalizedCrop,
-  imageRect: { left: number; top: number; width: number; height: number },
-) {
-  return {
-    left: imageRect.left + crop.x * imageRect.width,
-    top: imageRect.top + crop.y * imageRect.height,
-    width: crop.w * imageRect.width,
-    height: crop.h * imageRect.height,
   };
 }
 

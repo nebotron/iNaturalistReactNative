@@ -75,19 +75,6 @@ export const getPreviouslyUploadedDevicePhotoUrisSet = (
   return previouslyUploadedUris;
 };
 
-export const isPreviouslyUploadedDevicePhotoUri = (
-  realm: Realm,
-  devicePhotoUri: string | null | undefined,
-  excludeObservationUuids: string[] = [],
-): boolean => {
-  const normalizedUri = normalizeDevicePhotoUri( devicePhotoUri );
-  if ( !normalizedUri ) {
-    return false;
-  }
-  return getPreviouslyUploadedDevicePhotoUrisSet( realm, excludeObservationUuids )
-    .has( normalizedUri );
-};
-
 export const markDuplicatePhotosFromLibrary = (
   realm: Realm,
   movedPhotos: { image: Asset }[],
