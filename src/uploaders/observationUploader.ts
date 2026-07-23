@@ -125,11 +125,11 @@ async function uploadObservation(
       "media_upload",
       uploadStartTime,
     );
-    logger.error(
+    logger.errorWithExtra(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Media upload failed",
-      errorWithDetails.uploadFailureDetails,
       error,
+      errorWithDetails.uploadFailureDetails,
     );
     throw errorWithDetails;
   }
@@ -161,11 +161,11 @@ async function uploadObservation(
       "observation_upload",
       uploadStartTime,
     );
-    logger.error(
+    logger.errorWithExtra(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Observation upload failed",
-      errorWithDetails.uploadFailureDetails,
       error,
+      errorWithDetails.uploadFailureDetails,
     );
     throw errorWithDetails;
   }
@@ -194,11 +194,11 @@ async function uploadObservation(
       "media_attachment",
       uploadStartTime,
     );
-    logger.error(
+    logger.errorWithExtra(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Media attachment failed",
-      errorWithDetails.uploadFailureDetails,
       error,
+      errorWithDetails.uploadFailureDetails,
     );
     throw errorWithDetails;
   }
@@ -217,13 +217,18 @@ async function uploadObservation(
     const {
       errorContext, totalDuration,
     } = createErrorContext( "realm_update", uploadStartTime );
-    logger.error(
+    const realmError = attachUploadFailureDetails(
+      new Error( `Realm update failed: ${error.message}` ),
+      "realm_update",
+      uploadStartTime,
+    );
+    logger.errorWithExtra(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Realm update failed",
       error,
+      realmError.uploadFailureDetails,
     );
-    const realmError = new Error( `Realm update failed: ${error.message}` );
-    throw attachUploadFailureDetails( realmError, "realm_update", uploadStartTime );
+    throw realmError;
   }
 
   // Step 5: favorite observation if it was locally favorited
@@ -239,9 +244,15 @@ async function uploadObservation(
         { ...opts, api_token: apiToken },
       ) );
     } catch ( error ) {
-      logger.error(
+      const { uploadFailureDetails } = attachUploadFailureDetails(
+        error,
+        "favorite",
+        uploadStartTime,
+      );
+      logger.errorWithExtra(
         `Upload: Failed to favorite ${observation.uuid} after upload`,
         error,
+        uploadFailureDetails,
       );
     }
   }
