@@ -10,6 +10,7 @@ import type { TextProps } from "react-native";
 import type { RealmTaxon } from "realmModels/types";
 import { generateTaxonPieces } from "sharedHelpers/taxon";
 import useTranslation from "sharedHooks/useTranslation";
+import { TEXT_ON_IMAGE_SHADOW } from "styles/global";
 
 const rankNames: Record<number, string> = {
   10: "species",
@@ -39,6 +40,7 @@ interface Props {
   topTextComponent?: React.ComponentType<TextProps>;
   underlineTopText?: boolean;
   withdrawn?: boolean;
+  withShadow?: boolean;
 }
 
 const DisplayTaxonName = ( {
@@ -59,8 +61,12 @@ const DisplayTaxonName = ( {
   topTextComponent: TopTextComponentProp,
   underlineTopText = false,
   withdrawn,
+  withShadow = false,
 }: Props ) => {
   const { t } = useTranslation( );
+  const shadowStyle = withShadow
+    ? TEXT_ON_IMAGE_SHADOW
+    : undefined;
 
   const textClassName = useMemo( ( ) => {
     const classes = [];
@@ -137,6 +143,7 @@ const DisplayTaxonName = ( {
       ellipsizeMode="tail"
       selectable={selectable}
       maxFontSizeMultiplier={1.5}
+      style={shadowStyle}
     >
       {
         ( scientificNameFirst || !commonName || !prefersCommonNames )
@@ -172,6 +179,7 @@ const DisplayTaxonName = ( {
       className={classnames( textClassName, "mt-[3px]" )}
       selectable={selectable}
       numberOfLines={numberOfLinesBottomText}
+      style={shadowStyle}
     >
       {scientificNameFirst
         ? commonName

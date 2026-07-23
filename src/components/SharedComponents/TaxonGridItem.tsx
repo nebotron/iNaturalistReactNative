@@ -8,6 +8,7 @@ import React from "react";
 import Photo from "realmModels/Photo";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
 import { useCurrentUser, useFontScale, useTranslation } from "sharedHooks";
+import { TEXT_ON_IMAGE_SHADOW } from "styles/global";
 
 export interface Props {
   headerText?: string;
@@ -83,6 +84,7 @@ const TaxonGridItem = ( {
             <Body4
               maxFontSizeMultiplier={1.5}
               className="text-black py-1"
+              style={TEXT_ON_IMAGE_SHADOW}
             >
               {headerText}
             </Body4>
@@ -95,6 +97,7 @@ const TaxonGridItem = ( {
             layout="vertical"
             color="text-black"
             showOneNameOnly={isLargeFontScale}
+            withShadow
           />
         </View>
       </ObsImagePreview>

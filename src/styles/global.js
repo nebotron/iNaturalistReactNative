@@ -38,6 +38,14 @@ export const getShadowStyle = ( {
 
 export const dropShadow = getShadowStyle( DEFAULT_SHADOW );
 
+// Text shadow to keep light text legible when overlaid on photos of any
+// brightness (e.g. taxon names on grid thumbnails).
+export const TEXT_ON_IMAGE_SHADOW = {
+  textShadowColor: "rgba( 0, 0, 0, 0.75 )",
+  textShadowOffset: { width: 0, height: 1 },
+  textShadowRadius: 3,
+};
+
 export function getShadow( options = {} ) {
   return getShadowStyle( {
     ...DEFAULT_SHADOW,
