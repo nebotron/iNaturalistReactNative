@@ -47,7 +47,7 @@ const applyLocationToDevicePhotoLibrary = async (
   try {
     await ImageCropper.updateAssetLocation( phUri, match.latitude, match.longitude );
   } catch ( error ) {
-    logger.warn( "Failed to update Photos library asset location", error );
+    logger.warn( `Failed to update Photos library asset location for ${phUri}`, error );
   }
 };
 
