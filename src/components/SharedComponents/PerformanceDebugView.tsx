@@ -75,7 +75,7 @@ const PerformanceDebugView: React.FC<PerformanceDebugViewProps> = ( {
       )}
     >
       {showListMetrics && (
-        <Body1 className="text-white">
+        <Body1 className="text-black">
           {`Items Visible: ${
             safeListMetrics.itemsVisibleTime > 0
               ? `${safeListMetrics.itemsVisibleTime}ms`
@@ -85,26 +85,26 @@ const PerformanceDebugView: React.FC<PerformanceDebugViewProps> = ( {
       )}
       {showScrollMetrics && (
         <>
-          <Body1 className="text-white">
+          <Body1 className="text-black">
             {`Scroll Events: ${safeListMetrics.scrollEvents}`}
           </Body1>
-          <Body1 className="text-white">
+          <Body1 className="text-black">
             {`Avg Scroll Time: ${safeListMetrics.avgScrollDuration}ms`}
           </Body1>
-          <Body1 className="text-white">
+          <Body1 className="text-black">
             {`Avg Fetch Time: ${safeListMetrics.avgFetchTime}ms`}
           </Body1>
-          <Body1 className="text-white">
+          <Body1 className="text-black">
             {`Last Fetch: ${safeListMetrics?.lastFetchTime}ms`}
           </Body1>
         </>
       )}
       {showItemCountMetrics && (
         <>
-          <Body1 className="text-white">
+          <Body1 className="text-black">
             {`Last Fetch Items: ${safeListMetrics.lastFetchItemCount}`}
           </Body1>
-          <Body1 className="text-white">
+          <Body1 className="text-black">
             {`Total Items: ${safeListMetrics.totalItemsDisplayed}`}
           </Body1>
         </>

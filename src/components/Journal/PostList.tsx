@@ -12,7 +12,7 @@ import React, { useMemo } from "react";
 import PostListItem from "./PostListItem";
 
 const CONTAINER_STYLE = {
-  backgroundColor: "white",
+  backgroundColor: "#000000",
 };
 
 const ItemSeparator = () => <View className="border-b border-lightGray" />;

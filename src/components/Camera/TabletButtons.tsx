@@ -26,7 +26,7 @@ const checkmarkClasses = [
 ].join( " " );
 
 const cameraOptionsClasses = [
-  "bg-black/50",
+  "bg-white/50",
   `h-[${CAMERA_BUTTON_DIM}px]`,
   "items-center",
   "justify-center",

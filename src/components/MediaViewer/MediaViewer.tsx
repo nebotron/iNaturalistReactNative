@@ -260,7 +260,7 @@ const MediaViewer = ( {
 
   return (
     <View
-      className="flex-1 bg-black"
+      className="flex-1 bg-white"
       style={{ paddingTop: insets.top, paddingBottom: insets.bottom }}
       testID="MediaViewer"
     >

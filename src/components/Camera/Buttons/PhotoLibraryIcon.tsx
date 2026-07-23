@@ -28,7 +28,7 @@ const PhotoLibraryIcon = ( {
     >
       <INatIconButton
         className={classnames(
-          "bg-black/50",
+          "bg-white/50",
           "items-center",
           "justify-center",
           "border-white",

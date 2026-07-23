@@ -62,7 +62,7 @@ const PhotoGalleryImage = ( {
           style={gridItemStyle}
         />
         {isVideo && (
-          <View className="absolute bottom-1 right-1 z-10 bg-black/60 px-1 rounded">
+          <View className="absolute bottom-1 right-1 z-10 bg-white/60 px-1 rounded">
             { /* eslint-disable-next-line
               react-native/no-inline-styles, i18next/no-literal-string */ }
             <Text style={{ color: "white", fontSize: 10 }}>▶ GIF</Text>

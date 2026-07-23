@@ -16,7 +16,7 @@ const AddObsTooltip = ( { isVisible, dismissTooltip }: Props ) => {
   const { t } = useTranslation();
 
   const modalContent = (
-    <View className="flex-1 bg-black/50 items-center justify-end">
+    <View className="flex-1 bg-white/50 items-center justify-end">
       <View
         className="relative items-center"
         style={{ bottom: bottom + 4 }}

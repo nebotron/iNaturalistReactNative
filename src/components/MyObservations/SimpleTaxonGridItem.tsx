@@ -61,7 +61,7 @@ const SimpleTaxonGridItem = ( {
       <View className="absolute bottom-0 flex p-2 w-full">
         <Body4
           maxFontSizeMultiplier={1.5}
-          className="text-white py-1"
+          className="text-black py-1"
         >
           {t( "X-Observations", { count } )}
         </Body4>
@@ -69,7 +69,7 @@ const SimpleTaxonGridItem = ( {
           keyBase={`TaxonGridItem-DisplayTaxonName-${speciesCount?.taxon?.id}`}
           taxon={speciesCount?.taxon}
           layout="vertical"
-          color="text-white"
+          color="text-black"
           showOneNameOnly
         />
       </View>

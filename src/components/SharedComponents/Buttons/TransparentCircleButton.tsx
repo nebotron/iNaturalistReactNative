@@ -5,7 +5,7 @@ import type { GestureResponderEvent } from "react-native";
 import colors from "styles/tailwindColors";
 
 export const CIRCLE_OPTIONS_CLASSES = [
-  "bg-black/50",
+  "bg-white/50",
   "items-center",
   "justify-center",
   "rounded-full",

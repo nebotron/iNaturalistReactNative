@@ -32,9 +32,9 @@ const SliderControl = ( {
 }: SliderControlProps ) => (
   <P>
     {/* eslint-disable-next-line i18next/no-literal-string */}
-    <Heading4 className="text-white">{ `${name} (${min}-${max})` }</Heading4>
+    <Heading4 className="text-black">{ `${name} (${min}-${max})` }</Heading4>
     <View className="flex-row items-center h-fit">
-      <Body1 className="w-10 m-3 text-white">{round( value, precision )}</Body1>
+      <Body1 className="w-10 m-3 text-black">{round( value, precision )}</Body1>
       <Slider
         style={SLIDER_STYLE}
         minimumValue={min}

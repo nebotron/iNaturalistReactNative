@@ -51,7 +51,7 @@ const HotspotListItem = ( {
                 : colors.warningYellow,
             }}
           >
-            <Body4 className="text-white font-bold">{rank}</Body4>
+            <Body4 className="text-black font-bold">{rank}</Body4>
           </View>
           <View className="flex-1">
             <Body2 className="font-bold">

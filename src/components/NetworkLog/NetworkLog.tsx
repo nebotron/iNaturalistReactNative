@@ -66,7 +66,7 @@ const Row = React.memo( ( { entry }: RowProps ) => {
           {formatTime( entry.startTime )}
         </Text>
         <View className={classnames( "px-1.5 rounded-sm", methodColor( entry.method ) )}>
-          <Text className="text-xs text-white font-bold">{entry.method}</Text>
+          <Text className="text-xs text-black font-bold">{entry.method}</Text>
         </View>
         {entry.status > 0 && (
           <Text
@@ -96,7 +96,7 @@ const Row = React.memo( ( { entry }: RowProps ) => {
                 : "bg-mediumGray",
             )}
           >
-            <Text className="text-xs text-white">
+            <Text className="text-xs text-black">
               {entry.cacheHit
                 ? "HIT"
                 : "MISS"}
@@ -134,7 +134,7 @@ const NetworkLog = ( ) => {
           className="px-3 py-1.5 rounded bg-darkGray active:opacity-75"
           onPress={onClear}
         >
-          <Text className="text-xs text-white">CLEAR</Text>
+          <Text className="text-xs text-black">CLEAR</Text>
         </Pressable>
       </View>
       <FlatList

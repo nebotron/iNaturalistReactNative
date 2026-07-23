@@ -473,7 +473,7 @@ const Map = ( {
             "z-10",
           )}
         >
-          <Body1 className="text-white">
+          <Body1 className="text-black">
             {`Zoom: ${currentZoom}`}
           </Body1>
         </View>
@@ -633,10 +633,10 @@ const Map = ( {
             "z-10",
           )}
         >
-          <Body1 className="text-white">
+          <Body1 className="text-black">
             {`Map Ready: ${performanceMetrics.mapReadyTime}ms`}
           </Body1>
-          <Body1 className="text-white">
+          <Body1 className="text-black">
             {`Tiles Visible: ${performanceMetrics.tilesVisibleTime > 0
               ? `${performanceMetrics.tilesVisibleTime}ms`
               : "Not yet visible"}`}

@@ -9,7 +9,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { dropShadow } from "styles/global";
 
 const HEADER_STYLE = {
-  backgroundColor: "white",
+  backgroundColor: "#000000",
 } as const;
 
 const BACK_BUTTON_STYLE = {

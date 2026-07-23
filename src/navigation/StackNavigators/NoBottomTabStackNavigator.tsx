@@ -31,7 +31,7 @@ import SharedStackScreens from "./SharedStackScreens";
 const Stack = createNativeStackNavigator<NoBottomTabStackParamList>( );
 
 const soundRecorderTitle = () => (
-  <Heading4 className="text-white" accessibilityRole="header" numberOfLines={1}>
+  <Heading4 className="text-black" accessibilityRole="header" numberOfLines={1}>
     {t( "RECORD-NEW-SOUND" )}
   </Heading4>
 );
@@ -124,7 +124,7 @@ const NoBottomTabStackNavigator = ( ) => (
       screenOptions={{
         headerBackButtonDisplayMode: "minimal",
         contentStyle: {
-          backgroundColor: "white",
+          backgroundColor: "#000000",
         },
       }}
     >

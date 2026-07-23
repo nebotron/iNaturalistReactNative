@@ -41,7 +41,7 @@ const ActivityCount = ( {
         size={14}
       />
       <Body3
-        className={classNames( "ml-1.5", white && "text-white" )}
+        className={classNames( "ml-1.5", white && "text-black" )}
         testID={testID}
       >
         {t( "Intl-number", { val: count || 0 } )}

@@ -23,7 +23,7 @@ const NumberBadge = ( { number, light }: Props ) => {
     : "bg-inatGreen";
   const textColor = light
     ? "text-darkGray"
-    : "text-white";
+    : "text-black";
   return (
     <View
       className={classNames(

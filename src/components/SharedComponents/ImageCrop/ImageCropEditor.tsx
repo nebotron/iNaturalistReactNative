@@ -480,7 +480,7 @@ const ImageCropEditor = ( ) => {
 
   if ( loadingSource || !localImageUri || !imageSize || !activeInitialCrop ) {
     return (
-      <View className="flex-1 bg-black">
+      <View className="flex-1 bg-white">
         <View className="absolute top-8 left-0">
           <BackButton color={colors.white} onPress={( ) => navigation.goBack( )} />
         </View>

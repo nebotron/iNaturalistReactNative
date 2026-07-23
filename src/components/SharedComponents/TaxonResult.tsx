@@ -236,7 +236,7 @@ const TaxonResult = ( {
             taxon={usableTaxon}
             color={String(
               clearBackground
-                ? "text-white"
+                ? "text-black"
                 : "text-darkGray",
             )}
             scientificNameFirst={currentUser?.prefers_scientific_name_first}

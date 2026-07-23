@@ -58,7 +58,7 @@ const LocationStatus = ( { useLocation, visible, onAnimationEnd }: Props ) => {
     <Animated.View style={animatedStyle}>
       <View className="flex-row self-center items-center bg-darkGray/50 rounded-lg mt-4 p-2">
         <INatIcon name={name} size={19} color={colors.white} />
-        <Body1 className="text-white ml-2">{text}</Body1>
+        <Body1 className="text-black ml-2">{text}</Body1>
       </View>
     </Animated.View>
   );

@@ -12,7 +12,7 @@ const BUTTON_DIM = 40;
 const SIDE_BUTTON_CLASSES = [
   "w-1/3",
   "h-full",
-  "bg-black",
+  "bg-white",
 ];
 
 const CHECKMARK_CLASSES = [
@@ -54,7 +54,7 @@ const MediaNavButtons = ( {
   rotatableAnimatedStyle,
 }: Props ) => (
   <View
-    className="h-32 flex-row justify-between items-center bg-black"
+    className="h-32 flex-row justify-between items-center bg-white"
     testID="MediaNavButtons"
   >
     {closeHidden

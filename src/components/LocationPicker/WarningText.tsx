@@ -28,7 +28,7 @@ const WarningText = ( { accuracyTest }: Props ) => {
       className="p-4 rounded-xl bg-warningRed"
       style={DROP_SHADOW}
     >
-      <Body3 className="text-white text-center">
+      <Body3 className="text-black text-center">
         {t( "Location-accuracy-is-too-imprecise" )}
       </Body3>
     </View>
