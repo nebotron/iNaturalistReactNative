@@ -597,7 +597,18 @@ const TaxonDetails = ( ): Node => {
                     ? UPLOAD
                     : "save" );
                   if ( numObservations > 1 ) {
-                    navigation.dispatch( StackActions.popTo( "ObsEdit" ) );
+                    // In the bulk ID flow the user enters Suggestions directly
+                    // from My Observations, so there is no ObsEdit screen to
+                    // pop back to; popping to ObsEdit would drop them into the
+                    // editor instead of advancing. Return to Suggestions (now
+                    // showing the next observation), matching what choosing a
+                    // suggestion directly does. The regular multi-obs create
+                    // flow still returns to ObsEdit.
+                    navigation.dispatch( StackActions.popTo(
+                      fromObsEdit
+                        ? "ObsEdit"
+                        : "Suggestions",
+                    ) );
                   }
                 } else {
                   navigation.dispatch( StackActions.popTo( "ObsEdit" ) );
