@@ -1,4 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
+import { getUserAgent } from "api/userAgent";
 import {
   ActivityIndicator,
   Body2,
@@ -67,8 +68,14 @@ async function searchNominatim(
       const delta = 2;
       url += `&viewbox=${lon - delta},${lat + delta},${lon + delta},${lat - delta}`;
     }
+    // Nominatim's usage policy requires a valid User-Agent that identifies the
+    // app; requests without one are rejected (HTTP 403), which made every
+    // address search silently return no results.
     const response = await fetch( url, {
-      headers: { "Accept-Language": "en" },
+      headers: {
+        "Accept-Language": "en",
+        "User-Agent": getUserAgent(),
+      },
     } );
     if ( !response.ok ) return [];
     return response.json();
