@@ -42,7 +42,6 @@ const PivotCardObsGridItem = ( { uuid }: { uuid: string } ) => {
           prefersCommonNames={currentUser?.prefers_common_names}
           scientificNameFirst={currentUser?.prefers_scientific_name_first}
           showOneNameOnly
-          withShadow
           taxon={taxon}
         />
       </View>

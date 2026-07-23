@@ -5,7 +5,6 @@ import {
 } from "components/styledComponents";
 import React from "react";
 import { useTranslation } from "sharedHooks";
-import { TEXT_ON_IMAGE_SHADOW } from "styles/global";
 import type { SpeciesCount } from "types/sorting";
 
 const imageClassNames = [
@@ -63,7 +62,6 @@ const SimpleTaxonGridItem = ( {
         <Body4
           maxFontSizeMultiplier={1.5}
           className="text-black py-1"
-          style={TEXT_ON_IMAGE_SHADOW}
         >
           {t( "X-Observations", { count } )}
         </Body4>
@@ -73,7 +71,6 @@ const SimpleTaxonGridItem = ( {
           layout="vertical"
           color="text-black"
           showOneNameOnly
-          withShadow
         />
       </View>
     </Pressable>
