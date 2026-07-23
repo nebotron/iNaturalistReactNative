@@ -29,7 +29,6 @@ import { log } from "sharedHelpers/logger";
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
-import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import { useExitObservationFlow, useGridLayout } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -63,6 +62,9 @@ const GroupPhotosContainer = ( ): Node => {
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
   const pendingGroupPhotoDeletionUris = useStore( state => state.pendingGroupPhotoDeletionUris );
+  const addPendingGroupPhotoDeletionUri = useStore(
+    state => state.addPendingGroupPhotoDeletionUri,
+  );
   const resetMyObsOffsetToRestore = useStore( state => state.resetMyObsOffsetToRestore );
   const setMyObsOffset = useStore( state => state.setMyObsOffset );
 
@@ -291,21 +293,23 @@ const GroupPhotosContainer = ( ): Node => {
     }
   };
 
-  const removePhotos = async () => {
+  const removePhotos = () => {
     const removedFromGroup = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
 
-    // Resolve the removed photos' device URIs so they can be deleted from the
-    // device's photo library right away, matching the user's expectation that
-    // deleting a photo here also removes it from their phone.
+    // Stage the removed photos' device URIs for deletion rather than deleting
+    // here: the Group Photos screen is presented modally, and iOS can't present
+    // its deletion-confirmation over a modal RN screen (the request silently
+    // hangs). Deletion runs in navBasedOnUserSettings after the modal is
+    // dismissed and we're on the stable My Observations screen.
     const deviceUrisToDelete = orderedPhotos
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
       .filter( Boolean );
+    deviceUrisToDelete.forEach( uri => addPendingGroupPhotoDeletionUri( uri ) );
 
     logger.info(
-      `removePhotos: resolved ${deviceUrisToDelete.length} device URI(s) `
-      + `from ${orderedPhotos.length} removed photo(s)`,
-      { deviceUrisToDelete },
+      `removePhotos: staged ${deviceUrisToDelete.length} device URI(s) `
+      + `from ${orderedPhotos.length} removed photo(s) for deletion`,
     );
 
     groupedPhotos.forEach( obs => {
@@ -331,10 +335,6 @@ const GroupPhotosContainer = ( ): Node => {
     ) );
     setGroupedPhotos( removedFromGroup );
     setSelectedIndices( [] );
-
-    if ( deviceUrisToDelete.length > 0 ) {
-      await deleteOriginalDevicePhotos( deviceUrisToDelete, { userInitiated: true } );
-    }
   };
 
   const navBasedOnUserSettings = async ( ) => {
@@ -423,11 +423,16 @@ const GroupPhotosContainer = ( ): Node => {
       .catch( error => logger.error( "Failed to prefetch group photo suggestions", error ) );
 
     if ( allPendingUris.length > 0 ) {
+      // The iOS deletion confirmation can't present over the (now-dismissed)
+      // Group Photos modal. Wait for the navigation reset to My Observations to
+      // finish settling so the confirmation presents on that stable screen
+      // rather than mid-transition (which silently hangs the request).
+      await new Promise( resolve => { setTimeout( resolve, 800 ); } );
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { deleteOriginalDevicePhotos } = require(
         "sharedHelpers/promptDeleteOriginalDevicePhotos",
       );
-      await deleteOriginalDevicePhotos( allPendingUris );
+      await deleteOriginalDevicePhotos( allPendingUris, { userInitiated: true } );
     }
   };
 

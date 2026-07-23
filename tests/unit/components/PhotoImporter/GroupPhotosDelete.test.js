@@ -1,15 +1,8 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import { fireEvent, screen } from "@testing-library/react-native";
 import GroupPhotosContainer from "components/PhotoImporter/GroupPhotosContainer";
 import React from "react";
 import useStore from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
-
-const mockDeleteOriginalDevicePhotos = jest.fn( async () => undefined );
-jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", () => ( {
-  __esModule: true,
-  default: jest.fn(),
-  deleteOriginalDevicePhotos: ( ...args ) => mockDeleteOriginalDevicePhotos( ...args ),
-} ) );
 
 const initialStoreState = useStore.getState( );
 
@@ -19,7 +12,10 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
     jest.clearAllMocks( );
   } );
 
-  it( "deletes the removed photo from the device", async ( ) => {
+  // Removing a photo stages its device URI for deletion (the actual delete runs
+  // at import time on the stable My Observations screen, because iOS can't
+  // present its deletion confirmation over the modal Group Photos screen).
+  it( "stages the removed photo's device URI for deletion", async ( ) => {
     useStore.setState( {
       groupedPhotos: [{
         photos: [{
@@ -33,11 +29,6 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
     fireEvent.press( screen.getByTestId( "GroupPhotos.file:///local_1.jpg" ) );
     fireEvent.press( screen.getByLabelText( /Remove Photos/ ) );
 
-    await waitFor( () => {
-      expect( mockDeleteOriginalDevicePhotos ).toHaveBeenCalledWith(
-        ["ph://DEVICE-1"],
-        expect.anything(),
-      );
-    } );
+    expect( useStore.getState( ).pendingGroupPhotoDeletionUris ).toContain( "ph://DEVICE-1" );
   } );
 } );
