@@ -69,6 +69,11 @@ const labelRowStyle = { justifyContent: "space-between" as const };
 
 interface Props {
   autoPlaySound?: boolean; // automatically start playing a sound when it is visible
+  // Auto-frame each photo to its detected subject. Off by default so the
+  // viewer never runs subject detection on the user's own images; only
+  // enabled for other people's photos (Explore, taxon media, etc.). Own
+  // images are still detected/cropped in the dedicated crop editor.
+  autoDetectSubject?: boolean;
   editable?: boolean;
   horizontalScroll: React.Ref<ICarouselInstance>;
   onCropPhoto?: Function;
@@ -85,6 +90,7 @@ interface Props {
 
 const MainMediaDisplay = ( {
   autoPlaySound,
+  autoDetectSubject = false,
   editable,
   horizontalScroll,
   onCropPhoto,
@@ -211,7 +217,7 @@ const MainMediaDisplay = ( {
           resetKey={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
-          autoDetectSubject
+          autoDetectSubject={autoDetectSubject}
           detectUri={uri}
           brightness={BRIGHTNESS_DEFAULT}
           zoomRef={( ref: SharedZoomableImageRef | null ) => {

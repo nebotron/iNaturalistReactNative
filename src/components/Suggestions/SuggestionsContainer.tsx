@@ -667,6 +667,7 @@ const SuggestionsContainer = ( ) => {
         useOfflineModel={usingOfflineSuggestions}
       />
       <MediaViewerModal
+        autoDetectSubject={detectSubject}
         editable={lastScreen === "ObsEdit" || lastScreen === "Camera"}
         showModal={mediaViewerVisible}
         onClose={( ) => dispatch( {

@@ -545,6 +545,7 @@ const TaxonDetails = ( ): Node => {
           </View>
         </View>
         <MediaViewerModal
+          autoDetectSubject
           showModal={mediaViewerVisible}
           onClose={( ) => setMediaViewerVisible( false )}
           photos={photos}

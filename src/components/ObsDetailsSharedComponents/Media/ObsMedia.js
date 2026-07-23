@@ -10,6 +10,7 @@ import type { Node } from "react";
 import React, { useCallback, useMemo, useState } from "react";
 
 type Props = {
+  autoDetectSubject?: boolean,
   loading: boolean,
   latitude?: number,
   longitude?: number,
@@ -28,6 +29,7 @@ type Props = {
 }
 
 const ObsMedia = ( {
+  autoDetectSubject,
   loading,
   latitude,
   longitude,
@@ -114,6 +116,7 @@ const ObsMedia = ( {
         ? renderPhone( )
         : renderTablet( )}
       <MediaViewerModal
+        autoDetectSubject={autoDetectSubject}
         showModal={mediaViewerVisible}
         onClose={( ) => setMediaViewerVisible( false )}
         uri={currentPhotoUrl}

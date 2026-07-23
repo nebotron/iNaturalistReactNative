@@ -7,6 +7,7 @@ import React from "react";
 
 type Props = {
   autoPlaySound?: boolean, // automatically start playing a sound when it is visible
+  autoDetectSubject?: boolean,
   editable?: boolean,
   deleting?: boolean,
   // Optional component to use as the header
@@ -36,6 +37,7 @@ type Props = {
 
 const MediaViewerModal = ( {
   autoPlaySound,
+  autoDetectSubject,
   editable,
   deleting,
   header,
@@ -61,6 +63,7 @@ const MediaViewerModal = ( {
     modal={(
       <MediaViewer
         autoPlaySound={autoPlaySound}
+        autoDetectSubject={autoDetectSubject}
         editable={editable}
         deleting={deleting}
         header={header}

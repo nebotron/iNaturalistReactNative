@@ -14,6 +14,7 @@ import {
 import colors from "styles/tailwindColors";
 
 type Props = {
+  autoDetectSubject?: boolean,
   loading: boolean,
   latitude?: number,
   longitude?: number,
@@ -24,6 +25,7 @@ type Props = {
 }
 
 const ObsMediaDisplay = ( {
+  autoDetectSubject,
   loading,
   latitude,
   longitude,
@@ -40,6 +42,7 @@ const ObsMediaDisplay = ( {
     return (
       <View className="bg-black">
         <ObsMedia
+          autoDetectSubject={autoDetectSubject}
           loading={loading}
           latitude={latitude}
           longitude={longitude}

@@ -47,6 +47,7 @@ interface SoundItem {
 
 interface Props {
   autoPlaySound?: boolean; // automatically start playing a sound when it is visible
+  autoDetectSubject?: boolean;
   editable?: boolean;
   deleting?: boolean;
   // Optional component to use as the header
@@ -69,6 +70,7 @@ interface Props {
 
 const MediaViewer = ( {
   autoPlaySound,
+  autoDetectSubject,
   editable,
   deleting,
   header,
@@ -278,6 +280,7 @@ const MediaViewer = ( {
       }
       <MainMediaDisplay
         autoPlaySound={autoPlaySound}
+        autoDetectSubject={autoDetectSubject}
         editable={editable}
         photos={photos}
         sounds={sounds}

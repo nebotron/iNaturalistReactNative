@@ -124,6 +124,7 @@ const TaxonMedia = ( {
         ? renderPhone( )
         : renderTablet( )}
       <MediaViewerModal
+        autoDetectSubject
         showModal={mediaViewerVisible}
         onClose={( ) => setMediaViewerVisible( false )}
         uri={currentPhotoUrl}
