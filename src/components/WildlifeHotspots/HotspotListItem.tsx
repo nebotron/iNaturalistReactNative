@@ -99,7 +99,7 @@ const HotspotListItem = ( {
           </View>
         )}
         {( onAddToRoute || onOpenInGoogleMaps ) && (
-          <View className="flex-row mt-1 space-x-2">
+          <View className="flex-row mt-1 gap-2">
             {onAddToRoute && (
               <Button
                 className="flex-1"
