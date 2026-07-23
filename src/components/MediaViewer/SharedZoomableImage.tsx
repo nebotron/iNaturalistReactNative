@@ -27,8 +27,6 @@ const styles = StyleSheet.create( {
   image: {
     flex: 1,
     overflow: "hidden",
-    // Letterbox bars (revealed by resizeMode "contain") should read as black.
-    backgroundColor: "#000000",
   },
 } );
 
