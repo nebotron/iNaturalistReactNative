@@ -63,7 +63,7 @@ const styles = StyleSheet.create( {
   gestureHandlerRoot: { flex: 1 },
 } );
 const sliderStyle = { flex: 1, height: 40 };
-const iconBtnClass = "bg-white/50 items-center justify-center rounded-full h-[40px] w-[40px]";
+const iconBtnClass = "bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px]";
 const tickRowStyle = { justifyContent: "space-between" as const, bottom: 2 };
 const labelRowStyle = { justifyContent: "space-between" as const };
 
@@ -305,7 +305,7 @@ const MainMediaDisplay = ( {
         </View>
         { showBrightnessSlider && (
           <View className="absolute bottom-16 left-0 right-0 px-4 py-2">
-            <View className="bg-white/60 rounded-xl px-3 py-2 flex-row items-center">
+            <View className="bg-black/60 rounded-xl px-3 py-2 flex-row items-center">
               <View className="flex-1">
                 <View className="justify-center">
                   <Slider
@@ -333,7 +333,7 @@ const MainMediaDisplay = ( {
                 </View>
                 <View className="flex-row px-1" style={labelRowStyle}>
                   { EXPOSURE_TICK_STOPS.map( stop => (
-                    <Text key={stop} className="text-black/70 text-[10px]">
+                    <Text key={stop} className="text-white/70 text-[10px]">
                       { formatStop( stop ) }
                     </Text>
                   ) ) }

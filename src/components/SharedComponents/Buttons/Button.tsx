@@ -57,8 +57,8 @@ const setStyles = ( {
   const textClasses = [
     "text-center",
     disabled
-      ? "text-black/50"
-      : "text-black",
+      ? "text-white/50"
+      : "text-white",
   ];
 
   if ( className ) {
@@ -82,8 +82,8 @@ const setStyles = ( {
         ? "bg-darkGrayDisabled"
         : "bg-darkGray" );
       textClasses.push( disabled
-        ? "text-black/50"
-        : "text-black" );
+        ? "text-white/50"
+        : "text-white" );
     }
   } else if ( isFocus ) {
     if ( forceDark ) {

@@ -422,7 +422,7 @@ const ImageCropView = ( {
   ), [boxSize, cropAreaHeight, imageHeight, imageWidth, windowWidth] );
 
   return (
-    <View className="flex-1 bg-white">
+    <View className="flex-1 bg-black">
       <View
         className="flex-1 overflow-hidden"
         onLayout={event => {

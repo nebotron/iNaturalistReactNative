@@ -104,13 +104,13 @@ const locationHistoryTitle = () => (
   </Heading4>
 );
 // eslint-disable-next-line i18next/no-literal-string
-const debugTitle = () => <Heading4 className="text-black">DEBUG</Heading4>;
+const debugTitle = () => <Heading4 className="text-white">DEBUG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
-const uiLibTitle = () => <Heading4 className="text-black">UI LIBRARY</Heading4>;
+const uiLibTitle = () => <Heading4 className="text-white">UI LIBRARY</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
-const uiLibItemTitle = () => <Heading4 className="text-black">UI LIBRARY ITEM</Heading4>;
+const uiLibItemTitle = () => <Heading4 className="text-white">UI LIBRARY ITEM</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
-const logTitle = () => <Heading4 className="text-black">LOG</Heading4>;
+const logTitle = () => <Heading4 className="text-white">LOG</Heading4>;
 
 // note: react navigation 7 will have a layout prop
 // which should replace all of these individual wrappers

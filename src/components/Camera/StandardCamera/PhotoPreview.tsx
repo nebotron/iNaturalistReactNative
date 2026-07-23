@@ -48,7 +48,7 @@ const PhotoPreview = ( {
   let noPhotosNotice = (
     <Subheading1
       className={classnames(
-        "text-black",
+        "text-white",
         "text-center",
         "text-xl",
         "w-full",
@@ -61,7 +61,7 @@ const PhotoPreview = ( {
     noPhotosNotice = (
       <Subheading1
         className={classnames(
-          "text-black",
+          "text-white",
           "text-center",
           "text-xl",
           "absolute",

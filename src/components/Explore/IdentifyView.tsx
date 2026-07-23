@@ -241,7 +241,7 @@ const IdentifyView = ( {
         // We need these dynamic dimensions to keep the image square
         // eslint-disable-next-line react-native/no-inline-styles
         style={{ width: windowWidth, height: windowWidth }}
-        className="bg-white overflow-hidden"
+        className="bg-black overflow-hidden"
       >
         {currentPhotoUrl
           ? (

@@ -225,11 +225,11 @@ const LoginForm = ( {
         components={[
           <Body1
             key="0"
-            className="text-black"
+            className="text-white"
           />,
           <Body1
             key="1"
-            className="text-black font-Lato-Bold"
+            className="text-white font-Lato-Bold"
           />,
         ]}
       />
@@ -248,7 +248,7 @@ const LoginForm = ( {
                 size={19}
               />
             </View>
-            <List2 className="ml-3 text-black font-medium">
+            <List2 className="ml-3 text-white font-medium">
               {t( "Your-email-is-confirmed" )}
             </List2>
           </View>
@@ -274,7 +274,7 @@ const LoginForm = ( {
               )
               : (
                 <View className="flex-row my-5 items-center justify-center mx-2">
-                  <List2 className="ml-3 text-black font-medium">
+                  <List2 className="ml-3 text-white font-medium">
                     {t( "Please-log-in-again" )}
                   </List2>
                 </View>

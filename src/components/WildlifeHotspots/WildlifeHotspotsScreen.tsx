@@ -660,7 +660,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
                     : colors.warningYellow,
                 }}
               >
-                <Body4 className="text-black font-bold">{idx + 1}</Body4>
+                <Body4 className="text-white font-bold">{idx + 1}</Body4>
               </View>
             </Marker>
           ) )}

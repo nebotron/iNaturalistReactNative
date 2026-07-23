@@ -82,7 +82,7 @@ const TaxonGridItem = ( {
           { headerText && (
             <Body4
               maxFontSizeMultiplier={1.5}
-              className="text-black py-1"
+              className="text-white py-1"
             >
               {headerText}
             </Body4>
@@ -93,7 +93,7 @@ const TaxonGridItem = ( {
             scientificNameFirst={currentUser?.prefers_scientific_name_first}
             prefersCommonNames={currentUser?.prefers_common_names}
             layout="vertical"
-            color="text-black"
+            color="text-white"
             showOneNameOnly={isLargeFontScale}
           />
         </View>

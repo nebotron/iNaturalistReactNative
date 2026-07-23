@@ -56,10 +56,10 @@ const PreMatchLoadingScreen = ( { isLoading }: Props ) => {
       <Animated.View style={animatedStyle} />
       <View style={viewStyle}>
         <View className="flex-1 items-center justify-center">
-          <Body1 className="text-black">
+          <Body1 className="text-white">
             {t( "Analyzing-for-the-best-identification" )}
           </Body1>
-          <Body1 className="text-black mt-2 mb-[29px]">
+          <Body1 className="text-white mt-2 mb-[29px]">
             {t( "This-may-take-a-few-seconds" )}
           </Body1>
           <ActivityIndicator

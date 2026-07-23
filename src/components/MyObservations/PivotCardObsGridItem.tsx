@@ -36,7 +36,7 @@ const PivotCardObsGridItem = ( { uuid }: { uuid: string } ) => {
       <View className="absolute bottom-0 items-start p-2">
         <DisplayTaxonName
           bottomTextComponent={Body2}
-          color="text-black"
+          color="text-white"
           ellipsizeCommonName
           layout="vertical"
           prefersCommonNames={currentUser?.prefers_common_names}

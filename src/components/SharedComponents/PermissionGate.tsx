@@ -67,7 +67,7 @@ const PermissionGate = ( {
   } );
 
   return (
-    <ScreenShell wrapperClassName="bg-white" testID={testID}>
+    <ScreenShell wrapperClassName="bg-black" testID={testID}>
       <StatusBar barStyle="light-content" />
       <ImageBackground
         source={image}
@@ -110,18 +110,18 @@ const PermissionGate = ( {
               size={40}
             />
           ) }
-          <Heading2 className="text-center text-black mt-8 mb-5" maxFontSizeMultiplier={1.4}>
+          <Heading2 className="text-center text-white mt-8 mb-5" maxFontSizeMultiplier={1.4}>
             { grantStatus === RESULTS.BLOCKED
               ? titleDenied
               : title}
           </Heading2>
           { body && (
-            <Body2 className="text-center text-black" maxFontSizeMultiplier={1.3}>{ body }</Body2>
+            <Body2 className="text-center text-white" maxFontSizeMultiplier={1.3}>{ body }</Body2>
           ) }
           { body2 && (
             <Body2
               className={classnames(
-                "text-center text-black",
+                "text-center text-white",
                 isLargeFontScale
                   ? "mt-0"
                   : "mt-5",
@@ -132,7 +132,7 @@ const PermissionGate = ( {
             </Body2>
           ) }
           { grantStatus === RESULTS.BLOCKED && (
-            <Body2 className="text-center text-black mt-5">
+            <Body2 className="text-center text-white mt-5">
               { blockedPrompt }
             </Body2>
           ) }

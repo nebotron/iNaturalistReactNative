@@ -122,9 +122,9 @@ const AIDebugButton = ( {
                   text="Show prediction options"
                 />
                 {/* eslint-disable-next-line i18next/no-literal-string */}
-                <Heading4 className="text-black">Debug camera format:</Heading4>
+                <Heading4 className="text-white">Debug camera format:</Heading4>
                 {/* eslint-disable-next-line react-native/no-inline-styles */}
-                <Text className="text-black" style={{ fontSize: 8 }}>
+                <Text className="text-white" style={{ fontSize: 8 }}>
                   {JSON.stringify( debugFormat, null, 2 )}
                 </Text>
                 <Button

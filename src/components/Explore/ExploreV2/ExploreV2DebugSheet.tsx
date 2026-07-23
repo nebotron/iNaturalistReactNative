@@ -96,7 +96,7 @@ const DebugButton = ( { label, onPress, active }: DebugButtonProps ) => (
         : "bg-darkGray"
     }`}
   >
-    <Text className="text-black text-xs">{label}</Text>
+    <Text className="text-white text-xs">{label}</Text>
   </Pressable>
 );
 

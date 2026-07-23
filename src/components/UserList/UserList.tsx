@@ -10,7 +10,7 @@ import type { ViewStyle } from "react-native";
 import { useTranslation } from "sharedHooks";
 
 const CONTAINER_STYLE = {
-  backgroundColor: "#000000",
+  backgroundColor: "white",
 };
 
 interface Props {

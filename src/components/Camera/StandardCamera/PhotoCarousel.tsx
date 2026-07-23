@@ -154,7 +154,7 @@ const PhotoCarousel = ( {
                 deletePhotoMode
                   ? (
                     <View
-                      className="w-full h-full flex-1 justify-center items-center bg-white/50"
+                      className="w-full h-full flex-1 justify-center items-center bg-black/50"
                     >
                       <INatIconButton
                         icon="trash-outline"

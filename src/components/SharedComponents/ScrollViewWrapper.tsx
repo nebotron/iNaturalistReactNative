@@ -25,7 +25,7 @@ const ScrollViewWrapper = ( {
 
   return (
     <View className="flex-1 bg-white" style={style} testID={testID}>
-      <StatusBar barStyle="light-content" />
+      <StatusBar barStyle="dark-content" />
       <ScrollView
         ref={scrollRef}
         keyboardDismissMode="on-drag"

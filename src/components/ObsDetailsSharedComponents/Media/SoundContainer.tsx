@@ -213,9 +213,9 @@ const SoundContainer = ( {
       <View className={`${sizeClass} p-4 items-center justify-center`}>
         <View className="flex-row justify-center mb-2 gap-x-2">
           <INatIcon name="private" size={18} color={colors.white} />
-          <Body2 className="text-black">{t( "Content-Hidden" )}</Body2>
+          <Body2 className="text-white">{t( "Content-Hidden" )}</Body2>
         </View>
-        <Body4 className="text-black text-center italic">
+        <Body4 className="text-white text-center italic">
           {t( "This-sound-was-hidden-for-violating-community-guidelines-or-terms" )}
         </Body4>
       </View>
@@ -248,13 +248,13 @@ const SoundContainer = ( {
         size={80}
       />
       <View className="flex-row mt-[30px] mb-2">
-        <View className="text-black w-full items-end">
-          <Body1 className="text-black text-end">
+        <View className="text-white w-full items-end">
+          <Body1 className="text-white text-end">
             {playBackState.formattedCurrentPosition}
           </Body1>
         </View>
-        <Body1 className="text-black mx-1 self-center">{ t( "sound-playback-separator" ) }</Body1>
-        <Body1 className="text-black w-full items-start">
+        <Body1 className="text-white mx-1 self-center">{ t( "sound-playback-separator" ) }</Body1>
+        <Body1 className="text-white w-full items-start">
           {playBackState.formattedDuration}
         </Body1>
       </View>

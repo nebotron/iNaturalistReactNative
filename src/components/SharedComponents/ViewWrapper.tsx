@@ -33,7 +33,7 @@ const ScreenShell = ( {
     style={style}
     testID={testID}
   >
-    <StatusBar barStyle="light-content" />
+    <StatusBar barStyle="dark-content" />
     {children}
   </View>
 );

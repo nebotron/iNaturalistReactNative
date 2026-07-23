@@ -55,7 +55,7 @@ const CameraWithDevice = ( {
 
   return (
     <View
-      className={`flex-1 bg-white ${flexDirection}`}
+      className={`flex-1 bg-black ${flexDirection}`}
       testID="CameraWithDevice"
     >
       {cameraType === "Standard"

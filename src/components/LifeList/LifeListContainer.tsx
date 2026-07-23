@@ -270,7 +270,7 @@ const LiferGridItem = ( { item, style }: LiferGridItemProps ) => {
           { item.observed_on && (
             <Body4
               maxFontSizeMultiplier={1.5}
-              className="text-black py-1"
+              className="text-white py-1"
             >
               {item.observed_on}
             </Body4>
@@ -281,7 +281,7 @@ const LiferGridItem = ( { item, style }: LiferGridItemProps ) => {
             scientificNameFirst={currentUser?.prefers_scientific_name_first}
             prefersCommonNames={currentUser?.prefers_common_names}
             layout="vertical"
-            color="text-black"
+            color="text-white"
             showOneNameOnly={isLargeFontScale}
           />
         </View>

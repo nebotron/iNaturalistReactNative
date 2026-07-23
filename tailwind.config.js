@@ -60,22 +60,20 @@ module.exports = {
     },
     colors: {
       accessibleGreen: "#5D8017",
-      // Dark mode: neutral palette inverted so `white` surfaces render black
-      // and `black`/`darkGray` text/icons render light.
-      black: "#ffffff",
-      darkGray: "#CFCFCF",
+      black: "#000000",
+      darkGray: "#454545",
       darkGrayDisabled: "#828181",
       inatGreen: "#74AC00",
       inatGreenDisabled: "#B9D580",
       inatGreenDisabledDark: "#3A5600",
-      lightGray: "#1C1C1C",
-      lightGrayOpaque: "#1C1C1C54",
+      lightGray: "#E8E8E8",
+      lightGrayOpaque: "#E8E8E854",
       mediumGray: "#BFBFBF",
       mediumGrayGhost: "#BFBFBF33",
       warningRed: "#9B1010",
       warningRedDisabled: "#b06365",
       warningYellow: "#E6A939",
-      white: "#000000",
+      white: "#ffffff",
       yellow: "#FFD600",
 
       // Mostly for debugging

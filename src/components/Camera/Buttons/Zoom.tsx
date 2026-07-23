@@ -36,7 +36,7 @@ const Zoom = ( {
         accessibilityLabel={t( "Change-zoom" )}
         accessibilityState={{ disabled: false }}
       >
-        <Body3 className="text-s text-black">
+        <Body3 className="text-s text-white">
           {t( "zoom-x", { zoom: Number( zoomTextValue ) } )}
         </Body3>
       </Pressable>
