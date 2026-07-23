@@ -245,7 +245,16 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>( null );
-  const filterParams = filterParamsProp ?? route?.params?.filterParams ?? {};
+  // Memoized so the reference is stable across renders. When no params are
+  // supplied this previously fell through to a fresh `{}` every render, which
+  // — as a dependency of the findHotspots effect below — re-triggered the
+  // effect on each render. That effect also calls setState (setHotspotRouteCoords),
+  // so once both stops were confirmed it looped indefinitely ("Maximum update
+  // depth exceeded"), breaking the screen right after addresses were entered.
+  const filterParams = useMemo(
+    () => filterParamsProp ?? route?.params?.filterParams ?? {},
+    [filterParamsProp, route?.params?.filterParams],
+  );
 
   const [stops, setStops] = useState<Stop[]>( [
     { id: makeStopId(), text: "", point: null },
