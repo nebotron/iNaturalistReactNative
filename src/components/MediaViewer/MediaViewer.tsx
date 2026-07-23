@@ -1,7 +1,6 @@
 import {
   copyFile,
   downloadFile,
-  exists,
   TemporaryDirectoryPath,
   unlink,
 } from "@dr.pogodin/react-native-fs";
@@ -174,16 +173,14 @@ const MediaViewer = ( {
     setMediaToDelete,
   ] );
 
-  const handleLongPressPhoto = useCallback( async ( photoUri: string ) => {
-    const tempPath = `${TemporaryDirectoryPath}/share_photo.jpg`;
-
-    // Remove any leftover temp file from a previous share (including previous
-    // app sessions). copyFile/downloadFile fail or reuse stale, partial data
-    // when the destination already exists, producing a broken image that iOS
-    // refuses to save from the share sheet.
-    if ( await exists( tempPath ) ) {
-      await unlink( tempPath );
-    }
+  // Build a local, metadata-embedded copy of a photo we can hand to the share
+  // sheet. This is the slow part (copy/download + EXIF write), so it runs ahead
+  // of time (see the pre-warm effect below) rather than blocking the long press.
+  const buildSharePhoto = useCallback( async ( photoUri: string ): Promise<string> => {
+    // Unique per prep so an in-flight prep for a previous photo can't clobber
+    // the file mid-write, which would produce a broken image iOS can't save.
+    const tempPath = `${TemporaryDirectoryPath}/share_photo_${Date.now()}`
+      + `_${Math.random().toString( 36 ).slice( 2 )}.jpg`;
 
     // Get a local file we can annotate and share
     if ( photoUri.startsWith( "file://" ) ) {
@@ -213,8 +210,53 @@ const MediaViewer = ( {
       }
     }
 
-    Share.share( { url: `file://${tempPath}` } );
+    return tempPath;
   }, [latitude, longitude, timeObservedAt] );
+
+  // Cache of the in-flight/prepared share file for a single photo uri so the
+  // long press can present the sheet without waiting on file work.
+  const sharePrepRef = useRef<{ uri: string; promise: Promise<string> } | null>( null );
+
+  const prepareSharePhoto = useCallback( ( photoUri: string ): Promise<string> => {
+    if ( sharePrepRef.current?.uri === photoUri ) {
+      return sharePrepRef.current.promise;
+    }
+    const previous = sharePrepRef.current;
+    const promise = buildSharePhoto( photoUri );
+    sharePrepRef.current = { uri: photoUri, promise };
+    // Clean up the previously prepared temp file once it has finished writing.
+    if ( previous ) {
+      previous.promise
+        .then( path => unlink( path ).catch( ( ) => undefined ) )
+        .catch( ( ) => undefined );
+    }
+    return promise;
+  }, [buildSharePhoto] );
+
+  // Pre-warm the shareable copy of the currently displayed photo so a long
+  // press can present the share sheet the moment the threshold is hit, instead
+  // of after the copy/EXIF work finishes (which lands around finger release).
+  // Key off the same uri MainMediaDisplay passes to onLongPressPhoto so the
+  // long press hits the cache rather than rebuilding.
+  const currentPhoto = selectedMediaIndex < photos.length
+    ? photos[selectedMediaIndex]
+    : null;
+  const currentShareUri = currentPhoto
+    ? Photo.displayLocalOrRemoteLargePhoto( currentPhoto )
+    : null;
+  useEffect( ( ) => {
+    if ( !currentShareUri ) return;
+    prepareSharePhoto( currentShareUri ).catch( ( ) => undefined );
+  }, [currentShareUri, prepareSharePhoto] );
+
+  const handleLongPressPhoto = useCallback( async ( photoUri: string ) => {
+    try {
+      const tempPath = await prepareSharePhoto( photoUri );
+      Share.share( { url: `file://${tempPath}` } );
+    } catch ( _e ) {
+      // Nothing to share if the file could not be prepared
+    }
+  }, [prepareSharePhoto] );
 
   return (
     <View
