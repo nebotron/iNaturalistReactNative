@@ -369,35 +369,63 @@ const GroupPhotosContainer = ( ): Node => {
       ...newObs,
     } ) );
 
-    await Promise.all(
+    // Save each observation independently. A single failed save must not
+    // abort the whole import: the observations that did save would otherwise
+    // never reach the location auto-fill below and would land with no location.
+    const saveResults = await Promise.allSettled(
       observationsToSave.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
     );
+    saveResults.forEach( ( result, idx ) => {
+      if ( result.status === "rejected" ) {
+        logger.error(
+          `Failed to save imported observation ${observationsToSave[idx]?.uuid}`,
+          result.reason,
+        );
+      }
+    } );
 
     // Auto-fill location from tracked location history for any imported
     // observation whose photos didn't carry GPS EXIF data. This runs before
     // the ID requests below so computer vision scoring (and its cache key) use
-    // the observation's final location rather than no location.
+    // the observation's final location rather than no location. Wrapped so a
+    // failure applying one observation's location can't prevent the others.
     const trackedLocationByUuid = {};
-    const missingLocationObs = observationsToSave
-      .filter( obs => obs.latitude == null || obs.longitude == null );
-    if ( missingLocationObs.length > 0 ) {
-      // Filter the (potentially large) point history once and reuse it for
-      // every observation, rather than re-filtering per observation.
-      const usablePoints = filterUsableTrackedPoints(
-        realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
-      );
-      await Promise.all( missingLocationObs.map( async obs => {
-        const savedObs = realm.objectForPrimaryKey( "Observation", obs.uuid );
-        if ( !savedObs ) return;
-        const applied = await autoApplyTrackedLocationIfMissing( realm, savedObs, usablePoints );
-        if ( applied ) {
-          trackedLocationByUuid[obs.uuid] = {
-            latitude: savedObs.latitude,
-            longitude: savedObs.longitude,
-            accuracy: savedObs.positional_accuracy ?? null,
-          };
-        }
-      } ) );
+    try {
+      const missingLocationObs = observationsToSave
+        .filter( obs => obs.latitude == null || obs.longitude == null );
+      if ( missingLocationObs.length > 0 ) {
+        // Filter the (potentially large) point history once and reuse it for
+        // every observation, rather than re-filtering per observation.
+        const usablePoints = filterUsableTrackedPoints(
+          realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
+        );
+        logger.info(
+          `Auto-filling tracked location: ${missingLocationObs.length} observation(s) `
+          + `missing location, ${usablePoints.length} usable tracked point(s)`,
+        );
+        await Promise.all( missingLocationObs.map( async obs => {
+          try {
+            const savedObs = realm.objectForPrimaryKey( "Observation", obs.uuid );
+            if ( !savedObs ) return;
+            const applied = await autoApplyTrackedLocationIfMissing(
+              realm,
+              savedObs,
+              usablePoints,
+            );
+            if ( applied ) {
+              trackedLocationByUuid[obs.uuid] = {
+                latitude: savedObs.latitude,
+                longitude: savedObs.longitude,
+                accuracy: savedObs.positional_accuracy ?? null,
+              };
+            }
+          } catch ( error ) {
+            logger.error( `Failed to auto-apply tracked location to ${obs.uuid}`, error );
+          }
+        } ) );
+      }
+    } catch ( error ) {
+      logger.error( "Failed to auto-apply tracked location on group photo import", error );
     }
 
     // Mirror any auto-filled locations back onto the in-memory observations so
