@@ -78,12 +78,17 @@ const DevicePhotoCleanup = ( ) => {
   );
 
   const confirmDelete = useCallback( async ( ) => {
+    // Dismiss the confirmation sheet and let it fully animate out before
+    // deleting. iOS can't present its own system deletion confirmation while a
+    // modal (this BottomSheet) is on screen, so calling deletePhotos with the
+    // sheet still up makes the native request hang and never present.
+    setShowConfirm( false );
     setDeleting( true );
+    await new Promise( resolve => { setTimeout( resolve, 600 ); } );
     await deleteOriginalDevicePhotos( allUris, { userInitiated: true } );
     setDeletedCount( allUris.length );
     setDays( [] );
     setDeleting( false );
-    setShowConfirm( false );
   }, [allUris] );
 
   if ( deletedCount !== null ) {
