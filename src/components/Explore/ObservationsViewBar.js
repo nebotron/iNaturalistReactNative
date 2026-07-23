@@ -74,12 +74,16 @@ const ObservationsViewBar = ( {
           borderRightWidth: isLast
             ? 0
             : 1,
-          borderRightColor: colors.lightGray,
+          // Divider light enough to read against the dark button surface
+          borderRightColor: "#4A4A4A",
         };
         const backgroundColor = {
+          // Unchecked segments use an elevated dark-gray surface so the
+          // floating control stays visible against the black page instead of
+          // blending into it.
           backgroundColor: checked
             ? colors.inatGreen
-            : colors.white,
+            : "#2E2E2E",
         };
 
         return (
@@ -87,7 +91,7 @@ const ObservationsViewBar = ( {
             key={value}
             accessibilityLabel={accessibilityLabel}
             color={value === layout
-              ? colors.white
+              ? "#FFFFFF"
               : colors.darkGray}
             icon={icon}
             onPress={() => updateObservationsView( value )}
@@ -104,7 +108,7 @@ const ObservationsViewBar = ( {
             testID={testID}
             backgroundColor={value === layout
               ? colors.inatGreen
-              : colors.white}
+              : "#2E2E2E"}
           />
         );
       } )}
