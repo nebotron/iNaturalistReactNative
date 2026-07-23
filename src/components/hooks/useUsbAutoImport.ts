@@ -4,6 +4,7 @@ import { AppState } from "react-native";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import {
+  getUsbFolderDiagnostics,
   getUsbFolderName,
   importNewUsbImages,
   isUsbImportSupported,
@@ -111,7 +112,13 @@ const useUsbAutoImport = ( ) => {
         // thread on an interval for the many users who never set one up.
         const folder = await getUsbFolderName( );
         if ( !folder ) {
-          logDiag( "not polling: no USB folder configured" );
+          // A null name has two very different causes; report which one so we
+          // don't conflate "never set up" with "drive not mounted right now".
+          const d = await getUsbFolderDiagnostics( );
+          logDiag( d.bookmarkPresent
+            ? "not polling: folder bookmark saved but did not resolve "
+              + `(resolved=${d.resolved}, reachable=${d.reachable}, stale=${d.stale})`
+            : "not polling: no folder bookmark saved (folder never picked in Settings)" );
           return;
         }
         logDiag( `polling USB folder "${folder}" every ${SCAN_INTERVAL_MS}ms` );

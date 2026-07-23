@@ -92,6 +92,35 @@ RCT_EXPORT_METHOD(getFolderName:(RCTPromiseResolveBlock)resolve
   resolve( url ? url.lastPathComponent : [NSNull null] );
 }
 
+// Diagnostics for a null getFolderName: distinguishes "no bookmark was ever
+// saved" (folder never picked, or the pick didn't persist) from "a bookmark is
+// saved but won't resolve right now" (typically the drive isn't mounted). Both
+// otherwise surface identically as a null folder name.
+RCT_EXPORT_METHOD(getFolderDiagnostics:(RCTPromiseResolveBlock)resolve
+                                reject:(__unused RCTPromiseRejectBlock)reject)
+{
+  NSData *bookmark = [[NSUserDefaults standardUserDefaults] dataForKey:kBookmarkKey];
+  if ( !bookmark ) {
+    resolve( @{ @"bookmarkPresent": @NO, @"resolved": @NO,
+                @"stale": @NO, @"reachable": @NO } );
+    return;
+  }
+  BOOL stale = NO;
+  NSURL *url = [NSURL URLByResolvingBookmarkData:bookmark
+                                         options:NSURLBookmarkResolutionWithoutUI
+                                   relativeToURL:nil
+                             bookmarkDataIsStale:&stale
+                                           error:nil];
+  BOOL reachable = url ? [url checkResourceIsReachableAndReturnError:nil] : NO;
+  resolve( @{
+    @"bookmarkPresent": @YES,
+    @"resolved": url ? @YES : @NO,
+    @"stale": @( stale ),
+    @"reachable": @( reachable ),
+    @"bookmarkBytes": @( (double)bookmark.length ),
+  } );
+}
+
 RCT_EXPORT_METHOD(forgetFolder:(RCTPromiseResolveBlock)resolve
                         reject:(__unused RCTPromiseRejectBlock)reject)
 {

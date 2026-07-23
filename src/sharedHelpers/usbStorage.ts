@@ -39,9 +39,18 @@ export interface UsbImportResult {
   knownCount?: number;
 }
 
+export interface UsbFolderDiagnostics {
+  bookmarkPresent: boolean;
+  resolved: boolean;
+  stale: boolean;
+  reachable: boolean;
+  bookmarkBytes?: number;
+}
+
 interface UsbStorageModule {
   pickFolder: ( ) => Promise<string | null>;
   getFolderName: ( ) => Promise<string | null>;
+  getFolderDiagnostics: ( ) => Promise<UsbFolderDiagnostics>;
   forgetFolder: ( ) => Promise<void>;
   importNewImages: (
     destDir: string,
@@ -68,6 +77,13 @@ export const isUsbImportSupported = ( ) => !!usbStorage;
 export const pickUsbFolder = ( ) => usbStorage?.pickFolder( ) ?? Promise.resolve( null );
 
 export const getUsbFolderName = ( ) => usbStorage?.getFolderName( ) ?? Promise.resolve( null );
+
+export const getUsbFolderDiagnostics = ( ): Promise<UsbFolderDiagnostics> => (
+  usbStorage?.getFolderDiagnostics( )
+  ?? Promise.resolve( {
+    bookmarkPresent: false, resolved: false, stale: false, reachable: false,
+  } )
+);
 
 export const forgetUsbFolder = async ( ) => {
   await usbStorage?.forgetFolder( );
