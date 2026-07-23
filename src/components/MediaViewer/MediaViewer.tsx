@@ -1,7 +1,9 @@
 import {
   copyFile,
   downloadFile,
+  exists,
   TemporaryDirectoryPath,
+  unlink,
 } from "@dr.pogodin/react-native-fs";
 import type { ExifTags } from "@lodev09/react-native-exify";
 import * as Exify from "@lodev09/react-native-exify";
@@ -174,6 +176,14 @@ const MediaViewer = ( {
 
   const handleLongPressPhoto = useCallback( async ( photoUri: string ) => {
     const tempPath = `${TemporaryDirectoryPath}/share_photo.jpg`;
+
+    // Remove any leftover temp file from a previous share (including previous
+    // app sessions). copyFile/downloadFile fail or reuse stale, partial data
+    // when the destination already exists, producing a broken image that iOS
+    // refuses to save from the share sheet.
+    if ( await exists( tempPath ) ) {
+      await unlink( tempPath );
+    }
 
     // Get a local file we can annotate and share
     if ( photoUri.startsWith( "file://" ) ) {
