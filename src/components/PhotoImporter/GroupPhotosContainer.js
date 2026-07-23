@@ -9,6 +9,7 @@ import {
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { t } from "i18next";
 import { RealmContext } from "providers/contexts";
+import { InteractionManager } from "react-native";
 import type { Node } from "react";
 import React, {
   useCallback,
@@ -423,11 +424,16 @@ const GroupPhotosContainer = ( ): Node => {
       .catch( error => logger.error( "Failed to prefetch group photo suggestions", error ) );
 
     if ( allPendingUris.length > 0 ) {
-      // The iOS deletion confirmation can't present over the (now-dismissed)
-      // Group Photos modal. Wait for the navigation reset to My Observations to
-      // finish settling so the confirmation presents on that stable screen
-      // rather than mid-transition (which silently hangs the request).
-      await new Promise( resolve => { setTimeout( resolve, 800 ); } );
+      // The iOS deletion confirmation can only present when the app is idle on
+      // a stable screen. Wait for the navigation reset to My Observations and
+      // its first render/interactions to finish, then delete — presenting the
+      // confirmation mid-transition (or while the import work churns the main
+      // thread) silently hangs the request.
+      await new Promise( resolve => {
+        InteractionManager.runAfterInteractions( ( ) => {
+          setTimeout( resolve, 1200 );
+        } );
+      } );
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { deleteOriginalDevicePhotos } = require(
         "sharedHelpers/promptDeleteOriginalDevicePhotos",
