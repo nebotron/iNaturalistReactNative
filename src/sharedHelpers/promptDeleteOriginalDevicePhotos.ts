@@ -34,6 +34,7 @@ const ensureDeletePhotosPermission = async ( ): Promise<boolean> => {
     return true;
   }
   const status = await iosRequestReadWriteGalleryPermission( );
+  logger.info( `photo library readWrite permission status: ${status}` );
   // "limited" access (the user picked specific photos) still lets us delete
   // those photos — iOS shows its own deletion confirmation — so treat it the
   // same as full access. Rejecting it here silently skipped deletion for the
@@ -68,16 +69,25 @@ export const deleteOriginalDevicePhotos = async (
     return;
   }
 
+  const uriList = uniqueUris.join( ", " );
+  // Detect the case where CameraRoll.deletePhotos never settles (the native
+  // performChanges completion handler never fires — e.g. the deletion
+  // confirmation never presented). An error-level log reliably syncs.
+  const hangTimer = setTimeout( ( ) => {
+    logger.error( `deletePhotos still pending after 20s for ${uniqueUris.length} uri(s): ${uriList}` );
+  }, 20000 );
   try {
-    logger.info( `Deleting ${uniqueUris.length} device photo(s)`, { uniqueUris } );
-    await CameraRoll.deletePhotos( uniqueUris );
-    logger.info( `Deleted ${uniqueUris.length} device photo(s)` );
+    logger.info( `Deleting ${uniqueUris.length} device photo(s): ${uriList}` );
+    const result = await CameraRoll.deletePhotos( uniqueUris );
+    logger.info( `Deleted ${uniqueUris.length} device photo(s); result=${JSON.stringify( result )}` );
   } catch ( deleteError ) {
-    logger.error( "Error deleting original device photos", deleteError, { uniqueUris } );
+    logger.error( `Error deleting device photos (${uriList})`, deleteError );
     Alert.alert(
       i18next.t( "Something-went-wrong" ),
       i18next.t( "Could-not-delete-original-photos" ),
     );
+  } finally {
+    clearTimeout( hangTimer );
   }
 };
 
