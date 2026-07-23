@@ -135,8 +135,26 @@ static BOOL isImageFile( NSString *name )
   static NSSet<NSString *> *exts;
   static dispatch_once_t once;
   dispatch_once( &once, ^{
-    exts = [NSSet setWithArray:@[@"jpg", @"jpeg", @"png", @"heic", @"heif",
-                                 @"tif", @"tiff", @"dng", @"gif", @"webp", @"bmp"]];
+    exts = [NSSet setWithArray:@[
+      // Standard formats.
+      @"jpg", @"jpeg", @"png", @"heic", @"heif",
+      @"tif", @"tiff", @"gif", @"webp", @"bmp",
+      // Camera raw formats. A Canon EOS R7 card (folder 101EOSR7) held only
+      // .cr3 files, so a raw-only shooter saw nothing import. ImageIO decodes
+      // these, so dimensions still read. Covers the common vendors:
+      @"dng", @"cr2", @"cr3", @"crw",   // Adobe, Canon
+      @"nef", @"nrw",                   // Nikon
+      @"arw", @"sr2", @"srf",           // Sony
+      @"raf",                           // Fujifilm
+      @"orf",                           // Olympus / OM System
+      @"rw2",                           // Panasonic
+      @"pef",                           // Pentax
+      @"srw",                           // Samsung
+      @"x3f",                           // Sigma
+      @"rwl",                           // Leica
+      @"3fr", @"fff",                   // Hasselblad
+      @"iiq",                           // Phase One
+    ]];
   } );
   return [exts containsObject:name.pathExtension.lowercaseString];
 }
@@ -186,10 +204,18 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
   NSUInteger regularFileCount = 0;
   NSUInteger imageFileCount = 0;
   NSUInteger alreadyImportedCount = 0;
+  // Histogram of file extensions seen, so a scan that recognizes no images can
+  // report exactly which extensions are on the drive (e.g. an unsupported raw).
+  NSMutableDictionary<NSString *, NSNumber *> *extCounts = [NSMutableDictionary dictionary];
   for ( NSURL *file in enumerator ) {
     NSNumber *isRegular = nil;
     [file getResourceValue:&isRegular forKey:NSURLIsRegularFileKey error:nil];
-    if ( isRegular.boolValue ) regularFileCount++;
+    if ( isRegular.boolValue ) {
+      regularFileCount++;
+      NSString *ext = file.pathExtension.lowercaseString;
+      if ( ext.length == 0 ) ext = @"(none)";
+      extCounts[ext] = @( extCounts[ext].integerValue + 1 );
+    }
     if ( !isRegular.boolValue || !isImageFile( file.lastPathComponent ) ) continue;
     imageFileCount++;
     // Relative path is the stable identity of a file on the drive; camera
@@ -268,6 +294,7 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
     @"imageFileCount": @( imageFileCount ),
     @"alreadyImportedCount": @( alreadyImportedCount ),
     @"copyFailureCount": @( copyFailureCount ),
+    @"extensions": extCounts,
   } );
 }
 

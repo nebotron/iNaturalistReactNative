@@ -35,6 +35,9 @@ export interface UsbImportResult {
   imageFileCount?: number;
   alreadyImportedCount?: number;
   copyFailureCount?: number;
+  // Histogram of lowercased file extensions seen on the drive, e.g.
+  // { cr3: 53 }. Explains a scan that recognizes no images.
+  extensions?: Record<string, number>;
   // Added JS-side: how many relative paths are tracked as already imported.
   knownCount?: number;
 }

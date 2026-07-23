@@ -59,7 +59,8 @@ const useUsbAutoImport = ( ) => {
       logDiag( result.available
         ? `scan ok: ${photos.length} new photos; imageFiles=${result.imageFileCount}, `
           + `alreadyImported=${result.alreadyImportedCount}, known=${result.knownCount}, `
-          + `regularFiles=${result.regularFileCount}, copyFailures=${result.copyFailureCount}`
+          + `regularFiles=${result.regularFileCount}, copyFailures=${result.copyFailureCount}, `
+          + `extensions=${JSON.stringify( result.extensions ?? {} )}`
         : `scan produced no photos: ${result.reason}` );
       if ( photos.length === 0 ) return;
       logger.info( `Auto-importing ${photos.length} photos from USB folder` );
