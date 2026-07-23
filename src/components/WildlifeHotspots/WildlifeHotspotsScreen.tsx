@@ -31,6 +31,7 @@ import MapView, {
   Polyline,
 } from "react-native-maps";
 import Carousel from "react-native-reanimated-carousel";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
@@ -235,6 +236,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   const { t } = useTranslation();
   const navigation = useNavigation();
   const { width: windowWidth } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>( null );
   const filterParams = filterParamsProp ?? route?.params?.filterParams ?? {};
 
@@ -722,7 +724,13 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
       {( hotspots.length > 0 || error ) && (
         <View
           className="bg-lightGray border-t border-lightGray"
-          style={{ height: hotspotCardHeight ?? FALLBACK_HOTSPOT_CARD_HEIGHT }}
+          // Add the bottom safe-area inset so the card's action buttons clear
+          // the home indicator / tab menu; the extra height keeps the carousel
+          // content region at the full measured card height.
+          style={{
+            height: ( hotspotCardHeight ?? FALLBACK_HOTSPOT_CARD_HEIGHT ) + insets.bottom,
+            paddingBottom: insets.bottom,
+          }}
         >
           {error
             ? (
