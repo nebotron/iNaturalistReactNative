@@ -14,8 +14,10 @@ const logger = log.extend( "promptDeleteOriginalDevicePhotos" );
 // dismissing any modal that would block that confirmation.
 const { ImageCropper } = NativeModules as {
   ImageCropper?: {
-    photoDeletionContext?: ( ) => Promise<string>;
-    deletePhotoAssets?: ( phUris: string[] ) => Promise<{ deleted: number; requested: number }>;
+    photoDeletionContext?: ( phUris: string[] ) => Promise<string>;
+    deletePhotoAssets?: (
+      phUris: string[]
+    ) => Promise<{ deleted: number; requested: number; fetched?: number }>;
   };
 };
 
@@ -101,7 +103,7 @@ const performDeleteOriginalDevicePhotos = async (
     // behind why the confirmation couldn't present (modal in vcChain, no scene…).
     if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
       try {
-        logger.info( `deletion context: ${await ImageCropper.photoDeletionContext( )}` );
+        logger.info( `deletion context: ${await ImageCropper.photoDeletionContext( uniqueUris )}` );
       } catch ( ctxError ) {
         logger.warn( "Failed to read photo deletion context", ctxError );
       }

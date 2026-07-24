@@ -1109,9 +1109,11 @@ RCT_EXPORT_METHOD( convertVideoToGif
 }
 
 // Returns a one-line snapshot of the state that governs whether the iOS
-// deletion confirmation can present. Logged from JS to Firebase right before a
-// delete so a hung delete still leaves the diagnosing context behind.
+// deletion confirmation can present, plus how many of the passed identifiers
+// actually resolve to real library assets. Logged from JS to Firebase right
+// before a delete so a hung delete still leaves the diagnosing context behind.
 RCT_EXPORT_METHOD( photoDeletionContext
+                  : ( NSArray<NSString *> * )phUris resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
@@ -1128,11 +1130,21 @@ RCT_EXPORT_METHOD( photoDeletionContext
     } else {
       auth = ( long )[PHPhotoLibrary authorizationStatus];
     }
+
+    NSMutableArray<NSString *> *ids = [NSMutableArray array];
+    for ( NSString *u in ( phUris ?: @[] ) ) {
+      [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
+    }
+    NSUInteger fetchedCount = ids.count > 0
+      ? [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil].count
+      : 0;
+
     NSString *info = [NSString stringWithFormat:
-      @"appState=%ld hasWindowScene=%d authStatus=%ld windows=%lu vcChain=%@",
+      @"appState=%ld hasWindowScene=%d authStatus=%ld windows=%lu requested=%lu fetched=%lu vcChain=%@",
       ( long )UIApplication.sharedApplication.applicationState,
       hasScene, auth,
       ( unsigned long )UIApplication.sharedApplication.windows.count,
+      ( unsigned long )ids.count, ( unsigned long )fetchedCount,
       vcChain];
     resolve( info );
   } );
@@ -1154,6 +1166,14 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     }
     PHFetchResult<PHAsset *> *fetched =
       [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
+
+    // Deleting nothing can make performChanges never call its completion
+    // handler (the request hangs). If none of the identifiers resolve to a
+    // real asset, report that instead of issuing a no-op deletion.
+    if ( fetched.count == 0 ) {
+      resolve( @{ @"deleted": @0, @"requested": @( ids.count ), @"fetched": @0 } );
+      return;
+    }
 
     void ( ^doDelete )( void ) = ^{
       [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
