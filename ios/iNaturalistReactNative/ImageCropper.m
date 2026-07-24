@@ -1081,6 +1081,29 @@ RCT_EXPORT_METHOD( convertVideoToGif
 // to present its deletion confirmation.
 - ( UIWindow * )inatKeyWindow
 {
+  // Prefer the window on a genuinely foreground-active scene. Diagnostics
+  // (a52d5cfcb, ef673d9a3) caught deletePhotos hanging with sceneState=0
+  // (unattached) while fgActiveScenes=1 — UIApplication.windows had handed
+  // back a stale/detached window, so the modal-dismiss below silently
+  // skipped the real modal blocking the confirmation on the actual active
+  // scene. Resolving through connectedScenes avoids that mismatch.
+  if ( @available( iOS 13.0, * ) ) {
+    for ( UIScene *scene in UIApplication.sharedApplication.connectedScenes ) {
+      if ( ![scene isKindOfClass:[UIWindowScene class]] ) continue;
+      if ( scene.activationState != UISceneActivationStateForegroundActive ) continue;
+      UIWindowScene *windowScene = ( UIWindowScene * )scene;
+      if ( @available( iOS 15.0, * ) ) {
+        if ( windowScene.keyWindow ) { return windowScene.keyWindow; }
+      }
+      for ( UIWindow *w in windowScene.windows ) {
+        if ( w.isKeyWindow ) { return w; }
+      }
+      for ( UIWindow *w in windowScene.windows ) {
+        if ( !w.isHidden ) { return w; }
+      }
+    }
+  }
+
   UIWindow *keyWindow = nil;
   for ( UIWindow *w in UIApplication.sharedApplication.windows ) {
     if ( w.isKeyWindow ) { keyWindow = w; break; }
@@ -1188,23 +1211,35 @@ RCT_EXPORT_METHOD( deletePhotoAssets
       return;
     }
 
+    UIWindow *keyWindow = [self inatKeyWindow];
+    long sceneState = -1;
+    if ( @available( iOS 13.0, * ) && keyWindow.windowScene ) {
+      sceneState = ( long )keyWindow.windowScene.activationState;
+    }
+    BOOL dismissedModal = keyWindow.rootViewController.presentedViewController != nil;
+
     void ( ^doDelete )( void ) = ^{
       [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
         [PHAssetChangeRequest deleteAssets:fetched];
       } completionHandler:^( BOOL success, NSError *error ) {
         if ( success ) {
-          resolve( @{ @"deleted": @( fetched.count ), @"requested": @( ids.count ) } );
+          resolve( @{
+            @"deleted": @( fetched.count ),
+            @"requested": @( ids.count ),
+            @"dismissedModal": @( dismissedModal ),
+            @"sceneState": @( sceneState ),
+          } );
         } else {
           reject( @"DELETE_FAILED",
-            [NSString stringWithFormat:@"requested=%lu fetched=%lu error=%@",
+            [NSString stringWithFormat:
+              @"requested=%lu fetched=%lu dismissedModal=%d sceneState=%ld error=%@",
               ( unsigned long )ids.count, ( unsigned long )fetched.count,
-              error.localizedDescription ?: @"unknown"],
+              dismissedModal, sceneState, error.localizedDescription ?: @"unknown"],
             error );
         }
       }];
     };
 
-    UIWindow *keyWindow = [self inatKeyWindow];
     UIViewController *root = keyWindow.rootViewController;
     if ( root.presentedViewController ) {
       [root dismissViewControllerAnimated:NO completion:doDelete];
