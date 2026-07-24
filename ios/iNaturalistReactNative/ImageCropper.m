@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include "onnxruntime_c_api.h"
 
-@interface ImageCropper : NSObject <RCTBridgeModule>
+@interface ImageCropper : NSObject <RCTBridgeModule, PHPhotoLibraryChangeObserver>
 @end
 
 // Forward-declared so methods defined earlier in this file (updateAssetLocation)
@@ -19,7 +19,15 @@
 - ( NSString * )inatPresentedVCChain:( UIWindow * )window;
 @end
 
-@implementation ImageCropper
+@implementation ImageCropper {
+  // Tracks the single in-flight deletePhotoAssets call (JS serializes calls
+  // through one chain, so at most one is ever pending) so
+  // photoLibraryDidChange: can tell whether it's watching for anything.
+  NSArray<NSString *> *_pendingDeleteIds;
+  NSUInteger _pendingDeleteRequestedCount;
+  RCTPromiseResolveBlock _pendingDeleteResolve;
+  BOOL _pendingDeleteSettled;
+}
 
 RCT_EXPORT_MODULE( );
 
@@ -1081,12 +1089,12 @@ RCT_EXPORT_METHOD( convertVideoToGif
 // to present its deletion confirmation.
 - ( UIWindow * )inatKeyWindow
 {
-  // Prefer the window on a genuinely foreground-active scene. Diagnostics
-  // (a52d5cfcb, ef673d9a3) caught deletePhotos hanging with sceneState=0
-  // (unattached) while fgActiveScenes=1 — UIApplication.windows had handed
-  // back a stale/detached window, so the modal-dismiss below silently
-  // skipped the real modal blocking the confirmation on the actual active
-  // scene. Resolving through connectedScenes avoids that mismatch.
+  // Prefer the window on a genuinely foreground-active scene rather than the
+  // deprecated UIApplication.windows list, which isn't guaranteed to reflect
+  // the active scene on multi-scene-capable builds. (sceneState=0 in the
+  // logged diagnostics is UISceneActivationStateForegroundActive — i.e.
+  // healthy — not "unattached"; that enum's unattached case is -1. So this
+  // was not, on its own, the cause of the hang below.)
   if ( @available( iOS 13.0, * ) ) {
     for ( UIScene *scene in UIApplication.sharedApplication.connectedScenes ) {
       if ( ![scene isKindOfClass:[UIWindowScene class]] ) continue;
@@ -1218,25 +1226,46 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     }
     BOOL dismissedModal = keyWindow.rootViewController.presentedViewController != nil;
 
+    // Prior diagnostics (a52d5cfcb, ef673d9a3) ruled out every known
+    // presentation precondition (permission, scene, window, modal) yet
+    // deletePhotos still hangs — so performChanges' completionHandler itself
+    // may simply never fire even when the deletion goes through. Watch the
+    // library independently: if the requested assets vanish, resolve from
+    // here instead of waiting out JS's 120s timeout for a delete that already
+    // succeeded. photoLibraryDidChange: below does the watching.
+    _pendingDeleteIds = [ids copy];
+    _pendingDeleteRequestedCount = ids.count;
+    _pendingDeleteSettled = NO;
+    _pendingDeleteResolve = resolve;
+    [[PHPhotoLibrary sharedPhotoLibrary] registerChangeObserver:self];
+
     void ( ^doDelete )( void ) = ^{
       [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
         [PHAssetChangeRequest deleteAssets:fetched];
       } completionHandler:^( BOOL success, NSError *error ) {
-        if ( success ) {
-          resolve( @{
-            @"deleted": @( fetched.count ),
-            @"requested": @( ids.count ),
-            @"dismissedModal": @( dismissedModal ),
-            @"sceneState": @( sceneState ),
-          } );
-        } else {
-          reject( @"DELETE_FAILED",
-            [NSString stringWithFormat:
-              @"requested=%lu fetched=%lu dismissedModal=%d sceneState=%ld error=%@",
-              ( unsigned long )ids.count, ( unsigned long )fetched.count,
-              dismissedModal, sceneState, error.localizedDescription ?: @"unknown"],
-            error );
-        }
+        dispatch_async( dispatch_get_main_queue(), ^{
+          if ( self->_pendingDeleteSettled ) { return; }
+          self->_pendingDeleteSettled = YES;
+          [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
+          self->_pendingDeleteResolve = nil;
+          self->_pendingDeleteIds = nil;
+          if ( success ) {
+            resolve( @{
+              @"deleted": @( fetched.count ),
+              @"requested": @( ids.count ),
+              @"dismissedModal": @( dismissedModal ),
+              @"sceneState": @( sceneState ),
+              @"viaChangeObserver": @NO,
+            } );
+          } else {
+            reject( @"DELETE_FAILED",
+              [NSString stringWithFormat:
+                @"requested=%lu fetched=%lu dismissedModal=%d sceneState=%ld error=%@",
+                ( unsigned long )ids.count, ( unsigned long )fetched.count,
+                dismissedModal, sceneState, error.localizedDescription ?: @"unknown"],
+              error );
+          }
+        } );
       }];
     };
 
@@ -1246,6 +1275,32 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     } else {
       doDelete();
     }
+  } );
+}
+
+// See the comment in deletePhotoAssets: this is the fallback path for a
+// deletion that succeeds without performChanges' completion handler ever
+// firing. Fires for every library change, so it must confirm the *specific*
+// requested assets are gone before treating it as "our" delete completing.
+- ( void )photoLibraryDidChange:( PHChange * )changeInstance
+{
+  NSArray<NSString *> *ids = _pendingDeleteIds;
+  if ( !ids ) { return; }
+  dispatch_async( dispatch_get_main_queue(), ^{
+    if ( self->_pendingDeleteSettled || !self->_pendingDeleteResolve ) { return; }
+    PHFetchResult<PHAsset *> *stillPresent =
+      [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
+    if ( stillPresent.count > 0 ) { return; }
+    RCTPromiseResolveBlock resolve = self->_pendingDeleteResolve;
+    self->_pendingDeleteSettled = YES;
+    [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
+    self->_pendingDeleteResolve = nil;
+    self->_pendingDeleteIds = nil;
+    resolve( @{
+      @"deleted": @( self->_pendingDeleteRequestedCount ),
+      @"requested": @( self->_pendingDeleteRequestedCount ),
+      @"viaChangeObserver": @YES,
+    } );
   } );
 }
 
