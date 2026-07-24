@@ -11,6 +11,14 @@
 @interface ImageCropper : NSObject <RCTBridgeModule>
 @end
 
+// Forward-declared so methods defined earlier in this file (updateAssetLocation)
+// can call these helpers, which are implemented further down near
+// deletePhotoAssets.
+@interface ImageCropper ()
+- ( UIWindow * )inatKeyWindow;
+- ( NSString * )inatPresentedVCChain:( UIWindow * )window;
+@end
+
 @implementation ImageCropper
 
 RCT_EXPORT_MODULE( );
@@ -652,6 +660,13 @@ RCT_EXPORT_METHOD( exportPHAsset
 // Only fills in location for assets that are missing it: if the asset already
 // carries a location we leave it untouched (resolving @NO) rather than
 // overwriting the photo's own GPS metadata.
+//
+// Like deletePhotoAssets, this can trigger a system confirmation the first
+// time an app modifies an asset it doesn't own - and iOS silently refuses to
+// present that confirmation over an already-presented modal, leaving
+// performChanges' completion handler (and this promise) hanging forever. See
+// inatPresentedVCChain / deletePhotoAssets for the diagnosed root cause;
+// dismiss any presented modal first so the confirmation has somewhere to go.
 RCT_EXPORT_METHOD( updateAssetLocation
                   : ( NSString * )phUri latitude
                   : ( nonnull NSNumber * )latitude longitude
@@ -659,36 +674,48 @@ RCT_EXPORT_METHOD( updateAssetLocation
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSString *localIdentifier = [phUri hasPrefix:@"ph://"]
-    ? [phUri substringFromIndex:5]
-    : phUri;
+  dispatch_async( dispatch_get_main_queue(), ^{
+    NSString *localIdentifier = [phUri hasPrefix:@"ph://"]
+      ? [phUri substringFromIndex:5]
+      : phUri;
 
-  PHFetchResult<PHAsset *> *result =
-    [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
-  PHAsset *asset = result.firstObject;
-  if ( !asset ) {
-    reject( @"UPDATE_LOCATION_FAILED", @"PHAsset not found", nil );
-    return;
-  }
-
-  if ( asset.location != nil ) {
-    resolve( @NO );
-    return;
-  }
-
-  CLLocation *location = [[CLLocation alloc] initWithLatitude:[latitude doubleValue]
-                                                     longitude:[longitude doubleValue]];
-
-  [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-    PHAssetChangeRequest *changeRequest = [PHAssetChangeRequest changeRequestForAsset:asset];
-    changeRequest.location = location;
-  } completionHandler:^( BOOL success, NSError *error ) {
-    if ( success ) {
-      resolve( @YES );
-    } else {
-      reject( @"UPDATE_LOCATION_FAILED", error.localizedDescription, error );
+    PHFetchResult<PHAsset *> *result =
+      [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
+    PHAsset *asset = result.firstObject;
+    if ( !asset ) {
+      reject( @"UPDATE_LOCATION_FAILED", @"PHAsset not found", nil );
+      return;
     }
-  }];
+
+    if ( asset.location != nil ) {
+      resolve( @NO );
+      return;
+    }
+
+    CLLocation *location = [[CLLocation alloc] initWithLatitude:[latitude doubleValue]
+                                                       longitude:[longitude doubleValue]];
+
+    void ( ^doUpdate )( void ) = ^{
+      [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+        PHAssetChangeRequest *changeRequest = [PHAssetChangeRequest changeRequestForAsset:asset];
+        changeRequest.location = location;
+      } completionHandler:^( BOOL success, NSError *error ) {
+        if ( success ) {
+          resolve( @YES );
+        } else {
+          reject( @"UPDATE_LOCATION_FAILED", error.localizedDescription, error );
+        }
+      }];
+    };
+
+    UIWindow *keyWindow = [self inatKeyWindow];
+    UIViewController *root = keyWindow.rootViewController;
+    if ( root.presentedViewController ) {
+      [root dismissViewControllerAnimated:NO completion:doUpdate];
+    } else {
+      doUpdate();
+    }
+  } );
 }
 
 // Loads an EXIF-oriented image downscaled to maxPixel on its longest side via

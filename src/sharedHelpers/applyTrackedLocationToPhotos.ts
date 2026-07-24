@@ -32,6 +32,32 @@ const { ImageCropper } = NativeModules as {
   };
 };
 
+// Native Photos-library writes can trigger a system confirmation dialog that
+// silently never presents under certain modal states, leaving the native
+// promise unresolved forever (see ImageCropper.m). That's a native-side bug
+// worth fixing at the source, but this timeout is the backstop that keeps a
+// stuck native call from hanging the UI (e.g. the LocationHistory screen's
+// "Apply Tracked Location" button spinner) indefinitely regardless.
+const DEVICE_PHOTO_UPDATE_TIMEOUT_MS = 15_000;
+
+const withTimeout = <T, >( promise: Promise<T>, ms: number, label: string ): Promise<T> => (
+  new Promise<T>( ( resolve, reject ) => {
+    const timer = setTimeout(
+      ( ) => reject( new Error( `${label} timed out after ${ms}ms` ) ),
+      ms,
+    );
+    promise
+      .then( value => {
+        clearTimeout( timer );
+        resolve( value );
+      } )
+      .catch( error => {
+        clearTimeout( timer );
+        reject( error );
+      } );
+  } )
+);
+
 // Best-effort: also fills in the location metadata on the original Photos
 // library asset (if we know its ph:// identifier), so tracked-location is
 // reflected in the Photos app, not just the app's own copy. The native side
@@ -46,7 +72,11 @@ const applyLocationToDevicePhotoLibrary = async (
     return;
   }
   try {
-    await ImageCropper.updateAssetLocation( phUri, match.latitude, match.longitude );
+    await withTimeout(
+      ImageCropper.updateAssetLocation( phUri, match.latitude, match.longitude ),
+      DEVICE_PHOTO_UPDATE_TIMEOUT_MS,
+      `updateAssetLocation for ${phUri}`,
+    );
   } catch ( error ) {
     logger.warn( `Failed to update Photos library asset location for ${phUri}`, error );
   }
