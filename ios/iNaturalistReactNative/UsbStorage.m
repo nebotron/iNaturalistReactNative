@@ -1,4 +1,5 @@
 #import <ImageIO/ImageIO.h>
+#import <Photos/Photos.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTUtils.h>
 #import <UIKit/UIKit.h>
@@ -6,8 +7,10 @@
 
 // Lets the user grant access to a folder (e.g. on a USB drive mounted in
 // Files) via the system document picker, persists that grant as a
-// security-scoped bookmark, and copies not-yet-imported images out of the
-// folder on demand. iOS offers no attach notification or unprompted volume
+// security-scoped bookmark, then offloads not-yet-imported images: it lists
+// them (listNewImages), saves each into the Photos library (saveImageToPhotos),
+// and once the whole batch is safely saved, deletes them from the source
+// (deleteSourceImages). iOS offers no attach notification or unprompted volume
 // enumeration for third-party apps, so a one-time user pick is required;
 // after that, scans need no interaction while the drive is connected.
 
@@ -159,36 +162,31 @@ static BOOL isImageFile( NSString *name )
   return [exts containsObject:name.pathExtension.lowercaseString];
 }
 
-// Copies images under the saved folder whose relative paths are not in
-// knownNames into destDir. Resolves with { available, photos } — available is
-// false when no folder is saved or the drive is not currently connected.
-RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
-                       knownNames:(NSArray<NSString *> *)knownNames
-                         maxCount:(double)maxCount
-                          resolve:(RCTPromiseResolveBlock)resolve
-                           reject:(RCTPromiseRejectBlock)reject)
+// Enumerates images under the saved folder whose relative paths are not in
+// knownNames, newest first, capped at maxCount. Returns lightweight metadata
+// only ({ relativePath, fileSize }) — nothing is copied here, so a full card
+// can be listed cheaply. Resolves with { available, reason, images, ...diag }.
+RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
+                        maxCount:(double)maxCount
+                         resolve:(RCTPromiseResolveBlock)resolve
+                          reject:(__unused RCTPromiseRejectBlock)reject)
 {
   NSURL *folder = resolveSavedFolder( );
   if ( !folder ) {
-    // No bookmark saved: the user never picked a folder (or it was forgotten).
-    resolve( @{ @"available": @NO, @"reason": @"no-folder-saved", @"photos": @[] } );
+    resolve( @{ @"available": @NO, @"reason": @"no-folder-saved", @"images": @[] } );
     return;
   }
   if ( ![folder startAccessingSecurityScopedResource] ) {
-    // Bookmark resolved but iOS refused security-scoped access to it.
-    resolve( @{ @"available": @NO, @"reason": @"access-denied", @"photos": @[] } );
+    resolve( @{ @"available": @NO, @"reason": @"access-denied", @"images": @[] } );
     return;
   }
   if ( ![folder checkResourceIsReachableAndReturnError:nil] ) {
-    // Folder resolved but isn't on disk right now — the drive is unplugged.
     [folder stopAccessingSecurityScopedResource];
-    resolve( @{ @"available": @NO, @"reason": @"drive-disconnected", @"photos": @[] } );
+    resolve( @{ @"available": @NO, @"reason": @"drive-disconnected", @"images": @[] } );
     return;
   }
 
   NSFileManager *fm = [NSFileManager defaultManager];
-  [fm createDirectoryAtPath:destDir withIntermediateDirectories:YES attributes:nil error:nil];
-
   NSSet<NSString *> *known = [NSSet setWithArray:knownNames ?: @[]];
   NSDirectoryEnumerator<NSURL *> *enumerator =
     [fm enumeratorAtURL:folder
@@ -199,13 +197,9 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
 
   NSMutableArray<NSDictionary *> *candidates = [NSMutableArray array];
   NSUInteger folderPathLength = folder.path.length;
-  // Diagnostic counters so the JS layer can tell an empty/disconnected drive
-  // from one whose images have all already been imported.
   NSUInteger regularFileCount = 0;
   NSUInteger imageFileCount = 0;
   NSUInteger alreadyImportedCount = 0;
-  // Histogram of file extensions seen, so a scan that recognizes no images can
-  // report exactly which extensions are on the drive (e.g. an unsupported raw).
   NSMutableDictionary<NSString *, NSNumber *> *extCounts = [NSMutableDictionary dictionary];
   for ( NSURL *file in enumerator ) {
     NSNumber *isRegular = nil;
@@ -227,60 +221,28 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
     }
     NSDate *modified = nil;
     [file getResourceValue:&modified forKey:NSURLContentModificationDateKey error:nil];
+    NSNumber *fileSize = nil;
+    [file getResourceValue:&fileSize forKey:NSURLFileSizeKey error:nil];
     [candidates addObject:@{
-      @"url": file,
       @"relativePath": relativePath,
       @"modified": modified ?: [NSDate distantPast],
+      @"fileSize": fileSize ?: [NSNull null],
     }];
   }
 
-  // Newest first, so a huge archive drive yields its most recent photos
+  // Newest first, so a huge archive drive offloads its most recent photos
   // within the per-scan cap rather than years-old ones.
   [candidates sortUsingComparator:^NSComparisonResult( NSDictionary *a, NSDictionary *b ) {
     return [b[@"modified"] compare:a[@"modified"]];
   }];
   NSUInteger cap = maxCount > 0 ? (NSUInteger)maxCount : NSUIntegerMax;
 
-  NSMutableArray<NSDictionary *> *photos = [NSMutableArray array];
-  NSUInteger copyFailureCount = 0;
+  NSMutableArray<NSDictionary *> *images = [NSMutableArray array];
   for ( NSDictionary *candidate in candidates ) {
-    if ( photos.count >= cap ) break;
-    NSURL *src = candidate[@"url"];
-    NSString *relativePath = candidate[@"relativePath"];
-    NSString *destName = [relativePath stringByReplacingOccurrencesOfString:@"/"
-                                                                 withString:@"_"];
-    NSString *destPath = [destDir stringByAppendingPathComponent:destName];
-    [fm removeItemAtPath:destPath error:nil];
-    NSError *copyError = nil;
-    // Byte-for-byte copy, so all EXIF (GPS, timestamp) is preserved.
-    if ( ![fm copyItemAtURL:src toURL:[NSURL fileURLWithPath:destPath] error:&copyError] ) {
-      copyFailureCount++;
-      continue;
-    }
-
-    NSNumber *width = nil;
-    NSNumber *height = nil;
-    CGImageSourceRef imageSource =
-      CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:destPath], NULL );
-    if ( imageSource ) {
-      NSDictionary *props = CFBridgingRelease(
-        CGImageSourceCopyPropertiesAtIndex( imageSource, 0, NULL ) );
-      width = props[(NSString *)kCGImagePropertyPixelWidth];
-      height = props[(NSString *)kCGImagePropertyPixelHeight];
-      CFRelease( imageSource );
-    }
-
-    NSNumber *fileSize = nil;
-    [src getResourceValue:&fileSize forKey:NSURLFileSizeKey error:nil];
-    NSDate *modified = candidate[@"modified"];
-    [photos addObject:@{
-      @"name": relativePath,
-      @"uri": [NSString stringWithFormat:@"file://%@", destPath],
-      @"fileName": destName,
-      @"width": width ?: [NSNull null],
-      @"height": height ?: [NSNull null],
-      @"fileSize": fileSize ?: [NSNull null],
-      @"timestamp": @( modified.timeIntervalSince1970 ),
+    if ( images.count >= cap ) break;
+    [images addObject:@{
+      @"relativePath": candidate[@"relativePath"],
+      @"fileSize": candidate[@"fileSize"],
     }];
   }
 
@@ -288,14 +250,100 @@ RCT_EXPORT_METHOD(importNewImages:(NSString *)destDir
   resolve( @{
     @"available": @YES,
     @"reason": @"ok",
-    @"photos": photos,
-    // Diagnostics: let JS log why a scan produced no photos.
+    @"images": images,
     @"regularFileCount": @( regularFileCount ),
     @"imageFileCount": @( imageFileCount ),
     @"alreadyImportedCount": @( alreadyImportedCount ),
-    @"copyFailureCount": @( copyFailureCount ),
     @"extensions": extCounts,
   } );
+}
+
+// Saves one source image (identified by its relative path under the saved
+// folder) into the user's Photos library. The source is first copied into the
+// app's temp directory because PHPhotoLibrary's performChanges runs
+// asynchronously and may outlive our security-scoped access to the drive; the
+// temp file is moved into Photos (shouldMoveFile) so no manual cleanup is
+// needed on success. Does not delete the source — deletion happens as a batch
+// only after the whole set is safely saved (see deleteSourceImages).
+RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
+                            resolve:(RCTPromiseResolveBlock)resolve
+                             reject:(RCTPromiseRejectBlock)reject)
+{
+  NSURL *folder = resolveSavedFolder( );
+  if ( !folder || ![folder startAccessingSecurityScopedResource] ) {
+    reject( @"unavailable", @"USB folder is not available", nil );
+    return;
+  }
+  NSString *srcPath = [folder.path stringByAppendingPathComponent:relativePath];
+  NSFileManager *fm = [NSFileManager defaultManager];
+  NSString *tempPath = [NSTemporaryDirectory( ) stringByAppendingPathComponent:
+    [[[NSUUID UUID] UUIDString] stringByAppendingPathExtension:relativePath.pathExtension]];
+  NSError *copyError = nil;
+  BOOL copied = [fm copyItemAtPath:srcPath toPath:tempPath error:&copyError];
+  [folder stopAccessingSecurityScopedResource];
+  if ( !copied ) {
+    reject( @"copy-failed", copyError.localizedDescription ?: @"Could not read source file", copyError );
+    return;
+  }
+
+  void ( ^saveBlock )( void ) = ^{
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+      PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
+      PHAssetResourceCreationOptions *options = [[PHAssetResourceCreationOptions alloc] init];
+      options.shouldMoveFile = YES;
+      [request addResourceWithType:PHAssetResourceTypePhoto
+                           fileURL:[NSURL fileURLWithPath:tempPath]
+                           options:options];
+    } completionHandler:^( BOOL success, NSError *error ) {
+      if ( !success ) [fm removeItemAtPath:tempPath error:nil];
+      if ( success ) {
+        resolve( @{ @"saved": @YES } );
+      } else {
+        reject( @"save-failed", error.localizedDescription ?: @"Could not save to Photos", error );
+      }
+    }];
+  };
+
+  if ( [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly]
+       == PHAuthorizationStatusAuthorized ) {
+    saveBlock( );
+  } else {
+    [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly
+                                               handler:^( PHAuthorizationStatus status ) {
+      if ( status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited ) {
+        saveBlock( );
+      } else {
+        [fm removeItemAtPath:tempPath error:nil];
+        reject( @"no-permission", @"Photos permission not granted", nil );
+      }
+    }];
+  }
+}
+
+// Deletes the given source files (by relative path) from the saved folder.
+// Called only after every file in the batch has been confirmed saved to Photos.
+RCT_EXPORT_METHOD(deleteSourceImages:(NSArray<NSString *> *)relativePaths
+                             resolve:(RCTPromiseResolveBlock)resolve
+                              reject:(__unused RCTPromiseRejectBlock)reject)
+{
+  NSURL *folder = resolveSavedFolder( );
+  if ( !folder || ![folder startAccessingSecurityScopedResource] ) {
+    resolve( @{ @"deleted": @0, @"failed": @( relativePaths.count ), @"available": @NO } );
+    return;
+  }
+  NSFileManager *fm = [NSFileManager defaultManager];
+  NSUInteger deleted = 0;
+  NSUInteger failed = 0;
+  for ( NSString *relativePath in relativePaths ) {
+    NSString *path = [folder.path stringByAppendingPathComponent:relativePath];
+    if ( [fm removeItemAtPath:path error:nil] ) {
+      deleted++;
+    } else {
+      failed++;
+    }
+  }
+  [folder stopAccessingSecurityScopedResource];
+  resolve( @{ @"deleted": @( deleted ), @"failed": @( failed ), @"available": @YES } );
 }
 
 @end

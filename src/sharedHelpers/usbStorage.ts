@@ -1,24 +1,20 @@
-import { usbImportPhotosPath } from "appConstants/paths";
 import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
 
 // JS side of the UsbStorage native module (iOS): the user grants access to a
-// folder once (e.g. a USB drive mounted in Files), then importNewUsbImages
-// copies anything not yet imported into app storage with no further
-// interaction. Which files have been imported is tracked here by their
-// relative path on the drive, so unplugging and replugging doesn't re-import.
+// folder once (e.g. a USB drive mounted in Files), then the offload flow lists
+// not-yet-imported images (listNewUsbImages), saves each into the Photos
+// library (saveUsbImageToPhotos), and once the whole batch is saved, deletes
+// them from the source (deleteUsbSourceImages). Which files have been imported
+// is tracked here by their relative path on the drive, so a failed delete
+// doesn't cause a re-import.
 
-export interface UsbPhoto {
-  name: string;
-  uri: string;
-  fileName: string;
-  width: number | null;
-  height: number | null;
+export interface UsbImageRef {
+  relativePath: string;
   fileSize: number | null;
-  timestamp: number;
 }
 
-// Why a scan produced no photos, surfaced for diagnostics. "ok" means the drive
+// Why a list produced no images, surfaced for diagnostics. "ok" means the drive
 // was scanned; the other values are the early-return reasons in UsbStorage.m.
 export type UsbImportReason =
   | "ok"
@@ -26,20 +22,25 @@ export type UsbImportReason =
   | "access-denied"
   | "drive-disconnected";
 
-export interface UsbImportResult {
+export interface UsbListResult {
   available: boolean;
   reason: UsbImportReason;
-  photos: UsbPhoto[];
+  images: UsbImageRef[];
   // Present only when available (reason === "ok").
   regularFileCount?: number;
   imageFileCount?: number;
   alreadyImportedCount?: number;
-  copyFailureCount?: number;
   // Histogram of lowercased file extensions seen on the drive, e.g.
   // { cr3: 53 }. Explains a scan that recognizes no images.
   extensions?: Record<string, number>;
   // Added JS-side: how many relative paths are tracked as already imported.
   knownCount?: number;
+}
+
+export interface UsbDeleteResult {
+  deleted: number;
+  failed: number;
+  available?: boolean;
 }
 
 export interface UsbFolderDiagnostics {
@@ -55,18 +56,22 @@ interface UsbStorageModule {
   getFolderName: ( ) => Promise<string | null>;
   getFolderDiagnostics: ( ) => Promise<UsbFolderDiagnostics>;
   forgetFolder: ( ) => Promise<void>;
-  importNewImages: (
-    destDir: string,
+  listNewImages: (
     knownNames: string[],
     maxCount: number
-  ) => Promise<UsbImportResult>;
+  ) => Promise<UsbListResult>;
+  saveImageToPhotos: ( relativePath: string ) => Promise<{ saved: boolean }>;
+  deleteSourceImages: ( relativePaths: string[] ) => Promise<UsbDeleteResult>;
 }
 
 const usbStorage = Platform.OS === "ios"
   ? ( NativeModules as { UsbStorage?: UsbStorageModule } ).UsbStorage
   : undefined;
 
-const MAX_PHOTOS_PER_SCAN = 100;
+// How many images to offload per scan. We no longer bulk-copy up front, so this
+// can be generous; anything beyond it is handled by the next scan (the batch
+// just processed is deleted from the card first).
+const MAX_PHOTOS_PER_SCAN = 500;
 const IMPORTED_NAMES_KEY = "importedNames";
 
 const store = new MMKV( { id: "usb-import" } );
@@ -93,24 +98,30 @@ export const forgetUsbFolder = async ( ) => {
   store.delete( IMPORTED_NAMES_KEY );
 };
 
-export const importNewUsbImages = async ( ): Promise<UsbImportResult> => {
+export const listNewUsbImages = async ( ): Promise<UsbListResult> => {
   if ( !usbStorage ) {
-    return { available: false, reason: "no-folder-saved", photos: [] };
+    return { available: false, reason: "no-folder-saved", images: [] };
   }
   const knownNames = getImportedNames( );
-  const result = await usbStorage.importNewImages(
-    usbImportPhotosPath,
-    knownNames,
-    MAX_PHOTOS_PER_SCAN,
-  );
-  const { photos } = result;
-  if ( photos.length > 0 ) {
-    store.set( IMPORTED_NAMES_KEY, JSON.stringify( [
-      ...knownNames,
-      ...photos.map( photo => photo.name ),
-    ] ) );
-  }
-  // Surface how many paths we already consider imported: an unexpectedly large
-  // count here explains a scan that finds files on the drive but imports none.
-  return { ...result, knownCount: knownNames.length } as UsbImportResult;
+  const result = await usbStorage.listNewImages( knownNames, MAX_PHOTOS_PER_SCAN );
+  return { ...result, knownCount: knownNames.length };
+};
+
+export const saveUsbImageToPhotos = ( relativePath: string ) => (
+  usbStorage?.saveImageToPhotos( relativePath ) ?? Promise.resolve( { saved: false } )
+);
+
+export const deleteUsbSourceImages = ( relativePaths: string[] ): Promise<UsbDeleteResult> => (
+  usbStorage?.deleteSourceImages( relativePaths )
+  ?? Promise.resolve( { deleted: 0, failed: relativePaths.length } )
+);
+
+// Track saved files as imported so a later delete failure (or an unplug before
+// deletion) doesn't cause them to be saved to Photos a second time.
+export const markUsbImagesImported = ( relativePaths: string[] ) => {
+  if ( relativePaths.length === 0 ) return;
+  store.set( IMPORTED_NAMES_KEY, JSON.stringify( [
+    ...getImportedNames( ),
+    ...relativePaths,
+  ] ) );
 };
