@@ -9,6 +9,7 @@ import {
   isUsbImportSupported,
   listNewUsbImages,
   markUsbImagesImported,
+  requestUsbPhotosPermission,
   saveUsbImageToPhotos,
 } from "sharedHelpers/usbStorage";
 import useUsbImportProgress from "stores/usbImportProgress";
@@ -17,6 +18,20 @@ const logger = log.extend( "useUsbAutoImport" );
 
 // How often to re-check the watched folder while the app is foregrounded.
 const SCAN_INTERVAL_MS = 10_000;
+
+// Safety net so a single native call that never resolves (a stuck copy or
+// Photos import) can't freeze the whole run — that file is counted as failed
+// and the loop moves on.
+const SAVE_TIMEOUT_MS = 30_000;
+
+const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => (
+  Promise.race( [
+    promise,
+    new Promise<T>( ( _resolve, reject ) => {
+      setTimeout( ( ) => reject( new Error( `timed out after ${ms}ms` ) ), ms );
+    } ),
+  ] )
+);
 
 // Watches the user's chosen USB folder (see UsbImportSetting) on launch and,
 // while the app is foregrounded, on a short interval. iOS offers no attach
@@ -57,6 +72,16 @@ const useUsbAutoImport = ( ) => {
       const { images } = result;
       if ( images.length === 0 ) return;
 
+      // Get Photos permission before showing progress or touching any file, so
+      // the system prompt appears up front rather than mid-loop (where it was
+      // hiding behind the overlay and stalling the run at 0/N).
+      const permission = await requestUsbPhotosPermission( );
+      logDiag( `photos permission: ${permission}` );
+      if ( permission !== "authorized" && permission !== "limited" ) {
+        logger.error( `USB offload: Photos permission ${permission}; not importing` );
+        return;
+      }
+
       logger.info( `USB offload: saving ${images.length} photos to Photos library` );
       progress.start( images.length );
 
@@ -68,7 +93,7 @@ const useUsbAutoImport = ( ) => {
         const { relativePath } = images[i];
         try {
           // eslint-disable-next-line no-await-in-loop
-          await saveUsbImageToPhotos( relativePath );
+          await withTimeout( saveUsbImageToPhotos( relativePath ), SAVE_TIMEOUT_MS );
           savedPaths.push( relativePath );
         } catch ( err ) {
           failed += 1;

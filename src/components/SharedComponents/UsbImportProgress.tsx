@@ -1,30 +1,44 @@
-import {
-  ActivityIndicator,
-  Body3,
-  Heading4,
-} from "components/SharedComponents";
+import { ActivityIndicator } from "components/SharedComponents";
 import React from "react";
-import { Modal, StyleSheet, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 import useUsbImportProgress from "stores/usbImportProgress";
 
-// Full-screen overlay shown while useUsbAutoImport offloads photos from a USB
-// device into the Photos library and clears them from the device. Text is kept
-// intentionally simple/English here as this is an iOS-first utility flow.
+// Non-blocking status banner shown while useUsbAutoImport offloads photos from
+// a USB device into the Photos library and clears them from the device. It sits
+// above the tab bar and uses pointerEvents="none" so the rest of the app stays
+// fully usable during the import. Text is intentionally simple/English here as
+// this is an iOS-first utility flow.
 const styles = StyleSheet.create( {
-  backdrop: {
-    flex: 1,
+  wrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 100,
     alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 32,
-    backgroundColor: "rgba(0,0,0,0.6)",
+    paddingHorizontal: 16,
   },
-  card: {
-    width: "100%",
-    maxWidth: 320,
+  banner: {
+    flexDirection: "row",
     alignItems: "center",
-    padding: 24,
-    borderRadius: 16,
-    backgroundColor: "#ffffff",
+    maxWidth: 360,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "rgba(0,0,0,0.85)",
+  },
+  text: {
+    marginLeft: 12,
+    flexShrink: 1,
+  },
+  title: {
+    color: "#ffffff",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  detail: {
+    color: "#d4d4d4",
+    fontSize: 12,
+    marginTop: 2,
   },
 } );
 
@@ -55,15 +69,15 @@ const UsbImportProgress = ( ) => {
   }
 
   return (
-    <Modal transparent visible animationType="fade">
-      <View style={styles.backdrop}>
-        <View style={styles.card}>
-          {!finished && <ActivityIndicator size={40} />}
-          <Heading4 className="mt-4 text-center">{title}</Heading4>
-          <Body3 className="mt-2 text-center">{detail}</Body3>
+    <View style={styles.wrap} pointerEvents="none">
+      <View style={styles.banner}>
+        {!finished && <ActivityIndicator size={18} />}
+        <View style={styles.text}>
+          <Text style={styles.title}>{title}</Text>
+          <Text style={styles.detail}>{detail}</Text>
         </View>
       </View>
-    </Modal>
+    </View>
   );
 };
 

@@ -258,6 +258,36 @@ RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
   } );
 }
 
+static NSString *photosStatusString( PHAuthorizationStatus status )
+{
+  switch ( status ) {
+    case PHAuthorizationStatusAuthorized: return @"authorized";
+    case PHAuthorizationStatusLimited:    return @"limited";
+    case PHAuthorizationStatusDenied:     return @"denied";
+    case PHAuthorizationStatusRestricted: return @"restricted";
+    default:                              return @"notDetermined";
+  }
+}
+
+// Requests add-only Photos permission up front, before any save. Doing this
+// once (rather than lazily on the first saveImageToPhotos) keeps the system
+// prompt from appearing mid-loop where a blocking overlay could hide it and
+// stall the whole run. Resolves the resulting status as a string.
+RCT_EXPORT_METHOD(requestPhotosPermission:(RCTPromiseResolveBlock)resolve
+                                   reject:(__unused RCTPromiseRejectBlock)reject)
+{
+  PHAuthorizationStatus current =
+    [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelAddOnly];
+  if ( current != PHAuthorizationStatusNotDetermined ) {
+    resolve( photosStatusString( current ) );
+    return;
+  }
+  [PHPhotoLibrary requestAuthorizationForAccessLevel:PHAccessLevelAddOnly
+                                             handler:^( PHAuthorizationStatus status ) {
+    resolve( photosStatusString( status ) );
+  }];
+}
+
 // Saves one source image (identified by its relative path under the saved
 // folder) into the user's Photos library. The source is first copied into the
 // app's temp directory because PHPhotoLibrary's performChanges runs

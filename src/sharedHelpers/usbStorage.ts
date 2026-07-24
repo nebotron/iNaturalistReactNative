@@ -51,11 +51,19 @@ export interface UsbFolderDiagnostics {
   bookmarkBytes?: number;
 }
 
+export type PhotosPermissionStatus =
+  | "authorized"
+  | "limited"
+  | "denied"
+  | "restricted"
+  | "notDetermined";
+
 interface UsbStorageModule {
   pickFolder: ( ) => Promise<string | null>;
   getFolderName: ( ) => Promise<string | null>;
   getFolderDiagnostics: ( ) => Promise<UsbFolderDiagnostics>;
   forgetFolder: ( ) => Promise<void>;
+  requestPhotosPermission: ( ) => Promise<PhotosPermissionStatus>;
   listNewImages: (
     knownNames: string[],
     maxCount: number
@@ -97,6 +105,10 @@ export const forgetUsbFolder = async ( ) => {
   await usbStorage?.forgetFolder( );
   store.delete( IMPORTED_NAMES_KEY );
 };
+
+export const requestUsbPhotosPermission = ( ): Promise<PhotosPermissionStatus> => (
+  usbStorage?.requestPhotosPermission( ) ?? Promise.resolve( "denied" )
+);
 
 export const listNewUsbImages = async ( ): Promise<UsbListResult> => {
   if ( !usbStorage ) {
