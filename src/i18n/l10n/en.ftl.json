@@ -159,7 +159,7 @@
   "Coordinates-copied-to-clipboard": "Coordinates copied to clipboard",
   "Copy-coordinates": "Copy Coordinates",
   "Copyright": "Copyright",
-  "Could-not-delete-original-photos": "Could not delete the original photos from your device.",
+  "Could-not-delete-original-photos": "Could not delete the original photos from your device. This is a known iOS issue — try restarting your iPhone, then delete the photo from the Photos app.",
   "Could-not-find-a-camera-on-this-device": "Could not find a camera on this device",
   "Couldnt-create-comment": "Couldn't create comment",
   "Couldnt-create-identification-error": "Couldn't create identification { $error }",

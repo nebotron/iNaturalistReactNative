@@ -303,7 +303,7 @@ Copy-coordinates = Copy Coordinates
 # licensing
 Copyright = Copyright
 # Error message when original photos could not be deleted from the device
-Could-not-delete-original-photos = Could not delete the original photos from your device.
+Could-not-delete-original-photos = Could not delete the original photos from your device. This is a known iOS issue — try restarting your iPhone, then delete the photo from the Photos app.
 # Error message when no camera can be found
 Could-not-find-a-camera-on-this-device = Could not find a camera on this device
 Couldnt-create-comment = Couldn't create comment

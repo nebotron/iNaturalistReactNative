@@ -95,7 +95,9 @@ const performDeleteOriginalDevicePhotos = async (
 
   const uriList = uniqueUris.join( ", " );
   const hangTimer = setTimeout( ( ) => {
-    logger.error( `deletePhotos still pending after 20s for ${uniqueUris.length} uri(s): ${uriList}` );
+    logger.error(
+      `deletePhotos still pending after 20s for ${uniqueUris.length} uri(s): ${uriList}`,
+    );
   }, 20000 );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -124,8 +126,16 @@ const performDeleteOriginalDevicePhotos = async (
         );
       } ),
     ] );
-    logger.info( `Deleted ${uniqueUris.length} device photo(s); result=${JSON.stringify( result )}` );
+    logger.info(
+      `Deleted ${uniqueUris.length} device photo(s); result=${JSON.stringify( result )}`,
+    );
   } catch ( deleteError ) {
+    // As of iOS 26, PHPhotoLibrary.performChanges' completion handler for
+    // deleteAssets can simply never fire — no confirmation dialog, no error,
+    // no library change (confirmed via a native PHPhotoLibraryChangeObserver
+    // fallback in ImageCropper.m, and matches Apple Developer Forums thread
+    // 806349). Restarting the device is the only known workaround; there is
+    // no app-side fix for an OS completion handler that never calls back.
     logger.error( `Error deleting device photos (${uriList})`, deleteError );
     if ( options.userInitiated ) {
       Alert.alert(
