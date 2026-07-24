@@ -288,6 +288,22 @@ class Observation extends Realm.Object {
         localObs._created_at = new Date( );
       }
     }
+
+    // Diagnostic: an upsert from the server that clears a location we
+    // currently have locally is highly suspicious - it means either the
+    // server genuinely has no location for this observation (data loss on
+    // upload), or this mapping mis-derived it from the response.
+    if (
+      existingObs?.latitude != null
+      && ( localObs.latitude == null || localObs.longitude == null )
+    ) {
+      logger.warn(
+        `Remote upsert for observation ${obs.uuid} would clear existing local `
+        + `location (was ${existingObs.latitude},${existingObs.longitude}); `
+        + `remote geojson: ${JSON.stringify( obs.geojson )}`,
+      );
+    }
+
     return localObs;
   }
 
@@ -344,6 +360,19 @@ class Observation extends Realm.Object {
       observationPhotos,
       observationSounds,
     };
+
+    // Diagnostic: a save that clears a previously-set location almost always
+    // means the caller passed in a stale in-memory copy of the observation
+    // (e.g. captured before a background tracked-location fill completed).
+    if (
+      existingObservation?.latitude != null
+      && ( obsToSave.latitude == null || obsToSave.longitude == null )
+    ) {
+      logger.warn(
+        `Observation ${obs.uuid} save is clearing a previously-set location `
+        + `(was ${existingObservation.latitude},${existingObservation.longitude})`,
+      );
+    }
 
     safeRealmWrite( realm, ( ) => {
       // using 'modified' here for the case where a new observation has the same Taxon

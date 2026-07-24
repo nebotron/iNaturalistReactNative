@@ -1,8 +1,9 @@
 import * as Exify from "@lodev09/react-native-exify";
 import { NativeModules, Platform } from "react-native";
 import type Realm from "realm";
+import Observation from "realmModels/Observation";
 import Photo from "realmModels/Photo";
-import type { RealmObservation } from "realmModels/types";
+import type { RealmObservation, RealmObservationPojo } from "realmModels/types";
 import {
   lookupImportedPhotoDeviceUri,
   normalizeDevicePhotoUri,
@@ -136,7 +137,13 @@ export const autoApplyTrackedLocationIfMissing = async (
   observation: RealmObservation,
   precomputedUsablePoints?: TrackedPoint[],
 ): Promise<boolean> => {
-  if ( observation.latitude != null && observation.longitude != null ) return false;
+  if ( observation.latitude != null && observation.longitude != null ) {
+    logger.info(
+      `Observation ${observation.uuid} already has a location `
+      + `(${observation.latitude},${observation.longitude}); skipping tracked location`,
+    );
+    return false;
+  }
 
   const observedOn = observation.observed_on_string ?? observation.observed_on;
   if ( !observedOn ) {
@@ -168,7 +175,79 @@ export const autoApplyTrackedLocationIfMissing = async (
     `Applying tracked location ${trackedLocation.latitude},${trackedLocation.longitude} `
     + `to observation ${observation.uuid}`,
   );
-  return applyTrackedLocationToObservation( realm, observation, trackedLocation );
+  const applied = await applyTrackedLocationToObservation( realm, observation, trackedLocation );
+
+  // Confirm the write actually stuck by reading the field back, rather than
+  // trusting the log line above: this is the one place we can directly catch
+  // a later write (a stale save, a remote upsert) clobbering it back to null.
+  const confirmed = realm.objectForPrimaryKey<RealmObservation>( "Observation", observation.uuid );
+  logger.info(
+    `Confirmed location for observation ${observation.uuid}: `
+    + `${confirmed?.latitude},${confirmed?.longitude}`,
+  );
+
+  return applied;
+};
+
+// Saves each observation, then auto-fills tracked location for any that ended
+// up without one, reusing a single accuracy-filtered point set across all of
+// them. Shared by every place that persists freshly-created observations, so
+// the location auto-fill can't drift out of sync between call sites the way
+// it has twice before (see git history on this file). Returns a map of uuid
+// to the location that was applied, for callers that need to mirror the fill
+// back onto their own in-memory copies (e.g. for a CV prefetch cache key).
+export const saveObservationsAndApplyTrackedLocation = async (
+  observations: RealmObservationPojo[],
+  realm: Realm,
+): Promise<Record<string, TrackedLocationMatch>> => {
+  const saveResults = await Promise.allSettled(
+    observations.map( obs => Observation.saveLocalObservationForUpload( obs, realm ) ),
+  );
+  saveResults.forEach( ( result, idx ) => {
+    if ( result.status === "rejected" ) {
+      logger.error(
+        `Failed to save observation ${observations[idx]?.uuid}`,
+        result.reason,
+      );
+    }
+  } );
+
+  const trackedLocationByUuid: Record<string, TrackedLocationMatch> = {};
+  try {
+    const missingLocationObs = observations
+      .filter( obs => obs.latitude == null || obs.longitude == null );
+    if ( missingLocationObs.length > 0 ) {
+      // Filter the (potentially large) point history once and reuse it for
+      // every observation, rather than re-filtering per observation.
+      const usablePoints = filterUsableTrackedPoints(
+        realm.objects( "LocationHistoryPoint" ).sorted( "recordedAt" ),
+      );
+      logger.info(
+        `Auto-filling tracked location: ${missingLocationObs.length} observation(s) `
+        + `missing location, ${usablePoints.length} usable tracked point(s)`,
+      );
+      await Promise.all( missingLocationObs.map( async obs => {
+        try {
+          const savedObs = realm.objectForPrimaryKey<RealmObservation>( "Observation", obs.uuid );
+          if ( !savedObs ) return;
+          const applied = await autoApplyTrackedLocationIfMissing( realm, savedObs, usablePoints );
+          if ( applied ) {
+            trackedLocationByUuid[obs.uuid] = {
+              latitude: savedObs.latitude as number,
+              longitude: savedObs.longitude as number,
+              accuracy: savedObs.positional_accuracy ?? null,
+            };
+          }
+        } catch ( error ) {
+          logger.error( `Failed to auto-apply tracked location to ${obs.uuid}`, error );
+        }
+      } ) );
+    }
+  } catch ( error ) {
+    logger.error( "Failed to auto-apply tracked location while saving observations", error );
+  }
+
+  return trackedLocationByUuid;
 };
 
 export default applyTrackedLocationToObservation;

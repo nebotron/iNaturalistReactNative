@@ -7,7 +7,7 @@ import { t } from "i18next";
 import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
 import React from "react";
-import Observation from "realmModels/Observation";
+import { saveObservationsAndApplyTrackedLocation } from "sharedHelpers/applyTrackedLocationToPhotos";
 import useStore from "stores/useStore";
 
 const { useRealm } = RealmContext;
@@ -33,8 +33,9 @@ const DiscardObservationSheet = ( {
   // multiple observations to save, none of which should have
   // corresponding photos in cameraRollPhotos, so there's no need to
   // write EXIF for those.
-  const saveAllObservations = async ( ) => Promise.all(
-    observations.map( o => Observation.saveLocalObservationForUpload( o, realm ) ),
+  const saveAllObservations = async ( ) => saveObservationsAndApplyTrackedLocation(
+    observations,
+    realm,
   );
 
   const discardObservationandReset = () => {
