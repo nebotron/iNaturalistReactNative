@@ -1048,4 +1048,110 @@ RCT_EXPORT_METHOD( convertVideoToGif
   } );
 }
 
+// ─── Device photo deletion ──────────────────────────────────────────────────
+
+// The key/foreground window we'd delete photos from — the same window iOS uses
+// to present its deletion confirmation.
+- ( UIWindow * )inatKeyWindow
+{
+  UIWindow *keyWindow = nil;
+  for ( UIWindow *w in UIApplication.sharedApplication.windows ) {
+    if ( w.isKeyWindow ) { keyWindow = w; break; }
+  }
+  if ( !keyWindow ) {
+    for ( UIWindow *w in UIApplication.sharedApplication.windows ) {
+      if ( !w.isHidden ) { keyWindow = w; break; }
+    }
+  }
+  return keyWindow;
+}
+
+// Describes the modal presentation chain above the root VC. If anything is
+// presented here, iOS cannot present its own deletion confirmation over it —
+// that is the suspected cause of deletePhotos hanging with no prompt.
+- ( NSString * )inatPresentedVCChain:( UIWindow * )window
+{
+  UIViewController *vc = window.rootViewController;
+  if ( !vc ) { return @"(no rootViewController)"; }
+  NSMutableString *chain = [NSMutableString stringWithString:NSStringFromClass( [vc class] )];
+  while ( vc.presentedViewController ) {
+    vc = vc.presentedViewController;
+    [chain appendFormat:@" > %@", NSStringFromClass( [vc class] )];
+  }
+  return chain;
+}
+
+// Returns a one-line snapshot of the state that governs whether the iOS
+// deletion confirmation can present. Logged from JS to Firebase right before a
+// delete so a hung delete still leaves the diagnosing context behind.
+RCT_EXPORT_METHOD( photoDeletionContext
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    UIWindow *keyWindow = [self inatKeyWindow];
+    NSString *vcChain = keyWindow
+      ? [self inatPresentedVCChain:keyWindow]
+      : @"(no key window)";
+    BOOL hasScene = NO;
+    if ( @available( iOS 13.0, * ) ) { hasScene = keyWindow.windowScene != nil; }
+    long auth;
+    if ( @available( iOS 14.0, * ) ) {
+      auth = ( long )[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+    } else {
+      auth = ( long )[PHPhotoLibrary authorizationStatus];
+    }
+    NSString *info = [NSString stringWithFormat:
+      @"appState=%ld hasWindowScene=%d authStatus=%ld windows=%lu vcChain=%@",
+      ( long )UIApplication.sharedApplication.applicationState,
+      hasScene, auth,
+      ( unsigned long )UIApplication.sharedApplication.windows.count,
+      vcChain];
+    resolve( info );
+  } );
+}
+
+// Best-effort device-photo deletion. Dismisses any modal presented over the
+// root VC first (iOS won't present its deletion confirmation over a modal),
+// then requests deletion. Rejects with requested/fetched counts so JS can tell
+// whether the identifiers resolved to real assets.
+RCT_EXPORT_METHOD( deletePhotoAssets
+                  : ( NSArray<NSString *> * )phUris resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    NSMutableArray<NSString *> *ids = [NSMutableArray array];
+    for ( NSString *u in phUris ) {
+      [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
+    }
+    PHFetchResult<PHAsset *> *fetched =
+      [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
+
+    void ( ^doDelete )( void ) = ^{
+      [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+        [PHAssetChangeRequest deleteAssets:fetched];
+      } completionHandler:^( BOOL success, NSError *error ) {
+        if ( success ) {
+          resolve( @{ @"deleted": @( fetched.count ), @"requested": @( ids.count ) } );
+        } else {
+          reject( @"DELETE_FAILED",
+            [NSString stringWithFormat:@"requested=%lu fetched=%lu error=%@",
+              ( unsigned long )ids.count, ( unsigned long )fetched.count,
+              error.localizedDescription ?: @"unknown"],
+            error );
+        }
+      }];
+    };
+
+    UIWindow *keyWindow = [self inatKeyWindow];
+    UIViewController *root = keyWindow.rootViewController;
+    if ( root.presentedViewController ) {
+      [root dismissViewControllerAnimated:NO completion:doDelete];
+    } else {
+      doDelete();
+    }
+  } );
+}
+
 @end

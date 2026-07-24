@@ -3,11 +3,21 @@ import {
   iosRequestReadWriteGalleryPermission,
 } from "@react-native-camera-roll/camera-roll";
 import i18next from "i18next";
-import { Alert, Platform } from "react-native";
+import { Alert, NativeModules, Platform } from "react-native";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "promptDeleteOriginalDevicePhotos" );
+
+// Native helpers (iOS) that (a) report the window/scene/modal state governing
+// whether the iOS deletion confirmation can present, and (b) delete after
+// dismissing any modal that would block that confirmation.
+const { ImageCropper } = NativeModules as {
+  ImageCropper?: {
+    photoDeletionContext?: ( ) => Promise<string>;
+    deletePhotoAssets?: ( phUris: string[] ) => Promise<{ deleted: number; requested: number }>;
+  };
+};
 
 interface DeleteOriginalDevicePhotosOptions {
   userInitiated?: boolean;
@@ -87,9 +97,24 @@ const performDeleteOriginalDevicePhotos = async (
   }, 20000 );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
+    // Capture the native presentation state first so a hung delete still leaves
+    // behind why the confirmation couldn't present (modal in vcChain, no scene…).
+    if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
+      try {
+        logger.info( `deletion context: ${await ImageCropper.photoDeletionContext( )}` );
+      } catch ( ctxError ) {
+        logger.warn( "Failed to read photo deletion context", ctxError );
+      }
+    }
+
     logger.info( `Deleting ${uniqueUris.length} device photo(s): ${uriList}` );
+    // Prefer the native path that dismisses a blocking modal before deleting;
+    // fall back to CameraRoll on platforms/builds without it.
+    const deletion = ( Platform.OS === "ios" && ImageCropper?.deletePhotoAssets )
+      ? ImageCropper.deletePhotoAssets( uniqueUris )
+      : CameraRoll.deletePhotos( uniqueUris );
     const result = await Promise.race( [
-      CameraRoll.deletePhotos( uniqueUris ),
+      deletion,
       new Promise( ( _resolve, reject ) => {
         timeoutTimer = setTimeout(
           ( ) => reject( new Error( `deletePhotos timed out after ${DELETE_TIMEOUT_MS}ms` ) ),
