@@ -1123,7 +1123,19 @@ RCT_EXPORT_METHOD( photoDeletionContext
       ? [self inatPresentedVCChain:keyWindow]
       : @"(no key window)";
     BOOL hasScene = NO;
-    if ( @available( iOS 13.0, * ) ) { hasScene = keyWindow.windowScene != nil; }
+    long sceneState = -1;
+    NSUInteger foregroundActiveScenes = 0;
+    if ( @available( iOS 13.0, * ) ) {
+      hasScene = keyWindow.windowScene != nil;
+      if ( keyWindow.windowScene ) {
+        sceneState = ( long )keyWindow.windowScene.activationState;
+      }
+      for ( UIScene *scene in UIApplication.sharedApplication.connectedScenes ) {
+        if ( scene.activationState == UISceneActivationStateForegroundActive ) {
+          foregroundActiveScenes += 1;
+        }
+      }
+    }
     long auth;
     if ( @available( iOS 14.0, * ) ) {
       auth = ( long )[PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
@@ -1140,9 +1152,10 @@ RCT_EXPORT_METHOD( photoDeletionContext
       : 0;
 
     NSString *info = [NSString stringWithFormat:
-      @"appState=%ld hasWindowScene=%d authStatus=%ld windows=%lu requested=%lu fetched=%lu vcChain=%@",
+      @"appState=%ld hasWindowScene=%d sceneState=%ld fgActiveScenes=%lu authStatus=%ld "
+      @"windows=%lu requested=%lu fetched=%lu vcChain=%@",
       ( long )UIApplication.sharedApplication.applicationState,
-      hasScene, auth,
+      hasScene, sceneState, ( unsigned long )foregroundActiveScenes, auth,
       ( unsigned long )UIApplication.sharedApplication.windows.count,
       ( unsigned long )ids.count, ( unsigned long )fetchedCount,
       vcChain];
