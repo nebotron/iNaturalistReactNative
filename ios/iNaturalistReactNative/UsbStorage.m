@@ -288,6 +288,22 @@ RCT_EXPORT_METHOD(requestPhotosPermission:(RCTPromiseResolveBlock)resolve
   }];
 }
 
+// Serializes the performChanges calls below so at most one Photos library
+// write is ever in flight. PhotoKit queues concurrent asset-creation writes
+// internally anyway; letting the JS-side per-file timeout (useUsbAutoImport)
+// abandon a slow save and immediately start the next one previously let
+// several performChanges calls pile up, each making every other one slower —
+// producing a cascade of growing timeouts on a large batch of RAW files.
+// dispatch_semaphore_wait is called off the main thread (this module's own
+// background queue), so blocking here doesn't freeze the UI.
+static dispatch_semaphore_t photosWriteSemaphore( void )
+{
+  static dispatch_semaphore_t sem;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{ sem = dispatch_semaphore_create( 1 ); } );
+  return sem;
+}
+
 // Saves one source image (identified by its relative path under the saved
 // folder) into the user's Photos library. The source is first copied into the
 // app's temp directory because PHPhotoLibrary's performChanges runs
@@ -317,6 +333,7 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
   }
 
   void ( ^saveBlock )( void ) = ^{
+    dispatch_semaphore_wait( photosWriteSemaphore( ), DISPATCH_TIME_FOREVER );
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
       PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
       PHAssetResourceCreationOptions *options = [[PHAssetResourceCreationOptions alloc] init];
@@ -325,6 +342,7 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
                            fileURL:[NSURL fileURLWithPath:tempPath]
                            options:options];
     } completionHandler:^( BOOL success, NSError *error ) {
+      dispatch_semaphore_signal( photosWriteSemaphore( ) );
       if ( !success ) [fm removeItemAtPath:tempPath error:nil];
       if ( success ) {
         resolve( @{ @"saved": @YES } );
