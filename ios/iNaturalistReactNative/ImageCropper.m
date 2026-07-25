@@ -649,17 +649,39 @@ RCT_EXPORT_METHOD( exportPHAsset
   PHAssetResourceRequestOptions *options = [[PHAssetResourceRequestOptions alloc] init];
   options.networkAccessAllowed = YES;
 
-  [[PHAssetResourceManager defaultManager]
-    writeDataForAssetResource:photoResource
-    toFile:[NSURL fileURLWithPath:dest]
-    options:options
-    completionHandler:^( NSError *error ) {
-      if ( error ) {
-        reject( @"EXPORT_FAILED", error.localizedDescription, error );
-      } else {
-        resolve( [NSString stringWithFormat:@"file://%@", dest] );
-      }
-    }];
+  // An offloaded (iCloud-optimized) asset over a weak connection can fail the
+  // iCloud fetch rather than just being slow, surfacing as the opaque
+  // "PHPhotosErrorDomain error -1" — retry with backoff instead of failing
+  // the import on the first hiccup, giving the download time to complete.
+  static const NSInteger maxAttempts = 5;
+  NSArray<NSNumber *> *retryDelaySeconds = @[@2, @4, @8, @16];
+
+  __block void ( ^attemptExport )( NSInteger );
+  attemptExport = ^( NSInteger attemptNumber ) {
+    [[PHAssetResourceManager defaultManager]
+      writeDataForAssetResource:photoResource
+      toFile:[NSURL fileURLWithPath:dest]
+      options:options
+      completionHandler:^( NSError *error ) {
+        if ( !error ) {
+          resolve( [NSString stringWithFormat:@"file://%@", dest] );
+          attemptExport = nil;
+          return;
+        }
+        if ( attemptNumber + 1 >= maxAttempts ) {
+          reject( @"EXPORT_FAILED", error.localizedDescription, error );
+          attemptExport = nil;
+          return;
+        }
+        NSTimeInterval delay = retryDelaySeconds[attemptNumber].doubleValue;
+        dispatch_after(
+          dispatch_time( DISPATCH_TIME_NOW, ( int64_t )( delay * NSEC_PER_SEC ) ),
+          dispatch_get_main_queue(),
+          ^{ attemptExport( attemptNumber + 1 ); }
+        );
+      }];
+  };
+  attemptExport( 0 );
 }
 
 // Updates the location metadata of an existing Photos-library asset. Unlike
