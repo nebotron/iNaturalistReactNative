@@ -131,7 +131,6 @@ const TaxonDetails = ( ): Node => {
   const usableHistory = history.slice( usableStackIndex, history.length );
   const fromObsDetails = usableHistory.includes( "ObsDetails" );
   const fromSuggestions = usableHistory.includes( "Suggestions" );
-  const fromObsEdit = usableHistory.includes( "ObsEdit" );
   const fromMatch = usableHistory.includes( "Match" );
   const usableRoutes = navState?.routes.slice( usableStackIndex, history.length ) || [];
 
@@ -143,6 +142,27 @@ const TaxonDetails = ( ): Node => {
     usableRoutes.slice().reverse(),
     r => r.name === "Suggestions" || r.name === "SuggestionsTaxonSearch",
   );
+  // Walk back past this chain of Suggestions/SuggestionsTaxonSearch/TaxonDetails
+  // screens to find what preceded it. Checking whether "ObsEdit" appears
+  // *anywhere* in the tab's history is unreliable: an unrelated ObsEdit visit
+  // earlier in the session (e.g. from a deep link or notification that
+  // pushed a screen without resetting the stack) can linger further back in
+  // the same stack and get mistaken for this chain having come from ObsEdit,
+  // which then pops the bulk ID flow into that stale screen instead of
+  // advancing to the next observation.
+  const bulkChainStartIndex = ( ( ) => {
+    let index = usableRoutes.length - 1;
+    while (
+      index >= 0
+      && ["Suggestions", "SuggestionsTaxonSearch", "TaxonDetails"].includes(
+        usableRoutes[index].name,
+      )
+    ) {
+      index -= 1;
+    }
+    return index;
+  } )( );
+  const fromObsEdit = usableRoutes[bulkChainStartIndex]?.name === "ObsEdit";
   const { entryScreen: bulkEntryScreen, lastScreen: bulkLastScreen } = bulkFlowRoute?.params || {};
   const isMultiObsCreateFlow = (
     observations.length > 1 || savedOrUploadedMultiObsFlow

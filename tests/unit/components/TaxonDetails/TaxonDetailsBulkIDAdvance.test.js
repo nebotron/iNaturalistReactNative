@@ -130,4 +130,22 @@ describe( "TaxonDetails SELECT in bulk ID flow", ( ) => {
     } ) );
     expect( await pressSelectAndGetPopToTarget( ) ).toEqual( "ObsEdit" );
   } );
+
+  it( "returns to Suggestions when an unrelated ObsEdit visit lingers earlier in history", async ( ) => {
+    // An ObsEdit screen from an unrelated, unfinished flow earlier in the
+    // session (e.g. a notification tap) is still buried in the stack, but
+    // this bulk ID flow was entered directly from My Observations, so it
+    // should still advance to Suggestions rather than popping into the
+    // stale ObsEdit screen.
+    useNavigationState.mockImplementation( ( ) => ( {
+      routes: [
+        { name: "ObsEdit" },
+        { name: "ObsDetails" },
+        { name: "ObsList" },
+        { name: "Suggestions", params: { entryScreen: "ObsEdit", lastScreen: "ObsEdit" } },
+        { name: "TaxonDetails", params: { id: mockTaxon.id } },
+      ],
+    } ) );
+    expect( await pressSelectAndGetPopToTarget( ) ).toEqual( "Suggestions" );
+  } );
 } );
