@@ -19,28 +19,18 @@ import { Alert, Platform } from "react-native";
 import Config from "react-native-config";
 import * as RNLocalize from "react-native-localize";
 import RNRestart from "react-native-restart";
-import type { SensitiveInfoError } from "react-native-sensitive-info";
-import RNSInfo, { ErrorCode, isSensitiveInfoError } from "react-native-sensitive-info";
+import RNSInfo from "react-native-sensitive-info";
 import Realm, { UpdateMode } from "realm";
 import realmConfig from "realmModels/index";
 import changeLanguage from "sharedHelpers/changeLanguage";
 import { getInstallID } from "sharedHelpers/installData";
-import { log, logFileDirectory, logWithoutRemote } from "sharedHelpers/logger";
+import { log, logFileDirectory } from "sharedHelpers/logger";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { setFirebaseDataCollectionEnabled } from "sharedHelpers/tracking";
-import useStore from "stores/useStore";
 import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 
-function isDebugModeSync( ): boolean {
-  return useStore.getState().layout.debugModeEnabled === true;
-}
-
 const logger = log.extend( "AuthenticationService" );
-// The remote transport in the default logger uses many of the methods in this
-// module. Using a separate logger that only writes to disk avoids some
-// potential for infinite loops.
-const localLogger = logWithoutRemote.extend( "AuthenticationService" );
 
 // Base API domain can be overridden (in case we want to use staging URL) -
 // either by placing it in .env file, or in an environment variable.
@@ -80,41 +70,11 @@ async function getSensitiveItem(
     keychainService: "app" as const,
   },
 ) {
-  let exists;
-  try {
-    exists = await RNSInfo.hasItem( key, options );
-  } catch ( e ) {
-    if ( isSensitiveInfoError( e ) ) {
-      const hasItemError = e as SensitiveInfoError;
-      localLogger.info(
-        `RNSInfo.hasItem error for ${key}: ${hasItemError.message}`,
-      );
-    }
-    throw e;
-  }
+  const exists = await RNSInfo.hasItem( key, options );
   if ( !exists ) {
     return null;
   }
-
-  try {
-    return await RNSInfo.getItem( key, options );
-  } catch ( e ) {
-    if ( isSensitiveInfoError( e ) ) {
-      const getItemError = e as SensitiveInfoError;
-      if ( isDebugModeSync() ) {
-        switch ( getItemError.code ) {
-          case ErrorCode.NOT_FOUND:
-            // Value doesn't exist
-            localLogger.info( `RNSInfo.getItem not available for ${key}` );
-            break;
-          default:
-            localLogger.info( `RNSInfo.getItem unknown error for ${key}: ${getItemError.message}` );
-            break;
-        }
-      }
-    }
-    throw e;
-  }
+  return RNSInfo.getItem( key, options );
 }
 
 async function setSensitiveItem( key: string, value: string, options = {} ) {
@@ -125,21 +85,9 @@ async function setSensitiveItem( key: string, value: string, options = {} ) {
     ...options,
     accessControl: "none" as const,
   };
-  try {
-    const result = await RNSInfo.setItem( key, value, actualOptions );
-    clearAuthCache( );
-    return result;
-  } catch ( e ) {
-    if ( isSensitiveInfoError( e ) ) {
-      const setItemError = e as SensitiveInfoError;
-      if ( isDebugModeSync( ) ) {
-        localLogger.info(
-          `RNSInfo.setItem error for ${key}, ${setItemError.code} ${setItemError.message}`,
-        );
-      }
-    }
-    throw e;
-  }
+  const result = await RNSInfo.setItem( key, value, actualOptions );
+  clearAuthCache( );
+  return result;
 }
 
 async function deleteSensitiveItem(
@@ -148,21 +96,9 @@ async function deleteSensitiveItem(
     keychainService: "app" as const,
   },
 ) {
-  try {
-    const result = await RNSInfo.deleteItem( key, options );
-    clearAuthCache( );
-    return result;
-  } catch ( e ) {
-    if ( isSensitiveInfoError( e ) ) {
-      const deleteItemError = e as SensitiveInfoError;
-      if ( isDebugModeSync() ) {
-        localLogger.info(
-          `RNSInfo.deleteItem error for ${key}, ${deleteItemError.code} ${deleteItemError.message}`,
-        );
-      }
-    }
-    throw e;
-  }
+  const result = await RNSInfo.deleteItem( key, options );
+  clearAuthCache( );
+  return result;
 }
 
 /**

@@ -2,11 +2,6 @@ import Config from "react-native-config";
 import type { transportFunctionType } from "react-native-logs";
 // The git commit the bundle was built from (see scripts/writeAppCommit.js).
 import APP_COMMIT from "sharedHelpers/appCommit";
-// Only referenced inside function bodies (never at module load), so the
-// api/log <-> logger import cycle resolves before either warn() runs.
-// logWithoutRemote omits this very transport, so logging a sync failure
-// through it can't feed back into itself.
-import { logWithoutRemote } from "sharedHelpers/logger";
 import { isObject, isObjectWithPrimitiveValues } from "sharedHelpers/runtimeTypeUtil";
 
 import { extraSentinelKey } from "./enhanceLoggerWithExtra";
@@ -50,7 +45,6 @@ function extractExtra( rawMsg: unknown ) {
   // make sure our extra is actually valid
   const extraCandidate = extraWrapperCandidate[extraSentinelKey];
   if ( !isObjectWithPrimitiveValues( extraCandidate ) ) {
-    logWithoutRemote.warn( "[log.ts] `extra` must be a non-nested object with primitive values" );
     return nonExtraResult;
   }
   return {
@@ -126,15 +120,9 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
         body,
       } );
       if ( r.ok ) return;
-      if ( attempt === maxAttempts ) {
-        logWithoutRemote.warn( "[log.ts] failed to sync log entry", r.status );
-        return;
-      }
-    } catch ( syncError ) {
-      if ( attempt === maxAttempts ) {
-        logWithoutRemote.warn( "[log.ts] failed to sync log entry", syncError );
-        return;
-      }
+      if ( attempt === maxAttempts ) return;
+    } catch {
+      if ( attempt === maxAttempts ) return;
     }
     // eslint-disable-next-line no-await-in-loop
     await new Promise( resolve => { setTimeout( resolve, 500 * attempt ); } );

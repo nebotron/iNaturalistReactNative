@@ -289,21 +289,6 @@ class Observation extends Realm.Object {
       }
     }
 
-    // Diagnostic: an upsert from the server that clears a location we
-    // currently have locally is highly suspicious - it means either the
-    // server genuinely has no location for this observation (data loss on
-    // upload), or this mapping mis-derived it from the response.
-    if (
-      existingObs?.latitude != null
-      && ( localObs.latitude == null || localObs.longitude == null )
-    ) {
-      logger.warn(
-        `Remote upsert for observation ${obs.uuid} would clear existing local `
-        + `location (was ${existingObs.latitude},${existingObs.longitude}); `
-        + `remote geojson: ${JSON.stringify( obs.geojson )}`,
-      );
-    }
-
     return localObs;
   }
 

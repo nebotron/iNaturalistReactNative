@@ -1,5 +1,4 @@
 import Config from "react-native-config";
-import { logWithoutRemote } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
 
 // Normalise photo URLs to the "large" size so an entry saved against one size
@@ -49,10 +48,6 @@ export const createUrlKeyedFirebaseLog = <T>(
   const {
     storageKey, firebasePath, normalizeKeyOnSave = false, shouldSync, toFirebaseEntry,
   } = options;
-  // Sync failures are about Firebase itself and spike when a build/DB
-  // regresses; routing them through the remote logger POSTs an extra app_log
-  // entry per failure — a feedback loop that floods the log. Keep them local.
-  const logger = logWithoutRemote.extend( storageKey );
   const listeners = new Set<( ) => void>( );
 
   const load = ( ): Record<string, T> => {
@@ -74,14 +69,13 @@ export const createUrlKeyedFirebaseLog = <T>(
     const baseUrl = Config.CROP_LOG_FIREBASE_URL;
     if ( !baseUrl ) return;
     try {
-      const r = await fetch( `${baseUrl}/${firebasePath}/${fbKey( url )}.json`, {
+      await fetch( `${baseUrl}/${firebasePath}/${fbKey( url )}.json`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify( toFirebaseEntry( url, value ) ),
       } );
-      if ( !r.ok ) logger.warn( "Firebase sync failed", r.status );
-    } catch ( err ) {
-      logger.warn( "Firebase sync error", err );
+    } catch {
+      // Sync failures are about Firebase itself; nothing to do here.
     }
   };
 
@@ -90,8 +84,9 @@ export const createUrlKeyedFirebaseLog = <T>(
     const baseUrl = Config.CROP_LOG_FIREBASE_URL;
     if ( !baseUrl ) return;
     fetch( `${baseUrl}/${firebasePath}/${fbKey( url )}.json`, { method: "DELETE" } )
-      .then( r => { if ( !r.ok ) logger.warn( "Firebase delete failed", r.status ); } )
-      .catch( err => logger.warn( "Firebase delete error", err ) );
+      .catch( ( ) => {
+        // Best-effort delete; a failure just leaves a stale child behind.
+      } );
   };
 
   const save = ( photoUrl: string, value: T ): Promise<void> => {

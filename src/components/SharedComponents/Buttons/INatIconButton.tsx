@@ -1,7 +1,6 @@
 import classnames from "classnames";
 import { INatIcon } from "components/SharedComponents";
 import { View } from "components/styledComponents";
-import { getCurrentRoute } from "navigation/navigationUtils";
 import type { PropsWithChildren } from "react";
 import React from "react";
 import type {
@@ -12,12 +11,7 @@ import {
   Platform,
   Pressable,
 } from "react-native";
-import { logWithoutRemote } from "sharedHelpers/logger";
 import colors from "styles/tailwindColors";
-
-// Local-only breadcrumb: useful when reading a device log, not worth a remote
-// POST per tap (this was the single largest source of remote log volume).
-const logger = logWithoutRemote.extend( "INatIconButton" );
 
 interface Props extends PropsWithChildren {
   accessibilityHint?: string;
@@ -181,11 +175,6 @@ const INatIconButton = ( {
   }
 
   const handlePressWithTracking = ( event: GestureResponderEvent ) => {
-    if ( testID ) {
-      const currentRoute = getCurrentRoute( );
-      logger.info( `Button tap: ${testID}-${currentRoute?.name || "undefined"}` );
-    }
-
     if ( onPress ) {
       onPress( event );
     }

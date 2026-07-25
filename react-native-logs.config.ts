@@ -52,11 +52,3 @@ const baseLog = logger.createLogger( {
 // `firebaseLogTransport` handles this extra data specially while other
 // transports treat it as any other normal log param.
 export const log = enhanceLoggerWithExtra( baseLog );
-
-export const logWithoutRemote = logger.createLogger( {
-  ...sharedConfig,
-  transport: [
-    consoleTransport,
-    fileAsyncTransport,
-  ],
-} );
