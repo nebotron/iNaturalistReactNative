@@ -14,6 +14,11 @@ import {
   interpolateFromUsablePoints,
 } from "sharedHelpers/interpolateTrackedLocation";
 import { log } from "sharedHelpers/logger";
+import {
+  clearPhotoLibraryWriteFailure,
+  isInPhotoLibraryWriteCooldown,
+  recordPhotoLibraryWriteFailure,
+} from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import useStore from "stores/useStore";
 
@@ -71,14 +76,28 @@ const applyLocationToDevicePhotoLibrary = async (
   if ( Platform.OS !== "ios" || !phUri?.startsWith( "ph://" ) || !ImageCropper ) {
     return;
   }
+  // Shares a cooldown with device-photo deletion: both hit the same
+  // PHPhotoLibrary confirmation machinery, and a recent timeout on either one
+  // means it's likely wedged for the whole device (see
+  // promptDeleteOriginalDevicePhotos.ts).
+  if ( isInPhotoLibraryWriteCooldown( ) ) {
+    logger.warn(
+      `Skipped updateAssetLocation for ${phUri}: still in Photos-library write cooldown`,
+    );
+    return;
+  }
   try {
     await withTimeout(
       ImageCropper.updateAssetLocation( phUri, match.latitude, match.longitude ),
       DEVICE_PHOTO_UPDATE_TIMEOUT_MS,
       `updateAssetLocation for ${phUri}`,
     );
+    clearPhotoLibraryWriteFailure( );
   } catch ( error ) {
     logger.warn( `Failed to update Photos library asset location for ${phUri}`, error );
+    if ( error instanceof Error && error.message.includes( "timed out" ) ) {
+      recordPhotoLibraryWriteFailure( );
+    }
   }
 };
 
