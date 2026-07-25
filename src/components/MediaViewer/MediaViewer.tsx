@@ -254,9 +254,11 @@ const MediaViewer = ( {
   const handleLongPressPhoto = useCallback( async ( photoUri: string ) => {
     try {
       const tempPath = await prepareSharePhoto( photoUri );
-      Share.share( { url: `file://${tempPath}` } );
+      // Await so a share failure (e.g. Save Image failing) is actually
+      // caught here instead of becoming an unhandled rejection.
+      await Share.share( { url: `file://${tempPath}` } );
     } catch ( _e ) {
-      // Nothing to share if the file could not be prepared
+      // Nothing to share if the file could not be prepared or shared
     }
   }, [prepareSharePhoto] );
 
