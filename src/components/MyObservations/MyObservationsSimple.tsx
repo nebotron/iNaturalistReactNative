@@ -20,6 +20,7 @@ import {
 import SortButton from "components/SharedComponents/Buttons/SortButton";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
 import { ObservationsStatTab, SpeciesStatTab } from "components/SharedComponents/StatTab";
+import UsbImportProgress from "components/SharedComponents/UsbImportProgress";
 import { View } from "components/styledComponents";
 import React, { useCallback, useMemo } from "react";
 import Photo from "realmModels/Photo";
@@ -502,6 +503,7 @@ const MyObservationsSimple = ( {
         />
       )}
       {openSheet === ACTIVE_SHEET.LOGIN && <LoginSheet setShowLoginSheet={setOpenSheet} />}
+      <UsbImportProgress />
       {isDefaultMode && (
         <>
           {/* These four cards should show only in default mode */}

@@ -10,8 +10,6 @@ import {
   useShare,
 } from "sharedHooks";
 
-import UsbImportProgress from "components/SharedComponents/UsbImportProgress";
-
 import AppStateListener from "./AppStateListener";
 import useDeferredStartup from "./hooks/useDeferredStartup";
 import useLinking from "./hooks/useLinking";
@@ -83,7 +81,6 @@ const App = ( { children }: Props ): Node => {
       <UploadService />
       <AppStateListener />
       {children || <RootStackNavigator />}
-      <UsbImportProgress />
     </>
   );
 };
