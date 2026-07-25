@@ -44,6 +44,10 @@ import colors from "styles/tailwindColors";
 
 type Route = RouteProp<SharedStackParamList, "ImageCropEditor">;
 
+// How many upcoming photos in a bulk crop to preload ahead of the one
+// currently shown.
+const PRELOAD_LOOKAHEAD = 2;
+
 const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
@@ -230,19 +234,20 @@ const ImageCropEditor = ( ) => {
     };
   }, [imageUri, resolveCropContext] );
 
-  // Preload pending images in the background as soon as this screen mounts,
-  // rather than waiting for the current image to finish loading first — the
-  // queue's own concurrency cap (PRELOAD_CONCURRENCY) already keeps these
-  // heavy native asset exports from saturating the device, so there's no
-  // need to also serialize them behind the current image. Deferred past
-  // interactions so the burst doesn't contend with the screen transition
-  // animation or painting the current image.
+  // Preload only the next couple of pending images (local file export +
+  // subject detection, via enqueuePreload/preloadImage) as soon as this
+  // screen mounts, rather than the whole remaining batch — a bulk crop can
+  // span dozens of photos, and preloading them all wastes work on photos the
+  // user may delete or never reach. Each subsequent mount re-runs this with
+  // one fewer pending uri, so the lookahead slides forward as the user
+  // advances. Deferred past interactions so the burst doesn't contend with
+  // the screen transition animation or painting the current image.
   useEffect( ( ) => {
     if ( !pendingImageUris?.length || context !== "groupPhotos" ) {
       return ( ) => {};
     }
     const handle = InteractionManager.runAfterInteractions( ( ) => {
-      for ( const uri of pendingImageUris ) {
+      for ( const uri of pendingImageUris.slice( 0, PRELOAD_LOOKAHEAD ) ) {
         if ( !preloadedUrisRef.current.has( uri ) ) {
           preloadedUrisRef.current.add( uri );
           const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, uri );
