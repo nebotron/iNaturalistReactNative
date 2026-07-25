@@ -156,13 +156,26 @@ const PhotoLibrary = ( ) => {
       };
     };
 
+    // A single flaky asset (e.g. an iCloud photo whose bytes fail to download,
+    // surfaced as the opaque "PHPhotosErrorDomain error -1") must not abort
+    // the whole batch — that previously rejected the entire import and threw
+    // the user out of the observation flow even when most photos copied fine.
+    const copyNodeOrNull = async ( node: PhotoNode ) => {
+      try {
+        return await copyNode( node );
+      } catch ( error ) {
+        logger.error( `Error copying photo ${node.image.uri} from camera roll`, error );
+        return null;
+      }
+    };
+
     const BATCH_SIZE = 10;
     const results = [];
     for ( let i = 0; i < nodes.length; i += BATCH_SIZE ) {
       const batch = nodes.slice( i, i + BATCH_SIZE );
       // eslint-disable-next-line no-await-in-loop
-      const batchResults = await Promise.all( batch.map( copyNode ) );
-      results.push( ...batchResults );
+      const batchResults = await Promise.all( batch.map( copyNodeOrNull ) );
+      results.push( ...batchResults.filter( ( r ): r is NonNullable<typeof r> => r !== null ) );
     }
     return results;
   }, [] );
