@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useRef } from "react";
 import { AppState } from "react-native";
+import {
+  beginBackgroundUsbImportTask,
+  endBackgroundUsbImportTask,
+} from "sharedHelpers/backgroundExecution";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import {
@@ -33,17 +37,21 @@ const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => (
   ] )
 );
 
-// Watches the user's chosen USB folder (see UsbImportSetting) on launch and,
-// while the app is foregrounded, on a short interval. iOS offers no attach
-// notification, and a drive is commonly plugged in *after* the app is already
-// open — a moment that fires neither a launch nor a foreground event — so
-// polling is the only way to notice it. When new images are found they are
-// offloaded: each is saved into the Photos library, then — once the whole
-// batch is safely saved — deleted from the source device. A progress overlay
-// (UsbImportProgress) reflects the run.
+// Watches the user's chosen USB folder (see UsbImportSetting) on launch and
+// on a short interval. iOS offers no attach notification, and a drive is
+// commonly plugged in *after* the app is already open — a moment that fires
+// neither a launch nor a foreground event — so polling is the only way to
+// notice it. Polling also keeps running for a while after the app
+// backgrounds (via a background task, same mechanism as observation upload)
+// so a card inserted right as the app leaves the foreground still gets
+// caught, rather than requiring the user to return to the app first. When new
+// images are found they are offloaded: each is saved into the Photos
+// library, then — once the whole batch is safely saved — deleted from the
+// source device. A progress overlay (UsbImportProgress) reflects the run.
 const useUsbAutoImport = ( ) => {
   const [onboardingShown] = useOnboardingShown( );
   const offloading = useRef( false );
+  const backgroundTaskActive = useRef( false );
   // The scan runs every SCAN_INTERVAL_MS while foregrounded, and each remote
   // log line is a network POST, so logging every tick would flood the log.
   // Only emit a diagnostic when its text changes from the last one.
@@ -168,13 +176,29 @@ const useUsbAutoImport = ( ) => {
     };
 
     startPolling( );
-    const subscription = AppState.addEventListener( "change", nextAppState => {
-      if ( nextAppState === "active" ) startPolling( );
-      else stopPolling( );
+    const subscription = AppState.addEventListener( "change", async nextAppState => {
+      if ( nextAppState === "active" ) {
+        if ( backgroundTaskActive.current ) {
+          await endBackgroundUsbImportTask( );
+          backgroundTaskActive.current = false;
+        }
+        startPolling( );
+        return;
+      }
+      // Don't stop polling on background/inactive: hold a background task so
+      // iOS keeps the JS thread alive for a while, and let the interval keep
+      // checking the folder during that window.
+      if ( !backgroundTaskActive.current ) {
+        backgroundTaskActive.current = await beginBackgroundUsbImportTask( );
+      }
     } );
     return ( ) => {
       stopPolling( );
       subscription.remove( );
+      if ( backgroundTaskActive.current ) {
+        endBackgroundUsbImportTask( );
+        backgroundTaskActive.current = false;
+      }
     };
   }, [offload, onboardingShown, logDiag] );
 };

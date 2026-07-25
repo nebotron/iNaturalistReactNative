@@ -2,13 +2,13 @@ import { t } from "i18next";
 import BackgroundService from "react-native-background-actions";
 
 const BACKGROUND_TASK_POLL_MS = 1000;
-const UPLOAD_BACKGROUND_TASK_NAME = "observation-upload";
+const BACKGROUND_TASK_NAME = "inaturalist-background-task";
 
 const sleep = ( ms: number ) => new Promise<void>( resolve => {
   setTimeout( resolve, ms );
 } );
 
-const uploadBackgroundTask = async ( ) => {
+const backgroundTask = async ( ) => {
   await new Promise<void>( resolve => {
     const keepJsAlive = async ( ) => {
       while ( BackgroundService.isRunning( ) ) {
@@ -22,7 +22,7 @@ const uploadBackgroundTask = async ( ) => {
 };
 
 const getBackgroundServiceOptions = ( ) => ( {
-  taskName: UPLOAD_BACKGROUND_TASK_NAME,
+  taskName: BACKGROUND_TASK_NAME,
   taskTitle: t( "Upload-in-progress" ),
   taskDesc: t( "Upload-your-observations-to-contribute-data-to-help-save-species" ),
   taskIcon: {
@@ -34,21 +34,30 @@ const getBackgroundServiceOptions = ( ) => ( {
   parameters: {},
 } );
 
-export const beginBackgroundUploadTask = async ( ): Promise<boolean> => {
+// A single native background task is shared by every feature that needs extra
+// execution time after backgrounding (observation upload, USB auto-import).
+// Reference-counted so one caller finishing doesn't cut off another that's
+// still relying on it.
+let activeCallers = 0;
+
+const beginSharedBackgroundTask = async ( ): Promise<boolean> => {
+  activeCallers += 1;
   if ( BackgroundService.isRunning( ) ) {
     return true;
   }
 
   try {
-    await BackgroundService.start( uploadBackgroundTask, getBackgroundServiceOptions( ) );
+    await BackgroundService.start( backgroundTask, getBackgroundServiceOptions( ) );
     return true;
   } catch {
+    activeCallers = Math.max( 0, activeCallers - 1 );
     return false;
   }
 };
 
-export const endBackgroundUploadTask = async ( ) => {
-  if ( !BackgroundService.isRunning( ) ) {
+const endSharedBackgroundTask = async ( ) => {
+  activeCallers = Math.max( 0, activeCallers - 1 );
+  if ( activeCallers > 0 || !BackgroundService.isRunning( ) ) {
     return;
   }
 
@@ -58,3 +67,9 @@ export const endBackgroundUploadTask = async ( ) => {
     // Ignore stop failures when the service is already shutting down.
   }
 };
+
+export const beginBackgroundUploadTask = ( ) => beginSharedBackgroundTask( );
+export const endBackgroundUploadTask = ( ) => endSharedBackgroundTask( );
+
+export const beginBackgroundUsbImportTask = ( ) => beginSharedBackgroundTask( );
+export const endBackgroundUsbImportTask = ( ) => endSharedBackgroundTask( );
