@@ -6,8 +6,8 @@ import {
 import { FlashList } from "@shopify/flash-list";
 import type { PhotoGalleryListItem } from "components/PhotoImporter/helpers/photoGallerySections";
 import buildSectionedGalleryItems from "components/PhotoImporter/helpers/photoGallerySections";
-import PhotoGalleryImage from "components/PhotoImporter/PhotoGalleryImage";
 import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers";
+import PhotoGalleryImage from "components/PhotoImporter/PhotoGalleryImage";
 import { Body2 } from "components/SharedComponents";
 import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
 import { View } from "components/styledComponents";
@@ -29,6 +29,7 @@ import { formatDateStringFromTimestamp } from "sharedHelpers/dateAndTime";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -77,6 +78,12 @@ const PhotoGallery = ( {
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
   const [hideImported, setHideImported] = useState( true );
   const isFetchingRef = useRef( false );
+  // Photos the user removed from a Group Photos import previously (see
+  // removedGroupPhotoUris.ts) — always hidden, unlike hideImported which the
+  // user can toggle, since the underlying device deletion may have silently
+  // failed (iOS 26's PHPhotoLibrary confirmation bug) and re-showing them
+  // would just invite re-importing something the user already said to remove.
+  const removedGroupPhotoUrisRef = useRef<Set<string>>( new Set( getRemovedGroupPhotoUris( ) ) );
 
   useEffect( ( ) => {
     setImportedUris( getPreviouslyUploadedDevicePhotoUrisSet( realm ) );
@@ -94,7 +101,11 @@ const PhotoGallery = ( {
         after,
         include: ["filename", "fileSize", "filepath", "imageSize"],
       } );
-      const nodes = result.edges.map( e => e.node );
+      const removedUris = removedGroupPhotoUrisRef.current;
+      const nodes = result.edges.map( e => e.node ).filter( node => {
+        const uri = getDeviceUriFromNode( node );
+        return !uri || !removedUris.has( uri );
+      } );
       setPhotos( prev => ( after
         ? [...prev, ...nodes]
         : nodes ) );

@@ -9,7 +9,6 @@ import {
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { t } from "i18next";
 import { RealmContext } from "providers/contexts";
-import { InteractionManager } from "react-native";
 import type { Node } from "react";
 import React, {
   useCallback,
@@ -18,7 +17,10 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { saveObservationsAndApplyTrackedLocation } from "sharedHelpers/applyTrackedLocationToPhotos";
+import { InteractionManager } from "react-native";
+import {
+  saveObservationsAndApplyTrackedLocation,
+} from "sharedHelpers/applyTrackedLocationToPhotos";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
@@ -26,6 +28,7 @@ import { log } from "sharedHelpers/logger";
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
+import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { useExitObservationFlow, useGridLayout } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -303,6 +306,11 @@ const GroupPhotosContainer = ( ): Node => {
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
       .filter( Boolean );
     deviceUrisToDelete.forEach( uri => addPendingGroupPhotoDeletionUri( uri ) );
+    // Recorded regardless of whether the native deletion below actually
+    // succeeds (see removedGroupPhotoUris.ts) so these stay hidden from the
+    // photo picker and get another chance to be cleaned up via Delete
+    // Unfaved even if iOS's PHPhotoLibrary confirmation silently no-ops it.
+    addRemovedGroupPhotoUris( deviceUrisToDelete );
 
     logger.info(
       `removePhotos: staged ${deviceUrisToDelete.length} device URI(s) `

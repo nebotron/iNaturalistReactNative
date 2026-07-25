@@ -7,6 +7,7 @@ import type { RealmObservation } from "realmModels/types";
 import { getDevicePhotoUrisFromObservation } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
+import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 
 const logger = log.extend( "unfavoritedDevicePhotos" );
 
@@ -226,8 +227,21 @@ const findUnfavoritedDevicePhotoDays = async (
   // A photo favorited on one observation wins over an unfavorited match.
   exactFavoritedUris.forEach( uri => exactUnfavoritedUris.delete( uri ) );
 
+  // Photos the user already chose to remove via Group Photos, whose device
+  // deletion may have silently failed (see removedGroupPhotoUris.ts). These
+  // don't need the library-scan matching below — they're already known exact
+  // URIs — so they're handled up front and merged back in either way.
+  const pendingRemovedGroupPhotoUris = getRemovedGroupPhotoUris( );
+
   if ( unfavoritedTimes.length === 0 && exactUnfavoritedUris.size === 0 ) {
-    return [];
+    return pendingRemovedGroupPhotoUris.length > 0
+      ? [{
+        dateKey: "removed-from-group-photos",
+        label: "Removed from Group Photos",
+        timestamp: Date.now( ),
+        uris: pendingRemovedGroupPhotoUris,
+      }]
+      : [];
   }
 
   unfavoritedTimes.sort( ( a, b ) => a - b );
@@ -295,6 +309,21 @@ const findUnfavoritedDevicePhotoDays = async (
     seenUris.add( uri );
     addUriToDay( dayMap, uri, unfavoritedUriTime.get( uri ) ?? null );
   } );
+
+  // Give cleanup another shot at these regardless of favorite status — the
+  // user already decided they should go — grouped separately since we don't
+  // have a capture time for them without a per-asset library lookup.
+  const removedGroupPhotoUris = pendingRemovedGroupPhotoUris
+    .filter( uri => !seenUris.has( uri ) );
+  if ( removedGroupPhotoUris.length > 0 ) {
+    dayMap.set( "removed-from-group-photos", {
+      dateKey: "removed-from-group-photos",
+      label: "Removed from Group Photos",
+      // Sorts to the top (newest-first) regardless of when these were taken.
+      timestamp: Date.now( ),
+      uris: removedGroupPhotoUris,
+    } );
+  }
 
   return Array.from( dayMap.values( ) ).sort( ( a, b ) => b.timestamp - a.timestamp );
 };
