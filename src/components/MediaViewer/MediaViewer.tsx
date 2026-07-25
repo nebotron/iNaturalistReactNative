@@ -177,7 +177,7 @@ const MediaViewer = ( {
 
   // Build a local, metadata-embedded copy of a photo we can hand to the share
   // sheet. This is the slow part (copy/download + EXIF write), so it runs ahead
-  // of time (see the pre-warm effect below) rather than blocking the long press.
+  // of time (see the pre-warm effect below) rather than blocking the share button.
   const buildSharePhoto = useCallback( async ( photoUri: string ): Promise<string> => {
     // Unique per prep so an in-flight prep for a previous photo can't clobber
     // the file mid-write, which would produce a broken image iOS can't save.
@@ -216,7 +216,7 @@ const MediaViewer = ( {
   }, [latitude, longitude, timeObservedAt] );
 
   // Cache of the in-flight/prepared share file for a single photo uri so the
-  // long press can present the sheet without waiting on file work.
+  // share button can present the sheet without waiting on file work.
   const sharePrepRef = useRef<{ uri: string; promise: Promise<string> } | null>( null );
 
   const prepareSharePhoto = useCallback( ( photoUri: string ): Promise<string> => {
@@ -235,11 +235,10 @@ const MediaViewer = ( {
     return promise;
   }, [buildSharePhoto] );
 
-  // Pre-warm the shareable copy of the currently displayed photo so a long
-  // press can present the share sheet the moment the threshold is hit, instead
-  // of after the copy/EXIF work finishes (which lands around finger release).
-  // Key off the same uri MainMediaDisplay passes to onLongPressPhoto so the
-  // long press hits the cache rather than rebuilding.
+  // Pre-warm the shareable copy of the currently displayed photo so tapping
+  // the share button can present the share sheet immediately, instead of
+  // after the copy/EXIF work finishes. Key off the same uri MainMediaDisplay
+  // passes to onSharePhoto so the tap hits the cache rather than rebuilding.
   const currentPhoto = selectedMediaIndex < photos.length
     ? photos[selectedMediaIndex]
     : null;
@@ -251,7 +250,7 @@ const MediaViewer = ( {
     prepareSharePhoto( currentShareUri ).catch( ( ) => undefined );
   }, [currentShareUri, prepareSharePhoto] );
 
-  const handleLongPressPhoto = useCallback( async ( photoUri: string ) => {
+  const handleSharePhoto = useCallback( async ( photoUri: string ) => {
     try {
       const tempPath = await prepareSharePhoto( photoUri );
       Share.share( { url: `file://${tempPath}` } );
@@ -291,7 +290,7 @@ const MediaViewer = ( {
         onCropPhoto={onCropPhoto}
         onDeletePhoto={photoUri => setMediaToDelete( { type: "photo", uri: photoUri } )}
         onDeleteSound={soundUri => setMediaToDelete( { type: "sound", uri: soundUri } )}
-        onLongPressPhoto={handleLongPressPhoto}
+        onSharePhoto={handleSharePhoto}
         onShowMetadata={setMetadataPhoto}
       />
       <MediaSelector

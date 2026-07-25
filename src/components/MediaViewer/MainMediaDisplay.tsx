@@ -80,7 +80,7 @@ interface Props {
   onDeletePhoto: ( uri: string ) => void;
   onClose: ( ) => void;
   onDeleteSound: ( uri: string ) => void;
-  onLongPressPhoto?: ( uri: string ) => void;
+  onSharePhoto?: ( uri: string ) => void;
   onShowMetadata?: ( photo: Omit<PhotoItem, "type"> ) => void;
   photos: Omit<PhotoItem, "type">[];
   sounds?: Omit<SoundItem, "type">[];
@@ -97,7 +97,7 @@ const MainMediaDisplay = ( {
   onDeletePhoto,
   onDeleteSound,
   onClose,
-  onLongPressPhoto,
+  onSharePhoto,
   onShowMetadata,
   photos,
   sounds = [],
@@ -226,9 +226,6 @@ const MainMediaDisplay = ( {
             }
           }}
           onSwipeToClose={onClose}
-          onLongPress={onLongPressPhoto
-            ? ( ) => onLongPressPhoto( uri )
-            : undefined}
           onImageDimensionsChange={handleImageDimensionsChange}
           onInteractionEnd={handleInteractionEnd}
         />
@@ -299,6 +296,17 @@ const MainMediaDisplay = ( {
               className={`${iconBtnClass} ml-2`}
               accessibilityLabel={t( "View-photo-metadata" )}
               testID="MediaViewer.metadataButton"
+              size={20}
+            />
+          ) }
+          { onSharePhoto && (
+            <INatIconButton
+              onPress={( ) => onSharePhoto( uri )}
+              icon="share"
+              color={colors.white}
+              className={`${iconBtnClass} ml-2`}
+              accessibilityLabel={t( "Share" )}
+              testID="MediaViewer.shareButton"
               size={20}
             />
           ) }
