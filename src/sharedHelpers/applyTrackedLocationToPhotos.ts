@@ -16,6 +16,7 @@ import {
 import { log } from "sharedHelpers/logger";
 import {
   clearPhotoLibraryWriteFailure,
+  enqueuePhotoLibraryWrite,
   isInPhotoLibraryWriteCooldown,
   recordPhotoLibraryWriteFailure,
 } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
@@ -87,11 +88,14 @@ const applyLocationToDevicePhotoLibrary = async (
     return;
   }
   try {
-    await withTimeout(
+    // Serialized with deletions (and other location updates) so only one
+    // native Photos-library write is ever in flight — see
+    // enqueuePhotoLibraryWrite in promptDeleteOriginalDevicePhotos.ts.
+    await enqueuePhotoLibraryWrite( ( ) => withTimeout(
       ImageCropper.updateAssetLocation( phUri, match.latitude, match.longitude ),
       DEVICE_PHOTO_UPDATE_TIMEOUT_MS,
       `updateAssetLocation for ${phUri}`,
-    );
+    ) );
     clearPhotoLibraryWriteFailure( );
   } catch ( error ) {
     logger.warn( `Failed to update Photos library asset location for ${phUri}`, error );

@@ -82,11 +82,22 @@ const ensureDeletePhotosPermission = async ( ): Promise<boolean> => {
   return status === "granted" || status === "limited";
 };
 
-// iOS presents a single system confirmation per deletePhotos call. Firing a
-// second call while one is still awaiting that confirmation makes both hang
-// (iOS won't present a second deletion alert over the first). Serialize every
-// call through this chain so only one confirmation is ever in flight.
-let deletionChain: Promise<void> = Promise.resolve( );
+// iOS presents a single system confirmation per Photos-library write. Firing
+// a second write (delete OR location update, see applyTrackedLocationToPhotos.ts)
+// while one is still in flight can make both hang (iOS won't present a second
+// confirmation over the first), and a burst of concurrent writes can also
+// spuriously trip each other's timeout under normal I/O load, which then
+// poisons the cooldown above for every write that follows — including
+// unrelated deletions. Route every native Photos-library write (not just
+// deletions) through this single chain so only one is ever in flight.
+let photoLibraryWriteChain: Promise<void> = Promise.resolve( );
+
+export const enqueuePhotoLibraryWrite = <T, >( task: ( ) => Promise<T> ): Promise<T> => {
+  const run = photoLibraryWriteChain.then( task );
+  // Keep the chain alive even if this write rejects, so later writes still fire.
+  photoLibraryWriteChain = run.then( ( ) => undefined, ( ) => undefined );
+  return run;
+};
 
 // A hung deletePhotos (confirmation never presents) must not block the chain
 // forever, or one bad call poisons every later deletion for the whole session.
@@ -194,14 +205,9 @@ const performDeleteOriginalDevicePhotos = async (
 export const deleteOriginalDevicePhotos = (
   photoUris: string[],
   options: DeleteOriginalDevicePhotosOptions = {},
-): Promise<void> => {
-  const run = deletionChain.then(
-    ( ) => performDeleteOriginalDevicePhotos( photoUris, options ),
-  );
-  // Keep the chain alive even if this run rejects, so later deletions still fire.
-  deletionChain = run.catch( ( ) => undefined );
-  return run;
-};
+): Promise<void> => enqueuePhotoLibraryWrite(
+  ( ) => performDeleteOriginalDevicePhotos( photoUris, options ),
+);
 
 // Deletes the original device photos that were imported, without prompting.
 const promptDeleteOriginalDevicePhotos = (
