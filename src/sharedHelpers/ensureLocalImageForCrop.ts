@@ -10,6 +10,13 @@ const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
 const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 
+// Every downstream consumer (upload, CV scoring, brightness/crop preview)
+// resizes further down to 2048px or less, so exporting device photos at their
+// native resolution (up to 48MP) for crop editing only slows down the export,
+// on-screen decode, and subject detection with pixels nothing ever uses.
+// This cap keeps headroom above the upload size for cropping into a subject.
+const CROP_SOURCE_MAX_DIMENSION = 3072;
+
 // djb2 hash → stable hex filename for a given URL
 function urlToFilename( url: string ): string {
   let hash = 5381;
@@ -60,8 +67,9 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
       const destPath = `${cropSourcesPath}/${urlToFilename( uri )}`;
       const cached = await getCachedOrNull( destPath );
       if ( cached ) return cached;
-      // 99999 → no upscaling; copyAssetsFileIOS caps at the asset's natural dimensions
-      await copyAssetsFileIOS( uri, destPath, 99999, 99999 );
+      // copyAssetsFileIOS never upscales past the asset's natural dimensions,
+      // so this only downscales photos already larger than the cap.
+      await copyAssetsFileIOS( uri, destPath, CROP_SOURCE_MAX_DIMENSION, CROP_SOURCE_MAX_DIMENSION );
       return `file://${destPath}`;
     }
   }
