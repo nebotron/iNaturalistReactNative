@@ -230,13 +230,15 @@ const ImageCropEditor = ( ) => {
     };
   }, [imageUri, resolveCropContext] );
 
-  // Preload pending images in the background once the current image is
-  // displayed. Deferred past interactions so the burst of heavy native asset
-  // exports doesn't contend with painting the current image, and enqueued
-  // (bounded concurrency) rather than all fired at once so large batches don't
-  // saturate the device.
+  // Preload pending images in the background as soon as this screen mounts,
+  // rather than waiting for the current image to finish loading first — the
+  // queue's own concurrency cap (PRELOAD_CONCURRENCY) already keeps these
+  // heavy native asset exports from saturating the device, so there's no
+  // need to also serialize them behind the current image. Deferred past
+  // interactions so the burst doesn't contend with the screen transition
+  // animation or painting the current image.
   useEffect( ( ) => {
-    if ( loadingSource || !pendingImageUris?.length || context !== "groupPhotos" ) {
+    if ( !pendingImageUris?.length || context !== "groupPhotos" ) {
       return ( ) => {};
     }
     const handle = InteractionManager.runAfterInteractions( ( ) => {
@@ -251,7 +253,7 @@ const ImageCropEditor = ( ) => {
       }
     } );
     return ( ) => handle.cancel( );
-  }, [context, groupedPhotos, loadingSource, pendingImageUris] );
+  }, [context, groupedPhotos, pendingImageUris] );
 
   const labels = useMemo( ( ) => ( {
     confirm: t( "SAVE-CROP" ),
