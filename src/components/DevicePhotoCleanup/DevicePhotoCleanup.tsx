@@ -23,6 +23,7 @@ import {
   View,
 } from "react-native";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import { addRemovedDevicePhotoUris } from "sharedHelpers/removedDevicePhotoUris";
 import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
 import findUnfavoritedDevicePhotoDays from "sharedHelpers/unfavoritedDevicePhotos";
 
@@ -85,6 +86,10 @@ const DevicePhotoCleanup = ( ) => {
     setShowConfirm( false );
     setDeleting( true );
     await new Promise( resolve => { setTimeout( resolve, 600 ); } );
+    // Recorded regardless of whether the native deletion below actually
+    // succeeds (see removedDevicePhotoUris.ts) so these stay hidden from the
+    // photo picker even if iOS's PHPhotoLibrary confirmation silently no-ops it.
+    addRemovedDevicePhotoUris( allUris );
     await deleteOriginalDevicePhotos( allUris, { userInitiated: true } );
     setDeletedCount( allUris.length );
     setDays( [] );

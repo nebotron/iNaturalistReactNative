@@ -29,7 +29,7 @@ import { formatDateStringFromTimestamp } from "sharedHelpers/dateAndTime";
 import { getPreviouslyUploadedDevicePhotoUrisSet } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
-import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
+import { getRemovedDevicePhotoUris } from "sharedHelpers/removedDevicePhotoUris";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -78,12 +78,13 @@ const PhotoGallery = ( {
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
   const [hideImported, setHideImported] = useState( true );
   const isFetchingRef = useRef( false );
-  // Photos the user removed from a Group Photos import previously (see
-  // removedGroupPhotoUris.ts) — always hidden, unlike hideImported which the
-  // user can toggle, since the underlying device deletion may have silently
-  // failed (iOS 26's PHPhotoLibrary confirmation bug) and re-showing them
-  // would just invite re-importing something the user already said to remove.
-  const removedGroupPhotoUrisRef = useRef<Set<string>>( new Set( getRemovedGroupPhotoUris( ) ) );
+  // Photos the user previously asked to remove — from the Group Photos
+  // import screen or Delete Unfaved (see removedDevicePhotoUris.ts) — always
+  // hidden, unlike hideImported which the user can toggle, since the
+  // underlying device deletion may have silently failed (iOS 26's
+  // PHPhotoLibrary confirmation bug) and re-showing them would just invite
+  // re-importing something the user already said to remove.
+  const removedDevicePhotoUrisRef = useRef<Set<string>>( new Set( getRemovedDevicePhotoUris( ) ) );
 
   useEffect( ( ) => {
     setImportedUris( getPreviouslyUploadedDevicePhotoUrisSet( realm ) );
@@ -101,7 +102,7 @@ const PhotoGallery = ( {
         after,
         include: ["filename", "fileSize", "filepath", "imageSize"],
       } );
-      const removedUris = removedGroupPhotoUrisRef.current;
+      const removedUris = removedDevicePhotoUrisRef.current;
       const nodes = result.edges.map( e => e.node ).filter( node => {
         const uri = getDeviceUriFromNode( node );
         return !uri || !removedUris.has( uri );

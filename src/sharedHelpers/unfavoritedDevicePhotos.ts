@@ -7,7 +7,7 @@ import type { RealmObservation } from "realmModels/types";
 import { getDevicePhotoUrisFromObservation } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
-import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
+import { getRemovedDevicePhotoUris } from "sharedHelpers/removedDevicePhotoUris";
 
 const logger = log.extend( "unfavoritedDevicePhotos" );
 
@@ -227,19 +227,20 @@ const findUnfavoritedDevicePhotoDays = async (
   // A photo favorited on one observation wins over an unfavorited match.
   exactFavoritedUris.forEach( uri => exactUnfavoritedUris.delete( uri ) );
 
-  // Photos the user already chose to remove via Group Photos, whose device
-  // deletion may have silently failed (see removedGroupPhotoUris.ts). These
-  // don't need the library-scan matching below — they're already known exact
-  // URIs — so they're handled up front and merged back in either way.
-  const pendingRemovedGroupPhotoUris = getRemovedGroupPhotoUris( );
+  // Photos the user already asked to remove (via Group Photos or a previous
+  // Delete Unfaved run), whose device deletion may have silently failed (see
+  // removedDevicePhotoUris.ts). These don't need the library-scan matching
+  // below — they're already known exact URIs — so they're handled up front
+  // and merged back in either way.
+  const pendingRemovedDevicePhotoUris = getRemovedDevicePhotoUris( );
 
   if ( unfavoritedTimes.length === 0 && exactUnfavoritedUris.size === 0 ) {
-    return pendingRemovedGroupPhotoUris.length > 0
+    return pendingRemovedDevicePhotoUris.length > 0
       ? [{
-        dateKey: "removed-from-group-photos",
-        label: "Removed from Group Photos",
+        dateKey: "pending-removal",
+        label: "Pending Removal",
         timestamp: Date.now( ),
-        uris: pendingRemovedGroupPhotoUris,
+        uris: pendingRemovedDevicePhotoUris,
       }]
       : [];
   }
@@ -313,15 +314,15 @@ const findUnfavoritedDevicePhotoDays = async (
   // Give cleanup another shot at these regardless of favorite status — the
   // user already decided they should go — grouped separately since we don't
   // have a capture time for them without a per-asset library lookup.
-  const removedGroupPhotoUris = pendingRemovedGroupPhotoUris
+  const pendingRemovalUris = pendingRemovedDevicePhotoUris
     .filter( uri => !seenUris.has( uri ) );
-  if ( removedGroupPhotoUris.length > 0 ) {
-    dayMap.set( "removed-from-group-photos", {
-      dateKey: "removed-from-group-photos",
-      label: "Removed from Group Photos",
+  if ( pendingRemovalUris.length > 0 ) {
+    dayMap.set( "pending-removal", {
+      dateKey: "pending-removal",
+      label: "Pending Removal",
       // Sorts to the top (newest-first) regardless of when these were taken.
       timestamp: Date.now( ),
-      uris: removedGroupPhotoUris,
+      uris: pendingRemovalUris,
     } );
   }
 

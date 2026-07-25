@@ -28,7 +28,7 @@ import { log } from "sharedHelpers/logger";
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
-import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
+import { addRemovedDevicePhotoUris } from "sharedHelpers/removedDevicePhotoUris";
 import { useExitObservationFlow, useGridLayout } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -307,10 +307,10 @@ const GroupPhotosContainer = ( ): Node => {
       .filter( Boolean );
     deviceUrisToDelete.forEach( uri => addPendingGroupPhotoDeletionUri( uri ) );
     // Recorded regardless of whether the native deletion below actually
-    // succeeds (see removedGroupPhotoUris.ts) so these stay hidden from the
+    // succeeds (see removedDevicePhotoUris.ts) so these stay hidden from the
     // photo picker and get another chance to be cleaned up via Delete
     // Unfaved even if iOS's PHPhotoLibrary confirmation silently no-ops it.
-    addRemovedGroupPhotoUris( deviceUrisToDelete );
+    addRemovedDevicePhotoUris( deviceUrisToDelete );
 
     logger.info(
       `removePhotos: staged ${deviceUrisToDelete.length} device URI(s) `
