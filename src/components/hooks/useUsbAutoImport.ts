@@ -103,16 +103,16 @@ const useUsbAutoImport = ( ) => {
           // eslint-disable-next-line no-await-in-loop
           await withTimeout( saveUsbImageToPhotos( relativePath ), SAVE_TIMEOUT_MS );
           savedPaths.push( relativePath );
+          // Mark imported immediately, not after the whole batch: if the app
+          // is killed mid-loop, photos already saved to this point must not
+          // be saved again on restart.
+          markUsbImagesImported( [relativePath] );
         } catch ( err ) {
           failed += 1;
           logger.error( `USB offload: failed to save ${relativePath}`, err );
         }
         progress.setCounts( savedPaths.length, failed );
       }
-
-      // Remember what we saved before touching the card, so an interrupted or
-      // failed delete never causes the same photo to be saved twice.
-      markUsbImagesImported( savedPaths );
 
       // Delete from the source device only after the whole batch is safely in
       // Photos (per the user's choice), and only the files that actually saved.
