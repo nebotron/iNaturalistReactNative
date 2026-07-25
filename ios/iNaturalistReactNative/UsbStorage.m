@@ -288,19 +288,21 @@ RCT_EXPORT_METHOD(requestPhotosPermission:(RCTPromiseResolveBlock)resolve
   }];
 }
 
-// Serializes the performChanges calls below so at most one Photos library
-// write is ever in flight. PhotoKit queues concurrent asset-creation writes
-// internally anyway; letting the JS-side per-file timeout (useUsbAutoImport)
-// abandon a slow save and immediately start the next one previously let
-// several performChanges calls pile up, each making every other one slower —
-// producing a cascade of growing timeouts on a large batch of RAW files.
-// dispatch_semaphore_wait is called off the main thread (this module's own
-// background queue), so blocking here doesn't freeze the UI.
+// Caps how many performChanges calls below can be in flight at once. PhotoKit
+// queues concurrent asset-creation writes internally anyway; letting the
+// JS-side per-file timeout (useUsbAutoImport) abandon a slow save and
+// immediately start the next one previously let performChanges calls pile up
+// unbounded, each making every other one slower — producing a cascade of
+// growing timeouts on a large batch of RAW files. dispatch_semaphore_wait is
+// called off the main thread (this module's own background queue), so
+// blocking here doesn't freeze the UI.
+static const long kMaxConcurrentPhotosWrites = 2;
+
 static dispatch_semaphore_t photosWriteSemaphore( void )
 {
   static dispatch_semaphore_t sem;
   static dispatch_once_t once;
-  dispatch_once( &once, ^{ sem = dispatch_semaphore_create( 1 ); } );
+  dispatch_once( &once, ^{ sem = dispatch_semaphore_create( kMaxConcurrentPhotosWrites ); } );
   return sem;
 }
 
