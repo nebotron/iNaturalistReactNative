@@ -664,12 +664,17 @@ RCT_EXPORT_METHOD( exportPHAsset
       options:options
       completionHandler:^( NSError *error ) {
         if ( !error ) {
-          resolve( [NSString stringWithFormat:@"file://%@", dest] );
+          resolve( @{
+            @"uri": [NSString stringWithFormat:@"file://%@", dest],
+            @"attempts": @( attemptNumber + 1 ),
+          } );
           attemptExport = nil;
           return;
         }
         if ( attemptNumber + 1 >= maxAttempts ) {
-          reject( @"EXPORT_FAILED", error.localizedDescription, error );
+          NSString *message = [NSString stringWithFormat:@"%@ (after %ld attempt(s))",
+            error.localizedDescription, ( long )( attemptNumber + 1 )];
+          reject( @"EXPORT_FAILED", message, error );
           attemptExport = nil;
           return;
         }

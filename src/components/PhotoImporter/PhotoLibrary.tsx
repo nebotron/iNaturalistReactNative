@@ -133,10 +133,20 @@ const PhotoLibrary = ( ) => {
         // to write the original file bytes verbatim — no decode/re-encode,
         // so all EXIF (GPS, timestamp, camera details) is preserved.
         const { ImageCropper } = NativeModules as {
-          ImageCropper?: { exportPHAsset: ( phUri: string, destPath: string ) => Promise<string> };
+          ImageCropper?: {
+            exportPHAsset: (
+              phUri: string,
+              destPath: string
+            ) => Promise<{ uri: string; attempts: number }>;
+          };
         };
         if ( ImageCropper?.exportPHAsset ) {
-          await ImageCropper.exportPHAsset( node.image.uri, destPath );
+          const { attempts } = await ImageCropper.exportPHAsset( node.image.uri, destPath );
+          // A retry succeeding is itself worth knowing: it confirms failed
+          // imports are a slow/flaky iCloud download, not a hard failure.
+          if ( attempts > 1 ) {
+            logger.info( `Exported ${node.image.uri} after ${attempts} attempt(s)` );
+          }
         } else {
           // Fallback if native module unavailable (re-encodes, may lose EXIF).
           await copyAssetsFileIOS( node.image.uri, destPath, 99999, 99999 );
