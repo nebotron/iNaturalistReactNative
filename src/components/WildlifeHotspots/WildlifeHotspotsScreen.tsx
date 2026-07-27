@@ -24,6 +24,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import Config from "react-native-config";
+import DeviceInfo from "react-native-device-info";
 import type { RenderItemParams } from "react-native-draggable-flatlist";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
 import type { LatLng } from "react-native-maps";
@@ -60,12 +61,22 @@ interface PlaceResult {
   lon: string;
 }
 
+// A key restricted to "iOS apps" only authorizes requests carrying this
+// header with the app's bundle ID (unlike the native Maps SDK, a plain fetch
+// doesn't attach it automatically), so it can't just reuse the Android-only
+// GMAPS_API_KEY used for the native Maps SDK in AndroidManifest.xml.
+const IOS_BUNDLE_ID_HEADER = "X-Ios-Bundle-Identifier";
+
+function placesRequestHeaders() {
+  return { [IOS_BUNDLE_ID_HEADER]: DeviceInfo.getBundleId() };
+}
+
 async function searchGooglePlaces(
   text: string,
   nearbyLatLng?: LatLng,
 ): Promise<PlaceResult[]> {
   try {
-    const apiKey = Config.GMAPS_API_KEY;
+    const apiKey = Config.GMAPS_IOS_API_KEY;
     if ( !apiKey ) return [];
     let url = `${GOOGLE_PLACES_BASE}/autocomplete/json`
       + `?input=${encodeURIComponent( text )}&language=en&key=${apiKey}`;
@@ -73,7 +84,7 @@ async function searchGooglePlaces(
       url += `&location=${nearbyLatLng.latitude},${nearbyLatLng.longitude}`
         + `&radius=${AUTOCOMPLETE_BIAS_RADIUS_METERS}`;
     }
-    const response = await fetch( url );
+    const response = await fetch( url, { headers: placesRequestHeaders() } );
     if ( !response.ok ) return [];
     const json = await response.json();
     if ( json.status !== "OK" ) return [];
@@ -94,11 +105,11 @@ async function searchGooglePlaces(
 
 async function fetchPlaceLatLng( placeId: string ): Promise<LatLng | null> {
   try {
-    const apiKey = Config.GMAPS_API_KEY;
+    const apiKey = Config.GMAPS_IOS_API_KEY;
     if ( !apiKey ) return null;
     const url = `${GOOGLE_PLACES_BASE}/details/json`
       + `?place_id=${encodeURIComponent( placeId )}&fields=geometry&key=${apiKey}`;
-    const response = await fetch( url );
+    const response = await fetch( url, { headers: placesRequestHeaders() } );
     if ( !response.ok ) return null;
     const json = await response.json();
     const location = json?.result?.geometry?.location;
