@@ -142,13 +142,13 @@ const createLayoutSlice = set => ( {
     // Recently entered addresses in the Wildlife Hotspots address search,
     // most-recent first. Used to prefill the address dropdown before typing.
     hotspotAddressHistory: [] as {
-      place_id: number;
+      place_id: number | string;
       display_name: string;
       lat: string;
       lon: string;
     }[],
     addHotspotAddress: ( address: {
-      place_id: number;
+      place_id: number | string;
       display_name: string;
       lat: string;
       lon: string;
