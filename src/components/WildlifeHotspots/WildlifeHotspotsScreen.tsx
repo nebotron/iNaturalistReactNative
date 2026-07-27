@@ -1,5 +1,4 @@
 import { useNavigation } from "@react-navigation/native";
-import { getUserAgent } from "api/userAgent";
 import {
   ActivityIndicator,
   Body2,
@@ -24,6 +23,7 @@ import {
   TouchableOpacity,
   useWindowDimensions,
 } from "react-native";
+import Config from "react-native-config";
 import type { RenderItemParams } from "react-native-draggable-flatlist";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
 import type { LatLng } from "react-native-maps";
@@ -42,7 +42,10 @@ import type { Hotspot, HotspotSpecies, RoutePoint } from "./hooks/useRouteHotspo
 import { fetchOSRMRoute, findBestInsertion, useRouteHotspots } from "./hooks/useRouteHotspots";
 import HotspotListItem from "./HotspotListItem";
 
-const NOMINATIM_BASE = "https://nominatim.openstreetmap.org";
+const GOOGLE_PLACES_BASE = "https://maps.googleapis.com/maps/api/place";
+// Soft location bias radius (meters) for autocomplete results near the
+// previous stop / current location, matching the prior Nominatim viewbox bias.
+const AUTOCOMPLETE_BIAS_RADIUS_METERS = 200_000;
 
 // Synthetic place_id marking the "current location" row in the dropdown, which
 // resolves to the device location rather than a searched address.
@@ -50,37 +53,59 @@ const CURRENT_LOCATION_PLACE_ID = -1;
 // Number of recently entered addresses to offer before the user types.
 const RECENT_ADDRESS_COUNT = 4;
 
-interface NominatimResult {
-  place_id: number;
+interface PlaceResult {
+  place_id: number | string;
   display_name: string;
   lat: string;
   lon: string;
 }
 
-async function searchNominatim(
+async function searchGooglePlaces(
   text: string,
   nearbyLatLng?: LatLng,
-): Promise<NominatimResult[]> {
+): Promise<PlaceResult[]> {
   try {
-    let url = `${NOMINATIM_BASE}/search?q=${encodeURIComponent( text )}&format=json&limit=3`;
+    const apiKey = Config.GMAPS_API_KEY;
+    if ( !apiKey ) return [];
+    let url = `${GOOGLE_PLACES_BASE}/autocomplete/json`
+      + `?input=${encodeURIComponent( text )}&language=en&key=${apiKey}`;
     if ( nearbyLatLng ) {
-      const { latitude: lat, longitude: lon } = nearbyLatLng;
-      const delta = 2;
-      url += `&viewbox=${lon - delta},${lat + delta},${lon + delta},${lat - delta}`;
+      url += `&location=${nearbyLatLng.latitude},${nearbyLatLng.longitude}`
+        + `&radius=${AUTOCOMPLETE_BIAS_RADIUS_METERS}`;
     }
-    // Nominatim's usage policy requires a valid User-Agent that identifies the
-    // app; requests without one are rejected (HTTP 403), which made every
-    // address search silently return no results.
-    const response = await fetch( url, {
-      headers: {
-        "Accept-Language": "en",
-        "User-Agent": getUserAgent(),
-      },
-    } );
+    const response = await fetch( url );
     if ( !response.ok ) return [];
-    return response.json();
+    const json = await response.json();
+    if ( json.status !== "OK" ) return [];
+    return json.predictions.slice( 0, 3 ).map( ( prediction: {
+      place_id: string;
+      description: string;
+    } ) => ( {
+      place_id: prediction.place_id,
+      display_name: prediction.description,
+      // Resolved lazily via fetchPlaceLatLng once the user picks a suggestion.
+      lat: "",
+      lon: "",
+    } ) );
   } catch {
     return [];
+  }
+}
+
+async function fetchPlaceLatLng( placeId: string ): Promise<LatLng | null> {
+  try {
+    const apiKey = Config.GMAPS_API_KEY;
+    if ( !apiKey ) return null;
+    const url = `${GOOGLE_PLACES_BASE}/details/json`
+      + `?place_id=${encodeURIComponent( placeId )}&fields=geometry&key=${apiKey}`;
+    const response = await fetch( url );
+    if ( !response.ok ) return null;
+    const json = await response.json();
+    const location = json?.result?.geometry?.location;
+    if ( !location ) return null;
+    return { latitude: location.lat, longitude: location.lng };
+  } catch {
+    return null;
   }
 }
 
@@ -120,7 +145,7 @@ interface AddressInputProps {
   placeholder: string;
   value: string;
   onChangeText: ( text: string ) => void;
-  onSuggestionsChange: ( suggestions: NominatimResult[] ) => void;
+  onSuggestionsChange: ( suggestions: PlaceResult[] ) => void;
   confirmed: boolean;
   loading: boolean;
   dotColor: string;
@@ -128,7 +153,7 @@ interface AddressInputProps {
   onEmptyBlur?: () => void;
   // Shown in the dropdown before the user types (recent addresses + current
   // location), so the field can be filled without searching.
-  presetSuggestions: NominatimResult[];
+  presetSuggestions: PlaceResult[];
 }
 
 // Suggestions are reported up to the parent, which renders the dropdown as a
@@ -165,7 +190,7 @@ const AddressInput = ( {
     }
     debounceRef.current = setTimeout( async () => {
       setSearching( true );
-      const results = await searchNominatim( text.trim(), nearbyLatLng );
+      const results = await searchGooglePlaces( text.trim(), nearbyLatLng );
       setSearching( false );
       if ( requestIdRef.current !== requestId ) return;
       onSuggestionsChange( results );
@@ -266,10 +291,12 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   const [hotspotRouteLoading, setHotspotRouteLoading] = useState( false );
   const [activeSuggestions, setActiveSuggestions] = useState<{
     stopId: string;
-    suggestions: NominatimResult[];
+    suggestions: PlaceResult[];
   } | null>( null );
   const [visibleHotspotIndex, setVisibleHotspotIndex] = useState( 0 );
   const [hotspotCardHeight, setHotspotCardHeight] = useState<number | null>( null );
+  // Stop currently awaiting a Place Details lookup to resolve its lat/lng.
+  const [resolvingStopId, setResolvingStopId] = useState<string | null>( null );
 
   const addressHistory = useStore( state => state.layout.hotspotAddressHistory );
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
@@ -280,7 +307,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
 
   // Rows shown in the dropdown before the user types: current location first,
   // then the most recent addresses.
-  const presetSuggestions: NominatimResult[] = useMemo( () => [
+  const presetSuggestions: PlaceResult[] = useMemo( () => [
     ...( userLocation
       ? [{
         place_id: CURRENT_LOCATION_PLACE_ID,
@@ -336,31 +363,40 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
       : s ) ) );
   }, [] );
 
-  const handleSelectStopSuggestion = useCallback( ( id: string, result: NominatimResult ) => {
+  const handleSelectStopSuggestion = useCallback( async ( id: string, result: PlaceResult ) => {
+    setActiveSuggestions( null );
+    Keyboard.dismiss();
     setStops( prev => prev.map( s => ( s.id === id
-      ? {
-        ...s,
-        text: result.display_name,
-        point: { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) },
-      }
+      ? { ...s, text: result.display_name, point: null }
       : s ) ) );
+    // Autocomplete predictions don't include coordinates, so they're resolved
+    // lazily via a Place Details lookup once the user picks one; preset
+    // suggestions (current location, address history) already have them.
+    let point: LatLng | null = result.lat && result.lon
+      ? { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) }
+      : null;
+    if ( !point && result.place_id !== CURRENT_LOCATION_PLACE_ID ) {
+      setResolvingStopId( id );
+      point = await fetchPlaceLatLng( String( result.place_id ) );
+      setResolvingStopId( null );
+    }
+    if ( !point ) return;
+    setStops( prev => prev.map( s => ( s.id === id ? { ...s, point } : s ) ) );
     // Remember searched addresses (but not the synthetic current-location row)
     // so they can be offered again before typing next time.
     if ( result.place_id !== CURRENT_LOCATION_PLACE_ID ) {
       addHotspotAddress( {
         place_id: result.place_id,
         display_name: result.display_name,
-        lat: result.lat,
-        lon: result.lon,
+        lat: String( point.latitude ),
+        lon: String( point.longitude ),
       } );
     }
-    setActiveSuggestions( null );
-    Keyboard.dismiss();
   }, [addHotspotAddress] );
 
   const handleStopSuggestionsChange = useCallback( (
     stopId: string,
-    suggestions: NominatimResult[],
+    suggestions: PlaceResult[],
   ) => {
     setActiveSuggestions( prev => {
       if ( suggestions.length > 0 ) return { stopId, suggestions };
@@ -531,7 +567,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
             onChangeText={text => handleStopTextChange( stop.id, text )}
             onSuggestionsChange={suggestions => handleStopSuggestionsChange( stop.id, suggestions )}
             confirmed={!!stop.point}
-            loading={false}
+            loading={resolvingStopId === stop.id}
             dotColor={stopDotColor( index, stops.length )}
             nearbyLatLng={stops[index - 1]?.point ?? userLocation ?? undefined}
             onEmptyBlur={() => handleStopEmptyBlur( stop.id )}
@@ -563,6 +599,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     userLocation,
     t,
     presetSuggestions,
+    resolvingStopId,
     handleStopTextChange,
     handleStopSuggestionsChange,
     handleStopEmptyBlur,
