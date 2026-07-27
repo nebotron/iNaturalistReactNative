@@ -267,6 +267,10 @@ const findUnfavoritedDevicePhotoDays = async (
 
   const dayMap = new Map<string, UnfavoritedPhotoDay>( );
   const seenUris = new Set<string>( );
+  // Capture times already represented by a live library asset, so a stale
+  // stored URI for the same moment (e.g. a local identifier orphaned by a
+  // device restore) isn't also added as a second, undeletable "match".
+  const matchedTimes = new Set<number>( );
 
   assets.forEach( ( { uri, timestampMs } ) => {
     if ( seenUris.has( uri ) || exactFavoritedUris.has( uri ) ) {
@@ -298,16 +302,26 @@ const findUnfavoritedDevicePhotoDays = async (
     }
     seenUris.add( uri );
     addUriToDay( dayMap, uri, timestampMs );
+    if ( timestampMs !== null ) {
+      matchedTimes.add( timestampMs );
+    }
   } );
 
   // Make sure exact matches always appear, even if the library scan missed
   // them (e.g. permission denied or the asset fell outside the scanned window).
+  // Skip ones whose capture time is already covered by a live asset above —
+  // that's the same physical photo under its current identifier, not a
+  // second photo, so counting the stored URI too would double it.
   exactUnfavoritedUris.forEach( uri => {
     if ( seenUris.has( uri ) ) {
       return;
     }
+    const timeMs = unfavoritedUriTime.get( uri ) ?? null;
+    if ( timeMs !== null && matchedTimes.has( timeMs ) ) {
+      return;
+    }
     seenUris.add( uri );
-    addUriToDay( dayMap, uri, unfavoritedUriTime.get( uri ) ?? null );
+    addUriToDay( dayMap, uri, timeMs );
   } );
 
   // Give cleanup another shot at these regardless of favorite status — the

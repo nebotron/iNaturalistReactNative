@@ -99,6 +99,24 @@ describe( "findUnfavoritedDevicePhotoDays", ( ) => {
     expect( flatUris( days ) ).not.toContain( "ph://UNRELATED" );
   } );
 
+  it( "doesn't double-count a photo whose stored URI is stale (e.g. after a "
+    + "device restore reassigned local identifiers) alongside its rescanned match", async ( ) => {
+    const realm = makeRealm( [
+      makeObservation( {
+        faved: false,
+        timeMs: UNFAV_TIME,
+        deviceUris: ["ph://STALE_ID"],
+      } ),
+    ] );
+    // The physical photo now lives under a new identifier; the library scan
+    // only ever sees CURRENT_ID, never STALE_ID.
+    mockLibrary( [{ id: "CURRENT_ID", timeMs: UNFAV_TIME }] );
+
+    const days = await findUnfavoritedDevicePhotoDays( realm );
+
+    expect( flatUris( days ) ).toEqual( ["ph://CURRENT_ID"] );
+  } );
+
   it( "returns nothing when there are no unfavorited observations", async ( ) => {
     const realm = makeRealm( [
       makeObservation( { faved: true, timeMs: FAV_TIME, deviceUris: ["ph://FAVED"] } ),
