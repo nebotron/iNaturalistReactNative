@@ -165,11 +165,17 @@ def verify(model: onnx.ModelProto, w_raw: np.ndarray, b_raw: float) -> None:
     cols = np.r_[448:704, 1152:1164]
     orig = d["factors"] == 1.0
     X, y = d["feats"][orig][:, cols].astype(np.float64), d["labels"][orig]
+    # Row order in X follows extraction order, which skips raw[] entries with
+    # no image/label — groups[orig] gives the *raw* index for each X row, so
+    # raw lookups must go through it rather than assuming X[i] <-> raw[i].
+    groups = d["groups"][orig]
 
     raw = json.loads((REPO_ROOT / "brightness_training.json").read_text())
     max_out_diff, max_head_diff = 0.0, 0.0
-    for i in [0, 25, 50, 100, 150, 192]:
-        path = resolve_image(raw[i]["url"], None, Path("/tmp/inat_eval_cache"))
+    sample_rows = np.linspace(0, len(X) - 1, 6, dtype=int)
+    for i in sample_rows:
+        raw_idx = int(groups[i])
+        path = resolve_image(raw[raw_idx]["url"], None, Path("/tmp/inat_eval_cache"))
         lb, *_ = _letterbox(np.array(Image.open(path).convert("RGB")))
         x = lb.transpose(2, 0, 1)[None]
         out_old = old_sess.run(["output0"], {"images": x})[0]
@@ -178,7 +184,7 @@ def verify(model: onnx.ModelProto, w_raw: np.ndarray, b_raw: float) -> None:
                                  CLAMP_LO, CLAMP_HI))
         max_out_diff = max(max_out_diff, float(np.abs(out_old - out_new).max()))
         max_head_diff = max(max_head_diff, abs(float(bright[0, 0]) - expected))
-        print(f"  img {i}: brightness={float(bright[0, 0]):.4f} "
+        print(f"  row {i} (raw idx {raw_idx}): brightness={float(bright[0, 0]):.4f} "
               f"expected={expected:.4f} label={y[i]:.3f}")
     print(f"max |output0 old-new| = {max_out_diff:.2e}")
     print(f"max |head onnx-python| = {max_head_diff:.2e}")
