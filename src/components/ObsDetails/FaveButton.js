@@ -21,7 +21,9 @@ import {
 const { useRealm } = RealmContext;
 
 const OBS_IMAGE_ACTION_ICON_SIZE = 50;
-const WHITE_OVERLAY_COLOR = "rgba(255, 255, 255, 0.7)";
+// The star sits on top of a photo, so it needs to be fully opaque and carry a
+// shadow to stay visible over light parts of the image
+const WHITE_OVERLAY_COLOR = "rgba(255, 255, 255, 1)";
 
 type Props = {
   observation: Object,
@@ -209,6 +211,7 @@ const FaveButton = ( {
       height={buttonHeight}
       onPress={toggleFave}
       color={WHITE_OVERLAY_COLOR}
+      dropShadow
       className={classNames( positionClassName )}
       accessibilityLabel={isFaved
         ? t( "Remove-favorite" )

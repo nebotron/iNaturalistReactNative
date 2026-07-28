@@ -22,6 +22,9 @@ interface Props extends PropsWithChildren {
   className?: string;
   color?: string;
   disabled?: boolean;
+  // Adds a dark shadow behind the icon so light icons stay legible over
+  // light backgrounds, e.g. an overlay on a photo
+  dropShadow?: boolean;
   height?: number;
   icon?: string;
   // Only show the icon with all the same layout, don't make it a button
@@ -60,6 +63,7 @@ const INatIconButton = ( {
   children,
   color,
   disabled = false,
+  dropShadow,
   height = MIN_ACCESSIBLE_DIM,
   icon,
   iconOnly,
@@ -164,6 +168,7 @@ const INatIconButton = ( {
             name={icon}
             size={size}
             color={String( color || colors?.darkGray )}
+            dropShadow={dropShadow}
           />
         )
       }
