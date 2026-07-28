@@ -23,8 +23,10 @@ import {
   View,
 } from "react-native";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import refreshFaveVotes from "sharedHelpers/refreshFaveVotes";
 import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
 import findUnfavoritedDevicePhotoDays from "sharedHelpers/unfavoritedDevicePhotos";
+import { useCurrentUser } from "sharedHooks";
 
 const { useRealm } = RealmContext;
 
@@ -47,8 +49,11 @@ const styles = StyleSheet.create( {
 
 const DevicePhotoCleanup = ( ) => {
   const realm = useRealm( );
+  const currentUser = useCurrentUser( );
+  const currentUserId = currentUser?.id;
   const [days, setDays] = useState<UnfavoritedPhotoDay[]>( [] );
   const [loading, setLoading] = useState( true );
+  const [syncingFaves, setSyncingFaves] = useState( true );
   const [showConfirm, setShowConfirm] = useState( false );
   const [deleting, setDeleting] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
@@ -56,7 +61,17 @@ const DevicePhotoCleanup = ( ) => {
   useEffect( ( ) => {
     let cancelled = false;
     setLoading( true );
-    findUnfavoritedDevicePhotoDays( realm )
+    setSyncingFaves( true );
+    // Reconcile faves with the server first. A fave toggled on another device
+    // or in the website isn't in Realm yet, and scanning against stale votes is
+    // what makes freshly unfavorited observations look like they don't exist.
+    refreshFaveVotes( realm, currentUserId )
+      .then( ( ) => {
+        if ( !cancelled ) {
+          setSyncingFaves( false );
+        }
+        return findUnfavoritedDevicePhotoDays( realm );
+      } )
       .then( result => {
         if ( !cancelled ) {
           setDays( result );
@@ -64,13 +79,14 @@ const DevicePhotoCleanup = ( ) => {
       } )
       .finally( ( ) => {
         if ( !cancelled ) {
+          setSyncingFaves( false );
           setLoading( false );
         }
       } );
     return ( ) => {
       cancelled = true;
     };
-  }, [realm] );
+  }, [realm, currentUserId] );
 
   const allUris = useMemo(
     ( ) => days.flatMap( day => day.uris ),
@@ -111,7 +127,9 @@ const DevicePhotoCleanup = ( ) => {
         <View className="p-5 items-center justify-center flex-1">
           <ActivityIndicator size={40} />
           <Body2 className="mt-4 text-center">
-            Scanning your photo library…
+            {syncingFaves
+              ? "Checking which observations you've favorited…"
+              : "Scanning your photo library…"}
           </Body2>
         </View>
       </ViewWrapper>
