@@ -47,10 +47,12 @@ const logger = log.extend( "index.js" );
 // traces
 if (
   !__DEV__
-  && typeof (
-    // $FlowIgnore
-    HermesInternal?.enablePromiseRejectionTracker === "function"
-  )
+  // The parens used to wrap the whole comparison, so this was
+  // `typeof ( ... === "function" )` — always the string "boolean", i.e. always
+  // truthy. The guard only worked because RN always runs Hermes; on any engine
+  // without the tracker it would have thrown at startup.
+  // $FlowIgnore
+  && typeof HermesInternal?.enablePromiseRejectionTracker === "function"
 ) {
   // $FlowIgnore
   HermesInternal.enablePromiseRejectionTracker( {

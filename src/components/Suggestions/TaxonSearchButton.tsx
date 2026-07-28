@@ -11,7 +11,12 @@ const TaxonSearchButton = ( ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
   const { params } = useRoute( );
-  const { entryScreen, lastScreen } = params;
+  // Suggestions can be rendered with no route params at all, and this button
+  // lives in the header, so destructuring them unguarded crashed the whole app
+  // (via ErrorBoundary) instead of just failing to navigate. Both values are
+  // optional downstream — useNavigateWithTaxonSelected already guards the same
+  // way — so an empty object is a safe fallback.
+  const { entryScreen, lastScreen } = params || {};
 
   return (
     <INatIconButton
