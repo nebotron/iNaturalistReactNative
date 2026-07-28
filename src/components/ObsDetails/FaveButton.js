@@ -87,6 +87,44 @@ const FaveButton = ( {
     );
   };
 
+  // Mirrors the fave state onto the local Realm record. This has to happen for
+  // uploaded observations too, not just unuploaded ones: nothing else refreshes
+  // votes when faving from a list (e.g. the MyObservations grid), so without it
+  // Realm keeps a stale fave and features that read it — Delete Unfaved — never
+  // see the change.
+  const writeLocalFave = useCallback( faved => {
+    if ( realm.isClosed || !uuid ) return;
+    // observation may be a plain object mapped for display (e.g. on the
+    // MyObservations screen), so look up the Realm-managed record by uuid
+    // rather than writing directly to the prop we were passed.
+    const realmObservation = realm.objectForPrimaryKey( "Observation", uuid );
+    if ( !realmObservation || !realmObservation.isValid( ) ) return;
+    const userId = currentUser?.id || 0;
+    safeRealmWrite( realm, ( ) => {
+      const otherVotes = ( realmObservation.votes || [] )
+        // Drop this user's fave; other users' faves and scoped votes stay put.
+        // user_id 0 is the placeholder used when faving while logged out.
+        .filter( v => !(
+          v?.vote_scope === null && ( v?.user_id === userId || v?.user_id === 0 )
+        ) )
+        .map( v => ( {
+          id: v.id,
+          created_at: v.created_at,
+          user_id: v.user_id,
+          vote_flag: v.vote_flag,
+          vote_scope: v.vote_scope,
+        } ) );
+      realmObservation.votes = faved
+        ? [...otherVotes, {
+          id: Math.floor( Math.random( ) * 1e9 ),
+          user_id: userId,
+          vote_flag: true,
+          vote_scope: null,
+        }]
+        : otherVotes;
+    }, "toggling favorite locally" );
+  }, [realm, uuid, currentUser] );
+
   const { mutate: createFaveMutate } = useAuthenticatedMutation(
     ( faveOrUnfaveParams, optsWithAuth ) => faveObservation( faveOrUnfaveParams, optsWithAuth ),
     {
@@ -97,6 +135,7 @@ const FaveButton = ( {
       onError: error => {
         showErrorAlert( error );
         setIsFaved( false );
+        writeLocalFave( false );
         setLoading( false );
       },
     },
@@ -112,39 +151,17 @@ const FaveButton = ( {
       onError: error => {
         showErrorAlert( error );
         setIsFaved( true );
+        writeLocalFave( true );
         setLoading( false );
       },
     },
   );
 
-  const toggleLocalFave = useCallback( ( ) => {
-    if ( realm.isClosed || !uuid ) return;
-    // observation may be a plain object mapped for display (e.g. on the
-    // MyObservations screen), so look up the Realm-managed record by uuid
-    // rather than writing directly to the prop we were passed.
-    const realmObservation = realm.objectForPrimaryKey( "Observation", uuid );
-    if ( !realmObservation || !realmObservation.isValid( ) ) return;
-    safeRealmWrite( realm, ( ) => {
-      if ( isFaved ) {
-        realmObservation.votes = realmObservation.votes
-          ?.filter( v => v?.vote_scope !== null ) || [];
-      } else {
-        const newVote = {
-          id: Math.floor( Math.random( ) * 1e9 ),
-          user_id: currentUser?.id || 0,
-          vote_flag: true,
-          vote_scope: null,
-        };
-        realmObservation.votes = [...( realmObservation.votes || [] ), newVote];
-      }
-    }, "toggling favorite locally for unuploaded observation" );
-  }, [realm, uuid, isFaved, currentUser] );
-
   const toggleFave = useCallback( ( ) => {
+    const newIsFaved = !isFaved;
     if ( isUnuploaded ) {
       setLoading( true );
-      toggleLocalFave( );
-      const newIsFaved = !isFaved;
+      writeLocalFave( newIsFaved );
       setIsFaved( newIsFaved );
       setLoading( false );
       afterToggleFave( newIsFaved );
@@ -152,12 +169,15 @@ const FaveButton = ( {
     }
     if ( !currentUser ) return;
     setLoading( true );
-    if ( isFaved ) {
-      setIsFaved( false );
-      deleteFaveMutate( { uuid } );
-    } else {
-      setIsFaved( true );
+    setIsFaved( newIsFaved );
+    // Optimistic: the server is the source of truth, but Realm has to reflect
+    // the change now so a later refetch isn't the only thing that can. Reverted
+    // in the mutation's onError below.
+    writeLocalFave( newIsFaved );
+    if ( newIsFaved ) {
       createFaveMutate( { uuid } );
+    } else {
+      deleteFaveMutate( { uuid } );
     }
   }, [
     currentUser,
@@ -166,7 +186,7 @@ const FaveButton = ( {
     isFaved,
     uuid,
     isUnuploaded,
-    toggleLocalFave,
+    writeLocalFave,
     afterToggleFave,
   ] );
 
