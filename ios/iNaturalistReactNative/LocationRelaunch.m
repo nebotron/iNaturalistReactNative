@@ -5,9 +5,14 @@
 
 static NSString *const kEnabledKey = @"INatLocationMonitorEnabled";
 static NSString *const kPendingKey = @"INatLocationMonitorPending";
-// Cap the buffered fixes so a long stretch offline can't grow NSUserDefaults
-// without bound. Significant-change fixes are sparse, so this is generous.
-static const NSUInteger kMaxPending = 500;
+// Cap the buffered fixes so a long stretch with JS down can't grow
+// NSUserDefaults without bound. JS drains every minute while it's running, so
+// this only fills up while the app is terminated or suspended.
+static const NSUInteger kMaxPending = 2000;
+// Only record a fix once the user has moved this far, which keeps continuous
+// background tracking power-efficient. Mirrors MIN_DISTANCE_METERS in
+// locationHistoryTracker.ts.
+static const CLLocationDistance kDistanceFilterMeters = 50;
 
 @interface INatLocationMonitor () <CLLocationManagerDelegate>
 @property (nonatomic, strong) CLLocationManager *manager;
@@ -34,14 +39,27 @@ static const NSUInteger kMaxPending = 500;
 {
   [[NSUserDefaults standardUserDefaults] setBool:YES forKey:kEnabledKey];
   // CLLocationManager must be created and driven on a thread with a run loop.
+  // Staying on the main queue also means delegate callbacks and
+  // drainPendingLocations can't interleave, so a fix can't be dropped between
+  // reading the buffer and clearing it.
   dispatch_async( dispatch_get_main_queue(), ^{
     if ( !self.manager ) {
       self.manager = [CLLocationManager new];
       self.manager.delegate = self;
       self.manager.allowsBackgroundLocationUpdates = YES;
+      // Otherwise iOS pauses updates whenever it decides the user is
+      // stationary and does not resume them on its own for a long time, which
+      // leaves long gaps in the tracked history.
       self.manager.pausesLocationUpdatesAutomatically = NO;
+      // ~10 m is plenty to geotag photos and draws far less power than
+      // kCLLocationAccuracyBest, and CLActivityTypeFitness tells iOS this is a
+      // moving-on-foot session so it can manage the location radio accordingly.
+      self.manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters;
+      self.manager.activityType = CLActivityTypeFitness;
+      self.manager.distanceFilter = kDistanceFilterMeters;
     }
     [self.manager startMonitoringSignificantLocationChanges];
+    [self.manager startUpdatingLocation];
   } );
 }
 
@@ -49,6 +67,7 @@ static const NSUInteger kMaxPending = 500;
 {
   [[NSUserDefaults standardUserDefaults] setBool:NO forKey:kEnabledKey];
   dispatch_async( dispatch_get_main_queue(), ^{
+    [self.manager stopUpdatingLocation];
     [self.manager stopMonitoringSignificantLocationChanges];
   } );
 }
@@ -93,6 +112,13 @@ RCT_EXPORT_MODULE( );
 + (BOOL)requiresMainQueueSetup
 {
   return NO;
+}
+
+// Run on the main queue so drains are serialized against the location
+// manager's delegate callbacks (see -start).
+- (dispatch_queue_t)methodQueue
+{
+  return dispatch_get_main_queue();
 }
 
 RCT_EXPORT_METHOD( start )

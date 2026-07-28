@@ -13,6 +13,7 @@ import {
   filterUsableTrackedPoints,
   interpolateFromUsablePoints,
 } from "sharedHelpers/interpolateTrackedLocation";
+import { drainTrackedLocationFixes } from "sharedHelpers/locationHistoryTracker";
 import { log } from "sharedHelpers/logger";
 import {
   clearPhotoLibraryWriteFailure,
@@ -270,6 +271,10 @@ export const saveObservationsAndApplyTrackedLocation = async (
     const missingLocationObs = observations
       .filter( obs => obs.latitude == null || obs.longitude == null );
     if ( missingLocationObs.length > 0 ) {
+      // The newest fixes may still be sitting in the native buffer waiting for
+      // the tracker's drain timer, and they're the ones most likely to match a
+      // photo the user just took.
+      await drainTrackedLocationFixes( realm );
       // Filter the (potentially large) point history once and reuse it for
       // every observation, rather than re-filtering per observation.
       const usablePoints = filterUsableTrackedPoints(
