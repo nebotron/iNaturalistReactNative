@@ -181,7 +181,6 @@ const SuggestionsContainer = ( ) => {
   } );
   const [preferOfflineModel, setPreferOfflineModel] = useState( false );
   const previousObservationUuidRef = useRef<string | undefined>( currentObservation?.uuid );
-  const [interactionsDisabled, setInteractionsDisabled] = useState( false );
 
   usePreloadNextObservationSuggestions( );
 
@@ -347,21 +346,6 @@ const SuggestionsContainer = ( ) => {
       navigateWithTaxonSelected( genusTaxon );
     }
   }, [findGenusForSuggestion, navigateWithTaxonSelected] );
-
-  // when the displayed suggestions swap from offline to online (or vice versa),
-  // briefly disable taps so an in-flight tap doesn't land on a different
-  // suggestion after the list reflows
-  const previousUsingOfflineSuggestionsRef = useRef( usingOfflineSuggestions );
-  useEffect( ( ) => {
-    const hasSwapped = previousUsingOfflineSuggestionsRef.current !== usingOfflineSuggestions;
-    previousUsingOfflineSuggestionsRef.current = usingOfflineSuggestions;
-    if ( !hasSwapped ) {
-      return ( ) => { };
-    }
-    setInteractionsDisabled( true );
-    const timer = setTimeout( ( ) => setInteractionsDisabled( false ), 300 );
-    return ( ) => { clearTimeout( timer ); };
-  }, [usingOfflineSuggestions] );
 
   const createUploadParams = useCallback( async ( uri: string, showLocation: boolean ) => {
     const newImageParams = await flattenUploadParams( uri, detectSubject );
@@ -649,7 +633,6 @@ const SuggestionsContainer = ( ) => {
         hideLocationToggleButton={hideLocationToggleButton}
         hideSkip={params?.hideSkip}
         improveWithLocationButtonOnPress={improveWithLocationButtonOnPress}
-        interactionsDisabled={interactionsDisabled}
         isLoading={isLoading}
         shouldUseEvidenceLocation={shouldUseEvidenceLocation}
         onCropPhoto={onCropPhotoUri}
