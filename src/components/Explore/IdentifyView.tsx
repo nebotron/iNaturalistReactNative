@@ -241,7 +241,10 @@ const IdentifyView = ( {
         // We need these dynamic dimensions to keep the image square
         // eslint-disable-next-line react-native/no-inline-styles
         style={{ width: windowWidth, height: windowWidth }}
-        className="bg-black overflow-hidden"
+        // No background of its own: any letterboxing around a non-square photo
+        // then shows the screen background, so the padding and the rest of the
+        // screen are the same color.
+        className="overflow-hidden"
       >
         {currentPhotoUrl
           ? (
