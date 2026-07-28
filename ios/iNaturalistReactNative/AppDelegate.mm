@@ -83,11 +83,13 @@
                                         initialProperties:@{}
                                             launchOptions:launchOptions];
 
-  // Resume significant-location-change monitoring when the user had location
-  // history tracking enabled, or when iOS relaunched us because of a location
-  // event. This keeps the app relaunchable in the background after iOS
-  // terminates it, which is what prevents multi-hour gaps in the tracked
-  // history: a standard-location watch alone cannot relaunch a killed app.
+  // Resume location monitoring when the user had location history tracking
+  // enabled, or when iOS relaunched us because of a location event. Starting
+  // here rather than waiting for JS means a background relaunch resumes the
+  // continuous watch immediately, and significant-change monitoring keeps the
+  // app relaunchable after iOS terminates it - which is what prevents
+  // multi-hour gaps in the tracked history, since a standard-location watch
+  // alone cannot relaunch a killed app.
   if ( launchOptions[UIApplicationLaunchOptionsLocationKey] || [INatLocationMonitor enabled] ) {
     [[INatLocationMonitor shared] start];
   }

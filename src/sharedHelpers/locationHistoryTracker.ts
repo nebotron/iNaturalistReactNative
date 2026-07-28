@@ -1,4 +1,3 @@
-import Geolocation from "@react-native-community/geolocation";
 import {
   LOCATION_PERMISSIONS,
 } from "components/SharedComponents/PermissionGateContainer";
@@ -31,6 +30,8 @@ const MIN_DISTANCE_METERS = 50;
 // Requested update interval for the Android background watch
 const MIN_INTERVAL_MS = 2 * 60 * 1000;
 const POLL_MS = 1000;
+// How often JS pulls the fixes the iOS native monitor has buffered into Realm
+const DRAIN_INTERVAL_MS = 60 * 1000;
 
 const usesAndroidBackgroundLocationPermission = Platform.OS === "android" && Platform.Version >= 29;
 
@@ -44,33 +45,15 @@ const getBackgroundLocationPermissions = ( ) => {
 
 const BACKGROUND_LOCATION_PERMISSIONS = getBackgroundLocationPermissions();
 
-// @react-native-community/geolocation only calls the native code that flips
-// on CLLocationManager's allowsBackgroundLocationUpdates (required for
-// updates to keep arriving once the app is backgrounded) when it's the one
-// driving the authorization request, i.e. skipPermissionRequests must be
-// false and authorizationLevel must be explicitly "always". The rest of the
-// app relies on manually-gated permission prompts, so this config is only
-// switched on for the moment we start our own watch, then switched back.
-const IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG = {
-  skipPermissionRequests: false,
-  authorizationLevel: "always",
-  // Keep CLLocationManager.allowsBackgroundLocationUpdates on so the
-  // continuous watch keeps delivering fixes while the app is backgrounded.
-  enableBackgroundLocationUpdates: true,
-} as const;
-
-const DEFAULT_GEOLOCATION_CONFIG = {
-  skipPermissionRequests: true,
-  // Preserve background updates when we flip the config back, otherwise the
-  // continuous watch we just started would stop firing in the background.
-  enableBackgroundLocationUpdates: true,
-} as const;
-
-// iOS-only native significant-location-change monitor. It runs its own
-// CLLocationManager alongside the continuous watch so iOS relaunches the app
-// after terminating it in the background - a standard-location watch can't do
-// that, which is the cause of the multi-hour gaps in the tracked history. Fixes
-// it captures while JS is down are buffered natively and drained on startup.
+// iOS-only native location monitor. It owns its own CLLocationManager, tuned
+// for continuous background tracking, and buffers every fix it receives (see
+// LocationRelaunch.h). We deliberately don't use
+// @react-native-community/geolocation for iOS background tracking: it drives a
+// single shared CLLocationManager for the whole app, and its one-shot
+// getCurrentPosition path stops the running watch without ever restarting it
+// (`[self startObserving]` resolves to RCTEventEmitter's no-op), so the first
+// foreground geotag after tracking started silently killed the watch for the
+// rest of the session.
 interface LocationRelaunchModule {
   start: ( ) => void;
   stop: ( ) => void;
@@ -88,6 +71,7 @@ const locationRelaunch = ( NativeModules as {
 
 let watchIds: number[] = [];
 let realmInstance: Realm | null = null;
+let drainInterval: ReturnType<typeof setInterval> | null = null;
 
 const sleep = ( ms: number ) => new Promise<void>( resolve => {
   setTimeout( resolve, ms );
@@ -111,22 +95,26 @@ const getRealmInstance = async ( ): Promise<Realm> => {
 // Store every fix a watch delivers. We intentionally don't thin points at
 // capture time - keeping the full history lets the interpolation phase pick the
 // most accurate fixes for a given moment (see interpolateTrackedLocation).
-const recordFix = async ( fix: {
+const recordFixes = async ( fixes: {
   latitude: number;
   longitude: number;
   accuracy: number | null;
   recordedAt: Date;
-} ) => {
+}[], intoRealm?: Realm ) => {
+  if ( fixes.length === 0 ) return;
   try {
-    const realm = await getRealmInstance();
+    // Writing through the caller's Realm when there is one means the points are
+    // visible to it immediately, without waiting for our own instance's write
+    // to propagate.
+    const realm = intoRealm ?? await getRealmInstance();
     safeRealmWrite( realm, ( ) => {
-      realm.create(
+      fixes.forEach( fix => realm.create(
         "LocationHistoryPoint",
         LocationHistoryPoint.mapPositionToRealm( fix ),
-      );
-    }, "recording location history point" );
+      ) );
+    }, "recording location history points" );
   } catch ( error ) {
-    logger.error( "Failed to save location history point", error );
+    logger.error( "Failed to save location history points", error );
   }
 };
 
@@ -134,30 +122,46 @@ const recordPosition = ( ) => async ( position: {
   coords: { latitude: number; longitude: number; accuracy: number | null };
 } ) => {
   const { latitude, longitude, accuracy } = position.coords;
-  await recordFix( {
+  await recordFixes( [{
     latitude, longitude, accuracy, recordedAt: new Date(),
-  } );
+  }] );
 };
 
-// Drain any significant-change fixes the native monitor buffered while JS was
-// down (e.g. after iOS terminated and later relaunched the app) and store them
-// with their original timestamps so the gap gets backfilled.
-const recordPendingSignificantChanges = async ( ) => {
+// Move the fixes the native monitor has buffered into Realm, keeping their
+// original timestamps. This is the only path by which iOS fixes get recorded,
+// so it runs both on startup (backfilling anything captured while JS was down,
+// e.g. after iOS terminated and later relaunched the app) and periodically
+// while tracking is on.
+const drainPendingFixes = async ( intoRealm?: Realm ) => {
   if ( !locationRelaunch?.drainPendingLocations ) return;
   try {
     const pending = await locationRelaunch.drainPendingLocations();
-    for ( const fix of pending ) {
-      // eslint-disable-next-line no-await-in-loop
-      await recordFix( {
-        latitude: fix.latitude,
-        longitude: fix.longitude,
-        accuracy: fix.accuracy,
-        recordedAt: new Date( fix.timestamp ),
-      } );
-    }
+    await recordFixes( pending.map( fix => ( {
+      latitude: fix.latitude,
+      longitude: fix.longitude,
+      accuracy: fix.accuracy,
+      recordedAt: new Date( fix.timestamp ),
+    } ) ), intoRealm );
   } catch ( error ) {
-    logger.warn( "Failed to drain pending significant-change locations", error );
+    logger.warn( "Failed to drain pending locations", error );
   }
+};
+
+// Lets callers that are about to read the history (e.g. geotagging a photo the
+// user just took) pull in the newest fixes rather than waiting for the timer.
+export const drainTrackedLocationFixes = drainPendingFixes;
+
+const startDraining = ( ) => {
+  if ( drainInterval ) return;
+  drainInterval = setInterval( ( ) => {
+    drainPendingFixes( );
+  }, DRAIN_INTERVAL_MS );
+};
+
+const stopDraining = ( ) => {
+  if ( !drainInterval ) return;
+  clearInterval( drainInterval );
+  drainInterval = null;
 };
 
 const backgroundTask = async ( ) => {
@@ -263,43 +267,14 @@ export const startLocationHistoryTracking = async (
 
     if ( Platform.OS === "android" && !BackgroundService.isRunning( ) ) {
       await BackgroundService.start( backgroundTask, getBackgroundServiceOptions( ) );
-    } else if ( Platform.OS !== "android" && watchIds.length === 0 ) {
-      Geolocation.setRNConfiguration( IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG );
-      // iOS background tracking uses a single continuous high-accuracy watch.
-      // @react-native-community/geolocation drives one shared CLLocationManager
-      // and only applies the *first* watchPosition's options (later watches just
-      // attach extra callbacks), so pairing this with a second "significant
-      // changes" watch would never actually start significant-change monitoring -
-      // it would only record the continuous fixes twice. Instead we keep the
-      // continuous watch delivering in the background via
-      // allowsBackgroundLocationUpdates (enableBackgroundLocationUpdates) and,
-      // crucially, pausesLocationUpdatesAutomatically = NO (see the geolocation
-      // patch). Without that, iOS pauses updates whenever it thinks the user is
-      // stationary and does not resume for a long time - the main cause of long
-      // gaps in the tracked location history.
-      //
-      // enableHighAccuracy is left on, but the patch downgrades this specific
-      // (background) watch to kCLLocationAccuracyNearestTenMeters and sets
-      // activityType = fitness - ~10m is plenty to geotag photos and draws far
-      // less battery than kCLLocationAccuracyBest. Foreground getCurrentPosition
-      // (observation geotagging) is unaffected and keeps best accuracy.
-      const continuousWatchId = watchPosition(
-        recordPosition( ),
-        error => logger.warn( "watchPosition error (continuous)", error ),
-        {
-          enableHighAccuracy: true,
-          distanceFilter: MIN_DISTANCE_METERS,
-          useSignificantChanges: false,
-        },
-      );
-      watchIds = [continuousWatchId];
-      Geolocation.setRNConfiguration( DEFAULT_GEOLOCATION_CONFIG );
-
-      // Keep significant-change monitoring running so iOS relaunches us after
-      // terminating the app in the background, then backfill anything it
-      // buffered while JS was down.
+    } else if ( Platform.OS !== "android" ) {
+      // The native monitor runs both the continuous background watch and
+      // significant-change monitoring (so iOS relaunches us after terminating
+      // the app), buffering every fix. Backfill whatever it captured while JS
+      // was down, then keep pulling new fixes into Realm.
       locationRelaunch?.start();
-      await recordPendingSignificantChanges();
+      await drainPendingFixes();
+      startDraining();
     }
     store.set( TRACKING_ENABLED_KEY, true );
     return { success: true };
@@ -315,7 +290,10 @@ export const startLocationHistoryTracking = async (
 export const stopLocationHistoryTracking = async ( ) => {
   watchIds.forEach( clearWatch );
   watchIds = [];
+  stopDraining( );
   locationRelaunch?.stop();
+  // Anything already captured still belongs in the history
+  await drainPendingFixes( );
   if ( BackgroundService.isRunning( ) ) {
     try {
       await BackgroundService.stop( );

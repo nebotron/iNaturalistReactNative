@@ -2,33 +2,18 @@ diff --git a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation
 index 0000000..1111111 100644
 --- a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
 +++ b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
-@@ -187,6 +187,29 @@
-   _locationManager.distanceFilter  = distanceFilter;
-   _locationManager.desiredAccuracy = desiredAccuracy;
-   _usingSignificantChanges = useSignificantChanges;
-+
-+  // iNaturalist patch: pausesLocationUpdatesAutomatically defaults to YES, so
-+  // iOS pauses background location updates whenever it decides the user is
-+  // stationary and does not resume them on its own for a long time, which
-+  // leaves long gaps in the tracked location history. Keep updates flowing
-+  // continuously whenever we've opted into background updates (i.e. our
-+  // location history tracker); foreground-only watches are unaffected.
-+  if (_locationConfiguration.enableBackgroundLocationUpdates) {
-+    _locationManager.pausesLocationUpdatesAutomatically = NO;
-+
-+    // Scope battery tuning to the location-history background watch only. It is
-+    // the sole caller that begins updates while skipPermissionRequests == NO
-+    // (see IOS_BACKGROUND_TRACKING_GEOLOCATION_CONFIG); every other consumer,
-+    // e.g. getCurrentPosition for observation geotagging, runs with
-+    // skipPermissionRequests == YES and must keep full (best) accuracy.
-+    if (!_locationConfiguration.skipPermissionRequests) {
-+      // ~10 m is plenty to geotag photos and draws far less power than
-+      // kCLLocationAccuracyBest, and CLActivityTypeFitness tells iOS this is a
-+      // moving-on-foot session so it can manage the location radio accordingly.
-+      _locationManager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters;
-+      _locationManager.activityType = CLActivityTypeFitness;
-+    }
-+  }
-
-   if (@available(iOS 14.0, *)) {
-     if (
+@@ -412,7 +412,13 @@
+                           useSignificantChanges:options.useSignificantChanges];
+ 
+   if (didPause) {
+-    [self startObserving];
++    // iNaturalist patch: RNCGeolocation subclasses RCTEventEmitter, whose
++    // -startObserving takes no arguments, so this call resolved to that no-op
++    // rather than to -startObserving: below. The watch paused for this one-shot
++    // request was therefore never resumed: _observingLocation stayed NO and no
++    // further geolocationDidChange events were sent for the rest of the
++    // process's life. Resume it with the options it was started with.
++    [self startObserving:_observerOptions];
+   }
+ }
+ 
