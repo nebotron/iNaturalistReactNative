@@ -24,7 +24,6 @@ type Props = {
   hideLocationToggleButton: boolean,
   hideSkip?: boolean,
   improveWithLocationButtonOnPress: () => void,
-  interactionsDisabled: boolean,
   isLoading: boolean,
   shouldUseEvidenceLocation: boolean,
   onCropPhoto?: Function,
@@ -49,7 +48,6 @@ const Suggestions = ( {
   hideLocationToggleButton,
   hideSkip,
   improveWithLocationButtonOnPress,
-  interactionsDisabled,
   isLoading,
   shouldUseEvidenceLocation,
   onCropPhoto,
@@ -77,29 +75,21 @@ const Suggestions = ( {
   const isEmptyList = !topSuggestion && otherSuggestions?.length === 0;
   const showOfflineModelInfo = !isLoading && useOfflineModel && !isEmptyList;
 
-  const handleTaxonChosen = useCallback( ( ...args ) => {
-    if ( interactionsDisabled ) { return; }
-    onTaxonChosen( ...args );
-  }, [interactionsDisabled, onTaxonChosen] );
-
-  const handleSelectGenus = useCallback( suggestion => {
-    if ( interactionsDisabled ) { return; }
-    onSelectGenus( suggestion );
-  }, [interactionsDisabled, onSelectGenus] );
-
+  // Taps are never discarded here: TaxonResult captures the row's taxon on
+  // press-in, so a list reflow mid-tap can't redirect the choice
   const renderSuggestion = useCallback( ( { item: suggestion } ) => {
     const showGenusButton = genusEligibleTaxonIds?.has( suggestion.taxon.id );
     return (
       <Suggestion
         accessibilityLabel={t( "Choose-taxon" )}
         suggestion={suggestion}
-        onTaxonChosen={handleTaxonChosen}
+        onTaxonChosen={onTaxonChosen}
         onSelectGenus={showGenusButton
-          ? ( ) => handleSelectGenus( suggestion )
+          ? ( ) => onSelectGenus( suggestion )
           : undefined}
       />
     );
-  }, [genusEligibleTaxonIds, handleSelectGenus, handleTaxonChosen, t] );
+  }, [genusEligibleTaxonIds, onSelectGenus, onTaxonChosen, t] );
 
   const renderEmptyList = useMemo( ( ) => (
     <SuggestionsEmpty
@@ -130,7 +120,6 @@ const Suggestions = ( {
   const renderHeader = useMemo( ( ) => (
     <SuggestionsHeader
       detectSubject={detectSubject}
-      interactionsDisabled={interactionsDisabled}
       onCropPhoto={onCropPhoto}
       onPressPhoto={onPressPhoto}
       onReorderPhotos={onReorderPhotos}
@@ -145,7 +134,6 @@ const Suggestions = ( {
     />
   ), [
     detectSubject,
-    interactionsDisabled,
     onCropPhoto,
     onPressPhoto,
     onReorderPhotos,
@@ -183,9 +171,9 @@ const Suggestions = ( {
         <Suggestion
           accessibilityLabel={t( "Choose-top-taxon" )}
           suggestion={item}
-          onTaxonChosen={handleTaxonChosen}
+          onTaxonChosen={onTaxonChosen}
           onSelectGenus={showGenusButton
-            ? ( ) => handleSelectGenus( item )
+            ? ( ) => onSelectGenus( item )
             : undefined}
         />
       </View>
