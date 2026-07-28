@@ -174,8 +174,14 @@ const performDeleteOriginalDevicePhotos = async (
         );
       } ),
     ] );
+    // Report what the OS actually deleted, not what we asked for. A call that
+    // resolves with deleted:0 (e.g. fetched:0 — every URI is a ghost pointing
+    // at an already-deleted asset) is a no-op, and logging it as a deletion of
+    // all N made a repeating no-op look like a working cleanup.
+    const deleted = ( result as { deleted?: number } | undefined )?.deleted;
     logger.info(
-      `Deleted ${uniqueUris.length} device photo(s); result=${JSON.stringify( result )}`,
+      `Deleted ${deleted ?? uniqueUris.length} of ${uniqueUris.length} `
+      + `device photo(s); result=${JSON.stringify( result )}`,
     );
     clearPhotoLibraryWriteFailure( );
   } catch ( deleteError ) {
