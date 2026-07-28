@@ -1221,6 +1221,53 @@ RCT_EXPORT_METHOD( photoDeletionContext
   } );
 }
 
+// Returns the subset of the passed ph:// URIs that still resolve to a real
+// asset in the photo library. An identifier orphaned by an earlier deletion or
+// a device restore resolves to nothing: it can't be previewed and can't be
+// deleted, so callers should drop it rather than showing it to the user.
+RCT_EXPORT_METHOD( existingPhotoAssetUris
+                  : ( NSArray<NSString *> * )phUris resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSArray<NSString *> *uris = phUris ?: @[];
+  if ( uris.count == 0 ) {
+    resolve( @[] );
+    return;
+  }
+
+  // fetchAssetsWithLocalIdentifiers: matches an identifier with or without its
+  // "/L0/001" suffix, but the returned localIdentifier always carries one, so
+  // compare on the UUID ahead of the first slash.
+  NSString * ( ^baseIdentifier )( NSString * ) = ^( NSString *uri ) {
+    NSString *identifier = [uri hasPrefix:@"ph://"] ? [uri substringFromIndex:5] : uri;
+    NSRange slash = [identifier rangeOfString:@"/"];
+    return slash.location == NSNotFound
+      ? identifier
+      : [identifier substringToIndex:slash.location];
+  };
+
+  NSMutableArray<NSString *> *ids = [NSMutableArray array];
+  for ( NSString *u in uris ) {
+    [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
+  }
+  PHFetchResult<PHAsset *> *fetched =
+    [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
+
+  NSMutableSet<NSString *> *existing = [NSMutableSet set];
+  for ( PHAsset *asset in fetched ) {
+    [existing addObject:baseIdentifier( asset.localIdentifier )];
+  }
+
+  NSMutableArray<NSString *> *result = [NSMutableArray array];
+  for ( NSString *u in uris ) {
+    if ( [existing containsObject:baseIdentifier( u )] ) {
+      [result addObject:u];
+    }
+  }
+  resolve( result );
+}
+
 // Best-effort device-photo deletion. Dismisses any modal presented over the
 // root VC first (iOS won't present its deletion confirmation over a modal),
 // then requests deletion. Rejects with requested/fetched counts so JS can tell

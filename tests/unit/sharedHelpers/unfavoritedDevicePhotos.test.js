@@ -1,5 +1,11 @@
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
+import filterExistingDevicePhotoUris from "sharedHelpers/existingDevicePhotoUris";
 import findUnfavoritedDevicePhotoDays from "sharedHelpers/unfavoritedDevicePhotos";
+
+// Stands in for the native PHAsset lookup; by default every URI still exists.
+jest.mock( "sharedHelpers/existingDevicePhotoUris", ( ) => jest.fn(
+  uris => Promise.resolve( uris ),
+) );
 
 // Fixed instants (ms) used across the fixtures below.
 const UNFAV_TIME = Date.UTC( 2026, 6, 16, 12, 0, 0 );
@@ -34,6 +40,7 @@ const flatUris = days => days.flatMap( day => day.uris );
 
 beforeEach( ( ) => {
   CameraRoll.getPhotos.mockReset( );
+  filterExistingDevicePhotoUris.mockImplementation( uris => Promise.resolve( uris ) );
 } );
 
 describe( "findUnfavoritedDevicePhotoDays", ( ) => {
@@ -115,6 +122,43 @@ describe( "findUnfavoritedDevicePhotoDays", ( ) => {
     const days = await findUnfavoritedDevicePhotoDays( realm );
 
     expect( flatUris( days ) ).toEqual( ["ph://CURRENT_ID"] );
+  } );
+
+  it( "drops a stored URI whose photo is already gone from the library, so it "
+    + "can't show as a blank thumbnail or pad the delete count", async ( ) => {
+    const realm = makeRealm( [
+      makeObservation( {
+        faved: false,
+        timeMs: UNFAV_TIME,
+        deviceUris: ["ph://DELETED_ALREADY", "ph://STILL_HERE"],
+      } ),
+    ] );
+    // Neither stored URI turns up in the scan, so both reach the exact-match
+    // fallback; only one of them still resolves to an asset.
+    mockLibrary( [] );
+    filterExistingDevicePhotoUris.mockImplementation(
+      uris => Promise.resolve( uris.filter( uri => uri === "ph://STILL_HERE" ) ),
+    );
+
+    const days = await findUnfavoritedDevicePhotoDays( realm );
+
+    expect( flatUris( days ) ).toEqual( ["ph://STILL_HERE"] );
+  } );
+
+  it( "returns no days when every matching photo is already gone", async ( ) => {
+    const realm = makeRealm( [
+      makeObservation( {
+        faved: false,
+        timeMs: UNFAV_TIME,
+        deviceUris: ["ph://DELETED_ALREADY"],
+      } ),
+    ] );
+    mockLibrary( [] );
+    filterExistingDevicePhotoUris.mockResolvedValue( [] );
+
+    const days = await findUnfavoritedDevicePhotoDays( realm );
+
+    expect( days ).toEqual( [] );
   } );
 
   it( "returns nothing when there are no unfavorited observations", async ( ) => {

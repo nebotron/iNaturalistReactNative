@@ -5,9 +5,13 @@ import { Platform } from "react-native";
 import type Realm from "realm";
 import type { RealmObservation } from "realmModels/types";
 import { getDevicePhotoUrisFromObservation } from "sharedHelpers/duplicateUploadedDevicePhotos";
+import filterExistingDevicePhotoUris from "sharedHelpers/existingDevicePhotoUris";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
-import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
+import {
+  clearRemovedGroupPhotoUris,
+  getRemovedGroupPhotoUris,
+} from "sharedHelpers/removedGroupPhotoUris";
 
 const logger = log.extend( "unfavoritedDevicePhotos" );
 
@@ -184,6 +188,29 @@ const addUriToDay = (
   } );
 };
 
+// Removes URIs that no longer resolve to a real library asset. A stored device
+// photo URI outlives its photo: once the asset is deleted (by an earlier
+// cleanup run, or by the user in Photos) or orphaned by a device restore, the
+// identifier is a ghost. It renders as a blank thumbnail and the OS can't
+// delete it, so keeping it only inflates the count past what a delete can
+// actually do.
+const dropVanishedUris = async (
+  days: UnfavoritedPhotoDay[],
+): Promise<UnfavoritedPhotoDay[]> => {
+  const allUris = days.flatMap( day => day.uris );
+  const existing = new Set( await filterExistingDevicePhotoUris( allUris ) );
+  const vanished = allUris.filter( uri => !existing.has( uri ) );
+  if ( vanished.length === 0 ) {
+    return days;
+  }
+  // Group Photos removals confirmed gone from the library have nothing left to
+  // clean up, so stop carrying them forward (see removedGroupPhotoUris.ts).
+  clearRemovedGroupPhotoUris( vanished );
+  return days
+    .map( day => ( { ...day, uris: day.uris.filter( uri => existing.has( uri ) ) } ) )
+    .filter( day => day.uris.length > 0 );
+};
+
 // Finds every device photo library URI that belongs to an observation the
 // current user has NOT favorited, grouped by the day the photo was taken.
 // Photos are matched two ways: exactly, via the device photo URI stored on the
@@ -235,12 +262,12 @@ const findUnfavoritedDevicePhotoDays = async (
 
   if ( unfavoritedTimes.length === 0 && exactUnfavoritedUris.size === 0 ) {
     return pendingRemovedGroupPhotoUris.length > 0
-      ? [{
+      ? dropVanishedUris( [{
         dateKey: "removed-from-group-photos",
         label: "Removed from Group Photos",
         timestamp: Date.now( ),
         uris: pendingRemovedGroupPhotoUris,
-      }]
+      }] )
       : [];
   }
 
@@ -339,7 +366,9 @@ const findUnfavoritedDevicePhotoDays = async (
     } );
   }
 
-  return Array.from( dayMap.values( ) ).sort( ( a, b ) => b.timestamp - a.timestamp );
+  return dropVanishedUris(
+    Array.from( dayMap.values( ) ).sort( ( a, b ) => b.timestamp - a.timestamp ),
+  );
 };
 
 export default findUnfavoritedDevicePhotoDays;
