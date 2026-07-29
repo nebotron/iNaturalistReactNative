@@ -12,15 +12,14 @@ export interface PlaceResult {
   lon: string;
 }
 
-const PLACES_NEW_BASE = "https://places.googleapis.com/v1";
-const PLACES_LEGACY_BASE = "https://maps.googleapis.com/maps/api/place";
+// Places API (New). The legacy Places endpoints can no longer be enabled in
+// Cloud projects created after March 2025, so they aren't worth calling.
+const PLACES_BASE = "https://places.googleapis.com/v1";
 const AUTOCOMPLETE_FIELD_MASK = "suggestions.placePrediction.placeId,"
   + "suggestions.placePrediction.text.text";
-// Soft location bias for autocomplete results near the previous stop / current
-// location. Places API (New) rejects a circle radius over 50km, so its bias is
-// tighter than the legacy endpoint's.
-const BIAS_RADIUS_METERS = 200_000;
-const NEW_BIAS_RADIUS_METERS = 50_000;
+// Soft location bias for results near the previous stop / current location.
+// The API rejects a circle radius over 50km.
+const BIAS_RADIUS_METERS = 50_000;
 const MAX_SUGGESTIONS = 3;
 
 // A key restricted to "iOS apps" only authorizes requests carrying this header
@@ -28,15 +27,6 @@ const MAX_SUGGESTIONS = 3;
 // attach it automatically), so it can't just reuse the Android-only
 // GMAPS_API_KEY used for the native Maps SDK in AndroidManifest.xml.
 const IOS_BUNDLE_ID_HEADER = "X-Ios-Bundle-Identifier";
-
-// Places API (New) and Places API (Legacy) are separate products, enabled
-// separately, and the legacy one can no longer be enabled at all in Cloud
-// projects created after March 2025 — calling it there fails with
-// REQUEST_DENIED, which is what silently emptied this dropdown. Rather than
-// guess which one a given build's key can use, try both and remember whichever
-// answered.
-type PlacesApiFlavor = "new" | "legacy";
-let workingFlavor: PlacesApiFlavor | null = null;
 
 function apiKey( ): string | undefined {
   return Config.GMAPS_IOS_API_KEY || Config.GMAPS_API_KEY;
@@ -51,15 +41,17 @@ async function errorDetail( response: Response ): Promise<string> {
   }
 }
 
-// The request functions return null when the API itself failed (so the other
-// flavor is worth trying) and an array when it answered, even with no matches.
-async function autocompleteNew(
+export async function searchGooglePlaces(
   text: string,
-  key: string,
   nearbyLatLng?: LatLng,
-): Promise<PlaceResult[] | null> {
+): Promise<PlaceResult[]> {
+  const key = apiKey( );
+  if ( !key ) {
+    logger.error( "Places search skipped: no GMAPS_IOS_API_KEY or GMAPS_API_KEY in this build" );
+    return [];
+  }
   try {
-    const response = await fetch( `${PLACES_NEW_BASE}/places:autocomplete`, {
+    const response = await fetch( `${PLACES_BASE}/places:autocomplete`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -78,7 +70,7 @@ async function autocompleteNew(
                   latitude: nearbyLatLng.latitude,
                   longitude: nearbyLatLng.longitude,
                 },
-                radius: NEW_BIAS_RADIUS_METERS,
+                radius: BIAS_RADIUS_METERS,
               },
             },
           }
@@ -87,8 +79,8 @@ async function autocompleteNew(
     } );
     if ( !response.ok ) {
       const detail = await errorDetail( response );
-      logger.error( `Places (new) autocomplete failed: HTTP ${response.status} ${detail}` );
-      return null;
+      logger.error( `Places autocomplete failed: HTTP ${response.status} ${detail}` );
+      return [];
     }
     const json = await response.json( );
     return ( json.suggestions ?? [] )
@@ -105,57 +97,16 @@ async function autocompleteNew(
         lon: "",
       } ) );
   } catch ( error ) {
-    logger.error( "Places (new) autocomplete threw", error );
-    return null;
+    logger.error( "Places autocomplete threw", error );
+    return [];
   }
 }
 
-async function autocompleteLegacy(
-  text: string,
-  key: string,
-  nearbyLatLng?: LatLng,
-): Promise<PlaceResult[] | null> {
+export async function fetchPlaceLatLng( placeId: string ): Promise<LatLng | null> {
+  const key = apiKey( );
+  if ( !key ) return null;
   try {
-    let url = `${PLACES_LEGACY_BASE}/autocomplete/json`
-      + `?input=${encodeURIComponent( text )}&language=en&key=${key}`;
-    if ( nearbyLatLng ) {
-      url += `&location=${nearbyLatLng.latitude},${nearbyLatLng.longitude}`
-        + `&radius=${BIAS_RADIUS_METERS}`;
-    }
-    const response = await fetch( url, {
-      headers: { [IOS_BUNDLE_ID_HEADER]: DeviceInfo.getBundleId( ) },
-    } );
-    if ( !response.ok ) {
-      logger.error( `Places (legacy) autocomplete failed: HTTP ${response.status}` );
-      return null;
-    }
-    const json = await response.json( );
-    // ZERO_RESULTS means the API answered; anything else is a real failure.
-    if ( json.status === "ZERO_RESULTS" ) return [];
-    if ( json.status !== "OK" ) {
-      logger.error(
-        `Places (legacy) autocomplete failed: ${json.status} ${json.error_message ?? ""}`,
-      );
-      return null;
-    }
-    return json.predictions.slice( 0, MAX_SUGGESTIONS ).map( ( prediction: {
-      place_id: string;
-      description: string;
-    } ) => ( {
-      place_id: prediction.place_id,
-      display_name: prediction.description,
-      lat: "",
-      lon: "",
-    } ) );
-  } catch ( error ) {
-    logger.error( "Places (legacy) autocomplete threw", error );
-    return null;
-  }
-}
-
-async function placeLatLngNew( placeId: string, key: string ): Promise<LatLng | null> {
-  try {
-    const response = await fetch( `${PLACES_NEW_BASE}/places/${encodeURIComponent( placeId )}`, {
+    const response = await fetch( `${PLACES_BASE}/places/${encodeURIComponent( placeId )}`, {
       headers: {
         "X-Goog-Api-Key": key,
         "X-Goog-FieldMask": "location",
@@ -163,93 +114,19 @@ async function placeLatLngNew( placeId: string, key: string ): Promise<LatLng | 
       },
     } );
     if ( !response.ok ) {
-      logger.error(
-        `Place (new) details failed: HTTP ${response.status} ${await errorDetail( response )}`,
-      );
+      const detail = await errorDetail( response );
+      logger.error( `Place details failed: HTTP ${response.status} ${detail}` );
       return null;
     }
     const json = await response.json( );
     const location = json?.location;
-    if ( typeof location?.latitude !== "number" ) return null;
+    if ( typeof location?.latitude !== "number" ) {
+      logger.error( "Place details returned no location" );
+      return null;
+    }
     return { latitude: location.latitude, longitude: location.longitude };
   } catch ( error ) {
-    logger.error( "Place (new) details threw", error );
+    logger.error( "Place details threw", error );
     return null;
   }
-}
-
-async function placeLatLngLegacy( placeId: string, key: string ): Promise<LatLng | null> {
-  try {
-    const url = `${PLACES_LEGACY_BASE}/details/json`
-      + `?place_id=${encodeURIComponent( placeId )}&fields=geometry&key=${key}`;
-    const response = await fetch( url, {
-      headers: { [IOS_BUNDLE_ID_HEADER]: DeviceInfo.getBundleId( ) },
-    } );
-    if ( !response.ok ) {
-      logger.error( `Place (legacy) details failed: HTTP ${response.status}` );
-      return null;
-    }
-    const json = await response.json( );
-    const location = json?.result?.geometry?.location;
-    if ( !location ) {
-      logger.error( `Place (legacy) details failed: ${json?.status} ${json?.error_message ?? ""}` );
-      return null;
-    }
-    return { latitude: location.lat, longitude: location.lng };
-  } catch ( error ) {
-    logger.error( "Place (legacy) details threw", error );
-    return null;
-  }
-}
-
-// Runs the flavor that answered last (new first, until proven otherwise) and
-// falls back to the other one, remembering whichever worked.
-async function withFlavorFallback<T>(
-  runNew: ( ) => Promise<T | null>,
-  runLegacy: ( ) => Promise<T | null>,
-): Promise<T | null> {
-  const preferNew = workingFlavor !== "legacy";
-  const preferred = await ( preferNew
-    ? runNew( )
-    : runLegacy( ) );
-  if ( preferred !== null ) {
-    workingFlavor = preferNew
-      ? "new"
-      : "legacy";
-    return preferred;
-  }
-  const fallback = await ( preferNew
-    ? runLegacy( )
-    : runNew( ) );
-  if ( fallback !== null ) {
-    workingFlavor = preferNew
-      ? "legacy"
-      : "new";
-  }
-  return fallback;
-}
-
-export async function searchGooglePlaces(
-  text: string,
-  nearbyLatLng?: LatLng,
-): Promise<PlaceResult[]> {
-  const key = apiKey( );
-  if ( !key ) {
-    logger.error( "Places search skipped: no GMAPS_IOS_API_KEY or GMAPS_API_KEY in this build" );
-    return [];
-  }
-  const results = await withFlavorFallback(
-    ( ) => autocompleteNew( text, key, nearbyLatLng ),
-    ( ) => autocompleteLegacy( text, key, nearbyLatLng ),
-  );
-  return results ?? [];
-}
-
-export async function fetchPlaceLatLng( placeId: string ): Promise<LatLng | null> {
-  const key = apiKey( );
-  if ( !key ) return null;
-  return withFlavorFallback(
-    ( ) => placeLatLngNew( placeId, key ),
-    ( ) => placeLatLngLegacy( placeId, key ),
-  );
 }
