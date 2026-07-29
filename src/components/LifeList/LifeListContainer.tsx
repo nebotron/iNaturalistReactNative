@@ -1,5 +1,5 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
-import { fetchSpeciesCounts, searchObservations } from "api/observations";
+import { fetchRemoteObservations } from "api/observations";
 import type { ApiObservation, ApiTaxon } from "api/types";
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
 import {
@@ -14,14 +14,20 @@ import type { ListRenderItemInfo } from "react-native";
 import Photo from "realmModels/Photo";
 import Taxon from "realmModels/Taxon";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
+import type { CachedObservation, UserObservationsCache } from "sharedHelpers/userObservationsCache";
+import {
+  OBSERVATION_SYNC_FIELDS,
+  readUserObservationsCache,
+  syncUserObservations,
+} from "sharedHelpers/userObservationsCache";
 import {
   useAuthenticatedQuery, useCurrentUser, useFontScale, useGridLayout, useTranslation,
 } from "sharedHooks";
 import { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
 
-// Max page size the API allows
-const PAGE_SIZE = 200;
+// Max number of observations the API will fetch by uuid in one request.
+const FETCH_BY_UUID_BATCH = 100;
 
 interface Lifer {
   observed_on: string | null;
@@ -30,97 +36,112 @@ interface Lifer {
   taxon: ApiTaxon;
 }
 
-// The lifer list is expensive to compute (it requires paging through a
-// user's entire observation history), so once computed it's cached to disk
-// forever, keyed by the time of the last sync. Subsequent fetches only need
-// to look at observations created or updated since that time (e.g. newly
-// uploaded, or newly reaching research grade) instead of recomputing the
-// whole list from scratch.
-// v2: research-grade-only, keyed by last sync time instead of max observation id
-const cacheKey = ( userId: number ) => `lifers-v2-${userId}`;
-const lastSyncCacheKey = ( userId: number ) => `lifersLastSync-v2-${userId}`;
+// Which observation is a lifer is decided entirely from the shared observation
+// cache (see userObservationsCache.ts), so this only has to hold the taxon and
+// photo the grid renders. It's keyed by uuid and pruned to the current lifers,
+// so it stays one entry per species rather than one per observation.
+const displayCacheKey = ( userId: number ) => `liferDisplay-v1-${userId}`;
 
-function readCachedLifers( userId: number ): { lifers: Lifer[]; lastSync: string | null } {
-  const rawLifers = zustandStorage.getItem( cacheKey( userId ) );
-  return {
-    lifers: rawLifers
-      ? JSON.parse( rawLifers )
-      : [],
-    lastSync: zustandStorage.getItem( lastSyncCacheKey( userId ) ) || null,
-  };
+type LiferDisplayCache = Record<string, Lifer>;
+
+function readLiferDisplayCache( userId: number ): LiferDisplayCache {
+  const raw = zustandStorage.getItem( displayCacheKey( userId ) );
+  if ( typeof raw !== "string" ) return {};
+  try {
+    return JSON.parse( raw );
+  } catch {
+    return {};
+  }
 }
 
-function writeCachedLifers( userId: number, lifers: Lifer[], lastSync: string ): void {
-  zustandStorage.setItem( cacheKey( userId ), JSON.stringify( lifers ) );
-  zustandStorage.setItem( lastSyncCacheKey( userId ), lastSync );
+function writeLiferDisplayCache( userId: number, display: LiferDisplayCache ): void {
+  zustandStorage.setItem( displayCacheKey( userId ), JSON.stringify( display ) );
+  // The pre-shared-cache lifer list, which nothing reads now. It held a full
+  // record per species, so it's worth reclaiming rather than leaving on disk.
+  zustandStorage.removeItem( `lifers-v2-${userId}` );
+  zustandStorage.removeItem( `lifersLastSync-v2-${userId}` );
 }
 
-// Keep the earliest research-grade observation seen so far for a species.
-function addLiferIfEarliest( map: Map<number, Lifer>, obs: ApiObservation ): void {
-  const { taxon } = obs;
-  // Only track species-level observations (rank_level === 10)
-  if ( !taxon?.id || taxon.rank_level !== Taxon.SPECIES_LEVEL ) return;
-  const existing = map.get( taxon.id );
-  const observedOn = obs.observed_on ?? null;
-  const isEarlier = observedOn && existing?.observed_on
-    && new Date( observedOn ) < new Date( existing.observed_on );
-  if ( !existing || isEarlier ) {
-    map.set( taxon.id, {
-      observed_on: observedOn,
+const toLifer = ( obs: ApiObservation ): Lifer | null => (
+  obs.taxon?.id
+    ? {
+      observed_on: obs.observed_on ?? null,
       uuid: obs.uuid,
       observation_photos: obs.observation_photos,
-      taxon,
+      taxon: obs.taxon,
+    }
+    : null
+);
+
+// Only species-level (rank_level === 10) research-grade observations count.
+const isLiferCandidate = ( observation: CachedObservation ): boolean => (
+  observation.researchGrade
+  && !!observation.taxonId
+  && observation.rankLevel === Taxon.SPECIES_LEVEL
+);
+
+// The earliest research-grade observation of each species, straight out of the
+// shared cache. Recomputing from the whole cache rather than patching a stored
+// list means a retraction simply stops qualifying and the next-earliest
+// observation takes over, with no special case to handle it.
+function earliestBySpecies( cache: UserObservationsCache ): Map<number, CachedObservation> {
+  const earliest = new Map<number, CachedObservation>( );
+  cache.forEach( observation => {
+    if ( !isLiferCandidate( observation ) ) return;
+    const taxonId = observation.taxonId as number;
+    const existing = earliest.get( taxonId );
+    const time = observation.observedAtMs ?? Number.MAX_SAFE_INTEGER;
+    const existingTime = existing?.observedAtMs ?? Number.MAX_SAFE_INTEGER;
+    if ( !existing || time < existingTime ) {
+      earliest.set( taxonId, observation );
+    }
+  } );
+  return earliest;
+}
+
+const sortByObservedOnDesc = ( lifers: Lifer[] ): Lifer[] => lifers.sort(
+  ( a, b ) => (
+    new Date( b.observed_on ?? 0 ).getTime( ) - new Date( a.observed_on ?? 0 ).getTime( )
+  ),
+);
+
+// Fills in the taxon and photo for lifers we have no display data for. After a
+// first sync every lifer was seen during the pass, so this does nothing; it
+// only fires when a species' lifer changes to an older observation that wasn't
+// in the pass (e.g. the previous one lost research grade).
+async function fetchMissingDisplayData(
+  uuids: string[],
+  display: LiferDisplayCache,
+  opts: { api_token: string | null },
+): Promise<void> {
+  for ( let i = 0; i < uuids.length; i += FETCH_BY_UUID_BATCH ) {
+    const batch = uuids.slice( i, i + FETCH_BY_UUID_BATCH );
+    // eslint-disable-next-line no-await-in-loop
+    const results = await fetchRemoteObservations(
+      batch,
+      { fields: OBSERVATION_SYNC_FIELDS },
+      opts,
+    );
+    ( results ?? [] ).forEach( ( obs: ApiObservation ) => {
+      const lifer = toLifer( obs );
+      if ( lifer ) {
+        display[obs.uuid] = lifer;
+      }
     } );
   }
 }
 
-// Like addLiferIfEarliest, but also handles an observation that no longer
-// qualifies (e.g. an ID was retracted and it dropped below research grade).
-// If it was our recorded lifer for that species, remove it and flag the
-// species so its remaining research-grade observations get re-checked.
-function syncLiferFromUpdate(
-  map: Map<number, Lifer>,
-  obs: ApiObservation,
-  speciesNeedingRecheck: Set<number>,
-): void {
-  const { taxon } = obs;
-  if ( !taxon?.id || taxon.rank_level !== Taxon.SPECIES_LEVEL ) return;
-
-  if ( obs.quality_grade !== "research" ) {
-    const existing = map.get( taxon.id );
-    if ( existing?.uuid === obs.uuid ) {
-      map.delete( taxon.id );
-      speciesNeedingRecheck.add( taxon.id );
-    }
-    return;
-  }
-  addLiferIfEarliest( map, obs );
-  speciesNeedingRecheck.delete( taxon.id );
-}
-
-// Find the earliest remaining research-grade observation for a species
-// whose previous lifer observation was retracted, if any is left.
-async function recheckSpecies(
-  map: Map<number, Lifer>,
-  userId: number,
-  taxonId: number,
-  fields: object,
-  opts: { api_token: string | null },
-): Promise<void> {
-  const response = await searchObservations(
-    {
-      user_id: userId,
-      taxon_id: taxonId,
-      quality_grade: "research",
-      order_by: "observed_on",
-      order: "asc",
-      per_page: 1,
-      fields,
-    },
-    opts,
+// The lifers already derivable from the cache, for showing something
+// immediately while a background sync checks for new ones.
+function readCachedLifers( userId: number ): Lifer[] {
+  const display = readLiferDisplayCache( userId );
+  const liferUuids = new Set(
+    Array.from( earliestBySpecies( readUserObservationsCache( userId ) ).values( ) )
+      .map( observation => observation.uuid ),
   );
-  const obs = response?.results?.[0];
-  if ( obs ) addLiferIfEarliest( map, obs );
+  return sortByObservedOnDesc(
+    Object.values( display ).filter( lifer => liferUuids.has( lifer.uuid ) ),
+  );
 }
 
 async function fetchLifers(
@@ -129,95 +150,39 @@ async function fetchLifers(
 ): Promise<Lifer[]> {
   if ( !userId ) return [];
 
-  const { lifers: cachedLifers, lastSync } = readCachedLifers( userId );
-  const firstObservationBySpeciesId = new Map<number, Lifer>(
-    cachedLifers.map( lifer => [lifer.taxon.id, lifer] ),
+  const display = readLiferDisplayCache( userId );
+  // Harvest what the grid renders from the same pass that fills the shared
+  // cache, so a first sync needs no extra requests to be able to draw itself.
+  const cache = await syncUserObservations( userId, opts, {
+    onPage: results => results.forEach( obs => {
+      if ( obs.quality_grade !== "research" ) return;
+      if ( obs.taxon?.rank_level !== Taxon.SPECIES_LEVEL ) return;
+      const lifer = toLifer( obs );
+      if ( lifer ) {
+        display[obs.uuid] = lifer;
+      }
+    } ),
+  } );
+
+  const liferUuids = Array.from( earliestBySpecies( cache ).values( ) )
+    .map( observation => observation.uuid );
+  await fetchMissingDisplayData(
+    liferUuids.filter( uuid => !display[uuid] ),
+    display,
+    opts,
   );
 
-  // Recorded before fetching so any observations that change again while
-  // this sync is in flight get picked up by the next sync.
-  const syncStartedAt = new Date( ).toISOString( );
-  const fields = {
-    id: true,
-    observed_on: true,
-    uuid: true,
-    quality_grade: true,
-    observation_photos: {
-      photo: {
-        url: true,
-        license_code: true,
-        attribution: true,
-      },
-    },
-    taxon: Taxon.LIMITED_TAXON_FIELDS,
-  };
-  const commonParams = {
-    user_id: userId,
-    order_by: "id",
-    order: "asc",
-    per_page: PAGE_SIZE,
-    fields,
-  };
-
-  if ( lastSync ) {
-    // Only fetch observations created or updated since the last sync,
-    // instead of re-paging through the user's entire observation history.
-    // Grade isn't filtered server-side here so a retraction (an
-    // observation dropping below research grade) is visible and can be
-    // used to invalidate a stale cached lifer.
-    const speciesNeedingRecheck = new Set<number>( );
-    let page = 1;
-    let hasMorePages = true;
-    while ( hasMorePages ) {
-      // eslint-disable-next-line no-await-in-loop
-      const response = await searchObservations(
-        { ...commonParams, updated_since: lastSync, page },
-        opts,
-      );
-      const results: ApiObservation[] = response?.results ?? [];
-      results.forEach( obs => (
-        syncLiferFromUpdate( firstObservationBySpeciesId, obs, speciesNeedingRecheck )
-      ) );
-      hasMorePages = results.length === PAGE_SIZE;
-      page += 1;
+  // Keep only what's still a lifer, so this cache tracks the user's species
+  // count rather than growing with every research-grade observation synced.
+  const pruned: LiferDisplayCache = {};
+  liferUuids.forEach( uuid => {
+    if ( display[uuid] ) {
+      pruned[uuid] = display[uuid];
     }
-    await Promise.all( Array.from( speciesNeedingRecheck ).map( taxonId => (
-      recheckSpecies( firstObservationBySpeciesId, userId, taxonId, fields, opts )
-    ) ) );
-  } else {
-    // First run: no prior sync to diff against, so the server can filter to
-    // research grade directly. Cheap request (per_page: 0) for the total
-    // number of distinct research-grade species this user has observed, so
-    // the paging loop below can stop as soon as every species has been
-    // found instead of paging to the end.
-    const { total_results: totalSpecies } = await fetchSpeciesCounts(
-      { user_id: userId, quality_grade: "research", per_page: 0 },
-      opts,
-    );
+  } );
+  writeLiferDisplayCache( userId, pruned );
 
-    let page = 1;
-    let hasMorePages = true;
-    while ( hasMorePages ) {
-      // eslint-disable-next-line no-await-in-loop
-      const response = await searchObservations(
-        { ...commonParams, quality_grade: "research", page },
-        opts,
-      );
-      const results: ApiObservation[] = response?.results ?? [];
-      results.forEach( obs => addLiferIfEarliest( firstObservationBySpeciesId, obs ) );
-      hasMorePages = results.length === PAGE_SIZE
-        && firstObservationBySpeciesId.size < totalSpecies;
-      page += 1;
-    }
-  }
-
-  const lifers = Array.from( firstObservationBySpeciesId.values( ) ).sort(
-    ( a, b ) => (
-      new Date( b.observed_on ?? 0 ).getTime( ) - new Date( a.observed_on ?? 0 ).getTime( )
-    ),
-  );
-  writeCachedLifers( userId, lifers, syncStartedAt );
-  return lifers;
+  return sortByObservedOnDesc( Object.values( pruned ) );
 }
 
 interface LiferGridItemProps {
@@ -311,7 +276,7 @@ const LifeListContainer = ( ) => {
       // background fetch checks for any new lifers
       initialData: ( ) => {
         const cached = currentUser
-          ? readCachedLifers( currentUser.id ).lifers
+          ? readCachedLifers( currentUser.id )
           : [];
         return cached.length
           ? cached

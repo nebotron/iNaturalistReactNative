@@ -12,6 +12,7 @@ import {
   clearRemovedGroupPhotoUris,
   getRemovedGroupPhotoUris,
 } from "sharedHelpers/removedGroupPhotoUris";
+import type { UserObservationsCache } from "sharedHelpers/userObservationsCache";
 
 const logger = log.extend( "unfavoritedDevicePhotos" );
 
@@ -193,20 +194,31 @@ const getScanBounds = ( times: number[] ): ScanBounds => {
 
 // Starts the device library scan without waiting on anything else. The window
 // it scans depends only on when the user's observations were made, not on which
-// are favorited, so this can run concurrently with the fave refresh that has to
-// finish before matching can start — two multi-second waits become one. Hand
-// the result to findUnfavoritedDevicePhotoDays.
-export const prefetchDeviceAssets = ( realm: Realm ): Promise<DeviceAsset[]> => {
+// are favorited, so this can run concurrently with the observation sync that has
+// to finish before matching can start — two multi-second waits become one.
+// Hand the result to findUnfavoritedDevicePhotoDays.
+//
+// The window has to cover the same era matching will consider, so it's taken
+// from the last synced cache as well as Realm. Callers with an empty cache
+// should skip this and let findUnfavoritedDevicePhotoDays scan once the sync
+// has landed, rather than scanning a window that stops at whatever Realm holds.
+export const prefetchDeviceAssets = (
+  realm: Realm,
+  observationsCache?: UserObservationsCache,
+): Promise<DeviceAsset[]> => {
   const times: number[] = [];
-  let observationCount = 0;
   realm.objects<RealmObservation>( "Observation" ).forEach( observation => {
-    observationCount += 1;
     const timeMs = getObservationTimeMs( observation );
     if ( timeMs !== null ) {
       times.push( timeMs );
     }
   } );
-  if ( observationCount === 0 ) {
+  observationsCache?.forEach( cached => {
+    if ( cached.observedAtMs !== null ) {
+      times.push( cached.observedAtMs );
+    }
+  } );
+  if ( times.length === 0 ) {
     return Promise.resolve( [] );
   }
   const { fromTime, toTime } = getScanBounds( times );
@@ -272,6 +284,7 @@ const dropVanishedUris = async (
 const findUnfavoritedDevicePhotoDays = async (
   realm: Realm,
   prefetchedAssets?: Promise<DeviceAsset[]>,
+  observationsCache?: UserObservationsCache,
 ): Promise<UnfavoritedPhotoDay[]> => {
   const observations = realm.objects<FavoritableObservation>( "Observation" );
 
@@ -280,9 +293,21 @@ const findUnfavoritedDevicePhotoDays = async (
   const exactUnfavoritedUris = new Set<string>( );
   const exactFavoritedUris = new Set<string>( );
   const unfavoritedUriTime = new Map<string, number | null>( );
+  const seenUuids = new Set<string>( );
 
   observations.forEach( observation => {
-    const favorited = isFavorited( observation );
+    // Realm only holds the most recent page of remote observations, so its
+    // votes are both incomplete and potentially stale. Prefer the shared cache,
+    // which covers the whole history, and fall back to Realm for observations
+    // it doesn't know about — anything created on this device and not yet
+    // uploaded, which can't be favorited anyway.
+    const cached = observation.uuid
+      ? observationsCache?.get( observation.uuid )
+      : undefined;
+    if ( observation.uuid ) {
+      seenUuids.add( observation.uuid );
+    }
+    const favorited = cached?.faved ?? isFavorited( observation );
     const timeMs = getObservationTimeMs( observation );
     const uris = getDevicePhotoUrisFromObservation( observation );
     if ( favorited ) {
@@ -300,6 +325,22 @@ const findUnfavoritedDevicePhotoDays = async (
           unfavoritedUriTime.set( uri, timeMs );
         }
       } );
+    }
+  } );
+
+  // Observations that aren't in Realm can't contribute a device photo URI, but
+  // their capture times still decide whether a library photo belongs to
+  // something favorited. Without them the whole pre-Realm history was invisible
+  // here: its photos were never offered for deletion, and — the part that
+  // matters — a favorited observation from back then couldn't protect its photo.
+  observationsCache?.forEach( cached => {
+    if ( seenUuids.has( cached.uuid ) || cached.observedAtMs === null ) {
+      return;
+    }
+    if ( cached.faved ) {
+      favoritedTimes.push( cached.observedAtMs );
+    } else {
+      unfavoritedTimes.push( cached.observedAtMs );
     }
   } );
 

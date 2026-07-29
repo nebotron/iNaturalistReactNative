@@ -172,3 +172,69 @@ describe( "findUnfavoritedDevicePhotoDays", ( ) => {
     expect( CameraRoll.getPhotos ).not.toHaveBeenCalled( );
   } );
 } );
+
+// Realm only holds the most recent page of remote observations, so everything
+// older is only visible through the shared cache (see userObservationsCache.ts).
+describe( "findUnfavoritedDevicePhotoDays with the shared observations cache", ( ) => {
+  const makeCache = entries => new Map(
+    entries.map( ( { uuid, timeMs, faved } ) => [
+      uuid,
+      {
+        uuid, observedAtMs: timeMs, faved, researchGrade: false, taxonId: null, rankLevel: null,
+      },
+    ] ),
+  );
+
+  it( "protects a photo whose observation was favorited outside Realm", async ( ) => {
+    const realm = makeRealm( [
+      makeObservation( { faved: false, timeMs: UNFAV_TIME } ),
+    ] );
+    mockLibrary( [
+      { id: "OLD_FAVE", timeMs: FAV_TIME },
+      { id: "DELETE", timeMs: UNFAV_TIME },
+    ] );
+
+    const days = await findUnfavoritedDevicePhotoDays(
+      realm,
+      undefined,
+      makeCache( [{ uuid: "old", timeMs: FAV_TIME, faved: true }] ),
+    );
+    const uris = flatUris( days );
+
+    expect( uris ).toContain( "ph://DELETE" );
+    expect( uris ).not.toContain( "ph://OLD_FAVE" );
+  } );
+
+  it( "finds a photo whose unfavorited observation is only in the cache", async ( ) => {
+    const realm = makeRealm( [] );
+    mockLibrary( [{ id: "OLD_UNFAVED", timeMs: UNFAV_TIME }] );
+
+    const days = await findUnfavoritedDevicePhotoDays(
+      realm,
+      undefined,
+      makeCache( [{ uuid: "old", timeMs: UNFAV_TIME, faved: false }] ),
+    );
+
+    expect( flatUris( days ) ).toContain( "ph://OLD_UNFAVED" );
+  } );
+
+  // Realm's votes are whatever the last sync happened to write; the cache is
+  // reconciled with the server on every open.
+  it( "trusts the cache over stale Realm votes for the same observation", async ( ) => {
+    const realm = makeRealm( [
+      {
+        ...makeObservation( { faved: false, timeMs: UNFAV_TIME, deviceUris: ["ph://STALE"] } ),
+        uuid: "obs-1",
+      },
+    ] );
+    mockLibrary( [{ id: "STALE", timeMs: UNFAV_TIME }] );
+
+    const days = await findUnfavoritedDevicePhotoDays(
+      realm,
+      undefined,
+      makeCache( [{ uuid: "obs-1", timeMs: UNFAV_TIME, faved: true }] ),
+    );
+
+    expect( days ).toEqual( [] );
+  } );
+} );

@@ -236,18 +236,31 @@ export interface ApiObservationFieldValue {
   value: string;
 }
 
+export interface ApiVote {
+  id?: number;
+  created_at?: string | null;
+  user_id?: number;
+  vote_flag?: boolean;
+  // Faves are the votes whose scope is null; a non-null scope is some other
+  // kind of vote (e.g. "needs_id").
+  vote_scope?: string | null;
+}
+
 export interface ApiObservation extends ApiRecord {
   comments?: ApiComment[];
   identifications?: ApiIdentification[];
   non_traditional_projects?: { project: ApiProjectSummary }[];
   observation_photos?: ApiObservationPhoto[];
   observation_sounds?: ApiObservationSound[];
+  observed_on?: string | null;
   project_observations?: ApiProjectObservation[];
   ofvs?: ApiObservationFieldValue[];
+  quality_grade?: string;
   taxon?: ApiTaxon;
   time_observed_at?: string;
   user?: ApiUser;
   uuid: string;
+  votes?: ApiVote[];
 }
 
 export interface ApiRelationship extends ApiRecord {

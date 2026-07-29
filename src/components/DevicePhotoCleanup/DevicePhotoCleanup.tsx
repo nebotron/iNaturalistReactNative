@@ -1,5 +1,6 @@
 /* eslint-disable i18next/no-literal-string */
 import { FlashList } from "@shopify/flash-list";
+import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import {
   ActivityIndicator,
   Body2,
@@ -24,13 +25,20 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import { log } from "sharedHelpers/logger";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
-import refreshFaveVotes from "sharedHelpers/refreshFaveVotes";
 import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
 import findUnfavoritedDevicePhotoDays, {
   prefetchDeviceAssets,
 } from "sharedHelpers/unfavoritedDevicePhotos";
+import type { UserObservationsCache } from "sharedHelpers/userObservationsCache";
+import {
+  readUserObservationsCache,
+  syncUserObservations,
+} from "sharedHelpers/userObservationsCache";
 import { useCurrentUser } from "sharedHooks";
+
+const logger = log.extend( "DevicePhotoCleanup" );
 
 const { useRealm } = RealmContext;
 
@@ -81,6 +89,24 @@ const buildGridRows = (
   return rows;
 } );
 
+// Brings the shared observation cache up to date, falling back to the last
+// synced copy if the network is unavailable. Stale fave data is worse than
+// none — it's what makes a freshly unfavorited observation look like it doesn't
+// exist — but it still beats refusing to show anything.
+const loadObservationsCache = async (
+  userId?: number,
+): Promise<UserObservationsCache> => {
+  try {
+    const apiToken = await getJWT( );
+    return await syncUserObservations( userId, { api_token: apiToken } );
+  } catch ( error ) {
+    logger.warn( "Falling back to the last synced observations", error );
+    return userId
+      ? readUserObservationsCache( userId )
+      : new Map( );
+  }
+};
+
 const DevicePhotoCleanup = ( ) => {
   const realm = useRealm( );
   const currentUser = useCurrentUser( );
@@ -96,18 +122,25 @@ const DevicePhotoCleanup = ( ) => {
     let cancelled = false;
     setLoading( true );
     setSyncingFaves( true );
-    // Reconcile faves with the server before matching. A fave toggled on
-    // another device or in the website isn't in Realm yet, and scanning against
-    // stale votes is what makes freshly unfavorited observations look like they
+    // Sync the shared observation cache before matching. A fave toggled on
+    // another device or in the website isn't here yet, and scanning against
+    // stale faves is what makes freshly unfavorited observations look like they
     // don't exist. The library scan doesn't depend on that answer, though, so
-    // start it now and let the two waits overlap instead of stacking.
-    const assets = prefetchDeviceAssets( realm );
-    refreshFaveVotes( realm, currentUserId )
-      .then( ( ) => {
+    // start it now and let the two waits overlap instead of stacking. With
+    // nothing synced yet there's no way to know which era to scan, so the scan
+    // waits for the sync in that one case.
+    const lastSynced = currentUserId
+      ? readUserObservationsCache( currentUserId )
+      : undefined;
+    const assets = lastSynced?.size
+      ? prefetchDeviceAssets( realm, lastSynced )
+      : undefined;
+    loadObservationsCache( currentUserId )
+      .then( cache => {
         if ( !cancelled ) {
           setSyncingFaves( false );
         }
-        return findUnfavoritedDevicePhotoDays( realm, assets );
+        return findUnfavoritedDevicePhotoDays( realm, assets, cache );
       } )
       .then( result => {
         if ( !cancelled ) {
