@@ -1,4 +1,5 @@
 /* eslint-disable i18next/no-literal-string */
+import { FlashList } from "@shopify/flash-list";
 import {
   ActivityIndicator,
   Body2,
@@ -20,31 +21,64 @@ import {
   Image,
   ScrollView,
   StyleSheet,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import refreshFaveVotes from "sharedHelpers/refreshFaveVotes";
 import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
-import findUnfavoritedDevicePhotoDays from "sharedHelpers/unfavoritedDevicePhotos";
+import findUnfavoritedDevicePhotoDays, {
+  prefetchDeviceAssets,
+} from "sharedHelpers/unfavoritedDevicePhotos";
 import { useCurrentUser } from "sharedHooks";
 
 const { useRealm } = RealmContext;
 
 const THUMB_SIZE = 78;
+const THUMB_MARGIN = 3;
+const GRID_PADDING = 12;
 // Cap how many thumbnails we render in the confirmation preview strip so a
 // huge selection doesn't bog the sheet down; the count still reflects all.
 const CONFIRM_PREVIEW_LIMIT = 30;
 
 const styles = StyleSheet.create( {
+  list: {
+    flex: 1,
+  },
   scrollContent: {
     paddingBottom: 100,
   },
   thumb: {
     borderRadius: 4,
     height: THUMB_SIZE,
-    margin: 3,
+    margin: THUMB_MARGIN,
     width: THUMB_SIZE,
   },
+} );
+
+// One row of the virtualized grid: either a day's header or a row of that day's
+// thumbnails. Flattening days into rows lets FlashList mount only the
+// thumbnails on screen — rendering an Image per photo up front meant thousands
+// of live PHAsset loads before the list could be scrolled.
+type GridRow =
+  | { type: "header"; key: string; label: string }
+  | { type: "photos"; key: string; uris: string[] };
+
+const buildGridRows = (
+  days: UnfavoritedPhotoDay[],
+  columns: number,
+): GridRow[] => days.flatMap( day => {
+  const rows: GridRow[] = [
+    { type: "header", key: `${day.dateKey}-header`, label: day.label },
+  ];
+  for ( let i = 0; i < day.uris.length; i += columns ) {
+    rows.push( {
+      type: "photos",
+      key: `${day.dateKey}-${i}`,
+      uris: day.uris.slice( i, i + columns ),
+    } );
+  }
+  return rows;
 } );
 
 const DevicePhotoCleanup = ( ) => {
@@ -62,15 +96,18 @@ const DevicePhotoCleanup = ( ) => {
     let cancelled = false;
     setLoading( true );
     setSyncingFaves( true );
-    // Reconcile faves with the server first. A fave toggled on another device
-    // or in the website isn't in Realm yet, and scanning against stale votes is
-    // what makes freshly unfavorited observations look like they don't exist.
+    // Reconcile faves with the server before matching. A fave toggled on
+    // another device or in the website isn't in Realm yet, and scanning against
+    // stale votes is what makes freshly unfavorited observations look like they
+    // don't exist. The library scan doesn't depend on that answer, though, so
+    // start it now and let the two waits overlap instead of stacking.
+    const assets = prefetchDeviceAssets( realm );
     refreshFaveVotes( realm, currentUserId )
       .then( ( ) => {
         if ( !cancelled ) {
           setSyncingFaves( false );
         }
-        return findUnfavoritedDevicePhotoDays( realm );
+        return findUnfavoritedDevicePhotoDays( realm, assets );
       } )
       .then( result => {
         if ( !cancelled ) {
@@ -91,6 +128,16 @@ const DevicePhotoCleanup = ( ) => {
   const allUris = useMemo(
     ( ) => days.flatMap( day => day.uris ),
     [days],
+  );
+
+  const { width } = useWindowDimensions( );
+  const columns = Math.max(
+    1,
+    Math.floor( ( width - GRID_PADDING * 2 ) / ( THUMB_SIZE + THUMB_MARGIN * 2 ) ),
+  );
+  const gridRows = useMemo(
+    ( ) => buildGridRows( days, columns ),
+    [days, columns],
   );
 
   const confirmDelete = useCallback( async ( ) => {
@@ -128,8 +175,8 @@ const DevicePhotoCleanup = ( ) => {
           <ActivityIndicator size={40} />
           <Body2 className="mt-4 text-center">
             {syncingFaves
-              ? "Checking which observations you've favorited…"
-              : "Scanning your photo library…"}
+              ? "Checking your faves and scanning your photo library…"
+              : "Matching photos to your observations…"}
           </Body2>
         </View>
       </ViewWrapper>
@@ -158,12 +205,16 @@ const DevicePhotoCleanup = ( ) => {
             : "s"} in your library match observations you haven't favorited.`}
         </Body2>
       </View>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        {days.map( day => (
-          <View key={day.dateKey} className="px-3 pb-3">
-            <Heading4 className="px-2 py-2">{day.label}</Heading4>
-            <View className="flex-row flex-wrap">
-              {day.uris.map( uri => (
+      <FlashList
+        data={gridRows}
+        keyExtractor={row => row.key}
+        style={styles.list}
+        contentContainerStyle={styles.scrollContent}
+        renderItem={( { item } ) => ( item.type === "header"
+          ? <Heading4 className="px-5 py-2">{item.label}</Heading4>
+          : (
+            <View className="px-3 flex-row">
+              {item.uris.map( uri => (
                 <Image
                   key={uri}
                   source={{ uri }}
@@ -172,9 +223,8 @@ const DevicePhotoCleanup = ( ) => {
                 />
               ) )}
             </View>
-          </View>
-        ) )}
-      </ScrollView>
+          ) )}
+      />
       <View className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-lightGray">
         <Button
           level="warning"

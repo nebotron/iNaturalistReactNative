@@ -51,9 +51,12 @@ const SCAN_PADDING_MS = 1000;
 
 const toWholeSecondMs = ( ms: number ): number => Math.floor( ms / 1000 ) * 1000;
 
-const PAGE_SIZE = 100;
+// Each page is a separate round trip to the native photo library, and the
+// per-page overhead dwarfs the cost of the extra assets, so ask for a lot at a
+// time: a 20k-photo window is 20 calls instead of 200.
+const PAGE_SIZE = 1000;
 // Safety valve so an enormous library can't loop forever.
-const MAX_PAGES = 200;
+const MAX_PAGES = 20;
 
 // An observation is favorited when it has at least one vote with a null scope.
 const isFavorited = ( observation: FavoritableObservation ): boolean => {
@@ -162,6 +165,54 @@ const loadDeviceAssets = async (
   return assets;
 };
 
+interface ScanBounds {
+  fromTime: number | undefined;
+  toTime: number | undefined;
+}
+
+// Bound the library scan to the era spanned by the user's observations.
+// Undefined bounds mean "scan everything", which is what we want when no
+// observation has a usable time.
+const getScanBounds = ( times: number[] ): ScanBounds => {
+  let fromTime: number | undefined;
+  let toTime: number | undefined;
+  times.forEach( t => {
+    if ( fromTime === undefined || t < fromTime ) {
+      fromTime = t;
+    }
+    if ( toTime === undefined || t > toTime ) {
+      toTime = t;
+    }
+  } );
+  if ( fromTime !== undefined && toTime !== undefined ) {
+    fromTime -= SCAN_PADDING_MS;
+    toTime += SCAN_PADDING_MS;
+  }
+  return { fromTime, toTime };
+};
+
+// Starts the device library scan without waiting on anything else. The window
+// it scans depends only on when the user's observations were made, not on which
+// are favorited, so this can run concurrently with the fave refresh that has to
+// finish before matching can start — two multi-second waits become one. Hand
+// the result to findUnfavoritedDevicePhotoDays.
+export const prefetchDeviceAssets = ( realm: Realm ): Promise<DeviceAsset[]> => {
+  const times: number[] = [];
+  let observationCount = 0;
+  realm.objects<RealmObservation>( "Observation" ).forEach( observation => {
+    observationCount += 1;
+    const timeMs = getObservationTimeMs( observation );
+    if ( timeMs !== null ) {
+      times.push( timeMs );
+    }
+  } );
+  if ( observationCount === 0 ) {
+    return Promise.resolve( [] );
+  }
+  const { fromTime, toTime } = getScanBounds( times );
+  return loadDeviceAssets( fromTime, toTime );
+};
+
 const addUriToDay = (
   dayMap: Map<string, UnfavoritedPhotoDay>,
   uri: string,
@@ -220,6 +271,7 @@ const dropVanishedUris = async (
 // Returns the groups sorted newest day first.
 const findUnfavoritedDevicePhotoDays = async (
   realm: Realm,
+  prefetchedAssets?: Promise<DeviceAsset[]>,
 ): Promise<UnfavoritedPhotoDay[]> => {
   const observations = realm.objects<FavoritableObservation>( "Observation" );
 
@@ -274,23 +326,10 @@ const findUnfavoritedDevicePhotoDays = async (
   unfavoritedTimes.sort( ( a, b ) => a - b );
   favoritedTimes.sort( ( a, b ) => a - b );
 
-  // Bound the library scan to the era spanned by the user's observations.
-  let fromTime: number | undefined;
-  let toTime: number | undefined;
-  [...unfavoritedTimes, ...favoritedTimes].forEach( t => {
-    if ( fromTime === undefined || t < fromTime ) {
-      fromTime = t;
-    }
-    if ( toTime === undefined || t > toTime ) {
-      toTime = t;
-    }
-  } );
-  if ( fromTime !== undefined && toTime !== undefined ) {
-    fromTime -= SCAN_PADDING_MS;
-    toTime += SCAN_PADDING_MS;
-  }
-
-  const assets = await loadDeviceAssets( fromTime, toTime );
+  const assets = await ( prefetchedAssets ?? ( ( ) => {
+    const { fromTime, toTime } = getScanBounds( [...unfavoritedTimes, ...favoritedTimes] );
+    return loadDeviceAssets( fromTime, toTime );
+  } )( ) );
 
   const dayMap = new Map<string, UnfavoritedPhotoDay>( );
   const seenUris = new Set<string>( );

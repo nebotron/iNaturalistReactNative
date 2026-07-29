@@ -17,12 +17,21 @@ const makeRealmObservation = votes => ( {
   votes,
 } );
 
-// Minimal stand-in for Realm: a uuid -> observation map plus a write that just
-// runs its callback.
-const makeRealm = observationsByUuid => ( {
-  isInTransaction: true,
-  objectForPrimaryKey: ( _type, uuid ) => observationsByUuid[uuid] || null,
-} );
+// Minimal stand-in for Realm: a uuid -> observation map, plus the locally faved
+// query used to clear faves the server didn't return.
+const makeRealm = observationsByUuid => {
+  Object.entries( observationsByUuid ).forEach( ( [uuid, observation] ) => {
+    observation.uuid = uuid;
+  } );
+  return {
+    isInTransaction: true,
+    objectForPrimaryKey: ( _type, uuid ) => observationsByUuid[uuid] || null,
+    objects: ( ) => ( {
+      filtered: ( ) => Object.values( observationsByUuid )
+        .filter( observation => observation.votes?.length > 0 ),
+    } ),
+  };
+};
 
 const mockResults = results => {
   searchObservations.mockResolvedValueOnce( { results } );
@@ -34,19 +43,32 @@ beforeEach( ( ) => {
 } );
 
 describe( "refreshFaveVotes", ( ) => {
-  it( "clears a local fave the server no longer has", async ( ) => {
+  // Only faved observations come back, so an observation missing from the
+  // results is how we learn its fave is gone.
+  it( "clears a local fave the server no longer lists as faved", async ( ) => {
     const observation = makeRealmObservation( [
       {
         id: 1, user_id: USER_ID, vote_flag: true, vote_scope: null,
       },
     ] );
     const realm = makeRealm( { "uuid-1": observation } );
-    mockResults( [{ uuid: "uuid-1", votes: [] }] );
+    mockResults( [] );
 
     const updated = await refreshFaveVotes( realm, USER_ID );
 
     expect( updated ).toEqual( 1 );
     expect( observation.votes ).toEqual( [] );
+  } );
+
+  it( "only asks the server for faved observations", async ( ) => {
+    mockResults( [] );
+
+    await refreshFaveVotes( makeRealm( { } ), USER_ID );
+
+    expect( searchObservations ).toHaveBeenCalledWith(
+      expect.objectContaining( { popular: true, user_id: USER_ID } ),
+      expect.anything( ),
+    );
   } );
 
   it( "adds a fave made on another device", async ( ) => {

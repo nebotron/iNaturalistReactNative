@@ -28,6 +28,7 @@ interface ApiObservationVotes {
 // runtime (see realmModels/Observation.js).
 interface VotableRealmObservation {
   isValid: ( ) => boolean;
+  uuid?: string;
   votes?: { id: number }[];
 }
 
@@ -81,6 +82,30 @@ const writeVotesToRealm = ( realm: Realm, results: ApiObservationVotes[] ): numb
   return updated;
 };
 
+// Anything the server didn't list as faved has no faves, so a local vote on it
+// is stale (unfaved elsewhere since the last sync) and has to go — asking the
+// server only for faved observations means "not returned" is the only signal we
+// get that a fave is gone. Only observations that actually carry votes are
+// examined, which is a small slice of the library.
+const clearVotesNotOnServer = ( realm: Realm, favedUuids: Set<string> ): number => {
+  const locallyFaved = realm.objects<VotableRealmObservation>( "Observation" )
+    .filtered( "votes.@count > 0" );
+  const stale = Array.from( locallyFaved ).filter(
+    observation => observation.isValid( )
+      && !!observation.uuid
+      && !favedUuids.has( observation.uuid ),
+  );
+  if ( stale.length === 0 ) {
+    return 0;
+  }
+  safeRealmWrite( realm, ( ) => {
+    stale.forEach( observation => {
+      observation.votes = [];
+    } );
+  }, "clearing fave votes the server no longer has" );
+  return stale.length;
+};
+
 // Pulls the current user's fave votes down from the server and writes them onto
 // the matching local Realm observations. Faves can change anywhere — another
 // device, the website, an older build of this app that didn't persist the
@@ -103,24 +128,39 @@ const refreshFaveVotes = async (
   let updated = 0;
   try {
     const apiToken = await getJWT( );
+    const favedUuids = new Set<string>( );
     let page = 1;
     let done = false;
     while ( !done && page <= MAX_PAGES ) {
       // eslint-disable-next-line no-await-in-loop
       const response = await searchObservations( {
         user_id: currentUserId,
+        // Only observations with at least one fave. Paging the user's whole
+        // library to discover that almost none of it is faved was the bulk of
+        // the wait here; this is usually a single page.
+        popular: true,
         per_page: PER_PAGE,
         page,
         fields: { uuid: true, votes: VOTE_FIELDS },
         ttl: -1,
       }, { api_token: apiToken } );
-      const results: ApiObservationVotes[] = response?.results || [];
-      if ( results.length === 0 ) {
+      // A body without a results array isn't an empty fave list, it's a
+      // response we can't read; stop rather than conclude nothing is faved.
+      if ( !Array.isArray( response?.results ) ) {
         break;
       }
-      updated += writeVotesToRealm( realm, results );
+      const { results }: { results: ApiObservationVotes[] } = response;
+      results.forEach( result => favedUuids.add( result.uuid ) );
+      if ( results.length > 0 ) {
+        updated += writeVotesToRealm( realm, results );
+      }
       done = results.length < PER_PAGE;
       page += 1;
+    }
+    // Only safe once every page landed: a partial list would look like the
+    // missing observations had been unfaved and wipe faves we still have.
+    if ( done ) {
+      updated += clearVotesNotOnServer( realm, favedUuids );
     }
   } catch ( error ) {
     logger.error( "Failed to refresh fave votes", error );
