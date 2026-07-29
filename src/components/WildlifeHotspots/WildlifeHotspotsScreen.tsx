@@ -23,8 +23,6 @@ import {
   TouchableOpacity,
   useWindowDimensions,
 } from "react-native";
-import Config from "react-native-config";
-import DeviceInfo from "react-native-device-info";
 import type { RenderItemParams } from "react-native-draggable-flatlist";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
 import type { LatLng } from "react-native-maps";
@@ -39,86 +37,17 @@ import { useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
+import type { PlaceResult } from "./googlePlaces";
+import { fetchPlaceLatLng, searchGooglePlaces } from "./googlePlaces";
 import type { Hotspot, HotspotSpecies, RoutePoint } from "./hooks/useRouteHotspots";
 import { fetchOSRMRoute, findBestInsertion, useRouteHotspots } from "./hooks/useRouteHotspots";
 import HotspotListItem from "./HotspotListItem";
-
-const GOOGLE_PLACES_BASE = "https://maps.googleapis.com/maps/api/place";
-// Soft location bias radius (meters) for autocomplete results near the
-// previous stop / current location, matching the prior Nominatim viewbox bias.
-const AUTOCOMPLETE_BIAS_RADIUS_METERS = 200_000;
 
 // Synthetic place_id marking the "current location" row in the dropdown, which
 // resolves to the device location rather than a searched address.
 const CURRENT_LOCATION_PLACE_ID = -1;
 // Number of recently entered addresses to offer before the user types.
 const RECENT_ADDRESS_COUNT = 4;
-
-interface PlaceResult {
-  place_id: number | string;
-  display_name: string;
-  lat: string;
-  lon: string;
-}
-
-// A key restricted to "iOS apps" only authorizes requests carrying this
-// header with the app's bundle ID (unlike the native Maps SDK, a plain fetch
-// doesn't attach it automatically), so it can't just reuse the Android-only
-// GMAPS_API_KEY used for the native Maps SDK in AndroidManifest.xml.
-const IOS_BUNDLE_ID_HEADER = "X-Ios-Bundle-Identifier";
-
-function placesRequestHeaders() {
-  return { [IOS_BUNDLE_ID_HEADER]: DeviceInfo.getBundleId() };
-}
-
-async function searchGooglePlaces(
-  text: string,
-  nearbyLatLng?: LatLng,
-): Promise<PlaceResult[]> {
-  try {
-    const apiKey = Config.GMAPS_IOS_API_KEY;
-    if ( !apiKey ) return [];
-    let url = `${GOOGLE_PLACES_BASE}/autocomplete/json`
-      + `?input=${encodeURIComponent( text )}&language=en&key=${apiKey}`;
-    if ( nearbyLatLng ) {
-      url += `&location=${nearbyLatLng.latitude},${nearbyLatLng.longitude}`
-        + `&radius=${AUTOCOMPLETE_BIAS_RADIUS_METERS}`;
-    }
-    const response = await fetch( url, { headers: placesRequestHeaders() } );
-    if ( !response.ok ) return [];
-    const json = await response.json();
-    if ( json.status !== "OK" ) return [];
-    return json.predictions.slice( 0, 3 ).map( ( prediction: {
-      place_id: string;
-      description: string;
-    } ) => ( {
-      place_id: prediction.place_id,
-      display_name: prediction.description,
-      // Resolved lazily via fetchPlaceLatLng once the user picks a suggestion.
-      lat: "",
-      lon: "",
-    } ) );
-  } catch {
-    return [];
-  }
-}
-
-async function fetchPlaceLatLng( placeId: string ): Promise<LatLng | null> {
-  try {
-    const apiKey = Config.GMAPS_IOS_API_KEY;
-    if ( !apiKey ) return null;
-    const url = `${GOOGLE_PLACES_BASE}/details/json`
-      + `?place_id=${encodeURIComponent( placeId )}&fields=geometry&key=${apiKey}`;
-    const response = await fetch( url, { headers: placesRequestHeaders() } );
-    if ( !response.ok ) return null;
-    const json = await response.json();
-    const location = json?.result?.geometry?.location;
-    if ( !location ) return null;
-    return { latitude: location.lat, longitude: location.lng };
-  } catch {
-    return null;
-  }
-}
 
 function toMapCoord( pt: RoutePoint ): LatLng {
   return { latitude: pt.latitude, longitude: pt.longitude };
