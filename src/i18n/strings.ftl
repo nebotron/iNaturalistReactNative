@@ -207,6 +207,7 @@ CC-BY-ND = CC BY-ND
 CC-BY-SA = CC BY-SA
 # Short label for the Creative Commons Zero declaration
 CC0 = CC0
+CENTER = CENTER
 CHANGE-APP-LANGUAGE = CHANGE APP LANGUAGE
 # Label for a button that changes a selected date
 CHANGE-DATE = CHANGE DATE
@@ -237,6 +238,8 @@ Choose-a-date-time = Choose a date & time
 Choose-a-time = Choose a time
 # Label for a text input field during sign up to choose a username
 CHOOSE-A-USERNAME = CHOOSE A USERNAME
+# Button that opens a map to place the center of the privacy zone
+Choose-on-Map = Choose on Map
 Choose-photos = Choose Photos
 # Label for button that chooses a taxon
 Choose-taxon = Choose taxon
@@ -248,6 +251,7 @@ CHOOSE-USB-FOLDER = CHOOSE USB FOLDER
 # Label for a button that clears content, like the text entered in a text
 # field
 Clear = Clear
+Clear-Privacy-Zone = Clear Privacy Zone
 # Label for a button that closes a window or popup
 Close = Close
 # Accessibility label for a button that closes the permission request screen
@@ -315,6 +319,8 @@ CROP-DRAG-HINT = Drag to pan. Pinch to zoom.
 CROP-PHOTO = Crop Photo
 # Label for current device location in Wildlife Hotspots tool
 Current-location = Current location
+# Map legend label for the circle showing the user's privacy zone
+Current-privacy-zone = Current privacy zone
 DATA-QUALITY = DATA QUALITY
 DATA-QUALITY-ASSESSMENT = DATA QUALITY ASSESSMENT
 # Label for button that navigates users to the data quality screen
@@ -519,6 +525,7 @@ EMAIL-DEBUG-LOGS = EMAIL DEBUG LOGS
 Enable-flash = Enable flash
 # Button that enables the camera to use location for suggestions
 Enable-location = Enable location
+Enable-location-access-to-set-a-privacy-zone = Enable location access to set a privacy zone at your current location.
 Enable-location-access-to-track-your-location-in-the-background =
     Enable location access, including background access, to track your
     location and compare it to your photos.
@@ -787,6 +794,8 @@ Last-Active-date = Last Active: { $date }
 Lat-Lon = { NUMBER($latitude, maximumFractionDigits: 6) }, { NUMBER($longitude, maximumFractionDigits: 6) }
 # Latitude, longitude, and accuracy on a single line
 Lat-Lon-Acc = Lat: { NUMBER($latitude, maximumFractionDigits: 6) }, Lon: { NUMBER($longitude, maximumFractionDigits: 6) }, Acc: { $accuracy }
+# Coordinate pair, e.g. 37.87159, -122.27275
+Latitude-Longitude = { $latitude }, { $longitude }
 # Identification category
 leading--identification = Leading
 Learn-from-people-who-verify-and-refine-your-identifications = Learn from people who verify and refine your identifications.
@@ -950,6 +959,7 @@ No-metadata-available = No metadata available
 # As in a machine learning model that powers automated suggestions
 No-model-found = No model found
 No-photos-with-location-data-yet = No photos with location data yet
+No-privacy-zone-set-yet = No privacy zone set yet
 No-projects-match-that-search = No projects match that search
 # Shown when a list or view has no matching results
 No-results-found = No results found
@@ -995,7 +1005,20 @@ notifications-user1-added-identification-to-observation-by-user2 = <0>{ $user1 }
 # Month of November
 November = November
 Obervations-must-be-manually-added = Observations must be manually added to a traditional project, either during the upload stage or after the observation has been shared to iNaturalist. A user must also join a traditional project in order to add their observations to it.
+# Confirmation button in the alert that obscures past observations
+OBSCURE = OBSCURE
+Obscure-observations-near-a-place = Obscure observations near a place
+Obscure-Past-Observations = Obscure Past Observations
+# Button that obscures observations already saved inside the privacy zone
+Obscure-X-Past-Observations =
+    { $count ->
+        [one] Obscure { $count } Past Observation
+       *[other] Obscure { $count } Past Observations
+    }
 Obscured = Obscured
+Obscuring-past-observations-uploads-the-change-to-iNaturalist =
+    Obscuring past observations queues them for upload so the change reaches
+    iNaturalist.
 Observation = Observation
 Observation-Attribution = Observation: © { $userName } · { $restrictions }
 Observation-Copyright = Observation Copyright: © { $userName } · { $restrictions }
@@ -1017,6 +1040,8 @@ Observations-added-least-recently-appear-first = Observations added least recent
 # Description for observations sort order
 Observations-added-recently-appear-first = Observations added recently appear first
 Observations-need-location-date--warning = iNaturalist observations need a location and date to be useful to scientists. Please check observations with this icon before uploading.
+# Alert title shown after past observations were obscured
+Observations-Obscured = Observations Obscured
 Observations-View = Observations View
 # Description for observations sort order
 Observations-with-the-most-recent-date-appear-first = Observations with the most recent date appear first
@@ -1029,6 +1054,10 @@ OBSERVATIONS-WITHOUT-NUMBER =
         [one] OBSERVATION
        *[other] OBSERVATIONS
     }
+Observations-you-save-inside-this-area-will-be-obscured =
+    Observations you save inside this area will be obscured automatically, so
+    iNaturalist only publishes a wider area instead of the exact spot. Your own
+    coordinates are still uploaded and visible to you.
 # Text for a button prompting the user to grant access to the camera
 OBSERVE-ORGANISMS = OBSERVE ORGANISMS
 # This label is used in ObsDetails to describe the observation time
@@ -1079,6 +1108,7 @@ OTHERS--notifications = OTHERS
 Overwrite-saved-filter = Overwrite saved filter
 Parking-minutes = Parking minutes
 PASSWORD = PASSWORD
+PAST-OBSERVATIONS = PAST OBSERVATIONS
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
 Photo-importer = Photo importer
@@ -1119,6 +1149,7 @@ Previous-observation = Previous observation
 Previous-slide = Previous slide
 Privacy-Policy = Privacy Policy
 PRIVACY-POLICY = PRIVACY POLICY
+PRIVACY-ZONE = PRIVACY ZONE
 Private = Private
 # As in an iNat project, a collection of observations or observation search filters
 PROJECT = PROJECT
@@ -1143,6 +1174,7 @@ Quality-Grade-Casual--label = Quality Grade: Casual
 Quality-Grade-Needs-ID--label = Quality Grade: Needs ID
 # Screen reader label for the Research quality grade label
 Quality-Grade-Research--label = Quality Grade: Research
+RADIUS = RADIUS
 Ranks-CLASS = CLASS
 Ranks-Class = Class
 Ranks-COMPLEX = COMPLEX
@@ -1345,6 +1377,7 @@ Selects-iconic-taxon-X = Selects iconic taxon { $iconicTaxon }.
 Separate-Photos = Separate Photos
 # Month of September
 September = September
+Set-Up-Privacy-Zone = Set Up Privacy Zone
 SETTINGS = SETTINGS
 Share = Share
 SHARE-DEBUG-LOGS = SHARE DEBUG LOGS
@@ -1488,6 +1521,11 @@ This-sound-was-hidden-for-violating-community-guidelines-or-terms = This sound w
 This-user-has-no-followers = This user has no followers.
 This-user-has-not-joined-any-projects = This user has not joined any projects.
 This-user-is-not-following-anyone = This user is not following anyone.
+This-will-obscure-X-observations-and-upload-the-change =
+    { $count ->
+        [one] This will obscure { $count } observation and upload the change to iNaturalist.
+       *[other] This will obscure { $count } observations and upload the changes to iNaturalist.
+    }
 # Label for a filter that limits observations to a time of day range, e.g. 6 AM to 11 PM
 Time-of-day = Time of day
 TIME-OF-DAY = TIME OF DAY
@@ -1562,6 +1600,7 @@ USB-PHOTO-IMPORT = USB PHOTO IMPORT
 Use-iNaturalist-to-identify-any-living-thing = Use iNaturalist to identify any living thing
 # Text for a button prompting the user to grant access to location
 USE-LOCATION = USE LOCATION
+Use-My-Current-Location = Use My Current Location
 Use-the-devices-other-camera = Use the device's other camera.
 Use-the-iNaturalist-camera-to-see-real-time-identifications-and-take-photos = Use the iNaturalist camera to see real-time identifications and take photos!
 Use-your-devices-microphone-to-record-animal-sounds-and-share-them = Use your device’s microphone to record animal sounds and share them to get identifications and contribute to science!
@@ -1668,12 +1707,16 @@ X-JOURNAL_POSTS =
         [one] { $count } JOURNAL POST
        *[other] { $count } JOURNAL POSTS
     }
+# Distance in kilometers
+X-km = { $km } km
 # Count of background-tracked location history points
 X-Location-Points-Recorded =
     { $count ->
         [one] { $count } location point recorded
        *[other] { $count } location points recorded
     }
+# Distance in meters
+X-m = { $m } m
 # Subheader for number of project members screen
 X-MEMBERS =
     { $count ->
@@ -1701,6 +1744,11 @@ X-observations-uploaded =
     { $count ->
         [one] 1 observation uploaded
        *[other] { $count } observations uploaded
+    }
+X-observations-were-obscured =
+    { $count ->
+        [one] { $count } observation was obscured.
+       *[other] { $count } observations were obscured.
     }
 X-Observers =
     { $count ->

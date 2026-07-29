@@ -8,6 +8,7 @@ import { Alert } from "react-native";
 import { getNowISO } from "sharedHelpers/dateAndTime";
 import { log } from "sharedHelpers/logger";
 import readExifFromMultiplePhotos from "sharedHelpers/parseExif";
+import { privacyZoneGeoprivacy } from "sharedHelpers/privacyZone";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import * as uuid from "uuid";
 
@@ -345,6 +346,15 @@ class Observation extends Realm.Object {
       observationPhotos,
       observationSounds,
     };
+
+    // Every local save runs through here, so this is where the user's privacy
+    // zone gets enforced: anything saved inside it is obscured before it can
+    // be uploaded.
+    const zoneGeoprivacy = privacyZoneGeoprivacy( obs );
+    if ( zoneGeoprivacy ) {
+      obsToSave.geoprivacy = zoneGeoprivacy;
+      logger.info( `Obscuring observation ${obs.uuid} because it is inside the privacy zone` );
+    }
 
     // Diagnostic: a save that clears a previously-set location almost always
     // means the caller passed in a stale in-memory copy of the observation
