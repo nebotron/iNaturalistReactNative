@@ -75,12 +75,26 @@ const IdentifyView = ( {
   const windowWidth = Dimensions.get( "window" ).width;
   const photoRef = useRef<IdentifyPhotoHandle | null>( null );
 
+  // queryParams is a fresh object each parent render, so key anything derived
+  // from it on its serialized content rather than its identity.
+  const queryKey = JSON.stringify( queryParams );
+
+  // This view can only work on observations that have a photo: there's nothing
+  // to show or run subject detection on otherwise. Without this, sound-only
+  // observations came back in the results and left the photo pane spinning
+  // forever under a "1/0" photo counter.
+  const identifyParams = useMemo(
+    ( ) => ( { ...queryParams, photos: true } ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [queryKey],
+  );
+
   const {
     observations,
     totalResults,
     fetchNextPage,
     isLoading,
-  } = useInfiniteExploreScroll( { params: queryParams, enabled: !!canFetch } );
+  } = useInfiniteExploreScroll( { params: identifyParams, enabled: !!canFetch } );
 
   const [currentIndex, setCurrentIndex] = useState( 0 );
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState( 0 );
@@ -91,9 +105,7 @@ const IdentifyView = ( {
   }, [handleUpdateCount, totalResults] );
 
   // Reset to the first observation whenever the filter (and thus the query)
-  // changes. queryParams is a fresh object each parent render, so key the reset
-  // on its serialized content rather than its identity.
-  const queryKey = JSON.stringify( queryParams );
+  // changes.
   useEffect( ( ) => {
     setCurrentIndex( 0 );
   }, [queryKey] );
@@ -151,6 +163,14 @@ const IdentifyView = ( {
       return next;
     } );
   }, [fetchNextPage, observations.length] );
+
+  // An observation can still arrive with no *displayable* photo even though the
+  // query asked for photos=true, e.g. when its photos are hidden and the API
+  // returns them without a url. Skip past it instead of showing a spinner that
+  // never resolves.
+  useEffect( ( ) => {
+    if ( observationUuid && photoUrls.length === 0 ) goToNext( );
+  }, [goToNext, observationUuid, photoUrls.length] );
 
   const goToPhoto = useCallback( ( delta: number ) => {
     setSelectedPhotoIndex( prev => Math.min(
@@ -280,7 +300,7 @@ const IdentifyView = ( {
           testID="IdentifyView.prevPhoto"
         />
         <Body2 className="mx-4">
-          {`${selectedPhotoIndex + 1}/${photoUrls.length}`}
+          {`${Math.min( selectedPhotoIndex + 1, photoUrls.length )}/${photoUrls.length}`}
         </Body2>
         <INatIconButton
           icon="chevron-right-circle"
