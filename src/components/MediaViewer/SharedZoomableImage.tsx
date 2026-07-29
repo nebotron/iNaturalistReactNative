@@ -5,7 +5,9 @@ import React, {
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
 } from "react";
+import type { LayoutChangeEvent } from "react-native";
 import { StyleSheet, View } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
@@ -13,6 +15,7 @@ import Animated, {
   useAnimatedReaction,
 } from "react-native-reanimated";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
+import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import type { ImageZoomTransformRefs } from "sharedHooks/imageZoom/readImageZoomTransform";
 import readImageZoomTransform from "sharedHooks/imageZoom/readImageZoomTransform";
 import type { ImageZoomProps, ImageZoomRef } from "sharedHooks/imageZoom/types";
@@ -87,6 +90,8 @@ const SharedZoomableImage: ForwardRefRenderFunction<
   ref,
 ) => {
   const transformRef = useRef<ImageZoomTransformRefs | null>( null );
+  const [viewSize, setViewSize] = useState<{ width: number; height: number } | null>( null );
+  const [imageSize, setImageSize] = useState<{ width: number; height: number } | null>( null );
 
   const {
     animatedStyle,
@@ -164,6 +169,36 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     ? { filter: [{ brightness }] }
     : null;
 
+  // iOS renders a brightness filter as a multiply-blend layer covering the
+  // whole filtered view. With the image at absoluteFill and resizeMode
+  // "contain", that layer also covers the letterbox bars, tinting whatever
+  // shows through them (e.g. the white screen background on Explore >
+  // Identify) so the padding no longer matches the background. Sizing the
+  // image to its contain rect -- same pixels, since that rect is centered in
+  // the view -- keeps the filter on the photo alone.
+  const containRect = brightnessFilter && viewSize && imageSize
+    ? computeContainRect( viewSize.width, viewSize.height, imageSize.width, imageSize.height )
+    : null;
+  const imageLayoutStyle = containRect && containRect.width > 0 && containRect.height > 0
+    ? {
+      position: "absolute" as const,
+      left: containRect.left,
+      top: containRect.top,
+      width: containRect.width,
+      height: containRect.height,
+    }
+    : StyleSheet.absoluteFill;
+
+  const handleLayout = ( event: LayoutChangeEvent ) => {
+    const { width, height } = event.nativeEvent.layout;
+    setViewSize( prev => (
+      prev?.width === width && prev?.height === height
+        ? prev
+        : { width, height }
+    ) );
+    onZoomableLayout( event );
+  };
+
   const longPressGesture = useMemo(
     () => ( onLongPress
       ? Gesture.LongPress().runOnJS( true ).onStart( onLongPress )
@@ -184,7 +219,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
   // that makes two-finger panning lag far behind the fingers.
   return (
     <GestureDetector gesture={composedGestures}>
-      <View style={[styles.image, style]} onLayout={onZoomableLayout}>
+      <View style={[styles.image, style]} onLayout={handleLayout}>
         {renderImage
           ? (
             <Animated.View style={[StyleSheet.absoluteFill, animatedStyle]}>
@@ -194,11 +229,16 @@ const SharedZoomableImage: ForwardRefRenderFunction<
           : (
             <Animated.Image
               testID={testID}
-              style={[StyleSheet.absoluteFill, animatedStyle, brightnessFilter]}
+              style={[imageLayoutStyle, animatedStyle, brightnessFilter]}
               source={{ uri }}
               resizeMode="contain"
               onLoad={event => {
                 const { width, height } = event.nativeEvent.source;
+                setImageSize( prev => (
+                  prev?.width === width && prev?.height === height
+                    ? prev
+                    : { width, height }
+                ) );
                 onImageDimensionsChange?.( { width, height } );
                 onLoad?.( );
               }}
