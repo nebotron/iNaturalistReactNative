@@ -207,6 +207,9 @@ interface ZoomBrightnessSlidersProps {
   zoomAccessibilityLabel: string;
   brightnessAccessibilityLabel: string;
   iconColor?: string;
+  // Nothing to zoom or brighten (e.g. a sound-only observation), so the sliders
+  // stay in the layout but don't respond.
+  disabled?: boolean;
 }
 
 // The zoom + brightness sliders shown below a photo (not covering it).
@@ -222,11 +225,13 @@ export const ZoomBrightnessSliders = ( {
   zoomAccessibilityLabel,
   brightnessAccessibilityLabel,
   iconColor = colors.darkGray,
+  disabled = false,
 }: ZoomBrightnessSlidersProps ) => (
   <View className="px-4 pt-1">
     <View className="flex-row items-center">
       <INatIcon name="magnifying-glass" size={18} color={iconColor} />
       <Slider
+        disabled={disabled}
         style={styles.slider}
         minimumValue={0}
         maximumValue={1}
@@ -243,6 +248,7 @@ export const ZoomBrightnessSliders = ( {
     <View className="flex-row items-center">
       <INatIcon name="sun" size={18} color={iconColor} />
       <Slider
+        disabled={disabled}
         style={styles.slider}
         minimumValue={exposureStopsMin}
         maximumValue={exposureStopsMax}

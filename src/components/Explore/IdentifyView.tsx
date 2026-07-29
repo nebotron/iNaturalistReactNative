@@ -11,6 +11,7 @@ import {
   ZoomBrightnessSliders,
   zoomPosToScale,
 } from "components/MediaViewer/IdentifyPhoto";
+import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import useTopSpeciesSuggestion
   from "components/ObservationsFlashList/hooks/useTopSpeciesSuggestion";
 import {
@@ -52,10 +53,22 @@ const styles = StyleSheet.create( {
   buttonRow: { height: 60 },
 } );
 
+// A sound we can actually play: the API type has file_url optional.
+interface PlayableSound {
+  file_url: string;
+  hidden?: boolean;
+}
+
 const photosForObs = ( obs?: ApiObservation ): string[] => (
   ( obs?.observation_photos ?? [] )
     .map( op => Photo.displayLargePhoto( op?.photo?.url ) )
     .filter( ( url ): url is string => !!url )
+);
+
+const soundsForObs = ( obs?: ApiObservation ): PlayableSound[] => (
+  ( obs?.observation_sounds ?? [] )
+    .map( os => os?.sound )
+    .filter( ( sound ): sound is PlayableSound => !!sound?.file_url )
 );
 
 interface Props {
@@ -75,29 +88,15 @@ const IdentifyView = ( {
   const windowWidth = Dimensions.get( "window" ).width;
   const photoRef = useRef<IdentifyPhotoHandle | null>( null );
 
-  // queryParams is a fresh object each parent render, so key anything derived
-  // from it on its serialized content rather than its identity.
-  const queryKey = JSON.stringify( queryParams );
-
-  // This view can only work on observations that have a photo: there's nothing
-  // to show or run subject detection on otherwise. Without this, sound-only
-  // observations came back in the results and left the photo pane spinning
-  // forever under a "1/0" photo counter.
-  const identifyParams = useMemo(
-    ( ) => ( { ...queryParams, photos: true } ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [queryKey],
-  );
-
   const {
     observations,
     totalResults,
     fetchNextPage,
     isLoading,
-  } = useInfiniteExploreScroll( { params: identifyParams, enabled: !!canFetch } );
+  } = useInfiniteExploreScroll( { params: queryParams, enabled: !!canFetch } );
 
   const [currentIndex, setCurrentIndex] = useState( 0 );
-  const [selectedPhotoIndex, setSelectedPhotoIndex] = useState( 0 );
+  const [selectedMediaIndex, setSelectedMediaIndex] = useState( 0 );
   const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
 
   useEffect( ( ) => {
@@ -105,7 +104,9 @@ const IdentifyView = ( {
   }, [handleUpdateCount, totalResults] );
 
   // Reset to the first observation whenever the filter (and thus the query)
-  // changes.
+  // changes. queryParams is a fresh object each parent render, so key the reset
+  // on its serialized content rather than its identity.
+  const queryKey = JSON.stringify( queryParams );
   useEffect( ( ) => {
     setCurrentIndex( 0 );
   }, [queryKey] );
@@ -117,7 +118,21 @@ const IdentifyView = ( {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [observationUuid],
   );
-  const currentPhotoUrl = photoUrls[selectedPhotoIndex];
+  const sounds = useMemo(
+    ( ) => soundsForObs( observation ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [observationUuid],
+  );
+  // Photos are what this view is built around, but an observation can have only
+  // sounds, or no evidence at all. When there are no photos we page through the
+  // sounds instead, so the counter and the chevrons stay meaningful.
+  const mediaCount = photoUrls.length > 0
+    ? photoUrls.length
+    : sounds.length;
+  const currentPhotoUrl = photoUrls[selectedMediaIndex];
+  const currentSound = photoUrls.length === 0
+    ? sounds[selectedMediaIndex]
+    : undefined;
   const {
     brightness, brightnessStops, setBrightnessStops, handleBrightnessComplete,
   } = useIdentifyPhotoBrightness( currentPhotoUrl );
@@ -128,9 +143,9 @@ const IdentifyView = ( {
     setBrightnessStops( value );
   }, [setBrightnessStops] );
 
-  // Reset to the first photo whenever the observation changes.
+  // Reset to the first photo (or sound) whenever the observation changes.
   useEffect( ( ) => {
-    setSelectedPhotoIndex( 0 );
+    setSelectedMediaIndex( 0 );
   }, [observationUuid] );
 
   // Reset zoom for the visible photo (brightness resets itself via
@@ -164,20 +179,12 @@ const IdentifyView = ( {
     } );
   }, [fetchNextPage, observations.length] );
 
-  // An observation can still arrive with no *displayable* photo even though the
-  // query asked for photos=true, e.g. when its photos are hidden and the API
-  // returns them without a url. Skip past it instead of showing a spinner that
-  // never resolves.
-  useEffect( ( ) => {
-    if ( observationUuid && photoUrls.length === 0 ) goToNext( );
-  }, [goToNext, observationUuid, photoUrls.length] );
-
-  const goToPhoto = useCallback( ( delta: number ) => {
-    setSelectedPhotoIndex( prev => Math.min(
-      photoUrls.length - 1,
+  const goToMedia = useCallback( ( delta: number ) => {
+    setSelectedMediaIndex( prev => Math.min(
+      mediaCount - 1,
       Math.max( 0, prev + delta ),
     ) );
-  }, [photoUrls.length] );
+  }, [mediaCount] );
 
   const openObsDetails = useCallback( ( ) => {
     if ( !observationUuid ) return;
@@ -253,6 +260,52 @@ const IdentifyView = ( {
     goToNext( );
   };
 
+  // What fills the square media pane: the photo if there is one, otherwise the
+  // sound, otherwise a "no evidence" marker. Sounds and the marker get a dark
+  // background, matching how ObsDetails presents them (and SoundContainer's
+  // controls are white).
+  const renderMedia = ( ) => {
+    if ( currentPhotoUrl ) {
+      return (
+        <IdentifyPhoto
+          // Remount per photo so each frames to its own subject.
+          key={currentPhotoUrl}
+          ref={photoRef}
+          uri={currentPhotoUrl}
+          size={windowWidth}
+          brightness={brightness}
+          onSingleTap={openObsDetails}
+          onScaleChange={handleScaleChange}
+        />
+      );
+    }
+    if ( currentSound ) {
+      return (
+        <View className="flex-1 bg-black justify-center">
+          <SoundContainer
+            key={currentSound.file_url}
+            sizeClass="w-full"
+            sound={currentSound}
+            isVisible
+          />
+        </View>
+      );
+    }
+    return (
+      <Pressable
+        className="flex-1 bg-black items-center justify-center"
+        accessibilityRole="button"
+        accessibilityLabel={t( "Observation-has-no-photos-and-no-sounds" )}
+        // Same as tapping a photo: there's nothing to look at here, so let the
+        // full observation be the way to judge it.
+        onPress={openObsDetails}
+        testID="IdentifyView.noEvidence"
+      >
+        <INatIcon name="noevidence" size={96} color={colors.white} />
+      </Pressable>
+    );
+  };
+
   return (
     <View className="flex-1" style={styles.container}>
       {/* Square, zoomable/pannable image with subject detection. Nothing is
@@ -266,55 +319,41 @@ const IdentifyView = ( {
         // screen are the same color.
         className="overflow-hidden"
       >
-        {currentPhotoUrl
-          ? (
-            <IdentifyPhoto
-              // Remount per photo so each frames to its own subject.
-              key={currentPhotoUrl}
-              ref={photoRef}
-              uri={currentPhotoUrl}
-              size={windowWidth}
-              brightness={brightness}
-              onSingleTap={openObsDetails}
-              onScaleChange={handleScaleChange}
-            />
-          )
-          : (
-            <View className="flex-1 items-center justify-center">
-              <ActivityIndicator />
-            </View>
-          )}
+        {renderMedia( )}
       </View>
 
-      {/* Left / right photo navigation (below the image). Always rendered,
-          even for a single photo, so the layout doesn't shift by photo count;
-          the chevrons are simply disabled when there's nothing to page to. */}
+      {/* Left / right media navigation (below the image). Always rendered, even
+          for a single photo, so the layout doesn't shift by media count; the
+          chevrons are simply disabled when there's nothing to page to. */}
       <View className="flex-row items-center justify-center pt-1">
         <INatIconButton
           icon="chevron-left-circle"
           size={30}
           color={colors.inatGreen}
-          disabled={selectedPhotoIndex === 0}
+          disabled={selectedMediaIndex === 0}
           accessibilityLabel={t( "Previous-slide" )}
-          onPress={( ) => goToPhoto( -1 )}
+          onPress={( ) => goToMedia( -1 )}
           testID="IdentifyView.prevPhoto"
         />
         <Body2 className="mx-4">
-          {`${Math.min( selectedPhotoIndex + 1, photoUrls.length )}/${photoUrls.length}`}
+          {`${Math.min( selectedMediaIndex + 1, mediaCount )}/${mediaCount}`}
         </Body2>
         <INatIconButton
           icon="chevron-right-circle"
           size={30}
           color={colors.inatGreen}
-          disabled={selectedPhotoIndex === photoUrls.length - 1}
+          disabled={selectedMediaIndex >= mediaCount - 1}
           accessibilityLabel={t( "Next-slide" )}
-          onPress={( ) => goToPhoto( 1 )}
+          onPress={( ) => goToMedia( 1 )}
           testID="IdentifyView.nextPhoto"
         />
       </View>
 
-      {/* Zoom + brightness sliders (below the image, not covering it) */}
+      {/* Zoom + brightness sliders (below the image, not covering it). Kept in
+          the layout but inert when there's no photo to zoom or brighten, so the
+          buttons below don't jump around between observations. */}
       <ZoomBrightnessSliders
+        disabled={!currentPhotoUrl}
         zoomScale={zoomScale}
         brightnessStops={brightnessStops}
         exposureStopsMin={EXPOSURE_STOPS_MIN}
