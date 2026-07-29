@@ -317,5 +317,6 @@ export interface ApiObservationsSearchParams extends ApiParams {
     typeof ORDER_BY_SPECIES_GUESS |
     typeof ORDER_BY_UPDATED_AT |
     typeof ORDER_BY_VOTES;
+  photos?: boolean;
   return_bounds?: boolean;
 }
