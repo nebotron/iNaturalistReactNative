@@ -7,6 +7,7 @@ import {
 import Observation from "realmModels/Observation";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import { log } from "sharedHelpers/logger";
+import { trackUiWork } from "sharedHelpers/uiDelayTracker";
 import {
   useInputImageTracking,
   useLayoutPrefs,
@@ -163,6 +164,10 @@ const usePrepareStoreAndNavigate = ( ) => {
     logStageIfAICamera,
     deleteStageIfAICamera,
   } ) => {
+    // The camera sits there looking idle while this runs, and it only reaches
+    // navigation (where transition timing starts) at the very end, so this
+    // stretch is a delay nothing else would account for.
+    const startedAt = Date.now( );
     if ( userLocation !== null ) {
       logStageIfAICamera( "fetch_user_location_complete" );
     }
@@ -173,6 +178,7 @@ const usePrepareStoreAndNavigate = ( ) => {
       await updateObsWithCameraPhotos( userLocation, logStageIfAICamera );
       await deleteStageIfAICamera( );
       setSentinelFileName( null );
+      trackUiWork( "camera_prepare_and_navigate", startedAt );
       return navigation.navigate( "ObsEdit", { lastScreen: "Camera" } );
     }
 
@@ -183,6 +189,7 @@ const usePrepareStoreAndNavigate = ( ) => {
     );
     await deleteStageIfAICamera( );
     setSentinelFileName( null );
+    trackUiWork( "camera_prepare_and_navigate", startedAt );
 
     // Camera (multicapture and ai) in default mode should only go to Match screen
     if ( isDefaultMode ) {

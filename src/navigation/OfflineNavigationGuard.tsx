@@ -7,6 +7,12 @@ import { useReactNavigationDevTools } from "@rozenite/react-navigation-plugin";
 import type { PropsWithChildren } from "react";
 import React, { useEffect, useRef, useState } from "react";
 import { logFirebaseScreenView } from "sharedHelpers/tracking";
+import {
+  markNavigationDispatched,
+  startUiDelayMonitoring,
+  trackNavStatePersist,
+  trackScreenTransition,
+} from "sharedHelpers/uiDelayTracker";
 import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 
 import { navigationRef } from "./navigationUtils";
@@ -20,6 +26,10 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
   const [initialState, setInitialState] = useState<NavigationState | undefined>( undefined );
 
   useReactNavigationDevTools( { ref: navigationRef } );
+
+  useEffect( ( ) => {
+    startUiDelayMonitoring( );
+  }, [] );
 
   useEffect( ( ) => {
     try {
@@ -43,21 +53,36 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
   const onStateChange = ( state?: NavigationState ) => {
     const previousRouteName = routeNameRef.current;
     const currentRouteName = navigationRef.current?.getCurrentRoute( )?.name;
-    // Basic screen tracking with Firebase Analytics
-    if ( previousRouteName !== currentRouteName && currentRouteName ) {
+    const screenChanged = previousRouteName !== currentRouteName && !!currentRouteName;
+    // Basic screen tracking with Firebase Analytics. Without recording the new
+    // route below, every state change (including param-only changes on the
+    // screen we're already on) counted as a screen view, and returning to the
+    // screen we launched on counted as none.
+    if ( screenChanged ) {
       logFirebaseScreenView( currentRouteName );
     }
+    routeNameRef.current = currentRouteName;
     if ( currentRouteName === "Login" && !isConnected ) {
       // return to previous screen if offline
       navigationRef.current?.goBack( );
       return;
     }
+    let persistMs = 0;
     try {
-      zustandMMKVBackingStorage.set( PERSISTED_NAVIGATION_STATE_KEY, JSON.stringify( state ) );
+      const persistStartedAt = Date.now( );
+      const serializedState = JSON.stringify( state );
+      zustandMMKVBackingStorage.set( PERSISTED_NAVIGATION_STATE_KEY, serializedState );
+      persistMs = Date.now( ) - persistStartedAt;
+      trackNavStatePersist( persistMs, serializedState.length );
     } catch {
       // Some routes carry non-serializable params (e.g. Realm objects); if
       // the current state can't be saved, just skip persisting this change
     }
+    trackScreenTransition( {
+      fromScreen: previousRouteName,
+      toScreen: currentRouteName,
+      persistMs,
+    } );
   };
 
   if ( !isReady ) {
@@ -70,6 +95,11 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
       initialState={initialState}
       onReady={() => {
         routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
+        // The action listener is documented as debugging-only, which is exactly
+        // what this is: it's the only hook that fires when navigation is asked
+        // to move, before any state change, so it's where a transition's clock
+        // starts.
+        navigationRef.current?.addListener( "__unsafe_action__", markNavigationDispatched );
       }}
       onStateChange={onStateChange}
     >
