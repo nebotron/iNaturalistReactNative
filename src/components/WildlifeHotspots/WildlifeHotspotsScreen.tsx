@@ -30,6 +30,7 @@ import MapView, {
   Marker,
   Polyline,
 } from "react-native-maps";
+import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import Carousel from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
@@ -210,6 +211,10 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>( null );
+  const carouselRef = useRef<ICarouselInstance>( null );
+  // Index the carousel was scrolled to programmatically (by tapping a map
+  // marker), so the resulting snap doesn't redo the selection work.
+  const programmaticScrollIndexRef = useRef<number | null>( null );
   // Memoized so the reference is stable across renders. When no params are
   // supplied this previously fell through to a fresh `{}` every render, which
   // — as a dependency of the findHotspots effect below — re-triggered the
@@ -441,11 +446,26 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
 
   const handleHotspotSwipe = useCallback( ( index: number ) => {
     setVisibleHotspotIndex( index );
+    if ( programmaticScrollIndexRef.current === index ) {
+      programmaticScrollIndexRef.current = null;
+      return;
+    }
+    programmaticScrollIndexRef.current = null;
     const hotspot = hotspots[index];
     if ( hotspot && hotspot.id !== selectedHotspotId ) {
       handleHotspotPress( hotspot );
     }
   }, [hotspots, selectedHotspotId, handleHotspotPress] );
+
+  // Tapping a hotspot marker slides the card carousel to that hotspot's pane.
+  const handleHotspotMarkerPress = useCallback( ( hotspot: Hotspot, index: number ) => {
+    if ( selectedHotspotId !== hotspot.id ) {
+      setVisibleHotspotIndex( index );
+      programmaticScrollIndexRef.current = index;
+      carouselRef.current?.scrollTo( { index, animated: true } );
+    }
+    handleHotspotPress( hotspot );
+  }, [selectedHotspotId, handleHotspotPress] );
 
   useEffect( () => {
     setVisibleHotspotIndex( 0 );
@@ -643,7 +663,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
                 longitude: hotspot.centerLongitude,
               }}
               anchor={{ x: 0.5, y: 0.5 }}
-              onPress={() => handleHotspotPress( hotspot )}
+              onPress={() => handleHotspotMarkerPress( hotspot, idx )}
             >
               <View
                 className="w-6 h-6 rounded-full items-center justify-center border border-white"
@@ -733,6 +753,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
             )
             : (
               <Carousel
+                ref={carouselRef}
                 key={`WildlifeHotspotsCarousel-${windowWidth}-${hotspots.length}`}
                 testID="WildlifeHotspotsScreen.carousel"
                 data={hotspots}
