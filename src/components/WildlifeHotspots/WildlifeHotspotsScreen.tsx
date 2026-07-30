@@ -8,6 +8,7 @@ import {
   ViewWrapper,
 } from "components/SharedComponents";
 import { TextInput, View } from "components/styledComponents";
+import { useStackHost } from "navigation/StackHostContext";
 import type { TabStackScreenProps } from "navigation/types";
 import React, {
   useCallback,
@@ -209,6 +210,12 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   const navigation = useNavigation();
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const { hasBottomTabBar } = useStackHost();
+  // The bottom tab bar already pads the home indicator, so adding the inset
+  // again here would just show as an empty grey bar below the hotspot card.
+  const bottomInset = hasBottomTabBar
+    ? 0
+    : insets.bottom;
   const mapRef = useRef<MapView>( null );
   // Memoized so the reference is stable across renders. When no params are
   // supplied this previously fell through to a fresh `{}` every render, which
@@ -718,11 +725,12 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
         <View
           className="bg-lightGray border-t border-lightGray"
           // Add the bottom safe-area inset so the card's action buttons clear
-          // the home indicator / tab menu; the extra height keeps the carousel
-          // content region at the full measured card height.
+          // the home indicator; the extra height keeps the carousel content
+          // region at the full measured card height. When a bottom tab bar is
+          // present it already covers that area, so the inset is zero.
           style={{
-            height: ( hotspotCardHeight ?? FALLBACK_HOTSPOT_CARD_HEIGHT ) + insets.bottom,
-            paddingBottom: insets.bottom,
+            height: ( hotspotCardHeight ?? FALLBACK_HOTSPOT_CARD_HEIGHT ) + bottomInset,
+            paddingBottom: bottomInset,
           }}
         >
           {error
