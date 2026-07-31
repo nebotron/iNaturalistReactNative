@@ -25,6 +25,7 @@ import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import { log } from "sharedHelpers/logger";
+import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrops";
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
@@ -343,9 +344,17 @@ const GroupPhotosContainer = ( ): Node => {
   };
 
   const navBasedOnUserSettings = async ( ) => {
+    // Crops confirmed in the bulk cropper finish writing in the background so
+    // the cropper can advance to the next photo instantly. Let them land in
+    // the store first, or we'd import the uncropped photos. Normally a no-op:
+    // they finish while the user is still cropping.
+    await awaitPendingGroupPhotoCrops( );
+
     // Capture everything we need before navigating away, since exiting the
     // flow resets the store slice (groupedPhotos, pending deletion uris, etc.)
-    const groupsToImport = groupedPhotos;
+    // Read groupedPhotos from the store rather than the render closure, which
+    // is stale if a background crop landed after the last render.
+    const groupsToImport = useStore.getState( ).groupedPhotos;
     const allPendingUris = [...new Set( pendingGroupPhotoDeletionUris )];
 
     // Send the user to the Me page (My Observations) immediately. Observation
