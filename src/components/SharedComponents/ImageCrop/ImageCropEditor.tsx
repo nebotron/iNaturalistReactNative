@@ -38,6 +38,7 @@ import {
   preloadImage,
 } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import { trackGroupPhotoCrop } from "sharedHelpers/pendingGroupPhotoCrops";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -353,8 +354,75 @@ const ImageCropEditor = ( ) => {
     setGroupedPhotos,
   ] );
 
+  // Write the cropped file and stash the untouched original for future
+  // re-crops. Everything here reads the store fresh rather than from the
+  // render closure: in a bulk crop this runs after the user has already
+  // advanced past this photo, by which point later crops (or a deletion) may
+  // have replaced groupedPhotos.
+  const applyGroupPhotosCrop = useCallback( async (
+    crop: NormalizedCrop,
+    displayUri: string,
+    sourceUri: string,
+    size: { w: number; h: number },
+  ) => {
+    const croppedUri = await cropImageFile( sourceUri, crop, size.w, size.h );
+    const existingPhoto = findGroupedPhotoByDisplayUri(
+      useStore.getState( ).groupedPhotos,
+      displayUri,
+    );
+    const cropOriginalPath = await preserveCropOriginalPath(
+      sourceUri,
+      existingPhoto?.image.cropOriginalUri,
+    );
+    const cropOriginalUri = cropOriginalUriFromPath( cropOriginalPath ) || sourceUri;
+    saveAnimalCrop( displayUri, crop );
+    const store = useStore.getState( );
+    store.setGroupedPhotos(
+      store.groupedPhotos.map( group => {
+        const photos = group.photos?.map( photo => (
+          photo.image.uri === displayUri
+            ? {
+              ...photo,
+              image: {
+                ...photo.image,
+                uri: croppedUri,
+                cropOriginalUri,
+                crop,
+              },
+            }
+            : photo
+        ) );
+        return photos
+          ? { ...group, photos }
+          : group;
+      } ),
+    );
+    recordCropFeedback( cropOriginalUri, { crop, kept: true } );
+  }, [] );
+
   const handleConfirm = useCallback( ( crop: NormalizedCrop ) => {
     if ( !localImageUri || !imageUri || !imageSize ) {
+      return Promise.resolve( );
+    }
+
+    // Cropping the file and copying the original take long enough to feel like
+    // a stall after every checkmark tap in a bulk crop, and nothing on screen
+    // needs the result, so advance right away and let the writes finish in the
+    // background (deferred past the screen transition). GroupPhotosContainer
+    // waits on the tracked jobs before importing.
+    if ( context === "groupPhotos" ) {
+      const displayUri = imageUri;
+      const sourceUri = localImageUri;
+      const size = imageSize;
+      trackGroupPhotoCrop( ( async ( ) => {
+        await new Promise<void>( resolve => {
+          InteractionManager.runAfterInteractions( ( ) => resolve( ) );
+        } );
+        await applyGroupPhotosCrop( crop, displayUri, sourceUri, size );
+      } )( ).catch( ( ) => {
+        Alert.alert( t( "Something-went-wrong" ) );
+      } ) );
+      finishOrAdvance( );
       return Promise.resolve( );
     }
 
@@ -368,36 +436,7 @@ const ImageCropEditor = ( ) => {
 
       let feedbackSourceKey = getCropFeedbackSourceKey( );
 
-      if ( context === "groupPhotos" ) {
-        const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
-        const cropOriginalPath = await preserveCropOriginalPath(
-          localImageUri,
-          groupedPhoto?.image.cropOriginalUri,
-        );
-        const cropOriginalUri = cropOriginalUriFromPath( cropOriginalPath ) || localImageUri;
-        feedbackSourceKey = cropOriginalUri;
-        saveAnimalCrop( imageUri, crop );
-        setGroupedPhotos(
-          groupedPhotos.map( group => {
-            const photos = group.photos?.map( photo => (
-              photo.image.uri === imageUri
-                ? {
-                  ...photo,
-                  image: {
-                    ...photo.image,
-                    uri: croppedUri,
-                    cropOriginalUri,
-                    crop,
-                  },
-                }
-                : photo
-            ) );
-            return photos
-              ? { ...group, photos }
-              : group;
-          } ),
-        );
-      } else if ( context === "observationEdit" && observationPhotoUuid ) {
+      if ( context === "observationEdit" && observationPhotoUuid ) {
         const obs = cloneDeep( currentObservation );
         const idx = obs?.observationPhotos?.findIndex(
           op => op.uuid === observationPhotoUuid,
@@ -441,16 +480,15 @@ const ImageCropEditor = ( ) => {
       Alert.alert( t( "Something-went-wrong" ) );
     } );
   }, [
+    applyGroupPhotosCrop,
     context,
     currentObservation,
     finishOrAdvance,
     getCropFeedbackSourceKey,
-    groupedPhotos,
     imageSize,
     imageUri,
     localImageUri,
     observationPhotoUuid,
-    setGroupedPhotos,
     t,
     updateObservationKeys,
   ] );
