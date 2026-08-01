@@ -39,6 +39,7 @@ import {
 } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { trackGroupPhotoCrop } from "sharedHelpers/pendingGroupPhotoCrops";
+import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -300,6 +301,10 @@ const ImageCropEditor = ( ) => {
         const deviceUri = resolveDevicePhotoUriFromGroupedPhoto( groupedPhoto );
         if ( deviceUri ) {
           addPendingGroupPhotoDeletionUri( deviceUri );
+          // Same as removing from the Group Photos grid: record it regardless
+          // of whether the device deletion later succeeds, so the photo stays
+          // hidden from the photo picker (see removedGroupPhotoUris.ts).
+          addRemovedGroupPhotoUris( [deviceUri] );
         }
       }
       setGroupedPhotos(
