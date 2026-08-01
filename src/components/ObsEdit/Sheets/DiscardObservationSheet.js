@@ -7,7 +7,9 @@ import { t } from "i18next";
 import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
 import React from "react";
-import { saveObservationsAndApplyTrackedLocation } from "sharedHelpers/applyTrackedLocationToPhotos";
+import {
+  saveObservationsAndApplyTrackedLocation,
+} from "sharedHelpers/applyTrackedLocationToPhotos";
 import useStore from "stores/useStore";
 
 const { useRealm } = RealmContext;

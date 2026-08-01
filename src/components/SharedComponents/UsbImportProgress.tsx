@@ -57,12 +57,20 @@ const UsbImportProgress = ( ) => {
     title = "Clearing the storage device…";
     detail = `Saved ${saved} of ${total}. Removing them from the device…`;
   } else if ( phase === "done" ) {
+    const plural = saved === 1
+      ? ""
+      : "s";
+    const cleared = deleted > 0
+      ? ` and cleared ${deleted} from the device`
+      : "";
     title = "Import complete";
-    detail = `Saved ${saved} photo${saved === 1 ? "" : "s"} to your library`
-      + `${deleted > 0 ? ` and cleared ${deleted} from the device` : ""}.`;
+    detail = `Saved ${saved} photo${plural} to your library${cleared}.`;
   } else if ( phase === "error" ) {
+    const failures = failed > 0
+      ? `, ${failed} failed`
+      : "";
     title = "Import finished with errors";
-    detail = `Saved ${saved} of ${total}${failed > 0 ? `, ${failed} failed` : ""}.`;
+    detail = `Saved ${saved} of ${total}${failures}.`;
   } else {
     title = "Importing photos to your library…";
     detail = `${saved} of ${total}`;

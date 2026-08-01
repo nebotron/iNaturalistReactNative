@@ -1,9 +1,3 @@
-import BackgroundService from "react-native-background-actions";
-import {
-  beginBackgroundUploadTask,
-  endBackgroundUploadTask,
-} from "sharedHelpers/backgroundExecution";
-
 jest.mock( "react-native-background-actions", ( ) => ( {
   __esModule: true,
   default: {
@@ -18,8 +12,21 @@ jest.mock( "i18next", ( ) => ( {
 } ) );
 
 describe( "backgroundExecution", ( ) => {
+  let BackgroundService;
+  let beginBackgroundUploadTask;
+  let endBackgroundUploadTask;
+
   beforeEach( ( ) => {
-    jest.clearAllMocks( );
+    // The helper reference counts its callers in module state, so load it
+    // fresh for every test instead of leaking that count between them
+    jest.resetModules( );
+    /* eslint-disable global-require */
+    BackgroundService = require( "react-native-background-actions" ).default;
+    ( {
+      beginBackgroundUploadTask,
+      endBackgroundUploadTask,
+    } = require( "sharedHelpers/backgroundExecution" ) );
+    /* eslint-enable global-require */
     BackgroundService.isRunning.mockReturnValue( false );
   } );
 

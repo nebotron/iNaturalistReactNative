@@ -1,3 +1,5 @@
+import "tests/helpers/mockMortalForIntegration";
+
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import {
   fireEvent,

@@ -131,7 +131,7 @@ describe( "TaxonDetails SELECT in bulk ID flow", ( ) => {
     expect( await pressSelectAndGetPopToTarget( ) ).toEqual( "ObsEdit" );
   } );
 
-  it( "returns to Suggestions when an unrelated ObsEdit visit lingers earlier in history", async ( ) => {
+  it( "returns to Suggestions when an unrelated ObsEdit visit lingers in history", async ( ) => {
     // An ObsEdit screen from an unrelated, unfinished flow earlier in the
     // session (e.g. a notification tap) is still buried in the stack, but
     // this bulk ID flow was entered directly from My Observations, so it

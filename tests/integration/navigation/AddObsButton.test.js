@@ -88,15 +88,24 @@ describe( "with advanced user layout", ( ) => {
     } );
   } );
 
-  it( "opens AddObsBottomSheet", async ( ) => {
+  it( "navigates user to the photo importer", async ( ) => {
     renderComponent( <AddObsButton /> );
     await regularPress( );
+
+    expect( mockDispatch ).toHaveBeenCalledWith(
+      resetNavigation( "PhotoLibrary", { previousScreen: null } ),
+    );
+  } );
+
+  it( "opens AddObsBottomSheet on long press", async ( ) => {
+    renderComponent( <AddObsButton /> );
+    await longPress( );
     showNoEvidenceOption( );
   } );
 
   it( "navigates user to obs edit with no evidence", async ( ) => {
     renderComponent( <AddObsButton /> );
-    await regularPress( );
+    await longPress( );
 
     const noEvidenceButton = showNoEvidenceOption( );
     await actor.press( noEvidenceButton );
@@ -106,10 +115,10 @@ describe( "with advanced user layout", ( ) => {
     );
   } );
 
-  it( "does not open model on long press", async ( ) => {
+  it( "does not open model on a regular press", async ( ) => {
     const presentSpy = jest.spyOn( BottomSheetModal.prototype, "present" );
     renderComponent( <AddObsButton /> );
-    await longPress( );
+    await regularPress( );
 
     expect( presentSpy ).not.toHaveBeenCalled( );
     presentSpy.mockRestore( );

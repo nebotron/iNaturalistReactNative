@@ -125,7 +125,9 @@ const useUsbAutoImport = ( ) => {
           + `deleted ${del.deleted} from device (${del.failed} delete failures)`,
         );
       }
-      progress.setPhase( failed > 0 ? "error" : "done" );
+      progress.setPhase( failed > 0
+        ? "error"
+        : "done" );
     } catch ( error ) {
       logger.error( "USB offload failed", error );
       progress.setPhase( "error" );
@@ -142,7 +144,7 @@ const useUsbAutoImport = ( ) => {
     // not finished) that otherwise leave the feature completely silent.
     const supported = isUsbImportSupported( );
     logDiag( `hook mounted: supported=${supported}, onboardingShown=${onboardingShown}` );
-    if ( !supported || !onboardingShown ) return undefined;
+    if ( !supported || !onboardingShown ) return ( ) => {};
 
     let interval: ReturnType<typeof setInterval> | undefined;
     const stopPolling = ( ) => {

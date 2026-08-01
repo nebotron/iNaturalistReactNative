@@ -333,7 +333,9 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
       setResolvingStopId( null );
     }
     if ( !point ) return;
-    setStops( prev => prev.map( s => ( s.id === id ? { ...s, point } : s ) ) );
+    setStops( prev => prev.map( s => ( s.id === id
+      ? { ...s, point }
+      : s ) ) );
     // Remember searched addresses (but not the synthetic current-location row)
     // so they can be offered again before typing next time.
     if ( result.place_id !== CURRENT_LOCATION_PLACE_ID ) {

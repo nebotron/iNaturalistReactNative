@@ -85,6 +85,13 @@ const { useRealm } = RealmContext;
 
 const isTablet = DeviceInfo.isTablet();
 
+// Screens that can make up a chain of taxon browsing (suggestions, taxon
+// search, and drilling into the taxonomy) pushed from the screen where the
+// identification actually started, e.g. ObsEdit
+const isBulkChainScreen = ( name: string ): boolean => name === "Suggestions"
+  || name === "TaxonDetails"
+  || name.includes( "TaxonSearch" );
+
 const TaxonDetails = ( ): Node => {
   // Local state
   const [invertToWhiteBackground, setInvertToWhiteBackground] = useState( false );
@@ -129,7 +136,6 @@ const TaxonDetails = ( ): Node => {
     history.lastIndexOf( "RootExplore" ),
   );
   const usableHistory = history.slice( usableStackIndex, history.length );
-  const fromObsDetails = usableHistory.includes( "ObsDetails" );
   const fromSuggestions = usableHistory.includes( "Suggestions" );
   const fromMatch = usableHistory.includes( "Match" );
   const usableRoutes = navState?.routes.slice( usableStackIndex, history.length ) || [];
@@ -142,27 +148,24 @@ const TaxonDetails = ( ): Node => {
     usableRoutes.slice().reverse(),
     r => r.name === "Suggestions" || r.name === "SuggestionsTaxonSearch",
   );
-  // Walk back past this chain of Suggestions/SuggestionsTaxonSearch/TaxonDetails
-  // screens to find what preceded it. Checking whether "ObsEdit" appears
-  // *anywhere* in the tab's history is unreliable: an unrelated ObsEdit visit
-  // earlier in the session (e.g. from a deep link or notification that
+  // Walk back past this chain of suggestions/taxon search/taxonomy screens to
+  // find what preceded it. Checking whether "ObsEdit" or "ObsDetails" appears
+  // *anywhere* in the tab's history is unreliable: an unrelated visit to
+  // either earlier in the session (e.g. from a deep link or notification that
   // pushed a screen without resetting the stack) can linger further back in
-  // the same stack and get mistaken for this chain having come from ObsEdit,
+  // the same stack and get mistaken for this chain having come from there,
   // which then pops the bulk ID flow into that stale screen instead of
   // advancing to the next observation.
   const bulkChainStartIndex = ( ( ) => {
     let index = usableRoutes.length - 1;
-    while (
-      index >= 0
-      && ["Suggestions", "SuggestionsTaxonSearch", "TaxonDetails"].includes(
-        usableRoutes[index].name,
-      )
-    ) {
+    while ( index >= 0 && isBulkChainScreen( usableRoutes[index].name ) ) {
       index -= 1;
     }
     return index;
   } )( );
-  const fromObsEdit = usableRoutes[bulkChainStartIndex]?.name === "ObsEdit";
+  const bulkChainStartRoute = usableRoutes[bulkChainStartIndex];
+  const fromObsEdit = bulkChainStartRoute?.name === "ObsEdit";
+  const fromObsDetails = bulkChainStartRoute?.name === "ObsDetails";
   const { entryScreen: bulkEntryScreen, lastScreen: bulkLastScreen } = bulkFlowRoute?.params || {};
   const isMultiObsCreateFlow = (
     observations.length > 1 || savedOrUploadedMultiObsFlow
@@ -173,7 +176,7 @@ const TaxonDetails = ( ): Node => {
 
   // previous ObsDetails observation uuid
   const obsUuid = fromObsDetails
-    ? find( usableRoutes.slice().reverse(), r => r.name === "ObsDetails" ).params.uuid
+    ? bulkChainStartRoute?.params?.uuid
     : null;
   const { localObservation } = useLocalObservation( obsUuid );
   const { remoteObservation } = useRemoteObservation(

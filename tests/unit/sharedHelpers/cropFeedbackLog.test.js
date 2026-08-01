@@ -3,7 +3,9 @@ import { zustandStorage } from "stores/useStore";
 
 const readStoredFeedback = ( ) => {
   const raw = zustandStorage.getItem( "cropFeedbackLog" );
-  return raw ? JSON.parse( raw ) : {};
+  return raw
+    ? JSON.parse( raw )
+    : {};
 };
 
 describe( "cropFeedbackLog", ( ) => {

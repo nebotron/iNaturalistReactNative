@@ -12,7 +12,9 @@ import React, {
   useCallback, useState,
 } from "react";
 import { BackHandler } from "react-native";
-import { saveObservationsAndApplyTrackedLocation } from "sharedHelpers/applyTrackedLocationToPhotos";
+import {
+  saveObservationsAndApplyTrackedLocation,
+} from "sharedHelpers/applyTrackedLocationToPhotos";
 import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import { useExitObservationFlow, useTranslation } from "sharedHooks";
 import useObsEditRollback from "sharedHooks/useObsEditRollback";
