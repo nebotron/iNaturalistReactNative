@@ -3,19 +3,26 @@ import { INatApiError } from "api/error";
 const RETRY_DELAY_MS = 5000;
 const RETRY_JITTER_MS = 2000;
 
-function isRetryableError( error: unknown ): boolean {
+interface RetryOptions {
+  // Statuses that are normally fatal but are worth one more try in a specific
+  // call's context, e.g. a 404 on a record the server only just created.
+  alsoRetryStatuses?: number[];
+}
+
+function isRetryableError( error: unknown, options: RetryOptions ): boolean {
   if ( error instanceof INatApiError ) {
-    return error.status >= 500;
+    return error.status >= 500
+      || !!options.alsoRetryStatuses?.includes( error.status );
   }
   // No HTTP response received — network/connection failure
   return !( error instanceof INatApiError );
 }
 
-async function withRetry<T>( fn: () => Promise<T> ): Promise<T> {
+async function withRetry<T>( fn: () => Promise<T>, options: RetryOptions = {} ): Promise<T> {
   try {
     return await fn();
   } catch ( error ) {
-    if ( !isRetryableError( error ) ) {
+    if ( !isRetryableError( error, options ) ) {
       throw error;
     }
     const delay = RETRY_DELAY_MS + Math.random() * RETRY_JITTER_MS;

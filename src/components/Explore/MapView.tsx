@@ -3,7 +3,10 @@ import {
   Button,
   Map,
 } from "components/SharedComponents";
-import { getMapRegion } from "components/SharedComponents/Map/helpers/mapHelpers";
+import {
+  getMapBoundariesSafely,
+  getMapRegion,
+} from "components/SharedComponents/Map/helpers/mapHelpers";
 import { View } from "components/styledComponents";
 import type { MapBoundaries } from "providers/ExploreContext";
 import {
@@ -153,7 +156,7 @@ const MapView = ( {
 
   const handleRedoSearch = async ( ) => {
     setShowRedoSearchButton( false );
-    const currentBounds = await mapRef?.current?.getMapBoundaries( );
+    const currentBounds = await getMapBoundariesSafely( mapRef?.current );
     if ( !currentBounds ) { return; }
     dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_MAP_AREA } );
     dispatch( {

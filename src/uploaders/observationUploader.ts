@@ -239,10 +239,13 @@ async function uploadObservation(
   if ( wasLocallyFavorited ) {
     try {
       const apiToken = await validateAndGetToken( );
+      // The observation was created moments ago, so a 404 here means the
+      // server hasn't caught up with it yet, not that it doesn't exist —
+      // worth another try rather than silently dropping the user's fave.
       await withRetry( () => faveObservation(
         { uuid: obsUUID },
         { ...opts, api_token: apiToken },
-      ) );
+      ), { alsoRetryStatuses: [404] } );
     } catch ( error ) {
       const { uploadFailureDetails } = attachUploadFailureDetails(
         error,

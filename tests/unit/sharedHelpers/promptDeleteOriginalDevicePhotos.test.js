@@ -1,5 +1,7 @@
 import { Alert } from "react-native";
-import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import promptDeleteOriginalDevicePhotos, {
+  deleteOriginalDevicePhotos,
+} from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import { zustandStorage } from "stores/useStore";
 
 const mockIosReadGalleryPermission = jest.fn( async () => "not-determined" );
@@ -56,5 +58,31 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
 
     expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://ONE"] );
     expect( Alert.alert ).not.toHaveBeenCalled( );
+  } );
+
+  describe( "when the deletion hangs", ( ) => {
+    beforeEach( ( ) => jest.useFakeTimers( ) );
+    afterEach( ( ) => jest.useRealTimers( ) );
+
+    it( "stops waiting so the caller can leave the screen, and completes once", async ( ) => {
+      let finishDeletion;
+      mockDeletePhotos.mockImplementation(
+        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
+      );
+      const onComplete = jest.fn( );
+
+      promptDeleteOriginalDevicePhotos( ["ph://ONE"], onComplete );
+      // let the permission check and the deletion call itself settle
+      await jest.advanceTimersByTimeAsync( 0 );
+      expect( onComplete ).not.toHaveBeenCalled( );
+
+      await jest.advanceTimersByTimeAsync( 20000 );
+      expect( onComplete ).toHaveBeenCalledTimes( 1 );
+
+      // the deletion finishing after we gave up must not complete the exit twice
+      finishDeletion( );
+      await jest.advanceTimersByTimeAsync( 0 );
+      expect( onComplete ).toHaveBeenCalledTimes( 1 );
+    } );
   } );
 } );

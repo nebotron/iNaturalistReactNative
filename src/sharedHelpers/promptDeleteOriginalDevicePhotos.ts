@@ -215,6 +215,14 @@ export const deleteOriginalDevicePhotos = (
   ( ) => performDeleteOriginalDevicePhotos( photoUris, options ),
 );
 
+// Callers hold the user on the current screen until onComplete fires so the
+// iOS deletion confirmation isn't asked to present mid-navigation. A deletion
+// normally settles in a couple of seconds, but a wedged PHPhotoLibrary (see
+// above) doesn't settle until DELETE_TIMEOUT_MS, and stranding the user for
+// two minutes on a screen they asked to leave is far worse than letting the
+// deletion finish unobserved in the background.
+const EXIT_WAIT_TIMEOUT_MS = 20000;
+
 // Deletes the original device photos that were imported, without prompting.
 const promptDeleteOriginalDevicePhotos = (
   photoUris: string[],
@@ -226,7 +234,24 @@ const promptDeleteOriginalDevicePhotos = (
     return;
   }
 
-  void deleteOriginalDevicePhotos( uniqueUris ).finally( onComplete );
+  let completed = false;
+  const completeOnce = ( ) => {
+    if ( completed ) return;
+    completed = true;
+    onComplete( );
+  };
+  const waitTimer = setTimeout( ( ) => {
+    logger.warn(
+      `Proceeding without waiting for deletion of ${uniqueUris.length} device photo(s): `
+      + `still pending after ${EXIT_WAIT_TIMEOUT_MS}ms`,
+    );
+    completeOnce( );
+  }, EXIT_WAIT_TIMEOUT_MS );
+
+  void deleteOriginalDevicePhotos( uniqueUris ).finally( ( ) => {
+    clearTimeout( waitTimer );
+    completeOnce( );
+  } );
 };
 
 export default promptDeleteOriginalDevicePhotos;

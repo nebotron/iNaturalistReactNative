@@ -1,6 +1,6 @@
 import type { MapBoundaries } from "providers/ExploreContext";
 import Config from "react-native-config";
-import type { LatLng, Region } from "react-native-maps";
+import type { BoundingBox, LatLng, Region } from "react-native-maps";
 import createUTFPosition from "sharedHelpers/createUTFPosition";
 import getDataForPixel from "sharedHelpers/fetchUTFGridData";
 
@@ -12,6 +12,21 @@ export const TILE_URL = API_URL.match( /api\.inaturalist\.org/ )
   ? API_URL.replace( "api.inaturalist", "tiles.inaturalist" )
   : API_URL;
 const POINT_TILES_ENDPOINT = `${TILE_URL}/points`;
+
+// getMapBoundaries is one of the few MapView methods that round-trips to the
+// native view and returns a promise, so it rejects ("Invalid view returned
+// from registry, expecting RNMapsMapView, got: (null)") when the native view
+// is torn down between the call and the response — e.g. onRegionChangeComplete
+// firing while the screen is being unmounted. Nothing can be done about it and
+// nobody needs boundaries for a map that no longer exists, so resolve to
+// undefined rather than leaving an unhandled promise rejection behind.
+export async function getMapBoundariesSafely(
+  mapView: { getMapBoundaries: ( ) => Promise<BoundingBox> } | null | undefined,
+): Promise<BoundingBox | undefined> {
+  return mapView
+    ?.getMapBoundaries( )
+    .catch( ( ) => undefined );
+}
 
 export function calculateZoom( width: number, delta: number ) {
   return Math.log2( 360 * ( width / 256 / delta ) ) + 1;

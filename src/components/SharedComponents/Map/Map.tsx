@@ -29,6 +29,7 @@ import CurrentLocationButton from "./CurrentLocationButton";
 import {
   calculateZoom,
   fetchObservationUUID,
+  getMapBoundariesSafely,
   metersToLatitudeDelta,
   OBSCURATION_CELL_SIZE,
   obscurationCellForLatLng,
@@ -377,7 +378,7 @@ const Map = ( {
     }
     if ( !shouldSkipRegionUpdate ) {
       if ( onRegionChangeComplete ) {
-        const boundaries = await mapViewRef?.current?.getMapBoundaries( );
+        const boundaries = await getMapBoundariesSafely( mapViewRef?.current );
         onRegionChangeComplete( newRegion, boundaries );
       }
       if ( androidLocalRegion ) {
