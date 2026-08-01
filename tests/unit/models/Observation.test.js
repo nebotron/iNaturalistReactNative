@@ -176,6 +176,27 @@ describe( "Observation", ( ) => {
     } );
   } );
 
+  describe( "saveLocalObservationForUpload", ( ) => {
+    it( "should index the device photos it was imported from", async ( ) => {
+      const obsUuid = uuid.v4( );
+      const devicePhotoUri = `ph://${uuid.v4( )}`;
+
+      await Observation.saveLocalObservationForUpload( {
+        uuid: obsUuid,
+        observationPhotos: [{
+          uuid: uuid.v4( ),
+          position: 0,
+          originalDevicePhotoUri: devicePhotoUri,
+          photo: { uuid: uuid.v4( ), url: "file:///local.jpg" },
+        }],
+      }, global.realm );
+
+      const indexed = global.realm.objects( "UploadedDevicePhotoUri" )
+        .filtered( "uri == $0", devicePhotoUri );
+      expect( indexed.length ).toBe( 1 );
+    } );
+  } );
+
   describe( "deleteLocalObservation", ( ) => {
     it( "should keep hiding the device photos it was imported from", ( ) => {
       const obsUuid = uuid.v4( );
