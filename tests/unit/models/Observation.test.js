@@ -1,6 +1,8 @@
 import Observation from "realmModels/Observation";
 import ObservationFieldValue from "realmModels/ObservationFieldValue";
 import ProjectObservation from "realmModels/ProjectObservation";
+import { getPreviouslyUploadedDevicePhotoUrisSet } from
+  "sharedHelpers/duplicateUploadedDevicePhotos";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import factory from "tests/factory";
 import * as uuid from "uuid";
@@ -171,6 +173,31 @@ describe( "Observation", ( ) => {
 
       const unsynced = Observation.filterUnsyncedObservations( global.realm );
       expect( unsynced.filtered( `uuid == "${obsUuid}"` ).length ).toBe( 1 );
+    } );
+  } );
+
+  describe( "deleteLocalObservation", ( ) => {
+    it( "should keep hiding the device photos it was imported from", ( ) => {
+      const obsUuid = uuid.v4( );
+      const devicePhotoUri = `ph://${uuid.v4( )}`;
+      safeRealmWrite( global.realm, ( ) => {
+        global.realm.create( "Observation", {
+          uuid: obsUuid,
+          observationPhotos: [{
+            uuid: uuid.v4( ),
+            position: 0,
+            originalDevicePhotoUri: devicePhotoUri,
+            photo: { uuid: uuid.v4( ), url: "file:///local.jpg" },
+          }],
+        } );
+      }, "create obs with imported photo for deleteLocalObservation test" );
+
+      Observation.deleteLocalObservation( global.realm, obsUuid );
+
+      expect( global.realm.objectForPrimaryKey( "Observation", obsUuid ) ).toBeNull( );
+      expect(
+        getPreviouslyUploadedDevicePhotoUrisSet( global.realm ).has( devicePhotoUri ),
+      ).toBe( true );
     } );
   } );
 } );
