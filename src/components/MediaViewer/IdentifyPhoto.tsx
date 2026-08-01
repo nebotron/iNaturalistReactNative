@@ -1,4 +1,5 @@
 import Slider from "@react-native-community/slider";
+import FineSlider from "components/MediaViewer/FineSlider";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import { INatIcon } from "components/SharedComponents";
@@ -210,6 +211,10 @@ interface ZoomBrightnessSlidersProps {
   // Nothing to zoom or brighten (e.g. a sound-only observation), so the sliders
   // stay in the layout but don't respond.
   disabled?: boolean;
+  // Use the variable-precision zoom slider (same 1x..20x range, but dragging
+  // off the track slows the thumb down). For screens like the crop editor
+  // where small zoom changes matter.
+  fineZoom?: boolean;
 }
 
 // The zoom + brightness sliders shown below a photo (not covering it).
@@ -226,24 +231,37 @@ export const ZoomBrightnessSliders = ( {
   brightnessAccessibilityLabel,
   iconColor = colors.darkGray,
   disabled = false,
+  fineZoom = false,
 }: ZoomBrightnessSlidersProps ) => (
   <View className="px-4 pt-1">
     <View className="flex-row items-center">
       <INatIcon name="magnifying-glass" size={18} color={iconColor} />
-      <Slider
-        disabled={disabled}
-        style={styles.slider}
-        minimumValue={0}
-        maximumValue={1}
-        minimumTrackTintColor={colors.inatGreen}
-        maximumTrackTintColor={colors.lightGray}
-        thumbTintColor={colors.inatGreen}
-        value={zoomScaleToPos( zoomScale )}
-        onValueChange={onZoomChange}
-        onSlidingComplete={onZoomComplete}
-        tapToSeek
-        accessibilityLabel={zoomAccessibilityLabel}
-      />
+      {fineZoom
+        ? (
+          <FineSlider
+            disabled={disabled}
+            value={zoomScaleToPos( zoomScale )}
+            onChange={onZoomChange}
+            onComplete={onZoomComplete}
+            accessibilityLabel={zoomAccessibilityLabel}
+          />
+        )
+        : (
+          <Slider
+            disabled={disabled}
+            style={styles.slider}
+            minimumValue={0}
+            maximumValue={1}
+            minimumTrackTintColor={colors.inatGreen}
+            maximumTrackTintColor={colors.lightGray}
+            thumbTintColor={colors.inatGreen}
+            value={zoomScaleToPos( zoomScale )}
+            onValueChange={onZoomChange}
+            onSlidingComplete={onZoomComplete}
+            tapToSeek
+            accessibilityLabel={zoomAccessibilityLabel}
+          />
+        )}
     </View>
     <View className="flex-row items-center">
       <INatIcon name="sun" size={18} color={iconColor} />

@@ -471,6 +471,7 @@ const ImageCropView = ( {
       <View className="bg-[#1c1c1c] pt-1" style={bottomPanelStyle}>
         <ZoomBrightnessSliders
           zoomScale={zoomScale}
+          fineZoom
           brightnessStops={brightnessStops}
           exposureStopsMin={EXPOSURE_STOPS_MIN}
           exposureStopsMax={EXPOSURE_STOPS_MAX}
