@@ -13,6 +13,7 @@ import {
   onlineSuggestionsCacheKey,
   setCachedSuggestions,
 } from "sharedHelpers/suggestionsCache";
+import type { OfflineSuggestionsResponse } from "sharedHooks/useSuggestions/useOfflineSuggestions";
 import { predictOffline } from "sharedHooks/useSuggestions/useOfflineSuggestions";
 import type {
   OnlineSuggestionsQueryResponse,
@@ -25,6 +26,50 @@ interface OnlineSuggestionsApiResponse {
     taxon: OnlineSuggestionsQueryResponse["results"][0]["taxon"];
   };
 }
+
+// Mirror the Suggestions screen: the evidence location is only used when the
+// observation actually has one, and that choice is baked into both cache keys.
+const scoreParamsForObservation = ( observation: RealmObservationPojo ) => {
+  const shouldUseEvidenceLocation = !!observation.latitude;
+  return {
+    photoUri: ObservationPhoto.mapObsPhotoUris( observation )[0],
+    shouldUseEvidenceLocation,
+    latitude: shouldUseEvidenceLocation && observation.latitude != null
+      ? observation.latitude
+      : undefined,
+    longitude: shouldUseEvidenceLocation && observation.longitude != null
+      ? observation.longitude
+      : undefined,
+  };
+};
+
+// Offline model: run on-device inference once and persist it, or hand back
+// what an earlier run persisted. Failures are swallowed so a bad photo doesn't
+// stop the caller.
+export const prefetchOfflineSuggestions = async (
+  observation: RealmObservationPojo,
+  realm: Realm,
+): Promise<OfflineSuggestionsResponse | null> => {
+  const { photoUri, latitude, longitude } = scoreParamsForObservation( observation );
+  if ( !photoUri ) {
+    return null;
+  }
+  const offlineKey = offlineSuggestionsCacheKey( photoUri, latitude, longitude );
+  const cached = getCachedSuggestions<OfflineSuggestionsResponse>( offlineKey );
+  if ( cached ) {
+    return cached;
+  }
+  const offlineSuggestions = await predictOffline( {
+    latitude,
+    longitude,
+    photoUri,
+    realm,
+  } ).catch( ( ) => null );
+  if ( offlineSuggestions ) {
+    setCachedSuggestions( offlineKey, offlineSuggestions );
+  }
+  return offlineSuggestions;
+};
 
 const shimApiResponseForCommonAncestor = (
   apiSuggestions: OnlineSuggestionsApiResponse,
@@ -52,39 +97,21 @@ const prefetchObservationSuggestions = async (
   observation: RealmObservationPojo,
   realm: Realm,
 ): Promise<void> => {
-  const photoUris = ObservationPhoto.mapObsPhotoUris( observation );
-  const photoUri = photoUris[0];
+  const {
+    photoUri,
+    shouldUseEvidenceLocation,
+    latitude,
+    longitude,
+  } = scoreParamsForObservation( observation );
   if ( !photoUri ) {
     return;
   }
 
-  // Mirror the Suggestions screen: the evidence location is only used when the
-  // observation actually has one, and that choice is baked into both cache keys.
-  const shouldUseEvidenceLocation = !!observation.latitude;
-  const latitude = shouldUseEvidenceLocation && observation.latitude != null
-    ? observation.latitude
-    : undefined;
-  const longitude = shouldUseEvidenceLocation && observation.longitude != null
-    ? observation.longitude
-    : undefined;
   const locale = i18n?.language ?? "en";
   const hasCurrentUser = !!User.currentUser( realm );
   const queryKey = ["scoreImage", photoUri, { shouldUseEvidenceLocation }];
 
-  // Offline model: run on-device inference once and persist it. Failures are
-  // swallowed here so a bad photo doesn't stop the online prefetch below.
-  const offlineKey = offlineSuggestionsCacheKey( photoUri, latitude, longitude );
-  if ( !getCachedSuggestions( offlineKey ) ) {
-    const offlineSuggestions = await predictOffline( {
-      latitude,
-      longitude,
-      photoUri,
-      realm,
-    } ).catch( ( ) => null );
-    if ( offlineSuggestions ) {
-      setCachedSuggestions( offlineKey, offlineSuggestions );
-    }
-  }
+  await prefetchOfflineSuggestions( observation, realm );
 
   // Online model: warm the persistent cache (survives restarts) as well as the
   // in-memory React Query cache (instant for a same-session visit).
