@@ -847,6 +847,9 @@ March = March
 # Title for section of observation filters for controls over whether you have
 # Button to mark an observation as reviewed by the current user
 Mark-as-reviewed = Mark as reviewed
+# Button that marks the selected photos as already saved, so they get hidden by
+# the "Hide Saved" toggle in the photo picker
+Mark-photos-as-already-saved = Mark as Saved
 # Radio button option for navigation flows in Settings
 Match-Screen = Match Screen
 # Identification category
