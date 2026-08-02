@@ -245,7 +245,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     stopId: string;
     suggestions: PlaceResult[];
   } | null>( null );
-  const [visibleHotspotIndex, setVisibleHotspotIndex] = useState( 0 );
   const [hotspotCardHeight, setHotspotCardHeight] = useState<number | null>( null );
   // Stop currently awaiting a Place Details lookup to resolve its lat/lng.
   const [resolvingStopId, setResolvingStopId] = useState<string | null>( null );
@@ -454,7 +453,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   }, [stops, t] );
 
   const handleHotspotSwipe = useCallback( ( index: number ) => {
-    setVisibleHotspotIndex( index );
     if ( programmaticScrollIndexRef.current === index ) {
       programmaticScrollIndexRef.current = null;
       return;
@@ -469,7 +467,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   // Tapping a hotspot marker slides the card carousel to that hotspot's pane.
   const handleHotspotMarkerPress = useCallback( ( hotspot: Hotspot, index: number ) => {
     if ( selectedHotspotId !== hotspot.id ) {
-      setVisibleHotspotIndex( index );
       programmaticScrollIndexRef.current = index;
       carouselRef.current?.scrollTo( { index, animated: true } );
     }
@@ -477,13 +474,22 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   }, [selectedHotspotId, handleHotspotPress] );
 
   useEffect( () => {
-    setVisibleHotspotIndex( 0 );
     setHotspotCardHeight( null );
     if ( hotspots.length > 0 ) {
       handleHotspotPress( hotspots[0] );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotspots] );
+
+  // Card height is driven by the number of top-species rows, so the hotspot
+  // with the most rows is the tallest. Measuring that one (rather than the
+  // visible one) keeps the bottom panel a fixed height as the user swipes.
+  const tallestHotspot = useMemo( () => hotspots.reduce(
+    ( tallest, hotspot ) => ( hotspot.topSpecies.length > tallest.topSpecies.length
+      ? hotspot
+      : tallest ),
+    hotspots[0],
+  ), [hotspots] );
 
   const handleObservationPress = useCallback( ( uuid: string ) => {
     navigation.push( "ObsDetails", { uuid } );
@@ -718,23 +724,26 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
         )}
       </View>
 
-      {/* Hidden copy of the currently visible hotspot card, used only to measure
-          its natural content height so the section below can match it exactly. */}
-      {hotspots.length > 0 && (
+      {/* Hidden copy of the tallest hotspot card, used only to measure the
+          height the section below should hold for every card in the set. */}
+      {tallestHotspot && (
         <View
           style={[styles.hiddenHotspotMeasure, { width: windowWidth }]}
           pointerEvents="none"
           aria-hidden
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
-          onLayout={( { nativeEvent } ) => setHotspotCardHeight(
-            Math.ceil( nativeEvent.layout.height ) + HOTSPOT_CARD_HEIGHT_BUFFER,
-          )}
+          onLayout={( { nativeEvent } ) => {
+            const measured = Math.ceil( nativeEvent.layout.height ) + HOTSPOT_CARD_HEIGHT_BUFFER;
+            // Never shrink within a result set, so a late or slightly smaller
+            // measurement can't nudge the panel up and down.
+            setHotspotCardHeight( prev => Math.max( prev ?? 0, measured ) );
+          }}
         >
           <HotspotListItem
-            hotspot={hotspots[visibleHotspotIndex] ?? hotspots[0]}
-            rank={visibleHotspotIndex + 1}
-            selected={selectedHotspotId === ( hotspots[visibleHotspotIndex] ?? hotspots[0] ).id}
+            hotspot={tallestHotspot}
+            rank={1}
+            selected={false}
             onPress={() => null}
             onOpenInGoogleMaps={() => null}
             onAddToRoute={() => null}
