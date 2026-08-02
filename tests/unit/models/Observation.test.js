@@ -198,20 +198,18 @@ describe( "Observation", ( ) => {
   } );
 
   describe( "deleteLocalObservation", ( ) => {
-    it( "should keep hiding the device photos it was imported from", ( ) => {
+    it( "should keep hiding the device photos it was imported from", async ( ) => {
       const obsUuid = uuid.v4( );
       const devicePhotoUri = `ph://${uuid.v4( )}`;
-      safeRealmWrite( global.realm, ( ) => {
-        global.realm.create( "Observation", {
-          uuid: obsUuid,
-          observationPhotos: [{
-            uuid: uuid.v4( ),
-            position: 0,
-            originalDevicePhotoUri: devicePhotoUri,
-            photo: { uuid: uuid.v4( ), url: "file:///local.jpg" },
-          }],
-        } );
-      }, "create obs with imported photo for deleteLocalObservation test" );
+      await Observation.saveLocalObservationForUpload( {
+        uuid: obsUuid,
+        observationPhotos: [{
+          uuid: uuid.v4( ),
+          position: 0,
+          originalDevicePhotoUri: devicePhotoUri,
+          photo: { uuid: uuid.v4( ), url: "file:///local.jpg" },
+        }],
+      }, global.realm );
 
       Observation.deleteLocalObservation( global.realm, obsUuid );
 
