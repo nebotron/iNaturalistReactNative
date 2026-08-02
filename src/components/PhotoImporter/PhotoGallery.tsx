@@ -108,9 +108,20 @@ const PhotoGallery = ( {
         const uri = getDeviceUriFromNode( node );
         return !uri || !removedUris.has( uri );
       } );
-      setPhotos( prev => ( after
-        ? [...prev, ...nodes]
-        : nodes ) );
+      setPhotos( prev => {
+        if ( !after ) return nodes;
+        // CameraRoll's cursor-based pages overlap when the library changes
+        // mid-pagination — which it does constantly here, since importing
+        // deletes device photos and rewrites asset locations. A duplicated
+        // node meant two concurrent copies racing to write the same
+        // destination file on import, and both failing with the opaque
+        // "PHPhotosErrorDomain error -1".
+        const seen = new Set( prev.map( getSelectionKey ) );
+        return [
+          ...prev,
+          ...nodes.filter( node => !seen.has( getSelectionKey( node ) ) ),
+        ];
+      } );
       setHasNextPage( result.page_info.has_next_page );
       setEndCursor( result.page_info.end_cursor );
     } catch {

@@ -119,6 +119,14 @@ const PhotoLibrary = ( ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
 
+    // Every node for a given asset resolves to the same destination path, so
+    // copying one twice in a batch has the two writes racing over the same
+    // file (each unlinking what the other just wrote) and both fail with
+    // "PHPhotosErrorDomain error -1", dropping the photo from the import.
+    const uniqueNodes = [...new Map(
+      nodes.map( node => [node.image.uri, node] ),
+    ).values( )];
+
     const copyNode = async ( node: PhotoNode ) => {
       const fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
       const destPath = `${path}/${fileName}`;
@@ -158,11 +166,18 @@ const PhotoLibrary = ( ) => {
         const sourceUri = node.image.filepath ?? node.image.uri;
         await copyFile( sourceUri, destPath );
       }
+      const sourceAsset = nodeToSourceAsset( node );
       return {
         image: {
-          ...nodeToSourceAsset( node ),
+          ...sourceAsset,
           uri: `file://${destPath}`,
         },
+        // Carried alongside so callers can pair a copy with the device asset it
+        // came from by value. Pairing them by index breaks as soon as one photo
+        // in the batch fails to copy, and mismatched pairs attach the wrong
+        // ph:// URI to a photo — which is what later gets deleted from the
+        // device and recorded as uploaded.
+        sourceAsset,
       };
     };
 
@@ -181,8 +196,8 @@ const PhotoLibrary = ( ) => {
 
     const BATCH_SIZE = 10;
     const results = [];
-    for ( let i = 0; i < nodes.length; i += BATCH_SIZE ) {
-      const batch = nodes.slice( i, i + BATCH_SIZE );
+    for ( let i = 0; i < uniqueNodes.length; i += BATCH_SIZE ) {
+      const batch = uniqueNodes.slice( i, i + BATCH_SIZE );
       // eslint-disable-next-line no-await-in-loop
       const batchResults = await Promise.all( batch.map( copyNodeOrNull ) );
       results.push( ...batchResults.filter( ( r ): r is NonNullable<typeof r> => r !== null ) );
@@ -233,7 +248,11 @@ const PhotoLibrary = ( ) => {
         ? await copyImagesFromCameraRoll( photoNodes )
         : [];
       const selectedPhotos = copiedPhotos.length > 0
-        ? markDuplicatePhotosFromLibrary( realm, copiedPhotos, sourceAssets )
+        ? markDuplicatePhotosFromLibrary(
+          realm,
+          copiedPhotos,
+          copiedPhotos.map( photo => photo.sourceAsset ),
+        )
         : [];
 
       if ( selectedPhotos.length > 0 ) {
