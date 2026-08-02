@@ -28,22 +28,38 @@ function hashKey( key: string ): string {
   return hash.toString( 16 );
 }
 
+// Resolved thumbnails are kept for the life of the process: a grid that has
+// already shown a photo must be able to show it again instantly when the user
+// scrolls back, and the entries are just short strings.
 const memoryCache = new Map<string, string>( );
-const inFlight = new Map<string, Promise<string | null>>( );
 
 // Cap concurrent native thumbnail generations so a fast scroll through a large
 // library doesn't fire hundreds of decodes at once.
-const MAX_CONCURRENCY = 3;
-let active = 0;
-const queue: ( ( ) => void )[] = [];
+const MAX_CONCURRENCY = 4;
 
-const runNext = ( ) => {
-  if ( active >= MAX_CONCURRENCY ) return;
-  const job = queue.shift( );
-  if ( !job ) return;
-  active += 1;
-  job( );
-};
+interface Job {
+  key: string;
+  uri: string;
+  maxPixel: number;
+  // Number of live callers that still want this thumbnail. When it drops to
+  // zero before the job starts, the job is abandoned: the cell that asked for
+  // it has been recycled away and generating it now would only delay the
+  // thumbnails that are actually on screen.
+  waiters: number;
+  started: boolean;
+  cancelled: boolean;
+  promise: Promise<string | null>;
+  resolve: ( value: string | null ) => void;
+}
+
+const jobs = new Map<string, Job>( );
+// Pending work is served last-in-first-out, and visible cells jump ahead of
+// prefetches. A queue served in request order is what made scrolling back feel
+// like previews had "unloaded": the thumbnails for the rows now on screen sat
+// behind a backlog of requests from every row already scrolled past.
+const visibleStack: Job[] = [];
+const prefetchStack: Job[] = [];
+let active = 0;
 
 let dirReady: Promise<void> | null = null;
 const ensureDir = ( ) => {
@@ -51,48 +67,133 @@ const ensureDir = ( ) => {
   return dirReady;
 };
 
-const generate = ( uri: string, maxPixel: number ): Promise<string | null> => (
-  new Promise( resolve => {
-    queue.push( ( ) => {
-      ( async ( ) => {
-        try {
-          await ensureDir( );
-          const outputPath = `${deviceThumbnailsPath}/${hashKey( cacheKey( uri, maxPixel ) )}.jpg`;
-          if ( await exists( outputPath ) ) {
-            resolve( `file://${outputPath}` );
-            return;
-          }
-          const result = await ImageCropper!.createThumbnail( uri, maxPixel, outputPath );
-          resolve( result || null );
-        } catch {
-          resolve( null );
-        } finally {
-          active -= 1;
-          runNext( );
-        }
-      } )( );
-    } );
-    runNext( );
-  } )
-);
+const takeNext = ( ): Job | null => {
+  const stacks = [visibleStack, prefetchStack];
+  let next: Job | null = null;
+  for ( let i = 0; i < stacks.length && !next; i += 1 ) {
+    const stack = stacks[i];
+    while ( !next && stack.length > 0 ) {
+      // A job can appear in a stack more than once (requested again, or
+      // promoted from prefetch to visible); started/cancelled skips the dupes.
+      const job = stack.pop( ) as Job;
+      if ( !job.started && !job.cancelled ) next = job;
+    }
+  }
+  return next;
+};
 
-const getDeviceImageThumbnail = (
+const runJob = async ( job: Job ) => {
+  let result: string | null = null;
+  try {
+    await ensureDir( );
+    const outputPath = `${deviceThumbnailsPath}/${hashKey( job.key )}.jpg`;
+    result = await exists( outputPath )
+      ? `file://${outputPath}`
+      : ( await ImageCropper!.createThumbnail( job.uri, job.maxPixel, outputPath ) ) || null;
+  } catch {
+    result = null;
+  }
+  if ( result ) memoryCache.set( job.key, result );
+  jobs.delete( job.key );
+  job.resolve( result );
+};
+
+// Starts as many queued jobs as the concurrency cap allows, and starts the
+// next one as each finishes.
+const pump = ( ) => {
+  if ( active >= MAX_CONCURRENCY ) return;
+  const job = takeNext( );
+  if ( !job ) return;
+  job.started = true;
+  active += 1;
+  runJob( job ).then( ( ) => {
+    active -= 1;
+    pump( );
+  } );
+  pump( );
+};
+
+const scheduleJob = ( uri: string, maxPixel: number, visible: boolean ): Job => {
+  const key = cacheKey( uri, maxPixel );
+  let job = jobs.get( key );
+  if ( !job ) {
+    let resolveJob: ( value: string | null ) => void = ( ) => {};
+    const promise = new Promise<string | null>( resolve => {
+      resolveJob = resolve;
+    } );
+    job = {
+      key,
+      uri,
+      maxPixel,
+      waiters: 0,
+      started: false,
+      cancelled: false,
+      promise,
+      resolve: resolveJob,
+    };
+    jobs.set( key, job );
+  }
+  job.waiters += 1;
+  if ( !job.started ) {
+    ( visible
+      ? visibleStack
+      : prefetchStack ).push( job );
+    pump( );
+  }
+  return job;
+};
+
+interface ThumbnailRequest {
+  promise: Promise<string | null>;
+  release: ( ) => void;
+}
+
+// Requests a thumbnail on behalf of a cell that is on screen now. Callers must
+// call release() when they no longer need it (unmount, or recycled onto a
+// different photo) so an unstarted job can be dropped.
+const requestDeviceImageThumbnail = (
   uri: string,
   maxPixel: number,
-): Promise<string | null> => {
+): ThumbnailRequest => {
   const key = cacheKey( uri, maxPixel );
   const cached = memoryCache.get( key );
-  if ( cached ) return Promise.resolve( cached );
-  const existing = inFlight.get( key );
-  if ( existing ) return existing;
-  const promise = generate( uri, maxPixel )
-    .then( result => {
-      if ( result ) memoryCache.set( key, result );
-      return result;
-    } )
-    .finally( ( ) => inFlight.delete( key ) );
-  inFlight.set( key, promise );
-  return promise;
+  if ( cached ) {
+    return { promise: Promise.resolve( cached ), release: ( ) => {} };
+  }
+  const job = scheduleJob( uri, maxPixel, true );
+  let released = false;
+  return {
+    promise: job.promise,
+    release: ( ) => {
+      if ( !released ) {
+        released = true;
+        job.waiters -= 1;
+        if ( job.waiters <= 0 && !job.started && !job.cancelled ) {
+          job.cancelled = true;
+          jobs.delete( job.key );
+          job.resolve( null );
+        }
+      }
+    },
+  };
+};
+
+// Warms the cache for photos near the viewport at lower priority than the
+// cells actually on screen. Uris are enqueued in ascending order of importance
+// (the queue is LIFO), so pass the nearest-to-viewport photos last.
+export const prefetchDeviceImageThumbnails = (
+  uris: string[],
+  maxPixel: number,
+): void => {
+  if ( ImageCropper?.createThumbnail ) {
+    uris.forEach( uri => {
+      // Prefetches keep their waiter forever: nothing "unmounts" a prefetch,
+      // and a warmed cache is exactly what makes scrolling back instant.
+      if ( !memoryCache.has( cacheKey( uri, maxPixel ) ) ) {
+        scheduleJob( uri, maxPixel, false );
+      }
+    } );
+  }
 };
 
 // Returns a small cached thumbnail uri for a device photo, generated off the
@@ -105,36 +206,39 @@ const useDeviceImageThumbnail = (
   maxPixel: number,
 ): string | undefined => {
   const available = Boolean( ImageCropper?.createThumbnail );
-  const [thumbUri, setThumbUri] = useState<string | undefined>( ( ) => {
-    if ( !uri || !available ) return uri;
-    return memoryCache.get( cacheKey( uri, maxPixel ) );
-  } );
+  const key = uri && available
+    ? cacheKey( uri, maxPixel )
+    : null;
+  const [resolved, setResolved] = useState<{ key: string; uri: string } | null>( null );
 
   useEffect( ( ) => {
-    if ( !uri ) {
-      setThumbUri( undefined );
-      return ( ) => {};
-    }
-    if ( !available ) {
-      setThumbUri( uri );
-      return ( ) => {};
-    }
-    const cached = memoryCache.get( cacheKey( uri, maxPixel ) );
-    if ( cached ) {
-      setThumbUri( cached );
-      return ( ) => {};
-    }
-    setThumbUri( undefined );
+    // A cached thumbnail is picked up during render, so there's nothing to
+    // wait for and no state to set here.
+    if ( !uri || !key || memoryCache.has( key ) ) return ( ) => {};
     let cancelled = false;
-    getDeviceImageThumbnail( uri, maxPixel ).then( result => {
+    const request = requestDeviceImageThumbnail( uri, maxPixel );
+    request.promise.then( result => {
       // Fall back to the original uri if generation failed, so the cell shows
       // the photo (full-res) rather than staying blank forever.
-      if ( !cancelled ) setThumbUri( result ?? uri );
+      if ( !cancelled ) setResolved( { key, uri: result ?? uri } );
     } );
-    return ( ) => { cancelled = true; };
-  }, [available, maxPixel, uri] );
+    return ( ) => {
+      cancelled = true;
+      request.release( );
+    };
+  }, [key, maxPixel, uri] );
 
-  return thumbUri;
+  if ( !key ) {
+    // No uri at all, or no native generator (e.g. Android): use the original.
+    return uri;
+  }
+  // Read the cache during render rather than waiting for the effect, so a
+  // recycled cell shows its photo on the first frame instead of flashing a
+  // placeholder (or worse, the previous cell's photo) on the way back.
+  return memoryCache.get( key )
+    ?? ( resolved?.key === key
+      ? resolved.uri
+      : undefined );
 };
 
 export default useDeviceImageThumbnail;

@@ -1,13 +1,12 @@
-import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
+import DevicePhotoImage from "components/PhotoImporter/DevicePhotoImage";
 import { INatIcon } from "components/SharedComponents";
 import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import { Pressable, View } from "components/styledComponents";
 import React from "react";
 import type { ViewStyle } from "react-native";
-import { PixelRatio, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
@@ -52,24 +51,15 @@ const GroupPhotoImage = ( {
   const mediaCount = item.photos?.length || 0;
   const hasDuplicateUpload = item.photos?.some( photo => photo.isDuplicateUpload );
 
-  // Render a small cached thumbnail rather than decoding the full-resolution
-  // original into every cell, which janks scrolling. Sized to the grid cell so
-  // it stays crisp.
   const cellWidth = typeof style?.width === "number"
     ? style.width
     : 0;
-  const thumbMaxPixel = PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
-  const thumbnailUri = useDeviceImageThumbnail( firstPhoto?.image.uri, thumbMaxPixel );
 
   // A cropped photo must always show its crop, so fall back to the cropped
   // file (image.uri already points at the baked crop) until the thumbnail is
   // ready rather than flashing a placeholder. Large uncropped originals keep
   // waiting on the thumbnail so scrolling doesn't decode them full-resolution.
   const hasCrop = Boolean( firstPhoto?.image.crop );
-  const displayUri = thumbnailUri
-    ?? ( hasCrop
-      ? firstPhoto?.image.uri
-      : undefined );
 
   if ( item.soundUri ) {
     return (
@@ -88,36 +78,29 @@ const GroupPhotoImage = ( {
     );
   }
 
-  const source = displayUri
-    ? { uri: displayUri }
-    : undefined;
-
   return (
-    <Pressable
-      accessibilityRole="button"
+    <DevicePhotoImage
+      uri={firstPhoto?.image.uri}
+      fallbackUri={hasCrop
+        ? firstPhoto?.image.uri
+        : undefined}
+      cellWidth={cellWidth}
+      style={style}
+      selectable
+      selected={isSelected}
+      obsPhotosCount={mediaCount}
       onPress={handlePress}
       testID={`GroupPhotos.${mediaUri}`}
     >
-      <View className="relative">
-        <ObsImagePreview
-          source={source}
-          selected={isSelected}
-          obsPhotosCount={mediaCount}
-          selectable
-          hideGradientOverlay
-          squareCorners
-          style={style}
+      {hasDuplicateUpload && (
+        <DuplicateUploadBadge
+          accessibilityLabel={t( "Duplicate-photo-indicator" )}
+          className="absolute top-2 left-2 z-10"
+          size={20}
+          testID={`GroupPhotos.duplicate.${mediaUri}`}
         />
-        {hasDuplicateUpload && (
-          <DuplicateUploadBadge
-            accessibilityLabel={t( "Duplicate-photo-indicator" )}
-            className="absolute top-2 left-2 z-10"
-            size={20}
-            testID={`GroupPhotos.duplicate.${mediaUri}`}
-          />
-        )}
-      </View>
-    </Pressable>
+      )}
+    </DevicePhotoImage>
   );
 };
 

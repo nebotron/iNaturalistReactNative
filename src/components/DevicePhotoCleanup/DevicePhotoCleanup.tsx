@@ -1,6 +1,7 @@
 /* eslint-disable i18next/no-literal-string */
-import { FlashList } from "@shopify/flash-list";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
+import DevicePhotoGrid from "components/PhotoImporter/DevicePhotoGrid";
+import DevicePhotoImage from "components/PhotoImporter/DevicePhotoImage";
 import {
   ActivityIndicator,
   Body2,
@@ -21,10 +22,10 @@ import React, {
 } from "react";
 import {
   Image,
+  PixelRatio,
   Pressable,
   ScrollView,
   StyleSheet,
-  useWindowDimensions,
   View,
 } from "react-native";
 import { log } from "sharedHelpers/logger";
@@ -33,12 +34,13 @@ import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos"
 import findUnfavoritedDevicePhotoDays, {
   prefetchDeviceAssets,
 } from "sharedHelpers/unfavoritedDevicePhotos";
+import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
 import type { UserObservationsCache } from "sharedHelpers/userObservationsCache";
 import {
   readUserObservationsCache,
   syncUserObservations,
 } from "sharedHelpers/userObservationsCache";
-import { useCurrentUser } from "sharedHooks";
+import { useCurrentUser, useGridLayout } from "sharedHooks";
 
 const logger = log.extend( "DevicePhotoCleanup" );
 
@@ -46,9 +48,6 @@ const { useRealm } = RealmContext;
 
 const THUMB_SIZE = 78;
 const THUMB_MARGIN = 3;
-// The grid spans the full screen width with no padding or gutters, so a row is
-// exactly three square tiles wide.
-const GRID_COLUMNS = 3;
 // Cap how many thumbnails we render in the confirmation preview strip so a
 // huge selection doesn't bog the sheet down; the count still reflects all.
 const CONFIRM_PREVIEW_LIMIT = 30;
@@ -71,30 +70,19 @@ const styles = StyleSheet.create( {
   },
 } );
 
-// One row of the virtualized grid: either a day's header or a row of that day's
-// thumbnails. Flattening days into rows lets FlashList mount only the
-// thumbnails on screen — rendering an Image per photo up front meant thousands
-// of live PHAsset loads before the list could be scrolled.
-type GridRow =
-  | { type: "header"; key: string; label: string }
-  | { type: "photos"; key: string; uris: string[] };
+// One cell of the virtualized grid: either a day's header, spanning the full
+// width, or a single photo. This is the same shape the photo picker feeds
+// DevicePhotoGrid, so both screens get identical virtualization and thumbnail
+// prefetching.
+type CleanupGridItem =
+  | { type: "header"; id: string; label: string }
+  | { type: "photo"; id: string; uri: string };
 
-const buildGridRows = (
-  days: UnfavoritedPhotoDay[],
-  columns: number,
-): GridRow[] => days.flatMap( day => {
-  const rows: GridRow[] = [
-    { type: "header", key: `${day.dateKey}-header`, label: day.label },
-  ];
-  for ( let i = 0; i < day.uris.length; i += columns ) {
-    rows.push( {
-      type: "photos",
-      key: `${day.dateKey}-${i}`,
-      uris: day.uris.slice( i, i + columns ),
-    } );
-  }
-  return rows;
-} );
+const buildGridItems = ( days: UnfavoritedPhotoDay[] ): CleanupGridItem[] => days
+  .flatMap( day => [
+    { type: "header" as const, id: `${day.dateKey}-header`, label: day.label },
+    ...day.uris.map( uri => ( { type: "photo" as const, id: uri, uri } ) ),
+  ] );
 
 // Brings the shared observation cache up to date, falling back to the last
 // synced copy if the network is unavailable. Stale fave data is worse than
@@ -171,11 +159,35 @@ const DevicePhotoCleanup = ( ) => {
     [days],
   );
 
-  const { width } = useWindowDimensions( );
-  const tileSize = width / GRID_COLUMNS;
-  const gridRows = useMemo(
-    ( ) => buildGridRows( days, GRID_COLUMNS ),
-    [days],
+  const { gridItemStyle, gridItemWidth, numColumns } = useGridLayout( undefined, "threeUp" );
+  const gridItems = useMemo( ( ) => buildGridItems( days ), [days] );
+
+  const renderHeader = useCallback( ( item: CleanupGridItem ) => ( item.type === "header"
+    ? <Heading4 className="px-5 py-2">{item.label}</Heading4>
+    : null ), [] );
+
+  const renderPhoto = useCallback( ( item: CleanupGridItem ) => ( item.type === "photo"
+    ? (
+      <DevicePhotoImage
+        uri={item.uri}
+        cellWidth={gridItemWidth}
+        style={gridItemStyle}
+        onPress={( ) => setFullScreenUri( item.uri )}
+      />
+    )
+    : null ), [gridItemStyle, gridItemWidth] );
+
+  const getPhotoUri = useCallback( ( item: CleanupGridItem ) => ( item.type === "photo"
+    ? item.uri
+    : undefined ), [] );
+
+  // The grid's already-generated thumbnail (same size, so it's a cache hit)
+  // fills the full-screen view immediately while the full-resolution asset
+  // loads, instead of showing black. Requested at the grid cell size so it
+  // reuses the exact cache entry the tapped tile used.
+  const fullScreenThumbUri = useDeviceImageThumbnail(
+    fullScreenUri ?? undefined,
+    PixelRatio.getPixelSizeForLayoutSize( gridItemWidth || 128 ),
   );
 
   const confirmDelete = useCallback( async ( ) => {
@@ -243,31 +255,17 @@ const DevicePhotoCleanup = ( ) => {
             : "s"} in your library match observations you haven't favorited.`}
         </Body2>
       </View>
-      <FlashList
-        data={gridRows}
-        keyExtractor={row => row.key}
-        style={styles.list}
-        contentContainerStyle={styles.scrollContent}
-        renderItem={( { item } ) => ( item.type === "header"
-          ? <Heading4 className="px-5 py-2">{item.label}</Heading4>
-          : (
-            <View className="flex-row">
-              {item.uris.map( uri => (
-                <Pressable
-                  key={uri}
-                  accessibilityRole="button"
-                  onPress={( ) => setFullScreenUri( uri )}
-                >
-                  <Image
-                    source={{ uri }}
-                    style={{ height: tileSize, width: tileSize }}
-                    resizeMode="cover"
-                  />
-                </Pressable>
-              ) )}
-            </View>
-          ) )}
-      />
+      <View style={styles.list}>
+        <DevicePhotoGrid
+          items={gridItems}
+          numColumns={numColumns}
+          itemWidth={gridItemWidth}
+          renderHeader={renderHeader}
+          renderPhoto={renderPhoto}
+          getPhotoUri={getPhotoUri}
+          contentContainerStyle={styles.scrollContent}
+        />
+      </View>
       <View className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-lightGray">
         <Button
           level="warning"
@@ -298,11 +296,11 @@ const DevicePhotoCleanup = ( ) => {
               className="mb-5"
             >
               {allUris.slice( 0, CONFIRM_PREVIEW_LIMIT ).map( uri => (
-                <Image
+                <DevicePhotoImage
                   key={uri}
-                  source={{ uri }}
+                  uri={uri}
+                  cellWidth={THUMB_SIZE}
                   style={styles.thumb}
-                  resizeMode="cover"
                 />
               ) )}
               {allUris.length > CONFIRM_PREVIEW_LIMIT && (
@@ -346,6 +344,13 @@ const DevicePhotoCleanup = ( ) => {
             accessibilityRole="button"
             onPress={( ) => setFullScreenUri( null )}
           >
+            {fullScreenThumbUri && (
+              <Image
+                source={{ uri: fullScreenThumbUri }}
+                style={StyleSheet.absoluteFill}
+                resizeMode="contain"
+              />
+            )}
             {fullScreenUri && (
               <Image
                 source={{ uri: fullScreenUri }}
