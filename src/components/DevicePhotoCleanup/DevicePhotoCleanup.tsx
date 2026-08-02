@@ -11,6 +11,7 @@ import {
   List2,
   ViewWrapper,
 } from "components/SharedComponents";
+import Modal from "components/SharedComponents/Modal";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
@@ -20,6 +21,7 @@ import React, {
 } from "react";
 import {
   Image,
+  Pressable,
   ScrollView,
   StyleSheet,
   useWindowDimensions,
@@ -44,12 +46,17 @@ const { useRealm } = RealmContext;
 
 const THUMB_SIZE = 78;
 const THUMB_MARGIN = 3;
-const GRID_PADDING = 12;
+// The grid spans the full screen width with no padding or gutters, so a row is
+// exactly three square tiles wide.
+const GRID_COLUMNS = 3;
 // Cap how many thumbnails we render in the confirmation preview strip so a
 // huge selection doesn't bog the sheet down; the count still reflects all.
 const CONFIRM_PREVIEW_LIMIT = 30;
 
 const styles = StyleSheet.create( {
+  fullScreenImage: {
+    flex: 1,
+  },
   list: {
     flex: 1,
   },
@@ -117,6 +124,7 @@ const DevicePhotoCleanup = ( ) => {
   const [showConfirm, setShowConfirm] = useState( false );
   const [deleting, setDeleting] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
+  const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
 
   useEffect( ( ) => {
     let cancelled = false;
@@ -164,13 +172,10 @@ const DevicePhotoCleanup = ( ) => {
   );
 
   const { width } = useWindowDimensions( );
-  const columns = Math.max(
-    1,
-    Math.floor( ( width - GRID_PADDING * 2 ) / ( THUMB_SIZE + THUMB_MARGIN * 2 ) ),
-  );
+  const tileSize = width / GRID_COLUMNS;
   const gridRows = useMemo(
-    ( ) => buildGridRows( days, columns ),
-    [days, columns],
+    ( ) => buildGridRows( days, GRID_COLUMNS ),
+    [days],
   );
 
   const confirmDelete = useCallback( async ( ) => {
@@ -246,14 +251,19 @@ const DevicePhotoCleanup = ( ) => {
         renderItem={( { item } ) => ( item.type === "header"
           ? <Heading4 className="px-5 py-2">{item.label}</Heading4>
           : (
-            <View className="px-3 flex-row">
+            <View className="flex-row">
               {item.uris.map( uri => (
-                <Image
+                <Pressable
                   key={uri}
-                  source={{ uri }}
-                  style={styles.thumb}
-                  resizeMode="cover"
-                />
+                  accessibilityRole="button"
+                  onPress={( ) => setFullScreenUri( uri )}
+                >
+                  <Image
+                    source={{ uri }}
+                    style={{ height: tileSize, width: tileSize }}
+                    resizeMode="cover"
+                  />
+                </Pressable>
               ) )}
             </View>
           ) )}
@@ -325,6 +335,27 @@ const DevicePhotoCleanup = ( ) => {
           </View>
         </BottomSheet>
       )}
+      <Modal
+        showModal={!!fullScreenUri}
+        fullScreen
+        closeModal={( ) => setFullScreenUri( null )}
+        backdropOpacity={1}
+        modal={(
+          <Pressable
+            className="flex-1 bg-black"
+            accessibilityRole="button"
+            onPress={( ) => setFullScreenUri( null )}
+          >
+            {fullScreenUri && (
+              <Image
+                source={{ uri: fullScreenUri }}
+                style={styles.fullScreenImage}
+                resizeMode="contain"
+              />
+            )}
+          </Pressable>
+        )}
+      />
     </ViewWrapper>
   );
 };
