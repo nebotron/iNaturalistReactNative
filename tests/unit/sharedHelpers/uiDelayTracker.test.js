@@ -34,7 +34,7 @@ describe( "uiDelayTracker", ( ) => {
     markNavigationDispatched( );
     Date.now.mockReturnValue( 3_500 );
 
-    trackScreenTransition( { fromScreen: "MyObservations", toScreen: "ObsEdit", persistMs: 12 } );
+    trackScreenTransition( { fromScreen: "MyObservations", toScreen: "ObsEdit" } );
 
     expect( mockInfoWithExtra ).toHaveBeenCalledWith(
       "slow_screen_transition",
@@ -42,7 +42,6 @@ describe( "uiDelayTracker", ( ) => {
         fromScreen: "MyObservations",
         toScreen: "ObsEdit",
         totalMs: 2_500,
-        persistMs: 12,
       } ),
     );
   } );
@@ -51,7 +50,7 @@ describe( "uiDelayTracker", ( ) => {
     markNavigationDispatched( );
     Date.now.mockReturnValue( 1_100 );
 
-    trackScreenTransition( { fromScreen: "MyObservations", toScreen: "ObsEdit", persistMs: 0 } );
+    trackScreenTransition( { fromScreen: "MyObservations", toScreen: "ObsEdit" } );
 
     expect( mockInfoWithExtra ).not.toHaveBeenCalled( );
   } );
@@ -64,9 +63,8 @@ describe( "uiDelayTracker", ( ) => {
     trackScreenTransition( {
       fromScreen: "MyObservations",
       toScreen: "MyObservations",
-      persistMs: 0,
     } );
-    trackScreenTransition( { fromScreen: "MyObservations", toScreen: "ObsEdit", persistMs: 0 } );
+    trackScreenTransition( { fromScreen: "MyObservations", toScreen: "ObsEdit" } );
 
     expect( mockInfoWithExtra ).not.toHaveBeenCalled( );
   } );

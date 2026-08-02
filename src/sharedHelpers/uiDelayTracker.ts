@@ -19,9 +19,6 @@ const STALL_LOG_INTERVAL_MS = 30_000;
 const SLOW_TRANSITION_MS = 800;
 // Same suspension caveat as stalls: a transition can't really take this long.
 const MAX_PLAUSIBLE_TRANSITION_MS = 30_000;
-// Navigation state is serialized and written to MMKV synchronously on every
-// state change, so it lands directly in the transition the user is watching.
-const SLOW_PERSIST_MS = 100;
 // Work between a tap and the navigation it triggers is invisible to
 // trackScreenTransition, whose clock can only start once navigation is asked to
 // move. trackUiWork covers that gap for the handlers slow enough to need it.
@@ -36,7 +33,6 @@ let activeSinceLastTick = true;
 let stallsSinceLastLog = 0;
 let worstStallMs = 0;
 let lastStallLogAt = 0;
-let lastPersistLogAt = 0;
 // When the user tapped, as opposed to when navigation state caught up.
 let navigationDispatchedAt: number | null = null;
 
@@ -102,11 +98,9 @@ export const markNavigationDispatched = ( ) => {
 export const trackScreenTransition = ( {
   fromScreen,
   toScreen,
-  persistMs,
 }: {
   fromScreen?: string;
   toScreen?: string;
-  persistMs: number;
 } ) => {
   const dispatchedAt = navigationDispatchedAt;
   navigationDispatchedAt = null;
@@ -135,7 +129,6 @@ export const trackScreenTransition = ( {
       stateAppliedMs,
       // Tap to the new screen having finished rendering.
       totalMs,
-      persistMs,
     } );
   } );
 };
@@ -146,21 +139,6 @@ export const trackUiWork = ( work: string, startedAt: number ) => {
   logger.infoWithExtra( "slow_ui_work", {
     work,
     elapsedMs,
-    screen: currentScreen( ),
-  } );
-};
-
-// Navigation state persistence is synchronous work on the JS thread in the
-// middle of a transition, and it grows with the size of the navigation state,
-// so it's worth knowing when it turns into a delay of its own.
-export const trackNavStatePersist = ( persistMs: number, stateBytes: number ) => {
-  if ( persistMs < SLOW_PERSIST_MS ) return;
-  const now = Date.now( );
-  if ( now - lastPersistLogAt < STALL_LOG_INTERVAL_MS ) return;
-  lastPersistLogAt = now;
-  logger.infoWithExtra( "slow_nav_state_persist", {
-    persistMs: Math.round( persistMs ),
-    stateBytes,
     screen: currentScreen( ),
   } );
 };
