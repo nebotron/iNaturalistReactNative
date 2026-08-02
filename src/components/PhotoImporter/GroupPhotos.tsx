@@ -13,6 +13,7 @@ import {
 import { BottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import React, { useCallback, useEffect, useMemo } from "react";
+import { useWindowDimensions } from "react-native";
 import { preloadImage } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { useGridLayout, useTranslation } from "sharedHooks";
@@ -23,6 +24,14 @@ import GroupPhotoImage from "./GroupPhotoImage";
 import flattenAndOrderSelectedPhotos from "./helpers/groupPhotoHelpers";
 
 const DROP_SHADOW = getShadow( { offsetHeight: -2 } );
+
+// Action buttons in the bottom toolbar, and the horizontal padding + gaps
+// around them, so the buttons can shrink to fit narrower screens
+const ACTION_BUTTON_COUNT = 7;
+const TOOLBAR_HORIZONTAL_SPACE = 16 + ( ACTION_BUTTON_COUNT - 1 ) * 8;
+// INatIconButton throws below 44, the minimum accessible dimension
+const MIN_ACTION_BUTTON_DIM = 44;
+const MAX_ACTION_BUTTON_DIM = 58;
 
 const emptyItemStyle = {
   borderWidth: 4,
@@ -57,6 +66,7 @@ interface Props {
   groupedPhotos: Item[];
   isCreatingObservations?: boolean;
   isDuplicatingPhotos?: boolean;
+  markPhotosAsSaved: ( ) => void;
   navBasedOnUserSettings: ( ) => void;
   onScroll?: FlashListProps<GroupPhotosListItem>["onScroll"];
   onViewableItemsChanged?: ( info: {
@@ -80,6 +90,7 @@ const GroupPhotos = ( {
   groupedPhotos,
   isCreatingObservations,
   isDuplicatingPhotos,
+  markPhotosAsSaved,
   navBasedOnUserSettings,
   onScroll,
   onViewableItemsChanged,
@@ -93,6 +104,17 @@ const GroupPhotos = ( {
 }: Props ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
+  const { width: windowWidth } = useWindowDimensions( );
+  const buttonDim = Math.max(
+    MIN_ACTION_BUTTON_DIM,
+    Math.min(
+      MAX_ACTION_BUTTON_DIM,
+      Math.floor( ( windowWidth - TOOLBAR_HORIZONTAL_SPACE ) / ACTION_BUTTON_COUNT ),
+    ),
+  );
+  const buttonIconSize = buttonDim >= MAX_ACTION_BUTTON_DIM
+    ? 26
+    : 22;
   const {
     flashListStyle,
     gridItemStyle,
@@ -116,6 +138,7 @@ const GroupPhotos = ( {
   );
   const canCropSelectedPhotos = selectedPhotoUris.length > 0;
   const canDuplicateSelectedPhotos = selectedMediaCount > 0;
+  const canMarkSelectedPhotosAsSaved = selectedMediaCount > 0;
 
   // Preload the first selected image as soon as it's selected so its data is
   // usually ready by the time the user taps crop. The remaining images are
@@ -233,9 +256,9 @@ const GroupPhotos = ( {
               <INatIconButton
                 icon="check"
                 mode="contained"
-                size={26}
-                width={58}
-                height={58}
+                size={buttonIconSize}
+                width={buttonDim}
+                height={buttonDim}
                 color={colors.white}
                 backgroundColor={colors.darkGray}
                 accessibilityLabel={
@@ -251,9 +274,9 @@ const GroupPhotos = ( {
               <INatIconButton
                 icon="crop"
                 mode="contained"
-                size={26}
-                width={58}
-                height={58}
+                size={buttonIconSize}
+                width={buttonDim}
+                height={buttonDim}
                 color={colors.white}
                 backgroundColor={colors.darkGray}
                 accessibilityLabel={t( "CROP-PHOTO" )}
@@ -266,9 +289,9 @@ const GroupPhotos = ( {
               <INatIconButton
                 icon="combine"
                 mode="contained"
-                size={26}
-                width={58}
-                height={58}
+                size={buttonIconSize}
+                width={buttonDim}
+                height={buttonDim}
                 color={colors.white}
                 backgroundColor={colors.darkGray}
                 accessibilityLabel={t( "Combine-Photos" )}
@@ -280,9 +303,9 @@ const GroupPhotos = ( {
               <INatIconButton
                 icon="separate"
                 mode="contained"
-                size={26}
-                width={58}
-                height={58}
+                size={buttonIconSize}
+                width={buttonDim}
+                height={buttonDim}
                 color={colors.white}
                 backgroundColor={colors.darkGray}
                 accessibilityLabel={t( "Separate-Photos" )}
@@ -294,9 +317,9 @@ const GroupPhotos = ( {
               <INatIconButton
                 icon="copy"
                 mode="contained"
-                size={26}
-                width={58}
-                height={58}
+                size={buttonIconSize}
+                width={buttonDim}
+                height={buttonDim}
                 color={colors.white}
                 backgroundColor={colors.darkGray}
                 accessibilityLabel={t( "Duplicate-Photos" )}
@@ -307,11 +330,26 @@ const GroupPhotos = ( {
             </View>
             <View className="flex-1 items-center">
               <INatIconButton
+                icon="checkmark-circle"
+                mode="contained"
+                size={buttonIconSize}
+                width={buttonDim}
+                height={buttonDim}
+                color={colors.white}
+                backgroundColor={colors.darkGray}
+                accessibilityLabel={t( "Mark-photos-as-already-saved" )}
+                disabled={!canMarkSelectedPhotosAsSaved}
+                onPress={markPhotosAsSaved}
+                testID="GroupPhotos.markAsSaved"
+              />
+            </View>
+            <View className="flex-1 items-center">
+              <INatIconButton
                 icon="trash-outline"
                 mode="contained"
-                size={26}
-                width={58}
-                height={58}
+                size={buttonIconSize}
+                width={buttonDim}
+                height={buttonDim}
                 color={colors.white}
                 backgroundColor={colors.warningRed}
                 accessibilityLabel={t( "Remove-Photos" )}
