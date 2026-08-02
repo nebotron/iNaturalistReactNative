@@ -39,11 +39,11 @@ import { useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
-import type { PlaceResult } from "./googlePlaces";
-import { fetchPlaceLatLng, searchGooglePlaces } from "./googlePlaces";
 import type { Hotspot, HotspotSpecies, RoutePoint } from "./hooks/useRouteHotspots";
 import { fetchOSRMRoute, findBestInsertion, useRouteHotspots } from "./hooks/useRouteHotspots";
 import HotspotListItem from "./HotspotListItem";
+import type { PlaceResult } from "./placeSearch";
+import { searchPlaces } from "./placeSearch";
 
 // Synthetic place_id marking the "current location" row in the dropdown, which
 // resolves to the device location rather than a searched address.
@@ -89,7 +89,6 @@ interface AddressInputProps {
   onChangeText: ( text: string ) => void;
   onSuggestionsChange: ( suggestions: PlaceResult[] ) => void;
   confirmed: boolean;
-  loading: boolean;
   dotColor: string;
   nearbyLatLng?: LatLng;
   onEmptyBlur?: () => void;
@@ -106,7 +105,6 @@ const AddressInput = ( {
   onChangeText,
   onSuggestionsChange,
   confirmed,
-  loading,
   dotColor,
   nearbyLatLng,
   onEmptyBlur,
@@ -132,7 +130,7 @@ const AddressInput = ( {
     }
     debounceRef.current = setTimeout( async () => {
       setSearching( true );
-      const results = await searchGooglePlaces( text.trim(), nearbyLatLng );
+      const results = await searchPlaces( text.trim(), nearbyLatLng );
       setSearching( false );
       if ( requestIdRef.current !== requestId ) return;
       onSuggestionsChange( results );
@@ -174,8 +172,8 @@ const AddressInput = ( {
           autoCapitalize="none"
           editable
         />
-        {( loading || searching ) && <ActivityIndicator size={16} />}
-        {confirmed && !loading && !searching && (
+        {searching && <ActivityIndicator size={16} />}
+        {confirmed && !searching && (
           <INatIcon name="checkmark" size={16} color={colors.inatGreen} />
         )}
       </TouchableOpacity>
@@ -246,8 +244,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     suggestions: PlaceResult[];
   } | null>( null );
   const [hotspotCardHeight, setHotspotCardHeight] = useState<number | null>( null );
-  // Stop currently awaiting a Place Details lookup to resolve its lat/lng.
-  const [resolvingStopId, setResolvingStopId] = useState<string | null>( null );
 
   const addressHistory = useStore( state => state.layout.hotspotAddressHistory );
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
@@ -314,27 +310,18 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
       : s ) ) );
   }, [] );
 
-  const handleSelectStopSuggestion = useCallback( async ( id: string, result: PlaceResult ) => {
+  const handleSelectStopSuggestion = useCallback( ( id: string, result: PlaceResult ) => {
     setActiveSuggestions( null );
     Keyboard.dismiss();
-    setStops( prev => prev.map( s => ( s.id === id
-      ? { ...s, text: result.display_name, point: null }
-      : s ) ) );
-    // Autocomplete predictions don't include coordinates, so they're resolved
-    // lazily via a Place Details lookup once the user picks one; preset
-    // suggestions (current location, address history) already have them.
-    let point: LatLng | null = result.lat && result.lon
+    // Every suggestion — searched, recent, or current location — carries its
+    // own coordinates, so the stop is confirmed as soon as it's picked.
+    const point: LatLng | null = result.lat && result.lon
       ? { latitude: parseFloat( result.lat ), longitude: parseFloat( result.lon ) }
       : null;
-    if ( !point && result.place_id !== CURRENT_LOCATION_PLACE_ID ) {
-      setResolvingStopId( id );
-      point = await fetchPlaceLatLng( String( result.place_id ) );
-      setResolvingStopId( null );
-    }
-    if ( !point ) return;
     setStops( prev => prev.map( s => ( s.id === id
-      ? { ...s, point }
+      ? { ...s, text: result.display_name, point }
       : s ) ) );
+    if ( !point ) return;
     // Remember searched addresses (but not the synthetic current-location row)
     // so they can be offered again before typing next time.
     if ( result.place_id !== CURRENT_LOCATION_PLACE_ID ) {
@@ -542,7 +529,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
             onChangeText={text => handleStopTextChange( stop.id, text )}
             onSuggestionsChange={suggestions => handleStopSuggestionsChange( stop.id, suggestions )}
             confirmed={!!stop.point}
-            loading={resolvingStopId === stop.id}
             dotColor={stopDotColor( index, stops.length )}
             nearbyLatLng={stops[index - 1]?.point ?? userLocation ?? undefined}
             onEmptyBlur={() => handleStopEmptyBlur( stop.id )}
@@ -574,7 +560,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     userLocation,
     t,
     presetSuggestions,
-    resolvingStopId,
     handleStopTextChange,
     handleStopSuggestionsChange,
     handleStopEmptyBlur,
