@@ -3,7 +3,7 @@ import {
   CameraRoll,
   iosRequestReadWriteGalleryPermission,
 } from "@react-native-camera-roll/camera-roll";
-import { FlashList } from "@shopify/flash-list";
+import DevicePhotoGrid from "components/PhotoImporter/DevicePhotoGrid";
 import type { PhotoGalleryListItem } from "components/PhotoImporter/helpers/photoGallerySections";
 import buildSectionedGalleryItems from "components/PhotoImporter/helpers/photoGallerySections";
 import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers";
@@ -248,44 +248,42 @@ const PhotoGallery = ( {
     } );
   }, [maxPhotos] );
 
-  // eslint-disable-next-line react/no-unused-prop-types
-  const renderItem = useCallback( ( { item }: { item: PhotoGalleryListItem } ) => {
-    if ( item.type === "header" ) {
-      const allSelected = item.nodes.length > 0
-        && item.nodes.every( node => selectedUris.has( getSelectionKey( node ) ) );
-      return (
-        <View className="px-3 py-1 flex-row items-center justify-between">
-          <Body2>
-            {`${formatDateStringFromTimestamp( item.timestamp )} (${item.nodes.length})`}
-          </Body2>
-          <INatIconButton
-            icon="checkmark"
-            onPress={( ) => toggleSectionSelection( item.nodes )}
-            accessibilityLabel={allSelected
-              ? t( "Deselect-all-photos" )
-              : t( "Select-all-photos" )}
-            size={18}
-            color={allSelected
-              ? colors.inatGreen
-              : colors.darkGray}
-            testID={`PhotoGallery.section.${item.id}`}
-          />
-        </View>
-      );
-    }
+  const renderHeader = useCallback( ( item: PhotoGalleryListItem ) => {
+    if ( item.type !== "header" ) return null;
+    const allSelected = item.nodes.length > 0
+      && item.nodes.every( node => selectedUris.has( getSelectionKey( node ) ) );
+    return (
+      <View className="px-3 py-1 flex-row items-center justify-between">
+        <Body2>
+          {`${formatDateStringFromTimestamp( item.timestamp )} (${item.nodes.length})`}
+        </Body2>
+        <INatIconButton
+          icon="checkmark"
+          onPress={( ) => toggleSectionSelection( item.nodes )}
+          accessibilityLabel={allSelected
+            ? t( "Deselect-all-photos" )
+            : t( "Select-all-photos" )}
+          size={18}
+          color={allSelected
+            ? colors.inatGreen
+            : colors.darkGray}
+          testID={`PhotoGallery.section.${item.id}`}
+        />
+      </View>
+    );
+  }, [selectedUris, toggleSectionSelection, t] );
 
+  const renderPhoto = useCallback( ( item: PhotoGalleryListItem ) => {
+    if ( item.type !== "photo" ) return null;
     const { node } = item;
     const key = getSelectionKey( node );
-    const selected = selectedUris.has( key );
-    const imported = isImported( node );
-    const isVideo = isVideoNode( node );
     return (
       <PhotoGalleryImage
         node={node}
         selectionKey={key}
-        selected={selected}
-        imported={imported}
-        isVideo={isVideo}
+        selected={selectedUris.has( key )}
+        imported={isImported( node )}
+        isVideo={isVideoNode( node )}
         cellWidth={gridItemWidth}
         gridItemStyle={gridItemStyle}
         onPress={toggleSelection}
@@ -295,20 +293,13 @@ const PhotoGallery = ( {
     selectedUris,
     isImported,
     toggleSelection,
-    toggleSectionSelection,
     gridItemStyle,
     gridItemWidth,
-    t,
   ] );
 
-  const overrideItemLayout = useCallback( (
-    layout: { span?: number },
-    item: PhotoGalleryListItem,
-  ) => {
-    if ( item.type === "header" ) {
-      layout.span = numColumns;
-    }
-  }, [numColumns] );
+  const getPhotoUri = useCallback( ( item: PhotoGalleryListItem ) => ( item.type === "photo"
+    ? item.node.image.uri
+    : undefined ), [] );
 
   if ( loading ) {
     return (
@@ -377,18 +368,15 @@ const PhotoGallery = ( {
           testID="PhotoGallery.done"
         />
       </View>
-      <FlashList
-        data={galleryItems}
+      <DevicePhotoGrid
+        items={galleryItems}
         numColumns={numColumns}
-        renderItem={renderItem}
-        keyExtractor={item => item.id}
-        getItemType={item => item.type}
-        overrideItemLayout={overrideItemLayout}
+        itemWidth={gridItemWidth}
+        renderHeader={renderHeader}
+        renderPhoto={renderPhoto}
+        getPhotoUri={getPhotoUri}
         onEndReached={loadMore}
-        onEndReachedThreshold={0.5}
-        estimatedItemSize={gridItemWidth}
         extraData={{ selectedUris, importedUris }}
-        drawDistance={4000}
       />
     </View>
   );
