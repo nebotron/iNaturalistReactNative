@@ -1020,8 +1020,10 @@ Obscure-X-Past-Observations =
     }
 Obscured = Obscured
 Obscuring-past-observations-uploads-the-change-to-iNaturalist =
-    Obscuring past observations queues them for upload so the change reaches
-    iNaturalist.
+    Obscures every observation you have already made inside this area,
+    including ones that are already on iNaturalist.
+# Progress shown while obscuring past observations one at a time
+Obscuring-X-of-Y-observations = Obscuring { $done } of { $total } observations…
 Observation = Observation
 Observation-Attribution = Observation: © { $userName } · { $restrictions }
 Observation-Copyright = Observation Copyright: © { $userName } · { $restrictions }
@@ -1737,6 +1739,11 @@ X-OBSERVATIONS--below-number =
     { $count ->
         [one] OBSERVATION
        *[other] OBSERVATIONS
+    }
+X-observations-could-not-be-obscured =
+    { $count ->
+        [one] { $count } observation could not be obscured. Try again later.
+       *[other] { $count } observations could not be obscured. Try again later.
     }
 X-observations-deleted =
     { $count ->

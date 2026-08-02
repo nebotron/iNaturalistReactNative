@@ -20,8 +20,15 @@ interface LocatableObservation {
 // their geoprivacy hasn't already been set to something at least as private.
 // Excludes observations pending deletion. Note this deliberately says nothing
 // about taxon_geoprivacy, which the server applies on top of ours.
-export const PRIVACY_ZONE_CANDIDATE_FILTER
+//
+// Restricted to observations that have never been uploaded, because those are
+// the only ones whose Realm coordinates can be trusted: list responses from the
+// API don't include geojson, so synced observations are stored here with no
+// latitude at all. Already-uploaded observations in the zone are found through
+// the API instead — see privacyZonePastObservations.
+export const PRIVACY_ZONE_LOCAL_CANDIDATE_FILTER
   = "( _deleted_at == nil OR _pending_deletion == false OR _pending_deletion == nil ) "
+  + "AND _synced_at == nil "
   + "AND latitude != nil AND longitude != nil "
   + `AND ( geoprivacy == nil OR geoprivacy == "${GEOPRIVACY_OPEN}" )`;
 

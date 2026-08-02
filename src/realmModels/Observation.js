@@ -264,8 +264,13 @@ class Observation extends Realm.Object {
       _synced_at: new Date( ),
       // obs detail on web says geojson coords are preferred over lat/long
       // https://github.com/inaturalist/inaturalist/blob/df6572008f60845b8ef5972a92a9afbde6f67829/app/webpack/observations/show/ducks/observation.js#L145
-      latitude: obs.geojson && obs.geojson.coordinates && obs.geojson.coordinates[1],
-      longitude: obs.geojson && obs.geojson.coordinates && obs.geojson.coordinates[0],
+      // ...but list requests don't ask for geojson, and without the fallback
+      // these keys would overwrite the coordinates the response did include
+      // with undefined, leaving synced observations with no location at all.
+      latitude: ( obs.geojson && obs.geojson.coordinates && obs.geojson.coordinates[1] )
+        ?? obs.latitude,
+      longitude: ( obs.geojson && obs.geojson.coordinates && obs.geojson.coordinates[0] )
+        ?? obs.longitude,
       privateLatitude: obs.private_geojson && obs.private_geojson.coordinates
                       && obs.private_geojson.coordinates[1],
       privateLongitude: obs.private_geojson && obs.private_geojson.coordinates
