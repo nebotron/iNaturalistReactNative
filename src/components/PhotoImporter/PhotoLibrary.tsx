@@ -127,8 +127,16 @@ const PhotoLibrary = ( ) => {
       nodes.map( node => [node.image.uri, node] ),
     ).values( )];
 
+    // Distinct assets can still collide on a destination, since two of them
+    // can carry the same filename (e.g. IMG_0001.JPG from two cameras).
+    const claimedFileNames = new Set<string>( );
+
     const copyNode = async ( node: PhotoNode ) => {
-      const fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
+      let fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
+      if ( claimedFileNames.has( fileName ) ) {
+        fileName = `${uuid.v4()}-${fileName}`;
+      }
+      claimedFileNames.add( fileName );
       const destPath = `${path}/${fileName}`;
       // Remove any file left by a previous import of the same asset. Both
       // PHAssetResourceManager.writeData (iOS) and copyFile (Android) fail if
@@ -201,6 +209,9 @@ const PhotoLibrary = ( ) => {
       // eslint-disable-next-line no-await-in-loop
       const batchResults = await Promise.all( batch.map( copyNodeOrNull ) );
       results.push( ...batchResults.filter( ( r ): r is NonNullable<typeof r> => r !== null ) );
+    }
+    if ( results.length < uniqueNodes.length ) {
+      logger.warn( `Copied ${results.length} of ${uniqueNodes.length} photo(s) from camera roll` );
     }
     return results;
   }, [] );
