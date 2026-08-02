@@ -20,10 +20,43 @@ export interface PlaceResult {
 // Nominatim covers the queries Photon comes up empty on.
 const PHOTON_URL = "https://photon.komoot.io/api";
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-const MAX_SUGGESTIONS = 3;
-// Degrees of latitude/longitude around the previous stop (or current location)
-// used to bias results toward where the route already is (~150km).
+const MAX_SUGGESTIONS = 5;
+// Photon expresses its location bias as a map zoom level rather than a
+// distance. Measured against the live API (median distance of the top results
+// from the bias point), zoom 10 keeps results within ~27 miles and zoom 8
+// spreads to ~125; zoom 9 lands at ~90, the closest step to the ~100 mile
+// radius we want around the previous stop. Anything tighter ranks a nearby
+// residential street above a national park two hours up the road.
+const PHOTON_ZOOM = 9;
+// Nominatim biases with a box instead. ~1.5 degrees of latitude is the same
+// ~100 mile radius.
 const BIAS_DEGREES = 1.5;
+
+// Suggestions are cached by query so backspacing, retyping, or refocusing a
+// field doesn't refetch. The bias point is part of the key because the same
+// text ranks differently from a different stop.
+const CACHE_LIMIT = 50;
+const cache = new Map<string, PlaceResult[]>( );
+
+function cacheKey( text: string, nearbyLatLng?: LatLng ): string {
+  const bias = nearbyLatLng
+    ? `${nearbyLatLng.latitude.toFixed( 2 )},${nearbyLatLng.longitude.toFixed( 2 )}`
+    : "";
+  return `${text.trim( ).toLowerCase( )}|${bias}`;
+}
+
+// Only successful lookups are cached, so a network blip doesn't pin an empty
+// dropdown to a query for the rest of the session.
+function remember( key: string, results: PlaceResult[] ): PlaceResult[] {
+  if ( results.length > 0 ) {
+    cache.set( key, results );
+    if ( cache.size > CACHE_LIMIT ) {
+      const oldest = cache.keys( ).next( ).value;
+      if ( oldest !== undefined ) cache.delete( oldest );
+    }
+  }
+  return results;
+}
 
 interface PhotonProperties {
   osm_id?: number;
@@ -58,7 +91,7 @@ function photonDisplayName( properties: PhotonProperties = {} ): string {
 
 async function searchPhoton( text: string, nearbyLatLng?: LatLng ): Promise<PlaceResult[]> {
   const bias = nearbyLatLng
-    ? `&lat=${nearbyLatLng.latitude}&lon=${nearbyLatLng.longitude}`
+    ? `&lat=${nearbyLatLng.latitude}&lon=${nearbyLatLng.longitude}&zoom=${PHOTON_ZOOM}`
     : "";
   // Over-fetch because Photon often returns the same place as separate OSM
   // node/way features, which would otherwise fill the dropdown with duplicates.
@@ -124,14 +157,17 @@ export async function searchPlaces(
   text: string,
   nearbyLatLng?: LatLng,
 ): Promise<PlaceResult[]> {
+  const key = cacheKey( text, nearbyLatLng );
+  const cached = cache.get( key );
+  if ( cached ) return cached;
   try {
     const photonResults = await searchPhoton( text, nearbyLatLng );
-    if ( photonResults.length > 0 ) return photonResults;
+    if ( photonResults.length > 0 ) return remember( key, photonResults );
   } catch ( error ) {
     logger.error( "Photon search threw", error );
   }
   try {
-    return await searchNominatim( text, nearbyLatLng );
+    return remember( key, await searchNominatim( text, nearbyLatLng ) );
   } catch ( error ) {
     logger.error( "Nominatim search threw", error );
     return [];
