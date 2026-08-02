@@ -354,26 +354,35 @@ class Observation extends Realm.Object {
       observationSounds,
     };
 
-    // Every local save runs through here, so this is where the user's privacy
-    // zone gets enforced: anything saved inside it is obscured before it can
-    // be uploaded.
-    const zoneGeoprivacy = privacyZoneGeoprivacy( obs );
-    if ( zoneGeoprivacy ) {
-      obsToSave.geoprivacy = zoneGeoprivacy;
-      logger.info( `Obscuring observation ${obs.uuid} because it is inside the privacy zone` );
-    }
-
-    // Diagnostic: a save that clears a previously-set location almost always
-    // means the caller passed in a stale in-memory copy of the observation
-    // (e.g. captured before a background tracked-location fill completed).
+    // A save that clears a previously-set location is never something the user
+    // asked for — nothing in the app removes an observation's coordinates — so
+    // it always means the caller passed in a stale in-memory copy captured
+    // before a background tracked-location fill completed. Keep the location
+    // that's already on the record rather than wiping it and relying on the
+    // tracked-location pass to put it back on the next save.
     if (
       existingObservation?.latitude != null
+      && existingObservation?.longitude != null
       && ( obsToSave.latitude == null || obsToSave.longitude == null )
     ) {
       logger.warn(
-        `Observation ${obs.uuid} save is clearing a previously-set location `
-        + `(was ${existingObservation.latitude},${existingObservation.longitude})`,
+        `Observation ${obs.uuid} save would have cleared a previously-set location; `
+        + `keeping ${existingObservation.latitude},${existingObservation.longitude}`,
       );
+      obsToSave.latitude = existingObservation.latitude;
+      obsToSave.longitude = existingObservation.longitude;
+      obsToSave.positional_accuracy ??= existingObservation.positional_accuracy;
+      obsToSave.place_guess ??= existingObservation.place_guess;
+    }
+
+    // Every local save runs through here, so this is where the user's privacy
+    // zone gets enforced: anything saved inside it is obscured before it can
+    // be uploaded. Runs after the location is restored above so a stale save
+    // can't slip a zone location past the check by arriving without one.
+    const zoneGeoprivacy = privacyZoneGeoprivacy( obsToSave );
+    if ( zoneGeoprivacy ) {
+      obsToSave.geoprivacy = zoneGeoprivacy;
+      logger.info( `Obscuring observation ${obs.uuid} because it is inside the privacy zone` );
     }
 
     safeRealmWrite( realm, ( ) => {
