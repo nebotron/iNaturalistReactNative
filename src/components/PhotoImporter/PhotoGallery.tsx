@@ -40,7 +40,7 @@ type PhotoNode = PhotoIdentifier["node"];
 interface Props {
   maxPhotos: number;
   onCancel: () => void;
-  onDone: ( selectedNodes: PhotoNode[] ) => void;
+  onDone: ( selectedNodes: PhotoNode[] ) => void | Promise<void>;
 }
 
 const { useRealm } = RealmContext;
@@ -79,7 +79,9 @@ const PhotoGallery = ( {
   const [selectedUris, setSelectedUris] = useState<Set<string>>( new Set( ) );
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
   const [hideImported, setHideImported] = useState( true );
+  const [importing, setImporting] = useState( false );
   const isFetchingRef = useRef( false );
+  const importingRef = useRef( false );
   // Photos the user removed from a Group Photos import previously (see
   // removedGroupPhotoUris.ts) — always hidden, unlike hideImported which the
   // user can toggle, since the underlying device deletion may have silently
@@ -154,9 +156,33 @@ const PhotoGallery = ( {
     } );
   }, [maxPhotos] );
 
-  const handleDone = useCallback( ( ) => {
-    const selected = photos.filter( node => selectedUris.has( getSelectionKey( node ) ) );
-    onDone( selected );
+  // Importing can take tens of seconds (an iCloud-offloaded asset retries the
+  // download with backoff) and this screen stays up the whole time, so without
+  // a guard every extra tap starts another import of the same assets. Those
+  // concurrent imports then race on the same destination file, which fails
+  // *every* copy with the opaque "PHPhotosErrorDomain error -1" — so nothing
+  // imports at all and the check looks dead rather than merely slow.
+  const handleDone = useCallback( async ( ) => {
+    if ( importingRef.current ) {
+      return;
+    }
+    const seen = new Set<string>( );
+    const selected = photos.filter( node => {
+      const key = getSelectionKey( node );
+      if ( !selectedUris.has( key ) || seen.has( key ) ) {
+        return false;
+      }
+      seen.add( key );
+      return true;
+    } );
+    importingRef.current = true;
+    setImporting( true );
+    try {
+      await onDone( selected );
+    } finally {
+      importingRef.current = false;
+      setImporting( false );
+    }
   }, [photos, selectedUris, onDone] );
 
   // Record the selected photos as already saved without importing them, so the
@@ -353,20 +379,31 @@ const PhotoGallery = ( {
           icon="checkmark-circle"
           onPress={markSelectedAsSaved}
           accessibilityLabel={t( "Mark-photos-as-already-saved" )}
-          disabled={selectedCount === 0}
+          disabled={selectedCount === 0 || importing}
           size={22}
           color={colors.darkGray}
           testID="PhotoGallery.markAsSaved"
         />
-        <INatIconButton
-          icon="checkmark"
-          onPress={handleDone}
-          accessibilityLabel={t( "DONE" )}
-          disabled={selectedCount === 0}
-          size={22}
-          color={colors.inatGreen}
-          testID="PhotoGallery.done"
-        />
+        {importing
+          ? (
+            <View className="w-[44px] h-[44px] justify-center items-center">
+              <ActivityIndicator
+                color={colors.inatGreen}
+                testID="PhotoGallery.importing"
+              />
+            </View>
+          )
+          : (
+            <INatIconButton
+              icon="checkmark"
+              onPress={handleDone}
+              accessibilityLabel={t( "DONE" )}
+              disabled={selectedCount === 0}
+              size={22}
+              color={colors.inatGreen}
+              testID="PhotoGallery.done"
+            />
+          )}
       </View>
       <DevicePhotoGrid
         items={galleryItems}

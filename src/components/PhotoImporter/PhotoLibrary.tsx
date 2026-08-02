@@ -119,8 +119,18 @@ const PhotoLibrary = ( ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
 
+    // Two library assets can carry the same filename (e.g. IMG_0001.JPG from
+    // two different cameras). Letting them share a destination makes the
+    // second copy race the first — one unlinks the file the other is writing —
+    // and both fail with the opaque "PHPhotosErrorDomain error -1".
+    const claimedFileNames = new Set<string>( );
+
     const copyNode = async ( node: PhotoNode ) => {
-      const fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
+      let fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
+      if ( claimedFileNames.has( fileName ) ) {
+        fileName = `${uuid.v4()}-${fileName}`;
+      }
+      claimedFileNames.add( fileName );
       const destPath = `${path}/${fileName}`;
       // Remove any file left by a previous import of the same asset. Both
       // PHAssetResourceManager.writeData (iOS) and copyFile (Android) fail if
@@ -186,6 +196,9 @@ const PhotoLibrary = ( ) => {
       // eslint-disable-next-line no-await-in-loop
       const batchResults = await Promise.all( batch.map( copyNodeOrNull ) );
       results.push( ...batchResults.filter( ( r ): r is NonNullable<typeof r> => r !== null ) );
+    }
+    if ( results.length < nodes.length ) {
+      logger.warn( `Copied ${results.length} of ${nodes.length} photo(s) from camera roll` );
     }
     return results;
   }, [] );
