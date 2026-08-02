@@ -24,7 +24,6 @@ import {
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
-import { recordUploadedDevicePhotoUris } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
 import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrops";
 import {
@@ -295,23 +294,6 @@ const GroupPhotosContainer = ( ): Node => {
     }
   };
 
-  // Record the selected photos as already saved without importing them, so the
-  // photo picker's "Hide Saved" toggle hides them from now on. Useful for
-  // photos the user has already uploaded some other way, or never wants to see
-  // offered for import again.
-  const markPhotosAsSaved = () => {
-    const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
-    const deviceUris = orderedPhotos
-      .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
-      .filter( Boolean );
-    recordUploadedDevicePhotoUris( realm, deviceUris );
-    logger.info(
-      `markPhotosAsSaved: recorded ${deviceUris.length} device URI(s) `
-      + `from ${orderedPhotos.length} selected photo(s) as already saved`,
-    );
-    setSelectedIndices( [] );
-  };
-
   const removePhotos = () => {
     const removedFromGroup = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
@@ -462,7 +444,6 @@ const GroupPhotosContainer = ( ): Node => {
       flashListRef={flashListRef}
       groupedPhotos={groupedPhotos}
       isDuplicatingPhotos={isDuplicatingPhotos}
-      markPhotosAsSaved={markPhotosAsSaved}
       navBasedOnUserSettings={navBasedOnUserSettings}
       onScroll={onScroll}
       onViewableItemsChanged={onViewableItemsChanged}

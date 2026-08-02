@@ -177,4 +177,24 @@ describe( "Photo Import", ( ) => {
     const obsGridItems = await waitForMyObsGridItems();
     expect( obsGridItems[0] ).toBeVisible();
   } );
+
+  // Kept last: marking a photo as saved persists in the test file's realm, so
+  // it would stay hidden for any test that ran after it.
+  it( "should hide photos marked as saved without importing them", async ( ) => {
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+      makeGetPhotosResult( [mockNode1, mockNode2] ),
+    );
+    renderApp( );
+    await navigateToPhotoImporterFromMyObs();
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) ).toBeTruthy( );
+    }, { timeout: 10_000 } );
+    fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
+    fireEvent.press( screen.getByTestId( "PhotoGallery.markAsSaved" ) );
+
+    await waitFor( ( ) => {
+      expect( screen.queryByTestId( `PhotoGallery.${mockNode1.image.uri}` ) ).toBeNull( );
+    } );
+    expect( screen.getByTestId( `PhotoGallery.${mockNode2.image.uri}` ) ).toBeTruthy( );
+  } );
 } );

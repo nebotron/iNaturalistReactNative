@@ -26,8 +26,10 @@ import {
 } from "react-native";
 import { Switch } from "react-native-paper";
 import { formatDateStringFromTimestamp } from "sharedHelpers/dateAndTime";
-import { getPreviouslyUploadedDevicePhotoUrisSet } from
-  "sharedHelpers/duplicateUploadedDevicePhotos";
+import {
+  getPreviouslyUploadedDevicePhotoUrisSet,
+  recordUploadedDevicePhotoUris,
+} from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { useGridLayout, useTranslation } from "sharedHooks";
@@ -156,6 +158,19 @@ const PhotoGallery = ( {
     const selected = photos.filter( node => selectedUris.has( getSelectionKey( node ) ) );
     onDone( selected );
   }, [photos, selectedUris, onDone] );
+
+  // Record the selected photos as already saved without importing them, so the
+  // "Hide Saved" toggle hides them from now on. Useful for photos the user has
+  // already uploaded some other way, or never wants offered for import again.
+  const markSelectedAsSaved = useCallback( ( ) => {
+    const deviceUris = photos
+      .filter( node => selectedUris.has( getSelectionKey( node ) ) )
+      .map( getDeviceUriFromNode )
+      .filter( ( uri ): uri is string => !!uri );
+    recordUploadedDevicePhotoUris( realm, deviceUris );
+    setImportedUris( prev => new Set( [...prev, ...deviceUris] ) );
+    setSelectedUris( new Set( ) );
+  }, [photos, realm, selectedUris] );
 
   const isImported = useCallback( ( node: PhotoNode ): boolean => {
     const uri = getDeviceUriFromNode( node );
@@ -343,6 +358,15 @@ const PhotoGallery = ( {
             testID="PhotoGallery.selectSinceLastImport"
           />
         )}
+        <INatIconButton
+          icon="checkmark-circle"
+          onPress={markSelectedAsSaved}
+          accessibilityLabel={t( "Mark-photos-as-already-saved" )}
+          disabled={selectedCount === 0}
+          size={22}
+          color={colors.darkGray}
+          testID="PhotoGallery.markAsSaved"
+        />
         <INatIconButton
           icon="checkmark"
           onPress={handleDone}
