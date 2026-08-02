@@ -573,11 +573,6 @@ class Observation extends Realm.Object {
   static deleteLocalObservation = ( realm, uuidToDelete ) => {
     const observation = realm?.objectForPrimaryKey( "Observation", uuidToDelete );
     if ( observation ) {
-      // Remember the device photos this observation came from before it's gone,
-      // otherwise they'd show up again in the photo gallery even with "Hide
-      // Saved" on, inviting the user to re-import something they already dealt
-      // with.
-      recordUploadedDevicePhotoUrisFromObservation( realm, observation );
       safeRealmWrite( realm, ( ) => {
         realm?.delete( observation );
       }, `deleting local observation ${uuidToDelete} in deleteLocalObservation` );
