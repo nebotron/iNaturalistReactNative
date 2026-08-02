@@ -1,5 +1,6 @@
 /* eslint-disable i18next/no-literal-string */
 import { FlashList } from "@shopify/flash-list";
+import DevicePhotoThumbnail from "components/DevicePhotoCleanup/DevicePhotoThumbnail";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import {
   ActivityIndicator,
@@ -173,6 +174,11 @@ const DevicePhotoCleanup = ( ) => {
 
   const { width } = useWindowDimensions( );
   const tileSize = width / GRID_COLUMNS;
+  // Stable identity so recycled tiles don't remount on every render.
+  const tileStyle = useMemo(
+    ( ) => ( { height: tileSize, width: tileSize } ),
+    [tileSize],
+  );
   const gridRows = useMemo(
     ( ) => buildGridRows( days, GRID_COLUMNS ),
     [days],
@@ -258,10 +264,10 @@ const DevicePhotoCleanup = ( ) => {
                   accessibilityRole="button"
                   onPress={( ) => setFullScreenUri( uri )}
                 >
-                  <Image
-                    source={{ uri }}
-                    style={{ height: tileSize, width: tileSize }}
-                    resizeMode="cover"
+                  <DevicePhotoThumbnail
+                    uri={uri}
+                    size={tileSize}
+                    style={tileStyle}
                   />
                 </Pressable>
               ) )}
@@ -298,11 +304,11 @@ const DevicePhotoCleanup = ( ) => {
               className="mb-5"
             >
               {allUris.slice( 0, CONFIRM_PREVIEW_LIMIT ).map( uri => (
-                <Image
+                <DevicePhotoThumbnail
                   key={uri}
-                  source={{ uri }}
+                  uri={uri}
+                  size={THUMB_SIZE}
                   style={styles.thumb}
-                  resizeMode="cover"
                 />
               ) )}
               {allUris.length > CONFIRM_PREVIEW_LIMIT && (
