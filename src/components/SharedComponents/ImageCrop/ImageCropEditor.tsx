@@ -63,11 +63,17 @@ const ImageCropEditor = ( ) => {
     state => state.addPendingGroupPhotoDeletionUri,
   );
 
-  const imageUri = params?.imageUri;
   const context = params?.context;
   const observationPhotoUuid = params?.observationPhotoUuid;
   const onCropSaved = params?.onCropSaved;
-  const pendingImageUris = params?.pendingImageUris;
+
+  // The photo currently being cropped and the rest of the bulk crop queue.
+  // Held in state rather than read from route params on every render because a
+  // bulk crop advances by swapping these in place (see finishOrAdvance).
+  const [imageUri, setImageUri] = useState( params?.imageUri );
+  const [pendingImageUris, setPendingImageUris] = useState<string[]>(
+    params?.pendingImageUris ?? [],
+  );
 
   // Resolve the crop source URI and any previously-saved crop for the current
   // image. Pure read of props/store, shared by the synchronous cache seed and
@@ -102,45 +108,32 @@ const ImageCropEditor = ( ) => {
     return { cropSourceUri: imageUri, existingSavedCrop: null };
   }, [context, currentObservation, groupedPhotos, imageUri, observationPhotoUuid] );
 
-  // Seed state synchronously from the preload cache (computed once at mount) so
-  // advancing between already-preloaded images in a bulk crop renders the image
-  // on the first paint instead of flashing the loading spinner while the async
-  // effect re-reads the same cached data.
-  const seedRef = useRef<{
-    localUri: string;
-    size: { w: number; h: number };
-    savedCrop: NormalizedCrop | null;
-    detectedCrop: NormalizedCrop;
-  } | null | undefined>( undefined );
-  if ( seedRef.current === undefined ) {
-    const cached = imageUri
-      ? preloadCache.get( imageUri )
-      : null;
-    if ( cached ) {
-      const { existingSavedCrop } = resolveCropContext( );
-      seedRef.current = {
-        localUri: cached.localUri,
-        size: cached.size,
-        savedCrop: existingSavedCrop,
-        detectedCrop: existingSavedCrop ?? cached.crop,
-      };
-    } else {
-      seedRef.current = null;
-    }
-  }
-  const seed = seedRef.current;
+  const [localImageUri, setLocalImageUri] = useState<string | null>( null );
+  const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>( null );
+  const [detectedCrop, setDetectedCrop] = useState<NormalizedCrop | null>( null );
+  const [savedInitialCrop, setSavedInitialCrop] = useState<NormalizedCrop | null>( null );
+  const [loadingSource, setLoadingSource] = useState( true );
+  const [seededUri, setSeededUri] = useState<string | null>( null );
 
-  const [localImageUri, setLocalImageUri] = useState<string | null>( seed?.localUri ?? null );
-  const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>(
-    seed?.size ?? null,
-  );
-  const [detectedCrop, setDetectedCrop] = useState<NormalizedCrop | null>(
-    seed?.detectedCrop ?? null,
-  );
-  const [savedInitialCrop, setSavedInitialCrop] = useState<NormalizedCrop | null>(
-    seed?.savedCrop ?? null,
-  );
-  const [loadingSource, setLoadingSource] = useState( !seed );
+  // Seed state from the preload cache during render, before the first paint of
+  // each image, so mounting the editor (and advancing to the next photo in a
+  // bulk crop) shows an already-preloaded image immediately instead of painting
+  // a spinner, or the previous photo, while the async effect below re-reads the
+  // same cached data.
+  if ( imageUri && seededUri !== imageUri ) {
+    setSeededUri( imageUri );
+    const cached = preloadCache.get( imageUri );
+    const { existingSavedCrop } = resolveCropContext( );
+    setLocalImageUri( cached?.localUri ?? null );
+    setImageSize( cached?.size ?? null );
+    setSavedInitialCrop( cached
+      ? existingSavedCrop
+      : null );
+    setDetectedCrop( cached
+      ? existingSavedCrop ?? cached.crop
+      : null );
+    setLoadingSource( !cached );
+  }
 
   const getCropFeedbackSourceKey = useCallback( ( ) => {
     if ( context === "groupPhotos" && imageUri ) {
@@ -182,25 +175,13 @@ const ImageCropEditor = ( ) => {
 
     const { cropSourceUri, existingSavedCrop } = resolveCropContext( );
 
-    // Use preloaded data if available to skip all async work. Applying it
-    // directly (without first resetting to the loading state) avoids a spinner
-    // flash when advancing between already-preloaded images in a bulk crop.
-    const cached = preloadCache.get( imageUri );
-    if ( cached ) {
-      setLocalImageUri( cached.localUri );
-      setImageSize( cached.size );
-      setSavedInitialCrop( existingSavedCrop );
-      setDetectedCrop( existingSavedCrop ?? cached.crop );
-      setLoadingSource( false );
+    // Preloaded data was already applied during render, so there's no async
+    // work left to do.
+    if ( preloadCache.has( imageUri ) ) {
       return ( ) => {};
     }
 
     let cancelled = false;
-    setLoadingSource( true );
-    setLocalImageUri( null );
-    setImageSize( null );
-    setDetectedCrop( null );
-    setSavedInitialCrop( null );
 
     ( async ( ) => {
       try {
@@ -240,12 +221,12 @@ const ImageCropEditor = ( ) => {
   // subject detection, via enqueuePreload/preloadImage) as soon as this
   // screen mounts, rather than the whole remaining batch — a bulk crop can
   // span dozens of photos, and preloading them all wastes work on photos the
-  // user may delete or never reach. Each subsequent mount re-runs this with
-  // one fewer pending uri, so the lookahead slides forward as the user
-  // advances. Deferred past interactions so the burst doesn't contend with
-  // the screen transition animation or painting the current image.
+  // user may delete or never reach. Advancing drops one uri from the queue and
+  // re-runs this, so the lookahead slides forward as the user advances.
+  // Deferred past interactions so the burst doesn't contend with the screen
+  // transition animation or painting the current image.
   useEffect( ( ) => {
-    if ( !pendingImageUris?.length || context !== "groupPhotos" ) {
+    if ( !pendingImageUris.length || context !== "groupPhotos" ) {
       return ( ) => {};
     }
     const handle = InteractionManager.runAfterInteractions( ( ) => {
@@ -268,23 +249,22 @@ const ImageCropEditor = ( ) => {
     instructions: t( "CROP-DRAG-HINT" ),
   } ), [t] );
 
+  // Advance to the next photo in place instead of navigation.replace: a stack
+  // replace tears the editor down and rebuilds it, and plays both the screen
+  // transition and the fade in/out, which is most of the delay between photos
+  // in a bulk crop. Swapping the uri keeps the mounted cropper (ImageCropView
+  // resets itself when sourceUri changes), so a preloaded next image appears on
+  // the next frame.
   const finishOrAdvance = useCallback( ( ) => {
-    if ( pendingImageUris?.length ) {
-      navigation.replace( "ImageCropEditor", {
-        imageUri: pendingImageUris[0],
-        pendingImageUris: pendingImageUris.slice( 1 ),
-        context,
-        observationPhotoUuid,
-        onCropSaved,
-      } );
+    if ( pendingImageUris.length ) {
+      setImageUri( pendingImageUris[0] );
+      setPendingImageUris( uris => uris.slice( 1 ) );
       return;
     }
     onCropSaved?.( );
     navigation.goBack( );
   }, [
-    context,
     navigation,
-    observationPhotoUuid,
     onCropSaved,
     pendingImageUris,
   ] );
@@ -413,8 +393,9 @@ const ImageCropEditor = ( ) => {
     // Cropping the file and copying the original take long enough to feel like
     // a stall after every checkmark tap in a bulk crop, and nothing on screen
     // needs the result, so advance right away and let the writes finish in the
-    // background (deferred past the screen transition). GroupPhotosContainer
-    // waits on the tracked jobs before importing.
+    // background (deferred past pending interactions so they don't contend with
+    // painting the next image). GroupPhotosContainer waits on the tracked jobs
+    // before importing.
     if ( context === "groupPhotos" ) {
       const displayUri = imageUri;
       const sourceUri = localImageUri;
