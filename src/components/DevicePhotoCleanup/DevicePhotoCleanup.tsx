@@ -198,10 +198,20 @@ const DevicePhotoCleanup = ( ) => {
     setShowConfirm( false );
     setDeleting( true );
     await new Promise( resolve => { setTimeout( resolve, 600 ); } );
-    await deleteOriginalDevicePhotos( allUris, { userInitiated: true } );
-    setDeletedCount( allUris.length );
-    setDays( [] );
+    // Report what the OS actually deleted. A wedged PHPhotoLibrary (or the
+    // cooldown that follows one) deletes nothing yet resolves normally, and
+    // claiming "Deleted 1,159 photos" while the photos are all still there is
+    // worse than saying nothing happened.
+    const { deleted, succeeded } = await deleteOriginalDevicePhotos(
+      allUris,
+      { userInitiated: true },
+    );
     setDeleting( false );
+    // Leave the grid up when the delete didn't go through so the user can
+    // retry; the helper has already explained the failure with an alert.
+    if ( !succeeded ) return;
+    setDeletedCount( deleted );
+    setDays( [] );
   }, [allUris] );
 
   if ( deletedCount !== null ) {

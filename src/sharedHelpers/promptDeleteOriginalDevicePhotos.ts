@@ -53,6 +53,16 @@ interface DeleteOriginalDevicePhotosOptions {
   userInitiated?: boolean;
 }
 
+// What the OS actually did, so callers can tell the user the truth instead of
+// assuming every requested URI was deleted. A hung or cooled-down delete
+// resolves normally (the error is handled here), so without this a caller
+// can't distinguish "deleted 1159 photos" from "deleted none of them".
+export interface DeleteOriginalDevicePhotosResult {
+  deleted: number;
+  requested: number;
+  succeeded: boolean;
+}
+
 const filterDeletableDevicePhotoUris = ( photoUris: string[] ): string[] => (
   [...new Set(
     photoUris
@@ -108,7 +118,7 @@ const DELETE_TIMEOUT_MS = 120000;
 const performDeleteOriginalDevicePhotos = async (
   photoUris: string[],
   options: DeleteOriginalDevicePhotosOptions = {},
-) => {
+): Promise<DeleteOriginalDevicePhotosResult> => {
   const uniqueUris = filterDeletableDevicePhotoUris( photoUris );
   if ( uniqueUris.length === 0 ) {
     if ( photoUris.filter( Boolean ).length > 0 ) {
@@ -117,16 +127,24 @@ const performDeleteOriginalDevicePhotos = async (
         { photoUris },
       );
     }
-    return;
+    return { deleted: 0, requested: 0, succeeded: true };
   }
+
+  const requested = uniqueUris.length;
 
   if ( Platform.OS === "ios" && isInPhotoLibraryWriteCooldown( ) ) {
     logger.warn(
-      `Skipped deleting ${uniqueUris.length} device photo(s): `
+      `Skipped deleting ${requested} device photo(s): `
       + "still in cooldown after a recent Photos-library write timeout (likely a "
       + "wedged PHPhotoLibrary confirmation — see promptDeleteOriginalDevicePhotos.ts)",
     );
-    return;
+    if ( options.userInitiated ) {
+      Alert.alert(
+        i18next.t( "Something-went-wrong" ),
+        i18next.t( "Could-not-delete-original-photos" ),
+      );
+    }
+    return { deleted: 0, requested, succeeded: false };
   }
 
   const hasPermission = await ensureDeletePhotosPermission( );
@@ -138,7 +156,7 @@ const performDeleteOriginalDevicePhotos = async (
         i18next.t( "Could-not-delete-original-photos" ),
       );
     }
-    return;
+    return { deleted: 0, requested, succeeded: false };
   }
 
   const uriList = uniqueUris.join( ", " );
@@ -180,10 +198,11 @@ const performDeleteOriginalDevicePhotos = async (
     // all N made a repeating no-op look like a working cleanup.
     const deleted = ( result as { deleted?: number } | undefined )?.deleted;
     logger.info(
-      `Deleted ${deleted ?? uniqueUris.length} of ${uniqueUris.length} `
+      `Deleted ${deleted ?? requested} of ${requested} `
       + `device photo(s); result=${JSON.stringify( result )}`,
     );
     clearPhotoLibraryWriteFailure( );
+    return { deleted: deleted ?? requested, requested, succeeded: true };
   } catch ( deleteError ) {
     // As of iOS 26, PHPhotoLibrary.performChanges' completion handler for
     // deleteAssets can simply never fire — no confirmation dialog, no error,
@@ -202,6 +221,7 @@ const performDeleteOriginalDevicePhotos = async (
         i18next.t( "Could-not-delete-original-photos" ),
       );
     }
+    return { deleted: 0, requested, succeeded: false };
   } finally {
     clearTimeout( hangTimer );
     if ( timeoutTimer ) clearTimeout( timeoutTimer );
@@ -211,7 +231,7 @@ const performDeleteOriginalDevicePhotos = async (
 export const deleteOriginalDevicePhotos = (
   photoUris: string[],
   options: DeleteOriginalDevicePhotosOptions = {},
-): Promise<void> => enqueuePhotoLibraryWrite(
+): Promise<DeleteOriginalDevicePhotosResult> => enqueuePhotoLibraryWrite(
   ( ) => performDeleteOriginalDevicePhotos( photoUris, options ),
 );
 
