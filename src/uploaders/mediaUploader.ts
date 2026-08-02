@@ -121,6 +121,16 @@ const uploadSingleEvidence = async (
     observationId,
   );
   const evidenceUUID = evidence.uuid;
+  // Captured while the record is definitely still valid: an embedded
+  // Photo/Sound can be invalidated while its upload is in flight, and after
+  // that even reading this field throws. It's how we find the live record
+  // again when marking it uploaded.
+  let localFilePath: string | null | undefined;
+  if ( type === "Photo" ) {
+    ( { localFilePath } = evidence as RealmPhoto );
+  } else if ( type === "Sound" ) {
+    localFilePath = ( evidence as RealmSound ).file_url;
+  }
 
   // Determine if this is an upload or an attachment operation
   // for progress tracking
@@ -141,6 +151,7 @@ const uploadSingleEvidence = async (
     // TODO: can't mark records as uploaded by primary key for ObsPhotos and ObsSound anymore
     markRecordUploaded( observationUUID, evidenceUUID, type, response, realm, {
       record: evidence,
+      localFilePath,
     } );
     if ( isAttachOperation ) {
       // This is attaching evidence to an observation

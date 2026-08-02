@@ -42,6 +42,10 @@ const useUnviewedNotificationsCount = () => {
 
     const params = TAB_PARAMS[tab];
     const apiToken = await getJWT( );
+    // getJWT returns null when the token can't be refreshed (e.g. in the
+    // background). Prefetching without it just makes an unauthenticated
+    // request that 401s and caches an empty page.
+    if ( !apiToken ) return;
     queryClient.prefetchInfiniteQuery( {
       // realm is a stable context value, deliberately kept out of the key so
       // this matches the query key used in useInfiniteNotificationsScroll

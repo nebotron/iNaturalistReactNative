@@ -18,7 +18,11 @@ const SuggestionsEmpty = ( {
 }: Props ) => {
   const { t } = useTranslation( );
   const { params } = useRoute( );
-  const { lastScreen } = params;
+  // Suggestions can be rendered with no route params at all (e.g. when the
+  // persisted navigation state restores this screen on launch), and
+  // destructuring them unguarded took down the whole app through the
+  // ErrorBoundary. lastScreen is optional here anyway.
+  const { lastScreen } = params || {};
 
   const textClass = "mt-10 px-10 text-center";
 
