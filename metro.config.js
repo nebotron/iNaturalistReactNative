@@ -49,8 +49,24 @@ const config = {
   watchFolders: [...localPackagePaths],
 };
 
+const mergedConfig = mergeConfig( getDefaultConfig( __dirname ), config );
+
+// Stamping once at config load only covers the bundle built by that Metro
+// process. A dev server started before a rebase keeps serving newly pulled
+// code under the commit it happened to start on, which is the failure this is
+// here to prevent, so re-stamp per bundle build as well. writeAppCommit only
+// touches the file when the commit actually changes, so the module Metro
+// watches is invalidated once per checkout rather than once per reload.
+const { getTransformOptions } = mergedConfig.transformer;
+mergedConfig.transformer.getTransformOptions = async ( ...args ) => {
+  writeAppCommit( );
+  return getTransformOptions
+    ? getTransformOptions( ...args )
+    : {};
+};
+
 module.exports = withRozenite(
-  mergeConfig( getDefaultConfig( __dirname ), config ),
+  mergedConfig,
   {
     enabled: process.env.WITH_ROZENITE === "true",
     enhanceMetroConfig: config => withRozeniteRequireProfiler( config ),
