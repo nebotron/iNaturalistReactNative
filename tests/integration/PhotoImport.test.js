@@ -72,36 +72,27 @@ beforeAll( async () => {
 
 const galleryPath = "file://document/directory/path/galleryPhotos";
 
-const mockNode1 = {
-  id: "MOCK-ID-1",
+// The photo picker hides device photos it has already imported, and that
+// history lives in this file's realm for the whole run, so every test needs
+// its own photos or it inherits the previous test's imports as hidden.
+const makeMockNode = ( name, timestamp ) => ( {
+  id: `MOCK-ID-${name}`,
   type: "image",
   group_name: "Camera Roll",
   image: {
-    filename: "some_file_name.jpg",
-    filepath: "/path/to/some_file_name.jpg",
+    filename: `${name}.jpg`,
+    filepath: `/path/to/${name}.jpg`,
     extension: "jpg",
-    uri: "file:///path/to/some_file_name.jpg",
+    uri: `file:///path/to/${name}.jpg`,
     height: 1920,
     width: 1080,
     fileSize: 123456,
     playableDuration: NaN,
     orientation: 1,
   },
-  timestamp: 1234567890,
+  timestamp,
   location: null,
-};
-
-const mockNode2 = {
-  ...mockNode1,
-  id: "MOCK-ID-2",
-  image: {
-    ...mockNode1.image,
-    filename: "another_file_name.jpg",
-    filepath: "/path/to/another_file_name.jpg",
-    uri: "file:///path/to/another_file_name.jpg",
-  },
-  timestamp: 1234567891,
-};
+} );
 
 const makeGetPhotosResult = nodes => ( {
   page_info: { end_cursor: undefined, has_next_page: false },
@@ -130,12 +121,12 @@ describe( "Photo Import", ( ) => {
     fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
   }
 
-  async function groupPhotosIntoObservation() {
+  async function groupPhotosIntoObservation( firstNode, secondNode ) {
     await waitFor( ( ) => {
       expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
     }, { timeout: 10_000 } );
-    const firstUri = `${galleryPath}/${mockNode1.image.filename}`;
-    const secondUri = `${galleryPath}/${mockNode2.image.filename}`;
+    const firstUri = `${galleryPath}/${firstNode.image.filename}`;
+    const secondUri = `${galleryPath}/${secondNode.image.filename}`;
     const firstPhoto = await screen.findByTestId( `GroupPhotos.${firstUri}` );
     await actor.press( firstPhoto );
     const secondPhoto = await screen.findByTestId( `GroupPhotos.${secondUri}` );
@@ -147,12 +138,13 @@ describe( "Photo Import", ( ) => {
   }
 
   it( "should create and save an observation with an imported photo", async ( ) => {
+    const node = makeMockNode( "single_import", 1234567890 );
     jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
-      makeGetPhotosResult( [mockNode1] ),
+      makeGetPhotosResult( [node] ),
     );
     renderApp( );
     await navigateToPhotoImporterFromMyObs();
-    await selectPhotosInGallery( [mockNode1] );
+    await selectPhotosInGallery( [node] );
 
     await waitFor( ( ) => {
       expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
@@ -166,35 +158,37 @@ describe( "Photo Import", ( ) => {
   } );
 
   it( "should create and save an observation with multiple imported photos", async ( ) => {
+    const firstNode = makeMockNode( "multi_import_first", 1234567890 );
+    const secondNode = makeMockNode( "multi_import_second", 1234567891 );
     jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
-      makeGetPhotosResult( [mockNode1, mockNode2] ),
+      makeGetPhotosResult( [firstNode, secondNode] ),
     );
     renderApp( );
     await navigateToPhotoImporterFromMyObs();
-    await selectPhotosInGallery( [mockNode1, mockNode2] );
-    await groupPhotosIntoObservation();
+    await selectPhotosInGallery( [firstNode, secondNode] );
+    await groupPhotosIntoObservation( firstNode, secondNode );
 
     const obsGridItems = await waitForMyObsGridItems();
     expect( obsGridItems[0] ).toBeVisible();
   } );
 
-  // Kept last: marking a photo as saved persists in the test file's realm, so
-  // it would stay hidden for any test that ran after it.
   it( "should hide photos marked as saved without importing them", async ( ) => {
+    const savedNode = makeMockNode( "marked_as_saved", 1234567890 );
+    const keptNode = makeMockNode( "not_marked_as_saved", 1234567891 );
     jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
-      makeGetPhotosResult( [mockNode1, mockNode2] ),
+      makeGetPhotosResult( [savedNode, keptNode] ),
     );
     renderApp( );
     await navigateToPhotoImporterFromMyObs();
     await waitFor( ( ) => {
-      expect( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) ).toBeTruthy( );
+      expect( screen.getByTestId( `PhotoGallery.${savedNode.image.uri}` ) ).toBeTruthy( );
     }, { timeout: 10_000 } );
-    fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
+    fireEvent.press( screen.getByTestId( `PhotoGallery.${savedNode.image.uri}` ) );
     fireEvent.press( screen.getByTestId( "PhotoGallery.markAsSaved" ) );
 
     await waitFor( ( ) => {
-      expect( screen.queryByTestId( `PhotoGallery.${mockNode1.image.uri}` ) ).toBeNull( );
+      expect( screen.queryByTestId( `PhotoGallery.${savedNode.image.uri}` ) ).toBeNull( );
     } );
-    expect( screen.getByTestId( `PhotoGallery.${mockNode2.image.uri}` ) ).toBeTruthy( );
+    expect( screen.getByTestId( `PhotoGallery.${keptNode.image.uri}` ) ).toBeTruthy( );
   } );
 } );

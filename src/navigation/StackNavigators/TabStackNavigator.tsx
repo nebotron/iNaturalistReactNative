@@ -57,6 +57,7 @@ import useFeatureFlag from "sharedHooks/useFeatureFlag";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
 import colors from "styles/tailwindColors";
 
+import PhotoImporterStackScreens from "./PhotoImporterStackScreens";
 import SharedStackScreens from "./SharedStackScreens";
 
 const aboutTitle = () => (
@@ -260,6 +261,7 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           options={DQA_OPTIONS}
         />
         {SharedStackScreens( )}
+        {PhotoImporterStackScreens( )}
         {/* Project Stack Group */}
         <Stack.Group
           screenOptions={{

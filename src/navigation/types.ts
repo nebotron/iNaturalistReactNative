@@ -234,6 +234,49 @@ export type MyObservationsStackParamList = {
   SearchMyObservations: undefined;
 };
 
+// Screens hosted by PhotoImporterStackScreens, which is registered in both the
+// TabStackNavigator and the NoBottomTabStackNavigator
+// Note from the documentation:
+// The type containing the mapping must be a type alias. It cannot be an interface.
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+export type PhotoImporterStackParamList = {
+  // PhotoLibrary param options:
+  // Being set on PhotoLibrary:
+  // {
+  //   fromGroupPhotos: false;
+  // }
+  // From GroupPhotos
+  // {
+  //   fromGroupPhotos: true;
+  // }
+  // From PhotoLibraryIcon
+  // {
+  //   cmonBack: true;
+  //   lastScreen: "Camera";
+  //   fromAICamera: true;
+  // }
+  // From AddEvidenceSheet
+  // {
+  //   skipGroupPhotos: true;
+  // }
+  // From AddObsButton
+  // {
+  //   previousScreen: ParamListRoute<RootStackParamList>;
+  // };
+  PhotoLibrary: {
+    fromGroupPhotos?: boolean;
+    cmonBack?: boolean;
+    lastScreen?: "Camera";
+    fromAICamera?: boolean;
+    skipGroupPhotos?: boolean;
+    // eslint-disable-next-line no-use-before-define
+    previousScreen?: ParamListRoute<RootStackParamList>;
+  } | undefined;
+  // From PhotoSharing
+  // { lastScreen: "PhotoSharing" }
+  GroupPhotos: { lastScreen?: "PhotoSharing" } | undefined;
+};
+
 // Tab-only routes (not from SharedStackScreens). Intersected with SharedStackParamList
 // so TabStackParamList matches TabStackNavigator + SharedStackScreens.
 // Note from the documentation:
@@ -401,7 +444,9 @@ export type BaseTabStackParamList = {
   Help: undefined;
 };
 
-export type TabStackParamList = BaseTabStackParamList & SharedStackParamList;
+export type TabStackParamList = BaseTabStackParamList &
+  SharedStackParamList &
+  PhotoImporterStackParamList;
 
 // Params for TabStackNavigator when hosted inside BottomTabNavigator, including which
 // inner stack screen should be shown first (see BottomTabNavigator initialParams).
@@ -424,38 +469,6 @@ export type BottomTabParamList = {
 // The type containing the mapping must be a type alias. It cannot be an interface.
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 export type BaseNoBottomTabStackParamList = {
-  // PhotoLibrary param options:
-  // Being set on PhotoLibrary:
-  // {
-  //   fromGroupPhotos: false;
-  // }
-  // From GroupPhotos
-  // {
-  //   fromGroupPhotos: true;
-  // }
-  // From PhotoLibraryIcon
-  // {
-  //   cmonBack: true;
-  //   lastScreen: "Camera";
-  //   fromAICamera: true;
-  // }
-  // From AddEvidenceSheet
-  // {
-  //   skipGroupPhotos: true;
-  // }
-  // From AddObsButton
-  // {
-  //   previousScreen: ParamListRoute<RootStackParamList>;
-  // };
-  PhotoLibrary: {
-    fromGroupPhotos?: boolean;
-    cmonBack?: boolean;
-    lastScreen?: "Camera";
-    fromAICamera?: boolean;
-    skipGroupPhotos?: boolean;
-    // eslint-disable-next-line no-use-before-define
-    previousScreen?: ParamListRoute<RootStackParamList>;
-  };
   // From AddObsButton
   // {
   //   previousScreen: ParamListRoute<RootStackParamList>;
@@ -474,13 +487,11 @@ export type BaseNoBottomTabStackParamList = {
     previousScreen?: ParamListRoute<RootStackParamList>;
   };
   SoundRecorder: undefined;
-  // From PhotoSharing
-  // { lastScreen: "PhotoSharing" }
-  GroupPhotos: { lastScreen: "PhotoSharing" };
 };
 
 export type NoBottomTabStackParamList = BaseNoBottomTabStackParamList &
-  SharedStackParamList;
+  SharedStackParamList &
+  PhotoImporterStackParamList;
 
 // Note from the documentation:
 // The type containing the mapping must be a type alias. It cannot be an interface.

@@ -5,6 +5,7 @@ import {
   fireEvent,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
 import {
@@ -130,6 +131,47 @@ describe( "PhotoLibrary navigation", ( ) => {
 
     await waitFor( ( ) => {
       expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+    }, { timeout: 10_000 } );
+  } );
+
+  it( "keeps the bottom tab bar on the photo picker and on GroupPhotos", async ( ) => {
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+      makeGetPhotosResult( [mockNode1] ),
+    );
+    renderApp( );
+    await navigateToPhotoImporterFromMyObs( );
+    expect( screen.getByTestId( "CustomTabBar" ) ).toBeVisible( );
+
+    await waitFor( ( ) => {
+      expect(
+        screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ),
+      ).toBeTruthy( );
+    }, { timeout: 10_000 } );
+    fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
+    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+
+    await waitFor( ( ) => {
+      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+    }, { timeout: 10_000 } );
+    expect( screen.getByTestId( "CustomTabBar" ) ).toBeVisible( );
+  } );
+
+  it( "returns to an import the user left via another tab", async ( ) => {
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+      makeGetPhotosResult( [mockNode1] ),
+    );
+    renderApp( );
+    await navigateToPhotoImporterFromMyObs( );
+
+    const tabBar = screen.getByTestId( "CustomTabBar" );
+    fireEvent.press( within( tabBar ).getByLabelText( "Explore" ) );
+    await waitFor( ( ) => {
+      expect( screen.queryByTestId( "PhotoLibrary" ) ).toBeNull( );
+    }, { timeout: 10_000 } );
+
+    fireEvent.press( within( tabBar ).getByTestId( "NavButton.personIcon" ) );
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( "PhotoLibrary" ) ).toBeTruthy( );
     }, { timeout: 10_000 } );
   } );
 } );

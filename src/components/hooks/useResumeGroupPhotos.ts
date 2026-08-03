@@ -22,7 +22,12 @@ const useResumeGroupPhotos = ( ) => {
       const { groupedPhotos } = useStore.getState( );
       if ( groupedPhotos && groupedPhotos.length > 0 ) {
         resumedRef.current = true;
-        navigationRef.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
+        // Resume inside the My Observations tab so the import keeps the bottom
+        // tab bar and the user can step away from it and come back
+        navigationRef.navigate( "TabNavigator", {
+          screen: "ObservationsTab",
+          params: { screen: "GroupPhotos" },
+        } );
       }
     };
 

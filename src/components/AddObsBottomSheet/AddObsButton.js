@@ -123,10 +123,34 @@ const AddObsButton = ( ): React.Node => {
     logger.info( `isAdvancedUser: ${isAllAddObsOptionsMode}` );
   }, [isAllAddObsOptionsMode] );
 
-  type Screen = "ObsEdit" | "Camera" | "PhotoLibrary" | "SoundRecorder";
-  const navAndCloseBottomSheet = ( screen: Screen, params ) => {
-    if ( screen !== "ObsEdit" ) {
+  type Screen = "ObsEdit" | "Camera" | "PhotoLibrary" | "GroupPhotos" | "SoundRecorder";
+  const navAndCloseBottomSheet = ( requestedScreen: Screen, params ) => {
+    // An import the user stepped away from is worth returning to rather than
+    // silently discarding, so pick it up where they left off
+    const importInProgress = useStore.getState( ).groupedPhotos?.length > 0;
+    const screen = requestedScreen === "PhotoLibrary" && importInProgress
+      ? "GroupPhotos"
+      : requestedScreen;
+
+    // Resuming an import must not wipe the photos it's made of
+    if ( screen !== "ObsEdit" && screen !== "GroupPhotos" ) {
       resetObservationFlowSlice( );
+    }
+
+    // The importer lives in the tab stack so it keeps the bottom tab bar and
+    // the user can step away to another tab and come back to it. Navigating
+    // (rather than resetting the root) leaves the tab navigator mounted, which
+    // is what lets the import survive the trip.
+    if ( screen === "PhotoLibrary" || screen === "GroupPhotos" ) {
+      navigation.navigate( "TabNavigator", {
+        screen: "ObservationsTab",
+        params: {
+          screen,
+          params: { ...params, previousScreen: currentRoute },
+        },
+      } );
+      closeBottomSheet( );
+      return;
     }
 
     // we need to reset the navigation stack whenever a user navigates from the AddObs wheel,

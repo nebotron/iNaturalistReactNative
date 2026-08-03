@@ -19,7 +19,7 @@ import {
 } from "components/PhotoImporter/helpers/videoImportHelpers";
 import PhotoGallery from "components/PhotoImporter/PhotoGallery";
 import { ViewWrapper } from "components/SharedComponents";
-import type { NoBottomTabStackScreenProps } from "navigation/types";
+import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
@@ -61,7 +61,13 @@ const nodeToSourceAsset = ( node: PhotoNode ): Asset => ( {
 } );
 
 const PhotoLibrary = ( ) => {
-  const navigation = useNavigation<NoBottomTabStackScreenProps<"PhotoLibrary">["navigation"]>();
+  // This screen is registered in both stacks (see PhotoImporterStackScreens),
+  // so navigate to GroupPhotos unqualified and let it resolve in whichever
+  // stack the import was started from.
+  const navigation = useNavigation<
+    NoBottomTabStackScreenProps<"PhotoLibrary">["navigation"] &
+    TabStackScreenProps<"PhotoLibrary">["navigation"]
+  >( );
   const { params } = useRoute<NoBottomTabStackScreenProps<"PhotoLibrary">["route"]>();
 
   const setPhotoImporterState = useStore( state => state.setPhotoImporterState );
@@ -93,7 +99,7 @@ const PhotoLibrary = ( ) => {
 
   const handleSelectionCancelled = useCallback( ( ) => {
     if ( fromGroupPhotos ) {
-      navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
+      navigation.navigate( "GroupPhotos" );
       navigation.setParams( { fromGroupPhotos: false } );
     } else if ( skipGroupPhotos ) {
       navToObsEdit();
@@ -335,7 +341,7 @@ const PhotoLibrary = ( ) => {
           ...buildGroupedMediaItems( selectedPhotos ),
         ] ) );
         navigation.setParams( { fromGroupPhotos: false } );
-        navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
+        navigation.navigate( "GroupPhotos" );
         return;
       }
 
@@ -368,7 +374,7 @@ const PhotoLibrary = ( ) => {
         ] ),
       } );
       navigation.setParams( { fromGroupPhotos: false } );
-      navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
+      navigation.navigate( "GroupPhotos" );
     } catch ( error ) {
       logger.error( "Error importing photos from camera roll", error );
       exitObservationFlow( );

@@ -10,7 +10,7 @@ import {
   INatIcon,
   INatIconButton,
 } from "components/SharedComponents";
-import { BottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
+import { SharedStackBottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import React, { useCallback, useEffect, useMemo } from "react";
 import { preloadImage } from "sharedHelpers/imageCropPreload";
@@ -166,10 +166,7 @@ const GroupPhotos = ( {
   ), [gridItemStyle, selectedObservations, selectObservationPhotos] );
 
   const addPhotos = useCallback( () => {
-    navigation.navigate( "NoBottomTabStackNavigator", {
-      screen: "PhotoLibrary",
-      params: { fromGroupPhotos: true },
-    } );
+    navigation.navigate( "PhotoLibrary", { fromGroupPhotos: true } );
   }, [navigation] );
 
   const renderItem: ListRenderItem<GroupPhotosListItem> = useCallback( ( { item } ) => {
@@ -208,7 +205,7 @@ const GroupPhotos = ( {
   };
 
   return (
-    <BottomInsetViewWrapper>
+    <SharedStackBottomInsetViewWrapper>
       <CustomFlashList
         ListHeaderComponent={headerComponent}
         contentContainerStyle={flashListStyle}
@@ -330,7 +327,7 @@ const GroupPhotos = ( {
           loading={isCreatingObservations}
         />
       </View>
-    </BottomInsetViewWrapper>
+    </SharedStackBottomInsetViewWrapper>
   );
 };
 

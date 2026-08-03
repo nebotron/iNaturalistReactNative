@@ -33,10 +33,11 @@ describe( "useResumeGroupPhotos", () => {
 
     renderHook( () => useResumeGroupPhotos() );
 
-    expect( mockNavigate ).toHaveBeenCalledWith(
-      "NoBottomTabStackNavigator",
-      { screen: "GroupPhotos" },
-    );
+    // Resumes inside the My Observations tab so the import keeps the tab bar
+    expect( mockNavigate ).toHaveBeenCalledWith( "TabNavigator", {
+      screen: "ObservationsTab",
+      params: { screen: "GroupPhotos" },
+    } );
   } );
 
   it( "does not navigate when there is no saved progress", () => {
@@ -76,9 +77,10 @@ describe( "useResumeGroupPhotos", () => {
     expect( mockNavigate ).not.toHaveBeenCalled();
 
     finishHydration();
-    expect( mockNavigate ).toHaveBeenCalledWith(
-      "NoBottomTabStackNavigator",
-      { screen: "GroupPhotos" },
-    );
+    // Resumes inside the My Observations tab so the import keeps the tab bar
+    expect( mockNavigate ).toHaveBeenCalledWith( "TabNavigator", {
+      screen: "ObservationsTab",
+      params: { screen: "GroupPhotos" },
+    } );
   } );
 } );

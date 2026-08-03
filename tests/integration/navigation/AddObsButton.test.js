@@ -3,18 +3,21 @@ import { screen, userEvent } from "@testing-library/react-native";
 import AddObsButton from "components/AddObsBottomSheet/AddObsButton";
 import i18next from "i18next";
 import React from "react";
+import useStore from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 
 const actor = userEvent.setup();
 
 const mockDispatch = jest.fn();
+const mockNavigate = jest.fn();
 jest.mock( "@react-navigation/native", () => {
   const actualNav = jest.requireActual( "@react-navigation/native" );
   return {
     ...actualNav,
     useNavigation: () => ( {
       dispatch: mockDispatch,
+      navigate: mockNavigate,
     } ),
   };
 } );
@@ -35,6 +38,14 @@ const resetNavigation = ( name, params ) => ( {
   },
   type: "RESET",
 } );
+
+// The photo importer lives in the tab stack so it keeps the bottom tab bar
+const expectNavigationToImporter = ( name, params ) => {
+  expect( mockNavigate ).toHaveBeenCalledWith( "TabNavigator", {
+    screen: "ObservationsTab",
+    params: { screen: name, params },
+  } );
+};
 
 beforeAll( ( ) => {
   jest.useFakeTimers( );
@@ -86,15 +97,22 @@ describe( "with advanced user layout", ( ) => {
     setStoreStateLayout( {
       isAllAddObsOptionsMode: true,
     } );
+    useStore.setState( { groupedPhotos: [] } );
   } );
 
   it( "navigates user to the photo importer", async ( ) => {
     renderComponent( <AddObsButton /> );
     await regularPress( );
 
-    expect( mockDispatch ).toHaveBeenCalledWith(
-      resetNavigation( "PhotoLibrary", { previousScreen: null } ),
-    );
+    expectNavigationToImporter( "PhotoLibrary", { previousScreen: null } );
+  } );
+
+  it( "returns the user to an import they left rather than starting over", async ( ) => {
+    useStore.setState( { groupedPhotos: [{ photos: [{ image: { uri: "file:///a.jpg" } }] }] } );
+    renderComponent( <AddObsButton /> );
+    await regularPress( );
+
+    expectNavigationToImporter( "GroupPhotos", { previousScreen: null } );
   } );
 
   it( "opens AddObsBottomSheet on long press", async ( ) => {
