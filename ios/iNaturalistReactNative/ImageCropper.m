@@ -658,6 +658,13 @@ RCT_EXPORT_METHOD( exportPHAsset
 
   __block void ( ^attemptExport )( NSInteger );
   attemptExport = ^( NSInteger attemptNumber ) {
+    // writeDataForAssetResource refuses to write to a path that already
+    // exists, and reports that refusal as the same opaque "PHPhotosErrorDomain
+    // error -1" a failed iCloud fetch gives. A first attempt that fails partway
+    // leaves its partial file behind, so every retry after it was failing on
+    // the leftover rather than retrying the download — which is why the app log
+    // held 158 export failures and not one "Exported after N attempt(s)".
+    [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
     [[PHAssetResourceManager defaultManager]
       writeDataForAssetResource:photoResource
       toFile:[NSURL fileURLWithPath:dest]
@@ -672,8 +679,11 @@ RCT_EXPORT_METHOD( exportPHAsset
           return;
         }
         if ( attemptNumber + 1 >= maxAttempts ) {
-          NSString *message = [NSString stringWithFormat:@"%@ (after %ld attempt(s))",
-            error.localizedDescription, ( long )( attemptNumber + 1 )];
+          // localizedDescription for these is always the same opaque sentence,
+          // so carry the domain and code that identify which failure it was.
+          NSString *message = [NSString stringWithFormat:@"%@ [%@ %ld] (after %ld attempt(s))",
+            error.localizedDescription, error.domain, ( long )error.code,
+            ( long )( attemptNumber + 1 )];
           reject( @"EXPORT_FAILED", message, error );
           attemptExport = nil;
           return;
