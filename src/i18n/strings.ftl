@@ -1451,15 +1451,15 @@ Source-List = <0>(Source List: </0><1>{ $source }</1><0>)</0>
 Species = Species
 Species-I-havent-observed = Species I haven't observed
 Species-View = Species View
+Species-with-the-fewest-observations-on-iNaturalist-appear-first = Species with the fewest observations on iNaturalist appear first
 Species-with-the-least-observations-appear-first = Species with the least observations appear first
 Species-with-the-most-observations-appear-first = Species with the most observations appear first
-Species-with-the-fewest-observations-on-iNaturalist-appear-first = Species with the fewest observations on iNaturalist appear first
-Species-you-observed-most-recently-appear-first = Species you observed most recently appear first
 SPECIES-WITHOUT-NUMBER =
     { $count ->
         [one] SPECIES
        *[other] SPECIES
     }
+Species-you-observed-most-recently-appear-first = Species you observed most recently appear first
 # Label for the standard map type
 Standard--map-type = Standard
 # Placeholder text for the start location input in the Wildlife Hotspots tool
