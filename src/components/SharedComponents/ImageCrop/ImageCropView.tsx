@@ -71,6 +71,9 @@ const styles = StyleSheet.create( {
     borderWidth: 1,
     position: "absolute",
   },
+  hidden: {
+    opacity: 0,
+  },
   toolbar: {
     minHeight: TOOLBAR_HEIGHT,
   },
@@ -126,6 +129,17 @@ const ImageCropView = ( {
   const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
   const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
   const brightness = stopsToGain( brightnessStops );
+
+  // The underlying <Image> keeps painting the previous photo's pixels until the
+  // new file decodes, while the new photo's crop transform is applied right
+  // away -- so advancing a bulk crop would otherwise show the old photo framed
+  // in the wrong position. Track which uri has actually loaded and keep the
+  // zoom layer invisible (but mounted, so layout and the transform still apply)
+  // until then, showing a spinner instead. onError counts as loaded so a photo
+  // that can't be decoded doesn't spin forever.
+  const [loadedUri, setLoadedUri] = useState<string | null>( null );
+  const imageReady = loadedUri === sourceUri;
+  const handleImageLoad = useCallback( ( ) => setLoadedUri( sourceUri ), [sourceUri] );
 
   // Load any previously-saved brightness for this photo so the label
   // round-trips; otherwise reset to neutral for a new photo.
@@ -430,7 +444,7 @@ const ImageCropView = ( {
         }}
       >
         {cropAreaHeight > 0 && (
-          <View style={styles.zoomLayer}>
+          <View style={[styles.zoomLayer, !imageReady && styles.hidden]}>
             <CustomImageZoom
               uri={sourceUri}
               resetKey={sourceUri}
@@ -442,12 +456,20 @@ const ImageCropView = ( {
               brightness={brightness}
               testID={`ImageCropView.${sourceUri}`}
               onInteractionEnd={updateDownsizeStatus}
+              onLoad={handleImageLoad}
+              onError={handleImageLoad}
               onScaleChange={handleScaleChange}
             />
           </View>
         )}
 
-        {boxSize > 0 && (
+        {!imageReady && (
+          <View style={styles.zoomLayer} className="items-center justify-center">
+            <ActivityIndicator color={colors.white} />
+          </View>
+        )}
+
+        {imageReady && boxSize > 0 && (
           <>
             <View pointerEvents="none" style={[styles.dim, dimTopStyle]} />
             <View pointerEvents="none" style={[styles.dim, dimBottomStyle]} />

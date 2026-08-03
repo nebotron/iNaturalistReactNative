@@ -47,6 +47,8 @@ interface Props {
   onLongPress?: () => void;
   onInteractionEnd?: () => void;
   onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
+  onLoad?: () => void;
+  onError?: () => void;
   onScaleChange?: ( scale: number ) => void;
   onSwipeToClose?: () => void;
 }
@@ -69,6 +71,8 @@ const CustomImageZoom = ( {
   onLongPress,
   onInteractionEnd,
   onImageDimensionsChange,
+  onLoad,
+  onError,
   onScaleChange,
   onSwipeToClose,
 }: Props ): Node => {
@@ -155,6 +159,8 @@ const CustomImageZoom = ( {
       brightness={brightness}
       onLongPress={onLongPress}
       onImageDimensionsChange={onImageDimensionsChange}
+      onLoad={onLoad}
+      onError={onError}
       onScaleChange={onScaleChange}
     />
   );

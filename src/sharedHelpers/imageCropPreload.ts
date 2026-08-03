@@ -31,6 +31,10 @@ export async function loadImageData(
   if ( !size ) {
     return null;
   }
+  // Warm React Native's image pipeline for the file the cropper is about to
+  // display, so its <Image> doesn't start a cold read + decode of a full-size
+  // photo at the moment we show it. Fire-and-forget: it can only save time.
+  RNImage.prefetch?.( resolvedUri )?.catch?.( ( ) => {} );
   const crop = existingSavedCrop
     ?? await getCropForUri( imageUri, resolvedUri, size.w, size.h );
   return { localUri: resolvedUri, size, crop };

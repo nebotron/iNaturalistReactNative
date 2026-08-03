@@ -48,7 +48,7 @@ type Route = RouteProp<SharedStackParamList, "ImageCropEditor">;
 
 // How many upcoming photos in a bulk crop to preload ahead of the one
 // currently shown.
-const PRELOAD_LOOKAHEAD = 2;
+const PRELOAD_LOOKAHEAD = 3;
 
 const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
@@ -223,22 +223,28 @@ const ImageCropEditor = ( ) => {
   // span dozens of photos, and preloading them all wastes work on photos the
   // user may delete or never reach. Advancing drops one uri from the queue and
   // re-runs this, so the lookahead slides forward as the user advances.
-  // Deferred past interactions so the burst doesn't contend with the screen
-  // transition animation or painting the current image.
+  // The immediately-next photo is started right away, because how long the
+  // spinner sits between photos is exactly how much of its load is still
+  // outstanding when the user taps the checkmark. The rest of the lookahead is
+  // deferred past interactions so the burst doesn't contend with painting the
+  // current image.
   useEffect( ( ) => {
     if ( !pendingImageUris.length || context !== "groupPhotos" ) {
       return ( ) => {};
     }
-    const handle = InteractionManager.runAfterInteractions( ( ) => {
-      for ( const uri of pendingImageUris.slice( 0, PRELOAD_LOOKAHEAD ) ) {
-        if ( !preloadedUrisRef.current.has( uri ) ) {
-          preloadedUrisRef.current.add( uri );
-          const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, uri );
-          const cropSourceUri = groupedPhoto?.image.cropOriginalUri || uri;
-          const existingSavedCrop = groupedPhoto?.image.crop ?? null;
-          enqueuePreload( uri, cropSourceUri, existingSavedCrop );
-        }
+    const preload = ( uri: string ) => {
+      if ( preloadedUrisRef.current.has( uri ) ) {
+        return;
       }
+      preloadedUrisRef.current.add( uri );
+      const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, uri );
+      const cropSourceUri = groupedPhoto?.image.cropOriginalUri || uri;
+      const existingSavedCrop = groupedPhoto?.image.crop ?? null;
+      enqueuePreload( uri, cropSourceUri, existingSavedCrop );
+    };
+    preload( pendingImageUris[0] );
+    const handle = InteractionManager.runAfterInteractions( ( ) => {
+      pendingImageUris.slice( 1, PRELOAD_LOOKAHEAD ).forEach( preload );
     } );
     return ( ) => handle.cancel( );
   }, [context, groupedPhotos, pendingImageUris] );
