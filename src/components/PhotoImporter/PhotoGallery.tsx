@@ -31,6 +31,7 @@ import {
   recordUploadedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import { log } from "sharedHelpers/logger";
 import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
@@ -44,6 +45,8 @@ interface Props {
 }
 
 const { useRealm } = RealmContext;
+
+const logger = log.extend( "PhotoGallery" );
 
 const PAGE_SIZE = 60;
 
@@ -79,7 +82,7 @@ const PhotoGallery = ( {
   const [selectedUris, setSelectedUris] = useState<Set<string>>( new Set( ) );
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
   const [hideImported, setHideImported] = useState( true );
-  const [importing, setImporting] = useState( false );
+  const [importingCount, setImportingCount] = useState( 0 );
   const isFetchingRef = useRef( false );
   const importingRef = useRef( false );
   // Photos the user removed from a Group Photos import previously (see
@@ -175,16 +178,26 @@ const PhotoGallery = ( {
   // imports at all and the check looks dead rather than merely slow.
   const handleDone = useCallback( async ( ) => {
     if ( importingRef.current ) {
+      logger.info( "Done tapped while an import was already running; ignoring" );
       return;
     }
     const selected = photos.filter( node => selectedUris.has( getSelectionKey( node ) ) );
     importingRef.current = true;
-    setImporting( true );
+    setImportingCount( selected.length );
+    // Nothing else logs the tap itself, so a slow import was indistinguishable
+    // in the logs from a tap that never registered — the gap before the first
+    // copy error was all we had to go on. Bracket the import so the next
+    // report can be answered from the logs alone.
+    logger.info( `Done tapped: importing ${selected.length} selected photo(s)` );
+    const startedAt = Date.now( );
     try {
       await onDone( selected );
+      logger.info(
+        `Import of ${selected.length} photo(s) settled in ${Date.now( ) - startedAt}ms`,
+      );
     } finally {
       importingRef.current = false;
-      setImporting( false );
+      setImportingCount( 0 );
     }
   }, [photos, selectedUris, onDone] );
 
@@ -339,6 +352,7 @@ const PhotoGallery = ( {
   }
 
   const selectedCount = selectedUris.size;
+  const importing = importingCount > 0;
 
   return (
     <View className="flex-1">
@@ -387,26 +401,15 @@ const PhotoGallery = ( {
           color={colors.darkGray}
           testID="PhotoGallery.markAsSaved"
         />
-        {importing
-          ? (
-            <View className="w-[44px] h-[44px] justify-center items-center">
-              <ActivityIndicator
-                color={colors.inatGreen}
-                testID="PhotoGallery.importing"
-              />
-            </View>
-          )
-          : (
-            <INatIconButton
-              icon="checkmark"
-              onPress={handleDone}
-              accessibilityLabel={t( "DONE" )}
-              disabled={selectedCount === 0}
-              size={22}
-              color={colors.inatGreen}
-              testID="PhotoGallery.done"
-            />
-          )}
+        <INatIconButton
+          icon="checkmark"
+          onPress={handleDone}
+          accessibilityLabel={t( "DONE" )}
+          disabled={selectedCount === 0 || importing}
+          size={22}
+          color={colors.inatGreen}
+          testID="PhotoGallery.done"
+        />
       </View>
       <DevicePhotoGrid
         items={galleryItems}
@@ -418,6 +421,23 @@ const PhotoGallery = ( {
         onEndReached={loadMore}
         extraData={{ selectedUris, importedUris }}
       />
+      {/* Swapping the small header check for an equally small spinner was too
+          easy to miss on an import that runs for tens of seconds, which is the
+          whole window in which the screen looks dead. Cover the grid instead,
+          so the wait is unmistakable and taps can't land on the photos
+          underneath. */}
+      {importing && (
+        <View
+          className="absolute inset-0 justify-center items-center bg-black/60"
+          testID="PhotoGallery.importingOverlay"
+        >
+          <ActivityIndicator size="large" color={colors.white} />
+          { /* eslint-disable-next-line react-native/no-inline-styles */ }
+          <Text style={{ marginTop: 12, color: colors.white }}>
+            {t( "Importing-X-photos", { count: importingCount } )}
+          </Text>
+        </View>
+      )}
     </View>
   );
 };

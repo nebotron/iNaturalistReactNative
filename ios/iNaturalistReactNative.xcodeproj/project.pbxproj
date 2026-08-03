@@ -384,7 +384,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\n\n/bin/sh -c \"\\\"$WITH_ENVIRONMENT\\\" \\\"$REACT_NATIVE_XCODE\\\"\"\n";
+			shellScript = "set -e\n\nWITH_ENVIRONMENT=\"$REACT_NATIVE_PATH/scripts/xcode/with-environment.sh\"\nREACT_NATIVE_XCODE=\"$REACT_NATIVE_PATH/scripts/react-native-xcode.sh\"\nWRITE_APP_COMMIT=\"$SRCROOT/../scripts/writeAppCommit.js\"\n\n# Stamp the commit into the bundle on every build, not just on npm install.\n# A stale stamp makes remote log lines name code that is not what is running,\n# which is worse than no stamp at all. Never fail the build over it.\n/bin/sh -c \"\\\"$WITH_ENVIRONMENT\\\" node \\\"$WRITE_APP_COMMIT\\\"\" || echo \"warning: could not stamp app commit\"\n\n/bin/sh -c \"\\\"$WITH_ENVIRONMENT\\\" \\\"$REACT_NATIVE_XCODE\\\"\"\n";
 		};
 		25ED5682477FA4EE576828CE /* [CP] Check Pods Manifest.lock */ = {
 			isa = PBXShellScriptBuildPhase;

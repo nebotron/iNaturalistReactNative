@@ -715,6 +715,12 @@ IMPORT-X-OBSERVATIONS =
         [one] 1 OBSERVATION
        *[other] { $count } OBSERVATIONS
     }
+# Progress message shown while selected photos are copied off the device
+Importing-X-photos =
+    Importing { $count ->
+        [one] 1 photo
+       *[other] { $count } photos
+    }…
 # Title of screen asking for permission to access location
 Improve-suggestions-by-using-your-location = Improve suggestions by using your location
 IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION = IMPROVE THESE SUGGESTIONS BY USING YOUR LOCATION

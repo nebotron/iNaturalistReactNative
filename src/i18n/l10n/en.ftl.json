@@ -404,6 +404,7 @@
   "Ignore-notifications": "Ignore notifications",
   "Ignoring-location": "Ignoring location",
   "IMPORT-X-OBSERVATIONS": "IMPORT { $count ->\n  [one] 1 OBSERVATION\n *[other] { $count } OBSERVATIONS\n}",
+  "Importing-X-photos": "Importing { $count ->\n  [one] 1 photo\n *[other] { $count } photos\n}…",
   "Improve-suggestions-by-using-your-location": "Improve suggestions by using your location",
   "IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION": "IMPROVE THESE SUGGESTIONS BY USING YOUR LOCATION",
   "improving--identification": "Improving",
