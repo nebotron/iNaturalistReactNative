@@ -10,7 +10,10 @@ the line came from), `message`, any `extra` fields, and `stack` for errors. That
 log is the only view of what the app does on the user's phone — this skill turns
 it into fixes.
 
-Reads need credentials from `.env`; writes from the app don't.
+`scripts/app_log.py` reads `CROP_LOG_FIREBASE_URL` from `.env`. Where there is
+no `.env` (a fresh cloud container), export the database URL that
+`scripts/evaluate_subject_detector.py` carries as its default and everything
+below works — the log database serves reads and deletes without credentials.
 
 ## Steps
 
