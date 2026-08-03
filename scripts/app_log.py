@@ -91,7 +91,9 @@ def fetch_entries( base_url: str, limit: int | None ) -> list[dict]:
 def shape( message: str ) -> str:
     s = re.sub( r"https?://\S+", "<url>", message )
     s = re.sub( r"\b[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}\b", "<uuid>", s, flags=re.I )
-    s = re.sub( r"\b\d+(\.\d+)?\b", "<n>", s )
+    # No word boundaries: durations and sizes are written glued to their unit
+    # ("8595ms"), and a trailing \b would leave every one of those distinct.
+    s = re.sub( r"\d+(\.\d+)?", "<n>", s )
     return re.sub( r"\s+", " ", s ).strip()[:200]
 
 
