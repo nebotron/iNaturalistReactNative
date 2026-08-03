@@ -52,7 +52,7 @@ function isEmptyGridItem( item: GroupPhotosListItem ): item is { empty: true } {
 interface Props {
   combinePhotos: ( ) => void;
   clearSelection: ( ) => void;
-  duplicatePhotos: ( ) => void | Promise<void>;
+  duplicateItem: ( item: Item ) => void;
   flashListRef?: React.RefObject<FlashListRef<GroupPhotosListItem> | null>;
   groupedPhotos: Item[];
   isCreatingObservations?: boolean;
@@ -63,19 +63,18 @@ interface Props {
     viewableItems: ViewToken<GroupPhotosListItem>[];
     changed: ViewToken<GroupPhotosListItem>[];
   } ) => void;
-  removePhotos: ( ) => void;
+  removeItem: ( item: Item ) => void;
   selectedObservations: Item[];
-  selectedMediaCount: number;
   selectAllPhotos: ( ) => void;
   selectObservationPhotos: ( isSelected: boolean, item: Item ) => void;
-  separatePhotos: ( ) => void;
+  separateItem: ( item: Item ) => void;
   totalPhotos: number;
 }
 
 const GroupPhotos = ( {
   combinePhotos,
   clearSelection,
-  duplicatePhotos,
+  duplicateItem,
   flashListRef,
   groupedPhotos,
   isCreatingObservations,
@@ -83,12 +82,11 @@ const GroupPhotos = ( {
   navBasedOnUserSettings,
   onScroll,
   onViewableItemsChanged,
-  removePhotos,
+  removeItem,
   selectedObservations,
-  selectedMediaCount,
   selectAllPhotos,
   selectObservationPhotos,
-  separatePhotos,
+  separateItem,
   totalPhotos,
 }: Props ) => {
   const { t } = useTranslation( );
@@ -106,16 +104,12 @@ const GroupPhotos = ( {
 
   const noObsSelected = selectedObservations.length === 0;
   const oneObsSelected = selectedObservations.length === 1;
-  const obsWithMultiplePhotosSelected = selectedObservations.some(
-    obs => ( obs.photos?.length || 0 ) > 1,
-  );
   const selectedPhotoUris = useMemo(
     ( ) => flattenAndOrderSelectedPhotos( selectedObservations )
       .map( photo => photo.image.uri ),
     [selectedObservations],
   );
   const canCropSelectedPhotos = selectedPhotoUris.length > 0;
-  const canDuplicateSelectedPhotos = selectedMediaCount > 0;
 
   // Preload the first selected image as soon as it's selected so its data is
   // usually ready by the time the user taps crop. The remaining images are
@@ -158,12 +152,24 @@ const GroupPhotos = ( {
 
   const renderImage = useCallback( ( item: Item ) => (
     <GroupPhotoImage
+      duplicateItem={duplicateItem}
+      isDuplicatingPhotos={isDuplicatingPhotos}
       item={item}
+      removeItem={removeItem}
       selectedObservations={selectedObservations}
       selectObservationPhotos={selectObservationPhotos}
+      separateItem={separateItem}
       style={gridItemStyle}
     />
-  ), [gridItemStyle, selectedObservations, selectObservationPhotos] );
+  ), [
+    duplicateItem,
+    gridItemStyle,
+    isDuplicatingPhotos,
+    removeItem,
+    selectedObservations,
+    selectObservationPhotos,
+    separateItem,
+  ] );
 
   const addPhotos = useCallback( () => {
     navigation.navigate( "PhotoLibrary", { fromGroupPhotos: true } );
@@ -271,49 +277,6 @@ const GroupPhotos = ( {
                 accessibilityLabel={t( "Combine-Photos" )}
                 disabled={noObsSelected || oneObsSelected}
                 onPress={combinePhotos}
-              />
-            </View>
-            <View className="flex-1 items-center">
-              <INatIconButton
-                icon="separate"
-                mode="contained"
-                size={26}
-                width={58}
-                height={58}
-                color={colors.white}
-                backgroundColor={colors.darkGray}
-                accessibilityLabel={t( "Separate-Photos" )}
-                disabled={!obsWithMultiplePhotosSelected}
-                onPress={separatePhotos}
-              />
-            </View>
-            <View className="flex-1 items-center">
-              <INatIconButton
-                icon="copy"
-                mode="contained"
-                size={26}
-                width={58}
-                height={58}
-                color={colors.white}
-                backgroundColor={colors.darkGray}
-                accessibilityLabel={t( "Duplicate-Photos" )}
-                disabled={!canDuplicateSelectedPhotos || isDuplicatingPhotos}
-                onPress={duplicatePhotos}
-                testID="GroupPhotos.duplicate"
-              />
-            </View>
-            <View className="flex-1 items-center">
-              <INatIconButton
-                icon="trash-outline"
-                mode="contained"
-                size={26}
-                width={58}
-                height={58}
-                color={colors.white}
-                backgroundColor={colors.warningRed}
-                accessibilityLabel={t( "Remove-Photos" )}
-                disabled={noObsSelected}
-                onPress={removePhotos}
               />
             </View>
           </View>

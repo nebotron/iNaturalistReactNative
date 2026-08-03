@@ -215,10 +215,10 @@ const GroupPhotosContainer = ( ): Node => {
     setSelectedIndices( [] );
   };
 
-  const separatePhotos = () => {
+  const separateObservations = observations => {
     let maxCombinedItems = 0;
 
-    selectedObservations.forEach( obs => {
+    observations.forEach( obs => {
       // Count photos + sound as separate items for the threshold check
       const numItems = ( obs.photos?.length || 0 ) + ( obs.soundUri
         ? 1
@@ -233,7 +233,7 @@ const GroupPhotosContainer = ( ): Node => {
     }
 
     const separatedItems = [];
-    const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
+    const orderedPhotos = flattenAndOrderSelectedPhotos( observations );
 
     groupedPhotos.forEach( obs => {
       const filteredGroupedPhotos = obs.photos?.filter(
@@ -263,22 +263,20 @@ const GroupPhotosContainer = ( ): Node => {
     setSelectedIndices( [] );
   };
 
-  const selectedMediaCount = selectedObservations.reduce(
-    ( count, obs ) => count + ( obs.photos?.length || 0 ),
-    0,
-  );
-
-  const duplicatePhotos = async ( ) => {
-    if ( selectedObservations.length === 0 ) {
+  const duplicateObservations = async observations => {
+    if ( observations.length === 0 ) {
       return;
     }
 
     setIsDuplicatingPhotos( true );
     try {
-      const duplicatedGroups = await duplicateGroupedMediaGroups( selectedObservations );
+      const duplicatedGroups = await duplicateGroupedMediaGroups( observations );
       const indexToDuplicate = {};
-      selectedIndices.forEach( ( originalIndex, i ) => {
-        indexToDuplicate[originalIndex] = duplicatedGroups[i];
+      observations.forEach( ( obs, i ) => {
+        const originalIndex = groupedPhotos.indexOf( obs );
+        if ( originalIndex >= 0 ) {
+          indexToDuplicate[originalIndex] = duplicatedGroups[i];
+        }
       } );
       const newGroupedPhotos = [];
       groupedPhotos.forEach( ( group, index ) => {
@@ -294,9 +292,9 @@ const GroupPhotosContainer = ( ): Node => {
     }
   };
 
-  const removePhotos = () => {
+  const removeObservations = observations => {
     const removedFromGroup = [];
-    const orderedPhotos = flattenAndOrderSelectedPhotos( selectedObservations );
+    const orderedPhotos = flattenAndOrderSelectedPhotos( observations );
 
     // Stage the removed photos' device URIs for deletion rather than deleting
     // here: the Group Photos screen is presented modally, and iOS can't present
@@ -319,7 +317,7 @@ const GroupPhotosContainer = ( ): Node => {
 
     groupedPhotos.forEach( obs => {
       if ( obs.soundUri !== undefined ) {
-        if ( !selectedObservations.includes( obs ) ) {
+        if ( !observations.includes( obs ) ) {
           removedFromGroup.push( obs );
         }
         return;
@@ -341,6 +339,12 @@ const GroupPhotosContainer = ( ): Node => {
     setGroupedPhotos( removedFromGroup );
     setSelectedIndices( [] );
   };
+
+  // The separate, duplicate, and remove buttons live on each photo, so they
+  // always act on the photo they're drawn on rather than on the selection.
+  const separateItem = item => separateObservations( [item] );
+  const duplicateItem = item => duplicateObservations( [item] );
+  const removeItem = item => removeObservations( [item] );
 
   const navBasedOnUserSettings = async ( ) => {
     // Crops confirmed in the bulk cropper finish writing in the background so
@@ -439,19 +443,18 @@ const GroupPhotosContainer = ( ): Node => {
     <GroupPhotos
       combinePhotos={combinePhotos}
       clearSelection={() => setSelectedIndices( [] )}
-      duplicatePhotos={duplicatePhotos}
+      duplicateItem={duplicateItem}
       flashListRef={flashListRef}
       groupedPhotos={groupedPhotos}
       isDuplicatingPhotos={isDuplicatingPhotos}
       navBasedOnUserSettings={navBasedOnUserSettings}
       onScroll={onScroll}
       onViewableItemsChanged={onViewableItemsChanged}
-      removePhotos={removePhotos}
-      selectedMediaCount={selectedMediaCount}
+      removeItem={removeItem}
       selectAllPhotos={selectAllPhotos}
       selectObservationPhotos={selectObservationPhotos}
       selectedObservations={selectedObservations}
-      separatePhotos={separatePhotos}
+      separateItem={separateItem}
       totalPhotos={totalPhotos}
     />
   );

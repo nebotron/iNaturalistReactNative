@@ -1,5 +1,5 @@
 import DevicePhotoImage from "components/PhotoImporter/DevicePhotoImage";
-import { INatIcon } from "components/SharedComponents";
+import { INatIcon, INatIconButton } from "components/SharedComponents";
 import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import { Pressable, View } from "components/styledComponents";
@@ -31,16 +31,24 @@ interface Item {
 }
 
 interface Props {
+  duplicateItem: ( item: Item ) => void;
+  isDuplicatingPhotos?: boolean;
   item: Item;
+  removeItem: ( item: Item ) => void;
   selectedObservations: Item[];
   selectObservationPhotos: ( isSelected: boolean, item: Item ) => void;
+  separateItem: ( item: Item ) => void;
   style?: ViewStyle;
 }
 
 const GroupPhotoImage = ( {
+  duplicateItem,
+  isDuplicatingPhotos,
   item,
+  removeItem,
   selectedObservations,
   selectObservationPhotos,
+  separateItem,
   style,
 }: Props ) => {
   const { t } = useTranslation( );
@@ -50,6 +58,57 @@ const GroupPhotoImage = ( {
   const handlePress = ( ) => selectObservationPhotos( isSelected, item );
   const mediaCount = item.photos?.length || 0;
   const hasDuplicateUpload = item.photos?.some( photo => photo.isDuplicateUpload );
+
+  // Each grid cell carries its own separate/duplicate/remove buttons so the
+  // action always applies to the photo it's drawn on, not to the selection.
+  const separableItemCount = mediaCount + ( item.soundUri
+    ? 1
+    : 0 );
+  const actionButtons = (
+    <View className="absolute bottom-2 left-2 flex-row gap-2 z-20">
+      {separableItemCount > 1 && (
+        <INatIconButton
+          icon="separate"
+          mode="contained"
+          size={20}
+          width={44}
+          height={44}
+          color={colors.white}
+          backgroundColor={colors.darkGray}
+          accessibilityLabel={t( "Separate-Photos" )}
+          onPress={( ) => separateItem( item )}
+          testID={`GroupPhotos.separate.${mediaUri}`}
+        />
+      )}
+      {mediaCount > 0 && (
+        <INatIconButton
+          icon="copy"
+          mode="contained"
+          size={20}
+          width={44}
+          height={44}
+          color={colors.white}
+          backgroundColor={colors.darkGray}
+          accessibilityLabel={t( "Duplicate-Photos" )}
+          disabled={isDuplicatingPhotos}
+          onPress={( ) => duplicateItem( item )}
+          testID={`GroupPhotos.duplicate.${mediaUri}`}
+        />
+      )}
+      <INatIconButton
+        icon="trash-outline"
+        mode="contained"
+        size={20}
+        width={44}
+        height={44}
+        color={colors.white}
+        backgroundColor={colors.warningRed}
+        accessibilityLabel={t( "Remove-Photos" )}
+        onPress={( ) => removeItem( item )}
+        testID={`GroupPhotos.remove.${mediaUri}`}
+      />
+    </View>
+  );
 
   const cellWidth = typeof style?.width === "number"
     ? style.width
@@ -63,18 +122,21 @@ const GroupPhotoImage = ( {
 
   if ( item.soundUri ) {
     return (
-      <Pressable
-        accessibilityRole="button"
-        onPress={handlePress}
-        testID={`GroupPhotos.${mediaUri}`}
-      >
-        <View
-          className="items-center justify-center bg-lightGray"
-          style={[style, isSelected && styles.selectedBorder]}
+      <View className="relative">
+        <Pressable
+          accessibilityRole="button"
+          onPress={handlePress}
+          testID={`GroupPhotos.${mediaUri}`}
         >
-          <INatIcon name="sound" size={32} color={colors.darkGray} />
-        </View>
-      </Pressable>
+          <View
+            className="items-center justify-center bg-lightGray"
+            style={[style, isSelected && styles.selectedBorder]}
+          >
+            <INatIcon name="sound" size={32} color={colors.darkGray} />
+          </View>
+        </Pressable>
+        {actionButtons}
+      </View>
     );
   }
 
@@ -97,9 +159,10 @@ const GroupPhotoImage = ( {
           accessibilityLabel={t( "Duplicate-photo-indicator" )}
           className="absolute top-2 left-2 z-10"
           size={20}
-          testID={`GroupPhotos.duplicate.${mediaUri}`}
+          testID={`GroupPhotos.duplicateUpload.${mediaUri}`}
         />
       )}
+      {actionButtons}
     </DevicePhotoImage>
   );
 };

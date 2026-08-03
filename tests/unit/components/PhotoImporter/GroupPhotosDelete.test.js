@@ -26,8 +26,7 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
     } );
     renderComponent( <GroupPhotosContainer /> );
 
-    fireEvent.press( screen.getByTestId( "GroupPhotos.file:///local_1.jpg" ) );
-    fireEvent.press( screen.getByLabelText( /Remove Photos/ ) );
+    fireEvent.press( screen.getByTestId( "GroupPhotos.remove.file:///local_1.jpg" ) );
 
     expect( useStore.getState( ).pendingGroupPhotoDeletionUris ).toContain( "ph://DEVICE-1" );
   } );
