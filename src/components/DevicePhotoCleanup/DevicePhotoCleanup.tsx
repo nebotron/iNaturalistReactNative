@@ -309,7 +309,10 @@ const DevicePhotoCleanup = ( ) => {
                 <DevicePhotoImage
                   key={uri}
                   uri={uri}
-                  cellWidth={THUMB_SIZE}
+                  // Sized like a grid cell rather than like this strip so
+                  // these are cache hits on the thumbnails the grid behind the
+                  // sheet already generated, instead of 30 fresh ones.
+                  cellWidth={gridItemWidth}
                   style={styles.thumb}
                 />
               ) )}
