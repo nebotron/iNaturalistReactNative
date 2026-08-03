@@ -156,6 +156,7 @@ export interface ApiTaxon {
   iconic_taxon_name?: string;
   id?: number;
   name?: string;
+  observations_count?: number;
   preferred_common_name?: string;
   rank_level?: number;
   taxonPhotos?: { photo: ApiPhoto }[];

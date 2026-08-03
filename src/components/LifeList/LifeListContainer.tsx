@@ -4,8 +4,9 @@ import type { ApiObservation, ApiTaxon } from "api/types";
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
 import {
   ActivityIndicator, Body1, Body4, DisplayTaxonName, Heading4, IconicTaxonChooser,
-  RotatingINatIconButton,
+  RadioButtonSheet, RotatingINatIconButton,
 } from "components/SharedComponents";
+import SortButton from "components/SharedComponents/Buttons/SortButton";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
@@ -29,14 +30,27 @@ import {
 import { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
 
+import {
+  readTaxonObservationsCounts,
+  syncTaxonObservationsCounts,
+} from "./taxonObservationsCounts";
+
 // Max number of observations the API will fetch by uuid in one request.
 const FETCH_BY_UUID_BATCH = 100;
+
+enum LIFER_SORT {
+  OBSERVED_ON_DESC = "OBSERVED_ON_DESC",
+  RAREST = "RAREST",
+}
 
 interface Lifer {
   observed_on: string | null;
   uuid: string;
   observation_photos: ApiObservation["observation_photos"];
   taxon: ApiTaxon;
+  // How many observations of this species exist on iNaturalist. Undefined
+  // until the count has been fetched at least once.
+  observationsCount?: number;
 }
 
 // Which observation is a lifer is decided entirely from the shared observation
@@ -108,6 +122,23 @@ const sortByObservedOnDesc = ( lifers: Lifer[] ): Lifer[] => lifers.sort(
   ),
 );
 
+// Species with no count yet sort last rather than looking like the rarest
+// thing the user has ever seen.
+const sortByRarest = ( lifers: Lifer[] ): Lifer[] => [...lifers].sort(
+  ( a, b ) => ( a.observationsCount ?? Number.MAX_SAFE_INTEGER )
+    - ( b.observationsCount ?? Number.MAX_SAFE_INTEGER ),
+);
+
+const withObservationsCounts = (
+  lifers: Lifer[],
+  counts: Record<number, number>,
+): Lifer[] => lifers.map( lifer => ( {
+  ...lifer,
+  observationsCount: lifer.taxon?.id
+    ? counts[lifer.taxon.id]
+    : undefined,
+} ) );
+
 // Fills in the taxon and photo for lifers we have no display data for. After a
 // first sync every lifer was seen during the pass, so this does nothing; it
 // only fires when a species' lifer changes to an older observation that wasn't
@@ -143,7 +174,10 @@ function readCachedLifers( userId: number ): Lifer[] {
       .map( observation => observation.uuid ),
   );
   return sortByObservedOnDesc(
-    Object.values( display ).filter( lifer => liferUuids.has( lifer.uuid ) ),
+    withObservationsCounts(
+      Object.values( display ).filter( lifer => liferUuids.has( lifer.uuid ) ),
+      readTaxonObservationsCounts( ),
+    ),
   );
 }
 
@@ -185,7 +219,15 @@ async function fetchLifers(
   } );
   writeLiferDisplayCache( userId, pruned );
 
-  return sortByObservedOnDesc( Object.values( pruned ) );
+  const lifers = Object.values( pruned );
+  const counts = await syncTaxonObservationsCounts(
+    [...new Set(
+      lifers.map( lifer => lifer.taxon?.id ).filter( ( id ): id is number => Boolean( id ) ),
+    )],
+    opts,
+  );
+
+  return sortByObservedOnDesc( withObservationsCounts( lifers, counts ) );
 }
 
 interface LiferGridItemProps {
@@ -242,6 +284,15 @@ const LiferGridItem = ( { item, style }: LiferGridItemProps ) => {
               {item.observed_on}
             </Body4>
           ) }
+          { typeof item.observationsCount === "number" && (
+            <Body4
+              maxFontSizeMultiplier={1.5}
+              numberOfLines={1}
+              className="text-white pb-1"
+            >
+              {t( "X-Observations", { count: item.observationsCount } )}
+            </Body4>
+          ) }
           <DisplayTaxonName
             keyBase={`LiferGridItem-DisplayTaxonName-${item.taxon?.id}`}
             taxon={item.taxon}
@@ -288,13 +339,33 @@ const LifeListContainer = ( ) => {
 
   // Empty means no filter, i.e. show every lifer
   const [iconicTaxonFilter, setIconicTaxonFilter] = useState<string[]>( [] );
+  const [sortOption, setSortOption] = useState<LIFER_SORT>( LIFER_SORT.OBSERVED_ON_DESC );
+  const [sortSheetVisible, setSortSheetVisible] = useState( false );
 
   const visibleLifers = useMemo( ( ) => {
-    if ( iconicTaxonFilter.length === 0 ) return lifers ?? [];
-    return ( lifers ?? [] ).filter(
-      lifer => iconicTaxonFilter.includes( lifer.taxon?.iconic_taxon_name?.toLowerCase( ) ?? "" ),
-    );
-  }, [iconicTaxonFilter, lifers] );
+    const filtered = iconicTaxonFilter.length === 0
+      ? ( lifers ?? [] )
+      : ( lifers ?? [] ).filter(
+        lifer => iconicTaxonFilter.includes( lifer.taxon?.iconic_taxon_name?.toLowerCase( ) ?? "" ),
+      );
+    // fetchLifers already returns them newest first
+    return sortOption === LIFER_SORT.RAREST
+      ? sortByRarest( filtered )
+      : filtered;
+  }, [iconicTaxonFilter, lifers, sortOption] );
+
+  const sortOptions = useMemo( ( ) => ( {
+    [LIFER_SORT.OBSERVED_ON_DESC]: {
+      label: t( "Most-Recent-Default" ),
+      text: t( "Species-you-observed-most-recently-appear-first" ),
+      value: LIFER_SORT.OBSERVED_ON_DESC,
+    },
+    [LIFER_SORT.RAREST]: {
+      label: t( "Rarest" ),
+      text: t( "Species-with-the-fewest-observations-on-iNaturalist-appear-first" ),
+      value: LIFER_SORT.RAREST,
+    },
+  } ), [t] );
 
   // Tapping a chosen icon again clears it, so the filter can be undone without
   // a separate control
@@ -380,6 +451,22 @@ const LifeListContainer = ( ) => {
           </View>
         )}
       />
+      <SortButton
+        onPress={( ) => setSortSheetVisible( true )}
+        accessibilityLabel={t( "Change-species-sort-order" )}
+      />
+      {sortSheetVisible && (
+        <RadioButtonSheet
+          headerText={t( "SORT-SPECIES" )}
+          radioValues={sortOptions}
+          selectedValue={sortOption}
+          confirm={optionId => {
+            setSortOption( optionId as LIFER_SORT );
+            setSortSheetVisible( false );
+          }}
+          onPressClose={( ) => setSortSheetVisible( false )}
+        />
+      )}
     </ScreenShell>
   );
 };

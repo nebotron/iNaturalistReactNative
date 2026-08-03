@@ -894,6 +894,9 @@ MOST-FAVED = MOST FAVED
 Most-faved = Most faved
 # Label for species sort order, this option is selected by default
 Most-Observed-Default = Most Observed (Default)
+# Label for the lifers sort order that puts the most recently observed
+# species first, this option is selected by default
+Most-Recent-Default = Most Recent (Default)
 # Title for section in Notifications showing notifications about observations
 # created by the viewer. Should be 16 characters or fewer or it will be ellipsized.
 MY-CONTENT--notifications = MY CONTENT
@@ -1259,6 +1262,9 @@ Ranks-ZOOSECTION = ZOOSECTION
 Ranks-Zoosection = Zoosection
 Ranks-ZOOSUBSECTION = ZOOSUBSECTION
 Ranks-Zoosubsection = Zoosubsection
+# Label for the lifers sort order that puts the species with the fewest
+# observations on iNaturalist first
+Rarest = Rarest
 Read-more-on-Wikipedia = Read more on Wikipedia
 # Help text for the button that opens the sound recorder
 Record-a-sound = Record a sound
@@ -1447,6 +1453,8 @@ Species-I-havent-observed = Species I haven't observed
 Species-View = Species View
 Species-with-the-least-observations-appear-first = Species with the least observations appear first
 Species-with-the-most-observations-appear-first = Species with the most observations appear first
+Species-with-the-fewest-observations-on-iNaturalist-appear-first = Species with the fewest observations on iNaturalist appear first
+Species-you-observed-most-recently-appear-first = Species you observed most recently appear first
 SPECIES-WITHOUT-NUMBER =
     { $count ->
         [one] SPECIES

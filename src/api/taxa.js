@@ -97,6 +97,25 @@ async function fetchTaxon(
   }
 }
 
+// Global observation counts for a batch of taxa. Deliberately does not go
+// through fetchTaxon: this can run over every species a user has seen, so it
+// asks for the two fields it needs instead of ancestors, photos and summaries.
+async function fetchTaxaObservationsCounts(
+  ids: number[],
+  opts: Object = {},
+): Promise<?Object> {
+  try {
+    const response = await inatjs.taxa.fetch( ids, {
+      fields: { id: true, observations_count: true },
+    }, opts );
+    return response?.results || [];
+  } catch ( e ) {
+    return handleError( e, {
+      context: { functionName: "fetchTaxaObservationsCounts", ids, opts },
+    } );
+  }
+}
+
 async function searchTaxa( params: Object = {}, opts: Object = {} ): Promise<?Object> {
   try {
     const searchParams = { ...PARAMS, ...params };
@@ -108,6 +127,7 @@ async function searchTaxa( params: Object = {}, opts: Object = {} ): Promise<?Ob
 }
 
 export {
+  fetchTaxaObservationsCounts,
   fetchTaxon,
   searchTaxa,
 };
