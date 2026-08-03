@@ -25,13 +25,13 @@ import React, {
   useCallback,
 } from "react";
 import {
-  NativeModules, Platform,
+  Alert, NativeModules, Platform,
 } from "react-native";
 import type { Asset } from "react-native-image-picker";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
-import { useInputImageTracking } from "sharedHooks";
+import { useInputImageTracking, useTranslation } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
 import * as uuid from "uuid";
@@ -81,6 +81,7 @@ const PhotoLibrary = ( ) => {
   const exitObservationFlow = useExitObservationFlow( );
   const realm = useRealm( );
   const { trackImagesLoaded } = useInputImageTracking( );
+  const { t } = useTranslation( );
 
   const skipGroupPhotos = params?.skipGroupPhotos ?? false;
   const fromGroupPhotos = params?.fromGroupPhotos ?? false;
@@ -252,12 +253,18 @@ const PhotoLibrary = ( ) => {
         }
       }
 
-      const sourceAssets = photoNodes.map( nodeToSourceAsset );
-      addOriginalDevicePhotoUris( getOriginalDevicePhotoUrisFromAssets( sourceAssets ) );
-
       const copiedPhotos = photoNodes.length > 0
         ? await copyImagesFromCameraRoll( photoNodes )
         : [];
+
+      // Only photos that actually copied are staged for the "delete the
+      // originals?" prompt on exit. Staging every selected photo up front
+      // offered to delete originals whose copy had failed, leaving the photo
+      // gone from the device with nothing imported to show for it.
+      addOriginalDevicePhotoUris( getOriginalDevicePhotoUrisFromAssets(
+        copiedPhotos.map( photo => photo.sourceAsset ),
+      ) );
+
       const selectedPhotos = copiedPhotos.length > 0
         ? markDuplicatePhotosFromLibrary(
           realm,
@@ -279,6 +286,20 @@ const PhotoLibrary = ( ) => {
         );
       }
       const hasPhotos = selectedPhotos.length > 0;
+
+      // Every copy failing leaves nothing to hand on, and navigating onward
+      // anyway lands the user on an empty Group Photos screen — or, coming
+      // from Group Photos, right back where they started, which is
+      // indistinguishable from the check doing nothing at all. Say what
+      // happened and stay put so the selection survives a retry.
+      if ( photoNodes.length > 0 && !hasPhotos && videoGroupItems.length === 0 ) {
+        logger.error( `Imported none of the ${photoNodes.length} selected photo(s)` );
+        Alert.alert(
+          t( "Something-went-wrong" ),
+          t( "Could-not-import-selected-photos" ),
+        );
+        return;
+      }
 
       if ( fromGroupPhotos ) {
         setGroupedPhotos( sortGroupsByTime( [
@@ -344,6 +365,7 @@ const PhotoLibrary = ( ) => {
     setGroupedPhotos,
     setPhotoImporterState,
     skipGroupPhotos,
+    t,
     trackImagesLoaded,
     updateObservations,
   ] );

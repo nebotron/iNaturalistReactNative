@@ -310,6 +310,8 @@ Copyright = Copyright
 Could-not-delete-original-photos = Could not delete the original photos from your device. This is a known iOS issue — try restarting your iPhone, then delete the photo from the Photos app.
 # Error message when no camera can be found
 Could-not-find-a-camera-on-this-device = Could not find a camera on this device
+# Error message when none of the selected photos could be copied off the device
+Could-not-import-selected-photos = None of the selected photos could be imported. If they are stored in iCloud, connect to a stronger network and try again.
 Couldnt-create-comment = Couldn't create comment
 Couldnt-create-identification-error = Couldn't create identification { $error }
 Couldnt-create-identification-unknown-error = Couldn't create identification, unknown error.
