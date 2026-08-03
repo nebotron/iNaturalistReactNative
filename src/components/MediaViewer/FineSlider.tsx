@@ -66,15 +66,17 @@ const styles = StyleSheet.create( {
 } );
 
 interface Props {
-  // Current position, 0..1.
+  // Current value, within minimumValue..maximumValue.
   value: number;
   onChange: ( value: number ) => void;
-  onComplete: ( ) => void;
+  onComplete: ( value: number ) => void;
   accessibilityLabel: string;
   disabled?: boolean;
+  minimumValue?: number;
+  maximumValue?: number;
 }
 
-// A 0..1 slider with variable-precision dragging. Tapping seeks, as with the
+// A slider with variable-precision dragging. Tapping seeks, as with the
 // stock slider; dragging away from the track vertically slows the thumb down
 // so fine adjustments are possible without shrinking the slider's range.
 const FineSlider = ( {
@@ -83,12 +85,29 @@ const FineSlider = ( {
   onComplete,
   accessibilityLabel,
   disabled = false,
+  minimumValue = 0,
+  maximumValue = 1,
 }: Props ) => {
   const [trackWidth, setTrackWidth] = useState( 0 );
   const [dragging, setDragging] = useState( false );
   const [precisionLabel, setPrecisionLabel] = useState<string | null>( null );
-  const [pos, setPos] = useState( value );
-  const posRef = useRef( value );
+
+  // The thumb is tracked as a 0..1 position along the track and converted to
+  // the caller's value range only at the edges.
+  const range = maximumValue - minimumValue;
+  const toPos = useCallback(
+    ( val: number ) => clamp01( range === 0
+      ? 0
+      : ( val - minimumValue ) / range ),
+    [minimumValue, range],
+  );
+  const toValue = useCallback(
+    ( position: number ) => minimumValue + position * range,
+    [minimumValue, range],
+  );
+
+  const [pos, setPos] = useState( ( ) => toPos( value ) );
+  const posRef = useRef( toPos( value ) );
   const lastXRef = useRef( 0 );
 
   // Follow the controlled value except while dragging, when the accumulated
@@ -96,16 +115,16 @@ const FineSlider = ( {
   // through zoom scale and would otherwise fight the drag).
   useEffect( ( ) => {
     if ( dragging ) return;
-    posRef.current = value;
-    setPos( value );
-  }, [dragging, value] );
+    posRef.current = toPos( value );
+    setPos( toPos( value ) );
+  }, [dragging, toPos, value] );
 
   const emit = useCallback( ( next: number ) => {
     const clamped = clamp01( next );
     posRef.current = clamped;
     setPos( clamped );
-    onChange( clamped );
-  }, [onChange] );
+    onChange( toValue( clamped ) );
+  }, [onChange, toValue] );
 
   const gesture = useMemo( ( ) => Gesture.Pan( )
     .enabled( !disabled && trackWidth > 0 )
@@ -127,8 +146,8 @@ const FineSlider = ( {
     .onFinalize( ( ) => {
       setDragging( false );
       setPrecisionLabel( null );
-      onComplete( );
-    } ), [disabled, emit, onComplete, trackWidth] );
+      onComplete( toValue( posRef.current ) );
+    } ), [disabled, emit, onComplete, toValue, trackWidth] );
 
   // Absolute children are laid out from the row's content edge, so this is
   // already inside the row's thumb-radius padding: the thumb centre lands on
@@ -149,7 +168,7 @@ const FineSlider = ( {
             ? 0.02
             : -0.02;
           emit( posRef.current + step );
-          onComplete( );
+          onComplete( toValue( posRef.current ) );
         }}
       >
         <View
