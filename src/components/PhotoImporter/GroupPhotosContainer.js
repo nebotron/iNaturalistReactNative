@@ -313,10 +313,9 @@ const GroupPhotosContainer = ( ): Node => {
     // Unfaved even if iOS's PHPhotoLibrary confirmation silently no-ops it.
     addRemovedGroupPhotoUris( deviceUrisToDelete );
 
-    logger.info(
-      `removePhotos: staged ${deviceUrisToDelete.length} device URI(s) `
-      + `from ${orderedPhotos.length} removed photo(s) for deletion`,
-    );
+    // No line here: this fires on every photo the user removes (317 times in
+    // five days, usually "staged 1"), and what was staged is reported again by
+    // the deletion itself, which is where a problem would actually show up.
 
     groupedPhotos.forEach( obs => {
       if ( obs.soundUri !== undefined ) {

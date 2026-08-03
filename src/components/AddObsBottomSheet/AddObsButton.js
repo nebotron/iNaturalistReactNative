@@ -12,6 +12,9 @@ import useStore, { zustandStorage } from "stores/useStore";
 
 const logger = log.extend( "AddObsButton" );
 
+// Last value reported to the metrics log, so remounts don't repeat it.
+let lastLoggedAdvancedUserMode = null;
+
 const AddObsButton = ( ): React.Node => {
   const [showBottomSheet, setShowBottomSheet] = React.useState( false );
   const [showTooltip, setShowTooltip] = React.useState( false );
@@ -111,7 +114,12 @@ const AddObsButton = ( ): React.Node => {
   React.useEffect( ( ) => {
     // don't remove this logger.info statement: it's used for internal
     // metrics. isAdvancedUser name is vestigial, changing it will make it
-    // impossible to compare with older log data
+    // impossible to compare with older log data.
+    // The effect re-runs on every mount of this button — once per return to
+    // the tab bar — which repeated the same value 341 times in five days. The
+    // metric only means anything when it changes, so only log it then.
+    if ( lastLoggedAdvancedUserMode === isAllAddObsOptionsMode ) return;
+    lastLoggedAdvancedUserMode = isAllAddObsOptionsMode;
     logger.info( `isAdvancedUser: ${isAllAddObsOptionsMode}` );
   }, [isAllAddObsOptionsMode] );
 

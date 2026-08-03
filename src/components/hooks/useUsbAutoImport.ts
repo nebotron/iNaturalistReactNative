@@ -139,12 +139,15 @@ const useUsbAutoImport = ( ) => {
   }, [onboardingShown, logDiag] );
 
   useEffect( ( ) => {
-    // Report why the hook does or doesn't engage. This runs before the guard
-    // below, so it fires even in the cases (native module missing, onboarding
-    // not finished) that otherwise leave the feature completely silent.
+    // Report why the hook doesn't engage, in the cases (native module missing,
+    // onboarding not finished) that otherwise leave the feature completely
+    // silent. The supported-and-onboarded case needs no line: the polling
+    // diagnostics below already show the hook running.
     const supported = isUsbImportSupported( );
-    logDiag( `hook mounted: supported=${supported}, onboardingShown=${onboardingShown}` );
-    if ( !supported || !onboardingShown ) return ( ) => {};
+    if ( !supported || !onboardingShown ) {
+      logDiag( `not engaging: supported=${supported}, onboardingShown=${onboardingShown}` );
+      return ( ) => {};
+    }
 
     let interval: ReturnType<typeof setInterval> | undefined;
     const stopPolling = ( ) => {

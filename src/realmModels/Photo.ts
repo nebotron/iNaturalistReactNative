@@ -101,7 +101,10 @@ class Photo extends Realm.Object {
     // Only re-resize when we know the file is genuinely too big.
     if ( !Number.isFinite( size ) || size <= UPLOAD_MAX_BYTES ) return uri;
 
-    logger.info(
+    // Debug, not info: an oversized original being resized before upload is the
+    // normal path for this camera, not an event — it was 105 remote log writes
+    // in five days that never once explained anything.
+    logger.debug(
       `Re-resizing oversized upload photo (${size} bytes) before upload`,
     );
     return resizeImage( uri, {
