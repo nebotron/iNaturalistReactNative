@@ -211,10 +211,10 @@ interface ZoomBrightnessSlidersProps {
   // Nothing to zoom or brighten (e.g. a sound-only observation), so the sliders
   // stay in the layout but don't respond.
   disabled?: boolean;
-  // Use the variable-precision zoom slider (same 1x..20x range, but dragging
-  // off the track slows the thumb down). For screens like the crop editor
-  // where small zoom changes matter.
-  fineZoom?: boolean;
+  // Use the variable-precision sliders (same ranges, but dragging off the
+  // track slows the thumb down). For screens like the crop editor where small
+  // adjustments matter. Applies to both sliders so they look and behave alike.
+  fineSliders?: boolean;
 }
 
 // The zoom + brightness sliders shown below a photo (not covering it).
@@ -231,12 +231,12 @@ export const ZoomBrightnessSliders = ( {
   brightnessAccessibilityLabel,
   iconColor = colors.darkGray,
   disabled = false,
-  fineZoom = false,
+  fineSliders = false,
 }: ZoomBrightnessSlidersProps ) => (
   <View className="px-4 pt-1">
     <View className="flex-row items-center">
       <INatIcon name="magnifying-glass" size={18} color={iconColor} />
-      {fineZoom
+      {fineSliders
         ? (
           <FineSlider
             disabled={disabled}
@@ -265,20 +265,34 @@ export const ZoomBrightnessSliders = ( {
     </View>
     <View className="flex-row items-center">
       <INatIcon name="sun" size={18} color={iconColor} />
-      <Slider
-        disabled={disabled}
-        style={styles.slider}
-        minimumValue={exposureStopsMin}
-        maximumValue={exposureStopsMax}
-        minimumTrackTintColor={colors.inatGreen}
-        maximumTrackTintColor={colors.lightGray}
-        thumbTintColor={colors.inatGreen}
-        value={brightnessStops}
-        onValueChange={onBrightnessChange}
-        onSlidingComplete={onBrightnessComplete}
-        tapToSeek
-        accessibilityLabel={brightnessAccessibilityLabel}
-      />
+      {fineSliders
+        ? (
+          <FineSlider
+            disabled={disabled}
+            minimumValue={exposureStopsMin}
+            maximumValue={exposureStopsMax}
+            value={brightnessStops}
+            onChange={onBrightnessChange}
+            onComplete={onBrightnessComplete}
+            accessibilityLabel={brightnessAccessibilityLabel}
+          />
+        )
+        : (
+          <Slider
+            disabled={disabled}
+            style={styles.slider}
+            minimumValue={exposureStopsMin}
+            maximumValue={exposureStopsMax}
+            minimumTrackTintColor={colors.inatGreen}
+            maximumTrackTintColor={colors.lightGray}
+            thumbTintColor={colors.inatGreen}
+            value={brightnessStops}
+            onValueChange={onBrightnessChange}
+            onSlidingComplete={onBrightnessComplete}
+            tapToSeek
+            accessibilityLabel={brightnessAccessibilityLabel}
+          />
+        )}
     </View>
   </View>
 );
