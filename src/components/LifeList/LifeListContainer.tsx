@@ -3,13 +3,16 @@ import { fetchRemoteObservations } from "api/observations";
 import type { ApiObservation, ApiTaxon } from "api/types";
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
 import {
-  ActivityIndicator, Body1, Body4, DisplayTaxonName, RotatingINatIconButton,
+  ActivityIndicator, Body1, Body4, DisplayTaxonName, Heading4, IconicTaxonChooser,
+  RotatingINatIconButton,
 } from "components/SharedComponents";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import type { TabStackScreenProps } from "navigation/types";
-import React, { useCallback, useEffect } from "react";
+import React, {
+  useCallback, useEffect, useMemo, useState,
+} from "react";
 import type { ListRenderItemInfo } from "react-native";
 import Photo from "realmModels/Photo";
 import Taxon from "realmModels/Taxon";
@@ -21,7 +24,7 @@ import {
   syncUserObservations,
 } from "sharedHelpers/userObservationsCache";
 import {
-  useAuthenticatedQuery, useCurrentUser, useFontScale, useGridLayout, useTranslation,
+  useAuthenticatedQuery, useCurrentUser, useGridLayout, useTranslation,
 } from "sharedHooks";
 import { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -194,7 +197,6 @@ const LiferGridItem = ( { item, style }: LiferGridItemProps ) => {
   const navigation = useNavigation( );
   const { t } = useTranslation( );
   const currentUser = useCurrentUser( );
-  const { isLargeFontScale } = useFontScale();
   const route = useRoute( );
   const accessibleName = accessibleTaxonName( item.taxon, currentUser, t );
 
@@ -243,11 +245,10 @@ const LiferGridItem = ( { item, style }: LiferGridItemProps ) => {
           <DisplayTaxonName
             keyBase={`LiferGridItem-DisplayTaxonName-${item.taxon?.id}`}
             taxon={item.taxon}
-            scientificNameFirst={currentUser?.prefers_scientific_name_first}
             prefersCommonNames={currentUser?.prefers_common_names}
             layout="vertical"
             color="text-white"
-            showOneNameOnly={isLargeFontScale}
+            showOneNameOnly
           />
         </View>
       </ObsImagePreview>
@@ -284,6 +285,24 @@ const LifeListContainer = ( ) => {
       },
     },
   );
+
+  // Empty means no filter, i.e. show every lifer
+  const [iconicTaxonFilter, setIconicTaxonFilter] = useState<string[]>( [] );
+
+  const visibleLifers = useMemo( ( ) => {
+    if ( iconicTaxonFilter.length === 0 ) return lifers ?? [];
+    return ( lifers ?? [] ).filter(
+      lifer => iconicTaxonFilter.includes( lifer.taxon?.iconic_taxon_name?.toLowerCase( ) ?? "" ),
+    );
+  }, [iconicTaxonFilter, lifers] );
+
+  // Tapping a chosen icon again clears it, so the filter can be undone without
+  // a separate control
+  const handleTaxonChosen = useCallback( ( iconicTaxonName: string ) => {
+    setIconicTaxonFilter( chosen => ( chosen.includes( iconicTaxonName )
+      ? chosen.filter( name => name !== iconicTaxonName )
+      : [...chosen, iconicTaxonName] ) );
+  }, [] );
 
   const handleRefresh = useCallback( ( ) => {
     refetch( );
@@ -326,9 +345,20 @@ const LifeListContainer = ( ) => {
 
   return (
     <ScreenShell>
-      <View className="border-b border-lightGray mt-5" />
+      <View className="mt-5 px-4">
+        <Heading4 className="mb-3">
+          {t( "X-Species", { count: visibleLifers.length } )}
+        </Heading4>
+        <IconicTaxonChooser
+          chosen={iconicTaxonFilter}
+          onTaxonChosen={handleTaxonChosen}
+          withoutUnknown
+          testID="LifeList.IconicTaxonChooser"
+        />
+      </View>
+      <View className="border-b border-lightGray mt-4" />
       <CustomFlashList
-        data={lifers ?? []}
+        data={visibleLifers}
         numColumns={numColumns}
         contentContainerStyle={flashListStyle}
         keyExtractor={( item: Lifer ) => `${item.uuid}`}
@@ -343,7 +373,9 @@ const LifeListContainer = ( ) => {
         ListEmptyComponent={(
           <View className="self-center mt-5 p-4">
             <Body1 className="align-center text-center">
-              {t( "You-havent-observed-any-species-yet" )}
+              {iconicTaxonFilter.length > 0
+                ? t( "No-results-found-try-different-search" )
+                : t( "You-havent-observed-any-species-yet" )}
             </Body1>
           </View>
         )}
