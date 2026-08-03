@@ -10,6 +10,7 @@ import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers
 import PhotoGalleryImage from "components/PhotoImporter/PhotoGalleryImage";
 import { Body2 } from "components/SharedComponents";
 import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
+import ImportProgressBanner from "components/SharedComponents/ImportProgressBanner";
 import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -41,7 +42,12 @@ type PhotoNode = PhotoIdentifier["node"];
 interface Props {
   maxPhotos: number;
   onCancel: () => void;
-  onDone: ( selectedNodes: PhotoNode[] ) => void | Promise<void>;
+  // onProgress reports how many of the selected items have finished importing,
+  // so the overlay can show real progress instead of an open-ended spinner.
+  onDone: (
+    selectedNodes: PhotoNode[],
+    onProgress?: ( completed: number ) => void
+  ) => void | Promise<void>;
 }
 
 const { useRealm } = RealmContext;
@@ -83,6 +89,7 @@ const PhotoGallery = ( {
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
   const [hideImported, setHideImported] = useState( true );
   const [importingCount, setImportingCount] = useState( 0 );
+  const [importedCount, setImportedCount] = useState( 0 );
   const isFetchingRef = useRef( false );
   const importingRef = useRef( false );
   // Photos the user removed from a Group Photos import previously (see
@@ -184,6 +191,7 @@ const PhotoGallery = ( {
     const selected = photos.filter( node => selectedUris.has( getSelectionKey( node ) ) );
     importingRef.current = true;
     setImportingCount( selected.length );
+    setImportedCount( 0 );
     // Nothing else logs the tap itself, so a slow import was indistinguishable
     // in the logs from a tap that never registered — the gap before the first
     // copy error was all we had to go on. Bracket the import so the next
@@ -191,7 +199,7 @@ const PhotoGallery = ( {
     logger.info( `Done tapped: importing ${selected.length} selected photo(s)` );
     const startedAt = Date.now( );
     try {
-      await onDone( selected );
+      await onDone( selected, setImportedCount );
       logger.info(
         `Import of ${selected.length} photo(s) settled in ${Date.now( ) - startedAt}ms`,
       );
@@ -428,14 +436,15 @@ const PhotoGallery = ( {
           underneath. */}
       {importing && (
         <View
-          className="absolute inset-0 justify-center items-center bg-black/60"
+          className="absolute inset-0 justify-center items-center px-6 bg-black/60"
           testID="PhotoGallery.importingOverlay"
         >
-          <ActivityIndicator size="large" color={colors.white} />
-          { /* eslint-disable-next-line react-native/no-inline-styles */ }
-          <Text style={{ marginTop: 12, color: colors.white }}>
-            {t( "Importing-X-photos", { count: importingCount } )}
-          </Text>
+          <ImportProgressBanner
+            title={t( "Importing-X-photos", { count: importingCount } )}
+            detail={t( "X-of-Y", { x: importedCount, y: importingCount } )}
+            completed={importedCount}
+            total={importingCount}
+          />
         </View>
       )}
     </View>

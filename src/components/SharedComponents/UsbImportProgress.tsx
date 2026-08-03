@@ -1,6 +1,6 @@
-import { ActivityIndicator } from "components/SharedComponents";
+import ImportProgressBanner from "components/SharedComponents/ImportProgressBanner";
 import React from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { StyleSheet, View } from "react-native";
 import useUsbImportProgress from "stores/usbImportProgress";
 
 // Non-blocking status banner shown while useUsbAutoImport offloads photos from
@@ -16,29 +16,6 @@ const styles = StyleSheet.create( {
     bottom: 100,
     alignItems: "center",
     paddingHorizontal: 16,
-  },
-  banner: {
-    flexDirection: "row",
-    alignItems: "center",
-    maxWidth: 360,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: "rgba(0,0,0,0.85)",
-  },
-  text: {
-    marginLeft: 12,
-    flexShrink: 1,
-  },
-  title: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  detail: {
-    color: "#d4d4d4",
-    fontSize: 12,
-    marginTop: 2,
   },
 } );
 
@@ -78,13 +55,13 @@ const UsbImportProgress = ( ) => {
 
   return (
     <View style={styles.wrap} pointerEvents="none">
-      <View style={styles.banner}>
-        {!finished && <ActivityIndicator size={18} />}
-        <View style={styles.text}>
-          <Text style={styles.title}>{title}</Text>
-          <Text style={styles.detail}>{detail}</Text>
-        </View>
-      </View>
+      <ImportProgressBanner
+        title={title}
+        detail={detail}
+        completed={saved + failed}
+        total={total}
+        showSpinner={!finished}
+      />
     </View>
   );
 };

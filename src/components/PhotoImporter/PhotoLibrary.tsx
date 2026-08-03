@@ -116,7 +116,10 @@ const PhotoLibrary = ( ) => {
     skipGroupPhotos,
   ] );
 
-  const copyImagesFromCameraRoll = useCallback( async ( nodes: PhotoNode[] ) => {
+  const copyImagesFromCameraRoll = useCallback( async (
+    nodes: PhotoNode[],
+    onPhotoSettled?: ( ) => void,
+  ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
 
@@ -200,6 +203,10 @@ const PhotoLibrary = ( ) => {
       } catch ( error ) {
         logger.error( `Error copying photo ${node.image.uri} from camera roll`, error );
         return null;
+      } finally {
+        // Report failures as settled too: the progress bar tracks how much of
+        // the wait is left, and a failed copy is over just as a good one is.
+        onPhotoSettled?.( );
       }
     };
 
@@ -217,10 +224,21 @@ const PhotoLibrary = ( ) => {
     return results;
   }, [] );
 
-  const handleGalleryDone = useCallback( async ( nodes: PhotoNode[] ) => {
+  const handleGalleryDone = useCallback( async (
+    nodes: PhotoNode[],
+    onProgress?: ( completed: number ) => void,
+  ) => {
     try {
       const videoNodes = nodes.filter( isVideoNode );
       const photoNodes = nodes.filter( n => !isVideoNode( n ) );
+
+      // One tick per selected item, videos included, so the caller's progress
+      // bar advances over the whole import and not just the copying phase.
+      let settled = 0;
+      const reportSettled = ( ) => {
+        settled += 1;
+        onProgress?.( settled );
+      };
 
       // Extract GIF + audio from each video node and build GroupedMediaItems
       // so they appear in the GroupPhotos screen alongside regular photos.
@@ -251,10 +269,11 @@ const PhotoLibrary = ( ) => {
             buildGroupedSoundItem( audioUri, videoNode.timestamp ),
           );
         }
+        reportSettled( );
       }
 
       const copiedPhotos = photoNodes.length > 0
-        ? await copyImagesFromCameraRoll( photoNodes )
+        ? await copyImagesFromCameraRoll( photoNodes, reportSettled )
         : [];
 
       // Only photos that actually copied are staged for the "delete the
