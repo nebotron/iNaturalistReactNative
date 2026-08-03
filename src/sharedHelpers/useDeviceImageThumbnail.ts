@@ -82,6 +82,22 @@ const takeNext = ( ): Job | null => {
   return next;
 };
 
+// A native generation that never settles must not hold a concurrency slot for
+// the life of the process: four of those wedge the queue and every remaining
+// cell stays blank forever. Giving up frees the slot and leaves the cell to
+// display the original uri instead.
+const GENERATION_TIMEOUT_MS = 15000;
+
+const withTimeout = ( promise: Promise<string> ): Promise<string | null> => {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race( [
+    promise,
+    new Promise<null>( resolve => {
+      timer = setTimeout( ( ) => resolve( null ), GENERATION_TIMEOUT_MS );
+    } ),
+  ] ).finally( ( ) => clearTimeout( timer ) );
+};
+
 const runJob = async ( job: Job ) => {
   let result: string | null = null;
   try {
@@ -89,7 +105,9 @@ const runJob = async ( job: Job ) => {
     const outputPath = `${deviceThumbnailsPath}/${hashKey( job.key )}.jpg`;
     result = await exists( outputPath )
       ? `file://${outputPath}`
-      : ( await ImageCropper!.createThumbnail( job.uri, job.maxPixel, outputPath ) ) || null;
+      : ( await withTimeout(
+        ImageCropper!.createThumbnail( job.uri, job.maxPixel, outputPath ),
+      ) ) || null;
   } catch {
     result = null;
   }
@@ -176,6 +194,24 @@ const requestDeviceImageThumbnail = (
       }
     },
   };
+};
+
+// Moves the photos actually on screen to the front of the queue. Cells mount
+// in index order and the queue is LIFO, so the cell mounted last — far below
+// the fold, since the grid mounts well past the viewport — is generated first
+// and the row the user is looking at is generated last. Ordering by what's
+// visible is what the LIFO queue is for; mount order is a poor stand-in for it.
+export const prioritizeDeviceImageThumbnails = (
+  uris: string[],
+  maxPixel: number,
+): void => {
+  if ( !ImageCropper?.createThumbnail ) return;
+  // Pushed in reverse so the topmost visible photo is the first one popped.
+  for ( let i = uris.length - 1; i >= 0; i -= 1 ) {
+    if ( !memoryCache.has( cacheKey( uris[i], maxPixel ) ) ) {
+      scheduleJob( uris[i], maxPixel, true );
+    }
+  }
 };
 
 // Warms the cache for photos near the viewport at lower priority than the

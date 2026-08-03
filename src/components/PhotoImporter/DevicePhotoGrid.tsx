@@ -2,7 +2,10 @@ import { FlashList } from "@shopify/flash-list";
 import type { ComponentProps, ReactElement } from "react";
 import React, { useCallback, useEffect, useRef } from "react";
 import { PixelRatio } from "react-native";
-import { prefetchDeviceImageThumbnails } from "sharedHelpers/useDeviceImageThumbnail";
+import {
+  prefetchDeviceImageThumbnails,
+  prioritizeDeviceImageThumbnails,
+} from "sharedHelpers/useDeviceImageThumbnail";
 
 type ContentStyle = ComponentProps<typeof FlashList>["contentContainerStyle"];
 
@@ -69,12 +72,27 @@ const DevicePhotoGrid = <T extends DevicePhotoGridItem>( {
     if ( indices.length === 0 ) return;
     const first = Math.min( ...indices );
     const last = Math.max( ...indices );
+    const uriAt = ( index: number ) => {
+      const item = all[index];
+      return item
+        ? photoUri( item )
+        : undefined;
+    };
+
+    // Whatever is on screen goes first, ahead of every cell the grid mounted
+    // below the fold and ahead of every prefetch.
+    const visible: string[] = [];
+    for ( let i = first; i <= last; i += 1 ) {
+      const uri = uriAt( i );
+      if ( uri ) visible.push( uri );
+    }
+    prioritizeDeviceImageThumbnails( visible, maxPixel );
+
     const uris: string[] = [];
     // Enqueued least-urgent first: the queue is LIFO, so the photos just off
     // the leading edge of the viewport are generated first.
     const push = ( index: number ) => {
-      const item = all[index];
-      const uri = item && photoUri( item );
+      const uri = uriAt( index );
       if ( uri ) uris.push( uri );
     };
     for ( let i = Math.max( 0, first - PREFETCH_BEHIND ); i < first; i += 1 ) push( i );

@@ -793,9 +793,9 @@ RCT_EXPORT_METHOD( detectSubjectBounds
 // Writes a downscaled JPEG thumbnail (maxPixel px on the longest side) of a
 // device photo to outputPath, so a photo grid can scroll without decoding
 // full-resolution originals into every cell. ph:// PHAssets go through
-// PHImageManager, which serves fast pre-rendered thumbnails rather than the
-// full-resolution original; file:// paths use ImageIO subsampling. Resolves a
-// file:// uri, or rejects on failure.
+// PHImageManager, using only renditions already on the device — never an
+// iCloud download; file:// paths use ImageIO subsampling. Resolves a file://
+// uri, or rejects on failure.
 RCT_EXPORT_METHOD( createThumbnail
                   : ( NSString * )inputPath maxPixel
                   : ( nonnull NSNumber * )maxPixel outputPath
@@ -826,22 +826,37 @@ RCT_EXPORT_METHOD( createThumbnail
     if ( !asset ) { reject( @"THUMBNAIL_FAILED", @"PHAsset not found", nil ); return; }
 
     PHImageRequestOptions *opts = [[PHImageRequestOptions alloc] init];
-    opts.networkAccessAllowed = YES;
-    opts.deliveryMode         = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    // Never wait on iCloud for a grid tile. Asking for the high-quality format
+    // over the network downloads the full-resolution original, which for an
+    // offloaded asset takes tens of seconds — and since a handful of these
+    // occupy every slot of the generation queue, a screen full of old photos
+    // (Delete Unfaved is nothing but old photos) simply never renders. The
+    // locally cached rendition Photos keeps for offloaded assets is what the
+    // Photos app itself shows in its grid, and it is plenty for a tile.
+    opts.networkAccessAllowed = NO;
+    opts.deliveryMode         = PHImageRequestOptionsDeliveryModeOpportunistic;
     opts.resizeMode           = PHImageRequestOptionsResizeModeFast;
 
-    __block BOOL handled = NO;
+    __block BOOL     handled       = NO;
+    __block UIImage *degradedImage = nil;
     [[PHImageManager defaultManager]
       requestImageForAsset:asset
       targetSize:CGSizeMake( maxDim, maxDim )
       contentMode:PHImageContentModeAspectFill
       options:opts
       resultHandler:^( UIImage *result, NSDictionary *info ) {
-        // HighQualityFormat delivers a single result, but guard against any
-        // extra (degraded) callback so resolve/reject only ever fire once.
-        if ( handled || [info[PHImageResultIsDegradedKey] boolValue] ) return;
+        if ( handled ) return;
+        // Opportunistic delivery calls back twice when the full-quality
+        // rendition isn't loaded: a cached low-res thumbnail first, then the
+        // real one. Hold the low-res one and prefer whatever follows, but fall
+        // back to it if nothing does — that's an offloaded asset, whose
+        // original isn't on this device and isn't worth fetching for a tile.
+        if ( [info[PHImageResultIsDegradedKey] boolValue] ) {
+          if ( result ) degradedImage = result;
+          return;
+        }
         handled = YES;
-        writeThumbnail( result );
+        writeThumbnail( result ?: degradedImage );
       }];
     return;
   }
