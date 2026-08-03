@@ -118,7 +118,7 @@ const PhotoLibrary = ( ) => {
 
   const copyImagesFromCameraRoll = useCallback( async (
     nodes: PhotoNode[],
-    onPhotoSettled?: ( ) => void,
+    onPhotoSettled?: ( succeeded: boolean ) => void,
   ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
@@ -199,14 +199,15 @@ const PhotoLibrary = ( ) => {
     // the user out of the observation flow even when most photos copied fine.
     const copyNodeOrNull = async ( node: PhotoNode ) => {
       try {
-        return await copyNode( node );
-      } catch ( error ) {
-        logger.error( `Error copying photo ${node.image.uri} from camera roll`, error );
-        return null;
-      } finally {
+        const copied = await copyNode( node );
         // Report failures as settled too: the progress bar tracks how much of
         // the wait is left, and a failed copy is over just as a good one is.
-        onPhotoSettled?.( );
+        onPhotoSettled?.( true );
+        return copied;
+      } catch ( error ) {
+        logger.error( `Error copying photo ${node.image.uri} from camera roll`, error );
+        onPhotoSettled?.( false );
+        return null;
       }
     };
 
@@ -226,7 +227,7 @@ const PhotoLibrary = ( ) => {
 
   const handleGalleryDone = useCallback( async (
     nodes: PhotoNode[],
-    onProgress?: ( completed: number ) => void,
+    onProgress?: ( completed: number, failed: number ) => void,
   ) => {
     try {
       const videoNodes = nodes.filter( isVideoNode );
@@ -234,10 +235,15 @@ const PhotoLibrary = ( ) => {
 
       // One tick per selected item, videos included, so the caller's progress
       // bar advances over the whole import and not just the copying phase.
+      // Failures are counted separately: a photo whose bytes never arrive
+      // (an iCloud asset that won't download) is otherwise invisible until the
+      // user notices it missing from the next screen.
       let settled = 0;
-      const reportSettled = ( ) => {
+      let failed = 0;
+      const reportSettled = ( succeeded: boolean ) => {
         settled += 1;
-        onProgress?.( settled );
+        if ( !succeeded ) failed += 1;
+        onProgress?.( settled, failed );
       };
 
       // Extract GIF + audio from each video node and build GroupedMediaItems
@@ -269,7 +275,9 @@ const PhotoLibrary = ( ) => {
             buildGroupedSoundItem( audioUri, videoNode.timestamp ),
           );
         }
-        reportSettled( );
+        // A video that yields neither a GIF nor audio contributed nothing to
+        // the import, so count it the same as a photo that failed to copy.
+        reportSettled( !!gifUri || !!audioUri );
       }
 
       const copiedPhotos = photoNodes.length > 0

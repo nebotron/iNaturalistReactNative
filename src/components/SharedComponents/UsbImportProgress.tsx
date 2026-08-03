@@ -43,11 +43,8 @@ const UsbImportProgress = ( ) => {
     title = "Import complete";
     detail = `Saved ${saved} photo${plural} to your library${cleared}.`;
   } else if ( phase === "error" ) {
-    const failures = failed > 0
-      ? `, ${failed} failed`
-      : "";
     title = "Import finished with errors";
-    detail = `Saved ${saved} of ${total}${failures}.`;
+    detail = `Saved ${saved} of ${total}.`;
   } else {
     title = "Importing photos to your library…";
     detail = `${saved} of ${total}`;
@@ -58,6 +55,9 @@ const UsbImportProgress = ( ) => {
       <ImportProgressBanner
         title={title}
         detail={detail}
+        warning={failed > 0
+          ? `${failed} failed`
+          : undefined}
         completed={saved + failed}
         total={total}
         showSpinner={!finished}

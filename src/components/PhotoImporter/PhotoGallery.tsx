@@ -42,11 +42,12 @@ type PhotoNode = PhotoIdentifier["node"];
 interface Props {
   maxPhotos: number;
   onCancel: () => void;
-  // onProgress reports how many of the selected items have finished importing,
-  // so the overlay can show real progress instead of an open-ended spinner.
+  // onProgress reports how many of the selected items have finished importing
+  // and how many of those failed, so the overlay can show real progress
+  // instead of an open-ended spinner.
   onDone: (
     selectedNodes: PhotoNode[],
-    onProgress?: ( completed: number ) => void
+    onProgress?: ( completed: number, failed: number ) => void
   ) => void | Promise<void>;
 }
 
@@ -90,6 +91,7 @@ const PhotoGallery = ( {
   const [hideImported, setHideImported] = useState( true );
   const [importingCount, setImportingCount] = useState( 0 );
   const [importedCount, setImportedCount] = useState( 0 );
+  const [failedCount, setFailedCount] = useState( 0 );
   const isFetchingRef = useRef( false );
   const importingRef = useRef( false );
   // Photos the user removed from a Group Photos import previously (see
@@ -192,6 +194,7 @@ const PhotoGallery = ( {
     importingRef.current = true;
     setImportingCount( selected.length );
     setImportedCount( 0 );
+    setFailedCount( 0 );
     // Nothing else logs the tap itself, so a slow import was indistinguishable
     // in the logs from a tap that never registered — the gap before the first
     // copy error was all we had to go on. Bracket the import so the next
@@ -199,7 +202,10 @@ const PhotoGallery = ( {
     logger.info( `Done tapped: importing ${selected.length} selected photo(s)` );
     const startedAt = Date.now( );
     try {
-      await onDone( selected, setImportedCount );
+      await onDone( selected, ( completed, failed ) => {
+        setImportedCount( completed );
+        setFailedCount( failed );
+      } );
       logger.info(
         `Import of ${selected.length} photo(s) settled in ${Date.now( ) - startedAt}ms`,
       );
@@ -442,6 +448,9 @@ const PhotoGallery = ( {
           <ImportProgressBanner
             title={t( "Importing-X-photos", { count: importingCount } )}
             detail={t( "X-of-Y", { x: importedCount, y: importingCount } )}
+            warning={failedCount > 0
+              ? t( "x-failed", { count: failedCount } )
+              : undefined}
             completed={importedCount}
             total={importingCount}
           />

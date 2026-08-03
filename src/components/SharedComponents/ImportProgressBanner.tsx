@@ -37,6 +37,11 @@ const styles = StyleSheet.create( {
     fontSize: 12,
     marginTop: 2,
   },
+  warning: {
+    color: colors.warningRed,
+    fontSize: 12,
+    marginTop: 2,
+  },
   bar: {
     height: 6,
     marginTop: 12,
@@ -48,6 +53,9 @@ const styles = StyleSheet.create( {
 interface Props {
   title: string;
   detail?: string;
+  // Called out separately from detail, in red, so a partial failure is visible
+  // while the import is still running rather than only in the logs.
+  warning?: string;
   completed?: number;
   total?: number;
   showSpinner?: boolean;
@@ -56,6 +64,7 @@ interface Props {
 const ImportProgressBanner = ( {
   title,
   detail,
+  warning,
   completed = 0,
   total = 0,
   showSpinner = true,
@@ -70,6 +79,7 @@ const ImportProgressBanner = ( {
       <View style={styles.text}>
         <Text style={styles.title}>{title}</Text>
         {!!detail && <Text style={styles.detail}>{detail}</Text>}
+        {!!warning && <Text style={styles.warning}>{warning}</Text>}
       </View>
     </View>
     {total > 0 && (
