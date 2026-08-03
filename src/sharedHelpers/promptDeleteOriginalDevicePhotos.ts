@@ -3,7 +3,9 @@ import {
   iosRequestReadWriteGalleryPermission,
 } from "@react-native-camera-roll/camera-roll";
 import i18next from "i18next";
-import { Alert, NativeModules, Platform } from "react-native";
+import {
+  Alert, AppState, NativeModules, Platform,
+} from "react-native";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
@@ -33,9 +35,17 @@ export const recordPhotoLibraryWriteFailure = ( ) => zustandStorage.setItem(
   Date.now(),
 );
 
-export const clearPhotoLibraryWriteFailure = ( ) => zustandStorage.removeItem(
-  LAST_PHOTO_LIBRARY_WRITE_FAILURE_STORAGE_KEY,
-);
+// Whether a Photos-library write has ever gone through since launch, and how
+// many have hung. The app log shows hangs arriving in day-long runs between
+// runs of clean successes, so a hang report is only interpretable next to
+// "the last write worked 4s ago" versus "nothing has worked all session".
+let lastPhotoLibraryWriteSuccessAt: number | null = null;
+let photoLibraryWriteHangCount = 0;
+
+export const clearPhotoLibraryWriteFailure = ( ) => {
+  lastPhotoLibraryWriteSuccessAt = Date.now( );
+  zustandStorage.removeItem( LAST_PHOTO_LIBRARY_WRITE_FAILURE_STORAGE_KEY );
+};
 
 // Native helpers (iOS) that (a) report the window/scene/modal state governing
 // whether the iOS deletion confirmation can present, and (b) delete after
@@ -79,12 +89,17 @@ const filterDeletableDevicePhotoUris = ( photoUris: string[] ): string[] => (
 // Requests readWrite photo library permission. iOS shows the system dialog
 // exactly once (when status is notDetermined); subsequent calls return the
 // cached status silently, so this acts as a global one-time grant.
-const ensureDeletePhotosPermission = async ( ): Promise<boolean> => {
+const ensureDeletePhotosPermission = async ( requested: number ): Promise<boolean> => {
   if ( Platform.OS !== "ios" ) {
     return true;
   }
   const status = await iosRequestReadWriteGalleryPermission( );
-  logger.info( `photo library readWrite permission status: ${status}` );
+  // Only worth a line when it isn't the answer we expect: a granted status is
+  // implied by the deletion that follows, and logging it on every delete was
+  // one remote write per delete for no information.
+  if ( status !== "granted" ) {
+    logger.info( `photo library readWrite permission status: ${status} (${requested} photo(s))` );
+  }
   // "limited" access (the user picked specific photos) still lets us delete
   // those photos — iOS shows its own deletion confirmation — so treat it the
   // same as full access. Rejecting it here silently skipped deletion for the
@@ -147,7 +162,7 @@ const performDeleteOriginalDevicePhotos = async (
     return { deleted: 0, requested, succeeded: false };
   }
 
-  const hasPermission = await ensureDeletePhotosPermission( );
+  const hasPermission = await ensureDeletePhotosPermission( requested );
   if ( !hasPermission ) {
     logger.warn( "Skipped deleting device photos: photo library permission not granted" );
     if ( options.userInitiated ) {
@@ -159,25 +174,58 @@ const performDeleteOriginalDevicePhotos = async (
     return { deleted: 0, requested, succeeded: false };
   }
 
-  const uriList = uniqueUris.join( ", " );
+  // The ph:// URIs identify the user's photos, say nothing a count doesn't, and
+  // made single log lines kilobytes long; the counts below are what a report
+  // is read for.
+  const startedAt = Date.now( );
+  // iOS can only present the deletion confirmation to a foreground app, so a
+  // delete that spans a trip to the background is a different failure from one
+  // that hangs while the user is watching it. Nothing recorded this, which is
+  // why the log can't yet say whether the hangs are the documented iOS 26
+  // PHPhotoLibrary wedge or simply the app losing the foreground mid-delete.
+  // Only an explicit background/inactive counts: iOS reports "unknown" early in
+  // a launch, and reading that as "the user left" would put a false explanation
+  // on every hang that follows a cold start.
+  const isAway = ( state: unknown ) => state === "background" || state === "inactive";
+  let leftForeground = isAway( AppState.currentState );
+  let appStateChanges = 0;
+  const appStateSubscription = AppState.addEventListener( "change", nextState => {
+    appStateChanges += 1;
+    if ( isAway( nextState ) ) leftForeground = true;
+  } );
+  // Populated before the delete starts so a hang report still carries why the
+  // confirmation couldn't present (modal in vcChain, no scene…). Logged only
+  // when something goes wrong — on the happy path it was pure volume.
+  let deletionContext = "not captured";
+  const pendingExtra = ( ) => ( {
+    requested,
+    ms: Date.now( ) - startedAt,
+    leftForeground,
+    appStateChanges,
+    appState: typeof AppState.currentState === "string"
+      ? AppState.currentState
+      : "unknown",
+    hangsThisSession: photoLibraryWriteHangCount,
+    msSinceLastSuccess: lastPhotoLibraryWriteSuccessAt === null
+      ? -1
+      : Date.now( ) - lastPhotoLibraryWriteSuccessAt,
+    context: deletionContext,
+  } );
   const hangTimer = setTimeout( ( ) => {
-    logger.error(
-      `deletePhotos still pending after 20s for ${uniqueUris.length} uri(s): ${uriList}`,
-    );
+    photoLibraryWriteHangCount += 1;
+    logger.errorWithExtra( "photo_delete_pending_20s", pendingExtra( ) );
   }, 20000 );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
-    // Capture the native presentation state first so a hung delete still leaves
-    // behind why the confirmation couldn't present (modal in vcChain, no scene…).
     if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
       try {
-        logger.info( `deletion context: ${await ImageCropper.photoDeletionContext( uniqueUris )}` );
+        deletionContext = await ImageCropper.photoDeletionContext( uniqueUris );
       } catch ( ctxError ) {
-        logger.warn( "Failed to read photo deletion context", ctxError );
+        deletionContext = `unavailable: ${String( ctxError )}`;
       }
     }
 
-    logger.info( `Deleting ${uniqueUris.length} device photo(s): ${uriList}` );
+    logger.info( `Deleting ${uniqueUris.length} device photo(s)` );
     // Prefer the native path that dismisses a blocking modal before deleting;
     // fall back to CameraRoll on platforms/builds without it.
     const deletion = ( Platform.OS === "ios" && ImageCropper?.deletePhotoAssets )
@@ -211,7 +259,11 @@ const performDeleteOriginalDevicePhotos = async (
     // 806349). There's no way to make the OS call back; the cooldown above
     // is a mitigation (stop repeating the same 120s hang on every import),
     // not a fix. Restarting the device is still the only way to clear it.
-    logger.error( `Error deleting device photos (${uriList})`, deleteError );
+    logger.errorWithExtra(
+      "photo_delete_failed",
+      deleteError,
+      pendingExtra( ),
+    );
     const timedOut = deleteError instanceof Error
       && deleteError.message.includes( "timed out" );
     if ( Platform.OS === "ios" && timedOut ) recordPhotoLibraryWriteFailure( );
@@ -225,6 +277,7 @@ const performDeleteOriginalDevicePhotos = async (
   } finally {
     clearTimeout( hangTimer );
     if ( timeoutTimer ) clearTimeout( timeoutTimer );
+    appStateSubscription.remove( );
   }
 };
 

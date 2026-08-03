@@ -66,6 +66,28 @@ const withTimeout = <T, >( promise: Promise<T>, ms: number, label: string ): Pro
   } )
 );
 
+// Whether the Photos library accepts writes is a device-wide condition, but it
+// is discovered once per photo: a single wedged library turned into 156 near
+// identical log lines (one remote write each) across two bursts. Report the
+// first of a burst and then a running count, rather than every photo.
+const SUPPRESSION_WINDOW_MS = 60_000;
+const suppressed: Record<string, { count: number; lastLoggedAt: number }> = {};
+
+const reportSuppressed = ( kind: "skipped" | "failed", detail: string ) => {
+  const state = suppressed[kind] ?? { count: 0, lastLoggedAt: 0 };
+  state.count += 1;
+  suppressed[kind] = state;
+  if ( Date.now( ) - state.lastLoggedAt < SUPPRESSION_WINDOW_MS ) return;
+  const verb = kind === "skipped"
+    ? "Skipped"
+    : "Failed";
+  logger.warn(
+    `${verb} updateAssetLocation for ${state.count} photo(s) in the last minute: ${detail}`,
+  );
+  state.lastLoggedAt = Date.now( );
+  state.count = 0;
+};
+
 // Best-effort: also fills in the location metadata on the original Photos
 // library asset (if we know its ph:// identifier), so tracked-location is
 // reflected in the Photos app, not just the app's own copy. The native side
@@ -84,9 +106,7 @@ const applyLocationToDevicePhotoLibrary = async (
   // means it's likely wedged for the whole device (see
   // promptDeleteOriginalDevicePhotos.ts).
   if ( isInPhotoLibraryWriteCooldown( ) ) {
-    logger.warn(
-      `Skipped updateAssetLocation for ${phUri}: still in Photos-library write cooldown`,
-    );
+    reportSuppressed( "skipped", "still in Photos-library write cooldown" );
     return;
   }
   try {
@@ -100,7 +120,9 @@ const applyLocationToDevicePhotoLibrary = async (
     ) );
     clearPhotoLibraryWriteFailure( );
   } catch ( error ) {
-    logger.warn( `Failed to update Photos library asset location for ${phUri}`, error );
+    reportSuppressed( "failed", String( error instanceof Error
+      ? error.message
+      : error ) );
     if ( error instanceof Error && error.message.includes( "timed out" ) ) {
       recordPhotoLibraryWriteFailure( );
     }
@@ -204,11 +226,10 @@ export const autoApplyTrackedLocationIfMissing = async (
   observation: RealmObservation,
   precomputedUsablePoints?: TrackedPoint[],
 ): Promise<boolean> => {
+  // An observation that already has a location is the ordinary case — this
+  // fired 556 times in five days, carrying the user's coordinates into a shared
+  // log to report that nothing happened.
   if ( observation.latitude != null && observation.longitude != null ) {
-    logger.info(
-      `Observation ${observation.uuid} already has a location `
-      + `(${observation.latitude},${observation.longitude}); skipping tracked location`,
-    );
     return false;
   }
 
@@ -238,20 +259,20 @@ export const autoApplyTrackedLocationIfMissing = async (
     return false;
   }
 
-  logger.info(
-    `Applying tracked location ${trackedLocation.latitude},${trackedLocation.longitude} `
-    + `to observation ${observation.uuid}`,
-  );
   const applied = await applyTrackedLocationToObservation( realm, observation, trackedLocation );
 
-  // Confirm the write actually stuck by reading the field back, rather than
-  // trusting the log line above: this is the one place we can directly catch
-  // a later write (a stale save, a remote upsert) clobbering it back to null.
+  // Confirm the write actually stuck by reading the field back: this is the one
+  // place we can directly catch a later write (a stale save, a remote upsert)
+  // clobbering it back to null. The successful case is already covered by the
+  // "Auto-filling tracked location" summary the caller logs, so only the
+  // clobber — the thing worth waking up to — gets a line of its own.
   const confirmed = realm.objectForPrimaryKey<RealmObservation>( "Observation", observation.uuid );
-  logger.info(
-    `Confirmed location for observation ${observation.uuid}: `
-    + `${confirmed?.latitude},${confirmed?.longitude}`,
-  );
+  if ( applied && confirmed?.latitude == null ) {
+    logger.warn(
+      `Tracked location did not stick for observation ${observation.uuid}: `
+      + "read back as null immediately after the write",
+    );
+  }
 
   return applied;
 };
