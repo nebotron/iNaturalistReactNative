@@ -12,6 +12,13 @@ const { withRozenite } = require( "@rozenite/metro" );
 const {
   withRozeniteRequireProfiler,
 } = require( "@rozenite/require-profiler-plugin/metro" );
+const writeAppCommit = require( "./scripts/writeAppCommit" );
+
+// Stamp the git commit before Metro builds anything. Every path that produces
+// JS — `start`, `run-ios`, `run-android`, `react-native bundle` in the Xcode
+// build phase — loads this config first, so the stamp attached to remote log
+// lines cannot drift from the code that is actually running.
+writeAppCommit( );
 
 const {
   resolver: { sourceExts, assetExts },
