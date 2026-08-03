@@ -33,6 +33,7 @@ import {
   LAST_CRASH_DATA,
 } from "sharedHelpers/installData";
 import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
+import { startSlowLoadMonitoring } from "sharedHelpers/slowLoadTracker";
 import DeviceInfo from "react-native-device-info";
 import useRozenite, { HaltedLaunch, shouldHaltLaunchForDebug } from "sharedHooks/useRozenite";
 import { createMMKVStorageAdapter } from "@rozenite/storage-plugin";
@@ -155,6 +156,9 @@ const queryClient = new QueryClient( {
     },
   },
 } );
+
+// Report the fetches the UI sits on a spinner waiting for
+startSlowLoadMonitoring( queryClient );
 
 const storageAdapters = [
   createMMKVStorageAdapter( {

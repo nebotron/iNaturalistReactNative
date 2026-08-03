@@ -1,5 +1,8 @@
+import { AppState } from "react-native";
 import {
   markNavigationDispatched,
+  startUiDelayMonitoring,
+  stopUiDelayMonitoring,
   trackScreenTransition,
   trackUiWork,
 } from "sharedHelpers/uiDelayTracker";
@@ -82,5 +85,61 @@ describe( "uiDelayTracker", ( ) => {
         screen: "MyObservations",
       } ),
     );
+  } );
+
+  describe( "heartbeat", ( ) => {
+    // Runs the heartbeat once with the clock at the given time, i.e. an
+    // interval that took ( at - previous at ) instead of the scheduled 500ms.
+    const tickAt = at => {
+      Date.now.mockReturnValue( at );
+      jest.advanceTimersByTime( 500 );
+    };
+
+    beforeEach( ( ) => {
+      jest.useFakeTimers( );
+      AppState.currentState = "active";
+      jest.spyOn( AppState, "addEventListener" ).mockReturnValue( { remove: jest.fn( ) } );
+    } );
+
+    afterEach( ( ) => {
+      stopUiDelayMonitoring( );
+      jest.useRealTimers( );
+    } );
+
+    it( "reports stalls it was still holding when the burst ended", ( ) => {
+      Date.now.mockReturnValue( 1_000_000 );
+      startUiDelayMonitoring( );
+
+      // The first stall is reported immediately; the rest of the burst is
+      // summarized so one slow operation doesn't emit a line per tick.
+      tickAt( 1_002_500 );
+      expect( mockInfoWithExtra ).toHaveBeenCalledWith( "ui_stall", expect.any( Object ) );
+      mockInfoWithExtra.mockClear( );
+
+      tickAt( 1_004_000 );
+      expect( mockInfoWithExtra ).not.toHaveBeenCalled( );
+
+      // Nothing stalls again, so only a flush on a quiet tick can report it.
+      for ( let at = 1_004_500; at <= 1_034_500; at += 500 ) { tickAt( at ); }
+
+      expect( mockInfoWithExtra ).toHaveBeenCalledWith( "ui_stall", expect.objectContaining( {
+        stalledMs: 1_000,
+        stallCount: 1,
+        screen: "MyObservations",
+      } ) );
+    } );
+
+    it( "logs a freeze too long to be ordinary jitter", ( ) => {
+      Date.now.mockReturnValue( 2_000_000 );
+      startUiDelayMonitoring( );
+
+      tickAt( 2_045_000 );
+
+      expect( mockInfoWithExtra ).toHaveBeenCalledWith( "ui_hang", expect.objectContaining( {
+        stalledMs: 44_500,
+        screen: "MyObservations",
+        mayBeSuspension: true,
+      } ) );
+    } );
   } );
 } );

@@ -9,9 +9,14 @@ const logger = log.extend( "uiDelayTracker" );
 const HEARTBEAT_MS = 500;
 // Overrun that counts as a user-visible stall rather than scheduling jitter.
 const STALL_THRESHOLD_MS = 1000;
-// Overruns past this are the app having been suspended (iOS stops timers when
-// the app is backgrounded or the screen locks), not the JS thread blocking.
-const MAX_PLAUSIBLE_STALL_MS = 30_000;
+// Past this an overrun is more likely the app having been suspended (iOS stops
+// timers when the app is backgrounded or the screen locks) than the JS thread
+// blocking, but a freeze this long is the worst thing we could fail to hear
+// about, so it's logged on its own with that caveat attached.
+const SUSPECTED_HANG_MS = 30_000;
+// A suspension we didn't detect is the only plausible explanation past this, so
+// there's nothing to learn from logging it.
+const MAX_PLAUSIBLE_HANG_MS = 300_000;
 // Stalls come in bursts (one slow operation trips several ticks), so summarize
 // rather than emitting a line per tick.
 const STALL_LOG_INTERVAL_MS = 30_000;
@@ -45,11 +50,29 @@ const onHeartbeat = ( ) => {
   lastTickAt = now;
   activeSinceLastTick = AppState.currentState === "active";
 
-  if ( overrunMs < STALL_THRESHOLD_MS ) return;
-  if ( !wasActive || overrunMs > MAX_PLAUSIBLE_STALL_MS ) return;
+  if ( wasActive && overrunMs >= STALL_THRESHOLD_MS ) {
+    if ( overrunMs > SUSPECTED_HANG_MS ) {
+      // Rare enough to log on its own rather than fold into a summary that
+      // might not be emitted for another 30s.
+      if ( overrunMs <= MAX_PLAUSIBLE_HANG_MS ) {
+        logger.infoWithExtra( "ui_hang", {
+          stalledMs: Math.round( overrunMs ),
+          screen: currentScreen( ),
+          // We never saw the app leave the foreground, but an AppState change
+          // can't be delivered while the JS thread is blocked either.
+          mayBeSuspension: true,
+        } );
+      }
+    } else {
+      stallsSinceLastLog += 1;
+      worstStallMs = Math.max( worstStallMs, overrunMs );
+    }
+  }
 
-  stallsSinceLastLog += 1;
-  worstStallMs = Math.max( worstStallMs, overrunMs );
+  // Flush on any tick, not only one that stalled: a burst that ends before the
+  // interval elapses would otherwise sit in the counters unreported until the
+  // next burst, and be dropped entirely if none came.
+  if ( stallsSinceLastLog === 0 ) return;
   if ( now - lastStallLogAt < STALL_LOG_INTERVAL_MS ) return;
 
   lastStallLogAt = now;
