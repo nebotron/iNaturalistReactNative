@@ -35,11 +35,23 @@ let lastNonActiveAt = 0;
 const currentScreen = ( ): string => getCurrentRoute( )?.name ?? "unknown";
 
 // Query keys start with the name of the thing being fetched and continue with
-// ids, photo URIs and filter objects. Only the leading strings are useful in a
-// log line, and only they are safe to record.
+// ids, photo URIs and filter objects. Only the leading names are useful in a
+// log line, and only they are safe to record: filtering on "is a string" alone
+// let a key like ["scoreImage", "file:///…/photo.jpg"] carry a photo path into
+// the shared log, and gave every photo its own label to boot.
+const QUERY_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,31}$/;
+const UUID_PREFIX = /^[0-9a-f]{8}-[0-9a-f]{4}-/i;
+
 const queryLabel = ( queryKey: unknown ): string => {
   if ( !Array.isArray( queryKey ) ) return "unknown";
-  const named = queryKey.filter( key => typeof key === "string" ).slice( 0, 2 );
+  const named: string[] = [];
+  for ( const key of queryKey ) {
+    // Stop at the first element that isn't a plain name: everything past it is
+    // an id or a filter, not part of what to call this query.
+    if ( typeof key !== "string" || !QUERY_NAME.test( key ) || UUID_PREFIX.test( key ) ) break;
+    named.push( key );
+    if ( named.length === 2 ) break;
+  }
   return named.join( "/" ) || "unknown";
 };
 

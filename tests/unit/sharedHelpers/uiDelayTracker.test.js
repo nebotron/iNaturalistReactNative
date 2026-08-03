@@ -96,7 +96,9 @@ describe( "uiDelayTracker", ( ) => {
     };
 
     beforeEach( ( ) => {
-      jest.useFakeTimers( );
+      // Faking Date as well would replace the Date.now spy the outer beforeEach
+      // installed, and tickAt drives the clock through that spy.
+      jest.useFakeTimers( { doNotFake: ["Date"] } );
       AppState.currentState = "active";
       jest.spyOn( AppState, "addEventListener" ).mockReturnValue( { remove: jest.fn( ) } );
     } );
