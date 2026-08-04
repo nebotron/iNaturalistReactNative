@@ -214,6 +214,15 @@ const performDeleteOriginalDevicePhotos = async (
   const hangTimer = setTimeout( ( ) => {
     photoLibraryWriteHangCount += 1;
     logger.errorWithExtra( "photo_delete_pending_20s", pendingExtra( ) );
+    // Arm the cooldown here rather than only at DELETE_TIMEOUT_MS. A wedged
+    // PHPhotoLibrary leaves the app sitting on a dead confirmation, and the
+    // app log shows it being killed (or force-quit) well before the 120s
+    // timeout could record the failure — so the next launch saw no cooldown
+    // and fired the same doomed delete again, twice in four minutes. A delete
+    // that does come back clears this immediately, and nothing else can run
+    // while this one is pending (see enqueuePhotoLibraryWrite), so arming it
+    // early only takes effect when the app doesn't survive the hang.
+    if ( Platform.OS === "ios" ) recordPhotoLibraryWriteFailure( );
   }, 20000 );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
