@@ -3,6 +3,7 @@ import type { ApiObservationPhoto } from "api/types";
 import inatjs, { FileUpload } from "inaturalistjs";
 import type { Asset } from "react-native-image-picker";
 import type { RealmObservationPhoto, RealmPhoto } from "realmModels/types";
+import type { GroupedPhotoCropMetadata } from "sharedHelpers/cropPhotoMetadata";
 import {
   getGalleryAssetDevicePhotoUri,
   normalizeDevicePhotoUri,
@@ -115,8 +116,9 @@ class ObservationPhoto extends Realm.Object {
     uri: string,
     position: number,
     originalDevicePhotoUri?: string | null,
+    cropMetadata?: GroupedPhotoCropMetadata,
   ) {
-    const photo = await Photo.new( uri );
+    const photo = await Photo.new( uri, cropMetadata );
     return {
       _created_at: new Date( ),
       _updated_at: new Date( ),
@@ -137,14 +139,27 @@ class ObservationPhoto extends Realm.Object {
         ? photo as string
         : ( photo as { image: Asset } )?.image?.uri;
       const galleryPhoto = photo as {
-        image: Asset;
+        image: Asset & GroupedPhotoCropMetadata;
         originalDevicePhotoUri?: string | null;
       };
       const originalDevicePhotoUri = local
         ? null
         : normalizeDevicePhotoUri( galleryPhoto.originalDevicePhotoUri )
           ?? getGalleryAssetDevicePhotoUri( galleryPhoto.image );
-      return ObservationPhoto.new( uri, position + index, originalDevicePhotoUri );
+      // Carry over any crop framed in the Group Photos grid so the observation
+      // photo remembers the crop box, not just the cropped pixels.
+      const cropMetadata = local
+        ? undefined
+        : {
+          cropOriginalUri: galleryPhoto.image?.cropOriginalUri,
+          crop: galleryPhoto.image?.crop,
+        };
+      return ObservationPhoto.new(
+        uri,
+        position + index,
+        originalDevicePhotoUri,
+        cropMetadata,
+      );
     } ),
   );
 

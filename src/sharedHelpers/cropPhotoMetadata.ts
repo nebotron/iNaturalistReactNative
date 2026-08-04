@@ -59,6 +59,16 @@ const toLocalFilePath = ( uri: string ) => {
   return stripped;
 };
 
+// The inverse of cropOriginalUriFromPath: turns the file:// uri of a preserved
+// crop original back into the relative "photoUploads/..." path we store, so it
+// still resolves after an app update moves the container.
+export function cropOriginalPathFromUri( uri?: string | null ): string | null {
+  if ( !uri ) {
+    return null;
+  }
+  return toLocalFilePath( uri );
+}
+
 export async function preserveCropOriginalPath(
   sourceUri: string,
   existingOriginalPath?: string | null,

@@ -3,9 +3,10 @@ import Observation from "realmModels/Observation";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import ObservationSound from "realmModels/ObservationSound";
 import type { RealmObservationPojo } from "realmModels/types";
+import type { GroupedPhotoCropMetadata } from "sharedHelpers/cropPhotoMetadata";
 
 export interface GroupedMediaPhotoItem {
-  image: Asset;
+  image: Asset & GroupedPhotoCropMetadata;
   isDuplicateUpload?: boolean;
   originalDevicePhotoUri?: string | null;
 }

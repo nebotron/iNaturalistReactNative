@@ -4,7 +4,9 @@ import type { ApiPhoto } from "api/types";
 import { photoUploadPath } from "appConstants/paths";
 import { Platform } from "react-native";
 import type { RealmPhoto } from "realmModels/types";
+import type { GroupedPhotoCropMetadata } from "sharedHelpers/cropPhotoMetadata";
 import {
+  cropOriginalPathFromUri,
   cropOriginalUriFromPath,
   normalizedCropToStorage,
   preserveCropOriginalPath,
@@ -117,12 +119,23 @@ class Photo extends Realm.Object {
     } );
   }
 
-  static async new( uri: string ) {
+  // cropMetadata carries a crop framed before the photo became an observation
+  // photo (i.e. in the Group Photos grid or its bulk cropper). Without it the
+  // observation photo would keep the cropped pixels but forget the crop box, so
+  // reopening the crop editor would treat the cropped file as the original.
+  static async new( uri: string, cropMetadata?: GroupedPhotoCropMetadata ) {
     const localFilePath = await Photo.resizeImageForUpload( uri );
+    const cropOriginalLocalFilePath = cropOriginalPathFromUri( cropMetadata?.cropOriginalUri );
     return {
       _created_at: new Date( ),
       _updated_at: new Date( ),
       localFilePath,
+      ...( cropOriginalLocalFilePath
+        ? { cropOriginalLocalFilePath }
+        : {} ),
+      ...( cropMetadata?.crop
+        ? normalizedCropToStorage( cropMetadata.crop )
+        : {} ),
     };
   }
 
