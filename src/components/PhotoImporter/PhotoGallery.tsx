@@ -201,8 +201,26 @@ const PhotoGallery = ( {
     // report can be answered from the logs alone.
     logger.info( `Done tapped: importing ${selected.length} selected photo(s)` );
     const startedAt = Date.now( );
+    // Three imports in the app log logged the tap above and no "settled" line
+    // at all before the app was relaunched — the import wedged on one asset and
+    // the log could only say that, not where or how far in. Report the progress
+    // counts once the import is far past the ~300ms a local batch takes, so a
+    // wedge is distinguishable from a slow iCloud download that is still
+    // advancing. One line per stuck import, none on the happy path.
+    let settledCount = 0;
+    let failedSoFar = 0;
+    const stallTimer = setTimeout( ( ) => {
+      logger.errorWithExtra( "photo_import_stalled", {
+        selected: selected.length,
+        settled: settledCount,
+        failed: failedSoFar,
+        ms: Date.now( ) - startedAt,
+      } );
+    }, 30000 );
     try {
       await onDone( selected, ( completed, failed ) => {
+        settledCount = completed;
+        failedSoFar = failed;
         setImportedCount( completed );
         setFailedCount( failed );
       } );
@@ -210,6 +228,7 @@ const PhotoGallery = ( {
         `Import of ${selected.length} photo(s) settled in ${Date.now( ) - startedAt}ms`,
       );
     } finally {
+      clearTimeout( stallTimer );
       importingRef.current = false;
       setImportingCount( 0 );
     }
