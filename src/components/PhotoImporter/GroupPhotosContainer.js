@@ -3,6 +3,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { duplicateGroupedMediaGroups } from
   "components/PhotoImporter/helpers/duplicateGroupedMedia";
+import { bakePendingGroupPhotoCrops } from "components/PhotoImporter/helpers/groupPhotoCrops";
 import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
@@ -68,6 +69,7 @@ const GroupPhotosContainer = ( ): Node => {
 
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isDuplicatingPhotos, setIsDuplicatingPhotos] = useState( false );
+  const [isCreatingObservations, setIsCreatingObservations] = useState( false );
 
   const selectedObservations = useMemo(
     ( ) => selectedIndices
@@ -333,11 +335,17 @@ const GroupPhotosContainer = ( ): Node => {
   const removeItem = item => removeObservations( [item] );
 
   const navBasedOnUserSettings = async ( ) => {
+    setIsCreatingObservations( true );
     // Crops confirmed in the bulk cropper finish writing in the background so
     // the cropper can advance to the next photo instantly. Let them land in
     // the store first, or we'd import the uncropped photos. Normally a no-op:
     // they finish while the user is still cropping.
     await awaitPendingGroupPhotoCrops( );
+
+    // Crops framed by pinching a photo in the grid are recorded on the photo
+    // but not written to a file until here, so panning around the grid never
+    // costs a full-resolution write per gesture.
+    await bakePendingGroupPhotoCrops( );
 
     // Capture everything we need before navigating away, since exiting the
     // flow resets the store slice (groupedPhotos, pending deletion uris, etc.)
@@ -432,6 +440,7 @@ const GroupPhotosContainer = ( ): Node => {
       duplicateItem={duplicateItem}
       flashListRef={flashListRef}
       groupedPhotos={groupedPhotos}
+      isCreatingObservations={isCreatingObservations}
       isDuplicatingPhotos={isDuplicatingPhotos}
       navBasedOnUserSettings={navBasedOnUserSettings}
       onScroll={onScroll}

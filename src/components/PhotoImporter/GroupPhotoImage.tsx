@@ -1,9 +1,14 @@
 import DevicePhotoImage from "components/PhotoImporter/DevicePhotoImage";
+import GroupPhotoCropImage from "components/PhotoImporter/GroupPhotoCropImage";
+import {
+  groupPhotoCropSourceUri,
+  saveGroupPhotoCrop,
+} from "components/PhotoImporter/helpers/groupPhotoCrops";
 import { INatIcon, INatIconButton } from "components/SharedComponents";
 import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import { Pressable, View } from "components/styledComponents";
-import React from "react";
+import React, { useCallback } from "react";
 import type { ViewStyle } from "react-native";
 import { StyleSheet } from "react-native";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -20,6 +25,7 @@ const styles = StyleSheet.create( {
 interface PhotoItem {
   image: {
     uri: string;
+    cropOriginalUri?: string;
     crop?: NormalizedCrop;
   };
   isDuplicateUpload?: boolean;
@@ -120,6 +126,17 @@ const GroupPhotoImage = ( {
   // waiting on the thumbnail so scrolling doesn't decode them full-resolution.
   const hasCrop = Boolean( firstPhoto?.image.crop );
 
+  // Pinching a cell reframes its crop box, exactly as it does in the Explore
+  // observation grid. The crop is recorded against the photo (the file itself
+  // is written at import time), so the framing survives scrolling away and
+  // carries into the full-screen cropper.
+  const displayUri = firstPhoto?.image.uri;
+  const handleCropChange = useCallback( ( crop: NormalizedCrop ) => {
+    if ( displayUri ) {
+      saveGroupPhotoCrop( displayUri, crop );
+    }
+  }, [displayUri] );
+
   if ( item.soundUri ) {
     return (
       <View className="relative">
@@ -153,6 +170,16 @@ const GroupPhotoImage = ( {
       obsPhotosCount={mediaCount}
       onPress={handlePress}
       testID={`GroupPhotos.${mediaUri}`}
+      imageOverlay={firstPhoto && cellWidth > 0
+        ? (
+          <GroupPhotoCropImage
+            cropSourceUri={groupPhotoCropSourceUri( firstPhoto.image )}
+            savedCrop={firstPhoto.image.crop ?? null}
+            size={cellWidth}
+            onCropChange={handleCropChange}
+          />
+        )
+        : undefined}
     >
       {hasDuplicateUpload && (
         <DuplicateUploadBadge

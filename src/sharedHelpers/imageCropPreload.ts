@@ -75,6 +75,7 @@ interface PreloadRequest {
   imageUri: string;
   cropSourceUri: string;
   existingSavedCrop: NormalizedCrop | null;
+  resolve: ( result: PreloadResult | null ) => void;
 }
 
 // Each preload runs a heavy native asset export + subject detection. Kicking
@@ -83,7 +84,7 @@ interface PreloadRequest {
 // the rest from a queue in order, so the nearest-needed images load first.
 const PRELOAD_CONCURRENCY = 2;
 const preloadQueue: PreloadRequest[] = [];
-const preloadQueued = new Set<string>( );
+const preloadQueued = new Map<string, Promise<PreloadResult | null>>( );
 let activePreloadCount = 0;
 
 function startNextPreload( ) {
@@ -91,18 +92,26 @@ function startNextPreload( ) {
   preloadQueued.delete( request.imageUri );
   // May have been resolved or started directly (e.g. the user advanced to it)
   // since it was enqueued; don't waste a slot on already-done/running work.
-  if ( !preloadCache.has( request.imageUri ) && !preloadInFlight.has( request.imageUri ) ) {
-    activePreloadCount += 1;
-    preloadImage(
-      request.imageUri,
-      request.cropSourceUri,
-      request.existingSavedCrop,
-    ).finally( ( ) => {
-      activePreloadCount -= 1;
-      // eslint-disable-next-line no-use-before-define
-      pumpPreloadQueue( );
-    } );
+  const cached = preloadCache.get( request.imageUri );
+  if ( cached ) {
+    request.resolve( cached );
+    return;
   }
+  const inFlight = preloadInFlight.get( request.imageUri );
+  if ( inFlight ) {
+    inFlight.then( request.resolve, ( ) => request.resolve( null ) );
+    return;
+  }
+  activePreloadCount += 1;
+  preloadImage(
+    request.imageUri,
+    request.cropSourceUri,
+    request.existingSavedCrop,
+  ).then( request.resolve, ( ) => request.resolve( null ) ).finally( ( ) => {
+    activePreloadCount -= 1;
+    // eslint-disable-next-line no-use-before-define
+    pumpPreloadQueue( );
+  } );
 }
 
 function pumpPreloadQueue( ) {
@@ -111,22 +120,36 @@ function pumpPreloadQueue( ) {
   }
 }
 
-// Enqueue a background preload that respects PRELOAD_CONCURRENCY. Already
-// cached, in-flight, or queued URIs are skipped so callers can re-enqueue
-// freely (e.g. on every navigation.replace) without piling up duplicate work.
+// Enqueue a background preload that respects PRELOAD_CONCURRENCY, resolving
+// with the result so a caller that needs the data (rather than just warming
+// the cache) can await its turn in the queue. Already cached, in-flight, or
+// queued URIs reuse the existing work so callers can re-enqueue freely (e.g.
+// on every navigation.replace) without piling up duplicate loads.
 export function enqueuePreload(
   imageUri: string,
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
-) {
-  if (
-    preloadCache.has( imageUri )
-    || preloadInFlight.has( imageUri )
-    || preloadQueued.has( imageUri )
-  ) {
-    return;
+): Promise<PreloadResult | null> {
+  const cached = preloadCache.get( imageUri );
+  if ( cached ) {
+    return Promise.resolve( cached );
   }
-  preloadQueued.add( imageUri );
-  preloadQueue.push( { imageUri, cropSourceUri, existingSavedCrop } );
+  const inFlight = preloadInFlight.get( imageUri );
+  if ( inFlight ) {
+    return inFlight;
+  }
+  const queued = preloadQueued.get( imageUri );
+  if ( queued ) {
+    return queued;
+  }
+  let resolve: ( result: PreloadResult | null ) => void = ( ) => {};
+  const promise = new Promise<PreloadResult | null>( res => {
+    resolve = res;
+  } );
+  preloadQueued.set( imageUri, promise );
+  preloadQueue.push( {
+    imageUri, cropSourceUri, existingSavedCrop, resolve,
+  } );
   pumpPreloadQueue( );
+  return promise;
 }

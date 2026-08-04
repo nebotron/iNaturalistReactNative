@@ -1,5 +1,6 @@
 import type { RouteProp } from "@react-navigation/native";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import { applyGroupPhotosCrop } from "components/PhotoImporter/helpers/groupPhotoCrops";
 import {
   BackButton,
   Button,
@@ -28,7 +29,7 @@ import Photo from "realmModels/Photo";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
-import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
+import { cropOriginalUriFromPath } from "sharedHelpers/cropPhotoMetadata";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
@@ -345,52 +346,6 @@ const ImageCropEditor = ( ) => {
     setGroupedPhotos,
   ] );
 
-  // Write the cropped file and stash the untouched original for future
-  // re-crops. Everything here reads the store fresh rather than from the
-  // render closure: in a bulk crop this runs after the user has already
-  // advanced past this photo, by which point later crops (or a deletion) may
-  // have replaced groupedPhotos.
-  const applyGroupPhotosCrop = useCallback( async (
-    crop: NormalizedCrop,
-    displayUri: string,
-    sourceUri: string,
-    size: { w: number; h: number },
-  ) => {
-    const croppedUri = await cropImageFile( sourceUri, crop, size.w, size.h );
-    const existingPhoto = findGroupedPhotoByDisplayUri(
-      useStore.getState( ).groupedPhotos,
-      displayUri,
-    );
-    const cropOriginalPath = await preserveCropOriginalPath(
-      sourceUri,
-      existingPhoto?.image.cropOriginalUri,
-    );
-    const cropOriginalUri = cropOriginalUriFromPath( cropOriginalPath ) || sourceUri;
-    saveAnimalCrop( displayUri, crop );
-    const store = useStore.getState( );
-    store.setGroupedPhotos(
-      store.groupedPhotos.map( group => {
-        const photos = group.photos?.map( photo => (
-          photo.image.uri === displayUri
-            ? {
-              ...photo,
-              image: {
-                ...photo.image,
-                uri: croppedUri,
-                cropOriginalUri,
-                crop,
-              },
-            }
-            : photo
-        ) );
-        return photos
-          ? { ...group, photos }
-          : group;
-      } ),
-    );
-    recordCropFeedback( cropOriginalUri, { crop, kept: true } );
-  }, [] );
-
   const handleConfirm = useCallback( ( crop: NormalizedCrop ) => {
     if ( !localImageUri || !imageUri || !imageSize ) {
       return Promise.resolve( );
@@ -472,7 +427,6 @@ const ImageCropEditor = ( ) => {
       Alert.alert( t( "Something-went-wrong" ) );
     } );
   }, [
-    applyGroupPhotosCrop,
     context,
     currentObservation,
     finishOrAdvance,

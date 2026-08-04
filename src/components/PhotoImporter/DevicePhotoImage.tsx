@@ -25,6 +25,8 @@ interface Props {
   testID?: string;
   // Badges and overlays, absolutely positioned over the image
   children?: ReactNode;
+  // Drawn over the photo but under the selection indicator and children
+  imageOverlay?: ReactNode;
 }
 
 // A single square device-photo cell, shared by every grid that renders photos
@@ -44,6 +46,7 @@ const DevicePhotoImage = ( {
   accessibilityLabel,
   testID,
   children,
+  imageOverlay,
 }: Props ) => {
   const thumbMaxPixel = PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
   const thumbnailUri = useDeviceImageThumbnail( uri, thumbMaxPixel );
@@ -62,6 +65,7 @@ const DevicePhotoImage = ( {
         hideGradientOverlay
         squareCorners
         style={style}
+        imageOverlay={imageOverlay}
       />
       {children}
     </View>
