@@ -53,6 +53,7 @@ export const clearPhotoLibraryWriteFailure = ( ) => {
 const { ImageCropper } = NativeModules as {
   ImageCropper?: {
     photoDeletionContext?: ( phUris: string[] ) => Promise<string>;
+    photoLibraryWriteProbe?: ( ) => Promise<{ ok: boolean; ms: number; error: string }>;
     deletePhotoAssets?: (
       phUris: string[]
     ) => Promise<{ deleted: number; requested: number; fetched?: number }>;
@@ -233,15 +234,50 @@ const performDeleteOriginalDevicePhotos = async (
     // is doing.
     if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
       const askedAt = Date.now( );
-      void Promise.race( [
-        ImageCropper.photoDeletionContext( uniqueUris ),
+      // Alongside the context, run one Photos-library transaction that needs no
+      // user confirmation (photoLibraryWriteProbe in ImageCropper.m). Every hang
+      // in the Aug 4 log reported a foreground app, a live scene, no modal,
+      // every asset fetched and a main queue answering in 8ms — so the question
+      // left is whether PHPhotoLibrary itself is dead or only the consent alert
+      // a deletion needs. A probe that comes back while the delete beside it
+      // never does answers that. Deliberately not routed through
+      // enqueuePhotoLibraryWrite: running concurrently with the hung delete is
+      // the whole point. (Which does mean a probe that also hangs is ambiguous
+      // between a wedged library and transactions queueing behind the dead one.)
+      //
+      // Bounded separately rather than as one Promise.all, so a probe that
+      // hangs can't make the context read as "the main queue never answered",
+      // which is a different diagnosis entirely.
+      let contextRespondedIn = -1;
+      const boundedContext = Promise.race( [
+        ImageCropper.photoDeletionContext( uniqueUris ).then( context => {
+          contextRespondedIn = Date.now( ) - askedAt;
+          return context;
+        } ),
         new Promise<null>( resolve => { setTimeout( ( ) => resolve( null ), 5000 ); } ),
-      ] ).then( contextAtHang => logger.errorWithExtra( "photo_delete_hang_context", {
-        requested,
-        mainQueueResponsive: contextAtHang !== null,
-        msToRespond: Date.now( ) - askedAt,
-        contextAtHang: contextAtHang ?? "main queue did not respond in 5000ms",
-      } ) ).catch( ( ) => undefined );
+      ] ).catch( ( ) => null );
+      const boundedProbe = ImageCropper.photoLibraryWriteProbe
+        ? Promise.race( [
+          ImageCropper.photoLibraryWriteProbe( ).catch(
+            probeError => ( { ok: false, ms: -1, error: String( probeError ) } ),
+          ),
+          new Promise<null>( resolve => { setTimeout( ( ) => resolve( null ), 10000 ); } ),
+        ] )
+        : Promise.resolve( null );
+      void Promise.all( [boundedContext, boundedProbe] ).then(
+        ( [contextAtHang, probe] ) => logger.errorWithExtra( "photo_delete_hang_context", {
+          requested,
+          mainQueueResponsive: contextAtHang !== null,
+          msToRespond: contextRespondedIn,
+          contextAtHang: contextAtHang ?? "main queue did not respond in 5000ms",
+          // A consent-free library write, concurrent with the hung deletion.
+          probeOk: probe?.ok ?? false,
+          probeMs: probe?.ms ?? -1,
+          probeError: probe === null
+            ? "consent-free library write did not settle in 10000ms"
+            : probe.error,
+        } ),
+      ).catch( ( ) => undefined );
     }
   }, 20000 );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;

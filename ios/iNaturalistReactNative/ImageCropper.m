@@ -1359,6 +1359,36 @@ RCT_EXPORT_METHOD( convertVideoToGif
   return chain;
 }
 
+// Every window on a foreground scene, by class, level and visibility. iOS puts
+// its deletion confirmation in a window of its own rather than in the key
+// window's presentation chain, so inatPresentedVCChain structurally cannot see
+// it: a hang where the alert was built but never made visible and one where it
+// was never built at all both read as "vcChain=UIViewController". This tells
+// them apart. The logged window *count* already varies across hangs (1 in the
+// Aug 4 morning, 2 in the evening) with nothing to say what the extra one is.
+- ( NSString * )inatWindowInventory
+{
+  NSMutableArray<UIWindow *> *windows = [NSMutableArray array];
+  if ( @available( iOS 13.0, * ) ) {
+    for ( UIScene *scene in UIApplication.sharedApplication.connectedScenes ) {
+      if ( ![scene isKindOfClass:[UIWindowScene class]] ) continue;
+      [windows addObjectsFromArray:( ( UIWindowScene * )scene ).windows];
+    }
+  }
+  if ( windows.count == 0 ) {
+    [windows addObjectsFromArray:UIApplication.sharedApplication.windows];
+  }
+  NSMutableArray<NSString *> *described = [NSMutableArray array];
+  for ( UIWindow *w in windows ) {
+    [described addObject:[NSString stringWithFormat:
+      @"%@(level=%.0f,hidden=%d,key=%d,alpha=%.2f,root=%@)",
+      NSStringFromClass( [w class] ), ( double )w.windowLevel, w.isHidden, w.isKeyWindow,
+      w.alpha,
+      w.rootViewController ? NSStringFromClass( [w.rootViewController class] ) : @"nil"]];
+  }
+  return [described componentsJoinedByString:@" "];
+}
+
 // Returns a one-line snapshot of the state that governs whether the iOS
 // deletion confirmation can present, plus how many of the passed identifiers
 // actually resolve to real library assets. Logged from JS to Firebase right
@@ -1404,14 +1434,57 @@ RCT_EXPORT_METHOD( photoDeletionContext
 
     NSString *info = [NSString stringWithFormat:
       @"appState=%ld hasWindowScene=%d sceneState=%ld fgActiveScenes=%lu authStatus=%ld "
-      @"windows=%lu requested=%lu fetched=%lu vcChain=%@",
+      @"windows=%lu requested=%lu fetched=%lu vcChain=%@ windowList=[%@]",
       ( long )UIApplication.sharedApplication.applicationState,
       hasScene, sceneState, ( unsigned long )foregroundActiveScenes, auth,
       ( unsigned long )UIApplication.sharedApplication.windows.count,
       ( unsigned long )ids.count, ( unsigned long )fetchedCount,
-      vcChain];
+      vcChain, [self inatWindowInventory]];
     resolve( info );
   } );
+}
+
+// Runs one PHPhotoLibrary transaction the app owns outright — creating an
+// album — and reports whether it completes and how long it took.
+//
+// This is the one question the deletion diagnostics still can't answer. A
+// deletion needs iOS to present a user-consent alert; creating an album does
+// not. So when a deletion hangs, running this beside it separates the two
+// candidates that are left: if the album transaction comes back promptly while
+// the deletion never does, PHPhotoLibrary is healthy and the wedge is
+// specifically the consent-alert path; if this hangs too, the wedge is deeper
+// (photolibraryd, or transactions queueing behind the dead deletion) and
+// nothing app-side can route around it.
+//
+// The album is deleted again immediately, in a second transaction the app also
+// owns. Called only from the 20s hang report — a handful of times a day, never
+// on a healthy delete — so it adds no library writes to the path that works.
+RCT_EXPORT_METHOD( photoLibraryWriteProbe
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSDate *startedAt = [NSDate date];
+  __block NSString *placeholderId = nil;
+  [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+    PHAssetCollectionChangeRequest *request =
+      [PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:
+        @"iNaturalist library probe"];
+    placeholderId = request.placeholderForCreatedAssetCollection.localIdentifier;
+  } completionHandler:^( BOOL success, NSError *error ) {
+    resolve( @{
+      @"ok": @( success ),
+      @"ms": @( ( long )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 ) ),
+      @"error": error.localizedDescription ?: @"",
+    } );
+
+    if ( !success || !placeholderId ) { return; }
+    PHFetchResult<PHAssetCollection *> *created =
+      [PHAssetCollection fetchAssetCollectionsWithLocalIdentifiers:@[placeholderId] options:nil];
+    if ( created.count == 0 ) { return; }
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+      [PHAssetCollectionChangeRequest deleteAssetCollections:created];
+    } completionHandler:nil];
+  }];
 }
 
 // Returns the library photos whose capture time, floored to the second,
