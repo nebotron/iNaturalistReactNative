@@ -9,6 +9,19 @@ import { zustandStorage } from "stores/useStore";
 const mockIosReadGalleryPermission = jest.fn( async () => "not-determined" );
 const mockIosRequestReadWriteGalleryPermission = jest.fn( async () => "granted" );
 const mockDeletePhotos = jest.fn( async () => undefined );
+const mockPhotoDeletionContext = jest.fn( async ( ) => "appState=0" );
+
+// The module under test destructures NativeModules.ImageCropper at import time,
+// so the native helper has to exist before that import runs. Only
+// photoDeletionContext is provided, leaving the deletion itself on the
+// CameraRoll fallback the other tests drive.
+jest.mock( "react-native", ( ) => {
+  const RN = jest.requireActual( "react-native" );
+  RN.NativeModules.ImageCropper = {
+    photoDeletionContext: ( ...args ) => mockPhotoDeletionContext( ...args ),
+  };
+  return RN;
+} );
 const mockLogger = {
   info: jest.fn( ),
   warn: jest.fn( ),
@@ -182,6 +195,52 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       finishDeletion( { deleted: 1, requested: 1 } );
       await deletion;
       expect( isInPhotoLibraryWriteCooldown( ) ).toBe( false );
+    } );
+
+    it( "re-reads the presentation context at the hang", async ( ) => {
+      mockPhotoDeletionContext.mockResolvedValue( "appState=0 vcChain=UIViewController" );
+      let finishDeletion;
+      mockDeletePhotos.mockImplementation(
+        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
+      );
+
+      const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
+      await jest.advanceTimersByTimeAsync( 20000 );
+
+      expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+        "photo_delete_hang_context",
+        expect.objectContaining( {
+          requested: 1,
+          mainQueueResponsive: true,
+          contextAtHang: "appState=0 vcChain=UIViewController",
+        } ),
+      );
+
+      finishDeletion( { deleted: 1, requested: 1 } );
+      await deletion;
+    } );
+
+    it( "reports a main queue that never answers as the hang's own explanation", async ( ) => {
+      mockPhotoDeletionContext.mockImplementation( ( ) => new Promise( ( ) => {} ) );
+      let finishDeletion;
+      mockDeletePhotos.mockImplementation(
+        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
+      );
+
+      const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
+      // The context call never comes back, so the delete only starts once that
+      // diagnostic gives up — it must not hold the deletion open indefinitely.
+      await jest.advanceTimersByTimeAsync( 5000 );
+      expect( mockDeletePhotos ).toHaveBeenCalled( );
+
+      await jest.advanceTimersByTimeAsync( 20000 );
+      expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+        "photo_delete_hang_context",
+        expect.objectContaining( { mainQueueResponsive: false } ),
+      );
+
+      finishDeletion( { deleted: 1, requested: 1 } );
+      await deletion;
     } );
   } );
 } );

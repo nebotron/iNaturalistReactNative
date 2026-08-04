@@ -223,12 +223,41 @@ const performDeleteOriginalDevicePhotos = async (
     // while this one is pending (see enqueuePhotoLibraryWrite), so arming it
     // early only takes effect when the app doesn't survive the hang.
     if ( Platform.OS === "ios" ) recordPhotoLibraryWriteFailure( );
+    // The context above is a snapshot from *before* the delete, so it can't say
+    // whether something presented over the app afterwards — and the log's three
+    // hangs all showed a foreground app with no modal and every asset fetched,
+    // which killed the "the app lost the foreground" explanation without
+    // offering another. Re-read it now. photoDeletionContext hops to the main
+    // queue, so a request that doesn't come back is itself the answer: the main
+    // thread is wedged, and no confirmation could present on it whatever Photos
+    // is doing.
+    if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
+      const askedAt = Date.now( );
+      void Promise.race( [
+        ImageCropper.photoDeletionContext( uniqueUris ),
+        new Promise<null>( resolve => { setTimeout( ( ) => resolve( null ), 5000 ); } ),
+      ] ).then( contextAtHang => logger.errorWithExtra( "photo_delete_hang_context", {
+        requested,
+        mainQueueResponsive: contextAtHang !== null,
+        msToRespond: Date.now( ) - askedAt,
+        contextAtHang: contextAtHang ?? "main queue did not respond in 5000ms",
+      } ) ).catch( ( ) => undefined );
+    }
   }, 20000 );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
       try {
-        deletionContext = await ImageCropper.photoDeletionContext( uniqueUris );
+        // Bounded: this hops to the main queue, and a main queue slow enough to
+        // sit on it is exactly the condition being diagnosed. Awaiting it
+        // unbounded meant the diagnostic could stop the deletion it was there
+        // to explain from ever starting.
+        deletionContext = await Promise.race( [
+          ImageCropper.photoDeletionContext( uniqueUris ),
+          new Promise<string>( resolve => {
+            setTimeout( ( ) => resolve( "unavailable: main queue busy for 5000ms" ), 5000 );
+          } ),
+        ] );
       } catch ( ctxError ) {
         deletionContext = `unavailable: ${String( ctxError )}`;
       }
