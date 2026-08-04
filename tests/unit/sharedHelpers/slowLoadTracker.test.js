@@ -53,12 +53,64 @@ describe( "slowLoadTracker", ( ) => {
     Date.now.mockReturnValue( 9_000 );
     emit( { type: "updated", query, action: { type: "success" } } );
 
+    // Held back briefly in case it's the first of a burst.
+    expect( mockInfoWithExtra ).not.toHaveBeenCalled( );
+    jest.advanceTimersByTime( 5_000 );
+
     expect( mockInfoWithExtra ).toHaveBeenCalledWith( "slow_query", expect.objectContaining( {
       query: "scoreImage",
       elapsedMs: 8_000,
       status: "success",
       screen: "Suggestions",
     } ) );
+  } );
+
+  it( "reports several slow fetches at once as one burst", ( ) => {
+    ["searchObservations", "notificationsCount", "searchAnnouncements"].forEach( name => {
+      const query = makeQuery( [name] );
+      Date.now.mockReturnValue( 1_000 );
+      emit( { type: "updated", query, action: { type: "fetch" } } );
+    } );
+    Date.now.mockReturnValue( 12_000 );
+    ["searchObservations", "notificationsCount"].forEach( name => {
+      emit( { type: "updated", query: makeQuery( [name] ), action: { type: "success" } } );
+    } );
+    Date.now.mockReturnValue( 14_000 );
+    emit( {
+      type: "updated",
+      query: makeQuery( ["searchAnnouncements"] ),
+      action: { type: "error" },
+    } );
+    jest.advanceTimersByTime( 5_000 );
+
+    expect( mockInfoWithExtra ).toHaveBeenCalledTimes( 1 );
+    expect( mockInfoWithExtra ).toHaveBeenCalledWith( "slow_query_burst", {
+      count: 3,
+      hangs: 0,
+      errors: 1,
+      medianMs: 11_000,
+      maxMs: 13_000,
+      queries: "searchObservations,notificationsCount,searchAnnouncements",
+      screens: "Suggestions",
+    } );
+  } );
+
+  it( "starts a new burst window after the last one flushed", ( ) => {
+    const slowFetch = name => {
+      Date.now.mockReturnValue( 1_000 );
+      emit( { type: "updated", query: makeQuery( [name] ), action: { type: "fetch" } } );
+      Date.now.mockReturnValue( 9_000 );
+      emit( { type: "updated", query: makeQuery( [name] ), action: { type: "success" } } );
+    };
+
+    slowFetch( "searchObservations" );
+    jest.advanceTimersByTime( 5_000 );
+    slowFetch( "searchAnnouncements" );
+    jest.advanceTimersByTime( 5_000 );
+
+    expect( mockInfoWithExtra ).toHaveBeenCalledTimes( 2 );
+    expect( mockInfoWithExtra.mock.calls.map( call => call[0] ) )
+      .toEqual( ["slow_query", "slow_query"] );
   } );
 
   it( "ignores a fetch fast enough not to notice", ( ) => {

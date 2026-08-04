@@ -16,6 +16,16 @@ const SLOW_FETCH_MS = 5_000;
 const HANG_FETCH_MS = 20_000;
 // How often in-flight fetches are checked against HANG_FETCH_MS.
 const HANG_SWEEP_MS = 5_000;
+// One slow fetch is a signal; a dozen in the same second are one signal
+// repeated. When the network stalls, every query a screen has in flight
+// crosses SLOW_FETCH_MS together — the Aug 4 log carried 100 of these lines
+// inside 19 minutes (a third of the whole log), seven of them within 7ms of
+// each other, and all 92 of the slow_query ones had status "success". Collect
+// what lands in a window and report the burst once.
+const BURST_WINDOW_MS = 5_000;
+// A burst's query and screen names go out as one string; enough of them to
+// see what stalled, not the whole cache.
+const BURST_NAME_LIMIT = 10;
 
 interface PendingFetch {
   startedAt: number;
@@ -33,6 +43,66 @@ let appStateSubscription: { remove: ( ) => void } | null = null;
 let lastNonActiveAt = 0;
 
 const currentScreen = ( ): string => getCurrentRoute( )?.name ?? "unknown";
+
+interface SlowReport {
+  query: string;
+  elapsedMs: number;
+  screen: string;
+  status: string;
+  hang: boolean;
+}
+
+let burst: SlowReport[] = [];
+let burstTimer: ReturnType<typeof setTimeout> | null = null;
+
+const distinctNames = ( values: string[] ): string => {
+  const unique = [...new Set( values )];
+  return unique.length > BURST_NAME_LIMIT
+    ? `${unique.slice( 0, BURST_NAME_LIMIT ).join( "," )},+${unique.length - BURST_NAME_LIMIT}`
+    : unique.join( "," );
+};
+
+const flushBurst = ( ) => {
+  burstTimer = null;
+  const reports = burst;
+  burst = [];
+  if ( reports.length === 0 ) return;
+  // A lone slow fetch is the case worth reading in full, so it keeps its own
+  // marker and fields; only an actual burst is summarised.
+  if ( reports.length === 1 ) {
+    const [only] = reports;
+    if ( only.hang ) {
+      logger.infoWithExtra( "query_hang", {
+        query: only.query,
+        elapsedMs: only.elapsedMs,
+        screen: only.screen,
+      } );
+    } else {
+      logger.infoWithExtra( "slow_query", {
+        query: only.query,
+        elapsedMs: only.elapsedMs,
+        status: only.status,
+        screen: only.screen,
+      } );
+    }
+    return;
+  }
+  const elapsed = reports.map( report => report.elapsedMs ).sort( ( a, b ) => a - b );
+  logger.infoWithExtra( "slow_query_burst", {
+    count: reports.length,
+    hangs: reports.filter( report => report.hang ).length,
+    errors: reports.filter( report => report.status === "error" ).length,
+    medianMs: elapsed[Math.floor( elapsed.length / 2 )],
+    maxMs: elapsed[elapsed.length - 1],
+    queries: distinctNames( reports.map( report => report.query ) ),
+    screens: distinctNames( reports.map( report => report.screen ) ),
+  } );
+};
+
+const reportSlow = ( entry: SlowReport ) => {
+  burst.push( entry );
+  if ( !burstTimer ) { burstTimer = setTimeout( flushBurst, BURST_WINDOW_MS ); }
+};
 
 // Query keys start with the name of the thing being fetched and continue with
 // ids, photo URIs and filter objects. Only the leading names are useful in a
@@ -84,12 +154,13 @@ const finishPending = ( query: Query, status: string ) => {
   if ( elapsedMs < SLOW_FETCH_MS ) return;
   if ( lastNonActiveAt >= entry.startedAt ) return;
 
-  logger.infoWithExtra( "slow_query", {
+  reportSlow( {
     query: entry.label,
     elapsedMs,
     status,
     // Where the wait started, which is the screen showing the spinner.
     screen: entry.screen,
+    hang: false,
   } );
 };
 
@@ -128,10 +199,12 @@ const onSweep = ( ) => {
     if ( entry.hangLogged || now - entry.startedAt < HANG_FETCH_MS ) return;
     entry.hangLogged = true;
     if ( lastNonActiveAt >= entry.startedAt ) return;
-    logger.infoWithExtra( "query_hang", {
+    reportSlow( {
       query: entry.label,
       elapsedMs: now - entry.startedAt,
       screen: entry.screen,
+      status: "pending",
+      hang: true,
     } );
   } );
 };
@@ -156,6 +229,11 @@ export const stopSlowLoadMonitoring = ( ) => {
   appStateSubscription?.remove( );
   appStateSubscription = null;
   pending.clear( );
+  // Report what has already been collected rather than dropping it: monitoring
+  // stops on teardown, and a burst mid-window is exactly what a teardown-
+  // triggering stall looks like.
+  if ( burstTimer ) { clearTimeout( burstTimer ); }
+  flushBurst( );
   lastNonActiveAt = 0;
 };
 
