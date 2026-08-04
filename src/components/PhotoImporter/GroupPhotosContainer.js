@@ -1,13 +1,11 @@
 // @flow
 
-import { useNavigation } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
 import { duplicateGroupedMediaGroups } from
   "components/PhotoImporter/helpers/duplicateGroupedMedia";
 import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
-import { t } from "i18next";
 import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
 import React, {
@@ -53,7 +51,6 @@ function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
 }
 
 const GroupPhotosContainer = ( ): Node => {
-  const navigation = useNavigation( );
   const queryClient = useQueryClient( );
   const { gridItemStyle } = useGridLayout( undefined, "fullWidth" );
   const itemHeight = gridItemStyle.height;
@@ -117,17 +114,6 @@ const GroupPhotosContainer = ( ): Node => {
 
   const totalPhotos = groupedPhotos
     .reduce( ( count, current ) => count + ( current.photos?.length || 0 ), 0 );
-
-  useEffect( ( ) => {
-    navigation.setOptions( {
-      headerTitle: t( "Group-Photos" ),
-      headerSubtitle: t( "X-PHOTOS-X-OBSERVATIONS", {
-        photoCount: totalPhotos,
-        observationCount: groupedPhotos.length,
-      } ),
-      onBackPress: ( ) => exitObservationFlow( ),
-    } );
-  }, [totalPhotos, groupedPhotos, navigation, exitObservationFlow] );
 
   const selectAllPhotos = () => {
     setSelectedIndices( groupedPhotos.map( ( _obs, index ) => index ) );

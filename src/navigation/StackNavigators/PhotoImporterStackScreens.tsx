@@ -6,19 +6,12 @@ import PermissionGateContainer, {
   READ_WRITE_MEDIA_PERMISSIONS,
 } from "components/SharedComponents/PermissionGateContainer";
 import { t } from "i18next";
-import ContextHeader from "navigation/ContextHeader";
 import { hideHeader } from "navigation/navigationOptions";
 import type { PhotoImporterStackParamList } from "navigation/types";
 import React from "react";
 import { Platform } from "react-native";
 
 const Stack = createNativeStackNavigator<PhotoImporterStackParamList>( );
-
-const GROUP_PHOTOS_OPTIONS = {
-  header: ContextHeader,
-  alignStart: true,
-  lazy: true,
-} as const;
 
 // On iOS we don't actually need PHOTO LIBRARY permission to import photos,
 // and in fact, if we ask for it and the user denies it after already
@@ -61,7 +54,7 @@ const PhotoImporterStackScreens = ( ) => (
     <Stack.Screen
       name="GroupPhotos"
       component={GroupPhotosContainer}
-      options={GROUP_PHOTOS_OPTIONS}
+      options={hideHeader}
     />
   </Stack.Group>
 );

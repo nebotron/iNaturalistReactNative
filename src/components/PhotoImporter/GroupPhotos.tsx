@@ -10,7 +10,7 @@ import {
   INatIcon,
   INatIconButton,
 } from "components/SharedComponents";
-import { SharedStackBottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
+import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import React, { useCallback, useEffect, useMemo } from "react";
 import { preloadImage } from "sharedHelpers/imageCropPreload";
@@ -211,7 +211,7 @@ const GroupPhotos = ( {
   };
 
   return (
-    <SharedStackBottomInsetViewWrapper>
+    <SharedStackViewWrapper>
       <CustomFlashList
         ListHeaderComponent={headerComponent}
         contentContainerStyle={flashListStyle}
@@ -290,7 +290,7 @@ const GroupPhotos = ( {
           loading={isCreatingObservations}
         />
       </View>
-    </SharedStackBottomInsetViewWrapper>
+    </SharedStackViewWrapper>
   );
 };
 
