@@ -137,10 +137,40 @@ wedge that clears on restart (Apple Developer Forums 806349, referenced in
 `promptDeleteOriginalDevicePhotos.ts`). Ruled out by counting across all 49:
 concurrent uploads, taps that open a modal during the delete, batch size, and
 the native presentation context, all of which appear as often in the successes.
-The open question is whether iOS declines to present the confirmation to an app
-that lost the foreground mid-delete; `photo_delete_pending_20s` now carries
-`leftForeground`, `appStateChanges`, `msSinceLastSuccess` and `hangsThisSession`
-to answer it. **Check that first next session.**
+
+**Losing the foreground is ruled out too** (Aug 3–4 log, 4 hangs, 0 successes).
+Two of the three hangs carrying the new fields had `leftForeground=false`,
+`appStateChanges=0`, `appState=active`, `sceneState=0`, `fgActiveScenes=1`,
+`authStatus=3`, `fetched==requested` and no modal in `vcChain`. The app is
+squarely in the foreground with every precondition met and the confirmation
+still never presents.
+
+What that log did show is that **the app almost never survives the hang** — each
+one is followed by a `pickup` with no `photo_delete_failed` in between, so the
+120s timeout never ran and never armed the cooldown, and the next launch fired
+the same doomed delete again (101 photos at 01:45:35, then 101 again at
+01:49:23). The cooldown is now armed at the 20s hang instead.
+
+Next thing to check: `photo_delete_hang_context`, added this session. It
+re-reads the presentation context *at* the hang and reports
+`mainQueueResponsive`. If the main queue doesn't answer within 5s, the hang is a
+wedged main thread and not a Photos-library problem at all — a completely
+different bug. If it answers with the same clean context, that's another theory
+dead and the remaining candidates are all inside Photos itself.
+
+### Photo imports can wedge on one asset
+
+Three imports in the Aug 3–4 log logged `Done tapped: importing N selected
+photo(s)` and no `settled` line at all, then a relaunch; a fourth took 237s for
+20 photos where a local batch of 34 takes ~300ms. `handleGalleryDone` catches
+everything and never rethrows, so a missing `settled` line means the promise is
+genuinely still pending, not a swallowed error. Cause: `exportPHAsset` awaited
+`writeDataForAssetResource` with no bound — its retry ladder only fires on an
+*error*, so a call that never calls back hung `Promise.all` and the whole import
+forever. Now bounded by a no-progress watchdog (`EXPORT_STALLED`, 60s without a
+`progressHandler` tick); a slow-but-advancing iCloud download is still left
+alone however long it takes. `photo_import_stalled` reports the progress counts
+at 30s. **Check whether either fires next session.**
 
 ### Known, not worth acting on yet
 
@@ -158,3 +188,7 @@ to answer it. **Check that first next session.**
 3,443 lines over five days, of which ~2,550 were six diagnostics repeating
 themselves; the removals in that session should hold the next log near 900.
 If a fresh log is much bigger than that, something new is looping.
+
+The Aug 3–4 log came in at 124 lines over six hours — roughly 500/day, so the
+removals held. At that volume nothing is noise-dominated any more, and the
+grouped summary is small enough that the dump is worth loading every time.
