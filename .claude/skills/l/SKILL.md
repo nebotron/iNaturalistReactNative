@@ -151,12 +151,48 @@ one is followed by a `pickup` with no `photo_delete_failed` in between, so the
 the same doomed delete again (101 photos at 01:45:35, then 101 again at
 01:49:23). The cooldown is now armed at the 20s hang instead.
 
-Next thing to check: `photo_delete_hang_context`, added this session. It
-re-reads the presentation context *at* the hang and reports
-`mainQueueResponsive`. If the main queue doesn't answer within 5s, the hang is a
-wedged main thread and not a Photos-library problem at all — a completely
-different bug. If it answers with the same clean context, that's another theory
-dead and the remaining candidates are all inside Photos itself.
+**A wedged main thread is ruled out** (Aug 4 log, 5 hangs, 2 successes).
+`photo_delete_hang_context` came back on all five with `mainQueueResponsive=true`
+— `msToRespond` was 8, 8, 7, 8 and 1435ms — reporting the same clean context as
+before the delete: `appState=0 sceneState=0 fgActiveScenes=1 authStatus=3
+fetched==requested vcChain=UIViewController`. The main thread is answering in
+8ms and the confirmation still never presents.
+
+**The GPS write-burst mechanism is ruled out too.** Two of the five hangs were
+on `e0da994f7`, the build that cut a 101-photo import from ~101
+library transactions before the delete to zero. Same hangs, same rate. The
+burst was a bystander; keep the coalescing (it was right on its own terms) but
+stop treating it as the explanation.
+
+**Batch size and time since launch are ruled out.** 178 photos deleted fine at
+15:29:55; 4 photos hung at 15:16:22. A hang came 36s after a fresh launch
+(13:57) and a success came 1.8 min after one (15:29).
+
+**Escalating the cooldown is a bad idea, and the log says so.** The obvious
+mitigation — back the 10-minute cooldown off further on each consecutive hang —
+would have blocked the 15:29:55 success, which landed 13 minutes after the
+15:16 hang and after the cooldown had already lapsed twice. Deletes do recover
+without a restart.
+
+Next thing to check: `probeOk`/`probeMs` on `photo_delete_hang_context`, added
+this session. It runs a `performChanges` the app owns outright (create an
+album, then delete it) concurrently with the hung deletion. That transaction
+needs no user-consent alert, so:
+- **probe returns fast** → PHPhotoLibrary is healthy and the wedge is the
+  consent-alert path specifically. Everything left to try is about how that
+  alert gets presented.
+- **probe hangs too** → ambiguous between a wedged `photolibraryd` and
+  transactions simply queueing behind the dead deletion. Disambiguate next time
+  by also probing at a moment with nothing in flight (don't add that
+  pre-emptively: an album write before every delete is exactly the kind of
+  library traffic we just removed).
+
+Also new on that line: `windowList`, every window on the foreground scene by
+class, level, hidden and alpha. iOS presents its confirmation in its own
+window, not in the key window's chain, so `vcChain` structurally cannot tell
+"the alert was built and never shown" from "it was never built". The window
+*count* varied across the Aug 4 hangs (1 in the morning, 2 in the evening) with
+nothing to say what the second one was.
 
 **When the hangs started, from git rather than the log.** The first commit
 reporting "the deletion shows no iOS confirmation and deletes nothing" is
@@ -174,9 +210,15 @@ Two mitigations follow from that and are now in place: assets already queued
 for deletion are skipped entirely (writing GPS into a photo about to be
 deleted was pure waste), and the writes that remain are coalesced into a single
 `updateAssetLocations` transaction. Together a 101-photo import goes from ~101
-library transactions before the delete to zero. **If the hangs stop, that was
-the mechanism; if they continue at the same rate, the burst was a bystander and
-the cause is inside Photos.**
+library transactions before the delete to zero. They continued at the same
+rate — see above. The burst was a bystander.
+
+**Location writes hang the same way.** `updateAssetLocations for 2 photo(s)
+timed out after 45000ms` at 20:41 on Aug 4, and from that minute on every
+delete in the session hung, where one had succeeded at 20:22. Editing an asset
+the app didn't create needs the same user-consent alert a deletion does, so
+this is the same wedge reached by a second route — and useful, because it says
+the trigger isn't anything specific to `deleteAssets`.
 
 ### Photo imports can wedge on one asset
 
@@ -190,7 +232,14 @@ genuinely still pending, not a swallowed error. Cause: `exportPHAsset` awaited
 forever. Now bounded by a no-progress watchdog (`EXPORT_STALLED`, 60s without a
 `progressHandler` tick); a slow-but-advancing iCloud download is still left
 alone however long it takes. `photo_import_stalled` reports the progress counts
-at 30s. **Check whether either fires next session.**
+at 30s.
+
+Neither fired in the Aug 4 log, and 16 of 17 imports settled (the slowest of
+them in 753ms). The one exception — 42 photos at 15:30:16, no `settled` line,
+relaunch 42s later — did *not* trip `photo_import_stalled` at the 30s mark it
+would have reached, so the import had already finished and the `settled` POST
+was lost with the process. Watch for it again, but the wedge itself looks
+fixed.
 
 ### Known, not worth acting on yet
 
@@ -202,6 +251,11 @@ at 30s. **Check whether either fires next session.**
   items. Once in five days; revisit if it recurs.
 - **Places autocomplete failures** are a Google Cloud config issue (API not
   enabled for the key), not app code.
+- **Uploads aborted while backgrounded.** Five `Upload: Failed … stage:
+  media_upload, app backgrounded (background)` in the Aug 4 log, three of them
+  at ~400s — an iOS background task expiring mid-upload, which is what is
+  supposed to happen. One of the five was the keychain bug above (`without API
+  token!`). Only worth revisiting if it starts happening in the foreground.
 
 ### Volume, for calibration
 
@@ -212,3 +266,10 @@ If a fresh log is much bigger than that, something new is looping.
 The Aug 3–4 log came in at 124 lines over six hours — roughly 500/day, so the
 removals held. At that volume nothing is noise-dominated any more, and the
 grouped summary is small enough that the dump is worth loading every time.
+
+The Aug 4 log was 281 lines over 20 hours (~340/day), but 100 of them were
+`slow_query`/`query_hang` inside 19 minutes: one network stall, one line per
+in-flight query. Those are now coalesced into `slow_query_burst` (a lone slow
+fetch still gets its own line), which would have made those 100 about 20. The
+lesson generalises — any per-occurrence diagnostic on something the network can
+stall will arrive N-at-a-time, so summarise the burst from the start.
