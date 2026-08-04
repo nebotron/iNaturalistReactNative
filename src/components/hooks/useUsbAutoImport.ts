@@ -56,10 +56,10 @@ const useUsbAutoImport = ( ) => {
   // log line is a network POST, so logging every tick would flood the log.
   // Only emit a diagnostic when its text changes from the last one.
   const lastDiag = useRef<string>( "" );
-  const logDiag = useCallback( ( msg: string ) => {
+  const logDiag = useCallback( ( msg: string, level: "info" | "debug" = "info" ) => {
     if ( msg === lastDiag.current ) return;
     lastDiag.current = msg;
-    logger.info( `[diag] ${msg}` );
+    logger[level]( `[diag] ${msg}` );
   }, [] );
 
   const offload = useCallback( async ( ) => {
@@ -164,10 +164,21 @@ const useUsbAutoImport = ( ) => {
           // A null name has two very different causes; report which one so we
           // don't conflate "never set up" with "drive not mounted right now".
           const d = await getUsbFolderDiagnostics( );
-          logDiag( d.bookmarkPresent
-            ? "not polling: folder bookmark saved but did not resolve "
-              + `(resolved=${d.resolved}, reachable=${d.reachable}, stale=${d.stale})`
-            : "not polling: no folder bookmark saved (folder never picked in Settings)" );
+          // An unresolvable bookmark is what a saved folder looks like with the
+          // camera unplugged, i.e. nearly always — nine of these in the Aug 4
+          // log, one per foreground, none of them a bug. Keep it at debug (out
+          // of release builds) rather than reporting "no camera attached" to
+          // the shared log all day. "Never picked a folder" still warrants a
+          // line: it explains a feature that is silently doing nothing.
+          if ( d.bookmarkPresent ) {
+            logDiag(
+              "not polling: folder bookmark saved but did not resolve "
+                + `(resolved=${d.resolved}, reachable=${d.reachable}, stale=${d.stale})`,
+              "debug",
+            );
+          } else {
+            logDiag( "not polling: no folder bookmark saved (folder never picked in Settings)" );
+          }
           return;
         }
         logDiag( `polling USB folder "${folder}" every ${SCAN_INTERVAL_MS}ms` );
