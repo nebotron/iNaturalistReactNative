@@ -19,6 +19,24 @@
 - ( NSString * )inatPresentedVCChain:( UIWindow * )window;
 @end
 
+// A dismissal's completion block runs before UIKit has finished tearing the
+// presentation down, and iOS won't present its Photos confirmation over a
+// window it still considers busy — which leaves performChanges' completion
+// handler hanging with no dialog on screen, the failure mode this whole file
+// keeps chasing. Give the window a beat to settle before asking Photos for a
+// transaction. DevicePhotoCleanup.tsx already does this on the JS side for the
+// sheet it dismisses itself; this covers the modals dismissed down here.
+static const NSTimeInterval kInatDismissalSettleSeconds = 0.35;
+
+static void inatAfterDismissalSettles( void ( ^work )( void ) )
+{
+  dispatch_after(
+    dispatch_time( DISPATCH_TIME_NOW,
+      ( int64_t )( kInatDismissalSettleSeconds * NSEC_PER_SEC ) ),
+    dispatch_get_main_queue(),
+    work );
+}
+
 @implementation ImageCropper {
   // Tracks the single in-flight deletePhotoAssets call (JS serializes calls
   // through one chain, so at most one is ever pending) so
@@ -819,7 +837,94 @@ RCT_EXPORT_METHOD( updateAssetLocation
     UIWindow *keyWindow = [self inatKeyWindow];
     UIViewController *root = keyWindow.rootViewController;
     if ( root.presentedViewController ) {
-      [root dismissViewControllerAnimated:NO completion:doUpdate];
+      [root dismissViewControllerAnimated:NO completion:^{
+        inatAfterDismissalSettles( doUpdate );
+      }];
+    } else {
+      doUpdate();
+    }
+  } );
+}
+
+// Applies location to many assets in a single PHPhotoLibrary transaction.
+// One performChanges means one system confirmation instead of one per photo:
+// a group-photo import fired a separate transaction for every photo missing
+// GPS, back to back, in the seconds before the deletion that then hung. See
+// the batching note in applyTrackedLocationToPhotos.ts.
+RCT_EXPORT_METHOD( updateAssetLocations
+                  : ( NSArray<NSDictionary *> * )updates resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    NSMutableArray<NSString *> *ids = [NSMutableArray array];
+    for ( NSDictionary *update in updates ) {
+      NSString *phUri = update[@"phUri"];
+      if ( ![phUri isKindOfClass:[NSString class]] ) { continue; }
+      [ids addObject:( [phUri hasPrefix:@"ph://"] ? [phUri substringFromIndex:5] : phUri )];
+    }
+
+    PHFetchResult<PHAsset *> *fetched =
+      [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
+    NSMutableDictionary<NSString *, PHAsset *> *assetsById = [NSMutableDictionary dictionary];
+    for ( PHAsset *asset in fetched ) {
+      NSString *identifier = asset.localIdentifier;
+      NSRange slash = [identifier rangeOfString:@"/"];
+      if ( slash.location != NSNotFound ) {
+        identifier = [identifier substringToIndex:slash.location];
+      }
+      assetsById[identifier] = asset;
+    }
+
+    // Collect the assets that actually need a write. As in updateAssetLocation,
+    // an asset that already carries its own GPS is left alone. An empty change
+    // block can make performChanges never call its completion handler, so
+    // resolve without opening a transaction at all.
+    NSMutableArray<PHAsset *> *targets = [NSMutableArray array];
+    NSMutableArray<CLLocation *> *locations = [NSMutableArray array];
+    for ( NSDictionary *update in updates ) {
+      NSString *phUri = update[@"phUri"];
+      if ( ![phUri isKindOfClass:[NSString class]] ) { continue; }
+      NSString *identifier = [phUri hasPrefix:@"ph://"] ? [phUri substringFromIndex:5] : phUri;
+      NSRange slash = [identifier rangeOfString:@"/"];
+      if ( slash.location != NSNotFound ) {
+        identifier = [identifier substringToIndex:slash.location];
+      }
+      PHAsset *asset = assetsById[identifier];
+      if ( !asset || asset.location != nil ) { continue; }
+      [targets addObject:asset];
+      [locations addObject:[[CLLocation alloc]
+        initWithLatitude:[update[@"latitude"] doubleValue]
+        longitude:[update[@"longitude"] doubleValue]]];
+    }
+
+    if ( targets.count == 0 ) {
+      resolve( @{ @"updated": @0, @"requested": @( updates.count ) } );
+      return;
+    }
+
+    void ( ^doUpdate )( void ) = ^{
+      [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+        [targets enumerateObjectsUsingBlock:^( PHAsset *asset, NSUInteger idx, BOOL *stop ) {
+          PHAssetChangeRequest *changeRequest =
+            [PHAssetChangeRequest changeRequestForAsset:asset];
+          changeRequest.location = locations[idx];
+        }];
+      } completionHandler:^( BOOL success, NSError *error ) {
+        if ( success ) {
+          resolve( @{ @"updated": @( targets.count ), @"requested": @( updates.count ) } );
+        } else {
+          reject( @"UPDATE_LOCATION_FAILED", error.localizedDescription, error );
+        }
+      }];
+    };
+
+    UIWindow *keyWindow = [self inatKeyWindow];
+    UIViewController *root = keyWindow.rootViewController;
+    if ( root.presentedViewController ) {
+      [root dismissViewControllerAnimated:NO completion:^{
+        inatAfterDismissalSettles( doUpdate );
+      }];
     } else {
       doUpdate();
     }
@@ -1507,7 +1612,9 @@ RCT_EXPORT_METHOD( deletePhotoAssets
 
     UIViewController *root = keyWindow.rootViewController;
     if ( root.presentedViewController ) {
-      [root dismissViewControllerAnimated:NO completion:doDelete];
+      [root dismissViewControllerAnimated:NO completion:^{
+        inatAfterDismissalSettles( doDelete );
+      }];
     } else {
       doDelete();
     }

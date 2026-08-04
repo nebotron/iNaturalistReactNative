@@ -37,16 +37,11 @@ export interface TrackedLocationMatch {
 const { ImageCropper } = NativeModules as {
   ImageCropper?: {
     updateAssetLocation: ( phUri: string, latitude: number, longitude: number ) => Promise<boolean>;
+    updateAssetLocations?: (
+      updates: { phUri: string; latitude: number; longitude: number }[]
+    ) => Promise<{ updated: number; requested: number }>;
   };
 };
-
-// Native Photos-library writes can trigger a system confirmation dialog that
-// silently never presents under certain modal states, leaving the native
-// promise unresolved forever (see ImageCropper.m). That's a native-side bug
-// worth fixing at the source, but this timeout is the backstop that keeps a
-// stuck native call from hanging the UI (e.g. the LocationHistory screen's
-// "Apply Tracked Location" button spinner) indefinitely regardless.
-const DEVICE_PHOTO_UPDATE_TIMEOUT_MS = 15_000;
 
 const withTimeout = <T, >( promise: Promise<T>, ms: number, label: string ): Promise<T> => (
   new Promise<T>( ( resolve, reject ) => {
@@ -88,6 +83,113 @@ const reportSuppressed = ( kind: "skipped" | "failed", detail: string ) => {
   state.count = 0;
 };
 
+// An asset the user is about to have deleted doesn't need its GPS filled in
+// first. Both import paths queue the originals for deletion in the store
+// (`pendingGroupPhotoDeletionUris` from Group Photos and the crop editor,
+// `removedOriginalDevicePhotoUris` from the obs-create flow), and the deletion
+// runs seconds after the save. Writing to those assets is not just wasted
+// work: each write is its own PHPhotoLibrary transaction, so a 101-photo
+// import fired ~101 library writes in the moments before the deletion that
+// then hung. Skipping them removes that burst from the window where the
+// confirmation machinery wedges — see promptDeleteOriginalDevicePhotos.ts.
+//
+// Normalizing both queues per photo is O(n²) over an import, so cache the set
+// against the store arrays that produced it; both are replaced immutably on
+// every add, so a reference match means nothing has been queued since.
+let deletionUriCache: {
+  pending: string[];
+  removed: string[];
+  set: Set<string>;
+} | null = null;
+
+const isQueuedForDeletion = ( phUri: string ): boolean => {
+  const { pendingGroupPhotoDeletionUris, removedOriginalDevicePhotoUris } = useStore.getState( );
+  if (
+    deletionUriCache?.pending !== pendingGroupPhotoDeletionUris
+    || deletionUriCache?.removed !== removedOriginalDevicePhotoUris
+  ) {
+    deletionUriCache = {
+      pending: pendingGroupPhotoDeletionUris,
+      removed: removedOriginalDevicePhotoUris,
+      set: new Set(
+        [...pendingGroupPhotoDeletionUris, ...removedOriginalDevicePhotoUris]
+          .map( uri => normalizeDevicePhotoUri( uri ) )
+          .filter( ( uri ): uri is string => !!uri ),
+      ),
+    };
+  }
+  return deletionUriCache.set.has( phUri );
+};
+
+// Coalesces the per-photo location writes an import produces into one native
+// call. Every caller below runs inside a Promise.all, so the whole burst
+// arrives within a tick or two; collecting it and applying every change
+// request inside a single PHPhotoLibrary.performChanges turns N transactions
+// (and N chances for iOS to fail to present its confirmation) into one.
+interface PendingLocationWrite {
+  phUri: string;
+  latitude: number;
+  longitude: number;
+  resolve: ( ) => void;
+}
+const COALESCE_WINDOW_MS = 250;
+
+// Native Photos-library writes can trigger a system confirmation dialog that
+// silently never presents under certain modal states, leaving the native
+// promise unresolved forever (see ImageCropper.m). That's a native-side bug
+// worth fixing at the source, but this timeout is the backstop that keeps a
+// stuck native call from hanging the UI (e.g. the LocationHistory screen's
+// "Apply Tracked Location" button spinner) indefinitely regardless.
+//
+// Batching means one confirmation for the whole import rather than one per
+// photo, so the wait now includes a human deciding to tap it — the old 15s was
+// a timeout on a dialog nobody had to answer. Still bounded, because a
+// genuinely wedged write holds the shared queue (and the deletion behind it)
+// until it gives up.
+const BATCH_UPDATE_TIMEOUT_MS = 45_000;
+
+let pendingLocationWrites: PendingLocationWrite[] = [];
+let coalesceTimer: ReturnType<typeof setTimeout> | null = null;
+
+const flushLocationWrites = async ( ) => {
+  const batch = pendingLocationWrites;
+  pendingLocationWrites = [];
+  coalesceTimer = null;
+  if ( batch.length === 0 ) return;
+  const updates = batch.map( ( { phUri, latitude, longitude } ) => (
+    { phUri, latitude, longitude }
+  ) );
+  try {
+    // Serialized with deletions (and other location updates) so only one
+    // native Photos-library write is ever in flight — see
+    // enqueuePhotoLibraryWrite in promptDeleteOriginalDevicePhotos.ts.
+    await enqueuePhotoLibraryWrite( ( ): Promise<unknown> => withTimeout<unknown>(
+      ImageCropper?.updateAssetLocations
+        ? ImageCropper.updateAssetLocations( updates )
+        // Older builds without the batched native method still work, one
+        // transaction per photo.
+        : Promise.all( updates.map( u => ImageCropper?.updateAssetLocation(
+          u.phUri,
+          u.latitude,
+          u.longitude,
+        ) ) ),
+      BATCH_UPDATE_TIMEOUT_MS,
+      `updateAssetLocations for ${updates.length} photo(s)`,
+    ) );
+    clearPhotoLibraryWriteFailure( );
+  } catch ( error ) {
+    reportSuppressed( "failed", String( error instanceof Error
+      ? error.message
+      : error ) );
+    if ( error instanceof Error && error.message.includes( "timed out" ) ) {
+      recordPhotoLibraryWriteFailure( );
+    }
+  }
+  // Best-effort: callers only await this to keep the save from racing ahead of
+  // the write, so a failed batch settles the same way a failed write did.
+  batch.forEach( write => write.resolve( ) );
+};
+
 // Best-effort: also fills in the location metadata on the original Photos
 // library asset (if we know its ph:// identifier), so tracked-location is
 // reflected in the Photos app, not just the app's own copy. The native side
@@ -109,24 +211,21 @@ const applyLocationToDevicePhotoLibrary = async (
     reportSuppressed( "skipped", "still in Photos-library write cooldown" );
     return;
   }
-  try {
-    // Serialized with deletions (and other location updates) so only one
-    // native Photos-library write is ever in flight — see
-    // enqueuePhotoLibraryWrite in promptDeleteOriginalDevicePhotos.ts.
-    await enqueuePhotoLibraryWrite( ( ) => withTimeout(
-      ImageCropper.updateAssetLocation( phUri, match.latitude, match.longitude ),
-      DEVICE_PHOTO_UPDATE_TIMEOUT_MS,
-      `updateAssetLocation for ${phUri}`,
-    ) );
-    clearPhotoLibraryWriteFailure( );
-  } catch ( error ) {
-    reportSuppressed( "failed", String( error instanceof Error
-      ? error.message
-      : error ) );
-    if ( error instanceof Error && error.message.includes( "timed out" ) ) {
-      recordPhotoLibraryWriteFailure( );
-    }
+  if ( isQueuedForDeletion( phUri ) ) {
+    reportSuppressed( "skipped", "photo is queued for deletion after import" );
+    return;
   }
+  await new Promise<void>( resolve => {
+    pendingLocationWrites.push( {
+      phUri,
+      latitude: match.latitude,
+      longitude: match.longitude,
+      resolve,
+    } );
+    if ( !coalesceTimer ) {
+      coalesceTimer = setTimeout( ( ) => { void flushLocationWrites( ); }, COALESCE_WINDOW_MS );
+    }
+  } );
 };
 
 const toGpsExifTags = ( { latitude, longitude, accuracy }: TrackedLocationMatch ) => ( {

@@ -158,6 +158,26 @@ wedged main thread and not a Photos-library problem at all — a completely
 different bug. If it answers with the same clean context, that's another theory
 dead and the remaining candidates are all inside Photos itself.
 
+**When the hangs started, from git rather than the log.** The first commit
+reporting "the deletion shows no iOS confirmation and deletes nothing" is
+`8f1fd32f` (Jul 23). The day before, `16285bcd` (Jul 22) extended the
+tracked-location write-back from the group-photos import to *every* save path,
+so every observation saved without GPS now writes location into its Photos
+assets. That write is a `PHPhotoLibrary.performChanges` per photo, and the
+import fires the whole burst — up to one per imported photo — in the seconds
+before the deletion of those same assets. Nothing proves the burst wedges the
+confirmation machinery, but it is the only app-side change adjacent to the
+onset, and it means the deletion that hangs is always preceded by ~N library
+transactions that didn't exist before Jul 22.
+
+Two mitigations follow from that and are now in place: assets already queued
+for deletion are skipped entirely (writing GPS into a photo about to be
+deleted was pure waste), and the writes that remain are coalesced into a single
+`updateAssetLocations` transaction. Together a 101-photo import goes from ~101
+library transactions before the delete to zero. **If the hangs stop, that was
+the mechanism; if they continue at the same rate, the burst was a bystander and
+the cause is inside Photos.**
+
 ### Photo imports can wedge on one asset
 
 Three imports in the Aug 3–4 log logged `Done tapped: importing N selected
