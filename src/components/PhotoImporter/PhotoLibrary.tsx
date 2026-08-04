@@ -170,8 +170,11 @@ const PhotoLibrary = ( ) => {
           const { attempts } = await ImageCropper.exportPHAsset( node.image.uri, destPath );
           // A retry succeeding is itself worth knowing: it confirms failed
           // imports are a slow/flaky iCloud download, not a hard failure.
+          // The ph:// URI identifies the user's photo and belongs in a shared
+          // log no more than the coordinates do; the attempt count is the
+          // information.
           if ( attempts > 1 ) {
-            logger.info( `Exported ${node.image.uri} after ${attempts} attempt(s)` );
+            logger.info( `Exported a photo after ${attempts} attempt(s)` );
           }
         } else {
           // Fallback if native module unavailable (re-encodes, may lose EXIF).
@@ -211,7 +214,7 @@ const PhotoLibrary = ( ) => {
         onPhotoSettled?.( true );
         return copied;
       } catch ( error ) {
-        logger.error( `Error copying photo ${node.image.uri} from camera roll`, error );
+        logger.error( "Error copying a photo from camera roll", error );
         onPhotoSettled?.( false );
         return null;
       }
