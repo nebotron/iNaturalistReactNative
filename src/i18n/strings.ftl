@@ -632,7 +632,6 @@ Google-Play-Services-Not-Installed = Google Play Services Not Installed
 GRANT-PERMISSION = GRANT PERMISSION
 # Title of a screen asking for permission
 Grant-Permission-title = Grant Permission
-Group-Photos = Group Photos
 # Onboarding for users learning to group photos in the camera roll
 Group-photos-onboarding = Group photos into observations– make sure there is only one species per observation
 HELP = HELP
@@ -1804,15 +1803,6 @@ X-Photos-Updated-With-Tracked-Location =
     { $count ->
         [one] Updated { $count } photo with your tracked location.
        *[other] Updated { $count } photos with your tracked location.
-    }
-# Displays number of photos and observations a user has selected from the camera roll
-X-PHOTOS-X-OBSERVATIONS =
-    { $photoCount ->
-        [one] 1 PHOTO
-       *[other] { $photoCount } PHOTOS
-    }, { $observationCount ->
-        [one] 1 OBSERVATION
-       *[other] { $observationCount } OBSERVATIONS
     }
 # Displays number of photos and sounds attached to an observation in the Media
 # Viewer
