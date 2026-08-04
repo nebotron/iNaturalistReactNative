@@ -1309,6 +1309,80 @@ RCT_EXPORT_METHOD( photoDeletionContext
   } );
 }
 
+// Returns the library photos whose capture time, floored to the second,
+// matches one of the passed times, as parallel arrays of ph:// URIs and
+// millisecond timestamps.
+//
+// Delete Unfaved used to do this by paging CameraRoll: up to 20 bridge round
+// trips, each serializing a thousand full asset dictionaries, over a window
+// spanning the user's entire observing history — and then JS threw away
+// everything whose capture second didn't match an observation. Matching here
+// means one call carrying only the photos that can matter, and no cap on how
+// much of the library it can consider.
+RCT_EXPORT_METHOD( photoAssetsMatchingCaptureTimes
+                  : ( NSArray<NSNumber *> * )captureTimesMs fromTime
+                  : ( NSNumber * )fromTimeMs toTime
+                  : ( NSNumber * )toTimeMs resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  PHAuthorizationStatus status =
+    [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+  if ( status != PHAuthorizationStatusAuthorized && status != PHAuthorizationStatusLimited ) {
+    // Rejecting hands the scan back to CameraRoll, which knows how to ask.
+    reject( @"PHOTO_LIBRARY_UNAUTHORIZED",
+      [NSString stringWithFormat:@"photo library access not granted (status=%ld)",
+        ( long )status],
+      nil );
+    return;
+  }
+
+  NSMutableSet<NSNumber *> *seconds =
+    [NSMutableSet setWithCapacity:( captureTimesMs ?: @[] ).count];
+  for ( NSNumber *ms in ( captureTimesMs ?: @[] ) ) {
+    [seconds addObject:@( ( long long )floor( [ms doubleValue] / 1000.0 ) )];
+  }
+  if ( seconds.count == 0 ) {
+    resolve( @{ @"uris": @[], @"timestamps": @[], @"scanned": @0 } );
+    return;
+  }
+
+  // Off the module's serial queue: enumerating a large library takes long
+  // enough to stall cropping and thumbnailing behind it.
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+    NSMutableArray<NSPredicate *> *predicates = [NSMutableArray arrayWithObject:
+      [NSPredicate predicateWithFormat:@"mediaType == %d", PHAssetMediaTypeImage]];
+    if ( fromTimeMs ) {
+      [predicates addObject:[NSPredicate predicateWithFormat:@"creationDate >= %@",
+        [NSDate dateWithTimeIntervalSince1970:[fromTimeMs doubleValue] / 1000.0]]];
+    }
+    if ( toTimeMs ) {
+      [predicates addObject:[NSPredicate predicateWithFormat:@"creationDate <= %@",
+        [NSDate dateWithTimeIntervalSince1970:[toTimeMs doubleValue] / 1000.0]]];
+    }
+    PHFetchOptions *options = [[PHFetchOptions alloc] init];
+    options.predicate = [NSCompoundPredicate andPredicateWithSubpredicates:predicates];
+    PHFetchResult<PHAsset *> *fetched = [PHAsset fetchAssetsWithOptions:options];
+
+    NSMutableArray<NSString *> *uris = [NSMutableArray array];
+    NSMutableArray<NSNumber *> *timestamps = [NSMutableArray array];
+    [fetched enumerateObjectsUsingBlock:^( PHAsset *asset, NSUInteger idx, BOOL *stop ) {
+      NSDate *created = asset.creationDate;
+      if ( !created ) return;
+      long long second = ( long long )floor( created.timeIntervalSince1970 );
+      if ( ![seconds containsObject:@( second )] ) return;
+      [uris addObject:[@"ph://" stringByAppendingString:asset.localIdentifier]];
+      [timestamps addObject:@( second * 1000 )];
+    }];
+
+    resolve( @{
+      @"uris": uris,
+      @"timestamps": timestamps,
+      @"scanned": @( fetched.count ),
+    } );
+  } );
+}
+
 // Returns the subset of the passed ph:// URIs that still resolve to a real
 // asset in the photo library. An identifier orphaned by an earlier deletion or
 // a device restore resolves to nothing: it can't be previewed and can't be

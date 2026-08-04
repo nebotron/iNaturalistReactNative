@@ -71,14 +71,28 @@ const fromTuple = ( tuple: CachedObservationTuple ): CachedObservation => ( {
   rankLevel: tuple[5],
 } );
 
+// Parsing a full history is tens of thousands of entries of JSON, and every
+// screen that uses the cache reads it at least twice — once to draw something
+// immediately, once inside the sync. Keep the last parse, keyed by the exact
+// text it came from, so a repeat read is a string comparison instead. Keying on
+// the text rather than the user means a write from anywhere (or a test clearing
+// storage) invalidates it on its own.
+let parsedCache: { key: string; raw: string; cache: UserObservationsCache } | null = null;
+
 export const readUserObservationsCache = ( userId: number ): UserObservationsCache => {
-  const raw = zustandStorage.getItem( cacheKey( userId ) );
+  const key = cacheKey( userId );
+  const raw = zustandStorage.getItem( key );
   if ( typeof raw !== "string" ) {
     return new Map( );
   }
+  if ( parsedCache?.key === key && parsedCache.raw === raw ) {
+    return parsedCache.cache;
+  }
   try {
     const tuples: CachedObservationTuple[] = JSON.parse( raw );
-    return new Map( tuples.map( tuple => [tuple[0], fromTuple( tuple )] ) );
+    const cache = new Map( tuples.map( tuple => [tuple[0], fromTuple( tuple )] ) );
+    parsedCache = { key, raw, cache };
+    return cache;
   } catch ( error ) {
     logger.warn( "Discarding an unreadable observation cache", error );
     return new Map( );
@@ -97,11 +111,11 @@ const writeUserObservationsCache = (
   cache: UserObservationsCache,
   lastSync: string,
 ): void => {
-  zustandStorage.setItem(
-    cacheKey( userId ),
-    JSON.stringify( Array.from( cache.values( ) ).map( toTuple ) ),
-  );
+  const raw = JSON.stringify( Array.from( cache.values( ) ).map( toTuple ) );
+  const key = cacheKey( userId );
+  zustandStorage.setItem( key, raw );
   zustandStorage.setItem( lastSyncKey( userId ), lastSync );
+  parsedCache = { key, raw, cache };
 };
 
 const toWholeSecondMs = ( ms: number ): number => Math.floor( ms / 1000 ) * 1000;
@@ -218,6 +232,12 @@ export const syncUserObservations = async (
     page += 1;
   }
 
+  if ( syncedCount === 0 && cache.size > 0 ) {
+    // Nothing changed, and re-serializing an entire history to store exactly
+    // what's already there is the slowest part of an up-to-date sync.
+    zustandStorage.setItem( lastSyncKey( userId ), syncStartedAt );
+    return cache;
+  }
   writeUserObservationsCache( userId, cache, syncStartedAt );
   return cache;
 };

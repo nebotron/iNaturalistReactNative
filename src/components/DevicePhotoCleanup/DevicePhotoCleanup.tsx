@@ -128,17 +128,27 @@ const DevicePhotoCleanup = ( ) => {
     const lastSynced = currentUserId
       ? readUserObservationsCache( currentUserId )
       : undefined;
-    const assets = lastSynced?.size
+    const scan = lastSynced?.size
       ? prefetchDeviceAssets( realm, lastSynced )
       : undefined;
+    const startedAt = Date.now( );
+    let syncedAt = startedAt;
     loadObservationsCache( currentUserId )
       .then( cache => {
         if ( !cancelled ) {
           setSyncingFaves( false );
         }
-        return findUnfavoritedDevicePhotoDays( realm, assets, cache );
+        syncedAt = Date.now( );
+        return findUnfavoritedDevicePhotoDays( realm, scan, cache );
       } )
       .then( result => {
+        // How long the user sat on the spinner, split into the two waits, so
+        // the app log can say which one to shorten next.
+        logger.info(
+          `Found ${result.reduce( ( count, day ) => count + day.uris.length, 0 )} `
+          + `photo(s) in ${Date.now( ) - startedAt}ms `
+          + `(sync ${syncedAt - startedAt}ms, match ${Date.now( ) - syncedAt}ms)`,
+        );
         if ( !cancelled ) {
           setDays( result );
         }

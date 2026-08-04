@@ -1,7 +1,7 @@
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import { format } from "date-fns";
-import { Platform } from "react-native";
+import { NativeModules, Platform } from "react-native";
 import type Realm from "realm";
 import type { RealmObservation } from "realmModels/types";
 import { getDevicePhotoUrisFromObservation } from "sharedHelpers/duplicateUploadedDevicePhotos";
@@ -123,10 +123,61 @@ interface DeviceAsset {
   timestampMs: number | null;
 }
 
+interface NativePhotoMatcher {
+  photoAssetsMatchingCaptureTimes?: (
+    captureTimesMs: number[],
+    fromTime: number | null,
+    toTime: number | null,
+  ) => Promise<{ uris?: string[]; timestamps?: number[]; scanned?: number }>;
+}
+
+// Asks the Photos framework for the assets whose capture second matches one of
+// the observation times, so only those cross the bridge. Returns null when the
+// native helper can't answer (Android, an older build, no library access), in
+// which case the caller pages CameraRoll instead.
+const loadMatchingDeviceAssets = async (
+  times: number[],
+  fromTime: number | undefined,
+  toTime: number | undefined,
+): Promise<DeviceAsset[] | null> => {
+  // Read at call time rather than at import so a test (and a build without the
+  // method) can be told apart from a build that has it.
+  const { ImageCropper } = NativeModules as { ImageCropper?: NativePhotoMatcher };
+  if ( Platform.OS !== "ios" || !ImageCropper?.photoAssetsMatchingCaptureTimes ) {
+    return null;
+  }
+  const startedAt = Date.now( );
+  try {
+    const result = await ImageCropper.photoAssetsMatchingCaptureTimes(
+      times,
+      fromTime ?? null,
+      toTime ?? null,
+    );
+    const uris = result?.uris;
+    if ( !Array.isArray( uris ) ) {
+      return null;
+    }
+    const timestamps = result?.timestamps ?? [];
+    logger.info(
+      `Matched ${uris.length} of ${result?.scanned ?? 0} library photo(s) `
+      + `against ${times.length} observation time(s) in ${Date.now( ) - startedAt}ms`,
+    );
+    return uris.map( ( uri, index ) => ( {
+      uri: normalizeDevicePhotoUri( uri ) ?? uri,
+      timestampMs: typeof timestamps[index] === "number"
+        ? timestamps[index]
+        : null,
+    } ) );
+  } catch ( error ) {
+    logger.warn( "Falling back to a CameraRoll scan of the photo library", error );
+    return null;
+  }
+};
+
 // Pulls every photo from the device library within the given time window,
 // paginating through CameraRoll. Returns an empty list if the library can't be
 // read (e.g. permission denied), in which case only exact URI matches surface.
-const loadDeviceAssets = async (
+const loadDeviceAssetsFromCameraRoll = async (
   fromTime: number | undefined,
   toTime: number | undefined,
 ): Promise<DeviceAsset[]> => {
@@ -166,6 +217,16 @@ const loadDeviceAssets = async (
   return assets;
 };
 
+// What a library scan found, plus which capture times it was matched against.
+// A time-filtered scan only speaks for the times it was given, so a caller that
+// learns about more of them afterwards (the prefetch below starts before the
+// observation sync lands) knows exactly what it still has to ask for.
+export interface DeviceAssetScan {
+  assets: DeviceAsset[];
+  // Null when the scan wasn't filtered by time and so covers its whole window.
+  matchedTimes: Set<number> | null;
+}
+
 interface ScanBounds {
   fromTime: number | undefined;
   toTime: number | undefined;
@@ -192,20 +253,40 @@ const getScanBounds = ( times: number[] ): ScanBounds => {
   return { fromTime, toTime };
 };
 
+// Finds the library photos that could belong to an observation taken at one of
+// `times`, natively where possible and by paging CameraRoll otherwise.
+const scanDeviceAssets = async ( times: number[] ): Promise<DeviceAssetScan> => {
+  // Observations cluster on the same second (a burst of photos, a day's
+  // uploads), and there's no point sending the same one across the bridge twice.
+  const wanted = new Set( times );
+  if ( wanted.size === 0 ) {
+    return { assets: [], matchedTimes: wanted };
+  }
+  const { fromTime, toTime } = getScanBounds( times );
+  const matched = await loadMatchingDeviceAssets( [...wanted], fromTime, toTime );
+  if ( matched ) {
+    return { assets: matched, matchedTimes: wanted };
+  }
+  return {
+    assets: await loadDeviceAssetsFromCameraRoll( fromTime, toTime ),
+    matchedTimes: null,
+  };
+};
+
 // Starts the device library scan without waiting on anything else. The window
 // it scans depends only on when the user's observations were made, not on which
 // are favorited, so this can run concurrently with the observation sync that has
 // to finish before matching can start — two multi-second waits become one.
 // Hand the result to findUnfavoritedDevicePhotoDays.
 //
-// The window has to cover the same era matching will consider, so it's taken
-// from the last synced cache as well as Realm. Callers with an empty cache
-// should skip this and let findUnfavoritedDevicePhotoDays scan once the sync
-// has landed, rather than scanning a window that stops at whatever Realm holds.
+// The scan has to cover the same times matching will consider, so they're taken
+// from the last synced cache as well as Realm. Whatever the sync then adds is
+// picked up by findUnfavoritedDevicePhotoDays' top-up pass, so a stale cache
+// costs a small second scan rather than missing photos.
 export const prefetchDeviceAssets = (
   realm: Realm,
   observationsCache?: UserObservationsCache,
-): Promise<DeviceAsset[]> => {
+): Promise<DeviceAssetScan> => {
   const times: number[] = [];
   realm.objects<RealmObservation>( "Observation" ).forEach( observation => {
     const timeMs = getObservationTimeMs( observation );
@@ -218,11 +299,7 @@ export const prefetchDeviceAssets = (
       times.push( cached.observedAtMs );
     }
   } );
-  if ( times.length === 0 ) {
-    return Promise.resolve( [] );
-  }
-  const { fromTime, toTime } = getScanBounds( times );
-  return loadDeviceAssets( fromTime, toTime );
+  return scanDeviceAssets( times );
 };
 
 const addUriToDay = (
@@ -283,7 +360,7 @@ const dropVanishedUris = async (
 // Returns the groups sorted newest day first.
 const findUnfavoritedDevicePhotoDays = async (
   realm: Realm,
-  prefetchedAssets?: Promise<DeviceAsset[]>,
+  prefetchedAssets?: Promise<DeviceAssetScan>,
   observationsCache?: UserObservationsCache,
 ): Promise<UnfavoritedPhotoDay[]> => {
   const observations = realm.objects<FavoritableObservation>( "Observation" );
@@ -367,10 +444,20 @@ const findUnfavoritedDevicePhotoDays = async (
   unfavoritedTimes.sort( ( a, b ) => a - b );
   favoritedTimes.sort( ( a, b ) => a - b );
 
-  const assets = await ( prefetchedAssets ?? ( ( ) => {
-    const { fromTime, toTime } = getScanBounds( [...unfavoritedTimes, ...favoritedTimes] );
-    return loadDeviceAssets( fromTime, toTime );
-  } )( ) );
+  const allTimes = [...unfavoritedTimes, ...favoritedTimes];
+  const scan = await ( prefetchedAssets ?? scanDeviceAssets( allTimes ) );
+  const assets = [...scan.assets];
+  // A prefetch starts before the sync lands, so it could only match against the
+  // times known then. Anything the sync added (an observation made on another
+  // device, or a fave toggled there) needs a second pass — normally a handful
+  // of times, and nothing at all on the common path where nothing changed.
+  const scannedTimes = scan.matchedTimes;
+  if ( scannedTimes ) {
+    const missedTimes = allTimes.filter( time => !scannedTimes.has( time ) );
+    if ( missedTimes.length > 0 ) {
+      assets.push( ...( await scanDeviceAssets( missedTimes ) ).assets );
+    }
+  }
 
   const dayMap = new Map<string, UnfavoritedPhotoDay>( );
   const seenUris = new Set<string>( );
@@ -415,7 +502,8 @@ const findUnfavoritedDevicePhotoDays = async (
   } );
 
   // Make sure exact matches always appear, even if the library scan missed
-  // them (e.g. permission denied or the asset fell outside the scanned window).
+  // them (permission denied, or the asset's capture time matches no observation
+  // and so fell outside what the scan asked for).
   // Skip ones whose capture time is already covered by a live asset above —
   // that's the same physical photo under its current identifier, not a
   // second photo, so counting the stored URI too would double it.

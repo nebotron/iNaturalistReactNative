@@ -1,6 +1,9 @@
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
+import { NativeModules } from "react-native";
 import filterExistingDevicePhotoUris from "sharedHelpers/existingDevicePhotoUris";
-import findUnfavoritedDevicePhotoDays from "sharedHelpers/unfavoritedDevicePhotos";
+import findUnfavoritedDevicePhotoDays, {
+  prefetchDeviceAssets,
+} from "sharedHelpers/unfavoritedDevicePhotos";
 
 // Stands in for the native PHAsset lookup; by default every URI still exists.
 jest.mock( "sharedHelpers/existingDevicePhotoUris", ( ) => jest.fn(
@@ -41,6 +44,85 @@ const flatUris = days => days.flatMap( day => day.uris );
 beforeEach( ( ) => {
   CameraRoll.getPhotos.mockReset( );
   filterExistingDevicePhotoUris.mockImplementation( uris => Promise.resolve( uris ) );
+} );
+
+// The native matcher does the same job in one call, returning only the assets
+// whose capture second is one of the ones it was asked about.
+describe( "findUnfavoritedDevicePhotoDays with the native library matcher", ( ) => {
+  const originalImageCropper = NativeModules.ImageCropper;
+  let photoAssetsMatchingCaptureTimes;
+
+  const mockNativeLibrary = nodes => {
+    photoAssetsMatchingCaptureTimes.mockImplementation( captureTimesMs => {
+      const wanted = new Set( captureTimesMs );
+      const matching = nodes.filter( ( { timeMs } ) => wanted.has( timeMs ) );
+      return Promise.resolve( {
+        uris: matching.map( ( { id } ) => `ph://${id}` ),
+        timestamps: matching.map( ( { timeMs } ) => timeMs ),
+        scanned: nodes.length,
+      } );
+    } );
+  };
+
+  beforeEach( ( ) => {
+    photoAssetsMatchingCaptureTimes = jest.fn( );
+    NativeModules.ImageCropper = { photoAssetsMatchingCaptureTimes };
+  } );
+
+  afterEach( ( ) => {
+    NativeModules.ImageCropper = originalImageCropper;
+  } );
+
+  it( "matches without paging the library through CameraRoll", async ( ) => {
+    const realm = makeRealm( [
+      makeObservation( { faved: false, timeMs: UNFAV_TIME } ),
+      makeObservation( { faved: true, timeMs: FAV_TIME } ),
+    ] );
+    mockNativeLibrary( [
+      { id: "DELETE", timeMs: UNFAV_TIME },
+      { id: "FAVED", timeMs: FAV_TIME },
+      { id: "UNRELATED", timeMs: UNFAV_TIME + 60 * 1000 },
+    ] );
+
+    const days = await findUnfavoritedDevicePhotoDays( realm );
+
+    expect( flatUris( days ) ).toEqual( ["ph://DELETE"] );
+    expect( CameraRoll.getPhotos ).not.toHaveBeenCalled( );
+  } );
+
+  it( "falls back to CameraRoll when the native matcher can't answer", async ( ) => {
+    photoAssetsMatchingCaptureTimes.mockRejectedValue( new Error( "not granted" ) );
+    const realm = makeRealm( [makeObservation( { faved: false, timeMs: UNFAV_TIME } )] );
+    mockLibrary( [{ id: "DELETE", timeMs: UNFAV_TIME }] );
+
+    const days = await findUnfavoritedDevicePhotoDays( realm );
+
+    expect( flatUris( days ) ).toEqual( ["ph://DELETE"] );
+  } );
+
+  // The prefetch runs against the last synced observations, so the sync that
+  // follows it can turn up times it never asked the library about.
+  it( "tops up a prefetched scan with the times the sync added", async ( ) => {
+    const NEW_TIME = UNFAV_TIME + 24 * 60 * 60 * 1000;
+    mockNativeLibrary( [
+      { id: "OLD", timeMs: UNFAV_TIME },
+      { id: "NEW", timeMs: NEW_TIME },
+    ] );
+    // The prefetch only knows the observation Realm already had.
+    const scan = prefetchDeviceAssets(
+      makeRealm( [makeObservation( { faved: false, timeMs: UNFAV_TIME } )] ),
+    );
+    const realm = makeRealm( [
+      makeObservation( { faved: false, timeMs: UNFAV_TIME } ),
+      makeObservation( { faved: false, timeMs: NEW_TIME } ),
+    ] );
+
+    const days = await findUnfavoritedDevicePhotoDays( realm, scan );
+
+    expect( flatUris( days ).sort( ) ).toEqual( ["ph://NEW", "ph://OLD"] );
+    expect( photoAssetsMatchingCaptureTimes ).toHaveBeenCalledTimes( 2 );
+    expect( photoAssetsMatchingCaptureTimes.mock.calls[1][0] ).toEqual( [NEW_TIME] );
+  } );
 } );
 
 describe( "findUnfavoritedDevicePhotoDays", ( ) => {
