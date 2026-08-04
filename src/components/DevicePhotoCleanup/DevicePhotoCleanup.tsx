@@ -5,11 +5,8 @@ import DevicePhotoImage from "components/PhotoImporter/DevicePhotoImage";
 import {
   ActivityIndicator,
   Body2,
-  BottomSheet,
   Button,
-  ButtonBar,
   Heading4,
-  List2,
   ViewWrapper,
 } from "components/SharedComponents";
 import Modal from "components/SharedComponents/Modal";
@@ -24,7 +21,6 @@ import {
   Image,
   PixelRatio,
   Pressable,
-  ScrollView,
   StyleSheet,
   View,
 } from "react-native";
@@ -46,12 +42,6 @@ const logger = log.extend( "DevicePhotoCleanup" );
 
 const { useRealm } = RealmContext;
 
-const THUMB_SIZE = 78;
-const THUMB_MARGIN = 3;
-// Cap how many thumbnails we render in the confirmation preview strip so a
-// huge selection doesn't bog the sheet down; the count still reflects all.
-const CONFIRM_PREVIEW_LIMIT = 30;
-
 const styles = StyleSheet.create( {
   fullScreenImage: {
     flex: 1,
@@ -61,12 +51,6 @@ const styles = StyleSheet.create( {
   },
   scrollContent: {
     paddingBottom: 100,
-  },
-  thumb: {
-    borderRadius: 4,
-    height: THUMB_SIZE,
-    margin: THUMB_MARGIN,
-    width: THUMB_SIZE,
   },
 } );
 
@@ -109,7 +93,6 @@ const DevicePhotoCleanup = ( ) => {
   const [days, setDays] = useState<UnfavoritedPhotoDay[]>( [] );
   const [loading, setLoading] = useState( true );
   const [syncingFaves, setSyncingFaves] = useState( true );
-  const [showConfirm, setShowConfirm] = useState( false );
   const [deleting, setDeleting] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
@@ -200,14 +183,8 @@ const DevicePhotoCleanup = ( ) => {
     PixelRatio.getPixelSizeForLayoutSize( gridItemWidth || 128 ),
   );
 
-  const confirmDelete = useCallback( async ( ) => {
-    // Dismiss the confirmation sheet and let it fully animate out before
-    // deleting. iOS can't present its own system deletion confirmation while a
-    // modal (this BottomSheet) is on screen, so calling deletePhotos with the
-    // sheet still up makes the native request hang and never present.
-    setShowConfirm( false );
+  const deletePhotos = useCallback( async ( ) => {
     setDeleting( true );
-    await new Promise( resolve => { setTimeout( resolve, 600 ); } );
     // Report what the OS actually deleted. A wedged PHPhotoLibrary (or the
     // cooldown that follows one) deletes nothing yet resolves normally, and
     // claiming "Deleted 1,159 photos" while the photos are all still there is
@@ -292,70 +269,11 @@ const DevicePhotoCleanup = ( ) => {
           text={`DELETE ${allUris.length} PHOTO${allUris.length === 1
             ? ""
             : "S"}`}
-          onPress={( ) => setShowConfirm( true )}
+          onPress={deletePhotos}
+          loading={deleting}
+          disabled={deleting}
         />
       </View>
-      {showConfirm && (
-        <BottomSheet
-          onPressClose={( ) => setShowConfirm( false )}
-          headerText="DELETE PHOTOS?"
-        >
-          <View className="p-5">
-            <Heading4 className="mb-1">
-              {`Deleting ${allUris.length} photo${allUris.length === 1
-                ? ""
-                : "s"}`}
-            </Heading4>
-            <List2 className="mb-4">
-              These will be permanently removed from your device&apos;s photo
-              library. Your iNaturalist observations keep their own copies.
-            </List2>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              className="mb-5"
-            >
-              {allUris.slice( 0, CONFIRM_PREVIEW_LIMIT ).map( uri => (
-                <DevicePhotoImage
-                  key={uri}
-                  uri={uri}
-                  // Sized like a grid cell rather than like this strip so
-                  // these are cache hits on the thumbnails the grid behind the
-                  // sheet already generated, instead of 30 fresh ones.
-                  cellWidth={gridItemWidth}
-                  style={styles.thumb}
-                />
-              ) )}
-              {allUris.length > CONFIRM_PREVIEW_LIMIT && (
-                <View
-                  style={styles.thumb}
-                  className="items-center justify-center bg-lightGray"
-                >
-                  <Body2>{`+${allUris.length - CONFIRM_PREVIEW_LIMIT}`}</Body2>
-                </View>
-              )}
-            </ScrollView>
-            <ButtonBar
-              buttonConfiguration={[
-                {
-                  title: "CANCEL",
-                  onPress: ( ) => setShowConfirm( false ),
-                  isPrimary: false,
-                },
-                {
-                  title: `DELETE ${allUris.length}`,
-                  onPress: confirmDelete,
-                  level: "warning",
-                  loading: deleting,
-                  disabled: deleting,
-                  isPrimary: false,
-                  className: "grow ml-3",
-                },
-              ]}
-            />
-          </View>
-        </BottomSheet>
-      )}
       <Modal
         showModal={!!fullScreenUri}
         fullScreen
