@@ -5,16 +5,24 @@ const mockListNewUsbImages = jest.fn( );
 const mockSaveUsbImageToPhotos = jest.fn( );
 const mockMarkUsbImagesImported = jest.fn( );
 const mockDeleteUsbSourceImages = jest.fn( async ( ) => ( { deleted: 0, failed: 0 } ) );
+const mockClearUsbOffloadMarker = jest.fn( );
+const mockMarkUsbOffloadStarted = jest.fn( );
+const mockTakeUnfinishedUsbOffload = jest.fn( ( ) => null );
+const mockUpdateUsbOffloadProgress = jest.fn( );
 
 jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
+  clearUsbOffloadMarker: ( ) => mockClearUsbOffloadMarker( ),
   deleteUsbSourceImages: ( ...args ) => mockDeleteUsbSourceImages( ...args ),
   getUsbFolderDiagnostics: async ( ) => ( { bookmarkPresent: true } ),
   getUsbFolderName: async ( ) => "101EOSR7",
   isUsbImportSupported: ( ) => true,
   listNewUsbImages: ( ...args ) => mockListNewUsbImages( ...args ),
   markUsbImagesImported: ( ...args ) => mockMarkUsbImagesImported( ...args ),
+  markUsbOffloadStarted: ( ...args ) => mockMarkUsbOffloadStarted( ...args ),
   requestUsbPhotosPermission: async ( ) => "authorized",
   saveUsbImageToPhotos: ( ...args ) => mockSaveUsbImageToPhotos( ...args ),
+  takeUnfinishedUsbOffload: ( ) => mockTakeUnfinishedUsbOffload( ),
+  updateUsbOffloadProgress: ( ...args ) => mockUpdateUsbOffloadProgress( ...args ),
 } ) );
 
 jest.mock( "sharedHelpers/installData", ( ) => ( {
@@ -76,6 +84,45 @@ describe( "useUsbAutoImport", ( ) => {
     expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
       "usb_offload_library_wedged",
       expect.objectContaining( { abandoned: 37, saved: 0, failed: 3 } ),
+    );
+  } );
+
+  // Every log line is a network POST, so a run the app dies inside takes its
+  // last lines with it. The Aug 5 19:08–20:22 log has two offloads of the same
+  // 80 files, each followed within a minute by a cold pickup and neither by an
+  // outcome line, and nothing said how far either got. The marker is MMKV, so
+  // it survives the death it is measuring.
+  it( "reports an offload the app never came back from", async ( ) => {
+    mockTakeUnfinishedUsbOffload.mockReturnValueOnce( {
+      total: 80,
+      saved: 12,
+      failed: 1,
+      startedAt: Date.now( ) - 44_000,
+    } );
+    mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_never_finished",
+      expect.objectContaining( { total: 80, saved: 12, failed: 1 } ),
+    );
+    // The run that did finish clears its own marker rather than leaving one
+    // for the next scan to report.
+    expect( mockClearUsbOffloadMarker ).toHaveBeenCalled( );
+  } );
+
+  it( "says nothing when the previous offload finished", async ( ) => {
+    mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockMarkUsbOffloadStarted ).toHaveBeenCalledWith( 40 );
+    expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+      "usb_offload_never_finished",
+      expect.anything( ),
     );
   } );
 

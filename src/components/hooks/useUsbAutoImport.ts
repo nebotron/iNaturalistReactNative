@@ -9,14 +9,18 @@ import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import {
+  clearUsbOffloadMarker,
   deleteUsbSourceImages,
   getUsbFolderDiagnostics,
   getUsbFolderName,
   isUsbImportSupported,
   listNewUsbImages,
   markUsbImagesImported,
+  markUsbOffloadStarted,
   requestUsbPhotosPermission,
   saveUsbImageToPhotos,
+  takeUnfinishedUsbOffload,
+  updateUsbOffloadProgress,
 } from "sharedHelpers/usbStorage";
 import useUsbImportProgress from "stores/usbImportProgress";
 
@@ -97,6 +101,18 @@ const useUsbAutoImport = ( ) => {
     }
     offloading.current = true;
     const progress = useUsbImportProgress.getState( );
+    // An offload the app never came back from. Reported here rather than at
+    // launch because a run that died left its files unimported, so the next
+    // offload follows within seconds of the relaunch anyway.
+    const unfinished = takeUnfinishedUsbOffload( );
+    if ( unfinished ) {
+      logger.errorWithExtra( "usb_offload_never_finished", {
+        total: unfinished.total,
+        saved: unfinished.saved,
+        failed: unfinished.failed,
+        msRunning: Date.now( ) - unfinished.startedAt,
+      } );
+    }
     try {
       const result = await listNewUsbImages( );
       logDiag( result.available
@@ -120,6 +136,7 @@ const useUsbAutoImport = ( ) => {
 
       logger.info( `USB offload: saving ${images.length} photos to Photos library` );
       progress.start( images.length );
+      markUsbOffloadStarted( images.length );
 
       // Save each image to Photos, one at a time so memory stays flat and the
       // progress count is accurate. Track successes for the batch delete.
@@ -172,6 +189,7 @@ const useUsbAutoImport = ( ) => {
           logger.error( `USB offload: failed to save ${relativePath}`, err );
         }
         progress.setCounts( savedPaths.length, failed );
+        updateUsbOffloadProgress( savedPaths.length, failed );
       }
 
       if ( abandoned > 0 ) {
@@ -216,6 +234,9 @@ const useUsbAutoImport = ( ) => {
       logger.error( "USB offload failed", error );
       progress.setPhase( "error" );
     } finally {
+      // The run reached an end, however badly, so it is not one of the runs
+      // that vanish with the process.
+      clearUsbOffloadMarker( );
       offloading.current = false;
       // Leave the final state on screen briefly, then dismiss the overlay.
       setTimeout( ( ) => useUsbImportProgress.getState( ).finish( ), 4000 );

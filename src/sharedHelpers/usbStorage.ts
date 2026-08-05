@@ -143,3 +143,56 @@ export const markUsbImagesImported = ( relativePaths: string[] ) => {
     ...relativePaths,
   ] ) );
 };
+
+// A breadcrumb that outlives the process, so an offload the app never came
+// back from can be reported on the next launch.
+//
+// The Aug 5 19:08–20:22 log has two offloads of the same 80 files, each
+// followed within a minute by a cold `pickup` and neither followed by an
+// outcome line, and the session before it had two more that "ended with the
+// app being killed before the outcome line". Every line in the log is a
+// network POST, so a run that dies takes its last lines with it and nothing
+// says how far it got. These are MMKV writes, not log lines: no POST, and
+// they survive the death that is the thing being measured.
+const OFFLOAD_IN_PROGRESS_KEY = "offloadInProgress";
+
+export interface UsbOffloadMarker {
+  total: number;
+  saved: number;
+  failed: number;
+  startedAt: number;
+}
+
+export const markUsbOffloadStarted = ( total: number ) => {
+  store.set( OFFLOAD_IN_PROGRESS_KEY, JSON.stringify( {
+    total,
+    saved: 0,
+    failed: 0,
+    startedAt: Date.now( ),
+  } ) );
+};
+
+export const updateUsbOffloadProgress = ( saved: number, failed: number ) => {
+  const raw = store.getString( OFFLOAD_IN_PROGRESS_KEY );
+  if ( !raw ) return;
+  store.set( OFFLOAD_IN_PROGRESS_KEY, JSON.stringify( {
+    ...JSON.parse( raw ),
+    saved,
+    failed,
+  } ) );
+};
+
+export const clearUsbOffloadMarker = ( ) => store.delete( OFFLOAD_IN_PROGRESS_KEY );
+
+// The marker left by an offload that never finished, or null. Reading it
+// clears it, so one abandoned run is reported once.
+export const takeUnfinishedUsbOffload = ( ): UsbOffloadMarker | null => {
+  const raw = store.getString( OFFLOAD_IN_PROGRESS_KEY );
+  if ( !raw ) return null;
+  store.delete( OFFLOAD_IN_PROGRESS_KEY );
+  try {
+    return JSON.parse( raw ) as UsbOffloadMarker;
+  } catch {
+    return null;
+  }
+};
