@@ -37,6 +37,16 @@ static void inatAfterDismissalSettles( void ( ^work )( void ) )
     work );
 }
 
+// A deletion whose completion handler never fires — the wedge this file keeps
+// chasing — used to leave the change observer registered and the requested
+// identifiers pending for the life of the process. Every later library change
+// then ran a main-queue fetch for a batch JS had abandoned two minutes
+// earlier, and a change much later still could resolve that dead promise.
+// Anything held until a PhotoKit completion handler fires needs releasing on a
+// timer as well; comfortably past JS's 120s timeout, so the observer fallback
+// below keeps its full window.
+static const NSTimeInterval kInatPendingDeleteWatchdogSeconds = 150;
+
 @implementation ImageCropper {
   // Tracks the single in-flight deletePhotoAssets call (JS serializes calls
   // through one chain, so at most one is ever pending) so
@@ -45,6 +55,9 @@ static void inatAfterDismissalSettles( void ( ^work )( void ) )
   NSUInteger _pendingDeleteRequestedCount;
   RCTPromiseResolveBlock _pendingDeleteResolve;
   BOOL _pendingDeleteSettled;
+  // Bumped per deletion so a watchdog can tell its own call from the one that
+  // replaced it.
+  NSUInteger _pendingDeleteGeneration;
 }
 
 RCT_EXPORT_MODULE( );
@@ -1692,11 +1705,55 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     // library independently: if the requested assets vanish, resolve from
     // here instead of waiting out JS's 120s timeout for a delete that already
     // succeeded. photoLibraryDidChange: below does the watching.
+    //
+    // A deletion that never came back leaves its state behind; drop it before
+    // taking over, so the observer is registered once and watches one batch.
+    if ( _pendingDeleteResolve || _pendingDeleteIds ) {
+      [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
+      _pendingDeleteResolve = nil;
+      _pendingDeleteIds = nil;
+    }
     _pendingDeleteIds = [ids copy];
     _pendingDeleteRequestedCount = ids.count;
     _pendingDeleteSettled = NO;
     _pendingDeleteResolve = resolve;
+    _pendingDeleteGeneration += 1;
+    NSUInteger generation = _pendingDeleteGeneration;
     [[PHPhotoLibrary sharedPhotoLibrary] registerChangeObserver:self];
+
+    // Settles this call's promise exactly once, and tears down the shared
+    // observer state only while this call still owns it. The generation check
+    // matters because a hung deletion is abandoned by JS at 120s but is still
+    // live down here: when its completion handler eventually did fire, it used
+    // to set _pendingDeleteSettled and unregister the observer belonging to the
+    // *next* deletion, whose own callback then found the flag already set and
+    // never resolved — one wedged delete quietly wedging the delete after it.
+    __block BOOL callSettled = NO;
+    BOOL ( ^claimSettlement )( void ) = ^BOOL {
+      if ( callSettled ) { return NO; }
+      callSettled = YES;
+      if ( self->_pendingDeleteGeneration != generation ) { return YES; }
+      // photoLibraryDidChange: may already have resolved this same promise.
+      if ( self->_pendingDeleteSettled ) { return NO; }
+      self->_pendingDeleteSettled = YES;
+      [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
+      self->_pendingDeleteResolve = nil;
+      self->_pendingDeleteIds = nil;
+      return YES;
+    };
+
+    dispatch_after(
+      dispatch_time( DISPATCH_TIME_NOW,
+        ( int64_t )( kInatPendingDeleteWatchdogSeconds * NSEC_PER_SEC ) ),
+      dispatch_get_main_queue(),
+      ^{
+        if ( !claimSettlement( ) ) { return; }
+        reject( @"DELETE_NO_CALLBACK",
+          [NSString stringWithFormat:
+            @"deleteAssets for %lu asset(s) never called back in %.0fs",
+            ( unsigned long )ids.count, kInatPendingDeleteWatchdogSeconds],
+          nil );
+      } );
 
     // Filled in by the app-created transaction, reported alongside whatever the
     // prompted one does. -1 means it never came back.
@@ -1706,11 +1763,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     void ( ^finish )( BOOL, NSUInteger, NSError * ) =
       ^( BOOL success, NSUInteger deleted, NSError *error ) {
       dispatch_async( dispatch_get_main_queue(), ^{
-        if ( self->_pendingDeleteSettled ) { return; }
-        self->_pendingDeleteSettled = YES;
-        [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
-        self->_pendingDeleteResolve = nil;
-        self->_pendingDeleteIds = nil;
+        if ( !claimSettlement( ) ) { return; }
         if ( success ) {
           resolve( @{
             @"deleted": @( deleted ),
