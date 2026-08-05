@@ -439,6 +439,55 @@ module-level map of unsettled attempts now survives those resets.
 carries `uploadStatus`, `queueLength` and `activeUploads` at the moment it
 fires, which should name it in the next log.
 
+### One upload's timeout used to abort every other upload in flight
+
+The Aug 5 19:08–20:22 log is a wall of `Media upload failed: Aborted`, and
+duplicate attempts do not explain it — no uuid overlaps itself in that log.
+The uploads share **one** `AbortController` (the store's, per upload session)
+while the 5-minute `MS_BEFORE_UPLOAD_TIMES_OUT` timer is per observation, so
+whoever expired first killed everyone.
+
+The way it shows up is *two aborts at the same instant with different
+durations*, and three of them are in that log:
+
+- 19:51:36.04/.09 — `6cddaca3` at 300004ms (its own deadline) and `18dd15b2`
+  at **290811ms**, 9.2s short of its. One timer, two victims. This pair is the
+  proof; nothing else produces it.
+- 20:08:35.83/.84 — `047d78db` at 287217ms and `4ad5ecaf` at **24102ms**, and
+  no upload in the log reached its deadline at that instant.
+- 19:47:05.05/.67 — `047d78db` at 9091ms and `85633fa2` at 12811ms.
+
+Six of the ten foreground aborts were uploads killed before their own
+deadline. Sort by `timestamp - durationMs` and group the *end* times: siblings
+dying together within ~100ms with unlike ages is the signature.
+
+Second half of the same bug: `clearTimeout` sat after the `await` **inside the
+try**, so it only ran when the upload succeeded. A failed upload left a live
+timer that fired five minutes later at whatever was running then — and since
+`resetUploadObservationsSlice` and `stopAllUploads` both *preserve* the
+session controller (only `setStartUploadObservations` makes a new one), that
+reached across batches. That is what the 20:08:35 and 19:47:05 aborts are:
+timers outliving the uploads that armed them.
+
+Third consequence, worth knowing because it is the user-visible one: once the
+shared signal was aborted the effect's `abortController.signal.aborted` guard
+refused to start **anything** until the user tapped upload again. The log
+shows exactly that gap — nothing new starts between 19:51:36 and 20:03:41.
+
+Fixed by `createUploadAbortController` (`src/uploaders/utils/uploadAbort.ts`):
+one controller per attempt, linked to the session signal so `stopAllUploads`
+still reaches everything, and a `release( )` in the `finally` that clears the
+timer however the attempt ends. `upload_timed_out` now says when an upload
+spent its own budget, which the `Aborted` line alone never could.
+
+**Watch the timeout value in the next log.** `29637320` legitimately took
+294384ms and succeeded — 5.6 seconds inside the 300s budget — and several
+media stages ran past 280s. On a bad network 5 minutes is marginal. Left at
+300s deliberately: with per-upload controllers a slow upload now only risks
+itself, and raising it means a genuinely stuck upload holds one of the three
+concurrency slots for longer. If `upload_timed_out` starts appearing next to
+uploads that were still making progress, that is the signal to raise it.
+
 ### USB `saveImageToPhotos` timeouts, cause still unproven
 
 Three 30s save timeouts across two runs on Aug 5 (16:05:23, 16:08:48,
@@ -446,6 +495,33 @@ Three 30s save timeouts across two runs on Aug 5 (16:05:23, 16:08:48,
 them: run 1's *first* save timed out with nothing else touching the library.
 Both bad runs ended with the app being killed before the outcome line, so
 neither says how it finished. Not acted on.
+
+**It happened twice more in the Aug 5 19:08–20:22 log, and the log still
+can't say why.** 19:08:24 "saving 80 photos" → cold `pickup` 44s later →
+19:09:08 "saving 80 photos" again, `alreadyImported=0` → cold `pickup` 20s
+later. Not one file saved in 44 seconds, no per-file error line, no outcome
+line. Two cold launches in 64 seconds during an offload is a crash or a
+jetsam, and the loop is strictly sequential (`await` per file, `markUsb
+ImagesImported` per success) so flat memory is not obviously the cause.
+Every log line is a network POST, so a run that dies takes its last lines
+with it — absence of an error line is not evidence there wasn't one.
+
+That is the third session in a row to end at "the app was killed before the
+outcome line", so this session added the measurement instead of another
+theory: `markUsbOffloadStarted` / `updateUsbOffloadProgress` /
+`takeUnfinishedUsbOffload` in `usbStorage.ts` keep an **MMKV** breadcrumb
+(total, saved, failed, startedAt) that survives the process, and the next
+offload reports any survivor as `usb_offload_never_finished`. MMKV, not a log
+line, precisely because the thing being measured is the death that eats log
+lines. It fires only after a run that vanished, so a healthy device never
+logs it. Read it as: `saved` near 0 with a large `msRunning` means the app
+died without PhotoKit ever completing a save; `saved` climbing means it died
+partway and the crash is a function of how much it did.
+
+Note also that the card went away underneath both runs — 19:09:28 lists 0
+files where 19:09:08 listed 80, and 19:18:47 says `no-folder-saved`. Whether
+that is cause, consequence, or the user unplugging is exactly what the
+breadcrumb should disambiguate.
 
 ### Known, not worth acting on yet
 
@@ -500,3 +576,23 @@ network outage that failed every upload), not a new leak. Nine of the 92 were
 byte-identical `[diag]` repeats, now suppressed. At this size, read the whole
 dump; the grouped summary hides the interleaving that all three of this
 session's findings came out of.
+
+The fourth Aug 5 log (19:08–20:22) was 122 lines in 74 minutes (~2,400/day),
+again a burst window: an 80-photo card offload, a 45-minute network outage,
+and a 480-photo cleanup. 23 of the 122 were `slow_query*` riding out the
+outage, which is the coalescing working, not a leak.
+
+**Check the build before anything else — this whole log predated every fix
+from the session before it.** All 122 lines carry `3ef9032d1`, which is
+`HEAD~11`, so the two-transaction probe, the off-chain USB offload and the
+duplicate uploads were all still live in it. The three `photo_delete_preflight`
+failures (`probeMs=-1`, the exact ambiguous signature `7cdaf13` was written to
+remove) and the 19:11 one landing on top of an 80-photo off-chain offload are
+therefore *already answered*, and re-deriving them would have cost the
+session. Between them those three failures armed the cooldown often enough to
+skip six deletions covering 517 photos and three location writes. The `commit`
+check took a minute; do it first, every time.
+
+What that leaves genuinely new is the upload abort bug above — which is
+visible only in the interleaving, from `timestamp - durationMs`, and not at
+all in the grouped summary.
