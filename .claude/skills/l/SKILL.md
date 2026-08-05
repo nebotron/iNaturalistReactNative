@@ -50,7 +50,7 @@ below works — the log database serves reads and deletes without credentials.
    - hang and delay diagnostics: `ui_hang`, `ui_stall`, `slow_screen_transition`,
      `slow_ui_work` (`uiDelayTracker.ts`), `slow_query`, `query_hang`
      (`slowLoadTracker.ts`), `startup_tti` (`startupPerformanceTracker.ts`),
-     `photo_delete_pending_20s`, `photo_delete_failed`
+     `photo_delete_pending`, `photo_delete_failed`
      (`promptDeleteOriginalDevicePhotos.ts`);
    - anything else that shows the app doing something it shouldn't.
 
@@ -209,6 +209,17 @@ same as an absent one, the measurement now also rides on the hang report itself
 as `preflightMs` (`-1` = the probe wasn't available; a failed probe can't reach
 that line at all).
 
+**The deletion timeout is 10s as of this session, down from 120.** No hang on
+record has ever recovered, so the two minutes only ever bought a held write
+chain and a user stranded on a screen they asked to leave. `photo_delete_pending_20s`
+is renamed `photo_delete_pending` with the same fields — it now fires at 5s,
+half the budget, and `ms` says when. Grouping across the rename breaks at build
+`ebbbda1`; older entries keep the old name. The cost to watch for: a user who
+takes longer than 10s to answer the iOS confirmation now gets a reported
+failure and an armed cooldown for a deletion iOS may still carry out. If
+`photo_delete_pending` starts appearing with a *successful* delete right after
+it, that is what it looks like, and 10s was too tight.
+
 **The wedge survives an app relaunch.** That 15:02 preflight failed in a process
 launched at 15:01:43, nine hours after the morning's hang. Whatever is stuck is
 in `photolibraryd`, not in this app's address space, which is consistent with
@@ -243,7 +254,7 @@ Next theory, untested and not shipped: a second transaction landing ~1s after
 one completes races PhotoKit's alert presentation, and a settling delay before
 the delete would fix it. Two occurrences fit, one (00:36, no preceding write)
 does not, and the log has no successful deletes to compare against — nowhere
-near the bar. `msSinceLastSuccess` on `photo_delete_pending_20s` is already the
+near the bar. `msSinceLastSuccess` on `photo_delete_pending` is already the
 measurement; it needs a log with successes in it.
 
 **Every Photos-library write in the Aug 5 log failed** — 3 deletes, 2 USB card

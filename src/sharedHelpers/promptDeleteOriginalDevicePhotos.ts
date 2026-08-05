@@ -141,9 +141,20 @@ export const enqueuePhotoLibraryWrite = <T, >( task: ( ) => Promise<T> ): Promis
 
 // A hung deletePhotos (confirmation never presents) must not block the chain
 // forever, or one bad call poisons every later deletion for the whole session.
-// Long enough for a real user to respond to the confirmation, short enough to
-// recover from a genuine hang.
-const DELETE_TIMEOUT_MS = 120000;
+//
+// This used to be 120s, sized to let a real user read and answer the iOS
+// confirmation. Nothing in any log has ever answered one: every hang on record
+// ran the full two minutes and came back with nothing, holding the write chain
+// — and the screen the user asked to leave — for the whole of it. Ten seconds
+// is the cost of finding out instead. The trade is real and deliberate: a user
+// who takes longer than 10s to tap Delete gets a failure reported (and a
+// cooldown armed) for a deletion iOS may still carry out behind it.
+const DELETE_TIMEOUT_MS = 10000;
+
+// The pending-delete diagnostic has to land while the delete is still in
+// flight, so it is a fraction of the budget above rather than a fixed 20s that
+// would now never be reached.
+const HANG_REPORT_MS = DELETE_TIMEOUT_MS / 2;
 
 // How long a consent-free library write gets before the library counts as
 // unhealthy. Creating an album is a local database write; on a working library
@@ -309,10 +320,14 @@ const performDeleteOriginalDevicePhotos = async (
   } );
   const hangTimer = setTimeout( ( ) => {
     photoLibraryWriteHangCount += 1;
-    logger.errorWithExtra( "photo_delete_pending_20s", pendingExtra( ) );
+    // Named without the interval: it moved with DELETE_TIMEOUT_MS, and a marker
+    // that changes name is a marker whose history stops grouping. `ms` says
+    // when it fired. Was photo_delete_pending_20s up to and including build
+    // 3ef9032d1.
+    logger.errorWithExtra( "photo_delete_pending", pendingExtra( ) );
     // Arm the cooldown here rather than only at DELETE_TIMEOUT_MS. A wedged
     // PHPhotoLibrary leaves the app sitting on a dead confirmation, and the
-    // app log shows it being killed (or force-quit) well before the 120s
+    // app log shows it being killed (or force-quit) well before the
     // timeout could record the failure — so the next launch saw no cooldown
     // and fired the same doomed delete again, twice in four minutes. A delete
     // that does come back clears this immediately, and nothing else can run
@@ -377,7 +392,7 @@ const performDeleteOriginalDevicePhotos = async (
         } ),
       ).catch( ( ) => undefined );
     }
-  }, 20000 );
+  }, HANG_REPORT_MS );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
@@ -492,10 +507,11 @@ export const deleteOriginalDevicePhotos = (
 
 // Callers hold the user on the current screen until onComplete fires so the
 // iOS deletion confirmation isn't asked to present mid-navigation. A deletion
-// normally settles in a couple of seconds, but a wedged PHPhotoLibrary (see
-// above) doesn't settle until DELETE_TIMEOUT_MS, and stranding the user for
-// two minutes on a screen they asked to leave is far worse than letting the
-// deletion finish unobserved in the background.
+// normally settles in a couple of seconds, and a wedged one now gives up after
+// DELETE_TIMEOUT_MS. This stays above that: a delete queued behind another
+// Photos-library write (see enqueuePhotoLibraryWrite) can wait longer than its
+// own timeout, and stranding the user on a screen they asked to leave is far
+// worse than letting the deletion finish unobserved in the background.
 const EXIT_WAIT_TIMEOUT_MS = 20000;
 
 // Deletes the original device photos that were imported, without prompting.

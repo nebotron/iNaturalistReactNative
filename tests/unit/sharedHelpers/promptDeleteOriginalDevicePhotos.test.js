@@ -142,7 +142,7 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
 
         // A library that can't complete a write the app owns outright can't
         // complete a deletion needing a consent alert on top, so there is
-        // nothing to gain by spending 120s finding out.
+        // nothing to gain by spending the deletion timeout finding out.
         expect( mockDeletePhotos ).not.toHaveBeenCalled( );
         expect( result ).toEqual( { deleted: 0, requested: 1, succeeded: false } );
         expect( isInPhotoLibraryWriteCooldown( ) ).toBe( true );
@@ -170,7 +170,9 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       await jest.advanceTimersByTimeAsync( 0 );
       expect( onComplete ).not.toHaveBeenCalled( );
 
-      await jest.advanceTimersByTimeAsync( 20000 );
+      // The deletion's own timeout releases the exit well inside the 20s the
+      // caller would otherwise wait.
+      await jest.advanceTimersByTimeAsync( 10000 );
       expect( onComplete ).toHaveBeenCalledTimes( 1 );
 
       // the deletion finishing after we gave up must not complete the exit twice
@@ -189,15 +191,15 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       );
 
       const deletion = deleteOriginalDevicePhotos( ["ph://ONE", "ph://TWO"] );
-      await jest.advanceTimersByTimeAsync( 20000 );
+      await jest.advanceTimersByTimeAsync( 5000 );
       finishDeletion( { deleted: 2, requested: 2 } );
       await deletion;
 
       expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
-        "photo_delete_pending_20s",
+        "photo_delete_pending",
         expect.objectContaining( {
           requested: 2,
-          ms: 20000,
+          ms: 5000,
           leftForeground: false,
           appStateChanges: 0,
         } ),
@@ -220,7 +222,7 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       );
 
       const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
-      await jest.advanceTimersByTimeAsync( 19000 );
+      await jest.advanceTimersByTimeAsync( 4000 );
       expect( isInPhotoLibraryWriteCooldown( ) ).toBe( false );
 
       // The app is routinely killed before the 120s timeout could record the
@@ -240,7 +242,7 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       );
 
       const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
-      await jest.advanceTimersByTimeAsync( 20000 );
+      await jest.advanceTimersByTimeAsync( 5000 );
       expect( isInPhotoLibraryWriteCooldown( ) ).toBe( true );
 
       finishDeletion( { deleted: 1, requested: 1 } );
@@ -256,7 +258,7 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       );
 
       const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
-      await jest.advanceTimersByTimeAsync( 20000 );
+      await jest.advanceTimersByTimeAsync( 5000 );
 
       expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
         "photo_delete_hang_context",
