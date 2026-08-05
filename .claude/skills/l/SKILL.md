@@ -541,6 +541,44 @@ breadcrumb should disambiguate.
 - **`isAdvancedUser`** is an upstream metric marked do-not-remove and is
   already gated on change; one line per launch is the floor. Leave it.
 
+### The library can be perfectly healthy, and the Aug 5 21:50 log is what that
+### looks like
+
+Two deletions, both complete: 463 of 463 at 22:04 (5.3s door to door) and 9 of
+9 at 22:11 (3.0s). No hang, no timeout, no cooldown, no skipped delete. After
+four sessions of logs in which essentially every library write failed, this is
+the first with successes to compare against — and it is worth remembering that
+the wedge is a *state*, not a constant. A log without hangs does not mean a
+build fixed them.
+
+**`appCreatedMs` finally has data, and it is not conclusive.** 99 app-created
+assets in 3073ms, and 2 in 1477ms — both well under the 10s that would rule the
+exemption out, so the split stayed on and nobody got asked to confirm twice.
+But the *prompted* remainder was just as quick (364 assets in roughly 2.2s,
+7 in roughly 1.5s, by subtraction from the prose lines), and a prompted
+transaction that fast is either an alert nobody had to answer or a user tapping
+immediately. The log cannot separate those, which is why `promptedMs` now rides
+on `photo_delete_app_created`. Read the next one as: `promptedMs` well above
+`appCreatedMs` per asset means the alert is real and the exemption is buying
+something; the two alike means either both prompt or neither does.
+
+**A healthy probe can take 5.8s.** `probeOk=true, probeMs=5807` on a library
+that then deleted 463 photos without complaint. That is 58% of
+`PREFLIGHT_TIMEOUT_MS`, which would make the preflight itself the thing that
+skips a working deletion — but note the build was `3ef9032d1`, which still had
+the *two-transaction* probe that `7cdaf13` replaced. Do not retune the timeout
+off that number; get a `probeMs` from a build carrying the one-transaction
+probe first.
+
+**Check the build first — this is the second log in a row that predated every
+fix from the session before it.** All 25 lines carry `3ef9032d1`, now `HEAD~15`.
+The per-attempt upload abort controllers, the one-transaction probe, the USB
+offload on the write chain, the 10s deletion timeout and the duplicate-upload
+guard are all still undeployed. Nothing in this log tests any of them. Until a
+deploy happens, expect each new log to re-raise questions already answered in
+these notes; the `commit` check is the only thing standing between that and a
+wasted session.
+
 ### Volume, for calibration
 
 3,443 lines over five days, of which ~2,550 were six diagnostics repeating
@@ -576,6 +614,12 @@ network outage that failed every upload), not a new leak. Nine of the 92 were
 byte-identical `[diag]` repeats, now suppressed. At this size, read the whole
 dump; the grouped summary hides the interleaving that all three of this
 session's findings came out of.
+
+The fifth Aug 5 log (21:50–22:12) was 25 lines in 22 minutes, and it is the
+first log in the series with no failure to chase: one backgrounded upload
+(known, listed above), two `slow_query_burst` and a `slow_query` riding out a
+network stall, and two clean deletions. At this size the summary is pointless —
+read the dump.
 
 The fourth Aug 5 log (19:08–20:22) was 122 lines in 74 minutes (~2,400/day),
 again a burst window: an 80-photo card offload, a 45-minute network outage,
