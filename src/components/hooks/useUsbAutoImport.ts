@@ -7,6 +7,7 @@ import {
 } from "sharedHelpers/backgroundExecution";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
+import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import {
   deleteUsbSourceImages,
   getUsbFolderDiagnostics,
@@ -127,11 +128,21 @@ const useUsbAutoImport = ( ) => {
           break;
         }
         try {
+          // On the shared Photos-library write chain, like every other native
+          // library write in the app. This is the app's largest source of them
+          // — 114 in a run, one per file — and it was the one path outside the
+          // chain, so an offload overlapped whatever else the app was doing to
+          // the library. In the Aug 5 16:04–16:40 log that cost a deletion
+          // preflight its meaning: the probe ran on top of a live save, hung,
+          // and armed a ten-minute cooldown that then blocked five deletions on
+          // a library which went on to create 68 assets without complaint.
+          // Enqueued per file rather than per run so a deletion waits for one
+          // photo, not a whole card.
           // eslint-disable-next-line no-await-in-loop
-          const saved = await withTimeout(
+          const saved = await enqueuePhotoLibraryWrite( ( ) => withTimeout(
             saveUsbImageToPhotos( relativePath ),
             SAVE_TIMEOUT_MS,
-          );
+          ) );
           savedPaths.push( relativePath );
           // Remember that this asset is ours. These are the only photos in the
           // library the app created, and the only ones PhotoKit will let it
