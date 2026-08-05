@@ -85,8 +85,17 @@ class ObservationPhoto extends Realm.Object {
       position: observationPhoto.position,
     };
 
+    // Always point the observation photo at whatever photo id the record
+    // carries now. This used to be gated on needsPhotoReupload( photo ), but
+    // the re-uploaded photo is marked synced (markRecordUploaded) before this
+    // runs, which makes that check false every time -- so the id of the photo
+    // just uploaded never reached the server and the observation kept its
+    // original photo. That is why a crop made in the observation editor
+    // survived locally and vanished once the observation uploaded. When
+    // nothing was re-uploaded this is the id the server already has, so
+    // sending it changes nothing.
     const { photo } = observationPhoto;
-    if ( ObservationPhoto.needsPhotoReupload( photo ) && photo?.id ) {
+    if ( photo?.id ) {
       observationPhotoParams.photo_id = photo.id;
     }
 
