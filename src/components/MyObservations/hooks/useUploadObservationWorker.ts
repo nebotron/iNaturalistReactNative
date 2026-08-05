@@ -12,6 +12,7 @@ import {
   beginBackgroundUploadTask,
   endBackgroundUploadTask,
 } from "sharedHelpers/backgroundExecution";
+import { log } from "sharedHelpers/logger";
 import {
   useTranslation,
 } from "sharedHooks";
@@ -31,7 +32,26 @@ import {
 
 import { MS_BEFORE_TOOLBAR_RESET } from "./useUploadObservations";
 
+const logger = log.extend( "useUploadObservationWorker" );
+
 const MS_BEFORE_UPLOAD_TIMES_OUT = 60_000 * 5;
+
+// UUIDs whose upload promise hasn't settled yet, and when each started.
+//
+// The effect below already means to skip observations that are in flight, but
+// it reads activeUploads, and both resetUploadObservationsSlice and
+// stopAllUploads empty that map wholesale while the promises it was tracking
+// are still running. Nothing then remembers those uploads exist, so the next
+// session starts them again on top of themselves: in the Aug 5 16:04–16:40 log
+// four of nine observations were uploading two or three times concurrently,
+// one of them for seven minutes, and the duplicate attempt on 4aeb0f76 is
+// where "Media attachment failed: Accessing object which has been invalidated
+// or deleted" came from — two attempts mutating one observation's photos.
+//
+// A module-level map survives those resets, which is the whole point. Entries
+// older than the upload timeout are treated as gone rather than blocking the
+// observation forever, in case a promise never settles at all.
+const inFlightUploads = new Map<string, number>( );
 
 const { useRealm } = RealmContext;
 
@@ -154,6 +174,25 @@ const useUploadObservationWorker = ( ) => {
 
   const uploadObservationAndCatchError = useCallback( async ( observation: RealmObservation ) => {
     const { uuid } = observation;
+    const startedAt = Date.now( );
+    const previousAttemptAt = inFlightUploads.get( uuid );
+    if ( previousAttemptAt !== undefined ) {
+      const msSinceFirstAttempt = startedAt - previousAttemptAt;
+      if ( msSinceFirstAttempt < MS_BEFORE_UPLOAD_TIMES_OUT ) {
+        const state = useStore.getState( );
+        logger.errorWithExtra( "upload_duplicate_attempt", {
+          msSinceFirstAttempt,
+          inFlight: inFlightUploads.size,
+          activeUploads: Object.keys( state.activeUploads ).length,
+          queueLength: state.uploadQueue.length,
+          uploadStatus: state.uploadStatus,
+        } );
+        // The first attempt's finally still owns this UUID and will clear it
+        // from activeUploads and the queue when it settles.
+        return;
+      }
+    }
+    inFlightUploads.set( uuid, startedAt );
     try {
       const timeoutID = setTimeout( ( ) => {
         abortController?.abort( );
@@ -194,6 +233,10 @@ const useUploadObservationWorker = ( ) => {
         }
       }
     } finally {
+      // Only if this attempt is still the one being tracked: a stale entry
+      // above is overwritten rather than reused, and the abandoned attempt
+      // settling later must not clear its replacement.
+      if ( inFlightUploads.get( uuid ) === startedAt ) inFlightUploads.delete( uuid );
       finishUpload( uuid );
       // Read fresh state after finishUpload updates the store, rather
       // than the stale closure values captured when this callback was created.
