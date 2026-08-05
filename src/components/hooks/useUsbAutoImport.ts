@@ -171,13 +171,25 @@ const useUsbAutoImport = ( ) => {
 
       // Delete from the source device only after the whole batch is safely in
       // Photos (per the user's choice), and only the files that actually saved.
+      let deletedFromDevice = 0;
+      let deleteFailures = 0;
       if ( savedPaths.length > 0 ) {
         progress.setPhase( "deleting" );
         const del = await deleteUsbSourceImages( savedPaths );
         progress.setDeleted( del.deleted );
+        deletedFromDevice = del.deleted;
+        deleteFailures = del.failed;
+      }
+      // Reported even when nothing saved. This line used to sit inside the
+      // branch above, so the one run that most needed explaining — every file
+      // failing — was the one run that logged no outcome at all, and the Aug 5
+      // log couldn't say whether the offload finished or the app died holding
+      // it. Skipped only when the wedged line above already carries the same
+      // counts.
+      if ( abandoned === 0 ) {
         logger.info(
           `USB offload: saved ${savedPaths.length}, failed ${failed}; `
-          + `deleted ${del.deleted} from device (${del.failed} delete failures)`,
+          + `deleted ${deletedFromDevice} from device (${deleteFailures} delete failures)`,
         );
       }
       progress.setPhase( failed > 0

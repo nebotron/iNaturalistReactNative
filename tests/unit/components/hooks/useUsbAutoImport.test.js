@@ -92,6 +92,22 @@ describe( "useUsbAutoImport", ( ) => {
     expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 3 );
   } );
 
+  // This is the run that most needs explaining, and it was the one run that
+  // logged no outcome at all: the summary used to sit inside "if anything
+  // saved", so the Aug 5 log couldn't say whether the offload finished or the
+  // app died holding it.
+  it( "reports the outcome of a run where nothing saved", async ( ) => {
+    mockSaveUsbImageToPhotos.mockRejectedValue( new Error( "unreadable file" ) );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockDeleteUsbSourceImages ).not.toHaveBeenCalled( );
+    expect( mockLogger.info ).toHaveBeenCalledWith(
+      expect.stringContaining( "USB offload: saved 0, failed 40" ),
+    );
+  } );
+
   it( "carries on past an ordinary failure that is not a timeout", async ( ) => {
     mockSaveUsbImageToPhotos.mockImplementation( async relativePath => {
       if ( relativePath === "IMG_0.CR3" ) throw new Error( "unreadable file" );
