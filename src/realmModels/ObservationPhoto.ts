@@ -109,13 +109,26 @@ class ObservationPhoto extends Realm.Object {
   // I think it is only called after certain transformations on the Realm result,
   // but it is not important for my current linear ticket so I'll skip typing it more
   static mapObservationPhotoForMyObsDefaultMode( observationPhoto: {
-    photo?: { url?: string; localFilePath?: string };
+    photo?: {
+      url?: string;
+      localFilePath?: string;
+      _synced_at?: Date;
+      _updated_at?: Date;
+    };
     uuid?: string;
   } ) {
     return {
       photo: {
         url: observationPhoto?.photo?.url,
         localFilePath: observationPhoto?.photo?.localFilePath,
+        // Photo.hasLocalEdits reads these to decide whether the local file is
+        // newer than what was uploaded. Dropping them made every photo here
+        // look unedited, so an uploaded observation whose photo had been
+        // cropped (or otherwise edited) locally showed the remote original
+        // instead of the local file -- the crop looked lost as soon as the
+        // observation was saved and My Observations drew it again.
+        _synced_at: observationPhoto?.photo?._synced_at,
+        _updated_at: observationPhoto?.photo?._updated_at,
       },
       uuid: observationPhoto?.uuid,
     };

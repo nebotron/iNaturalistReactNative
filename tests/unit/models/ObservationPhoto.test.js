@@ -1,4 +1,5 @@
 import ObservationPhoto from "realmModels/ObservationPhoto";
+import Photo from "realmModels/Photo";
 
 describe( "ObservationPhoto", ( ) => {
   describe( "createObsPhotosWithPosition", ( ) => {
@@ -111,6 +112,44 @@ describe( "ObservationPhoto", ( ) => {
       } );
 
       expect( result.observation_photo ).not.toHaveProperty( "photo_id" );
+    } );
+  } );
+
+  describe( "mapObservationPhotoForMyObsDefaultMode", ( ) => {
+    // My Observations draws from this mapping, so a photo cropped locally on an
+    // already-uploaded observation has to keep resolving to its local file here.
+    // It used to drop the timestamps hasLocalEdits reads, which made every photo
+    // look unedited and sent the list back to the remote original -- the crop
+    // looked lost the moment the observation was saved.
+    it( "keeps a locally edited photo resolving to its local file", ( ) => {
+      const mapped = ObservationPhoto.mapObservationPhotoForMyObsDefaultMode( {
+        uuid: "obs-photo-uuid",
+        photo: {
+          url: "https://example.com/photos/1/square.jpg",
+          localFilePath: "photoUploads/cropped.jpg",
+          _synced_at: new Date( "2026-01-01T12:00:00Z" ),
+          _updated_at: new Date( "2026-01-02T12:00:00Z" ),
+        },
+      } );
+
+      expect( Photo.hasLocalEdits( mapped.photo ) ).toBe( true );
+      expect( Photo.displayLocalOrRemoteOriginalPhoto( mapped.photo ) )
+        .toMatch( /photoUploads\/cropped\.jpg$/ );
+    } );
+
+    it( "still prefers the remote photo when there are no local edits", ( ) => {
+      const mapped = ObservationPhoto.mapObservationPhotoForMyObsDefaultMode( {
+        uuid: "obs-photo-uuid",
+        photo: {
+          url: "https://example.com/photos/1/square.jpg",
+          localFilePath: "photoUploads/uploaded.jpg",
+          _synced_at: new Date( "2026-01-02T12:00:00Z" ),
+          _updated_at: new Date( "2026-01-01T12:00:00Z" ),
+        },
+      } );
+
+      expect( Photo.displayLocalOrRemoteOriginalPhoto( mapped.photo ) )
+        .toEqual( "https://example.com/photos/1/original.jpg" );
     } );
   } );
 } );
