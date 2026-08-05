@@ -12,6 +12,9 @@ export interface GroupedPhotoImage {
   uri: string;
   cropOriginalUri?: string;
   crop?: NormalizedCrop;
+  // The crop the file at uri actually holds. Anything else in crop is still
+  // only a framing, whether or not the photo was ever cropped before.
+  bakedCrop?: NormalizedCrop;
 }
 
 interface GroupedPhotoItem {
@@ -29,12 +32,28 @@ export const groupPhotoCropSourceUri = ( image: GroupedPhotoImage ): string => (
   image.cropOriginalUri || image.uri
 );
 
-// A crop that hasn't been written to a file yet: pinching a photo in the Group
+// Crops round-trip through a screen-space transform, so re-reading the same
+// framing can come back differing in the last few decimals.
+const CROP_EPSILON = 0.001;
+
+const cropsMatch = ( a?: NormalizedCrop, b?: NormalizedCrop ) => {
+  if ( !a || !b ) {
+    return false;
+  }
+  return Math.abs( a.x - b.x ) < CROP_EPSILON
+    && Math.abs( a.y - b.y ) < CROP_EPSILON
+    && Math.abs( a.w - b.w ) < CROP_EPSILON
+    && Math.abs( a.h - b.h ) < CROP_EPSILON;
+};
+
+// A crop the photo's own file doesn't hold yet: pinching a photo in the Group
 // Photos grid records the crop only (see saveGroupPhotoCrop), so panning around
-// the grid never writes a full-resolution file per gesture.
-const hasUnbakedCrop = ( image: GroupedPhotoImage ) => Boolean(
-  image.crop && !image.cropOriginalUri,
-);
+// the grid never writes a full-resolution file per gesture. This compares
+// against the crop that was baked rather than just asking whether the photo has
+// ever been cropped, or re-pinching a photo that had already been through the
+// bulk cropper would import the older crop's file.
+const hasUnbakedCrop = ( image: GroupedPhotoImage ) => Boolean( image.crop )
+  && !cropsMatch( image.crop, image.bakedCrop );
 
 const updateGroupedPhotoImages = (
   updates: Map<string, Partial<GroupedPhotoImage>>,
@@ -79,7 +98,9 @@ async function cropGroupPhotoFile(
   const cropOriginalUri = cropOriginalUriFromPath( cropOriginalPath ) || sourceUri;
   saveAnimalCrop( displayUri, crop );
   recordCropFeedback( cropOriginalUri, { crop, kept: true } );
-  return { uri: croppedUri, cropOriginalUri, crop };
+  return {
+    uri: croppedUri, cropOriginalUri, crop, bakedCrop: crop,
+  };
 }
 
 // Everything here reads the store fresh rather than from the caller's closure:
@@ -128,11 +149,14 @@ export async function bakePendingGroupPhotoCrops( ): Promise<void> {
   const updates = new Map<string, Partial<GroupedPhotoImage>>( );
   const bake = async ( image: GroupedPhotoImage ) => {
     try {
+      // The crop is expressed against the uncropped original, which for a photo
+      // that has already been cropped once is not image.uri.
+      const sourceUri = groupPhotoCropSourceUri( image );
       // Passing the crop skips subject detection; this only resolves the
       // full-resolution local file and its dimensions, which is work the grid
       // deliberately never does (it crops thumbnails) and the cropper only
       // does for photos the user opened.
-      const loaded = await preloadImage( image.uri, image.uri, image.crop! );
+      const loaded = await preloadImage( sourceUri, sourceUri, image.crop! );
       if ( !loaded ) {
         return;
       }
@@ -141,6 +165,7 @@ export async function bakePendingGroupPhotoCrops( ): Promise<void> {
         image.uri,
         loaded.localUri,
         loaded.size,
+        image.cropOriginalUri,
       ) );
     } catch {
       // Leave the photo uncropped rather than failing the whole import.
