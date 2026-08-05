@@ -167,8 +167,13 @@ const TaxonDetails = ( ): Node => {
   const fromObsEdit = bulkChainStartRoute?.name === "ObsEdit";
   const fromObsDetails = bulkChainStartRoute?.name === "ObsDetails";
   const { entryScreen: bulkEntryScreen, lastScreen: bulkLastScreen } = bulkFlowRoute?.params || {};
+  // bulkUploadMode means the user entered the bulk ID flow from My
+  // Observations, which is a multi-obs flow even when only one observation
+  // needs an ID. Without it, a one-observation bulk ID would fall through to
+  // the single-obs branch below and pop to ObsEdit instead of saving/uploading
+  // and returning to My Observations.
   const isMultiObsCreateFlow = (
-    observations.length > 1 || savedOrUploadedMultiObsFlow
+    observations.length > 1 || savedOrUploadedMultiObsFlow || bulkUploadMode
   ) && bulkEntryScreen === "ObsEdit" && bulkLastScreen === "ObsEdit";
   const { saveAndAdvance } = useMultiObsSaveAndAdvance( {
     transitionAnimation: ( ) => undefined,

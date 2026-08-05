@@ -56,4 +56,23 @@ describe( "useNavigateWithTaxonSelected", ( ) => {
     } );
     expect( mockNavigate ).not.toHaveBeenCalledWith( "ObsEdit" );
   } );
+
+  it( "saves instead of opening ObsEdit when the bulk ID flow has one observation", async ( ) => {
+    useStore.setState( {
+      observations: [observation],
+      currentObservation: observation,
+      currentObservationIndex: 0,
+      bulkUploadMode: true,
+    } );
+    const taxon = factory( "RemoteTaxon", { id: 123, rank_level: 10 } );
+    const { result } = renderHook( () => useNavigateWithTaxonSelected( { vision: true } ) );
+
+    await result.current( taxon );
+
+    await waitFor( ( ) => {
+      expect( mockSaveAndAdvance ).toHaveBeenCalledWith( "upload" );
+    } );
+    expect( mockNavigate ).not.toHaveBeenCalled( );
+    expect( mockDispatch ).not.toHaveBeenCalled( );
+  } );
 } );

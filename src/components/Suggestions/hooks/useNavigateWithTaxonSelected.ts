@@ -29,8 +29,13 @@ const useNavigateWithTaxonSelected = (
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const vision = options?.vision;
 
+  // bulkUploadMode means the user entered the bulk ID flow from My
+  // Observations, which is a multi-obs flow even when only one observation
+  // needs an ID. Without it, a one-observation bulk ID would fall through to
+  // the single-obs branches below and dump the user in ObsEdit instead of
+  // saving/uploading and returning to My Observations.
   const isMultiObsCreateFlow = (
-    observations.length > 1 || savedOrUploadedMultiObsFlow
+    observations.length > 1 || savedOrUploadedMultiObsFlow || bulkUploadMode
   ) && entryScreen === "ObsEdit" && lastScreen === "ObsEdit";
 
   const { saveAndAdvance } = useMultiObsSaveAndAdvance( {

@@ -148,4 +148,29 @@ describe( "TaxonDetails SELECT in bulk ID flow", ( ) => {
     } ) );
     expect( await pressSelectAndGetPopToTarget( ) ).toEqual( "Suggestions" );
   } );
+
+  it( "saves and exits instead of opening ObsEdit for a single-observation bulk ID", async ( ) => {
+    // Only one unuploaded observation needed an ID, so the bulk flow has a
+    // single observation and nothing has been saved yet. Selecting a taxon
+    // should still save/upload it and let the flow exit to My Observations,
+    // not drop the user into the observation editor.
+    useStore.setState( {
+      observations: [factory( "LocalObservation", { uuid: "obs-0" } )],
+      currentObservation: factory( "LocalObservation", { uuid: "obs-0" } ),
+      currentObservationIndex: 0,
+      bulkUploadMode: true,
+    } );
+    useNavigationState.mockImplementation( ( ) => ( {
+      routes: [
+        { name: "ObsList" },
+        { name: "Suggestions", params: { entryScreen: "ObsEdit", lastScreen: "ObsEdit" } },
+        { name: "TaxonDetails", params: { id: mockTaxon.id } },
+      ],
+    } ) );
+    renderTaxonDetails( );
+    const selectButton = await screen.findByText( /SELECT THIS TAXON/ );
+    fireEvent.press( selectButton );
+    await waitFor( ( ) => expect( mockSaveAndAdvance ).toHaveBeenCalled( ) );
+    expect( mockDispatch ).not.toHaveBeenCalled( );
+  } );
 } );
