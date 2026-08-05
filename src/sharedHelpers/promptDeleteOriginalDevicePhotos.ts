@@ -59,7 +59,12 @@ export const clearPhotoLibraryWriteFailure = ( ) => {
 const { ImageCropper } = NativeModules as {
   ImageCropper?: {
     photoDeletionContext?: ( phUris: string[] ) => Promise<string>;
-    photoLibraryWriteProbe?: ( ) => Promise<{ ok: boolean; ms: number; error: string }>;
+    photoLibraryWriteProbe?: ( ) => Promise<{
+      ok: boolean;
+      ms: number;
+      error: string;
+      cleaned?: number;
+    }>;
     deletePhotoAssets?: (
       phUris: string[],
       appCreatedUris: string[]
@@ -170,7 +175,12 @@ const PREFLIGHT_TIMEOUT_MS = 10000;
 // its first sighting, Aug 5 04:30 — the result is ambiguous between "the whole
 // library is wedged" and "transactions are just queueing behind the dead
 // deletion". Running the same transaction before the deletion removes the
-// second explanation: nothing is in flight to queue behind.
+// second explanation: nothing is in flight to queue behind — which was only
+// ever true of writes that go through enqueuePhotoLibraryWrite, and the USB
+// card offload did not, so the Aug 5 16:08 preflight ran on top of a live
+// saveImageToPhotos and its verdict meant nothing. Every native library write
+// is on the chain now; add one off it and this probe goes back to being
+// unreadable.
 //
 // It is also a fix, not only a measurement. A library that can't complete a
 // write the app owns outright certainly can't complete a deletion that needs a
@@ -201,6 +211,10 @@ const preflightPhotoLibraryWrite = async (
       probeOk: ok,
       probeMs: probe?.ms ?? -1,
       waitedMs: Date.now( ) - startedAt,
+      // Albums left behind by earlier probes, cleaned up by this one's single
+      // transaction. Anything above 1 means probes have been landing their
+      // write and being reported as failures anyway.
+      probeCleaned: probe?.cleaned ?? -1,
       probeError: probe === null
         ? `consent-free library write did not settle in ${PREFLIGHT_TIMEOUT_MS}ms`
         : probe.error,

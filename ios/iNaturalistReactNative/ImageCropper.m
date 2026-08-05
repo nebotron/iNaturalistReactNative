@@ -1469,46 +1469,54 @@ RCT_EXPORT_METHOD( photoDeletionContext
 // (photolibraryd, or transactions queueing behind the dead deletion) and
 // nothing app-side can route around it.
 //
-// The album is deleted again immediately, in a second transaction the app also
-// owns, and the promise resolves only once that cleanup has finished. Resolving
-// early (as this first did) left the cleanup transaction running concurrently
-// with whatever the caller did next, which is exactly the overlap
-// enqueuePhotoLibraryWrite exists to prevent — harmless when the probe only ran
-// beside an already-hung delete, not harmless now that it also runs immediately
-// before a live one.
+// Exactly one transaction, because the probe's whole value is that its result
+// is unambiguous. It used to create the album and then delete it again in a
+// second transaction, resolving only once the cleanup had finished — which
+// meant a promise that never settled could be either transaction, and JS
+// reported both as "the library did not service a consent-free write". Both
+// preflight failures in the Aug 5 16:04–16:40 log had that signature
+// (probeMs=-1, "did not settle in 10000ms"), so neither of them actually says
+// whether the write went through, and between them they blocked five deletions
+// (150 photos) and eleven location writes on a library that created 68 assets
+// without complaint at 16:10:58. Resolving early instead is not an option: the
+// cleanup would then overlap the deletion this runs immediately before, which
+// is the overlap enqueuePhotoLibraryWrite exists to prevent.
 //
-// "ok" is the *creation* transaction's result: that is the consent-free write
-// being measured. A cleanup that never comes back leaves the promise pending,
-// and the caller's timeout reads that as an unhealthy library, which it is.
+// So the cleanup moves into the next probe's transaction: delete whatever the
+// last probe left behind and create a fresh album, in one performChanges. One
+// completion handler, one thing it can mean, and at most one leftover album on
+// the device between probes.
+static NSString *const kPhotoLibraryProbeAlbumTitle = @"iNaturalist library probe";
+
 RCT_EXPORT_METHOD( photoLibraryWriteProbe
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
+  PHFetchOptions *staleOptions = [PHFetchOptions new];
+  staleOptions.predicate = [NSPredicate predicateWithFormat:@"title = %@",
+    kPhotoLibraryProbeAlbumTitle];
+  PHFetchResult<PHAssetCollection *> *stale =
+    [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
+                                             subtype:PHAssetCollectionSubtypeAlbumRegular
+                                             options:staleOptions];
+  NSUInteger staleCount = stale.count;
   NSDate *startedAt = [NSDate date];
-  __block NSString *placeholderId = nil;
   [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-    PHAssetCollectionChangeRequest *request =
-      [PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:
-        @"iNaturalist library probe"];
-    placeholderId = request.placeholderForCreatedAssetCollection.localIdentifier;
+    if ( staleCount > 0 ) {
+      [PHAssetCollectionChangeRequest deleteAssetCollections:stale];
+    }
+    [PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:
+      kPhotoLibraryProbeAlbumTitle];
   } completionHandler:^( BOOL success, NSError *error ) {
-    void ( ^finish )( void ) = ^{
-      resolve( @{
-        @"ok": @( success ),
-        @"ms": @( ( long )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 ) ),
-        @"error": error.localizedDescription ?: @"",
-      } );
-    };
-
-    if ( !success || !placeholderId ) { finish( ); return; }
-    PHFetchResult<PHAssetCollection *> *created =
-      [PHAssetCollection fetchAssetCollectionsWithLocalIdentifiers:@[placeholderId] options:nil];
-    if ( created.count == 0 ) { finish( ); return; }
-    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-      [PHAssetCollectionChangeRequest deleteAssetCollections:created];
-    } completionHandler:^( BOOL cleanupSuccess, NSError *cleanupError ) {
-      finish( );
-    }];
+    resolve( @{
+      @"ok": @( success ),
+      @"ms": @( ( long )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 ) ),
+      @"error": error.localizedDescription ?: @"",
+      // How many albums the previous probes left behind. Above 1 means probes
+      // have been failing after the write landed, which the "ok" flag alone
+      // can't show.
+      @"cleaned": @( staleCount ),
+    } );
   }];
 }
 
