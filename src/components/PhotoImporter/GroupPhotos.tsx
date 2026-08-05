@@ -3,13 +3,17 @@ import type {
   FlashListProps, FlashListRef, ListRenderItem, ViewToken,
 } from "@shopify/flash-list";
 import {
+  BackButton,
   Button,
   CustomFlashList,
   INatIconButton,
+  WarningSheet,
 } from "components/SharedComponents";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, {
+  useCallback, useEffect, useMemo, useState,
+} from "react";
 import { preloadImage } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { useGridLayout, useTranslation } from "sharedHooks";
@@ -40,6 +44,7 @@ interface Item {
 interface Props {
   combinePhotos: ( ) => void;
   clearSelection: ( ) => void;
+  discardImport: ( ) => void;
   duplicateItem: ( item: Item ) => void;
   flashListRef?: React.RefObject<FlashListRef<Item> | null>;
   groupedPhotos: Item[];
@@ -61,6 +66,7 @@ interface Props {
 const GroupPhotos = ( {
   combinePhotos,
   clearSelection,
+  discardImport,
   duplicateItem,
   flashListRef,
   groupedPhotos,
@@ -77,6 +83,7 @@ const GroupPhotos = ( {
 }: Props ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
+  const [showDiscardSheet, setShowDiscardSheet] = useState( false );
   const {
     flashListStyle,
     gridItemStyle,
@@ -184,6 +191,12 @@ const GroupPhotos = ( {
 
   return (
     <SharedStackViewWrapper>
+      <View className="flex-row items-center">
+        <BackButton
+          onPress={( ) => setShowDiscardSheet( true )}
+          testID="GroupPhotos.back"
+        />
+      </View>
       <CustomFlashList
         ListFooterComponent={footerComponent}
         contentContainerStyle={listStyle}
@@ -253,6 +266,22 @@ const GroupPhotos = ( {
             </View>
           </View>
         </View>
+      )}
+      {showDiscardSheet && (
+        <WarningSheet
+          onPressClose={( ) => setShowDiscardSheet( false )}
+          headerText={t( "DISCARD-PHOTOS--question" )}
+          text={t( "By-exiting-your-photos-will-not-be-saved" )}
+          secondButtonText={t( "CANCEL" )}
+          handleSecondButtonPress={( ) => setShowDiscardSheet( false )}
+          buttonText={t( "DISCARD-ALL" )}
+          testID="GroupPhotos.discardSheet"
+          confirm={( ) => {
+            setShowDiscardSheet( false );
+            discardImport( );
+          }}
+          loading={false}
+        />
       )}
     </SharedStackViewWrapper>
   );

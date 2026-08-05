@@ -28,7 +28,10 @@ import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrop
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
-import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
+import {
+  addRemovedGroupPhotoUris,
+  clearRemovedGroupPhotoUris,
+} from "sharedHelpers/removedGroupPhotoUris";
 import { useExitObservationFlow, useGridLayout } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -331,6 +334,21 @@ const GroupPhotosContainer = ( ): Node => {
   const duplicateItem = item => duplicateObservations( [item] );
   const removeItem = item => removeObservations( [item] );
 
+  // Backing out of Group Photos abandons the import entirely: nothing here has
+  // been saved yet, and the grouped photos are persisted (see
+  // useResumeGroupPhotos), so leaving any of this behind would drop the user
+  // back into a stale import on the next cold start.
+  const discardImport = useCallback( ( ) => {
+    // Photos the user removed from the grid were recorded as "gone" so they'd
+    // stay hidden from the photo picker. The import never happened, so give
+    // them back rather than hiding photos that still exist on the device.
+    clearRemovedGroupPhotoUris( pendingGroupPhotoDeletionUris );
+    // Resets the observation flow slice: groupedPhotos, photoLibraryUris,
+    // pendingGroupPhotoDeletionUris, and the rest of the import state. The
+    // staged device photos are deliberately not deleted.
+    exitObservationFlow( );
+  }, [exitObservationFlow, pendingGroupPhotoDeletionUris] );
+
   const navBasedOnUserSettings = async ( ) => {
     setIsCreatingObservations( true );
     // Crops confirmed in the bulk cropper finish writing in the background so
@@ -434,6 +452,7 @@ const GroupPhotosContainer = ( ): Node => {
     <GroupPhotos
       combinePhotos={combinePhotos}
       clearSelection={() => setSelectedIndices( [] )}
+      discardImport={discardImport}
       duplicateItem={duplicateItem}
       flashListRef={flashListRef}
       groupedPhotos={groupedPhotos}
