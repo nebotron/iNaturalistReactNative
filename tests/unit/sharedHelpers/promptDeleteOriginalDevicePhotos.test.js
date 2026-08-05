@@ -10,15 +10,17 @@ const mockIosReadGalleryPermission = jest.fn( async () => "not-determined" );
 const mockIosRequestReadWriteGalleryPermission = jest.fn( async () => "granted" );
 const mockDeletePhotos = jest.fn( async () => undefined );
 const mockPhotoDeletionContext = jest.fn( async ( ) => "appState=0" );
+const mockPhotoLibraryWriteProbe = jest.fn( async ( ) => ( { ok: true, ms: 3, error: "" } ) );
 
 // The module under test destructures NativeModules.ImageCropper at import time,
-// so the native helper has to exist before that import runs. Only
-// photoDeletionContext is provided, leaving the deletion itself on the
-// CameraRoll fallback the other tests drive.
+// so the native helper has to exist before that import runs. deletePhotoAssets
+// is left off, keeping the deletion itself on the CameraRoll fallback the other
+// tests drive.
 jest.mock( "react-native", ( ) => {
   const RN = jest.requireActual( "react-native" );
   RN.NativeModules.ImageCropper = {
     photoDeletionContext: ( ...args ) => mockPhotoDeletionContext( ...args ),
+    photoLibraryWriteProbe: ( ...args ) => mockPhotoLibraryWriteProbe( ...args ),
   };
   return RN;
 } );
@@ -64,6 +66,11 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     zustandStorage.removeItem( "deleteOriginalPhotosSettingsPrompted" );
     mockIosReadGalleryPermission.mockResolvedValue( "not-determined" );
     mockIosRequestReadWriteGalleryPermission.mockResolvedValue( "granted" );
+    mockPhotoLibraryWriteProbe.mockReset( );
+    mockPhotoLibraryWriteProbe.mockResolvedValue( { ok: true, ms: 3, error: "" } );
+    // The cooldown is persisted, so a test that arms it otherwise makes every
+    // test after it skip its deletion before reaching what it meant to check.
+    clearPhotoLibraryWriteFailure( );
   } );
 
   it( "requests photo library permission for user-initiated deletes", async ( ) => {
@@ -105,6 +112,46 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     expect( infoLines.some( line => line.includes( "permission status" ) ) ).toBe( false );
     expect( infoLines.some( line => line.includes( "deletion context" ) ) ).toBe( false );
     expect( infoLines.some( line => line.includes( "ph://" ) ) ).toBe( false );
+  } );
+
+  describe( "preflighting a consent-free library write", ( ) => {
+    it( "deletes normally when the probe comes back", async ( ) => {
+      await deleteOriginalDevicePhotos( ["ph://ONE"] );
+
+      expect( mockPhotoLibraryWriteProbe ).toHaveBeenCalledTimes( 1 );
+      expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://ONE"] );
+      // A healthy preflight is the common case; a line per delete would be
+      // pure volume.
+      expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+        "photo_delete_preflight",
+        expect.anything( ),
+      );
+    } );
+
+    describe( "when the probe never settles", ( ) => {
+      beforeEach( ( ) => jest.useFakeTimers( ) );
+      afterEach( ( ) => jest.useRealTimers( ) );
+
+      it( "skips the doomed deletion and arms the cooldown", async ( ) => {
+        clearPhotoLibraryWriteFailure( );
+        mockPhotoLibraryWriteProbe.mockImplementation( ( ) => new Promise( ( ) => {} ) );
+
+        const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
+        await jest.advanceTimersByTimeAsync( 10000 );
+        const result = await deletion;
+
+        // A library that can't complete a write the app owns outright can't
+        // complete a deletion needing a consent alert on top, so there is
+        // nothing to gain by spending 120s finding out.
+        expect( mockDeletePhotos ).not.toHaveBeenCalled( );
+        expect( result ).toEqual( { deleted: 0, requested: 1, succeeded: false } );
+        expect( isInPhotoLibraryWriteCooldown( ) ).toBe( true );
+        expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+          "photo_delete_preflight",
+          expect.objectContaining( { requested: 1, probeOk: false } ),
+        );
+      } );
+    } );
   } );
 
   describe( "when the deletion hangs", ( ) => {

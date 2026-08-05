@@ -145,6 +145,57 @@ export const enqueuePhotoLibraryWrite = <T, >( task: ( ) => Promise<T> ): Promis
 // recover from a genuine hang.
 const DELETE_TIMEOUT_MS = 120000;
 
+// How long a consent-free library write gets before the library counts as
+// unhealthy. Creating an album is a local database write; on a working library
+// it comes back in milliseconds, so anything near this is already pathological.
+const PREFLIGHT_TIMEOUT_MS = 10000;
+
+// Runs one Photos-library transaction that needs no user consent (creating an
+// album and deleting it again) immediately before the deletion, with nothing
+// else in flight.
+//
+// This settles the question the 20s hang probe couldn't. That probe runs
+// *concurrently* with the hung deletion, so when it hangs too — as it did on
+// its first sighting, Aug 5 04:30 — the result is ambiguous between "the whole
+// library is wedged" and "transactions are just queueing behind the dead
+// deletion". Running the same transaction before the deletion removes the
+// second explanation: nothing is in flight to queue behind.
+//
+// It is also a fix, not only a measurement. A library that can't complete a
+// write the app owns outright certainly can't complete a deletion that needs a
+// consent alert on top, and every delete in the Aug 5 log spent 120s
+// discovering that. Skipping on a failed preflight turns a two-minute hang into
+// a ten-second one and arms the cooldown that stops the next import repeating
+// it.
+const preflightPhotoLibraryWrite = async (
+  requested: number,
+): Promise<boolean> => {
+  if ( Platform.OS !== "ios" || !ImageCropper?.photoLibraryWriteProbe ) return true;
+  const startedAt = Date.now( );
+  const probe = await Promise.race( [
+    ImageCropper.photoLibraryWriteProbe( ).catch(
+      probeError => ( { ok: false, ms: -1, error: String( probeError ) } ),
+    ),
+    new Promise<null>( resolve => { setTimeout( ( ) => resolve( null ), PREFLIGHT_TIMEOUT_MS ); } ),
+  ] );
+  const ok = probe?.ok ?? false;
+  // Only reported when it fails or drags. A healthy preflight is the common
+  // case and says nothing the deletion that follows doesn't already say, and
+  // one remote POST per delete is what the last round of removals was about.
+  if ( !ok || Date.now( ) - startedAt > 1000 ) {
+    logger.errorWithExtra( "photo_delete_preflight", {
+      requested,
+      probeOk: ok,
+      probeMs: probe?.ms ?? -1,
+      waitedMs: Date.now( ) - startedAt,
+      probeError: probe === null
+        ? `consent-free library write did not settle in ${PREFLIGHT_TIMEOUT_MS}ms`
+        : probe.error,
+    } );
+  }
+  return ok;
+};
+
 const performDeleteOriginalDevicePhotos = async (
   photoUris: string[],
   options: DeleteOriginalDevicePhotosOptions = {},
@@ -180,6 +231,22 @@ const performDeleteOriginalDevicePhotos = async (
   const hasPermission = await ensureDeletePhotosPermission( requested );
   if ( !hasPermission ) {
     logger.warn( "Skipped deleting device photos: photo library permission not granted" );
+    if ( options.userInitiated ) {
+      Alert.alert(
+        i18next.t( "Something-went-wrong" ),
+        i18next.t( "Could-not-delete-original-photos" ),
+      );
+    }
+    return { deleted: 0, requested, succeeded: false };
+  }
+
+  if ( !await preflightPhotoLibraryWrite( requested ) ) {
+    logger.warn(
+      `Skipped deleting ${requested} device photo(s): a Photos-library write `
+      + "needing no user consent did not complete, so the library cannot "
+      + "service a deletion either (see preflightPhotoLibraryWrite)",
+    );
+    recordPhotoLibraryWriteFailure( );
     if ( options.userInitiated ) {
       Alert.alert(
         i18next.t( "Something-went-wrong" ),
@@ -257,7 +324,10 @@ const performDeleteOriginalDevicePhotos = async (
       // never does answers that. Deliberately not routed through
       // enqueuePhotoLibraryWrite: running concurrently with the hung delete is
       // the whole point. (Which does mean a probe that also hangs is ambiguous
-      // between a wedged library and transactions queueing behind the dead one.)
+      // between a wedged library and transactions queueing behind the dead one
+      // — preflightPhotoLibraryWrite above is what disambiguates it, since a
+      // delete only gets this far once the same write succeeded with nothing
+      // in flight.)
       //
       // Bounded separately rather than as one Promise.all, so a probe that
       // hangs can't make the context read as "the main queue never answered",

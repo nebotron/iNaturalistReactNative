@@ -1457,8 +1457,16 @@ RCT_EXPORT_METHOD( photoDeletionContext
 // nothing app-side can route around it.
 //
 // The album is deleted again immediately, in a second transaction the app also
-// owns. Called only from the 20s hang report — a handful of times a day, never
-// on a healthy delete — so it adds no library writes to the path that works.
+// owns, and the promise resolves only once that cleanup has finished. Resolving
+// early (as this first did) left the cleanup transaction running concurrently
+// with whatever the caller did next, which is exactly the overlap
+// enqueuePhotoLibraryWrite exists to prevent — harmless when the probe only ran
+// beside an already-hung delete, not harmless now that it also runs immediately
+// before a live one.
+//
+// "ok" is the *creation* transaction's result: that is the consent-free write
+// being measured. A cleanup that never comes back leaves the promise pending,
+// and the caller's timeout reads that as an unhealthy library, which it is.
 RCT_EXPORT_METHOD( photoLibraryWriteProbe
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
@@ -1471,19 +1479,23 @@ RCT_EXPORT_METHOD( photoLibraryWriteProbe
         @"iNaturalist library probe"];
     placeholderId = request.placeholderForCreatedAssetCollection.localIdentifier;
   } completionHandler:^( BOOL success, NSError *error ) {
-    resolve( @{
-      @"ok": @( success ),
-      @"ms": @( ( long )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 ) ),
-      @"error": error.localizedDescription ?: @"",
-    } );
+    void ( ^finish )( void ) = ^{
+      resolve( @{
+        @"ok": @( success ),
+        @"ms": @( ( long )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 ) ),
+        @"error": error.localizedDescription ?: @"",
+      } );
+    };
 
-    if ( !success || !placeholderId ) { return; }
+    if ( !success || !placeholderId ) { finish( ); return; }
     PHFetchResult<PHAssetCollection *> *created =
       [PHAssetCollection fetchAssetCollectionsWithLocalIdentifiers:@[placeholderId] options:nil];
-    if ( created.count == 0 ) { return; }
+    if ( created.count == 0 ) { finish( ); return; }
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
       [PHAssetCollectionChangeRequest deleteAssetCollections:created];
-    } completionHandler:nil];
+    } completionHandler:^( BOOL cleanupSuccess, NSError *cleanupError ) {
+      finish( );
+    }];
   }];
 }
 
