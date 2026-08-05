@@ -386,6 +386,67 @@ would have reached, so the import had already finished and the `settled` POST
 was lost with the process. Watch for it again, but the wedge itself looks
 fixed.
 
+### The preflight's premise was false, and the probe couldn't say so anyway
+
+Two things went wrong at once in the Aug 5 16:04–16:40 log, and between them
+they skipped **five deletions (150 photos) and eleven location writes on a
+library that was working**: at 16:10:58 the USB offload created 68 assets with
+zero failures, minutes after the probe had reported the library unable to
+service a consent-free write.
+
+1. **The USB card offload was never on `enqueuePhotoLibraryWrite`** — the one
+   native library write in the app that wasn't, and the largest, one
+   `performChanges` per file, 114 in a run. The 16:08 preflight therefore ran on
+   top of a live `saveImageToPhotos`, which is exactly the "queueing behind
+   another transaction" ambiguity the preflight exists to remove. It is on the
+   chain now, enqueued per file so a deletion waits one photo, not a card. **If
+   a new native library write is ever added off the chain, the probe silently
+   goes back to being unreadable.**
+2. **`photoLibraryWriteProbe` spanned two transactions** — create an album, then
+   delete it again, resolving only after the cleanup. A promise that never
+   settled could be either one, and JS reported both as `probeOk=false,
+   probeMs=-1`. Both preflight failures in this log have that signature, so
+   *neither says whether the write landed*. Now one `performChanges` that
+   deletes the previous probe's album and creates a fresh one; `probeCleaned`
+   above 1 means probes have been landing their write and being called failures.
+
+Consequence for reading the next log: `probeOk=false` finally means the
+library did not complete a transaction the app owns outright. If preflight
+failures survive both fixes, that is the first solid evidence of a wedge that
+isn't self-inflicted. **The 16:23 failure is the one to beat** — an
+`updateAssetLocations` (a *consent-requiring* write on user assets) completed
+inside 2.5s, and 2.9s later the consent-free album write didn't settle in 10s,
+with nothing else on the chain. Note also that the whole cascade came from one
+bad probe: each failure arms the 10-minute cooldown, which skips everything
+after it, so the log shows 5 skips from 2 probe failures.
+
+### The app uploads one observation two or three times at once
+
+Four of nine observations in the Aug 5 16:04–16:40 log had genuinely
+overlapping upload attempts — `5912d135` had three, starting 16:30:59,
+16:32:51 and 16:33:51, the first still running seven minutes later. Extract
+start times as `timestamp - durationMs` from the `Upload: Failed` / `Upload:
+Slow completion` lines and interval-overlap them per uuid; that is how it
+shows up, and it explains both the wall of `Aborted` and the lone `Media
+attachment failed: Accessing object which has been invalidated or deleted`
+(two attempts mutating one observation's photos).
+
+`useUploadObservationWorker` does intend to skip in-flight uuids, but it reads
+`activeUploads`, and `resetUploadObservationsSlice` and `stopAllUploads` both
+empty that map wholesale while the promises it was tracking keep running. A
+module-level map of unsettled attempts now survives those resets.
+**Which reset is doing it is still unproven** — `upload_duplicate_attempt`
+carries `uploadStatus`, `queueLength` and `activeUploads` at the moment it
+fires, which should name it in the next log.
+
+### USB `saveImageToPhotos` timeouts, cause still unproven
+
+Three 30s save timeouts across two runs on Aug 5 (16:05:23, 16:08:48,
+16:09:18), then 68/68 saved cleanly at 16:10:58. Contention doesn't explain
+them: run 1's *first* save timed out with nothing else touching the library.
+Both bad runs ended with the app being killed before the outcome line, so
+neither says how it finished. Not acted on.
+
 ### Known, not worth acting on yet
 
 - **Keychain `-25308` (`errSecInteractionNotAllowed`) with 401s around it.**
@@ -432,3 +493,10 @@ quietest yet, and 6 of the 25 were the single deletion hang. Nothing repeats
 any more, so at this volume read the whole dump and skip the summary. The prose
 warn beside `photo_delete_preflight` is gone as of this session: two POSTs for
 one event, and the structured line already carries the count and the reason.
+
+The third Aug 5 log (16:04–16:40) was 92 lines in 36 minutes — a rate of
+~3,700/day, but it is a pure burst window (a 114-photo card offload, then a
+network outage that failed every upload), not a new leak. Nine of the 92 were
+byte-identical `[diag]` repeats, now suppressed. At this size, read the whole
+dump; the grouped summary hides the interleaving that all three of this
+session's findings came out of.
