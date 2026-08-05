@@ -205,6 +205,10 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       const [, extra] = mockLogger.errorWithExtra.mock.calls[0];
       // Counted for the whole session, so other hangs in this file add to it.
       expect( extra.hangsThisSession ).toBeGreaterThanOrEqual( 1 );
+      // The hang report has to carry the preflight it got past: a delete that
+      // hangs seconds after a consent-free write on the same library came back
+      // is a different diagnosis from one on a library that was already stuck.
+      expect( extra.preflightMs ).toBeGreaterThanOrEqual( 0 );
       expect( JSON.stringify( extra ) ).not.toContain( "ph://" );
     } );
 

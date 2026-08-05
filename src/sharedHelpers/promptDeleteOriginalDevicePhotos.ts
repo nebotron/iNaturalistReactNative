@@ -169,8 +169,10 @@ const PREFLIGHT_TIMEOUT_MS = 10000;
 // it.
 const preflightPhotoLibraryWrite = async (
   requested: number,
-): Promise<boolean> => {
-  if ( Platform.OS !== "ios" || !ImageCropper?.photoLibraryWriteProbe ) return true;
+): Promise<{ ok: boolean; ms: number }> => {
+  if ( Platform.OS !== "ios" || !ImageCropper?.photoLibraryWriteProbe ) {
+    return { ok: true, ms: -1 };
+  }
   const startedAt = Date.now( );
   const probe = await Promise.race( [
     ImageCropper.photoLibraryWriteProbe( ).catch(
@@ -193,7 +195,12 @@ const preflightPhotoLibraryWrite = async (
         : probe.error,
     } );
   }
-  return ok;
+  return {
+    ok,
+    ms: ok
+      ? Date.now( ) - startedAt
+      : -1,
+  };
 };
 
 const performDeleteOriginalDevicePhotos = async (
@@ -240,12 +247,11 @@ const performDeleteOriginalDevicePhotos = async (
     return { deleted: 0, requested, succeeded: false };
   }
 
-  if ( !await preflightPhotoLibraryWrite( requested ) ) {
-    logger.warn(
-      `Skipped deleting ${requested} device photo(s): a Photos-library write `
-      + "needing no user consent did not complete, so the library cannot "
-      + "service a deletion either (see preflightPhotoLibraryWrite)",
-    );
+  const preflight = await preflightPhotoLibraryWrite( requested );
+  if ( !preflight.ok ) {
+    // No prose line beside this: photo_delete_preflight above already carries
+    // the count and why it failed, and two POSTs for one event is what the
+    // last round of removals was about.
     recordPhotoLibraryWriteFailure( );
     if ( options.userInitiated ) {
       Alert.alert(
@@ -291,6 +297,14 @@ const performDeleteOriginalDevicePhotos = async (
     msSinceLastSuccess: lastPhotoLibraryWriteSuccessAt === null
       ? -1
       : Date.now( ) - lastPhotoLibraryWriteSuccessAt,
+    // How long the consent-free write immediately before this delete took, on
+    // the same library, with nothing else in flight (-1 = the probe wasn't
+    // available; a failed probe skips the delete entirely, so it can't reach
+    // here). A hang carrying a fast preflight is the case that matters: it
+    // says the library was demonstrably servicing writes moments earlier and
+    // wedged on the ask. Folded in here rather than logged separately because
+    // a healthy preflight isn't worth a POST of its own.
+    preflightMs: preflight.ms,
     context: deletionContext,
   } );
   const hangTimer = setTimeout( ( ) => {
