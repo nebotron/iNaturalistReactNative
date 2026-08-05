@@ -33,11 +33,13 @@ import { cropOriginalUriFromPath } from "sharedHelpers/cropPhotoMetadata";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
+import type { PreloadResult } from "sharedHelpers/imageCropPreload";
 import {
   enqueuePreload,
   preloadCache,
   preloadImage,
 } from "sharedHelpers/imageCropPreload";
+import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { trackGroupPhotoCrop } from "sharedHelpers/pendingGroupPhotoCrops";
 import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
@@ -46,6 +48,8 @@ import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 type Route = RouteProp<SharedStackParamList, "ImageCropEditor">;
+
+const logger = log.extend( "ImageCropEditor" );
 
 // How many upcoming photos in a bulk crop to preload ahead of the one
 // currently shown.
@@ -169,6 +173,19 @@ const ImageCropEditor = ( ) => {
   // Track which imageUri's preload we've already kicked off to avoid re-triggering
   const preloadedUrisRef = useRef( new Set<string>( ) );
 
+  const applyPreloadResult = useCallback( (
+    result: PreloadResult,
+    existingSavedCrop: NormalizedCrop | null,
+  ) => {
+    setLocalImageUri( result.localUri );
+    setImageSize( result.size );
+    if ( existingSavedCrop ) {
+      setSavedInitialCrop( existingSavedCrop );
+    }
+    setDetectedCrop( existingSavedCrop ?? result.crop );
+    setLoadingSource( false );
+  }, [] );
+
   useEffect( ( ) => {
     if ( !imageUri ) {
       return ( ) => {};
@@ -176,12 +193,13 @@ const ImageCropEditor = ( ) => {
 
     const { cropSourceUri, existingSavedCrop } = resolveCropContext( );
 
-    // Preloaded data was already applied during render, so there's no async
-    // work left to do.
-    if ( preloadCache.has( imageUri ) ) {
-      return ( ) => {};
-    }
-
+    // Always go through preloadImage, even for a URI the cache already holds
+    // (it resolves from the cache without reloading anything). Bailing out on
+    // a cache hit assumed the render-time seed had applied it, but this effect
+    // re-runs on any store write — resolveCropContext reads the store — and a
+    // re-run cancels the load in flight. When that cancelled load is what
+    // filled the cache, there was nothing left to apply it or to clear
+    // loadingSource, so the screen sat on its spinner forever.
     let cancelled = false;
 
     ( async ( ) => {
@@ -193,17 +211,17 @@ const ImageCropEditor = ( ) => {
           return;
         }
         if ( !result ) {
+          // The screen can only show its spinner without an image to crop, so
+          // a load that fails silently is indistinguishable from one still
+          // running. Say which photo it was.
+          logger.error( `Could not load an image to crop (source ${cropSourceUri})` );
           setImageSize( null );
           return;
         }
-        setLocalImageUri( result.localUri );
-        setImageSize( result.size );
-        if ( existingSavedCrop ) {
-          setSavedInitialCrop( existingSavedCrop );
-        }
-        setDetectedCrop( existingSavedCrop ?? result.crop );
-      } catch {
+        applyPreloadResult( result, existingSavedCrop );
+      } catch ( error ) {
         if ( !cancelled ) {
+          logger.error( "Failed to load an image to crop", error );
           setLocalImageUri( null );
         }
       } finally {
@@ -216,7 +234,7 @@ const ImageCropEditor = ( ) => {
     return ( ) => {
       cancelled = true;
     };
-  }, [imageUri, resolveCropContext] );
+  }, [applyPreloadResult, imageUri, resolveCropContext] );
 
   // Preload only the next couple of pending images (local file export +
   // subject detection, via enqueuePreload/preloadImage) as soon as this
