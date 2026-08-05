@@ -187,6 +187,27 @@ needs no user-consent alert, so:
   pre-emptively: an album write before every delete is exactly the kind of
   library traffic we just removed).
 
+**The one documented way to delete without a prompt** is that PhotoKit deletes
+assets the app itself created without presenting its confirmation. It does not
+cover the hangs — those are camera-roll originals the user shot and the app
+merely imported — but it does cover the USB card offload
+(`UsbStorage.m saveImageToPhotos`), which is the only place this app adds
+assets to the library. PhotoKit can't be asked after the fact whether an asset
+was ours (`PHAsset.sourceType` only separates user library from shared and
+synced), so the identifier is now recorded at creation in
+`appCreatedPhotoAssets.ts`, and `deletePhotoAssets` deletes those in a
+transaction of their own, ahead of the prompted one.
+
+That gives the controlled comparison the probe above can't: `appCreatedMs` on
+`photo_delete_app_created`, measured on a transaction that should never prompt,
+sitting beside a prompted remainder that may hang. **It also rests on
+behaviour nothing in the log has confirmed yet** — if the exemption doesn't
+hold, a mixed batch would ask the user to confirm twice, so a transaction that
+takes ≥10s is taken as evidence it prompted and the split switches itself off
+for good on that device (`isAppCreatedDeleteExemptionRuledOut`). Check
+`appCreatedMs` first thing next session: sub-second means the exemption is
+real and a slice of deletions now needs no prompt at all.
+
 Also new on that line: `windowList`, every window on the foreground scene by
 class, level, hidden and alpha. iOS presents its confirmation in its own
 window, not in the key window's chain, so `vcChain` structurally cannot tell

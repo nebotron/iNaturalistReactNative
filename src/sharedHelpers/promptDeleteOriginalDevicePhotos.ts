@@ -6,6 +6,12 @@ import i18next from "i18next";
 import {
   Alert, AppState, NativeModules, Platform,
 } from "react-native";
+import {
+  appCreatedPhotoUris,
+  forgetAppCreatedPhotoAssets,
+  isAppCreatedDeleteExemptionRuledOut,
+  recordAppCreatedDeletionTiming,
+} from "sharedHelpers/appCreatedPhotoAssets";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
@@ -55,8 +61,16 @@ const { ImageCropper } = NativeModules as {
     photoDeletionContext?: ( phUris: string[] ) => Promise<string>;
     photoLibraryWriteProbe?: ( ) => Promise<{ ok: boolean; ms: number; error: string }>;
     deletePhotoAssets?: (
-      phUris: string[]
-    ) => Promise<{ deleted: number; requested: number; fetched?: number }>;
+      phUris: string[],
+      appCreatedUris: string[]
+    ) => Promise<{
+      deleted: number;
+      requested: number;
+      fetched?: number;
+      appCreated?: number;
+      appCreatedDeleted?: number;
+      appCreatedMs?: number;
+    }>;
   };
 };
 
@@ -299,11 +313,23 @@ const performDeleteOriginalDevicePhotos = async (
       }
     }
 
-    logger.info( `Deleting ${uniqueUris.length} device photo(s)` );
+    // Assets the app added to the library itself (the USB card offload) are the
+    // only ones PhotoKit deletes without presenting its confirmation, so they
+    // go in a transaction of their own — see deletePhotoAssets in
+    // ImageCropper.m. Skipped once the exemption has been observed not to hold
+    // on this device, because then splitting would only ask the user to
+    // confirm twice.
+    const appCreatedUris = isAppCreatedDeleteExemptionRuledOut( )
+      ? []
+      : appCreatedPhotoUris( uniqueUris );
+    const appCreatedNote = appCreatedUris.length > 0
+      ? `, ${appCreatedUris.length} of them app-created`
+      : "";
+    logger.info( `Deleting ${uniqueUris.length} device photo(s)${appCreatedNote}` );
     // Prefer the native path that dismisses a blocking modal before deleting;
     // fall back to CameraRoll on platforms/builds without it.
     const deletion = ( Platform.OS === "ios" && ImageCropper?.deletePhotoAssets )
-      ? ImageCropper.deletePhotoAssets( uniqueUris )
+      ? ImageCropper.deletePhotoAssets( uniqueUris, appCreatedUris )
       : CameraRoll.deletePhotos( uniqueUris );
     const result = await Promise.race( [
       deletion,
@@ -323,6 +349,24 @@ const performDeleteOriginalDevicePhotos = async (
       `Deleted ${deleted ?? requested} of ${requested} `
       + `device photo(s); result=${JSON.stringify( result )}`,
     );
+    // How long the unprompted half took is the measurement this whole split
+    // exists for, and it decides whether to keep splitting.
+    const appCreatedMs = ( result as { appCreatedMs?: number } | undefined )?.appCreatedMs;
+    const appCreatedResult = result as { appCreatedDeleted?: number } | undefined;
+    const appCreatedDeleted = appCreatedResult?.appCreatedDeleted ?? 0;
+    if ( typeof appCreatedMs === "number" && appCreatedUris.length > 0 ) {
+      recordAppCreatedDeletionTiming( appCreatedMs );
+      logger.infoWithExtra( "photo_delete_app_created", {
+        appCreated: appCreatedUris.length,
+        appCreatedDeleted,
+        appCreatedMs,
+        prompted: requested - appCreatedUris.length,
+      } );
+    }
+    // A transaction deletes all of its assets or none of them, so anything
+    // above zero means these are gone and no longer worth tracking. Keep them
+    // if it failed: they still need deleting, and still without a prompt.
+    if ( appCreatedDeleted > 0 ) forgetAppCreatedPhotoAssets( appCreatedUris );
     clearPhotoLibraryWriteFailure( );
     return { deleted: deleted ?? requested, requested, succeeded: true };
   } catch ( deleteError ) {

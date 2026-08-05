@@ -334,6 +334,11 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
     return;
   }
 
+  // Report the identifier of the asset we created. PhotoKit deletes an asset
+  // the app created without presenting its confirmation alert, but offers no
+  // way to ask after the fact whether a given asset was ours — so the only
+  // chance to record it is here, at creation. See appCreatedPhotoAssets.ts.
+  __block NSString *createdId = nil;
   void ( ^saveBlock )( void ) = ^{
     dispatch_semaphore_wait( photosWriteSemaphore( ), DISPATCH_TIME_FOREVER );
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
@@ -343,11 +348,12 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
       [request addResourceWithType:PHAssetResourceTypePhoto
                            fileURL:[NSURL fileURLWithPath:tempPath]
                            options:options];
+      createdId = request.placeholderForCreatedAsset.localIdentifier;
     } completionHandler:^( BOOL success, NSError *error ) {
       dispatch_semaphore_signal( photosWriteSemaphore( ) );
       if ( !success ) [fm removeItemAtPath:tempPath error:nil];
       if ( success ) {
-        resolve( @{ @"saved": @YES } );
+        resolve( @{ @"saved": @YES, @"localIdentifier": createdId ?: @"" } );
       } else {
         reject( @"save-failed", error.localizedDescription ?: @"Could not save to Photos", error );
       }

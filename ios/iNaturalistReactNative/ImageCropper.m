@@ -1612,8 +1612,18 @@ RCT_EXPORT_METHOD( existingPhotoAssetUris
 // root VC first (iOS won't present its deletion confirmation over a modal),
 // then requests deletion. Rejects with requested/fetched counts so JS can tell
 // whether the identifiers resolved to real assets.
+//
+// appCreatedUris are the assets this app itself added to the library (the USB
+// card offload; see appCreatedPhotoAssets.ts). PhotoKit deletes an app's own
+// assets without presenting its confirmation alert, so those go in a
+// transaction of their own, first, ahead of the prompted one. Two payoffs: the
+// photos we own get deleted even when the prompted batch wedges, and the
+// timings come back separately, which is the controlled comparison the log has
+// been missing — a clean appCreatedMs beside a hung remainder pins the wedge
+// on the consent alert.
 RCT_EXPORT_METHOD( deletePhotoAssets
-                  : ( NSArray<NSString *> * )phUris resolver
+                  : ( NSArray<NSString *> * )phUris appCreated
+                  : ( NSArray<NSString *> * )appCreatedUris resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
@@ -1631,6 +1641,29 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     if ( fetched.count == 0 ) {
       resolve( @{ @"deleted": @0, @"requested": @( ids.count ), @"fetched": @0 } );
       return;
+    }
+
+    // Split the fetched assets by whether we created them. Identifiers are
+    // compared on the UUID ahead of the first slash, as elsewhere in this file:
+    // a stored "…/L0/001" and a bare UUID name the same asset.
+    NSMutableSet<NSString *> *appCreatedBaseIds = [NSMutableSet set];
+    for ( NSString *u in ( appCreatedUris ?: @[] ) ) {
+      NSString *identifier = [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u;
+      NSRange slash = [identifier rangeOfString:@"/"];
+      [appCreatedBaseIds addObject:( slash.location == NSNotFound
+        ? identifier
+        : [identifier substringToIndex:slash.location] )];
+    }
+    NSMutableArray<PHAsset *> *ourAssets = [NSMutableArray array];
+    NSMutableArray<PHAsset *> *theirAssets = [NSMutableArray array];
+    for ( PHAsset *asset in fetched ) {
+      NSString *identifier = asset.localIdentifier;
+      NSRange slash = [identifier rangeOfString:@"/"];
+      if ( slash.location != NSNotFound ) {
+        identifier = [identifier substringToIndex:slash.location];
+      }
+      [( [appCreatedBaseIds containsObject:identifier] ? ourAssets : theirAssets )
+        addObject:asset];
     }
 
     UIWindow *keyWindow = [self inatKeyWindow];
@@ -1653,33 +1686,73 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     _pendingDeleteResolve = resolve;
     [[PHPhotoLibrary sharedPhotoLibrary] registerChangeObserver:self];
 
-    void ( ^doDelete )( void ) = ^{
+    // Filled in by the app-created transaction, reported alongside whatever the
+    // prompted one does. -1 means it never came back.
+    __block NSInteger appCreatedMs = -1;
+    __block NSUInteger appCreatedDeleted = 0;
+
+    void ( ^finish )( BOOL, NSUInteger, NSError * ) =
+      ^( BOOL success, NSUInteger deleted, NSError *error ) {
+      dispatch_async( dispatch_get_main_queue(), ^{
+        if ( self->_pendingDeleteSettled ) { return; }
+        self->_pendingDeleteSettled = YES;
+        [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
+        self->_pendingDeleteResolve = nil;
+        self->_pendingDeleteIds = nil;
+        if ( success ) {
+          resolve( @{
+            @"deleted": @( deleted ),
+            @"requested": @( ids.count ),
+            @"dismissedModal": @( dismissedModal ),
+            @"sceneState": @( sceneState ),
+            @"viaChangeObserver": @NO,
+            @"appCreated": @( ourAssets.count ),
+            @"appCreatedDeleted": @( appCreatedDeleted ),
+            @"appCreatedMs": @( appCreatedMs ),
+          } );
+        } else {
+          reject( @"DELETE_FAILED",
+            [NSString stringWithFormat:
+              @"requested=%lu fetched=%lu appCreated=%lu appCreatedMs=%ld "
+              @"dismissedModal=%d sceneState=%ld error=%@",
+              ( unsigned long )ids.count, ( unsigned long )fetched.count,
+              ( unsigned long )ourAssets.count, ( long )appCreatedMs,
+              dismissedModal, sceneState, error.localizedDescription ?: @"unknown"],
+            error );
+        }
+      } );
+    };
+
+    // The prompted half: everything we didn't create. Runs after the
+    // app-created transaction so its confirmation can't sit in front of one
+    // that needs no confirmation at all.
+    void ( ^deleteTheirs )( void ) = ^{
+      if ( theirAssets.count == 0 ) {
+        finish( YES, appCreatedDeleted, nil );
+        return;
+      }
       [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-        [PHAssetChangeRequest deleteAssets:fetched];
+        [PHAssetChangeRequest deleteAssets:theirAssets];
       } completionHandler:^( BOOL success, NSError *error ) {
-        dispatch_async( dispatch_get_main_queue(), ^{
-          if ( self->_pendingDeleteSettled ) { return; }
-          self->_pendingDeleteSettled = YES;
-          [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
-          self->_pendingDeleteResolve = nil;
-          self->_pendingDeleteIds = nil;
-          if ( success ) {
-            resolve( @{
-              @"deleted": @( fetched.count ),
-              @"requested": @( ids.count ),
-              @"dismissedModal": @( dismissedModal ),
-              @"sceneState": @( sceneState ),
-              @"viaChangeObserver": @NO,
-            } );
-          } else {
-            reject( @"DELETE_FAILED",
-              [NSString stringWithFormat:
-                @"requested=%lu fetched=%lu dismissedModal=%d sceneState=%ld error=%@",
-                ( unsigned long )ids.count, ( unsigned long )fetched.count,
-                dismissedModal, sceneState, error.localizedDescription ?: @"unknown"],
-              error );
-          }
-        } );
+        finish( success, appCreatedDeleted + ( success ? theirAssets.count : 0 ), error );
+      }];
+    };
+
+    void ( ^doDelete )( void ) = ^{
+      if ( ourAssets.count == 0 ) {
+        deleteTheirs( );
+        return;
+      }
+      NSDate *startedAt = [NSDate date];
+      [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+        [PHAssetChangeRequest deleteAssets:ourAssets];
+      } completionHandler:^( BOOL success, NSError *error ) {
+        appCreatedMs = ( NSInteger )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 );
+        if ( success ) { appCreatedDeleted = ourAssets.count; }
+        // A failure here is not fatal to the rest: the photos we don't own
+        // still need deleting, and their transaction is the one that carries
+        // the user's confirmation.
+        deleteTheirs( );
       }];
     };
 

@@ -119,7 +119,13 @@ export const listNewUsbImages = async ( ): Promise<UsbListResult> => {
   return { ...result, knownCount: knownNames.length };
 };
 
-export const saveUsbImageToPhotos = ( relativePath: string ) => (
+// Resolves with the identifier of the asset created in the Photos library, so
+// the caller can record it as ours (appCreatedPhotoAssets.ts) — an asset the
+// app created is the one thing PhotoKit will delete without a confirmation.
+export const saveUsbImageToPhotos = ( relativePath: string ): Promise<{
+  saved: boolean;
+  localIdentifier?: string;
+}> => (
   usbStorage?.saveImageToPhotos( relativePath ) ?? Promise.resolve( { saved: false } )
 );
 

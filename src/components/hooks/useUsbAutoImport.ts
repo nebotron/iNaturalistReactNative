@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { AppState } from "react-native";
+import { recordAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
 import {
   beginBackgroundUsbImportTask,
   endBackgroundUsbImportTask,
@@ -101,8 +102,18 @@ const useUsbAutoImport = ( ) => {
         const { relativePath } = images[i];
         try {
           // eslint-disable-next-line no-await-in-loop
-          await withTimeout( saveUsbImageToPhotos( relativePath ), SAVE_TIMEOUT_MS );
+          const saved = await withTimeout(
+            saveUsbImageToPhotos( relativePath ),
+            SAVE_TIMEOUT_MS,
+          );
           savedPaths.push( relativePath );
+          // Remember that this asset is ours. These are the only photos in the
+          // library the app created, and the only ones PhotoKit will let it
+          // delete without a confirmation — the confirmation the deletion
+          // hangs are stuck on.
+          if ( saved?.localIdentifier ) {
+            recordAppCreatedPhotoAssets( [saved.localIdentifier] );
+          }
           // Mark imported immediately, not after the whole batch: if the app
           // is killed mid-loop, photos already saved to this point must not
           // be saved again on restart.
