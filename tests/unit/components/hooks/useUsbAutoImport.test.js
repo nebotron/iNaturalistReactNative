@@ -1,0 +1,110 @@
+import { renderHook } from "@testing-library/react-native";
+import useUsbAutoImport from "components/hooks/useUsbAutoImport";
+
+const mockListNewUsbImages = jest.fn( );
+const mockSaveUsbImageToPhotos = jest.fn( );
+const mockMarkUsbImagesImported = jest.fn( );
+const mockDeleteUsbSourceImages = jest.fn( async ( ) => ( { deleted: 0, failed: 0 } ) );
+
+jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
+  deleteUsbSourceImages: ( ...args ) => mockDeleteUsbSourceImages( ...args ),
+  getUsbFolderDiagnostics: async ( ) => ( { bookmarkPresent: true } ),
+  getUsbFolderName: async ( ) => "101EOSR7",
+  isUsbImportSupported: ( ) => true,
+  listNewUsbImages: ( ...args ) => mockListNewUsbImages( ...args ),
+  markUsbImagesImported: ( ...args ) => mockMarkUsbImagesImported( ...args ),
+  requestUsbPhotosPermission: async ( ) => "authorized",
+  saveUsbImageToPhotos: ( ...args ) => mockSaveUsbImageToPhotos( ...args ),
+} ) );
+
+jest.mock( "sharedHelpers/installData", ( ) => ( {
+  useOnboardingShown: ( ) => [true],
+} ) );
+
+jest.mock( "sharedHelpers/backgroundExecution", ( ) => ( {
+  beginBackgroundUsbImportTask: async ( ) => false,
+  endBackgroundUsbImportTask: async ( ) => undefined,
+} ) );
+
+const mockLogger = {
+  info: jest.fn( ), debug: jest.fn( ), error: jest.fn( ), errorWithExtra: jest.fn( ),
+};
+jest.mock( "sharedHelpers/logger", ( ) => ( {
+  log: {
+    extend: ( ) => ( {
+      info: ( ...args ) => mockLogger.info( ...args ),
+      // eslint-disable-next-line testing-library/no-debugging-utils
+      debug: ( ...args ) => mockLogger.debug( ...args ),
+      error: ( ...args ) => mockLogger.error( ...args ),
+      errorWithExtra: ( ...args ) => mockLogger.errorWithExtra( ...args ),
+    } ),
+  },
+} ) );
+
+const images = n => Array.from(
+  { length: n },
+  ( _unused, i ) => ( { relativePath: `IMG_${i}.CR3` } ),
+);
+
+describe( "useUsbAutoImport", ( ) => {
+  beforeEach( ( ) => {
+    jest.clearAllMocks( );
+    jest.useFakeTimers( );
+    mockListNewUsbImages.mockResolvedValue( {
+      available: true,
+      images: images( 40 ),
+      imageFileCount: 40,
+      alreadyImportedCount: 0,
+      knownCount: 0,
+      regularFileCount: 40,
+      extensions: { cr3: 40 },
+    } );
+  } );
+  afterEach( ( ) => jest.useRealTimers( ) );
+
+  // A wedged Photos library makes every save burn the full 30s timeout in
+  // turn. Left to run, a 122-photo card is an hour of grinding to save
+  // nothing, plus an error line per file in the remote log.
+  it( "abandons the run after a run of Photos-library save timeouts", async ( ) => {
+    mockSaveUsbImageToPhotos.mockImplementation( ( ) => new Promise( ( ) => {} ) );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    // Three 30s save timeouts, then the fourth file is never attempted.
+    await jest.advanceTimersByTimeAsync( 4 * 30_000 );
+
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 3 );
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_library_wedged",
+      expect.objectContaining( { abandoned: 37, saved: 0, failed: 3 } ),
+    );
+  } );
+
+  it( "does not pick the same card up again on the next scan", async ( ) => {
+    mockSaveUsbImageToPhotos.mockImplementation( ( ) => new Promise( ( ) => {} ) );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 4 * 30_000 );
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 3 );
+
+    // Several more 10s scan intervals: nothing recovers a wedged library on
+    // that timescale, so retrying just repeats the same three timeouts.
+    await jest.advanceTimersByTimeAsync( 60_000 );
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 3 );
+  } );
+
+  it( "carries on past an ordinary failure that is not a timeout", async ( ) => {
+    mockSaveUsbImageToPhotos.mockImplementation( async relativePath => {
+      if ( relativePath === "IMG_0.CR3" ) throw new Error( "unreadable file" );
+      return { localIdentifier: relativePath };
+    } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 40 );
+    expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+      "usb_offload_library_wedged",
+      expect.anything( ),
+    );
+  } );
+} );

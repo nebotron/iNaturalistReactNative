@@ -29,6 +29,21 @@ const SCAN_INTERVAL_MS = 10_000;
 // and the loop moves on.
 const SAVE_TIMEOUT_MS = 30_000;
 
+// Saving to Photos is a PHPhotoLibrary write, and those can wedge for the whole
+// device (see promptDeleteOriginalDevicePhotos.ts). When that happens every
+// remaining file in the run burns the full SAVE_TIMEOUT_MS in turn — the Aug 5
+// log caught a 122-photo card starting down that path, which is an hour of
+// grinding to save nothing and one error line per file. Consecutive timeouts
+// are the signal; a single failure is an ordinary bad file and the loop should
+// carry on past it.
+const MAX_CONSECUTIVE_SAVE_TIMEOUTS = 3;
+
+// Abandoned files stay unimported, so the next scan — SCAN_INTERVAL_MS later —
+// would pick the same card up and grind through the same timeouts again.
+// Nothing recovers a wedged Photos library on that timescale, so wait before
+// trying the card again.
+const LIBRARY_WEDGED_RETRY_DELAY_MS = 10 * 60 * 1000;
+
 const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => (
   Promise.race( [
     promise,
@@ -52,6 +67,7 @@ const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => (
 const useUsbAutoImport = ( ) => {
   const [onboardingShown] = useOnboardingShown( );
   const offloading = useRef( false );
+  const libraryWedgedUntil = useRef( 0 );
   const backgroundTaskActive = useRef( false );
   // The scan runs every SCAN_INTERVAL_MS while foregrounded, and each remote
   // log line is a network POST, so logging every tick would flood the log.
@@ -68,6 +84,10 @@ const useUsbAutoImport = ( ) => {
     // An offload already in flight is normal overlap on the poll, not an error.
     if ( offloading.current ) return;
     if ( !onboardingShown ) { logDiag( "skip: onboarding not shown yet" ); return; }
+    if ( Date.now( ) < libraryWedgedUntil.current ) {
+      logDiag( "skip: waiting out a run of Photos-library save timeouts" );
+      return;
+    }
     offloading.current = true;
     const progress = useUsbImportProgress.getState( );
     try {
@@ -98,8 +118,14 @@ const useUsbAutoImport = ( ) => {
       // progress count is accurate. Track successes for the batch delete.
       const savedPaths: string[] = [];
       let failed = 0;
+      let consecutiveTimeouts = 0;
+      let abandoned = 0;
       for ( let i = 0; i < images.length; i += 1 ) {
         const { relativePath } = images[i];
+        if ( consecutiveTimeouts >= MAX_CONSECUTIVE_SAVE_TIMEOUTS ) {
+          abandoned = images.length - i;
+          break;
+        }
         try {
           // eslint-disable-next-line no-await-in-loop
           const saved = await withTimeout(
@@ -118,11 +144,29 @@ const useUsbAutoImport = ( ) => {
           // is killed mid-loop, photos already saved to this point must not
           // be saved again on restart.
           markUsbImagesImported( [relativePath] );
+          consecutiveTimeouts = 0;
         } catch ( err ) {
           failed += 1;
+          if ( err instanceof Error && err.message.includes( "timed out" ) ) {
+            consecutiveTimeouts += 1;
+          } else {
+            consecutiveTimeouts = 0;
+          }
           logger.error( `USB offload: failed to save ${relativePath}`, err );
         }
         progress.setCounts( savedPaths.length, failed );
+      }
+
+      if ( abandoned > 0 ) {
+        libraryWedgedUntil.current = Date.now( ) + LIBRARY_WEDGED_RETRY_DELAY_MS;
+        logger.errorWithExtra( "usb_offload_library_wedged", {
+          abandoned,
+          saved: savedPaths.length,
+          failed,
+          total: images.length,
+          consecutiveTimeouts,
+          timeoutMs: SAVE_TIMEOUT_MS,
+        } );
       }
 
       // Delete from the source device only after the whole batch is safely in
