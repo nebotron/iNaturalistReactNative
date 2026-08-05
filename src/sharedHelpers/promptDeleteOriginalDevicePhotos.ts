@@ -205,8 +205,16 @@ const preflightPhotoLibraryWrite = async (
   // Only reported when it fails or drags. A healthy preflight is the common
   // case and says nothing the deletion that follows doesn't already say, and
   // one remote POST per delete is what the last round of removals was about.
+  //
+  // A drag is not an error, though: the Aug 5 22:04 probe took 5807ms, came
+  // back ok, and the 463-photo deletion behind it worked. Reporting that at
+  // error level puts a healthy library at the top of an errors-first triage.
+  // Only a probe that did not complete is an error.
   if ( !ok || Date.now( ) - startedAt > 1000 ) {
-    logger.errorWithExtra( "photo_delete_preflight", {
+    const report = ok
+      ? logger.infoWithExtra
+      : logger.errorWithExtra;
+    report( "photo_delete_preflight", {
       requested,
       probeOk: ok,
       probeMs: probe?.ms ?? -1,

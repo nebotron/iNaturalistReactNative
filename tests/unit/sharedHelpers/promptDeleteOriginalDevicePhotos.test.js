@@ -128,6 +128,34 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       );
     } );
 
+    describe( "when the probe drags but comes back", ( ) => {
+      beforeEach( ( ) => jest.useFakeTimers( ) );
+      afterEach( ( ) => jest.useRealTimers( ) );
+
+      it( "reports the drag without calling a healthy library an error", async ( ) => {
+        mockPhotoLibraryWriteProbe.mockImplementation( ( ) => new Promise( resolve => {
+          setTimeout( ( ) => resolve( { ok: true, ms: 5807, cleaned: 0 } ), 5807 );
+        } ) );
+
+        const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
+        await jest.advanceTimersByTimeAsync( 5807 );
+        await deletion;
+
+        // The deletion behind a slow-but-successful probe still runs, and the
+        // probe is not an error: reporting it as one puts a healthy library at
+        // the top of an errors-first triage.
+        expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://ONE"] );
+        expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+          "photo_delete_preflight",
+          expect.anything( ),
+        );
+        expect( mockLogger.infoWithExtra ).toHaveBeenCalledWith(
+          "photo_delete_preflight",
+          expect.objectContaining( { probeOk: true, requested: 1 } ),
+        );
+      } );
+    } );
+
     describe( "when the probe never settles", ( ) => {
       beforeEach( ( ) => jest.useFakeTimers( ) );
       afterEach( ( ) => jest.useRealTimers( ) );
