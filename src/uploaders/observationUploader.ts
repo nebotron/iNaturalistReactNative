@@ -30,7 +30,7 @@ const SLOW_UPLOAD_MS = 30000;
 
 interface UploadOptions {
   api_token?: string;
-  signal: AbortController;
+  signal: AbortSignal;
 }
 
 interface UploadParams {

@@ -29,6 +29,7 @@ import { RECOVERY_BY } from "uploaders/utils/errorHandling";
 import {
   INCREMENT_SINGLE_UPLOAD_PROGRESS,
 } from "uploaders/utils/progressTracker";
+import createUploadAbortController from "uploaders/utils/uploadAbort";
 
 import { MS_BEFORE_TOOLBAR_RESET } from "./useUploadObservations";
 
@@ -193,12 +194,16 @@ const useUploadObservationWorker = ( ) => {
       }
     }
     inFlightUploads.set( uuid, startedAt );
+    const { signal, release } = createUploadAbortController(
+      abortController?.signal,
+      MS_BEFORE_UPLOAD_TIMES_OUT,
+      ( ) => logger.infoWithExtra( "upload_timed_out", {
+        ms: MS_BEFORE_UPLOAD_TIMES_OUT,
+        inFlight: inFlightUploads.size,
+      } ),
+    );
     try {
-      const timeoutID = setTimeout( ( ) => {
-        abortController?.abort( );
-      }, MS_BEFORE_UPLOAD_TIMES_OUT );
-      await uploadObservation( observation, realm, { signal: abortController?.signal } );
-      clearTimeout( timeoutID );
+      await uploadObservation( observation, realm, { signal } );
     } catch ( uploadErr ) {
       const uploadError = uploadErr as Error;
       if ( uploadError.name === "AbortError" ) {
@@ -233,6 +238,7 @@ const useUploadObservationWorker = ( ) => {
         }
       }
     } finally {
+      release( );
       // Only if this attempt is still the one being tracked: a stale entry
       // above is overwritten rather than reused, and the abandoned attempt
       // settling later must not clear its replacement.
