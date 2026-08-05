@@ -1767,6 +1767,11 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     // prompted one does. -1 means it never came back.
     __block NSInteger appCreatedMs = -1;
     __block NSUInteger appCreatedDeleted = 0;
+    // The prompted transaction's own duration. The app-created split exists to
+    // put an unprompted deletion beside a prompted one, and timing only half of
+    // it left the comparison to be guessed from the gap between two prose log
+    // lines. -1 means that transaction never came back.
+    __block NSInteger promptedMs = -1;
 
     void ( ^finish )( BOOL, NSUInteger, NSError * ) =
       ^( BOOL success, NSUInteger deleted, NSError *error ) {
@@ -1782,6 +1787,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
             @"appCreated": @( ourAssets.count ),
             @"appCreatedDeleted": @( appCreatedDeleted ),
             @"appCreatedMs": @( appCreatedMs ),
+            @"promptedMs": @( promptedMs ),
           } );
         } else {
           reject( @"DELETE_FAILED",
@@ -1804,9 +1810,12 @@ RCT_EXPORT_METHOD( deletePhotoAssets
         finish( YES, appCreatedDeleted, nil );
         return;
       }
+      NSDate *promptedStartedAt = [NSDate date];
       [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
         [PHAssetChangeRequest deleteAssets:theirAssets];
       } completionHandler:^( BOOL success, NSError *error ) {
+        promptedMs =
+          ( NSInteger )( [[NSDate date] timeIntervalSinceDate:promptedStartedAt] * 1000 );
         finish( success, appCreatedDeleted + ( success ? theirAssets.count : 0 ), error );
       }];
     };

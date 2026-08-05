@@ -75,6 +75,7 @@ const { ImageCropper } = NativeModules as {
       appCreated?: number;
       appCreatedDeleted?: number;
       appCreatedMs?: number;
+      promptedMs?: number;
     }>;
   };
 };
@@ -482,6 +483,12 @@ const performDeleteOriginalDevicePhotos = async (
         appCreatedDeleted,
         appCreatedMs,
         prompted: requested - appCreatedUris.length,
+        // The half of the comparison that was missing. An unprompted
+        // transaction should be quick where a prompted one waits on a human,
+        // so promptedMs >> appCreatedMs per asset is what a real exemption
+        // looks like; the two coming back alike means either both prompt or
+        // neither does.
+        promptedMs: ( result as { promptedMs?: number } | undefined )?.promptedMs ?? -1,
       } );
     }
     // A transaction deletes all of its assets or none of them, so anything
