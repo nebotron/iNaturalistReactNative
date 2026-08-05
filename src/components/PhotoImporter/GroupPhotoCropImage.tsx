@@ -10,14 +10,13 @@ import {
   Image, PixelRatio, StyleSheet, View,
 } from "react-native";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
-import type { PreloadResult } from "sharedHelpers/imageCropPreload";
-import { enqueuePreload, preloadCache } from "sharedHelpers/imageCropPreload";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import {
   normalizedCropToImageZoomTransform,
 } from "sharedHelpers/normalizedCropToImageZoomTransform";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
+import useThumbnailSubjectDetection from "sharedHelpers/useThumbnailSubjectDetection";
 import colors from "styles/tailwindColors";
 
 const MAX_SCALE = 100;
@@ -26,6 +25,9 @@ const MAX_SCALE = 100;
 // the upload size, which is all the detail a crop can ever carry.
 const ZOOM_THUMBNAIL_SCALE = 2;
 const MAX_ZOOM_THUMBNAIL_PIXEL = 2048;
+// Subject detection runs on this same thumbnail, and the detector letterboxes
+// its input into a 640px square, so anything smaller is only upscaled back.
+const MIN_ZOOM_THUMBNAIL_PIXEL = 640;
 // Crops round-trip through a screen-space transform, so a gesture that only
 // tapped (or barely moved) comes back as a crop that differs in the last few
 // decimals. Below this it isn't a crop the user made.
@@ -65,8 +67,10 @@ interface Props {
 // Renders a Group Photos grid cell cropped to its subject, with a two-finger
 // pinch/pan that reframes the crop. Everything below the gesture is shared with
 // the crop editor and the Explore grid: the same zoom engine (via
-// SharedZoomableImage), the same subject detection + local-file pipeline
-// (imageCropPreload), and the same crop <-> transform math. Single-finger
+// SharedZoomableImage), the same subject detector, and the same crop <->
+// transform math. What differs is that a grid cell runs detection on its own
+// thumbnail rather than on a full-resolution copy of the original, so a
+// screenful of crops lands in about the time the thumbnails take. Single-finger
 // panning is disabled so one finger still scrolls the list.
 const GroupPhotoCropImage = ( {
   cropSourceUri,
@@ -75,9 +79,6 @@ const GroupPhotoCropImage = ( {
   onCropChange,
 }: Props ) => {
   const zoomRef = useRef<SharedZoomableImageRef | null>( null );
-  const [source, setSource] = useState<PreloadResult | null>(
-    ( ) => preloadCache.get( cropSourceUri ) ?? null,
-  );
   // The crop the photo is currently framed to. Null means it still needs
   // framing, which happens once per photo; the zoom engine owns the transform
   // from then on.
@@ -88,37 +89,33 @@ const GroupPhotoCropImage = ( {
   // first render never frames the new photo with the previous one's crop.
   if ( prevCropSourceUri !== cropSourceUri ) {
     setPrevCropSourceUri( cropSourceUri );
-    setSource( preloadCache.get( cropSourceUri ) ?? null );
     setFramedCrop( null );
   }
 
-  // Subject detection (plus the local file export and image dimensions it
-  // needs) runs through the shared preload queue, so a screenful of cells can't
-  // saturate the device with full-resolution work.
-  useEffect( ( ) => {
-    let cancelled = false;
-    enqueuePreload( cropSourceUri, cropSourceUri, savedCrop ?? null )
-      .then( result => {
-        if ( !cancelled && result ) {
-          setSource( result );
-        }
-      } );
-    return ( ) => {
-      cancelled = true;
-    };
-  }, [cropSourceUri, savedCrop] );
-
   const thumbMaxPixel = Math.min(
-    PixelRatio.getPixelSizeForLayoutSize( size || 128 ) * ZOOM_THUMBNAIL_SCALE,
+    Math.max(
+      PixelRatio.getPixelSizeForLayoutSize( size || 128 ) * ZOOM_THUMBNAIL_SCALE,
+      MIN_ZOOM_THUMBNAIL_PIXEL,
+    ),
     MAX_ZOOM_THUMBNAIL_PIXEL,
   );
   const thumbnailUri = useDeviceImageThumbnail( cropSourceUri, thumbMaxPixel );
 
-  const imageWidth = source?.size.w ?? 0;
-  const imageHeight = source?.size.h ?? 0;
-  // A cached preload can carry a crop from before the user's last gesture, so
+  // Detection runs on the thumbnail above rather than on a full-resolution
+  // export of the original, which is what a grid cell had to wait for before:
+  // exporting a dozen photos out of the library takes seconds, so the cells sat
+  // uncropped long after their thumbnails had arrived.
+  const detection = useThumbnailSubjectDetection(
+    cropSourceUri,
+    thumbnailUri,
+    Boolean( savedCrop ),
+  );
+
+  const imageWidth = detection?.imageWidth ?? 0;
+  const imageHeight = detection?.imageHeight ?? 0;
+  // A cached detection can carry a crop from before the user's last gesture, so
   // the crop saved on the photo always wins (same as the crop editor).
-  const initialCrop = savedCrop ?? source?.crop ?? null;
+  const initialCrop = savedCrop ?? detection?.crop ?? null;
   const ready = Boolean( thumbnailUri ) && imageWidth > 0 && imageHeight > 0 && size > 0;
 
   const cropPanContext = {

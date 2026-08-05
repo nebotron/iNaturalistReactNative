@@ -128,8 +128,10 @@ export async function bakePendingGroupPhotoCrops( ): Promise<void> {
   const updates = new Map<string, Partial<GroupedPhotoImage>>( );
   const bake = async ( image: GroupedPhotoImage ) => {
     try {
-      // Passing the crop skips subject detection; this only resolves the local
-      // file and its dimensions, and usually hits the cache the grid warmed.
+      // Passing the crop skips subject detection; this only resolves the
+      // full-resolution local file and its dimensions, which is work the grid
+      // deliberately never does (it crops thumbnails) and the cropper only
+      // does for photos the user opened.
       const loaded = await preloadImage( image.uri, image.uri, image.crop! );
       if ( !loaded ) {
         return;
