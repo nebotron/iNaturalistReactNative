@@ -42,6 +42,8 @@ const styles = StyleSheet.create( {
   },
   // Mounted (so the ref exists and the crop can be applied) but not yet
   // showing the crop, which would otherwise flash the whole photo for a frame.
+  // Also covers the gap before the photo itself has decoded, so the black
+  // backdrop below never paints over an empty cell.
   unframed: {
     opacity: 0,
   },
@@ -83,6 +85,12 @@ const GroupPhotoCropImage = ( {
   // framing, which happens once per photo; the zoom engine owns the transform
   // from then on.
   const [framedCrop, setFramedCrop] = useState<NormalizedCrop | null>( null );
+  // The thumbnail the image below has actually painted. A cell whose crop and
+  // thumbnail are both already cached — every cell recycled by scrolling, and
+  // every cell that shifts up when one is deleted — frames itself on its first
+  // render, while its image is still decoding. Showing the overlay then is what
+  // turned those cells black.
+  const [loadedThumbnailUri, setLoadedThumbnailUri] = useState<string | null>( null );
   const [prevCropSourceUri, setPrevCropSourceUri] = useState( cropSourceUri );
 
   // Synchronously reset when a recycled cell lands on a different photo, so its
@@ -183,8 +191,10 @@ const GroupPhotoCropImage = ( {
     return null;
   }
 
+  const framed = Boolean( framedCrop ) && loadedThumbnailUri === thumbnailUri;
+
   return (
-    <View style={[styles.overlay, !framedCrop && styles.unframed]}>
+    <View style={[styles.overlay, !framed && styles.unframed]}>
       <SharedZoomableImage
         ref={zoomRef}
         uri={thumbnailUri}
@@ -207,6 +217,7 @@ const GroupPhotoCropImage = ( {
             style={StyleSheet.absoluteFill}
             resizeMode="contain"
             source={{ uri: thumbnailUri }}
+            onLoad={( ) => setLoadedThumbnailUri( thumbnailUri ?? null )}
           />
         )}
       />
