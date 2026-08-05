@@ -4,11 +4,16 @@ import {
   groupPhotoCropSourceUri,
   saveGroupPhotoCrop,
 } from "components/PhotoImporter/helpers/groupPhotoCrops";
-import { INatIcon, INatIconButton } from "components/SharedComponents";
+import {
+  Carousel,
+  CarouselDots,
+  INatIcon,
+  INatIconButton,
+} from "components/SharedComponents";
 import DuplicateUploadBadge from
   "components/SharedComponents/DuplicateUploadBadge/DuplicateUploadBadge";
 import { Pressable, View } from "components/styledComponents";
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import type { ViewStyle } from "react-native";
 import { StyleSheet } from "react-native";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -58,12 +63,24 @@ const GroupPhotoImage = ( {
   style,
 }: Props ) => {
   const { t } = useTranslation( );
-  const firstPhoto = item.photos?.[0];
+  const photos = item.photos ?? [];
+  const firstPhoto = photos[0];
   const mediaUri = firstPhoto?.image.uri ?? item.soundUri;
+  const [photoIndex, setPhotoIndex] = useState( 0 );
+  const [prevMediaUri, setPrevMediaUri] = useState( mediaUri );
+
+  // Reset the pager when a recycled cell lands on a different observation
+  if ( prevMediaUri !== mediaUri ) {
+    setPrevMediaUri( mediaUri );
+    setPhotoIndex( 0 );
+  }
+
   const isSelected = selectedObservations.includes( item );
-  const handlePress = ( ) => selectObservationPhotos( isSelected, item );
-  const mediaCount = item.photos?.length || 0;
-  const hasDuplicateUpload = item.photos?.some( photo => photo.isDuplicateUpload );
+  const handlePress = useCallback(
+    ( ) => selectObservationPhotos( isSelected, item ),
+    [isSelected, item, selectObservationPhotos],
+  );
+  const mediaCount = photos.length;
 
   // Each grid cell carries its own separate/duplicate/remove buttons so the
   // action always applies to the photo it's drawn on, not to the selection.
@@ -120,22 +137,54 @@ const GroupPhotoImage = ( {
     ? style.width
     : 0;
 
-  // A cropped photo must always show its crop, so fall back to the cropped
-  // file (image.uri already points at the baked crop) until the thumbnail is
-  // ready rather than flashing a placeholder. Large uncropped originals keep
-  // waiting on the thumbnail so scrolling doesn't decode them full-resolution.
-  const hasCrop = Boolean( firstPhoto?.image.crop );
-
   // Pinching a cell reframes its crop box, exactly as it does in the Explore
   // observation grid. The crop is recorded against the photo (the file itself
   // is written at import time), so the framing survives scrolling away and
   // carries into the full-screen cropper.
-  const displayUri = firstPhoto?.image.uri;
-  const handleCropChange = useCallback( ( crop: NormalizedCrop ) => {
-    if ( displayUri ) {
-      saveGroupPhotoCrop( displayUri, crop );
-    }
-  }, [displayUri] );
+  const renderPhoto = useCallback( ( photo: PhotoItem ) => (
+    <DevicePhotoImage
+      uri={photo.image.uri}
+      // A cropped photo must always show its crop, so fall back to the cropped
+      // file (image.uri already points at the baked crop) until the thumbnail
+      // is ready rather than flashing a placeholder. Large uncropped originals
+      // keep waiting on the thumbnail so scrolling doesn't decode them
+      // full-resolution.
+      fallbackUri={photo.image.crop
+        ? photo.image.uri
+        : undefined}
+      cellWidth={cellWidth}
+      style={style}
+      selectable
+      selected={isSelected}
+      obsPhotosCount={mediaCount}
+      onPress={handlePress}
+      testID={`GroupPhotos.${photo.image.uri}`}
+      imageOverlay={cellWidth > 0
+        ? (
+          <GroupPhotoCropImage
+            cropSourceUri={groupPhotoCropSourceUri( photo.image )}
+            savedCrop={photo.image.crop ?? null}
+            size={cellWidth}
+            onCropChange={( crop: NormalizedCrop ) => saveGroupPhotoCrop( photo.image.uri, crop )}
+          />
+        )
+        : undefined}
+    >
+      {photo.isDuplicateUpload && (
+        <DuplicateUploadBadge
+          accessibilityLabel={t( "Duplicate-photo-indicator" )}
+          className="absolute top-2 left-2 z-10"
+          size={20}
+          testID={`GroupPhotos.duplicateUpload.${photo.image.uri}`}
+        />
+      )}
+    </DevicePhotoImage>
+  ), [cellWidth, handlePress, isSelected, mediaCount, style, t] );
+
+  const renderCarouselItem = useCallback(
+    ( { item: photo }: { item: object } ) => renderPhoto( photo as PhotoItem ),
+    [renderPhoto],
+  );
 
   if ( item.soundUri ) {
     return (
@@ -157,40 +206,39 @@ const GroupPhotoImage = ( {
     );
   }
 
+  // A group of photos pages horizontally so every photo in it can be seen (and
+  // cropped) without separating them first. The crop overlay leaves
+  // single-finger panning to the pager, so a horizontal drag swipes photos and
+  // a vertical one still scrolls the list.
   return (
-    <DevicePhotoImage
-      uri={firstPhoto?.image.uri}
-      fallbackUri={hasCrop
-        ? firstPhoto?.image.uri
-        : undefined}
-      cellWidth={cellWidth}
-      style={style}
-      selectable
-      selected={isSelected}
-      obsPhotosCount={mediaCount}
-      onPress={handlePress}
-      testID={`GroupPhotos.${mediaUri}`}
-      imageOverlay={firstPhoto && cellWidth > 0
+    <View className="relative">
+      {mediaCount > 1
         ? (
-          <GroupPhotoCropImage
-            cropSourceUri={groupPhotoCropSourceUri( firstPhoto.image )}
-            savedCrop={firstPhoto.image.crop ?? null}
-            size={cellWidth}
-            onCropChange={handleCropChange}
-          />
+          <>
+            <Carousel
+              key={mediaUri}
+              data={photos}
+              renderItem={renderCarouselItem}
+              keyExtractor={photo => ( photo as PhotoItem ).image.uri}
+              style={style}
+              // Each page carries its own subject detection and thumbnail
+              // work, so only the pages next to the visible one are mounted
+              initialNumToRender={1}
+              windowSize={3}
+              onSlideScroll={setPhotoIndex}
+              testID={`GroupPhotos.carousel.${mediaUri}`}
+            />
+            <View className="absolute bottom-0 w-full z-10">
+              <CarouselDots
+                length={mediaCount}
+                index={Math.min( photoIndex, mediaCount - 1 )}
+              />
+            </View>
+          </>
         )
-        : undefined}
-    >
-      {hasDuplicateUpload && (
-        <DuplicateUploadBadge
-          accessibilityLabel={t( "Duplicate-photo-indicator" )}
-          className="absolute top-2 left-2 z-10"
-          size={20}
-          testID={`GroupPhotos.duplicateUpload.${mediaUri}`}
-        />
-      )}
+        : firstPhoto && renderPhoto( firstPhoto )}
       {actionButtons}
-    </DevicePhotoImage>
+    </View>
   );
 };
 
