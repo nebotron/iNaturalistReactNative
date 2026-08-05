@@ -265,13 +265,34 @@ the app didn't create needs the same user-consent alert a deletion does, so
 this is the same wedge reached by a second route — and useful, because it says
 the trigger isn't anything specific to `deleteAssets`.
 
-**So does the USB card offload.** `saveImageToPhotos` is asset *creation*, the
-one library write that indisputably needs no consent alert, and on Aug 5 at
-02:42 two consecutive saves each burned the full 30s timeout. Third route to
-the same wedge. It had no circuit breaker, so a 122-photo card was on course
-for an hour of grinding and one error line per file; it now abandons the run
-after 3 consecutive timeouts and waits 10 minutes before touching that card
-again (`usb_offload_library_wedged`).
+**So does the USB card offload — but only the first two saves are evidence of
+it.** `saveImageToPhotos` is asset *creation*, the one library write that
+indisputably needs no consent alert, and on Aug 5 at 02:42 two consecutive
+saves each burned the full 30s timeout. Everything after those two is
+explained by the app's own code, so don't count it as corroboration:
+`UsbStorage.m` gated saves behind a semaphore of capacity 2 whose permit was
+returned **only** from `performChanges`' completion handler. The JS loop
+abandons a save at 30s, but the native call keeps its permit — so two hung
+saves exhausted the semaphore permanently, and every later save blocked on
+`dispatch_semaphore_wait(…, DISPATCH_TIME_FOREVER)` without ever reaching
+PhotoKit. One bad card killed the offload for the life of the process, and a
+10-minute retry would have started with zero permits and died the same way.
+
+The permit now comes back from whichever fires first, the completion handler
+or a 45s watchdog, and the run abandons after 3 consecutive timeouts and waits
+10 minutes before touching that card again (`usb_offload_library_wedged`).
+
+The general shape is worth remembering: **anything that holds a resource until
+a PhotoKit completion handler fires is a permanent leak on this device**,
+because that handler demonstrably never fires. Look for the same pattern
+wherever a lock, permit, or queue slot is released only from a completion
+block.
+
+Also fixed: the `saved N, failed M` summary sat inside `if (savedPaths.length
+> 0)`, so a run where *nothing* saved logged no outcome at all — which is why
+the Aug 5 log can't say whether that offload finished or the app died holding
+it. It is now unconditional (skipped only when `usb_offload_library_wedged`
+already carries the same counts).
 
 **"A location write immediately before the delete causes the hang" is dead as
 a necessary cause.** Two of the three Aug 5 hangs had one 1–2s earlier; the
