@@ -298,6 +298,18 @@ RCT_EXPORT_METHOD(requestPhotosPermission:(RCTPromiseResolveBlock)resolve
 // blocking here doesn't freeze the UI.
 static const long kMaxConcurrentPhotosWrites = 2;
 
+// How long a permit may stay out before it is assumed lost and returned. A
+// permit is normally returned by performChanges' completion handler, but as of
+// iOS 26 that handler can simply never fire (the PHPhotoLibrary wedge the
+// deletion hangs are stuck on — see promptDeleteOriginalDevicePhotos.ts).
+// Without this, kMaxConcurrentPhotosWrites hung saves leak every permit and
+// every later save blocks below without ever reaching PhotoKit — one bad card
+// killed the offload for the life of the process. The Aug 5 log caught exactly
+// that: two 30s save timeouts, then a 122-photo card that made no further
+// progress. Comfortably longer than the JS-side per-file timeout in
+// useUsbAutoImport, so an ordinary slow save is never treated as lost.
+static const int64_t kPhotosWritePermitTimeoutSec = 45;
+
 static dispatch_semaphore_t photosWriteSemaphore( void )
 {
   static dispatch_semaphore_t sem;
@@ -339,8 +351,24 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
   // way to ask after the fact whether a given asset was ours — so the only
   // chance to record it is here, at creation. See appCreatedPhotoAssets.ts.
   __block NSString *createdId = nil;
+  // Returns this save's permit exactly once, from whichever comes first: the
+  // completion handler, or the watchdog below when that handler never fires.
+  __block BOOL permitReturned = NO;
+  NSObject *permitGuard = [NSObject new];
+  void ( ^returnPermit )( void ) = ^{
+    @synchronized ( permitGuard ) {
+      if ( permitReturned ) { return; }
+      permitReturned = YES;
+    }
+    dispatch_semaphore_signal( photosWriteSemaphore( ) );
+  };
+
   void ( ^saveBlock )( void ) = ^{
     dispatch_semaphore_wait( photosWriteSemaphore( ), DISPATCH_TIME_FOREVER );
+    dispatch_after(
+      dispatch_time( DISPATCH_TIME_NOW, kPhotosWritePermitTimeoutSec * NSEC_PER_SEC ),
+      dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ),
+      ^{ returnPermit( ); } );
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
       PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
       PHAssetResourceCreationOptions *options = [[PHAssetResourceCreationOptions alloc] init];
@@ -350,7 +378,7 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
                            options:options];
       createdId = request.placeholderForCreatedAsset.localIdentifier;
     } completionHandler:^( BOOL success, NSError *error ) {
-      dispatch_semaphore_signal( photosWriteSemaphore( ) );
+      returnPermit( );
       if ( !success ) [fm removeItemAtPath:tempPath error:nil];
       if ( success ) {
         resolve( @{ @"saved": @YES, @"localIdentifier": createdId ?: @"" } );
