@@ -114,9 +114,6 @@ const GroupPhotosContainer = ( ): Node => {
     return ( ) => clearTimeout( timer );
   }, [groupedPhotos] );
 
-  const totalPhotos = groupedPhotos
-    .reduce( ( count, current ) => count + ( current.photos?.length || 0 ), 0 );
-
   const selectAllPhotos = () => {
     setSelectedIndices( groupedPhotos.map( ( _obs, index ) => index ) );
   };
@@ -450,7 +447,6 @@ const GroupPhotosContainer = ( ): Node => {
       selectObservationPhotos={selectObservationPhotos}
       selectedObservations={selectedObservations}
       separateItem={separateItem}
-      totalPhotos={totalPhotos}
     />
   );
 };

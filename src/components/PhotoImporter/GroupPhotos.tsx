@@ -2,16 +2,13 @@ import { useNavigation } from "@react-navigation/native";
 import type {
   FlashListProps, FlashListRef, ListRenderItem, ViewToken,
 } from "@shopify/flash-list";
-import { MAX_PHOTOS_ALLOWED } from "components/Camera/StandardCamera/StandardCamera";
 import {
-  Body2,
   Button,
   CustomFlashList,
-  INatIcon,
   INatIconButton,
 } from "components/SharedComponents";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
-import { Pressable, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import React, { useCallback, useEffect, useMemo } from "react";
 import { preloadImage } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -24,11 +21,8 @@ import flattenAndOrderSelectedPhotos from "./helpers/groupPhotoHelpers";
 
 const DROP_SHADOW = getShadow( { offsetHeight: -2 } );
 
-const emptyItemStyle = {
-  borderWidth: 4,
-  borderStyle: "dashed",
-  borderColor: colors.mediumGray,
-} as const;
+// Button (58) plus the toolbar's vertical padding
+const TOOLBAR_HEIGHT = 82;
 
 interface PhotoItem {
   image: {
@@ -43,32 +37,25 @@ interface Item {
   soundUri?: string;
 }
 
-type GroupPhotosListItem = Item | { empty: true };
-
-function isEmptyGridItem( item: GroupPhotosListItem ): item is { empty: true } {
-  return "empty" in item && item.empty === true;
-}
-
 interface Props {
   combinePhotos: ( ) => void;
   clearSelection: ( ) => void;
   duplicateItem: ( item: Item ) => void;
-  flashListRef?: React.RefObject<FlashListRef<GroupPhotosListItem> | null>;
+  flashListRef?: React.RefObject<FlashListRef<Item> | null>;
   groupedPhotos: Item[];
   isCreatingObservations?: boolean;
   isDuplicatingPhotos?: boolean;
   navBasedOnUserSettings: ( ) => void;
-  onScroll?: FlashListProps<GroupPhotosListItem>["onScroll"];
+  onScroll?: FlashListProps<Item>["onScroll"];
   onViewableItemsChanged?: ( info: {
-    viewableItems: ViewToken<GroupPhotosListItem>[];
-    changed: ViewToken<GroupPhotosListItem>[];
+    viewableItems: ViewToken<Item>[];
+    changed: ViewToken<Item>[];
   } ) => void;
   removeItem: ( item: Item ) => void;
   selectedObservations: Item[];
   selectAllPhotos: ( ) => void;
   selectObservationPhotos: ( isSelected: boolean, item: Item ) => void;
   separateItem: ( item: Item ) => void;
-  totalPhotos: number;
 }
 
 const GroupPhotos = ( {
@@ -87,7 +74,6 @@ const GroupPhotos = ( {
   selectAllPhotos,
   selectObservationPhotos,
   separateItem,
-  totalPhotos,
 }: Props ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
@@ -96,10 +82,8 @@ const GroupPhotos = ( {
     gridItemStyle,
     numColumns,
   } = useGridLayout( undefined, "fullWidth" );
-  const extractKey = ( item: GroupPhotosListItem, index: number ) => (
-    isEmptyGridItem( item )
-      ? "empty"
-      : `${item.photos?.[0]?.image.uri ?? item.soundUri ?? ""}${index}`
+  const extractKey = ( item: Item, index: number ) => (
+    `${item.photos?.[0]?.image.uri ?? item.soundUri ?? ""}${index}`
   );
 
   const noObsSelected = selectedObservations.length === 0;
@@ -150,7 +134,7 @@ const GroupPhotos = ( {
     }
   }, [allPhotosSelected, clearSelection, selectAllPhotos] );
 
-  const renderImage = useCallback( ( item: Item ) => (
+  const renderItem: ListRenderItem<Item> = useCallback( ( { item } ) => (
     <GroupPhotoImage
       duplicateItem={duplicateItem}
       isDuplicatingPhotos={isDuplicatingPhotos}
@@ -171,51 +155,39 @@ const GroupPhotos = ( {
     separateItem,
   ] );
 
-  const addPhotos = useCallback( () => {
-    navigation.navigate( "PhotoLibrary", { fromGroupPhotos: true } );
-  }, [navigation] );
-
-  const renderItem: ListRenderItem<GroupPhotosListItem> = useCallback( ( { item } ) => {
-    if ( isEmptyGridItem( item ) ) {
-      return (
-        <Pressable
-          accessibilityRole="button"
-          onPress={addPhotos}
-          className="justify-center items-center"
-          // Sorry, couldn't get this to work with tailwind
-          style={[gridItemStyle, emptyItemStyle]}
-        >
-          <INatIcon name="plus" size={50} color={colors.mediumGray} />
-        </Pressable>
-      );
-    }
-    return renderImage( item );
-  }, [gridItemStyle, renderImage, addPhotos] );
-
-  const headerComponent = useMemo( ( ) => (
-    <View className="m-5">
-      <Body2>{t( "Group-photos-onboarding" )}</Body2>
+  // The import button scrolls with the list so it's only reachable once the
+  // user has scrolled to the end of their photos.
+  const footerComponent = useMemo( ( ) => (
+    <View className="items-center px-2 pt-4">
+      <Button
+        className="max-w-[500px] w-full"
+        level="focus"
+        text={t( "IMPORT-X-OBSERVATIONS", { count: groupedPhotos.length } )}
+        onPress={navBasedOnUserSettings}
+        testID="GroupPhotos.next"
+        loading={isCreatingObservations}
+      />
     </View>
-  ), [t] );
-
-  const data = useMemo( (): GroupPhotosListItem[] => {
-    const newData: GroupPhotosListItem[] = [...groupedPhotos];
-    if ( totalPhotos < MAX_PHOTOS_ALLOWED ) {
-      newData.push( { empty: true } );
-    }
-    return newData;
-  }, [groupedPhotos, totalPhotos] );
+  ), [groupedPhotos.length, isCreatingObservations, navBasedOnUserSettings, t] );
 
   const extraData = {
     selectedObservations,
   };
 
+  // Leave room under the footer button for the floating toolbar
+  const listStyle = useMemo( ( ) => ( {
+    ...flashListStyle,
+    paddingBottom: groupedPhotos.length > 0
+      ? TOOLBAR_HEIGHT + 20
+      : 20,
+  } ), [flashListStyle, groupedPhotos.length] );
+
   return (
     <SharedStackViewWrapper>
       <CustomFlashList
-        ListHeaderComponent={headerComponent}
-        contentContainerStyle={flashListStyle}
-        data={data}
+        ListFooterComponent={footerComponent}
+        contentContainerStyle={listStyle}
+        data={groupedPhotos}
         extraData={extraData}
         key={numColumns}
         keyExtractor={extractKey}
@@ -226,12 +198,12 @@ const GroupPhotos = ( {
         renderItem={renderItem}
         testID="GroupPhotos.list"
       />
-      <View
-        className="absolute bottom-0 w-full bg-white z-50 items-center px-2 pt-2 pb-4"
-        style={DROP_SHADOW}
-      >
-        {groupedPhotos.length > 0 && (
-          <View className="flex-row w-full gap-2 mb-2">
+      {groupedPhotos.length > 0 && (
+        <View
+          className="absolute bottom-0 w-full bg-white z-50 items-center px-2 pt-2 pb-4"
+          style={DROP_SHADOW}
+        >
+          <View className="flex-row w-full gap-2">
             <View className="flex-1 items-center">
               <INatIconButton
                 icon="check"
@@ -280,16 +252,8 @@ const GroupPhotos = ( {
               />
             </View>
           </View>
-        )}
-        <Button
-          className="max-w-[500px] w-full"
-          level="focus"
-          text={t( "IMPORT-X-OBSERVATIONS", { count: groupedPhotos.length } )}
-          onPress={navBasedOnUserSettings}
-          testID="GroupPhotos.next"
-          loading={isCreatingObservations}
-        />
-      </View>
+        </View>
+      )}
     </SharedStackViewWrapper>
   );
 };
