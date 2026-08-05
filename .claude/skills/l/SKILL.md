@@ -199,6 +199,46 @@ request (00:36, `msSinceLastSuccess=-1`). Note also that the native probe now
 resolves only after its own cleanup transaction finishes — resolving early left
 a stray write overlapping whatever ran next.
 
+**The preflight shipped and earned its place on its first sighting** (Aug 5
+15:02, build `3ef9032d1`): the probe never settled, the delete of 9 photos was
+skipped in 10s instead of hanging for 120, and the cooldown was armed. Note the
+reporting convention it implies — a *passing* preflight logs nothing, so the
+absence of a `photo_delete_preflight` line before a hang is itself the evidence
+that the library was healthy a second earlier. Because a lost POST looks the
+same as an absent one, the measurement now also rides on the hang report itself
+as `preflightMs` (`-1` = the probe wasn't available; a failed probe can't reach
+that line at all).
+
+**The wedge survives an app relaunch.** That 15:02 preflight failed in a process
+launched at 15:01:43, nine hours after the morning's hang. Whatever is stuck is
+in `photolibraryd`, not in this app's address space, which is consistent with
+the reboot-only recovery in Apple Developer Forums 806349.
+
+**The one hang in the Aug 5 (05:09–15:02) log is the first with
+`leftForeground=true`**: `appStateChanges=2` and JS `AppState` "background" at
+the 20s mark, native `appState=2 sceneState=2 fgActiveScenes=0` at 30s, back to
+"active" by the 120s timeout. The app was active when the delete was issued
+(the pre-delete context says `appState=0 fgActiveScenes=1`) and went away
+during it — a phone locking at 5am fits. That build (`4049dc5fb`) predates the
+preflight, so nothing says whether the library was already stuck.
+
+Which opens a theory worth the next log's attention, **untested and not
+shipped**: a consent alert requested by an app that then leaves the foreground
+is what wedges `photolibraryd` device-wide. It would explain the wedge
+outliving the process, consent-free writes hanging afterwards, and the earlier
+`leftForeground=false` hangs as later hangs on an already-wedged library rather
+than as counter-evidence. It is not testable against the old logs (cleared),
+and `preflightMs` is the measurement that decides it: a hang with a fast
+preflight and `leftForeground=true` is the smoking gun, the same hang with
+`leftForeground=false` kills it.
+
+**Don't "fix" the cooldown for backgrounded deletes.** Arming the
+library-wedged cooldown off a delete the user backgrounded looks like
+mis-attribution — blaming the library for a self-inflicted failure — and the
+obvious change is to skip it when `leftForeground` is true. Under the theory
+above that hang is precisely the event that wedges the device, so the cooldown
+is right either way. Left alone deliberately.
+
 Next theory, untested and not shipped: a second transaction landing ~1s after
 one completes races PhotoKit's alert presentation, and a settling delay before
 the delete would fix it. Two occurrences fit, one (00:36, no preceding write)
@@ -230,7 +270,11 @@ hold, a mixed batch would ask the user to confirm twice, so a transaction that
 takes ≥10s is taken as evidence it prompted and the split switches itself off
 for good on that device (`isAppCreatedDeleteExemptionRuledOut`). Check
 `appCreatedMs` first thing next session: sub-second means the exemption is
-real and a slice of deletions now needs no prompt at all.
+real and a slice of deletions now needs no prompt at all. Still unanswered
+after Aug 5 — the one delete in that log carried no app-created assets (the
+`Deleting N device photo(s)` line says so: no ", N of them app-created"
+suffix), so the split never ran. It needs a USB card offload followed by a
+deletion of those same photos.
 
 Also new on that line: `windowList`, every window on the foreground scene by
 class, level, hidden and alpha. iOS presents its confirmation in its own
@@ -287,6 +331,18 @@ a PhotoKit completion handler fires is a permanent leak on this device**,
 because that handler demonstrably never fires. Look for the same pattern
 wherever a lock, permit, or queue slot is released only from a completion
 block.
+
+`deletePhotoAssets` was the next instance of it, found by reading rather than
+from the log: the `PHPhotoLibraryChangeObserver` registration and the pending
+identifier list were released only from `finish`, so a hung delete left the
+observer registered for the life of the process, running a main-queue
+`fetchAssetsWithLocalIdentifiers` over a batch JS abandoned two minutes earlier
+on every subsequent library change. Worse, that abandoned call is still live
+natively: when its completion handler finally fired it set the shared
+`_pendingDeleteSettled` flag and unregistered the observer belonging to the
+*next* deletion, whose own callback then returned early and never resolved — a
+wedged delete wedging the delete after it. Both are now generation-scoped, with
+a 150s native watchdog (just past JS's 120s) as the release path.
 
 Also fixed: the `saved N, failed M` summary sat inside `if (savedPaths.length
 > 0)`, so a run where *nothing* saved logged no outcome at all — which is why
@@ -359,3 +415,9 @@ dominating — the coalescing held. `Failed to open about:blank` (4 lines, a
 WebView navigating its own blank frame into `Linking.openURL`) is gone as of
 this session, and a wedged delete now costs one `photo_delete_preflight`
 instead of three lines and 120 seconds whenever the library is already stuck.
+
+The second Aug 5 log (05:09–15:02) was 25 lines over 10 hours — ~60/day, the
+quietest yet, and 6 of the 25 were the single deletion hang. Nothing repeats
+any more, so at this volume read the whole dump and skip the summary. The prose
+warn beside `photo_delete_preflight` is gone as of this session: two POSTs for
+one event, and the structured line already carries the count and the reason.
