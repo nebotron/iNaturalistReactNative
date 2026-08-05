@@ -174,18 +174,42 @@ would have blocked the 15:29:55 success, which landed 13 minutes after the
 15:16 hang and after the cooldown had already lapsed twice. Deletes do recover
 without a restart.
 
-Next thing to check: `probeOk`/`probeMs` on `photo_delete_hang_context`, added
-this session. It runs a `performChanges` the app owns outright (create an
-album, then delete it) concurrently with the hung deletion. That transaction
-needs no user-consent alert, so:
-- **probe returns fast** → PHPhotoLibrary is healthy and the wedge is the
-  consent-alert path specifically. Everything left to try is about how that
-  alert gets presented.
-- **probe hangs too** → ambiguous between a wedged `photolibraryd` and
-  transactions simply queueing behind the dead deletion. Disambiguate next time
-  by also probing at a moment with nothing in flight (don't add that
-  pre-emptively: an album write before every delete is exactly the kind of
-  library traffic we just removed).
+**The concurrent probe came back, and it hung** (Aug 5 log, one sighting,
+04:30): `probeOk=false`, "consent-free library write did not settle in
+10000ms". So it isn't only the consent-alert path — but as predicted that
+single result is ambiguous between a wedged `photolibraryd` and the album
+transaction simply queueing behind the dead deletion beside it.
+
+**The Aug 5 log resolves which way to read that, and it is the second one.**
+`msSinceLastSuccess` on the two hangs that carried it was 21259ms and 21251ms
+— i.e. a real `updateAssetLocations` transaction *completed* 1.3s and 1.2s
+before each `Deleting` line (`clearPhotoLibraryWriteFailure` is only called on
+a genuine success). The library was demonstrably servicing writes a second
+before the delete that hung. It is not wedged when the app asks; it wedges
+*on* the ask.
+
+Which is why the probe now also runs **before** the deletion, with nothing in
+flight (`preflightPhotoLibraryWrite`). The earlier objection to that — an album
+write before every delete is the library traffic we just removed — is worth
+much less than it looked: that was ~101 transactions per import, this is one,
+and it is the only thing that can separate "wedged before we asked" from
+"wedged by asking". Expect it to *succeed* and the delete to hang anyway; the
+skip it triggers only helps in the minority case where the wedge predates the
+request (00:36, `msSinceLastSuccess=-1`). Note also that the native probe now
+resolves only after its own cleanup transaction finishes — resolving early left
+a stray write overlapping whatever ran next.
+
+Next theory, untested and not shipped: a second transaction landing ~1s after
+one completes races PhotoKit's alert presentation, and a settling delay before
+the delete would fix it. Two occurrences fit, one (00:36, no preceding write)
+does not, and the log has no successful deletes to compare against — nowhere
+near the bar. `msSinceLastSuccess` on `photo_delete_pending_20s` is already the
+measurement; it needs a log with successes in it.
+
+**Every Photos-library write in the Aug 5 log failed** — 3 deletes, 2 USB card
+saves, 2 location updates, zero successes of any kind except the two location
+writes noted above. A log with no successes cannot kill a theory by comparison,
+which is most of why this session ended with a measurement rather than a fix.
 
 **The one documented way to delete without a prompt** is that PhotoKit deletes
 assets the app itself created without presenting its confirmation. It does not
@@ -241,6 +265,18 @@ the app didn't create needs the same user-consent alert a deletion does, so
 this is the same wedge reached by a second route — and useful, because it says
 the trigger isn't anything specific to `deleteAssets`.
 
+**So does the USB card offload.** `saveImageToPhotos` is asset *creation*, the
+one library write that indisputably needs no consent alert, and on Aug 5 at
+02:42 two consecutive saves each burned the full 30s timeout. Third route to
+the same wedge. It had no circuit breaker, so a 122-photo card was on course
+for an hour of grinding and one error line per file; it now abandons the run
+after 3 consecutive timeouts and waits 10 minutes before touching that card
+again (`usb_offload_library_wedged`).
+
+**"A location write immediately before the delete causes the hang" is dead as
+a necessary cause.** Two of the three Aug 5 hangs had one 1–2s earlier; the
+00:36 hang had none in its session at all.
+
 ### Photo imports can wedge on one asset
 
 Three imports in the Aug 3–4 log logged `Done tapped: importing N selected
@@ -277,6 +313,8 @@ fixed.
   at ~400s — an iOS background task expiring mid-upload, which is what is
   supposed to happen. One of the five was the keychain bug above (`without API
   token!`). Only worth revisiting if it starts happening in the foreground.
+- **`isAdvancedUser`** is an upstream metric marked do-not-remove and is
+  already gated on change; one line per launch is the floor. Leave it.
 
 ### Volume, for calibration
 
@@ -294,3 +332,9 @@ in-flight query. Those are now coalesced into `slow_query_burst` (a lone slow
 fetch still gets its own line), which would have made those 100 about 20. The
 lesson generalises — any per-occurrence diagnostic on something the network can
 stall will arrive N-at-a-time, so summarise the burst from the start.
+
+The Aug 5 log was 75 lines over 4 hours (~450/day), with no single diagnostic
+dominating — the coalescing held. `Failed to open about:blank` (4 lines, a
+WebView navigating its own blank frame into `Linking.openURL`) is gone as of
+this session, and a wedged delete now costs one `photo_delete_preflight`
+instead of three lines and 120 seconds whenever the library is already stuck.
