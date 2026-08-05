@@ -73,10 +73,16 @@ const useUsbAutoImport = ( ) => {
   // The scan runs every SCAN_INTERVAL_MS while foregrounded, and each remote
   // log line is a network POST, so logging every tick would flood the log.
   // Only emit a diagnostic when its text changes from the last one.
-  const lastDiag = useRef<string>( "" );
+  // Remembered per kind of message, not as one last-seen string: a scan emits
+  // "polling…" and then "list ok…", so two unchanging diagnostics alternate and
+  // a single slot never matches either of them. Nine of the 92 lines in the
+  // Aug 5 16:04–16:40 log were byte-identical repeats this already meant to
+  // suppress.
+  const lastDiag = useRef<Record<string, string>>( {} );
   const logDiag = useCallback( ( msg: string, level: "info" | "debug" = "info" ) => {
-    if ( msg === lastDiag.current ) return;
-    lastDiag.current = msg;
+    const kind = msg.split( ":" )[0];
+    if ( msg === lastDiag.current[kind] ) return;
+    lastDiag.current[kind] = msg;
     logger[level]( `[diag] ${msg}` );
   }, [] );
 
