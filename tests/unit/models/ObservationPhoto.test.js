@@ -59,7 +59,30 @@ describe( "ObservationPhoto", ( ) => {
       } );
     } );
 
-    it( "omits photo_id for position-only updates", ( ) => {
+    // The photo is uploaded before the observation photo is updated, and the
+    // upload marks the photo synced. Deciding here whether the photo was
+    // re-uploaded therefore always came out false, and the id of the photo just
+    // uploaded never reached the server -- the observation kept pointing at the
+    // photo the crop replaced.
+    it( "includes the new photo_id even though the re-upload marked it synced", ( ) => {
+      const uploadedAt = new Date( "2024-01-03T12:00:00Z" );
+      const result = ObservationPhoto.mapPhotoForUpdating( 123, {
+        uuid: "obs-photo-uuid",
+        position: 0,
+        photo: {
+          // id and _synced_at as markRecordUploaded leaves them after the
+          // cropped file has been uploaded as a new photo
+          id: 789,
+          localFilePath: "file:///tmp/photoUploads/cropped.jpg",
+          _synced_at: uploadedAt,
+          _updated_at: new Date( "2024-01-02T12:00:00Z" ),
+        },
+      } );
+
+      expect( result.observation_photo.photo_id ).toEqual( 789 );
+    } );
+
+    it( "sends the unchanged photo_id for position-only updates", ( ) => {
       const result = ObservationPhoto.mapPhotoForUpdating( 123, {
         uuid: "obs-photo-uuid",
         position: 1,
@@ -75,8 +98,19 @@ describe( "ObservationPhoto", ( ) => {
         observation_photo: {
           observation_id: 123,
           position: 1,
+          photo_id: 456,
         },
       } );
+    } );
+
+    it( "omits photo_id when the photo has never been uploaded", ( ) => {
+      const result = ObservationPhoto.mapPhotoForUpdating( 123, {
+        uuid: "obs-photo-uuid",
+        position: 1,
+        photo: { localFilePath: "file:///tmp/photoUploads/new.jpg" },
+      } );
+
+      expect( result.observation_photo ).not.toHaveProperty( "photo_id" );
     } );
   } );
 } );
