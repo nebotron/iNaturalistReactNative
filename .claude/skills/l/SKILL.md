@@ -577,6 +577,94 @@ it back. The verdict flaps on a single cold-start sample. Not retuned on one
 log; get `promptedMs` (shipped in `a524314`, not in this build) from a mixed
 batch first.
 
+### A full phone is a failure mode, and nothing in the app was watching for it
+
+The Aug 6 (01:00–14:13) log is 1,237 lines and **1,084 of them are one error**:
+`"3S1A5693.CR3" couldn't be copied to "tmp" because there isn't enough space`,
+one per file, 157 files, seven rounds, 74 seconds. At 14:11:22 an offload of 208
+saved 51 and the disk filled; every scan after that re-listed the remaining 157
+and failed all of them in ~1.5s, ten seconds apart, forever.
+
+The guard that should have caught it counted **consecutive timeouts**, and a
+full disk fails instantly — so `consecutiveTimeouts` reset on every failure and
+never reached 3. Now any consecutive failures abandon the run, and out-of-space
+abandons on the *first* one (it is a property of the device, not the file). New
+markers: `usb_offload_out_of_space` and `usb_offload_saves_failing` beside the
+existing `usb_offload_library_wedged`. The generalisation worth remembering:
+**a guard keyed to one failure mode is no guard at all** — the next outage
+arrives as a different error and walks straight past it.
+
+`storage_metrics` now carries `freeDiskBytes`/`totalDiskBytes`. Read it first
+next session: the old line said 5MB of MMKV and 8MB of Realm on a phone with no
+room to copy a single file, and nothing else in the log could name the
+condition. **Note it is a per-launch line, so a disk that fills mid-session
+still won't show** — the offload's own marker is what reports that.
+
+### The one-transaction probe's healthy timings, at last
+
+Four `photo_delete_preflight` lines, three of them `probeOk=true` at **error**
+level — `eb9c8d8`, already fixed, and again the summary's largest error groups
+were dead on arrival. Their `probeMs` on a build that *does* carry the
+one-transaction probe (`7cdaf13` is an ancestor of `3a6dedd7e`): **4186, 2942,
+1522**. So a healthy probe takes up to 4.2s, 42% of `PREFLIGHT_TIMEOUT_MS`.
+That answers the question the Aug 5 21:50 notes left open, and the answer is
+**don't tighten the timeout**.
+
+The one genuine failure (01:00:42, `probeOk=false, probeMs=-1`) armed the
+cooldown and skipped four deletions; a probe 11 minutes later passed and deleted
+25 of 25.
+
+### The 03:13 hang says nothing new, and that is worth knowing
+
+86 photos, 85 app-created, preflight `probeOk=true` in 4186ms, a real library
+write completed 10.4s earlier, `mainQueueResponsive=true` with `msToRespond=6`,
+one window, no modal — and the deletion still never came back. No
+`photo_delete_app_created` line, so the transaction that hung is the
+**unprompted** one, matching the Aug 6 00:15 controlled case. Every established
+theory stays dead and no new one is testable from this log.
+
+Read its `leftForeground=true` as nothing: `appStateChanges=1`, `appState`
+active, context `sceneState=1` — the start-inactive-then-go-active signature
+that `4987949` (`HEAD`) already fixed. This build predates both that and
+`a524314`, so the hang carries neither `appCreated`/`prompted` on the timers nor
+`promptedMs`. **The mixed-batch comparison is still unanswered after three
+sessions**; it needs a log from `a524314` or later.
+
+### Gallery imports still vanish, and now there's a marker for it
+
+01:13:32, 48 photos: the tap logged, `photo_import_stalled` at 30s with 9 of 48
+settled and 0 failed, six `export_stalled` rejections at 134s (`progress=0.00`,
+the watchdog working), then **nothing** — no `settled` line, no second stall, a
+cold pickup twelve minutes later. `photo_import_stalled` fires once and cannot
+say what happened next.
+
+So this session added the MMKV breadcrumb rather than another theory:
+`markPhotoImportStarted` / `updatePhotoImportProgress` /
+`takeUnfinishedPhotoImport` (`photoImportMarker.ts`), reported by the next
+launch as `photo_import_never_finished` with `selected`, `settled`, `failed`,
+`msRunning`. Same shape as the USB one, which worked. Read it as: a large
+`msRunning` with `settled` frozen at the 30s figure means the import was still
+wedged when the process died; `settled` near `selected` means it finished and
+only the POST was lost.
+
+### Upload aborts: looked like the old bug, isn't
+
+Six `Media upload failed: Aborted` in one minute, including three uploads killed
+at 03:25:17–18 after only 5.5–7.7s — the exact "siblings dying together with
+unlike ages" signature the per-attempt controllers were written to remove. It
+is not that bug. `59f4cbb` **is** in this build, and the sequence explains
+itself: the app was suspended 03:16→03:25 (nothing at all in the log between),
+so three 300s timers fired late on resume at 03:25:05 and correctly aborted
+their own uploads, then the queue restarted at ~03:25:18 and the session
+controller's abort took the three young attempts with it. All three restarted
+uploads completed. `upload_timed_out` firing at 535–539s rather than 300s is the
+suspension, not a broken timer.
+
+Worth carrying forward: **`upload_timed_out` cannot distinguish a real 300s
+overrun from a backgrounded app whose timer fired late**, and the log has to be
+read for a gap to tell. If that ambiguity ever costs a session, the fix is to
+record elapsed wall time against the deadline on the line itself.
+
 ### Known, not worth acting on yet
 
 - **Keychain `-25308` (`errSecInteractionNotAllowed`) with 401s around it.**
@@ -709,3 +797,17 @@ preceding offload had finished cleanly — the MMKV breadcrumb is working and
 says this death wasn't during one. If it recurs, the generalisation of that
 breadcrumb (a launch-scoped "previous run ended without a clean background
 transition" marker) is the measurement to add.
+
+The second Aug 6 log (01:00–14:13) was **1,237 lines over 13 hours**, and 1,084
+of them were the out-of-space burst above. Strip that and it is 153 lines in 13
+hours — ~280/day, in line with every log since the coalescing. So the volume
+rule held and the exception proves its own point: **when a log is suddenly an
+order of magnitude bigger, one diagnostic has found a new way to loop**, and the
+top of the grouped summary names it in one line. That is the one situation where
+the summary beats the dump; everything else this session came out of the
+interleaving.
+
+Every line carried `3a6dedd7e` (`HEAD~6`), so `eb9c8d8`, `a524314`, `d94d72c`,
+`9e68ad1` and `4987949` were all still undeployed in it. Third session running
+where the `commit` check saved re-deriving a fixed bug — this time the three
+biggest error groups after the burst were the preflight-at-error again.
