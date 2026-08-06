@@ -2,7 +2,7 @@ import {
   appCreatedPhotoUris,
   basePhotoAssetId,
   forgetAppCreatedPhotoAssets,
-  isAppCreatedDeleteExemptionRuledOut,
+  isAppCreatedDeleteExemptionConfirmed,
   recordAppCreatedDeletionTiming,
   recordAppCreatedPhotoAssets,
 } from "sharedHelpers/appCreatedPhotoAssets";
@@ -37,25 +37,27 @@ describe( "appCreatedPhotoAssets", ( ) => {
     expect( appCreatedPhotoUris( [`ph://${UUID_A}`] ) ).toEqual( [] );
   } );
 
-  it( "keeps splitting while the unprompted delete comes back fast", ( ) => {
+  it( "confirms the exemption while the unprompted delete comes back fast", ( ) => {
     recordAppCreatedDeletionTiming( 400 );
-    expect( isAppCreatedDeleteExemptionRuledOut( ) ).toBe( false );
+    expect( isAppCreatedDeleteExemptionConfirmed( ) ).toBe( true );
   } );
 
-  it( "stops splitting once a delete takes long enough to have been prompted", ( ) => {
-    recordAppCreatedDeletionTiming( 12_000 );
-    expect( isAppCreatedDeleteExemptionRuledOut( ) ).toBe( true );
+  it( "withholds the exemption for a delete slow enough to have been prompted", ( ) => {
+    // Slow enough for the user to have read and tapped an alert, but well
+    // short of the 10s this used to allow.
+    recordAppCreatedDeletionTiming( 3_000 );
+    expect( isAppCreatedDeleteExemptionConfirmed( ) ).toBe( false );
   } );
 
-  it( "leaves the verdict open when the delete never came back", ( ) => {
+  it( "leaves the verdict alone when the delete never came back", ( ) => {
     // A transaction that hung says nothing about whether it would have
-    // prompted, so it must not rule the exemption out.
-    recordAppCreatedDeletionTiming( 12_000 );
+    // prompted, so it must not change the verdict either way.
+    recordAppCreatedDeletionTiming( 3_000 );
     recordAppCreatedDeletionTiming( -1 );
-    expect( isAppCreatedDeleteExemptionRuledOut( ) ).toBe( true );
+    expect( isAppCreatedDeleteExemptionConfirmed( ) ).toBe( false );
 
     recordAppCreatedDeletionTiming( 400 );
     recordAppCreatedDeletionTiming( -1 );
-    expect( isAppCreatedDeleteExemptionRuledOut( ) ).toBe( false );
+    expect( isAppCreatedDeleteExemptionConfirmed( ) ).toBe( true );
   } );
 } );

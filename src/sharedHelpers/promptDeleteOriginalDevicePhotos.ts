@@ -9,7 +9,7 @@ import {
 import {
   appCreatedPhotoUris,
   forgetAppCreatedPhotoAssets,
-  isAppCreatedDeleteExemptionRuledOut,
+  isAppCreatedDeleteExemptionConfirmed,
   recordAppCreatedDeletionTiming,
 } from "sharedHelpers/appCreatedPhotoAssets";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
@@ -428,13 +428,22 @@ const performDeleteOriginalDevicePhotos = async (
 
     // Assets the app added to the library itself (the USB card offload) are the
     // only ones PhotoKit deletes without presenting its confirmation, so they
-    // go in a transaction of their own — see deletePhotoAssets in
-    // ImageCropper.m. Skipped once the exemption has been observed not to hold
-    // on this device, because then splitting would only ask the user to
-    // confirm twice.
-    const appCreatedUris = isAppCreatedDeleteExemptionRuledOut( )
-      ? []
-      : appCreatedPhotoUris( uniqueUris );
+    // can go in a transaction of their own — see deletePhotoAssets in
+    // ImageCropper.m.
+    //
+    // Splitting a *mixed* batch is only safe once that exemption has been seen
+    // to hold on this device: if it doesn't, the split is two prompted
+    // transactions and the user confirms twice for one import. So split when
+    // every asset is ours — one transaction either way, and the controlled
+    // measurement the exemption is judged on — or when such a batch has already
+    // proved the exemption real. Anything else stays a single transaction, and
+    // so a single prompt.
+    const ourUris = appCreatedPhotoUris( uniqueUris );
+    const appCreatedUris = (
+      ourUris.length === uniqueUris.length || isAppCreatedDeleteExemptionConfirmed( )
+    )
+      ? ourUris
+      : [];
     const appCreatedNote = appCreatedUris.length > 0
       ? `, ${appCreatedUris.length} of them app-created`
       : "";
