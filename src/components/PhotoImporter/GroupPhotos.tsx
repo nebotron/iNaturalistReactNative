@@ -22,6 +22,7 @@ import colors from "styles/tailwindColors";
 
 import GroupPhotoImage from "./GroupPhotoImage";
 import flattenAndOrderSelectedPhotos from "./helpers/groupPhotoHelpers";
+import preloadGroupPhotoSubjectDetection from "./helpers/preloadGroupPhotoSubjectDetection";
 
 const DROP_SHADOW = getShadow( { offsetHeight: -2 } );
 
@@ -87,6 +88,7 @@ const GroupPhotos = ( {
   const {
     flashListStyle,
     gridItemStyle,
+    gridItemWidth,
     numColumns,
   } = useGridLayout( undefined, "fullWidth" );
   const extractKey = ( item: Item, index: number ) => (
@@ -114,6 +116,19 @@ const GroupPhotos = ( {
       preloadImage( uri, cropOriginalUri || uri, crop ?? null );
     }
   }, [selectedObservations] );
+
+  // Warm the thumbnail and subject detection for every photo in the import, not
+  // just the cells the list has mounted. A cell can only frame its crop once
+  // both have landed, so a photo first reached by scrolling used to start that
+  // work when it was already on screen and sat uncropped until it finished.
+  // Everything here is queued behind the visible cells, so it costs them
+  // nothing.
+  useEffect( ( ) => {
+    if ( !gridItemWidth || groupedPhotos.length === 0 ) {
+      return ( ) => {};
+    }
+    return preloadGroupPhotoSubjectDetection( groupedPhotos, gridItemWidth );
+  }, [gridItemWidth, groupedPhotos] );
 
   const cropSelectedPhotos = useCallback( () => {
     if ( selectedPhotoUris.length === 0 ) {

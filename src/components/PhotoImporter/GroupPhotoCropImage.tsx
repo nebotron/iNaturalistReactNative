@@ -1,5 +1,6 @@
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
+import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import React, {
   useCallback,
   useEffect,
@@ -7,7 +8,7 @@ import React, {
   useState,
 } from "react";
 import {
-  Image, PixelRatio, StyleSheet, View,
+  Image, StyleSheet, View,
 } from "react-native";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
@@ -20,14 +21,6 @@ import useThumbnailSubjectDetection from "sharedHelpers/useThumbnailSubjectDetec
 import colors from "styles/tailwindColors";
 
 const MAX_SCALE = 100;
-// The crop box zooms well past the cell's own size, so the image the grid zooms
-// into is generated larger than the 1x thumbnail a static cell shows. Capped at
-// the upload size, which is all the detail a crop can ever carry.
-const ZOOM_THUMBNAIL_SCALE = 2;
-const MAX_ZOOM_THUMBNAIL_PIXEL = 2048;
-// Subject detection runs on this same thumbnail, and the detector letterboxes
-// its input into a 640px square, so anything smaller is only upscaled back.
-const MIN_ZOOM_THUMBNAIL_PIXEL = 640;
 // Crops round-trip through a screen-space transform, so a gesture that only
 // tapped (or barely moved) comes back as a crop that differs in the last few
 // decimals. Below this it isn't a crop the user made.
@@ -100,14 +93,10 @@ const GroupPhotoCropImage = ( {
     setFramedCrop( null );
   }
 
-  const thumbMaxPixel = Math.min(
-    Math.max(
-      PixelRatio.getPixelSizeForLayoutSize( size || 128 ) * ZOOM_THUMBNAIL_SCALE,
-      MIN_ZOOM_THUMBNAIL_PIXEL,
-    ),
-    MAX_ZOOM_THUMBNAIL_PIXEL,
+  const thumbnailUri = useDeviceImageThumbnail(
+    cropSourceUri,
+    groupPhotoThumbnailMaxPixel( size ),
   );
-  const thumbnailUri = useDeviceImageThumbnail( cropSourceUri, thumbMaxPixel );
 
   // Detection runs on the thumbnail above rather than on a full-resolution
   // export of the original, which is what a grid cell had to wait for before:
