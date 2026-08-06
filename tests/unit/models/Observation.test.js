@@ -1,3 +1,4 @@
+import * as Exify from "@lodev09/react-native-exify";
 import Observation from "realmModels/Observation";
 import ObservationFieldValue from "realmModels/ObservationFieldValue";
 import ProjectObservation from "realmModels/ProjectObservation";
@@ -194,6 +195,46 @@ describe( "Observation", ( ) => {
       const indexed = global.realm.objects( "UploadedDevicePhotoUri" )
         .filtered( "uri == $0", devicePhotoUri );
       expect( indexed.length ).toBe( 1 );
+    } );
+  } );
+
+  describe( "createObservationFromGalleryPhotos", ( ) => {
+    const galleryPhoto = timestamp => ( {
+      image: { uri: "file:///photo.jpg", timestamp },
+    } );
+
+    beforeEach( ( ) => {
+      Exify.read.mockResolvedValue( undefined );
+    } );
+
+    it( "should use the photo's timestamp when it has no EXIF date", async ( ) => {
+      const obs = await Observation.createObservationFromGalleryPhotos( [
+        galleryPhoto( "1754467200" ),
+      ] );
+      // observed_on_string has no timezone, so it parses back as local time
+      expect( new Date( obs.observed_on_string ).getTime( ) ).toEqual( 1754467200 * 1000 );
+    } );
+
+    it( "should treat a milliseconds timestamp as milliseconds", async ( ) => {
+      const obs = await Observation.createObservationFromGalleryPhotos( [
+        galleryPhoto( 1754467200000 ),
+      ] );
+      expect( new Date( obs.observed_on_string ).getTime( ) ).toEqual( 1754467200 * 1000 );
+    } );
+
+    it( "should prefer the EXIF date over the photo's timestamp", async ( ) => {
+      Exify.read.mockResolvedValue( { DateTimeOriginal: "2018:03:07 08:19:49" } );
+      const obs = await Observation.createObservationFromGalleryPhotos( [
+        galleryPhoto( "1754467200" ),
+      ] );
+      expect( obs.observed_on_string ).toEqual( "2018-03-07T08:19:49" );
+    } );
+
+    it( "should leave the date unset when there is no EXIF date or timestamp", async ( ) => {
+      const obs = await Observation.createObservationFromGalleryPhotos( [
+        galleryPhoto( undefined ),
+      ] );
+      expect( obs.observed_on_string ).toBeFalsy( );
     } );
   } );
 

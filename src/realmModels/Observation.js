@@ -5,7 +5,7 @@ import {
   PROJECT_SUMMARY_FIELDS,
 } from "api/fields";
 import { Alert } from "react-native";
-import { getNowISO } from "sharedHelpers/dateAndTime";
+import { formatDateStringFromTimestamp, getNowISO } from "sharedHelpers/dateAndTime";
 import { recordUploadedDevicePhotoUrisFromObservation } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
@@ -37,6 +37,27 @@ export const UNSYNCED_FILTER
   + " || ANY observationSounds._synced_at == null"
   + " || ANY projectObservations._synced_at == null"
   + " || ANY observationFieldValues._synced_at == null";
+
+// The photo library reports every asset's creation date, but a photo whose
+// metadata was stripped (a screenshot, a download, anything that arrived
+// through a messaging app) carries no EXIF date, and the observation was
+// imported with no date at all. That also silently cost it the tracked-location
+// auto-fill, which needs a timestamp to match a recorded fix against — and the
+// photos with no EXIF date are exactly the ones with no EXIF GPS either, so the
+// import that most needed a tracked location was the one that never got one.
+const galleryPhotosTimestamp = photos => {
+  for ( const photo of photos || [] ) {
+    const timestamp = Number( photo?.image?.timestamp );
+    if ( Number.isFinite( timestamp ) && timestamp > 0 ) {
+      // CameraRoll reports seconds; tolerate a milliseconds value rather than
+      // dating the observation to the year 5138.
+      return formatDateStringFromTimestamp( timestamp > 1e11
+        ? Math.round( timestamp / 1000 )
+        : timestamp );
+    }
+  }
+  return null;
+};
 
 // noting that methods like .toJSON( ) are only accessible when the model
 // class is extended with Realm.Object per this issue:
@@ -520,6 +541,9 @@ class Observation extends Realm.Object {
     const photoUris = photos.map( photo => photo?.image?.uri );
     try {
       const newObservation = await readExifFromMultiplePhotos( photoUris );
+      if ( !newObservation.observed_on_string ) {
+        newObservation.observed_on_string = galleryPhotosTimestamp( photos );
+      }
       return Observation.new( newObservation );
     } catch ( createObservationFromGalleryError ) {
       logger.error(
