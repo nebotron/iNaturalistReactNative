@@ -232,6 +232,20 @@ export const prefetchDeviceImageThumbnails = (
   }
 };
 
+// Generates one thumbnail at prefetch priority and resolves with its uri (null
+// if it couldn't be generated). For work that needs the thumbnail file itself
+// rather than a cell to draw it in, e.g. running subject detection on it.
+export const prefetchDeviceImageThumbnail = (
+  uri: string,
+  maxPixel: number,
+): Promise<string | null> => {
+  const key = cacheKey( uri, maxPixel );
+  const cached = memoryCache.get( key );
+  if ( cached ) return Promise.resolve( cached );
+  if ( !ImageCropper?.createThumbnail ) return Promise.resolve( null );
+  return scheduleJob( uri, maxPixel, false ).promise;
+};
+
 // Returns a small cached thumbnail uri for a device photo, generated off the
 // UI thread so photo grids scroll without decoding full-resolution originals.
 // Falls back to the original uri where the native generator isn't available

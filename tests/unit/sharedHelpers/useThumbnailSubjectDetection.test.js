@@ -1,6 +1,8 @@
 import { act, renderHook } from "@testing-library/react-native";
 import { Image, NativeModules } from "react-native";
-import useThumbnailSubjectDetection from "sharedHelpers/useThumbnailSubjectDetection";
+import useThumbnailSubjectDetection, {
+  resolveThumbnailSubjectDetection,
+} from "sharedHelpers/useThumbnailSubjectDetection";
 
 const MAX_CONCURRENT = 3;
 
@@ -83,6 +85,27 @@ describe( "useThumbnailSubjectDetection", ( ) => {
 
     await finishDetection( `/thumbs/${uris[0]}.jpg` );
     expect( detectSubjectBounds ).toHaveBeenCalledTimes( MAX_CONCURRENT + 1 );
+  } );
+
+  it( "runs an on-screen cell ahead of preloaded photos already queued", async ( ) => {
+    const uris = ["a", "b", "c", "d", "e"].map( name => `ph://preload-${name}` );
+    uris.forEach(
+      uri => resolveThumbnailSubjectDetection( uri, thumbnailFor( uri ), false, true ),
+    );
+    await flush( );
+
+    // Every slot is busy, so preload-d and preload-e are queued behind them.
+    expect( detectSubjectBounds ).toHaveBeenCalledTimes( MAX_CONCURRENT );
+
+    render( "ph://preload-visible" );
+    await flush( );
+    await finishDetection( thumbnailFor( uris[0] ).replace( "file://", "" ) );
+
+    // The whole import is being warmed in the background, so a cell scrolled
+    // into view must not wait out the backlog before it can frame its crop.
+    const detected = detectSubjectBounds.mock.calls.map( call => call[0] );
+    expect( detected ).toContain( "/thumbs/ph://preload-visible.jpg" );
+    expect( detected ).not.toContain( "/thumbs/ph://preload-d.jpg" );
   } );
 
   it( "detects once per photo no matter how many cells ask", async ( ) => {

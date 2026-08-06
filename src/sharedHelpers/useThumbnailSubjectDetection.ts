@@ -33,22 +33,52 @@ const getImageSize = (
 // it at once. Cap how many run together so the ones on screen aren't waiting
 // behind the whole grid.
 const MAX_CONCURRENT = 3;
-const queue: ( ( ) => void )[] = [];
+
+interface Waiter {
+  // Preloaded photos wait behind every photo a cell is actually asking for, so
+  // warming the whole import never delays the row on screen.
+  background: boolean;
+  resolve: ( ) => void;
+}
+
+const queue: Waiter[] = [];
+const queuedByUri = new Map<string, Waiter>( );
 let active = 0;
 
-const runQueued = async <T>( task: ( ) => Promise<T> ): Promise<T> => {
+const takeNext = ( ): Waiter | undefined => {
+  const foreground = queue.findIndex( waiter => !waiter.background );
+  return queue.splice( foreground < 0
+    ? 0
+    : foreground, 1 )[0];
+};
+
+const runQueued = async <T>(
+  cropSourceUri: string,
+  background: boolean,
+  task: ( ) => Promise<T>,
+): Promise<T> => {
   if ( active >= MAX_CONCURRENT ) {
     await new Promise<void>( resolve => {
-      queue.push( resolve );
+      const waiter = { background, resolve };
+      queue.push( waiter );
+      queuedByUri.set( cropSourceUri, waiter );
     } );
+    queuedByUri.delete( cropSourceUri );
   }
   active += 1;
   try {
     return await task( );
   } finally {
     active -= 1;
-    queue.shift( )?.( );
+    takeNext( )?.resolve( );
   }
+};
+
+// A cell that scrolls into view while its photo is still queued as a preload
+// jumps ahead of the rest of the preload rather than waiting out the backlog.
+const promote = ( cropSourceUri: string ) => {
+  const waiter = queuedByUri.get( cropSourceUri );
+  if ( waiter ) waiter.background = false;
 };
 
 // The crop already detected for a photo, if any. Lets the full-resolution
@@ -71,6 +101,13 @@ const cachedDetection = (
   return { crop, imageWidth: size.w, imageHeight: size.h };
 };
 
+// Whether a photo already has everything a cell needs to frame it, so the
+// preload can walk the whole import without re-queueing work already done.
+export const hasThumbnailDetection = (
+  cropSourceUri: string,
+  hasSavedCrop: boolean,
+): boolean => cachedDetection( cropSourceUri, hasSavedCrop ) !== null;
+
 // Subject detection for a photo, run against the small thumbnail a grid cell
 // has already generated instead of the full-resolution original. The detector
 // reports normalized coordinates and downscales its input to 1024px anyway, so
@@ -81,11 +118,17 @@ export const resolveThumbnailSubjectDetection = (
   cropSourceUri: string,
   thumbnailUri: string,
   hasSavedCrop: boolean,
+  background = false,
 ): Promise<ThumbnailDetection | null> => {
   const existing = inflight.get( cropSourceUri );
-  if ( existing ) return existing;
+  if ( existing ) {
+    if ( !background ) promote( cropSourceUri );
+    return existing;
+  }
 
-  const promise = runQueued( async ( ): Promise<ThumbnailDetection | null> => {
+  const promise = runQueued( cropSourceUri, background, async ( ): Promise<
+    ThumbnailDetection | null
+  > => {
     const size = sizeCache.get( cropSourceUri ) ?? await getImageSize( thumbnailUri );
     if ( !size ) return null;
     sizeCache.set( cropSourceUri, size );
