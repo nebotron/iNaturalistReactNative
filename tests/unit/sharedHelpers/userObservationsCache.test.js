@@ -17,15 +17,21 @@ const FAVE_VOTE = { id: 1, user_id: 7, vote_scope: null };
 // A non-null scope is some other kind of vote, not a fave.
 const NEEDS_ID_VOTE = { id: 2, user_id: 7, vote_scope: "needs_id" };
 
+let nextObservationId = 0;
+
 const makeApiObservation = ( {
   uuid, observedAt, votes = [], qualityGrade = "casual",
-} ) => ( {
-  uuid,
-  time_observed_at: observedAt,
-  votes,
-  quality_grade: qualityGrade,
-  taxon: { id: 1, rank_level: 10 },
-} );
+} ) => {
+  nextObservationId += 1;
+  return {
+    id: nextObservationId,
+    uuid,
+    time_observed_at: observedAt,
+    votes,
+    quality_grade: qualityGrade,
+    taxon: { id: 1, rank_level: 10 },
+  };
+};
 
 const mockPages = ( ...pages ) => {
   pages.forEach( results => searchObservations.mockResolvedValueOnce( { results } ) );
@@ -131,6 +137,48 @@ describe( "syncUserObservations", ( ) => {
 
     expect( onPage ).toHaveBeenCalledTimes( 1 );
     expect( onPage.mock.calls[0][0][0].uuid ).toEqual( "one" );
+  } );
+
+  // The API's page param stops working past 10,000 results, which is the whole
+  // reason this pages by cursor: a history longer than that could never finish
+  // a first sync, so Delete Unfaved never saw the older half of it.
+  it( "pages by id_above rather than the page param", async ( ) => {
+    const firstPage = Array.from( { length: 200 }, ( _, i ) => makeApiObservation( {
+      uuid: `first-${i}`,
+      observedAt: "2026-07-16T12:00:00Z",
+    } ) );
+    mockPages(
+      firstPage,
+      [makeApiObservation( { uuid: "last", observedAt: "2026-07-17T12:00:00Z" } )],
+    );
+
+    const cache = await syncUserObservations( USER_ID, OPTS );
+
+    expect( searchObservations ).toHaveBeenCalledTimes( 2 );
+    expect( searchObservations.mock.calls[0][0].page ).toBeUndefined( );
+    expect( searchObservations.mock.calls[0][0].id_above ).toBeUndefined( );
+    expect( searchObservations.mock.calls[1][0].id_above )
+      .toEqual( firstPage[firstPage.length - 1].id );
+    expect( cache.size ).toEqual( 201 );
+  } );
+
+  // Otherwise a long history that keeps being interrupted starts from nothing
+  // every time and the cache stays permanently empty.
+  it( "keeps the pages that landed when a later one fails", async ( ) => {
+    const firstPage = Array.from( { length: 200 }, ( _, i ) => makeApiObservation( {
+      uuid: `first-${i}`,
+      observedAt: "2026-07-16T12:00:00Z",
+    } ) );
+    searchObservations
+      .mockResolvedValueOnce( { results: firstPage } )
+      .mockRejectedValueOnce( new Error( "boom" ) );
+
+    await expect( syncUserObservations( USER_ID, OPTS ) ).rejects.toThrow( "boom" );
+
+    expect( readUserObservationsCache( USER_ID ).size ).toEqual( 200 );
+    // Not recorded, so the next run re-fetches from the top rather than
+    // skipping everything that never arrived.
+    expect( readLastSync( USER_ID ) ).toBeNull( );
   } );
 
   it( "does nothing without a signed in user", async ( ) => {

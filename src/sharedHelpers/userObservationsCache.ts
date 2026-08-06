@@ -19,8 +19,8 @@ const logger = log.extend( "userObservationsCache" );
 
 // Max page size the API allows.
 const PAGE_SIZE = 200;
-// Safety valve so a huge history can't loop forever; 250 pages is 50k obs.
-const MAX_PAGES = 250;
+// Safety valve so a huge history can't loop forever; 500 pages is 100k obs.
+const MAX_PAGES = 500;
 
 export interface CachedObservation {
   uuid: string;
@@ -109,12 +109,10 @@ export const readLastSync = ( userId: number ): string | null => {
 const writeUserObservationsCache = (
   userId: number,
   cache: UserObservationsCache,
-  lastSync: string,
 ): void => {
   const raw = JSON.stringify( Array.from( cache.values( ) ).map( toTuple ) );
   const key = cacheKey( userId );
   zustandStorage.setItem( key, raw );
-  zustandStorage.setItem( lastSyncKey( userId ), lastSync );
   parsedCache = { key, raw, cache };
 };
 
@@ -181,9 +179,20 @@ interface SyncOptions {
 // history; after that only observations created or updated since the last sync
 // are fetched, which is normally a single request.
 //
+// Paging is by `id_above` cursor rather than the `page` param. The API's page
+// param only reaches the first 10,000 results (see exploreParams.ts, which
+// paginates the same way for the same reason) and errors past that, so a
+// history longer than that could never finish a first sync: the request threw,
+// nothing was written, and the cache stayed empty on every run. Delete Unfaved
+// then fell back to Realm, which holds only the most recent page of remote
+// observations — which is exactly the older half of the history going missing
+// from it. A cursor has no such ceiling.
+//
 // The last-sync timestamp is only recorded once every page has landed, so a
 // request that fails partway through means the next run re-fetches rather than
-// leaving a permanent hole in the cache.
+// leaving a permanent hole in the cache. What did land is still written,
+// though: a long history that keeps being interrupted should get closer to
+// complete each time instead of starting from nothing.
 export const syncUserObservations = async (
   userId: number | undefined | null,
   opts: { api_token: string | null },
@@ -198,27 +207,46 @@ export const syncUserObservations = async (
   // flight is picked up by the next one rather than missed.
   const syncStartedAt = new Date( ).toISOString( );
 
-  let page = 1;
+  let pages = 0;
   let syncedCount = 0;
+  let idAbove: number | undefined;
   let hasMorePages = true;
-  while ( hasMorePages && page <= MAX_PAGES ) {
-    // eslint-disable-next-line no-await-in-loop
-    const response = await searchObservations( {
-      user_id: userId,
-      order_by: "id",
-      order: "asc",
-      per_page: PAGE_SIZE,
-      fields: OBSERVATION_SYNC_FIELDS,
-      ttl: -1,
-      page,
-      ...( lastSync
-        ? { updated_since: lastSync }
-        : {} ),
-    }, opts );
+  // Anything already merged into the cache is worth keeping even if a later
+  // page never arrives, so persist it — without recording the sync, which is
+  // what makes the next run re-fetch from the top.
+  const savePartial = ( ) => {
+    if ( syncedCount > 0 ) {
+      writeUserObservationsCache( userId, cache );
+    }
+  };
+  while ( hasMorePages && pages < MAX_PAGES ) {
+    pages += 1;
+    let response;
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      response = await searchObservations( {
+        user_id: userId,
+        order_by: "id",
+        order: "asc",
+        per_page: PAGE_SIZE,
+        fields: OBSERVATION_SYNC_FIELDS,
+        ttl: -1,
+        ...( idAbove === undefined
+          ? {}
+          : { id_above: idAbove } ),
+        ...( lastSync
+          ? { updated_since: lastSync }
+          : {} ),
+      }, opts );
+    } catch ( error ) {
+      savePartial( );
+      throw error;
+    }
     // A body without a results array isn't an empty history, it's a response we
     // can't read. Bail without recording the sync so the next run retries.
     if ( !Array.isArray( response?.results ) ) {
-      logger.warn( `Unreadable observation page ${page}; leaving the cache as it was` );
+      logger.warn( `Unreadable observation page ${pages}; keeping what has synced so far` );
+      savePartial( );
       return cache;
     }
     const { results }: { results: ApiObservation[] } = response;
@@ -228,8 +256,12 @@ export const syncUserObservations = async (
     onPage?.( results );
     syncedCount += results.length;
     onProgress?.( syncedCount );
-    hasMorePages = results.length === PAGE_SIZE;
-    page += 1;
+    // Ordered by id ascending, so the last result is the high-water mark. A
+    // page whose results carry no id can't advance the cursor, and repeating
+    // the same request forever is worse than stopping short.
+    const lastId = results[results.length - 1]?.id;
+    hasMorePages = results.length === PAGE_SIZE && typeof lastId === "number";
+    idAbove = lastId;
   }
 
   if ( syncedCount === 0 && cache.size > 0 ) {
@@ -238,6 +270,7 @@ export const syncUserObservations = async (
     zustandStorage.setItem( lastSyncKey( userId ), syncStartedAt );
     return cache;
   }
-  writeUserObservationsCache( userId, cache, syncStartedAt );
+  writeUserObservationsCache( userId, cache );
+  zustandStorage.setItem( lastSyncKey( userId ), syncStartedAt );
   return cache;
 };
