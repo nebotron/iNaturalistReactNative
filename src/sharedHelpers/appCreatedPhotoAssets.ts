@@ -5,9 +5,14 @@ import { MMKV } from "react-native-mmkv";
 //
 // Why this exists: PhotoKit presents its deletion confirmation for assets the
 // app did not create, and deletes the app's own assets without one. That is
-// the only documented way to delete without a prompt, and the prompt is what
-// the deletion hangs are stuck on (see promptDeleteOriginalDevicePhotos.ts).
-// PhotoKit offers no way to ask, after the fact, whether a given asset was
+// the only documented way to delete without a prompt, and the prompt was the
+// leading suspect for the deletion hangs (see
+// promptDeleteOriginalDevicePhotos.ts). It is no longer: the Aug 6 log has a
+// hang on a batch that was 17 of 17 app-created, i.e. a transaction that
+// presents no confirmation at all, alongside two deletions of the same kind
+// that completed in ~1.2s. Skipping the prompt is still worth having — it is a
+// second of the user's attention per import — but it is not a fix for the
+// wedge. PhotoKit offers no way to ask, after the fact, whether a given asset was
 // ours — PHAsset.sourceType only separates the user library from shared and
 // synced albums — so the identifier has to be recorded at creation time and
 // kept here.

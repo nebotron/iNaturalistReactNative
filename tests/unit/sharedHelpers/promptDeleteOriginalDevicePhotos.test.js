@@ -1,4 +1,4 @@
-import { Alert } from "react-native";
+import { Alert, AppState } from "react-native";
 import promptDeleteOriginalDevicePhotos, {
   clearPhotoLibraryWriteFailure,
   deleteOriginalDevicePhotos,
@@ -228,8 +228,14 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
         expect.objectContaining( {
           requested: 2,
           ms: 5000,
-          leftForeground: false,
+          backgrounded: false,
+          wentInactive: false,
           appStateChanges: 0,
+          // Which transaction was in flight. A hang with prompted=0 issued only
+          // the consent-free half, which is what kills the consent-alert
+          // explanation, so it has to be on the hang report itself.
+          appCreated: 0,
+          prompted: 2,
         } ),
       );
       const [, extra] = mockLogger.errorWithExtra.mock.calls[0];
@@ -240,6 +246,32 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       // is a different diagnosis from one on a library that was already stuck.
       expect( extra.preflightMs ).toBeGreaterThanOrEqual( 0 );
       expect( JSON.stringify( extra ) ).not.toContain( "ph://" );
+    } );
+
+    it( "does not report a foreground-inactive app as having left the foreground", async ( ) => {
+      // These deletes are issued straight after a navigation or a modal
+      // dismissal, so the app is routinely foreground-inactive when one starts
+      // — the Aug 6 log's three *successful* deletions all report
+      // sceneState=1. Folding that into "left the foreground" made the flag
+      // true before the delete began, and a theory about backgrounded consent
+      // alerts was built on one hang reporting it.
+      const previousState = AppState.currentState;
+      AppState.currentState = "inactive";
+      let finishDeletion;
+      mockDeletePhotos.mockImplementation(
+        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
+      );
+
+      const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
+      await jest.advanceTimersByTimeAsync( 5000 );
+      finishDeletion( { deleted: 1, requested: 1 } );
+      await deletion;
+      AppState.currentState = previousState;
+
+      const [, extra] = mockLogger.errorWithExtra.mock.calls
+        .filter( ( [marker] ) => marker === "photo_delete_pending" ).at( -1 );
+      expect( extra.backgrounded ).toBe( false );
+      expect( extra.wentInactive ).toBe( true );
     } );
 
     it( "arms the cooldown as soon as the hang is detected", async ( ) => {

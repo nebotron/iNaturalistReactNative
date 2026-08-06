@@ -1651,9 +1651,15 @@ RCT_EXPORT_METHOD( existingPhotoAssetUris
 // assets without presenting its confirmation alert, so those go in a
 // transaction of their own, first, ahead of the prompted one. Two payoffs: the
 // photos we own get deleted even when the prompted batch wedges, and the
-// timings come back separately, which is the controlled comparison the log has
-// been missing — a clean appCreatedMs beside a hung remainder pins the wedge
-// on the consent alert.
+// timings come back separately, which is the controlled comparison the log had
+// been missing.
+//
+// That comparison has now run, and it did *not* pin the wedge on the consent
+// alert: the Aug 6 log has a deletion where every asset was ours, so
+// theirAssets was empty and the only transaction issued was the consent-free
+// one below — and it hung exactly like a prompted one, while two deletions of
+// the same kind minutes earlier came back in ~1.2s. Keep the split for the
+// prompt it saves the user; do not read a hang here as evidence about alerts.
 RCT_EXPORT_METHOD( deletePhotoAssets
                   : ( NSArray<NSString *> * )phUris appCreated
                   : ( NSArray<NSString *> * )appCreatedUris resolver

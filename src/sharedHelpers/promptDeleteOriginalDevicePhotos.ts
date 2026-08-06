@@ -296,24 +296,55 @@ const performDeleteOriginalDevicePhotos = async (
     return { deleted: 0, requested, succeeded: false };
   }
 
+  // Assets the app added to the library itself (the USB card offload) are the
+  // only ones PhotoKit deletes without presenting its confirmation, so they
+  // can go in a transaction of their own — see deletePhotoAssets in
+  // ImageCropper.m.
+  //
+  // Splitting a *mixed* batch is only safe once that exemption has been seen
+  // to hold on this device: if it doesn't, the split is two prompted
+  // transactions and the user confirms twice for one import. So split when
+  // every asset is ours — one transaction either way, and the controlled
+  // measurement the exemption is judged on — or when such a batch has already
+  // proved the exemption real. Anything else stays a single transaction, and
+  // so a single prompt.
+  //
+  // Decided here, ahead of the hang timers, so a hang report can say which
+  // transaction was outstanding. Reading that off the adjacent prose line meant
+  // loading the dump to answer the single most important question about a hang.
+  const ourUris = appCreatedPhotoUris( uniqueUris );
+  const appCreatedUris = (
+    ourUris.length === uniqueUris.length || isAppCreatedDeleteExemptionConfirmed( )
+  )
+    ? ourUris
+    : [];
+
   // The ph:// URIs identify the user's photos, say nothing a count doesn't, and
   // made single log lines kilobytes long; the counts below are what a report
   // is read for.
   const startedAt = Date.now( );
   // iOS can only present the deletion confirmation to a foreground app, so a
   // delete that spans a trip to the background is a different failure from one
-  // that hangs while the user is watching it. Nothing recorded this, which is
-  // why the log can't yet say whether the hangs are the documented iOS 26
-  // PHPhotoLibrary wedge or simply the app losing the foreground mid-delete.
-  // Only an explicit background/inactive counts: iOS reports "unknown" early in
-  // a launch, and reading that as "the user left" would put a false explanation
-  // on every hang that follows a cold start.
-  const isAway = ( state: unknown ) => state === "background" || state === "inactive";
-  let leftForeground = isAway( AppState.currentState );
+  // that hangs while the user is watching it.
+  //
+  // This used to count "inactive" as having left the foreground, and that made
+  // the flag useless: the Aug 6 log has three *successful* deletions, and the
+  // native context captured before each one says sceneState=1
+  // (foregroundInactive). These deletes are issued straight after a navigation
+  // or a modal dismissal, so foreground-inactive is the normal state to be in
+  // when one starts, not an anomaly — the old flag was true before the delete
+  // even began. A whole theory ("a consent alert requested by an app that then
+  // leaves the foreground wedges photolibraryd") rested on one hang reporting
+  // it. Only "background" is the user actually leaving; "inactive" is recorded
+  // separately so nothing is lost. Neither reads anything into iOS's "unknown",
+  // which is what it reports early in a launch.
+  let backgrounded = AppState.currentState === "background";
+  let wentInactive = AppState.currentState === "inactive";
   let appStateChanges = 0;
   const appStateSubscription = AppState.addEventListener( "change", nextState => {
     appStateChanges += 1;
-    if ( isAway( nextState ) ) leftForeground = true;
+    if ( nextState === "background" ) backgrounded = true;
+    if ( nextState === "inactive" ) wentInactive = true;
   } );
   // Populated before the delete starts so a hang report still carries why the
   // confirmation couldn't present (modal in vcChain, no scene…). Logged only
@@ -322,7 +353,16 @@ const performDeleteOriginalDevicePhotos = async (
   const pendingExtra = ( ) => ( {
     requested,
     ms: Date.now( ) - startedAt,
-    leftForeground,
+    // Which half of the split was in flight. A hang with prompted=0 is a
+    // deletion that issued only the consent-free transaction, and the Aug 6
+    // log has one: 17 of 17 app-created, no prompted transaction created at
+    // all, hung exactly like a prompted one. That is what rules the consent
+    // alert out as the thing that wedges the library, so it belongs on the
+    // hang report rather than being inferred from the prose line beside it.
+    appCreated: appCreatedUris.length,
+    prompted: requested - appCreatedUris.length,
+    backgrounded,
+    wentInactive,
     appStateChanges,
     appState: typeof AppState.currentState === "string"
       ? AppState.currentState
@@ -435,24 +475,6 @@ const performDeleteOriginalDevicePhotos = async (
       }
     }
 
-    // Assets the app added to the library itself (the USB card offload) are the
-    // only ones PhotoKit deletes without presenting its confirmation, so they
-    // can go in a transaction of their own — see deletePhotoAssets in
-    // ImageCropper.m.
-    //
-    // Splitting a *mixed* batch is only safe once that exemption has been seen
-    // to hold on this device: if it doesn't, the split is two prompted
-    // transactions and the user confirms twice for one import. So split when
-    // every asset is ours — one transaction either way, and the controlled
-    // measurement the exemption is judged on — or when such a batch has already
-    // proved the exemption real. Anything else stays a single transaction, and
-    // so a single prompt.
-    const ourUris = appCreatedPhotoUris( uniqueUris );
-    const appCreatedUris = (
-      ourUris.length === uniqueUris.length || isAppCreatedDeleteExemptionConfirmed( )
-    )
-      ? ourUris
-      : [];
     const appCreatedNote = appCreatedUris.length > 0
       ? `, ${appCreatedUris.length} of them app-created`
       : "";

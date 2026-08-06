@@ -523,6 +523,60 @@ files where 19:09:08 listed 80, and 19:18:47 says `no-folder-saved`. Whether
 that is cause, consequence, or the user unplugging is exactly what the
 breadcrumb should disambiguate.
 
+### The consent alert is not what wedges the library
+
+The Aug 6 (23:38–00:18) log has the controlled case every previous session was
+missing. At 00:15:00 the app deleted **17 photos, 17 of them app-created** —
+`theirAssets.count == 0` in `deletePhotoAssets`, so the only PhotoKit
+transaction issued was `deleteAssets:ourAssets`, the one that presents no
+confirmation. It hung: `photo_delete_pending` at 5s, timeout at 10s, and the
+concurrent probe reporting `probeOk=false`. Two deletions minutes earlier, same
+build, same device, same assets (the 00:02:47 offload of 47), both entirely
+app-created, came back in **1145ms and 1191ms**.
+
+So every theory resting on the alert is dead, including the one this session
+was supposed to test: *"a consent alert requested by an app that then leaves the
+foreground wedges photolibraryd"*. There was no alert.
+
+**`leftForeground` was never measuring what its name says, and this is the log
+that proves it.** It counted `"inactive"` as away, and it was seeded from
+`AppState.currentState` *before* the delete began. All three of the log's
+**successful** deletions report `sceneState:1` (foregroundInactive) in the
+native context captured before them — these deletes are issued straight after a
+navigation or a modal dismissal, so foreground-inactive is the normal state to
+start one in. The hang's `leftForeground=true, appStateChanges=1,
+appState="active"` is the signature of starting inactive and going active once,
+not of a trip to the background. Replaced by `backgrounded` (background only)
+and `wentInactive`; the Aug 5 05:09 hang's `leftForeground=true` should be
+re-read as "nothing", not as evidence.
+
+**The settling-delay theory is dead too**, killed by counting rather than by
+one instance. Gap from the `applyTrackedLocationToPhotos` line to the delete:
+6.4s, 2.7s, 2.6s (all successes) and 2.6s (the hang). Identical.
+
+`photo_delete_pending` / `photo_delete_failed` now carry `appCreated` and
+`prompted`, so the next hang says which transaction was outstanding without
+loading the dump. The split is decided before the timers are armed for this.
+
+**The preflight worked, and it is not the story.** All three
+`photo_delete_preflight` lines in this log are `probeOk=true` at **error**
+level — that is `eb9c8d8`, already fixed, and the three biggest error groups in
+the summary were therefore already dead on arrival. The `commit` check took a
+minute again. The probe itself is healthy on the one-transaction build:
+`probeMs` 4849 / 1180 / 1001, `probeCleaned` 5 then 1 then 1 (the 5 were stale
+albums from the two-transaction era, cleaned once and gone).
+
+**`appCreatedMs` vs the prompted half, one mixed batch, and it inverts.** At
+00:07: 1 app-created asset took **3364ms**, and the 2 prompted ones took
+~1375ms by subtraction — the *unprompted* transaction was slower, per asset by
+5×. Then 8 app-created in 1145ms and 7 in 1191ms. Duration plainly doesn't
+scale with count, and the first library transaction after a launch looks
+expensive. Consequence worth watching: 3364 > `NO_CONFIRMATION_MAX_MS` (2s), so
+that one sample flipped the exemption verdict to "no" and the next two flipped
+it back. The verdict flaps on a single cold-start sample. Not retuned on one
+log; get `promptedMs` (shipped in `a524314`, not in this build) from a mixed
+batch first.
+
 ### Known, not worth acting on yet
 
 - **Keychain `-25308` (`errSecInteractionNotAllowed`) with 401s around it.**
@@ -640,3 +694,18 @@ check took a minute; do it first, every time.
 What that leaves genuinely new is the upload abort bug above — which is
 visible only in the interleaving, from `timestamp - durationMs`, and not at
 all in the grouped summary.
+
+The Aug 6 log (23:38–00:18) was 60 lines in 40 minutes, and 53 of them carry
+`3a6dedd7e` — for the first time in three sessions the log is mostly from a
+recent build (`HEAD~4`), which is why it could finally settle something. Read
+the dump; at this size the summary's errors-first ordering actively misleads,
+since its top three groups were the already-fixed preflight-at-error.
+
+Not chased, for the record: two cold `pickup`s 26 seconds apart (00:02:21,
+00:02:47) with a `slow_query` between them, i.e. the app died ~25s into a
+launch and left nothing behind. That is the fourth session with a death that
+ate its own evidence. `usb_offload_never_finished` did *not* fire, so the
+preceding offload had finished cleanly — the MMKV breadcrumb is working and
+says this death wasn't during one. If it recurs, the generalisation of that
+breadcrumb (a launch-scoped "previous run ended without a clean background
+transition" marker) is the measurement to add.
