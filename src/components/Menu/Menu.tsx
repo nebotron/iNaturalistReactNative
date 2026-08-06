@@ -165,7 +165,7 @@ const Menu = ( ) => {
     },
     devicePhotoCleanup: {
       // eslint-disable-next-line i18next/no-literal-string
-      label: "DELETE UNFAVED PHOTOS",
+      label: "PHOTO CLEANUP",
       navigation: "DevicePhotoCleanup",
       icon: "trash-outline",
     },

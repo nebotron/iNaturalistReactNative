@@ -100,7 +100,7 @@ const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const networkLogTitle = () => <Heading4 numberOfLines={1}>NETWORK LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
-const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>DELETE UNFAVED PHOTOS</Heading4>;
+const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>PHOTO CLEANUP</Heading4>;
 const locationHistoryTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "LOCATION-HISTORY" )}

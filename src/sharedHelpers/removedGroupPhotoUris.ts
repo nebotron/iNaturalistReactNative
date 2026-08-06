@@ -22,11 +22,11 @@ const save = ( uris: string[] ): void => {
 };
 
 // Device photo URIs (ph:// on iOS) the user removed from the Group Photos
-// import screen. Recorded at the moment of removal, independent of whether
-// the native device-deletion actually succeeds — iOS 26's PHPhotoLibrary
-// confirmation bug can silently no-op it (see promptDeleteOriginalDevicePhotos.ts)
-// — so the app can still treat them as "gone": hidden from the photo picker
-// (PhotoGallery.tsx), and offered again for cleanup in Delete Unfaved
+// import screen. An import doesn't delete them from the library — that would
+// mean a PHPhotoLibrary confirmation per import, which iOS 26 can silently
+// wedge (see promptDeleteOriginalDevicePhotos.ts). Instead they're recorded
+// here at the moment of removal and treated as "gone": hidden from the photo
+// picker (PhotoGallery.tsx), and offered for deletion in Photo Cleanup
 // (unfavoritedDevicePhotos.ts).
 export const getRemovedGroupPhotoUris = ( ): string[] => load( );
 

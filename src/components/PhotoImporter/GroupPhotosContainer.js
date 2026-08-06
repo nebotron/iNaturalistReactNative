@@ -16,7 +16,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { InteractionManager } from "react-native";
 import {
   saveObservationsAndApplyTrackedLocation,
 } from "sharedHelpers/applyTrackedLocationToPhotos";
@@ -284,19 +283,16 @@ const GroupPhotosContainer = ( ): Node => {
     const removedFromGroup = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( observations );
 
-    // Stage the removed photos' device URIs for deletion rather than deleting
-    // here: the Group Photos screen is presented modally, and iOS can't present
-    // its deletion-confirmation over a modal RN screen (the request silently
-    // hangs). Deletion runs in navBasedOnUserSettings after the modal is
-    // dismissed and we're on the stable My Observations screen.
+    // Record the removed photos' device URIs instead of deleting them. An
+    // import no longer deletes anything from the library: every deletion is a
+    // PHPhotoLibrary confirmation iOS can silently wedge, and doing that on
+    // each import was both intrusive and unreliable. The URIs are saved
+    // (see removedGroupPhotoUris.ts) so these stay hidden from the photo
+    // picker and can be deleted in one pass later from Photo Cleanup.
     const deviceUrisToDelete = orderedPhotos
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
       .filter( Boolean );
     deviceUrisToDelete.forEach( uri => addPendingGroupPhotoDeletionUri( uri ) );
-    // Recorded regardless of whether the native deletion below actually
-    // succeeds (see removedGroupPhotoUris.ts) so these stay hidden from the
-    // photo picker and get another chance to be cleaned up via Delete
-    // Unfaved even if iOS's PHPhotoLibrary confirmation silently no-ops it.
     addRemovedGroupPhotoUris( deviceUrisToDelete );
 
     // No line here: this fires on every photo the user removes (317 times in
@@ -367,7 +363,6 @@ const GroupPhotosContainer = ( ): Node => {
     // Read groupedPhotos from the store rather than the render closure, which
     // is stale if a background crop landed after the last render.
     const groupsToImport = useStore.getState( ).groupedPhotos;
-    const allPendingUris = [...new Set( pendingGroupPhotoDeletionUris )];
 
     // Send the user to the Me page (My Observations) immediately. Observation
     // creation, saving, CV prefetch, and the optional delete-originals prompt
@@ -428,24 +423,6 @@ const GroupPhotosContainer = ( ): Node => {
     // isn't blocked on CV.
     prefetchSuggestionsForObservations( queryClient, locatedObservations, realm )
       .catch( error => logger.error( "Failed to prefetch group photo suggestions", error ) );
-
-    if ( allPendingUris.length > 0 ) {
-      // The iOS deletion confirmation can only present when the app is idle on
-      // a stable screen. Wait for the navigation reset to My Observations and
-      // its first render/interactions to finish, then delete — presenting the
-      // confirmation mid-transition (or while the import work churns the main
-      // thread) silently hangs the request.
-      await new Promise( resolve => {
-        InteractionManager.runAfterInteractions( ( ) => {
-          setTimeout( resolve, 1200 );
-        } );
-      } );
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { deleteOriginalDevicePhotos } = require(
-        "sharedHelpers/promptDeleteOriginalDevicePhotos",
-      );
-      await deleteOriginalDevicePhotos( allPendingUris, { userInitiated: true } );
-    }
   };
 
   return (
