@@ -134,6 +134,15 @@ interface PendingLocationWrite {
 }
 const COALESCE_WINDOW_MS = 250;
 
+// A bulk import outruns that window. Each observation only queues its write
+// after awaiting an EXIF write per photo, and those settle at wildly different
+// times across a hundred photos, so the writes trickle in over seconds: the
+// first few flush together and every straggler afterwards starts a new batch —
+// a new transaction, and a new iOS consent alert. A caller that knows the whole
+// set (an import) brackets it instead, and gets exactly one transaction for the
+// lot however long the photos take to trickle through.
+let locationWriteBatchDepth = 0;
+
 // Native Photos-library writes can trigger a system confirmation dialog that
 // silently never presents under certain modal states, leaving the native
 // promise unresolved forever (see ImageCropper.m). That's a native-side bug
@@ -190,6 +199,23 @@ const flushLocationWrites = async ( ) => {
   batch.forEach( write => write.resolve( ) );
 };
 
+export const beginLocationWriteBatch = ( ) => { locationWriteBatchDepth += 1; };
+
+// Flushes everything the bracketed work queued, as one transaction. Awaited by
+// the caller, which is why a batched write doesn't have to be awaited where it
+// is queued (see applyLocationToDevicePhotoLibrary): a queued write that only
+// settled on flush, awaited by the very loop whose completion triggers the
+// flush, would deadlock.
+export const endLocationWriteBatch = async ( ) => {
+  locationWriteBatchDepth = Math.max( 0, locationWriteBatchDepth - 1 );
+  if ( locationWriteBatchDepth > 0 ) return;
+  if ( coalesceTimer ) {
+    clearTimeout( coalesceTimer );
+    coalesceTimer = null;
+  }
+  await flushLocationWrites( );
+};
+
 // Best-effort: also fills in the location metadata on the original Photos
 // library asset (if we know its ph:// identifier), so tracked-location is
 // reflected in the Photos app, not just the app's own copy. The native side
@@ -213,6 +239,18 @@ const applyLocationToDevicePhotoLibrary = async (
   }
   if ( isQueuedForDeletion( phUri ) ) {
     reportSuppressed( "skipped", "photo is queued for deletion after import" );
+    return;
+  }
+  if ( locationWriteBatchDepth > 0 ) {
+    // Held until the bracketing caller closes the batch, so a hundred photos
+    // arriving over several seconds still make one transaction. Nothing waits
+    // on it here — endLocationWriteBatch is what the caller awaits.
+    pendingLocationWrites.push( {
+      phUri,
+      latitude: match.latitude,
+      longitude: match.longitude,
+      resolve: ( ) => {},
+    } );
     return;
   }
   await new Promise<void>( resolve => {
@@ -417,22 +455,36 @@ export const saveObservationsAndApplyTrackedLocation = async (
         `Auto-filling tracked location: ${missingLocationObs.length} observation(s) `
         + `missing location, ${usablePoints.length} usable tracked point(s)`,
       );
-      await Promise.all( missingLocationObs.map( async obs => {
-        try {
-          const savedObs = realm.objectForPrimaryKey<RealmObservation>( "Observation", obs.uuid );
-          if ( !savedObs ) return;
-          const applied = await autoApplyTrackedLocationIfMissing( realm, savedObs, usablePoints );
-          if ( applied ) {
-            trackedLocationByUuid[obs.uuid] = {
-              latitude: savedObs.latitude as number,
-              longitude: savedObs.longitude as number,
-              accuracy: savedObs.positional_accuracy ?? null,
-            };
+      // One transaction — and so one iOS consent alert — for the whole set,
+      // however long its photos take to work through the EXIF write above.
+      beginLocationWriteBatch( );
+      try {
+        await Promise.all( missingLocationObs.map( async obs => {
+          try {
+            const savedObs = realm.objectForPrimaryKey<RealmObservation>(
+              "Observation",
+              obs.uuid,
+            );
+            if ( !savedObs ) return;
+            const applied = await autoApplyTrackedLocationIfMissing(
+              realm,
+              savedObs,
+              usablePoints,
+            );
+            if ( applied ) {
+              trackedLocationByUuid[obs.uuid] = {
+                latitude: savedObs.latitude as number,
+                longitude: savedObs.longitude as number,
+                accuracy: savedObs.positional_accuracy ?? null,
+              };
+            }
+          } catch ( error ) {
+            logger.error( `Failed to auto-apply tracked location to ${obs.uuid}`, error );
           }
-        } catch ( error ) {
-          logger.error( `Failed to auto-apply tracked location to ${obs.uuid}`, error );
-        }
-      } ) );
+        } ) );
+      } finally {
+        await endLocationWriteBatch( );
+      }
     }
   } catch ( error ) {
     logger.error( "Failed to auto-apply tracked location while saving observations", error );

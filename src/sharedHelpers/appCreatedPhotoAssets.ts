@@ -82,14 +82,22 @@ export const appCreatedPhotoUris = ( uris: string[] ): string[] => {
 // The no-confirmation deletion of app-created assets is documented PhotoKit
 // behaviour, but it is behaviour we can only confirm by observing it: nothing
 // reports whether an alert was presented. A transaction that needed no
-// confirmation returns in well under a second; one the user had to notice,
-// read and tap does not. So if the app-created half of a deletion takes this
-// long, treat the exemption as absent on this device and stop splitting —
-// otherwise a mixed batch would ask the user to confirm twice, every time.
-const NO_CONFIRMATION_MAX_MS = 10_000;
+// confirmation is a local database write and returns in well under a second;
+// one the user had to notice, read and tap does not. Anything slower than this
+// is taken as evidence it prompted, and the exemption as absent on this device.
+//
+// This was 10s, which is long enough for a quick tap on a real alert to be
+// recorded as proof the exemption holds — and that verdict is what licenses
+// splitting a mixed batch into two transactions, i.e. asking the user to
+// confirm twice for one import. Two seconds still clears any plausible
+// unprompted transaction, and the way it errs (a slow-but-exempt device stops
+// splitting) costs nothing but a prompt the user was already getting.
+const NO_CONFIRMATION_MAX_MS = 2_000;
 
-export const isAppCreatedDeleteExemptionRuledOut = ( ): boolean => (
-  store.getString( EXEMPTION_KEY ) === "no"
+// Only true once a transaction of ours has actually come back fast enough to
+// have gone through without an alert.
+export const isAppCreatedDeleteExemptionConfirmed = ( ): boolean => (
+  store.getString( EXEMPTION_KEY ) === "yes"
 );
 
 // ms < 0 means the transaction never came back, which says nothing about
