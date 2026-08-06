@@ -27,6 +27,20 @@ RCT_EXPORT_MODULE( );
 
 + (BOOL)requiresMainQueueSetup { return NO; }
 
+// A device with no room left is not a per-file problem: every remaining file in
+// the run will fail the same way, instantly. JS abandons the run on this code
+// rather than grinding through the card — the Aug 6 log has 1,084 error lines
+// in 74 seconds, one per file per retry, from exactly that. Reported as a code
+// because the message is localizedDescription, i.e. the user's language.
+static BOOL errorIsOutOfSpace( NSError *error )
+{
+  if ( !error ) return NO;
+  if ( [error.domain isEqualToString:NSCocoaErrorDomain]
+       && error.code == NSFileWriteOutOfSpaceError ) return YES;
+  if ( [error.domain isEqualToString:NSPOSIXErrorDomain] && error.code == ENOSPC ) return YES;
+  return errorIsOutOfSpace( error.userInfo[NSUnderlyingErrorKey] );
+}
+
 static NSURL *resolveSavedFolder( void )
 {
   NSData *bookmark = [[NSUserDefaults standardUserDefaults] dataForKey:kBookmarkKey];
@@ -342,7 +356,11 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
   BOOL copied = [fm copyItemAtPath:srcPath toPath:tempPath error:&copyError];
   [folder stopAccessingSecurityScopedResource];
   if ( !copied ) {
-    reject( @"copy-failed", copyError.localizedDescription ?: @"Could not read source file", copyError );
+    reject( errorIsOutOfSpace( copyError )
+              ? @"out-of-space"
+              : @"copy-failed",
+            copyError.localizedDescription ?: @"Could not read source file",
+            copyError );
     return;
   }
 
@@ -383,7 +401,11 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
       if ( success ) {
         resolve( @{ @"saved": @YES, @"localIdentifier": createdId ?: @"" } );
       } else {
-        reject( @"save-failed", error.localizedDescription ?: @"Could not save to Photos", error );
+        reject( errorIsOutOfSpace( error )
+                  ? @"out-of-space"
+                  : @"save-failed",
+                error.localizedDescription ?: @"Could not save to Photos",
+                error );
       }
     }];
   };

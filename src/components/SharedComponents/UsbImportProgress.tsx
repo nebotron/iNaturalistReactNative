@@ -21,7 +21,7 @@ const styles = StyleSheet.create( {
 
 const UsbImportProgress = ( ) => {
   const {
-    active, phase, total, saved, failed, deleted,
+    active, phase, total, saved, failed, deleted, note,
   } = useUsbImportProgress( );
 
   if ( !active ) return null;
@@ -44,7 +44,9 @@ const UsbImportProgress = ( ) => {
     detail = `Saved ${saved} photo${plural} to your library${cleared}.`;
   } else if ( phase === "error" ) {
     title = "Import finished with errors";
-    detail = `Saved ${saved} of ${total}.`;
+    // Without the note a device that ran out of room reads as the app failing
+    // at random — "Saved 0 of 157" and nothing to act on.
+    detail = note || `Saved ${saved} of ${total}.`;
   } else {
     title = "Importing photos to your library…";
     detail = `${saved} of ${total}`;

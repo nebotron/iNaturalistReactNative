@@ -150,8 +150,59 @@ describe( "useUsbAutoImport", ( ) => {
     await jest.advanceTimersByTimeAsync( 0 );
 
     expect( mockDeleteUsbSourceImages ).not.toHaveBeenCalled( );
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_saves_failing",
+      expect.objectContaining( { saved: 0, failed: 3, abandoned: 37 } ),
+    );
+  } );
+
+  // The Aug 6 log: the phone ran out of room, so every copy failed instantly
+  // instead of timing out, the timeouts-only counter reset on each one, and the
+  // run ground through all 157 files in a second and a half — then the poll did
+  // it again ten seconds later. 1,084 error lines in 74 seconds.
+  it( "abandons the run as soon as the device is out of space", async ( ) => {
+    mockSaveUsbImageToPhotos.mockImplementation( ( ) => {
+      const err = new Error( "“IMG.CR3” couldn’t be copied to “tmp”" );
+      err.code = "out-of-space";
+      return Promise.reject( err );
+    } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    // The first file's failure is the whole device's answer for the other 39.
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 1 );
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_out_of_space",
+      expect.objectContaining( { abandoned: 39, saved: 0, failed: 1 } ),
+    );
+
+    // And the next scans don't start it over.
+    await jest.advanceTimersByTimeAsync( 60_000 );
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 1 );
+  } );
+
+  // Every log line is a network POST. A run that fails file after file used to
+  // send one per file; the abandon line above carries the totals.
+  it( "logs the first few save failures, not one per file", async ( ) => {
+    mockSaveUsbImageToPhotos.mockImplementation( async relativePath => {
+      if ( Number( relativePath.match( /\d+/ )[0] ) % 2 === 0 ) {
+        throw new Error( "unreadable file" );
+      }
+      return { localIdentifier: relativePath };
+    } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    // 20 of the 40 failed, alternating so no three are consecutive and the run
+    // is never abandoned.
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 40 );
+    expect( mockLogger.error.mock.calls.filter(
+      ( [msg] ) => typeof msg === "string" && msg.startsWith( "USB offload: failed to save" ),
+    ) ).toHaveLength( 3 );
     expect( mockLogger.info ).toHaveBeenCalledWith(
-      expect.stringContaining( "USB offload: saved 0, failed 40" ),
+      expect.stringContaining( "USB offload: saved 20, failed 20" ),
     );
   } );
 

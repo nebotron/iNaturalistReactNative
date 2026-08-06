@@ -38,16 +38,26 @@ const SAVE_TIMEOUT_MS = 30_000;
 // device (see promptDeleteOriginalDevicePhotos.ts). When that happens every
 // remaining file in the run burns the full SAVE_TIMEOUT_MS in turn — the Aug 5
 // log caught a 122-photo card starting down that path, which is an hour of
-// grinding to save nothing and one error line per file. Consecutive timeouts
-// are the signal; a single failure is an ordinary bad file and the loop should
-// carry on past it.
-const MAX_CONSECUTIVE_SAVE_TIMEOUTS = 3;
+// grinding to save nothing and one error line per file. A single failure is an
+// ordinary bad file and the loop should carry on past it; a run of them is a
+// condition of the device, and nothing on the card will save until it changes.
+// Counted for failures of *any* kind, not just timeouts: on Aug 6 the phone ran
+// out of disk space, every copy failed instantly rather than timing out, and a
+// timeouts-only counter reset on each one — so the loop ran all 157 files in a
+// second and a half and the poll did it again ten seconds later, 1,084 error
+// lines in 74 seconds.
+const MAX_CONSECUTIVE_SAVE_FAILURES = 3;
 
 // Abandoned files stay unimported, so the next scan — SCAN_INTERVAL_MS later —
-// would pick the same card up and grind through the same timeouts again.
-// Nothing recovers a wedged Photos library on that timescale, so wait before
-// trying the card again.
-const LIBRARY_WEDGED_RETRY_DELAY_MS = 10 * 60 * 1000;
+// would pick the same card up and grind through the same failures again.
+// Neither a wedged Photos library nor a full disk recovers on that timescale,
+// so wait before trying the card again.
+const SAVE_FAILING_RETRY_DELAY_MS = 10 * 60 * 1000;
+
+// Every log line is a network POST, and a run that fails does it once per file.
+// The abandon line below carries the totals, so only the first few failures
+// need to say what the error actually was.
+const MAX_LOGGED_SAVE_FAILURES = 3;
 
 const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => (
   Promise.race( [
@@ -72,7 +82,7 @@ const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => (
 const useUsbAutoImport = ( ) => {
   const [onboardingShown] = useOnboardingShown( );
   const offloading = useRef( false );
-  const libraryWedgedUntil = useRef( 0 );
+  const savesFailingUntil = useRef( 0 );
   const backgroundTaskActive = useRef( false );
   // The scan runs every SCAN_INTERVAL_MS while foregrounded, and each remote
   // log line is a network POST, so logging every tick would flood the log.
@@ -95,8 +105,8 @@ const useUsbAutoImport = ( ) => {
     // An offload already in flight is normal overlap on the poll, not an error.
     if ( offloading.current ) return;
     if ( !onboardingShown ) { logDiag( "skip: onboarding not shown yet" ); return; }
-    if ( Date.now( ) < libraryWedgedUntil.current ) {
-      logDiag( "skip: waiting out a run of Photos-library save timeouts" );
+    if ( Date.now( ) < savesFailingUntil.current ) {
+      logDiag( "skip: waiting out a run of failed saves to the Photos library" );
       return;
     }
     offloading.current = true;
@@ -142,11 +152,16 @@ const useUsbAutoImport = ( ) => {
       // progress count is accurate. Track successes for the batch delete.
       const savedPaths: string[] = [];
       let failed = 0;
-      let consecutiveTimeouts = 0;
+      let consecutiveFailures = 0;
+      let loggedFailures = 0;
       let abandoned = 0;
+      // Which condition ended the run early, and so which marker reports it and
+      // what the banner tells the user.
+      let abandonReason: "timeouts" | "out-of-space" | "failures" | "" = "";
+      let lastError = "";
       for ( let i = 0; i < images.length; i += 1 ) {
         const { relativePath } = images[i];
-        if ( consecutiveTimeouts >= MAX_CONSECUTIVE_SAVE_TIMEOUTS ) {
+        if ( abandonReason ) {
           abandoned = images.length - i;
           break;
         }
@@ -178,29 +193,56 @@ const useUsbAutoImport = ( ) => {
           // is killed mid-loop, photos already saved to this point must not
           // be saved again on restart.
           markUsbImagesImported( [relativePath] );
-          consecutiveTimeouts = 0;
+          consecutiveFailures = 0;
         } catch ( err ) {
           failed += 1;
-          if ( err instanceof Error && err.message.includes( "timed out" ) ) {
-            consecutiveTimeouts += 1;
-          } else {
-            consecutiveTimeouts = 0;
+          consecutiveFailures += 1;
+          const timedOut = err instanceof Error && err.message.includes( "timed out" );
+          lastError = ( err instanceof Error
+            ? err.message
+            : String( err ) ).slice( 0, 200 );
+          // No room on the phone is a whole-device condition, not this file's
+          // problem — the next 156 copies cannot succeed either, so don't try
+          // them.
+          if ( ( err as { code?: string } )?.code === "out-of-space" ) {
+            abandonReason = "out-of-space";
+          } else if ( consecutiveFailures >= MAX_CONSECUTIVE_SAVE_FAILURES ) {
+            abandonReason = timedOut
+              ? "timeouts"
+              : "failures";
           }
-          logger.error( `USB offload: failed to save ${relativePath}`, err );
+          if ( loggedFailures < MAX_LOGGED_SAVE_FAILURES ) {
+            loggedFailures += 1;
+            logger.error( `USB offload: failed to save ${relativePath}`, err );
+          }
         }
         progress.setCounts( savedPaths.length, failed );
         updateUsbOffloadProgress( savedPaths.length, failed );
       }
 
-      if ( abandoned > 0 ) {
-        libraryWedgedUntil.current = Date.now( ) + LIBRARY_WEDGED_RETRY_DELAY_MS;
-        logger.errorWithExtra( "usb_offload_library_wedged", {
+      if ( abandonReason ) {
+        savesFailingUntil.current = Date.now( ) + SAVE_FAILING_RETRY_DELAY_MS;
+        // Distinct markers rather than one with a reason field: these are
+        // different bugs with different fixes, and the grouped summary is only
+        // useful if it can tell "the library is wedged again" from "the phone
+        // is full" without opening the entries.
+        const marker = {
+          timeouts: "usb_offload_library_wedged",
+          "out-of-space": "usb_offload_out_of_space",
+          failures: "usb_offload_saves_failing",
+        }[abandonReason];
+        logger.errorWithExtra( marker, {
           abandoned,
           saved: savedPaths.length,
           failed,
           total: images.length,
-          consecutiveTimeouts,
+          consecutiveFailures,
           timeoutMs: SAVE_TIMEOUT_MS,
+          retryDelayMs: SAVE_FAILING_RETRY_DELAY_MS,
+          // The last failure's text, so a run abandoned for a reason nothing
+          // here anticipated still says what it was. localizedDescription from
+          // the native side: a message, never a path.
+          lastError,
         } );
       }
 
@@ -221,11 +263,14 @@ const useUsbAutoImport = ( ) => {
       // log couldn't say whether the offload finished or the app died holding
       // it. Skipped only when the wedged line above already carries the same
       // counts.
-      if ( abandoned === 0 ) {
+      if ( !abandonReason ) {
         logger.info(
           `USB offload: saved ${savedPaths.length}, failed ${failed}; `
           + `deleted ${deletedFromDevice} from device (${deleteFailures} delete failures)`,
         );
+      }
+      if ( abandonReason === "out-of-space" ) {
+        progress.setNote( "There's no room left on this device." );
       }
       progress.setPhase( failed > 0
         ? "error"
