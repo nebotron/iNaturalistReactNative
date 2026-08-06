@@ -33,6 +33,11 @@ import {
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
+import {
+  clearPhotoImportMarker,
+  markPhotoImportStarted,
+  updatePhotoImportProgress,
+} from "sharedHelpers/photoImportMarker";
 import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
@@ -201,6 +206,9 @@ const PhotoGallery = ( {
     // report can be answered from the logs alone.
     logger.info( `Done tapped: importing ${selected.length} selected photo(s)` );
     const startedAt = Date.now( );
+    // An import the app never comes back from — see photoImportMarker.ts. The
+    // marker is reported by the next launch, not here.
+    markPhotoImportStarted( selected.length );
     // Three imports in the app log logged the tap above and no "settled" line
     // at all before the app was relaunched — the import wedged on one asset and
     // the log could only say that, not where or how far in. Report the progress
@@ -221,6 +229,7 @@ const PhotoGallery = ( {
       await onDone( selected, ( completed, failed ) => {
         settledCount = completed;
         failedSoFar = failed;
+        updatePhotoImportProgress( completed, failed );
         setImportedCount( completed );
         setFailedCount( failed );
       } );
@@ -228,6 +237,9 @@ const PhotoGallery = ( {
         `Import of ${selected.length} photo(s) settled in ${Date.now( ) - startedAt}ms`,
       );
     } finally {
+      // The import reached an end, however badly, so it is not one of the ones
+      // that vanish with the process.
+      clearPhotoImportMarker( );
       clearTimeout( stallTimer );
       importingRef.current = false;
       setImportingCount( 0 );

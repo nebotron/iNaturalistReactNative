@@ -25,6 +25,7 @@ import {
 import { formatApiDatetime } from "sharedHelpers/dateAndTime";
 import { LAST_CRASH_DATA, store as installDataMMKVStorage } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
+import { takeUnfinishedPhotoImport } from "sharedHelpers/photoImportMarker";
 import { logSentinelFiles } from "sharedHelpers/sentinelFiles";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
 import syncJoinedProjects from "sharedHelpers/syncJoinedProjects";
@@ -90,6 +91,20 @@ const useDeferredStartup = ( ) => {
     // should have a timeout to ensure they run eventually.
     const id1 = deferTask( "checkForPreviousCrash", checkForPreviousCrash, 30000 );
     const id2 = deferTask( "logSentinelFiles", logSentinelFiles, 30000 );
+    // A gallery import that never came back — the app was killed or the import
+    // is still wedged, and either way the "settled" line never made it out.
+    // See photoImportMarker.ts.
+    const idImport = deferTask( "reportUnfinishedPhotoImport", async () => {
+      const unfinished = takeUnfinishedPhotoImport( );
+      if ( !unfinished ) return;
+      logger.errorWithExtra( "photo_import_never_finished", {
+        selected: unfinished.selected,
+        settled: unfinished.settled,
+        failed: unfinished.failed,
+        msRunning: Date.now( ) - unfinished.startedAt,
+      } );
+    }, 30000 );
+
     const id3 = deferTask( "logStorageMetrics", async () => {
       const metrics = await getStorageMetrics( realm?.path );
       logger.infoWithExtra( "storage_metrics", metrics );
@@ -135,6 +150,7 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id11 );
       cancelIdleCallback( id12 );
       cancelIdleCallback( id13 );
+      cancelIdleCallback( idImport );
     };
   }, [i18n, realm] );
 };
