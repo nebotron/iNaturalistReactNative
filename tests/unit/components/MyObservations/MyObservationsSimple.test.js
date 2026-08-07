@@ -173,10 +173,10 @@ describe( "MyObservationsSimple", () => {
   describe( "grid view", ( ) => {
     describe( "portrait orientation", ( ) => {
       describe( "on a phone", ( ) => {
-        it( "should have 2 columns", async ( ) => {
+        it( "should have 1 full-width column", async ( ) => {
           renderMyObservations( "grid" );
           const list = screen.getByTestId( "MyObservationsAnimatedList" );
-          expect( list.props.numColumns ).toEqual( 2 );
+          expect( list.props.numColumns ).toEqual( 1 );
         } );
       } );
       // describe( "on a tablet", ( ) => {
@@ -193,11 +193,11 @@ describe( "MyObservationsSimple", () => {
     } );
     describe( "landscape orientation", ( ) => {
       describe( "on a phone", ( ) => {
-        it( "should have 2 columns", async ( ) => {
+        it( "should have 1 full-width column", async ( ) => {
           useDeviceOrientation.mockImplementation( ( ) => DEVICE_ORIENTATION_PHONE_LANDSCAPE );
           renderMyObservations( "grid" );
           const list = screen.getByTestId( "MyObservationsAnimatedList" );
-          expect( list.props.numColumns ).toEqual( 2 );
+          expect( list.props.numColumns ).toEqual( 1 );
         } );
       } );
       // describe( "on a tablet", ( ) => {

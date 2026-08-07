@@ -10,6 +10,8 @@ import {
 import { fetchSpeciesCounts } from "api/observations";
 import MatchSaveDiscardButtons from "components/Match/SaveDiscardButtons";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
+import { UPLOAD } from "components/ObsEdit/BottomButtons";
+import useMultiObsSaveAndAdvance from "components/ObsEdit/hooks/useMultiObsSaveAndAdvance";
 import {
   ActivityIndicator,
   Body1,
@@ -29,7 +31,12 @@ import compact from "lodash/compact";
 import find from "lodash/find";
 import { RealmContext } from "providers/contexts";
 import type { Node } from "react";
-import React, { useCallback, useEffect, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   ScrollView,
   StatusBar,
@@ -38,7 +45,9 @@ import DeviceInfo from "react-native-device-info";
 import Observation from "realmModels/Observation";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { log } from "sharedHelpers/logger";
+import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import saveObservation from "sharedHelpers/saveObservation";
+import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
@@ -53,6 +62,7 @@ import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import EstablishmentMeans from "./EstablishmentMeans";
+import IdentificationTips from "./IdentificationTips";
 import TaxonDetailsHeader, {
   OPTIONS as TAXON_DETAILS_HEADER_RIGHT_OPTIONS,
   SEARCH as TAXON_DETAILS_HEADER_RIGHT_SEARCH,
@@ -75,6 +85,13 @@ const { useRealm } = RealmContext;
 
 const isTablet = DeviceInfo.isTablet();
 
+// Screens that can make up a chain of taxon browsing (suggestions, taxon
+// search, and drilling into the taxonomy) pushed from the screen where the
+// identification actually started, e.g. ObsEdit
+const isBulkChainScreen = ( name: string ): boolean => name === "Suggestions"
+  || name === "TaxonDetails"
+  || name.includes( "TaxonSearch" );
+
 const TaxonDetails = ( ): Node => {
   // Local state
   const [invertToWhiteBackground, setInvertToWhiteBackground] = useState( false );
@@ -85,6 +102,9 @@ const TaxonDetails = ( ): Node => {
   // Plug into global state
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const currentEditingObservation = useStore( state => state.currentObservation );
+  const observations = useStore( state => state.observations );
+  const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
+  const bulkUploadMode = useStore( state => state.bulkUploadMode );
   const getCurrentObservation = useStore( state => state.getCurrentObservation );
   const setExploreView = useStore( state => state.setExploreView );
   const cameraRollUris = useStore( state => state.cameraRollUris );
@@ -94,7 +114,7 @@ const TaxonDetails = ( ): Node => {
   const navigation = useNavigation( );
   const { params } = useRoute( );
   const {
-    id, hideNavButtons, firstPhotoID, representativePhoto,
+    id, hideNavButtons, firstPhotoID, representativePhoto, rankLevel, selectableForExplore,
   } = params;
   const { t } = useTranslation( );
   const { isConnected } = useNetInfo( );
@@ -116,15 +136,52 @@ const TaxonDetails = ( ): Node => {
     history.lastIndexOf( "RootExplore" ),
   );
   const usableHistory = history.slice( usableStackIndex, history.length );
-  const fromObsDetails = usableHistory.includes( "ObsDetails" );
   const fromSuggestions = usableHistory.includes( "Suggestions" );
-  const fromObsEdit = usableHistory.includes( "ObsEdit" );
   const fromMatch = usableHistory.includes( "Match" );
   const usableRoutes = navState?.routes.slice( usableStackIndex, history.length ) || [];
 
+  // Find the Suggestions/SuggestionsTaxonSearch screen this TaxonDetails (or
+  // chain of ancestor TaxonDetails screens) was pushed from, so we can tell
+  // whether we're in the ObsEdit bulk identification flow, even after
+  // drilling into one or more ancestor taxa.
+  const bulkFlowRoute = find(
+    usableRoutes.slice().reverse(),
+    r => r.name === "Suggestions" || r.name === "SuggestionsTaxonSearch",
+  );
+  // Walk back past this chain of suggestions/taxon search/taxonomy screens to
+  // find what preceded it. Checking whether "ObsEdit" or "ObsDetails" appears
+  // *anywhere* in the tab's history is unreliable: an unrelated visit to
+  // either earlier in the session (e.g. from a deep link or notification that
+  // pushed a screen without resetting the stack) can linger further back in
+  // the same stack and get mistaken for this chain having come from there,
+  // which then pops the bulk ID flow into that stale screen instead of
+  // advancing to the next observation.
+  const bulkChainStartIndex = ( ( ) => {
+    let index = usableRoutes.length - 1;
+    while ( index >= 0 && isBulkChainScreen( usableRoutes[index].name ) ) {
+      index -= 1;
+    }
+    return index;
+  } )( );
+  const bulkChainStartRoute = usableRoutes[bulkChainStartIndex];
+  const fromObsEdit = bulkChainStartRoute?.name === "ObsEdit";
+  const fromObsDetails = bulkChainStartRoute?.name === "ObsDetails";
+  const { entryScreen: bulkEntryScreen, lastScreen: bulkLastScreen } = bulkFlowRoute?.params || {};
+  // bulkUploadMode means the user entered the bulk ID flow from My
+  // Observations, which is a multi-obs flow even when only one observation
+  // needs an ID. Without it, a one-observation bulk ID would fall through to
+  // the single-obs branch below and pop to ObsEdit instead of saving/uploading
+  // and returning to My Observations.
+  const isMultiObsCreateFlow = (
+    observations.length > 1 || savedOrUploadedMultiObsFlow || bulkUploadMode
+  ) && bulkEntryScreen === "ObsEdit" && bulkLastScreen === "ObsEdit";
+  const { saveAndAdvance } = useMultiObsSaveAndAdvance( {
+    transitionAnimation: ( ) => undefined,
+  } );
+
   // previous ObsDetails observation uuid
   const obsUuid = fromObsDetails
-    ? find( usableRoutes.slice().reverse(), r => r.name === "ObsDetails" ).params.uuid
+    ? bulkChainStartRoute?.params?.uuid
     : null;
   const { localObservation } = useLocalObservation( obsUuid );
   const { remoteObservation } = useRemoteObservation(
@@ -138,7 +195,7 @@ const TaxonDetails = ( ): Node => {
     mappableObservation = Observation.mapApiToRealm( remoteObservation );
   }
 
-  const showSelectButton = fromSuggestions || fromObsEdit;
+  const showSelectButton = fromSuggestions || fromObsEdit || !!selectableForExplore;
 
   // Determine if this taxon was automatically suggested or if the user chose
   // it themselves. If the user reached TaxonDetails from Match or
@@ -174,6 +231,26 @@ const TaxonDetails = ( ): Node => {
   );
 
   const taxon = remoteTaxon || localTaxon;
+
+  const [offlineAncestors, setOfflineAncestors] = useState( null );
+
+  const isNetworkError = !!error?.message?.match( /Network request failed/ );
+
+  useEffect( ( ) => {
+    const ancestorIds = localTaxon?.ancestor_ids;
+    if ( ancestorIds?.length > 0 && !offlineAncestors ) {
+      getAncestorsFromTaxonomyFile( Array.from( ancestorIds ) )
+        .then( ancestors => setOfflineAncestors( ancestors ) )
+        .catch( err => logger.error( "Failed to load offline ancestors", err ) );
+    }
+  }, [localTaxon, offlineAncestors] );
+
+  const taxonForDisplay = useMemo( ( ) => {
+    if ( taxon && !taxon.ancestors && offlineAncestors ) {
+      return { ...taxon, ancestors: offlineAncestors };
+    }
+    return taxon;
+  }, [taxon, offlineAncestors] );
 
   const { data: seenByCurrentUser } = useQuery(
     ["fetchSpeciesCounts", taxon?.id],
@@ -252,7 +329,9 @@ const TaxonDetails = ( ): Node => {
 
   const saveForLater = useCallback( async ( ) => {
     await saveObservationFromSheet( );
-    exitObservationFlow( );
+    exitObservationFlow( {
+      promptDeleteOriginalPhotos: shouldPromptDeleteOriginalPhotos( ),
+    } );
   }, [
     exitObservationFlow,
     saveObservationFromSheet,
@@ -262,6 +341,7 @@ const TaxonDetails = ( ): Node => {
     await saveObservationFromSheet( );
     exitObservationFlow( {
       navigate: ( ) => navigation.navigate( "LoginStackNavigator" ),
+      promptDeleteOriginalPhotos: shouldPromptDeleteOriginalPhotos( ),
     } );
   }, [exitObservationFlow, navigation, saveObservationFromSheet] );
 
@@ -275,17 +355,39 @@ const TaxonDetails = ( ): Node => {
 
   const displayTaxonDetails = ( ) => {
     if ( isLoading ) {
+      if ( taxonForDisplay?.ancestors?.length ) {
+        return (
+          <View className="mx-3">
+            <Taxonomy
+              taxon={taxonForDisplay}
+              hideNavButtons={hideNavButtons}
+              selectableForExplore={selectableForExplore}
+            />
+          </View>
+        );
+      }
       return <View className="m-3 flex-1 h-full justify-center"><ActivityIndicator /></View>;
     }
 
-    if ( error?.message?.match( /Network request failed/ ) ) {
+    if ( isNetworkError ) {
+      if ( !taxonForDisplay ) {
+        return (
+          <View className="py-[93px]">
+            <OfflineNotice
+              onPress={( ) => {
+                refresh();
+                refetch();
+              }}
+            />
+          </View>
+        );
+      }
       return (
-        <View className="py-[93px]">
-          <OfflineNotice
-            onPress={( ) => {
-              refresh();
-              refetch();
-            }}
+        <View className="mx-3">
+          <Taxonomy
+            taxon={taxonForDisplay}
+            hideNavButtons={hideNavButtons}
+            selectableForExplore={selectableForExplore}
           />
         </View>
       );
@@ -301,12 +403,17 @@ const TaxonDetails = ( ): Node => {
       <View className="mx-3">
         <EstablishmentMeans taxon={taxon} />
         <Wikipedia taxon={taxon} />
-        <Taxonomy taxon={taxon} hideNavButtons={hideNavButtons} />
+        <Taxonomy
+          taxon={taxonForDisplay}
+          hideNavButtons={hideNavButtons}
+          selectableForExplore={selectableForExplore}
+        />
         <TaxonMapPreview
           observation={mappableObservation}
           taxon={taxon}
           showSpeciesSeenCheckmark={currentUserHasSeenTaxon}
         />
+        {taxon.rank_level <= 10 && <IdentificationTips taxon={taxon} />}
       </View>
     );
   };
@@ -315,7 +422,15 @@ const TaxonDetails = ( ): Node => {
     <CarouselDots length={photos.length} index={mediaIndex} />
   );
 
-  const showExploreButton = !hideNavButtons && isConnected && !fromMatch;
+  // Rank level from taxon data, or from a hint passed by callers (e.g. SpeciesGame) that
+  // know the rank before taxon data has loaded from the API.
+  const effectiveRankLevel = taxon?.rank_level ?? rankLevel;
+  const showExploreButton = !hideNavButtons && isConnected && !fromMatch && taxon != null;
+  // The game button should remain available on the species page even in flows that
+  // hide the other nav buttons (e.g. "add an id" / Suggestions), so it is intentionally
+  // not gated on hideNavButtons. It is still hidden in the match flow.
+  const showGameButton = isConnected !== false && !fromMatch
+    && effectiveRankLevel != null && effectiveRankLevel <= 10;
 
   const displayTaxonTitle = useCallback( ( ) => (
     <View
@@ -348,10 +463,26 @@ const TaxonDetails = ( ): Node => {
           />
         </View>
       )}
+      {showGameButton && (
+        <View className="ml-2">
+          <INatIconButton
+            icon="play"
+            onPress={( ) => navigation.navigate( "SpeciesGame", { taxonId: taxon?.id ?? id } )}
+            accessibilityLabel="Play species identification game"
+            size={20}
+            color={colors.white}
+            className="bg-inatGreen rounded-full"
+            mode="contained"
+            preventTransparency
+          />
+        </View>
+      )}
     </View>
   ), [
     currentUserHasSeenTaxon,
+    id,
     showExploreButton,
+    showGameButton,
     navigation,
     setExploreView,
     t,
@@ -434,7 +565,7 @@ const TaxonDetails = ( ): Node => {
               pointerEvents="box-none"
             >
               {isConnected && !isTablet && photos.length > 1 && displayScrollDots()}
-              {taxon && displayTaxonTitle()}
+              {( taxon || showGameButton ) && displayTaxonTitle()}
             </View>
           </View>
           <View className="bg-white py-5 h-full flex-1">
@@ -442,6 +573,7 @@ const TaxonDetails = ( ): Node => {
           </View>
         </View>
         <MediaViewerModal
+          autoDetectSubject
           showModal={mediaViewerVisible}
           onClose={( ) => setMediaViewerVisible( false )}
           photos={photos}
@@ -454,7 +586,10 @@ const TaxonDetails = ( ): Node => {
             if ( action === "save" ) {
               await saveObservationFromSheet( );
             }
-            exitObservationFlow( );
+            exitObservationFlow( {
+              promptDeleteOriginalPhotos: action === "save"
+                && shouldPromptDeleteOriginalPhotos( ),
+            } );
           }}
         />
       )}
@@ -465,8 +600,15 @@ const TaxonDetails = ( ): Node => {
             className="max-w-[500px] w-full"
             level="focus"
             text={t( "SELECT-THIS-TAXON" )}
-            onPress={( ) => {
-              if ( fromSuggestions && !currentUser ) {
+            onPress={async ( ) => {
+              if ( selectableForExplore ) {
+                const exploreRouteName = history.includes( "RootExplore" )
+                  ? "RootExplore"
+                  : "Explore";
+                navigation.dispatch(
+                  StackActions.popTo( exploreRouteName, { selectedTaxonForFilter: taxon } ),
+                );
+              } else if ( fromSuggestions && !currentUser ) {
                 setSheetVisible( true );
               } else {
                 updateTaxon( );
@@ -478,6 +620,25 @@ const TaxonDetails = ( ): Node => {
                       identAt: Date.now(),
                     } ),
                   );
+                } else if ( isMultiObsCreateFlow ) {
+                  const numObservations = useStore.getState( ).observations.length;
+                  await saveAndAdvance( bulkUploadMode
+                    ? UPLOAD
+                    : "save" );
+                  if ( numObservations > 1 ) {
+                    // In the bulk ID flow the user enters Suggestions directly
+                    // from My Observations, so there is no ObsEdit screen to
+                    // pop back to; popping to ObsEdit would drop them into the
+                    // editor instead of advancing. Return to Suggestions (now
+                    // showing the next observation), matching what choosing a
+                    // suggestion directly does. The regular multi-obs create
+                    // flow still returns to ObsEdit.
+                    navigation.dispatch( StackActions.popTo(
+                      fromObsEdit
+                        ? "ObsEdit"
+                        : "Suggestions",
+                    ) );
+                  }
                 } else {
                   navigation.dispatch( StackActions.popTo( "ObsEdit" ) );
                 }

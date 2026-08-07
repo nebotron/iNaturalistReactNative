@@ -1,114 +1,91 @@
-import { useNetInfo } from "@react-native-community/netinfo";
-import { fetchSearchResults } from "api/search";
-import type { ApiOpts } from "api/types";
+import { searchTaxa } from "api/taxa";
+import type { ApiTaxon } from "api/types";
+import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import { RealmContext } from "providers/contexts";
 import {
   useCallback, useEffect, useMemo, useState,
 } from "react";
-import type Realm from "realm";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import type { RealmTaxon } from "realmModels/types";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import validateRealmSearch from "sharedHelpers/validateRealmSearch";
-import { useAuthenticatedQuery, useIconicTaxa } from "sharedHooks";
+import { useIconicTaxa } from "sharedHooks";
 
 const { useRealm } = RealmContext;
-
-// we're already getting all this taxon information anytime we make this API
-// call, so we might as well store it in realm. we can remove this if we're
-// worried about the cache getting too large
-function saveTaxaToRealm( taxa: Taxon[], realm: Realm ) {
-  safeRealmWrite( realm, ( ) => {
-    taxa.forEach( remoteTaxon => {
-      realm.create(
-        "Taxon",
-        Taxon.forUpdate( remoteTaxon ),
-        UpdateMode.Modified,
-      );
-    } );
-  }, "saving remote taxon from useTaxonSearch" );
-}
 
 const useTaxonSearch = ( taxonQueryArg = "" ) => {
   const realm = useRealm( );
   const iconicTaxa = useIconicTaxa( { reload: false } );
-  const { isConnected } = useNetInfo( );
-  // Remove leading and trailing whitespace, no need to perform new queries or
-  // potentially get different results b/c of meaningless whitespace
   const taxonQuery = taxonQueryArg.trim();
   const [localTaxa, setLocalTaxa] = useState<RealmTaxon[] | null>( null );
+  const [isUpdatingLocalDb, setIsUpdatingLocalDb] = useState( false );
 
-  const shouldFetchRemote = taxonQuery.length > 0;
-
-  const {
-    data: remoteTaxa, refetch, isLoading, isFetched,
-  } = useAuthenticatedQuery(
-    ["fetchTaxonSuggestions", taxonQuery],
-    async ( optsWithAuth: ApiOpts ) => {
-      const apiTaxa = await fetchSearchResults(
-        {
-          q: taxonQuery,
-          sources: "taxa",
-          fields: {
-            taxon: Taxon.LIMITED_TAXON_FIELDS,
-          },
-        },
-        optsWithAuth,
-      );
-      return apiTaxa?.map( taxon => Taxon.mapApiToRealm( taxon ) ) || [];
-    },
-    {
-      enabled: shouldFetchRemote,
-    },
-  );
-
+  // Do the substring match in JS rather than via Realm's query language.
+  // Realm's CONTAINS operator on this property was unreliable in
+  // practice (results that plainly contained the substring, e.g.
+  // "Brown-headed Cowbird" for a query of "brownheaded", did not come
+  // back), so we fetch the cached taxa and match manually to guarantee
+  // correct, hyphen/whitespace-agnostic substring matching offline.
+  //
+  // We normalize each taxon's name on the fly instead of reading the
+  // stored _searchableName, because that field is null for taxa written
+  // through the observation-save path (Observation.mapApiToRealm ->
+  // Taxon.mapApiToRealm never calls compileSearchableName) and may be
+  // stale on taxa cached before the current normalization. Recomputing
+  // guarantees every cached taxon matches all hyphen/space variants.
   const safeRealmSearch = useCallback( async ( searchString: string ) => {
     try {
       const { cleanedQuery } = validateRealmSearch( searchString );
-      return await realm.objects( "Taxon" ).filtered(
-        // "name TEXT $0"
-        // + " || preferredCommonName TEXT $0"
-        // + " || name CONTAINS[c] $0"
-
-        // "name CONTAINS[c] $0"
-        // + " || preferredCommonName CONTAINS[c] $0"
-
-        "_searchableName TEXT $0 || _searchableName CONTAINS[c] $0"
-
-        + " LIMIT(50)",
-        cleanedQuery,
-      );
+      const lowerQuery = cleanedQuery.toLowerCase();
+      const matches: { taxon: RealmTaxon; isExact: boolean }[] = [];
+      const allTaxa = realm.objects( "Taxon" );
+      for ( let i = 0; i < allTaxa.length && matches.length < 50; i += 1 ) {
+        const taxon = allTaxa[i];
+        const searchableName = Taxon.compileSearchableName( taxon ).toLowerCase( );
+        if ( searchableName.includes( lowerQuery ) ) {
+          const isExact = searchableName.split( ";" ).includes( lowerQuery );
+          matches.push( { taxon, isExact } );
+        }
+      }
+      // Exact name matches (scientific or common name equal to the query)
+      // should appear before partial/substring matches.
+      matches.sort( ( a, b ) => Number( b.isExact ) - Number( a.isExact ) );
+      return matches.map( match => match.taxon );
     } catch ( error ) {
       throw new Error( `Search failed: ${error.message}` );
     }
   }, [realm] );
 
+  // Fetches taxa matching the current query from the API and saves them to
+  // Realm, so they show up in future offline searches. Then re-runs the
+  // local search so the newly-saved taxa show up immediately.
+  const updateLocalSpeciesDb = useCallback( async ( ) => {
+    if ( taxonQuery.length === 0 ) return;
+    setIsUpdatingLocalDb( true );
+    try {
+      const apiToken = await getJWT( );
+      const remoteTaxa = await searchTaxa( { q: taxonQuery }, { api_token: apiToken } );
+      if ( remoteTaxa && remoteTaxa.length > 0 ) {
+        const mappedTaxa = remoteTaxa.map(
+          ( remoteTaxon: ApiTaxon ) => Taxon.mapApiToRealm( remoteTaxon, realm ),
+        );
+        safeRealmWrite( realm, ( ) => {
+          mappedTaxa.forEach( mappedTaxon => {
+            realm.create( "Taxon", Taxon.forUpdate( mappedTaxon ), UpdateMode.Modified );
+          } );
+        }, "updating local species db from search" );
+        setLocalTaxa( await safeRealmSearch( taxonQuery ) );
+      }
+    } finally {
+      setIsUpdatingLocalDb( false );
+    }
+  }, [taxonQuery, realm, safeRealmSearch] );
+
   useEffect( ( ) => {
     let isSubscribed = true;
-    const saveOrSearchRealmTaxa = async ( ) => {
-      // save taxa to realm if we have results from the API
-      if ( realm && remoteTaxa?.length > 0 ) {
-        saveTaxaToRealm( remoteTaxa, realm );
-      }
-      // Search for local taxa if we have a query, if remote results are not loading
-      // and if remote results are empty
+    const searchLocalTaxa = async ( ) => {
       if ( taxonQuery.length === 0 ) {
-        if ( isSubscribed ) setLocalTaxa( null );
-        return;
-      }
-
-      if ( isLoading ) return;
-
-      // Don't fall back to local results until the remote query has actually
-      // run at least once. useAuthenticatedQuery starts with enabled=false
-      // while it resolves the auth state, which makes isLoading=false even
-      // though no remote fetch has happened yet — without this check we'd
-      // flash the "Showing offline search results" callout in that window.
-      // Skip the gate when we know we're offline and will need remote taxa
-      if ( shouldFetchRemote && !isFetched && isConnected !== false ) return;
-
-      if ( remoteTaxa && remoteTaxa.length > 0 ) {
         if ( isSubscribed ) setLocalTaxa( null );
         return;
       }
@@ -122,63 +99,49 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       }
     };
 
-    saveOrSearchRealmTaxa( );
+    searchLocalTaxa( );
 
     return ( ) => {
       isSubscribed = false;
     };
   }, [
-    isConnected,
-    isFetched,
-    isLoading,
     realm,
-    remoteTaxa,
     safeRealmSearch,
-    shouldFetchRemote,
     taxonQuery,
   ] );
 
-  return useMemo( () => {
+  const searchResult = useMemo( () => {
     // Show iconic taxa by default (empty query)
     if ( taxonQuery.length === 0 ) {
       return {
         taxa: iconicTaxa,
         refetch: () => undefined,
         isLoading: false,
-        isLocal: false,
       };
     }
 
-    // Show remote taxa if available
-    if ( remoteTaxa && remoteTaxa.length > 0 ) {
-      return {
-        taxa: remoteTaxa,
-        refetch,
-        isLoading,
-        isLocal: false,
-      };
-    }
-
-    // Show local taxa if available
+    // Show local taxa from offline search
     if ( localTaxa !== null && localTaxa.length > 0 ) {
       return {
         taxa: localTaxa,
         refetch: () => undefined,
         isLoading: false,
-        isLocal: true,
       };
     }
 
-    // Still loading or no results
+    // No results (loading or empty)
     return {
-      taxa: isLoading
-        ? []
-        : localTaxa || [],
-      refetch,
-      isLoading,
-      isLocal: false,
+      taxa: [],
+      refetch: () => undefined,
+      isLoading: false,
     };
-  }, [taxonQuery, remoteTaxa, localTaxa, iconicTaxa, refetch, isLoading] );
+  }, [taxonQuery, localTaxa, iconicTaxa] );
+
+  return {
+    ...searchResult,
+    isUpdatingLocalDb,
+    updateLocalSpeciesDb,
+  };
 };
 
 export default useTaxonSearch;

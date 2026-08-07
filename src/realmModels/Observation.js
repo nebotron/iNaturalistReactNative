@@ -5,9 +5,12 @@ import {
   PROJECT_SUMMARY_FIELDS,
 } from "api/fields";
 import { Alert } from "react-native";
-import { getNowISO } from "sharedHelpers/dateAndTime";
+import { formatDateStringFromTimestamp, getNowISO } from "sharedHelpers/dateAndTime";
+import { recordUploadedDevicePhotoUrisFromObservation } from
+  "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
 import readExifFromMultiplePhotos from "sharedHelpers/parseExif";
+import { privacyZoneGeoprivacy } from "sharedHelpers/privacyZone";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import * as uuid from "uuid";
 
@@ -34,6 +37,27 @@ export const UNSYNCED_FILTER
   + " || ANY observationSounds._synced_at == null"
   + " || ANY projectObservations._synced_at == null"
   + " || ANY observationFieldValues._synced_at == null";
+
+// The photo library reports every asset's creation date, but a photo whose
+// metadata was stripped (a screenshot, a download, anything that arrived
+// through a messaging app) carries no EXIF date, and the observation was
+// imported with no date at all. That also silently cost it the tracked-location
+// auto-fill, which needs a timestamp to match a recorded fix against — and the
+// photos with no EXIF date are exactly the ones with no EXIF GPS either, so the
+// import that most needed a tracked location was the one that never got one.
+const galleryPhotosTimestamp = photos => {
+  for ( const photo of photos || [] ) {
+    const timestamp = Number( photo?.image?.timestamp );
+    if ( Number.isFinite( timestamp ) && timestamp > 0 ) {
+      // CameraRoll reports seconds; tolerate a milliseconds value rather than
+      // dating the observation to the year 5138.
+      return formatDateStringFromTimestamp( timestamp > 1e11
+        ? Math.round( timestamp / 1000 )
+        : timestamp );
+    }
+  }
+  return null;
+};
 
 // noting that methods like .toJSON( ) are only accessible when the model
 // class is extended with Realm.Object per this issue:
@@ -71,6 +95,7 @@ class Observation extends Realm.Object {
     },
     updated_at: true,
     viewer_trusted_by_observer: true,
+    reviewed_by: true,
     votes: Vote.VOTE_FIELDS,
     private_geojson: true,
     private_location: true,
@@ -104,6 +129,7 @@ class Observation extends Realm.Object {
     quality_grade: true,
     taxon: {
       id: true,
+      is_active: true,
       name: true,
       preferred_common_name: true,
       // rank and rank_level are needed to italicize scientific names
@@ -122,7 +148,15 @@ class Observation extends Realm.Object {
     identifications: {
       uuid: true,
       current: true,
+      taxon: {
+        id: true,
+        is_active: true,
+      },
+      user: {
+        id: true,
+      },
     },
+    reviewed_by: true,
     comments: {
       uuid: true,
     },
@@ -138,6 +172,7 @@ class Observation extends Realm.Object {
     taxon_geoprivacy: true,
     project_observations: PROJECT_OBSERVATION_FIELDS,
     ofvs: OBSERVATION_FIELD_VALUE_FIELDS,
+    votes: Vote.VOTE_FIELDS,
   };
 
   static async new( obs ) {
@@ -216,6 +251,18 @@ class Observation extends Realm.Object {
       if ( !existingObsPhoto ) {
         mappedObsPhoto._created_at = new Date( );
         mappedObsPhoto.photo._created_at = new Date( );
+      } else if ( existingObsPhoto.originalDevicePhotoUri ) {
+        // ObservationPhoto is an embedded object, so it has no identity of its
+        // own and "modified" can't merge into it: assigning this list replaces
+        // the stored one wholesale, and anything the API doesn't return is
+        // gone. originalDevicePhotoUri is local-only and never comes back from
+        // the API, so without this it survived only until the observation was
+        // next downloaded — after which the link between an uploaded
+        // observation and the photo still sitting in the device library was
+        // lost for good. Delete Unfaved then had nothing left but an exact
+        // same-second capture-time match, which is why the photos it stopped
+        // finding were the older ones.
+        mappedObsPhoto.originalDevicePhotoUri = existingObsPhoto.originalDevicePhotoUri;
       }
       return mappedObsPhoto;
     } );
@@ -250,8 +297,13 @@ class Observation extends Realm.Object {
       _synced_at: new Date( ),
       // obs detail on web says geojson coords are preferred over lat/long
       // https://github.com/inaturalist/inaturalist/blob/df6572008f60845b8ef5972a92a9afbde6f67829/app/webpack/observations/show/ducks/observation.js#L145
-      latitude: obs.geojson && obs.geojson.coordinates && obs.geojson.coordinates[1],
-      longitude: obs.geojson && obs.geojson.coordinates && obs.geojson.coordinates[0],
+      // ...but list requests don't ask for geojson, and without the fallback
+      // these keys would overwrite the coordinates the response did include
+      // with undefined, leaving synced observations with no location at all.
+      latitude: ( obs.geojson && obs.geojson.coordinates && obs.geojson.coordinates[1] )
+        ?? obs.latitude,
+      longitude: ( obs.geojson && obs.geojson.coordinates && obs.geojson.coordinates[0] )
+        ?? obs.longitude,
       privateLatitude: obs.private_geojson && obs.private_geojson.coordinates
                       && obs.private_geojson.coordinates[1],
       privateLongitude: obs.private_geojson && obs.private_geojson.coordinates
@@ -277,6 +329,7 @@ class Observation extends Realm.Object {
         localObs._created_at = new Date( );
       }
     }
+
     return localObs;
   }
 
@@ -298,15 +351,29 @@ class Observation extends Realm.Object {
       timestamps._synced_at = null;
     }
 
-    const addTimestampsToEvidence = evidence => ( evidence
-      ? evidence.map( record => ( {
-        ...record,
-        ...timestamps,
-      } ) )
+    const addTimestampsToEvidence = ( evidence, existingEvidence ) => ( evidence
+      ? evidence.map( record => {
+        // Don't bump _updated_at on already-synced evidence in existing observations:
+        // their _synced_at timestamp already correctly reflects that they are up to date.
+        // Bumping _updated_at would cause needsSync() to return true and trigger an
+        // unnecessary (or broken) re-upload of the photo file.
+        if ( existingObservation && record._synced_at ) {
+          // Exception: if position changed, bump _updated_at so the new order syncs.
+          const existingRecord = existingEvidence?.find( r => r.uuid === record.uuid );
+          if ( existingRecord && existingRecord.position !== record.position ) {
+            return { ...record, ...timestamps };
+          }
+          return record;
+        }
+        return { ...record, ...timestamps };
+      } )
       : evidence );
 
     const taxon = obs.taxon || null;
-    const observationPhotos = addTimestampsToEvidence( obs.observationPhotos );
+    const observationPhotos = addTimestampsToEvidence(
+      obs.observationPhotos,
+      existingObservation?.observationPhotos,
+    );
     const observationSounds = addTimestampsToEvidence( obs.observationSounds );
 
     const obsToSave = {
@@ -320,13 +387,52 @@ class Observation extends Realm.Object {
       observationSounds,
     };
 
+    // A save that clears a previously-set location is never something the user
+    // asked for — nothing in the app removes an observation's coordinates — so
+    // it always means the caller passed in a stale in-memory copy captured
+    // before a background tracked-location fill completed. Keep the location
+    // that's already on the record rather than wiping it and relying on the
+    // tracked-location pass to put it back on the next save.
+    if (
+      existingObservation?.latitude != null
+      && existingObservation?.longitude != null
+      && ( obsToSave.latitude == null || obsToSave.longitude == null )
+    ) {
+      logger.warn(
+        `Observation ${obs.uuid} save would have cleared a previously-set location; `
+        + `keeping ${existingObservation.latitude},${existingObservation.longitude}`,
+      );
+      obsToSave.latitude = existingObservation.latitude;
+      obsToSave.longitude = existingObservation.longitude;
+      obsToSave.positional_accuracy ??= existingObservation.positional_accuracy;
+      obsToSave.place_guess ??= existingObservation.place_guess;
+    }
+
+    // Every local save runs through here, so this is where the user's privacy
+    // zone gets enforced: anything saved inside it is obscured before it can
+    // be uploaded. Runs after the location is restored above so a stale save
+    // can't slip a zone location past the check by arriving without one.
+    const zoneGeoprivacy = privacyZoneGeoprivacy( obsToSave );
+    if ( zoneGeoprivacy ) {
+      obsToSave.geoprivacy = zoneGeoprivacy;
+      logger.info( `Obscuring observation ${obs.uuid} because it is inside the privacy zone` );
+    }
+
     safeRealmWrite( realm, ( ) => {
       // using 'modified' here for the case where a new observation has the same Taxon
       // as a previous observation; otherwise, realm will error out
       // also using modified for updating observations which were already saved locally
       realm.create( "Observation", obsToSave, "modified" );
     }, "saving local observation for upload in Observation" );
-    return realm.objectForPrimaryKey( "Observation", obs.uuid );
+    const savedObservation = realm.objectForPrimaryKey( "Observation", obs.uuid );
+    // Saving is what makes the device photos "saved" as far as the photo
+    // gallery's Hide Saved toggle is concerned, so index them now rather than
+    // waiting for upload. The index outlives the observation, so the photos
+    // stay hidden even if it's later deleted.
+    if ( savedObservation ) {
+      recordUploadedDevicePhotoUrisFromObservation( realm, savedObservation );
+    }
+    return savedObservation;
   }
 
   static mapObservationForUpload( obs ) {
@@ -381,6 +487,14 @@ class Observation extends Realm.Object {
       needs_sync: typeof obs.needsSync === "function"
         ? obs.needsSync()
         : obs.needs_sync,
+      votes: obs.votes?.length > 0
+        ? Array.from( obs.votes ).map( v => ( {
+          id: v.id,
+          user_id: v.user_id,
+          vote_flag: v.vote_flag,
+          vote_scope: v.vote_scope,
+        } ) )
+        : [],
     };
   }
 
@@ -439,6 +553,9 @@ class Observation extends Realm.Object {
     const photoUris = photos.map( photo => photo?.image?.uri );
     try {
       const newObservation = await readExifFromMultiplePhotos( photoUris );
+      if ( !newObservation.observed_on_string ) {
+        newObservation.observed_on_string = galleryPhotosTimestamp( photos );
+      }
       return Observation.new( newObservation );
     } catch ( createObservationFromGalleryError ) {
       logger.error(
@@ -633,10 +750,14 @@ class Observation extends Realm.Object {
   }
 
   missingBasics() {
+    const missingId = !this.uuid;
     const missingDate = !Date.parse( this.observed_on_string ) && !this.time_observed_at;
     const missingCoords = typeof ( this.latitude ) !== "number"
       && typeof ( this.privateLatitude ) !== "number";
-    return missingDate || missingCoords;
+    const missingEvidence = ( this.observationPhotos?.length ?? 0 ) === 0
+      && ( this.observationSounds?.length ?? 0 ) === 0;
+    const missingTaxon = !this.taxon;
+    return missingId || missingDate || missingCoords || missingEvidence || missingTaxon;
   }
 }
 

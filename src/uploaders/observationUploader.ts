@@ -1,11 +1,14 @@
 import {
   createObservation,
+  faveObservation,
   updateObservation,
 } from "api/observations";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import { AppState } from "react-native";
 import type Realm from "realm";
 import type { RealmObservation, RealmObservationPojo } from "realmModels/types";
+import { recordUploadedDevicePhotoUrisFromObservation } from
+  "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
 import {
   markRecordUploaded,
@@ -17,8 +20,13 @@ import {
 } from "uploaders/mediaUploader";
 import { RecoverableError, RECOVERY_BY } from "uploaders/utils/errorHandling";
 import { trackObservationUpload } from "uploaders/utils/progressTracker";
+import withRetry from "uploaders/utils/retry";
+import { attachUploadFailureDetails } from "uploaders/utils/uploadFailureDetails";
 
 const logger = log.extend( "observationUploader" );
+
+// Past this an upload is slow enough to be worth a log line of its own.
+const SLOW_UPLOAD_MS = 30000;
 
 interface UploadOptions {
   api_token?: string;
@@ -66,13 +74,13 @@ async function createOrUpdateObservation(
   };
 
   if ( wasPreviouslySynced ) {
-    return updateObservation( {
+    return withRetry( () => updateObservation( {
       ...uploadParams,
       id: newObs.uuid,
       ignore_photos: true,
-    }, options );
+    }, options ) );
   }
-  return createObservation( uploadParams, options );
+  return withRetry( () => createObservation( uploadParams, options ) );
 }
 
 function createErrorContext( stage: string, startTime: number ) {
@@ -114,13 +122,19 @@ async function uploadObservation(
     const {
       errorContext, totalDuration,
     } = createErrorContext( "media_upload", uploadStartTime );
-    logger.error(
+    error.message = `Media upload failed: ${error.message}`;
+    const errorWithDetails = attachUploadFailureDetails(
+      error,
+      "media_upload",
+      uploadStartTime,
+    );
+    logger.errorWithExtra(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Media upload failed",
       error,
+      errorWithDetails.uploadFailureDetails,
     );
-    error.message = `Media upload failed: ${error.message}`;
-    throw error;
+    throw errorWithDetails;
   }
 
   // Step 2: upload or modify observation with revalidated token
@@ -144,13 +158,19 @@ async function uploadObservation(
     const {
       errorContext, totalDuration,
     } = createErrorContext( "observation_upload", uploadStartTime );
-    logger.error(
+    error.message = `Observation upload failed: ${error.message}`;
+    const errorWithDetails = attachUploadFailureDetails(
+      error,
+      "observation_upload",
+      uploadStartTime,
+    );
+    logger.errorWithExtra(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Observation upload failed",
       error,
+      errorWithDetails.uploadFailureDetails,
     );
-    error.message = `Observation upload failed: ${error.message}`;
-    throw error;
+    throw errorWithDetails;
   }
 
   const { uuid: obsUUID } = response.results[0];
@@ -171,38 +191,92 @@ async function uploadObservation(
     const {
       errorContext, totalDuration,
     } = createErrorContext( "media_attachment", uploadStartTime );
-    logger.error(
+    error.message = `Media attachment failed: ${error.message}`;
+    const errorWithDetails = attachUploadFailureDetails(
+      error,
+      "media_attachment",
+      uploadStartTime,
+    );
+    logger.errorWithExtra(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Media attachment failed",
       error,
+      errorWithDetails.uploadFailureDetails,
     );
-    error.message = `Media attachment failed: ${error.message}`;
-    throw error;
+    throw errorWithDetails;
   }
 
   // Step 4: mark observation as uploaded in realm
   try {
     markRecordUploaded( observation.uuid, null, "Observation", response, realm );
+    const uploadedObservation = realm.objectForPrimaryKey<RealmObservation>(
+      "Observation",
+      observation.uuid,
+    );
+    if ( uploadedObservation ) {
+      recordUploadedDevicePhotoUrisFromObservation( realm, uploadedObservation );
+    }
   } catch ( error ) {
     const {
       errorContext, totalDuration,
     } = createErrorContext( "realm_update", uploadStartTime );
-    logger.error(
+    const realmError = attachUploadFailureDetails(
+      new Error( `Realm update failed: ${error.message}` ),
+      "realm_update",
+      uploadStartTime,
+    );
+    logger.errorWithExtra(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Realm update failed",
       error,
+      realmError.uploadFailureDetails,
     );
-    throw new Error( `Realm update failed: ${error.message}` );
+    throw realmError;
+  }
+
+  // Step 5: favorite observation if it was locally favorited
+  const wasLocallyFavorited = observation.votes?.filter(
+    v => v?.vote_scope === null,
+  ).length > 0;
+
+  if ( wasLocallyFavorited ) {
+    try {
+      const apiToken = await validateAndGetToken( );
+      // The observation was created moments ago, so a 404 here means the
+      // server hasn't caught up with it yet, not that it doesn't exist —
+      // worth another try rather than silently dropping the user's fave.
+      await withRetry( () => faveObservation(
+        { uuid: obsUUID },
+        { ...opts, api_token: apiToken },
+      ), { alsoRetryStatuses: [404] } );
+    } catch ( error ) {
+      const { uploadFailureDetails } = attachUploadFailureDetails(
+        error,
+        "favorite",
+        uploadStartTime,
+      );
+      logger.errorWithExtra(
+        `Upload: Failed to favorite ${observation.uuid} after upload`,
+        error,
+        uploadFailureDetails,
+      );
+    }
   }
 
   const totalDuration = Date.now( ) - uploadStartTime;
   const { unsyncedObservationPhotos, unsyncedObservationSounds } = mediaItems;
   const uploadedMediaCount = unsyncedObservationPhotos.length + unsyncedObservationSounds.length;
-  logger.info(
-    `Upload: Completed ${observation.uuid} - total: ${totalDuration}ms`
-      + `, media: ${mediaDuration}ms, obs: ${obsDuration}ms, attach: ${attachDuration}ms`
-      + `, uploaded items: ${uploadedMediaCount}`,
-  );
+  // A successful upload takes ~7s (p50 over 636 logged uploads), and logging
+  // every one of them was the single largest source of log volume. The tail is
+  // what's worth reading — p99 was 94s and the slowest 173s — so only report
+  // uploads slow enough that the user waited on them.
+  if ( totalDuration > SLOW_UPLOAD_MS ) {
+    logger.info(
+      `Upload: Slow completion ${observation.uuid} - total: ${totalDuration}ms`
+        + `, media: ${mediaDuration}ms, obs: ${obsDuration}ms, attach: ${attachDuration}ms`
+        + `, uploaded items: ${uploadedMediaCount}`,
+    );
+  }
 
   // note: removed observation fetch at the end of the upload, because we don't actually
   // need this operation here

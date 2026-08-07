@@ -6,6 +6,20 @@ import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "parseExif.ts" );
 
+const MAX_EXIF_PHOTOS_TO_SCAN = 25;
+
+const hasCompleteUnifiedExif = ( unifiedExif: {
+  latitude?: number;
+  longitude?: number;
+  observed_on_string?: string | null;
+  positional_accuracy?: number;
+} ) => (
+  !!unifiedExif.latitude
+  && !!unifiedExif.longitude
+  && !!unifiedExif.observed_on_string
+  && !!unifiedExif.positional_accuracy
+);
+
 class UsePhotoExifDateFormatError extends Error {}
 // https://wbinnssmith.com/blog/subclassing-error-in-modern-javascript/
 Object.defineProperty( UsePhotoExifDateFormatError.prototype, "name", {
@@ -77,54 +91,49 @@ const readExifFromMultiplePhotos = async ( photoUris: string[] ) => {
   const normalizedUris = photoUris.map( uri => ( uri.startsWith( "/" )
     ? `file://${uri}`
     : uri ) );
-  const responses = await Promise.allSettled( normalizedUris.map( uri => Exify.read( uri ) ) );
 
-  // If any of the EXIF reads were rejected, log the reasons, but do continue
-  const rejectedReasons = responses
-    .filter( r => r.status === "rejected" )
-    .map( r => r.reason );
-  if ( rejectedReasons.length > 0 ) {
-    rejectedReasons.forEach(
-      reason => logger.error( "Failed to read EXIF data from a photo:", reason ),
-    );
+  for ( const uri of normalizedUris.slice( 0, MAX_EXIF_PHOTOS_TO_SCAN ) ) {
+    try {
+      // Read photos one at a time so we can stop early once we have complete
+      // EXIF data, rather than reading every photo up front
+      // eslint-disable-next-line no-await-in-loop
+      const currentPhotoExif = await Exify.read( uri );
+      if ( currentPhotoExif ) {
+        const {
+          GPSLatitude,
+          GPSLatitudeRef,
+          GPSLongitude,
+          GPSLongitudeRef,
+          GPSHPositioningError,
+        } = currentPhotoExif;
+
+        if ( !unifiedExif.latitude && GPSLatitude ) {
+          unifiedExif.latitude
+            = GPSLatitudeRef === "S"
+              ? -GPSLatitude
+              : GPSLatitude;
+        }
+        if ( !unifiedExif.longitude && GPSLongitude ) {
+          unifiedExif.longitude = GPSLongitudeRef === "W"
+            ? -GPSLongitude
+            : GPSLongitude;
+        }
+        if ( !unifiedExif.observed_on_string ) {
+          unifiedExif.observed_on_string = formatExifDateAsString( currentPhotoExif ) || null;
+        }
+        if ( GPSHPositioningError && !unifiedExif.positional_accuracy ) {
+          unifiedExif.positional_accuracy = GPSHPositioningError;
+        }
+
+        if ( hasCompleteUnifiedExif( unifiedExif ) ) {
+          break;
+        }
+      }
+    } catch ( reason ) {
+      logger.error( "Failed to read EXIF data from a photo:", reason );
+    }
   }
 
-  const allExifPhotos = responses
-    .filter( r => r.status === "fulfilled" )
-    .filter( r => r.value )
-    .map( r => r.value );
-  allExifPhotos
-    .filter( x => x )
-    .forEach( currentPhotoExif => {
-      // TODO: TS says currentPhotoExif could be null, but the filters should exclude null ?
-      if ( !currentPhotoExif ) return;
-
-      const {
-        GPSLatitude,
-        GPSLatitudeRef,
-        GPSLongitude,
-        GPSLongitudeRef,
-        GPSHPositioningError,
-      } = currentPhotoExif;
-
-      if ( !unifiedExif.latitude && GPSLatitude ) {
-        unifiedExif.latitude
-          = GPSLatitudeRef === "S"
-            ? -GPSLatitude
-            : GPSLatitude;
-      }
-      if ( !unifiedExif.longitude && GPSLongitude ) {
-        unifiedExif.longitude = GPSLongitudeRef === "W"
-          ? -GPSLongitude
-          : GPSLongitude;
-      }
-      if ( !unifiedExif.observed_on_string ) {
-        unifiedExif.observed_on_string = formatExifDateAsString( currentPhotoExif ) || null;
-      }
-      if ( GPSHPositioningError && !unifiedExif.positional_accuracy ) {
-        unifiedExif.positional_accuracy = GPSHPositioningError;
-      }
-    } );
   return unifiedExif;
 };
 

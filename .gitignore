@@ -118,6 +118,23 @@ artifacts/
 # Rubocop cache
 **/tmp/rubocop_cache
 
-# Claude Code local config except CLAUDE.md
+# Claude Code local config except CLAUDE.md and the skills we track
 .claude/*
 !.claude/CLAUDE.md
+!.claude/skills
+
+yolov8n.pt
+
+# Python
+__pycache__/
+*.pyc
+
+# Subject-detector training/eval artifacts (regenerable; not app assets)
+datasets/
+runs/
+*.eval.csv
+crop_training.json
+brightness_training.json
+
+# Generated at install/build time by scripts/writeAppCommit.js
+src/sharedHelpers/appCommit.ts

@@ -1,5 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import { THUMBNAIL_CLASS } from "appConstants/classNames";
+import buildExploreV2QueryParams from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import {
   Body1,
   Body3,
@@ -226,6 +227,18 @@ const ExploreV2Header = ( ) => {
       >
         <BackButton />
         {headerContent}
+        <View className="mr-2">
+          <ContainedSquareButton
+            accessibilityHint={t( "Opens-route-hotspots" )}
+            accessibilityLabel={t( "Wildlife-Hotspots" )}
+            backgroundColor={colors.darkGray}
+            icon="location"
+            onPress={() => navigation.navigate( "WildlifeHotspots", {
+              filterParams: buildExploreV2QueryParams( state ),
+            } )}
+            testID="ExploreV2Header.hotspotsButton"
+          />
+        </View>
         <ContainedSquareButton
           accessibilityHint={t( "Opens-search-interface" )}
           accessibilityLabel={t( "Search" )}

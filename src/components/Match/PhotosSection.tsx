@@ -155,7 +155,6 @@ const PhotosSection = ( {
           <PhotoCount count={observationPhotos.length} />
         </View>
       )}
-
     </Pressable>
   );
 

@@ -28,8 +28,11 @@ const ExploreHeaderCount = ( {
 }: Props ): Node => {
   const { t } = useTranslation( );
 
+  // The Identify view reclaims this space for its own interface.
+  if ( exploreView === "identify" ) { return null; }
+
   const renderText = ( ) => {
-    if ( exploreView === "observations" ) {
+    if ( exploreView === "observations" || exploreView === "identify" ) {
       return t( "X-Observations", { count } );
     }
     if ( exploreView === "species" ) {
@@ -38,13 +41,16 @@ const ExploreHeaderCount = ( {
     if ( exploreView === "identifiers" ) {
       return t( "X-Identifiers", { count } );
     }
+    if ( exploreView === "hotspots" ) {
+      return t( "Hotspots" );
+    }
     return t( "X-Observers", { count } );
   };
 
   const renderHeader = ( ) => {
     if ( isFetching ) {
       return <ActivityIndicator size={25} />;
-    } if ( count !== null ) {
+    } if ( count !== null || exploreView === "hotspots" ) {
       return (
         <>
           <INatIcon
@@ -54,7 +60,7 @@ const ExploreHeaderCount = ( {
           />
           <Body2
             maxFontSizeMultiplier={1.5}
-            className="text-white ml-3"
+            className="text-white ml-2"
           >
             {renderText( )}
           </Body2>
@@ -66,7 +72,7 @@ const ExploreHeaderCount = ( {
 
   return (
     <Pressable
-      className="h-[40px] flex-row items-center justify-center"
+      className="h-[32px] flex-row items-center justify-center"
       onPress={onPress}
       accessibilityRole="summary"
     >

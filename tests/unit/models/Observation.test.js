@@ -1,6 +1,9 @@
+import * as Exify from "@lodev09/react-native-exify";
 import Observation from "realmModels/Observation";
 import ObservationFieldValue from "realmModels/ObservationFieldValue";
 import ProjectObservation from "realmModels/ProjectObservation";
+import { getPreviouslyUploadedDevicePhotoUrisSet } from
+  "sharedHelpers/duplicateUploadedDevicePhotos";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import factory from "tests/factory";
 import * as uuid from "uuid";
@@ -52,6 +55,28 @@ describe( "Observation", ( ) => {
       const mappedObservation = Observation.mapApiToRealm( mockRemoteObservation );
       expect( mappedObservation.projectObservations ).toHaveLength( 1 );
       expect( mappedObservation.projectObservations[0]._created_at ).toBeInstanceOf( Date );
+    } );
+
+    // The API never returns it, and the embedded photo list is replaced
+    // wholesale on every sync, so without carrying it over an uploaded
+    // observation loses the link to the photo in the device library the first
+    // time it's downloaded again.
+    it( "should keep the stored originalDevicePhotoUri the API doesn't return", ( ) => {
+      const remoteObservationPhoto = factory( "RemoteObservationPhoto" );
+      const realm = {
+        objectForPrimaryKey: ( ) => ( {
+          observationPhotos: [{
+            uuid: remoteObservationPhoto.uuid,
+            originalDevicePhotoUri: "ph://ABC/L0/001",
+          }],
+        } ),
+      };
+      const mappedObservation = Observation.mapApiToRealm( {
+        uuid: "obs-uuid",
+        observation_photos: [remoteObservationPhoto],
+      }, realm );
+      expect( mappedObservation.observationPhotos[0].originalDevicePhotoUri )
+        .toEqual( "ph://ABC/L0/001" );
     } );
 
     it( "should map ofvs to observationFieldValues with created_at metadata", ( ) => {
@@ -171,6 +196,90 @@ describe( "Observation", ( ) => {
 
       const unsynced = Observation.filterUnsyncedObservations( global.realm );
       expect( unsynced.filtered( `uuid == "${obsUuid}"` ).length ).toBe( 1 );
+    } );
+  } );
+
+  describe( "saveLocalObservationForUpload", ( ) => {
+    it( "should index the device photos it was imported from", async ( ) => {
+      const obsUuid = uuid.v4( );
+      const devicePhotoUri = `ph://${uuid.v4( )}`;
+
+      await Observation.saveLocalObservationForUpload( {
+        uuid: obsUuid,
+        observationPhotos: [{
+          uuid: uuid.v4( ),
+          position: 0,
+          originalDevicePhotoUri: devicePhotoUri,
+          photo: { uuid: uuid.v4( ), url: "file:///local.jpg" },
+        }],
+      }, global.realm );
+
+      const indexed = global.realm.objects( "UploadedDevicePhotoUri" )
+        .filtered( "uri == $0", devicePhotoUri );
+      expect( indexed.length ).toBe( 1 );
+    } );
+  } );
+
+  describe( "createObservationFromGalleryPhotos", ( ) => {
+    const galleryPhoto = timestamp => ( {
+      image: { uri: "file:///photo.jpg", timestamp },
+    } );
+
+    beforeEach( ( ) => {
+      Exify.read.mockResolvedValue( undefined );
+    } );
+
+    it( "should use the photo's timestamp when it has no EXIF date", async ( ) => {
+      const obs = await Observation.createObservationFromGalleryPhotos( [
+        galleryPhoto( "1754467200" ),
+      ] );
+      // observed_on_string has no timezone, so it parses back as local time
+      expect( new Date( obs.observed_on_string ).getTime( ) ).toEqual( 1754467200 * 1000 );
+    } );
+
+    it( "should treat a milliseconds timestamp as milliseconds", async ( ) => {
+      const obs = await Observation.createObservationFromGalleryPhotos( [
+        galleryPhoto( 1754467200000 ),
+      ] );
+      expect( new Date( obs.observed_on_string ).getTime( ) ).toEqual( 1754467200 * 1000 );
+    } );
+
+    it( "should prefer the EXIF date over the photo's timestamp", async ( ) => {
+      Exify.read.mockResolvedValue( { DateTimeOriginal: "2018:03:07 08:19:49" } );
+      const obs = await Observation.createObservationFromGalleryPhotos( [
+        galleryPhoto( "1754467200" ),
+      ] );
+      expect( obs.observed_on_string ).toEqual( "2018-03-07T08:19:49" );
+    } );
+
+    it( "should leave the date unset when there is no EXIF date or timestamp", async ( ) => {
+      const obs = await Observation.createObservationFromGalleryPhotos( [
+        galleryPhoto( undefined ),
+      ] );
+      expect( obs.observed_on_string ).toBeFalsy( );
+    } );
+  } );
+
+  describe( "deleteLocalObservation", ( ) => {
+    it( "should keep hiding the device photos it was imported from", async ( ) => {
+      const obsUuid = uuid.v4( );
+      const devicePhotoUri = `ph://${uuid.v4( )}`;
+      await Observation.saveLocalObservationForUpload( {
+        uuid: obsUuid,
+        observationPhotos: [{
+          uuid: uuid.v4( ),
+          position: 0,
+          originalDevicePhotoUri: devicePhotoUri,
+          photo: { uuid: uuid.v4( ), url: "file:///local.jpg" },
+        }],
+      }, global.realm );
+
+      Observation.deleteLocalObservation( global.realm, obsUuid );
+
+      expect( global.realm.objectForPrimaryKey( "Observation", obsUuid ) ).toBeNull( );
+      expect(
+        getPreviouslyUploadedDevicePhotoUrisSet( global.realm ).has( devicePhotoUri ),
+      ).toBe( true );
     } );
   } );
 } );

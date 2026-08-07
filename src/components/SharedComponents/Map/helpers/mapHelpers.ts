@@ -1,6 +1,6 @@
 import type { MapBoundaries } from "providers/ExploreContext";
 import Config from "react-native-config";
-import type { LatLng, Region } from "react-native-maps";
+import type { BoundingBox, LatLng, Region } from "react-native-maps";
 import createUTFPosition from "sharedHelpers/createUTFPosition";
 import getDataForPixel from "sharedHelpers/fetchUTFGridData";
 
@@ -12,6 +12,21 @@ export const TILE_URL = API_URL.match( /api\.inaturalist\.org/ )
   ? API_URL.replace( "api.inaturalist", "tiles.inaturalist" )
   : API_URL;
 const POINT_TILES_ENDPOINT = `${TILE_URL}/points`;
+
+// getMapBoundaries is one of the few MapView methods that round-trips to the
+// native view and returns a promise, so it rejects ("Invalid view returned
+// from registry, expecting RNMapsMapView, got: (null)") when the native view
+// is torn down between the call and the response — e.g. onRegionChangeComplete
+// firing while the screen is being unmounted. Nothing can be done about it and
+// nobody needs boundaries for a map that no longer exists, so resolve to
+// undefined rather than leaving an unhandled promise rejection behind.
+export async function getMapBoundariesSafely(
+  mapView: { getMapBoundaries: ( ) => Promise<BoundingBox> } | null | undefined,
+): Promise<BoundingBox | undefined> {
+  return mapView
+    ?.getMapBoundaries( )
+    .catch( ( ) => undefined );
+}
 
 export function calculateZoom( width: number, delta: number ) {
   return Math.log2( 360 * ( width / 256 / delta ) ) + 1;
@@ -72,6 +87,160 @@ export function latitudeDeltaToMeters(
   latitude: number,
 ): number {
   return latitudeDelta * metersPerDegreeLatitude( latitude );
+}
+
+export interface GeoJsonPolygon {
+  coordinates: number[][][];
+}
+
+export function boundingBoxGeojsonToBounds(
+  bbox?: GeoJsonPolygon | null,
+): MapBoundaries | null {
+  const ring = bbox?.coordinates?.[0];
+  if ( !ring?.length ) {
+    return null;
+  }
+
+  const lngs = ring.map( coordinate => coordinate[0] );
+  const lats = ring.map( coordinate => coordinate[1] );
+
+  return {
+    swlat: Math.min( ...lats ),
+    swlng: Math.min( ...lngs ),
+    nelat: Math.max( ...lats ),
+    nelng: Math.max( ...lngs ),
+  };
+}
+
+export function haversineMeters(
+  lat1: number,
+  lng1: number,
+  lat2: number,
+  lng2: number,
+): number {
+  const earthRadiusMeters = 6371000;
+  const toRadians = ( degrees: number ) => ( degrees * Math.PI ) / 180;
+  const latDifference = toRadians( lat2 - lat1 );
+  const lngDifference = toRadians( lng2 - lng1 );
+  const haversine = Math.sin( latDifference / 2 ) ** 2
+    + Math.cos( toRadians( lat1 ) )
+    * Math.cos( toRadians( lat2 ) )
+    * Math.sin( lngDifference / 2 ) ** 2;
+
+  return earthRadiusMeters * 2 * Math.atan2( Math.sqrt( haversine ), Math.sqrt( 1 - haversine ) );
+}
+
+export function accuracyToEncompassBounds(
+  centerLat: number,
+  centerLng: number,
+  bounds: MapBoundaries,
+): number {
+  const corners: [number, number][] = [
+    [bounds.swlat, bounds.swlng],
+    [bounds.swlat, bounds.nelng],
+    [bounds.nelat, bounds.swlng],
+    [bounds.nelat, bounds.nelng],
+  ];
+
+  return Math.max(
+    ...corners.map( ( [lat, lng] ) => haversineMeters(
+      centerLat,
+      centerLng,
+      lat,
+      lng,
+    ) ),
+  );
+}
+
+export const DEFAULT_OBSERVATION_LOCATION_ACCURACY_METERS = 1000;
+
+export function hasValidMapCoordinates(
+  latitude?: number | null,
+  longitude?: number | null,
+): boolean {
+  if ( latitude == null || longitude == null ) {
+    return false;
+  }
+  if ( Number.isNaN( latitude ) || Number.isNaN( longitude ) ) {
+    return false;
+  }
+  if ( latitude === 0 && longitude === 0 ) {
+    return false;
+  }
+  return latitude >= -90
+    && latitude <= 90
+    && longitude >= -180
+    && longitude <= 180;
+}
+
+interface ObservationWithCoordinates {
+  privateLatitude?: number | null;
+  latitude?: number | null;
+  privateLongitude?: number | null;
+  longitude?: number | null;
+  positional_accuracy?: number | null;
+}
+
+export function getObservationCoordinates(
+  observation?: ObservationWithCoordinates | null,
+): { latitude: number; longitude: number } | null {
+  const latitude = observation?.privateLatitude ?? observation?.latitude;
+  const longitude = observation?.privateLongitude ?? observation?.longitude;
+
+  if ( !hasValidMapCoordinates( latitude, longitude ) ) {
+    return null;
+  }
+
+  return {
+    latitude: latitude as number,
+    longitude: longitude as number,
+  };
+}
+
+export function regionForAccuracy(
+  latitude: number,
+  longitude: number,
+  accuracyMeters: number,
+  radiusToMapHeight: number,
+  mapDimensionsRatio: number,
+): Region {
+  const latitudeDelta = metersToLatitudeDelta(
+    accuracyMeters,
+    latitude,
+  ) / radiusToMapHeight;
+
+  return {
+    latitude,
+    longitude,
+    latitudeDelta,
+    longitudeDelta: latitudeDelta * mapDimensionsRatio,
+  };
+}
+
+export function regionForObservationLocation(
+  observation: ObservationWithCoordinates | null | undefined,
+  radiusToMapHeight: number | undefined,
+  mapDimensionsRatio: number | undefined,
+): Region | null {
+  if ( !radiusToMapHeight || !mapDimensionsRatio ) {
+    return null;
+  }
+
+  const coordinates = getObservationCoordinates( observation );
+  if ( !coordinates ) {
+    return null;
+  }
+
+  const accuracyMeters = observation?.positional_accuracy
+    ?? DEFAULT_OBSERVATION_LOCATION_ACCURACY_METERS;
+
+  return regionForAccuracy(
+    coordinates.latitude,
+    coordinates.longitude,
+    accuracyMeters,
+    radiusToMapHeight,
+    mapDimensionsRatio,
+  );
 }
 
 export function regionFromBounds( bounds: MapBoundaries ): Region {

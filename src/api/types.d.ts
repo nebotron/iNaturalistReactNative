@@ -156,6 +156,7 @@ export interface ApiTaxon {
   iconic_taxon_name?: string;
   id?: number;
   name?: string;
+  observations_count?: number;
   preferred_common_name?: string;
   rank_level?: number;
   taxonPhotos?: { photo: ApiPhoto }[];
@@ -198,9 +199,15 @@ export interface ApiComment {
 
 export interface ApiIdentification {
   body?: string;
+  category?: "improving" | "supporting" | "leading" | "maverick";
+  created_at?: string;
+  current?: boolean;
+  hidden?: boolean;
+  id?: number;
+  observation?: { uuid?: string };
   taxon?: ApiTaxon;
   user?: ApiUser;
-  hidden?: boolean;
+  uuid?: string;
 }
 
 export interface ApiNotification {
@@ -230,18 +237,31 @@ export interface ApiObservationFieldValue {
   value: string;
 }
 
+export interface ApiVote {
+  id?: number;
+  created_at?: string | null;
+  user_id?: number;
+  vote_flag?: boolean;
+  // Faves are the votes whose scope is null; a non-null scope is some other
+  // kind of vote (e.g. "needs_id").
+  vote_scope?: string | null;
+}
+
 export interface ApiObservation extends ApiRecord {
   comments?: ApiComment[];
   identifications?: ApiIdentification[];
   non_traditional_projects?: { project: ApiProjectSummary }[];
   observation_photos?: ApiObservationPhoto[];
   observation_sounds?: ApiObservationSound[];
+  observed_on?: string | null;
   project_observations?: ApiProjectObservation[];
   ofvs?: ApiObservationFieldValue[];
+  quality_grade?: string;
   taxon?: ApiTaxon;
   time_observed_at?: string;
   user?: ApiUser;
   uuid: string;
+  votes?: ApiVote[];
 }
 
 export interface ApiRelationship extends ApiRecord {
@@ -286,6 +306,8 @@ export interface ApiObservationsSearchParams extends ApiParams {
   created_d2?: string;
   d1?: string;
   d2?: string;
+  hour?: number[];
+  id_above?: number;
   id_below?: number;
   order?: typeof ORDER_ASC | typeof ORDER_DESC;
   order_by?: typeof ORDER_BY_CREATED_AT |

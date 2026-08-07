@@ -1,4 +1,6 @@
 import { StackActions, useNavigation, useRoute } from "@react-navigation/native";
+import { UPLOAD } from "components/ObsEdit/BottomButtons";
+import useMultiObsSaveAndAdvance from "components/ObsEdit/hooks/useMultiObsSaveAndAdvance";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { useCallback } from "react";
 import useStore from "stores/useStore";
@@ -15,16 +17,32 @@ const useNavigateWithTaxonSelected = (
     NoBottomTabStackScreenProps<"Suggestions" | "SuggestionsTaxonSearch">["navigation"] &
     TabStackScreenProps<"Suggestions" | "SuggestionsTaxonSearch">["navigation"]
   >( );
-  const { params } = useRoute<
+  const { name: routeName, params } = useRoute<
     NoBottomTabStackScreenProps<"Suggestions" | "SuggestionsTaxonSearch">["route"] &
     TabStackScreenProps<"Suggestions" | "SuggestionsTaxonSearch">["route"]
   >( );
   const { entryScreen, lastScreen } = params || {};
   const currentObservation = useStore( state => state.currentObservation );
+  const observations = useStore( state => state.observations );
+  const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
+  const bulkUploadMode = useStore( state => state.bulkUploadMode );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const vision = options?.vision;
 
-  const navigateWithTaxonSelected = useCallback( ( selectedTaxon: object | undefined ) => {
+  // bulkUploadMode means the user entered the bulk ID flow from My
+  // Observations, which is a multi-obs flow even when only one observation
+  // needs an ID. Without it, a one-observation bulk ID would fall through to
+  // the single-obs branches below and dump the user in ObsEdit instead of
+  // saving/uploading and returning to My Observations.
+  const isMultiObsCreateFlow = (
+    observations.length > 1 || savedOrUploadedMultiObsFlow || bulkUploadMode
+  ) && entryScreen === "ObsEdit" && lastScreen === "ObsEdit";
+
+  const { saveAndAdvance } = useMultiObsSaveAndAdvance( {
+    transitionAnimation: ( ) => undefined,
+  } );
+
+  const navigateWithTaxonSelected = useCallback( async ( selectedTaxon: object | undefined ) => {
     if ( selectedTaxon === undefined ) {
       updateObservationKeys( {
         owners_identification_from_vision: false,
@@ -35,6 +53,27 @@ const useNavigateWithTaxonSelected = (
         owners_identification_from_vision: vision,
         taxon: selectedTaxon,
       } );
+    }
+
+    if ( selectedTaxon !== undefined && isMultiObsCreateFlow ) {
+      const numObservations = useStore.getState( ).observations.length;
+      await saveAndAdvance( bulkUploadMode
+        ? UPLOAD
+        : "save" );
+      if ( numObservations > 1 ) {
+        if ( routeName === "SuggestionsTaxonSearch" ) {
+          // Explicitly navigate back to Suggestions (now showing the next
+          // observation in the bulk flow) rather than relying on goBack,
+          // which can silently no-op if there's no history to pop to.
+          if ( navigation.canGoBack( ) ) {
+            navigation.goBack( );
+          } else {
+            navigation.navigate( "Suggestions", { entryScreen, lastScreen } );
+          }
+        }
+        return;
+      }
+      return;
     }
 
     // checking for previous screen here rather than a synced/unsynced observation
@@ -59,10 +98,14 @@ const useNavigateWithTaxonSelected = (
       navigation.navigate( "ObsEdit", { lastScreen: "Suggestions" } );
     }
   }, [
+    bulkUploadMode,
     currentObservation?.uuid,
     entryScreen,
+    isMultiObsCreateFlow,
     lastScreen,
     navigation,
+    routeName,
+    saveAndAdvance,
     updateObservationKeys,
     vision,
   ] );

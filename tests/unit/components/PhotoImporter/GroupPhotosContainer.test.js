@@ -111,18 +111,39 @@ describe( "GroupPhotosContainer", ( ) => {
 
     const { groupedPhotos } = useStore.getState( );
 
-    const firstPhotoCombinedPressable = screen.getByTestId(
-      `GroupPhotos.${groupedPhotos[0].photos[0].image.uri}`,
+    // The separate button lives on the combined photo itself
+    const separatePhotosButton = screen.getByTestId(
+      `GroupPhotos.separate.${groupedPhotos[0].photos[0].image.uri}`,
     );
-    const secondPhotoCombinedPressable = screen.getByTestId(
-      `GroupPhotos.${groupedPhotos[1].photos[0].image.uri}`,
-    );
-    fireEvent.press( firstPhotoCombinedPressable );
-    fireEvent.press( secondPhotoCombinedPressable );
-    const separatePhotosButton = screen.getByLabelText( /Separate Photos/ );
     fireEvent.press( separatePhotosButton );
 
     const photoCount = screen.queryByTestId( "photo-count" );
     expect( photoCount ).toBeFalsy( );
+  } );
+
+  it( "duplicates the photo whose duplicate button was pressed", async ( ) => {
+    useStore.setState( { groupedPhotos: mockGroupedPhotos } );
+    renderComponent( <GroupPhotosContainer /> );
+
+    const duplicatePhotosButton = screen.getByTestId(
+      `GroupPhotos.duplicate.${mockGroupedPhotos[0].photos[0].image.uri}`,
+    );
+    fireEvent.press( duplicatePhotosButton );
+
+    await screen.findByTestId(
+      `GroupPhotos.${mockGroupedPhotos[0].photos[0].image.uri}`,
+    );
+
+    const { groupedPhotos } = useStore.getState( );
+    expect( groupedPhotos ).toHaveLength( 4 );
+    expect( groupedPhotos[1].photos[0].image.uri ).not.toEqual(
+      mockGroupedPhotos[0].photos[0].image.uri,
+    );
+    expect( groupedPhotos[2].photos[0].image.uri ).toEqual(
+      mockGroupedPhotos[1].photos[0].image.uri,
+    );
+    expect( groupedPhotos[3].photos[0].image.uri ).toEqual(
+      mockGroupedPhotos[2].photos[0].image.uri,
+    );
   } );
 } );

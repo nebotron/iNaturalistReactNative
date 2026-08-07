@@ -105,12 +105,10 @@ exports[`TaxonResult should render correctly 1`] = `
       }
     >
       <View
+        onLayout={[Function]}
         style={
           [
             [
-              {
-                "maxHeight": 210,
-              },
               {
                 "overflow": "hidden",
               },
@@ -118,16 +116,19 @@ exports[`TaxonResult should render correctly 1`] = `
                 "position": "relative",
               },
               {
-                "borderBottomLeftRadius": 8,
-                "borderBottomRightRadius": 8,
-                "borderTopLeftRadius": 8,
-                "borderTopRightRadius": 8,
+                "maxHeight": 210,
               },
               {
                 "height": 62,
               },
               {
                 "width": 62,
+              },
+              {
+                "borderBottomLeftRadius": 8,
+                "borderBottomRightRadius": 8,
+                "borderTopLeftRadius": 8,
+                "borderTopRightRadius": 8,
               },
               {
                 "justifyContent": "center",
@@ -166,6 +167,9 @@ exports[`TaxonResult should render correctly 1`] = `
                 },
                 {
                   "position": "relative",
+                },
+                {
+                  "overflow": "hidden",
                 },
               ],
             ]

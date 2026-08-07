@@ -32,7 +32,8 @@ import {
   store as installDataMMKVStorage,
   LAST_CRASH_DATA,
 } from "sharedHelpers/installData";
-import { reactQueryRetry } from "sharedHelpers/logging";
+import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
+import { startSlowLoadMonitoring } from "sharedHelpers/slowLoadTracker";
 import DeviceInfo from "react-native-device-info";
 import useRozenite, { HaltedLaunch, shouldHaltLaunchForDebug } from "sharedHooks/useRozenite";
 import { createMMKVStorageAdapter } from "@rozenite/storage-plugin";
@@ -52,10 +53,12 @@ LogBox.ignoreLogs( [
 // traces
 if (
   !__DEV__
-  && typeof (
-    // $FlowIgnore
-    HermesInternal?.enablePromiseRejectionTracker === "function"
-  )
+  // The parens used to wrap the whole comparison, so this was
+  // `typeof ( ... === "function" )` — always the string "boolean", i.e. always
+  // truthy. The guard only worked because RN always runs Hermes; on any engine
+  // without the tracker it would have thrown at startup.
+  // $FlowIgnore
+  && typeof HermesInternal?.enablePromiseRejectionTracker === "function"
 ) {
   // $FlowIgnore
   HermesInternal.enablePromiseRejectionTracker( {
@@ -85,6 +88,20 @@ const jsErrorHandler = ( e, isFatal ) => {
   // if ( !e.name && !e.message ) return;
   if ( isFatal ) {
     logger.error( "Fatal JS Error: ", e );
+    try {
+      // Store crash data for retrieval on next app launch, same as the
+      // native exception handler below, so the full stack (not just the
+      // one line a user can see/copy from the alert) is captured in logs.
+      const crashData = {
+        error: `${e?.message}\n\n${e?.stack}`,
+        screen: getCurrentRoute()?.name || "",
+        timestamp: new Date().toISOString(),
+        appVersion: DeviceInfo.getVersion(),
+      };
+      installDataMMKVStorage.setItem( LAST_CRASH_DATA, JSON.stringify( crashData ) );
+    } catch ( storageError ) {
+      logger.error( "Failed to save fatal JS error context", storageError );
+    }
     Alert.alert( "Fatal JS Error", `${e.message}\n\n${e.stack}` );
   } else {
     // This should get logged by ErrorBoundary. For some reason this handler
@@ -140,9 +157,13 @@ const queryClient = new QueryClient( {
   defaultOptions: {
     queries: {
       retry: reactQueryRetry,
+      retryDelay: handleRetryDelay,
     },
   },
 } );
+
+// Report the fetches the UI sits on a spinner waiting for
+startSlowLoadMonitoring( queryClient );
 
 const storageAdapters = [
   createMMKVStorageAdapter( {

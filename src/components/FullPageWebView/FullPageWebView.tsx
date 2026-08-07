@@ -87,6 +87,15 @@ export function onShouldStartLoadWithRequest(
     return true;
   }
 
+  // A WebView navigating its own blank frame is not a link the user followed.
+  // It has no domain, so it fell through to the "not an allowed domain" branch
+  // below and was handed to Linking.openURL, which can't open about: URLs —
+  // one "Failed to open about:blank" in the remote log per blank frame, for a
+  // condition that is entirely normal.
+  if ( request.url === "about:blank" ) {
+    return false;
+  }
+
   // If we're going to a different anchor on the same page, also fine
   const requestUrl = new URL( request.url );
   const requestDomain = requestUrl.host.split( "." ).slice( -2 ).join( "." );

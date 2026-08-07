@@ -10,10 +10,8 @@ const useNonAuthenticatedQuery = (
 ) => useQuery( {
   queryKey: [...queryKey, queryOptions.allowAnonymousJWT],
   queryFn: queryFunction,
-  retry: ( failureCount, error ) => reactQueryRetry( failureCount, error, {
-    queryKey,
-  } ),
-  retryDelay: ( failureCount, error ) => handleRetryDelay( failureCount, error ),
+  retry: reactQueryRetry,
+  retryDelay: handleRetryDelay,
   ...queryOptions,
 } );
 

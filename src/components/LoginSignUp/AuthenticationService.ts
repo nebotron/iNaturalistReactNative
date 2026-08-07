@@ -19,28 +19,18 @@ import { Alert, Platform } from "react-native";
 import Config from "react-native-config";
 import * as RNLocalize from "react-native-localize";
 import RNRestart from "react-native-restart";
-import type { SensitiveInfoError } from "react-native-sensitive-info";
-import RNSInfo, { ErrorCode, isSensitiveInfoError } from "react-native-sensitive-info";
+import RNSInfo from "react-native-sensitive-info";
 import Realm, { UpdateMode } from "realm";
 import realmConfig from "realmModels/index";
 import changeLanguage from "sharedHelpers/changeLanguage";
 import { getInstallID } from "sharedHelpers/installData";
-import { log, logFileDirectory, logWithoutRemote } from "sharedHelpers/logger";
+import { log, logFileDirectory } from "sharedHelpers/logger";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { setFirebaseDataCollectionEnabled } from "sharedHelpers/tracking";
-import useStore from "stores/useStore";
 import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 
-function isDebugModeSync( ): boolean {
-  return useStore.getState().layout.debugModeEnabled === true;
-}
-
 const logger = log.extend( "AuthenticationService" );
-// The remote transport in the default logger uses many of the methods in this
-// module. Using a separate logger that only writes to disk avoids some
-// potential for infinite loops.
-const localLogger = logWithoutRemote.extend( "AuthenticationService" );
 
 // Base API domain can be overridden (in case we want to use staging URL) -
 // either by placing it in .env file, or in an environment variable.
@@ -50,6 +40,13 @@ const API_HOST: string = Config.OAUTH_API_URL || process.env.OAUTH_API_URL || "h
 // (safe margin). Actually they expire in 24 hours, but ideally they would
 // expire every 30 mins, so might as well be futureproof.
 const JWT_EXPIRATION_MINS = 25;
+
+// How long past that we'll keep using a token the API wouldn't let us refresh,
+// when the refresh failed because we couldn't reach the API rather than because
+// it rejected us (see getJWT). Comfortably inside the 24 hours these tokens
+// really last, so the fallback covers an ordinary network outage; past it, a
+// refresh has been failing long enough that a null token is the honest answer.
+const JWT_ACTUAL_EXPIRATION_MINS = 60;
 
 interface AuthCache {
   isLoggedIn: boolean | null;
@@ -91,41 +88,11 @@ async function getSensitiveItem(
     keychainService: "app" as const,
   },
 ) {
-  let exists;
-  try {
-    exists = await RNSInfo.hasItem( key, options );
-  } catch ( e ) {
-    if ( isSensitiveInfoError( e ) ) {
-      const hasItemError = e as SensitiveInfoError;
-      localLogger.info(
-        `RNSInfo.hasItem error for ${key}: ${hasItemError.message}`,
-      );
-    }
-    throw e;
-  }
+  const exists = await RNSInfo.hasItem( key, options );
   if ( !exists ) {
     return null;
   }
-
-  try {
-    return await RNSInfo.getItem( key, options );
-  } catch ( e ) {
-    if ( isSensitiveInfoError( e ) ) {
-      const getItemError = e as SensitiveInfoError;
-      if ( isDebugModeSync() ) {
-        switch ( getItemError.code ) {
-          case ErrorCode.NOT_FOUND:
-            // Value doesn't exist
-            localLogger.info( `RNSInfo.getItem not available for ${key}` );
-            break;
-          default:
-            localLogger.info( `RNSInfo.getItem unknown error for ${key}: ${getItemError.message}` );
-            break;
-        }
-      }
-    }
-    throw e;
-  }
+  return RNSInfo.getItem( key, options );
 }
 
 async function setSensitiveItem( key: string, value: string, options = {} ) {
@@ -136,21 +103,9 @@ async function setSensitiveItem( key: string, value: string, options = {} ) {
     ...options,
     accessControl: "none" as const,
   };
-  try {
-    const result = await RNSInfo.setItem( key, value, actualOptions );
-    clearAuthCache( );
-    return result;
-  } catch ( e ) {
-    if ( isSensitiveInfoError( e ) ) {
-      const setItemError = e as SensitiveInfoError;
-      if ( isDebugModeSync( ) ) {
-        localLogger.info(
-          `RNSInfo.setItem error for ${key}, ${setItemError.code} ${setItemError.message}`,
-        );
-      }
-    }
-    throw e;
-  }
+  const result = await RNSInfo.setItem( key, value, actualOptions );
+  clearAuthCache( );
+  return result;
 }
 
 async function deleteSensitiveItem(
@@ -159,22 +114,18 @@ async function deleteSensitiveItem(
     keychainService: "app" as const,
   },
 ) {
-  try {
-    const result = await RNSInfo.deleteItem( key, options );
-    clearAuthCache( );
-    return result;
-  } catch ( e ) {
-    if ( isSensitiveInfoError( e ) ) {
-      const deleteItemError = e as SensitiveInfoError;
-      if ( isDebugModeSync() ) {
-        localLogger.info(
-          `RNSInfo.deleteItem error for ${key}, ${deleteItemError.code} ${deleteItemError.message}`,
-        );
-      }
-    }
-    throw e;
-  }
+  const result = await RNSInfo.deleteItem( key, options );
+  clearAuthCache( );
+  return result;
 }
+
+// Every request here is a small JSON call, so anything near this is a request
+// that is never coming back. Unbounded was the dangerous default for the token
+// refresh in particular: getJWT hands every concurrent caller the same
+// in-flight jwtRefreshPromise, so one hung /users/api_token.json would leave
+// every authenticated query in the app waiting on it for as long as iOS kept
+// the socket open.
+const API_TIMEOUT_MS = 30_000;
 
 /**
  * Creates base API client for all requests
@@ -182,6 +133,7 @@ async function deleteSensitiveItem(
  */
 const createAPI = ( additionalHeaders?: { [header: string]: string } ) => create( {
   baseURL: API_HOST,
+  timeout: API_TIMEOUT_MS,
   headers: {
     "User-Agent": getUserAgent(),
     "X-Installation-ID": getInstallID( ),
@@ -321,11 +273,19 @@ const getAnonymousJWT = (): string => {
   return encodeJWT( claims, Config.JWT_ANONYMOUS_API_SECRET || "not-a-real-secret", "HS512" );
 };
 
+// A failed refresh means one of two very different things: the server rejected
+// our credentials, or we never reached it. Only the first says anything about
+// the token we already hold — see getJWT.
+interface JWTRefreshResult {
+  token: string | null;
+  credentialsRejected: boolean;
+}
+
 // Shared promise for any in-flight token refresh. Concurrent callers that
 // find the token stale will all await this same request rather than each
 // firing their own, preventing a ton of requests against /users/api_token.json
 // during downtime.
-let jwtRefreshPromise: Promise<string | null> | null = null;
+let jwtRefreshPromise: Promise<JWTRefreshResult> | null = null;
 
 const jwtRefreshBackoffRemainingMs = ( ): number => {
   if ( !jwtRefreshFailedAt || jwtRefreshFailureCount === 0 ) { return 0; }
@@ -347,7 +307,7 @@ const recordJwtRefreshSuccess = ( ): void => {
   jwtRefreshFailedAt = null;
 };
 
-async function fetchFreshJWT( logContext: string | null ): Promise<string | null> {
+async function fetchFreshJWT( logContext: string | null ): Promise<JWTRefreshResult> {
   try {
     const accessToken = await getSensitiveItem( "accessToken" );
     // accessToken should always be a string here, since we're logged in,
@@ -360,7 +320,9 @@ async function fetchFreshJWT( logContext: string | null ): Promise<string | null
     } catch ( getUsersApiTokenError ) {
       logger.error( "Failed to fetch JWT: ", getUsersApiTokenError );
       recordJwtRefreshFailure( );
-      if ( !getUsersApiTokenError ) { return null; }
+      if ( !getUsersApiTokenError ) {
+        return { token: null, credentialsRejected: false };
+      }
       throw getUsersApiTokenError;
     }
 
@@ -373,7 +335,8 @@ async function fetchFreshJWT( logContext: string | null ): Promise<string | null
       // this deletes the user JWT and saved login details when a user is not
       // actually signed in anymore for example, if they installed, deleted,
       // and reinstalled the app without logging out
-      if ( response.status === 401 ) {
+      const credentialsRejected = response.status === 401;
+      if ( credentialsRejected ) {
         if ( logContext ) {
           logger.info( `JWT [${logContext}]: User unauthorized, navigating to login` );
         }
@@ -381,7 +344,7 @@ async function fetchFreshJWT( logContext: string | null ): Promise<string | null
           navigationRef.navigate( "LoginStackNavigator", { screen: "Login" } );
         }
       }
-      return null;
+      return { token: null, credentialsRejected };
     }
 
     // Get newest JWT Token
@@ -401,7 +364,7 @@ async function fetchFreshJWT( logContext: string | null ): Promise<string | null
       logger.info( `JWT [${logContext}]: Token refreshed successfully` );
     }
 
-    return newJwtToken;
+    return { token: newJwtToken, credentialsRejected: false };
   } finally {
     jwtRefreshPromise = null;
   }
@@ -457,7 +420,28 @@ const getJWT = async (
       }
       jwtRefreshPromise = fetchFreshJWT( logContext );
     }
-    return jwtRefreshPromise;
+    const refresh = await jwtRefreshPromise;
+    if ( refresh.token ) return refresh.token;
+    // A refresh that failed because the API was unreachable says nothing about
+    // the token we already hold, and we refresh at JWT_EXPIRATION_MINS against
+    // a far longer real lifetime, so a token that just crossed that line is
+    // very likely still good. Returning null here instead hands the caller
+    // api_token: null and sends an authenticated request that can only 401 —
+    // the app log has two "Token refresh failed - problem: NETWORK_ERROR" and
+    // a 401 on fetchObservationUpdates with a null token. A 401 on the refresh
+    // itself is the other case: those credentials really are dead, so there is
+    // nothing to fall back to.
+    const stillWithinRealLifetime = !!jwtGeneratedAt
+      && ( Date.now() - jwtGeneratedAt ) / 1000 < JWT_ACTUAL_EXPIRATION_MINS * 60;
+    if ( jwtToken && !refresh.credentialsRejected && stillWithinRealLifetime ) {
+      if ( logContext ) {
+        logger.info(
+          `JWT [${logContext}]: Refresh unreachable, reusing the stored token for now`,
+        );
+      }
+      return jwtToken;
+    }
+    return null;
   }
   // Current JWT token is still fresh/valid - return it as-is
   return jwtToken;

@@ -60,9 +60,7 @@ enum MenuModalState {
 
 const feedbackLogger = log.extend( "feedback" );
 
-function showOfflineAlert( t: ( _: string ) => string ) {
-  Alert.alert( t( "You-are-offline" ), t( "Please-try-again-when-you-are-online" ) );
-}
+function showOfflineAlert( _t: ( _: string ) => string ) { }
 
 const getDeviceMetricsForFeedback = async () => {
   const freeDiskBytes = await DeviceInfo.getFreeDiskStorage();
@@ -106,7 +104,6 @@ const Menu = ( ) => {
   const currentUser = useCurrentUser( );
   const { t } = useTranslation( );
   const { bottom, top } = useSafeAreaInsets( );
-
   const { isConnected } = useNetInfo( );
 
   const layoutPrefs = useLayoutPrefs();
@@ -114,10 +111,29 @@ const Menu = ( ) => {
   const [modalState, setModalState] = useState<MenuModalState | null>( null );
 
   const menuItems: Record<string, MenuOption> = {
+    ...( currentUser
+      ? {
+        lifeList: {
+          label: t( "MY-LIFERS" ),
+          navigation: "LifeList",
+          icon: "star",
+        },
+        mavericks: {
+          label: t( "MY-MAVERICK-IDS" ),
+          navigation: "MaverickIdentifications",
+          icon: "flag",
+        },
+      }
+      : {} ),
     projects: {
       label: t( "PROJECTS" ),
       navigation: "Projects",
       icon: "briefcase",
+    },
+    locationHistory: {
+      label: t( "LOCATION-HISTORY" ),
+      navigation: "LocationHistory",
+      icon: "location",
     },
     about: {
       label: t( "ABOUT" ),
@@ -134,6 +150,24 @@ const Menu = ( ) => {
       label: t( "HELP" ),
       navigation: "Help",
       icon: "help-circle",
+    },
+    cropLog: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CROP LOG",
+      navigation: "CropLogViewer",
+      icon: "clipboard",
+    },
+    networkLog: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "NETWORK LOG",
+      navigation: "NetworkLog",
+      icon: "globe-outline",
+    },
+    devicePhotoCleanup: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "PHOTO CLEANUP",
+      navigation: "DevicePhotoCleanup",
+      icon: "trash-outline",
     },
     settings: {
       testID: "settings",
