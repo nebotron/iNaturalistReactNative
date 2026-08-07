@@ -156,6 +156,11 @@ const fetchObservationUpdates = async (
   params: Object = {},
   opts: Object = {},
 ): Promise<?Object> => {
+  // Same endpoint, same guarantee, as fetchUnviewedObservationUpdatesCount
+  // below: /observations/updates 401s without a token, and getJWT() can return
+  // null while isLoggedIn() is true. The app log has that 401, with
+  // opts.api_token null.
+  if ( !opts?.api_token ) return null;
   try {
     const { results } = await inatjs.observations.updates( params, opts );
     return results;

@@ -158,10 +158,18 @@ const loadMatchingDeviceAssets = async (
       return null;
     }
     const timestamps = result?.timestamps ?? [];
-    logger.info(
-      `Matched ${uris.length} of ${result?.scanned ?? 0} library photo(s) `
-      + `against ${times.length} observation time(s) in ${Date.now( ) - startedAt}ms`,
-    );
+    // Only remotely when it drags. This fires immediately before
+    // DevicePhotoCleanup's "Found N photo(s) in Xms (sync …, match …)", whose
+    // match figure is this call, so on the ordinary sub-second scan it was a
+    // second POST saying what the line after it already said.
+    const elapsed = Date.now( ) - startedAt;
+    const matchReport = `Matched ${uris.length} of ${result?.scanned ?? 0} library photo(s) `
+      + `against ${times.length} observation time(s) in ${elapsed}ms`;
+    if ( elapsed > 1000 ) {
+      logger.info( matchReport );
+    } else {
+      console.log( matchReport );
+    }
     return uris.map( ( uri, index ) => ( {
       uri: normalizeDevicePhotoUri( uri ) ?? uri,
       timestampMs: typeof timestamps[index] === "number"

@@ -41,6 +41,13 @@ const API_HOST: string = Config.OAUTH_API_URL || process.env.OAUTH_API_URL || "h
 // expire every 30 mins, so might as well be futureproof.
 const JWT_EXPIRATION_MINS = 25;
 
+// How long past that we'll keep using a token the API wouldn't let us refresh,
+// when the refresh failed because we couldn't reach the API rather than because
+// it rejected us (see getJWT). Comfortably inside the 24 hours these tokens
+// really last, so the fallback covers an ordinary network outage; past it, a
+// refresh has been failing long enough that a null token is the honest answer.
+const JWT_ACTUAL_EXPIRATION_MINS = 60;
+
 interface AuthCache {
   isLoggedIn: boolean | null;
   lastChecked: number | null;
@@ -101,12 +108,21 @@ async function deleteSensitiveItem(
   return result;
 }
 
+// Every request here is a small JSON call, so anything near this is a request
+// that is never coming back. Unbounded was the dangerous default for the token
+// refresh in particular: getJWT hands every concurrent caller the same
+// in-flight jwtRefreshPromise, so one hung /users/api_token.json would leave
+// every authenticated query in the app waiting on it for as long as iOS kept
+// the socket open.
+const API_TIMEOUT_MS = 30_000;
+
 /**
  * Creates base API client for all requests
  * @param additionalHeaders any additional headers that will be passed to the API
  */
 const createAPI = ( additionalHeaders?: { [header: string]: string } ) => create( {
   baseURL: API_HOST,
+  timeout: API_TIMEOUT_MS,
   headers: {
     "User-Agent": getUserAgent(),
     "X-Installation-ID": getInstallID( ),
@@ -246,13 +262,21 @@ const getAnonymousJWT = (): string => {
   return encodeJWT( claims, Config.JWT_ANONYMOUS_API_SECRET || "not-a-real-secret", "HS512" );
 };
 
+// A failed refresh means one of two very different things: the server rejected
+// our credentials, or we never reached it. Only the first says anything about
+// the token we already hold — see getJWT.
+interface JWTRefreshResult {
+  token: string | null;
+  credentialsRejected: boolean;
+}
+
 // Shared promise for any in-flight token refresh. Concurrent callers that
 // find the token stale will all await this same request rather than each
 // firing their own, preventing a ton of requests against /users/api_token.json
 // during downtime.
-let jwtRefreshPromise: Promise<string | null> | null = null;
+let jwtRefreshPromise: Promise<JWTRefreshResult> | null = null;
 
-async function fetchFreshJWT( logContext: string | null ): Promise<string | null> {
+async function fetchFreshJWT( logContext: string | null ): Promise<JWTRefreshResult> {
   try {
     const accessToken = await getSensitiveItem( "accessToken" );
     // accessToken should always be a string here, since we're logged in,
@@ -264,7 +288,9 @@ async function fetchFreshJWT( logContext: string | null ): Promise<string | null
       response = await api.get<{api_token: string}>( "/users/api_token.json" );
     } catch ( getUsersApiTokenError ) {
       logger.error( "Failed to fetch JWT: ", getUsersApiTokenError );
-      if ( !getUsersApiTokenError ) { return null; }
+      if ( !getUsersApiTokenError ) {
+        return { token: null, credentialsRejected: false };
+      }
       throw getUsersApiTokenError;
     }
 
@@ -276,7 +302,8 @@ async function fetchFreshJWT( logContext: string | null ): Promise<string | null
       // this deletes the user JWT and saved login details when a user is not
       // actually signed in anymore for example, if they installed, deleted,
       // and reinstalled the app without logging out
-      if ( response.status === 401 ) {
+      const credentialsRejected = response.status === 401;
+      if ( credentialsRejected ) {
         if ( logContext ) {
           logger.info( `JWT [${logContext}]: User unauthorized, navigating to login` );
         }
@@ -284,7 +311,7 @@ async function fetchFreshJWT( logContext: string | null ): Promise<string | null
           navigationRef.navigate( "LoginStackNavigator", { screen: "Login" } );
         }
       }
-      return null;
+      return { token: null, credentialsRejected };
     }
 
     // Get newest JWT Token
@@ -301,7 +328,7 @@ async function fetchFreshJWT( logContext: string | null ): Promise<string | null
       logger.info( `JWT [${logContext}]: Token refreshed successfully` );
     }
 
-    return newJwtToken;
+    return { token: newJwtToken, credentialsRejected: false };
   } finally {
     jwtRefreshPromise = null;
   }
@@ -353,7 +380,28 @@ const getJWT = async (
     if ( !jwtRefreshPromise ) {
       jwtRefreshPromise = fetchFreshJWT( logContext );
     }
-    return jwtRefreshPromise;
+    const refresh = await jwtRefreshPromise;
+    if ( refresh.token ) return refresh.token;
+    // A refresh that failed because the API was unreachable says nothing about
+    // the token we already hold, and we refresh at JWT_EXPIRATION_MINS against
+    // a far longer real lifetime, so a token that just crossed that line is
+    // very likely still good. Returning null here instead hands the caller
+    // api_token: null and sends an authenticated request that can only 401 —
+    // the app log has two "Token refresh failed - problem: NETWORK_ERROR" and
+    // a 401 on fetchObservationUpdates with a null token. A 401 on the refresh
+    // itself is the other case: those credentials really are dead, so there is
+    // nothing to fall back to.
+    const stillWithinRealLifetime = !!jwtGeneratedAt
+      && ( Date.now() - jwtGeneratedAt ) / 1000 < JWT_ACTUAL_EXPIRATION_MINS * 60;
+    if ( jwtToken && !refresh.credentialsRejected && stillWithinRealLifetime ) {
+      if ( logContext ) {
+        logger.info(
+          `JWT [${logContext}]: Refresh unreachable, reusing the stored token for now`,
+        );
+      }
+      return jwtToken;
+    }
+    return null;
   }
   // Current JWT token is still fresh/valid - return it as-is
   return jwtToken;
