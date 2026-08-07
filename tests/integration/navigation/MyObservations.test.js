@@ -24,31 +24,29 @@ import { signIn, signOut } from "tests/helpers/user";
 // working normally
 jest.unmock( "@react-navigation/native" );
 
+// An observation missing any of the basics (evidence, taxon, date, location)
+// offers an edit button instead of an upload button, so these all need a photo
+const makeUploadableObservation = observedOnString => factory( "LocalObservation", {
+  _synced_at: null,
+  _created_at: faker.date.past( ),
+  observed_on_string: observedOnString,
+  latitude: 1.2345,
+  longitude: 1.2345,
+  taxon: factory( "LocalTaxon" ),
+  observationPhotos: [
+    factory( "LocalObservationPhoto", {
+      photo: {
+        url: faker.image.url( ),
+        position: 0,
+      },
+    } ),
+  ],
+} );
+
 const mockUnsyncedObservations = [
-  factory( "LocalObservation", {
-    _synced_at: null,
-    _created_at: faker.date.past( ),
-    observed_on_string: "2024-05-01",
-    latitude: 1.2345,
-    longitude: 1.2345,
-    taxon: factory( "LocalTaxon" ),
-  } ),
-  factory( "LocalObservation", {
-    _synced_at: null,
-    _created_at: faker.date.past( ),
-    observed_on_string: "2024-05-02",
-    latitude: 1.2345,
-    longitude: 1.2345,
-    taxon: factory( "LocalTaxon" ),
-  } ),
-  factory( "LocalObservation", {
-    _synced_at: null,
-    _created_at: faker.date.past( ),
-    observed_on_string: "2024-05-03",
-    latitude: 1.2345,
-    longitude: 1.2345,
-    taxon: factory( "LocalTaxon" ),
-  } ),
+  makeUploadableObservation( "2024-05-01" ),
+  makeUploadableObservation( "2024-05-02" ),
+  makeUploadableObservation( "2024-05-03" ),
 ];
 
 const mockUser = factory( "LocalUser", {
@@ -168,6 +166,15 @@ describe( "MyObservations -> Photo Importer -> ObsEdit -> MyObservations", ( ) =
     // a remote obs, but this works
     return Promise.resolve( makeResponse( [mockObs] ) );
   } );
+  inatjs.photos.create.mockImplementation( ( ) => Promise.resolve( makeResponse( [{
+    id: faker.number.int( ),
+  }] ) ) );
+  inatjs.observation_photos.create.mockImplementation( params => Promise.resolve(
+    makeResponse( [{
+      id: faker.number.int( ),
+      uuid: params.observation_photo.uuid,
+    }] ),
+  ) );
 
   beforeEach( async ( ) => {
     await signIn( mockUser, { realm: global.mockRealms[__filename] } );
@@ -216,7 +223,7 @@ describe( "MyObservations -> Photo Importer -> ObsEdit -> MyObservations", ( ) =
     fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) );
     fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
     await waitFor( ( ) => {
-      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
     const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
     await actor.press( importButton );

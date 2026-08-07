@@ -123,7 +123,7 @@ describe( "Photo Import", ( ) => {
 
   async function groupPhotosIntoObservation( firstNode, secondNode ) {
     await waitFor( ( ) => {
-      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
     const firstUri = `${galleryPath}/${firstNode.image.filename}`;
     const secondUri = `${galleryPath}/${secondNode.image.filename}`;
@@ -147,7 +147,7 @@ describe( "Photo Import", ( ) => {
     await selectPhotosInGallery( [node] );
 
     await waitFor( ( ) => {
-      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
     const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
     await actor.press( importButton );

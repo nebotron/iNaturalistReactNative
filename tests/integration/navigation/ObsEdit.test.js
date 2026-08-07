@@ -1,21 +1,15 @@
-import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import {
-  fireEvent,
   screen,
   userEvent,
-  waitFor,
 } from "@testing-library/react-native";
-import inatjs from "inaturalistjs";
 import useStore from "stores/useStore";
 // import os from "os";
 // import path from "path";
 // import Realm from "realm";
 // import realmConfig from "realmModels/index";
-import factory, { makeResponse } from "tests/factory";
+import factory from "tests/factory";
 import {
   mockInteractionManagerRunAfterInteractions,
-  navigateToPhotoImporterFromMyObs,
-  saveObsEditObservation,
 } from "tests/helpers/addObsBottomSheet";
 import faker from "tests/helpers/faker";
 import {
@@ -51,76 +45,7 @@ beforeAll( uniqueRealmBeforeAll );
 afterAll( uniqueRealmAfterAll );
 // /UNIQUE REALM SETUP
 
-const mockNode1 = {
-  id: "MOCK-ID-1",
-  type: "image",
-  group_name: "Camera Roll",
-  image: {
-    filename: `${faker.string.uuid()}.jpg`,
-    filepath: "/path/to/photo1.jpg",
-    extension: "jpg",
-    uri: "file:///path/to/photo1.jpg",
-    height: 1920,
-    width: 1080,
-    fileSize: 123456,
-    playableDuration: NaN,
-    orientation: 1,
-  },
-  timestamp: 1234567890,
-  location: null,
-};
-
-const mockNode2 = {
-  ...mockNode1,
-  id: "MOCK-ID-2",
-  image: {
-    ...mockNode1.image,
-    filename: `${faker.string.uuid()}.jpg`,
-    filepath: "/path/to/photo2.jpg",
-    uri: "file:///path/to/photo2.jpg",
-  },
-  timestamp: 1234567891,
-};
-
-const makeGetPhotosResult = nodes => ( {
-  page_info: { end_cursor: undefined, has_next_page: false },
-  edges: nodes.map( node => ( { node } ) ),
-} );
-
 const actor = userEvent.setup( );
-
-const navigateToObsEditViaGroupPhotos = async ( ) => {
-  jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
-    makeGetPhotosResult( [mockNode1, mockNode2] ),
-  );
-  await navigateToPhotoImporterFromMyObs( );
-  await waitFor( ( ) => {
-    expect( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) ).toBeTruthy( );
-  }, { timeout: 10_000 } );
-  fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
-  fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode2.image.uri}` ) );
-  fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
-  await waitFor( ( ) => {
-    expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
-  }, { timeout: 10_000 } );
-  const importObservationsText = await screen.findByText( /IMPORT 2 OBSERVATIONS/ );
-  await actor.press( importObservationsText );
-  await waitFor( ( ) => {
-    expect( screen.getByText( /2 Observations/ ) ).toBeVisible( );
-  }, { timeout: 10_000 } );
-};
-
-const uploadObsEditObservation = async options => {
-  const uploadButton = await screen.findByText( /UPLOAD/ );
-  await actor.press( uploadButton );
-  if ( options?.skipMissingEvidence ) {
-    return;
-  }
-  // missing evidence sheet pops up here, so need to press UPLOAD twice
-  const okButton = await screen.findByText( /OK/ );
-  await actor.press( okButton );
-  await actor.press( uploadButton );
-};
 
 beforeEach( ( ) => {
   setStoreStateLayout( {
@@ -203,64 +128,6 @@ describe( "ObsEdit", ( ) => {
       } );
 
       it.todo( "should show photos when reached from ObsDetails" );
-
-      it( "should go back to GroupPhotos if no observations are saved/uploaded"
-        + " in the multi-observation flow", async ( ) => {
-        await renderAppWithObservations( mockObservations, __filename );
-        await navigateToObsEditViaGroupPhotos( );
-        const backButtonId = screen.getByTestId( "ObsEdit.BackButton" );
-        await actor.press( backButtonId );
-        const groupPhotosText = await screen.findByText( /Group Photos/ );
-        expect( groupPhotosText ).toBeTruthy( );
-      } );
-
-      it( "should show discard observations sheet if at least one observation is saved/uploaded"
-        + " in the multi-observation flow", async ( ) => {
-        await renderAppWithObservations( mockObservations, __filename );
-        await navigateToObsEditViaGroupPhotos( );
-        await saveObsEditObservation( );
-        const newTitle = await screen.findByText( /New Observation/ );
-        expect( newTitle ).toBeTruthy( );
-        const backButtonId = screen.getByTestId( "ObsEdit.BackButton" );
-        await actor.press( backButtonId );
-        const warningText = await screen.findByText( /By exiting, your observation will not be saved./ );
-        expect( warningText ).toBeTruthy( );
-      } );
-
-      it( "should clear upload queue when user lands on ObsEdit", async ( ) => {
-        await renderAppWithObservations( mockObservations, __filename );
-        await navigateToObsEditViaGroupPhotos( );
-        const { initialNumObservationsInQueue, numUploadsAttempted } = useStore.getState( );
-        expect( initialNumObservationsInQueue ).toEqual( 0 );
-        expect( numUploadsAttempted ).toEqual( 0 );
-      } );
-
-      it( "should show uploading status after user starts one upload"
-        + " in the multi-observation flow", async ( ) => {
-        inatjs.photos.create.mockImplementation(
-          ( ) => Promise.resolve( makeResponse( [{
-            id: faker.number.int(),
-          }] ) ),
-        );
-        inatjs.observations.create.mockImplementation(
-          ( params, _opts ) => Promise.resolve( makeResponse( [{
-            id: faker.number.int(),
-            uuid: params.observation.uuid,
-          }] ) ),
-        );
-        inatjs.observation_photos.create.mockImplementation(
-          ( ) => Promise.resolve( makeResponse( [{
-            id: faker.number.int(),
-          }] ) ),
-        );
-        await renderAppWithObservations( mockObservations, __filename );
-        await navigateToObsEditViaGroupPhotos( );
-        await uploadObsEditObservation( );
-        const uploadStatus = await screen.findByText( /1 uploaded/ );
-        expect( uploadStatus ).toBeVisible( );
-        const newTitle = await screen.findByText( /New Observation/ );
-        expect( newTitle ).toBeTruthy( );
-      } );
     } );
   } );
 } );

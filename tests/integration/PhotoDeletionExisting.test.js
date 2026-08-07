@@ -79,15 +79,18 @@ describe( "Photo Deletion with existing saved observation", () => {
   } );
 
   async function createSavedObservationWithImportedPhoto() {
+    // A unique path per import: the gallery hides photos it has already
+    // imported, so reusing one would make it invisible to the next test
+    const filepath = `/path/to/${faker.string.uuid()}.jpg`;
     const mockNode = {
-      id: "MOCK-ID-1",
+      id: `MOCK-ID-${faker.string.uuid()}`,
       type: "image",
       group_name: "Camera Roll",
       image: {
         filename: `${faker.string.uuid()}.jpg`,
-        filepath: "/path/to/photo.jpg",
+        filepath,
         extension: "jpg",
-        uri: "file:///path/to/photo.jpg",
+        uri: `file://${filepath}`,
         height: 1920,
         width: 1080,
         fileSize: 123456,
@@ -108,7 +111,7 @@ describe( "Photo Deletion with existing saved observation", () => {
     fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) );
     fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
     await waitFor( ( ) => {
-      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
     const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
     await actor.press( importButton );

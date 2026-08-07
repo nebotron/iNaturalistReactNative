@@ -25,12 +25,15 @@ jest.mock( "uploaders/utils/retry", ( ) => ( {
   default: fn => fn( ),
 } ) );
 
+// An observation missing any of the basics (evidence, taxon, date, location)
+// offers an edit button instead of an upload button, so these all need a taxon
 const mockUnsyncedObservations = [
   factory( "LocalObservation", {
     _synced_at: null,
     observed_on_string: "2024-05-01",
     latitude: 1.2345,
     longitude: 1.2345,
+    taxon: factory( "LocalTaxon" ),
     observationPhotos: [
       factory( "LocalObservationPhoto", {
         photo: {
@@ -45,6 +48,7 @@ const mockUnsyncedObservations = [
     observed_on_string: "2024-05-02",
     latitude: 1.2345,
     longitude: 1.2345,
+    taxon: factory( "LocalTaxon" ),
     observationPhotos: [
       factory( "LocalObservationPhoto", {
         photo: {

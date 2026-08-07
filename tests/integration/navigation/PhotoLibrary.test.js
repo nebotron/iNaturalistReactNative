@@ -109,7 +109,7 @@ describe( "PhotoLibrary navigation", ( ) => {
     fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
 
     await waitFor( ( ) => {
-      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
   } );
 
@@ -130,7 +130,7 @@ describe( "PhotoLibrary navigation", ( ) => {
     fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
 
     await waitFor( ( ) => {
-      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
   } );
 
@@ -151,7 +151,7 @@ describe( "PhotoLibrary navigation", ( ) => {
     fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
 
     await waitFor( ( ) => {
-      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
     expect( screen.getByTestId( "CustomTabBar" ) ).toBeVisible( );
   } );

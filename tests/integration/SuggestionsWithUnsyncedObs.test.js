@@ -11,6 +11,7 @@ import {
 import * as usePredictions from "components/Camera/AICamera/hooks/usePredictions";
 import inatjs from "inaturalistjs";
 import { Animated } from "react-native";
+import { clearSuggestionsCache } from "sharedHelpers/suggestionsCache";
 import * as useLocationPermission from "sharedHooks/useLocationPermission";
 import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
@@ -18,7 +19,7 @@ import factory, { makeResponse } from "tests/factory";
 import {
   navigateToSuggestionsViaAICameraFromMyObs,
 } from "tests/helpers/addObsBottomSheet";
-import { renderAppWithObservations } from "tests/helpers/render";
+import { queryClient, renderAppWithObservations } from "tests/helpers/render";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 import { signIn, signOut } from "tests/helpers/user";
@@ -195,6 +196,12 @@ const navigateToSuggestionsForObservationViaObsEdit = async observation => {
   await actor.press( observationGridItem );
   const addIdButton = await screen.findByText( "IDENTIFY" );
   await actor.press( addIdButton );
+  // An observation without a location is offered the chance to add one before
+  // it asks for suggestions
+  const skipLocationButton = screen.queryByText( "Skip for now" );
+  if ( skipLocationButton ) {
+    await actor.press( skipLocationButton );
+  }
 };
 
 const setupAppWithSignedInUser = async hasLocation => {
@@ -360,6 +367,15 @@ describe( "from AICamera directly", ( ) => {
   } );
 
   describe( "suggestions while offline", ( ) => {
+    // Suggestions are cached per photo, both on disk and in the shared query
+    // client, and the app prefers online results whenever it has them. Each
+    // test has to start from empty caches to see its own mocked predictions
+    // rather than an earlier test's online ones.
+    beforeEach( ( ) => {
+      clearSuggestionsCache( );
+      queryClient.clear( );
+    } );
+
     it( "should not call score_image and should not show any location buttons", async ( ) => {
       useNetInfo.mockImplementation( ( ) => ( { isConnected: false } ) );
       await setupAppWithSignedInUser( );
