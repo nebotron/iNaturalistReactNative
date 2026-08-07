@@ -170,10 +170,9 @@ const useUsbAutoImport = ( ) => {
           // library write in the app. This is the app's largest source of them
           // — 114 in a run, one per file — and it was the one path outside the
           // chain, so an offload overlapped whatever else the app was doing to
-          // the library. In the Aug 5 16:04–16:40 log that cost a deletion
-          // preflight its meaning: the probe ran on top of a live save and
-          // hung, so five deletions were skipped on a library which went on to
-          // create 68 assets without complaint.
+          // the library — and a delete racing a save can hang on a library that
+          // is servicing both perfectly well, as the Aug 5 16:04–16:40 log
+          // showed while 68 assets were created without complaint.
           // Enqueued per file rather than per run so a deletion waits for one
           // photo, not a whole card.
           // eslint-disable-next-line no-await-in-loop

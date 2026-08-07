@@ -109,82 +109,6 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     expect( infoLines.some( line => line.includes( "ph://" ) ) ).toBe( false );
   } );
 
-  describe( "preflighting a consent-free library write", ( ) => {
-    it( "deletes normally when the probe comes back", async ( ) => {
-      await deleteOriginalDevicePhotos( ["ph://ONE"] );
-
-      expect( mockPhotoLibraryWriteProbe ).toHaveBeenCalledTimes( 1 );
-      expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://ONE"] );
-      // A healthy preflight is the common case; a line per delete would be
-      // pure volume.
-      expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
-        "photo_delete_preflight",
-        expect.anything( ),
-      );
-    } );
-
-    describe( "when the probe drags but comes back", ( ) => {
-      beforeEach( ( ) => jest.useFakeTimers( ) );
-      afterEach( ( ) => jest.useRealTimers( ) );
-
-      it( "reports the drag without calling a healthy library an error", async ( ) => {
-        mockPhotoLibraryWriteProbe.mockImplementation( ( ) => new Promise( resolve => {
-          setTimeout( ( ) => resolve( { ok: true, ms: 5807, cleaned: 0 } ), 5807 );
-        } ) );
-
-        const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
-        await jest.advanceTimersByTimeAsync( 5807 );
-        await deletion;
-
-        // The deletion behind a slow-but-successful probe still runs, and the
-        // probe is not an error: reporting it as one puts a healthy library at
-        // the top of an errors-first triage.
-        expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://ONE"] );
-        expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
-          "photo_delete_preflight",
-          expect.anything( ),
-        );
-        expect( mockLogger.infoWithExtra ).toHaveBeenCalledWith(
-          "photo_delete_preflight",
-          expect.objectContaining( { probeOk: true, requested: 1 } ),
-        );
-      } );
-    } );
-
-    describe( "when the probe never settles", ( ) => {
-      beforeEach( ( ) => jest.useFakeTimers( ) );
-      afterEach( ( ) => jest.useRealTimers( ) );
-
-      it( "skips the doomed deletion, and still probes for the next one", async ( ) => {
-        mockPhotoLibraryWriteProbe.mockImplementation( ( ) => new Promise( ( ) => {} ) );
-
-        const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
-        await jest.advanceTimersByTimeAsync( 10000 );
-        const result = await deletion;
-
-        // A library that can't complete a write the app owns outright can't
-        // complete a deletion needing a consent alert on top, so there is
-        // nothing to gain by spending the deletion timeout finding out.
-        expect( mockDeletePhotos ).not.toHaveBeenCalled( );
-        expect( result ).toEqual( { deleted: 0, requested: 1, succeeded: false } );
-        expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
-          "photo_delete_preflight",
-          expect.objectContaining( { requested: 1, probeOk: false } ),
-        );
-
-        // The verdict is about this deletion only. A library that recovers
-        // (the user restarts the device) is found by trying again.
-        mockPhotoLibraryWriteProbe.mockResolvedValue( { ok: true, ms: 3, error: "" } );
-        mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
-        const retry = deleteOriginalDevicePhotos( ["ph://TWO"] );
-        await jest.advanceTimersByTimeAsync( 0 );
-        await retry;
-
-        expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://TWO"] );
-      } );
-    } );
-  } );
-
   describe( "when the deletion hangs", ( ) => {
     beforeEach( ( ) => jest.useFakeTimers( ) );
     afterEach( ( ) => jest.useRealTimers( ) );
@@ -244,10 +168,6 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       const [, extra] = mockLogger.errorWithExtra.mock.calls[0];
       // Counted for the whole session, so other hangs in this file add to it.
       expect( extra.hangsThisSession ).toBeGreaterThanOrEqual( 1 );
-      // The hang report has to carry the preflight it got past: a delete that
-      // hangs seconds after a consent-free write on the same library came back
-      // is a different diagnosis from one on a library that was already stuck.
-      expect( extra.preflightMs ).toBeGreaterThanOrEqual( 0 );
       expect( JSON.stringify( extra ) ).not.toContain( "ph://" );
     } );
 

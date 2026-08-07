@@ -16,10 +16,7 @@ import {
 import { drainTrackedLocationFixes } from "sharedHelpers/locationHistoryTracker";
 import { log } from "sharedHelpers/logger";
 import { privacyZoneGeoprivacy } from "sharedHelpers/privacyZone";
-import {
-  enqueuePhotoLibraryWrite,
-  recordPhotoLibraryWriteSuccess,
-} from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import useStore from "stores/useStore";
 
@@ -183,7 +180,6 @@ const flushLocationWrites = async ( ) => {
       BATCH_UPDATE_TIMEOUT_MS,
       `updateAssetLocations for ${updates.length} photo(s)`,
     ) );
-    recordPhotoLibraryWriteSuccess( );
   } catch ( error ) {
     reportSuppressed( "failed", String( error instanceof Error
       ? error.message

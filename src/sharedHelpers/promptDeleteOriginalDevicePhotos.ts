@@ -17,16 +17,8 @@ import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "promptDeleteOriginalDevicePhotos" );
 
-// Whether a Photos-library write has ever gone through since launch, and how
-// many have hung. The app log shows hangs arriving in day-long runs between
-// runs of clean successes, so a hang report is only interpretable next to
-// "the last write worked 4s ago" versus "nothing has worked all session".
-let lastPhotoLibraryWriteSuccessAt: number | null = null;
+// How many Photos-library writes have hung this session.
 let photoLibraryWriteHangCount = 0;
-
-export const recordPhotoLibraryWriteSuccess = ( ) => {
-  lastPhotoLibraryWriteSuccessAt = Date.now( );
-};
 
 // Native helpers (iOS) that (a) report the window/scene/modal state governing
 // whether the iOS deletion confirmation can present, and (b) delete after
@@ -38,7 +30,6 @@ const { ImageCropper } = NativeModules as {
       ok: boolean;
       ms: number;
       error: string;
-      cleaned?: number;
     }>;
     deletePhotoAssets?: (
       phUris: string[],
@@ -136,81 +127,6 @@ const DELETE_TIMEOUT_MS = 10000;
 // would now never be reached.
 const HANG_REPORT_MS = DELETE_TIMEOUT_MS / 2;
 
-// How long a consent-free library write gets before the library counts as
-// unhealthy. Creating an album is a local database write; on a working library
-// it comes back in milliseconds, so anything near this is already pathological.
-const PREFLIGHT_TIMEOUT_MS = 10000;
-
-// Runs one Photos-library transaction that needs no user consent (creating an
-// album and deleting it again) immediately before the deletion, with nothing
-// else in flight.
-//
-// This settles the question the 20s hang probe couldn't. That probe runs
-// *concurrently* with the hung deletion, so when it hangs too — as it did on
-// its first sighting, Aug 5 04:30 — the result is ambiguous between "the whole
-// library is wedged" and "transactions are just queueing behind the dead
-// deletion". Running the same transaction before the deletion removes the
-// second explanation: nothing is in flight to queue behind — which was only
-// ever true of writes that go through enqueuePhotoLibraryWrite, and the USB
-// card offload did not, so the Aug 5 16:08 preflight ran on top of a live
-// saveImageToPhotos and its verdict meant nothing. Every native library write
-// is on the chain now; add one off it and this probe goes back to being
-// unreadable.
-//
-// It is also a fix, not only a measurement. A library that can't complete a
-// write the app owns outright certainly can't complete a deletion that needs a
-// consent alert on top, and every delete in the Aug 5 log spent 120s
-// discovering that. Skipping on a failed preflight turns a two-minute hang into
-// a ten-second one. It is judged fresh on every deletion, so the next import
-// tries again rather than being locked out by this one's verdict.
-const preflightPhotoLibraryWrite = async (
-  requested: number,
-): Promise<{ ok: boolean; ms: number }> => {
-  if ( Platform.OS !== "ios" || !ImageCropper?.photoLibraryWriteProbe ) {
-    return { ok: true, ms: -1 };
-  }
-  const startedAt = Date.now( );
-  const probe = await Promise.race( [
-    ImageCropper.photoLibraryWriteProbe( ).catch(
-      probeError => ( { ok: false, ms: -1, error: String( probeError ) } ),
-    ),
-    new Promise<null>( resolve => { setTimeout( ( ) => resolve( null ), PREFLIGHT_TIMEOUT_MS ); } ),
-  ] );
-  const ok = probe?.ok ?? false;
-  // Only reported when it fails or drags. A healthy preflight is the common
-  // case and says nothing the deletion that follows doesn't already say, and
-  // one remote POST per delete is what the last round of removals was about.
-  //
-  // A drag is not an error, though: the Aug 5 22:04 probe took 5807ms, came
-  // back ok, and the 463-photo deletion behind it worked. Reporting that at
-  // error level puts a healthy library at the top of an errors-first triage.
-  // Only a probe that did not complete is an error.
-  if ( !ok || Date.now( ) - startedAt > 1000 ) {
-    const report = ok
-      ? logger.infoWithExtra
-      : logger.errorWithExtra;
-    report( "photo_delete_preflight", {
-      requested,
-      probeOk: ok,
-      probeMs: probe?.ms ?? -1,
-      waitedMs: Date.now( ) - startedAt,
-      // Albums left behind by earlier probes, cleaned up by this one's single
-      // transaction. Anything above 1 means probes have been landing their
-      // write and being reported as failures anyway.
-      probeCleaned: probe?.cleaned ?? -1,
-      probeError: probe === null
-        ? `consent-free library write did not settle in ${PREFLIGHT_TIMEOUT_MS}ms`
-        : probe.error,
-    } );
-  }
-  return {
-    ok,
-    ms: ok
-      ? Date.now( ) - startedAt
-      : -1,
-  };
-};
-
 const performDeleteOriginalDevicePhotos = async (
   photoUris: string[],
   options: DeleteOriginalDevicePhotosOptions = {},
@@ -231,20 +147,6 @@ const performDeleteOriginalDevicePhotos = async (
   const hasPermission = await ensureDeletePhotosPermission( requested );
   if ( !hasPermission ) {
     logger.warn( "Skipped deleting device photos: photo library permission not granted" );
-    if ( options.userInitiated ) {
-      Alert.alert(
-        i18next.t( "Something-went-wrong" ),
-        i18next.t( "Could-not-delete-original-photos" ),
-      );
-    }
-    return { deleted: 0, requested, succeeded: false };
-  }
-
-  const preflight = await preflightPhotoLibraryWrite( requested );
-  if ( !preflight.ok ) {
-    // No prose line beside this: photo_delete_preflight above already carries
-    // the count and why it failed, and two POSTs for one event is what the
-    // last round of removals was about.
     if ( options.userInitiated ) {
       Alert.alert(
         i18next.t( "Something-went-wrong" ),
@@ -326,17 +228,6 @@ const performDeleteOriginalDevicePhotos = async (
       ? AppState.currentState
       : "unknown",
     hangsThisSession: photoLibraryWriteHangCount,
-    msSinceLastSuccess: lastPhotoLibraryWriteSuccessAt === null
-      ? -1
-      : Date.now( ) - lastPhotoLibraryWriteSuccessAt,
-    // How long the consent-free write immediately before this delete took, on
-    // the same library, with nothing else in flight (-1 = the probe wasn't
-    // available; a failed probe skips the delete entirely, so it can't reach
-    // here). A hang carrying a fast preflight is the case that matters: it
-    // says the library was demonstrably servicing writes moments earlier and
-    // wedged on the ask. Folded in here rather than logged separately because
-    // a healthy preflight isn't worth a POST of its own.
-    preflightMs: preflight.ms,
     context: deletionContext,
   } );
   const hangTimer = setTimeout( ( ) => {
@@ -364,11 +255,9 @@ const performDeleteOriginalDevicePhotos = async (
       // a deletion needs. A probe that comes back while the delete beside it
       // never does answers that. Deliberately not routed through
       // enqueuePhotoLibraryWrite: running concurrently with the hung delete is
-      // the whole point. (Which does mean a probe that also hangs is ambiguous
-      // between a wedged library and transactions queueing behind the dead one
-      // — preflightPhotoLibraryWrite above is what disambiguates it, since a
-      // delete only gets this far once the same write succeeded with nothing
-      // in flight.)
+      // the whole point. A probe that hangs too is the ambiguous case — a
+      // wedged library and transactions queueing behind the dead deletion look
+      // alike from here — so only a probe that comes back is worth reading.
       //
       // Bounded separately rather than as one Promise.all, so a probe that
       // hangs can't make the context read as "the main queue never answered",
@@ -475,7 +364,6 @@ const performDeleteOriginalDevicePhotos = async (
     // above zero means these are gone and no longer worth tracking. Keep them
     // if it failed: they still need deleting, and still without a prompt.
     if ( appCreatedDeleted > 0 ) forgetAppCreatedPhotoAssets( appCreatedUris );
-    recordPhotoLibraryWriteSuccess( );
     return { deleted: deleted ?? requested, requested, succeeded: true };
   } catch ( deleteError ) {
     // As of iOS 26, PHPhotoLibrary.performChanges' completion handler for
