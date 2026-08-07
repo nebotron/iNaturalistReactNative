@@ -17,6 +17,8 @@ import React, {
   useState,
 } from "react";
 import {
+  beginLocationWriteBatch,
+  endLocationWriteBatch,
   saveObservationsAndApplyTrackedLocation,
 } from "sharedHelpers/applyTrackedLocationToPhotos";
 import {
@@ -372,57 +374,81 @@ const GroupPhotosContainer = ( ): Node => {
     exitObservationFlow( );
 
     // Process in batches to avoid spawning hundreds of concurrent native image
-    // resize operations (Photo.resizeImageForUpload) which exhausts resources
+    // resize operations (Photo.resizeImageForUpload) which exhausts resources.
+    // Each batch is created, saved, located and handed to the CV prefetch
+    // before the next one starts, so scoring the first observations begins
+    // while the rest of the import is still being written. Waiting for the
+    // whole import first meant a 100-photo import scored nothing until every
+    // photo had been resized and saved — by which time the user was already
+    // looking at Suggestions.
     const BATCH_SIZE = 10;
-    const newObservations = [];
-    for ( let i = 0; i < groupsToImport.length; i += BATCH_SIZE ) {
-      const batch = groupsToImport.slice( i, i + BATCH_SIZE );
-      // eslint-disable-next-line no-await-in-loop
-      const batchResults = await Promise.all( batch.map( createObservationFromGroupedMedia ) );
-      newObservations.push( ...batchResults );
+    // Prefetches are chained rather than fired per batch so they still run one
+    // observation at a time, instead of every batch's CV work piling up
+    // concurrently.
+    let prefetchChain = Promise.resolve( );
+    // One Photos-library transaction (and so one iOS consent alert) for the
+    // whole import, however many batches its location writes arrive in.
+    beginLocationWriteBatch( );
+    try {
+      for ( let i = 0; i < groupsToImport.length; i += BATCH_SIZE ) {
+        const batch = groupsToImport.slice( i, i + BATCH_SIZE );
+        // eslint-disable-next-line no-await-in-loop
+        const batchResults = await Promise.all( batch.map( createObservationFromGroupedMedia ) );
+        const observationsToSave = batchResults.map( ( newObs, idx ) => ( {
+          ...( i === 0 && idx === 0
+            ? firstObservationDefaults
+            : {}
+          ),
+          ...newObs,
+        } ) );
+
+        // Save each observation and auto-fill tracked location for any that
+        // ended up without one. Saves happen independently so a single failed
+        // save can't abort the whole import (the observations that did save
+        // would otherwise never reach the location auto-fill and would land
+        // with no location). This runs before the ID requests below so
+        // computer vision scoring (and its cache key) use the observation's
+        // final location rather than no location.
+        // eslint-disable-next-line no-await-in-loop
+        const trackedLocationByUuid = await saveObservationsAndApplyTrackedLocation(
+          observationsToSave,
+          realm,
+        );
+
+        // Mirror any auto-filled locations back onto the in-memory
+        // observations so the CV prefetch (and its cache key) reflects the
+        // observation's final location.
+        const locatedObservations = observationsToSave.map( obs => {
+          const trackedLocation = trackedLocationByUuid[obs.uuid];
+          if ( !trackedLocation ) return obs;
+          return {
+            ...obs,
+            latitude: trackedLocation.latitude,
+            longitude: trackedLocation.longitude,
+            ...( trackedLocation.accuracy != null
+              ? { positional_accuracy: trackedLocation.accuracy }
+              : {} ),
+          };
+        } );
+
+        // Now that locations are populated, start scoring each new
+        // observation's photo (offline + online), caching both so the
+        // Suggestions screen loads instantly and no photo is ever scored
+        // twice. Fire-and-forget so import isn't blocked on CV.
+        prefetchChain = prefetchChain
+          .then( ( ) => prefetchSuggestionsForObservations(
+            queryClient,
+            locatedObservations,
+            realm,
+          ) )
+          .catch( error => logger.error(
+            "Failed to prefetch group photo suggestions",
+            error,
+          ) );
+      }
+    } finally {
+      await endLocationWriteBatch( );
     }
-    const observationsToSave = newObservations.map( ( newObs, idx ) => ( {
-      ...( idx === 0
-        ? firstObservationDefaults
-        : {}
-      ),
-      ...newObs,
-    } ) );
-
-    // Save each observation and auto-fill tracked location for any that ended
-    // up without one. Saves happen independently so a single failed save can't
-    // abort the whole import (the observations that did save would otherwise
-    // never reach the location auto-fill and would land with no location).
-    // This runs before the ID requests below so computer vision scoring (and
-    // its cache key) use the observation's final location rather than no
-    // location.
-    const trackedLocationByUuid = await saveObservationsAndApplyTrackedLocation(
-      observationsToSave,
-      realm,
-    );
-
-    // Mirror any auto-filled locations back onto the in-memory observations so
-    // the CV prefetch (and its cache key) reflects the observation's final
-    // location.
-    const locatedObservations = observationsToSave.map( obs => {
-      const trackedLocation = trackedLocationByUuid[obs.uuid];
-      if ( !trackedLocation ) return obs;
-      return {
-        ...obs,
-        latitude: trackedLocation.latitude,
-        longitude: trackedLocation.longitude,
-        ...( trackedLocation.accuracy != null
-          ? { positional_accuracy: trackedLocation.accuracy }
-          : {} ),
-      };
-    } );
-
-    // Now that locations are populated, start scoring each new observation's
-    // photo (offline + online), caching both so the Suggestions screen loads
-    // instantly and no photo is ever scored twice. Fire-and-forget so import
-    // isn't blocked on CV.
-    prefetchSuggestionsForObservations( queryClient, locatedObservations, realm )
-      .catch( error => logger.error( "Failed to prefetch group photo suggestions", error ) );
   };
 
   return (

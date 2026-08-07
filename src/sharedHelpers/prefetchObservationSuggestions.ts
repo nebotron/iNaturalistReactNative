@@ -87,12 +87,9 @@ const shimApiResponseForCommonAncestor = (
   };
 };
 
-// Score the first photo of an observation ahead of time with both the offline
-// (on-device) and online (API) models, persisting each result under the exact
-// cache key the Suggestions screen reads from. Because both hooks check that
-// cache before doing any work, a prefetched photo is never scored a second
-// time.
-const prefetchObservationSuggestions = async (
+// Online model: warm the persistent cache (survives restarts) as well as the
+// in-memory React Query cache (instant for a same-session visit).
+const prefetchOnlineSuggestions = async (
   queryClient: QueryClient,
   observation: RealmObservationPojo,
   realm: Realm,
@@ -111,10 +108,6 @@ const prefetchObservationSuggestions = async (
   const hasCurrentUser = !!User.currentUser( realm );
   const queryKey = ["scoreImage", photoUri, { shouldUseEvidenceLocation }];
 
-  await prefetchOfflineSuggestions( observation, realm );
-
-  // Online model: warm the persistent cache (survives restarts) as well as the
-  // in-memory React Query cache (instant for a same-session visit).
   const onlineKey = onlineSuggestionsCacheKey( queryKey, hasCurrentUser, locale );
   if ( getCachedSuggestions( onlineKey ) ) {
     return;
@@ -148,6 +141,26 @@ const prefetchObservationSuggestions = async (
       return shimmed;
     },
   } );
+};
+
+// Score the first photo of an observation ahead of time with both the offline
+// (on-device) and online (API) models, persisting each result under the exact
+// cache key the Suggestions screen reads from. Because both hooks check that
+// cache before doing any work, a prefetched photo is never scored a second
+// time.
+//
+// The two models run concurrently: on-device inference is CPU bound and the
+// API request is network bound, so making the online request wait for the
+// offline one only delayed the result the user waits longest for.
+const prefetchObservationSuggestions = async (
+  queryClient: QueryClient,
+  observation: RealmObservationPojo,
+  realm: Realm,
+): Promise<void> => {
+  await Promise.all( [
+    prefetchOfflineSuggestions( observation, realm ).catch( ( ) => null ),
+    prefetchOnlineSuggestions( queryClient, observation, realm ),
+  ] );
 };
 
 // Prefetch suggestions for several observations one at a time, so importing a
