@@ -1,0 +1,7 @@
+# Install torch/torchaudio from the CPU index for a much smaller download:
+#   pip install -r requirements.txt --extra-index-url https://download.pytorch.org/whl/cpu
+torch>=2.2
+torchaudio>=2.2
+numpy>=1.26
+soundfile>=0.12    # WAV/MP3 via libsndfile
+av>=11.0           # AAC/M4A via bundled ffmpeg; iOS app recordings are M4A
