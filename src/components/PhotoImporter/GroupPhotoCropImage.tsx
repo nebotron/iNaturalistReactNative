@@ -27,26 +27,27 @@ const MAX_SCALE = 100;
 const CROP_EPSILON = 0.001;
 
 const styles = StyleSheet.create( {
-  overlay: {
+  overlay: StyleSheet.absoluteFillObject,
+  // The photo is drawn contained rather than cover-cropped, so anything the
+  // grid's own thumbnail would show through the letterbox is covered. Only
+  // painted once this photo has actually decoded, so the backdrop can never
+  // black out a cell whose image hasn't arrived yet.
+  backdrop: {
     ...StyleSheet.absoluteFillObject,
-    // The photo is drawn contained rather than cover-cropped, so anything the
-    // grid's own thumbnail would show through the letterbox is covered.
     backgroundColor: colors.black,
   },
   // Mounted (so the ref exists and the crop can be applied) but not yet
   // showing the crop, which would otherwise flash the whole photo for a frame.
-  // Also covers the gap before the photo itself has decoded, so the black
-  // backdrop below never paints over an empty cell.
   unframed: {
     opacity: 0,
   },
 } );
 
-// Thumbnails this process has already decoded once. A cell recycled onto one of
-// them is showing a bitmap the image cache still holds, so it can reveal its
-// crop on the first frame rather than waiting out another onLoad. Waiting was
-// what made a photo scrolled back to appear uncropped — the black-backed
-// overlay stayed hidden and the plain thumbnail showed through underneath.
+// Thumbnails this process has already decoded once. A cell landing on one of
+// them draws from a warm image cache, so it can reveal its crop on the first
+// frame rather than waiting out another onLoad. Waiting was what made a photo
+// scrolled back to appear uncropped — the overlay stayed hidden and the plain
+// thumbnail showed through underneath.
 const paintedThumbnails = new Set<string>( );
 
 const cropsMatch = ( a: NormalizedCrop, b: NormalizedCrop ) => (
@@ -189,11 +190,13 @@ const GroupPhotoCropImage = ( {
     return null;
   }
 
+  const painted = loadedThumbnailUri === thumbnailUri;
   const framed = Boolean( framedCrop )
-    && ( loadedThumbnailUri === thumbnailUri || paintedThumbnails.has( thumbnailUri ?? "" ) );
+    && ( painted || paintedThumbnails.has( thumbnailUri ?? "" ) );
 
   return (
     <View style={[styles.overlay, !framed && styles.unframed]}>
+      {painted && <View style={styles.backdrop} />}
       <SharedZoomableImage
         ref={zoomRef}
         uri={thumbnailUri}
@@ -210,6 +213,12 @@ const GroupPhotoCropImage = ( {
         onInteractionEnd={handleInteractionEnd}
         renderImage={( ) => (
           <Image
+            // A cell that lands on a different photo — every cell below a
+            // deleted one, and every cell recycled by scrolling — must not
+            // reuse the native view that already painted the previous photo:
+            // it keeps that bitmap on screen until the new file decodes, so
+            // the crop overlay would frame and show the wrong photo.
+            key={thumbnailUri}
             testID="GroupPhotoCropImage.photo"
             accessibilityIgnoresInvertColors
             fadeDuration={0}
