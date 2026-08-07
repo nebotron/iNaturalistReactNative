@@ -251,6 +251,18 @@ class Observation extends Realm.Object {
       if ( !existingObsPhoto ) {
         mappedObsPhoto._created_at = new Date( );
         mappedObsPhoto.photo._created_at = new Date( );
+      } else if ( existingObsPhoto.originalDevicePhotoUri ) {
+        // ObservationPhoto is an embedded object, so it has no identity of its
+        // own and "modified" can't merge into it: assigning this list replaces
+        // the stored one wholesale, and anything the API doesn't return is
+        // gone. originalDevicePhotoUri is local-only and never comes back from
+        // the API, so without this it survived only until the observation was
+        // next downloaded — after which the link between an uploaded
+        // observation and the photo still sitting in the device library was
+        // lost for good. Delete Unfaved then had nothing left but an exact
+        // same-second capture-time match, which is why the photos it stopped
+        // finding were the older ones.
+        mappedObsPhoto.originalDevicePhotoUri = existingObsPhoto.originalDevicePhotoUri;
       }
       return mappedObsPhoto;
     } );

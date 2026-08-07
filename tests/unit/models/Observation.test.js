@@ -57,6 +57,28 @@ describe( "Observation", ( ) => {
       expect( mappedObservation.projectObservations[0]._created_at ).toBeInstanceOf( Date );
     } );
 
+    // The API never returns it, and the embedded photo list is replaced
+    // wholesale on every sync, so without carrying it over an uploaded
+    // observation loses the link to the photo in the device library the first
+    // time it's downloaded again.
+    it( "should keep the stored originalDevicePhotoUri the API doesn't return", ( ) => {
+      const remoteObservationPhoto = factory( "RemoteObservationPhoto" );
+      const realm = {
+        objectForPrimaryKey: ( ) => ( {
+          observationPhotos: [{
+            uuid: remoteObservationPhoto.uuid,
+            originalDevicePhotoUri: "ph://ABC/L0/001",
+          }],
+        } ),
+      };
+      const mappedObservation = Observation.mapApiToRealm( {
+        uuid: "obs-uuid",
+        observation_photos: [remoteObservationPhoto],
+      }, realm );
+      expect( mappedObservation.observationPhotos[0].originalDevicePhotoUri )
+        .toEqual( "ph://ABC/L0/001" );
+    } );
+
     it( "should map ofvs to observationFieldValues with created_at metadata", ( ) => {
       const mockRemoteObservation = factory( "RemoteObservation", {
         ofvs: [factory( "RemoteObservationFieldValue" )],
