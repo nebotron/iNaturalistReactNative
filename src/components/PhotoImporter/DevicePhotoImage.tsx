@@ -16,6 +16,11 @@ interface Props {
   fallbackUri?: string;
   // Laid-out width of the cell, used to size the generated thumbnail
   cellWidth: number;
+  // Overrides the thumbnail size derived from cellWidth. Grids that zoom into
+  // the photo (Group Photos) pass the larger size their overlay uses, so the
+  // cell and the overlay share one thumbnail file instead of generating — and
+  // waiting on — two different ones for the same photo.
+  thumbnailMaxPixel?: number;
   style?: ViewStyle;
   selectable?: boolean;
   selected?: boolean;
@@ -38,6 +43,7 @@ const DevicePhotoImage = ( {
   uri,
   fallbackUri,
   cellWidth,
+  thumbnailMaxPixel,
   style,
   selectable = false,
   selected = false,
@@ -48,7 +54,8 @@ const DevicePhotoImage = ( {
   children,
   imageOverlay,
 }: Props ) => {
-  const thumbMaxPixel = PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
+  const thumbMaxPixel = thumbnailMaxPixel
+    ?? PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
   const thumbnailUri = useDeviceImageThumbnail( uri, thumbMaxPixel );
   const displayUri = thumbnailUri ?? fallbackUri;
   const source = displayUri

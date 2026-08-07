@@ -12,19 +12,31 @@ import {
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import React, {
-  useCallback, useEffect, useMemo, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import { preloadImage } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import {
+  prefetchDeviceImageThumbnails,
+  prioritizeDeviceImageThumbnails,
+} from "sharedHelpers/useDeviceImageThumbnail";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
 import GroupPhotoImage from "./GroupPhotoImage";
+import { groupPhotoCropSourceUri } from "./helpers/groupPhotoCrops";
 import flattenAndOrderSelectedPhotos from "./helpers/groupPhotoHelpers";
+import groupPhotoThumbnailMaxPixel from "./helpers/groupPhotoThumbnail";
 import preloadGroupPhotoSubjectDetection from "./helpers/preloadGroupPhotoSubjectDetection";
 
 const DROP_SHADOW = getShadow( { offsetHeight: -2 } );
+
+// How many items on either side of the viewport are warmed ahead of the cells
+// on screen. Behind matters as much as ahead here: scrolling back up is where
+// photos looked like they had unloaded.
+const PREFETCH_AHEAD = 12;
+const PREFETCH_BEHIND = 8;
 
 // Button (58) plus the toolbar's vertical padding
 const TOOLBAR_HEIGHT = 82;
@@ -130,6 +142,56 @@ const GroupPhotos = ( {
     return preloadGroupPhotoSubjectDetection( groupedPhotos, gridItemWidth );
   }, [gridItemWidth, groupedPhotos] );
 
+  // Read through a ref so the viewability callback stays stable; FlashList
+  // treats a changed onViewableItemsChanged as a fresh viewability config.
+  const viewportRef = useRef( { groupedPhotos, gridItemWidth, onViewableItemsChanged } );
+  useEffect( ( ) => {
+    viewportRef.current = { groupedPhotos, gridItemWidth, onViewableItemsChanged };
+  }, [gridItemWidth, groupedPhotos, onViewableItemsChanged] );
+
+  // Pin the thumbnails for the photos on screen (and the ones just outside it)
+  // to the front of the generation queue. A thumbnail a visible cell asked for
+  // used to be dropped as soon as that cell was recycled away, so scrolling
+  // back to a photo found it ungenerated again and the cell fell back to a
+  // placeholder; a prioritized photo is never dropped, so a photo that has been
+  // on screen once stays instantly available.
+  const handleViewableItemsChanged = useCallback( ( info: {
+    viewableItems: ViewToken<Item>[];
+    changed: ViewToken<Item>[];
+  } ) => {
+    const { groupedPhotos: items, gridItemWidth: cellWidth } = viewportRef.current;
+    viewportRef.current.onViewableItemsChanged?.( info );
+    if ( !cellWidth || info.viewableItems.length === 0 ) return;
+    const maxPixel = groupPhotoThumbnailMaxPixel( cellWidth );
+    const indices = info.viewableItems
+      .map( token => token.index )
+      .filter( ( index ): index is number => typeof index === "number" );
+    if ( indices.length === 0 ) return;
+    const first = Math.min( ...indices );
+    const last = Math.max( ...indices );
+    // Both uris matter: the cell draws image.uri and the crop overlay zooms the
+    // uncropped original, which are the same file until a crop has been baked.
+    const urisAt = ( index: number ) => ( items[index]?.photos ?? [] ).flatMap( photo => [
+      photo.image.uri,
+      groupPhotoCropSourceUri( photo.image ),
+    ] );
+
+    const visible: string[] = [];
+    for ( let i = first; i <= last; i += 1 ) visible.push( ...urisAt( i ) );
+    prioritizeDeviceImageThumbnails( visible, maxPixel );
+
+    // Enqueued least-urgent first: the queue is LIFO, so the items just off the
+    // leading edge of the viewport are generated first.
+    const nearby: string[] = [];
+    for ( let i = Math.max( 0, first - PREFETCH_BEHIND ); i < first; i += 1 ) {
+      nearby.push( ...urisAt( i ) );
+    }
+    for ( let i = Math.min( items.length - 1, last + PREFETCH_AHEAD ); i > last; i -= 1 ) {
+      nearby.push( ...urisAt( i ) );
+    }
+    prefetchDeviceImageThumbnails( nearby, maxPixel );
+  }, [] );
+
   const cropSelectedPhotos = useCallback( () => {
     if ( selectedPhotoUris.length === 0 ) {
       return;
@@ -221,7 +283,7 @@ const GroupPhotos = ( {
         keyExtractor={extractKey}
         numColumns={numColumns}
         onScroll={onScroll}
-        onViewableItemsChanged={onViewableItemsChanged}
+        onViewableItemsChanged={handleViewableItemsChanged}
         ref={flashListRef}
         renderItem={renderItem}
         testID="GroupPhotos.list"

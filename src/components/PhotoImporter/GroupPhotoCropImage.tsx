@@ -3,7 +3,7 @@ import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import React, {
   useCallback,
-  useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -41,6 +41,13 @@ const styles = StyleSheet.create( {
     opacity: 0,
   },
 } );
+
+// Thumbnails this process has already decoded once. A cell recycled onto one of
+// them is showing a bitmap the image cache still holds, so it can reveal its
+// crop on the first frame rather than waiting out another onLoad. Waiting was
+// what made a photo scrolled back to appear uncropped — the black-backed
+// overlay stayed hidden and the plain thumbnail showed through underneath.
+const paintedThumbnails = new Set<string>( );
 
 const cropsMatch = ( a: NormalizedCrop, b: NormalizedCrop ) => (
   Math.abs( a.x - b.x ) < CROP_EPSILON
@@ -125,8 +132,10 @@ const GroupPhotoCropImage = ( {
 
   // Frame the detected (or saved) crop once the image dimensions are known.
   // applyTransform only sets shared values, so it is safe to call regardless of
-  // layout timing (same path as the crop editor).
-  useEffect( ( ) => {
+  // layout timing (same path as the crop editor). Runs as a layout effect so a
+  // recycled cell is already framed in the frame it first paints, instead of
+  // showing the photo uncropped for a beat and then snapping into its crop box.
+  useLayoutEffect( ( ) => {
     if ( !ready || !initialCrop || framedCrop ) {
       return;
     }
@@ -180,7 +189,8 @@ const GroupPhotoCropImage = ( {
     return null;
   }
 
-  const framed = Boolean( framedCrop ) && loadedThumbnailUri === thumbnailUri;
+  const framed = Boolean( framedCrop )
+    && ( loadedThumbnailUri === thumbnailUri || paintedThumbnails.has( thumbnailUri ?? "" ) );
 
   return (
     <View style={[styles.overlay, !framed && styles.unframed]}>
@@ -206,7 +216,10 @@ const GroupPhotoCropImage = ( {
             style={StyleSheet.absoluteFill}
             resizeMode="contain"
             source={{ uri: thumbnailUri }}
-            onLoad={( ) => setLoadedThumbnailUri( thumbnailUri ?? null )}
+            onLoad={( ) => {
+              if ( thumbnailUri ) paintedThumbnails.add( thumbnailUri );
+              setLoadedThumbnailUri( thumbnailUri ?? null );
+            }}
           />
         )}
       />

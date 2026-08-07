@@ -4,6 +4,7 @@ import {
   groupPhotoCropSourceUri,
   saveGroupPhotoCrop,
 } from "components/PhotoImporter/helpers/groupPhotoCrops";
+import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import {
   Carousel,
   CarouselDots,
@@ -153,6 +154,14 @@ const GroupPhotoImage = ( {
         ? photo.image.uri
         : undefined}
       cellWidth={cellWidth}
+      // The same thumbnail the crop overlay zooms into, and the one the whole
+      // import is preloaded at. Asking for the cell's own 1x size instead meant
+      // a second file per photo that nothing warmed, so a photo reached by
+      // scrolling had to generate it there and then — which is why cells that
+      // had already been shown went back to a placeholder.
+      thumbnailMaxPixel={cellWidth > 0
+        ? groupPhotoThumbnailMaxPixel( cellWidth )
+        : undefined}
       style={style}
       selectable
       selected={isSelected}
