@@ -5,8 +5,6 @@ export interface NormalizedBounds {
   y: number;
   width: number;
   height: number;
-  // Model-predicted exposure multiplier (see NormalizedCrop.brightness).
-  brightness?: number;
 }
 
 const DEFAULT_PADDING_FRACTION = 0.1;

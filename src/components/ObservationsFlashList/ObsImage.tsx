@@ -5,13 +5,11 @@ import React, {
   useCallback, useState,
 } from "react";
 import type { LayoutChangeEvent } from "react-native";
-import useAutoBrightnessForUri from "sharedHelpers/useAutoBrightnessForUri";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 
 import ObsImageZoomable from "./ObsImageZoomable";
 
 interface Props {
-  autoBrightness?: boolean;
   autoDetectSubject?: boolean;
   iconicTaxonIconSize?: number;
   iconicTaxonName?: string;
@@ -31,7 +29,6 @@ const CLASS_NAMES = [
 ] as const;
 
 const ObsImage = ( {
-  autoBrightness = false,
   autoDetectSubject = false,
   iconicTaxonName,
   imageClassName,
@@ -56,27 +53,7 @@ const ObsImage = ( {
       : undefined,
   );
 
-  // crop===undefined: detection still in progress (brightness hook waits)
-  // crop===null:      no subject detection requested (measure full image)
-  // crop===NormalizedCrop: detection done; measure only the subject region
-  const brightnessUri = autoBrightness && uri?.uri
-    ? uri.uri
-    : undefined;
-  const brightnessCrop = autoDetectSubject
-    ? detection?.crop // undefined until detection resolves
-    : null; // no detection → full-image measurement
-
-  // Auto-brightness applies the computed adjustment live as a flat CSS
-  // brightness filter (multiplicative).
-  const multiplyAdjustment = useAutoBrightnessForUri(
-    brightnessUri,
-    brightnessCrop,
-  );
   const displayUri = uri?.uri;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const brightnessFilterStyle: any = multiplyAdjustment !== 1
-    ? { filter: [{ brightness: multiplyAdjustment }] }
-    : undefined;
 
   // Once subject detection resolves and the tile is measured, render the
   // photo through the shared image-zoom engine so a two-finger gesture zooms
@@ -117,7 +94,6 @@ const ObsImage = ( {
             <Image
               key={uri.uri}
               className={classNames( CLASS_NAMES )}
-              style={brightnessFilterStyle}
               testID="ObsList.photo"
               resizeMode="cover"
               source={{ uri: displayUri }}
@@ -127,7 +103,6 @@ const ObsImage = ( {
             <FasterImageView
               key={uri.uri}
               className={classNames( CLASS_NAMES )}
-              style={brightnessFilterStyle}
               testID="ObsList.photo"
               accessibilityIgnoresInvertColors
               fadeDuration={0}
@@ -148,7 +123,6 @@ const ObsImage = ( {
           imageHeight={detection.imageHeight}
           initialCrop={detection.crop}
           size={containerSize}
-          brightnessFilterStyle={brightnessFilterStyle}
         />
       ) }
       { opaque && (

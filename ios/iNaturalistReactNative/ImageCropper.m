@@ -139,10 +139,6 @@ typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 static OrtEnv     *s_ortEnv     = NULL;
 static OrtSession *s_ortSession = NULL;
 static BOOL        s_yoloFailed = NO;
-// The current model also exposes a "brightness" output (a ridge head baked
-// into the graph — see scripts/bake_brightness_head.py). Detected at init so
-// an older single-output model file keeps working.
-static BOOL        s_hasBrightnessOutput = NO;
 
 static void initYOLOSession( void )
 {
@@ -165,11 +161,6 @@ static void initYOLOSession( void )
     OrtStatus *status = ort->CreateSession( s_ortEnv, [path UTF8String], opts, &s_ortSession );
     ort->ReleaseSessionOptions( opts );
     if ( status ) { ort->ReleaseStatus( status ); s_yoloFailed = YES; return; }
-
-    size_t outputCount = 0;
-    if ( !ort->SessionGetOutputCount( s_ortSession, &outputCount ) ) {
-      s_hasBrightnessOutput = outputCount >= 2;
-    }
   } );
 }
 
@@ -239,10 +230,7 @@ static int compareBoxByConf( const void *a, const void *b )
 }
 
 // Returns {x,y,width,height} in top-left normalised coords, or nil if nothing detected.
-// When the model carries the baked-in brightness head, *outBrightness receives the
-// predicted exposure multiplier (already clamped in-graph) even if no box passes the
-// gate; it is left untouched otherwise.
-static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, float *outBrightness )
+static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
 {
   initYOLOSession();
   if ( s_yoloFailed || !s_ortSession ) return nil;
@@ -270,29 +258,20 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, float *outBrightne
   }
 
   const char *inputNames[]  = { "images" };
-  const char *outputNames[] = { "output0", "brightness" };
-  size_t      numOutputs    = s_hasBrightnessOutput ? 2 : 1;
-  OrtValue   *outputs[2]    = { NULL, NULL };
+  const char *outputNames[] = { "output0" };
+  OrtValue   *outputs[1]    = { NULL };
 
   status = ort->Run( s_ortSession, NULL,
                      inputNames,  (const OrtValue *const *)&inputTensor,  1,
-                     outputNames, numOutputs, outputs );
+                     outputNames, 1, outputs );
   ort->ReleaseValue( inputTensor );
   free( inputData );
 
   if ( status || !outputs[0] ) {
     if ( status ) ort->ReleaseStatus( status );
-    if ( outputs[1] ) ort->ReleaseValue( outputs[1] );
     return nil;
   }
 
-  if ( outputs[1] && outBrightness ) {
-    float *bright = NULL;
-    if ( !ort->GetTensorMutableData( outputs[1], (void **)&bright ) && bright ) {
-      *outBrightness = bright[0];
-    }
-  }
-  if ( outputs[1] ) ort->ReleaseValue( outputs[1] );
   OrtValue *outputTensor = outputs[0];
 
   // output0: [1, 5, 8400] — rows 0-3 = cx,cy,w,h; row 4 = objectness score (1 class)
@@ -382,68 +361,6 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, float *outBrightne
   return @{ @"x": @(x), @"y": @(y), @"width": @(w), @"height": @(h) };
 }
 
-// ─── Brightness measurement ──────────────────────────────────────────────────
-
-static int compareFloatsAsc( const void *a, const void *b )
-{
-  float fa = *(const float *)a, fb = *(const float *)b;
-  return ( fa > fb ) - ( fa < fb );
-}
-
-// Samples a 64×64 pixel grid within normCrop (0-1 coords) and returns the
-// geometric-mean and median perceptual luminance [0,1] of the region via the
-// out params. Pass CGRectMake(0,0,1,1) for the full image. Returns NO on
-// failure. Definitions must stay in sync with
-// scripts/compute_brightness_crop_features.py (geomean clips luminance at
-// 1e-4 before the log; median averages the two middle samples).
-static BOOL measureCropLuminance( UIImage *image, CGRect normCrop,
-                                  float *outGeomean, float *outMedian )
-{
-  const int N  = 64;
-  float imgW   = (float)image.size.width;
-  float imgH   = (float)image.size.height;
-
-  // Scale the full image so the crop region fills the N×N canvas.
-  float scaleX = N / ( normCrop.size.width  * imgW );
-  float scaleY = N / ( normCrop.size.height * imgH );
-  float drawW  = imgW * scaleX;
-  float drawH  = imgH * scaleY;
-  float drawX  = -normCrop.origin.x * imgW * scaleX;
-  float drawY  = -normCrop.origin.y * imgH * scaleY;
-
-  UIGraphicsBeginImageContextWithOptions( CGSizeMake( N, N ), YES, 1.0 );
-  [image drawInRect:CGRectMake( drawX, drawY, drawW, drawH )];
-  UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );
-  UIGraphicsEndImageContext( );
-
-  if ( !scaled.CGImage ) return NO;
-
-  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
-  unsigned char  *raw = (unsigned char *)calloc( (size_t)N * N * 4, 1 );
-  CGContextRef    bmp = CGBitmapContextCreate(
-    raw, N, N, 8, (size_t)4 * N, cs,
-    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
-  CGContextDrawImage( bmp, CGRectMake( 0, 0, N, N ), scaled.CGImage );
-  CGContextRelease( bmp );
-  CGColorSpaceRelease( cs );
-
-  float *lums = (float *)malloc( (size_t)N * N * sizeof( float ) );
-  double logSum = 0.0;
-  for ( int i = 0; i < N * N; i++ ) {
-    float r = raw[i * 4 + 0] / 255.0f;
-    float g = raw[i * 4 + 1] / 255.0f;
-    float b = raw[i * 4 + 2] / 255.0f;
-    lums[i] = 0.299f * r + 0.587f * g + 0.114f * b;
-    logSum += log( fmax( lums[i], 1e-4f ) );
-  }
-  free( raw );
-  qsort( lums, N * N, sizeof( float ), compareFloatsAsc );
-  *outGeomean = (float)exp( logSum / ( N * N ) );
-  *outMedian  = 0.5f * ( lums[N * N / 2 - 1] + lums[N * N / 2] );
-  free( lums );
-  return YES;
-}
-
 // ─── Brightness adjustment (linear multiply) ─────────────────────────────────
 
 // Brightness: multiplies each channel's encoded value by the gain k and clamps
@@ -470,14 +387,11 @@ static void applyBrightnessMultiplyBuffer( unsigned char *raw, int pixelCount, f
 // ─── Public detection entry point ────────────────────────────────────────────
 
 // Try YOLO; fall back to Vision attention saliency when nothing is detected.
-// The model's brightness prediction (computed on the same forward pass) is
-// attached to whichever bounds are returned.
 static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
 {
   if ( image.CGImage == NULL ) return nil;
 
-  float brightness = -1.0f;
-  NSDictionary *bounds = detectSubjectBoundsYOLO( image, &brightness );
+  NSDictionary *bounds = detectSubjectBoundsYOLO( image );
 
   if ( !bounds ) {
     CGImagePropertyOrientation orientation = orientationFromUIImage( image );
@@ -488,11 +402,6 @@ static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
     bounds = detectSubjectBoundsSaliency( handler );
   }
 
-  if ( bounds && brightness > 0.0f ) {
-    NSMutableDictionary *withBrightness = [bounds mutableCopy];
-    withBrightness[@"brightness"] = @( brightness );
-    bounds = withBrightness;
-  }
   return bounds;
 }
 
@@ -1056,35 +965,6 @@ RCT_EXPORT_METHOD( createThumbnail
   writeThumbnail( downscaledImageAtPath( input, maxDim ) );
 }
 
-// cropX/cropY/cropW/cropH are normalized [0,1] coords of the subject region;
-// pass null for all four to measure the full image.
-RCT_EXPORT_METHOD( measureImageBrightness
-                  : ( NSString * )inputPath cropX
-                  : ( NSNumber * )cropX cropY
-                  : ( NSNumber * )cropY cropW
-                  : ( NSNumber * )cropW cropH
-                  : ( NSNumber * )cropH resolver
-                  : ( RCTPromiseResolveBlock )resolve rejecter
-                  : ( RCTPromiseRejectBlock )reject )
-{
-  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  UIImage  *image = [UIImage imageWithContentsOfFile:input];
-  if ( !image ) { resolve( [NSNull null] ); return; }
-
-  CGRect normCrop = ( cropX && cropY && cropW && cropH )
-    ? CGRectMake( [cropX floatValue], [cropY floatValue],
-                  [cropW floatValue], [cropH floatValue] )
-    : CGRectMake( 0, 0, 1, 1 );
-
-  float geomean = -1.0f;
-  float median  = -1.0f;
-  if ( !measureCropLuminance( image, normCrop, &geomean, &median ) ) {
-    resolve( [NSNull null] );
-    return;
-  }
-  resolve( @{ @"geomean": @( geomean ), @"median": @( median ) } );
-}
-
 // Multiplies every pixel by the brightness gain (scaled down to fit within
 // maxDimension on its longest side, since this is used for thumbnail display)
 // and writes the result as a JPEG to outputPath.
@@ -1110,7 +990,7 @@ RCT_EXPORT_METHOD( adjustImageBrightness
   int   H      = MAX( 1, (int)roundf( imgH * scale ) );
 
   // drawInRect: applies the UIImage's orientation, so this also normalizes
-  // orientation to "up" the same way measureCropLuminance does above.
+  // orientation to "up".
   UIGraphicsBeginImageContextWithOptions( CGSizeMake( W, H ), YES, 1.0 );
   [image drawInRect:CGRectMake( 0, 0, W, H )];
   UIImage *scaled = UIGraphicsGetImageFromCurrentImageContext( );

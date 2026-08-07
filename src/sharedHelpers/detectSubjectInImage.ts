@@ -37,16 +37,12 @@ const detectSubjectInImage = async (
     if ( !bounds ) {
       return defaultSquareCrop( imageWidth, imageHeight );
     }
-    const crop = subjectBoundsToNormalizedCrop(
+    return subjectBoundsToNormalizedCrop(
       bounds,
       imageWidth,
       imageHeight,
       SUBJECT_DETECTION_PADDING,
     );
-    if ( typeof bounds.brightness === "number" && bounds.brightness > 0 ) {
-      crop.brightness = bounds.brightness;
-    }
-    return crop;
   } catch ( error ) {
     logger.warn( "Subject detection failed, using default crop", error );
     return defaultSquareCrop( imageWidth, imageHeight );

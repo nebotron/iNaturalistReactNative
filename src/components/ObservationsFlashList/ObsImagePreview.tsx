@@ -25,7 +25,6 @@ const ICON_DROP_SHADOW = getShadow( {
 } );
 
 interface Props extends PropsWithChildren {
-  autoBrightness?: boolean;
   autoDetectSubject?: boolean;
   className?: string;
   hasSound?: boolean;
@@ -68,7 +67,6 @@ const getBorderRadiusClass = (
 };
 
 const ObsImagePreview = ( {
-  autoBrightness = false,
   autoDetectSubject = false,
   children,
   className,
@@ -323,7 +321,6 @@ const ObsImagePreview = ( {
     ( info: { item: { uri: string } | null } ) => (
       <View style={carouselWidthStyle} className="h-full">
         <ObsImage
-          autoBrightness={autoBrightness}
           autoDetectSubject={autoDetectSubject}
           initialContainerSize={containerWidth ?? undefined}
           uri={info.item ?? undefined}
@@ -338,7 +335,6 @@ const ObsImagePreview = ( {
       </View>
     ),
     [
-      autoBrightness,
       autoDetectSubject,
       carouselWidthStyle,
       containerWidth,
@@ -382,7 +378,6 @@ const ObsImagePreview = ( {
     content = (
       <>
         <ObsImage
-          autoBrightness={autoBrightness}
           autoDetectSubject={autoDetectSubject}
           uri={source}
           opaque={opaque}

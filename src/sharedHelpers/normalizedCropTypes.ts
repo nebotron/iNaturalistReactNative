@@ -3,10 +3,6 @@ export interface NormalizedCrop {
   y: number;
   w: number;
   h: number;
-  // Exposure multiplier predicted by the subject-detection model's baked-in
-  // brightness head, clamped to [0.4, 3.0] in-graph. Only present on crops
-  // produced by detectSubjectInImage.
-  brightness?: number;
 }
 
 const MIN_CROP_FRACTION = 0.05;
