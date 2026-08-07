@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 import {
-  Image, StyleSheet, View,
+  Image, PixelRatio, StyleSheet, View,
 } from "react-native";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
@@ -25,6 +25,12 @@ const MAX_SCALE = 100;
 // tapped (or barely moved) comes back as a crop that differs in the last few
 // decimals. Below this it isn't a crop the user made.
 const CROP_EPSILON = 0.001;
+
+// Pixels the photo itself is decoded at. Anything the camera captured fits
+// inside this (a 12MP photo is 4032 on its long side), so in practice the cell
+// draws the photo at its native resolution; the cap is only there so a
+// panorama can't decode a bitmap the size of the whole grid.
+const FULL_RESOLUTION_MAX_PIXEL = 4096;
 
 const styles = StyleSheet.create( {
   overlay: {
@@ -192,6 +198,24 @@ const GroupPhotoCropImage = ( {
   const framed = Boolean( framedCrop )
     && ( loadedThumbnailUri === thumbnailUri || paintedThumbnails.has( thumbnailUri ?? "" ) );
 
+  // React Native decodes an image to the pixel bounds of the view it's drawn
+  // in, so a photo laid out at the cell's own size is downsampled to it no
+  // matter how much detail the file holds — and the crop box then zooms into
+  // that downsample, which is why a tightly framed cell looked soft. Laying the
+  // photo out at its own pixel size and scaling that box back down to the cell
+  // leaves the decode full-resolution; scaling about the box's center over the
+  // same square means the geometry still matches the thumbnail underneath
+  // exactly, so the swap is invisible.
+  const fullResolutionSize = FULL_RESOLUTION_MAX_PIXEL / PixelRatio.get( );
+  const fullResolutionStyle = {
+    position: "absolute" as const,
+    left: ( size - fullResolutionSize ) / 2,
+    top: ( size - fullResolutionSize ) / 2,
+    width: fullResolutionSize,
+    height: fullResolutionSize,
+    transform: [{ scale: size / fullResolutionSize }],
+  };
+
   return (
     <View style={[styles.overlay, !framed && styles.unframed]}>
       <SharedZoomableImage
@@ -209,18 +233,40 @@ const GroupPhotoCropImage = ( {
         cropPanContext={cropPanContext}
         onInteractionEnd={handleInteractionEnd}
         renderImage={( ) => (
-          <Image
-            testID="GroupPhotoCropImage.photo"
-            accessibilityIgnoresInvertColors
-            fadeDuration={0}
-            style={StyleSheet.absoluteFill}
-            resizeMode="contain"
-            source={{ uri: thumbnailUri }}
-            onLoad={( ) => {
-              if ( thumbnailUri ) paintedThumbnails.add( thumbnailUri );
-              setLoadedThumbnailUri( thumbnailUri ?? null );
-            }}
-          />
+          <>
+            {/*
+              The thumbnail the detector ran on, kept underneath as the layer
+              that paints immediately: it's already generated and warmed by the
+              time the cell mounts, while the photo above it still has to be
+              read out of the photo library (and pulled back from iCloud, if the
+              original was offloaded). Nothing here waits on that — the cell
+              shows the thumbnail and sharpens into the photo when it lands.
+            */}
+            <Image
+              testID="GroupPhotoCropImage.photo"
+              accessibilityIgnoresInvertColors
+              fadeDuration={0}
+              style={StyleSheet.absoluteFill}
+              resizeMode="contain"
+              source={{ uri: thumbnailUri }}
+              onLoad={( ) => {
+                if ( thumbnailUri ) paintedThumbnails.add( thumbnailUri );
+                setLoadedThumbnailUri( thumbnailUri ?? null );
+              }}
+            />
+            {framedCrop && (
+              <View style={fullResolutionStyle} pointerEvents="none">
+                <Image
+                  testID="GroupPhotoCropImage.fullResolutionPhoto"
+                  accessibilityIgnoresInvertColors
+                  fadeDuration={0}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="contain"
+                  source={{ uri: cropSourceUri }}
+                />
+              </View>
+            )}
+          </>
         )}
       />
     </View>

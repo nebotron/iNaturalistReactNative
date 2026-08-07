@@ -1,8 +1,9 @@
 import { PixelRatio } from "react-native";
 
-// The crop box zooms well past the cell's own size, so the image the grid zooms
-// into is generated larger than the 1x thumbnail a static cell shows. Capped at
-// the upload size, which is all the detail a crop can ever carry.
+// Generated larger than the 1x size a static cell shows: a cell that hasn't
+// loaded its full-resolution photo yet still shows this while the crop box is
+// zoomed in. Capped at the upload size, which is all the detail a crop can ever
+// carry.
 const ZOOM_THUMBNAIL_SCALE = 2;
 const MAX_ZOOM_THUMBNAIL_PIXEL = 2048;
 // Subject detection runs on this same thumbnail, and the detector letterboxes
