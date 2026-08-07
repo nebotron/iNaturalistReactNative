@@ -103,8 +103,11 @@ const GroupPhotos = ( {
     gridItemWidth,
     numColumns,
   } = useGridLayout( undefined, "fullWidth" );
-  const extractKey = ( item: Item, index: number ) => (
-    `${item.photos?.[0]?.image.uri ?? item.soundUri ?? ""}${index}`
+  // Keyed on the media itself, never the index: mixing the index in gave every
+  // item below a deleted one a brand new key, so the whole rest of the grid was
+  // treated as new items and recycled onto different photos at once.
+  const extractKey = ( item: Item ) => (
+    item.photos?.[0]?.image.uri ?? item.soundUri ?? ""
   );
 
   const noObsSelected = selectedObservations.length === 0;
