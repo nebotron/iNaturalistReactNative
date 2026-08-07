@@ -1457,69 +1457,6 @@ RCT_EXPORT_METHOD( photoDeletionContext
   } );
 }
 
-// Runs one PHPhotoLibrary transaction the app owns outright — creating an
-// album — and reports whether it completes and how long it took.
-//
-// This is the one question the deletion diagnostics still can't answer. A
-// deletion needs iOS to present a user-consent alert; creating an album does
-// not. So when a deletion hangs, running this beside it separates the two
-// candidates that are left: if the album transaction comes back promptly while
-// the deletion never does, PHPhotoLibrary is healthy and the wedge is
-// specifically the consent-alert path; if this hangs too, the wedge is deeper
-// (photolibraryd, or transactions queueing behind the dead deletion) and
-// nothing app-side can route around it.
-//
-// Exactly one transaction, because the probe's whole value is that its result
-// is unambiguous. It used to create the album and then delete it again in a
-// second transaction, resolving only once the cleanup had finished — which
-// meant a promise that never settled could be either transaction, and JS
-// reported both as "the library did not service a consent-free write". Both
-// preflight failures in the Aug 5 16:04–16:40 log had that signature
-// (probeMs=-1, "did not settle in 10000ms"), so neither of them actually says
-// whether the write went through, and between them they blocked five deletions
-// (150 photos) and eleven location writes on a library that created 68 assets
-// without complaint at 16:10:58. Resolving early instead is not an option: the
-// cleanup would then overlap the deletion this runs immediately before, which
-// is the overlap enqueuePhotoLibraryWrite exists to prevent.
-//
-// So the cleanup moves into the next probe's transaction: delete whatever the
-// last probe left behind and create a fresh album, in one performChanges. One
-// completion handler, one thing it can mean, and at most one leftover album on
-// the device between probes.
-static NSString *const kPhotoLibraryProbeAlbumTitle = @"iNaturalist library probe";
-
-RCT_EXPORT_METHOD( photoLibraryWriteProbe
-                  : ( RCTPromiseResolveBlock )resolve rejecter
-                  : ( RCTPromiseRejectBlock )reject )
-{
-  PHFetchOptions *staleOptions = [PHFetchOptions new];
-  staleOptions.predicate = [NSPredicate predicateWithFormat:@"title = %@",
-    kPhotoLibraryProbeAlbumTitle];
-  PHFetchResult<PHAssetCollection *> *stale =
-    [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
-                                             subtype:PHAssetCollectionSubtypeAlbumRegular
-                                             options:staleOptions];
-  NSUInteger staleCount = stale.count;
-  NSDate *startedAt = [NSDate date];
-  [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-    if ( staleCount > 0 ) {
-      [PHAssetCollectionChangeRequest deleteAssetCollections:stale];
-    }
-    [PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:
-      kPhotoLibraryProbeAlbumTitle];
-  } completionHandler:^( BOOL success, NSError *error ) {
-    resolve( @{
-      @"ok": @( success ),
-      @"ms": @( ( long )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 ) ),
-      @"error": error.localizedDescription ?: @"",
-      // How many albums the previous probes left behind. Above 1 means probes
-      // have been failing after the write landed, which the "ok" flag alone
-      // can't show.
-      @"cleaned": @( staleCount ),
-    } );
-  }];
-}
-
 // Returns the library photos whose capture time, floored to the second,
 // matches one of the passed times, as parallel arrays of ph:// URIs and
 // millisecond timestamps.

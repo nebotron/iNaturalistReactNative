@@ -8,7 +8,6 @@ const mockIosReadGalleryPermission = jest.fn( async () => "not-determined" );
 const mockIosRequestReadWriteGalleryPermission = jest.fn( async () => "granted" );
 const mockDeletePhotos = jest.fn( async () => undefined );
 const mockPhotoDeletionContext = jest.fn( async ( ) => "appState=0" );
-const mockPhotoLibraryWriteProbe = jest.fn( async ( ) => ( { ok: true, ms: 3, error: "" } ) );
 
 // The module under test destructures NativeModules.ImageCropper at import time,
 // so the native helper has to exist before that import runs. deletePhotoAssets
@@ -18,7 +17,6 @@ jest.mock( "react-native", ( ) => {
   const RN = jest.requireActual( "react-native" );
   RN.NativeModules.ImageCropper = {
     photoDeletionContext: ( ...args ) => mockPhotoDeletionContext( ...args ),
-    photoLibraryWriteProbe: ( ...args ) => mockPhotoLibraryWriteProbe( ...args ),
   };
   return RN;
 } );
@@ -64,8 +62,6 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     zustandStorage.removeItem( "deleteOriginalPhotosSettingsPrompted" );
     mockIosReadGalleryPermission.mockResolvedValue( "not-determined" );
     mockIosRequestReadWriteGalleryPermission.mockResolvedValue( "granted" );
-    mockPhotoLibraryWriteProbe.mockReset( );
-    mockPhotoLibraryWriteProbe.mockResolvedValue( { ok: true, ms: 3, error: "" } );
   } );
 
   it( "requests photo library permission for user-initiated deletes", async ( ) => {
