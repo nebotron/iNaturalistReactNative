@@ -14,32 +14,8 @@ import {
 } from "sharedHelpers/appCreatedPhotoAssets";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
-import { zustandStorage } from "stores/useStore";
 
 const logger = log.extend( "promptDeleteOriginalDevicePhotos" );
-
-// As of iOS 26, a hung deletePhotos or updateAssetLocation call (see
-// ImageCropper.m) can mean PHPhotoLibrary's confirmation machinery is wedged
-// for the whole device — Apple Developer Forums thread 806349 — until a
-// restart. Retrying on every subsequent import just repeats the same hang,
-// and may be compounding whatever is stuck. Once one of these calls times
-// out, skip attempting either kind for a cooldown instead of hammering it; a
-// later success (e.g. after the user restarts) clears the cooldown
-// immediately. Shared with applyTrackedLocationToPhotos.ts, which hits the
-// same underlying confirmation machinery.
-const LAST_PHOTO_LIBRARY_WRITE_FAILURE_STORAGE_KEY = "photo-library-write-last-failure-at";
-const PHOTO_LIBRARY_WRITE_FAILURE_COOLDOWN_MS = 10 * 60 * 1000;
-
-export const isInPhotoLibraryWriteCooldown = ( ): boolean => {
-  const lastFailureAt = zustandStorage.getItem( LAST_PHOTO_LIBRARY_WRITE_FAILURE_STORAGE_KEY );
-  return typeof lastFailureAt === "number"
-    && ( Date.now() - lastFailureAt ) < PHOTO_LIBRARY_WRITE_FAILURE_COOLDOWN_MS;
-};
-
-export const recordPhotoLibraryWriteFailure = ( ) => zustandStorage.setItem(
-  LAST_PHOTO_LIBRARY_WRITE_FAILURE_STORAGE_KEY,
-  Date.now(),
-);
 
 // Whether a Photos-library write has ever gone through since launch, and how
 // many have hung. The app log shows hangs arriving in day-long runs between
@@ -48,9 +24,8 @@ export const recordPhotoLibraryWriteFailure = ( ) => zustandStorage.setItem(
 let lastPhotoLibraryWriteSuccessAt: number | null = null;
 let photoLibraryWriteHangCount = 0;
 
-export const clearPhotoLibraryWriteFailure = ( ) => {
+export const recordPhotoLibraryWriteSuccess = ( ) => {
   lastPhotoLibraryWriteSuccessAt = Date.now( );
-  zustandStorage.removeItem( LAST_PHOTO_LIBRARY_WRITE_FAILURE_STORAGE_KEY );
 };
 
 // Native helpers (iOS) that (a) report the window/scene/modal state governing
@@ -85,9 +60,9 @@ interface DeleteOriginalDevicePhotosOptions {
 }
 
 // What the OS actually did, so callers can tell the user the truth instead of
-// assuming every requested URI was deleted. A hung or cooled-down delete
-// resolves normally (the error is handled here), so without this a caller
-// can't distinguish "deleted 1159 photos" from "deleted none of them".
+// assuming every requested URI was deleted. A hung delete resolves normally
+// (the error is handled here), so without this a caller can't distinguish
+// "deleted 1159 photos" from "deleted none of them".
 export interface DeleteOriginalDevicePhotosResult {
   deleted: number;
   requested: number;
@@ -132,10 +107,9 @@ const ensureDeletePhotosPermission = async ( requested: number ): Promise<boolea
 // a second write (delete OR location update, see applyTrackedLocationToPhotos.ts)
 // while one is still in flight can make both hang (iOS won't present a second
 // confirmation over the first), and a burst of concurrent writes can also
-// spuriously trip each other's timeout under normal I/O load, which then
-// poisons the cooldown above for every write that follows — including
-// unrelated deletions. Route every native Photos-library write (not just
-// deletions) through this single chain so only one is ever in flight.
+// spuriously trip each other's timeout under normal I/O load. Route every
+// native Photos-library write (not just deletions) through this single chain
+// so only one is ever in flight.
 let photoLibraryWriteChain: Promise<void> = Promise.resolve( );
 
 export const enqueuePhotoLibraryWrite = <T, >( task: ( ) => Promise<T> ): Promise<T> => {
@@ -153,8 +127,8 @@ export const enqueuePhotoLibraryWrite = <T, >( task: ( ) => Promise<T> ): Promis
 // ran the full two minutes and came back with nothing, holding the write chain
 // — and the screen the user asked to leave — for the whole of it. Ten seconds
 // is the cost of finding out instead. The trade is real and deliberate: a user
-// who takes longer than 10s to tap Delete gets a failure reported (and a
-// cooldown armed) for a deletion iOS may still carry out behind it.
+// who takes longer than 10s to tap Delete gets a failure reported for a
+// deletion iOS may still carry out behind it.
 const DELETE_TIMEOUT_MS = 10000;
 
 // The pending-delete diagnostic has to land while the delete is still in
@@ -187,8 +161,8 @@ const PREFLIGHT_TIMEOUT_MS = 10000;
 // write the app owns outright certainly can't complete a deletion that needs a
 // consent alert on top, and every delete in the Aug 5 log spent 120s
 // discovering that. Skipping on a failed preflight turns a two-minute hang into
-// a ten-second one and arms the cooldown that stops the next import repeating
-// it.
+// a ten-second one. It is judged fresh on every deletion, so the next import
+// tries again rather than being locked out by this one's verdict.
 const preflightPhotoLibraryWrite = async (
   requested: number,
 ): Promise<{ ok: boolean; ms: number }> => {
@@ -254,21 +228,6 @@ const performDeleteOriginalDevicePhotos = async (
 
   const requested = uniqueUris.length;
 
-  if ( Platform.OS === "ios" && isInPhotoLibraryWriteCooldown( ) ) {
-    logger.warn(
-      `Skipped deleting ${requested} device photo(s): `
-      + "still in cooldown after a recent Photos-library write timeout (likely a "
-      + "wedged PHPhotoLibrary confirmation — see promptDeleteOriginalDevicePhotos.ts)",
-    );
-    if ( options.userInitiated ) {
-      Alert.alert(
-        i18next.t( "Something-went-wrong" ),
-        i18next.t( "Could-not-delete-original-photos" ),
-      );
-    }
-    return { deleted: 0, requested, succeeded: false };
-  }
-
   const hasPermission = await ensureDeletePhotosPermission( requested );
   if ( !hasPermission ) {
     logger.warn( "Skipped deleting device photos: photo library permission not granted" );
@@ -286,7 +245,6 @@ const performDeleteOriginalDevicePhotos = async (
     // No prose line beside this: photo_delete_preflight above already carries
     // the count and why it failed, and two POSTs for one event is what the
     // last round of removals was about.
-    recordPhotoLibraryWriteFailure( );
     if ( options.userInitiated ) {
       Alert.alert(
         i18next.t( "Something-went-wrong" ),
@@ -388,15 +346,6 @@ const performDeleteOriginalDevicePhotos = async (
     // when it fired. Was photo_delete_pending_20s up to and including build
     // 3ef9032d1.
     logger.errorWithExtra( "photo_delete_pending", pendingExtra( ) );
-    // Arm the cooldown here rather than only at DELETE_TIMEOUT_MS. A wedged
-    // PHPhotoLibrary leaves the app sitting on a dead confirmation, and the
-    // app log shows it being killed (or force-quit) well before the
-    // timeout could record the failure — so the next launch saw no cooldown
-    // and fired the same doomed delete again, twice in four minutes. A delete
-    // that does come back clears this immediately, and nothing else can run
-    // while this one is pending (see enqueuePhotoLibraryWrite), so arming it
-    // early only takes effect when the app doesn't survive the hang.
-    if ( Platform.OS === "ios" ) recordPhotoLibraryWriteFailure( );
     // The context above is a snapshot from *before* the delete, so it can't say
     // whether something presented over the app afterwards — and the log's three
     // hangs all showed a foreground app with no modal and every asset fetched,
@@ -526,24 +475,22 @@ const performDeleteOriginalDevicePhotos = async (
     // above zero means these are gone and no longer worth tracking. Keep them
     // if it failed: they still need deleting, and still without a prompt.
     if ( appCreatedDeleted > 0 ) forgetAppCreatedPhotoAssets( appCreatedUris );
-    clearPhotoLibraryWriteFailure( );
+    recordPhotoLibraryWriteSuccess( );
     return { deleted: deleted ?? requested, requested, succeeded: true };
   } catch ( deleteError ) {
     // As of iOS 26, PHPhotoLibrary.performChanges' completion handler for
     // deleteAssets can simply never fire — no confirmation dialog, no error,
     // no library change (confirmed via a native PHPhotoLibraryChangeObserver
     // fallback in ImageCropper.m, and matches Apple Developer Forums thread
-    // 806349). There's no way to make the OS call back; the cooldown above
-    // is a mitigation (stop repeating the same 120s hang on every import),
-    // not a fix. Restarting the device is still the only way to clear it.
+    // 806349). There's no way to make the OS call back, and restarting the
+    // device is still the only known way to clear it — but a failure here says
+    // nothing about the next delete, so nothing is remembered from it. Every
+    // deletion gets its own attempt, however the last one ended.
     logger.errorWithExtra(
       "photo_delete_failed",
       deleteError,
       pendingExtra( ),
     );
-    const timedOut = deleteError instanceof Error
-      && deleteError.message.includes( "timed out" );
-    if ( Platform.OS === "ios" && timedOut ) recordPhotoLibraryWriteFailure( );
     if ( options.userInitiated ) {
       Alert.alert(
         i18next.t( "Something-went-wrong" ),

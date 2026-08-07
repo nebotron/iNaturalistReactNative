@@ -185,8 +185,8 @@ const DevicePhotoCleanup = ( ) => {
 
   const deletePhotos = useCallback( async ( ) => {
     setDeleting( true );
-    // Report what the OS actually deleted. A wedged PHPhotoLibrary (or the
-    // cooldown that follows one) deletes nothing yet resolves normally, and
+    // Report what the OS actually deleted. A wedged PHPhotoLibrary deletes
+    // nothing yet resolves normally, and
     // claiming "Deleted 1,159 photos" while the photos are all still there is
     // worse than saying nothing happened.
     const { deleted, succeeded } = await deleteOriginalDevicePhotos(

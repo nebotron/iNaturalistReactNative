@@ -17,10 +17,8 @@ import { drainTrackedLocationFixes } from "sharedHelpers/locationHistoryTracker"
 import { log } from "sharedHelpers/logger";
 import { privacyZoneGeoprivacy } from "sharedHelpers/privacyZone";
 import {
-  clearPhotoLibraryWriteFailure,
   enqueuePhotoLibraryWrite,
-  isInPhotoLibraryWriteCooldown,
-  recordPhotoLibraryWriteFailure,
+  recordPhotoLibraryWriteSuccess,
 } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import useStore from "stores/useStore";
@@ -185,14 +183,11 @@ const flushLocationWrites = async ( ) => {
       BATCH_UPDATE_TIMEOUT_MS,
       `updateAssetLocations for ${updates.length} photo(s)`,
     ) );
-    clearPhotoLibraryWriteFailure( );
+    recordPhotoLibraryWriteSuccess( );
   } catch ( error ) {
     reportSuppressed( "failed", String( error instanceof Error
       ? error.message
       : error ) );
-    if ( error instanceof Error && error.message.includes( "timed out" ) ) {
-      recordPhotoLibraryWriteFailure( );
-    }
   }
   // Best-effort: callers only await this to keep the save from racing ahead of
   // the write, so a failed batch settles the same way a failed write did.
@@ -227,14 +222,6 @@ const applyLocationToDevicePhotoLibrary = async (
 ): Promise<void> => {
   const phUri = normalizeDevicePhotoUri( originalDevicePhotoUri );
   if ( Platform.OS !== "ios" || !phUri?.startsWith( "ph://" ) || !ImageCropper ) {
-    return;
-  }
-  // Shares a cooldown with device-photo deletion: both hit the same
-  // PHPhotoLibrary confirmation machinery, and a recent timeout on either one
-  // means it's likely wedged for the whole device (see
-  // promptDeleteOriginalDevicePhotos.ts).
-  if ( isInPhotoLibraryWriteCooldown( ) ) {
-    reportSuppressed( "skipped", "still in Photos-library write cooldown" );
     return;
   }
   if ( isQueuedForDeletion( phUri ) ) {

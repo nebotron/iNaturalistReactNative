@@ -171,9 +171,9 @@ const useUsbAutoImport = ( ) => {
           // — 114 in a run, one per file — and it was the one path outside the
           // chain, so an offload overlapped whatever else the app was doing to
           // the library. In the Aug 5 16:04–16:40 log that cost a deletion
-          // preflight its meaning: the probe ran on top of a live save, hung,
-          // and armed a ten-minute cooldown that then blocked five deletions on
-          // a library which went on to create 68 assets without complaint.
+          // preflight its meaning: the probe ran on top of a live save and
+          // hung, so five deletions were skipped on a library which went on to
+          // create 68 assets without complaint.
           // Enqueued per file rather than per run so a deletion waits for one
           // photo, not a whole card.
           // eslint-disable-next-line no-await-in-loop

@@ -1,8 +1,6 @@
 import { Alert, AppState } from "react-native";
 import promptDeleteOriginalDevicePhotos, {
-  clearPhotoLibraryWriteFailure,
   deleteOriginalDevicePhotos,
-  isInPhotoLibraryWriteCooldown,
 } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import { zustandStorage } from "stores/useStore";
 
@@ -68,9 +66,6 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     mockIosRequestReadWriteGalleryPermission.mockResolvedValue( "granted" );
     mockPhotoLibraryWriteProbe.mockReset( );
     mockPhotoLibraryWriteProbe.mockResolvedValue( { ok: true, ms: 3, error: "" } );
-    // The cooldown is persisted, so a test that arms it otherwise makes every
-    // test after it skip its deletion before reaching what it meant to check.
-    clearPhotoLibraryWriteFailure( );
   } );
 
   it( "requests photo library permission for user-initiated deletes", async ( ) => {
@@ -160,8 +155,7 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       beforeEach( ( ) => jest.useFakeTimers( ) );
       afterEach( ( ) => jest.useRealTimers( ) );
 
-      it( "skips the doomed deletion and arms the cooldown", async ( ) => {
-        clearPhotoLibraryWriteFailure( );
+      it( "skips the doomed deletion, and still probes for the next one", async ( ) => {
         mockPhotoLibraryWriteProbe.mockImplementation( ( ) => new Promise( ( ) => {} ) );
 
         const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
@@ -173,11 +167,20 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
         // nothing to gain by spending the deletion timeout finding out.
         expect( mockDeletePhotos ).not.toHaveBeenCalled( );
         expect( result ).toEqual( { deleted: 0, requested: 1, succeeded: false } );
-        expect( isInPhotoLibraryWriteCooldown( ) ).toBe( true );
         expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
           "photo_delete_preflight",
           expect.objectContaining( { requested: 1, probeOk: false } ),
         );
+
+        // The verdict is about this deletion only. A library that recovers
+        // (the user restarts the device) is found by trying again.
+        mockPhotoLibraryWriteProbe.mockResolvedValue( { ok: true, ms: 3, error: "" } );
+        mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
+        const retry = deleteOriginalDevicePhotos( ["ph://TWO"] );
+        await jest.advanceTimersByTimeAsync( 0 );
+        await retry;
+
+        expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://TWO"] );
       } );
     } );
   } );
@@ -274,40 +277,27 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( extra.wentInactive ).toBe( true );
     } );
 
-    it( "arms the cooldown as soon as the hang is detected", async ( ) => {
-      clearPhotoLibraryWriteFailure( );
+    it( "issues the next deletion anyway, however the last one ended", async ( ) => {
       let finishDeletion;
-      mockDeletePhotos.mockImplementation(
+      mockDeletePhotos.mockImplementationOnce(
         ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
       );
 
-      const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
-      await jest.advanceTimersByTimeAsync( 4000 );
-      expect( isInPhotoLibraryWriteCooldown( ) ).toBe( false );
+      const hung = deleteOriginalDevicePhotos( ["ph://ONE"] );
+      await jest.advanceTimersByTimeAsync( 10000 );
+      expect( await hung ).toEqual( { deleted: 0, requested: 1, succeeded: false } );
 
-      // The app is routinely killed before the 120s timeout could record the
-      // failure, so a cooldown armed only there never survived to the relaunch.
-      await jest.advanceTimersByTimeAsync( 1000 );
-      expect( isInPhotoLibraryWriteCooldown( ) ).toBe( true );
+      // Nothing is remembered from a failed delete. A wedged PHPhotoLibrary
+      // recovers when the user restarts the device, and asking is the only way
+      // to find out that it has.
+      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
+      const retry = deleteOriginalDevicePhotos( ["ph://TWO"] );
+      await jest.advanceTimersByTimeAsync( 0 );
 
-      finishDeletion( { deleted: 1, requested: 1 } );
-      await deletion;
-    } );
+      expect( await retry ).toEqual( { deleted: 1, requested: 1, succeeded: true } );
+      expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://TWO"] );
 
-    it( "clears the cooldown when a slow delete does come back", async ( ) => {
-      clearPhotoLibraryWriteFailure( );
-      let finishDeletion;
-      mockDeletePhotos.mockImplementation(
-        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
-      );
-
-      const deletion = deleteOriginalDevicePhotos( ["ph://ONE"] );
-      await jest.advanceTimersByTimeAsync( 5000 );
-      expect( isInPhotoLibraryWriteCooldown( ) ).toBe( true );
-
-      finishDeletion( { deleted: 1, requested: 1 } );
-      await deletion;
-      expect( isInPhotoLibraryWriteCooldown( ) ).toBe( false );
+      finishDeletion( );
     } );
 
     it( "re-reads the presentation context at the hang", async ( ) => {
