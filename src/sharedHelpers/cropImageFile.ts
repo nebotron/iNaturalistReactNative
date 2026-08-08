@@ -7,6 +7,7 @@ import {
 } from "sharedHelpers/jpegCropBounds";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import * as uuid from "uuid";
 
 const logger = log.extend( "cropImageFile" );
@@ -25,8 +26,6 @@ interface ImageCropperModule {
 const { ImageCropper } = NativeModules as {
   ImageCropper?: ImageCropperModule;
 };
-
-const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
 const cropImageFile = async (
   imageUri: string,

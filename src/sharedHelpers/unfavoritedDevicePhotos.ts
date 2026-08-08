@@ -168,7 +168,7 @@ const loadMatchingDeviceAssets = async (
     if ( elapsed > 1000 ) {
       logger.info( matchReport );
     } else {
-      console.log( matchReport );
+      logger.debug( matchReport );
     }
     return uris.map( ( uri, index ) => ( {
       uri: normalizeDevicePhotoUri( uri ) ?? uri,

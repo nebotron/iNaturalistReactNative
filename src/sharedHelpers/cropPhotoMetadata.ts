@@ -1,7 +1,7 @@
 import { copyFile, exists, mkdir } from "@dr.pogodin/react-native-fs";
 import { photoUploadPath } from "appConstants/paths";
-import { stripFilePrefix } from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import * as uuid from "uuid";
 
 export interface CropOriginalStorage {

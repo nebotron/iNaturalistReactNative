@@ -107,10 +107,3 @@ export function toggleUserFilter(
 
   return [...userFilters, { user: normalizedUser, exclude }];
 }
-
-export function removeUserFilter(
-  userFilters: ExploreUserFilter[],
-  userId: number,
-): ExploreUserFilter[] {
-  return userFilters.filter( filter => filter.user.id !== userId );
-}

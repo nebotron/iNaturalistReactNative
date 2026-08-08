@@ -18,6 +18,7 @@ import { clearWatch, watchPosition } from "sharedHelpers/geolocationWrapper";
 import { store } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import { sleep } from "sharedHelpers/util";
 
 const logger = log.extend( "locationHistoryTracker" );
 
@@ -72,10 +73,6 @@ const locationRelaunch = ( NativeModules as {
 let watchIds: number[] = [];
 let realmInstance: Realm | null = null;
 let drainInterval: ReturnType<typeof setInterval> | null = null;
-
-const sleep = ( ms: number ) => new Promise<void>( resolve => {
-  setTimeout( resolve, ms );
-} );
 
 const isLocationHistoryTrackingEnabled = ( ) => (
   store.getBoolean( TRACKING_ENABLED_KEY ) ?? false

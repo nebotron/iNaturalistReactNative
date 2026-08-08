@@ -2,6 +2,7 @@ import { NativeModules } from "react-native";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import type { NormalizedBounds } from "sharedHelpers/subjectBoundsToNormalizedCrop";
 import { subjectBoundsToNormalizedCrop } from "sharedHelpers/subjectBoundsToNormalizedCrop";
 
@@ -11,13 +12,8 @@ const logger = log.extend( "detectSubjectInImage" );
 const SUBJECT_DETECTION_PADDING = 0;
 
 interface ImageCropperModule {
-  detectSubjectBounds: (
-    inputPath: string,
-    model: string,
-  ) => Promise<NormalizedBounds | null>;
+  detectSubjectBounds: ( inputPath: string ) => Promise<NormalizedBounds | null>;
 }
-
-const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
 const detectSubjectInImage = async (
   imageUri: string,
@@ -30,10 +26,7 @@ const detectSubjectInImage = async (
   }
 
   try {
-    const bounds = await imageCropper.detectSubjectBounds(
-      stripFilePrefix( imageUri ),
-      "A",
-    );
+    const bounds = await imageCropper.detectSubjectBounds( stripFilePrefix( imageUri ) );
     if ( !bounds ) {
       return defaultSquareCrop( imageWidth, imageHeight );
     }

@@ -1,4 +1,6 @@
-const EARTH_RADIUS_METERS = 6_371_000;
+export const EARTH_RADIUS_KM = 6371;
+
+const EARTH_RADIUS_METERS = EARTH_RADIUS_KM * 1000;
 
 const toRadians = ( degrees: number ) => ( degrees * Math.PI ) / 180;
 
@@ -18,5 +20,12 @@ const distanceInMeters = (
   const c = 2 * Math.atan2( Math.sqrt( a ), Math.sqrt( 1 - a ) );
   return EARTH_RADIUS_METERS * c;
 };
+
+export const distanceInKm = (
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number => distanceInMeters( lat1, lon1, lat2, lon2 ) / 1000;
 
 export default distanceInMeters;

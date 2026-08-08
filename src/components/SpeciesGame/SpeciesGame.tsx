@@ -2,11 +2,8 @@ import { prefetch } from "@candlefinance/faster-image";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { IdentifyPhotoHandle } from "components/MediaViewer/IdentifyPhoto";
 import {
-  clampZoom,
   IdentifyPhoto,
-  MIN_ZOOM,
   ZoomBrightnessSliders,
-  zoomPosToScale,
 } from "components/MediaViewer/IdentifyPhoto";
 import {
   ActivityIndicator,
@@ -41,14 +38,12 @@ import {
   preloadSubjectDetectionForUri,
   resolveSubjectDetectionForUri,
 } from "sharedHelpers/useSubjectDetectionForUri";
-import {
-  useIdentifyPhotoBrightness,
-  useTranslation,
-} from "sharedHooks";
+import { useTranslation } from "sharedHooks";
 import {
   EXPOSURE_STOPS_MAX,
   EXPOSURE_STOPS_MIN,
 } from "sharedHooks/useIdentifyPhotoBrightness";
+import useIdentifyPhotoControls from "sharedHooks/useIdentifyPhotoControls";
 import { zustandStorage } from "stores/useStore";
 
 type ObservationType = "egg" | "juvenile" | "adult";
@@ -254,30 +249,15 @@ const SpeciesGame = ( ) => {
   const { bottom: bottomInset } = useSafeAreaInsets( );
   const { t } = useTranslation( );
   const photoRef = useRef<IdentifyPhotoHandle | null>( null );
-  const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
   const {
-    brightness, brightnessStops, setBrightnessStops, handleBrightnessComplete,
-  } = useIdentifyPhotoBrightness( currentPhotoUrl ?? undefined );
-
-  // Reset zoom for the visible photo (brightness resets itself via
-  // useIdentifyPhotoBrightness).
-  useEffect( ( ) => { setZoomScale( MIN_ZOOM ); }, [currentPhotoUrl] );
-
-  // Update the exposure override live; the image re-renders with the new
-  // brightness filter each tick.
-  const handleBrightnessChange = useCallback( ( value: number ) => {
-    setBrightnessStops( value );
-  }, [setBrightnessStops] );
-
-  const handleScaleChange = useCallback(
-    ( scale: number ) => setZoomScale( clampZoom( scale ) ),
-    [],
-  );
-  const handleZoomChange = useCallback( ( pos: number ) => {
-    const scale = zoomPosToScale( pos );
-    setZoomScale( scale );
-    photoRef.current?.applyZoom( scale );
-  }, [] );
+    brightness,
+    brightnessStops,
+    handleBrightnessChange,
+    handleBrightnessComplete,
+    handleScaleChange,
+    handleZoomChange,
+    zoomScale,
+  } = useIdentifyPhotoControls( currentPhotoUrl ?? undefined, photoRef );
 
   const taxonLabel = ( taxonInfo: TaxonInfo ) => taxonInfo.preferredCommonName || taxonInfo.name;
 

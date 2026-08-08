@@ -4,11 +4,6 @@ import { log } from "../../react-native-logs.config";
 
 const defaultLogger = log.extend( "logging.js" );
 
-// returns string representation of an object, intended for debugging
-function inspect( target ) {
-  return JSON.stringify( target );
-}
-
 function handleRetryDelay( failureCount ) {
   return Math.min( 1000 * 2 ** failureCount, 30000 );
 }
@@ -45,9 +40,7 @@ function reactQueryRetry( failureCount, error ) {
   return shouldRetry;
 }
 
-// eslint-disable-next-line import/prefer-default-export
 export {
   handleRetryDelay,
-  inspect,
   reactQueryRetry,
 };

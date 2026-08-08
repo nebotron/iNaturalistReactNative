@@ -32,7 +32,7 @@ export const PRIVACY_ZONE_LOCAL_CANDIDATE_FILTER
   + "AND latitude != nil AND longitude != nil "
   + `AND ( geoprivacy == nil OR geoprivacy == "${GEOPRIVACY_OPEN}" )`;
 
-export const getPrivacyZone = ( ): PrivacyZone => useStore.getState( ).privacyZone;
+const getPrivacyZone = ( ): PrivacyZone => useStore.getState( ).privacyZone;
 
 export const isPrivacyZoneActive = ( zone: PrivacyZone = getPrivacyZone( ) ): boolean => (
   !!zone?.enabled && zone.latitude != null && zone.longitude != null

@@ -6,8 +6,6 @@ import { cropSourcesPath } from "appConstants/paths";
 import { Platform } from "react-native";
 import resizeImage from "sharedHelpers/resizeImage";
 
-const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
-
 const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 
 // djb2 hash → stable hex filename for a given URL
@@ -87,5 +85,3 @@ const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
 };
 
 export default ensureLocalImageForCrop;
-
-export { stripFilePrefix };

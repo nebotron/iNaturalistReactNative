@@ -34,7 +34,7 @@ describe( "detectSubjectInImage", ( ) => {
 
     const crop = await detectSubjectInImage( "file:///tmp/photo.jpg", 2000, 1000 );
 
-    expect( mockDetectSubjectBounds ).toHaveBeenCalledWith( "/tmp/photo.jpg", "A" );
+    expect( mockDetectSubjectBounds ).toHaveBeenCalledWith( "/tmp/photo.jpg" );
     expect( crop.w * 2000 ).toBeCloseTo( crop.h * 1000, 5 );
     expect( crop.x ).toBeGreaterThanOrEqual( 0 );
     expect( crop.y ).toBeGreaterThanOrEqual( 0 );

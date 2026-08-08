@@ -183,12 +183,6 @@ const INatIconButton = ( {
     );
   }
 
-  const handlePressWithTracking = ( event: GestureResponderEvent ) => {
-    if ( onPress ) {
-      onPress( event );
-    }
-  };
-
   return (
     <Pressable
       accessibilityHint={accessibilityHint}
@@ -196,7 +190,7 @@ const INatIconButton = ( {
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       disabled={disabled}
-      onPress={handlePressWithTracking}
+      onPress={onPress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       style={( { pressed } ) => [

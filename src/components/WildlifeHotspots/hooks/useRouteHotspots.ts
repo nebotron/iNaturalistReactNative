@@ -1,5 +1,6 @@
 import { searchObservations } from "api/observations";
 import { useCallback, useState } from "react";
+import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
 
 export interface RoutePoint {
   latitude: number;
@@ -36,7 +37,6 @@ export interface Hotspot {
   observations: HotspotObservation[];
 }
 
-const EARTH_RADIUS_KM = 6371;
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 // Max radius for each k-means cluster (2 km diameter)
 const MAX_CLUSTER_RADIUS_KM = 1.5;
@@ -82,18 +82,6 @@ function minutesToAmPm( minutes: number ): string {
   return `~${h12}:${m.toString().padStart( 2, "0" )} ${ampm}`;
 }
 
-function toRad( deg: number ): number {
-  return ( deg * Math.PI ) / 180;
-}
-
-function haversineKm( lat1: number, lon1: number, lat2: number, lon2: number ): number {
-  const dLat = toRad( lat2 - lat1 );
-  const dLon = toRad( lon2 - lon1 );
-  const a = Math.sin( dLat / 2 ) ** 2
-    + Math.cos( toRad( lat1 ) ) * Math.cos( toRad( lat2 ) ) * Math.sin( dLon / 2 ) ** 2;
-  return 2 * EARTH_RADIUS_KM * Math.asin( Math.sqrt( a ) );
-}
-
 export async function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<{
   coords: RoutePoint[];
   durationSec: number;
@@ -132,9 +120,9 @@ async function fetchOSRMDuration( waypoints: RoutePoint[] ): Promise<number> {
 function insertionCostKm( stops: RoutePoint[], idx: number, candidate: RoutePoint ): number {
   const a = stops[idx];
   const b = stops[idx + 1];
-  const direct = haversineKm( a.latitude, a.longitude, b.latitude, b.longitude );
-  const viaCost = haversineKm( a.latitude, a.longitude, candidate.latitude, candidate.longitude )
-    + haversineKm( candidate.latitude, candidate.longitude, b.latitude, b.longitude );
+  const direct = distanceInKm( a.latitude, a.longitude, b.latitude, b.longitude );
+  const viaCost = distanceInKm( a.latitude, a.longitude, candidate.latitude, candidate.longitude )
+    + distanceInKm( candidate.latitude, candidate.longitude, b.latitude, b.longitude );
   return viaCost - direct;
 }
 
@@ -169,7 +157,7 @@ function routeBbox( coords: RoutePoint[], paddingKm = BBOX_PADDING_KM ) {
   }
   const latPaddingDeg = paddingKm / KM_PER_DEG_LAT;
   const midLat = ( minLat + maxLat ) / 2;
-  const lngPaddingDeg = paddingKm / ( KM_PER_DEG_LAT * Math.cos( toRad( midLat ) ) );
+  const lngPaddingDeg = paddingKm / ( KM_PER_DEG_LAT * Math.cos( ( midLat * Math.PI ) / 180 ) );
   return {
     swlat: minLat - latPaddingDeg,
     swlng: minLng - lngPaddingDeg,
@@ -208,7 +196,7 @@ function runKMeans(
       if ( !seedIndices.includes( i ) ) {
         let minD = Infinity;
         for ( const si of seedIndices ) {
-          const d = haversineKm( points[i].lat, points[i].lng, points[si].lat, points[si].lng );
+          const d = distanceInKm( points[i].lat, points[i].lng, points[si].lat, points[si].lng );
           if ( d < minD ) minD = d;
         }
         if ( minD > bestDist ) { bestDist = minD; bestIdx = i; }
@@ -227,7 +215,7 @@ function runKMeans(
       let minD = Infinity;
       let best = 0;
       for ( let c = 0; c < currentCentroids.length; c += 1 ) {
-        const d = haversineKm( p.lat, p.lng, currentCentroids[c].lat, currentCentroids[c].lng );
+        const d = distanceInKm( p.lat, p.lng, currentCentroids[c].lat, currentCentroids[c].lng );
         if ( d < minD ) { minD = d; best = c; }
       }
       return best;
@@ -269,7 +257,7 @@ function splitToRadiusConstraint(
   const { centroid } = cluster;
 
   const exceedsRadius = points.some(
-    p => haversineKm( p.lat, p.lng, centroid.lat, centroid.lng ) > maxRadiusKm,
+    p => distanceInKm( p.lat, p.lng, centroid.lat, centroid.lng ) > maxRadiusKm,
   );
   if ( !exceedsRadius || points.length <= 1 ) return [cluster];
 

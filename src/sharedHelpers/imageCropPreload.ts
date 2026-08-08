@@ -15,7 +15,7 @@ export const preloadCache = new Map<string, PreloadResult>( );
 // an ongoing preload instead of kicking off duplicate, contending work.
 const preloadInFlight = new Map<string, Promise<PreloadResult | null>>( );
 
-export async function loadImageData(
+async function loadImageData(
   imageUri: string,
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,

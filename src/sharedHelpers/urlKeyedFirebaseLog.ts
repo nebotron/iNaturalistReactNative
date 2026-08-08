@@ -4,7 +4,7 @@ import { zustandStorage } from "stores/useStore";
 // Normalise photo URLs to the "large" size so an entry saved against one size
 // (e.g. the large URL the crop tool stores) is found when looked up under
 // another (e.g. the original-size URL the explore page uses), and vice-versa.
-export const normalizePhotoUrl = ( url: string ): string => url.replace(
+const normalizePhotoUrl = ( url: string ): string => url.replace(
   /\/(square|small|medium|large|original)(\.(?:jpe?g|png|webp|gif))/i,
   "/large$2",
 );

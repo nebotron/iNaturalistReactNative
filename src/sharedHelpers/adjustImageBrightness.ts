@@ -1,4 +1,5 @@
 import { NativeModules } from "react-native";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 
 interface ImageCropperModule {
   adjustImageBrightness: (
@@ -8,8 +9,6 @@ interface ImageCropperModule {
     outputPath: string,
   ) => Promise<string>;
 }
-
-const stripFilePrefix = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
 // Multiplies each channel by the brightness gain and clamps to [0, 255] (see
 // applyBrightnessMultiplyBuffer in the native implementation), the same

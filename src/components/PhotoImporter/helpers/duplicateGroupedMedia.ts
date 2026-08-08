@@ -1,7 +1,7 @@
 import { copyFile, mkdir } from "@dr.pogodin/react-native-fs";
 import { photoLibraryPhotosPath, photoUploadPath } from "appConstants/paths";
 import { Platform } from "react-native";
-import { stripFilePrefix } from "sharedHelpers/ensureLocalImageForCrop";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import * as uuid from "uuid";
 
 import type {
@@ -66,7 +66,7 @@ export const duplicateGroupedPhotoItem = async (
   };
 };
 
-export const duplicateGroupedMediaGroup = async (
+const duplicateGroupedMediaGroup = async (
   group: GroupedMediaItem,
 ): Promise<GroupedMediaItem> => {
   if ( group.photos?.length ) {

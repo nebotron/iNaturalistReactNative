@@ -1,12 +1,9 @@
 import { t } from "i18next";
 import BackgroundService from "react-native-background-actions";
+import { sleep } from "sharedHelpers/util";
 
 const BACKGROUND_TASK_POLL_MS = 1000;
 const BACKGROUND_TASK_NAME = "inaturalist-background-task";
-
-const sleep = ( ms: number ) => new Promise<void>( resolve => {
-  setTimeout( resolve, ms );
-} );
 
 const backgroundTask = async ( ) => {
   await new Promise<void>( resolve => {

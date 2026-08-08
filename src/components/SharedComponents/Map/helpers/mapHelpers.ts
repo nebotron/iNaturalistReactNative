@@ -3,6 +3,7 @@ import Config from "react-native-config";
 import type { BoundingBox, LatLng, Region } from "react-native-maps";
 import createUTFPosition from "sharedHelpers/createUTFPosition";
 import getDataForPixel from "sharedHelpers/fetchUTFGridData";
+import distanceInMeters from "sharedHelpers/geoDistance";
 
 export const OBSCURATION_CELL_SIZE = 0.2;
 // tiles should be requested from tiles.inaturalist.org for better resource
@@ -112,24 +113,6 @@ export function boundingBoxGeojsonToBounds(
   };
 }
 
-export function haversineMeters(
-  lat1: number,
-  lng1: number,
-  lat2: number,
-  lng2: number,
-): number {
-  const earthRadiusMeters = 6371000;
-  const toRadians = ( degrees: number ) => ( degrees * Math.PI ) / 180;
-  const latDifference = toRadians( lat2 - lat1 );
-  const lngDifference = toRadians( lng2 - lng1 );
-  const haversine = Math.sin( latDifference / 2 ) ** 2
-    + Math.cos( toRadians( lat1 ) )
-    * Math.cos( toRadians( lat2 ) )
-    * Math.sin( lngDifference / 2 ) ** 2;
-
-  return earthRadiusMeters * 2 * Math.atan2( Math.sqrt( haversine ), Math.sqrt( 1 - haversine ) );
-}
-
 export function accuracyToEncompassBounds(
   centerLat: number,
   centerLng: number,
@@ -143,7 +126,7 @@ export function accuracyToEncompassBounds(
   ];
 
   return Math.max(
-    ...corners.map( ( [lat, lng] ) => haversineMeters(
+    ...corners.map( ( [lat, lng] ) => distanceInMeters(
       centerLat,
       centerLng,
       lat,

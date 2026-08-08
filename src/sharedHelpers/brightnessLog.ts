@@ -12,8 +12,6 @@ const brightnessLog = createUrlKeyedFirebaseLog<number>( {
   toFirebaseEntry: ( url, brightness ) => ( { url, brightness } ),
 } );
 
-export const subscribeToBrightnessLog = brightnessLog.subscribe;
-
 // brightness is the ideal multiplier (1.0 = no change).
 export const saveBrightness = ( photoUrl: string, brightness: number ): Promise<void> => (
   brightnessLog.save( photoUrl, brightness )

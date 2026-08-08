@@ -27,7 +27,7 @@ interface ApiOptions {
 // already-uploaded observations inside the zone has to come from the API. It
 // supports exactly this query: a point, a radius in kilometers, and a
 // geoprivacy filter ("open" also covers observations with no geoprivacy set).
-export const privacyZoneSearchParams = ( userId: number, zone: PrivacyZone ) => ( {
+const privacyZoneSearchParams = ( userId: number, zone: PrivacyZone ) => ( {
   user_id: userId,
   lat: zone.latitude,
   lng: zone.longitude,

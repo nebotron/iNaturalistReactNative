@@ -516,38 +516,6 @@ RCT_EXPORT_METHOD( cropImage
   resolve( output );
 }
 
-RCT_EXPORT_METHOD( preserveImageMetadata
-                  : ( NSString * )sourcePath destPath
-                  : ( NSString * )destPath width
-                  : ( nonnull NSNumber * )width height
-                  : ( nonnull NSNumber * )height resolver
-                  : ( RCTPromiseResolveBlock )resolve rejecter
-                  : ( RCTPromiseRejectBlock )reject )
-{
-  NSString *source  = [sourcePath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  NSString *dest    = [destPath   stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  NSURL    *srcURL  = [NSURL fileURLWithPath:source];
-  CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)srcURL, nil );
-  NSDictionary *srcMeta = nil;
-  if ( src ) {
-    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
-    CFRelease( src );
-  }
-
-  UIImage *croppedImage = [UIImage imageWithContentsOfFile:dest];
-  if ( !croppedImage ) { reject( @"CROP_FAILED", @"Could not load cropped image", nil ); return; }
-  CGImageRef croppedRef = croppedImage.CGImage;
-  if ( !croppedRef )    { reject( @"CROP_FAILED", @"Could not read cropped image", nil ); return; }
-
-  NSData *data = jpegDataFromCroppedImage( croppedRef, srcMeta,
-                                           [width integerValue], [height integerValue] );
-  if ( !data ) { reject( @"CROP_FAILED", @"Could not encode cropped image with metadata", nil ); return; }
-  if ( ![data writeToFile:dest atomically:YES] ) {
-    reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
-  }
-  resolve( dest );
-}
-
 // Exports a PHAsset to a local file using PHAssetResourceManager, which writes
 // the original file bytes verbatim — preserving all EXIF metadata (GPS,
 // timestamp, camera make/model, etc.) without re-encoding.
@@ -876,8 +844,7 @@ static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
 }
 
 RCT_EXPORT_METHOD( detectSubjectBounds
-                  : ( NSString * )inputPath model
-                  : ( NSString * )model resolver
+                  : ( NSString * )inputPath resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {

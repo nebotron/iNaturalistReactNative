@@ -5,11 +5,8 @@ import type { ApiObservation, ApiObservationsSearchParams } from "api/types";
 import useInfiniteExploreScroll from "components/Explore/hooks/useInfiniteExploreScroll";
 import type { IdentifyPhotoHandle } from "components/MediaViewer/IdentifyPhoto";
 import {
-  clampZoom,
   IdentifyPhoto,
-  MIN_ZOOM,
   ZoomBrightnessSliders,
-  zoomPosToScale,
 } from "components/MediaViewer/IdentifyPhoto";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import useTopSpeciesSuggestion
@@ -36,13 +33,13 @@ import { preloadSubjectDetectionForUri } from "sharedHelpers/useSubjectDetection
 import {
   useAuthenticatedMutation,
   useCurrentUser,
-  useIdentifyPhotoBrightness,
   useTranslation,
 } from "sharedHooks";
 import {
   EXPOSURE_STOPS_MAX,
   EXPOSURE_STOPS_MIN,
 } from "sharedHooks/useIdentifyPhotoBrightness";
+import useIdentifyPhotoControls from "sharedHooks/useIdentifyPhotoControls";
 import colors from "styles/tailwindColors";
 
 // Fetch the next page once we're within this many observations of the end.
@@ -97,7 +94,6 @@ const IdentifyView = ( {
 
   const [currentIndex, setCurrentIndex] = useState( 0 );
   const [selectedMediaIndex, setSelectedMediaIndex] = useState( 0 );
-  const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
 
   useEffect( ( ) => {
     handleUpdateCount( "identify", totalResults );
@@ -134,25 +130,19 @@ const IdentifyView = ( {
     ? sounds[selectedMediaIndex]
     : undefined;
   const {
-    brightness, brightnessStops, setBrightnessStops, handleBrightnessComplete,
-  } = useIdentifyPhotoBrightness( currentPhotoUrl );
-
-  // Update the exposure override live; the image re-renders with the new
-  // brightness filter each tick.
-  const handleBrightnessChange = useCallback( ( value: number ) => {
-    setBrightnessStops( value );
-  }, [setBrightnessStops] );
+    brightness,
+    brightnessStops,
+    handleBrightnessChange,
+    handleBrightnessComplete,
+    handleScaleChange,
+    handleZoomChange,
+    zoomScale,
+  } = useIdentifyPhotoControls( currentPhotoUrl, photoRef );
 
   // Reset to the first photo (or sound) whenever the observation changes.
   useEffect( ( ) => {
     setSelectedMediaIndex( 0 );
   }, [observationUuid] );
-
-  // Reset zoom for the visible photo (brightness resets itself via
-  // useIdentifyPhotoBrightness).
-  useEffect( ( ) => {
-    setZoomScale( MIN_ZOOM );
-  }, [currentPhotoUrl] );
 
   // Warm the image cache and subject detection for the current observation's
   // other photos and the first photo of upcoming observations, so advancing or
@@ -207,18 +197,6 @@ const IdentifyView = ( {
     if ( !id ) return;
     navigation.navigate( "TaxonDetails" as never, { id } as never );
   }, [navigation, taxon?.id] );
-
-  // Keep the zoom slider in sync with pinch/double-tap/subject-framing zoom.
-  const handleScaleChange = useCallback(
-    ( scale: number ) => setZoomScale( clampZoom( scale ) ),
-    [],
-  );
-
-  const handleZoomChange = useCallback( ( pos: number ) => {
-    const scale = zoomPosToScale( pos );
-    setZoomScale( scale );
-    photoRef.current?.applyZoom( scale );
-  }, [] );
 
   const { mutate: agreeMutate } = useAuthenticatedMutation(
     ( params, optsWithAuth ) => createIdentification( params, optsWithAuth ),

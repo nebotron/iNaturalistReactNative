@@ -58,7 +58,7 @@ describe( "useThumbnailSubjectDetection", ( ) => {
     const { result } = render( "ph://thumbnail-not-original" );
     await flush( );
 
-    expect( detectSubjectBounds ).toHaveBeenCalledWith( "/thumbs/ph://thumbnail-not-original.jpg", "A" );
+    expect( detectSubjectBounds ).toHaveBeenCalledWith( "/thumbs/ph://thumbnail-not-original.jpg" );
     await finishDetection( "/thumbs/ph://thumbnail-not-original.jpg" );
 
     // Dimensions come from the thumbnail; only their ratio is ever used

@@ -9,7 +9,6 @@ export { default as useFeatureFlag } from "./useFeatureFlag";
 export { default as useFontScale } from "./useFontScale";
 export { default as useGridLayout } from "./useGridLayout";
 export { default as useIconicTaxa } from "./useIconicTaxa";
-export { default as useIdentifyPhotoBrightness } from "./useIdentifyPhotoBrightness";
 export { default as useInfiniteNotificationsScroll } from "./useInfiniteNotificationsScroll";
 export { default as useInfiniteObservationsScroll } from "./useInfiniteObservationsScroll";
 export { default as useInfiniteScroll } from "./useInfiniteScroll";

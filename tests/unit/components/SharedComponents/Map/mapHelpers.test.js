@@ -5,11 +5,11 @@ import {
   getMapRegion,
   getObservationCoordinates,
   hasValidMapCoordinates,
-  haversineMeters,
   regionForAccuracy,
   regionForObservationLocation,
   regionFromBounds,
 } from "components/SharedComponents/Map/helpers/mapHelpers";
+import distanceInMeters from "sharedHelpers/geoDistance";
 
 describe( "mapHelpers place accuracy", ( ) => {
   const seattleBounds = {
@@ -46,25 +46,25 @@ describe( "mapHelpers place accuracy", ( ) => {
     );
 
     const cornerDistances = [
-      haversineMeters(
+      distanceInMeters(
         seattleCenter.latitude,
         seattleCenter.longitude,
         seattleBounds.swlat,
         seattleBounds.swlng,
       ),
-      haversineMeters(
+      distanceInMeters(
         seattleCenter.latitude,
         seattleCenter.longitude,
         seattleBounds.swlat,
         seattleBounds.nelng,
       ),
-      haversineMeters(
+      distanceInMeters(
         seattleCenter.latitude,
         seattleCenter.longitude,
         seattleBounds.nelat,
         seattleBounds.swlng,
       ),
-      haversineMeters(
+      distanceInMeters(
         seattleCenter.latitude,
         seattleCenter.longitude,
         seattleBounds.nelat,
