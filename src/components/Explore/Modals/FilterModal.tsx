@@ -721,6 +721,45 @@ const FilterModal = ( {
     }
   };
 
+  // A single date picker serves every date button here. Rendering one picker per
+  // button meant six native modals mounted at once, and moving between two of
+  // them (e.g. start date -> end date) presented one while the other was still
+  // dismissing, which on iOS drops the presentation and leaves an invisible view
+  // that swallows all touches. One picker keeps that sequencing in one place.
+  const datePickers: Record<string, {
+    date?: string;
+    onDatePicked: ( date: Date ) => void;
+  }> = {
+    [OBSERVED_EXACT]: {
+      date: observedOn,
+      onDatePicked: updateObservedExact,
+    },
+    [OBSERVED_START]: {
+      date: d1,
+      onDatePicked: updateObservedStart,
+    },
+    [OBSERVED_END]: {
+      date: d2,
+      onDatePicked: updateObservedEnd,
+    },
+    [UPLOADED_EXACT]: {
+      date: createdOn,
+      onDatePicked: ( date: Date ) => updateDateUploaded( {
+        newDateUploaded: DATE_UPLOADED.EXACT_DATE,
+        newD1: formatObsFieldDate( date ),
+      } ),
+    },
+    [UPLOADED_START]: {
+      date: createdD1,
+      onDatePicked: updateUploadedStart,
+    },
+    [UPLOADED_END]: {
+      date: createdD2,
+      onDatePicked: updateUploadedEnd,
+    },
+  };
+  const openDatePicker = datePickers[openSheet];
+
   const observedEndBeforeStart = d1 > d2;
   const uploadedEndBeforeStart = createdD1 > createdD2;
   const hasError = observedEndBeforeStart || uploadedEndBeforeStart;
@@ -1053,12 +1092,6 @@ const FilterModal = ( {
                   }}
                   accessibilityLabel={t( "Change-date" )}
                 />
-                <DateTimePicker
-                  date={parseLocalDate( observedOn )}
-                  isDateTimePickerVisible={openSheet === OBSERVED_EXACT}
-                  toggleDateTimePicker={() => setOpenSheet( NONE )}
-                  onDatePicked={date => updateObservedExact( date )}
-                />
               </View>
             )}
             {dateObserved === DATE_OBSERVED.DATE_RANGE && (
@@ -1102,18 +1135,6 @@ const FilterModal = ( {
                     </List2>
                   </View>
                 )}
-                <DateTimePicker
-                  date={parseLocalDate( d1 )}
-                  isDateTimePickerVisible={openSheet === OBSERVED_START}
-                  toggleDateTimePicker={() => setOpenSheet( NONE )}
-                  onDatePicked={date => updateObservedStart( date )}
-                />
-                <DateTimePicker
-                  date={parseLocalDate( d2 )}
-                  isDateTimePickerVisible={openSheet === OBSERVED_END}
-                  toggleDateTimePicker={() => setOpenSheet( NONE )}
-                  onDatePicked={date => updateObservedEnd( date )}
-                />
               </View>
             )}
             {dateObserved === DATE_OBSERVED.MONTHS
@@ -1151,15 +1172,6 @@ const FilterModal = ( {
                     setOpenSheet( UPLOADED_EXACT );
                   }}
                   accessibilityLabel={t( "Change-date" )}
-                />
-                <DateTimePicker
-                  date={parseLocalDate( createdOn )}
-                  isDateTimePickerVisible={openSheet === UPLOADED_EXACT}
-                  toggleDateTimePicker={() => setOpenSheet( NONE )}
-                  onDatePicked={date => updateDateUploaded( {
-                    newDateUploaded: DATE_UPLOADED.EXACT_DATE,
-                    newD1: formatObsFieldDate( date ),
-                  } )}
                 />
               </View>
             )}
@@ -1204,18 +1216,6 @@ const FilterModal = ( {
                     </List2>
                   </View>
                 )}
-                <DateTimePicker
-                  date={parseLocalDate( createdD1 )}
-                  isDateTimePickerVisible={openSheet === UPLOADED_START}
-                  toggleDateTimePicker={() => setOpenSheet( NONE )}
-                  onDatePicked={date => updateUploadedStart( date )}
-                />
-                <DateTimePicker
-                  date={parseLocalDate( createdD2 )}
-                  isDateTimePickerVisible={openSheet === UPLOADED_END}
-                  toggleDateTimePicker={() => setOpenSheet( NONE )}
-                  onDatePicked={date => updateUploadedEnd( date )}
-                />
               </View>
             )}
           </View>
@@ -1605,6 +1605,12 @@ const FilterModal = ( {
           insideModal
         />
       )}
+      <DateTimePicker
+        date={parseLocalDate( openDatePicker?.date )}
+        isDateTimePickerVisible={!!openDatePicker}
+        toggleDateTimePicker={() => setOpenSheet( NONE )}
+        onDatePicked={date => openDatePicker?.onDatePicked( date )}
+      />
       <ExploreSavedFilterSheets
         filterToDelete={filterToDelete}
         onCloseDeleteFilter={() => setFilterToDelete( null )}
