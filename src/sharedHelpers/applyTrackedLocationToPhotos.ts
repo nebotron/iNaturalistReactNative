@@ -190,14 +190,14 @@ const flushLocationWrites = async ( ) => {
   batch.forEach( write => write.resolve( ) );
 };
 
-const beginLocationWriteBatch = ( ) => { locationWriteBatchDepth += 1; };
+export const beginLocationWriteBatch = ( ) => { locationWriteBatchDepth += 1; };
 
 // Flushes everything the bracketed work queued, as one transaction. Awaited by
 // the caller, which is why a batched write doesn't have to be awaited where it
 // is queued (see applyLocationToDevicePhotoLibrary): a queued write that only
 // settled on flush, awaited by the very loop whose completion triggers the
 // flush, would deadlock.
-const endLocationWriteBatch = async ( ) => {
+export const endLocationWriteBatch = async ( ) => {
   locationWriteBatchDepth = Math.max( 0, locationWriteBatchDepth - 1 );
   if ( locationWriteBatchDepth > 0 ) return;
   if ( coalesceTimer ) {
