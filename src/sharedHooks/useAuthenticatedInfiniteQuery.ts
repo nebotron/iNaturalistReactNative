@@ -1,7 +1,9 @@
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import i18n from "i18next";
-import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
+import {
+  createRequestTimeoutSignal, handleRetryDelay, reactQueryRetry,
+} from "sharedHelpers/logging";
 import { useCurrentUser } from "sharedHooks";
 
 // Should work like React Query's useInfiniteQuery with our custom reactQueryRetry
@@ -28,10 +30,16 @@ const useAuthenticatedInfiniteQuery = (
       // one is expired. We *could* store the token in state with useState if
       // fetching from RNSInfo becomes a performance issue
       const apiToken = await getJWT( queryOptions.allowAnonymousJWT );
+      const { signal, clear } = createRequestTimeoutSignal( );
       const options = {
         api_token: apiToken,
+        signal,
       };
-      return queryFunction( params, options );
+      try {
+        return await queryFunction( params, options );
+      } finally {
+        clear( );
+      }
     },
     retry: reactQueryRetry,
     retryDelay: handleRetryDelay,

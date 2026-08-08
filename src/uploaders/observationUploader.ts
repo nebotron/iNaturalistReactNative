@@ -28,6 +28,21 @@ const logger = log.extend( "observationUploader" );
 // Past this an upload is slow enough to be worth a log line of its own.
 const SLOW_UPLOAD_MS = 30000;
 
+// Aborts are an expected outcome of stopAllUploads (the user cancelling, or
+// the per-upload timeout in createUploadAbortController) rather than an
+// unexpected failure, so they're worth a line but not at error level — their
+// volume was crowding out the failures actually worth alerting on.
+function logUploadFailure(
+  message: string,
+  error: Error,
+  extra: Record<string, unknown>,
+): void {
+  const logFn = error?.name === "AbortError"
+    ? logger.warnWithExtra
+    : logger.errorWithExtra;
+  logFn( message, error, extra );
+}
+
 interface UploadOptions {
   api_token?: string;
   signal: AbortSignal;
@@ -136,7 +151,7 @@ async function uploadObservation(
       "media_upload",
       uploadStartTime,
     );
-    logger.errorWithExtra(
+    logUploadFailure(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Media upload failed",
       error,
@@ -172,7 +187,7 @@ async function uploadObservation(
       "observation_upload",
       uploadStartTime,
     );
-    logger.errorWithExtra(
+    logUploadFailure(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Observation upload failed",
       error,
@@ -205,7 +220,7 @@ async function uploadObservation(
       "media_attachment",
       uploadStartTime,
     );
-    logger.errorWithExtra(
+    logUploadFailure(
       `Upload: Failed ${observation.uuid} after ${totalDuration}ms - ${errorContext}`
       + ": Media attachment failed",
       error,

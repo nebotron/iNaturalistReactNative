@@ -170,8 +170,8 @@ const ListEmpty = ( ) => (
 );
 
 const CropLogViewer = ( ) => {
-  // The app can't read the remote log (write-only sync, no credentials), so
-  // the viewer shows this device's local log — the same entries it synced up.
+  // The app never reads the remote log back (write-only sync), so the viewer
+  // shows this device's local log — the same entries it synced up.
   const [entries, setEntries] = useState<Entry[]>( ( ) => getAnimalCropLogAsArray( ) );
   const loading = false;
 
