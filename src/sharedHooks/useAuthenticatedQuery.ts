@@ -2,7 +2,9 @@ import type { QueryKey, UseQueryOptions } from "@tanstack/react-query";
 import { useQuery } from "@tanstack/react-query";
 import { getJWT, isLoggedIn } from "components/LoginSignUp/AuthenticationService";
 import { useEffect, useState } from "react";
-import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
+import {
+  createRequestTimeoutSignal, handleRetryDelay, reactQueryRetry,
+} from "sharedHelpers/logging";
 
 const LOGGED_IN_UNKNOWN = null;
 
@@ -21,7 +23,7 @@ export type AuthenticatedQueryOptions<Response> = Omit<
 }
 
 export type QueryFunction<Response>
-  = ( options: { api_token: string | null } ) => Promise<Response>;
+  = ( options: { api_token: string | null; signal: AbortSignal } ) => Promise<Response>;
 
 // Should work like React Query's useQuery except it calls the queryFunction
 // with an object that includes the JWT
@@ -58,10 +60,16 @@ const useAuthenticatedQuery = <Response>(
       // one is expired. We *could* store the token in state with useState if
       // fetching from RNSInfo becomes a performance issue
       const apiToken = await getJWT( queryOptions.allowAnonymousJWT );
+      const { signal, clear } = createRequestTimeoutSignal( );
       const options = {
         api_token: apiToken,
+        signal,
       };
-      return queryFunction( options );
+      try {
+        return await queryFunction( options );
+      } finally {
+        clear( );
+      }
     },
     ...queryOptions,
     retry: queryOptions.retry !== false

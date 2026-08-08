@@ -40,8 +40,8 @@ export interface UrlKeyedFirebaseLog<T> {
 }
 
 // Factory for a URL-keyed log that mirrors write-only to a Firebase RTDB path
-// for offline CV-tuning scripts. The app never reads Firebase (reads require
-// auth and the app carries no credentials); viewers show the local log.
+// for offline CV-tuning scripts. The app never reads Firebase — viewers show
+// the local log instead, since the local copy is what the app itself acted on.
 export const createUrlKeyedFirebaseLog = <T>(
   options: UrlKeyedFirebaseLogOptions<T>,
 ): UrlKeyedFirebaseLog<T> => {

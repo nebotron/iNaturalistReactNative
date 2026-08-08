@@ -3,8 +3,8 @@
 Read (and clear) the app_log the release build writes to Firebase.
 
 Every logger line from a non-dev build is POSTed to {CROP_LOG_FIREBASE_URL}/app_log
-by src/api/log/index.ts. Writes are unauthenticated; reads need credentials
-(FIREBASE_DB_SECRET, or FIREBASE_API_KEY/EMAIL/PASSWORD) in .env.
+by src/api/log/index.ts. Both reads and writes are unauthenticated; set
+CROP_LOG_FIREBASE_URL in .env to point this script at the database.
 
 Usage:
     python3 scripts/app_log.py                  # grouped summary of recent entries

@@ -2,11 +2,12 @@
 """
 Firebase email/password auth for the training-log scripts.
 
-The Realtime Database rules allow unauthenticated writes (so the app's
-logging keeps working) but require auth for reads. firebase_auth_query()
-signs in with FIREBASE_API_KEY / FIREBASE_EMAIL / FIREBASE_PASSWORD from
-the environment (.env) and returns "?auth=<idToken>" to append to REST
-URLs, or "" when credentials aren't configured.
+The Realtime Database rules allow unauthenticated reads and writes, so this
+is optional — it's only useful if the project's rules are later locked down
+to require auth for reads. firebase_auth_query() signs in with
+FIREBASE_API_KEY / FIREBASE_EMAIL / FIREBASE_PASSWORD from the environment
+(.env) and returns "?auth=<idToken>" to append to REST URLs, or "" when
+credentials aren't configured.
 """
 from __future__ import annotations
 

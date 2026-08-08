@@ -63,8 +63,14 @@ if (
   // $FlowIgnore
   HermesInternal.enablePromiseRejectionTracker( {
     allRejections: true,
+    // The stack Hermes gives a release build for these is just the async
+    // trampoline (asyncGeneratorStep, tryCallOne…), not the call site, so the
+    // screen it happened on is the only lead the log carries toward finding it.
     onUnhandled: ( id, error ) => {
-      logger.error( "Unhandled promise rejection: ", error );
+      logger.errorWithExtra( "Unhandled promise rejection: ", error, {
+        errorName: error?.name ?? "unknown",
+        screen: getCurrentRoute()?.name || "unknown",
+      } );
     },
   } );
 }
