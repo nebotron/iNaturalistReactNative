@@ -16,7 +16,9 @@ import json
 import pathlib
 import random
 import sys
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -32,14 +34,21 @@ API_INTERVAL = 1.05
 FILE_INTERVAL = 0.2
 OPEN_LICENSES = "cc0,cc-by,cc-by-nc,cc-by-sa,cc-by-nc-sa"
 
+DOWNLOAD_WORKERS = 8
+
 _last_request: dict[str, float] = { "api": 0.0, "file": 0.0 }
+_throttle_lock = threading.Lock()
 
 
 def _throttle( kind: str, interval: float ) -> None:
-    wait = interval - ( time.monotonic() - _last_request[kind] )
+    """Space out requests of one kind, counting concurrent callers."""
+    with _throttle_lock:
+        now = time.monotonic()
+        start = max( now, _last_request[kind] + interval )
+        _last_request[kind] = start
+        wait = start - now
     if wait > 0:
         time.sleep( wait )
-    _last_request[kind] = time.monotonic()
 
 
 def api_get( path: str, **params ) -> dict:
@@ -212,32 +221,40 @@ def main() -> None:
 
     max_id = max_observation_id()
     manifest: list[dict] = []
-    for s in species:
-        rows = observations_for_species(
-            s["taxon_id"], args.per_species, args.place_id, max_id, args.seed
-        )
-        kept = 0
-        for row in rows:
-            ext = pathlib.Path( urllib.parse.urlparse( row["file_url"] ).path ).suffix or ".mp3"
-            dest = AUDIO / f"{row['sound_id']}{ext}"
-            if download( row["file_url"], dest ):
-                row["path"] = str( dest.relative_to( DATA ) )
-                row["common_name"] = s["common_name"]
-                manifest.append( row )
-                kept += 1
-        print( f"{s['name']}: {kept}/{len( rows )} files" )
+
+    def fetch_one( row: dict, common_name: str ) -> dict | None:
+        ext = pathlib.Path( urllib.parse.urlparse( row["file_url"] ).path ).suffix or ".mp3"
+        dest = AUDIO / f"{row['sound_id']}{ext}"
+        if not download( row["file_url"], dest ):
+            return None
+        row["path"] = str( dest.relative_to( DATA ) )
+        row["common_name"] = common_name
+        return row
 
     out = DATA / "manifest.csv"
-    with out.open( "w", newline="" ) as fh:
-        writer = csv.DictWriter(
-            fh,
-            fieldnames=[
-                "observation_id", "user_id", "taxon_id", "scientific_name",
-                "common_name", "sound_id", "license_code", "file_url", "path",
-            ],
-        )
-        writer.writeheader()
-        writer.writerows( manifest )
+    fields = [
+        "observation_id", "user_id", "taxon_id", "scientific_name",
+        "common_name", "sound_id", "license_code", "file_url", "path",
+    ]
+
+    # Downloads overlap so transfer time is not serialized behind the throttle;
+    # the shared throttle still bounds the aggregate request rate.
+    with ThreadPoolExecutor( max_workers=DOWNLOAD_WORKERS ) as pool:
+        for s in species:
+            rows = observations_for_species(
+                s["taxon_id"], args.per_species, args.place_id, max_id, args.seed
+            )
+            done = [r for r in pool.map( lambda row: fetch_one( row, s["common_name"] ), rows ) if r]
+            manifest.extend( done )
+            # Rewrite after every species. Downloads are cached on disk, so an
+            # interrupted run resumes cheaply, and the manifest always describes
+            # the audio that is actually present.
+            with out.open( "w", newline="" ) as fh:
+                writer = csv.DictWriter( fh, fieldnames=fields, extrasaction="ignore" )
+                writer.writeheader()
+                writer.writerows( manifest )
+            print( f"{s['name']}: {len( done )}/{len( rows )} files", flush=True )
+
     print( f"\nWrote {len( manifest )} rows to {out}" )
 
 

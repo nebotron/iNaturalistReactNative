@@ -106,6 +106,18 @@ def recordist_disjoint_split(
     return split, dropped
 
 
+def random_recording_split( rows: list[dict], val_frac: float, seed: int ) -> None:
+    """Naive split that ignores who made the recording.
+
+    Provided only so the cost of the leak can be measured; see README.
+    """
+    shuffled = list( rows )
+    random.Random( seed ).shuffle( shuffled )
+    cut = int( len( shuffled ) * val_frac )
+    for i, row in enumerate( shuffled ):
+        row["split"] = "val" if i < cut else "train"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser( description=__doc__ )
     parser.add_argument( "--max-windows", type=int, default=4,
@@ -113,6 +125,10 @@ def main() -> None:
     parser.add_argument( "--val-frac", type=float, default=0.2 )
     parser.add_argument( "--seed", type=int, default=0 )
     parser.add_argument( "--min-per-class", type=int, default=20 )
+    parser.add_argument(
+        "--split", choices=( "recordist", "random" ), default="recordist",
+        help="'random' splits by recording and leaks; use it only to measure that",
+    )
     args = parser.parse_args()
 
     with ( DATA / "manifest.csv" ).open() as fh:
@@ -125,14 +141,16 @@ def main() -> None:
     per_class = collections.Counter( r["scientific_name"] for r in rows )
     rows = [r for r in rows if per_class[r["scientific_name"]] >= args.min_per_class]
 
-    split, dropped = recordist_disjoint_split( rows, args.val_frac, args.seed )
-    if dropped:
-        print( f"Dropping {len( dropped )} class(es) without both-side coverage: {dropped}" )
-        rows = [r for r in rows if r["scientific_name"] not in dropped]
-        split, _ = recordist_disjoint_split( rows, args.val_frac, args.seed )
-
-    for row in rows:
-        row["split"] = split[int( row["user_id"] )]
+    if args.split == "random":
+        random_recording_split( rows, args.val_frac, args.seed )
+    else:
+        split, dropped = recordist_disjoint_split( rows, args.val_frac, args.seed )
+        if dropped:
+            print( f"Dropping {len( dropped )} class(es) without both-side coverage: {dropped}" )
+            rows = [r for r in rows if r["scientific_name"] not in dropped]
+            split, _ = recordist_disjoint_split( rows, args.val_frac, args.seed )
+        for row in rows:
+            row["split"] = split[int( row["user_id"] )]
 
     out = DATA / "features.csv"
     with out.open( "w", newline="" ) as fh:
@@ -157,9 +175,12 @@ def main() -> None:
         f"{windows['train']} train / {windows['val']} val windows "
         f"of {N_MELS}x{N_FRAMES}"
     )
+    train_users = { r["user_id"] for r in rows if r["split"] == "train" }
+    val_users = { r["user_id"] for r in rows if r["split"] == "val" }
+    shared = len( train_users & val_users )
     print(
-        f"Recordists: {len( { r['user_id'] for r in rows if r['split'] == 'train' } )} train / "
-        f"{len( { r['user_id'] for r in rows if r['split'] == 'val' } )} val (disjoint)"
+        f"Recordists: {len( train_users )} train / {len( val_users )} val, "
+        + ( f"{shared} on BOTH sides (leaking)" if shared else "disjoint" )
     )
     print( f"Wrote {out}" )
 

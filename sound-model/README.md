@@ -65,14 +65,16 @@ moment, and plenty of recordings are mostly silence or handling noise.
 64 × 130 per window.
 
 **Splitting** (`preprocess.py`) is recordist-disjoint: every recording by a
-given user goes entirely to train or entirely to validation. This is the single
-most important choice in the pipeline. Splitting at the clip level inflates
-accuracy badly, because one recordist often uploads the same individual animal
-from the same spot with the same microphone many times over, and the model
-learns the microphone and the background instead of the animal. After the
-random assignment, whole recordists are moved across to guarantee every species
-appears on both sides; species that still can't be covered are dropped and
-reported.
+given user goes entirely to train or entirely to validation. One recordist
+often uploads the same individual animal from the same spot with the same
+microphone many times over, so a clip-level split lets the model score points
+for recognising the microphone and the background rather than the animal. On
+this dataset that inflates reported top-1 by 4.2 points (measured in
+`RESULTS.md`); on a set with fewer, more prolific contributors it would be
+worse. After the random assignment, whole recordists are moved across to
+guarantee every species appears on both sides; species that still can't be
+covered are dropped and reported. `--split random` reproduces the leaky
+version for comparison.
 
 **Model** (`train.py`) is a 4-block CNN (~0.4M parameters) with mean+max pooling
 over the time-frequency plane, trained with class-balanced sampling, mixup,
@@ -84,7 +86,18 @@ since that is how you'd actually classify an upload.
 
 ## Results
 
-See `RESULTS.md` for the measured numbers from a run of this pipeline.
+Seven bird species, 2,096 recordings from 932 recordists, trained for 30 epochs
+in ~22 minutes on 4 CPU cores:
+
+| Metric | Value |
+| --- | ---: |
+| Recording-level top-1 | **0.774** |
+| Recording-level top-3 | **0.912** |
+| Macro F1 | 0.756 |
+| Chance | 0.143 |
+
+Full details, per-class counts and the split-leakage comparison are in
+[`RESULTS.md`](RESULTS.md).
 
 ## Honest limitations
 
