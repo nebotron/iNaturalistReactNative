@@ -4,6 +4,7 @@ import { t } from "i18next";
 import React from "react";
 import * as useCurrentUser from "sharedHooks/useCurrentUser";
 import factory from "tests/factory";
+import cachedImageUri from "tests/helpers/cachedImageUri";
 import { renderComponent } from "tests/helpers/render";
 
 const mockUser = factory( "RemoteUser" );
@@ -89,8 +90,7 @@ describe( "UserProfile", () => {
     ).toBeTruthy( );
     const userIcon = screen.getByTestId( "UserIcon.photo" );
     expect( userIcon ).toBeTruthy( );
-    // eslint-disable-next-line testing-library/no-node-access
-    expect( userIcon.children[0].props.source ).toHaveProperty( "uri", mockUser.icon_url );
+    expect( cachedImageUri( userIcon ) ).toStrictEqual( mockUser.icon_url );
   } );
 
   test( "renders followers and following buttons", async () => {

@@ -1,12 +1,10 @@
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
-import { FasterImageView } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
   useRef,
 } from "react";
-import { StyleSheet } from "react-native";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
@@ -61,9 +59,7 @@ const frameCropTransform = (
 // two-finger pinch/pan that reuses the shared image-zoom engine (via
 // SharedZoomableImage) so the gesture behaves identically to the crop editor,
 // MediaViewer and IDing game. Single-finger panning is disabled so one finger
-// scrolls the list; two fingers are required to pan or zoom. The grid uses
-// FasterImageView (disk cache) rather than the default Animated.Image, injected
-// through SharedZoomableImage's renderImage prop.
+// scrolls the list; two fingers are required to pan or zoom.
 const ObsImageZoomable = ( {
   uri,
   logUri,
@@ -137,19 +133,7 @@ const ObsImageZoomable = ( {
       isSingleTapEnabled={false}
       cropPanContext={cropPanContext}
       onInteractionEnd={handleInteractionEnd}
-      renderImage={( ) => (
-        <FasterImageView
-          testID="ObsList.photo"
-          accessibilityIgnoresInvertColors
-          fadeDuration={0}
-          style={StyleSheet.absoluteFill}
-          source={{
-            url: uri,
-            cachePolicy: "discWithCacheControl",
-            resizeMode: "contain",
-          }}
-        />
-      )}
+      testID="ObsList.photo"
     />
   );
 };

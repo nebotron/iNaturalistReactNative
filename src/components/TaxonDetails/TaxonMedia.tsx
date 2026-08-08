@@ -1,8 +1,8 @@
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import MasonryLayout from "components/ObsDetails/MasonryLayout";
-import { ActivityIndicator, Carousel } from "components/SharedComponents";
+import { ActivityIndicator, CachedImage, Carousel } from "components/SharedComponents";
 import {
-  Image, Pressable, View,
+  Pressable, View,
 } from "components/styledComponents";
 import React, {
   useCallback,
@@ -58,7 +58,7 @@ const TaxonMedia = ( {
           colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.5) 100%)"]}
           className="absolute w-full h-full z-10"
         />
-        <Image
+        <CachedImage
           testID={`TaxonDetails.photo.${item.id}`}
           className="w-full h-full"
           source={{
@@ -67,7 +67,6 @@ const TaxonMedia = ( {
             // available
             uri: Photo.displayLargePhoto( item.url ),
           }}
-          accessibilityIgnoresInvertColors
         />
       </Pressable>
     ),

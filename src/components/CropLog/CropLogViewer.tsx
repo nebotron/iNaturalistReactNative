@@ -1,5 +1,6 @@
 /* eslint-disable i18next/no-literal-string */
 import { INatIcon } from "components/SharedComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
 import { Text, View } from "components/styledComponents";
 import React, {
   useCallback,
@@ -116,10 +117,10 @@ const Row = ( { entry, onDelete }: RowProps ) => {
 
   return (
     <View style={{ height: displayHeight, width: displayWidth }}>
-      <Image
+      <CachedImage
         source={{ uri: entry.url }}
         style={{ height: displayHeight, width: displayWidth }}
-        resizeMode="stretch"
+        resizeMode="fill"
       />
       <View
         pointerEvents="none"

@@ -5,7 +5,8 @@ import deleteRemoteObservationSound from "api/observationSounds";
 import classnames from "classnames";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import { ActivityIndicator, INatIcon, INatIconButton } from "components/SharedComponents";
-import { Image, Pressable, View } from "components/styledComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
+import { Pressable, View } from "components/styledComponents";
 import findIndex from "lodash/findIndex";
 import sortBy from "lodash/sortBy";
 import { RealmContext } from "providers/contexts";
@@ -104,14 +105,11 @@ const EvidenceList = ( {
           className={classnames( imageClass )}
           testID={`EvidenceList.${obsPhotoUri}`}
         >
-          <View className="rounded-lg overflow-hidden relative">
-            <Image
-              source={{ uri: obsPhotoUri }}
-              testID="ObsEdit.photo"
-              className="w-fit h-full flex items-center justify-center"
-              accessibilityIgnoresInvertColors
-            />
-          </View>
+          <CachedImage
+            source={{ uri: obsPhotoUri }}
+            testID="ObsEdit.photo"
+            className="w-full h-full rounded-lg"
+          />
         </Pressable>
       </ScaleDecorator>
     ),

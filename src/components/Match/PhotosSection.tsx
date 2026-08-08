@@ -2,11 +2,12 @@ import type { ApiPhoto, ApiTaxon } from "api/types";
 import classnames from "classnames";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import {
+  CachedImage,
   IconicTaxonIcon,
   PhotoCount,
 } from "components/SharedComponents";
 import {
-  Image, Pressable, View,
+  Pressable, View,
 } from "components/styledComponents";
 import compact from "lodash/compact";
 import React, { useEffect, useState } from "react";
@@ -71,6 +72,9 @@ const PhotosSection = ( {
       : [],
   );
 
+  // Measured up front rather than from the rendered photo's onLoad: the
+  // component renders an empty placeholder until displayPortraitLayout is
+  // known, so nothing that depends on the image having rendered can resolve it.
   useEffect( ( ) => {
     const checkImageOrientation = async ( ) => {
       if ( observationPhoto ) {
@@ -144,11 +148,10 @@ const PhotosSection = ( {
         layoutClasses?.observationPhotoClass,
       )}
     >
-      <Image
+      <CachedImage
         testID="MatchScreen.ObsPhoto"
         source={{ uri: Photo.displayLargePhoto( observationPhoto ) }}
         className="w-full h-full"
-        accessibilityIgnoresInvertColors
       />
       {observationPhotos.length > 1 && (
         <View className="absolute bottom-5 left-5">
@@ -175,13 +178,12 @@ const PhotosSection = ( {
             layoutClasses?.taxonPhotoClass,
           )}
         >
-          <Image
+          <CachedImage
             testID={`TaxonDetails.photo.${photo.id}`}
             className="w-full h-full"
             source={{
               uri: Photo.displayMediumPhoto( photo.url ),
             }}
-            accessibilityIgnoresInvertColors
           />
         </Pressable>
       ) )}

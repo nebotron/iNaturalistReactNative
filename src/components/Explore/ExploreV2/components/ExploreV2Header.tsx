@@ -11,8 +11,9 @@ import {
 } from "components/SharedComponents";
 import BackButton from "components/SharedComponents/Buttons/BackButton";
 import ContainedSquareButton from "components/SharedComponents/Buttons/ContainedSquareButton";
+import CachedImage from "components/SharedComponents/CachedImage";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
-import { Image, Pressable, View } from "components/styledComponents";
+import { Pressable, View } from "components/styledComponents";
 import type { TFunction } from "i18next";
 import type { ExploreStackScreenProps } from "navigation/types";
 import type { ExploreV2LocationState, ExploreV2Subject } from "providers/ExploreV2Context";
@@ -63,10 +64,9 @@ const SubjectThumbnail = ( { subject }: { subject: ExploreV2Subject } ) => {
       const photo = subject.taxon.default_photo?.url;
       return photo
         ? (
-          <Image
+          <CachedImage
             source={{ uri: photo }}
             className={THUMBNAIL_CLASS}
-            accessibilityIgnoresInvertColors
             testID="ExploreV2Header.taxonImage"
           />
         )
@@ -89,10 +89,9 @@ const SubjectThumbnail = ( { subject }: { subject: ExploreV2Subject } ) => {
     case "project":
       return subject.project.icon
         ? (
-          <Image
+          <CachedImage
             source={{ uri: subject.project.icon }}
             className={THUMBNAIL_CLASS}
-            accessibilityIgnoresInvertColors
             testID="ExploreV2Header.projectImage"
           />
         )

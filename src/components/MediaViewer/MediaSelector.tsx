@@ -1,6 +1,6 @@
 import classnames from "classnames";
-import { INatIcon } from "components/SharedComponents";
-import { Image, Pressable, View } from "components/styledComponents";
+import { CachedImage, INatIcon } from "components/SharedComponents";
+import { Pressable, View } from "components/styledComponents";
 import React, { useCallback, useMemo } from "react";
 import {
   FlatList,
@@ -117,9 +117,8 @@ const MediaSelector = ( {
       {
         item.type === "photo"
           ? (
-            <Image
+            <CachedImage
               source={{ uri: Photo.displayLocalOrRemoteSquarePhoto( item ) }}
-              accessibilityIgnoresInvertColors
               className="w-full h-full"
             />
           )
@@ -160,9 +159,8 @@ const MediaSelector = ( {
           )}
           testID={`MediaSelector.${photoUri}`}
         >
-          <Image
+          <CachedImage
             source={{ uri: photoUri }}
-            accessibilityIgnoresInvertColors
             className="w-full h-full"
           />
         </Pressable>

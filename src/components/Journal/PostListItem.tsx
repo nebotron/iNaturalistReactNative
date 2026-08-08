@@ -2,10 +2,10 @@ import type { ApiPostForUser } from "api/types";
 import { THUMBNAIL_CLASS } from "appConstants/classNames";
 import {
   Body1,
+  CachedImage,
   List2,
 } from "components/SharedComponents";
 import {
-  Image,
   View,
 } from "components/styledComponents";
 import React, { useMemo } from "react";
@@ -37,7 +37,7 @@ const PostListItem = ( {
   return (
     <View className="flex-row items-center mx-3 my-2">
       {imgSrc && (
-        <Image
+        <CachedImage
           source={{ uri: imgSrc }}
           // Passing a key here is not ideal for FlashList, but we do actually want to avoid
           // recycling on images. When Image gets a new `source` prop, it continues displaying
@@ -46,7 +46,6 @@ const PostListItem = ( {
           key={imgSrc}
           className={THUMBNAIL_CLASS}
           accessibilityRole="image"
-          accessibilityIgnoresInvertColors
         />
       )}
       <View className="ml-3 shrink">

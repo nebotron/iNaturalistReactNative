@@ -1,6 +1,7 @@
 import classNames from "classnames";
 import { IconicTaxonIcon } from "components/SharedComponents";
-import { FasterImageView, Image, View } from "components/styledComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
+import { View } from "components/styledComponents";
 import React, {
   useCallback, useState,
 } from "react";
@@ -87,32 +88,12 @@ const ObsImage = ( {
         />
       </View>
       { displayUri && !showZoomable && (
-        displayUri.startsWith( "ph://" )
-          // FasterImageView (SDWebImage) can't load ph:// PHAsset identifiers;
-          // only React Native's own Image loader resolves those on iOS.
-          ? (
-            <Image
-              key={uri.uri}
-              className={classNames( CLASS_NAMES )}
-              testID="ObsList.photo"
-              resizeMode="cover"
-              source={{ uri: displayUri }}
-            />
-          )
-          : (
-            <FasterImageView
-              key={uri.uri}
-              className={classNames( CLASS_NAMES )}
-              testID="ObsList.photo"
-              accessibilityIgnoresInvertColors
-              fadeDuration={0}
-              source={{
-                url: displayUri,
-                cachePolicy: "discWithCacheControl",
-                resizeMode: "cover",
-              }}
-            />
-          )
+        <CachedImage
+          key={uri.uri}
+          className={classNames( CLASS_NAMES )}
+          testID="ObsList.photo"
+          source={{ uri: displayUri }}
+        />
       ) }
       { showZoomable && detection && displayUri && containerSize && (
         <ObsImageZoomable

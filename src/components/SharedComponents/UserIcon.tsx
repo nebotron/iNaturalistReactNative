@@ -1,8 +1,8 @@
 import classNames from "classnames";
 import { INatIcon } from "components/SharedComponents";
-import { Image, View } from "components/styledComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
 import React from "react";
-import type { ImageStyle } from "react-native";
+import type { ViewStyle } from "react-native";
 
 interface Props {
   active?: boolean;
@@ -40,7 +40,7 @@ const UserIcon = ( {
 
   // For unknown reasons, the green border doesn't show up on Android using nativewind classNames
   // but it works with style, might warrant further investigation or an issue in nativewind
-  const style: ImageStyle = {
+  const style: ViewStyle = {
     width: size,
     height: size,
   };
@@ -48,19 +48,13 @@ const UserIcon = ( {
   return (
     uri
       ? (
-        <View
+        <CachedImage
           accessibilityRole="image"
-          accessibilityIgnoresInvertColors
           testID="UserIcon.photo"
-        >
-          <Image
-            style={style}
-            source={{
-              uri,
-            }}
-            className={classNames( "rounded-full", active && "border-[3px] border-inatGreen" )}
-          />
-        </View>
+          style={style}
+          source={{ uri }}
+          className={classNames( "rounded-full", active && "border-[3px] border-inatGreen" )}
+        />
       )
       : (
         <INatIcon

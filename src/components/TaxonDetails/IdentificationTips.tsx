@@ -4,7 +4,8 @@ import {
   Heading4,
   INatIcon,
 } from "components/SharedComponents";
-import { FasterImageView, View } from "components/styledComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
+import { View } from "components/styledComponents";
 import React from "react";
 import Photo from "realmModels/Photo";
 import { useAuthenticatedQuery, useTranslation } from "sharedHooks";
@@ -82,13 +83,9 @@ const IdentificationTips = ( { taxon }: Props ) => {
             className="flex-row mb-4"
           >
             {squareUrl && (
-              <FasterImageView
+              <CachedImage
                 className="w-[62px] h-[62px] rounded-lg mr-3 shrink-0"
-                source={{
-                  url: squareUrl,
-                  cachePolicy: "discWithCacheControl",
-                  resizeMode: "cover",
-                }}
+                source={{ uri: squareUrl }}
               />
             )}
             <View className="flex-1">

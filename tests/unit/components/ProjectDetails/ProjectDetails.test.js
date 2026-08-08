@@ -77,12 +77,14 @@ describe( "ProjectDetails", ( ) => {
 
     expect( screen.getByText( mockProject.title ) ).toBeTruthy( );
     expect( screen.getByText( mockProject.description ) ).toBeTruthy( );
-    expect(
-      screen.getByTestId( "ProjectDetails.headerImage" ).props.source,
-    ).toStrictEqual( { uri: mockProject.header_image_url } );
-    expect(
-      screen.getByTestId( "ProjectDetails.projectIcon" ).props.source,
-    ).toStrictEqual( { uri: mockProject.icon } );
+    // CachedImage puts the testID on a wrapper and the loader underneath, so
+    // the remote URL is on the child's source as `url`.
+    /* eslint-disable testing-library/no-node-access */
+    expect( screen.getByTestId( "ProjectDetails.headerImage" ).children[0].props.source )
+      .toHaveProperty( "url", mockProject.header_image_url );
+    expect( screen.getByTestId( "ProjectDetails.projectIcon" ).children[0].props.source )
+      .toHaveProperty( "url", mockProject.icon );
+    /* eslint-enable testing-library/no-node-access */
   } );
 
   it( "renders when project has no description", ( ) => {

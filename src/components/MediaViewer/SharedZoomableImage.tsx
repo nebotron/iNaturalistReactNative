@@ -1,3 +1,4 @@
+import CachedImage from "components/SharedComponents/CachedImage";
 import type { ForwardRefRenderFunction, ReactNode } from "react";
 import React, {
   forwardRef,
@@ -41,9 +42,8 @@ type SharedZoomableImageProps = ImageZoomProps & {
   onLoad?: () => void;
   onError?: () => void;
   // Optional custom image renderer. When provided it is drawn inside the
-  // zoom-transformed layer instead of the default Animated.Image, letting
-  // callers use a different image backend (e.g. FasterImageView for the
-  // disk-cached Explore grid) while sharing the same gesture engine.
+  // zoom-transformed layer instead of the default CachedImage, letting callers
+  // use a different image backend while sharing the same gesture engine.
   renderImage?: () => ReactNode;
 };
 
@@ -227,23 +227,30 @@ const SharedZoomableImage: ForwardRefRenderFunction<
             </Animated.View>
           )
           : (
-            <Animated.Image
-              testID={testID}
+            // CachedImage rather than Animated.Image so full-screen photos,
+            // the IDing game and the crop editor read from the same disk cache
+            // as the grids that prefetched them. The transform stays on this
+            // wrapper because CachedImage renders a native view underneath.
+            <Animated.View
               style={[imageLayoutStyle, animatedStyle, brightnessFilter]}
-              source={{ uri }}
-              resizeMode="contain"
-              onLoad={event => {
-                const { width, height } = event.nativeEvent.source;
-                setImageSize( prev => (
-                  prev?.width === width && prev?.height === height
-                    ? prev
-                    : { width, height }
-                ) );
-                onImageDimensionsChange?.( { width, height } );
-                onLoad?.( );
-              }}
-              onError={onError}
-            />
+            >
+              <CachedImage
+                testID={testID}
+                className="w-full h-full"
+                source={{ uri }}
+                resizeMode="contain"
+                onLoad={( { width, height } ) => {
+                  setImageSize( prev => (
+                    prev?.width === width && prev?.height === height
+                      ? prev
+                      : { width, height }
+                  ) );
+                  onImageDimensionsChange?.( { width, height } );
+                  onLoad?.( );
+                }}
+                onError={onError}
+              />
+            </Animated.View>
           )}
       </View>
     </GestureDetector>

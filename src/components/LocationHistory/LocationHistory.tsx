@@ -3,11 +3,12 @@ import { photoFromObservation } from "components/ObservationsFlashList/util";
 import {
   Body2,
   Button,
+  CachedImage,
   List2,
   SwitchRow,
 } from "components/SharedComponents";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
-import { Image, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
   useCallback, useMemo, useState,
@@ -70,7 +71,7 @@ const PhotoLocationRow = ( { item, onPress, onPhotoPress }: { item: {
             onPress={onPhotoPress}
             disabled={!onPhotoPress}
           >
-            <Image
+            <CachedImage
               source={{ uri: item.photoUri }}
               className="w-16 h-16 rounded"
             />

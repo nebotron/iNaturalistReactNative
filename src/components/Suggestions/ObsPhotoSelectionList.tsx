@@ -1,7 +1,7 @@
 import classnames from "classnames";
-import { TransparentCircleButton } from "components/SharedComponents";
+import { CachedImage, TransparentCircleButton } from "components/SharedComponents";
 import {
-  Image, Pressable, View,
+  Pressable, View,
 } from "components/styledComponents";
 import React, { useCallback, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
@@ -51,18 +51,16 @@ const PhotoThumbnail = ( { uri, detectSubject }: { uri: string; detectSubject?: 
       {cropStyles
         ? (
           <View style={cropStyles.wrapperStyle}>
-            <Image
+            <CachedImage
               source={{ uri }}
-              accessibilityIgnoresInvertColors
               style={cropStyles.imageStyle}
-              resizeMode="stretch"
+              resizeMode="fill"
             />
           </View>
         )
         : (
-          <Image
+          <CachedImage
             source={{ uri }}
-            accessibilityIgnoresInvertColors
             className="w-full h-full"
           />
         )}

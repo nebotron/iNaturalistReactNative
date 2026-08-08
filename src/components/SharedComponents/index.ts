@@ -12,6 +12,7 @@ export { default as INatIconButton } from "./Buttons/INatIconButton";
 export { default as PressableWithDebounce } from "./Buttons/PressableWithDebounce";
 export { default as RotatingINatIconButton } from "./Buttons/RotatingINatIconButton";
 export { default as TransparentCircleButton } from "./Buttons/TransparentCircleButton";
+export { default as CachedImage } from "./CachedImage";
 export { default as Carousel } from "./Carousel";
 export { default as CarouselDots } from "./CarouselDots";
 export { default as Checkbox } from "./Checkbox";
