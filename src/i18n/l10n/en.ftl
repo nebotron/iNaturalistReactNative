@@ -69,7 +69,6 @@ Add-stop = Add stop
 ADD-TAXON-FILTER = ADD TAXON FILTER
 Add-to-Projects = Add to Projects
 ADD-TO-PROJECTS = ADD TO PROJECTS
-ADD-USER-FILTER = ADD USER FILTER
 Added-to-X-Projects =
     Added to { $count } { $count ->
         [one] Project
@@ -562,7 +561,6 @@ Exact-Date = Exact Date
 EXACT-DATE = EXACT DATE
 except = except
 Exclude-taxon = Exclude
-Exclude-user = Exclude
 EXPAND-MAP = EXPAND MAP
 # Onboarding carousel second screen description
 Experts-help-verify-and-improve-IDs = Experts help verify and improve IDs
@@ -749,7 +747,6 @@ iNaturalist-users-who-have-observed = iNaturalist users who have observed a part
 iNaturalists-apps-are-designed-and-developed-3 = iNaturalist's apps are designed, developed, and supported by the iNaturalist team: Yaron Budowski, Amanda Bullington, Tony Iwane, Johannes Klein, Patrick Leary, Joanne Lin, Scott Loarie, Abhas Misraraj, Sylvain Morin, Carrie Seltzer, Alex Shepard, Thea Skaff, Angie Ta, Ken-ichi Ueda, Kirk van Gorkom, Jason Walthall, & Jane Weeden.
 iNaturalists-vision-is-a-world = iNaturalist's vision is a world where everyone can understand and sustain biodiversity through the practice of observing wild organisms and sharing information about them.
 Include-taxon = Include
-Include-user = Include
 Individual-encounters-with-organisms = Individual encounters with organisms at a particular time and location, usually with evidence
 # Title for dialog telling the user that an Internet connection is required
 Internet-Connection-Required = Internet Connection Required
