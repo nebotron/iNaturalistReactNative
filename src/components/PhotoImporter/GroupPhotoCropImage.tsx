@@ -1,6 +1,5 @@
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
-import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import React, {
   useCallback,
   useLayoutEffect,
@@ -49,12 +48,12 @@ const styles = StyleSheet.create( {
   },
 } );
 
-// Thumbnails this process has already decoded once. A cell landing on one of
-// them draws from a warm image cache, so it can reveal its crop on the first
-// frame rather than waiting out another onLoad. Waiting was what made a photo
-// scrolled back to appear uncropped — the overlay stayed hidden and the plain
-// thumbnail showed through underneath.
-const paintedThumbnails = new Set<string>( );
+// Photos this process has already decoded once. A cell landing on one of them
+// draws from a warm image cache, so it can reveal its crop on the first frame
+// rather than waiting out another onLoad. Waiting was what made a photo
+// scrolled back to appear uncropped — the overlay stayed hidden and the grid's
+// own thumbnail showed through underneath.
+const paintedImages = new Set<string>( );
 
 const cropsMatch = ( a: NormalizedCrop, b: NormalizedCrop ) => (
   Math.abs( a.x - b.x ) < CROP_EPSILON
@@ -77,10 +76,8 @@ interface Props {
 // pinch/pan that reframes the crop. Everything below the gesture is shared with
 // the crop editor and the Explore grid: the same zoom engine (via
 // SharedZoomableImage), the same subject detector, and the same crop <->
-// transform math. What differs is that a grid cell runs detection on its own
-// thumbnail rather than on a full-resolution copy of the original, so a
-// screenful of crops lands in about the time the thumbnails take. Single-finger
-// panning is disabled so one finger still scrolls the list.
+// transform math. Single-finger panning is disabled so one finger still
+// scrolls the list.
 const GroupPhotoCropImage = ( {
   cropSourceUri,
   savedCrop,
@@ -92,12 +89,12 @@ const GroupPhotoCropImage = ( {
   // framing, which happens once per photo; the zoom engine owns the transform
   // from then on.
   const [framedCrop, setFramedCrop] = useState<NormalizedCrop | null>( null );
-  // The thumbnail the image below has actually painted. A cell whose crop and
-  // thumbnail are both already cached — every cell recycled by scrolling, and
+  // The photo the image below has actually painted. A cell whose crop and
+  // photo are both already cached — every cell recycled by scrolling, and
   // every cell that shifts up when one is deleted — frames itself on its first
   // render, while its image is still decoding. Showing the overlay then is what
   // turned those cells black.
-  const [loadedThumbnailUri, setLoadedThumbnailUri] = useState<string | null>( null );
+  const [loadedUri, setLoadedUri] = useState<string | null>( null );
   const [prevCropSourceUri, setPrevCropSourceUri] = useState( cropSourceUri );
 
   // Synchronously reset when a recycled cell lands on a different photo, so its
@@ -107,29 +104,18 @@ const GroupPhotoCropImage = ( {
     setFramedCrop( null );
   }
 
-  const thumbnailUri = useDeviceImageThumbnail(
-    cropSourceUri,
-    groupPhotoThumbnailMaxPixel( size ),
-  );
-
-  // Routed through the same native thumbnail generator as thumbnailUri above
-  // (rather than an <Image> reading cropSourceUri directly) so this layer's
-  // orientation is baked the same way: a raw device photo can carry any EXIF
-  // orientation, and RN's <Image> doesn't reliably re-apply it, which showed
-  // up as this full-resolution layer rendering rotated 90° against the
-  // thumbnail underneath it.
+  // Routed through the native thumbnail generator (rather than an <Image>
+  // reading cropSourceUri directly) so orientation is baked in: a raw device
+  // photo can carry any EXIF orientation, and RN's <Image> doesn't reliably
+  // re-apply it, which showed up as this layer rendering rotated 90°.
   const fullResolutionUri = useDeviceImageThumbnail(
     cropSourceUri,
     FULL_RESOLUTION_MAX_PIXEL,
   );
 
-  // Detection runs on the thumbnail above rather than on a full-resolution
-  // export of the original, which is what a grid cell had to wait for before:
-  // exporting a dozen photos out of the library takes seconds, so the cells sat
-  // uncropped long after their thumbnails had arrived.
   const detection = useThumbnailSubjectDetection(
     cropSourceUri,
-    thumbnailUri,
+    fullResolutionUri,
     Boolean( savedCrop ),
   );
 
@@ -138,7 +124,7 @@ const GroupPhotoCropImage = ( {
   // A cached detection can carry a crop from before the user's last gesture, so
   // the crop saved on the photo always wins (same as the crop editor).
   const initialCrop = savedCrop ?? detection?.crop ?? null;
-  const ready = Boolean( thumbnailUri ) && imageWidth > 0 && imageHeight > 0 && size > 0;
+  const ready = Boolean( fullResolutionUri ) && imageWidth > 0 && imageHeight > 0 && size > 0;
 
   const cropPanContext = {
     imageWidth,
@@ -207,18 +193,16 @@ const GroupPhotoCropImage = ( {
     return null;
   }
 
-  const painted = loadedThumbnailUri === thumbnailUri;
+  const painted = loadedUri === fullResolutionUri;
   const framed = Boolean( framedCrop )
-    && ( painted || paintedThumbnails.has( thumbnailUri ?? "" ) );
+    && ( painted || paintedImages.has( fullResolutionUri ?? "" ) );
 
   // React Native decodes an image to the pixel bounds of the view it's drawn
   // in, so a photo laid out at the cell's own size is downsampled to it no
   // matter how much detail the file holds — and the crop box then zooms into
   // that downsample, which is why a tightly framed cell looked soft. Laying the
   // photo out at its own pixel size and scaling that box back down to the cell
-  // leaves the decode full-resolution; scaling about the box's center over the
-  // same square means the geometry still matches the thumbnail underneath
-  // exactly, so the swap is invisible.
+  // leaves the decode full-resolution.
   const fullResolutionSize = FULL_RESOLUTION_MAX_PIXEL / PixelRatio.get( );
   const fullResolutionStyle = {
     position: "absolute" as const,
@@ -234,7 +218,7 @@ const GroupPhotoCropImage = ( {
       {painted && <View style={styles.backdrop} />}
       <SharedZoomableImage
         ref={zoomRef}
-        uri={thumbnailUri}
+        uri={fullResolutionUri}
         style={{ width: size, height: size }}
         // scale 1 renders the whole image contained (letterboxed) in the square, so
         // allowing pinch down to 1 lets the user shrink the photo until it fully fits.
@@ -247,50 +231,26 @@ const GroupPhotoCropImage = ( {
         cropPanContext={cropPanContext}
         onInteractionEnd={handleInteractionEnd}
         renderImage={( ) => (
-          <>
-            {/*
-              The thumbnail the detector ran on, kept underneath as the layer
-              that paints immediately: it's already generated and warmed by the
-              time the cell mounts, while the photo above it still has to be
-              read out of the photo library (and pulled back from iCloud, if the
-              original was offloaded). Nothing here waits on that — the cell
-              shows the thumbnail and sharpens into the photo when it lands.
-            */}
+          <View style={fullResolutionStyle} pointerEvents="none">
             <Image
               // A cell that lands on a different photo — every cell below a
               // deleted one, and every cell recycled by scrolling — must not
               // reuse the native view that already painted the previous photo:
               // it keeps that bitmap on screen until the new file decodes, so
               // the crop overlay would frame and show the wrong photo.
-              key={thumbnailUri}
+              key={fullResolutionUri}
               testID="GroupPhotoCropImage.photo"
               accessibilityIgnoresInvertColors
               fadeDuration={0}
               style={StyleSheet.absoluteFill}
               resizeMode="contain"
-              source={{ uri: thumbnailUri }}
+              source={{ uri: fullResolutionUri }}
               onLoad={( ) => {
-                if ( thumbnailUri ) paintedThumbnails.add( thumbnailUri );
-                setLoadedThumbnailUri( thumbnailUri ?? null );
+                if ( fullResolutionUri ) paintedImages.add( fullResolutionUri );
+                setLoadedUri( fullResolutionUri ?? null );
               }}
             />
-            {framedCrop && fullResolutionUri && (
-              <View style={fullResolutionStyle} pointerEvents="none">
-                <Image
-                  // Same reason as the thumbnail below it, and more urgent
-                  // here: reading the original out of the library is slow, so a
-                  // reused view would hold the previous photo for far longer.
-                  key={fullResolutionUri}
-                  testID="GroupPhotoCropImage.fullResolutionPhoto"
-                  accessibilityIgnoresInvertColors
-                  fadeDuration={0}
-                  style={StyleSheet.absoluteFill}
-                  resizeMode="contain"
-                  source={{ uri: fullResolutionUri }}
-                />
-              </View>
-            )}
-          </>
+          </View>
         )}
       />
     </View>

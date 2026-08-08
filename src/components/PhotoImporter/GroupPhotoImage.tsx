@@ -154,12 +154,11 @@ const GroupPhotoImage = ( {
         ? photo.image.uri
         : undefined}
       cellWidth={cellWidth}
-      // The same thumbnail the crop overlay shows until its full-resolution
-      // photo lands, and the one the whole import is preloaded at and detects
-      // its subject in. Asking for the cell's own 1x size instead meant
-      // a second file per photo that nothing warmed, so a photo reached by
-      // scrolling had to generate it there and then — which is why cells that
-      // had already been shown went back to a placeholder.
+      // The same size the whole import is preloaded at and detects its
+      // subject in. Asking for the cell's own 1x size instead meant a second
+      // file per photo that nothing warmed, so a photo reached by scrolling
+      // had to generate it there and then — which is why cells that had
+      // already been shown went back to a placeholder.
       thumbnailMaxPixel={cellWidth > 0
         ? groupPhotoThumbnailMaxPixel( cellWidth )
         : undefined}
