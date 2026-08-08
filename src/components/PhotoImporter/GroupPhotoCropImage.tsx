@@ -112,6 +112,17 @@ const GroupPhotoCropImage = ( {
     groupPhotoThumbnailMaxPixel( size ),
   );
 
+  // Routed through the same native thumbnail generator as thumbnailUri above
+  // (rather than an <Image> reading cropSourceUri directly) so this layer's
+  // orientation is baked the same way: a raw device photo can carry any EXIF
+  // orientation, and RN's <Image> doesn't reliably re-apply it, which showed
+  // up as this full-resolution layer rendering rotated 90° against the
+  // thumbnail underneath it.
+  const fullResolutionUri = useDeviceImageThumbnail(
+    cropSourceUri,
+    FULL_RESOLUTION_MAX_PIXEL,
+  );
+
   // Detection runs on the thumbnail above rather than on a full-resolution
   // export of the original, which is what a grid cell had to wait for before:
   // exporting a dozen photos out of the library takes seconds, so the cells sat
@@ -263,19 +274,19 @@ const GroupPhotoCropImage = ( {
                 setLoadedThumbnailUri( thumbnailUri ?? null );
               }}
             />
-            {framedCrop && (
+            {framedCrop && fullResolutionUri && (
               <View style={fullResolutionStyle} pointerEvents="none">
                 <Image
                   // Same reason as the thumbnail below it, and more urgent
                   // here: reading the original out of the library is slow, so a
                   // reused view would hold the previous photo for far longer.
-                  key={cropSourceUri}
+                  key={fullResolutionUri}
                   testID="GroupPhotoCropImage.fullResolutionPhoto"
                   accessibilityIgnoresInvertColors
                   fadeDuration={0}
                   style={StyleSheet.absoluteFill}
                   resizeMode="contain"
-                  source={{ uri: cropSourceUri }}
+                  source={{ uri: fullResolutionUri }}
                 />
               </View>
             )}
