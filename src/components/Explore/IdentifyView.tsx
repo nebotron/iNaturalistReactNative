@@ -2,6 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import { createIdentification } from "api/identifications";
 import { markAsReviewed } from "api/observations";
 import type { ApiObservation, ApiObservationsSearchParams } from "api/types";
+import classnames from "classnames";
 import useInfiniteExploreScroll from "components/Explore/hooks/useInfiniteExploreScroll";
 import type { IdentifyPhotoHandle } from "components/MediaViewer/IdentifyPhoto";
 import {
@@ -44,6 +45,10 @@ import colors from "styles/tailwindColors";
 
 // Fetch the next page once we're within this many observations of the end.
 const PREFETCH_THRESHOLD = 5;
+
+// How long after the photo renders before the taxon name appears, so the name
+// never beats the image it describes onto the screen.
+const TAXON_DELAY_MS = 100;
 
 const styles = StyleSheet.create( {
   container: { paddingTop: 30 },
@@ -195,6 +200,23 @@ const IdentifyView = ( {
   const topSpeciesSuggestion = useTopSpeciesSuggestion( observation, currentPhotoUrl );
   const taxon = topSpeciesSuggestion || observation?.taxon;
 
+  // Hide the taxon while a new photo is loading, and for a beat after it
+  // renders. Nothing to wait for when there's no photo (sound-only or no
+  // evidence), so it shows right away.
+  const [taxonShown, setTaxonShown] = useState( !currentPhotoUrl );
+  const taxonTimer = useRef<ReturnType<typeof setTimeout> | null>( null );
+  useEffect( ( ) => {
+    if ( taxonTimer.current ) clearTimeout( taxonTimer.current );
+    setTaxonShown( !currentPhotoUrl );
+  }, [currentPhotoUrl] );
+  const handlePhotoLoad = useCallback( ( ) => {
+    if ( taxonTimer.current ) clearTimeout( taxonTimer.current );
+    taxonTimer.current = setTimeout( ( ) => setTaxonShown( true ), TAXON_DELAY_MS );
+  }, [] );
+  useEffect( ( ) => ( ) => {
+    if ( taxonTimer.current ) clearTimeout( taxonTimer.current );
+  }, [] );
+
   const openTaxonDetails = useCallback( ( ) => {
     const id = taxon?.id;
     if ( !id ) return;
@@ -257,6 +279,9 @@ const IdentifyView = ( {
           brightness={brightness}
           onSingleTap={openObsDetails}
           onScaleChange={handleScaleChange}
+          onLoad={handlePhotoLoad}
+          // Don't leave the taxon hidden forever if the photo never arrives.
+          onError={handlePhotoLoad}
         />
       );
     }
@@ -378,8 +403,19 @@ const IdentifyView = ( {
         </View>
       </View>
 
-      {/* Current id'ed taxon — common name only, tap for species details */}
-      <View className="px-4 py-2 items-center justify-center">
+      {/* Current id'ed taxon — common name only, tap for species details.
+          Hidden with opacity rather than unmounted until the photo has been on
+          screen for a moment, so the layout doesn't shift as it appears. */}
+      <View
+        className={classnames(
+          "px-4 py-2 items-center justify-center",
+          { "opacity-0": !taxonShown },
+        )}
+        pointerEvents={taxonShown
+          ? "auto"
+          : "none"}
+        accessibilityElementsHidden={!taxonShown}
+      >
         {taxon
           ? (
             <Pressable
