@@ -1,5 +1,7 @@
 # Downloaded audio, cached spectrograms and checkpoints are all reproducible
-# from the scripts in this directory.
-data/
+# from the scripts in this directory. The manifest is kept: it is the dataset
+# definition, and re-running fetch_dataset.py restores the audio it lists.
+data/*
+!data/manifest.csv
 runs/
 __pycache__/
