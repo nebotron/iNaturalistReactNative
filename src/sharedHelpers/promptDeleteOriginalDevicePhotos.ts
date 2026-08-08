@@ -36,6 +36,9 @@ const { ImageCropper } = NativeModules as {
       appCreated?: number;
       appCreatedDeleted?: number;
       appCreatedMs?: number;
+      prompted?: number;
+      promptedDeleted?: number;
+      promptedChunks?: number;
       promptedMs?: number;
     }>;
   };
@@ -53,6 +56,10 @@ export interface DeleteOriginalDevicePhotosResult {
   deleted: number;
   requested: number;
   succeeded: boolean;
+  // The OS hasn't answered yet and we stopped waiting. Distinct from a failure:
+  // the transaction is still open down in PhotoKit and usually still goes
+  // through, so a caller should rescan rather than tell the user it went wrong.
+  pending?: boolean;
 }
 
 const filterDeletableDevicePhotoUris = ( photoUris: string[] ): string[] => (
@@ -98,33 +105,71 @@ const ensureDeletePhotosPermission = async ( requested: number ): Promise<boolea
 // so only one is ever in flight.
 let photoLibraryWriteChain: Promise<void> = Promise.resolve( );
 
-export const enqueuePhotoLibraryWrite = <T, >( task: ( ) => Promise<T> ): Promise<T> => {
-  const run = photoLibraryWriteChain.then( task );
+const settled = ( promise: Promise<unknown> ): Promise<void> => promise.then(
+  ( ) => undefined,
+  ( ) => undefined,
+);
+
+// Waits for a native write to settle, but not forever: a task whose native call
+// never comes back must not poison the chain for the rest of the session.
+const heldUntilSettled = ( promise: Promise<unknown>, ms: number ): Promise<void> => {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race( [
+    settled( promise ),
+    new Promise<void>( resolve => { timer = setTimeout( resolve, ms ); } ),
+  ] ).then( ( ) => { clearTimeout( timer ); } );
+};
+
+// Sits above the native deletion watchdog (kInatPendingDeleteWatchdogSeconds in
+// ImageCropper.m), so a native call that is merely slow has always settled
+// before the chain stops waiting for it.
+const CHAIN_HOLD_MS = 170_000;
+
+export const enqueuePhotoLibraryWrite = <T, >(
+  task: ( holdChainUntil: ( nativeWrite: Promise<unknown> ) => void ) => Promise<T>,
+): Promise<T> => {
+  // The native transaction this task opened, when it tells us about one. A task
+  // that gives up on its own native call leaves iOS still holding an open
+  // performChanges, and opening a second one behind it is what wedges
+  // photolibraryd — the whole point of this chain. So the chain waits on the
+  // transaction, not on our patience with it.
+  let nativeWrite: Promise<unknown> | undefined;
+  const run = photoLibraryWriteChain.then(
+    ( ) => task( write => { nativeWrite = write; } ),
+  );
   // Keep the chain alive even if this write rejects, so later writes still fire.
-  photoLibraryWriteChain = run.then( ( ) => undefined, ( ) => undefined );
+  photoLibraryWriteChain = settled( run ).then( ( ) => (
+    nativeWrite
+      ? heldUntilSettled( nativeWrite, CHAIN_HOLD_MS )
+      : undefined
+  ) );
   return run;
 };
 
-// A hung deletePhotos (confirmation never presents) must not block the chain
-// forever, or one bad call poisons every later deletion for the whole session.
+// How long a caller waits on a deletion before we stop holding it there.
 //
-// This used to be 120s, sized to let a real user read and answer the iOS
-// confirmation. Nothing in any log has ever answered one: every hang on record
-// ran the full two minutes and came back with nothing, holding the write chain
-// — and the screen the user asked to leave — for the whole of it. Ten seconds
-// is the cost of finding out instead. The trade is real and deliberate: a user
-// who takes longer than 10s to tap Delete gets a failure reported for a
-// deletion iOS may still carry out behind it.
-const DELETE_TIMEOUT_MS = 10000;
+// This used to be a hard timeout that also decided the outcome: at 10s the
+// promise rejected, the caller reported "Something went wrong", and the chain
+// above was released. All three were wrong. The native module gives the same
+// call 150s and has a PHPhotoLibraryChangeObserver fallback that resolves as
+// soon as the assets really vanish, so at 10s the deletion is usually still
+// going to happen: the Aug 8 log has a "failed" delete of 112 photos followed a
+// minute later by a rescan that found 44. Every deletion that did complete came
+// back in 1.3-1.8s, so 15s is well clear of a working one — but past it we stop
+// waiting without either calling it a failure or letting go of the native call.
+const UI_WAIT_MS = 15_000;
 
 // The pending-delete diagnostic has to land while the delete is still in
-// flight, so it is a fraction of the budget above rather than a fixed 20s that
-// would now never be reached.
-const HANG_REPORT_MS = DELETE_TIMEOUT_MS / 2;
+// flight, so it stays well inside the wait above.
+const HANG_REPORT_MS = 5000;
+
+// Returned by the race below when the OS hasn't answered inside UI_WAIT_MS.
+const STILL_PENDING = { stillPending: true } as const;
 
 const performDeleteOriginalDevicePhotos = async (
   photoUris: string[],
   options: DeleteOriginalDevicePhotosOptions = {},
+  holdChainUntil: ( nativeWrite: Promise<unknown> ) => void = ( ) => undefined,
 ): Promise<DeleteOriginalDevicePhotosResult> => {
   const uniqueUris = filterDeletableDevicePhotoUris( photoUris );
   if ( uniqueUris.length === 0 ) {
@@ -287,15 +332,35 @@ const performDeleteOriginalDevicePhotos = async (
     const deletion = ( Platform.OS === "ios" && ImageCropper?.deletePhotoAssets )
       ? ImageCropper.deletePhotoAssets( uniqueUris, appCreatedUris )
       : CameraRoll.deletePhotos( uniqueUris );
+    // Whatever we decide below, the next Photos-library write waits for this
+    // transaction rather than stacking on top of it.
+    holdChainUntil( deletion );
     const result = await Promise.race( [
       deletion,
-      new Promise( ( _resolve, reject ) => {
-        timeoutTimer = setTimeout(
-          ( ) => reject( new Error( `deletePhotos timed out after ${DELETE_TIMEOUT_MS}ms` ) ),
-          DELETE_TIMEOUT_MS,
-        );
+      new Promise<typeof STILL_PENDING>( resolve => {
+        timeoutTimer = setTimeout( ( ) => resolve( STILL_PENDING ), UI_WAIT_MS );
       } ),
     ] );
+    if ( result === STILL_PENDING ) {
+      // Say so when it does land. Whether a deletion the UI gave up on still
+      // goes through is the open question in this whole investigation, and the
+      // log could only ever answer it by comparing photo counts across two
+      // visits to the cleanup screen.
+      void deletion.then(
+        lateResult => logger.info(
+          `Delete of ${requested} device photo(s) settled ${Date.now( ) - startedAt}ms in, `
+          + `after the UI stopped waiting; result=${JSON.stringify( lateResult )}`,
+        ),
+        lateError => logger.errorWithExtra( "photo_delete_late_failure", {
+          requested,
+          ms: Date.now( ) - startedAt,
+          error: String( lateError ),
+        } ),
+      );
+      return {
+        deleted: 0, requested, succeeded: false, pending: true,
+      };
+    }
     // Report what the OS actually deleted, not what we asked for. A call that
     // resolves with deleted:0 (e.g. fetched:0 — every URI is a ghost pointing
     // at an already-deleted asset) is a no-op, and logging it as a deletion of
@@ -305,6 +370,24 @@ const performDeleteOriginalDevicePhotos = async (
       `Deleted ${deleted ?? requested} of ${requested} `
       + `device photo(s); result=${JSON.stringify( result )}`,
     );
+    // What the chunked prompted walk did. promptedChunks is how many
+    // transactions came back, so promptedDeleted < prompted says which chunk
+    // stopped it — and promptedMs/promptedChunks says whether a human is
+    // answering a confirmation per chunk (~1.5s each means nobody is).
+    const promptedWalk = result as {
+      prompted?: number;
+      promptedDeleted?: number;
+      promptedChunks?: number;
+      promptedMs?: number;
+    } | undefined;
+    if ( ( promptedWalk?.prompted ?? 0 ) > 0 ) {
+      logger.infoWithExtra( "photo_delete_prompted", {
+        prompted: promptedWalk?.prompted,
+        promptedDeleted: promptedWalk?.promptedDeleted,
+        promptedChunks: promptedWalk?.promptedChunks,
+        promptedMs: promptedWalk?.promptedMs,
+      } );
+    }
     // How long the unprompted half took is the measurement this whole split
     // exists for, and it decides whether to keep splitting.
     const appCreatedMs = ( result as { appCreatedMs?: number } | undefined )?.appCreatedMs;
@@ -362,13 +445,14 @@ export const deleteOriginalDevicePhotos = (
   photoUris: string[],
   options: DeleteOriginalDevicePhotosOptions = {},
 ): Promise<DeleteOriginalDevicePhotosResult> => enqueuePhotoLibraryWrite(
-  ( ) => performDeleteOriginalDevicePhotos( photoUris, options ),
+  holdChainUntil => performDeleteOriginalDevicePhotos( photoUris, options, holdChainUntil ),
 );
 
 // Callers hold the user on the current screen until onComplete fires so the
 // iOS deletion confirmation isn't asked to present mid-navigation. A deletion
-// normally settles in a couple of seconds, and a wedged one now gives up after
-// DELETE_TIMEOUT_MS. This stays above that: a delete queued behind another
+// normally settles in a couple of seconds, and one that hasn't answered stops
+// being waited on after UI_WAIT_MS. This stays above that: a delete queued
+// behind another
 // Photos-library write (see enqueuePhotoLibraryWrite) can wait longer than its
 // own timeout, and stranding the user on a screen they asked to leave is far
 // worse than letting the deletion finish unobserved in the background.

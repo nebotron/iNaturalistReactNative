@@ -47,6 +47,23 @@ static void inatAfterDismissalSettles( void ( ^work )( void ) )
 // below keeps its full window.
 static const NSTimeInterval kInatPendingDeleteWatchdogSeconds = 150;
 
+// How many assets we didn't create go into one prompted transaction.
+//
+// The app log separates cleanly on exactly this number, with no exception in
+// eleven attempts: every prompted transaction of 3, 11 or 19 assets called its
+// completion handler in 1.3-1.8s, and every one of 44, 45, 55, 112, 277, 278
+// or 283 never called it at all. Total batch size is not what does it — the
+// Aug 6 deletion of 278 assets came back in 1.7s because 275 of them were ours
+// and only 3 needed a prompt — and neither is a wedged library, because the
+// Aug 7 attempt at 278 prompted assets hung 1.6s after a consent-free probe
+// write had just proved the library was answering. It is the size of the
+// prompted transaction itself.
+//
+// So keep each one under the line and issue them in sequence. Every chunk that
+// comes back is that many photos genuinely deleted, and one that doesn't stops
+// the walk rather than taking the whole cleanup down with it.
+static const NSUInteger kInatPromptedDeleteChunkSize = 15;
+
 @implementation ImageCropper {
   // Tracks the single in-flight deletePhotoAssets call (JS serializes calls
   // through one chain, so at most one is ever pending) so
@@ -1557,11 +1574,16 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     // prompted one does. -1 means it never came back.
     __block NSInteger appCreatedMs = -1;
     __block NSUInteger appCreatedDeleted = 0;
-    // The prompted transaction's own duration. The app-created split exists to
+    // The prompted transactions' total duration. The app-created split exists to
     // put an unprompted deletion beside a prompted one, and timing only half of
     // it left the comparison to be guessed from the gap between two prose log
-    // lines. -1 means that transaction never came back.
+    // lines. -1 means the first chunk never came back.
     __block NSInteger promptedMs = -1;
+    // How much of the prompted half actually went through, and in how many
+    // chunks. A walk that stops early reports a partial deletion rather than
+    // claiming all of it or none of it.
+    __block NSUInteger promptedDeleted = 0;
+    __block NSUInteger promptedChunks = 0;
 
     void ( ^finish )( BOOL, NSUInteger, NSError * ) =
       ^( BOOL success, NSUInteger deleted, NSError *error ) {
@@ -1577,6 +1599,9 @@ RCT_EXPORT_METHOD( deletePhotoAssets
             @"appCreated": @( ourAssets.count ),
             @"appCreatedDeleted": @( appCreatedDeleted ),
             @"appCreatedMs": @( appCreatedMs ),
+            @"prompted": @( theirAssets.count ),
+            @"promptedDeleted": @( promptedDeleted ),
+            @"promptedChunks": @( promptedChunks ),
             @"promptedMs": @( promptedMs ),
           } );
         } else {
@@ -1594,20 +1619,50 @@ RCT_EXPORT_METHOD( deletePhotoAssets
 
     // The prompted half: everything we didn't create. Runs after the
     // app-created transaction so its confirmation can't sit in front of one
-    // that needs no confirmation at all.
+    // that needs no confirmation at all, and in chunks of
+    // kInatPromptedDeleteChunkSize because a prompted transaction bigger than
+    // that has never once come back.
     void ( ^deleteTheirs )( void ) = ^{
       if ( theirAssets.count == 0 ) {
         finish( YES, appCreatedDeleted, nil );
         return;
       }
       NSDate *promptedStartedAt = [NSDate date];
-      [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-        [PHAssetChangeRequest deleteAssets:theirAssets];
-      } completionHandler:^( BOOL success, NSError *error ) {
+      // Strong and __block so each chunk's completion handler can start the
+      // next. That makes the block own itself, so the walk releases it when it
+      // ends — on the next main-queue hop, never from inside the block that is
+      // still running.
+      __block void ( ^deleteChunkFrom )( NSUInteger ) = nil;
+      void ( ^endWalk )( BOOL, NSError * ) = ^( BOOL success, NSError *error ) {
         promptedMs =
           ( NSInteger )( [[NSDate date] timeIntervalSinceDate:promptedStartedAt] * 1000 );
-        finish( success, appCreatedDeleted + ( success ? theirAssets.count : 0 ), error );
-      }];
+        dispatch_async( dispatch_get_main_queue(), ^{ deleteChunkFrom = nil; } );
+        finish( success, appCreatedDeleted + promptedDeleted, error );
+      };
+      deleteChunkFrom = ^( NSUInteger start ) {
+        if ( start >= theirAssets.count ) {
+          endWalk( YES, nil );
+          return;
+        }
+        NSRange range = NSMakeRange( start,
+          MIN( kInatPromptedDeleteChunkSize, theirAssets.count - start ) );
+        NSArray<PHAsset *> *chunk = [theirAssets subarrayWithRange:range];
+        [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+          [PHAssetChangeRequest deleteAssets:chunk];
+        } completionHandler:^( BOOL success, NSError *error ) {
+          if ( !success ) {
+            // Whatever earlier chunks deleted is really deleted, so report a
+            // partial deletion rather than failing the lot. JS reports the count
+            // the OS gives it, and the rest are still there on the next scan.
+            endWalk( promptedDeleted > 0, error );
+            return;
+          }
+          promptedDeleted += chunk.count;
+          promptedChunks += 1;
+          deleteChunkFrom( start + range.length );
+        }];
+      };
+      deleteChunkFrom( 0 );
     };
 
     void ( ^doDelete )( void ) = ^{

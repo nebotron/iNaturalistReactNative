@@ -96,6 +96,8 @@ const DevicePhotoCleanup = ( ) => {
   const [deleting, setDeleting] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
+  const [stillDeleting, setStillDeleting] = useState( false );
+  const [rescans, setRescans] = useState( 0 );
 
   useEffect( ( ) => {
     let cancelled = false;
@@ -145,7 +147,7 @@ const DevicePhotoCleanup = ( ) => {
     return ( ) => {
       cancelled = true;
     };
-  }, [realm, currentUserId] );
+  }, [realm, currentUserId, rescans] );
 
   const allUris = useMemo(
     ( ) => days.flatMap( day => day.uris ),
@@ -185,15 +187,24 @@ const DevicePhotoCleanup = ( ) => {
 
   const deletePhotos = useCallback( async ( ) => {
     setDeleting( true );
+    setStillDeleting( false );
     // Report what the OS actually deleted. A wedged PHPhotoLibrary deletes
     // nothing yet resolves normally, and
     // claiming "Deleted 1,159 photos" while the photos are all still there is
     // worse than saying nothing happened.
-    const { deleted, succeeded } = await deleteOriginalDevicePhotos(
+    const { deleted, succeeded, pending } = await deleteOriginalDevicePhotos(
       allUris,
       { userInitiated: true },
     );
     setDeleting( false );
+    // PhotoKit hasn't answered but is still holding the transaction, and it
+    // usually goes through afterwards. Rescanning is the only honest thing to
+    // show: the photos left in the grid may already be gone.
+    if ( pending ) {
+      setStillDeleting( true );
+      setRescans( count => count + 1 );
+      return;
+    }
     // Leave the grid up when the delete didn't go through so the user can
     // retry; the helper has already explained the failure with an alert.
     if ( !succeeded ) return;
@@ -251,6 +262,12 @@ const DevicePhotoCleanup = ( ) => {
             ? ""
             : "s"} in your library match observations you haven't favorited.`}
         </Body2>
+        {stillDeleting && (
+          <Body2 className="mt-2">
+            The last delete hasn&apos;t come back from iOS yet. These are what is still
+            in your library — it may finish on its own, or a restart may be needed.
+          </Body2>
+        )}
       </View>
       <View style={styles.list}>
         <DevicePhotoGrid
@@ -273,6 +290,11 @@ const DevicePhotoCleanup = ( ) => {
           loading={deleting}
           disabled={deleting}
         />
+        {deleting && (
+          <Body2 className="mt-2 text-center">
+            iOS confirms and carries out the deletion itself, which can take a while.
+          </Body2>
+        )}
       </View>
       <Modal
         showModal={!!fullScreenUri}

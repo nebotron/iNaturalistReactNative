@@ -167,8 +167,8 @@ const flushLocationWrites = async ( ) => {
     // Serialized with deletions (and other location updates) so only one
     // native Photos-library write is ever in flight — see
     // enqueuePhotoLibraryWrite in promptDeleteOriginalDevicePhotos.ts.
-    await enqueuePhotoLibraryWrite( ( ): Promise<unknown> => withTimeout<unknown>(
-      ImageCropper?.updateAssetLocations
+    await enqueuePhotoLibraryWrite( ( holdChainUntil ): Promise<unknown> => {
+      const nativeWrite: Promise<unknown> = ImageCropper?.updateAssetLocations
         ? ImageCropper.updateAssetLocations( updates )
         // Older builds without the batched native method still work, one
         // transaction per photo.
@@ -176,10 +176,19 @@ const flushLocationWrites = async ( ) => {
           u.phUri,
           u.latitude,
           u.longitude,
-        ) ) ),
-      BATCH_UPDATE_TIMEOUT_MS,
-      `updateAssetLocations for ${updates.length} photo(s)`,
-    ) );
+        ) ) );
+      // Unlike the deletion, this has no native watchdog: when the timeout
+      // below fires, iOS is still holding the transaction open with nothing to
+      // close it. The deletion that follows must queue behind that transaction
+      // rather than open a second one in front of it — the log's worst runs are
+      // a 45s location-write timeout with every deletion after it hanging.
+      holdChainUntil( nativeWrite );
+      return withTimeout<unknown>(
+        nativeWrite,
+        BATCH_UPDATE_TIMEOUT_MS,
+        `updateAssetLocations for ${updates.length} photo(s)`,
+      );
+    } );
   } catch ( error ) {
     reportSuppressed( "failed", String( error instanceof Error
       ? error.message

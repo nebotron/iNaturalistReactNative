@@ -121,9 +121,9 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       await jest.advanceTimersByTimeAsync( 0 );
       expect( onComplete ).not.toHaveBeenCalled( );
 
-      // The deletion's own timeout releases the exit well inside the 20s the
-      // caller would otherwise wait.
-      await jest.advanceTimersByTimeAsync( 10000 );
+      // The deletion stops being waited on inside the 20s the caller would
+      // otherwise sit there for.
+      await jest.advanceTimersByTimeAsync( 15000 );
       expect( onComplete ).toHaveBeenCalledTimes( 1 );
 
       // the deletion finishing after we gave up must not complete the exit twice
@@ -193,27 +193,57 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( extra.wentInactive ).toBe( true );
     } );
 
-    it( "issues the next deletion anyway, however the last one ended", async ( ) => {
+    it( "reports an unanswered delete as pending, not as a failure", async ( ) => {
       let finishDeletion;
       mockDeletePhotos.mockImplementationOnce(
         ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
       );
 
-      const hung = deleteOriginalDevicePhotos( ["ph://ONE"] );
-      await jest.advanceTimersByTimeAsync( 10000 );
-      expect( await hung ).toEqual( { deleted: 0, requested: 1, succeeded: false } );
+      const pending = deleteOriginalDevicePhotos( ["ph://ONE"], { userInitiated: true } );
+      await jest.advanceTimersByTimeAsync( 15000 );
 
-      // Nothing is remembered from a failed delete. A wedged PHPhotoLibrary
-      // recovers when the user restarts the device, and asking is the only way
-      // to find out that it has.
-      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
-      const retry = deleteOriginalDevicePhotos( ["ph://TWO"] );
+      // iOS is still holding the transaction and usually still carries the
+      // deletion out, so a caller must be able to tell this from a real
+      // failure — and the user must not be told it went wrong.
+      expect( await pending ).toEqual( {
+        deleted: 0, requested: 1, succeeded: false, pending: true,
+      } );
+      expect( Alert.alert ).not.toHaveBeenCalled( );
+
+      // Whether the abandoned deletion eventually lands is the question the log
+      // could not answer before.
+      finishDeletion( { deleted: 1, requested: 1 } );
       await jest.advanceTimersByTimeAsync( 0 );
+      expect( mockLogger.info.mock.calls.map( call => String( call[0] ) ).some(
+        line => line.includes( "after the UI stopped waiting" ),
+      ) ).toBe( true );
+    } );
 
-      expect( await retry ).toEqual( { deleted: 1, requested: 1, succeeded: true } );
-      expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://TWO"] );
+    it( "holds the write chain until the abandoned native call settles", async ( ) => {
+      // A JS timeout does not close the transaction iOS opened. Starting a
+      // second performChanges behind an open one is what wedges photolibraryd,
+      // so the next write waits for the transaction, not for our patience.
+      let finishDeletion;
+      mockDeletePhotos.mockImplementationOnce(
+        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
+      );
 
+      const pending = deleteOriginalDevicePhotos( ["ph://ONE"] );
+      await jest.advanceTimersByTimeAsync( 15000 );
+      expect( await pending ).toMatchObject( { pending: true } );
+
+      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
+      const next = deleteOriginalDevicePhotos( ["ph://TWO"] );
+      await jest.advanceTimersByTimeAsync( 1000 );
+      expect( mockDeletePhotos ).not.toHaveBeenCalledWith( ["ph://TWO"] );
+
+      // Nothing is remembered from a delete that went wrong: a wedged
+      // PHPhotoLibrary recovers when the user restarts the device, and asking is
+      // the only way to find out that it has.
       finishDeletion( );
+      await jest.advanceTimersByTimeAsync( 0 );
+      expect( await next ).toEqual( { deleted: 1, requested: 1, succeeded: true } );
+      expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://TWO"] );
     } );
 
     it( "re-reads the presentation context at the hang", async ( ) => {
