@@ -2,7 +2,7 @@
   "webcredentials": {
     "apps": [
       "B7H6W7XF8Z.org.inaturalist.inaturalist",
-      "DVURLJZFH6.com.benhannel.inat.dev.iNaturalistMobile"
+      "DVURLJZFH6.com.benhannel.inat.dev"
     ]
   },
   "applinks": {
@@ -10,7 +10,7 @@
     "details": [
       {
         "appIDs": [
-          "DVURLJZFH6.com.benhannel.inat.dev.iNaturalistMobile"
+          "DVURLJZFH6.com.benhannel.inat.dev"
         ],
         "components": [
           {
@@ -31,7 +31,7 @@
         ]
       },
       {
-        "appID": "DVURLJZFH6.com.benhannel.inat.dev.iNaturalistMobile",
+        "appID": "DVURLJZFH6.com.benhannel.inat.dev",
         "paths": [
           "/users/sign_in?confirmed=true"
         ]

@@ -137,7 +137,10 @@ const IdentifyView = ( {
     handleScaleChange,
     handleZoomChange,
     zoomScale,
-  } = useIdentifyPhotoControls( currentPhotoUrl, photoRef );
+  } = useIdentifyPhotoControls( {
+    brightnessKey: currentPhotoUrl,
+    applyZoom: scale => photoRef.current?.applyZoom( scale ),
+  } );
 
   // Reset to the first photo (or sound) whenever the observation changes.
   useEffect( ( ) => {

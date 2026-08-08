@@ -74,7 +74,6 @@ const useParams = ( ): Object => {
       dispatch( {
         type: EXPLORE_ACTION.SET_USER,
         user: params.user,
-        userId: params.user.id,
       } );
     }
     if ( params?.project && params?.project.id ) {

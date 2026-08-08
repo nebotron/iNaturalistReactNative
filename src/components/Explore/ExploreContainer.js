@@ -85,7 +85,6 @@ const ExploreContainerWithContext = ( ): Node => {
       dispatch( {
         type: EXPLORE_ACTION.SET_USER,
         user,
-        userId: user?.id,
       } );
     }
   };

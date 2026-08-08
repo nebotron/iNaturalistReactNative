@@ -9,6 +9,7 @@ import {
 } from "components/Explore/helpers/taxonFilters";
 import type { ExploreUserFilter } from "components/Explore/helpers/userFilters";
 import {
+  derivedUserFields,
   migrateUserFilters,
   normalizeUserFilters,
   toExploreUserFilterUser,
@@ -275,11 +276,9 @@ interface State {
 }
 type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.DISCARD; snapshot: State}
-  | {type: EXPLORE_ACTION.SET_USER; user: object | null; userId: number | null; storedState: State}
+  | {type: EXPLORE_ACTION.SET_USER; user: object | null; storedState: State}
   | {
     type: EXPLORE_ACTION.EXCLUDE_USER;
-    user: null;
-    userId: null;
     excludeUser: object;
     storedState: State;
   }
@@ -604,47 +603,44 @@ function exploreReducer( state: State, action: Action ) {
         swlat: undefined,
         swlng: undefined,
       };
+    // SET_USER and EXCLUDE_USER are the one-element cases of SET_USER_FILTERS,
+    // so all three build a userFilters array and let derivedUserFields fill in
+    // the legacy single-user fields from it.
     case EXPLORE_ACTION.SET_USER_FILTERS: {
       const userFilters = normalizeUserFilters( action.userFilters );
-      const firstInclude = userFilters.find( f => !f.exclude )?.user ?? null;
-      const firstExclude = userFilters.find( f => f.exclude )?.user ?? null;
       return {
         ...state,
         ...action.storedState,
         userFilters,
-        user: firstInclude,
-        user_id: firstInclude?.id ?? null,
-        excludeUser: firstExclude,
+        ...derivedUserFields( userFilters ),
       };
     }
     case EXPLORE_ACTION.SET_USER: {
-      const normalizedUser = action.user
-        ? toExploreUserFilterUser( action.user as ExploreUserFilter["user"] )
-        : null;
+      const userFilters = action.user
+        ? [{
+          user: toExploreUserFilterUser( action.user as ExploreUserFilter["user"] ),
+          exclude: false,
+        }]
+        : [];
       return {
         ...state,
         ...action.storedState,
-        user: normalizedUser,
-        user_id: action.userId,
-        excludeUser: null,
-        userFilters: normalizedUser
-          ? [{ user: normalizedUser, exclude: false }]
-          : [],
+        userFilters,
+        ...derivedUserFields( userFilters ),
       };
     }
     case EXPLORE_ACTION.EXCLUDE_USER: {
-      const normalizedExcludeUser = action.excludeUser
-        ? toExploreUserFilterUser( action.excludeUser as ExploreUserFilter["user"] )
-        : null;
+      const userFilters = action.excludeUser
+        ? [{
+          user: toExploreUserFilterUser( action.excludeUser as ExploreUserFilter["user"] ),
+          exclude: true,
+        }]
+        : [];
       return {
         ...state,
         ...action.storedState,
-        excludeUser: normalizedExcludeUser,
-        user: null,
-        user_id: null,
-        userFilters: normalizedExcludeUser
-          ? [{ user: normalizedExcludeUser, exclude: true }]
-          : [],
+        userFilters,
+        ...derivedUserFields( userFilters ),
       };
     }
     case EXPLORE_ACTION.SET_PROJECT:
@@ -856,8 +852,6 @@ function exploreReducer( state: State, action: Action ) {
         : storedState.radius ?? DEFAULT_NEARBY_RADIUS_KM;
       const taxonFilters = migrateTaxonFilters( storedState );
       const userFilters = migrateUserFilters( storedState );
-      const firstIncludeUser = userFilters.find( f => !f.exclude )?.user ?? null;
-      const firstExcludeUser = userFilters.find( f => f.exclude )?.user ?? null;
 
       return {
         ...initialState,
@@ -869,9 +863,7 @@ function exploreReducer( state: State, action: Action ) {
         taxon_id: taxonFilters.find( filter => !filter.exclude )?.taxon?.id
           ?? storedState.taxon_id,
         userFilters,
-        user: firstIncludeUser ?? storedState.user,
-        user_id: firstIncludeUser?.id ?? storedState.user_id,
-        excludeUser: firstExcludeUser ?? storedState.excludeUser,
+        ...derivedUserFields( userFilters ),
       };
     }
     case EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS:

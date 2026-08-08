@@ -120,12 +120,14 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
         body,
       } );
       if ( r.ok ) return;
-      if ( attempt === maxAttempts ) return;
     } catch {
-      if ( attempt === maxAttempts ) return;
+      // Retry below, or give up once the loop runs out of attempts. Never
+      // rethrow: we log to report errors, so failing to log must stay silent.
     }
-    // eslint-disable-next-line no-await-in-loop
-    await new Promise( resolve => { setTimeout( resolve, 500 * attempt ); } );
+    if ( attempt < maxAttempts ) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise( resolve => { setTimeout( resolve, 500 * attempt ); } );
+    }
   }
 };
 

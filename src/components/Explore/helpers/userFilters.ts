@@ -63,6 +63,24 @@ export function migrateUserFilters(
   return [];
 }
 
+// The single-user fields the explore state carried before userFilters existed.
+// Several screens and mapParamsToAPI still read them, so they are derived from
+// userFilters rather than tracked alongside it — one source of truth, one place
+// that knows how the two representations line up.
+export function derivedUserFields( userFilters: ExploreUserFilter[] ): {
+  user: ExploreUserFilter["user"] | null;
+  user_id: number | null;
+  excludeUser: ExploreUserFilter["user"] | null;
+} {
+  const firstInclude = userFilters.find( filter => !filter.exclude )?.user ?? null;
+  const firstExclude = userFilters.find( filter => filter.exclude )?.user ?? null;
+  return {
+    user: firstInclude,
+    user_id: firstInclude?.id ?? null,
+    excludeUser: firstExclude,
+  };
+}
+
 export function userFiltersToApiParams(
   userFilters: ExploreUserFilter[] | undefined,
 ): {

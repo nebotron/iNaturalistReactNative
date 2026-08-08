@@ -257,7 +257,10 @@ const SpeciesGame = ( ) => {
     handleScaleChange,
     handleZoomChange,
     zoomScale,
-  } = useIdentifyPhotoControls( currentPhotoUrl ?? undefined, photoRef );
+  } = useIdentifyPhotoControls( {
+    brightnessKey: currentPhotoUrl ?? undefined,
+    applyZoom: scale => photoRef.current?.applyZoom( scale ),
+  } );
 
   const taxonLabel = ( taxonInfo: TaxonInfo ) => taxonInfo.preferredCommonName || taxonInfo.name;
 

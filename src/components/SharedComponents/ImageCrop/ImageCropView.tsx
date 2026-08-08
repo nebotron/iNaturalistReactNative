@@ -1,10 +1,5 @@
 import CustomImageZoom from "components/MediaViewer/CustomImageZoom";
-import {
-  clampZoom,
-  MIN_ZOOM,
-  ZoomBrightnessSliders,
-  zoomPosToScale,
-} from "components/MediaViewer/IdentifyPhoto";
+import { ZoomBrightnessSliders } from "components/MediaViewer/IdentifyPhoto";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import { INatIconButton } from "components/SharedComponents";
 import { View } from "components/styledComponents";
@@ -22,7 +17,6 @@ import {
   useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import {
   normalizedCropToImageZoomTransform,
@@ -30,12 +24,10 @@ import {
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect, square2048Crop } from "sharedHelpers/normalizedCropTypes";
 import {
-  EXPOSURE_STOPS_DEFAULT,
   EXPOSURE_STOPS_MAX,
   EXPOSURE_STOPS_MIN,
-  gainToStops,
-  stopsToGain,
 } from "sharedHooks/useIdentifyPhotoBrightness";
+import useIdentifyPhotoControls from "sharedHooks/useIdentifyPhotoControls";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
@@ -126,9 +118,6 @@ const ImageCropView = ( {
   const [cropAreaHeight, setCropAreaHeight] = useState( 0 );
   const [saving, setSaving] = useState( false );
   const [willBeDownsized, setWillBeDownsized] = useState( false );
-  const [zoomScale, setZoomScale] = useState( MIN_ZOOM );
-  const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
-  const brightness = stopsToGain( brightnessStops );
 
   // The underlying <Image> keeps painting the previous photo's pixels until the
   // new file decodes, while the new photo's crop transform is applied right
@@ -140,17 +129,6 @@ const ImageCropView = ( {
   const [loadedUri, setLoadedUri] = useState<string | null>( null );
   const imageReady = loadedUri === sourceUri;
   const handleImageLoad = useCallback( ( ) => setLoadedUri( sourceUri ), [sourceUri] );
-
-  // Load any previously-saved brightness for this photo so the label
-  // round-trips; otherwise reset to neutral for a new photo.
-  useEffect( ( ) => {
-    const saved = brightnessLogKey
-      ? getBrightness( brightnessLogKey )
-      : null;
-    setBrightnessStops( saved !== null
-      ? gainToStops( saved )
-      : EXPOSURE_STOPS_DEFAULT );
-  }, [brightnessLogKey] );
 
   const boxSize = useMemo( ( ) => {
     // Full screen width, capped by the available crop area height.
@@ -209,9 +187,9 @@ const ImageCropView = ( {
     windowWidth,
   ] );
 
-  const handleScaleChange = useCallback( ( scale: number ) => {
-    // Keep the zoom slider in sync with pinch / double-tap / initial framing.
-    setZoomScale( clampZoom( scale ) );
+  // Recompute the downsize warning on every scale change, whatever its source
+  // (slider, pinch, double-tap, initial framing).
+  const updateDownsizeWarning = useCallback( ( scale: number ) => {
     const sizePx = cropSidePxFromScale( scale );
     if ( sizePx <= 0 ) {
       return;
@@ -249,21 +227,25 @@ const ImageCropView = ( {
     } );
   }, [cropAreaHeight, windowWidth] );
 
-  const handleZoomChange = useCallback( ( pos: number ) => {
-    const scale = zoomPosToScale( pos );
-    setZoomScale( scale );
-    applyZoom( scale );
-  }, [applyZoom] );
-
-  // Preview-only exposure: drives the CSS brightness filter live and, on
-  // release, records the label to the brightness log. It never feeds into the
-  // cropped file (onConfirm reads the untouched source).
-  const handleBrightnessComplete = useCallback( ( value: number ) => {
-    setBrightnessStops( value );
-    if ( brightnessLogKey ) {
-      saveBrightness( brightnessLogKey, stopsToGain( value ) );
-    }
-  }, [brightnessLogKey] );
+  // Zoom slider plus preview-only exposure. Brightness drives the CSS filter
+  // live and, on release, records the label to the brightness log; it never
+  // feeds into the cropped file (onConfirm reads the untouched source). Zoom
+  // never resets on a new photo here — the initialCrop effect below frames each
+  // one, and snapping the slider to MIN_ZOOM first would show the wrong value.
+  const {
+    brightness,
+    brightnessStops,
+    handleBrightnessChange,
+    handleBrightnessComplete,
+    handleScaleChange: syncZoomSlider,
+    handleZoomChange,
+    zoomScale,
+  } = useIdentifyPhotoControls( {
+    brightnessKey: brightnessLogKey ?? undefined,
+    applyZoom,
+    onScaleChange: updateDownsizeWarning,
+    skipZoomReset: true,
+  } );
 
   useEffect( ( ) => {
     if (
@@ -458,7 +440,7 @@ const ImageCropView = ( {
               onInteractionEnd={updateDownsizeStatus}
               onLoad={handleImageLoad}
               onError={handleImageLoad}
-              onScaleChange={handleScaleChange}
+              onScaleChange={syncZoomSlider}
             />
           </View>
         )}
@@ -499,7 +481,7 @@ const ImageCropView = ( {
           exposureStopsMax={EXPOSURE_STOPS_MAX}
           onZoomChange={handleZoomChange}
           onZoomComplete={updateDownsizeStatus}
-          onBrightnessChange={setBrightnessStops}
+          onBrightnessChange={handleBrightnessChange}
           onBrightnessComplete={handleBrightnessComplete}
           zoomAccessibilityLabel={t( "Adjust-zoom" )}
           brightnessAccessibilityLabel={t( "Adjust-brightness" )}
