@@ -3,7 +3,7 @@ import {
   faveObservation,
   updateObservation,
 } from "api/observations";
-import { getJWT } from "components/LoginSignUp/AuthenticationService";
+import { getJWT, isLoggedIn } from "components/LoginSignUp/AuthenticationService";
 import { AppState } from "react-native";
 import type Realm from "realm";
 import type { RealmObservation, RealmObservationPojo } from "realmModels/types";
@@ -56,7 +56,15 @@ async function validateAndGetToken( ): Promise<string> {
   const apiToken = await getJWT( false, "upload" );
   if ( !apiToken ) {
     const error = new RecoverableError( "Gack, tried to upload an observation without API token!" );
-    error.recoveryBy = RECOVERY_BY.LOGIN_AGAIN;
+    // getJWT returns null for two very different reasons: we're signed out, or
+    // we're signed in and the refresh didn't come back (unreachable API, an
+    // in-flight backoff, a stored token past the window we'll reuse it in).
+    // Only the first is the user's to fix. Asking someone who still holds an
+    // access token to re-enter their password every time a refresh misses is
+    // how a working login turns into a daily login prompt.
+    if ( !await isLoggedIn( ) ) {
+      error.recoveryBy = RECOVERY_BY.LOGIN_AGAIN;
+    }
     throw error;
   }
   return apiToken;

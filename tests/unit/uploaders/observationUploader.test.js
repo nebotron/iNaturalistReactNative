@@ -4,6 +4,7 @@ import factory from "tests/factory";
 import * as uploaders from "uploaders";
 import * as mediaUploader from "uploaders/mediaUploader";
 import uploadObservation from "uploaders/observationUploader";
+import { RECOVERY_BY } from "uploaders/utils/errorHandling";
 import * as progressTracker from "uploaders/utils/progressTracker";
 
 const mockErrorWithExtra = jest.fn();
@@ -103,6 +104,23 @@ describe( "uploadObservation", () => {
 
     await expect( uploadObservation( mockObservation, mockRealm ) )
       .rejects.toThrow( "Gack, tried to upload an observation without API token!" );
+  } );
+
+  it( "should ask for login again when there is no token and no signed-in user", async () => {
+    authService.getJWT.mockResolvedValue( null );
+    authService.isLoggedIn.mockResolvedValue( false );
+
+    await expect( uploadObservation( mockObservation, mockRealm ) )
+      .rejects.toMatchObject( { recoveryBy: RECOVERY_BY.LOGIN_AGAIN } );
+  } );
+
+  it( "should not ask a signed-in user to log in again when the token refresh failed", async () => {
+    // The user's credentials are fine; the refresh just didn't come back.
+    authService.getJWT.mockResolvedValue( null );
+    authService.isLoggedIn.mockResolvedValue( true );
+
+    await expect( uploadObservation( mockObservation, mockRealm ) )
+      .rejects.toMatchObject( { recoveryBy: undefined } );
   } );
 
   it( "should prepare the observation for upload", async () => {

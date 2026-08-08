@@ -168,7 +168,11 @@ const isLoggedIn = async (): Promise<boolean> => {
     return result;
   } catch ( error ) {
     console.warn( "Auth check failed:", error );
-    return false;
+    // A keychain read that threw says nothing about whether we're signed in,
+    // and answering false sends a signed-in user to the login screen (getJWT
+    // returns null, and the upload path reads a null token as "log in again").
+    // Keep the last answer we actually got from storage, stale or not.
+    return authCache.isLoggedIn ?? false;
   }
 };
 
@@ -310,9 +314,16 @@ const recordJwtRefreshSuccess = ( ): void => {
 async function fetchFreshJWT( logContext: string | null ): Promise<JWTRefreshResult> {
   try {
     const accessToken = await getSensitiveItem( "accessToken" );
-    // accessToken should always be a string here, since we're logged in,
-    // i.e. in the function call to loggedIn() above we must have found accessToken
-    // to not be null at least in the last 5000 ms
+    // accessToken is normally a string here, since we're logged in, i.e. in the
+    // call to isLoggedIn() above we must have found accessToken to not be null
+    // at least in the last 5000 ms. But that cache can be up to 5s stale and the
+    // read can fail on its own, and sending `Bearer null` earns a 401 that we
+    // would then read as the server rejecting real credentials — pushing the
+    // user to the login screen over a storage hiccup.
+    if ( typeof accessToken !== "string" ) {
+      logger.error( `JWT [${logContext}]: No access token to refresh with` );
+      return { token: null, credentialsRejected: false };
+    }
     const api = createAPI( { Authorization: `Bearer ${accessToken}` } );
     let response;
     try {
