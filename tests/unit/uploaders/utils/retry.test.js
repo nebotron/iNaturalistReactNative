@@ -33,6 +33,24 @@ describe( "withRetry", () => {
     expect( fn ).toHaveBeenCalledTimes( 2 );
   } );
 
+  it( "retries a retryable error up to three times", async () => {
+    const fn = jest.fn()
+      .mockRejectedValueOnce( apiError( 500 ) )
+      .mockRejectedValueOnce( apiError( 500 ) )
+      .mockRejectedValueOnce( apiError( 500 ) )
+      .mockResolvedValueOnce( "ok" );
+
+    await expect( settle( withRetry( fn ) ) ).resolves.toEqual( "ok" );
+    expect( fn ).toHaveBeenCalledTimes( 4 );
+  } );
+
+  it( "gives up after three retries", async () => {
+    const fn = jest.fn().mockRejectedValue( apiError( 500 ) );
+
+    await expect( settle( withRetry( fn ) ) ).resolves.toBeInstanceOf( INatApiError );
+    expect( fn ).toHaveBeenCalledTimes( 4 );
+  } );
+
   it( "does not retry client errors by default", async () => {
     const fn = jest.fn().mockRejectedValue( apiError( 404 ) );
 
