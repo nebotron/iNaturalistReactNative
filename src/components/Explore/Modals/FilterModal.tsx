@@ -15,7 +15,7 @@ import {
   Button,
   ButtonBar,
   Checkbox,
-  DateTimePicker,
+  DateSheet,
   Heading1,
   Heading4,
   IconicTaxonChooser,
@@ -721,29 +721,33 @@ const FilterModal = ( {
     }
   };
 
-  // A single date picker serves every date button here. Rendering one picker per
-  // button meant six native modals mounted at once, and moving between two of
-  // them (e.g. start date -> end date) presented one while the other was still
-  // dismissing, which on iOS drops the presentation and leaves an invisible view
-  // that swallows all touches. One picker keeps that sequencing in one place.
+  // A single date picker serves every date button here, rendered as a BottomSheet rather
+  // than a native modal. FilterModal is already shown inside a Modal, and a second native
+  // modal (react-native-modal-datetime-picker) nested inside it can leave the outer modal
+  // unresponsive to touches after closing - a known React Native issue with nested modals.
   const datePickers: Record<string, {
     date?: string;
+    headerText: string;
     onDatePicked: ( date: Date ) => void;
   }> = {
     [OBSERVED_EXACT]: {
       date: observedOn,
+      headerText: t( "CHANGE-DATE" ),
       onDatePicked: updateObservedExact,
     },
     [OBSERVED_START]: {
       date: d1,
+      headerText: t( "CHANGE-START-DATE" ),
       onDatePicked: updateObservedStart,
     },
     [OBSERVED_END]: {
       date: d2,
+      headerText: t( "CHANGE-END-DATE" ),
       onDatePicked: updateObservedEnd,
     },
     [UPLOADED_EXACT]: {
       date: createdOn,
+      headerText: t( "CHANGE-DATE" ),
       onDatePicked: ( date: Date ) => updateDateUploaded( {
         newDateUploaded: DATE_UPLOADED.EXACT_DATE,
         newD1: formatObsFieldDate( date ),
@@ -751,10 +755,12 @@ const FilterModal = ( {
     },
     [UPLOADED_START]: {
       date: createdD1,
+      headerText: t( "CHANGE-START-DATE" ),
       onDatePicked: updateUploadedStart,
     },
     [UPLOADED_END]: {
       date: createdD2,
+      headerText: t( "CHANGE-END-DATE" ),
       onDatePicked: updateUploadedEnd,
     },
   };
@@ -1605,12 +1611,19 @@ const FilterModal = ( {
           insideModal
         />
       )}
-      <DateTimePicker
-        date={parseLocalDate( openDatePicker?.date )}
-        isDateTimePickerVisible={!!openDatePicker}
-        toggleDateTimePicker={() => setOpenSheet( NONE )}
-        onDatePicked={date => openDatePicker?.onDatePicked( date )}
-      />
+      {openDatePicker && (
+        <DateSheet
+          headerText={openDatePicker.headerText}
+          date={parseLocalDate( openDatePicker.date )}
+          maximumDate={new Date( )}
+          onPressClose={() => setOpenSheet( NONE )}
+          confirm={date => {
+            openDatePicker.onDatePicked( date );
+            setOpenSheet( NONE );
+          }}
+          insideModal
+        />
+      )}
       <ExploreSavedFilterSheets
         filterToDelete={filterToDelete}
         onCloseDeleteFilter={() => setFilterToDelete( null )}

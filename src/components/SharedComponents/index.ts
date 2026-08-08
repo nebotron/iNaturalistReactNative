@@ -63,6 +63,7 @@ export { default as SearchHeader } from "./SearchHeader";
 export { default as BottomSheet } from "./Sheets/BottomSheet";
 export { default as BottomSheetStandardBackdrop } from "./Sheets/BottomSheetStandardBackdrop";
 export { default as BottomSheetV2 } from "./Sheets/BottomSheetV2";
+export { default as DateSheet } from "./Sheets/DateSheet";
 export { default as PickerSheet } from "./Sheets/PickerSheet";
 export { default as RadioButtonSheet } from "./Sheets/RadioButtonSheet";
 export { default as TextInputSheet } from "./Sheets/TextInputSheet";
