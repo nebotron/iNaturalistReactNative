@@ -1,9 +1,7 @@
-import { useNavigation } from "@react-navigation/native";
 import type {
   FlashListProps, FlashListRef, ListRenderItem, ViewToken,
 } from "@shopify/flash-list";
 import {
-  BackButton,
   Button,
   CustomFlashList,
   INatIconButton,
@@ -56,7 +54,6 @@ interface Item {
 
 interface Props {
   combinePhotos: ( ) => void;
-  clearSelection: ( ) => void;
   discardImport: ( ) => void;
   duplicateItem: ( item: Item ) => void;
   flashListRef?: React.RefObject<FlashListRef<Item> | null>;
@@ -71,14 +68,12 @@ interface Props {
   } ) => void;
   removeItem: ( item: Item ) => void;
   selectedObservations: Item[];
-  selectAllPhotos: ( ) => void;
   selectObservationPhotos: ( isSelected: boolean, item: Item ) => void;
   separateItem: ( item: Item ) => void;
 }
 
 const GroupPhotos = ( {
   combinePhotos,
-  clearSelection,
   discardImport,
   duplicateItem,
   flashListRef,
@@ -90,12 +85,10 @@ const GroupPhotos = ( {
   onViewableItemsChanged,
   removeItem,
   selectedObservations,
-  selectAllPhotos,
   selectObservationPhotos,
   separateItem,
 }: Props ) => {
   const { t } = useTranslation( );
-  const navigation = useNavigation( );
   const [showDiscardSheet, setShowDiscardSheet] = useState( false );
   const {
     flashListStyle,
@@ -110,14 +103,7 @@ const GroupPhotos = ( {
     item.photos?.[0]?.image.uri ?? item.soundUri ?? ""
   );
 
-  const noObsSelected = selectedObservations.length === 0;
-  const oneObsSelected = selectedObservations.length === 1;
-  const selectedPhotoUris = useMemo(
-    ( ) => flattenAndOrderSelectedPhotos( selectedObservations )
-      .map( photo => photo.image.uri ),
-    [selectedObservations],
-  );
-  const canCropSelectedPhotos = selectedPhotoUris.length > 0;
+  const multiplePhotosSelected = selectedObservations.length > 1;
 
   // Preload the first selected image as soon as it's selected so its data is
   // usually ready by the time the user taps crop. The remaining images are
@@ -195,32 +181,6 @@ const GroupPhotos = ( {
     prefetchDeviceImageThumbnails( nearby, maxPixel );
   }, [] );
 
-  const cropSelectedPhotos = useCallback( () => {
-    if ( selectedPhotoUris.length === 0 ) {
-      return;
-    }
-    const [firstUri, ...remainingUris] = selectedPhotoUris;
-    navigation.navigate( "ImageCropEditor", {
-      imageUri: firstUri,
-      pendingImageUris: remainingUris.length > 0
-        ? remainingUris
-        : undefined,
-      context: "groupPhotos",
-      onCropSaved: clearSelection,
-    } );
-  }, [clearSelection, navigation, selectedPhotoUris] );
-
-  const allPhotosSelected = groupedPhotos.length > 0
-    && selectedObservations.length === groupedPhotos.length;
-
-  const toggleSelectAll = useCallback( ( ) => {
-    if ( allPhotosSelected ) {
-      clearSelection( );
-    } else {
-      selectAllPhotos( );
-    }
-  }, [allPhotosSelected, clearSelection, selectAllPhotos] );
-
   const renderItem: ListRenderItem<Item> = useCallback( ( { item } ) => (
     <GroupPhotoImage
       duplicateItem={duplicateItem}
@@ -242,18 +202,26 @@ const GroupPhotos = ( {
     separateItem,
   ] );
 
-  // The import button scrolls with the list so it's only reachable once the
-  // user has scrolled to the end of their photos.
+  // The import/discard buttons scroll with the list so they're only
+  // reachable once the user has scrolled to the end of their photos.
   const footerComponent = useMemo( ( ) => (
     <View className="items-center px-2 pt-4">
-      <Button
-        className="max-w-[500px] w-full"
-        level="focus"
-        text={t( "IMPORT-X-OBSERVATIONS", { count: groupedPhotos.length } )}
-        onPress={navBasedOnUserSettings}
-        testID="GroupPhotos.next"
-        loading={isCreatingObservations}
-      />
+      <View className="flex-row w-full max-w-[500px] gap-2">
+        <Button
+          level="neutral"
+          text={t( "DISCARD" )}
+          onPress={( ) => setShowDiscardSheet( true )}
+          testID="GroupPhotos.discard"
+        />
+        <Button
+          className="flex-1"
+          level="focus"
+          text={t( "IMPORT-X-OBSERVATIONS", { count: groupedPhotos.length } )}
+          onPress={navBasedOnUserSettings}
+          testID="GroupPhotos.next"
+          loading={isCreatingObservations}
+        />
+      </View>
     </View>
   ), [groupedPhotos.length, isCreatingObservations, navBasedOnUserSettings, t] );
 
@@ -261,22 +229,16 @@ const GroupPhotos = ( {
     selectedObservations,
   };
 
-  // Leave room under the footer button for the floating toolbar
+  // Leave room under the footer buttons for the floating combine overlay
   const listStyle = useMemo( ( ) => ( {
     ...flashListStyle,
-    paddingBottom: groupedPhotos.length > 0
+    paddingBottom: multiplePhotosSelected
       ? TOOLBAR_HEIGHT + 20
       : 20,
-  } ), [flashListStyle, groupedPhotos.length] );
+  } ), [flashListStyle, multiplePhotosSelected] );
 
   return (
     <SharedStackViewWrapper>
-      <View className="flex-row items-center">
-        <BackButton
-          onPress={( ) => setShowDiscardSheet( true )}
-          testID="GroupPhotos.back"
-        />
-      </View>
       <CustomFlashList
         ListFooterComponent={footerComponent}
         contentContainerStyle={listStyle}
@@ -291,60 +253,23 @@ const GroupPhotos = ( {
         renderItem={renderItem}
         testID="GroupPhotos.list"
       />
-      {groupedPhotos.length > 0 && (
+      {multiplePhotosSelected && (
         <View
           className="absolute bottom-0 w-full bg-white z-50 items-center px-2 pt-2 pb-4"
           style={DROP_SHADOW}
         >
-          <View className="flex-row w-full gap-2">
-            <View className="flex-1 items-center">
-              <INatIconButton
-                icon="check"
-                mode="contained"
-                size={26}
-                width={58}
-                height={58}
-                color={colors.white}
-                backgroundColor={colors.darkGray}
-                accessibilityLabel={
-                  allPhotosSelected
-                    ? t( "Deselect-all-photos" )
-                    : t( "Select-all-photos" )
-                }
-                onPress={toggleSelectAll}
-                testID="GroupPhotos.selectAll"
-              />
-            </View>
-            <View className="flex-1 items-center">
-              <INatIconButton
-                icon="crop"
-                mode="contained"
-                size={26}
-                width={58}
-                height={58}
-                color={colors.white}
-                backgroundColor={colors.darkGray}
-                accessibilityLabel={t( "CROP-PHOTO" )}
-                disabled={!canCropSelectedPhotos}
-                onPress={cropSelectedPhotos}
-                testID="GroupPhotos.crop"
-              />
-            </View>
-            <View className="flex-1 items-center">
-              <INatIconButton
-                icon="combine"
-                mode="contained"
-                size={26}
-                width={58}
-                height={58}
-                color={colors.white}
-                backgroundColor={colors.darkGray}
-                accessibilityLabel={t( "Combine-Photos" )}
-                disabled={noObsSelected || oneObsSelected}
-                onPress={combinePhotos}
-              />
-            </View>
-          </View>
+          <INatIconButton
+            icon="combine"
+            mode="contained"
+            size={26}
+            width={58}
+            height={58}
+            color={colors.white}
+            backgroundColor={colors.darkGray}
+            accessibilityLabel={t( "Combine-Photos" )}
+            onPress={combinePhotos}
+            testID="GroupPhotos.combine"
+          />
         </View>
       )}
       {showDiscardSheet && (

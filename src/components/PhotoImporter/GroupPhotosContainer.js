@@ -118,10 +118,6 @@ const GroupPhotosContainer = ( ): Node => {
     return ( ) => clearTimeout( timer );
   }, [groupedPhotos] );
 
-  const selectAllPhotos = () => {
-    setSelectedIndices( groupedPhotos.map( ( _obs, index ) => index ) );
-  };
-
   const selectObservationPhotos = ( isSelected, observation ) => {
     const index = groupedPhotos.indexOf( observation );
     if ( index < 0 ) {
@@ -454,7 +450,6 @@ const GroupPhotosContainer = ( ): Node => {
   return (
     <GroupPhotos
       combinePhotos={combinePhotos}
-      clearSelection={() => setSelectedIndices( [] )}
       discardImport={discardImport}
       duplicateItem={duplicateItem}
       flashListRef={flashListRef}
@@ -465,7 +460,6 @@ const GroupPhotosContainer = ( ): Node => {
       onScroll={onScroll}
       onViewableItemsChanged={onViewableItemsChanged}
       removeItem={removeItem}
-      selectAllPhotos={selectAllPhotos}
       selectObservationPhotos={selectObservationPhotos}
       selectedObservations={selectedObservations}
       separateItem={separateItem}

@@ -88,7 +88,10 @@ describe( "GroupPhotosContainer", ( ) => {
     );
     fireEvent.press( firstPhotoCombinedPressable );
     fireEvent.press( secondPhotoCombinedPressable );
-    fireEvent.press( combinePhotosButton );
+    // The combine button only exists while multiple photos are selected, so it
+    // unmounts after the first combine resets the selection and must be
+    // re-queried once a new selection brings it back.
+    fireEvent.press( screen.getByLabelText( /Combine Photos/ ) );
 
     expect( firstPhotoCombinedPressable ).toHaveTextContent( /3/ );
   } );
