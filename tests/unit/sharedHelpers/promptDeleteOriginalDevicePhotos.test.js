@@ -150,7 +150,7 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
         "photo_delete_pending",
         expect.objectContaining( {
           requested: 2,
-          ms: 5000,
+          ms: 4800,
           backgrounded: false,
           wentInactive: false,
           appStateChanges: 0,
@@ -165,6 +165,36 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       // Counted for the whole session, so other hangs in this file add to it.
       expect( extra.hangsThisSession ).toBeGreaterThanOrEqual( 1 );
       expect( JSON.stringify( extra ) ).not.toContain( "ph://" );
+    } );
+
+    it( "gives a multi-chunk walk time to finish before calling it a hang", async ( ) => {
+      // A PhotoKit transaction costs ~1.6s whatever it holds, so a walk's honest
+      // duration goes with the chunk count. The first cleanup that ever worked
+      // took 5005ms for 37 photos in 3 chunks and the flat 5s budget reported it
+      // as a hang 4ms before it finished.
+      let finishDeletion;
+      mockDeletePhotos.mockImplementation(
+        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
+      );
+      const uris = Array.from( { length: 37 }, ( _unused, i ) => `ph://P${i}` );
+
+      const deletion = deleteOriginalDevicePhotos( uris );
+      await jest.advanceTimersByTimeAsync( 6000 );
+      expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+        "photo_delete_pending",
+        expect.anything( ),
+      );
+
+      await jest.advanceTimersByTimeAsync( 3000 );
+      expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+        "photo_delete_pending",
+        // Three chunks of 15, 15 and 7, so the report says how much of the walk
+        // was still outstanding.
+        expect.objectContaining( { requested: 37, expectedTransactions: 3 } ),
+      );
+
+      finishDeletion( { deleted: 37, requested: 37 } );
+      await deletion;
     } );
 
     it( "does not report a foreground-inactive app as having left the foreground", async ( ) => {

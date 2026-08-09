@@ -159,9 +159,24 @@ export const enqueuePhotoLibraryWrite = <T, >(
 // waiting without either calling it a failure or letting go of the native call.
 const UI_WAIT_MS = 15_000;
 
+// Mirrors kInatPromptedDeleteChunkSize in ImageCropper.m. Only used to size the
+// diagnostic below, so the two drifting apart costs nothing but a slightly
+// mistimed log line.
+const PROMPTED_DELETE_CHUNK_SIZE = 15;
+
+// A PhotoKit transaction costs ~1.6s whatever it holds: 3 assets took 1752ms,
+// 19 took 1442ms, 275 consent-free ones took 1691ms. So a chunked walk's honest
+// duration scales with the number of transactions, not the photo count — and a
+// flat 5s budget reported the first working cleanup (37 photos, 3 chunks,
+// 5005ms) as a hang 4ms before it finished. Allow for the walk, then report.
+const CHUNK_MS_ALLOWANCE = 1800;
+
 // The pending-delete diagnostic has to land while the delete is still in
-// flight, so it stays well inside the wait above.
-const HANG_REPORT_MS = 5000;
+// flight, so it stays inside the wait above however many chunks are expected.
+const hangReportMs = ( transactions: number ) => Math.min(
+  UI_WAIT_MS - 2000,
+  3000 + CHUNK_MS_ALLOWANCE * transactions,
+);
 
 // Returned by the race below when the OS hasn't answered inside UI_WAIT_MS.
 const STILL_PENDING = { stillPending: true } as const;
@@ -219,6 +234,18 @@ const performDeleteOriginalDevicePhotos = async (
     ? ourUris
     : [];
 
+  // How many PhotoKit transactions this deletion should take: one per chunk of
+  // the prompted half, plus one for the consent-free half if there is one. It
+  // sizes the pending diagnostic, and a hang report carrying it says how much of
+  // the walk was still to come.
+  const expectedTransactions = Math.max(
+    1,
+    Math.ceil( ( requested - appCreatedUris.length ) / PROMPTED_DELETE_CHUNK_SIZE )
+      + ( appCreatedUris.length > 0
+        ? 1
+        : 0 ),
+  );
+
   // The ph:// URIs identify the user's photos, say nothing a count doesn't, and
   // made single log lines kilobytes long; the counts below are what a report
   // is read for.
@@ -261,6 +288,7 @@ const performDeleteOriginalDevicePhotos = async (
     // hang report rather than being inferred from the prose line beside it.
     appCreated: appCreatedUris.length,
     prompted: requested - appCreatedUris.length,
+    expectedTransactions,
     backgrounded,
     wentInactive,
     appStateChanges,
@@ -303,7 +331,7 @@ const performDeleteOriginalDevicePhotos = async (
         } ),
       ).catch( ( ) => undefined );
     }
-  }, HANG_REPORT_MS );
+  }, hangReportMs( expectedTransactions ) );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
