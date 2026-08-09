@@ -41,7 +41,7 @@ const SpeciesView = ( {
   const [pendingTaxonIds, setPendingTaxonIds] = useState( [] );
   const currentUser = useCurrentUser( );
   const { state } = useExplore();
-  const { excludeUser } = state;
+  const { excludeUser, unobservedByMe } = state;
   const {
     flashListStyle,
     gridItemStyle,
@@ -69,9 +69,38 @@ const SpeciesView = ( {
     r => r.taxon.id,
   ) || [], [seenByCurrentUserAll?.results] );
 
-  const params = excludeUser
-    ? { ...queryParams, without_taxon_id: pageObservedTaxonIdsAll }
-    : queryParams;
+  // The API's unobserved_by_user_id filter only excludes taxa the user has
+  // observed at that exact rank, so a subspecies whose parent species the user
+  // has already observed still shows up as "unobserved". Fetch the user's
+  // observed species and additionally exclude them via without_taxon_id, which
+  // (unlike unobserved_by_user_id) also excludes their descendants.
+  const { data: seenSpeciesByCurrentUser } = useQuery(
+    ["fetchSpeciesCountsSeenSpecies"],
+    ( ) => fetchSpeciesCounts( {
+      user_id: currentUser?.id,
+      ttl: -1,
+      fields: {
+        taxon: {
+          id: true,
+          rank_level: true,
+        },
+      },
+    } ),
+    {
+      enabled: ( !!currentUser && !!unobservedByMe ),
+    },
+  );
+
+  const observedSpeciesIds = useMemo( ( ) => seenSpeciesByCurrentUser?.results
+    ?.filter( r => r.taxon.rank_level === Taxon.SPECIES_LEVEL )
+    ?.map( r => r.taxon.id ) || [], [seenSpeciesByCurrentUser?.results] );
+
+  let params = queryParams;
+  if ( excludeUser ) {
+    params = { ...queryParams, without_taxon_id: pageObservedTaxonIdsAll };
+  } else if ( unobservedByMe ) {
+    params = { ...queryParams, without_taxon_id: observedSpeciesIds };
+  }
 
   const locale = i18n?.language ?? "en";
 
