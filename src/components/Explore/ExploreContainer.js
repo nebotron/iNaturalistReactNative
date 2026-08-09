@@ -17,8 +17,8 @@ import useLocationPermission from "sharedHooks/useLocationPermission";
 import useStore from "stores/useStore";
 
 import Explore from "./Explore";
-import mapParamsToAPI from "./helpers/mapParamsToAPI";
 import useExploreHeaderCount from "./hooks/useExploreHeaderCount";
+import useExploreQueryParams from "./hooks/useExploreQueryParams";
 import useParams from "./hooks/useParams";
 
 const ExploreContainerWithContext = ( ): Node => {
@@ -97,10 +97,7 @@ const ExploreContainerWithContext = ( ): Node => {
     } );
   };
 
-  const filteredParams = mapParamsToAPI(
-    state,
-    currentUser,
-  );
+  const filteredParams = useExploreQueryParams( state, currentUser );
 
   const queryParams = {
     ...filteredParams,
