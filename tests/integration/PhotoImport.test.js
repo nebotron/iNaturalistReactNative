@@ -54,12 +54,20 @@ jest.mock( "sharedHooks/useObservationCounts", () => {
     __esModule: true,
     default: () => {
       const realm = global.mockRealms[__filename];
-      if ( !realm ) return { numUnuploadedObservations: 0, numObsMissingBasics: 0 };
+      if ( !realm ) {
+        return {
+          numUnuploadedObservations: 0,
+          numObsMissingBasics: 0,
+          numUnuploadedObsNoTaxon: 0,
+        };
+      }
       const unsynced = realm.objects( "Observation" ).filtered( UNSYNCED_FILTER );
       return {
         numUnuploadedObservations: unsynced.length,
         numObsMissingBasics: unsynced
           .filter( obs => obs.missingBasics( ) ).length,
+        numUnuploadedObsNoTaxon: unsynced
+          .filter( obs => !obs.taxon ).length,
       };
     },
   };

@@ -126,6 +126,7 @@ const MyObservationsResults = ( ) => {
   const {
     numUnuploadedObservations,
     numObsMissingBasics,
+    numUnuploadedObsNoTaxon,
   } = useObservationCounts( );
   const prevObservationsLength = useRef( observationIds.length );
   const { layout, writeLayoutToStorage } = useStoredLayout( "myObservationsLayout" );
@@ -516,6 +517,7 @@ const MyObservationsResults = ( ) => {
       numTotalTaxa={displayedSpeciesCount}
       numUnuploadedObservations={numUnuploadedObservations}
       numObsMissingBasics={numObsMissingBasics}
+      numUnuploadedObsNoTaxon={numUnuploadedObsNoTaxon}
       observationIds={observationIds}
       observationsSortOptionId={myObsState.observationsSort}
       onEndReached={handleEndReached}

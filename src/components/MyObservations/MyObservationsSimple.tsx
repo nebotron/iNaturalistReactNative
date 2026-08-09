@@ -80,6 +80,7 @@ interface Props {
   numTotalTaxa?: number;
   numUnuploadedObservations: number;
   numObsMissingBasics: number;
+  numUnuploadedObsNoTaxon: number;
   observationIds: { uuid: string }[];
   observationsSortOptionId: OBSERVATIONS_SORT;
   onEndReached: ( ) => void;
@@ -141,6 +142,7 @@ const MyObservationsSimple = ( {
   numTotalTaxa,
   numUnuploadedObservations,
   numObsMissingBasics: numUnuploadedObsMissingBasics,
+  numUnuploadedObsNoTaxon,
   observationIds,
   observationsSortOptionId,
   onEndReached,
@@ -527,6 +529,7 @@ const MyObservationsSimple = ( {
           currentUser={currentUser}
           isConnected={isConnected}
           numUploadableObservations={numUploadableObservations}
+          numUnuploadedObsNoTaxon={numUnuploadedObsNoTaxon}
           handleSyncButtonPress={handleSyncButtonPress}
         />
         <Tabs

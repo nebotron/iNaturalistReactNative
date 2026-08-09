@@ -39,6 +39,7 @@ const { useRealm } = RealmContext;
 interface Props {
   currentUser?: RealmUser;
   numUploadableObservations: number;
+  numUnuploadedObsNoTaxon: number;
   handleSyncButtonPress: ( ) => void;
   isConnected: boolean;
 }
@@ -48,6 +49,7 @@ const MyObservationsSimpleHeader = ( {
   handleSyncButtonPress,
   isConnected,
   numUploadableObservations,
+  numUnuploadedObsNoTaxon,
 }: Props ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation<
@@ -145,7 +147,7 @@ const MyObservationsSimpleHeader = ( {
                 size={20}
               />
             )}
-            {numUploadableObservations > 0 && (
+            {numUnuploadedObsNoTaxon > 0 && (
               <INatIconButton
                 icon="sparkly-label"
                 // eslint-disable-next-line i18next/no-literal-string
