@@ -25,11 +25,14 @@ const MAX_SCALE = 100;
 // decimals. Below this it isn't a crop the user made.
 const CROP_EPSILON = 0.001;
 
-// Pixels the photo itself is decoded at. Anything the camera captured fits
-// inside this (a 12MP photo is 4032 on its long side), so in practice the cell
-// draws the photo at its native resolution; the cap is only there so a
-// panorama can't decode a bitmap the size of the whole grid.
-const FULL_RESOLUTION_MAX_PIXEL = 4096;
+// Pixels the photo itself is decoded at. Set well above any single-shot phone
+// camera photo (even a 108MP sensor's long edge is well under this), so the
+// cell always draws the photo at its true native resolution; the cap only
+// exists so a stitched panorama can't decode a bitmap the size of the whole
+// grid. createThumbnail never upscales past the source's actual resolution
+// (ImageIO's kCGImageSourceThumbnailMaxPixelSize, or PHImageManager's
+// targetSize, are both ceilings), so this is a safety valve, not a target.
+const FULL_RESOLUTION_MAX_PIXEL = 16384;
 
 const styles = StyleSheet.create( {
   overlay: StyleSheet.absoluteFillObject,
