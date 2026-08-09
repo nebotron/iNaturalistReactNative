@@ -98,6 +98,14 @@ const DevicePhotoCleanup = ( ) => {
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
   const [stillDeleting, setStillDeleting] = useState( false );
   const [rescans, setRescans] = useState( 0 );
+  // How many attempts in a row PhotoKit has never answered. A single pending
+  // result is consistent with a delete that's merely slow, but every attempt
+  // on this branch (see promptDeleteOriginalDevicePhotos.ts) is independent
+  // and remembers nothing, so a device that's actually wedged just repeats
+  // this forever. Once we have that repeated evidence within one visit to
+  // this screen, say so plainly instead of the same tentative "may finish on
+  // its own" line every time.
+  const [pendingStreak, setPendingStreak] = useState( 0 );
 
   useEffect( ( ) => {
     let cancelled = false;
@@ -202,6 +210,7 @@ const DevicePhotoCleanup = ( ) => {
     // show: the photos left in the grid may already be gone.
     if ( pending ) {
       setStillDeleting( true );
+      setPendingStreak( count => count + 1 );
       setRescans( count => count + 1 );
       return;
     }
@@ -262,10 +271,16 @@ const DevicePhotoCleanup = ( ) => {
             ? ""
             : "s"} in your library match observations you haven't favorited.`}
         </Body2>
-        {stillDeleting && (
+        {stillDeleting && pendingStreak < 2 && (
           <Body2 className="mt-2">
             The last delete hasn&apos;t come back from iOS yet. These are what is still
             in your library — it may finish on its own, or a restart may be needed.
+          </Body2>
+        )}
+        {stillDeleting && pendingStreak >= 2 && (
+          <Body2 className="mt-2">
+            {`Delete hasn't gone through ${pendingStreak} times in a row. `}
+            Your device needs to be restarted before it can delete these photos.
           </Body2>
         )}
       </View>

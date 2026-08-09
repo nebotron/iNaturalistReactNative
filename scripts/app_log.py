@@ -3,8 +3,9 @@
 Read (and clear) the app_log the release build writes to Firebase.
 
 Every logger line from a non-dev build is POSTed to {CROP_LOG_FIREBASE_URL}/app_log
-by src/api/log/index.ts. Both reads and writes are unauthenticated; set
-CROP_LOG_FIREBASE_URL in .env to point this script at the database.
+by src/api/log/index.ts. Both reads and writes are unauthenticated and open-read, so
+this script defaults to the production log DB; set CROP_LOG_FIREBASE_URL in .env to
+point it at a different one (e.g. staging).
 
 Usage:
     python3 scripts/app_log.py                  # grouped summary of recent entries
@@ -33,6 +34,9 @@ from firebase_auth import firebase_auth_query  # noqa: E402
 
 REPO_ROOT = Path( __file__ ).parent.parent
 ENV_FILE = REPO_ROOT / ".env"
+# The log DB is unauthenticated and open-read, so this is a safe default;
+# CROP_LOG_FIREBASE_URL in .env overrides it (e.g. for a staging DB).
+DEFAULT_FIREBASE_URL = "https://inaturalist-9001d-default-rtdb.firebaseio.com"
 # Training data, not diagnostics: never cleared.
 KEEP_PATHS = { "crop_log", "brightness_log" }
 DEFAULT_LIMIT = 3000
@@ -179,9 +183,7 @@ def main() -> None:
     args = parser.parse_args()
 
     load_env()
-    base_url = os.environ.get( "CROP_LOG_FIREBASE_URL", "" ).strip()
-    if not base_url:
-        sys.exit( "CROP_LOG_FIREBASE_URL is not set. Add it to .env." )
+    base_url = os.environ.get( "CROP_LOG_FIREBASE_URL", "" ).strip() or DEFAULT_FIREBASE_URL
 
     if args.clear:
         clear_logs( base_url )
