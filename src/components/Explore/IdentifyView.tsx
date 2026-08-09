@@ -44,7 +44,12 @@ import useIdentifyPhotoControls from "sharedHooks/useIdentifyPhotoControls";
 import colors from "styles/tailwindColors";
 
 // Fetch the next page once we're within this many observations of the end.
-const PREFETCH_THRESHOLD = 5;
+const PAGINATION_THRESHOLD = 5;
+
+// How many observations ahead to start downloading photos for. Photos are
+// shown at full original resolution, so we start these downloads well before
+// the user reaches them to hide the latency.
+const PHOTO_PREFETCH_LOOKAHEAD = 15;
 
 // How long after the photo renders before the taxon name appears, so the name
 // never beats the image it describes onto the screen.
@@ -63,7 +68,7 @@ interface PlayableSound {
 
 const photosForObs = ( obs?: ApiObservation ): string[] => (
   ( obs?.observation_photos ?? [] )
-    .map( op => Photo.displayLargePhoto( op?.photo?.url ) )
+    .map( op => Photo.displayOriginalPhoto( op?.photo?.url ) )
     .filter( ( url ): url is string => !!url )
 );
 
@@ -157,7 +162,7 @@ const IdentifyView = ( {
   // paging shows them with no download/detection delay.
   useEffect( ( ) => {
     const upcoming = observations
-      .slice( currentIndex + 1, currentIndex + 1 + PREFETCH_THRESHOLD )
+      .slice( currentIndex + 1, currentIndex + 1 + PHOTO_PREFETCH_LOOKAHEAD )
       .map( obs => photosForObs( obs )[0] )
       .filter( ( url ): url is string => !!url );
     [...photoUrls, ...upcoming].forEach( url => {
@@ -172,7 +177,7 @@ const IdentifyView = ( {
   const goToNext = useCallback( ( ) => {
     setCurrentIndex( prev => {
       const next = prev + 1;
-      if ( next >= observations.length - PREFETCH_THRESHOLD ) fetchNextPage( );
+      if ( next >= observations.length - PAGINATION_THRESHOLD ) fetchNextPage( );
       return next;
     } );
   }, [fetchNextPage, observations.length] );
