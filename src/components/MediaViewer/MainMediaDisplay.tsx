@@ -173,7 +173,7 @@ const MainMediaDisplay = ( {
     if ( currentIndex >= photos.length ) return;
 
     const photo = photos[currentIndex];
-    const photoUrl = Photo.displayLocalOrRemoteLargePhoto( photo );
+    const photoUrl = Photo.displayLocalOrRemoteOriginalPhoto( photo );
     const zoomRef = currentZoomRefRef.current;
     const imageDims = imageDimensionsRef.current;
 
@@ -198,7 +198,7 @@ const MainMediaDisplay = ( {
   }, [photos, selectedMediaIndex, screenWidth, screenHeight] );
 
   const renderPhoto = ( photo: PhotoItem, photoIndex: number ) => {
-    const uri = Photo.displayLocalOrRemoteLargePhoto( photo );
+    const uri = Photo.displayLocalOrRemoteOriginalPhoto( photo );
     const hasAttribution = photo?.attribution;
     const isSelected = photoIndex === selectedMediaIndex;
     const isEditingBrightness = isSelected && brightness !== BRIGHTNESS_DEFAULT;

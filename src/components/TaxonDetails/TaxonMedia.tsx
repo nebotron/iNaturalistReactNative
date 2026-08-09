@@ -63,9 +63,9 @@ const TaxonMedia = ( {
           className="w-full h-full"
           source={{
             // TODO replace this entire image component to one that supports
-            // progressive sizes and fallbacks if the large photo isn't
+            // progressive sizes and fallbacks if the original photo isn't
             // available
-            uri: Photo.displayLargePhoto( item.url ),
+            uri: Photo.displayOriginalPhoto( item.url ),
           }}
         />
       </Pressable>

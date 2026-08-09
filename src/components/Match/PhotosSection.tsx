@@ -150,7 +150,7 @@ const PhotosSection = ( {
     >
       <CachedImage
         testID="MatchScreen.ObsPhoto"
-        source={{ uri: Photo.displayLargePhoto( observationPhoto ) }}
+        source={{ uri: Photo.displayOriginalPhoto( observationPhoto ) }}
         className="w-full h-full"
       />
       {observationPhotos.length > 1 && (

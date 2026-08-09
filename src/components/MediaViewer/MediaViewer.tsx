@@ -243,7 +243,7 @@ const MediaViewer = ( {
     ? photos[selectedMediaIndex]
     : null;
   const currentShareUri = currentPhoto
-    ? Photo.displayLocalOrRemoteLargePhoto( currentPhoto )
+    ? Photo.displayLocalOrRemoteOriginalPhoto( currentPhoto )
     : null;
   useEffect( ( ) => {
     if ( !currentShareUri ) return;
