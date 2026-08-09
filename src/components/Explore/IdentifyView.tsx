@@ -63,7 +63,7 @@ interface PlayableSound {
 
 const photosForObs = ( obs?: ApiObservation ): string[] => (
   ( obs?.observation_photos ?? [] )
-    .map( op => Photo.displayOriginalPhoto( op?.photo?.url ) )
+    .map( op => Photo.displayLargePhoto( op?.photo?.url ) )
     .filter( ( url ): url is string => !!url )
 );
 
