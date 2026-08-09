@@ -47,7 +47,16 @@ static void inatAfterDismissalSettles( void ( ^work )( void ) )
 // below keeps its full window.
 static const NSTimeInterval kInatPendingDeleteWatchdogSeconds = 150;
 
-// How many assets we didn't create go into one prompted transaction.
+// How many assets we didn't create go into the *first* prompted transaction,
+// and how much bigger each one after it gets.
+//
+// A transaction costs ~1.6s whatever it holds, so the fewer of them the better,
+// and the only thing stopping us using one big one is that somewhere above 19
+// they stop coming back. Ramping finds that edge while getting work done: every
+// chunk that returns is both photos deleted and a size proved to work, and the
+// walk stops at the first that doesn't with everything before it already gone.
+// Chunk sizes below have never failed at 15 or 19; 37 and up never succeed, and
+// nothing in between has been tried.
 //
 // The app log separates cleanly on exactly this number, with no exception in
 // eleven attempts: every prompted transaction of 3, 11 or 19 assets called its
@@ -59,10 +68,9 @@ static const NSTimeInterval kInatPendingDeleteWatchdogSeconds = 150;
 // write had just proved the library was answering. It is the size of the
 // prompted transaction itself.
 //
-// So keep each one under the line and issue them in sequence. Every chunk that
-// comes back is that many photos genuinely deleted, and one that doesn't stops
-// the walk rather than taking the whole cleanup down with it.
+// So start under the line and issue them in sequence, growing as they land.
 static const NSUInteger kInatPromptedDeleteChunkSize = 15;
+static const NSUInteger kInatPromptedDeleteChunkStep = 5;
 
 @implementation ImageCropper {
   // Tracks the single in-flight deletePhotoAssets call (JS serializes calls
@@ -1615,6 +1623,10 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     // claiming all of it or none of it.
     __block NSUInteger promptedDeleted = 0;
     __block NSUInteger promptedChunks = 0;
+    // The largest chunk that came back, which is the measurement the ramp
+    // exists for: it is a lower bound on how big a prompted transaction this
+    // device will actually answer.
+    __block NSUInteger promptedMaxChunk = 0;
 
     void ( ^finish )( BOOL, NSUInteger, NSError * ) =
       ^( BOOL success, NSUInteger deleted, NSError *error ) {
@@ -1633,6 +1645,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
             @"prompted": @( theirAssets.count ),
             @"promptedDeleted": @( promptedDeleted ),
             @"promptedChunks": @( promptedChunks ),
+            @"promptedMaxChunk": @( promptedMaxChunk ),
             @"promptedMs": @( promptedMs ),
           } );
         } else {
@@ -1677,14 +1690,19 @@ RCT_EXPORT_METHOD( deletePhotoAssets
         dispatch_async( dispatch_get_main_queue(), ^{ deleteChunkFrom = nil; } );
         finish( success, appCreatedDeleted + promptedDeleted, error );
       };
+      // Grows by kInatPromptedDeleteChunkStep for every chunk that comes back.
+      __block NSUInteger chunkSize = kInatPromptedDeleteChunkSize;
       deleteChunkFrom = ^( NSUInteger start ) {
         if ( start >= theirAssets.count ) {
           endWalk( YES, nil );
           return;
         }
         NSRange range = NSMakeRange( start,
-          MIN( kInatPromptedDeleteChunkSize, theirAssets.count - start ) );
+          MIN( chunkSize, theirAssets.count - start ) );
         NSArray<PHAsset *> *chunk = [theirAssets subarrayWithRange:range];
+        // The size actually in flight, so a stalled walk names the chunk that
+        // stalled rather than the size the walk started at.
+        self->_promptedWalkChunkSize = range.length;
         self->_promptedWalkChunkStartedAt = [NSDate date];
         [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
           [PHAssetChangeRequest deleteAssets:chunk];
@@ -1698,6 +1716,8 @@ RCT_EXPORT_METHOD( deletePhotoAssets
           }
           promptedDeleted += chunk.count;
           promptedChunks += 1;
+          promptedMaxChunk = MAX( promptedMaxChunk, chunk.count );
+          chunkSize += kInatPromptedDeleteChunkStep;
           self->_promptedWalkDeleted = promptedDeleted;
           self->_promptedWalkChunks = promptedChunks;
           deleteChunkFrom( start + range.length );

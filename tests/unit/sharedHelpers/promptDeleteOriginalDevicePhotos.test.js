@@ -197,6 +197,34 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       await deletion;
     } );
 
+    it( "counts the ramp's chunks, and still reports inside the caller's wait", async ( ) => {
+      // Chunks of 15, 20, 25 … cover 300 assets in nine transactions where a
+      // flat 15 would take twenty. Nine transactions' allowance is longer than
+      // the wait the UI gives the whole deletion, so the report has to be capped
+      // below it — a pending marker that never fires diagnoses nothing.
+      let finishDeletion;
+      mockDeletePhotos.mockImplementation(
+        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
+      );
+      const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://R${i}` );
+
+      const deletion = deleteOriginalDevicePhotos( uris );
+      await jest.advanceTimersByTimeAsync( 12000 );
+      expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+        "photo_delete_pending",
+        expect.anything( ),
+      );
+
+      await jest.advanceTimersByTimeAsync( 2000 );
+      expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+        "photo_delete_pending",
+        expect.objectContaining( { requested: 300, expectedTransactions: 9 } ),
+      );
+
+      finishDeletion( { deleted: 300, requested: 300 } );
+      await deletion;
+    } );
+
     it( "does not report a foreground-inactive app as having left the foreground", async ( ) => {
       // These deletes are issued straight after a navigation or a modal
       // dismissal, so the app is routinely foreground-inactive when one starts

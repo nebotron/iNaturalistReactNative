@@ -39,6 +39,7 @@ const { ImageCropper } = NativeModules as {
       prompted?: number;
       promptedDeleted?: number;
       promptedChunks?: number;
+      promptedMaxChunk?: number;
       promptedMs?: number;
     }>;
   };
@@ -159,10 +160,25 @@ export const enqueuePhotoLibraryWrite = <T, >(
 // waiting without either calling it a failure or letting go of the native call.
 const UI_WAIT_MS = 15_000;
 
-// Mirrors kInatPromptedDeleteChunkSize in ImageCropper.m. Only used to size the
-// diagnostic below, so the two drifting apart costs nothing but a slightly
-// mistimed log line.
+// Mirrors kInatPromptedDeleteChunkSize / kInatPromptedDeleteChunkStep in
+// ImageCropper.m, where the prompted half goes out in chunks of 15, 20, 25 and
+// so on. Only used to size the diagnostic below, so the two drifting apart costs
+// nothing but a slightly mistimed log line.
 const PROMPTED_DELETE_CHUNK_SIZE = 15;
+const PROMPTED_DELETE_CHUNK_STEP = 5;
+
+// How many transactions the ramp needs to cover this many prompted assets.
+const promptedTransactionCount = ( prompted: number ) => {
+  let remaining = prompted;
+  let size = PROMPTED_DELETE_CHUNK_SIZE;
+  let count = 0;
+  while ( remaining > 0 ) {
+    remaining -= size;
+    size += PROMPTED_DELETE_CHUNK_STEP;
+    count += 1;
+  }
+  return count;
+};
 
 // A PhotoKit transaction costs ~1.6s whatever it holds: 3 assets took 1752ms,
 // 19 took 1442ms, 275 consent-free ones took 1691ms. So a chunked walk's honest
@@ -240,7 +256,7 @@ const performDeleteOriginalDevicePhotos = async (
   // the walk was still to come.
   const expectedTransactions = Math.max(
     1,
-    Math.ceil( ( requested - appCreatedUris.length ) / PROMPTED_DELETE_CHUNK_SIZE )
+    promptedTransactionCount( requested - appCreatedUris.length )
       + ( appCreatedUris.length > 0
         ? 1
         : 0 ),
@@ -406,6 +422,7 @@ const performDeleteOriginalDevicePhotos = async (
       prompted?: number;
       promptedDeleted?: number;
       promptedChunks?: number;
+      promptedMaxChunk?: number;
       promptedMs?: number;
     } | undefined;
     if ( ( promptedWalk?.prompted ?? 0 ) > 0 ) {
@@ -413,6 +430,9 @@ const performDeleteOriginalDevicePhotos = async (
         prompted: promptedWalk?.prompted,
         promptedDeleted: promptedWalk?.promptedDeleted,
         promptedChunks: promptedWalk?.promptedChunks,
+        // The largest chunk the ramp got an answer for. This is the number the
+        // chunk size is tuned against: it rises run over run until it stops.
+        promptedMaxChunk: promptedWalk?.promptedMaxChunk,
         promptedMs: promptedWalk?.promptedMs,
       } );
     }
