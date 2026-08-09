@@ -36,6 +36,8 @@ const DateSheetContent = ( { confirm, date, maximumDate }: DateSheetContentProps
         mode="date"
         display="spinner"
         maximumDate={maximumDate}
+        isDarkModeEnabled={false}
+        themeVariant="light"
         onChange={( _event, selectedDate ) => {
           if ( selectedDate ) setSelection( selectedDate );
         }}
