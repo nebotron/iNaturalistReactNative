@@ -75,6 +75,17 @@ static const NSUInteger kInatPromptedDeleteChunkSize = 15;
   // Bumped per deletion so a watchdog can tell its own call from the one that
   // replaced it.
   NSUInteger _pendingDeleteGeneration;
+  // How far the chunked prompted walk has got. A hang only ever reported that
+  // the whole deletion hadn't come back, which cannot say whether the walk is
+  // even in the running build, let alone which chunk stalled — and that is the
+  // one question the chunk-size theory turns on. photoDeletionContext reports
+  // these, so the hang diagnostic that already fires 5s in carries them.
+  BOOL _promptedWalkActive;
+  NSUInteger _promptedWalkChunkSize;
+  NSUInteger _promptedWalkTotal;
+  NSUInteger _promptedWalkDeleted;
+  NSUInteger _promptedWalkChunks;
+  NSDate *_promptedWalkChunkStartedAt;
 }
 
 RCT_EXPORT_MODULE( );
@@ -1309,14 +1320,31 @@ RCT_EXPORT_METHOD( photoDeletionContext
       ? [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil].count
       : 0;
 
+    // "walk=absent" is itself an answer: a hang reporting it is a hang in an
+    // unchunked transaction, so the running build predates the chunking rather
+    // than disproving it. Otherwise chunkMs is how long the stalled chunk has
+    // been outstanding, and deleted/total is how many photos really went before
+    // it — which is what says whether a chunk under the size line can hang too.
+    NSString *walk = self->_promptedWalkActive
+      ? [NSString stringWithFormat:
+          @"walk=active chunkSize=%lu deleted=%lu/%lu chunksDone=%lu chunkMs=%.0f",
+          ( unsigned long )self->_promptedWalkChunkSize,
+          ( unsigned long )self->_promptedWalkDeleted,
+          ( unsigned long )self->_promptedWalkTotal,
+          ( unsigned long )self->_promptedWalkChunks,
+          self->_promptedWalkChunkStartedAt
+            ? [[NSDate date] timeIntervalSinceDate:self->_promptedWalkChunkStartedAt] * 1000
+            : -1]
+      : @"walk=absent";
+
     NSString *info = [NSString stringWithFormat:
       @"appState=%ld hasWindowScene=%d sceneState=%ld fgActiveScenes=%lu authStatus=%ld "
-      @"windows=%lu requested=%lu fetched=%lu vcChain=%@ windowList=[%@]",
+      @"windows=%lu requested=%lu fetched=%lu %@ vcChain=%@ windowList=[%@]",
       ( long )UIApplication.sharedApplication.applicationState,
       hasScene, sceneState, ( unsigned long )foregroundActiveScenes, auth,
       ( unsigned long )UIApplication.sharedApplication.windows.count,
       ( unsigned long )ids.count, ( unsigned long )fetchedCount,
-      vcChain, [self inatWindowInventory]];
+      walk, vcChain, [self inatWindowInventory]];
     resolve( info );
   } );
 }
@@ -1528,6 +1556,9 @@ RCT_EXPORT_METHOD( deletePhotoAssets
       _pendingDeleteResolve = nil;
       _pendingDeleteIds = nil;
     }
+    // A walk whose chunk never came back leaves this set; clear it here so a
+    // later hang can't be misread as that walk still being in flight.
+    _promptedWalkActive = NO;
     _pendingDeleteIds = [ids copy];
     _pendingDeleteRequestedCount = ids.count;
     _pendingDeleteSettled = NO;
@@ -1628,6 +1659,12 @@ RCT_EXPORT_METHOD( deletePhotoAssets
         return;
       }
       NSDate *promptedStartedAt = [NSDate date];
+      self->_promptedWalkActive = YES;
+      self->_promptedWalkChunkSize = kInatPromptedDeleteChunkSize;
+      self->_promptedWalkTotal = theirAssets.count;
+      self->_promptedWalkDeleted = 0;
+      self->_promptedWalkChunks = 0;
+      self->_promptedWalkChunkStartedAt = promptedStartedAt;
       // Strong and __block so each chunk's completion handler can start the
       // next. That makes the block own itself, so the walk releases it when it
       // ends — on the next main-queue hop, never from inside the block that is
@@ -1636,6 +1673,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
       void ( ^endWalk )( BOOL, NSError * ) = ^( BOOL success, NSError *error ) {
         promptedMs =
           ( NSInteger )( [[NSDate date] timeIntervalSinceDate:promptedStartedAt] * 1000 );
+        self->_promptedWalkActive = NO;
         dispatch_async( dispatch_get_main_queue(), ^{ deleteChunkFrom = nil; } );
         finish( success, appCreatedDeleted + promptedDeleted, error );
       };
@@ -1647,6 +1685,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
         NSRange range = NSMakeRange( start,
           MIN( kInatPromptedDeleteChunkSize, theirAssets.count - start ) );
         NSArray<PHAsset *> *chunk = [theirAssets subarrayWithRange:range];
+        self->_promptedWalkChunkStartedAt = [NSDate date];
         [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
           [PHAssetChangeRequest deleteAssets:chunk];
         } completionHandler:^( BOOL success, NSError *error ) {
@@ -1659,6 +1698,8 @@ RCT_EXPORT_METHOD( deletePhotoAssets
           }
           promptedDeleted += chunk.count;
           promptedChunks += 1;
+          self->_promptedWalkDeleted = promptedDeleted;
+          self->_promptedWalkChunks = promptedChunks;
           deleteChunkFrom( start + range.length );
         }];
       };
