@@ -31,10 +31,16 @@ async function getCachedOrNull( filePath: string ): Promise<string | null> {
   return `file://${filePath}`;
 }
 
-const ensureLocalImageForCrop = async ( uri: string ): Promise<string> => {
+const ensureLocalImageForCrop = async (
+  uri: string,
+  // "large" is plenty for subject detection, which only needs to locate a
+  // bounding box. The crop editor passes "original" so the photo it actually
+  // crops -- and saves -- is never downsampled below what was uploaded.
+  targetSize: "large" | "original" = "large",
+): Promise<string> => {
   if ( uri.match( /^https?:\/\// ) ) {
     await mkdir( cropSourcesPath );
-    const downloadUrl = uri.replace( /(square|small|medium|original)/i, "large" );
+    const downloadUrl = uri.replace( /(square|small|medium|large|original)/i, targetSize );
     const destPath = `${cropSourcesPath}/${urlToFilename( downloadUrl )}`;
     const cached = await getCachedOrNull( destPath );
     if ( cached ) return cached;

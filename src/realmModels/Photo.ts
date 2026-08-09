@@ -211,7 +211,7 @@ class Photo extends Realm.Object {
   static displayCropSourcePhoto( photo: RealmPhoto ) {
     return (
       Photo.getLocalPhotoUri( photo?.localFilePath )
-      || Photo.displayLargePhoto( photo?.url )
+      || Photo.displayOriginalPhoto( photo?.url )
     );
   }
 

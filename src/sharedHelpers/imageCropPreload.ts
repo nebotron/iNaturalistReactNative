@@ -20,7 +20,7 @@ async function loadImageData(
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
 ): Promise<PreloadResult | null> {
-  const resolvedUri = await ensureLocalImageForCrop( cropSourceUri );
+  const resolvedUri = await ensureLocalImageForCrop( cropSourceUri, "original" );
   const size = await new Promise<{ w: number; h: number } | null>( resolve => {
     RNImage.getSize(
       resolvedUri,

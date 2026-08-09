@@ -429,7 +429,7 @@ const ImageCropEditor = ( ) => {
           };
           updateObservationKeys( { observationPhotos: obs.observationPhotos } );
 
-          const photoUrl = Photo.displayLocalOrRemoteLargePhoto( existingPhoto );
+          const photoUrl = Photo.displayLocalOrRemoteOriginalPhoto( existingPhoto );
           if ( photoUrl ) {
             saveAnimalCrop( photoUrl, crop );
           }
@@ -465,7 +465,7 @@ const ImageCropEditor = ( ) => {
         op => op.uuid === observationPhotoUuid,
       );
       if ( obsPhoto?.photo ) {
-        return Photo.displayLocalOrRemoteLargePhoto( obsPhoto.photo ) || imageUri || null;
+        return Photo.displayLocalOrRemoteOriginalPhoto( obsPhoto.photo ) || imageUri || null;
       }
     }
     return imageUri || null;
