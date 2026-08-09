@@ -928,6 +928,17 @@ RCT_EXPORT_METHOD( createThumbnail
       [PHAsset fetchAssetsWithLocalIdentifiers:@[localId] options:nil].firstObject;
     if ( !asset ) { reject( @"THUMBNAIL_FAILED", @"PHAsset not found", nil ); return; }
 
+    // A grid tile asks for a few hundred px and wants it fast; the Group
+    // Photos crop overlay asks for this same method at a size comfortably
+    // above any camera photo (see FULL_RESOLUTION_MAX_PIXEL in
+    // GroupPhotoCropImage.tsx) because it wants the actual original detail to
+    // crop into. Fast/Opportunistic optimizes for speed over matching the
+    // requested size, so at that size it was handing back whatever smaller
+    // cached preview Photos already had -- the crop overlay's "full
+    // resolution" request was silently getting a soft, low-quality rendition
+    // no matter how high the JS-side cap was raised.
+    BOOL highQualityDecode = maxDim >= 8192;
+
     PHImageRequestOptions *opts = [[PHImageRequestOptions alloc] init];
     // Never wait on iCloud for a grid tile. Asking for the high-quality format
     // over the network downloads the full-resolution original, which for an
@@ -937,15 +948,24 @@ RCT_EXPORT_METHOD( createThumbnail
     // locally cached rendition Photos keeps for offloaded assets is what the
     // Photos app itself shows in its grid, and it is plenty for a tile.
     opts.networkAccessAllowed = NO;
-    opts.deliveryMode         = PHImageRequestOptionsDeliveryModeOpportunistic;
-    opts.resizeMode           = PHImageRequestOptionsResizeModeFast;
+    opts.deliveryMode         = highQualityDecode
+      ? PHImageRequestOptionsDeliveryModeHighQualityFormat
+      : PHImageRequestOptionsDeliveryModeOpportunistic;
+    opts.resizeMode           = highQualityDecode
+      ? PHImageRequestOptionsResizeModeExact
+      : PHImageRequestOptionsResizeModeFast;
 
     __block BOOL     handled       = NO;
     __block UIImage *degradedImage = nil;
     [[PHImageManager defaultManager]
       requestImageForAsset:asset
       targetSize:CGSizeMake( maxDim, maxDim )
-      contentMode:PHImageContentModeAspectFill
+      // AspectFill crops to a square, which is fine for a square grid tile but
+      // would clip a real photo's edges out of the crop overlay's source
+      // image before the user ever gets to frame it.
+      contentMode:( highQualityDecode
+        ? PHImageContentModeAspectFit
+        : PHImageContentModeAspectFill )
       options:opts
       resultHandler:^( UIImage *result, NSDictionary *info ) {
         if ( handled ) return;
