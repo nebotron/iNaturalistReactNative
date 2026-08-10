@@ -63,6 +63,22 @@ interface Job {
   resolve: ( value: string | null ) => void;
 }
 
+// ImageCropper.m's native side switches to a network-allowed, high-quality
+// decode at this same threshold (see highQualityDecode in createThumbnail) so
+// the Group Photos crop overlay can pull the real original from iCloud rather
+// than settle for whatever soft local rendition is already cached.
+const HIGH_QUALITY_MIN_PIXEL = 8192;
+
+const isHighQuality = ( job: Job ) => job.maxPixel >= HIGH_QUALITY_MIN_PIXEL;
+
+// How many high-quality decodes may run at once, out of MAX_CONCURRENCY. One
+// of these holds a full-resolution frame in memory (a 6960x4640 camera photo
+// is ~129MB) on top of whatever the decoder needs to get there, which for a
+// RAW original is a demosaic of the whole sensor image. Four at a time is what
+// separates the import that produced undecodable thumbnails from the same
+// photos decoding fine when they were walked one at a time.
+const MAX_HIGH_QUALITY_CONCURRENCY = 1;
+
 const jobs = new Map<string, Job>( );
 // Pending work is served last-in-first-out, and visible cells jump ahead of
 // prefetches. A queue served in request order is what made scrolling back feel
@@ -71,6 +87,7 @@ const jobs = new Map<string, Job>( );
 const visibleStack: Job[] = [];
 const prefetchStack: Job[] = [];
 let active = 0;
+let activeHighQuality = 0;
 
 let dirReady: Promise<void> | null = null;
 const ensureDir = ( ) => {
@@ -83,11 +100,24 @@ const takeNext = ( ): Job | null => {
   let next: Job | null = null;
   for ( let i = 0; i < stacks.length && !next; i += 1 ) {
     const stack = stacks[i];
+    // High-quality jobs passed over because one is already running. They stay
+    // queued — and go back in the order they were queued in — rather than
+    // being dropped or made to wait for the whole stack to drain.
+    const deferred: Job[] = [];
     while ( !next && stack.length > 0 ) {
       // A job can appear in a stack more than once (requested again, or
       // promoted from prefetch to visible); started/cancelled skips the dupes.
       const job = stack.pop( ) as Job;
-      if ( !job.started && !job.cancelled ) next = job;
+      if ( !job.started && !job.cancelled ) {
+        if ( isHighQuality( job ) && activeHighQuality >= MAX_HIGH_QUALITY_CONCURRENCY ) {
+          deferred.push( job );
+        } else {
+          next = job;
+        }
+      }
+    }
+    for ( let j = deferred.length - 1; j >= 0; j -= 1 ) {
+      stack.push( deferred[j] );
     }
   }
   return next;
@@ -99,14 +129,10 @@ const takeNext = ( ): Job | null => {
 // display the original uri instead.
 const GENERATION_TIMEOUT_MS = 15000;
 
-// ImageCropper.m's native side switches to a network-allowed, high-quality
-// decode at this same threshold (see highQualityDecode in createThumbnail) so
-// the Group Photos crop overlay can pull the real original from iCloud rather
-// than settle for whatever soft local rendition is already cached. That
-// download can take tens of seconds, well past GENERATION_TIMEOUT_MS -- and
-// once the JS side times out, the result is discarded even if the native call
-// later succeeds, so the cell fell back to a soft direct ph:// load forever.
-const HIGH_QUALITY_MIN_PIXEL = 8192;
+// A high-quality decode can take tens of seconds (it is allowed to pull the
+// original down from iCloud), well past GENERATION_TIMEOUT_MS -- and once the
+// JS side times out, the result is discarded even if the native call later
+// succeeds, so the cell fell back to a soft direct ph:// load forever.
 const HIGH_QUALITY_GENERATION_TIMEOUT_MS = 120000;
 
 // Distinguishes a timeout from a genuine result so the caller can log which
@@ -130,7 +156,7 @@ const raceWithTimeout = (
 
 const runJob = async ( job: Job ) => {
   let result: string | null = null;
-  const highQuality = job.maxPixel >= HIGH_QUALITY_MIN_PIXEL;
+  const highQuality = isHighQuality( job );
   const start = Date.now( );
   try {
     await ensureDir( );
@@ -175,8 +201,11 @@ const pump = ( ) => {
   if ( !job ) return;
   job.started = true;
   active += 1;
+  const highQuality = isHighQuality( job );
+  if ( highQuality ) activeHighQuality += 1;
   runJob( job ).then( ( ) => {
     active -= 1;
+    if ( highQuality ) activeHighQuality -= 1;
     pump( );
   } );
   pump( );

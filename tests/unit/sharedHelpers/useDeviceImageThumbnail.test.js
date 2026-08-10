@@ -131,6 +131,27 @@ describe( "useDeviceImageThumbnail", ( ) => {
     expect( createThumbnail ).toHaveBeenCalledTimes( 1 );
   } );
 
+  it( "runs only one full-resolution decode at a time", async ( ) => {
+    const uris = ["h1", "h2", "h3"].map( name => `ph://${name}` );
+
+    // Full-resolution decodes hold a whole frame in memory at once, so they
+    // get a slot of their own rather than the four every other size shares.
+    prefetchDeviceImageThumbnails( uris, 16384 );
+    await flush( );
+    expect( createThumbnail ).toHaveBeenCalledTimes( 1 );
+
+    // The rest are still queued, not dropped, and follow one by one.
+    await finish( "ph://h1" );
+    expect( createThumbnail ).toHaveBeenCalledTimes( 2 );
+    expect( startedUris( ) ).toContain( "ph://h3" );
+    expect( startedUris( ) ).not.toContain( "ph://h2" );
+
+    // Smaller work still fills the remaining slots while one of these runs.
+    prefetchDeviceImageThumbnails( ["ph://small"], 300 );
+    await flush( );
+    expect( startedUris( ) ).toContain( "ph://small" );
+  } );
+
   it( "regenerates a thumbnail the caller couldn't decode", async ( ) => {
     const generated = `file://${cachedThumbnailPath}/f1.jpg`;
     renderHook( ( ) => useDeviceImageThumbnail( "ph://f1", 300 ) );

@@ -1001,11 +1001,25 @@ static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
   if ( !src ) return nil;
 
   if ( maxPixel >= kFileHighQualityMinPixel ) {
-    CGImageRef full = CGImageSourceCreateImageAtIndex( src, 0, nil );
+    // Decode now rather than on first draw. Without this the CGImage that
+    // comes back carries only a promise of pixels, and for a RAW original
+    // (.CR3) that demosaic is first forced inside UIImageJPEGRepresentation --
+    // by which point the image source it needs has been released and a failure
+    // has nowhere to be reported. What landed on disk then was a JPEG
+    // container with no image in it: 762 bytes, the same 762 bytes whichever
+    // photo it came from, cached under that photo's key and undrawable from
+    // then on. Decoding here turns that into a NULL we refuse to write.
+    NSDictionary *fullOpts = @{
+      (__bridge NSString *)kCGImageSourceShouldCacheImmediately: @YES,
+    };
+    CGImageRef full =
+      CGImageSourceCreateImageAtIndex( src, 0, (__bridge CFDictionaryRef)fullOpts );
+    UIImage *image = full ? [UIImage imageWithCGImage:full] : nil;
+    if ( full ) CGImageRelease( full );
+    // Released only once the pixels are materialized: releasing it while the
+    // decode was still deferred is what left that decode with no source.
     CFRelease( src );
-    if ( !full ) return nil;
-    UIImage *image = [UIImage imageWithCGImage:full];
-    CGImageRelease( full );
+    if ( !image ) return nil;
     return clampToMaxPixel( image, maxPixel );
   }
 
