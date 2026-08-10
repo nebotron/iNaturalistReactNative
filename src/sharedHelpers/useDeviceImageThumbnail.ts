@@ -1,7 +1,7 @@
 import { exists, mkdir } from "@dr.pogodin/react-native-fs";
 import { deviceThumbnailsPath } from "appConstants/paths";
 import { useEffect, useState } from "react";
-import { Image, NativeModules } from "react-native";
+import { NativeModules } from "react-native";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "useDeviceImageThumbnail" );
@@ -127,20 +127,6 @@ const raceWithTimeout = (
   ] ).finally( ( ) => clearTimeout( timer ) );
 };
 
-// Logs the actual pixel size of a high-quality thumbnail once it lands, so a
-// still-soft crop overlay can be told apart from a decode that genuinely
-// produced full resolution -- errors and timeouts around createThumbnail were
-// previously swallowed with no trace in the logs at all.
-const logHighQualityResult = ( uri: string, maxPixel: number, resultUri: string ) => {
-  Image.getSize(
-    resultUri,
-    ( w, h ) => logger.info(
-      `high-quality thumbnail for ${uri}: requested maxPixel=${maxPixel}, got ${w}x${h}`,
-    ),
-    e => logger.warn( `high-quality thumbnail getSize failed for ${uri}: ${e}` ),
-  );
-};
-
 const runJob = async ( job: Job ) => {
   let result: string | null = null;
   const highQuality = job.maxPixel >= HIGH_QUALITY_MIN_PIXEL;
@@ -174,7 +160,6 @@ const runJob = async ( job: Job ) => {
   }
   if ( result ) {
     memoryCache.set( job.key, result );
-    if ( highQuality ) logHighQualityResult( job.uri, job.maxPixel, result );
   }
   jobs.delete( job.key );
   job.resolve( result );

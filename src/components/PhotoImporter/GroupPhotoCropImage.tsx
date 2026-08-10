@@ -6,9 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import {
-  Image, PixelRatio, StyleSheet, View,
-} from "react-native";
+import { Image, StyleSheet, View } from "react-native";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import { log } from "sharedHelpers/logger";
@@ -28,13 +26,13 @@ const MAX_SCALE = 100;
 // decimals. Below this it isn't a crop the user made.
 const CROP_EPSILON = 0.001;
 
-// Pixels the photo itself is decoded at. Set well above any single-shot phone
-// camera photo (even a 108MP sensor's long edge is well under this), so the
-// cell always draws the photo at its true native resolution; the cap only
-// exists so a stitched panorama can't decode a bitmap the size of the whole
-// grid. createThumbnail never upscales past the source's actual resolution
-// (ImageIO's kCGImageSourceThumbnailMaxPixelSize, or PHImageManager's
-// targetSize, are both ceilings), so this is a safety valve, not a target.
+// Pixels the photo file itself is generated at. Set well above any single-shot
+// camera photo (even a 108MP sensor's long edge is well under this) so the cell
+// always draws the photo at its true native resolution; the cap only exists so
+// a stitched panorama can't produce a bitmap the size of the whole grid.
+// createThumbnail never upscales past the source's actual resolution (ImageIO's
+// kCGImageSourceThumbnailMaxPixelSize, and PHImageManager's targetSize, are
+// both ceilings), so this is a safety valve, not a target.
 const FULL_RESOLUTION_MAX_PIXEL = 16384;
 
 const styles = StyleSheet.create( {
@@ -203,22 +201,6 @@ const GroupPhotoCropImage = ( {
   const framed = Boolean( framedCrop )
     && ( painted || paintedImages.has( fullResolutionUri ?? "" ) );
 
-  // React Native decodes an image to the pixel bounds of the view it's drawn
-  // in, so a photo laid out at the cell's own size is downsampled to it no
-  // matter how much detail the file holds — and the crop box then zooms into
-  // that downsample, which is why a tightly framed cell looked soft. Laying the
-  // photo out at its own pixel size and scaling that box back down to the cell
-  // leaves the decode full-resolution.
-  const fullResolutionSize = FULL_RESOLUTION_MAX_PIXEL / PixelRatio.get( );
-  const fullResolutionStyle = {
-    position: "absolute" as const,
-    left: ( size - fullResolutionSize ) / 2,
-    top: ( size - fullResolutionSize ) / 2,
-    width: fullResolutionSize,
-    height: fullResolutionSize,
-    transform: [{ scale: size / fullResolutionSize }],
-  };
-
   return (
     <View style={[styles.overlay, !framed && styles.unframed]}>
       {painted && <View style={styles.backdrop} />}
@@ -236,32 +218,39 @@ const GroupPhotoCropImage = ( {
         isSingleTapEnabled={false}
         cropPanContext={cropPanContext}
         onInteractionEnd={handleInteractionEnd}
+        // Laid out at the cell's own size, exactly like the crop editor. A
+        // source with no explicit width/height decodes at the file's full
+        // resolution regardless of how large the view is (the New
+        // Architecture's RCTImageManager passes the *source's* size to the
+        // decoder, not the view's bounds), so the detail is all there and the
+        // zoom transform samples it directly. Laying the photo out oversized to
+        // "force" a full decode bought nothing and cost the sharpness it was
+        // meant to protect: it made this a 16384px-wide layer, past the point
+        // Core Animation will render at full fidelity, which is what left a
+        // tightly framed cell looking pixelated.
         renderImage={( ) => (
-          <View style={fullResolutionStyle} pointerEvents="none">
-            <Image
-              // A cell that lands on a different photo — every cell below a
-              // deleted one, and every cell recycled by scrolling — must not
-              // reuse the native view that already painted the previous photo:
-              // it keeps that bitmap on screen until the new file decodes, so
-              // the crop overlay would frame and show the wrong photo.
-              key={fullResolutionUri}
-              testID="GroupPhotoCropImage.photo"
-              accessibilityIgnoresInvertColors
-              fadeDuration={0}
-              style={StyleSheet.absoluteFill}
-              resizeMode="contain"
-              source={{ uri: fullResolutionUri }}
-              onLoad={( ) => {
-                logger.info( `overlay image loaded: ${fullResolutionUri}` );
-                if ( fullResolutionUri ) paintedImages.add( fullResolutionUri );
-                setLoadedUri( fullResolutionUri ?? null );
-              }}
-              onError={e => logger.warn(
-                `overlay image failed to load: ${fullResolutionUri}: `
-                + `${e.nativeEvent?.error}`,
-              )}
-            />
-          </View>
+          <Image
+            // A cell that lands on a different photo — every cell below a
+            // deleted one, and every cell recycled by scrolling — must not
+            // reuse the native view that already painted the previous photo:
+            // it keeps that bitmap on screen until the new file decodes, so
+            // the crop overlay would frame and show the wrong photo.
+            key={fullResolutionUri}
+            testID="GroupPhotoCropImage.photo"
+            accessibilityIgnoresInvertColors
+            fadeDuration={0}
+            style={StyleSheet.absoluteFill}
+            resizeMode="contain"
+            source={{ uri: fullResolutionUri }}
+            onLoad={( ) => {
+              if ( fullResolutionUri ) paintedImages.add( fullResolutionUri );
+              setLoadedUri( fullResolutionUri ?? null );
+            }}
+            onError={e => logger.warn(
+              `overlay image failed to load: ${fullResolutionUri}: `
+              + `${e.nativeEvent?.error}`,
+            )}
+          />
         )}
       />
     </View>
