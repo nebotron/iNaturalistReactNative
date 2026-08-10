@@ -95,12 +95,25 @@ const takeNext = ( ): Job | null => {
 // display the original uri instead.
 const GENERATION_TIMEOUT_MS = 15000;
 
-const withTimeout = ( promise: Promise<string> ): Promise<string | null> => {
+// ImageCropper.m's native side switches to a network-allowed, high-quality
+// decode at this same threshold (see highQualityDecode in createThumbnail) so
+// the Group Photos crop overlay can pull the real original from iCloud rather
+// than settle for whatever soft local rendition is already cached. That
+// download can take tens of seconds, well past GENERATION_TIMEOUT_MS -- and
+// once the JS side times out, the result is discarded even if the native call
+// later succeeds, so the cell fell back to a soft direct ph:// load forever.
+const HIGH_QUALITY_MIN_PIXEL = 8192;
+const HIGH_QUALITY_GENERATION_TIMEOUT_MS = 120000;
+
+const withTimeout = ( promise: Promise<string>, maxPixel: number ): Promise<string | null> => {
   let timer: ReturnType<typeof setTimeout>;
+  const timeoutMs = maxPixel >= HIGH_QUALITY_MIN_PIXEL
+    ? HIGH_QUALITY_GENERATION_TIMEOUT_MS
+    : GENERATION_TIMEOUT_MS;
   return Promise.race( [
     promise,
     new Promise<null>( resolve => {
-      timer = setTimeout( ( ) => resolve( null ), GENERATION_TIMEOUT_MS );
+      timer = setTimeout( ( ) => resolve( null ), timeoutMs );
     } ),
   ] ).finally( ( ) => clearTimeout( timer ) );
 };
@@ -114,6 +127,7 @@ const runJob = async ( job: Job ) => {
       ? `file://${outputPath}`
       : ( await withTimeout(
         ImageCropper!.createThumbnail( job.uri, job.maxPixel, outputPath ),
+        job.maxPixel,
       ) ) || null;
   } catch {
     result = null;
