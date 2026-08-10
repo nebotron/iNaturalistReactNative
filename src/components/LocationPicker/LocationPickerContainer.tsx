@@ -12,15 +12,19 @@ import React, {
   useCallback,
   useEffect,
   useReducer,
+  useRef,
   useState,
 } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import type { Region } from "react-native-maps";
 import fetchPlaceName from "sharedHelpers/fetchPlaceName";
+import { log } from "sharedHelpers/logger";
 import useStore from "stores/useStore";
 
 import LocationPicker from "./LocationPicker";
 import type { LocationPickerObservation, LocationPickerPlace } from "./types";
+
+const logger = log.extend( "LocationPickerContainer" );
 
 const CROSSHAIRRADIUS = 254 / 2;
 
@@ -106,10 +110,20 @@ const reducer = ( state, action ) => {
     case "HANDLE_REGION_CHANGE":
       return {
         ...state,
-        locationName: action.locationName,
+        // The name we have describes wherever the crosshair used to be, so it
+        // can't stay on screen - or be saved - alongside the new coordinates.
+        // UPDATE_PLACE_NAME fills it back in when the geocoder answers.
+        locationName: "",
         region: action.region,
         accuracy: action.accuracy,
+        hidePlaceResults: true,
         loading: false,
+      };
+    case "UPDATE_PLACE_NAME":
+      return {
+        ...state,
+        locationName: action.locationName,
+        hidePlaceResults: true,
       };
     case "INITIALIZE_MAP": {
       const newMap = initializeMap( state, action );
@@ -173,6 +187,8 @@ const LocationPickerContainer = ( {
   const [state, dispatch] = useReducer( reducer, initialState );
   const [radiusToMapHeight, setRadiusToMapHeight] = useState<number | null>( null );
   const [mapDimensionsRatio, setMapDimensionsRatio] = useState<number | null>( null );
+  // Identifies the region change a pending place name lookup belongs to.
+  const regionChangeIdRef = useRef( 0 );
 
   const {
     accuracy,
@@ -225,13 +241,27 @@ const LocationPickerContainer = ( {
     const newAccuracy = radiusToMapHeight
       * latitudeDeltaToMeters( newRegion.latitudeDelta, newRegion.latitude );
 
-    const placeName = await fetchPlaceName( newRegion.latitude, newRegion.longitude );
+    // Commit the coordinates before geocoding. Reverse geocoding is a network
+    // call that can take up to its 2.5s timeout, and until this dispatch runs
+    // there is nothing for Save to write: a tap in that window used to save the
+    // region the user had already panned away from, or - on an observation that
+    // had no coordinates yet - save nothing at all and just close the screen,
+    // which is what makes the button look unresponsive.
+    regionChangeIdRef.current += 1;
+    const regionChangeId = regionChangeIdRef.current;
     dispatch( {
       type: "HANDLE_REGION_CHANGE",
-      locationName: placeName || "",
       region: newRegion,
       accuracy: newAccuracy,
     } );
+
+    const placeName = await fetchPlaceName( newRegion.latitude, newRegion.longitude );
+    // Lookups can resolve out of order, and a name for a region the user has
+    // already left is worse than no name at all.
+    if ( regionChangeId !== regionChangeIdRef.current ) {
+      return;
+    }
+    dispatch( { type: "UPDATE_PLACE_NAME", locationName: placeName || "" } );
   }, [isFirstMapRender, radiusToMapHeight] );
 
   const updateLocationName = useCallback( ( name: string ) => {
@@ -307,28 +337,44 @@ const LocationPickerContainer = ( {
   const onMapReady = useCallback( ( ) => dispatch( { type: "HANDLE_MAP_READY" } ), [] );
 
   const handleSave = ( ) => {
-    if ( region && hasValidMapCoordinates( region.latitude, region.longitude ) ) {
+    // Until the map reports its first region change the crosshair is sitting on
+    // initialRegion, so that's what Save has to mean - the same fallback
+    // LocationPicker uses to decide what to display.
+    const regionToSave = ( region && hasValidMapCoordinates( region.latitude, region.longitude ) )
+      ? region
+      : initialRegion;
+
+    if ( regionToSave && hasValidMapCoordinates( regionToSave.latitude, regionToSave.longitude ) ) {
       if ( onSave ) {
         // Caller owns persistence and navigation in this mode.
         onSave( {
-          latitude: region.latitude,
-          longitude: region.longitude,
+          latitude: regionToSave.latitude,
+          longitude: regionToSave.longitude,
           positional_accuracy: accuracy,
           place_guess: locationName,
         } );
         return;
       }
       const keysToUpdate = {
-        latitude: region.latitude,
-        longitude: region.longitude,
+        latitude: regionToSave.latitude,
+        longitude: regionToSave.longitude,
         positional_accuracy: accuracy,
         place_guess: locationName,
       };
       updateObservationKeys( keysToUpdate );
       setLastLocationPickerState( {
-        region,
+        region: regionToSave,
         accuracy,
         locationName,
+      } );
+    } else {
+      // The only path where Save closes the screen having written nothing, so
+      // it's the one worth hearing about if users still report the button
+      // doing nothing.
+      logger.infoWithExtra( "location_picker_save_without_region", {
+        hasRegion: !!region,
+        hasInitialRegion: !!initialRegion,
+        loading,
       } );
     }
     navigation.goBack( );

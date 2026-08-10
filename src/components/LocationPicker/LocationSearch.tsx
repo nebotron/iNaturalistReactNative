@@ -1,4 +1,3 @@
-import { useQueryClient } from "@tanstack/react-query";
 import { fetchSearchResults } from "api/search";
 import type { ApiOpts } from "api/types";
 import {
@@ -26,11 +25,7 @@ interface Props {
 const LocationSearch = ( {
   locationName = "", updateLocationName, selectPlaceResult, hidePlaceResults,
 }: Props ) => {
-  const queryClient = useQueryClient( );
   const locationInput = useRef<TextInput>( undefined );
-
-  // this seems necessary for clearing the cache between searches
-  queryClient.invalidateQueries( { queryKey: ["fetchSearchResults"] } );
 
   const {
     data: placeResults,
@@ -41,6 +36,11 @@ const LocationSearch = ( {
       sources: "places",
       fields: "place,place.display_name,place.point_geojson,place.bounding_box_geojson",
     }, optsWithAuth ),
+    // Only search while the user is typing. locationName also changes every
+    // time the geocoder names a new map region, and searching for those was a
+    // request per pan whose results were never rendered. An invalidateQueries
+    // call in this render body added one more per render, on top of that.
+    { enabled: !hidePlaceResults && locationName.length > 0 },
   );
 
   return (
