@@ -2,6 +2,7 @@ import type { ExifTags } from "@lodev09/react-native-exify";
 import * as Exify from "@lodev09/react-native-exify";
 import { toZonedTime } from "date-fns-tz";
 import { formatISONoTimezone } from "sharedHelpers/dateAndTime";
+import exifUri from "sharedHelpers/exifUri";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "parseExif.ts" );
@@ -88,9 +89,7 @@ const readExifFromMultiplePhotos = async ( photoUris: string[] ) => {
   // TODO: when uri starts with content do we need to check if we have required permission
   // Android Read content:// (Android < 10) READ_EXTERNAL_STORAGE
   // Android Read content:// (Android 10+) READ_MEDIA_IMAGES + ACCESS_MEDIA_LOCATION
-  const normalizedUris = photoUris.map( uri => ( uri.startsWith( "/" )
-    ? `file://${uri}`
-    : uri ) );
+  const normalizedUris = photoUris.map( uri => exifUri( uri ) );
 
   for ( const uri of normalizedUris.slice( 0, MAX_EXIF_PHOTOS_TO_SCAN ) ) {
     try {

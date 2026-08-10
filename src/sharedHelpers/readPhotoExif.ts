@@ -7,6 +7,7 @@ import {
 } from "@dr.pogodin/react-native-fs";
 import * as Exify from "@lodev09/react-native-exify";
 import Photo from "realmModels/Photo";
+import exifUri from "sharedHelpers/exifUri";
 import { log } from "sharedHelpers/logger";
 
 import parseMakerNote from "./exif/parseMakerNote";
@@ -59,7 +60,8 @@ const readMetadataFromFile = async (
   fileUri: string,
 ): Promise<PhotoMetadata | null> => {
   const [exif, makerNote] = await Promise.all( [
-    Exify.read( fileUri ).catch( ( reason: unknown ) => {
+    // react-native-fs takes the raw path, but Exify needs an encoded uri
+    Exify.read( exifUri( fileUri ) ).catch( ( reason: unknown ) => {
       logger.error( "Failed to read EXIF:", reason );
       return null;
     } ),

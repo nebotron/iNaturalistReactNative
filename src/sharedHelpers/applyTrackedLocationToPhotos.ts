@@ -4,6 +4,7 @@ import type Realm from "realm";
 import Observation from "realmModels/Observation";
 import Photo from "realmModels/Photo";
 import type { RealmObservation, RealmObservationPojo } from "realmModels/types";
+import exifUri from "sharedHelpers/exifUri";
 import {
   lookupImportedPhotoDeviceUri,
   normalizeDevicePhotoUri,
@@ -304,7 +305,7 @@ const applyTrackedLocationToObservation = async (
   if ( localUris.length > 0 ) {
     const tags = toGpsExifTags( match );
     try {
-      await Promise.all( localUris.map( uri => Exify.write( uri, tags ) ) );
+      await Promise.all( localUris.map( uri => Exify.write( exifUri( uri ), tags ) ) );
     } catch ( error ) {
       logger.error( "Failed to write EXIF GPS data", error );
     }

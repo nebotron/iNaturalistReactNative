@@ -59,6 +59,22 @@ describe( "readExifFromMultiplePhotos", ( ) => {
     expect( unified.longitude ).toEqual( EXPECTED_EXIF_LONGITUDE );
   } );
 
+  // An imported photo keeps its device filename, which can contain characters
+  // that make [NSURL URLWithString:] return nil, so Exify rejects the read and
+  // the observation is created with no location at all.
+  it( "should percent-encode device filenames for Exify", async ( ) => {
+    Exify.read.mockImplementation( async uri => {
+      expect( uri ).toEqual( "file:///galleryPhotos/Screen%20Shot%201.png" );
+      return MOCK_READ_EXIF_RESPONSE;
+    } );
+
+    const unified = await readExifFromMultiplePhotos(
+      ["file:///galleryPhotos/Screen Shot 1.png"],
+    );
+    expect( unified.latitude ).toEqual( EXPECTED_EXIF_LATITUDE );
+    expect( unified.longitude ).toEqual( EXPECTED_EXIF_LONGITUDE );
+  } );
+
   it( "should handle EXIF datetime with a different timezone offset", async ( ) => {
     Exify.read
       .mockRejectedValueOnce( new Error( "failed to catch test error" ) )

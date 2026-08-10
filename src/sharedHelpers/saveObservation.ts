@@ -4,6 +4,7 @@ import type Realm from "realm";
 import Observation from "realmModels/Observation";
 import type { RealmObservation } from "realmModels/types";
 import { autoApplyTrackedLocationIfMissing } from "sharedHelpers/applyTrackedLocationToPhotos";
+import exifUri from "sharedHelpers/exifUri";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "saveObservation.ts" );
@@ -33,7 +34,7 @@ const writeExifToCameraRollPhotos = async (
 
   // Update all photos taken via the app with the new fetched location.
   const results = await Promise.allSettled(
-    cameraRollUris.map( uri => Exify.write( uri, exifToWrite ) ),
+    cameraRollUris.map( uri => Exify.write( exifUri( uri ), exifToWrite ) ),
   );
   results
     .filter( ( r ): r is PromiseRejectedResult => r.status === "rejected" )

@@ -47,7 +47,7 @@ export const createObservationFromGroupedMedia = async (
 };
 
 export const appendPhotosToObservation = async (
-  photos: { image: Asset }[],
+  photos: GroupedMediaPhotoItem[],
   currentObservation: RealmObservationPojo,
   photoPosition: number,
 ): Promise<RealmObservationPojo> => {
@@ -55,7 +55,11 @@ export const appendPhotosToObservation = async (
     return currentObservation;
   }
 
-  const photoUris = photos.map( photo => photo.image.uri ).filter( Boolean ) as string[];
+  // Prefer the uncropped original, which still holds the EXIF the camera wrote
+  // (see Observation.createObservationFromGalleryPhotos).
+  const photoUris = photos
+    .map( photo => photo.image.cropOriginalUri || photo.image.uri )
+    .filter( Boolean ) as string[];
   const obsPhotos = await ObservationPhoto.createObsPhotosWithPosition(
     photos,
     { position: photoPosition, local: false },

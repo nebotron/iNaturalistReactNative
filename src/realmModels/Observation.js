@@ -550,7 +550,13 @@ class Observation extends Realm.Object {
   };
 
   static createObservationFromGalleryPhotos = async photos => {
-    const photoUris = photos.map( photo => photo?.image?.uri );
+    // Crops are baked before the import creates observations, so image.uri is
+    // usually a re-encoded JPEG by the time we get here. Read the EXIF off the
+    // untouched original the crop was framed against whenever we still have it,
+    // rather than depending on the cropper to carry every tag through.
+    const photoUris = photos.map(
+      photo => photo?.image?.cropOriginalUri || photo?.image?.uri,
+    );
     try {
       const newObservation = await readExifFromMultiplePhotos( photoUris );
       if ( !newObservation.observed_on_string ) {
