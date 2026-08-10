@@ -75,11 +75,18 @@ export const getPreviouslyUploadedDevicePhotoUrisSet = (
   return previouslyUploadedUris;
 };
 
-export const markDuplicatePhotosFromLibrary = (
+// Generic over the image so callers keep whatever they carry alongside the
+// picker's own fields (e.g. the device asset's location) rather than having it
+// typed away here.
+export const markDuplicatePhotosFromLibrary = <T extends Asset>(
   realm: Realm,
-  movedPhotos: { image: Asset }[],
+  movedPhotos: { image: T }[],
   sourceAssets: Asset[] = [],
-): { image: Asset; isDuplicateUpload: boolean }[] => {
+): {
+  image: T;
+  isDuplicateUpload: boolean;
+  originalDevicePhotoUri?: string;
+}[] => {
   const previouslyUploadedUris = getPreviouslyUploadedDevicePhotoUrisSet( realm );
 
   return movedPhotos.map( ( { image }, index ) => {

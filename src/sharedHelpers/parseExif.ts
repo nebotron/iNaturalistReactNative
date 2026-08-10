@@ -21,6 +21,14 @@ const hasCompleteUnifiedExif = ( unifiedExif: {
   && !!unifiedExif.positional_accuracy
 );
 
+// A photo whose metadata could not be read at all, as opposed to one that
+// simply carries no GPS or date. Callers surface this rather than importing a
+// photo with silently missing metadata.
+export class PhotoExifReadError extends Error {}
+Object.defineProperty( PhotoExifReadError.prototype, "name", {
+  value: "PhotoExifReadError",
+} );
+
 class UsePhotoExifDateFormatError extends Error {}
 // https://wbinnssmith.com/blog/subclassing-error-in-modern-javascript/
 Object.defineProperty( UsePhotoExifDateFormatError.prototype, "name", {
@@ -129,7 +137,16 @@ const readExifFromMultiplePhotos = async ( photoUris: string[] ) => {
         }
       }
     } catch ( reason ) {
+      // Finding no GPS or date in a photo is ordinary; failing to read the
+      // photo's metadata at all is not. Swallowing that produced an
+      // observation with no location and nothing anywhere to say why, so the
+      // caller is told instead — see PhotoExifReadError.
       logger.error( "Failed to read EXIF data from a photo:", reason );
+      throw new PhotoExifReadError(
+        reason instanceof Error
+          ? reason.message
+          : String( reason ),
+      );
     }
   }
 

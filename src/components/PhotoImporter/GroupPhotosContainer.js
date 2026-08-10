@@ -16,6 +16,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { Alert } from "react-native";
 import {
   beginLocationWriteBatch,
   endLocationWriteBatch,
@@ -33,7 +34,7 @@ import {
   addRemovedGroupPhotoUris,
   clearRemovedGroupPhotoUris,
 } from "sharedHelpers/removedGroupPhotoUris";
-import { useExitObservationFlow, useGridLayout } from "sharedHooks";
+import { useExitObservationFlow, useGridLayout, useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 
 import GroupPhotos from "./GroupPhotos";
@@ -57,6 +58,7 @@ function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
 
 const GroupPhotosContainer = ( ): Node => {
   const queryClient = useQueryClient( );
+  const { t } = useTranslation( );
   const { gridItemStyle } = useGridLayout( undefined, "fullWidth" );
   const itemHeight = gridItemStyle.height;
   const realm = useRealm( );
@@ -382,6 +384,11 @@ const GroupPhotosContainer = ( ): Node => {
     // observation at a time, instead of every batch's CV work piling up
     // concurrently.
     let prefetchChain = Promise.resolve( );
+    // Photos whose metadata could not be read are left out rather than imported
+    // without it, and reported once at the end: a location silently missing
+    // from an observation is invisible until long after the photo is gone.
+    let failedCount = 0;
+    let defaultsApplied = false;
     // One Photos-library transaction (and so one iOS consent alert) for the
     // whole import, however many batches its location writes arrive in.
     beginLocationWriteBatch( );
@@ -389,14 +396,31 @@ const GroupPhotosContainer = ( ): Node => {
       for ( let i = 0; i < groupsToImport.length; i += BATCH_SIZE ) {
         const batch = groupsToImport.slice( i, i + BATCH_SIZE );
         // eslint-disable-next-line no-await-in-loop
-        const batchResults = await Promise.all( batch.map( createObservationFromGroupedMedia ) );
-        const observationsToSave = batchResults.map( ( newObs, idx ) => ( {
-          ...( i === 0 && idx === 0
-            ? firstObservationDefaults
-            : {}
-          ),
-          ...newObs,
-        } ) );
+        const batchResults = await Promise.allSettled(
+          batch.map( createObservationFromGroupedMedia ),
+        );
+        const observationsToSave = [];
+        for ( const result of batchResults ) {
+          if ( result.status === "rejected" ) {
+            failedCount += 1;
+            logger.error(
+              "Failed to create an observation from imported media",
+              result.reason,
+            );
+          } else {
+            observationsToSave.push( {
+              ...( defaultsApplied
+                ? {}
+                : firstObservationDefaults ),
+              ...result.value,
+            } );
+            defaultsApplied = true;
+          }
+        }
+        if ( observationsToSave.length === 0 ) {
+          // eslint-disable-next-line no-continue
+          continue;
+        }
 
         // Save each observation and auto-fill tracked location for any that
         // ended up without one. Saves happen independently so a single failed
@@ -444,6 +468,16 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } finally {
       await endLocationWriteBatch( );
+    }
+
+    if ( failedCount > 0 ) {
+      logger.error(
+        `Skipped ${failedCount} of ${groupsToImport.length} item(s): metadata unreadable`,
+      );
+      Alert.alert(
+        t( "Something-went-wrong" ),
+        t( "X-photos-could-not-be-imported-with-their-metadata", { count: failedCount } ),
+      );
     }
   };
 

@@ -4,9 +4,18 @@ import ObservationPhoto from "realmModels/ObservationPhoto";
 import ObservationSound from "realmModels/ObservationSound";
 import type { RealmObservationPojo } from "realmModels/types";
 import type { GroupedPhotoCropMetadata } from "sharedHelpers/cropPhotoMetadata";
+import type { DevicePhotoLocation } from "sharedHelpers/devicePhotoLocation";
+import { firstDevicePhotoLocation } from "sharedHelpers/devicePhotoLocation";
+
+// A photo picked from the device library, as the importer carries it: the
+// picker's asset, any crop framed before import, and the location Photos holds
+// for the asset (which the photo file itself may not carry).
+export type ImportedAsset = Asset & GroupedPhotoCropMetadata & {
+  deviceLocation?: DevicePhotoLocation;
+};
 
 export interface GroupedMediaPhotoItem {
-  image: Asset & GroupedPhotoCropMetadata;
+  image: ImportedAsset;
   isDuplicateUpload?: boolean;
   originalDevicePhotoUri?: string | null;
 }
@@ -67,7 +76,11 @@ export const appendPhotosToObservation = async (
 
   const unsynced = !currentObservation?._synced_at;
   let updatedObservation = unsynced
-    ? await Observation.updateObsExifFromPhotos( photoUris, currentObservation )
+    ? await Observation.updateObsExifFromPhotos(
+      photoUris,
+      currentObservation,
+      firstDevicePhotoLocation( photos ),
+    )
     : currentObservation;
   updatedObservation = Observation.appendObsPhotos( obsPhotos, updatedObservation );
 

@@ -308,6 +308,8 @@ Could-not-delete-original-photos = Could not delete the original photos from you
 Could-not-find-a-camera-on-this-device = Could not find a camera on this device
 # Error message when none of the selected photos could be copied off the device
 Could-not-import-selected-photos = None of the selected photos could be imported. If they are stored in iCloud, connect to a stronger network and try again.
+# Error message when an import stopped partway through, so nothing was created
+Could-not-import-your-photos-nothing-was-saved = Your photos could not be imported, so nothing was saved. Please try again.
 Couldnt-create-comment = Couldn't create comment
 Couldnt-create-identification-error = Couldn't create identification { $error }
 Couldnt-create-identification-unknown-error = Couldn't create identification, unknown error.
@@ -1792,6 +1794,13 @@ X-PHOTOS =
     { $photoCount ->
         [one] 1 PHOTO
        *[other] { $photoCount } PHOTOS
+    }
+# Error message when photos were left out of an import because their metadata
+# (date, location) could not be read
+X-photos-could-not-be-imported-with-their-metadata =
+    { $count ->
+        [one] 1 photo was not imported because its date and location could not be read.
+       *[other] { $count } photos were not imported because their date and location could not be read.
     }
 # Result message after writing tracked location into photos missing GPS data
 X-Photos-Updated-With-Tracked-Location =

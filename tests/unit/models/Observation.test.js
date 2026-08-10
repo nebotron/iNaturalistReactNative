@@ -258,6 +258,62 @@ describe( "Observation", ( ) => {
       ] );
       expect( obs.observed_on_string ).toBeFalsy( );
     } );
+
+    // A camera with no GPS writes no GPS tags, and a location set by hand in
+    // the Photos app is recorded against the asset, never written back into the
+    // file we import.
+    it( "should use the device asset's location when the photo has no GPS EXIF", async ( ) => {
+      const obs = await Observation.createObservationFromGalleryPhotos( [{
+        image: {
+          uri: "file:///photo.jpg",
+          timestamp: "1754467200",
+          deviceLocation: { latitude: 38.07, longitude: -122.85 },
+        },
+      }] );
+      expect( obs.latitude ).toEqual( 38.07 );
+      expect( obs.longitude ).toEqual( -122.85 );
+    } );
+
+    it( "should prefer the device asset's location over the photo's GPS EXIF", async ( ) => {
+      Exify.read.mockResolvedValue( {
+        GPSLatitude: 1,
+        GPSLongitude: 2,
+        GPSHPositioningError: 5,
+      } );
+      const obs = await Observation.createObservationFromGalleryPhotos( [{
+        image: {
+          uri: "file:///photo.jpg",
+          deviceLocation: { latitude: 38.07, longitude: -122.85 },
+        },
+      }] );
+      expect( obs.latitude ).toEqual( 38.07 );
+      expect( obs.longitude ).toEqual( -122.85 );
+      // The camera's accuracy described the point the user moved away from
+      expect( obs.positional_accuracy ).toBeUndefined( );
+    } );
+
+    it( "should keep the EXIF accuracy when the device location matches", async ( ) => {
+      Exify.read.mockResolvedValue( {
+        GPSLatitude: 38.07,
+        GPSLongitude: 122.85,
+        GPSLongitudeRef: "W",
+        GPSHPositioningError: 5,
+      } );
+      const obs = await Observation.createObservationFromGalleryPhotos( [{
+        image: {
+          uri: "file:///photo.jpg",
+          deviceLocation: { latitude: 38.07, longitude: -122.85 },
+        },
+      }] );
+      expect( obs.positional_accuracy ).toEqual( 5 );
+    } );
+
+    it( "should throw rather than import a photo whose metadata cannot be read", async ( ) => {
+      Exify.read.mockRejectedValue( new Error( "Invalid URI" ) );
+      await expect(
+        Observation.createObservationFromGalleryPhotos( [galleryPhoto( "1754467200" )] ),
+      ).rejects.toThrow( );
+    } );
   } );
 
   describe( "deleteLocalObservation", ( ) => {

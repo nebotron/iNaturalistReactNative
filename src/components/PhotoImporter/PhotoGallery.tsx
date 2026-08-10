@@ -120,7 +120,10 @@ const PhotoGallery = ( {
         first: PAGE_SIZE,
         assetType: "All",
         after,
-        include: ["filename", "fileSize", "filepath", "imageSize"],
+        // "location" is PHAsset.location, which is where a location set by
+        // hand in the Photos app lives — the photo file itself is never
+        // rewritten, so that location is not in the EXIF we import.
+        include: ["filename", "fileSize", "filepath", "imageSize", "location"],
       } );
       const removedUris = removedGroupPhotoUrisRef.current;
       const nodes = result.edges.map( e => e.node ).filter( node => {

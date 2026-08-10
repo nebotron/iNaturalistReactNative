@@ -4,8 +4,8 @@ import {
   PROJECT_OBSERVATION_FIELDS,
   PROJECT_SUMMARY_FIELDS,
 } from "api/fields";
-import { Alert } from "react-native";
 import { formatDateStringFromTimestamp, getNowISO } from "sharedHelpers/dateAndTime";
+import { firstDevicePhotoLocation } from "sharedHelpers/devicePhotoLocation";
 import { recordUploadedDevicePhotoUrisFromObservation } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
@@ -557,23 +557,29 @@ class Observation extends Realm.Object {
     const photoUris = photos.map(
       photo => photo?.image?.cropOriginalUri || photo?.image?.uri,
     );
-    try {
-      const newObservation = await readExifFromMultiplePhotos( photoUris );
-      if ( !newObservation.observed_on_string ) {
-        newObservation.observed_on_string = galleryPhotosTimestamp( photos );
+    // Reading EXIF is allowed to find nothing — plenty of photos carry no GPS
+    // — but it is not allowed to fail silently, so this deliberately doesn't
+    // catch. The caller reports which photos couldn't be imported.
+    const newObservation = await readExifFromMultiplePhotos( photoUris );
+    // What Photos shows for the asset wins over the file's own tags: it is
+    // seeded from them and replaced when the user adjusts the location by
+    // hand, which never rewrites the file (see devicePhotoLocation.ts).
+    const deviceLocation = firstDevicePhotoLocation( photos );
+    if ( deviceLocation ) {
+      const movedFromExif = newObservation.latitude !== deviceLocation.latitude
+        || newObservation.longitude !== deviceLocation.longitude;
+      newObservation.latitude = deviceLocation.latitude;
+      newObservation.longitude = deviceLocation.longitude;
+      if ( movedFromExif ) {
+        // GPSHPositioningError described where the camera thought it was, which
+        // says nothing about a point the user placed by hand somewhere else.
+        delete newObservation.positional_accuracy;
       }
-      return Observation.new( newObservation );
-    } catch ( createObservationFromGalleryError ) {
-      logger.error(
-        "Error reading EXIF from multiple gallery photos",
-        createObservationFromGalleryError,
-      );
-      Alert.alert(
-        "Creating Observation from Gallery Error",
-        createObservationFromGalleryError.message,
-      );
-      return null;
     }
+    if ( !newObservation.observed_on_string ) {
+      newObservation.observed_on_string = galleryPhotosTimestamp( photos );
+    }
+    return Observation.new( newObservation );
   };
 
   static createObservationWithPhotos = async photos => {
@@ -583,10 +589,20 @@ class Observation extends Realm.Object {
     return newLocalObs;
   };
 
-  static updateObsExifFromPhotos = async ( photoUris, currentObservation ) => {
+  static updateObsExifFromPhotos = async (
+    photoUris,
+    currentObservation,
+    deviceLocation = null,
+  ) => {
     const updatedObs = currentObservation;
 
     const unifiedExif = await readExifFromMultiplePhotos( photoUris );
+    // What Photos holds for the asset wins over the file's own tags, for the
+    // reasons in devicePhotoLocation.ts.
+    if ( deviceLocation ) {
+      unifiedExif.latitude = deviceLocation.latitude;
+      unifiedExif.longitude = deviceLocation.longitude;
+    }
 
     if ( unifiedExif.latitude && !currentObservation.latitude ) {
       updatedObs.latitude = unifiedExif.latitude;

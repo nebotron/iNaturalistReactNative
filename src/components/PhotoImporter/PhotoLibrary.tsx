@@ -1,5 +1,5 @@
 import {
-  copyAssetsFileIOS, copyFile, mkdir, unlink,
+  copyFile, mkdir, unlink,
 } from "@dr.pogodin/react-native-fs";
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -8,6 +8,7 @@ import {
 } from "appConstants/paths";
 import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDetails";
 import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
+import type { ImportedAsset } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import {
   appendPhotosToObservation,
   buildGroupedMediaItems,
@@ -27,7 +28,7 @@ import React, {
 import {
   Alert, NativeModules, Platform,
 } from "react-native";
-import type { Asset } from "react-native-image-picker";
+import { toDevicePhotoLocation } from "sharedHelpers/devicePhotoLocation";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
@@ -49,7 +50,7 @@ const MAX_PHOTOS_ALLOWED = Platform.select( {
 
 const FROM_AICAMERA_MAX_PHOTOS_ALLOWED = 1;
 
-const nodeToSourceAsset = ( node: PhotoNode ): Asset => ( {
+const nodeToSourceAsset = ( node: PhotoNode ): ImportedAsset => ( {
   uri: node.image.uri,
   fileName: node.image.filename ?? undefined,
   width: node.image.width,
@@ -58,6 +59,9 @@ const nodeToSourceAsset = ( node: PhotoNode ): Asset => ( {
   type: "image/jpeg",
   id: node.id ?? undefined,
   timestamp: String( node.timestamp ),
+  // Carried separately from the file: a location set by hand in Photos lives
+  // on the asset, not in the photo's EXIF (see devicePhotoLocation.ts).
+  deviceLocation: toDevicePhotoLocation( node.location ) ?? undefined,
 } );
 
 const PhotoLibrary = ( ) => {
@@ -166,19 +170,20 @@ const PhotoLibrary = ( ) => {
             ) => Promise<{ uri: string; attempts: number }>;
           };
         };
-        if ( ImageCropper?.exportPHAsset ) {
-          const { attempts } = await ImageCropper.exportPHAsset( node.image.uri, destPath );
-          // A retry succeeding is itself worth knowing: it confirms failed
-          // imports are a slow/flaky iCloud download, not a hard failure.
-          // The ph:// URI identifies the user's photo and belongs in a shared
-          // log no more than the coordinates do; the attempt count is the
-          // information.
-          if ( attempts > 1 ) {
-            logger.info( `Exported a photo after ${attempts} attempt(s)` );
-          }
-        } else {
-          // Fallback if native module unavailable (re-encodes, may lose EXIF).
-          await copyAssetsFileIOS( node.image.uri, destPath, 99999, 99999 );
+        // No fallback: copyAssetsFileIOS re-encodes, which silently drops EXIF,
+        // and a photo imported without its metadata is worse than one the user
+        // is told didn't import. copyNodeOrNull counts this as a failed photo.
+        if ( !ImageCropper?.exportPHAsset ) {
+          throw new Error( "ImageCropper.exportPHAsset is unavailable" );
+        }
+        const { attempts } = await ImageCropper.exportPHAsset( node.image.uri, destPath );
+        // A retry succeeding is itself worth knowing: it confirms failed
+        // imports are a slow/flaky iCloud download, not a hard failure.
+        // The ph:// URI identifies the user's photo and belongs in a shared
+        // log no more than the coordinates do; the attempt count is the
+        // information.
+        if ( attempts > 1 ) {
+          logger.info( `Exported a photo after ${attempts} attempt(s)` );
         }
       } else {
         // On Android 10+, content:// URIs served by MediaStore strip GPS EXIF
@@ -380,6 +385,14 @@ const PhotoLibrary = ( ) => {
       navigation.navigate( "GroupPhotos" );
     } catch ( error ) {
       logger.error( "Error importing photos from camera roll", error );
+      // Dropping the user out of the flow with no explanation is
+      // indistinguishable from the import having been cancelled — and when the
+      // cause is unreadable metadata, from an import that quietly lost the
+      // photo's date and location.
+      Alert.alert(
+        t( "Something-went-wrong" ),
+        t( "Could-not-import-your-photos-nothing-was-saved" ),
+      );
       exitObservationFlow( );
     }
   }, [
