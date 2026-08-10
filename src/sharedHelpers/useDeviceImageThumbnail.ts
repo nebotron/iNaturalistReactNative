@@ -1,7 +1,10 @@
 import { exists, mkdir } from "@dr.pogodin/react-native-fs";
 import { deviceThumbnailsPath } from "appConstants/paths";
 import { useEffect, useState } from "react";
-import { NativeModules } from "react-native";
+import { Image, NativeModules } from "react-native";
+import { log } from "sharedHelpers/logger";
+
+const logger = log.extend( "useDeviceImageThumbnail" );
 
 interface ImageCropperModule {
   createThumbnail: (
@@ -105,34 +108,74 @@ const GENERATION_TIMEOUT_MS = 15000;
 const HIGH_QUALITY_MIN_PIXEL = 8192;
 const HIGH_QUALITY_GENERATION_TIMEOUT_MS = 120000;
 
-const withTimeout = ( promise: Promise<string>, maxPixel: number ): Promise<string | null> => {
+// Distinguishes a timeout from a genuine result so the caller can log which
+// one happened -- both used to just come back as null, which made a timed-out
+// high-quality decode indistinguishable from one that legitimately failed.
+const raceWithTimeout = (
+  promise: Promise<string>,
+  maxPixel: number,
+): Promise<{ value: string | null; timedOut: boolean }> => {
   let timer: ReturnType<typeof setTimeout>;
   const timeoutMs = maxPixel >= HIGH_QUALITY_MIN_PIXEL
     ? HIGH_QUALITY_GENERATION_TIMEOUT_MS
     : GENERATION_TIMEOUT_MS;
   return Promise.race( [
-    promise,
-    new Promise<null>( resolve => {
-      timer = setTimeout( ( ) => resolve( null ), timeoutMs );
+    promise.then( value => ( { value, timedOut: false } ) ),
+    new Promise<{ value: null; timedOut: true }>( resolve => {
+      timer = setTimeout( ( ) => resolve( { value: null, timedOut: true } ), timeoutMs );
     } ),
   ] ).finally( ( ) => clearTimeout( timer ) );
 };
 
+// Logs the actual pixel size of a high-quality thumbnail once it lands, so a
+// still-soft crop overlay can be told apart from a decode that genuinely
+// produced full resolution -- errors and timeouts around createThumbnail were
+// previously swallowed with no trace in the logs at all.
+const logHighQualityResult = ( uri: string, maxPixel: number, resultUri: string ) => {
+  Image.getSize(
+    resultUri,
+    ( w, h ) => logger.info(
+      `high-quality thumbnail for ${uri}: requested maxPixel=${maxPixel}, got ${w}x${h}`,
+    ),
+    e => logger.warn( `high-quality thumbnail getSize failed for ${uri}: ${e}` ),
+  );
+};
+
 const runJob = async ( job: Job ) => {
   let result: string | null = null;
+  const highQuality = job.maxPixel >= HIGH_QUALITY_MIN_PIXEL;
+  const start = Date.now( );
   try {
     await ensureDir( );
     const outputPath = `${deviceThumbnailsPath}/${hashKey( job.key )}.jpg`;
-    result = await exists( outputPath )
-      ? `file://${outputPath}`
-      : ( await withTimeout(
+    if ( await exists( outputPath ) ) {
+      result = `file://${outputPath}`;
+    } else {
+      const { value, timedOut } = await raceWithTimeout(
         ImageCropper!.createThumbnail( job.uri, job.maxPixel, outputPath ),
         job.maxPixel,
-      ) ) || null;
-  } catch {
+      );
+      if ( timedOut && highQuality ) {
+        logger.warn(
+          `createThumbnail timed out after ${Date.now( ) - start}ms for ${job.uri}, `
+          + `maxPixel=${job.maxPixel}`,
+        );
+      }
+      result = value || null;
+    }
+  } catch ( e ) {
+    if ( highQuality ) {
+      logger.warn(
+        `createThumbnail failed after ${Date.now( ) - start}ms for ${job.uri}, `
+        + `maxPixel=${job.maxPixel}: ${e}`,
+      );
+    }
     result = null;
   }
-  if ( result ) memoryCache.set( job.key, result );
+  if ( result ) {
+    memoryCache.set( job.key, result );
+    if ( highQuality ) logHighQualityResult( job.uri, job.maxPixel, result );
+  }
   jobs.delete( job.key );
   job.resolve( result );
 };
