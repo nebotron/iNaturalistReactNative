@@ -857,15 +857,58 @@ RCT_EXPORT_METHOD( updateAssetLocations
   } );
 }
 
+// Matches the ph:// branch's highQualityDecode threshold in createThumbnail:
+// below this, a request is a grid tile that wants speed; at or above it, only
+// the Group Photos crop overlay is asking, and it wants real detail.
+static const CGFloat kFileHighQualityMinPixel = 8192;
+
+// Scales an already-decoded image down to maxPixel on its longest side, so
+// the safety valve in FULL_RESOLUTION_MAX_PIXEL (JS) still caps memory for a
+// pathological source (a stitched panorama, say) even on the full-decode path.
+static UIImage *clampToMaxPixel( UIImage *image, CGFloat maxPixel )
+{
+  CGFloat longest = MAX( image.size.width * image.scale, image.size.height * image.scale );
+  if ( longest <= maxPixel ) return image;
+  CGFloat scale = maxPixel / longest;
+  CGSize newSize = CGSizeMake( image.size.width * scale, image.size.height * scale );
+  UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+  format.scale = 1;
+  UIGraphicsImageRenderer *renderer =
+    [[UIGraphicsImageRenderer alloc] initWithSize:newSize format:format];
+  return [renderer imageWithActions:^( UIGraphicsImageRendererContext *context ) {
+    [image drawInRect:CGRectMake( 0, 0, newSize.width, newSize.height )];
+  }];
+}
+
 // Loads an EXIF-oriented image downscaled to maxPixel on its longest side via
 // ImageIO, which subsamples during decode instead of decoding the full
 // resolution. Detection outputs normalized coords, so a downscaled input
 // yields the same bounds at a fraction of the decode cost.
+//
+// CGImageSourceCreateThumbnailAtIndex is a speed-optimized API: for a RAW
+// file (.CR3, etc.) it commonly hands back the file's embedded preview JPEG
+// rather than truly demosaicing the sensor data, even with
+// kCGImageSourceCreateThumbnailFromImageAlways set -- the dimensions can
+// still match the sensor, but the actual detail is whatever quality the
+// camera baked into that preview. That's what kept a RAW photo's crop
+// overlay looking soft/pixelated no matter how high maxPixel was raised.
+// At or above kFileHighQualityMinPixel, decode the image data directly
+// instead of asking for a thumbnail.
 static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
 {
   NSURL *url = [NSURL fileURLWithPath:path];
   CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)url, nil );
   if ( !src ) return nil;
+
+  if ( maxPixel >= kFileHighQualityMinPixel ) {
+    CGImageRef full = CGImageSourceCreateImageAtIndex( src, 0, nil );
+    CFRelease( src );
+    if ( !full ) return nil;
+    UIImage *image = [UIImage imageWithCGImage:full];
+    CGImageRelease( full );
+    return clampToMaxPixel( image, maxPixel );
+  }
+
   NSDictionary *opts = @{
     (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
     (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform:   @YES,
@@ -939,7 +982,7 @@ RCT_EXPORT_METHOD( createThumbnail
     // cached preview Photos already had -- the crop overlay's "full
     // resolution" request was silently getting a soft, low-quality rendition
     // no matter how high the JS-side cap was raised.
-    BOOL highQualityDecode = maxDim >= 8192;
+    BOOL highQualityDecode = maxDim >= kFileHighQualityMinPixel;
 
     PHImageRequestOptions *opts = [[PHImageRequestOptions alloc] init];
     // Never wait on iCloud for a grid tile. Asking for the high-quality format
