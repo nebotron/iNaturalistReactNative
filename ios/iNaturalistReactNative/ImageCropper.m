@@ -896,9 +896,11 @@ RCT_EXPORT_METHOD( detectSubjectBounds
 // Writes a downscaled JPEG thumbnail (maxPixel px on the longest side) of a
 // device photo to outputPath, so a photo grid can scroll without decoding
 // full-resolution originals into every cell. ph:// PHAssets go through
-// PHImageManager, using only renditions already on the device — never an
-// iCloud download; file:// paths use ImageIO subsampling. Resolves a file://
-// uri, or rejects on failure.
+// PHImageManager: grid-tile requests use only renditions already on the
+// device and never an iCloud download, but the crop overlay's high-quality
+// request (see highQualityDecode below) will fetch the original from iCloud
+// if that's what it takes to get real full-resolution detail; file:// paths
+// use ImageIO subsampling. Resolves a file:// uri, or rejects on failure.
 RCT_EXPORT_METHOD( createThumbnail
                   : ( NSString * )inputPath maxPixel
                   : ( nonnull NSNumber * )maxPixel outputPath
@@ -947,7 +949,14 @@ RCT_EXPORT_METHOD( createThumbnail
     // (Delete Unfaved is nothing but old photos) simply never renders. The
     // locally cached rendition Photos keeps for offloaded assets is what the
     // Photos app itself shows in its grid, and it is plenty for a tile.
-    opts.networkAccessAllowed = NO;
+    //
+    // The crop overlay is the opposite case: it's one deliberate request the
+    // user is actively waiting on to frame a crop, not one of hundreds in a
+    // scroll list, and ResizeModeExact/HighQualityFormat can't produce real
+    // full-resolution detail from a local rendition that was never that big
+    // to begin with -- for an optimized/offloaded asset, disallowing network
+    // access there just serves the same soft preview the tile path uses.
+    opts.networkAccessAllowed = highQualityDecode;
     opts.deliveryMode         = highQualityDecode
       ? PHImageRequestOptionsDeliveryModeHighQualityFormat
       : PHImageRequestOptionsDeliveryModeOpportunistic;

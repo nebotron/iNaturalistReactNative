@@ -18,7 +18,7 @@ const { ImageCropper } = NativeModules as { ImageCropper?: ImageCropperModule };
 // is what made the Group Photos crop overlay stay pixelated even after
 // ImageCropper.m started decoding accurately -- the on-disk cache from before
 // that fix kept getting served).
-const CACHE_VERSION = 2;
+const CACHE_VERSION = 3;
 
 const cacheKey = ( uri: string, maxPixel: number ) => `${uri}:${maxPixel}:v${CACHE_VERSION}`;
 
