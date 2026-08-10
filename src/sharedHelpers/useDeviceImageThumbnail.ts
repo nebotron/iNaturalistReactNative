@@ -13,7 +13,14 @@ interface ImageCropperModule {
 
 const { ImageCropper } = NativeModules as { ImageCropper?: ImageCropperModule };
 
-const cacheKey = ( uri: string, maxPixel: number ) => `${uri}:${maxPixel}`;
+// Bump when the native decode changes, so thumbnails already on disk under the
+// old key are treated as misses and regenerated rather than reused stale (this
+// is what made the Group Photos crop overlay stay pixelated even after
+// ImageCropper.m started decoding accurately -- the on-disk cache from before
+// that fix kept getting served).
+const CACHE_VERSION = 2;
+
+const cacheKey = ( uri: string, maxPixel: number ) => `${uri}:${maxPixel}:v${CACHE_VERSION}`;
 
 // djb2 → stable hex filename so a photo's thumbnail is reused across scroll
 // recycling and app launches (uris can be long ph:// / file:// paths).
