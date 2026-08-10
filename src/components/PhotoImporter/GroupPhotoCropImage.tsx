@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
+import { log } from "sharedHelpers/logger";
 import {
   normalizedCropToImageZoomTransform,
 } from "sharedHelpers/normalizedCropToImageZoomTransform";
@@ -18,6 +19,8 @@ import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
 import useThumbnailSubjectDetection from "sharedHelpers/useThumbnailSubjectDetection";
 import colors from "styles/tailwindColors";
+
+const logger = log.extend( "GroupPhotoCropImage" );
 
 const MAX_SCALE = 100;
 // Crops round-trip through a screen-space transform, so a gesture that only
@@ -249,9 +252,14 @@ const GroupPhotoCropImage = ( {
               resizeMode="contain"
               source={{ uri: fullResolutionUri }}
               onLoad={( ) => {
+                logger.info( `overlay image loaded: ${fullResolutionUri}` );
                 if ( fullResolutionUri ) paintedImages.add( fullResolutionUri );
                 setLoadedUri( fullResolutionUri ?? null );
               }}
+              onError={e => logger.warn(
+                `overlay image failed to load: ${fullResolutionUri}: `
+                + `${e.nativeEvent?.error}`,
+              )}
             />
           </View>
         )}
