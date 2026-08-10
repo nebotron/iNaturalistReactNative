@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { Image } from "react-native";
+import { log } from "sharedHelpers/logger";
 
 import { getAnimalCrop } from "./animalCropLog";
 import detectSubjectInImage from "./detectSubjectInImage";
 import type { NormalizedCrop } from "./normalizedCropTypes";
+
+const logger = log.extend( "useThumbnailSubjectDetection" );
 
 export interface ThumbnailDetection {
   // Null while a saved crop made detection unnecessary
@@ -137,6 +140,17 @@ export const resolveThumbnailSubjectDetection = (
       const loggedCrop = getAnimalCrop( cropSourceUri );
       crop = loggedCrop ?? await detectSubjectInImage( thumbnailUri, size.w, size.h );
       cropCache.set( cropSourceUri, crop );
+      // Diagnosing a "pixelated crop overlay" report that survived several
+      // decode-quality fixes: a subject occupying a small fraction of a
+      // large source image is inherently soft once cropped tight and zoomed
+      // to fill the screen, no matter how good the decode is. This makes
+      // that distinguishable from an actual decode/framing bug.
+      logger.info(
+        `crop for ${cropSourceUri}: image ${size.w}x${size.h}, `
+        + `normalized crop x=${crop.x.toFixed( 3 )} y=${crop.y.toFixed( 3 )} `
+        + `w=${crop.w.toFixed( 3 )} h=${crop.h.toFixed( 3 )} `
+        + `(~${Math.round( crop.w * size.w )}x${Math.round( crop.h * size.h )}px)`,
+      );
     }
     return { crop, imageWidth: size.w, imageHeight: size.h };
   } ).catch( ( ) => null ).finally( ( ) => {
