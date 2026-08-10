@@ -647,6 +647,7 @@
   "Photo-location": "Photo location",
   "Photo-metadata": "Photo metadata",
   "Photos": "Photos",
+  "Photos-stopped-responding-restart-the-app": "Photos stopped responding on this device, so nothing was deleted. Close and reopen the app, then try again.",
   "Photos-you-take-will-appear-here": "Photos you take will appear here",
   "Please-allow-Camera-Access": "Please allow Camera Access",
   "Please-allow-Location-Access": "Please allow Location Access",

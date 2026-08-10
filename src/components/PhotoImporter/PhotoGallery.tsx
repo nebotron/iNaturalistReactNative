@@ -200,11 +200,6 @@ const PhotoGallery = ( {
     setImportingCount( selected.length );
     setImportedCount( 0 );
     setFailedCount( 0 );
-    // Nothing else logs the tap itself, so a slow import was indistinguishable
-    // in the logs from a tap that never registered — the gap before the first
-    // copy error was all we had to go on. Bracket the import so the next
-    // report can be answered from the logs alone.
-    logger.info( `Done tapped: importing ${selected.length} selected photo(s)` );
     const startedAt = Date.now( );
     // An import the app never comes back from — see photoImportMarker.ts. The
     // marker is reported by the next launch, not here.
@@ -233,9 +228,17 @@ const PhotoGallery = ( {
         setImportedCount( completed );
         setFailedCount( failed );
       } );
-      logger.info(
-        `Import of ${selected.length} photo(s) settled in ${Date.now( ) - startedAt}ms`,
-      );
+      // The tap used to be bracketed by a line on the way in and a line on the
+      // way out, which was 138 of the app log's 889 entries over five days and
+      // every one of them said the same thing: a local batch settles in ~150ms.
+      // A wedge is already covered from both ends — photo_import_stalled below
+      // fires at 30s, and an import the process never returns from is reported
+      // by the next launch's marker — so only a slow import that did finish is
+      // news.
+      const ms = Date.now( ) - startedAt;
+      if ( ms > 3000 ) {
+        logger.info( `Import of ${selected.length} photo(s) settled in ${ms}ms` );
+      }
     } finally {
       // The import reached an end, however badly, so it is not one of the ones
       // that vanish with the process.

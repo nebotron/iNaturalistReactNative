@@ -1123,6 +1123,8 @@ Photo-location = Photo location
 # Header for a sheet listing a photo's full EXIF metadata
 Photo-metadata = Photo metadata
 Photos = Photos
+# Error message when the iOS Photos library has stopped answering write requests, so nothing was deleted
+Photos-stopped-responding-restart-the-app = Photos stopped responding on this device, so nothing was deleted. Close and reopen the app, then try again.
 Photos-you-take-will-appear-here = Photos you take will appear here
 # Title of screen asking for permission to access the camera when access was denied
 Please-allow-Camera-Access = Please allow Camera Access

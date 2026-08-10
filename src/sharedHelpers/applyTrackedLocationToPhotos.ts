@@ -163,11 +163,12 @@ const flushLocationWrites = async ( ) => {
   const updates = batch.map( ( { phUri, latitude, longitude } ) => (
     { phUri, latitude, longitude }
   ) );
+  const startedAt = Date.now( );
   try {
     // Serialized with deletions (and other location updates) so only one
     // native Photos-library write is ever in flight — see
     // enqueuePhotoLibraryWrite in promptDeleteOriginalDevicePhotos.ts.
-    await enqueuePhotoLibraryWrite( ( holdChainUntil ): Promise<unknown> => {
+    const result = await enqueuePhotoLibraryWrite( ( holdChainUntil ): Promise<unknown> => {
       const nativeWrite: Promise<unknown> = ImageCropper?.updateAssetLocations
         ? ImageCropper.updateAssetLocations( updates )
         // Older builds without the batched native method still work, one
@@ -189,6 +190,18 @@ const flushLocationWrites = async ( ) => {
         `updateAssetLocations for ${updates.length} photo(s)`,
       );
     } );
+    // Only failures were ever logged here, so a delete that hung right after a
+    // location write was indistinguishable in the log from one that hung out of
+    // nowhere — and a location write is the other transaction that can leave
+    // PhotoKit holding the library. One line per batch (they coalesce to a
+    // handful a day), carrying whether a transaction was actually opened.
+    const updated = ( result as { updated?: number } | undefined )?.updated ?? 0;
+    if ( updated > 0 ) {
+      logger.info(
+        `updateAssetLocations wrote ${updated} of ${updates.length} `
+        + `photo(s) in ${Date.now( ) - startedAt}ms`,
+      );
+    }
   } catch ( error ) {
     reportSuppressed( "failed", String( error instanceof Error
       ? error.message

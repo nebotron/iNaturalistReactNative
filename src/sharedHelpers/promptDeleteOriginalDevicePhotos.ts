@@ -197,6 +197,15 @@ const hangReportMs = ( transactions: number ) => Math.min(
 // Returned by the race below when the OS hasn't answered inside UI_WAIT_MS.
 const STILL_PENDING = { stillPending: true } as const;
 
+// The native module refused to open a transaction because the last one it
+// opened has never come back (see the write gate in ImageCropper.m). Not a
+// failure of this deletion: nothing was attempted, and nothing will be until
+// the app is relaunched, so it needs its own report and its own message rather
+// than a third copy of "Something went wrong".
+const isLibraryBusy = ( error: unknown ): boolean => (
+  ( error as { code?: string } | undefined )?.code === "PHOTOS_LIBRARY_BUSY"
+);
+
 const performDeleteOriginalDevicePhotos = async (
   photoUris: string[],
   options: DeleteOriginalDevicePhotosOptions = {},
@@ -462,6 +471,23 @@ const performDeleteOriginalDevicePhotos = async (
     if ( appCreatedDeleted > 0 ) forgetAppCreatedPhotoAssets( appCreatedUris );
     return { deleted: deleted ?? requested, requested, succeeded: true };
   } catch ( deleteError ) {
+    if ( isLibraryBusy( deleteError ) ) {
+      // Comes back in milliseconds, so the user isn't left waiting — and the
+      // 150s this would otherwise have spent stacked on a wedged
+      // photolibraryd is exactly what made the Aug 9 log's second and third
+      // attempts as useless as the first.
+      logger.warnWithExtra( "photo_delete_library_busy", {
+        requested,
+        detail: String( ( deleteError as { message?: string } )?.message ?? deleteError ),
+      } );
+      if ( options.userInitiated ) {
+        Alert.alert(
+          i18next.t( "Something-went-wrong" ),
+          i18next.t( "Photos-stopped-responding-restart-the-app" ),
+        );
+      }
+      return { deleted: 0, requested, succeeded: false };
+    }
     // As of iOS 26, PHPhotoLibrary.performChanges' completion handler for
     // deleteAssets can simply never fire — no confirmation dialog, no error,
     // no library change (confirmed via a native PHPhotoLibraryChangeObserver

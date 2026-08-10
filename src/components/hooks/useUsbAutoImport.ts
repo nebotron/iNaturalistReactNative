@@ -29,6 +29,9 @@ const logger = log.extend( "useUsbAutoImport" );
 // How often to re-check the watched folder while the app is foregrounded.
 const SCAN_INTERVAL_MS = 10_000;
 
+// Whether this process has already said the user never picked a folder.
+let loggedNoFolderBookmark = false;
+
 // Safety net so a single native call that never resolves (a stuck copy or
 // Photos import) can't freeze the whole run — that file is counted as failed
 // and the loop moves on.
@@ -325,7 +328,12 @@ const useUsbAutoImport = ( ) => {
                 + `(resolved=${d.resolved}, reachable=${d.reachable}, stale=${d.stale})`,
               "debug",
             );
-          } else {
+          } else if ( !loggedNoFolderBookmark ) {
+            // Once per process. It explains a feature that is silently doing
+            // nothing, which is worth saying — but it fires on every
+            // foreground, and thirty identical copies say nothing the first
+            // one didn't.
+            loggedNoFolderBookmark = true;
             logDiag( "not polling: no folder bookmark saved (folder never picked in Settings)" );
           }
           return;

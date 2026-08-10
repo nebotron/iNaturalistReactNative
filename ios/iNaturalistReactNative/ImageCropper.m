@@ -47,6 +47,88 @@ static void inatAfterDismissalSettles( void ( ^work )( void ) )
 // below keeps its full window.
 static const NSTimeInterval kInatPendingDeleteWatchdogSeconds = 150;
 
+// ─── Photos-library write gate ──────────────────────────────────────────────
+//
+// performChanges' completion handler can simply stop firing (iOS 26; Apple
+// Developer Forums 806349), and the transaction it opened stays open in
+// photolibraryd afterwards — the watchdog above only gives up waiting for it,
+// it cannot cancel it. The Aug 9 app log shows what happens next: a 47-asset
+// deletion whose first chunk never called back, the watchdog rejecting it at
+// 150s, and a new deletion issued 13ms later that photoDeletionContext caught
+// stacking on the still-running walk (walk=active chunkMs=150649). That one
+// hung too, and so did a *one*-asset deletion two launches later — which also
+// retires the chunk-size theory these constants were tuned on: once the library
+// stops answering, transaction size stops mattering.
+//
+// So a write issued while the library is silent buys nothing and costs the user
+// 150s of waiting, on top of stacking transactions on a wedged photolibraryd —
+// the one thing this file already knows makes the wedge worse. Refuse it
+// instead, immediately, and say how long the library has been silent so JS can
+// tell the user something true.
+//
+// The gate is opened on the main queue but closed from performChanges'
+// completion handler, which PhotoKit runs on a queue of its own choosing, so
+// every access takes the lock.
+static NSUInteger inatPhotoWriteGeneration = 0;
+static NSString *inatOutstandingPhotoWriteLabel = nil;
+static NSDate *inatOutstandingPhotoWriteStartedAt = nil;
+static NSObject *inatPhotoWriteLock = nil;
+
+static NSObject *inatPhotoWriteGateLock( void )
+{
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{ inatPhotoWriteLock = [NSObject new]; } );
+  return inatPhotoWriteLock;
+}
+
+static NSUInteger inatPhotoWriteBegan( NSString *label )
+{
+  @synchronized( inatPhotoWriteGateLock( ) ) {
+    inatPhotoWriteGeneration += 1;
+    inatOutstandingPhotoWriteLabel = label;
+    inatOutstandingPhotoWriteStartedAt = [NSDate date];
+    return inatPhotoWriteGeneration;
+  }
+}
+
+// Only the write that is still outstanding can open the gate again. A
+// completion handler that fires long after the change observer already answered
+// for its transaction would otherwise clear a *later* write's gate and let a
+// second transaction stack behind it — the exact thing the gate exists to stop.
+// Pass 0 to clear whatever is outstanding, from evidence other than the
+// callback (see photoLibraryDidChange:).
+static void inatPhotoWriteEnded( NSUInteger generation )
+{
+  @synchronized( inatPhotoWriteGateLock( ) ) {
+    if ( generation != 0 && generation != inatPhotoWriteGeneration ) { return; }
+    inatOutstandingPhotoWriteLabel = nil;
+    inatOutstandingPhotoWriteStartedAt = nil;
+  }
+}
+
+// What the library still owes us, or nil when it is free to write to.
+static NSString *inatOutstandingPhotoWriteLabelCopy( void )
+{
+  @synchronized( inatPhotoWriteGateLock( ) ) {
+    return inatOutstandingPhotoWriteLabel;
+  }
+}
+
+// Nil when the library is free to write to; otherwise why this write wasn't
+// issued, in words JS can pass on.
+static NSString *inatOutstandingPhotoWrite( void )
+{
+  @synchronized( inatPhotoWriteGateLock( ) ) {
+    if ( !inatOutstandingPhotoWriteLabel ) { return nil; }
+    return [NSString stringWithFormat:
+      @"Photos has not answered %@ for %.0fs; it stops answering every write "
+      @"after that, so this one was not issued",
+      inatOutstandingPhotoWriteLabel,
+      [[NSDate date] timeIntervalSinceDate:
+        ( inatOutstandingPhotoWriteStartedAt ?: [NSDate date] )]];
+  }
+}
+
 // How many assets we didn't create go into the *first* prompted transaction,
 // and how much bigger each one after it gets.
 //
@@ -731,6 +813,12 @@ RCT_EXPORT_METHOD( updateAssetLocation
       ? [phUri substringFromIndex:5]
       : phUri;
 
+    NSString *busy = inatOutstandingPhotoWrite( );
+    if ( busy ) {
+      reject( @"PHOTOS_LIBRARY_BUSY", busy, nil );
+      return;
+    }
+
     PHFetchResult<PHAsset *> *result =
       [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
     PHAsset *asset = result.firstObject;
@@ -748,10 +836,12 @@ RCT_EXPORT_METHOD( updateAssetLocation
                                                        longitude:[longitude doubleValue]];
 
     void ( ^doUpdate )( void ) = ^{
+      NSUInteger writeToken = inatPhotoWriteBegan( @"updateAssetLocation(1)" );
       [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
         PHAssetChangeRequest *changeRequest = [PHAssetChangeRequest changeRequestForAsset:asset];
         changeRequest.location = location;
       } completionHandler:^( BOOL success, NSError *error ) {
+        inatPhotoWriteEnded( writeToken );
         if ( success ) {
           resolve( @YES );
         } else {
@@ -783,6 +873,12 @@ RCT_EXPORT_METHOD( updateAssetLocations
                   : ( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
+    NSString *busy = inatOutstandingPhotoWrite( );
+    if ( busy ) {
+      reject( @"PHOTOS_LIBRARY_BUSY", busy, nil );
+      return;
+    }
+
     NSMutableArray<NSString *> *ids = [NSMutableArray array];
     for ( NSDictionary *update in updates ) {
       NSString *phUri = update[@"phUri"];
@@ -830,6 +926,9 @@ RCT_EXPORT_METHOD( updateAssetLocations
     }
 
     void ( ^doUpdate )( void ) = ^{
+      NSUInteger writeToken = inatPhotoWriteBegan(
+        [NSString stringWithFormat:@"updateAssetLocations(%lu)",
+          ( unsigned long )targets.count] );
       [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
         [targets enumerateObjectsUsingBlock:^( PHAsset *asset, NSUInteger idx, BOOL *stop ) {
           PHAssetChangeRequest *changeRequest =
@@ -837,6 +936,7 @@ RCT_EXPORT_METHOD( updateAssetLocations
           changeRequest.location = locations[idx];
         }];
       } completionHandler:^( BOOL success, NSError *error ) {
+        inatPhotoWriteEnded( writeToken );
         if ( success ) {
           resolve( @{ @"updated": @( targets.count ), @"requested": @( updates.count ) } );
         } else {
@@ -1419,12 +1519,16 @@ RCT_EXPORT_METHOD( photoDeletionContext
 
     NSString *info = [NSString stringWithFormat:
       @"appState=%ld hasWindowScene=%d sceneState=%ld fgActiveScenes=%lu authStatus=%ld "
-      @"windows=%lu requested=%lu fetched=%lu %@ vcChain=%@ windowList=[%@]",
+      @"windows=%lu requested=%lu fetched=%lu %@ outstanding=%@ vcChain=%@ windowList=[%@]",
       ( long )UIApplication.sharedApplication.applicationState,
       hasScene, sceneState, ( unsigned long )foregroundActiveScenes, auth,
       ( unsigned long )UIApplication.sharedApplication.windows.count,
       ( unsigned long )ids.count, ( unsigned long )fetchedCount,
-      walk, vcChain, [self inatWindowInventory]];
+      // Which transaction the library still owes us, if any. The walk above
+      // only covers deletions; a location write that never came back is the
+      // other way in, and nothing reported it.
+      walk, inatOutstandingPhotoWriteLabelCopy( ) ?: @"none",
+      vcChain, [self inatWindowInventory]];
     resolve( info );
   } );
 }
@@ -1576,6 +1680,12 @@ RCT_EXPORT_METHOD( deletePhotoAssets
                   : ( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
+    NSString *busy = inatOutstandingPhotoWrite( );
+    if ( busy ) {
+      reject( @"PHOTOS_LIBRARY_BUSY", busy, nil );
+      return;
+    }
+
     NSMutableArray<NSString *> *ids = [NSMutableArray array];
     for ( NSString *u in phUris ) {
       [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
@@ -1776,9 +1886,13 @@ RCT_EXPORT_METHOD( deletePhotoAssets
         // stalled rather than the size the walk started at.
         self->_promptedWalkChunkSize = range.length;
         self->_promptedWalkChunkStartedAt = [NSDate date];
+        NSUInteger writeToken = inatPhotoWriteBegan(
+          [NSString stringWithFormat:@"deleteAssets(%lu)",
+            ( unsigned long )range.length] );
         [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
           [PHAssetChangeRequest deleteAssets:chunk];
         } completionHandler:^( BOOL success, NSError *error ) {
+          inatPhotoWriteEnded( writeToken );
           if ( !success ) {
             // Whatever earlier chunks deleted is really deleted, so report a
             // partial deletion rather than failing the lot. JS reports the count
@@ -1804,9 +1918,13 @@ RCT_EXPORT_METHOD( deletePhotoAssets
         return;
       }
       NSDate *startedAt = [NSDate date];
+      NSUInteger writeToken = inatPhotoWriteBegan(
+        [NSString stringWithFormat:@"deleteAssets(%lu, app-created)",
+          ( unsigned long )ourAssets.count] );
       [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
         [PHAssetChangeRequest deleteAssets:ourAssets];
       } completionHandler:^( BOOL success, NSError *error ) {
+        inatPhotoWriteEnded( writeToken );
         appCreatedMs = ( NSInteger )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 );
         if ( success ) { appCreatedDeleted = ourAssets.count; }
         // A failure here is not fatal to the rest: the photos we don't own
@@ -1840,6 +1958,13 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     PHFetchResult<PHAsset *> *stillPresent =
       [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
     if ( stillPresent.count > 0 ) { return; }
+    // The requested assets are gone, so the transaction did land whatever its
+    // completion handler is doing. Clear the write gate: a library that just
+    // carried out a deletion is answering, and holding the gate shut on the
+    // strength of a callback that will never arrive would refuse every write
+    // for the rest of the session.
+    inatPhotoWriteEnded( 0 );
+    self->_promptedWalkActive = NO;
     RCTPromiseResolveBlock resolve = self->_pendingDeleteResolve;
     self->_pendingDeleteSettled = YES;
     [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
