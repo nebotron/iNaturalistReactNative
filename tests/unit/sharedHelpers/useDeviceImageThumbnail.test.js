@@ -1,6 +1,8 @@
-import { exists } from "@dr.pogodin/react-native-fs";
+import { CachesDirectoryPath, exists, unlink } from "@dr.pogodin/react-native-fs";
 import { act, renderHook } from "@testing-library/react-native";
 import { NativeModules } from "react-native";
+
+const cachedThumbnailPath = `${CachesDirectoryPath}/inatDeviceThumbnails`;
 
 const MAX_CONCURRENCY = 4;
 
@@ -19,7 +21,7 @@ NativeModules.ImageCropper = { createThumbnail };
 const thumbnails = require( "sharedHelpers/useDeviceImageThumbnail" );
 
 const useDeviceImageThumbnail = thumbnails.default;
-const { prefetchDeviceImageThumbnails } = thumbnails;
+const { invalidateDeviceImageThumbnail, prefetchDeviceImageThumbnails } = thumbnails;
 
 // Generation goes through several awaits (mkdir, exists, the native call), so
 // let every pending microtask settle.
@@ -127,5 +129,32 @@ describe( "useDeviceImageThumbnail", ( ) => {
     );
     expect( remounted.current ).toEqual( "file:///thumbs/ph://e1.jpg" );
     expect( createThumbnail ).toHaveBeenCalledTimes( 1 );
+  } );
+
+  it( "regenerates a thumbnail the caller couldn't decode", async ( ) => {
+    const generated = `file://${cachedThumbnailPath}/f1.jpg`;
+    renderHook( ( ) => useDeviceImageThumbnail( "ph://f1", 300 ) );
+    await flush( );
+    await finish( "ph://f1", generated );
+    expect( createThumbnail ).toHaveBeenCalledTimes( 1 );
+
+    await act( async ( ) => {
+      await invalidateDeviceImageThumbnail( generated, "ph://f1" );
+    } );
+
+    // Without the invalidation the cache would hand the same unopenable file
+    // to every cell that asks for this photo from now on.
+    renderHook( ( ) => useDeviceImageThumbnail( "ph://f1", 300 ) );
+    await flush( );
+    expect( startedUris( ).filter( uri => uri === "ph://f1" ) ).toHaveLength( 2 );
+  } );
+
+  it( "never deletes anything outside the thumbnail cache", async ( ) => {
+    exists.mockResolvedValue( true );
+    unlink.mockClear( );
+
+    await invalidateDeviceImageThumbnail( "file:///galleryPhotos/g1.CR3", "file:///g1.CR3" );
+
+    expect( unlink ).not.toHaveBeenCalled( );
   } );
 } );

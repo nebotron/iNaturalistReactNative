@@ -129,13 +129,22 @@ export const resolveThumbnailSubjectDetection = (
   const promise = runQueued( cropSourceUri, background, async ( ): Promise<
     ThumbnailDetection | null
   > => {
-    const size = sizeCache.get( cropSourceUri ) ?? await getImageSize( thumbnailUri );
+    let source = thumbnailUri;
+    let size = sizeCache.get( cropSourceUri ) ?? await getImageSize( thumbnailUri );
+    if ( !size ) {
+      // A thumbnail that can't be measured can't be decoded either. Detecting
+      // in the original instead keeps the cell framable: with no dimensions
+      // there is no crop box, and the crop box is the only thing carrying the
+      // pinch gesture.
+      source = cropSourceUri;
+      size = await getImageSize( cropSourceUri );
+    }
     if ( !size ) return null;
     sizeCache.set( cropSourceUri, size );
     let crop = cropCache.get( cropSourceUri ) ?? null;
     if ( !crop && !hasSavedCrop ) {
       const loggedCrop = getAnimalCrop( cropSourceUri );
-      crop = loggedCrop ?? await detectSubjectInImage( thumbnailUri, size.w, size.h );
+      crop = loggedCrop ?? await detectSubjectInImage( source, size.w, size.h );
       cropCache.set( cropSourceUri, crop );
     }
     return { crop, imageWidth: size.w, imageHeight: size.h };

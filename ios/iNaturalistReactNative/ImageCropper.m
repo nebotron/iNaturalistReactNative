@@ -1036,6 +1036,62 @@ RCT_EXPORT_METHOD( detectSubjectBounds
   resolve( bounds ?: [NSNull null] );
 }
 
+// Whether JPEG data is something a decoder will actually open, checked the
+// same way React Native's image loader checks it. Encoding a UIImage whose
+// CGImage decodes lazily (a RAW original's, say) can hand back a file that is
+// nothing but JPEG headers and tables — a fixed ~760 bytes, no image in it —
+// and nothing upstream notices, because the encode "succeeded".
+static BOOL jpegDataIsDecodable( NSData *data )
+{
+  if ( data.length == 0 ) return NO;
+  UIImage *decoded = [UIImage imageWithData:data];
+  return decoded != nil && decoded.size.width > 0 && decoded.size.height > 0;
+}
+
+// Longest side a repair rasterization is allowed to allocate a bitmap for.
+// Well above any camera photo, and four bytes a pixel at this size is already
+// 256MB, so a pathological source can't take the app down on a path that only
+// runs to rescue a thumbnail that would otherwise be unusable.
+static const CGFloat kMaxRasterizePixel = 8192;
+
+// Draws the image into a fresh opaque RGB bitmap, forcing any deferred decode
+// to happen now (and against the source data, which is still around) rather
+// than inside the JPEG encoder.
+static UIImage *rasterizedImage( UIImage *image )
+{
+  CGSize size = CGSizeMake( image.size.width * image.scale, image.size.height * image.scale );
+  CGFloat longest = MAX( size.width, size.height );
+  if ( longest > kMaxRasterizePixel ) {
+    CGFloat scale = kMaxRasterizePixel / longest;
+    size = CGSizeMake( size.width * scale, size.height * scale );
+  }
+  if ( size.width < 1 || size.height < 1 ) return nil;
+  UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
+  format.scale  = 1;
+  format.opaque = YES;
+  UIGraphicsImageRenderer *renderer =
+    [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
+  return [renderer imageWithActions:^( UIGraphicsImageRendererContext *context ) {
+    [image drawInRect:CGRectMake( 0, 0, size.width, size.height )];
+  }];
+}
+
+// JPEG data for a thumbnail, or nil if this image can't be encoded into one a
+// decoder will open. A thumbnail that fails to decode is worse than no
+// thumbnail at all: it is cached on disk under the photo's key and served to
+// every cell that asks for it from then on, so the photo it stands for can
+// never be drawn — which is what left Group Photos cells showing an invisible
+// crop overlay whose pinch gesture appeared dead and whose subject detection
+// appeared never to return.
+static NSData *encodedThumbnailData( UIImage *image )
+{
+  NSData *data = UIImageJPEGRepresentation( image, 0.8 );
+  if ( jpegDataIsDecodable( data ) ) return data;
+  UIImage *rasterized = rasterizedImage( image );
+  data = rasterized ? UIImageJPEGRepresentation( rasterized, 0.8 ) : nil;
+  return jpegDataIsDecodable( data ) ? data : nil;
+}
+
 // Writes a downscaled JPEG thumbnail (maxPixel px on the longest side) of a
 // device photo to outputPath, so a photo grid can scroll without decoding
 // full-resolution originals into every cell. ph:// PHAssets go through
@@ -1056,7 +1112,7 @@ RCT_EXPORT_METHOD( createThumbnail
 
   void (^writeThumbnail)( UIImage * ) = ^( UIImage *image ) {
     if ( !image ) { reject( @"THUMBNAIL_FAILED", @"Could not load image", nil ); return; }
-    NSData *data = UIImageJPEGRepresentation( image, 0.8 );
+    NSData *data = encodedThumbnailData( image );
     if ( !data ) { reject( @"THUMBNAIL_FAILED", @"Could not encode thumbnail", nil ); return; }
     [[NSFileManager defaultManager]
       createDirectoryAtPath:[output stringByDeletingLastPathComponent]

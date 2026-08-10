@@ -1,8 +1,9 @@
-import { exists, mkdir } from "@dr.pogodin/react-native-fs";
+import { exists, mkdir, stat } from "@dr.pogodin/react-native-fs";
 import { deviceThumbnailsPath } from "appConstants/paths";
 import { useEffect, useState } from "react";
 import { NativeModules } from "react-native";
 import { log } from "sharedHelpers/logger";
+import { unlink } from "sharedHelpers/util";
 
 const logger = log.extend( "useDeviceImageThumbnail" );
 
@@ -150,12 +151,13 @@ const runJob = async ( job: Job ) => {
       result = value || null;
     }
   } catch ( e ) {
-    if ( highQuality ) {
-      logger.warn(
-        `createThumbnail failed after ${Date.now( ) - start}ms for ${job.uri}, `
-        + `maxPixel=${job.maxPixel}: ${e}`,
-      );
-    }
+    // Logged whatever the size: generation now rejects an encode that wouldn't
+    // decode (see encodedThumbnailData in ImageCropper.m), and a photo that
+    // can't produce a thumbnail at all is worth knowing about at any size.
+    logger.warn(
+      `createThumbnail failed after ${Date.now( ) - start}ms for ${job.uri}, `
+      + `maxPixel=${job.maxPixel}: ${e}`,
+    );
     result = null;
   }
   if ( result ) {
@@ -293,6 +295,34 @@ export const prefetchDeviceImageThumbnail = (
   if ( cached ) return Promise.resolve( cached );
   if ( !ImageCropper?.createThumbnail ) return Promise.resolve( null );
   return scheduleJob( uri, maxPixel, false ).promise;
+};
+
+// Throws away a generated thumbnail the caller couldn't decode. Generation
+// reports success as long as the encode and the write succeeded, so a file
+// that holds no usable image still lands in the cache — and once it does, both
+// the on-disk cache (a two-day TTL) and the in-memory one keep handing that
+// same file to every cell that asks, so the photo can never be drawn. Deleting
+// it makes the next request regenerate.
+export const invalidateDeviceImageThumbnail = async (
+  thumbnailUri: string,
+  context: string,
+): Promise<void> => {
+  const path = thumbnailUri.replace( /^file:\/\//, "" );
+  // Only ever deletes files this module generated, never an original photo.
+  if ( !path.startsWith( `${deviceThumbnailsPath}/` ) ) return;
+  memoryCache.forEach( ( value, key ) => {
+    if ( value === thumbnailUri ) memoryCache.delete( key );
+  } );
+  try {
+    // The byte count is the diagnostic: a header-only JPEG is a fixed few
+    // hundred bytes whatever photo it came from, which distinguishes a bad
+    // encode from a file truncated on the way to disk.
+    const { size } = await stat( path );
+    logger.warn( `discarding undecodable thumbnail (${size} bytes) for ${context}` );
+    await unlink( path );
+  } catch ( e ) {
+    logger.warn( `could not discard undecodable thumbnail for ${context}: ${e}` );
+  }
 };
 
 // Returns a small cached thumbnail uri for a device photo, generated off the

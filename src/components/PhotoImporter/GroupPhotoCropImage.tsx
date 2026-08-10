@@ -16,7 +16,9 @@ import {
 } from "sharedHelpers/normalizedCropToImageZoomTransform";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
-import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
+import useDeviceImageThumbnail, {
+  invalidateDeviceImageThumbnail,
+} from "sharedHelpers/useDeviceImageThumbnail";
 import useThumbnailSubjectDetection from "sharedHelpers/useThumbnailSubjectDetection";
 import colors from "styles/tailwindColors";
 
@@ -64,6 +66,15 @@ const styles = StyleSheet.create( {
 // scrolled back to appear uncropped — the overlay stayed hidden and the grid's
 // own thumbnail showed through underneath.
 const paintedImages = new Set<string>( );
+
+// Files this process asked <Image> to draw and got a decode failure back for.
+// A thumbnail generation that produced an unopenable file is cached like any
+// other, so every cell that lands on that photo is handed the same dead file:
+// the overlay never paints, and since the overlay is what carries both the
+// crop box and the pinch gesture, the photo looks like its subject detection
+// never returned and its pinch does nothing. Remembering them lets a cell fall
+// straight through to an image it can actually draw.
+const undecodableUris = new Set<string>( );
 
 const cropsMatch = ( a: NormalizedCrop, b: NormalizedCrop ) => (
   Math.abs( a.x - b.x ) < CROP_EPSILON
@@ -113,6 +124,9 @@ const GroupPhotoCropImage = ( {
   // cell with no crop box and no gesture.
   const [decodedSize, setDecodedSize] = useState<{ width: number; height: number } | null>( null );
   const [prevCropSourceUri, setPrevCropSourceUri] = useState( cropSourceUri );
+  // Bumped when an image fails to decode, purely to re-render onto the next
+  // candidate below (the failures themselves are remembered process-wide).
+  const [, countLoadFailure] = useState( 0 );
 
   // Synchronously reset when a recycled cell lands on a different photo, so its
   // first render never frames the new photo with the previous one's crop.
@@ -144,8 +158,12 @@ const GroupPhotoCropImage = ( {
   // is what made pinch-to-zoom look dead: it is the most expensive job in the
   // app (a full-resolution re-encode per photo, four at a time, allowed to pull
   // the original down from iCloud), nothing prefetches it, and until it existed
-  // the cell carried no gesture at all.
-  const displayUri = fullResolutionUri ?? thumbnailUri;
+  // the cell carried no gesture at all. Anything that came back undecodable is
+  // skipped in favour of the next candidate, ending at the original itself, so
+  // one bad generated file can't cost the cell its crop box.
+  const displayUri = [fullResolutionUri, thumbnailUri, cropSourceUri].find(
+    uri => uri && !undecodableUris.has( uri ),
+  );
 
   // Detection runs on the same thumbnail the preload warms, so a cell that has
   // been walked already has its crop and dimensions in hand. Everything the
@@ -300,10 +318,18 @@ const GroupPhotoCropImage = ( {
                 ) );
               }
             }}
-            onError={e => logger.warn(
-              `overlay image failed to load: ${displayUri}: `
-              + `${e.nativeEvent?.error}`,
-            )}
+            onError={e => {
+              const failedUri = displayUri as string;
+              undecodableUris.add( failedUri );
+              logger.warn(
+                `overlay image failed to load for ${cropSourceUri}: ${failedUri}: `
+                + `${e.nativeEvent?.error}`,
+              );
+              // Generated files only: the fallback chain ends at the original,
+              // and invalidate ignores anything outside the thumbnail cache.
+              invalidateDeviceImageThumbnail( failedUri, cropSourceUri );
+              countLoadFailure( count => count + 1 );
+            }}
           />
         )}
       />
