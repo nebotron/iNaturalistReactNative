@@ -15,6 +15,7 @@ import {
   normalizedCropToImageZoomTransform,
 } from "sharedHelpers/normalizedCropToImageZoomTransform";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import { defaultSquareCrop } from "sharedHelpers/normalizedCropTypes";
 import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
 import useThumbnailSubjectDetection from "sharedHelpers/useThumbnailSubjectDetection";
 import colors from "styles/tailwindColors";
@@ -104,6 +105,13 @@ const GroupPhotoCropImage = ( {
   // render, while its image is still decoding. Showing the overlay then is what
   // turned those cells black.
   const [painted, setPainted] = useState( false );
+  // Dimensions reported by the photo below when it decoded. Subject detection
+  // normally supplies these, but it yields nothing at all when it can't measure
+  // the file (a photo whose thumbnail failed to generate falls back to its
+  // ph:// uri, which Image.getSize can't read) or when the detector throws. The
+  // photo is on screen either way, so read them off it rather than leaving the
+  // cell with no crop box and no gesture.
+  const [decodedSize, setDecodedSize] = useState<{ width: number; height: number } | null>( null );
   const [prevCropSourceUri, setPrevCropSourceUri] = useState( cropSourceUri );
 
   // Synchronously reset when a recycled cell lands on a different photo, so its
@@ -112,6 +120,7 @@ const GroupPhotoCropImage = ( {
     setPrevCropSourceUri( cropSourceUri );
     setFramedCrop( null );
     setPainted( false );
+    setDecodedSize( null );
   }
 
   // Both are routed through the native thumbnail generator (rather than an
@@ -148,12 +157,22 @@ const GroupPhotoCropImage = ( {
     Boolean( savedCrop ),
   );
 
-  const imageWidth = detection?.imageWidth ?? 0;
-  const imageHeight = detection?.imageHeight ?? 0;
+  const imageWidth = detection?.imageWidth || decodedSize?.width || 0;
+  const imageHeight = detection?.imageHeight || decodedSize?.height || 0;
   // A cached detection can carry a crop from before the user's last gesture, so
-  // the crop saved on the photo always wins (same as the crop editor).
-  const initialCrop = savedCrop ?? detection?.crop ?? null;
-  const ready = Boolean( displayUri ) && imageWidth > 0 && imageHeight > 0 && size > 0;
+  // the crop saved on the photo always wins (same as the crop editor). With no
+  // crop from either, fall back to the centered square the cell is already
+  // showing: detection failing is no reason for the photo to lose its crop box,
+  // which is the only thing carrying the pinch gesture.
+  const framable = imageWidth > 0 && imageHeight > 0 && size > 0;
+  const initialCrop = savedCrop
+    ?? detection?.crop
+    ?? ( framable
+      ? defaultSquareCrop( imageWidth, imageHeight )
+      : null );
+  // Mounted as soon as there is a photo to draw, so its onLoad can report the
+  // dimensions detection didn't.
+  const ready = Boolean( displayUri ) && size > 0;
 
   const cropPanContext = {
     imageWidth,
@@ -169,7 +188,7 @@ const GroupPhotoCropImage = ( {
   // recycled cell is already framed in the frame it first paints, instead of
   // showing the photo uncropped for a beat and then snapping into its crop box.
   useLayoutEffect( ( ) => {
-    if ( !ready || !initialCrop || framedCrop ) {
+    if ( !framable || !initialCrop || framedCrop ) {
       return;
     }
     const zoom = zoomRef.current;
@@ -195,10 +214,10 @@ const GroupPhotoCropImage = ( {
     } );
     setFramedCrop( initialCrop );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [framedCrop, imageHeight, imageWidth, initialCrop, ready, size] );
+  }, [framable, framedCrop, imageHeight, imageWidth, initialCrop, size] );
 
   const handleInteractionEnd = useCallback( ( ) => {
-    if ( !zoomRef.current || !ready ) {
+    if ( !zoomRef.current || !framable ) {
       return;
     }
     const crop = imageZoomTransformToNormalizedCrop(
@@ -216,7 +235,7 @@ const GroupPhotoCropImage = ( {
     }
     setFramedCrop( crop );
     onCropChange( crop );
-  }, [framedCrop, imageHeight, imageWidth, onCropChange, ready, size] );
+  }, [framable, framedCrop, imageHeight, imageWidth, onCropChange, size] );
 
   if ( !ready ) {
     return null;
@@ -269,9 +288,17 @@ const GroupPhotoCropImage = ( {
             style={[StyleSheet.absoluteFill, !framed && styles.unframed]}
             resizeMode="contain"
             source={{ uri: displayUri }}
-            onLoad={( ) => {
+            onLoad={e => {
               paintedImages.add( cropSourceUri );
               setPainted( true );
+              const { width, height } = e.nativeEvent.source;
+              if ( width > 0 && height > 0 ) {
+                setDecodedSize( prev => (
+                  prev?.width === width && prev?.height === height
+                    ? prev
+                    : { width, height }
+                ) );
+              }
             }}
             onError={e => logger.warn(
               `overlay image failed to load: ${displayUri}: `
