@@ -263,7 +263,13 @@ const GroupPhotoCropImage = ( {
 
   return (
     <View style={styles.overlay}>
-      {framed && <View style={styles.backdrop} />}
+      {/* Gated on this mount's own onLoad rather than on framed: framed also
+          trusts paintedImages, which only says some earlier cell drew this
+          photo. A recycled cell gets a fresh native image view, and the
+          full-resolution file it has to decode is big enough that RN's decoded
+          -image cache may not still hold it — so trusting that here painted an
+          opaque black square over a cell whose photo hadn't arrived yet. */}
+      {painted && <View style={styles.backdrop} />}
       <SharedZoomableImage
         ref={zoomRef}
         uri={displayUri}

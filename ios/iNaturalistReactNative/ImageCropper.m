@@ -980,6 +980,32 @@ static UIImage *clampToMaxPixel( UIImage *image, CGFloat maxPixel )
   }];
 }
 
+// Defined below, alongside the encode it was written for.
+static UIImage *rasterizedImage( UIImage *image );
+
+// EXIF orientation of an image source, as a UIImageOrientation.
+// CGImageSourceCreateImageAtIndex hands back the pixels exactly as they are
+// stored, with none of the rotation the EXIF tag asks for -- unlike the
+// thumbnail path below, which applies it via kCGImageSourceCreateThumbnailWith
+// Transform. Without this a portrait photo's full-resolution thumbnail came
+// back on its side, so a Group Photos cell rotated the moment the
+// full-resolution file replaced the thumbnail it was showing.
+static UIImageOrientation orientationForImageSource( CGImageSourceRef src )
+{
+  NSDictionary *props =
+    CFBridgingRelease( CGImageSourceCopyPropertiesAtIndex( src, 0, NULL ) );
+  switch ( [props[(__bridge NSString *)kCGImagePropertyOrientation] intValue] ) {
+    case 2:  return UIImageOrientationUpMirrored;
+    case 3:  return UIImageOrientationDown;
+    case 4:  return UIImageOrientationDownMirrored;
+    case 5:  return UIImageOrientationLeftMirrored;
+    case 6:  return UIImageOrientationRight;
+    case 7:  return UIImageOrientationRightMirrored;
+    case 8:  return UIImageOrientationLeft;
+    default: return UIImageOrientationUp;
+  }
+}
+
 // Loads an EXIF-oriented image downscaled to maxPixel on its longest side via
 // ImageIO, which subsamples during decode instead of decoding the full
 // resolution. Detection outputs normalized coords, so a downscaled input
@@ -1014,13 +1040,22 @@ static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
     };
     CGImageRef full =
       CGImageSourceCreateImageAtIndex( src, 0, (__bridge CFDictionaryRef)fullOpts );
-    UIImage *image = full ? [UIImage imageWithCGImage:full] : nil;
+    UIImage *image = full
+      ? [UIImage imageWithCGImage:full scale:1 orientation:orientationForImageSource( src )]
+      : nil;
     if ( full ) CGImageRelease( full );
-    // Released only once the pixels are materialized: releasing it while the
-    // decode was still deferred is what left that decode with no source.
+    // kCGImageSourceShouldCacheImmediately is a hint the RAW decoder is free
+    // to ignore, so draw the image here to actually materialize its pixels --
+    // and do it while the image source is still alive, since releasing it
+    // while the decode was still deferred is what left that decode with no
+    // source. rasterizedImage returns nil when the draw put nothing there,
+    // rather than the frame of solid black it would otherwise encode.
+    UIImage *decoded = image
+      ? rasterizedImage( image )
+      : nil;
     CFRelease( src );
-    if ( !image ) return nil;
-    return clampToMaxPixel( image, maxPixel );
+    if ( !decoded ) return nil;
+    return clampToMaxPixel( decoded, maxPixel );
   }
 
   NSDictionary *opts = @{
@@ -1062,15 +1097,55 @@ static BOOL jpegDataIsDecodable( NSData *data )
   return decoded != nil && decoded.size.width > 0 && decoded.size.height > 0;
 }
 
-// Longest side a repair rasterization is allowed to allocate a bitmap for.
-// Well above any camera photo, and four bytes a pixel at this size is already
-// 256MB, so a pathological source can't take the app down on a path that only
-// runs to rescue a thumbnail that would otherwise be unusable.
+// Longest side a rasterization is allowed to allocate a bitmap for. Well above
+// any camera photo, and four bytes a pixel at this size is already 256MB, so a
+// pathological source (a stitched panorama, say) can't take the app down.
 static const CGFloat kMaxRasterizePixel = 8192;
+
+// Colour the rasterization buffer is cleared to before the image is drawn
+// over it. A CGImage whose pixels never materialized -- a RAW original whose
+// demosaic failed -- draws as a no-op, and over the opaque buffer this used to
+// allocate (cleared to black) that produced a perfectly decodable, entirely
+// black JPEG. Nothing downstream could tell that from a photo of the night
+// sky, so it was written to the cache under the photo's key and handed to
+// every Group Photos cell that asked for it from then on, with no load error
+// anywhere to say why the cell was a black square. Clearing to a colour no
+// photograph is uniformly made of makes a no-op draw something we can detect.
+// Magenta reads the same forwards and backwards, so the check below doesn't
+// care whether the buffer's channel order is RGB or BGR.
+static const uint8_t kRasterizeSentinel[3] = { 255, 0, 255 };
+
+// Points sampled per axis when checking whether anything was drawn. A partial
+// draw isn't a thing the decoder does -- either the pixels exist or they don't
+// -- so this only has to be dense enough to not land entirely on a magenta
+// subject by chance.
+static const size_t kBlankProbeSteps = 32;
+
+static BOOL bitmapIsBlank(
+  const uint8_t *pixels,
+  size_t         width,
+  size_t         height,
+  size_t         bytesPerRow
+)
+{
+  size_t stepX = MAX( (size_t)1, width / kBlankProbeSteps );
+  size_t stepY = MAX( (size_t)1, height / kBlankProbeSteps );
+  for ( size_t y = 0; y < height; y += stepY ) {
+    const uint8_t *row = pixels + ( y * bytesPerRow );
+    for ( size_t x = 0; x < width; x += stepX ) {
+      const uint8_t *px = row + ( x * 4 );
+      if ( px[0] != kRasterizeSentinel[0]
+        || px[1] != kRasterizeSentinel[1]
+        || px[2] != kRasterizeSentinel[2] ) return NO;
+    }
+  }
+  return YES;
+}
 
 // Draws the image into a fresh opaque RGB bitmap, forcing any deferred decode
 // to happen now (and against the source data, which is still around) rather
-// than inside the JPEG encoder.
+// than inside the JPEG encoder. Returns nil if the draw put nothing there,
+// so a failed decode can't be mistaken for a black photograph.
 static UIImage *rasterizedImage( UIImage *image )
 {
   CGSize size = CGSizeMake( image.size.width * image.scale, image.size.height * image.scale );
@@ -1080,14 +1155,46 @@ static UIImage *rasterizedImage( UIImage *image )
     size = CGSizeMake( size.width * scale, size.height * scale );
   }
   if ( size.width < 1 || size.height < 1 ) return nil;
-  UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat preferredFormat];
-  format.scale  = 1;
-  format.opaque = YES;
-  UIGraphicsImageRenderer *renderer =
-    [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
-  return [renderer imageWithActions:^( UIGraphicsImageRendererContext *context ) {
-    [image drawInRect:CGRectMake( 0, 0, size.width, size.height )];
-  }];
+  size_t width  = (size_t)size.width;
+  size_t height = (size_t)size.height;
+
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB( );
+  // No alpha channel, so the JPEG encoder gets an opaque bitmap and every
+  // pixel is the four bytes bitmapIsBlank steps through.
+  CGContextRef ctx = CGBitmapContextCreate(
+    NULL, width, height, 8, 0, space,
+    kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little
+  );
+  CGColorSpaceRelease( space );
+  if ( !ctx ) return nil;
+
+  CGContextSetRGBFillColor(
+    ctx,
+    kRasterizeSentinel[0] / 255.0,
+    kRasterizeSentinel[1] / 255.0,
+    kRasterizeSentinel[2] / 255.0,
+    1
+  );
+  CGContextFillRect( ctx, CGRectMake( 0, 0, width, height ) );
+  // drawInRect: is what bakes the image's EXIF orientation in, and it expects
+  // UIKit's top-left origin rather than the bitmap context's bottom-left one.
+  CGContextTranslateCTM( ctx, 0, height );
+  CGContextScaleCTM( ctx, 1, -1 );
+  UIGraphicsPushContext( ctx );
+  [image drawInRect:CGRectMake( 0, 0, width, height )];
+  UIGraphicsPopContext( );
+
+  const uint8_t *pixels = CGBitmapContextGetData( ctx );
+  BOOL blank = pixels
+    && bitmapIsBlank( pixels, width, height, CGBitmapContextGetBytesPerRow( ctx ) );
+  CGImageRef cg = blank
+    ? NULL
+    : CGBitmapContextCreateImage( ctx );
+  CGContextRelease( ctx );
+  if ( !cg ) return nil;
+  UIImage *rasterized = [UIImage imageWithCGImage:cg];
+  CGImageRelease( cg );
+  return rasterized;
 }
 
 // JPEG data for a thumbnail, or nil if this image can't be encoded into one a
