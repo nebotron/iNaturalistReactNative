@@ -260,16 +260,23 @@ const GroupPhotoCropImage = ( {
   }
 
   const framed = Boolean( framedCrop ) && ( painted || paintedImages.has( cropSourceUri ) );
+  // Both halves are load-bearing, and each one on its own has shipped a black
+  // cell. Without `painted`, framed trusts paintedImages, which only says some
+  // earlier cell drew this photo: a recycled cell gets a fresh native image
+  // view whose file may no longer be in RN's decoded-image cache, so the
+  // backdrop painted over a photo that hadn't arrived. Without `framed`, the
+  // backdrop outlives the photo in the other direction -- the photo is hidden
+  // whenever framedCrop is null, and a cell that can get no dimensions for its
+  // photo (detection yields nothing when the thumbnail failed to generate and
+  // the fallback is a ph:// uri, which onLoad and Image.getSize both decline to
+  // measure) never frames at all, leaving the backdrop alone on screen forever.
+  const backdropVisible = framed && painted;
 
   return (
     <View style={styles.overlay}>
-      {/* Gated on this mount's own onLoad rather than on framed: framed also
-          trusts paintedImages, which only says some earlier cell drew this
-          photo. A recycled cell gets a fresh native image view, and the
-          full-resolution file it has to decode is big enough that RN's decoded
-          -image cache may not still hold it — so trusting that here painted an
-          opaque black square over a cell whose photo hadn't arrived yet. */}
-      {painted && <View style={styles.backdrop} />}
+      {backdropVisible && (
+        <View testID="GroupPhotoCropImage.backdrop" style={styles.backdrop} />
+      )}
       <SharedZoomableImage
         ref={zoomRef}
         uri={displayUri}
@@ -315,7 +322,12 @@ const GroupPhotoCropImage = ( {
             onLoad={e => {
               paintedImages.add( cropSourceUri );
               setPainted( true );
-              const { width, height } = e.nativeEvent.source;
+              // Optional: a load that reports no source at all would otherwise
+              // throw here, after painted was already set -- which is exactly
+              // the state that leaves a cell framed by nothing.
+              const loaded = e.nativeEvent?.source;
+              const width = loaded?.width ?? 0;
+              const height = loaded?.height ?? 0;
               if ( width > 0 && height > 0 ) {
                 setDecodedSize( prev => (
                   prev?.width === width && prev?.height === height
