@@ -26,6 +26,12 @@ const createRequestTimeoutSignal = ( ) => {
   };
 };
 
+// Retries that ran out are paced: a single outage produces one of these per
+// query in flight, and they all say the same thing.
+const RETRY_GIVE_UP_LOG_INTERVAL_MS = 30000;
+let lastRetryGiveUpLoggedAt = 0;
+let suppressedRetryGiveUps = 0;
+
 // Note that this should not be async. When you're using it with reactQuery,
 // returning a promise is like returning true, which means it retries forever.
 // Retries only on 5xx errors, network connection failures, or our own
@@ -50,11 +56,28 @@ function reactQueryRetry( failureCount, error ) {
   }
 
   const shouldRetry = failureCount < 3;
-  if ( shouldRetry ) {
+  // Only the give-up is worth a line. One outage fails every query a screen
+  // has in flight and each of those retried three times, so the old
+  // once-per-attempt line put fifteen "Network failure, attempt N" warnings in
+  // the log inside 47 seconds on Aug 18 — none of which named a query, and all
+  // of which described one outage the caller's own error log already covers.
+  if ( !shouldRetry ) {
     const label = isNetworkFailure
       ? "Network failure"
       : `HTTP ${status}`;
-    defaultLogger.warn( `reactQueryRetry: ${label}, attempt ${failureCount + 1}` );
+    const now = Date.now( );
+    if ( now - lastRetryGiveUpLoggedAt > RETRY_GIVE_UP_LOG_INTERVAL_MS ) {
+      const alsoSuppressed = suppressedRetryGiveUps > 0
+        ? ` (+${suppressedRetryGiveUps} more since the last line)`
+        : "";
+      lastRetryGiveUpLoggedAt = now;
+      suppressedRetryGiveUps = 0;
+      defaultLogger.warn(
+        `reactQueryRetry: ${label}, giving up after ${failureCount} retries${alsoSuppressed}`,
+      );
+    } else {
+      suppressedRetryGiveUps += 1;
+    }
   }
 
   return shouldRetry;

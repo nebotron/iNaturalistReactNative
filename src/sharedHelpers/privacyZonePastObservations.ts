@@ -18,6 +18,15 @@ const MAX_PAGES = 50;
 // under 100 requests a minute. This paces us at roughly 80.
 const MS_BETWEEN_UPDATES = 750;
 
+// A run over a large zone takes an hour of sequential writes, and a single
+// dropped request in the middle of it left that observation open to the world
+// with nothing but a count in an alert to say so -- the Aug 16 log has nine of
+// them, scattered one every few minutes through one run, every one a bare
+// "Network request failed". Retrying costs a couple of seconds and is the
+// difference between an obscured observation and an unobscured one.
+const UPDATE_ATTEMPTS = 3;
+const MS_BEFORE_RETRY = 2000;
+
 interface ApiOptions {
   api_token: string | null;
 }
@@ -121,20 +130,32 @@ const obscureUploadedObservationsInPrivacyZone = async (
 
   for ( let i = 0; i < uuids.length; i += 1 ) {
     const uuid = uuids[i];
-    try {
-      // ignore_photos keeps this a metadata-only update, exactly as the
-      // observation uploader does when it modifies an existing observation.
-      // eslint-disable-next-line no-await-in-loop
-      await updateObservation( {
-        id: uuid,
-        observation: { uuid, geoprivacy: GEOPRIVACY_OBSCURED },
-        fields: { id: true },
-        ignore_photos: true,
-      }, opts );
-      succeeded.push( uuid );
-    } catch ( error ) {
-      failed += 1;
-      logger.error( `Failed to obscure observation ${uuid} in the privacy zone`, error );
+    for ( let attempt = 1; attempt <= UPDATE_ATTEMPTS; attempt += 1 ) {
+      try {
+        // ignore_photos keeps this a metadata-only update, exactly as the
+        // observation uploader does when it modifies an existing observation.
+        // eslint-disable-next-line no-await-in-loop
+        await updateObservation( {
+          id: uuid,
+          observation: { uuid, geoprivacy: GEOPRIVACY_OBSCURED },
+          fields: { id: true },
+          ignore_photos: true,
+        }, opts );
+        succeeded.push( uuid );
+        break;
+      } catch ( error ) {
+        if ( attempt < UPDATE_ATTEMPTS ) {
+          // eslint-disable-next-line no-await-in-loop
+          await sleep( MS_BEFORE_RETRY * attempt );
+        } else {
+          failed += 1;
+          logger.error(
+            `Failed to obscure observation ${uuid} in the privacy zone `
+            + `after ${UPDATE_ATTEMPTS} attempts`,
+            error,
+          );
+        }
+      }
     }
     onProgress?.( i + 1, uuids.length );
     if ( i < uuids.length - 1 ) {
@@ -144,6 +165,11 @@ const obscureUploadedObservationsInPrivacyZone = async (
   }
 
   markLocalCopiesObscured( realm, succeeded );
+
+  logger.info(
+    `Privacy zone: obscured ${succeeded.length} of ${uuids.length} `
+    + `uploaded observation(s), ${failed} failed`,
+  );
 
   return { obscured: succeeded.length, failed };
 };

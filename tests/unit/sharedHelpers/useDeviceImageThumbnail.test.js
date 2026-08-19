@@ -170,6 +170,34 @@ describe( "useDeviceImageThumbnail", ( ) => {
     expect( startedUris( ).filter( uri => uri === "ph://f1" ) ).toHaveLength( 2 );
   } );
 
+  it( "does not ask the native side again for a photo that just failed", async ( ) => {
+    createThumbnail.mockImplementationOnce(
+      ( ) => Promise.reject( new Error( "Could not load image" ) ),
+    );
+    renderHook( ( ) => useDeviceImageThumbnail( "file:///galleryPhotos/i1.CR3", 300 ) );
+    await flush( );
+    expect( createThumbnail ).toHaveBeenCalledTimes( 1 );
+
+    // A grid of undecodable files used to re-run the decode for every cell
+    // that was recycled onto one -- 38 attempts of the same file in fifteen
+    // seconds, all of them failing the same way.
+    renderHook( ( ) => useDeviceImageThumbnail( "file:///galleryPhotos/i1.CR3", 300 ) );
+    await flush( );
+    expect( createThumbnail ).toHaveBeenCalledTimes( 1 );
+  } );
+
+  it( "falls back to the original uri when generation fails", async ( ) => {
+    createThumbnail.mockImplementationOnce(
+      ( ) => Promise.reject( new Error( "Could not load image" ) ),
+    );
+    const { result } = renderHook(
+      ( ) => useDeviceImageThumbnail( "file:///galleryPhotos/i2.CR3", 300 ),
+    );
+    await flush( );
+
+    expect( result.current ).toEqual( "file:///galleryPhotos/i2.CR3" );
+  } );
+
   it( "never deletes anything outside the thumbnail cache", async ( ) => {
     exists.mockResolvedValue( true );
     unlink.mockClear( );

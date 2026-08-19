@@ -44,6 +44,27 @@ function hashKey( key: string ): string {
 // scrolls back, and the entries are just short strings.
 const memoryCache = new Map<string, string>( );
 
+// Keys whose last generation attempt failed, and when. Nothing used to be
+// remembered about a failure, so every cell that asked for the photo asked the
+// native side to decode it again: the Aug 11 log has 102 undecodable files
+// producing 1,104 failed decodes in fifteen seconds, up to 38 attempts of the
+// same file, all while the user was scrolling the grid those cells are in.
+const failureCache = new Map<string, number>( );
+
+// How long a failure stands before the file is worth another try. Long enough
+// that scrolling back and forth over a photo can't re-trigger the decode,
+// short enough that a genuinely transient failure (a file still being written,
+// an original not yet down from iCloud) recovers without a relaunch.
+const FAILURE_RETRY_MS = 60000;
+
+const recentlyFailed = ( key: string ): boolean => {
+  const failedAt = failureCache.get( key );
+  if ( failedAt === undefined ) return false;
+  if ( Date.now( ) - failedAt < FAILURE_RETRY_MS ) return true;
+  failureCache.delete( key );
+  return false;
+};
+
 // Cap concurrent native thumbnail generations so a fast scroll through a large
 // library doesn't fire hundreds of decodes at once.
 const MAX_CONCURRENCY = 4;
@@ -154,8 +175,23 @@ const raceWithTimeout = (
   ] ).finally( ( ) => clearTimeout( timer ) );
 };
 
+// Whether the photo a failed job was asked to decode is still on disk. "Could
+// not load image" reads as an undecodable file, but it is also what a file
+// that has been deleted out from under a stale uri produces -- and those come
+// back in ~40ms, far too fast for a real RAW decode. Only asked on the failure
+// path, so it costs nothing in the normal case.
+const sourceFileMissing = async ( uri: string ): Promise<boolean | null> => {
+  if ( !uri.startsWith( "file://" ) ) return null;
+  try {
+    return !await exists( uri.replace( /^file:\/\//, "" ) );
+  } catch {
+    return null;
+  }
+};
+
 const runJob = async ( job: Job ) => {
   let result: string | null = null;
+  let failure: unknown = null;
   const highQuality = isHighQuality( job );
   const start = Date.now( );
   try {
@@ -175,19 +211,27 @@ const runJob = async ( job: Job ) => {
         );
       }
       result = value || null;
+      if ( !result && !timedOut ) failure = new Error( "generation produced nothing" );
     }
   } catch ( e ) {
-    // Logged whatever the size: generation now rejects an encode that wouldn't
-    // decode (see encodedThumbnailData in ImageCropper.m), and a photo that
-    // can't produce a thumbnail at all is worth knowing about at any size.
-    logger.warn(
-      `createThumbnail failed after ${Date.now( ) - start}ms for ${job.uri}, `
-      + `maxPixel=${job.maxPixel}: ${e}`,
-    );
+    failure = e;
     result = null;
   }
   if ( result ) {
     memoryCache.set( job.key, result );
+    failureCache.delete( job.key );
+  } else {
+    // Logged once per failure window rather than once per attempt: the point
+    // of the log is which photos can't be drawn, and the repeats were the bug.
+    const firstFailure = !failureCache.has( job.key );
+    failureCache.set( job.key, Date.now( ) );
+    if ( failure && firstFailure ) {
+      const missing = await sourceFileMissing( job.uri );
+      logger.warn(
+        `createThumbnail failed after ${Date.now( ) - start}ms for ${job.uri}, `
+        + `maxPixel=${job.maxPixel}, sourceMissing=${missing}: ${failure}`,
+      );
+    }
   }
   jobs.delete( job.key );
   job.resolve( result );
@@ -258,6 +302,13 @@ const requestDeviceImageThumbnail = (
   if ( cached ) {
     return { promise: Promise.resolve( cached ), release: ( ) => {} };
   }
+  // A photo that just failed to decode will fail again, and the caller falls
+  // back to the original uri either way. Answering from the failure cache
+  // keeps a scroll past a folder of undecodable files from re-running the
+  // native decode for every cell, every time it is recycled onto one.
+  if ( recentlyFailed( key ) ) {
+    return { promise: Promise.resolve( null ), release: ( ) => {} };
+  }
   const job = scheduleJob( uri, maxPixel, true );
   let released = false;
   return {
@@ -288,7 +339,8 @@ export const prioritizeDeviceImageThumbnails = (
   if ( !ImageCropper?.createThumbnail ) return;
   // Pushed in reverse so the topmost visible photo is the first one popped.
   for ( let i = uris.length - 1; i >= 0; i -= 1 ) {
-    if ( !memoryCache.has( cacheKey( uris[i], maxPixel ) ) ) {
+    const key = cacheKey( uris[i], maxPixel );
+    if ( !memoryCache.has( key ) && !recentlyFailed( key ) ) {
       scheduleJob( uris[i], maxPixel, true );
     }
   }
@@ -305,7 +357,8 @@ export const prefetchDeviceImageThumbnails = (
     uris.forEach( uri => {
       // Prefetches keep their waiter forever: nothing "unmounts" a prefetch,
       // and a warmed cache is exactly what makes scrolling back instant.
-      if ( !memoryCache.has( cacheKey( uri, maxPixel ) ) ) {
+      const key = cacheKey( uri, maxPixel );
+      if ( !memoryCache.has( key ) && !recentlyFailed( key ) ) {
         scheduleJob( uri, maxPixel, false );
       }
     } );
@@ -323,6 +376,7 @@ export const prefetchDeviceImageThumbnail = (
   const cached = memoryCache.get( key );
   if ( cached ) return Promise.resolve( cached );
   if ( !ImageCropper?.createThumbnail ) return Promise.resolve( null );
+  if ( recentlyFailed( key ) ) return Promise.resolve( null );
   return scheduleJob( uri, maxPixel, false ).promise;
 };
 

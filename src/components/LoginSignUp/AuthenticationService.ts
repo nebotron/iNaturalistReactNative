@@ -15,7 +15,7 @@ import { getInatLocaleFromSystemLocale } from "i18n/initI18next";
 import i18next from "i18next";
 import rs from "jsrsasign";
 import { navigationRef } from "navigation/navigationUtils";
-import { Alert, Platform } from "react-native";
+import { Alert, AppState, Platform } from "react-native";
 import Config from "react-native-config";
 import * as RNLocalize from "react-native-localize";
 import RNRestart from "react-native-restart";
@@ -83,6 +83,11 @@ let jwtRefreshFailureCount = 0;
 let jwtRefreshFailedAt: number | null = null;
 const JWT_REFRESH_BACKOFF_BASE_MS = 5_000;
 const JWT_REFRESH_BACKOFF_MAX_MS = 60_000;
+
+// A backgrounded upload run asks isLoggedIn once per observation, so the
+// unreadable-keychain warning below is paced rather than emitted per call.
+const KEYCHAIN_UNREADABLE_LOG_INTERVAL_MS = 60_000;
+let lastKeychainUnreadableLoggedAt = 0;
 
 /**
  * Clear cache for isLoggedIn, and any JWT refresh failure backoff.
@@ -218,6 +223,32 @@ const isLoggedIn = async (): Promise<boolean> => {
   try {
     const accessToken = await getSensitiveItem( "accessToken" );
     const result = typeof accessToken === "string";
+
+    // Keychain items are only readable while the device is unlocked, and the
+    // read comes back *absent* rather than failing when it isn't: nothing
+    // distinguishes "signed out" from "locked" at this level except that only
+    // the second can happen while the app is in the background. Answering
+    // false there is what made a backgrounded upload fail with "tried to
+    // upload an observation without API token" and mark itself LOGIN_AGAIN
+    // for a user who was signed in the whole time (Aug 8, 14 and 18 in the
+    // app log, every one of them with appState=background). Only trust the
+    // absence once this process has seen a token: signOut clears the cache,
+    // so a real sign-out still reads as signed out.
+    const backgrounded = AppState.currentState === "background"
+      || AppState.currentState === "inactive";
+    if ( !result && authCache.isLoggedIn && backgrounded ) {
+      if ( now - lastKeychainUnreadableLoggedAt > KEYCHAIN_UNREADABLE_LOG_INTERVAL_MS ) {
+        lastKeychainUnreadableLoggedAt = now;
+        logger.warn(
+          `isLoggedIn: no access token while appState=${AppState.currentState}; `
+          + "treating the keychain as unreadable rather than signed out",
+        );
+      }
+      // Cached as normal so a background upload of many observations doesn't
+      // re-read the keychain for every one of them.
+      authCache.lastChecked = now;
+      return true;
+    }
 
     authCache.isLoggedIn = result;
     authCache.lastChecked = now;
@@ -378,7 +409,16 @@ async function fetchFreshJWT( logContext: string | null ): Promise<JWTRefreshRes
     // would then read as the server rejecting real credentials — pushing the
     // user to the login screen over a storage hiccup.
     if ( typeof accessToken !== "string" ) {
-      logger.error( `JWT [${logContext}]: No access token to refresh with` );
+      // Backgrounded, this is the locked-device keychain read isLoggedIn
+      // describes above rather than a missing login, and it resolves itself
+      // when the device is unlocked -- not worth an error line per upload.
+      const message = `JWT [${logContext}]: No access token to refresh with `
+        + `(appState=${AppState.currentState})`;
+      if ( AppState.currentState === "background" || AppState.currentState === "inactive" ) {
+        logger.warn( message );
+      } else {
+        logger.error( message );
+      }
       return { token: null, credentialsRejected: false };
     }
     const api = createAPI( { Authorization: `Bearer ${accessToken}` } );
