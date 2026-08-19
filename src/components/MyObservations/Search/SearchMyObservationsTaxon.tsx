@@ -32,7 +32,9 @@ const SearchMyObservationsTaxon = ( ) => {
       : ""
   ) );
 
-  const { taxa, isLoading, isLocal } = useTaxonSearch( taxonQuery );
+  const {
+    taxa, isLoading, isUpdatingLocalDb, updateLocalSpeciesDb,
+  } = useTaxonSearch( taxonQuery );
 
   const closeScreen = useCallback( ( ) => navigation.goBack( ), [navigation] );
 
@@ -101,11 +103,12 @@ const SearchMyObservationsTaxon = ( ) => {
       />
       <TaxonSearch
         isLoading={isLoading}
-        isLocal={isLocal}
+        isUpdatingLocalDb={isUpdatingLocalDb}
         query={taxonQuery}
         renderItem={renderItem}
         setQuery={setTaxonQuery}
         taxa={taxa}
+        updateLocalSpeciesDb={updateLocalSpeciesDb}
       />
     </ViewWrapper>
   );

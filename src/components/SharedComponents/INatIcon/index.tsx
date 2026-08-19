@@ -85,9 +85,9 @@ const INatIcon = ( {
 }: Props ) => {
   const style = dropShadow
     ? {
-      shadowOpacity: 2,
+      textShadowColor: "rgba(0, 0, 0, 0.75)",
       textShadowRadius: 4,
-      textShadowOffset: { width: 2, height: 2 },
+      textShadowOffset: { width: 0, height: 1 },
     }
     : null;
   return (

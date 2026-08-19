@@ -12,6 +12,7 @@ const { withRozenite } = require( "@rozenite/metro" );
 const {
   withRozeniteRequireProfiler,
 } = require( "@rozenite/require-profiler-plugin/metro" );
+const writeAppCommit = require( "./scripts/writeAppCommit" );
 
 const {
   resolver: { sourceExts, assetExts },
@@ -42,8 +43,26 @@ const config = {
   watchFolders: [...localPackagePaths],
 };
 
+const mergedConfig = mergeConfig( getDefaultConfig( __dirname ), config );
+
+// Stamp the git commit before every bundle build. Stamping once at config load
+// would only cover the bundle built by that Metro process: a dev server started
+// before a rebase keeps serving newly pulled code under the commit it happened
+// to start on, which is the failure this is here to prevent. Metro calls this
+// at the start of each graph build, so `start`, `run-ios`, `run-android` and
+// `react-native bundle` are all covered. writeAppCommit only touches the file
+// when the commit actually changes, so the module Metro watches is invalidated
+// once per checkout rather than once per reload.
+const { getTransformOptions } = mergedConfig.transformer;
+mergedConfig.transformer.getTransformOptions = async ( ...args ) => {
+  writeAppCommit( );
+  return getTransformOptions
+    ? getTransformOptions( ...args )
+    : {};
+};
+
 module.exports = withRozenite(
-  mergeConfig( getDefaultConfig( __dirname ), config ),
+  mergedConfig,
   {
     enabled: process.env.WITH_ROZENITE === "true",
     enhanceMetroConfig: config => withRozeniteRequireProfiler( config ),

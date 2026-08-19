@@ -1,131 +1,67 @@
-import handleError from "api/error";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 
 import { log } from "../../react-native-logs.config";
 
 const defaultLogger = log.extend( "logging.js" );
 
-// returns string representation of an object, intended for debugging
-function inspect( target ) {
-  return JSON.stringify( target );
-}
-
-function handleRetryDelay( failureCount, error ) {
-  // Special handling for 429 errors - use exponential backoff
-  if ( error.status === 429 || ( error.response && error.response.status === 429 ) ) {
-    const baseDelay = 1000;
-    const exponentialDelay = baseDelay * 2 ** failureCount;
-    const jitter = Math.random() * 100; // Add randomness
-    return exponentialDelay + jitter; // Progressive backoff
-  }
-
-  // Default React Query retry delay for other errors
+function handleRetryDelay( failureCount ) {
   return Math.min( 1000 * 2 ** failureCount, 30000 );
 }
 
-function handleTooManyRequestsErrors( failureCount, error, options = {} ) {
-  if ( error.status === 429 || ( error.response && error.response.status === 429 ) ) {
-    // Use progressive backoff for rate limit errors using handleRetryDelay;
-    // wait longer between retries
-    const shouldRetry = failureCount < 3;
+// A stalled fetch has no upper bound of its own, so a network hiccup that
+// never surfaces a connection error just sits there — see slowLoadTracker's
+// HANG_FETCH_MS, which is where the app itself gives up waiting and reports
+// one of these as a hang rather than a request that ever resolved. Aborting
+// authenticated requests at the same threshold (see useAuthenticatedQuery /
+// useAuthenticatedInfiniteQuery) turns that indefinite hang into a retryable
+// failure instead.
+const REQUEST_TIMEOUT_MS = 20000;
 
-    // Let the error handler know this was a rate limit error but don't throw to allow retry
-    handleError( error, {
-      throw: false,
-      onApiError: apiError => {
-        console.log( apiError, "API error in reactQueryRetry handleTooManyRequestsErrors" );
-      },
-      failureCount,
-      ...options,
-    } );
-
-    return shouldRetry;
-  }
-  return null;
-}
+const createRequestTimeoutSignal = ( ) => {
+  const controller = new AbortController( );
+  const timer = setTimeout( ( ) => controller.abort( ), REQUEST_TIMEOUT_MS );
+  return {
+    signal: controller.signal,
+    clear: ( ) => clearTimeout( timer ),
+  };
+};
 
 // Note that this should not be async. When you're using it with reactQuery,
-// returning a promise is like returning true, which means it retries
-// forever
-function reactQueryRetry( failureCount, error, options = {} ) {
-  const isOffline = error instanceof TypeError && error.message.match( "Network request failed" );
-  const logger = options.logger || defaultLogger;
+// returning a promise is like returning true, which means it retries forever.
+// Retries only on 5xx errors, network connection failures, or our own
+// request-timeout abort (see createRequestTimeoutSignal above).
+function reactQueryRetry( failureCount, error ) {
+  const isNetworkFailure = ( error instanceof TypeError
+    && /Network request failed/i.test( error.message ) )
+    || error?.name === "AbortError";
+  const status = error.status ?? error.response?.status;
+  const is5xx = typeof status === "number" && status >= 500 && status < 600;
 
-  // trying to get more context in Grafana for TooManyRequests errors
-  const rateLimitRetryDecision = handleTooManyRequestsErrors( failureCount, error, options );
-  if ( rateLimitRetryDecision !== null ) {
-    return rateLimitRetryDecision;
-  }
-
-  if ( typeof ( options.beforeRetry ) === "function" ) {
-    options.beforeRetry( failureCount, error );
-  }
-  logger.warn(
-    `reactQueryRetry, error: ${error.message}, failureCount: ${failureCount}, options:`,
-    inspect( options?.queryKey ),
-  );
-  // We don't want to retry server-side errors — retrying a downed server amplifies
-  // load. The logger.warn above still fires so these errors remain visible in
-  // Grafana, but we skip handleError (which would fire the log transport again)
-  // since /v2/log itself returns 503 during downtime.
-  if ( error.status === 503 || error.response?.status === 503 ) {
+  // JWT refresh side-effect on auth errors — fire-and-forget, no retry
+  if ( status === 401 || status === 403 ) {
+    getJWT( true ).catch( refreshError => {
+      defaultLogger.error( "Error refreshing JWT during retry:", refreshError );
+    } );
     return false;
   }
-  let shouldRetry = failureCount < 2;
-  if (
-    // If this is an actual 408 Request Timeout error, we probably want to
-    // retry... but this will probably never happen because at this point the
-    // error hasn't been converted to an INatApiError
-    error.status === 408 || isOffline
-  ) {
-    shouldRetry = failureCount < 3;
-    console.log(
-      "reactQueryRetry, handling 408 Request Timeout / Network request failed, "
-      + `failureCount: ${failureCount}, shouldRetry: ${shouldRetry}, options: `,
-      options,
-    );
-    // 20240905 amanda - not handling error here since we want these queries to retry
-    // immediately if there is an internet connection
-    // though i'm also not sure if we need to log these network request failed errors somewhere
-    // or if it's ok to suppress them
-    return shouldRetry;
-  }
-  // 404 means the record does not exist, so no need to retry
-  if ( error.status === 404 ) {
-    shouldRetry = false;
-    console.log( "reactQueryRetry, handling 404, not retrying" );
-  }
-  handleError( error, {
-    throw: false,
-    onApiError: async apiError => {
-      if ( apiError.status === 401 || apiError.status === 403 ) {
-        // If we get a 401 or 403, call getJWT
-        // which has a timestamp check if we need to refresh the token
-        logger.error( "JWT error detected in React Query retry:", JSON.stringify( {
-          queryKey: options?.queryKey
-            ? inspect( options.queryKey )
-            : "unknown",
-          url: error?.response?.url,
-          routeName: options?.routeName || error?.routeName,
-          timestamp: new Date().toISOString(),
-        } ) );
 
-        try {
-          await getJWT( true ); // Force refresh token
-        } catch ( refreshError ) {
-          logger.error( "Error refreshing JWT during retry:", refreshError );
-        }
-      }
-      // Consider handling 500+ errors differently. if you can detect them
-      // before processing, you want to disable retry
-    },
-  } );
+  if ( !isNetworkFailure && !is5xx ) {
+    return false;
+  }
+
+  const shouldRetry = failureCount < 3;
+  if ( shouldRetry ) {
+    const label = isNetworkFailure
+      ? "Network failure"
+      : `HTTP ${status}`;
+    defaultLogger.warn( `reactQueryRetry: ${label}, attempt ${failureCount + 1}` );
+  }
+
   return shouldRetry;
 }
 
-// eslint-disable-next-line import/prefer-default-export
 export {
+  createRequestTimeoutSignal,
   handleRetryDelay,
-  inspect,
   reactQueryRetry,
 };

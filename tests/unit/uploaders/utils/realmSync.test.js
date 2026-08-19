@@ -109,6 +109,24 @@ describe( "markRecordUploaded", () => {
     expect( mockSound._synced_at ).toBeInstanceOf( Date );
   } );
 
+  test( "should mark the live Photo when the uploaded one was invalidated", () => {
+    const invalidatedPhoto = {
+      id: null,
+      _synced_at: null,
+      isValid: ( ) => false,
+    };
+    const livePhoto = { id: null, _synced_at: null, localFilePath: "/photo.jpg" };
+    mockObservation.observationPhotos = [{ uuid: "photo123", photo: livePhoto }];
+
+    markRecordUploaded( "obs123", null, "Photo", mockResponse, mockRealm, {
+      record: invalidatedPhoto,
+      localFilePath: "/photo.jpg",
+    } );
+
+    expect( livePhoto.id ).toBe( 12345 );
+    expect( invalidatedPhoto.id ).toBeNull();
+  } );
+
   test( "should throw error when record is not found", () => {
     expect( () => {
       markRecordUploaded( "obs123", "nonexistent", "ObservationPhoto", mockResponse, mockRealm );

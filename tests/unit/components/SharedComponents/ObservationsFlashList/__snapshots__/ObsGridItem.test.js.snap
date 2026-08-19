@@ -2,12 +2,10 @@
 
 exports[`ObsGridItem for an observation with a photo should render 1`] = `
 <View
+  onLayout={[Function]}
   style={
     [
       [
-        {
-          "maxHeight": 210,
-        },
         {
           "overflow": "hidden",
         },
@@ -15,16 +13,19 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
           "position": "relative",
         },
         {
+          "maxHeight": 210,
+        },
+        {
+          "height": 200,
+        },
+        {
+          "width": 200,
+        },
+        {
           "borderBottomLeftRadius": 15,
           "borderBottomRightRadius": 15,
           "borderTopLeftRadius": 15,
           "borderTopRightRadius": 15,
-        },
-        {
-          "width": 200,
-        },
-        {
-          "width": 200,
         },
       ],
     ]
@@ -43,6 +44,9 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
           },
           {
             "position": "relative",
+          },
+          {
+            "overflow": "hidden",
           },
         ],
       ]
@@ -117,34 +121,53 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
             ]
           }
         >
-          
+          
         </Text>
       </View>
     </View>
-    <FasterImageView
-      accessibilityIgnoresInvertColors={true}
-      fadeDuration={0}
-      source={
-        {
-          "cachePolicy": "discWithCacheControl",
-          "resizeMode": "cover",
-          "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg",
-        }
-      }
+    <View
       style={
         [
           [
             {
-              "flexGrow": 1,
+              "overflow": "hidden",
             },
-            {
-              "aspectRatio": 1,
-            },
+            [
+              {
+                "flexGrow": 1,
+              },
+              {
+                "aspectRatio": 1,
+              },
+            ],
           ],
         ]
       }
       testID="ObsList.photo"
-    />
+    >
+      <View
+        accessibilityIgnoresInvertColors={true}
+        source={
+          {
+            "cachePolicy": "discNoCacheControl",
+            "resizeMode": "cover",
+            "transitionDuration": 0,
+            "url": "https://inaturalist-open-data.s3.amazonaws.com/photos/1/large.jpeg",
+          }
+        }
+        style={
+          [
+            {
+              "bottom": 0,
+              "left": 0,
+              "position": "absolute",
+              "right": 0,
+              "top": 0,
+            },
+          ]
+        }
+      />
+    </View>
   </View>
   <BVLinearGradient
     colors={
@@ -160,6 +183,7 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
       }
     }
     locations={null}
+    pointerEvents="none"
     startPoint={
       {
         "x": 0,
@@ -191,6 +215,12 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
           },
           {
             "bottom": 0,
+          },
+          {
+            "left": 0,
+          },
+          {
+            "right": 0,
           },
           {
             "alignItems": "flex-start",
@@ -246,12 +276,10 @@ exports[`ObsGridItem for an observation with a photo should render 1`] = `
 
 exports[`ObsGridItem for an observation without a photo should render 1`] = `
 <View
+  onLayout={[Function]}
   style={
     [
       [
-        {
-          "maxHeight": 210,
-        },
         {
           "overflow": "hidden",
         },
@@ -259,16 +287,19 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
           "position": "relative",
         },
         {
+          "maxHeight": 210,
+        },
+        {
+          "height": 200,
+        },
+        {
+          "width": 200,
+        },
+        {
           "borderBottomLeftRadius": 15,
           "borderBottomRightRadius": 15,
           "borderTopLeftRadius": 15,
           "borderTopRightRadius": 15,
-        },
-        {
-          "width": 200,
-        },
-        {
-          "width": 200,
         },
       ],
     ]
@@ -287,6 +318,9 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
           },
           {
             "position": "relative",
+          },
+          {
+            "overflow": "hidden",
           },
         ],
       ]
@@ -361,7 +395,7 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
             ]
           }
         >
-          
+          
         </Text>
       </View>
     </View>
@@ -380,6 +414,7 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
       }
     }
     locations={null}
+    pointerEvents="none"
     startPoint={
       {
         "x": 0,
@@ -411,6 +446,12 @@ exports[`ObsGridItem for an observation without a photo should render 1`] = `
           },
           {
             "bottom": 0,
+          },
+          {
+            "left": 0,
+          },
+          {
+            "right": 0,
           },
           {
             "alignItems": "flex-start",

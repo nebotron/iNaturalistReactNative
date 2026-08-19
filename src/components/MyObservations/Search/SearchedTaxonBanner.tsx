@@ -1,8 +1,9 @@
 import {
   Body3,
+  CachedImage,
   INatIconButton,
 } from "components/SharedComponents";
-import { Image, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import {
   MY_OBSERVATIONS_ACTION,
   useMyObservations,
@@ -30,10 +31,9 @@ const SearchedTaxonBanner = ( ) => {
       <View className="flex-1 flex-row items-center space-x-[10px]">
         <View className="w-[44px] h-[44px] bg-lightGray">
           {searchedTaxon.iconUri && (
-            <Image
+            <CachedImage
               source={{ uri: searchedTaxon.iconUri }}
               className="w-full h-full"
-              accessibilityIgnoresInvertColors
             />
           )}
         </View>

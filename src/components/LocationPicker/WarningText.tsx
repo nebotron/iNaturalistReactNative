@@ -1,4 +1,3 @@
-import classnames from "classnames";
 import {
   Body3,
 } from "components/SharedComponents";
@@ -16,39 +15,21 @@ interface Props {
 const WarningText = ( { accuracyTest }: Props ) => {
   const { t } = useTranslation( );
 
-  if ( accuracyTest === "pass" ) {
+  // Only warn when accuracy is too imprecise to be useful. The
+  // "zoom in as much as possible" nudge for merely-acceptable accuracy has
+  // been removed.
+  if ( accuracyTest !== "fail" ) {
     return null;
   }
-
-  const displayWarningText = ( ) => {
-    if ( accuracyTest === "acceptable" ) {
-      return t( "Zoom-in-as-much-as-possible-to-improve" );
-    }
-    if ( accuracyTest === "fail" ) {
-      return t( "Location-accuracy-is-too-imprecise" );
-    }
-    return null;
-  };
 
   return (
     <View
       pointerEvents="none"
-      className={classnames( "p-4 rounded-xl", {
-        "bg-white": accuracyTest === "acceptable",
-        "bg-warningRed": accuracyTest === "fail",
-      } )}
+      className="p-4 rounded-xl bg-warningRed"
       style={DROP_SHADOW}
     >
-      <Body3
-        className={classnames(
-          "text-darkGray",
-          "text-center",
-          {
-            "text-white": accuracyTest === "fail",
-          },
-        )}
-      >
-        {displayWarningText( )}
+      <Body3 className="text-white text-center">
+        {t( "Location-accuracy-is-too-imprecise" )}
       </Body3>
     </View>
   );

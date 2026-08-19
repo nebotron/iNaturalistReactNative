@@ -4,34 +4,27 @@ import React from "react";
 import { useTranslation } from "sharedHooks";
 
 import SuggestionsLoading from "./SuggestionsLoading";
-import SuggestionsOffline from "./SuggestionsOffline";
 
 interface Props {
   hasTopSuggestion?: boolean;
   isLoading: boolean;
   onTaxonChosen: ( ) => void;
-  reloadSuggestions: ( ) => void;
-  urlWillCrashOffline: boolean;
 }
 
 const SuggestionsEmpty = ( {
   hasTopSuggestion = false,
   isLoading,
   onTaxonChosen,
-  reloadSuggestions,
-  urlWillCrashOffline,
 }: Props ) => {
   const { t } = useTranslation( );
   const { params } = useRoute( );
-  const { lastScreen } = params;
+  // Suggestions can be rendered with no route params at all (e.g. when the
+  // persisted navigation state restores this screen on launch), and
+  // destructuring them unguarded took down the whole app through the
+  // ErrorBoundary. lastScreen is optional here anyway.
+  const { lastScreen } = params || {};
 
   const textClass = "mt-10 px-10 text-center";
-
-  if ( urlWillCrashOffline ) {
-    return (
-      <SuggestionsOffline reloadSuggestions={reloadSuggestions} />
-    );
-  }
 
   if ( isLoading ) {
     return (

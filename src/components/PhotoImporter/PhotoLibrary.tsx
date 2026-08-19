@@ -1,34 +1,47 @@
-import { mkdir, moveFile, TemporaryDirectoryPath } from "@dr.pogodin/react-native-fs";
-import { useFocusEffect, useNavigation, useRoute } from "@react-navigation/native";
+import {
+  copyFile, mkdir, unlink,
+} from "@dr.pogodin/react-native-fs";
+import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
+import { useNavigation, useRoute } from "@react-navigation/native";
 import {
   photoLibraryPhotosPath,
 } from "appConstants/paths";
 import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDetails";
-import { ActivityAnimation, ViewWrapper } from "components/SharedComponents";
-import { t } from "i18next";
-import type { NoBottomTabStackScreenProps } from "navigation/types";
+import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
+import type { ImportedAsset } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
+import {
+  appendPhotosToObservation,
+  buildGroupedMediaItems,
+  buildGroupedSoundItem,
+} from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
+import {
+  extractVideoMedia,
+  isVideoNode,
+} from "components/PhotoImporter/helpers/videoImportHelpers";
+import PhotoGallery from "components/PhotoImporter/PhotoGallery";
+import { ViewWrapper } from "components/SharedComponents";
+import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
+import { RealmContext } from "providers/contexts";
 import React, {
   useCallback,
-  useState,
 } from "react";
 import {
-  InteractionManager,
-  Platform,
-  View,
+  Alert, NativeModules, Platform,
 } from "react-native";
-import type { Asset } from "react-native-image-picker";
-import { launchImageLibrary } from "react-native-image-picker";
-import Observation from "realmModels/Observation";
-import ObservationPhoto from "realmModels/ObservationPhoto";
-import fetchPlaceName from "sharedHelpers/fetchPlaceName";
+import { toDevicePhotoLocation } from "sharedHelpers/devicePhotoLocation";
+import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
+import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
-import { sleep } from "sharedHelpers/util";
-import { useLayoutPrefs } from "sharedHooks";
+import { useInputImageTracking, useLayoutPrefs, useTranslation } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
-import type { ObservationFlowSlice } from "stores/createObservationFlowSlice";
 import useStore from "stores/useStore";
+import * as uuid from "uuid";
+
+type PhotoNode = PhotoIdentifier["node"];
 
 const logger = log.extend( "PhotoLibrary" );
+
+const { useRealm } = RealmContext;
 
 const MAX_PHOTOS_ALLOWED = Platform.select( {
   ios: 500,
@@ -37,21 +50,37 @@ const MAX_PHOTOS_ALLOWED = Platform.select( {
 
 const FROM_AICAMERA_MAX_PHOTOS_ALLOWED = 1;
 
+const nodeToSourceAsset = ( node: PhotoNode ): ImportedAsset => ( {
+  uri: node.image.uri,
+  fileName: node.image.filename ?? undefined,
+  width: node.image.width,
+  height: node.image.height,
+  fileSize: node.image.fileSize ?? undefined,
+  type: "image/jpeg",
+  id: node.id ?? undefined,
+  timestamp: String( node.timestamp ),
+  // Carried separately from the file: a location set by hand in Photos lives
+  // on the asset, not in the photo's EXIF (see devicePhotoLocation.ts).
+  deviceLocation: toDevicePhotoLocation( node.location ) ?? undefined,
+} );
+
 const PhotoLibrary = ( ) => {
-  const {
-    screenAfterPhotoEvidence, isDefaultMode,
-  } = useLayoutPrefs( );
-  const navigation = useNavigation<NoBottomTabStackScreenProps<"PhotoLibrary">["navigation"]>();
+  // This screen is registered in both stacks (see PhotoImporterStackScreens),
+  // so navigate to GroupPhotos unqualified and let it resolve in whichever
+  // stack the import was started from.
+  const navigation = useNavigation<
+    NoBottomTabStackScreenProps<"PhotoLibrary">["navigation"] &
+    TabStackScreenProps<"PhotoLibrary">["navigation"]
+  >( );
   const { params } = useRoute<NoBottomTabStackScreenProps<"PhotoLibrary">["route"]>();
 
-  const [photoLibraryShown, setPhotoLibraryShown] = useState( false );
   const setPhotoImporterState = useStore( state => state.setPhotoImporterState );
-  const setGroupedPhotos = useStore(
-    ( state: ObservationFlowSlice ) => state.setGroupedPhotos,
+  const addOriginalDevicePhotoUris = useStore( state => state.addOriginalDevicePhotoUris );
+  const addImportedPhotoDeviceUriMappings = useStore(
+    state => state.addImportedPhotoDeviceUriMappings,
   );
-  const groupedPhotos = useStore(
-    ( state: ObservationFlowSlice ) => state.groupedPhotos,
-  );
+  const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
+  const groupedPhotos = useStore( state => state.groupedPhotos );
   const updateObservations = useStore( state => state.updateObservations );
   const photoLibraryUris = useStore( state => state.photoLibraryUris );
   const evidenceToAdd = useStore( state => state.evidenceToAdd );
@@ -60,278 +89,346 @@ const PhotoLibrary = ( ) => {
   const observations = useStore( state => state.observations );
   const numOfObsPhotos: number = currentObservation?.observationPhotos?.length || 0;
   const exitObservationFlow = useExitObservationFlow( );
+  const realm = useRealm( );
+  const { trackImagesLoaded } = useInputImageTracking( );
+  const { t } = useTranslation( );
+  const { isDefaultMode } = useLayoutPrefs( );
 
-  const skipGroupPhotos = params
-    ? params.skipGroupPhotos
-    : false;
-  const fromGroupPhotos = params
-    ? params.fromGroupPhotos
-    : false;
-  const fromAICamera = params
-    ? params.fromAICamera
-    : false;
+  const skipGroupPhotos = params?.skipGroupPhotos ?? false;
+  const fromGroupPhotos = params?.fromGroupPhotos ?? false;
+  const fromAICamera = params?.fromAICamera ?? false;
 
   const navToObsEdit = useCallback( ( ) => navigation.navigate( "ObsEdit", {
     lastScreen: "PhotoLibrary",
   } ), [navigation] );
 
-  const navBasedOnUserSettings = useCallback( async ( ) => {
-    if ( isDefaultMode ) {
-      // TODO: why do we need to define higher navigator here
-      return navigation.navigate( "NoBottomTabStackNavigator", {
-        screen: "Match",
-        params: {
-          lastScreen: "PhotoLibrary",
-        },
-      } );
-    }
-
-    // in advanced mode, navigate based on user preference
-    return navigation.navigate( "NoBottomTabStackNavigator", {
-      screen: screenAfterPhotoEvidence,
-      params: {
-        lastScreen: "PhotoLibrary",
-      },
-    } );
-  }, [navigation, screenAfterPhotoEvidence, isDefaultMode] );
-
-  const moveImagesToDocumentsDirectory = async ( selectedImages:
-    { image: Asset }[] ) => {
-    const path = photoLibraryPhotosPath;
-    await mkdir( path );
-
-    const movedImages = await Promise.all( selectedImages.map( async ( { image } ) => {
-      const { fileName, uri } = image;
-      if ( !fileName ) {
-        throw new Error( "No fileName in pick photo response" );
+  const handleSelectionCancelled = useCallback( ( ) => {
+    if ( fromGroupPhotos ) {
+      navigation.navigate( "GroupPhotos" );
+      navigation.setParams( { fromGroupPhotos: false } );
+    } else if ( skipGroupPhotos ) {
+      navToObsEdit();
+    } else if ( params?.previousScreen?.name === "ObsDetails" ) {
+      if ( !params.previousScreen.params?.uuid ) {
+        throw new Error( "No UUID found to route to ObsDetails screen" );
       }
-      const destPath = `${path}/${fileName}`;
-      const getSourcePath = Platform.select( {
-        ios: ( ) => `${TemporaryDirectoryPath}/${fileName}`,
-        // Get image from uri on android. TemporaryDirectoryPath results in an ANR.
-        android: ( ) => {
-          if ( !uri ) {
-            throw new Error( "No URI in pick photo response" );
-          }
-          return uri;
-        },
-        default: ( ) => {
-          throw new Error( `Unsupported platform for moving picked photo: ${Platform.OS}` );
-        },
-      } );
-
-      await moveFile( getSourcePath(), destPath );
-      return {
-        image: {
-          ...image,
-          uri: Platform.OS === "ios"
-            ? `file://${destPath}`
-            : destPath,
-        },
-      };
-    } ) );
-    return movedImages;
-  };
-
-  const showPhotoLibrary = useCallback( async () => {
-    if ( photoLibraryShown ) {
-      return;
-    }
-
-    setPhotoLibraryShown( true );
-
-    if ( Platform.OS === "ios" ) {
-      // iOS has annoying transition of the screen - that if we don't wait enough time,
-      // the launchImageLibrary would halt and not return (and not showing any image picker)
-      await sleep( 500 );
-    }
-
-    // According to the native code of the image picker library, it never rejects the promise,
-    // just returns a response object with errorCode
-    // https://github.com/react-native-image-picker/react-native-image-picker?tab=readme-ov-file#Asset-Object
-    // THAT SAID, we had an android isse where this threw an error, causing a stuck loading screen
-    // see https://linear.app/inaturalist/issue/MOB-90/importing-photo-while-offline-in-android-gets-stuck-on-photogallery
-    // so I am adding a try/catch just in case
-    let response;
-    try {
-      response = await launchImageLibrary( {
-        selectionLimit: ( fromAICamera && isDefaultMode )
-          ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
-          : MAX_PHOTOS_ALLOWED,
-        mediaType: "photo",
-        includeBase64: false,
-        // forceOldAndroidPhotoPicker is necessary because the "new" picker strips key EXIF data
-        forceOldAndroidPhotoPicker: true,
-        chooserTitle: t( "Import-Photos-From" ),
-        presentationStyle: "overFullScreen",
-      } );
-    } catch ( launchError ) {
-      logger.error( "launchImageLibrary threw unexpectedly", launchError );
-      setPhotoLibraryShown( false );
-      exitObservationFlow( );
-      return;
-    }
-
-    if ( !response || response.didCancel || !response.assets || response.errorCode ) {
-      // User cancelled selection of photos - close current screen
-      if ( response?.errorCode ) {
-        logger.error(
-          `import from photo library error: ${response.errorCode}: ${response.errorMessage}`,
-        );
-      }
-
-      if ( fromGroupPhotos ) {
-        // This screen was called from the plus button of the group photos screen - get back to it
-        navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
-        navigation.setParams( { fromGroupPhotos: false } );
-      } else if ( skipGroupPhotos ) {
-        // This only happens when being called from ObsEdit
-        navToObsEdit();
-
-        // Determine if we need to go back to ObsList or ObsDetails screen
-      } else if ( params && params.previousScreen && params.previousScreen.name === "ObsDetails" ) {
-        // If the uuid is undefined we need to error out here or ObsDetails doesn't work
-        if ( !params.previousScreen.params?.uuid ) {
-          throw new Error( "No UUID found to route to ObsDetails screen" );
-        }
-        navigateToObsDetails( navigation, params.previousScreen.params.uuid );
-      } else if ( params?.cmonBack && navigation.canGoBack() ) {
-        navigation.goBack();
-      } else {
-        exitObservationFlow( );
-      }
-      setPhotoLibraryShown( false );
-      return;
-    }
-
-    try {
-      const selectedTmpDirectoryImages = response.assets.map( x => ( { image: x } ) );
-      const selectedImages = await moveImagesToDocumentsDirectory( selectedTmpDirectoryImages );
-
-      if ( fromGroupPhotos ) {
-        // This screen was called from the plus button of the group photos screen - get back to it
-        // after adding the newly selected photos
-        setGroupedPhotos( [...groupedPhotos, ...selectedImages.map( photo => ( {
-          photos: [photo],
-        } ) )] );
-        navigation.setParams( { fromGroupPhotos: false } );
-        navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
-        setPhotoLibraryShown( false );
-        return;
-      }
-
-      const importedPhotoUris = selectedImages.map( x => x.image.uri );
-
-      if ( skipGroupPhotos ) {
-        // add evidence to existing observation
-        setPhotoImporterState( {
-          photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
-          evidenceToAdd: [...evidenceToAdd, ...importedPhotoUris],
-        } );
-        const obsPhotos = await ObservationPhoto
-          .createObsPhotosWithPosition(
-            selectedImages,
-            { position: numOfObsPhotos, local: false },
-          );
-
-        // If the current observation is not synced, update the EXIF data from imported photos
-        const unsynced = !currentObservation?._synced_at;
-        let updatedCurrentObservation = unsynced
-          ? await Observation
-            .updateObsExifFromPhotos( importedPhotoUris, currentObservation )
-          : currentObservation;
-
-        updatedCurrentObservation = Observation
-          .appendObsPhotos( obsPhotos, updatedCurrentObservation );
-
-        const updatedObservations = [...observations];
-        updatedObservations[currentObservationIndex] = updatedCurrentObservation;
-        updateObservations( updatedObservations );
-
-        navToObsEdit();
-        setPhotoLibraryShown( false );
-      } else if ( selectedImages.length === 1 ) {
-        // create a new observation and skip group photos screen
-        const newObservation = await Observation.createObservationWithPhotos( [selectedImages[0]] );
-        // fetch place name to display on Match screen
-        if ( newObservation.latitude ) {
-          const placeName = await fetchPlaceName(
-            newObservation.latitude,
-            newObservation.longitude,
-          );
-          newObservation.place_guess = placeName;
-        }
-        setPhotoImporterState( {
-          observations: [newObservation],
-        } );
-        navBasedOnUserSettings( );
-        setPhotoLibraryShown( false );
-      } else {
-        // navigate to group photos
-        setPhotoImporterState( {
-          photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
-          groupedPhotos: selectedImages.map( photo => ( {
-            photos: [photo],
-          } ) ),
-        } );
-        navigation.setParams( { fromGroupPhotos: false } );
-        navigation.navigate( "NoBottomTabStackNavigator", { screen: "GroupPhotos" } );
-        setPhotoLibraryShown( false );
-      }
-    } catch ( error ) {
-      logger.error( "Error importing photos from library", error );
-      setPhotoLibraryShown( false );
+      navigateToObsDetails( navigation, params.previousScreen.params.uuid );
+    } else if ( params?.cmonBack && navigation.canGoBack() ) {
+      navigation.goBack();
+    } else {
       exitObservationFlow( );
     }
   }, [
+    exitObservationFlow,
+    fromGroupPhotos,
+    navToObsEdit,
+    navigation,
+    params,
+    skipGroupPhotos,
+  ] );
+
+  const copyImagesFromCameraRoll = useCallback( async (
+    nodes: PhotoNode[],
+    onPhotoSettled?: ( succeeded: boolean ) => void,
+  ) => {
+    const path = photoLibraryPhotosPath;
+    await mkdir( path );
+
+    // Every node for a given asset resolves to the same destination path, so
+    // copying one twice in a batch has the two writes racing over the same
+    // file (each unlinking what the other just wrote) and both fail with
+    // "PHPhotosErrorDomain error -1", dropping the photo from the import.
+    const uniqueNodes = [...new Map(
+      nodes.map( node => [node.image.uri, node] ),
+    ).values( )];
+
+    // Distinct assets can still collide on a destination, since two of them
+    // can carry the same filename (e.g. IMG_0001.JPG from two cameras).
+    const claimedFileNames = new Set<string>( );
+
+    const copyNode = async ( node: PhotoNode ) => {
+      let fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
+      if ( claimedFileNames.has( fileName ) ) {
+        fileName = `${uuid.v4()}-${fileName}`;
+      }
+      claimedFileNames.add( fileName );
+      const destPath = `${path}/${fileName}`;
+      // Remove any file left by a previous import of the same asset. Both
+      // PHAssetResourceManager.writeData (iOS) and copyFile (Android) fail if
+      // the destination already exists — iOS surfaces this as the opaque
+      // "PHPhotosErrorDomain error -1", which was aborting the whole import
+      // when a still-selected, already-imported photo was re-imported.
+      await unlink( destPath ).catch( ( ) => undefined );
+      if ( Platform.OS === "ios" ) {
+        // Use PHAssetResourceManager.writeData (via ImageCropper.exportPHAsset)
+        // to write the original file bytes verbatim — no decode/re-encode,
+        // so all EXIF (GPS, timestamp, camera details) is preserved.
+        const { ImageCropper } = NativeModules as {
+          ImageCropper?: {
+            exportPHAsset: (
+              phUri: string,
+              destPath: string
+            ) => Promise<{ uri: string; attempts: number }>;
+          };
+        };
+        // No fallback: copyAssetsFileIOS re-encodes, which silently drops EXIF,
+        // and a photo imported without its metadata is worse than one the user
+        // is told didn't import. copyNodeOrNull counts this as a failed photo.
+        if ( !ImageCropper?.exportPHAsset ) {
+          throw new Error( "ImageCropper.exportPHAsset is unavailable" );
+        }
+        const { attempts } = await ImageCropper.exportPHAsset( node.image.uri, destPath );
+        // A retry succeeding is itself worth knowing: it confirms failed
+        // imports are a slow/flaky iCloud download, not a hard failure.
+        // The ph:// URI identifies the user's photo and belongs in a shared
+        // log no more than the coordinates do; the attempt count is the
+        // information.
+        if ( attempts > 1 ) {
+          logger.info( `Exported a photo after ${attempts} attempt(s)` );
+        }
+      } else {
+        // On Android 10+, content:// URIs served by MediaStore strip GPS EXIF
+        // from the byte stream. Using the actual file path (filepath) bypasses
+        // the MediaStore provider and preserves all EXIF metadata.
+        const sourceUri = node.image.filepath ?? node.image.uri;
+        await copyFile( sourceUri, destPath );
+      }
+      const sourceAsset = nodeToSourceAsset( node );
+      return {
+        image: {
+          ...sourceAsset,
+          uri: `file://${destPath}`,
+        },
+        // Carried alongside so callers can pair a copy with the device asset it
+        // came from by value. Pairing them by index breaks as soon as one photo
+        // in the batch fails to copy, and mismatched pairs attach the wrong
+        // ph:// URI to a photo — which is what later gets deleted from the
+        // device and recorded as uploaded.
+        sourceAsset,
+      };
+    };
+
+    // A single flaky asset (e.g. an iCloud photo whose bytes fail to download,
+    // surfaced as the opaque "PHPhotosErrorDomain error -1") must not abort
+    // the whole batch — that previously rejected the entire import and threw
+    // the user out of the observation flow even when most photos copied fine.
+    const copyNodeOrNull = async ( node: PhotoNode ) => {
+      try {
+        const copied = await copyNode( node );
+        // Report failures as settled too: the progress bar tracks how much of
+        // the wait is left, and a failed copy is over just as a good one is.
+        onPhotoSettled?.( true );
+        return copied;
+      } catch ( error ) {
+        logger.error( "Error copying a photo from camera roll", error );
+        onPhotoSettled?.( false );
+        return null;
+      }
+    };
+
+    const BATCH_SIZE = 10;
+    const results = [];
+    for ( let i = 0; i < uniqueNodes.length; i += BATCH_SIZE ) {
+      const batch = uniqueNodes.slice( i, i + BATCH_SIZE );
+      // eslint-disable-next-line no-await-in-loop
+      const batchResults = await Promise.all( batch.map( copyNodeOrNull ) );
+      results.push( ...batchResults.filter( ( r ): r is NonNullable<typeof r> => r !== null ) );
+    }
+    if ( results.length < uniqueNodes.length ) {
+      logger.warn( `Copied ${results.length} of ${uniqueNodes.length} photo(s) from camera roll` );
+    }
+    return results;
+  }, [] );
+
+  const handleGalleryDone = useCallback( async (
+    nodes: PhotoNode[],
+    onProgress?: ( completed: number, failed: number ) => void,
+  ) => {
+    try {
+      const videoNodes = nodes.filter( isVideoNode );
+      const photoNodes = nodes.filter( n => !isVideoNode( n ) );
+
+      // One tick per selected item, videos included, so the caller's progress
+      // bar advances over the whole import and not just the copying phase.
+      // Failures are counted separately: a photo whose bytes never arrive
+      // (an iCloud asset that won't download) is otherwise invisible until the
+      // user notices it missing from the next screen.
+      let settled = 0;
+      let failed = 0;
+      const reportSettled = ( succeeded: boolean ) => {
+        settled += 1;
+        if ( !succeeded ) failed += 1;
+        onProgress?.( settled, failed );
+      };
+
+      // Extract GIF + audio from each video node and build GroupedMediaItems
+      // so they appear in the GroupPhotos screen alongside regular photos.
+      const videoGroupItems = [];
+      for ( const videoNode of videoNodes ) {
+        // eslint-disable-next-line no-await-in-loop
+        const { gifUri, audioUri } = await extractVideoMedia( videoNode );
+        if ( gifUri ) {
+          videoGroupItems.push( {
+            photos: [
+              {
+                image: {
+                  uri: gifUri,
+                  type: "image/gif",
+                  fileName: gifUri.split( "/" ).pop( ),
+                  width: videoNode.image.width,
+                  height: videoNode.image.height,
+                  fileSize: undefined,
+                  id: undefined,
+                  timestamp: videoNode.timestamp,
+                },
+              },
+            ],
+          } );
+        }
+        if ( audioUri ) {
+          videoGroupItems.push(
+            buildGroupedSoundItem( audioUri, videoNode.timestamp ),
+          );
+        }
+        // A video that yields neither a GIF nor audio contributed nothing to
+        // the import, so count it the same as a photo that failed to copy.
+        reportSettled( !!gifUri || !!audioUri );
+      }
+
+      const copiedPhotos = photoNodes.length > 0
+        ? await copyImagesFromCameraRoll( photoNodes, reportSettled )
+        : [];
+
+      // Only photos that actually copied are staged for the "delete the
+      // originals?" prompt on exit. Staging every selected photo up front
+      // offered to delete originals whose copy had failed, leaving the photo
+      // gone from the device with nothing imported to show for it.
+      addOriginalDevicePhotoUris( getOriginalDevicePhotoUrisFromAssets(
+        copiedPhotos.map( photo => photo.sourceAsset ),
+      ) );
+
+      const selectedPhotos = copiedPhotos.length > 0
+        ? markDuplicatePhotosFromLibrary(
+          realm,
+          copiedPhotos,
+          copiedPhotos.map( photo => photo.sourceAsset ),
+        )
+        : [];
+
+      if ( selectedPhotos.length > 0 ) {
+        addImportedPhotoDeviceUriMappings(
+          selectedPhotos.map( photo => ( {
+            localUri: photo.image.uri,
+            deviceUri: photo.originalDevicePhotoUri,
+          } ) ),
+        );
+        trackImagesLoaded(
+          selectedPhotos.map( ( { image } ) => image.uri ).filter( Boolean ) as string[],
+          "photoLibrary",
+        );
+      }
+      const hasPhotos = selectedPhotos.length > 0;
+
+      // Every copy failing leaves nothing to hand on, and navigating onward
+      // anyway lands the user on an empty Group Photos screen — or, coming
+      // from Group Photos, right back where they started, which is
+      // indistinguishable from the check doing nothing at all. Say what
+      // happened and stay put so the selection survives a retry.
+      if ( photoNodes.length > 0 && !hasPhotos && videoGroupItems.length === 0 ) {
+        logger.error( `Imported none of the ${photoNodes.length} selected photo(s)` );
+        Alert.alert(
+          t( "Something-went-wrong" ),
+          t( "Could-not-import-selected-photos" ),
+        );
+        return;
+      }
+
+      if ( fromGroupPhotos ) {
+        setGroupedPhotos( sortGroupsByTime( [
+          ...groupedPhotos,
+          ...videoGroupItems,
+          ...buildGroupedMediaItems( selectedPhotos ),
+        ] ) );
+        navigation.setParams( { fromGroupPhotos: false } );
+        navigation.navigate( "GroupPhotos" );
+        return;
+      }
+
+      if ( skipGroupPhotos ) {
+        if ( hasPhotos ) {
+          const importedPhotoUris = selectedPhotos.map( x => x.image.uri );
+          setPhotoImporterState( {
+            photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
+            evidenceToAdd: [...evidenceToAdd, ...importedPhotoUris],
+          } );
+        }
+        const updatedCurrentObservation = await appendPhotosToObservation(
+          selectedPhotos,
+          currentObservation,
+          numOfObsPhotos,
+        );
+        const updatedObservations = [...observations];
+        updatedObservations[currentObservationIndex] = updatedCurrentObservation;
+        updateObservations( updatedObservations );
+        navToObsEdit();
+        return;
+      }
+
+      const importedPhotoUris = selectedPhotos.map( x => x.image.uri );
+      setPhotoImporterState( {
+        photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
+        groupedPhotos: sortGroupsByTime( [
+          ...videoGroupItems,
+          ...buildGroupedMediaItems( selectedPhotos ),
+        ] ),
+      } );
+      navigation.setParams( { fromGroupPhotos: false } );
+      navigation.navigate( "GroupPhotos" );
+    } catch ( error ) {
+      logger.error( "Error importing photos from camera roll", error );
+      // Dropping the user out of the flow with no explanation is
+      // indistinguishable from the import having been cancelled — and when the
+      // cause is unreadable metadata, from an import that quietly lost the
+      // photo's date and location.
+      Alert.alert(
+        t( "Something-went-wrong" ),
+        t( "Could-not-import-your-photos-nothing-was-saved" ),
+      );
+      exitObservationFlow( );
+    }
+  }, [
+    addImportedPhotoDeviceUriMappings,
+    addOriginalDevicePhotoUris,
+    copyImagesFromCameraRoll,
     currentObservation,
     currentObservationIndex,
     evidenceToAdd,
     exitObservationFlow,
     fromGroupPhotos,
-    photoLibraryUris,
     groupedPhotos,
-    isDefaultMode,
-    navigation,
     navToObsEdit,
-    navBasedOnUserSettings,
+    navigation,
     numOfObsPhotos,
     observations,
-    params,
-    photoLibraryShown,
+    photoLibraryUris,
+    realm,
     setGroupedPhotos,
     setPhotoImporterState,
     skipGroupPhotos,
+    t,
+    trackImagesLoaded,
     updateObservations,
-    fromAICamera,
   ] );
-
-  useFocusEffect(
-    React.useCallback( () => {
-      // This will run when the screen comes into focus.
-      let interactionHandle = null;
-
-      // Wait for screen to finish transition
-      interactionHandle = InteractionManager.runAfterInteractions( () => {
-        if ( !photoLibraryShown ) {
-          showPhotoLibrary();
-        }
-      } );
-
-      return () => {
-        // This runs when the screen goes out of focus
-        if ( interactionHandle ) {
-          interactionHandle.cancel();
-        }
-      };
-    }, [photoLibraryShown, showPhotoLibrary] ),
-  );
 
   return (
     <ViewWrapper testID="PhotoLibrary">
-      <View className="flex-1 w-full h-full justify-center items-center">
-        <ActivityAnimation />
-      </View>
+      <PhotoGallery
+        maxPhotos={( fromAICamera && isDefaultMode )
+          ? FROM_AICAMERA_MAX_PHOTOS_ALLOWED
+          : MAX_PHOTOS_ALLOWED}
+        onCancel={handleSelectionCancelled}
+        onDone={handleGalleryDone}
+      />
     </ViewWrapper>
   );
 };

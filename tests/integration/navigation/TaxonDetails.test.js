@@ -208,13 +208,16 @@ describe( "TaxonDetails", ( ) => {
     expect(
       await screen.findByTestId( `ObsDetails.${observations[0].uuid}` ),
     ).toBeTruthy();
-    // suggest ID should be popped open with the suggested taxon
-    const bottomSheetText = await screen.findByText(
-      /Would you like to suggest the following identification/,
-    );
-    expect( bottomSheetText ).toBeVisible();
-    const selectedTaxonName = await screen.findByText( taxon.name );
-    expect( selectedTaxonName ).toBeVisible();
+    // The identification is submitted directly rather than through a
+    // confirmation sheet
+    await waitFor( ( ) => {
+      expect( inatjs.identifications.create ).toHaveBeenCalledWith(
+        expect.objectContaining( {
+          identification: expect.objectContaining( { taxon_id: taxon.id } ),
+        } ),
+        expect.anything( ),
+      );
+    } );
     const { currentObservation } = useStore.getState();
     expect( currentObservation.owners_identification_from_vision ).toBeTruthy();
   } );

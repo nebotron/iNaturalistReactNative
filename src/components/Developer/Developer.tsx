@@ -14,6 +14,7 @@ import {
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import { t } from "i18next";
+import orderBy from "lodash/orderBy";
 import React, { useState } from "react";
 import { I18nManager, Platform, Text } from "react-native";
 import Config from "react-native-config";
@@ -54,6 +55,36 @@ const boldClassname = ( line: string, isDirectory = false ) => classnames(
   },
 );
 
+interface AppSizeProps {
+  appSize: Record<string, DirectoryEntrySize[]>;
+}
+
+const AppSizeSummary = ( { appSize }: AppSizeProps ) => {
+  const directoryTotals = orderBy(
+    Object.entries( appSize ).map( ( [directoryName, directoryEntrySizes] ) => ( {
+      directoryName,
+      totalSize: getTotalDirectorySize( directoryEntrySizes ),
+    } ) ),
+    "totalSize",
+    "desc",
+  );
+  return (
+    <>
+      <H1>App Size Breakdown</H1>
+      {directoryTotals.map( ( { directoryName, totalSize } ) => {
+        const line = formatAppSizeString( directoryName, totalSize );
+        return (
+          <P key={directoryName}>
+            <CODE optionalClassName={boldClassname( line, true )}>
+              {line}
+            </CODE>
+          </P>
+        );
+      } )}
+    </>
+  );
+};
+
 interface DirectorySizesProps {
   directoryName: string;
   directoryEntrySizes: DirectoryEntrySize[];
@@ -87,11 +118,7 @@ const DirectoryFileSizes = ( { directoryName, directoryEntrySizes }: DirectorySi
   );
 };
 
-const AppFileSizes = () => {
-  const appSize = useAppSize();
-  if ( !appSize ) {
-    return null;
-  }
+const AppFileSizes = ( { appSize }: AppSizeProps ) => {
   return (
     <>
       {Object.entries( appSize ).map( ( [directoryName, directoryEntrySizes] ) => (
@@ -284,6 +311,7 @@ const TestFlightAdminFeatureFlagTest = () => {
 };
 
 const Developer = () => {
+  const appSize = useAppSize();
   return (
     <ScrollViewWrapper>
       <View className="p-5">
@@ -292,7 +320,8 @@ const Developer = () => {
         <ComputerVisionStats />
         <FeatureFlags />
         <PathStats />
-        <AppFileSizes />
+        {appSize && <AppSizeSummary appSize={appSize} />}
+        {appSize && <AppFileSizes appSize={appSize} />}
         {/* TODO: remove once MOB-1573 is validated in TestFlight */}
         <TestFlightAdminFeatureFlagTest />
       </View>

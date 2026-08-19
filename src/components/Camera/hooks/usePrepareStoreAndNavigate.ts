@@ -7,10 +7,11 @@ import {
 import Observation from "realmModels/Observation";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import { log } from "sharedHelpers/logger";
+import { trackUiWork } from "sharedHelpers/uiDelayTracker";
 import {
+  useInputImageTracking,
   useLayoutPrefs,
 } from "sharedHooks";
-import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
 
 // Relative import so MOCK_MODE=e2e resolves fetchPlaceName.e2e-mock (Metro sourceExts).
@@ -29,12 +30,16 @@ const usePrepareStoreAndNavigate = ( ) => {
   const cameraUris = useStore( state => state.cameraUris );
   const currentObservation = useStore( state => state.currentObservation );
   const addCameraRollUris = useStore( state => state.addCameraRollUris );
+  const attachDeviceUrisToObservationPhotos = useStore(
+    state => state.attachDeviceUrisToObservationPhotos,
+  );
   const currentObservationIndex = useStore( state => state.currentObservationIndex );
   const observations = useStore( state => state.observations );
   const setSavingPhoto = useStore( state => state.setSavingPhoto );
   const setCameraState = useStore( state => state.setCameraState );
   const setSentinelFileName = useStore( state => state.setSentinelFileName );
   const { screenAfterPhotoEvidence, isDefaultMode } = useLayoutPrefs( );
+  const { trackImageLoaded } = useInputImageTracking( );
 
   const { deviceStorageFull, showStorageFullAlert } = useDeviceStorageFull( );
 
@@ -58,6 +63,18 @@ const usePrepareStoreAndNavigate = ( ) => {
       // Save these camera roll URIs, so later on observation editor can update
       // the EXIF metadata of these photos, once we retrieve a location.
       addCameraRollUris( savedPhotoUris );
+      // Persist each saved photo's device library URI onto its observation
+      // photo so features like device photo cleanup can match the original.
+      // savePhotosToPhotoLibrary preserves order, so only map when every photo
+      // saved successfully and the counts line up.
+      if ( savedPhotoUris.length === uris.length ) {
+        attachDeviceUrisToObservationPhotos(
+          uris.map( ( localUri: string, index: number ) => ( {
+            localUri,
+            deviceUri: savedPhotoUris[index],
+          } ) ),
+        );
+      }
     }
     // When we've persisted photos to the observation, we don't need them in
     // state anymore
@@ -65,6 +82,7 @@ const usePrepareStoreAndNavigate = ( ) => {
     return null;
   }, [
     addCameraRollUris,
+    attachDeviceUrisToObservationPhotos,
     deviceStorageFull,
     setCameraState,
     setSavingPhoto,
@@ -75,7 +93,6 @@ const usePrepareStoreAndNavigate = ( ) => {
     uris,
     userLocation,
     logStageIfAICamera,
-    visionResult,
   ) => {
     const newObservation = await Observation.new( );
 
@@ -94,11 +111,7 @@ const usePrepareStoreAndNavigate = ( ) => {
         position: 0,
         local: true,
       } );
-    if ( !isDefaultMode
-        && screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.OBS_EDIT
-        && visionResult ) {
-      newObservation.taxon = visionResult.taxon;
-    }
+    uris.forEach( ( uri: string ) => trackImageLoaded( uri, "camera" ) );
     setObservations( [newObservation] );
     handleSavingToPhotoLibrary(
       uris,
@@ -106,10 +119,9 @@ const usePrepareStoreAndNavigate = ( ) => {
       logStageIfAICamera,
     ).catch( e => logger.error( "createObsWithCameraPhotos: error saving to photo library", e ) );
   }, [
-    isDefaultMode,
-    screenAfterPhotoEvidence,
     setObservations,
     handleSavingToPhotoLibrary,
+    trackImageLoaded,
   ] );
 
   const updateObsWithCameraPhotos = useCallback( async (
@@ -123,6 +135,7 @@ const usePrepareStoreAndNavigate = ( ) => {
         local: true,
       },
     );
+    evidenceToAdd.forEach( ( uri: string ) => trackImageLoaded( uri, "camera" ) );
     const updatedCurrentObservation = Observation
       .appendObsPhotos( obsPhotos, currentObservation );
 
@@ -142,6 +155,7 @@ const usePrepareStoreAndNavigate = ( ) => {
     currentObservationIndex,
     updateObservations,
     handleSavingToPhotoLibrary,
+    trackImageLoaded,
   ] );
 
   const prepareStoreAndNavigate = useCallback( async ( {
@@ -149,8 +163,11 @@ const usePrepareStoreAndNavigate = ( ) => {
     newPhotoState,
     logStageIfAICamera,
     deleteStageIfAICamera,
-    visionResult,
   } ) => {
+    // The camera sits there looking idle while this runs, and it only reaches
+    // navigation (where transition timing starts) at the very end, so this
+    // stretch is a delay nothing else would account for.
+    const startedAt = Date.now( );
     if ( userLocation !== null ) {
       logStageIfAICamera( "fetch_user_location_complete" );
     }
@@ -161,6 +178,7 @@ const usePrepareStoreAndNavigate = ( ) => {
       await updateObsWithCameraPhotos( userLocation, logStageIfAICamera );
       await deleteStageIfAICamera( );
       setSentinelFileName( null );
+      trackUiWork( "camera_prepare_and_navigate", startedAt );
       return navigation.navigate( "ObsEdit", { lastScreen: "Camera" } );
     }
 
@@ -168,10 +186,10 @@ const usePrepareStoreAndNavigate = ( ) => {
       uris,
       userLocation,
       logStageIfAICamera,
-      visionResult,
     );
     await deleteStageIfAICamera( );
     setSentinelFileName( null );
+    trackUiWork( "camera_prepare_and_navigate", startedAt );
 
     // Camera (multicapture and ai) in default mode should only go to Match screen
     if ( isDefaultMode ) {

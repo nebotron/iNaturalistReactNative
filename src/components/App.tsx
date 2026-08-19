@@ -2,6 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import RootStackNavigator from "navigation/RootStackNavigator";
 import type { PropsWithChildren } from "react";
 import React, { useCallback } from "react";
+import { installNetworkInterceptor } from "sharedHelpers/networkLogger";
 import useCurrentUser from "sharedHooks/useCurrentUser";
 import type { SharedData } from "sharedHooks/useShare";
 import useShare from "sharedHooks/useShare";
@@ -9,8 +10,13 @@ import useShare from "sharedHooks/useShare";
 import AppStateListener from "./AppStateListener";
 import useDeferredStartup from "./hooks/useDeferredStartup";
 import useLinking from "./hooks/useLinking";
+import useResumeGroupPhotos from "./hooks/useResumeGroupPhotos";
+import useUsbAutoImport from "./hooks/useUsbAutoImport";
 import NetworkService from "./NetworkService";
 import StartupService from "./StartupService";
+import UploadService from "./UploadService";
+
+installNetworkInterceptor( );
 
 const handleShare = ( navigation, item?: SharedData | null ) => {
   if ( !item ) {
@@ -50,6 +56,8 @@ const App = ( { children }: PropsWithChildren ) => {
   useLinking( currentUser );
   useShare( onShare );
   useDeferredStartup( );
+  useResumeGroupPhotos( );
+  useUsbAutoImport( );
 
   // this children prop is here for the sake of testing with jest
   // normally we would never do this in code
@@ -57,6 +65,7 @@ const App = ( { children }: PropsWithChildren ) => {
     <>
       <StartupService />
       <NetworkService />
+      <UploadService />
       <AppStateListener />
       {children || <RootStackNavigator />}
     </>

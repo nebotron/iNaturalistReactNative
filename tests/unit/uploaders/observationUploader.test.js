@@ -4,7 +4,24 @@ import factory from "tests/factory";
 import * as uploaders from "uploaders";
 import * as mediaUploader from "uploaders/mediaUploader";
 import uploadObservation from "uploaders/observationUploader";
+import { RECOVERY_BY } from "uploaders/utils/errorHandling";
 import * as progressTracker from "uploaders/utils/progressTracker";
+
+const mockErrorWithExtra = jest.fn();
+jest.mock( "sharedHelpers/logger", () => {
+  const makeLogger = () => ( {
+    debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    // Delegate lazily: this logger is bound at module load, before the
+    // mockErrorWithExtra const above has initialized.
+    errorWithExtra: ( ...args ) => mockErrorWithExtra( ...args ),
+    extend: () => makeLogger(),
+  } );
+  const log = makeLogger();
+  return { log };
+} );
 
 jest.mock( "components/LoginSignUp/AuthenticationService" );
 jest.mock( "uploaders/utils/progressTracker" );
@@ -87,6 +104,23 @@ describe( "uploadObservation", () => {
 
     await expect( uploadObservation( mockObservation, mockRealm ) )
       .rejects.toThrow( "Gack, tried to upload an observation without API token!" );
+  } );
+
+  it( "should ask for login again when there is no token and no signed-in user", async () => {
+    authService.getJWT.mockResolvedValue( null );
+    authService.isLoggedIn.mockResolvedValue( false );
+
+    await expect( uploadObservation( mockObservation, mockRealm ) )
+      .rejects.toMatchObject( { recoveryBy: RECOVERY_BY.LOGIN_AGAIN } );
+  } );
+
+  it( "should not ask a signed-in user to log in again when the token refresh failed", async () => {
+    // The user's credentials are fine; the refresh just didn't come back.
+    authService.getJWT.mockResolvedValue( null );
+    authService.isLoggedIn.mockResolvedValue( true );
+
+    await expect( uploadObservation( mockObservation, mockRealm ) )
+      .rejects.toMatchObject( { recoveryBy: undefined } );
   } );
 
   it( "should prepare the observation for upload", async () => {
@@ -183,6 +217,26 @@ describe( "uploadObservation", () => {
 
     await expect( uploadObservation( mockObservation, mockRealm ) )
       .rejects.toThrow( "Media Upload Error" );
+  } );
+
+  it( "should log structured upload-failure diagnostics as extra", async () => {
+    // A 413 (payload too large) from the photos endpoint should surface its
+    // HTTP status in the remote log rather than being flattened to a string.
+    const apiError = Object.assign( new Error( "Payload Too Large" ), { status: 413 } );
+    mediaUploader.uploadObservationMedia.mockRejectedValue( apiError );
+
+    await expect( uploadObservation( mockObservation, mockRealm ) ).rejects.toThrow();
+
+    // The last argument must be the structured details object so the Firebase
+    // transport records its fields instead of stringifying it to "[object Object]".
+    const call = mockErrorWithExtra.mock.calls.find(
+      args => args[0]?.includes( "media_upload" ),
+    );
+    expect( call ).toBeDefined();
+    const details = call.at( -1 );
+    expect( details.stage ).toBe( "media_upload" );
+    expect( details.httpStatus ).toBe( 413 );
+    expect( details.httpStatusText ).toBeDefined();
   } );
 
   it( "should throw an error if media attachment fails", async () => {

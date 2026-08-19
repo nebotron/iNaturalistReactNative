@@ -4,9 +4,10 @@ import type { UniversalSearchResultItem }
   from "components/Explore/ExploreV2/hooks/useUniversalSearch";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
 import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
+import CachedImage from "components/SharedComponents/CachedImage";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
 import IconicTaxonIcon from "components/SharedComponents/IconicTaxonIcon";
-import { Image, Pressable, View } from "components/styledComponents";
+import { Pressable, View } from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
 import type { TFunction } from "i18next";
 import type { ExploreStackScreenProps } from "navigation/types";
@@ -67,10 +68,9 @@ const UniversalSearchResult = ( { result, onPress }: Props ) => {
           <View className="flex-row items-center flex-1">
             {photo
               ? (
-                <Image
+                <CachedImage
                   source={{ uri: photo }}
                   className={THUMBNAIL_CLASS}
-                  accessibilityIgnoresInvertColors
                   testID="UniversalSearchResult.taxonImage"
                 />
               )

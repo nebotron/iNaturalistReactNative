@@ -1,0 +1,152 @@
+import scoreImage from "api/computerVision";
+import flattenUploadParams from "components/Suggestions/helpers/flattenUploadParams";
+import Taxon from "realmModels/Taxon";
+import { useAuthenticatedQuery, useCurrentUser } from "sharedHooks";
+
+interface RankedTaxon {
+  id?: number;
+  rank?: string;
+  rank_level?: number;
+}
+
+interface CVResult {
+  combined_score?: number;
+  taxon?: RankedTaxon;
+}
+
+interface SuggestionObservation {
+  id?: number;
+  uuid?: string;
+  taxon?: RankedTaxon;
+  // API observations carry location as GeoJSON [lng, lat]; top-level
+  // latitude/longitude are often absent, so geojson is the reliable source.
+  geojson?: { coordinates?: [number, number] };
+  latitude?: number;
+  longitude?: number;
+  user?: { id?: number };
+}
+
+// API taxa reliably carry a `rank` string but not always a numeric
+// `rank_level`, so map ranks to levels to fall back on. Mirrors the mapping in
+// sharedHelpers/offlineTaxonomy.
+const RANK_LEVEL_BY_RANK: Record<string, number> = {
+  stateofmatter: 100,
+  kingdom: 70,
+  phylum: 60,
+  subphylum: 57,
+  superclass: 53,
+  class: 50,
+  subclass: 47,
+  infraclass: 45,
+  subterclass: 44,
+  superorder: 43,
+  order: 40,
+  suborder: 37,
+  infraorder: 35,
+  zoosection: 34,
+  superfamily: 33,
+  epifamily: 32,
+  family: 30,
+  subfamily: 27,
+  supertribe: 26,
+  tribe: 25,
+  subtribe: 24,
+  genus: 20,
+  subgenus: 15,
+  section: 13,
+  subsection: 12,
+  complex: 11,
+  species: 10,
+  subspecies: 5,
+};
+
+const rankLevelForTaxon = ( taxon?: RankedTaxon ): number | undefined => {
+  if ( typeof taxon?.rank_level === "number" ) return taxon.rank_level;
+  return taxon?.rank
+    ? RANK_LEVEL_BY_RANK[taxon.rank]
+    : undefined;
+};
+
+// Mirror the Suggestions screen's confidence gate: it only promotes a result
+// to the top suggestion when the single highest-scoring result clears this
+// combined_score threshold (see filterSuggestions.ts). combined_score is on a
+// 0-100 scale.
+const TOP_RESULT_SCORE_THRESHOLD = 78;
+
+// If an observation's community taxon is genus or broader, suggest the most
+// likely species-level ID from the computer vision model. To keep this in sync
+// with the "Suggest ID" (Suggestions) screen, we score through the exact same
+// path it uses: the `score_image` endpoint, fed the subject-cropped/resized
+// photo plus the observation's location. (The previous implementation used
+// `score_observation`, a different endpoint with different inputs, which
+// produced suggestions that disagreed with the Suggestions screen.)
+const useTopSpeciesSuggestion = (
+  observation?: SuggestionObservation,
+  photoUrl?: string,
+  enabled: boolean = true,
+) => {
+  const currentUser = useCurrentUser( );
+  const communityRankLevel = rankLevelForTaxon( observation?.taxon );
+  const isGenusOrBroader = communityRankLevel != null
+    && communityRankLevel >= Taxon.GENUS_LEVEL;
+
+  // Mirror the Suggestions screen: subject-detect and crop other people's
+  // photos, but score the current user's own photos full-frame.
+  const belongsToCurrentUser = observation?.user?.id != null
+    && observation.user.id === currentUser?.id;
+  const detectSubject = !belongsToCurrentUser;
+
+  // Mirror the Suggestions screen's location toggle, which defaults on exactly
+  // when the observation has a location: pass lat/lng only when present. Read
+  // coordinates from geojson (the reliable source on API observations, matching
+  // realmModels/Observation), falling back to top-level latitude/longitude.
+  // Without this, location was almost never sent and the CV scored without geo
+  // context, yielding entirely different species than the Suggest ID screen.
+  const coordinates = observation?.geojson?.coordinates;
+  const latitude = coordinates?.[1] ?? observation?.latitude;
+  const longitude = coordinates?.[0] ?? observation?.longitude;
+
+  const queryEnabled = enabled && isGenusOrBroader && !!currentUser && !!photoUrl;
+
+  const { data } = useAuthenticatedQuery(
+    ["useTopSpeciesSuggestion", photoUrl, latitude, longitude, detectSubject],
+    async optsWithAuth => {
+      // Prepare the image the same way the Suggestions screen does (subject
+      // crop + resize + upload) so the score_image request carries identical
+      // inputs and yields matching results.
+      const params = await flattenUploadParams( photoUrl as string, detectSubject );
+      if ( latitude != null ) {
+        params.lat = latitude;
+        params.lng = longitude;
+      }
+      return scoreImage( params, optsWithAuth );
+    },
+    {
+      enabled: queryEnabled,
+      staleTime: Infinity,
+    },
+  );
+
+  // Only bump a genus-or-broader observation to a CV species when the CV is
+  // actually confident: take its single highest-scoring result and suggest it
+  // only if that result is species-level (or finer) AND clears the same
+  // confidence threshold the Suggestions screen uses. Previously we picked the
+  // best species regardless of score, which surfaced wildly wrong species
+  // whenever the CV wasn't confident about any species. Results usually arrive
+  // score-sorted, but sort defensively so this doesn't depend on server order.
+  const results = isGenusOrBroader
+    ? ( data as { results?: CVResult[] } )?.results ?? []
+    : [];
+  const topResult = [...results]
+    .sort( ( a, b ) => ( b.combined_score ?? 0 ) - ( a.combined_score ?? 0 ) )[0];
+  const topRankLevel = rankLevelForTaxon( topResult?.taxon );
+  const isConfidentSpecies = topResult != null
+    && ( topResult.combined_score ?? 0 ) > TOP_RESULT_SCORE_THRESHOLD
+    && topRankLevel != null
+    && topRankLevel <= Taxon.SPECIES_LEVEL;
+  return isConfidentSpecies
+    ? topResult?.taxon
+    : undefined;
+};
+
+export default useTopSpeciesSuggestion;

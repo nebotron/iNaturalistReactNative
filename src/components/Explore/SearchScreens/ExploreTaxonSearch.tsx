@@ -1,4 +1,9 @@
 import type { ApiTaxon } from "api/types";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import {
+  normalizeTaxonFilters,
+  toExploreTaxonFilterTaxon,
+} from "components/Explore/helpers/taxonFilters";
 import {
   SearchHeader,
   TaxonResult,
@@ -17,13 +22,15 @@ import useTranslation from "sharedHooks/useTranslation";
 interface Props {
   closeModal: ( ) => void;
   onPressInfo?: ( taxon: RealmTaxon | ApiTaxon ) => void;
-  updateTaxon: ( taxon: RealmTaxon | null ) => void;
+  taxonFilters?: ExploreTaxonFilter[];
+  updateTaxonFilters: ( taxonFilters: ExploreTaxonFilter[] ) => void;
 }
 
 const ExploreTaxonSearch = ( {
   closeModal,
   onPressInfo,
-  updateTaxon,
+  taxonFilters = [],
+  updateTaxonFilters,
 }: Props ) => {
   const { t } = useTranslation( );
   const [taxonQuery, setTaxonQuery] = useState( "" );
@@ -31,37 +38,49 @@ const ExploreTaxonSearch = ( {
   const {
     taxa,
     isLoading,
-    isLocal,
+    isUpdatingLocalDb,
+    updateLocalSpeciesDb,
   } = useTaxonSearch( taxonQuery );
 
-  const onTaxonSelected = useCallback( async ( newTaxon: RealmTaxon ) => {
-    updateTaxon( newTaxon );
-    closeModal();
-  }, [closeModal, updateTaxon] );
+  const onTaxonSelected = useCallback( ( taxon: RealmTaxon ) => {
+    const alreadyAdded = taxonFilters.some( f => f.taxon.id === taxon.id );
+    if ( !alreadyAdded ) {
+      updateTaxonFilters( normalizeTaxonFilters( [
+        ...taxonFilters,
+        { taxon: toExploreTaxonFilterTaxon( taxon ), exclude: false },
+      ] ) );
+    }
+    closeModal( );
+  }, [closeModal, taxonFilters, updateTaxonFilters] );
 
-  const resetTaxon = useCallback(
-    ( ) => {
-      updateTaxon( null );
-      closeModal();
-    },
-    [updateTaxon, closeModal],
-  );
+  const resetTaxon = useCallback( ( ) => {
+    updateTaxonFilters( [] );
+    closeModal( );
+  }, [updateTaxonFilters, closeModal] );
+
+  const getFilterForTaxon = useCallback( ( taxonId: number ) => (
+    taxonFilters.find( filter => filter.taxon.id === taxonId )
+  ), [taxonFilters] );
 
   const renderItem: ListRenderItem<RealmTaxon> = useCallback(
     ( { item: taxon, index } ) => (
       <TaxonResult
+        accessibilityLabel={t( "Choose-taxon" )}
         first={index === 0}
         fetchRemote={false}
+        handleCheckmarkPress={() => onTaxonSelected( taxon )}
         handleTaxonOrEditPress={() => onTaxonSelected( taxon )}
         onPressInfo={onPressInfo}
-        showCheckmark={false}
+        showCheckmark={!!getFilterForTaxon( taxon.id )}
         taxon={taxon}
         testID={`Search.taxa.${taxon.id}`}
       />
     ),
     [
+      getFilterForTaxon,
       onPressInfo,
       onTaxonSelected,
+      t,
     ],
   );
 
@@ -75,11 +94,12 @@ const ExploreTaxonSearch = ( {
       />
       <TaxonSearch
         isLoading={isLoading}
-        isLocal={isLocal}
+        isUpdatingLocalDb={isUpdatingLocalDb}
         query={taxonQuery}
         renderItem={renderItem}
         setQuery={setTaxonQuery}
         taxa={taxa}
+        updateLocalSpeciesDb={updateLocalSpeciesDb}
       />
     </ViewWrapper>
   );

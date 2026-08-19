@@ -10,6 +10,7 @@ import type {
 import flatten from "lodash/flatten";
 import { useCallback, useMemo } from "react";
 import Observation from "realmModels/Observation";
+import ObservationSound from "realmModels/ObservationSound";
 import { useAuthenticatedInfiniteQuery } from "sharedHooks";
 
 import {
@@ -22,7 +23,10 @@ interface ExcludeUser {
 }
 
 interface UseInfiniteExploreScrollParams {
-  params: ApiObservationsSearchParams & { excludeUser?: ExcludeUser };
+  params: ApiObservationsSearchParams & {
+    excludeUser?: ExcludeUser;
+    excludedUsers?: ExcludeUser[];
+  };
   enabled: boolean;
 }
 
@@ -48,6 +52,13 @@ const useInfiniteExploreScroll = (
       // the most data we display in the UI on any Observations view in Explore
       // is the same amount of data we show for the Advanced list mode in MyObservations
       ...Observation.ADVANCED_MODE_LIST_FIELDS,
+      // geojson is the reliable coordinate source on API observations (top-level
+      // latitude/longitude are often absent); the Identify auto-CV reads it to
+      // score with location, matching the Suggest ID screen.
+      geojson: true,
+      // ADVANCED_MODE_LIST_FIELDS only asks for the sound uuid, but the Identify
+      // view plays the sounds of observations that have no photos.
+      observation_sounds: ObservationSound.OBSERVATION_SOUNDS_FIELDS,
       user: { // included here for "exclude by current user" in explore filters
         id: true,
         uuid: true,
@@ -58,6 +69,7 @@ const useInfiniteExploreScroll = (
   } ), [newInputParams] );
 
   const excludedUser: ExcludeUser | undefined = newInputParams.excludeUser;
+  const excludedUsers: ExcludeUser[] = newInputParams.excludedUsers || [];
 
   const queryKey = ["useInfiniteExploreScroll", newInputParams];
 
@@ -96,12 +108,23 @@ const useInfiniteExploreScroll = (
 
   const pages = data?.pages as ApiObservationsSearchResponse[] | undefined;
 
-  let observations: ApiObservation[] = flatten( pages?.map( r => r.results ) ) || [];
+  const allObservations: ApiObservation[] = flatten( pages?.map( r => r.results ) ) || [];
+  const seenKeys = new Set<string | number>();
+  let observations: ApiObservation[] = allObservations.filter( obs => {
+    const key = obs.uuid ?? obs.id;
+    if ( key == null || seenKeys.has( key ) ) return false;
+    seenKeys.add( key );
+    return true;
+  } );
   let totalResults: number | null | undefined = pages?.[0]?.total_results;
   let filtered = [];
 
-  // filter out obs from excluded user and adjust count
-  if ( excludedUser && observations ) {
+  // filter out obs from excluded users (client-side, no API param available)
+  if ( excludedUsers.length > 0 && observations ) {
+    const excludedIds = new Set( excludedUsers.map( u => u.id ) );
+    filtered = observations.filter( obs => !excludedIds.has( obs?.user?.id ) );
+    observations = filtered;
+  } else if ( excludedUser && observations ) {
     filtered = observations.filter( observation => observation?.user?.id !== excludedUser.id );
     observations = filtered;
   }

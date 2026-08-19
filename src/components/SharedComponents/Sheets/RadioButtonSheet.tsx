@@ -24,6 +24,7 @@ interface Props<ValueT extends RadioSheetPrimitive> {
   confirm: ( _checkedValue: ValueT ) => void;
   confirmText?: string;
   headerText: string;
+  immediate?: boolean;
   insideModal?: boolean;
   loading?: boolean;
   onPressClose?: ( ) => void;
@@ -40,6 +41,7 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
   confirm,
   confirmText,
   headerText,
+  immediate,
   insideModal,
   loading,
   onPressClose,
@@ -62,7 +64,12 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
         value={radioValues[radioRow].value.toString( )}
         icon={radioValues[radioRow].icon}
         checked={checkedValue === radioValues[radioRow].value}
-        onPress={() => setCheckedValue( radioValues[radioRow].value )}
+        onPress={() => {
+          setCheckedValue( radioValues[radioRow].value );
+          if ( immediate ) {
+            confirm( radioValues[radioRow].value );
+          }
+        }}
         label={radioValues[radioRow].label}
         description={radioValues[radioRow].text}
         labelComponent={radioValues[radioRow].labelComponent}
@@ -87,16 +94,18 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
           {Object.keys( radioValues ).map( radioRow => radioButtonRow( radioRow ) )}
         </View>
         {bottomComponent}
-        <Button
-          level="primary"
-          onPress={( ) => {
-            confirm( checkedValue );
-          }}
-          disabled={confirmBlockedByDirtyCheck || loading}
-          loading={loading}
-          text={buttonLabel}
-          accessibilityLabel={buttonLabel}
-        />
+        {!immediate && (
+          <Button
+            level="primary"
+            onPress={( ) => {
+              confirm( checkedValue );
+            }}
+            disabled={confirmBlockedByDirtyCheck || loading}
+            loading={loading}
+            text={buttonLabel}
+            accessibilityLabel={buttonLabel}
+          />
+        )}
       </View>
     </BottomSheet>
   );

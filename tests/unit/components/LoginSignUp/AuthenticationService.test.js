@@ -193,6 +193,26 @@ describe( "getJWT 401 handling", ( ) => {
     expect( result ).toBeNull( );
   } );
 
+  it( "does not navigate to login when there is no access token to refresh with", async ( ) => {
+    // isLoggedIn's cache can be up to 5s stale, so getJWT can reach the refresh
+    // with the accessToken already gone. Sending `Bearer null` earns a 401 that
+    // would otherwise read as the server rejecting real credentials.
+    nock.disableNetConnect( );
+    try {
+      // Warm the isLoggedIn cache with the seeded token, then take the token
+      // away, so getJWT gets past isLoggedIn and into the refresh without one.
+      await expect( isLoggedIn( ) ).resolves.toEqual( true );
+      RNSInfo.stores.set( "app", new Map( ) );
+
+      const result = await getJWT( );
+
+      expect( result ).toBeNull( );
+      expect( navigationRef.navigate ).not.toHaveBeenCalled( );
+    } finally {
+      nock.enableNetConnect( );
+    }
+  } );
+
   it( "backs off and skips a second refresh attempt shortly after a failure", async ( ) => {
     // Only one interceptor is registered (not .persist()), and net connect
     // is disabled, so a second real request wouldn't silently succeed

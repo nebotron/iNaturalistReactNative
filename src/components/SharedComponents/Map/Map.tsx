@@ -29,6 +29,7 @@ import CurrentLocationButton from "./CurrentLocationButton";
 import {
   calculateZoom,
   fetchObservationUUID,
+  getMapBoundariesSafely,
   metersToLatitudeDelta,
   OBSCURATION_CELL_SIZE,
   obscurationCellForLatLng,
@@ -57,6 +58,7 @@ const getDefaultRegion = ( initialLatitude?: number, initialLongitude?: number )
 
 interface Props {
   children?: React.ReactNode;
+  mapChildren?: React.ReactNode;
   className?: string;
   currentLocationButtonClassName?: string;
   initialRegion?: Region;
@@ -91,6 +93,7 @@ interface Props {
 // for people who don't use GMaps (i.e. users in China)
 const Map = ( {
   children,
+  mapChildren,
   className = "flex-1",
   currentLocationButtonClassName,
   initialRegion,
@@ -169,6 +172,13 @@ const Map = ( {
       : null,
   );
 
+  // On Android, suppress the controlled region prop while the user is dragging
+  // so the map doesn't fight the gesture or snap on release.
+  const [isUserDragging, setIsUserDragging] = useState( false );
+  // Ref so we only call setIsUserDragging/onPanDrag once per gesture, not on
+  // every movement event that onPanDrag fires during the drag.
+  const panDragActiveRef = useRef( false );
+
   // In Android, onMapReady does not fire when we pass parameter region instead
   // of parameter initialRegion. This state allows us to fire onMapReady and
   // fire it only once. This state is always false in iOS.
@@ -233,14 +243,18 @@ const Map = ( {
     onPermissionGranted,
   } );
 
-  // In Android, we always return a state, either region or androidLocalRegion.
+  // In Android, we always return a state, either region or androidLocalRegion,
+  // unless the user is actively dragging (to avoid fighting the gesture).
   const setRegion = ( ) => {
-    if ( Platform.OS !== "android" && initialRegion ) {
-      return null;
+    let region;
+    if ( Platform.OS === "android" ) {
+      region = isUserDragging
+        ? undefined
+        : androidLocalRegion;
+    } else if ( !initialRegion ) {
+      region = defaultInitialRegion;
     }
-    return Platform.OS === "android"
-      ? androidLocalRegion
-      : defaultInitialRegion;
+    return region;
   };
 
   const handleCurrentLocationPress = useCallback( ( ) => {
@@ -323,7 +337,11 @@ const Map = ( {
 
   const showPointTiles = currentZoom > 13;
 
-  // We want green points and (default) orange grid
+  // We want green points and (default) orange grid. The /heatmap endpoint's
+  // density-to-color mapping isn't tied to a fixed scale, so pairing it with
+  // a hardcoded color gradient made the colors look inconsistent between
+  // zoom levels. /grid uses a fixed color scale tuned per zoom level, so it
+  // stays visually consistent as you zoom in and out.
   const tileUrlTemplate = showPointTiles
     ? `${TILE_URL}/points/{z}/{x}/{y}.png?${queryString}&color=%2374ac00`
     : `${TILE_URL}/grid/{z}/{x}/{y}.png?${queryString}`;
@@ -354,9 +372,13 @@ const Map = ( {
       }
       shouldSkipRegionUpdate = true;
     }
+    panDragActiveRef.current = false;
+    if ( isUserDragging ) {
+      setIsUserDragging( false );
+    }
     if ( !shouldSkipRegionUpdate ) {
       if ( onRegionChangeComplete ) {
-        const boundaries = await mapViewRef?.current?.getMapBoundaries( );
+        const boundaries = await getMapBoundariesSafely( mapViewRef?.current );
         onRegionChangeComplete( newRegion, boundaries );
       }
       if ( androidLocalRegion ) {
@@ -371,6 +393,7 @@ const Map = ( {
     onMapReady,
     onRegionChangeComplete,
     androidLocalRegion,
+    isUserDragging,
     screenWidth,
   ] );
 
@@ -396,6 +419,15 @@ const Map = ( {
       handleRegionChangeComplete,
     ],
   );
+
+  const handlePanDrag = useCallback( ( ) => {
+    if ( panDragActiveRef.current ) return;
+    panDragActiveRef.current = true;
+    if ( Platform.OS === "android" ) {
+      setIsUserDragging( true );
+    }
+    onPanDrag( );
+  }, [onPanDrag] );
 
   const handleMapPress = e => {
     if ( withPressableObsTiles ) onMapPressForObsLyr( e.nativeEvent.coordinate );
@@ -532,7 +564,7 @@ const Map = ( {
         mapType={mapType}
         minZoomLevel={MIN_ZOOM_LEVEL}
         onMapReady={handleMapReady}
-        onPanDrag={onPanDrag}
+        onPanDrag={handlePanDrag}
         onPress={handleMapPress}
         onRegionChangeComplete={handleRegionChangeComplete}
         onUserLocationChange={handleUserLocationChange}
@@ -556,11 +588,7 @@ const Map = ( {
             testID="Map.UrlTile"
             tileSize={512}
             urlTemplate={tileUrlTemplate}
-            opacity={
-              showPointTiles
-                ? 1
-                : 0.7
-            }
+            opacity={1}
           />
         )}
         { observation && hasCoordinates && ( currentUserCanViewCoords
@@ -578,6 +606,7 @@ const Map = ( {
             />
           )
         ) }
+        {mapChildren}
       </MapView>
       <CurrentLocationButton
         showCurrentLocationButton={showCurrentLocationButton}

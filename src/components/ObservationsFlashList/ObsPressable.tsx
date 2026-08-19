@@ -22,6 +22,7 @@ interface Props {
   isSimpleObsStatus?: boolean;
   hideRGLabel?: boolean;
   apiObservation?: ApiObservation;
+  onExploreObservationAction?: ( ) => void;
   onUploadButtonPress: ( ) => void;
   onItemPress: ( ) => void;
   // only meaningful for layout === "grid"
@@ -35,6 +36,7 @@ interface Props {
   // whether to render an upload icon at all. Don't default/coalesce this at call sites.
   uploadProgress?: number;
   unsynced: boolean;
+  squareCorners?: boolean;
 }
 
 const ObsPressable = ( {
@@ -47,6 +49,7 @@ const ObsPressable = ( {
   isSimpleObsStatus,
   hideRGLabel,
   apiObservation,
+  onExploreObservationAction,
   onUploadButtonPress,
   onItemPress,
   gridItemStyle,
@@ -56,6 +59,7 @@ const ObsPressable = ( {
   uuid,
   uploadProgress,
   unsynced,
+  squareCorners = false,
 }: Props ) => {
   const { t } = useTranslation( );
   const { isDefaultMode } = useLayoutPrefs( );
@@ -79,6 +83,7 @@ const ObsPressable = ( {
         currentUser={currentUser}
         explore={explore}
         hideObsUploadStatus={hideObsUploadStatus}
+        onExploreObservationAction={onExploreObservationAction}
         onUploadButtonPress={onUploadButtonPress}
         observation={observation}
         queued={queued}
@@ -86,6 +91,7 @@ const ObsPressable = ( {
         // better with RN styles than with Tailwind classes
         style={gridItemStyle}
         uploadProgress={uploadProgress}
+        squareCorners={squareCorners}
       />
     );
   } else if ( layout === "smallGrid" ) {

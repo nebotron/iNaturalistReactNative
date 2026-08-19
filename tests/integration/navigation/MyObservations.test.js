@@ -1,16 +1,18 @@
+import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import {
-  screen, userEvent, waitFor,
+  fireEvent,
+  screen,
+  userEvent,
+  waitFor,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
 import inatjs from "inaturalistjs";
-import * as rnImagePicker from "react-native-image-picker";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 import factory, { makeResponse } from "tests/factory";
 import {
   mockInteractionManagerRunAfterInteractions,
   navigateToPhotoImporterFromMyObs,
-  saveObsEditObservation,
 } from "tests/helpers/addObsBottomSheet";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
@@ -22,31 +24,29 @@ import { signIn, signOut } from "tests/helpers/user";
 // working normally
 jest.unmock( "@react-navigation/native" );
 
+// An observation missing any of the basics (evidence, taxon, date, location)
+// offers an edit button instead of an upload button, so these all need a photo
+const makeUploadableObservation = observedOnString => factory( "LocalObservation", {
+  _synced_at: null,
+  _created_at: faker.date.past( ),
+  observed_on_string: observedOnString,
+  latitude: 1.2345,
+  longitude: 1.2345,
+  taxon: factory( "LocalTaxon" ),
+  observationPhotos: [
+    factory( "LocalObservationPhoto", {
+      photo: {
+        url: faker.image.url( ),
+        position: 0,
+      },
+    } ),
+  ],
+} );
+
 const mockUnsyncedObservations = [
-  factory( "LocalObservation", {
-    _synced_at: null,
-    _created_at: faker.date.past( ),
-    observed_on_string: "2024-05-01",
-    latitude: 1.2345,
-    longitude: 1.2345,
-    taxon: factory( "LocalTaxon" ),
-  } ),
-  factory( "LocalObservation", {
-    _synced_at: null,
-    _created_at: faker.date.past( ),
-    observed_on_string: "2024-05-02",
-    latitude: 1.2345,
-    longitude: 1.2345,
-    taxon: factory( "LocalTaxon" ),
-  } ),
-  factory( "LocalObservation", {
-    _synced_at: null,
-    _created_at: faker.date.past( ),
-    observed_on_string: "2024-05-03",
-    latitude: 1.2345,
-    longitude: 1.2345,
-    taxon: factory( "LocalTaxon" ),
-  } ),
+  makeUploadableObservation( "2024-05-01" ),
+  makeUploadableObservation( "2024-05-02" ),
+  makeUploadableObservation( "2024-05-03" ),
 ];
 
 const mockUser = factory( "LocalUser", {
@@ -83,12 +83,20 @@ jest.mock( "sharedHooks/useObservationCounts", () => {
     __esModule: true,
     default: () => {
       const realm = global.mockRealms[__filename];
-      if ( !realm ) return { numUnuploadedObservations: 0, numObsMissingBasics: 0 };
+      if ( !realm ) {
+        return {
+          numUnuploadedObservations: 0,
+          numObsMissingBasics: 0,
+          numUnuploadedObsNoTaxon: 0,
+        };
+      }
       const unsynced = realm.objects( "Observation" ).filtered( UNSYNCED_FILTER );
       return {
         numUnuploadedObservations: unsynced.length,
         numObsMissingBasics: unsynced
           .filter( obs => obs.missingBasics( ) ).length,
+        numUnuploadedObsNoTaxon: unsynced
+          .filter( obs => !obs.taxon ).length,
       };
     },
   };
@@ -166,6 +174,15 @@ describe( "MyObservations -> Photo Importer -> ObsEdit -> MyObservations", ( ) =
     // a remote obs, but this works
     return Promise.resolve( makeResponse( [mockObs] ) );
   } );
+  inatjs.photos.create.mockImplementation( ( ) => Promise.resolve( makeResponse( [{
+    id: faker.number.int( ),
+  }] ) ) );
+  inatjs.observation_photos.create.mockImplementation( params => Promise.resolve(
+    makeResponse( [{
+      id: faker.number.int( ),
+      uuid: params.observation_photo.uuid,
+    }] ),
+  ) );
 
   beforeEach( async ( ) => {
     await signIn( mockUser, { realm: global.mockRealms[__filename] } );
@@ -185,15 +202,39 @@ describe( "MyObservations -> Photo Importer -> ObsEdit -> MyObservations", ( ) =
     await checkToolbarResetWithUnsyncedObs( );
     await pressIndividualUpload( mockUnsyncedObservations[0] );
     await waitForDisplayedText( /1 observation uploaded/ );
-    jest.spyOn( rnImagePicker, "launchImageLibrary" ).mockImplementation( () => ( {
-      assets: [{
-        uri: faker.image.url(),
-        fileName: `${faker.string.uuid()}.jpg`,
-      }],
-    } ) );
+    const mockNode = {
+      id: "MOCK-ID-1",
+      type: "image",
+      group_name: "Camera Roll",
+      image: {
+        filename: `${faker.string.uuid()}.jpg`,
+        filepath: "/path/to/photo.jpg",
+        extension: "jpg",
+        uri: "file:///path/to/photo.jpg",
+        height: 1920,
+        width: 1080,
+        fileSize: 123456,
+        playableDuration: NaN,
+        orientation: 1,
+      },
+      timestamp: 1234567890,
+      location: null,
+    };
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue( {
+      page_info: { end_cursor: undefined, has_next_page: false },
+      edges: [{ node: mockNode }],
+    } );
     await navigateToPhotoImporterFromMyObs();
-    await screen.findByText( /New Observation/, {}, { timeout: 10_000 } );
-    await saveObsEditObservation();
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) ).toBeTruthy( );
+    }, { timeout: 10_000 } );
+    fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode.image.uri}` ) );
+    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
+    }, { timeout: 10_000 } );
+    const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
+    await actor.press( importButton );
     await waitForDisplayedText( /Upload 3 observations/, 10_000 );
   } );
 

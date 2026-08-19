@@ -1,15 +1,23 @@
 // @flow
 
 import { useRoute } from "@react-navigation/native";
+import { toExploreTaxonFilterTaxon } from "components/Explore/helpers/taxonFilters";
 import {
   EXPLORE_ACTION,
+  PLACE_MODE,
   useExplore,
 } from "providers/ExploreContext";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 const useParams = ( ): Object => {
   const { params } = useRoute( );
-  const { dispatch, defaultExploreLocation } = useExplore( );
+  const { state, dispatch, defaultExploreLocation } = useExplore( );
+  // Navigation params represent a one-time intent (e.g. "open Explore filtered
+  // to this taxon"). We only want to apply them when the params themselves
+  // change, not every time explore state changes. Otherwise removing a taxon
+  // (or loading a saved filter) re-runs this effect and immediately re-applies
+  // the still-present params, making the taxon impossible to remove.
+  const appliedParamsRef = useRef( null );
 
   const updateContextWithParams = useCallback( async ( ) => {
     const setWorldwide = ( ) => {
@@ -35,11 +43,23 @@ const useParams = ( ): Object => {
     }
     if ( params?.taxon ) {
       dispatch( {
-        type: EXPLORE_ACTION.CHANGE_TAXON,
-        taxon: params.taxon,
-        taxonId: params.taxon?.id,
-        taxonName: params.taxon?.preferred_common_name || params.taxon?.name,
+        type: EXPLORE_ACTION.SET_TAXON_FILTERS,
+        taxonFilters: [{ taxon: params.taxon, exclude: false }],
       } );
+    }
+    if ( params?.selectedTaxonForFilter ) {
+      const normalizedTaxon = toExploreTaxonFilterTaxon( params.selectedTaxonForFilter );
+      const alreadySelected = ( state.taxonFilters || [] )
+        .some( filter => filter.taxon.id === normalizedTaxon.id );
+      if ( !alreadySelected ) {
+        dispatch( {
+          type: EXPLORE_ACTION.SET_TAXON_FILTERS,
+          taxonFilters: [
+            ...( state.taxonFilters || [] ),
+            { taxon: normalizedTaxon, exclude: false },
+          ],
+        } );
+      }
     }
     if ( params?.place ) {
       dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_PLACE } );
@@ -54,7 +74,6 @@ const useParams = ( ): Object => {
       dispatch( {
         type: EXPLORE_ACTION.SET_USER,
         user: params.user,
-        userId: params.user.id,
       } );
     }
     if ( params?.project && params?.project.id ) {
@@ -64,15 +83,32 @@ const useParams = ( ): Object => {
         projectId: params.project.id,
       } );
     }
+    if ( params?.lat != null && params?.lng != null ) {
+      dispatch( {
+        type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
+        exploreLocation: {
+          placeMode: PLACE_MODE.NEARBY,
+          lat: params.lat,
+          lng: params.lng,
+          radius: params.radius ?? 2,
+        },
+      } );
+    }
   }, [
     dispatch,
     params,
     defaultExploreLocation,
+    state.taxonFilters,
   ] );
 
   useEffect( ( ) => {
+    if ( appliedParamsRef.current === params ) {
+      return;
+    }
+    appliedParamsRef.current = params;
     updateContextWithParams( );
   }, [
+    params,
     updateContextWithParams,
   ] );
 

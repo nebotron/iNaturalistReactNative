@@ -39,6 +39,65 @@ See [CONTRIBUTING](CONTRIBUTING.md) for guidelines on contributing to this proje
 1. Run `npm start -- --reset-cache` (`npm start` works too, but resetting the cache each time makes for a lot less build issues)
 2. Run `npm run ios` or `npm run android`
 
+### Signing this fork with a personal Apple Developer account
+
+This fork is already set up to build on a personal Apple Developer account, so
+there is nothing to change before running it on a device — but the setup costs
+some features, and the trade-offs are worth knowing. Upstream builds for the
+iNaturalist team (`N5J7L4P93Z`) and bundle ID `org.inaturalist.iNaturalistMobile`;
+a personal account cannot provision several of the capabilities that requires.
+
+What is already configured, in `ios/iNaturalistReactNative.xcodeproj/project.pbxproj`
+unless noted:
+
+- **Signing.** `DEVELOPMENT_TEAM` is `DVURLJZFH6`, with `PRODUCT_BUNDLE_IDENTIFIER`
+  `com.benhannel.inat.dev` for the app and `com.benhannel.inat.dev.ShareExtensionIOS`
+  for the Share Extension. To build under a different account, change both to
+  values you control — the extension's ID must stay prefixed by the app's.
+- **Main-app entitlements are off.** `CODE_SIGN_ENTITLEMENTS` is empty for the
+  app target's Debug and Release configurations, so
+  `iNaturalistReactNative.entitlements` and `iNaturalistReactNativeRelease.entitlements`
+  are not applied to this build. They are kept only to stay mergeable with
+  upstream.
+- **The Share Extension app group is cleared.** `com.apple.security.application-groups`
+  is an empty array in the extension's entitlements.
+- **Firebase failures are non-fatal.** `AppDelegate.mm` wraps `[FIRApp configure]`
+  in `@try`/`@catch`, so an example or mismatched `GoogleService-Info.plist` logs
+  and continues instead of crashing at launch.
+
+`ios/apple-app-site-association.json` is the universal-links manifest those
+`applinks:` entitlements would need. Nothing in this repo consumes it: Apple
+fetches it over HTTPS from `https://<domain>/.well-known/apple-app-site-association`
+on the domain being claimed, so it has to be deployed to that web server, not
+bundled into the app. It is kept here as the source of truth for what would be
+served.
+
+**What does not work as a result:** universal links, Sign in with Apple, and
+Share Extension handoff to the main app (which goes through the app group).
+Firebase Analytics and Crashlytics are inert until you create Firebase iOS apps
+for your own bundle IDs and fill in `ios/GoogleService-Info.staging.plist` and
+`ios/GoogleService-Info.production.plist`. `ios/link-files-for-build-modes.sh`
+symlinks whichever one matches the build configuration to
+`GoogleService-Info.plist`.
+
+#### Building on a device
+
+```bash
+npm start -- --reset-cache
+npm run ios -- --device      # Debug
+npm run ios:release          # Release, i.e. run-ios --device --mode Release
+```
+
+If `npx pod-install` fails after a signing change, check your CocoaPods version —
+the lockfile is on 1.16.2, so `gem install cocoapods` or `brew upgrade cocoapods`
+may be needed.
+
+The `.env` / `.env.staging` steps above still apply. Create an
+[iNaturalist OAuth application](https://www.inaturalist.org/oauth/applications)
+and put the client ID and secret in your env file. Any Google Sign-In or other
+third-party credentials there must match the bundle ID and Firebase project you
+are building against.
+
 ### Rozenite (React Native DevTools plugins)
 
 You may optionally, as an environment variable, set the Rozenite env var to enable the Rozenite React Native DevTools plugins: `WITH_ROZENITE=true npm start`. This makes the installed Rozenite plugins available in React Native DevTools in their respective tabs.

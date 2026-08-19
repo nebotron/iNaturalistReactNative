@@ -2,18 +2,13 @@
 
 exports[`UserIcon displays active user image correctly 1`] = `
 <View
-  accessibilityIgnoresInvertColors={true}
   accessibilityRole="image"
-  testID="UserIcon.photo"
->
-  <Image
-    source={
-      {
-        "uri": "https://loremflickr.com/640/480?lock=4455548378415104",
-      }
-    }
-    style={
+  style={
+    [
       [
+        {
+          "overflow": "hidden",
+        },
         [
           {
             "borderBottomLeftRadius": 9999,
@@ -38,6 +33,30 @@ exports[`UserIcon displays active user image correctly 1`] = `
             "width": 40,
           },
         ],
+      ],
+    ]
+  }
+  testID="UserIcon.photo"
+>
+  <View
+    accessibilityIgnoresInvertColors={true}
+    source={
+      {
+        "cachePolicy": "discNoCacheControl",
+        "resizeMode": "cover",
+        "transitionDuration": 0,
+        "url": "https://loremflickr.com/640/480?lock=4455548378415104",
+      }
+    }
+    style={
+      [
+        {
+          "bottom": 0,
+          "left": 0,
+          "position": "absolute",
+          "right": 0,
+          "top": 0,
+        },
       ]
     }
   />
@@ -46,18 +65,13 @@ exports[`UserIcon displays active user image correctly 1`] = `
 
 exports[`UserIcon displays small user image correctly 1`] = `
 <View
-  accessibilityIgnoresInvertColors={true}
   accessibilityRole="image"
-  testID="UserIcon.photo"
->
-  <Image
-    source={
-      {
-        "uri": "https://loremflickr.com/640/480?lock=4455548378415104",
-      }
-    }
-    style={
+  style={
+    [
       [
+        {
+          "overflow": "hidden",
+        },
         [
           {
             "borderBottomLeftRadius": 9999,
@@ -70,6 +84,30 @@ exports[`UserIcon displays small user image correctly 1`] = `
             "width": 22,
           },
         ],
+      ],
+    ]
+  }
+  testID="UserIcon.photo"
+>
+  <View
+    accessibilityIgnoresInvertColors={true}
+    source={
+      {
+        "cachePolicy": "discNoCacheControl",
+        "resizeMode": "cover",
+        "transitionDuration": 0,
+        "url": "https://loremflickr.com/640/480?lock=4455548378415104",
+      }
+    }
+    style={
+      [
+        {
+          "bottom": 0,
+          "left": 0,
+          "position": "absolute",
+          "right": 0,
+          "top": 0,
+        },
       ]
     }
   />
@@ -78,18 +116,13 @@ exports[`UserIcon displays small user image correctly 1`] = `
 
 exports[`UserIcon displays user image correctly 1`] = `
 <View
-  accessibilityIgnoresInvertColors={true}
   accessibilityRole="image"
-  testID="UserIcon.photo"
->
-  <Image
-    source={
-      {
-        "uri": "https://loremflickr.com/640/480?lock=4455548378415104",
-      }
-    }
-    style={
+  style={
+    [
       [
+        {
+          "overflow": "hidden",
+        },
         [
           {
             "borderBottomLeftRadius": 9999,
@@ -102,6 +135,30 @@ exports[`UserIcon displays user image correctly 1`] = `
             "width": 40,
           },
         ],
+      ],
+    ]
+  }
+  testID="UserIcon.photo"
+>
+  <View
+    accessibilityIgnoresInvertColors={true}
+    source={
+      {
+        "cachePolicy": "discNoCacheControl",
+        "resizeMode": "cover",
+        "transitionDuration": 0,
+        "url": "https://loremflickr.com/640/480?lock=4455548378415104",
+      }
+    }
+    style={
+      [
+        {
+          "bottom": 0,
+          "left": 0,
+          "position": "absolute",
+          "right": 0,
+          "top": 0,
+        },
       ]
     }
   />

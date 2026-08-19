@@ -7,6 +7,7 @@ import {
 const useExploreHeaderCount = ( ): Object => {
   const [count, setCount] = useState( {
     observations: null,
+    identify: null,
     species: null,
     observers: null,
     identifiers: null,

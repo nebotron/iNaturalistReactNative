@@ -1,7 +1,13 @@
 import { Realm } from "@realm/react";
 import type { ApiObservationPhoto } from "api/types";
 import inatjs, { FileUpload } from "inaturalistjs";
+import type { Asset } from "react-native-image-picker";
 import type { RealmObservation, RealmObservationPhoto, RealmPhoto } from "realmModels/types";
+import type { GroupedPhotoCropMetadata } from "sharedHelpers/cropPhotoMetadata";
+import {
+  getGalleryAssetDevicePhotoUri,
+  normalizeDevicePhotoUri,
+} from "sharedHelpers/getOriginalDevicePhotoUri";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import * as uuid from "uuid";
 
@@ -49,6 +55,10 @@ class ObservationPhoto extends Realm.Object {
     };
   }
 
+  static needsPhotoReupload( photo?: RealmPhoto ) {
+    return Photo.hasLocalEdits( photo );
+  }
+
   static mapPhotoForAttachingToObs(
     observationID: number,
     observationPhoto: RealmObservationPhoto,
@@ -67,12 +77,32 @@ class ObservationPhoto extends Realm.Object {
     observationID: number,
     observationPhoto: RealmObservationPhoto,
   ) {
+    const observationPhotoParams: {
+      observation_id: number;
+      position?: number;
+      photo_id?: number;
+    } = {
+      observation_id: observationID,
+      position: observationPhoto.position,
+    };
+
+    // Always point the observation photo at whatever photo id the record
+    // carries now. This used to be gated on needsPhotoReupload( photo ), but
+    // the re-uploaded photo is marked synced (markRecordUploaded) before this
+    // runs, which makes that check false every time -- so the id of the photo
+    // just uploaded never reached the server and the observation kept its
+    // original photo. That is why a crop made in the observation editor
+    // survived locally and vanished once the observation uploaded. When
+    // nothing was re-uploaded this is the id the server already has, so
+    // sending it changes nothing.
+    const { photo } = observationPhoto;
+    if ( photo?.id ) {
+      observationPhotoParams.photo_id = photo.id;
+    }
+
     return {
       id: observationPhoto.uuid,
-      observation_photo: {
-        observation_id: observationID,
-        position: observationPhoto.position,
-      },
+      observation_photo: observationPhotoParams,
     };
   }
 
@@ -80,48 +110,81 @@ class ObservationPhoto extends Realm.Object {
   // I think it is only called after certain transformations on the Realm result,
   // but it is not important for my current linear ticket so I'll skip typing it more
   static mapObservationPhotoForMyObsDefaultMode( observationPhoto: {
-    photo?: { url?: string; localFilePath?: string };
+    photo?: {
+      url?: string;
+      localFilePath?: string;
+      _synced_at?: Date;
+      _updated_at?: Date;
+    };
     uuid?: string;
   } ) {
     return {
       photo: {
         url: observationPhoto?.photo?.url,
         localFilePath: observationPhoto?.photo?.localFilePath,
+        // Photo.hasLocalEdits reads these to decide whether the local file is
+        // newer than what was uploaded. Dropping them made every photo here
+        // look unedited, so an uploaded observation whose photo had been
+        // cropped (or otherwise edited) locally showed the remote original
+        // instead of the local file -- the crop looked lost as soon as the
+        // observation was saved and My Observations drew it again.
+        _synced_at: observationPhoto?.photo?._synced_at,
+        _updated_at: observationPhoto?.photo?._updated_at,
       },
       uuid: observationPhoto?.uuid,
     };
   }
 
-  static async new( uri: string, position: number ) {
-    const photo = await Photo.new( uri );
+  static async new(
+    uri: string,
+    position: number,
+    originalDevicePhotoUri?: string | null,
+    cropMetadata?: GroupedPhotoCropMetadata,
+  ) {
+    const photo = await Photo.new( uri, cropMetadata );
     return {
       _created_at: new Date( ),
       _updated_at: new Date( ),
       uuid: uuid.v4( ),
       photo,
       originalPhotoUri: uri,
+      originalDevicePhotoUri: originalDevicePhotoUri ?? undefined,
       position,
     };
   }
 
   static createObsPhotosWithPosition = async (
-    photos: string[] | { image: { uri: string } }[],
+    photos: string[] | { image: Asset }[],
     { position, local }: { position: number; local: boolean },
-  ) => {
-    let photoPosition = position;
-    return Promise.all(
-      photos.map( async photo => {
-        const newPhoto = ObservationPhoto.new(
-          local
-            ? photo
-            : photo?.image?.uri,
-          photoPosition,
-        );
-        photoPosition += 1;
-        return newPhoto;
-      } ),
-    );
-  };
+  ) => Promise.all(
+    photos.map( async ( photo, index ) => {
+      const uri = local
+        ? photo as string
+        : ( photo as { image: Asset } )?.image?.uri;
+      const galleryPhoto = photo as {
+        image: Asset & GroupedPhotoCropMetadata;
+        originalDevicePhotoUri?: string | null;
+      };
+      const originalDevicePhotoUri = local
+        ? null
+        : normalizeDevicePhotoUri( galleryPhoto.originalDevicePhotoUri )
+          ?? getGalleryAssetDevicePhotoUri( galleryPhoto.image );
+      // Carry over any crop framed in the Group Photos grid so the observation
+      // photo remembers the crop box, not just the cropped pixels.
+      const cropMetadata = local
+        ? undefined
+        : {
+          cropOriginalUri: galleryPhoto.image?.cropOriginalUri,
+          crop: galleryPhoto.image?.crop,
+        };
+      return ObservationPhoto.new(
+        uri,
+        position + index,
+        originalDevicePhotoUri,
+        cropMetadata,
+      );
+    } ),
+  );
 
   // TODO: I don't know how what the type for currentObservation is outside of this context here,
   // in the zustand store slice that is referenced in the two places this function is called
@@ -147,7 +210,7 @@ class ObservationPhoto extends Realm.Object {
 
   static async deleteLocalPhoto( uri: string, realm?: Realm, obsUUID?: string ) {
     // delete uri on disk
-    Photo.deletePhotoFromDeviceStorage( uri );
+    await Photo.deletePhotoFromDeviceStorage( uri );
     if ( !realm || !obsUUID ) return;
     const realmObs = realm.objectForPrimaryKey<RealmObservation>( "Observation", obsUUID );
     const obsPhotoToDelete = realmObs?.observationPhotos
@@ -172,9 +235,9 @@ class ObservationPhoto extends Realm.Object {
     realm?: Realm,
   ) {
     if ( uri.includes( "https://" ) ) {
-      ObservationPhoto.deleteRemotePhoto( uri, currentObservation );
+      await ObservationPhoto.deleteRemotePhoto( uri, currentObservation );
     } else {
-      ObservationPhoto.deleteLocalPhoto( uri, realm, currentObservation?.uuid );
+      await ObservationPhoto.deleteLocalPhoto( uri, realm, currentObservation?.uuid );
     }
   }
 
@@ -227,6 +290,7 @@ class ObservationPhoto extends Realm.Object {
       _updated_at: "date?",
       uuid: "string",
       id: "int?",
+      originalDevicePhotoUri: "string?",
       photo: "Photo?",
       position: "int?",
       // this creates an inverse relationship so observation photos

@@ -16,8 +16,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Alert } from "react-native";
-import Observation from "realmModels/Observation";
 import Taxon from "realmModels/Taxon";
 import type { RealmObservation } from "realmModels/types";
 import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
@@ -35,7 +33,6 @@ import {
   useNavigateToObsEdit,
   useObservationsUpdates,
   useStoredLayout,
-  useTranslation,
 } from "sharedHooks";
 import useFeatureFlag from "sharedHooks/useFeatureFlag";
 import useLocalObservationIds from "sharedHooks/useLocalObservationIds";
@@ -68,7 +65,6 @@ export enum ACTIVE_SHEET {
 
 const MyObservationsResults = ( ) => {
   const { isDefaultMode, loggedInWhileInDefaultMode } = useLayoutPrefs();
-  const { t } = useTranslation( );
   const realm = useRealm( );
   const navigation = useNavigation( );
   const listRef = useRef<FlashListRef<RealmObservation>>( null );
@@ -133,6 +129,7 @@ const MyObservationsResults = ( ) => {
   const {
     numUnuploadedObservations,
     numObsMissingBasics,
+    numUnuploadedObsNoTaxon,
   } = useObservationCounts( );
   const prevObservationsLength = useRef( observationIds.length );
   const { layout, writeLayoutToStorage } = useStoredLayout( "myObservationsLayout" );
@@ -219,15 +216,7 @@ const MyObservationsResults = ( ) => {
     writeLayoutToStorage( value );
   };
 
-  const confirmInternetConnection = useCallback( ( ) => {
-    if ( !isConnected ) {
-      Alert.alert(
-        t( "Internet-Connection-Required" ),
-        t( "Please-try-again-when-you-are-connected-to-the-internet" ),
-      );
-    }
-    return isConnected;
-  }, [t, isConnected] );
+  const confirmInternetConnection = useCallback( ( ) => isConnected, [isConnected] );
 
   const confirmLoggedIn = useCallback( ( ) => {
     if ( !currentUser ) {
@@ -241,21 +230,11 @@ const MyObservationsResults = ( ) => {
     if ( !confirmInternetConnection( ) ) { return; }
 
     startManualSync( );
-    const syncOptions = isDefaultMode
-      ? {
-        skipSomeUploads: Observation
-          .filterUnsyncedObservations( realm )
-          .filter( ( obs: Observation ) => obs.missingBasics( ) )
-          .map( obs => obs.uuid ),
-      }
-      : { };
-    syncManually( syncOptions );
+    syncManually( {} );
   }, [
     confirmLoggedIn,
     confirmInternetConnection,
     startManualSync,
-    isDefaultMode,
-    realm,
     syncManually,
   ] );
 
@@ -560,6 +539,7 @@ const MyObservationsResults = ( ) => {
       numTotalTaxa={displayedSpeciesCount}
       numUnuploadedObservations={numUnuploadedObservations}
       numObsMissingBasics={numObsMissingBasics}
+      numUnuploadedObsNoTaxon={numUnuploadedObsNoTaxon}
       observationIds={observationIds}
       observationsSortOptionId={myObsState.observationsSort}
       onEndReached={handleEndReached}

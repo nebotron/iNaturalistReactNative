@@ -2,9 +2,10 @@ import type { ApiObservation } from "api/types";
 import { THUMBNAIL_CLASS } from "appConstants/classNames";
 import classnames from "classnames";
 import {
+  CachedImage,
   INatIcon,
 } from "components/SharedComponents";
-import { Image, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import * as React from "react";
 import colors from "styles/tailwindColors";
 
@@ -58,12 +59,11 @@ const ObservationIcon = ( {
   }
 
   return (
-    <Image
+    <CachedImage
       testID="ObservationIcon.photo"
       className={THUMBNAIL_CLASS}
       source={{ uri: photoUri }}
       accessibilityRole="image"
-      accessibilityIgnoresInvertColors
     />
   );
 };

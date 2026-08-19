@@ -1,5 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import { THUMBNAIL_CLASS } from "appConstants/classNames";
+import buildExploreV2QueryParams from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import locationLabel from "components/Explore/ExploreV2/helpers/locationLabel";
 import {
   Body1,
@@ -11,8 +12,9 @@ import {
 } from "components/SharedComponents";
 import BackButton from "components/SharedComponents/Buttons/BackButton";
 import ContainedSquareButton from "components/SharedComponents/Buttons/ContainedSquareButton";
+import CachedImage from "components/SharedComponents/CachedImage";
 import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
-import { Image, Pressable, View } from "components/styledComponents";
+import { Pressable, View } from "components/styledComponents";
 import type { TFunction } from "i18next";
 import type { ExploreStackScreenProps } from "navigation/types";
 import type { ExploreV2Subject } from "providers/ExploreV2Context";
@@ -45,10 +47,9 @@ const SubjectThumbnail = ( { subject }: { subject: ExploreV2Subject } ) => {
       const photo = subject.taxon.default_photo?.url;
       return photo
         ? (
-          <Image
+          <CachedImage
             source={{ uri: photo }}
             className={THUMBNAIL_CLASS}
-            accessibilityIgnoresInvertColors
             testID="ExploreV2Header.taxonImage"
           />
         )
@@ -71,10 +72,9 @@ const SubjectThumbnail = ( { subject }: { subject: ExploreV2Subject } ) => {
     case "project":
       return subject.project.icon
         ? (
-          <Image
+          <CachedImage
             source={{ uri: subject.project.icon }}
             className={THUMBNAIL_CLASS}
-            accessibilityIgnoresInvertColors
             testID="ExploreV2Header.projectImage"
           />
         )
@@ -209,6 +209,18 @@ const ExploreV2Header = ( ) => {
       >
         <BackButton />
         {headerContent}
+        <View className="mr-2">
+          <ContainedSquareButton
+            accessibilityHint={t( "Opens-route-hotspots" )}
+            accessibilityLabel={t( "Wildlife-Hotspots" )}
+            backgroundColor={colors.darkGray}
+            icon="location"
+            onPress={() => navigation.navigate( "WildlifeHotspots", {
+              filterParams: buildExploreV2QueryParams( state ),
+            } )}
+            testID="ExploreV2Header.hotspotsButton"
+          />
+        </View>
         <ContainedSquareButton
           accessibilityHint={t( "Opens-search-interface" )}
           accessibilityLabel={t( "Search" )}

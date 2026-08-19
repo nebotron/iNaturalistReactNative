@@ -1,5 +1,7 @@
 // @flow
 
+import FaveButton from "components/ObsDetails/FaveButton";
+import ObsImageActionButtons from "components/ObsDetails/ObsImageActionButtons";
 import { Body2, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
@@ -12,6 +14,7 @@ import {
   observationHasSound,
   photoCountFromObservation,
   photoFromObservation,
+  photosFromObservation,
 } from "./util";
 
 type Props = {
@@ -20,27 +23,34 @@ type Props = {
   height?: string,
   hideObsUploadStatus?: boolean,
   observation: Object,
+  onExploreObservationAction?: Function,
   onUploadButtonPress: Function,
   style?: Object,
   queued: boolean,
   uploadProgress?: number,
   width?: string,
-  testID?: string
+  testID?: string,
+  squareCorners?: boolean,
 };
 
 const ObsGridItem = ( {
   currentUser,
   explore,
-  height = "w-[200px]",
+  height = "h-[200px]",
   hideObsUploadStatus,
   observation,
+  onExploreObservationAction,
   onUploadButtonPress,
   queued,
   style,
   uploadProgress,
   testID,
   width = "w-[200px]",
+  squareCorners = false,
 }: Props ): Node => {
+  const showExploreImageActions = explore
+    && currentUser;
+  const isOwnObs = !!currentUser && observation?.user?.login === currentUser?.login;
   const displayTaxonName = useMemo( ( ) => (
     <DisplayTaxonName
       bottomTextComponent={Body2}
@@ -61,24 +71,62 @@ const ObsGridItem = ( {
   ] );
 
   const photo = photoFromObservation( observation );
+  // On the Me page ( non-explore ) the photo count renders at the bottom-right,
+  // so reserve space to keep a long species name from overlapping it.
+  const reservePhotoCountSpace = !explore
+    && photoCountFromObservation( observation ) > 1;
+  const allPhotos = useMemo( ( ) => photosFromObservation( observation ).map(
+    p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
+  ), [observation] );
 
   return (
     <ObsImagePreview
+      key={observation.uuid}
+      autoDetectSubject={explore && !isOwnObs}
       source={{
-        uri: Photo.displayLocalOrRemoteMediumPhoto( photo ),
+        uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),
       }}
-      width={width}
-      height={height}
+      photos={allPhotos}
+      width={squareCorners
+        ? undefined
+        : width}
+      height={squareCorners
+        ? undefined
+        : height}
       style={style}
       obsPhotosCount={photoCountFromObservation( observation )}
       hasSound={observationHasSound( observation )}
-      isMultiplePhotosTop
+      isMultiplePhotosTop={explore}
       testID={testID || `MyObservations.obsGridItem.${observation.uuid}`}
       useShortGradient={!explore}
       iconicTaxonName={observation.taxon?.iconic_taxon_name}
       white
+      squareCorners={squareCorners}
     >
-      <View className="absolute bottom-0 items-start p-2">
+      {showExploreImageActions && (
+        <ObsImageActionButtons
+          observation={observation}
+          currentUser={currentUser}
+          afterAction={onExploreObservationAction}
+          directAgree
+        />
+      )}
+      {!explore && currentUser && (
+        <FaveButton
+          observation={observation}
+          currentUser={currentUser}
+        />
+      )}
+      <View
+        // Use explicit per-side padding when reserving space for the photo
+        // count: a `p-2` + `pr-10` combo doesn't reliably override padding-right
+        // in NativeWind, which let long species names run under the count icon.
+        className={`absolute bottom-0 left-0 right-0 items-start ${
+          reservePhotoCountSpace
+            ? "pt-2 pb-2 pl-2 pr-12"
+            : "p-2"
+        }`}
+      >
         {!hideObsUploadStatus && (
           <ObsUploadStatus
             classNameMargin="mb-1"

@@ -43,8 +43,8 @@ interface Props {
   onSuggestionChosen: ( suggestion: ApiSuggestion ) => void;
   scrollRef: React.RefObject<ScrollView | null>;
   iconicTaxon?: RealmTaxon;
-  setIconicTaxon: ( taxon: RealmTaxon ) => void;
-  taxonToSave?: ApiTaxon;
+  onIconicTaxonChosen: ( taxon: RealmTaxon ) => void;
+  taxonToSave?: ApiTaxon | RealmTaxon;
 }
 
 const Match = ( {
@@ -60,7 +60,7 @@ const Match = ( {
   onSuggestionChosen,
   scrollRef,
   iconicTaxon,
-  setIconicTaxon,
+  onIconicTaxonChosen,
   taxonToSave,
 }: Props ) => {
   const { t } = useTranslation( );
@@ -101,7 +101,7 @@ const Match = ( {
               </Heading3>
               <IconicSuggestionsScroll
                 iconicTaxonChosen={iconicTaxon}
-                onIconicTaxonChosen={setIconicTaxon}
+                onIconicTaxonChosen={onIconicTaxonChosen}
               />
               <Body2 className="mx-5 my-[30px]">
                 {t( "If-you-save-this-observation-and-upload-it-to-iNaturalist" )}

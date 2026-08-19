@@ -1,4 +1,4 @@
-import merge from "lodash/merge";
+import mergeWith from "lodash/mergeWith";
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 
@@ -8,6 +8,7 @@ import createFirebaseTraceSlice from "./createFirebaseTraceSlice";
 import createLayoutSlice from "./createLayoutSlice";
 import createMyObservationsSlice from "./createMyObservationsSlice";
 import createObservationFlowSlice from "./createObservationFlowSlice";
+import createPrivacyZoneSlice from "./createPrivacyZoneSlice";
 import createRootExploreSlice from "./createRootExploreSlice";
 import createSyncObservationsSlice from "./createSyncObservationsSlice";
 import createUploadObservationsSlice from "./createUploadObservationsSlice";
@@ -25,6 +26,15 @@ export const zustandStorage = {
   removeItem: name => storage.delete( name ),
 };
 
+// Everything in a namespaced slice except its setters, which can't be
+// serialized and are recreated on every launch anyway
+const persistableValues = namespace => Object.keys( namespace ).reduce( ( memo, key ) => {
+  if ( typeof ( namespace[key] ) !== "function" ) {
+    memo[key] = namespace[key];
+  }
+  return memo;
+}, {} );
+
 // Using slices to separate store for Explore and Observation creation flow
 // https://docs.pmnd.rs/zustand/guides/slices-pattern
 const useStore = create( persist(
@@ -37,6 +47,7 @@ const useStore = create( persist(
       createLayoutSlice( ...args ),
       createMyObservationsSlice( ...args ),
       createObservationFlowSlice( ...args ),
+      createPrivacyZoneSlice( ...args ),
       createRootExploreSlice( ...args ),
       createSyncObservationsSlice( ...args ),
       createUploadObservationsSlice( ...args ),
@@ -81,17 +92,37 @@ const useStore = create( persist(
       obsDetailsTab: state.obsDetailsTab,
 
       // Dynamically select all values in the layout slice's namespace
-      layout: ( Object.keys( state.layout ).reduce( ( memo, key ) => {
-        if ( typeof ( state.layout[key] ) !== "function" ) {
-          memo[key] = state.layout[key];
-        }
-        return memo;
-      }, {} ) ),
+      layout: persistableValues( state.layout ),
+
+      // Privacy zone (auto-obscure observations near a place, e.g. home)
+      privacyZone: persistableValues( state.privacyZone ),
+
+      // Last location used in the location picker
+      lastLocationPickerState: state.lastLocationPickerState,
+
+      // Group Photos progress, so it survives an app kill
+      groupedPhotos: state.groupedPhotos,
+      firstObservationDefaults: state.firstObservationDefaults,
+      pendingGroupPhotoDeletionUris: state.pendingGroupPhotoDeletionUris,
+
+      // Explore tab filters and related search state
+      rootExploreView: state.rootExploreView,
+      rootRelativeDateOffsets: state.rootRelativeDateOffsets,
+      rootStoredParams: state.rootStoredParams,
+      savedExploreFilters: state.savedExploreFilters,
     } ),
     storage: createJSONStorage( () => zustandStorage ),
     // We need to deep merge to persist nested objects, like layout
     // https://zustand.docs.pmnd.rs/middlewares/persist#persisting-a-state-with-nested-objects
-    merge: ( persisted, current ) => merge( current, persisted ),
+    // Arrays must be replaced wholesale rather than merged index-by-index:
+    // lodash's default array merging leaves stale trailing elements behind
+    // when the persisted array (e.g. groupedPhotos cleared after a Group
+    // Photos import) is shorter than what's currently in memory.
+    merge: ( persisted, current ) => mergeWith( current, persisted, ( _objValue, srcValue ) => (
+      Array.isArray( srcValue )
+        ? srcValue
+        : undefined
+    ) ),
   },
 ) );
 

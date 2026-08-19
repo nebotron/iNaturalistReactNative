@@ -9,6 +9,7 @@ import * as usePredictions from "components/Camera/AICamera/hooks/usePredictions
 import initI18next from "i18n/initI18next";
 import inatjs from "inaturalistjs";
 import { Animated } from "react-native";
+import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import * as useLocationPermission from "sharedHooks/useLocationPermission";
 import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 import useStore from "stores/useStore";
@@ -139,6 +140,12 @@ describe( "Suggestions", ( ) => {
         ? await screen.findByLabelText( "Edit identification" )
         : await screen.findByText( "IDENTIFY" );
       await actor.press( addIdButton );
+      // An observation without a location is offered the chance to add one
+      // before it asks for suggestions
+      const skipLocationButton = screen.queryByText( "Skip for now" );
+      if ( skipLocationButton ) {
+        await actor.press( skipLocationButton );
+      }
     }
   }
 
@@ -308,15 +315,17 @@ describe( "Suggestions", ( ) => {
           toTaxonSearch: true,
         } );
         const searchInput = await screen.findByLabelText( "Search for a taxon" );
-        const mockSearchResultTaxon = factory( "RemoteTaxon" );
-        inatjs.search.mockResolvedValue( makeResponse( [
-          { taxon: mockSearchResultTaxon },
-        ] ) );
+        // Taxon search reads the local species database, so the result has to
+        // be in Realm rather than in a mocked API response
+        const mockSearchResultTaxon = factory( "LocalTaxon", {
+          name: "Searchable taxon",
+          preferred_common_name: "Searchable taxon",
+        } );
+        safeRealmWrite( global.mockRealms[__filename], ( ) => {
+          global.mockRealms[__filename].create( "Taxon", mockSearchResultTaxon, "modified" );
+        }, "writing a searchable taxon for Suggestions integration test" );
         await act(
-          async ( ) => actor.type(
-            searchInput,
-            "doesn't really matter since we're mocking the response",
-          ),
+          async ( ) => actor.type( searchInput, "Searchable taxon" ),
         );
         const taxonResultButton = await screen.findByTestId(
           `Search.taxa.${mockSearchResultTaxon.id}.checkmark`,

@@ -40,25 +40,46 @@ const PhotoSharing = ( ) => {
 
   const resetNavigator = useCallback( (
     screen: "Match" | "ObsEdit" | "Suggestions" | "GroupPhotos",
-  ) => navigation.dispatch(
-    CommonActions.reset( {
-      index: 0,
-      routes: [
-        {
-          name: "NoBottomTabStackNavigator",
-          state: {
-            index: 0,
-            routes: [
-              {
-                name: screen,
-                params: { lastScreen: "PhotoSharing" },
-              },
-            ],
-          },
+  ) => {
+    if ( screen === "GroupPhotos" ) {
+      // Group Photos lives in the tab stack so the import keeps the bottom tab
+      // bar and the user can step away from it and come back. Drop the sharing
+      // stack first, then navigate in: handing the tab navigator a nested
+      // state through the reset itself would lose it, since the reset remounts
+      // the tab navigator and it comes back with its default state.
+      navigation.dispatch( CommonActions.reset( {
+        index: 0,
+        routes: [{ name: "TabNavigator" }],
+      } ) );
+      navigation.navigate( "TabNavigator", {
+        screen: "ObservationsTab",
+        params: {
+          screen,
+          params: { lastScreen: "PhotoSharing" },
         },
-      ],
-    } ),
-  ), [navigation] );
+      } );
+      return;
+    }
+    navigation.dispatch(
+      CommonActions.reset( {
+        index: 0,
+        routes: [
+          {
+            name: "NoBottomTabStackNavigator",
+            state: {
+              index: 0,
+              routes: [
+                {
+                  name: screen,
+                  params: { lastScreen: "PhotoSharing" },
+                },
+              ],
+            },
+          },
+        ],
+      } ),
+    );
+  }, [navigation] );
 
   const createObservationAndNavigate = useCallback( async ( photoUris: SharedPhoto[] ) => {
     try {

@@ -4,19 +4,25 @@ import {
 import { NavigationContainer } from "@react-navigation/native";
 import { useReactNavigationDevTools } from "@rozenite/react-navigation-plugin";
 import type { PropsWithChildren } from "react";
-import React, { useRef } from "react";
-import { Alert } from "react-native";
+import React, { useEffect, useRef } from "react";
 import { logFirebaseScreenView } from "sharedHelpers/tracking";
-import { useTranslation } from "sharedHooks";
+import {
+  markNavigationDispatched,
+  startUiDelayMonitoring,
+  trackScreenTransition,
+} from "sharedHelpers/uiDelayTracker";
 
 import { navigationRef } from "./navigationUtils";
 
 const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
   const routeNameRef = useRef( navigationRef.current?.getCurrentRoute()?.name );
   const { isConnected } = useNetInfo( );
-  const { t } = useTranslation( );
 
   useReactNavigationDevTools( { ref: navigationRef } );
+
+  useEffect( ( ) => {
+    startUiDelayMonitoring( );
+  }, [] );
 
   // if a user tries to navigate to the Login screen while they're
   // offline, they'll see this no internet alert and automatically land
@@ -24,20 +30,24 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
   const onStateChange = ( ) => {
     const previousRouteName = routeNameRef.current;
     const currentRouteName = navigationRef.current?.getCurrentRoute( )?.name;
-    // Basic screen tracking with Firebase Analytics
-    if ( previousRouteName !== currentRouteName && currentRouteName ) {
+    const screenChanged = previousRouteName !== currentRouteName && !!currentRouteName;
+    // Basic screen tracking with Firebase Analytics. Without recording the new
+    // route below, every state change (including param-only changes on the
+    // screen we're already on) counted as a screen view, and returning to the
+    // screen we launched on counted as none.
+    if ( screenChanged ) {
       logFirebaseScreenView( currentRouteName );
     }
+    routeNameRef.current = currentRouteName;
     if ( currentRouteName === "Login" && !isConnected ) {
       // return to previous screen if offline
       navigationRef.current?.goBack( );
-      if ( !isConnected ) {
-        Alert.alert(
-          t( "Internet-Connection-Required" ),
-          t( "Please-try-again-when-you-are-connected-to-the-internet" ),
-        );
-      }
+      return;
     }
+    trackScreenTransition( {
+      fromScreen: previousRouteName,
+      toScreen: currentRouteName,
+    } );
   };
 
   return (
@@ -45,6 +55,11 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
       ref={navigationRef}
       onReady={() => {
         routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
+        // The action listener is documented as debugging-only, which is exactly
+        // what this is: it's the only hook that fires when navigation is asked
+        // to move, before any state change, so it's where a transition's clock
+        // starts.
+        navigationRef.current?.addListener( "__unsafe_action__", markNavigationDispatched );
       }}
       onStateChange={onStateChange}
     >

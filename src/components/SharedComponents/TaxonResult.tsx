@@ -41,6 +41,7 @@ interface TaxonResultProps {
   hideNavButtons?: boolean;
   lastScreen?: "Suggestions";
   onPressInfo?: ( taxon: RealmTaxon | ApiTaxon ) => void;
+  onSelectGenus?: () => void;
   showCheckmark?: boolean;
   showEditButton?: boolean;
   showRemoveButton?: boolean;
@@ -53,6 +54,12 @@ interface TaxonResultProps {
 
 interface TaxonResultMainProps extends PropsWithChildren {
   className?: string;
+}
+
+// What a row represented when a button press on it began
+interface PressTarget {
+  onSelectGenus?: ( ) => void;
+  taxon: RealmTaxon | ApiTaxon;
 }
 
 const TaxonResult = ( {
@@ -73,6 +80,7 @@ const TaxonResult = ( {
   hideNavButtons = false,
   lastScreen,
   onPressInfo,
+  onSelectGenus,
   retryQuery = true,
   showCheckmark = true,
   showEditButton = false,
@@ -137,6 +145,24 @@ const TaxonResult = ( {
     && !localTaxon?.taxonPhotos?.some(
       ( tp: RealmTaxonPhoto ) => tp.photo.id === representativePhoto.id,
     );
+
+  // Remember what this row represented when the finger went down. Lists like
+  // Suggestions can reflow mid-tap (e.g. online results replacing offline
+  // ones), and without this a press would act on whatever taxon happens to
+  // occupy the row by the time it's released. Freezing the target for the
+  // duration of the touch means such a press is safe to honor rather than
+  // having to be discarded, which is what made buttons feel unresponsive.
+  const pressTargetRef = React.useRef<PressTarget | null>( null );
+  const capturePressTarget = React.useCallback( ( ) => {
+    pressTargetRef.current = { onSelectGenus, taxon: usableTaxon };
+  }, [onSelectGenus, usableTaxon] );
+  // onPressOut runs synchronously before onPress, so clear the capture after
+  // the current tick instead: by then the press has resolved or been
+  // cancelled, and nothing stale is left for the next one, including an
+  // accessibility activation, which fires onPress with no onPressIn
+  const releasePressTarget = React.useCallback( ( ) => {
+    setTimeout( ( ) => { pressTargetRef.current = null; }, 0 );
+  }, [] );
 
   const navToTaxonDetails = React.useCallback( ( ) => {
     const params: SharedStackParamList["TaxonDetails"] = {
@@ -260,6 +286,23 @@ const TaxonResult = ( {
       </TaxonResultMain>
       { !unpressable && (
         <View className="flex-row items-center">
+          { onSelectGenus && (
+            <INatIconButton
+              icon="arrow-up-bold-circle-outline"
+              size={22}
+              onPressIn={capturePressTarget}
+              onPressOut={releasePressTarget}
+              onPress={( ) => (
+                pressTargetRef.current?.onSelectGenus || onSelectGenus
+              )?.( )}
+              color={String(
+                clearBackground
+                  ? colors?.white
+                  : colors?.darkGray,
+              )}
+              accessibilityLabel={t( "SUGGEST-GENUS" )}
+            />
+          )}
           { !hideInfoButton && (
             <INatIconButton
               icon="info-circle-outline"
@@ -290,7 +333,11 @@ const TaxonResult = ( {
                   ? colors?.white
                   : colors?.darkGray,
               )}
-              onPress={() => handleCheckmarkPress( usableTaxon )}
+              onPressIn={capturePressTarget}
+              onPressOut={releasePressTarget}
+              onPress={() => handleCheckmarkPress(
+                pressTargetRef.current?.taxon || usableTaxon,
+              )}
               accessibilityLabel={accessibilityLabel}
               testID={`${testID}.checkmark`}
             />
