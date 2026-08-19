@@ -31,6 +31,7 @@ import {
 import { toDevicePhotoLocation } from "sharedHelpers/devicePhotoLocation";
 import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
+import { fileExtension, summarizeTypes } from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
 import { useInputImageTracking, useLayoutPrefs, useTranslation } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
@@ -146,6 +147,11 @@ const PhotoLibrary = ( ) => {
     // can carry the same filename (e.g. IMG_0001.JPG from two cameras).
     const claimedFileNames = new Set<string>( );
 
+    // Which kinds of file the copy could not produce. An import that loses
+    // photos loses particular ones — an iCloud-offloaded HEIC behaves nothing
+    // like a local JPEG — and the count alone cannot say which.
+    const failedExtensions: string[] = [];
+
     const copyNode = async ( node: PhotoNode ) => {
       let fileName = node.image.filename ?? `${uuid.v4()}.jpg`;
       if ( claimedFileNames.has( fileName ) ) {
@@ -220,6 +226,7 @@ const PhotoLibrary = ( ) => {
         onPhotoSettled?.( true );
         return copied;
       } catch ( error ) {
+        failedExtensions.push( fileExtension( node.image.filename ) );
         logger.error( "Error copying a photo from camera roll", error );
         onPhotoSettled?.( false );
         return null;
@@ -235,7 +242,11 @@ const PhotoLibrary = ( ) => {
       results.push( ...batchResults.filter( ( r ): r is NonNullable<typeof r> => r !== null ) );
     }
     if ( results.length < uniqueNodes.length ) {
-      logger.warn( `Copied ${results.length} of ${uniqueNodes.length} photo(s) from camera roll` );
+      logger.warnWithExtra( "camera_roll_copy_incomplete", {
+        copied: results.length,
+        selected: uniqueNodes.length,
+        failedFileTypes: summarizeTypes( failedExtensions ),
+      } );
     }
     return results;
   }, [] );
@@ -335,7 +346,12 @@ const PhotoLibrary = ( ) => {
       // indistinguishable from the check doing nothing at all. Say what
       // happened and stay put so the selection survives a retry.
       if ( photoNodes.length > 0 && !hasPhotos && videoGroupItems.length === 0 ) {
-        logger.error( `Imported none of the ${photoNodes.length} selected photo(s)` );
+        logger.errorWithExtra( "photo_import_produced_nothing", {
+          selected: photoNodes.length,
+          fileTypes: summarizeTypes(
+            photoNodes.map( node => fileExtension( node.image.filename ) ),
+          ),
+        } );
         Alert.alert(
           t( "Something-went-wrong" ),
           t( "Could-not-import-selected-photos" ),

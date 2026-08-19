@@ -151,9 +151,12 @@ describe( "PhotoSharing", ( ) => {
       renderComponent( <PhotoSharing /> );
 
       await waitFor( ( ) => {
+        // The alert body has to be a string: an Error handed to Alert.alert
+        // crosses the bridge as an empty object, so the user saw a title and
+        // nothing else.
         expect( alertSpy ).toHaveBeenCalledWith(
           "Photo sharing failed: couldn't create new observation:",
-          error,
+          "Error: Creation failed",
         );
       } );
       expect( mocks.dispatch ).not.toHaveBeenCalled( );

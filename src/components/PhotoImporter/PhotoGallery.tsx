@@ -32,6 +32,11 @@ import {
   recordUploadedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import {
+  fileExtension,
+  summarizeTypes,
+  totalMegabytes,
+} from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
 import {
   clearPhotoImportMarker,
@@ -204,6 +209,13 @@ const PhotoGallery = ( {
     setImportedCount( 0 );
     setFailedCount( 0 );
     const startedAt = Date.now( );
+    // What the import was actually handed. A stalled or slow import says
+    // nothing about *which* files it was chewing on otherwise, and "all five
+    // were HEIC" or "one was a 90MB video" is the first thing worth knowing.
+    const fileTypes = summarizeTypes( selected.map( node => ( isVideoNode( node )
+      ? "video"
+      : fileExtension( node.image.filename ) ) ) );
+    const megabytes = totalMegabytes( selected.map( node => node.image.fileSize ) );
     // An import the app never comes back from — see photoImportMarker.ts. The
     // marker is reported by the next launch, not here.
     markPhotoImportStarted( selected.length );
@@ -221,6 +233,8 @@ const PhotoGallery = ( {
         settled: settledCount,
         failed: failedSoFar,
         ms: Date.now( ) - startedAt,
+        fileTypes,
+        megabytes,
       } );
     }, 30000 );
     try {
@@ -240,7 +254,12 @@ const PhotoGallery = ( {
       // news.
       const ms = Date.now( ) - startedAt;
       if ( ms > 3000 ) {
-        logger.info( `Import of ${selected.length} photo(s) settled in ${ms}ms` );
+        logger.infoWithExtra( "photo_import_slow", {
+          selected: selected.length,
+          ms,
+          fileTypes,
+          megabytes,
+        } );
       }
     } finally {
       // The import reached an end, however badly, so it is not one of the ones

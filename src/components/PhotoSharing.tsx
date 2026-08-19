@@ -7,6 +7,8 @@ import React, {
 } from "react";
 import { Alert } from "react-native";
 import Observation from "realmModels/Observation";
+import { fileExtension, summarizeTypes } from "sharedHelpers/importedFileTypes";
+import { log } from "sharedHelpers/logger";
 import { unlinkIfShareExtensionSource } from "sharedHelpers/shareExtensionFiles";
 import { useLayoutPrefs } from "sharedHooks";
 import type { SharedData } from "sharedHooks/useShare";
@@ -14,6 +16,8 @@ import type { ObservationFlowSlice } from "stores/createObservationFlowSlice";
 import useStore from "stores/useStore";
 
 interface SharedPhoto { image: { uri: string }}
+
+const logger = log.extend( "PhotoSharing" );
 
 const PhotoSharing = ( ) => {
   const previousItem = useRef<null | SharedData>( null );
@@ -92,9 +96,13 @@ const PhotoSharing = ( ) => {
         ? "Match"
         : screenAfterPhotoEvidence );
     } catch ( e ) {
+      // Until now a failed share left no trace at all: the alert is gone as
+      // soon as it is dismissed, and nothing reached the app log to say which
+      // share it was or how far it got.
+      logger.error( "Failed to create an observation from a shared photo", e );
       Alert.alert(
         "Photo sharing failed: couldn't create new observation:",
-        e,
+        String( e ),
       );
       return null;
     }
@@ -111,9 +119,26 @@ const PhotoSharing = ( ) => {
     // navigating through the AddObsBottomSheet
     resetObservationFlowSlice( );
 
-    const photoUris = data
-      .filter( x => x.mimeType && x.mimeType.startsWith( "image/" ) )
-      .map( x => ( { image: { uri: x.data } } ) );
+    const sharedImages = data.filter( x => x.mimeType && x.mimeType.startsWith( "image/" ) );
+    const photoUris = sharedImages.map( x => ( { image: { uri: x.data } } ) );
+
+    // Anything that is not an image is dropped right here, silently: a shared
+    // video, PDF, or an item whose provider declared no MIME type simply never
+    // arrives, and nothing said so. One line per share (a share is one user
+    // action, so this is not chatty) records what came in and what was kept.
+    const dropped = data.length - photoUris.length;
+    const shareSummary = {
+      shared: data.length,
+      images: photoUris.length,
+      dropped,
+      mimeTypes: summarizeTypes( data.map( x => x.mimeType ) ),
+      extensions: summarizeTypes( data.map( x => fileExtension( x.data ) ) ),
+    };
+    if ( dropped > 0 ) {
+      logger.warnWithExtra( "share_import_dropped_items", shareSummary );
+    } else {
+      logger.infoWithExtra( "share_import", shareSummary );
+    }
 
     if ( photoUris.length === 1 ) {
       createObservationAndNavigate( photoUris );
