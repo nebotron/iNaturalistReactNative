@@ -134,6 +134,7 @@ datasets/
 runs/
 *.eval.csv
 crop_training.json
+brightness_training.json
 
 # Generated at install/build time by scripts/writeAppCommit.js
 src/sharedHelpers/appCommit.ts
