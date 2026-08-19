@@ -1064,6 +1064,8 @@ const SpeciesGame = ( ) => {
         showModal={showFilterModal}
         closeModal={() => setShowFilterModal( false )}
         modal={filterModalContent}
+        // the swipe-to-dismiss gesture swallows the ScrollView's pan gesture
+        disableSwipeDirection
       />
 
       {/* Lookalikes explanation modal */}
@@ -1071,6 +1073,8 @@ const SpeciesGame = ( ) => {
         showModal={showLookalikesModal}
         closeModal={() => setShowLookalikesModal( false )}
         modal={lookalikesModalContent}
+        // the swipe-to-dismiss gesture swallows the ScrollView's pan gesture
+        disableSwipeDirection
       />
 
       {/* Header bar */}
