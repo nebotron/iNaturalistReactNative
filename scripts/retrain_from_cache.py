@@ -37,6 +37,11 @@ def main() -> None:
     parser.add_argument("--base", default="yolov8n.pt",
                         help="Base model to fine-tune (default: yolov8n.pt — "
                              "matches the deployed yolov8n.onnx output [1,5,8400])")
+    parser.add_argument("--warm-start", action="store_true",
+                        help="Fine-tune from the deployed yolov8n.onnx weights instead "
+                             "of --base. Starting from stock COCO throws away every "
+                             "earlier round of fine-tuning and needs far more epochs "
+                             "to catch up.")
     parser.add_argument("--batch", type=int, default=8,
                         help="Batch size (default: 8)")
     parser.add_argument("--patience", type=int, default=20,
@@ -131,9 +136,14 @@ def main() -> None:
     from ultralytics import YOLO
     import torch
 
-    # Resolve base model path — allow local files
-    base_path = REPO_ROOT / args.base
-    base_model = str(base_path) if base_path.exists() else args.base
+    if args.warm_start:
+        from onnx_to_pt import onnx_to_pt
+        base_model = str(onnx_to_pt(REPO_ROOT / "ios/iNaturalistReactNative/yolov8n.onnx",
+                                    Path("/tmp/deployed_warmstart.pt")))
+    else:
+        # Resolve base model path — allow local files
+        base_path = REPO_ROOT / args.base
+        base_model = str(base_path) if base_path.exists() else args.base
     print(f"Base model: {base_model}\n")
 
     device = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -146,11 +156,16 @@ def main() -> None:
         imgsz=640,
         batch=args.batch,
         device=device,
+        # Explicit optimizer: 'auto' (the default) silently discards lr0 and
+        # picks 2e-3, which is far too hot for a warm start.
+        optimizer="AdamW",
         lr0=1e-4,
-        lrf=0.01,
+        lrf=0.05,
         weight_decay=0.0005,
-        warmup_epochs=3,
-        close_mosaic=5,
+        warmup_epochs=0.5,
+        # Every crop-log image has exactly one subject; mosaic composites four
+        # of them and shifts the scale statistics away from what runs on device.
+        mosaic=0.0,
         patience=args.patience,
         seed=SEED,
         verbose=True,

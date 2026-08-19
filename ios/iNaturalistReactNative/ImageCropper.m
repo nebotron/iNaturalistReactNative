@@ -245,8 +245,10 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 #define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
 #define YOLO_IOU_THRESH  0.45f
 // If the best post-NMS box is below this threshold the detection is likely spurious;
-// returning nil triggers the Vision attention-saliency fallback instead.
-#define YOLO_GATE_CONF   0.25f
+// returning nil triggers the Vision attention-saliency fallback instead. Below ~0.5
+// the detector's crop scores worse against the crop log than simply framing the
+// whole photo, so the fallback is the better bet there.
+#define YOLO_GATE_CONF   0.50f
 // Union: include box if its confidence is at least this fraction of the best box.
 // Cap at this many boxes to prevent noisy low-conf detections from bloating the union.
 #define YOLO_UNION_THRESH 0.60f
