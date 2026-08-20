@@ -313,7 +313,7 @@ const AdvancedSearch = ( ) => {
             {( taxon || taxonUnknown )
               ? (
                 <SelectedFilterRow
-                  accessibilityLabel={t( "Change-taxon" )}
+                  accessibilityLabel={t( "Change-taxon-filter" )}
                   onEdit={() => setOpenPicker( "taxon" )}
                   onRemove={() => updateTaxon( null )}
                   removeAccessibilityLabel={t( "Remove-taxon-filter" )}

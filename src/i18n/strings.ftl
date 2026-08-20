@@ -254,9 +254,6 @@ Choose-taxon = Choose taxon
 Choose-top-taxon = Choose top taxon
 # Label for button that chooses a folder on a USB drive for automatic photo import
 CHOOSE-USB-FOLDER = CHOOSE USB FOLDER
-# Label for a button that clears content, like the text entered in a text
-# field
-Clear = Clear
 Clear-Privacy-Zone = Clear Privacy Zone
 # Label for a button that closes a window or popup
 Close = Close
