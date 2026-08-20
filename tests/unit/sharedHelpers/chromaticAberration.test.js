@@ -184,6 +184,31 @@ describe( "lens profiles", ( ) => {
     expect( lensProfileKey( null ) ).toBeNull( );
   } );
 
+  // What the photo actually held, ring by ring, so a log line settles what
+  // would otherwise be guesswork about the pixels reaching the app.
+  it( "reports the shape of the first profile it measured", async ( ) => {
+    const summary = await correctPhotosChromaticAberration( photos( 1 ) );
+
+    expect( summary.firstProfile ).toBe(
+      "red:0,100,200,400,500,500,400,300,200,200"
+      + " blue:-100,-100,-100,-100,-100,-100,-100,-100,-100,-100",
+    );
+  } );
+
+  it( "reports why a profile was measured but not applied", async ( ) => {
+    correctChromaticAberration.mockResolvedValue( {
+      applied: false,
+      measured: true,
+      reason: "no lens-shaped profile",
+      redProfile: RED_RINGS,
+      blueProfile: BLUE_RINGS,
+    } );
+
+    const summary = await correctPhotosChromaticAberration( photos( 1 ) );
+
+    expect( summary.firstProfile ).toContain( "(no lens-shaped profile)" );
+  } );
+
   it( "measures the first frames of a lens, then reuses what it found", async ( ) => {
     const summary = await correctPhotosChromaticAberration( photos( 6 ) );
 

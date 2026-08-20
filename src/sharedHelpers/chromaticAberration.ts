@@ -34,6 +34,11 @@ export interface ChromaticAberrationSummary {
   lenses: number;
   maxShiftPx: number;
   ms: number;
+  // The first profile measured this run, ring by ring, in millionths of the
+  // corner radius. Reported so a log line says what the photo actually held —
+  // a lens signature grows out towards the corners, noise from the subject
+  // spikes somewhere in the middle — instead of leaving it to be inferred.
+  firstProfile: string;
 }
 
 export interface LensProfile {
@@ -62,6 +67,12 @@ export const chromaticAberrationCorrectionAvailable = ( ): boolean => (
 );
 
 const stripScheme = ( uri: string ) => uri.replace( /^file:\/\//, "" );
+
+// Ring by ring, in millionths of the corner radius: small enough integers to
+// read at a glance, and the shape is the point.
+const describeProfile = ( profile: number[] ): string => profile
+  .map( value => Math.round( value * 1e6 ) )
+  .join( "," );
 
 // ─── Lens profiles ───────────────────────────────────────────────────────────
 //
@@ -264,9 +275,18 @@ export async function correctPhotosChromaticAberration(
         summary.failed += 1;
         return;
       }
-      if ( result.measured && key && result.redProfile && result.blueProfile ) {
-        summary.measured += 1;
-        recordLensMeasurement( key, result.redProfile, result.blueProfile );
+      if ( result.measured && result.redProfile && result.blueProfile ) {
+        if ( !summary.firstProfile ) {
+          summary.firstProfile = `red:${describeProfile( result.redProfile )}`
+            + ` blue:${describeProfile( result.blueProfile )}${
+              result.applied
+                ? ""
+                : ` (${result.reason ?? "not applied"})`}`;
+        }
+        if ( key ) {
+          summary.measured += 1;
+          recordLensMeasurement( key, result.redProfile, result.blueProfile );
+        }
       }
       if ( profile ) summary.fromProfile += 1;
       if ( result.applied ) {

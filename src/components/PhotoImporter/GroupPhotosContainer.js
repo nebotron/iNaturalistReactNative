@@ -410,18 +410,14 @@ const GroupPhotosContainer = ( ): Node => {
     // Once per import, and only when a raw came through: what the file held,
     // and how much of it survived into the JPEG the observation carries.
     let rawMetadataLogged = false;
-    // iOS cannot demosaic a CR3, so the pixels an imported raw carries are the
-    // preview the camera embedded — and a camera set to correct chromatic
-    // aberration has already corrected that preview. Measuring one finds the
-    // subject rather than the lens: an EOS R7 preview measured a 0.97px spike
-    // mid-frame and nothing at the corners, where the same frame's sensor data
-    // measured a clean 1.51px profile that held all the way out.
-    let cameraAlreadyCorrectedCa = false;
     // Totalled across batches so the import reports one line, not one per ten
     // photos.
     const chromaticAberration = {
       corrected: 0, skipped: 0, failed: 0, measured: 0, fromProfile: 0, maxShiftPx: 0, ms: 0,
     };
+    // The shape of the first thing measured, so the log says what the photo
+    // actually held rather than leaving it to be inferred.
+    chromaticAberration.firstProfile = "";
     // One Photos-library transaction (and so one iOS consent alert) for the
     // whole import, however many batches its location writes arrive in.
     beginLocationWriteBatch( );
@@ -460,25 +456,16 @@ const GroupPhotosContainer = ( ): Node => {
           const sourceUris = batch.flatMap( group => ( group.photos || [] ).map(
             photo => photo.image?.cropOriginalUri || photo.image?.uri,
           ) );
-          // Awaited, because what the raw says about in-camera correction
-          // decides whether the correction below is worth doing at all. It
-          // reads a header and one record, not the whole file.
+          // Awaited so its line lands beside the correction's, and because it
+          // reads a header and one record rather than the whole file.
           // eslint-disable-next-line no-await-in-loop
-          const rawSummary = await logRawImportMetadata(
+          await logRawImportMetadata(
             sourceUris,
             localFileUrisForObservations( observationsToSave ),
           ).catch( error => {
             logger.error( "Failed to report raw import metadata", error );
             return null;
           } );
-          if ( rawSummary?.chromaticAberrationCorrection === 1 ) {
-            cameraAlreadyCorrectedCa = true;
-            logger.infoWithExtra( "chromatic_aberration_not_needed", {
-              reason: "the camera corrected the preview these photos came from",
-              camera: rawSummary.camera || "",
-              lens: rawSummary.lens || "",
-            } );
-          }
         }
 
         // Correct lateral chromatic aberration before anything reads these
@@ -486,24 +473,22 @@ const GroupPhotosContainer = ( ): Node => {
         // that gets scored, shown and uploaded. Measured per photo from the
         // photo itself, so it costs nothing on a lens that doesn't fringe —
         // those come back "nothing to correct" and are left untouched.
-        let caSummary = null;
-        if ( !cameraAlreadyCorrectedCa ) {
-          // eslint-disable-next-line no-await-in-loop
-          caSummary = await correctPhotosChromaticAberration(
-            localFileUrisForObservations( observationsToSave ),
-          );
-        }
-        if ( caSummary ) {
-          chromaticAberration.corrected += caSummary.corrected;
-          chromaticAberration.skipped += caSummary.skipped;
-          chromaticAberration.failed += caSummary.failed;
-          chromaticAberration.measured += caSummary.measured;
-          chromaticAberration.fromProfile += caSummary.fromProfile;
-          chromaticAberration.ms += caSummary.ms;
-          chromaticAberration.maxShiftPx = Math.max(
-            chromaticAberration.maxShiftPx,
-            caSummary.maxShiftPx,
-          );
+        // eslint-disable-next-line no-await-in-loop
+        const caSummary = await correctPhotosChromaticAberration(
+          localFileUrisForObservations( observationsToSave ),
+        );
+        chromaticAberration.corrected += caSummary.corrected;
+        chromaticAberration.skipped += caSummary.skipped;
+        chromaticAberration.failed += caSummary.failed;
+        chromaticAberration.measured += caSummary.measured;
+        chromaticAberration.fromProfile += caSummary.fromProfile;
+        chromaticAberration.ms += caSummary.ms;
+        chromaticAberration.maxShiftPx = Math.max(
+          chromaticAberration.maxShiftPx,
+          caSummary.maxShiftPx,
+        );
+        if ( !chromaticAberration.firstProfile && caSummary.firstProfile ) {
+          chromaticAberration.firstProfile = caSummary.firstProfile;
         }
 
         // Save each observation and auto-fill tracked location for any that
@@ -557,6 +542,7 @@ const GroupPhotosContainer = ( ): Node => {
     if ( chromaticAberration.corrected > 0 || chromaticAberration.failed > 0 ) {
       logger.infoWithExtra( "group_photos_chromatic_aberration", {
         ...chromaticAberration,
+        firstProfile: chromaticAberration.firstProfile,
         // Cumulative, not this import's: it says how much of the next one will
         // need no measuring.
         lensProfilesKnown: knownLensProfileCount( ),
