@@ -35,6 +35,7 @@ import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrop
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
+import logRawImportMetadata from "sharedHelpers/rawImportMetadataLog";
 import {
   addRemovedGroupPhotoUris,
   clearRemovedGroupPhotoUris,
@@ -406,6 +407,9 @@ const GroupPhotosContainer = ( ): Node => {
     // from an observation is invisible until long after the photo is gone.
     let failedCount = 0;
     let defaultsApplied = false;
+    // Once per import, and only when a raw came through: what the file held,
+    // and how much of it survived into the JPEG the observation carries.
+    let rawMetadataLogged = false;
     // Totalled across batches so the import reports one line, not one per ten
     // photos.
     const chromaticAberration = {
@@ -442,6 +446,19 @@ const GroupPhotosContainer = ( ): Node => {
         if ( observationsToSave.length === 0 ) {
           // eslint-disable-next-line no-continue
           continue;
+        }
+
+        if ( !rawMetadataLogged ) {
+          rawMetadataLogged = true;
+          const sourceUris = batch.flatMap( group => ( group.photos || [] ).map(
+            photo => photo.image?.cropOriginalUri || photo.image?.uri,
+          ) );
+          // Not awaited: nothing downstream needs it, and an import should not
+          // wait on a diagnostic.
+          logRawImportMetadata(
+            sourceUris,
+            localFileUrisForObservations( observationsToSave ),
+          ).catch( error => logger.error( "Failed to report raw import metadata", error ) );
         }
 
         // Correct lateral chromatic aberration before anything reads these
