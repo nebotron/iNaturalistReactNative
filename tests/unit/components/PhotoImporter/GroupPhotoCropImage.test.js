@@ -1,4 +1,5 @@
-import { fireEvent, screen } from "@testing-library/react-native";
+import { exists } from "@dr.pogodin/react-native-fs";
+import { fireEvent, screen, waitFor } from "@testing-library/react-native";
 import GroupPhotoCropImage from "components/PhotoImporter/GroupPhotoCropImage";
 import React from "react";
 import { renderComponent } from "tests/helpers/render";
@@ -14,6 +15,9 @@ jest.mock( "sharedHelpers/useDeviceImageThumbnail", ( ) => ( {
   default: ( ...args ) => mockThumbnail( ...args ),
   invalidateDeviceImageThumbnail: jest.fn( ),
 } ) );
+
+// eslint-disable-next-line global-require
+const { invalidateDeviceImageThumbnail } = require( "sharedHelpers/useDeviceImageThumbnail" );
 
 const mockDetection = jest.fn( );
 jest.mock( "sharedHelpers/useThumbnailSubjectDetection", ( ) => ( {
@@ -126,6 +130,41 @@ describe( "GroupPhotoCropImage", ( ) => {
   // A load event that carries no source at all used to throw out of the
   // handler, after painted had already been set -- leaving the cell in exactly
   // the framed-by-nothing state the backdrop must not paint over.
+  // An original that is gone from disk explains the load failure on its own,
+  // and the generated thumbnail is then the only copy of that photo left: the
+  // Aug 20 log threw away three 10MB thumbnails that had generated perfectly
+  // well, and regenerated them on the next visit to do it again.
+  it( "keeps the thumbnail when the photo it came from is gone", async ( ) => {
+    exists.mockResolvedValue( false );
+    mockThumbnail.mockReturnValue( "file:///thumbs/raw.jpg" );
+    renderCropImage( "file:///galleryPhotos/raw.CR3" );
+
+    fireEvent( screen.getByTestId( "GroupPhotoCropImage.photo" ), "error", {
+      nativeEvent: {
+        error: "The file “raw.CR3” couldn’t be opened because there is no such file.",
+      },
+    } );
+
+    await waitFor( ( ) => {
+      expect( exists ).toHaveBeenCalledWith( "/galleryPhotos/raw.CR3" );
+    } );
+    expect( invalidateDeviceImageThumbnail ).not.toHaveBeenCalled( );
+  } );
+
+  it( "discards a thumbnail that failed while its photo is still there", async ( ) => {
+    exists.mockResolvedValue( true );
+    mockThumbnail.mockReturnValue( "file:///thumbs/raw.jpg" );
+    renderCropImage( "file:///galleryPhotos/raw.CR3" );
+
+    fireEvent( screen.getByTestId( "GroupPhotoCropImage.photo" ), "error", {
+      nativeEvent: { error: "decode failed" },
+    } );
+
+    await waitFor( ( ) => {
+      expect( invalidateDeviceImageThumbnail ).toHaveBeenCalled( );
+    } );
+  } );
+
   it( "survives a load event that reports no source", ( ) => {
     mockDetection.mockReturnValue( null );
     renderCropImage( "ph://sourceless" );

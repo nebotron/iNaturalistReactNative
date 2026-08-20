@@ -63,9 +63,9 @@ const exifSummary = async ( uri?: string | null ) => {
 async function logRawImportMetadata(
   sourceUris: ( string | null | undefined )[],
   derivedUris: ( string | null | undefined )[],
-): Promise<boolean> {
+): Promise<Cr3Summary | null> {
   const source = sourceUris.find( uri => isCanonRawUri( uri ) );
-  if ( !source ) return false;
+  if ( !source ) return null;
   const derived = derivedUris.find( Boolean );
 
   try {
@@ -79,7 +79,7 @@ async function logRawImportMetadata(
         sourceType: fileExtension( source ),
         sourceExifReadable: sourceExif.readable,
       } );
-      return false;
+      return null;
     }
 
     logger.infoWithExtra( "raw_import_metadata", {
@@ -115,10 +115,10 @@ async function logRawImportMetadata(
       derivedFocalLength: derivedExif.focalLength,
       derivedExifTags: derivedExif.tags,
     } );
-    return true;
+    return summary;
   } catch ( error ) {
     logger.error( "Could not read the metadata of an imported raw file", error );
-    return false;
+    return null;
   }
 }
 

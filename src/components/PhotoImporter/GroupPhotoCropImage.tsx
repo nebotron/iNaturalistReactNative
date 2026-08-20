@@ -1,3 +1,4 @@
+import { exists } from "@dr.pogodin/react-native-fs";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
@@ -75,6 +76,30 @@ const paintedImages = new Set<string>( );
 // never returned and its pinch does nothing. Remembering them lets a cell fall
 // straight through to an image it can actually draw.
 const undecodableUris = new Set<string>( );
+
+// What actually failed, which the load error alone does not say: the Aug 20 log
+// has three of these where the error names the *original* .CR3 rather than the
+// thumbnail that was being drawn, and each one threw away a 10MB thumbnail that
+// had generated perfectly well. If the original is gone from disk, that
+// explains the failure by itself — and the generated thumbnail is then the only
+// copy of the photo left, so discarding it costs the cell the one image it
+// could still draw.
+async function reportOverlayLoadFailure(
+  failedUri: string,
+  cropSourceUri: string,
+  error?: string,
+): Promise<void> {
+  const sourceExists = cropSourceUri.startsWith( "ph://" )
+    ? true
+    : await exists( cropSourceUri.replace( /^file:\/\//, "" ) ).catch( ( ) => false );
+  logger.warn(
+    `overlay image failed to load for ${cropSourceUri}: ${failedUri}: ${error} `
+    + `(original on disk: ${sourceExists})`,
+  );
+  if ( sourceExists ) {
+    invalidateDeviceImageThumbnail( failedUri, cropSourceUri );
+  }
+}
 
 const cropsMatch = ( a: NormalizedCrop, b: NormalizedCrop ) => (
   Math.abs( a.x - b.x ) < CROP_EPSILON
@@ -356,13 +381,9 @@ const GroupPhotoCropImage = ( {
             onError={e => {
               const failedUri = displayUri as string;
               undecodableUris.add( failedUri );
-              logger.warn(
-                `overlay image failed to load for ${cropSourceUri}: ${failedUri}: `
-                + `${e.nativeEvent?.error}`,
-              );
               // Generated files only: the fallback chain ends at the original,
               // and invalidate ignores anything outside the thumbnail cache.
-              invalidateDeviceImageThumbnail( failedUri, cropSourceUri );
+              reportOverlayLoadFailure( failedUri, cropSourceUri, e.nativeEvent?.error );
               countLoadFailure( count => count + 1 );
             }}
           />

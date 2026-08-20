@@ -74,7 +74,9 @@ describe( "logRawImportMetadata", ( ) => {
   } );
 
   it( "reports what the raw held and what the JPEG kept", async ( ) => {
-    expect( await logRawImportMetadata( [RAW], [JPEG] ) ).toBe( true );
+    // Returns what it read, so the import can act on it: a camera that already
+    // corrected the preview needs no correction from us.
+    expect( await logRawImportMetadata( [RAW], [JPEG] ) ).toBe( summary );
 
     expect( mockExtra.infoWithExtra ).toHaveBeenCalledWith(
       "raw_import_metadata",
@@ -97,7 +99,7 @@ describe( "logRawImportMetadata", ( ) => {
   } );
 
   it( "says nothing when the import held no raw file", async ( ) => {
-    expect( await logRawImportMetadata( [JPEG], [JPEG] ) ).toBe( false );
+    expect( await logRawImportMetadata( [JPEG], [JPEG] ) ).toBeNull( );
     expect( mockReadCr3SummaryFromFile ).not.toHaveBeenCalled( );
     expect( mockExtra.infoWithExtra ).not.toHaveBeenCalled( );
   } );
@@ -105,7 +107,7 @@ describe( "logRawImportMetadata", ( ) => {
   it( "reports a raw it could not parse rather than staying silent", async ( ) => {
     mockReadCr3SummaryFromFile.mockResolvedValue( null );
 
-    expect( await logRawImportMetadata( [RAW], [JPEG] ) ).toBe( false );
+    expect( await logRawImportMetadata( [RAW], [JPEG] ) ).toBeNull( );
     expect( mockExtra.warnWithExtra ).toHaveBeenCalledWith(
       "raw_import_metadata_unreadable",
       expect.objectContaining( { sourceType: "cr3" } ),
@@ -115,7 +117,7 @@ describe( "logRawImportMetadata", ( ) => {
   it( "records that ImageIO could not open the file, rather than throwing", async ( ) => {
     Exify.read.mockRejectedValue( new Error( "Invalid URI" ) );
 
-    expect( await logRawImportMetadata( [RAW], [JPEG] ) ).toBe( true );
+    expect( await logRawImportMetadata( [RAW], [JPEG] ) ).toBe( summary );
     expect( mockExtra.infoWithExtra ).toHaveBeenCalledWith(
       "raw_import_metadata",
       expect.objectContaining( { sourceExifReadable: false, derivedExifReadable: false } ),
@@ -125,7 +127,7 @@ describe( "logRawImportMetadata", ( ) => {
   it( "never lets a parse failure reach the import", async ( ) => {
     mockReadCr3SummaryFromFile.mockRejectedValue( new Error( "unreadable" ) );
 
-    await expect( logRawImportMetadata( [RAW], [JPEG] ) ).resolves.toBe( false );
+    await expect( logRawImportMetadata( [RAW], [JPEG] ) ).resolves.toBeNull( );
     expect( mockLogger.error ).toHaveBeenCalled( );
   } );
 } );

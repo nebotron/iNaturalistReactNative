@@ -1635,6 +1635,43 @@ static void caResampleChannel(
   }
 }
 
+// Whether a measured profile looks like a lens rather than like the subject.
+//
+// Lateral CA grows with distance from the optical axis: it is smallest at the
+// centre and largest out towards the corners, and it does not change sign on
+// the way. A measurement dominated by the photograph instead — a coloured edge
+// that happens to sit mid-frame, a subject that fringes on its own — spikes in
+// one ring and reads near zero at the corners.
+//
+// This matters most for a raw file. iOS cannot demosaic a CR3, so what it hands
+// back is the preview the camera embedded, and a camera set to correct
+// chromatic aberration has already corrected that preview: measuring one finds
+// noise where the aberration used to be. On an EOS R7 frame the preview
+// measured a 0.97px spike in ring 2 and nothing at all in the outer rings,
+// while the same frame's sensor data measured a clean 1.51px profile that held
+// out to the corner. Applying the first would warp the photo for nothing.
+static BOOL caProfileLooksLikeALens( const double *profile )
+{
+  double most = 0;
+  int    outerStart = ( kCABinCount * 2 ) / 3;
+  double outerMost = 0;
+  for ( int b = 0; b < kCABinCount; b++ ) {
+    most = MAX( most, fabs( profile[b] ) );
+    if ( b >= outerStart ) outerMost = MAX( outerMost, fabs( profile[b] ) );
+  }
+  if ( most <= 0 ) return NO;
+  // The corners must carry most of the displacement, not some ring in the
+  // middle of the frame.
+  if ( outerMost < most * 0.5 ) return NO;
+  // And the outer half must not change sign: a real aberration pushes one way.
+  int positive = 0, negative = 0;
+  for ( int b = kCABinCount / 2; b < kCABinCount; b++ ) {
+    if ( profile[b] > 0 ) positive++;
+    if ( profile[b] < 0 ) negative++;
+  }
+  return ( positive == 0 || negative == 0 );
+}
+
 // Biggest displacement anywhere in the frame, in pixels.
 static double caMaxShiftPx( const double *profile, double cornerRadius )
 {
@@ -1831,6 +1868,18 @@ RCT_EXPORT_METHOD( correctChromaticAberration
     return;
   }
 
+  // A channel whose profile is not lens-shaped is left alone; the other may
+  // still be worth correcting.
+  int dropped = 0;
+  if ( !caProfileLooksLikeALens( redProfile ) ) {
+    memset( redProfile, 0, kCABinCount * sizeof( double ) );
+    dropped += 1;
+  }
+  if ( !caProfileLooksLikeALens( blueProfile ) ) {
+    memset( blueProfile, 0, kCABinCount * sizeof( double ) );
+    dropped += 1;
+  }
+
   double cornerRadius = sqrt( (double)W * W + (double)H * H ) / 2.0;
   double redPx        = caMaxShiftPx( redProfile,  cornerRadius );
   double bluePx       = caMaxShiftPx( blueProfile, cornerRadius );
@@ -1846,7 +1895,10 @@ RCT_EXPORT_METHOD( correctChromaticAberration
   if ( redPx < kCAMinShiftPx && bluePx < kCAMinShiftPx ) {
     // Nothing worth resampling for, but still a real measurement of this lens:
     // reported as such so the rest of an import can stop measuring.
-    resolve( @{ @"applied": @NO, @"measured": @YES, @"reason": @"nothing to correct",
+    resolve( @{ @"applied": @NO, @"measured": @YES,
+                @"reason": dropped > 0
+                  ? @"no lens-shaped profile"
+                  : @"nothing to correct",
                 @"redProfile": caProfileToArray( redProfile ),
                 @"blueProfile": caProfileToArray( blueProfile ),
                 @"redShiftPx": @( redPx ), @"blueShiftPx": @( bluePx ) } );
@@ -1863,6 +1915,7 @@ RCT_EXPORT_METHOD( correctChromaticAberration
   resolve( @{
     @"applied":     @YES,
     @"measured":    @YES,
+    @"channelsDropped": @( dropped ),
     @"outputPath":  output,
     @"redProfile":  caProfileToArray( redProfile ),
     @"blueProfile": caProfileToArray( blueProfile ),
