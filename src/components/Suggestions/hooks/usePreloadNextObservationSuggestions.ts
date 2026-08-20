@@ -49,15 +49,29 @@ const usePreloadNextObservationSuggestions = ( ) => {
     ? observations[currentObservationIndex + 3]
     : undefined;
 
+  // One at a time: each prefetch resizes a photo and uploads it for scoring,
+  // and three of those at once starve the request for the observation the user
+  // is looking at right now.
   useEffect( ( ) => {
-    [nextObs1, nextObs2, nextObs3].forEach( obs => {
-      if ( !obs ) {
-        return;
+    let cancelled = false;
+
+    const preload = async ( ) => {
+      for ( const obs of [nextObs1, nextObs2, nextObs3] ) {
+        if ( cancelled ) { return; }
+        if ( obs ) {
+          // eslint-disable-next-line no-await-in-loop
+          await prefetchObservationSuggestions( queryClient, obs, realm ).catch( error => {
+            logger.error( "Failed to preload next observation suggestions", error );
+          } );
+        }
       }
-      prefetchObservationSuggestions( queryClient, obs, realm ).catch( error => {
-        logger.error( "Failed to preload next observation suggestions", error );
-      } );
-    } );
+    };
+
+    preload( );
+
+    return ( ) => {
+      cancelled = true;
+    };
   }, [nextObs1, nextObs2, nextObs3, queryClient, realm] );
 
   // The bulk ID flow arrives ordered by when the observations were created,

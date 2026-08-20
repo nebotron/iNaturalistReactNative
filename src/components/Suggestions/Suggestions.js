@@ -71,7 +71,9 @@ const Suggestions = ( {
   } = suggestions;
 
   const taxonIds = otherSuggestions?.map( s => s.taxon.id );
-  const observers = useObservers( taxonIds );
+  // The attribution these observers appear in lives inside the same block as
+  // the location toggle, so when that's hidden there's nothing to fetch for.
+  const observers = useObservers( taxonIds, !hideLocationToggleButton );
   const isEmptyList = !topSuggestion && otherSuggestions?.length === 0;
   const showOfflineModelInfo = !isLoading && useOfflineModel && !isEmptyList;
 
