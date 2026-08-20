@@ -1,4 +1,5 @@
 import { moveFile } from "@dr.pogodin/react-native-fs";
+import * as Exify from "@lodev09/react-native-exify";
 import { NativeModules } from "react-native";
 
 // The shared fs mock exports moveFile as a plain function; these tests need to
@@ -10,17 +11,23 @@ jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
 } ) );
 
 const correctChromaticAberration = jest.fn( );
+const applyChromaticAberration = jest.fn( );
 
 // The module reads NativeModules.ImageCropper at import time, so the mock has
 // to be in place before it is required.
-NativeModules.ImageCropper = { correctChromaticAberration };
+NativeModules.ImageCropper = { correctChromaticAberration, applyChromaticAberration };
 // eslint-disable-next-line global-require
 const {
   chromaticAberrationCorrectionAvailable,
   correctPhotoChromaticAberration,
   correctPhotosChromaticAberration,
+  forgetLensProfiles,
+  lensProfile,
+  lensProfileKey,
   localFileUrisForObservations,
 } = require( "sharedHelpers/chromaticAberration" );
+
+const LENS = { LensModel: "RF100mm F2.8 L MACRO IS USM", FocalLength: 100 };
 
 const PHOTO = "file:///photoUploads/IMG_1.jpg";
 const PATH = "/photoUploads/IMG_1.jpg";
@@ -94,6 +101,8 @@ describe( "correctPhotosChromaticAberration", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
     moveFile.mockResolvedValue( undefined );
+    forgetLensProfiles( );
+    Exify.read.mockResolvedValue( LENS );
   } );
 
   it( "totals what happened across the batch", async ( ) => {
@@ -136,5 +145,116 @@ describe( "localFileUrisForObservations", ( ) => {
       { observationPhotos: [{ photo: { } }] },
       { },
     ] ) ).toEqual( ["a.jpg", "b.jpg"] );
+  } );
+} );
+
+// The lens a photo was taken with is in its EXIF, and lateral CA is a property
+// of that lens: measure it on a couple of frames and the rest of the import
+// needs no measuring at all.
+describe( "lens profiles", ( ) => {
+  const photos = n => Array.from( { length: n }, ( _u, i ) => `file:///photoUploads/IMG_${i}.jpg` );
+
+  beforeEach( ( ) => {
+    jest.clearAllMocks( );
+    moveFile.mockResolvedValue( undefined );
+    forgetLensProfiles( );
+    Exify.read.mockResolvedValue( LENS );
+    correctChromaticAberration.mockResolvedValue( {
+      applied: true, measured: true, redScale: 0.0003, blueScale: -0.0001, redCornerPx: 0.5,
+    } );
+    applyChromaticAberration.mockResolvedValue( {
+      applied: true, measured: false, redScale: 0.0003, blueScale: -0.0001, redCornerPx: 0.5,
+    } );
+  } );
+
+  it( "keys a profile on the lens and focal length, not the aperture", ( ) => {
+    expect( lensProfileKey( { ...LENS, FNumber: 2.8 } ) )
+      .toBe( "RF100mm F2.8 L MACRO IS USM@100mm" );
+    expect( lensProfileKey( { ...LENS, FNumber: 16 } ) )
+      .toBe( "RF100mm F2.8 L MACRO IS USM@100mm" );
+    expect( lensProfileKey( { LensModel: "RF100mm" } ) ).toBeNull( );
+    expect( lensProfileKey( null ) ).toBeNull( );
+  } );
+
+  it( "measures the first frames of a lens, then reuses what it found", async ( ) => {
+    const summary = await correctPhotosChromaticAberration( photos( 6 ) );
+
+    // Two measured (MIN_SAMPLES_TO_TRUST), the rest corrected from the profile.
+    expect( correctChromaticAberration ).toHaveBeenCalledTimes( 2 );
+    expect( applyChromaticAberration ).toHaveBeenCalledTimes( 4 );
+    expect( applyChromaticAberration ).toHaveBeenLastCalledWith(
+      expect.any( String ),
+      expect.any( String ),
+      0.0003,
+      -0.0001,
+    );
+    expect( summary ).toMatchObject( {
+      corrected: 6, measured: 2, fromProfile: 4, lenses: 1,
+    } );
+    expect( lensProfile( "RF100mm F2.8 L MACRO IS USM@100mm" ) ).toMatchObject( {
+      red: 0.0003, blue: -0.0001, samples: 2,
+    } );
+  } );
+
+  it( "remembers a lens that turned out not to need correcting", async ( ) => {
+    correctChromaticAberration.mockResolvedValue( {
+      applied: false,
+      measured: true,
+      reason: "nothing to correct",
+      redScale: 0.00001,
+      blueScale: 0.00001,
+    } );
+    // The native side declines a profile this small for the same reason it
+    // declined the measurement it came from.
+    applyChromaticAberration.mockResolvedValue( {
+      applied: false,
+      measured: false,
+      reason: "nothing to correct",
+    } );
+
+    const summary = await correctPhotosChromaticAberration( photos( 4 ) );
+
+    expect( summary ).toMatchObject( { corrected: 0, skipped: 4, measured: 2 } );
+    expect( lensProfile( "RF100mm F2.8 L MACRO IS USM@100mm" ).samples ).toBe( 2 );
+    // The profile is still applied to the rest, and the native side declines it
+    // for being too small to see.
+    expect( applyChromaticAberration ).toHaveBeenCalledTimes( 2 );
+  } );
+
+  it( "averages what it measures rather than trusting one frame", async ( ) => {
+    correctChromaticAberration
+      .mockResolvedValueOnce( {
+        applied: true, measured: true, redScale: 0.0002, blueScale: 0,
+      } )
+      .mockResolvedValueOnce( {
+        applied: true, measured: true, redScale: 0.0004, blueScale: 0,
+      } );
+
+    await correctPhotosChromaticAberration( photos( 2 ) );
+
+    expect( lensProfile( "RF100mm F2.8 L MACRO IS USM@100mm" ).red )
+      .toBeCloseTo( 0.0003, 6 );
+  } );
+
+  it( "measures every photo when the lens is unknown", async ( ) => {
+    Exify.read.mockResolvedValue( { } );
+
+    const summary = await correctPhotosChromaticAberration( photos( 4 ) );
+
+    expect( correctChromaticAberration ).toHaveBeenCalledTimes( 4 );
+    expect( applyChromaticAberration ).not.toHaveBeenCalled( );
+    expect( summary ).toMatchObject( { lenses: 0, fromProfile: 0 } );
+  } );
+
+  it( "keeps a separate profile per focal length of a zoom", async ( ) => {
+    Exify.read
+      .mockResolvedValueOnce( { LensModel: "RF24-105mm", FocalLength: 24 } )
+      .mockResolvedValueOnce( { LensModel: "RF24-105mm", FocalLength: 105 } );
+
+    const summary = await correctPhotosChromaticAberration( photos( 2 ) );
+
+    expect( summary.lenses ).toBe( 2 );
+    expect( lensProfile( "RF24-105mm@24mm" ).samples ).toBe( 1 );
+    expect( lensProfile( "RF24-105mm@105mm" ).samples ).toBe( 1 );
   } );
 } );

@@ -1686,6 +1686,57 @@ static BOOL caMeasureShifts( UIImage *image, double *outRed, double *outBlue )
   return YES;
 }
 
+// Resamples red and blue by the given shifts and writes the result. The photo
+// keeps the metadata it arrived with (GPS, timestamp, camera): the pixels move,
+// nothing else about it does.
+static BOOL caWriteCorrectedImage(
+  UIImage *image, int W, int H, double red, double blue,
+  NSString *input, NSString *output, NSString **failureOut
+)
+{
+  NSURL           *inputURL = [NSURL fileURLWithPath:input];
+  CGImageSourceRef src      = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
+  NSDictionary    *srcMeta  = nil;
+  if ( src ) {
+    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+    CFRelease( src );
+  }
+
+  uint8_t *full = caBitmapFromImage( image, W, H );
+  if ( !full ) {
+    if ( failureOut ) *failureOut = @"Could not read image pixels";
+    return NO;
+  }
+  uint8_t *corrected = (uint8_t *)malloc( (size_t)W * H * 4 );
+  if ( !corrected ) {
+    free( full );
+    if ( failureOut ) *failureOut = @"Out of memory";
+    return NO;
+  }
+  memcpy( corrected, full, (size_t)W * H * 4 );
+  caResampleChannel( full, corrected, W, H, 0, red );
+  caResampleChannel( full, corrected, W, H, 2, blue );
+  free( full );
+
+  CGImageRef ref  = caImageFromBitmap( corrected, W, H );
+  NSData    *data = ref ? jpegDataFromCroppedImage( ref, srcMeta, W, H ) : nil;
+  if ( ref ) CGImageRelease( ref );
+  free( corrected );
+  if ( !data ) {
+    if ( failureOut ) *failureOut = @"Could not encode corrected image";
+    return NO;
+  }
+
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+  if ( ![data writeToFile:output atomically:YES] ) {
+    if ( failureOut ) *failureOut = @"Could not write corrected image";
+    return NO;
+  }
+  return YES;
+}
+
 // Corrects lateral chromatic aberration in a photo and writes the result to
 // outputPath. Resolves with what it measured and whether it wrote anything: a
 // photo whose fringing is already under a fraction of a pixel is left alone
@@ -1725,8 +1776,76 @@ RCT_EXPORT_METHOD( correctChromaticAberration
   double bluePx       = fabs( blue ) * cornerRadius;
 
   if ( fabs( red ) > kCAMaxScale || fabs( blue ) > kCAMaxScale ) {
-    resolve( @{ @"applied": @NO, @"reason": @"measurement implausible",
+    // Not recorded against the lens: an implausible number is one to forget,
+    // not to average in.
+    resolve( @{ @"applied": @NO, @"measured": @NO, @"reason": @"measurement implausible",
                 @"redScale": @( red ), @"blueScale": @( blue ) } );
+    return;
+  }
+  if ( redPx < kCAMinCornerShiftPx && bluePx < kCAMinCornerShiftPx ) {
+    // Nothing worth resampling for, but still a real measurement of this lens:
+    // reported as such so the rest of the import can stop measuring.
+    resolve( @{ @"applied": @NO, @"measured": @YES, @"reason": @"nothing to correct",
+                @"redScale": @( red ), @"blueScale": @( blue ),
+                @"redCornerPx": @( redPx ), @"blueCornerPx": @( bluePx ) } );
+    return;
+  }
+
+  NSString *failure = nil;
+  if ( !caWriteCorrectedImage( image, W, H, red, blue, input, output, &failure ) ) {
+    reject( @"CA_FAILED", failure, nil );
+    return;
+  }
+
+  resolve( @{
+    @"applied":      @YES,
+    @"measured":     @YES,
+    @"outputPath":   output,
+    @"redScale":     @( red ),
+    @"blueScale":    @( blue ),
+    @"redCornerPx":  @( redPx ),
+    @"blueCornerPx": @( bluePx ),
+    @"ms":           @( (int)round( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
+  } );
+}
+
+// Corrects a photo with shifts measured from another frame of the same lens at
+// the same focal length (see chromaticAberration.ts): lateral CA is a property
+// of the lens, so a profile measured once holds for every frame it took, and
+// most of an import needs no measuring at all. It also covers the frames a
+// measurement cannot handle — a photo of open sky has no edges to measure and
+// would otherwise be left uncorrected.
+RCT_EXPORT_METHOD( applyChromaticAberration
+                  : ( NSString * )inputPath outputPath
+                  : ( NSString * )outputPath redScale
+                  : ( nonnull NSNumber * )redScale blueScale
+                  : ( nonnull NSNumber * )blueScale resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString       *input   = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString       *output  = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSTimeInterval  started = [NSDate timeIntervalSinceReferenceDate];
+  double          red     = [redScale doubleValue];
+  double          blue    = [blueScale doubleValue];
+
+  UIImage *image = [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { reject( @"CA_FAILED", @"Could not load image", nil ); return; }
+
+  int W = (int)round( image.size.width );
+  int H = (int)round( image.size.height );
+  if ( W < 64 || H < 64 || (size_t)W * (size_t)H > kCAMaxPixels ) {
+    resolve( @{ @"applied": @NO, @"reason": @"image size out of range" } );
+    return;
+  }
+
+  // The same guards a measured correction gets: a profile is only ever worth
+  // applying on the same terms it was worth measuring on.
+  double cornerRadius = sqrt( (double)W * W + (double)H * H ) / 2.0;
+  double redPx        = fabs( red )  * cornerRadius;
+  double bluePx       = fabs( blue ) * cornerRadius;
+  if ( fabs( red ) > kCAMaxScale || fabs( blue ) > kCAMaxScale ) {
+    resolve( @{ @"applied": @NO, @"reason": @"profile implausible" } );
     return;
   }
   if ( redPx < kCAMinCornerShiftPx && bluePx < kCAMinCornerShiftPx ) {
@@ -1735,45 +1854,15 @@ RCT_EXPORT_METHOD( correctChromaticAberration
     return;
   }
 
-  // The photo keeps the metadata it arrived with (GPS, timestamp, camera): the
-  // pixels move, nothing else about it does.
-  NSURL           *inputURL = [NSURL fileURLWithPath:input];
-  CGImageSourceRef src      = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
-  NSDictionary    *srcMeta  = nil;
-  if ( src ) {
-    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
-    CFRelease( src );
-  }
-
-  uint8_t *full = caBitmapFromImage( image, W, H );
-  if ( !full ) { reject( @"CA_FAILED", @"Could not read image pixels", nil ); return; }
-  uint8_t *corrected = (uint8_t *)malloc( (size_t)W * H * 4 );
-  if ( !corrected ) {
-    free( full );
-    reject( @"CA_FAILED", @"Out of memory", nil );
-    return;
-  }
-  memcpy( corrected, full, (size_t)W * H * 4 );
-  caResampleChannel( full, corrected, W, H, 0, red );
-  caResampleChannel( full, corrected, W, H, 2, blue );
-  free( full );
-
-  CGImageRef ref  = caImageFromBitmap( corrected, W, H );
-  NSData    *data = ref ? jpegDataFromCroppedImage( ref, srcMeta, W, H ) : nil;
-  if ( ref ) CGImageRelease( ref );
-  free( corrected );
-  if ( !data ) { reject( @"CA_FAILED", @"Could not encode corrected image", nil ); return; }
-
-  [[NSFileManager defaultManager]
-    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
-    withIntermediateDirectories:YES attributes:nil error:nil];
-  if ( ![data writeToFile:output atomically:YES] ) {
-    reject( @"CA_FAILED", @"Could not write corrected image", nil );
+  NSString *failure = nil;
+  if ( !caWriteCorrectedImage( image, W, H, red, blue, input, output, &failure ) ) {
+    reject( @"CA_FAILED", failure, nil );
     return;
   }
 
   resolve( @{
     @"applied":      @YES,
+    @"measured":     @NO,
     @"outputPath":   output,
     @"redScale":     @( red ),
     @"blueScale":    @( blue ),

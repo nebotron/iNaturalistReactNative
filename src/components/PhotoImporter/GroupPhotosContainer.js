@@ -24,6 +24,7 @@ import {
 } from "sharedHelpers/applyTrackedLocationToPhotos";
 import {
   correctPhotosChromaticAberration,
+  knownLensProfileCount,
   localFileUrisForObservations,
 } from "sharedHelpers/chromaticAberration";
 import {
@@ -408,7 +409,7 @@ const GroupPhotosContainer = ( ): Node => {
     // Totalled across batches so the import reports one line, not one per ten
     // photos.
     const chromaticAberration = {
-      corrected: 0, skipped: 0, failed: 0, maxCornerPx: 0, ms: 0,
+      corrected: 0, skipped: 0, failed: 0, measured: 0, fromProfile: 0, maxCornerPx: 0, ms: 0,
     };
     // One Photos-library transaction (and so one iOS consent alert) for the
     // whole import, however many batches its location writes arrive in.
@@ -455,6 +456,8 @@ const GroupPhotosContainer = ( ): Node => {
         chromaticAberration.corrected += caSummary.corrected;
         chromaticAberration.skipped += caSummary.skipped;
         chromaticAberration.failed += caSummary.failed;
+        chromaticAberration.measured += caSummary.measured;
+        chromaticAberration.fromProfile += caSummary.fromProfile;
         chromaticAberration.ms += caSummary.ms;
         chromaticAberration.maxCornerPx = Math.max(
           chromaticAberration.maxCornerPx,
@@ -510,7 +513,12 @@ const GroupPhotosContainer = ( ): Node => {
     }
 
     if ( chromaticAberration.corrected > 0 || chromaticAberration.failed > 0 ) {
-      logger.infoWithExtra( "group_photos_chromatic_aberration", chromaticAberration );
+      logger.infoWithExtra( "group_photos_chromatic_aberration", {
+        ...chromaticAberration,
+        // Cumulative, not this import's: it says how much of the next one will
+        // need no measuring.
+        lensProfilesKnown: knownLensProfileCount( ),
+      } );
     }
 
     if ( failedCount > 0 ) {

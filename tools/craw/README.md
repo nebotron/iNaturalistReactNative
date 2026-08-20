@@ -86,8 +86,27 @@ The gain curves are **not** identified. Each file has several (0.5%, 1%, 3%
 peak) and nothing in the file labels them, so `correct` never applies one on
 its own; `--distortion-curve N` applies one by index if you want to experiment.
 
-None of the gain curves is lateral CA: measured CA in the samples is 0.4–0.9 px
-at the corner (≈0.02%), two orders of magnitude below the smallest curve.
+None of the gain curves is lateral CA. Measured CA in the samples is 0.4–0.9 px
+at the corner (≈0.02%), two orders of magnitude below the smallest curve, and
+reading a curve as a radial magnification and fitting it against the measured
+per-annulus displacement does not rescue it:
+
+- Correlation is uninformative. Six of the seven curves correlate at |r| > 0.85
+  with measured red on one file or the other — including the falloff curve,
+  which is peripheral illumination and cannot be an aberration. Everything that
+  varies monotonically with radius correlates with everything else that does,
+  over eight radial bins.
+- The scale needed to match doesn't hold. The best-correlating curve needs
+  ×0.031 to match red and ×0.011 to match blue *on the same file* — a factor of
+  three between two channels that any real CA table would describe in the same
+  units — and the factor moves again on the other body.
+
+So the packet says which corrections the camera was set to apply, and it
+carries a usable falloff curve, but there is no lateral CA profile to be had
+from it. What the file does give the app is the lens identity (EXIF
+`LensModel` + `FocalLength`), which survives into a JPEG where this packet does
+not: `src/sharedHelpers/chromaticAberration.ts` uses it to key CA measured from
+the photos themselves, so a lens is measured a couple of times and then reused.
 
 ## How the CA correction works
 
