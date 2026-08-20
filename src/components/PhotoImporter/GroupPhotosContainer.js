@@ -23,6 +23,10 @@ import {
   saveObservationsAndApplyTrackedLocation,
 } from "sharedHelpers/applyTrackedLocationToPhotos";
 import {
+  correctPhotosChromaticAberration,
+  localFileUrisForObservations,
+} from "sharedHelpers/chromaticAberration";
+import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import { log } from "sharedHelpers/logger";
@@ -401,6 +405,11 @@ const GroupPhotosContainer = ( ): Node => {
     // from an observation is invisible until long after the photo is gone.
     let failedCount = 0;
     let defaultsApplied = false;
+    // Totalled across batches so the import reports one line, not one per ten
+    // photos.
+    const chromaticAberration = {
+      corrected: 0, skipped: 0, failed: 0, maxCornerPx: 0, ms: 0,
+    };
     // One Photos-library transaction (and so one iOS consent alert) for the
     // whole import, however many batches its location writes arrive in.
     beginLocationWriteBatch( );
@@ -433,6 +442,24 @@ const GroupPhotosContainer = ( ): Node => {
           // eslint-disable-next-line no-continue
           continue;
         }
+
+        // Correct lateral chromatic aberration before anything reads these
+        // files: the photo the observation carries from here on is the one
+        // that gets scored, shown and uploaded. Measured per photo from the
+        // photo itself, so it costs nothing on a lens that doesn't fringe —
+        // those come back "nothing to correct" and are left untouched.
+        // eslint-disable-next-line no-await-in-loop
+        const caSummary = await correctPhotosChromaticAberration(
+          localFileUrisForObservations( observationsToSave ),
+        );
+        chromaticAberration.corrected += caSummary.corrected;
+        chromaticAberration.skipped += caSummary.skipped;
+        chromaticAberration.failed += caSummary.failed;
+        chromaticAberration.ms += caSummary.ms;
+        chromaticAberration.maxCornerPx = Math.max(
+          chromaticAberration.maxCornerPx,
+          caSummary.maxCornerPx,
+        );
 
         // Save each observation and auto-fill tracked location for any that
         // ended up without one. Saves happen independently so a single failed
@@ -480,6 +507,10 @@ const GroupPhotosContainer = ( ): Node => {
       }
     } finally {
       await endLocationWriteBatch( );
+    }
+
+    if ( chromaticAberration.corrected > 0 || chromaticAberration.failed > 0 ) {
+      logger.infoWithExtra( "group_photos_chromatic_aberration", chromaticAberration );
     }
 
     if ( failedCount > 0 ) {

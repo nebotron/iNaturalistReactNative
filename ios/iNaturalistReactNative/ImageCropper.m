@@ -1444,6 +1444,345 @@ RCT_EXPORT_METHOD( adjustImageBrightness
   resolve( output );
 }
 
+
+// ─── Lateral chromatic aberration ────────────────────────────────────────────
+//
+// Lateral CA is the red and blue channels landing at slightly the wrong radius
+// from the optical axis, so every high-contrast edge picks up a coloured
+// fringe that grows towards the corners. There is no lens profile to correct
+// it from: the photos arrive from any camera, and a Canon raw's own correction
+// tables are undocumented and not in a form ImageIO hands over. So the shift
+// is measured from the photo itself, with green as the reference. For each
+// ring of the frame we solve for the radial displacement d that best explains
+// the difference between the other channel and green over that ring's
+// strongest edges,
+//
+//   C - G  ≈  -d · dG/dr
+//
+// and fit d(r) = b1·r through the rings, letting a constant term absorb a
+// whole-channel offset (sensor decentring, or bias in the estimate) so only
+// the part that grows with radius — the aberration — is corrected.
+//
+// Measurement runs on a downscaled copy: b1 is dimensionless, so it applies
+// unchanged at full size, and a megapixel is plenty of edges. It is iterated
+// because the gradient estimate underestimates displacements beyond a pixel,
+// and each pass measures what the previous one left behind.
+
+static const int    kCAMeasureMaxPixel  = 1024;
+static const int    kCABinCount         = 10;
+static const int    kCAIterations       = 3;
+// Under a sixth of a pixel at the corner there is nothing to see, and
+// resampling the photo to remove it only costs it a little sharpness.
+static const double kCAMinCornerShiftPx = 0.15;
+// A real lateral CA is a fraction of a percent. Anything past 1% is the
+// measurement having locked onto something else (a colour-fringed subject
+// moving between frames, say), not an aberration; leave the photo alone.
+static const double kCAMaxScale         = 0.01;
+static const size_t kCAMaxPixels        = 60000000;
+
+// Mean of a (2*radius+1) window, run horizontally into tmp then vertically
+// into dst.
+static void caBoxBlur( const float *src, float *dst, float *tmp, int w, int h, int radius )
+{
+  if ( radius < 1 ) {
+    memcpy( dst, src, (size_t)w * h * sizeof( float ) );
+    return;
+  }
+  for ( int y = 0; y < h; y++ ) {
+    const float *row = src + (size_t)y * w;
+    float       *out = tmp + (size_t)y * w;
+    double       sum = 0;
+    int          count = 0;
+    for ( int x = 0; x <= radius && x < w; x++ ) { sum += row[x]; count++; }
+    for ( int x = 0; x < w; x++ ) {
+      out[x] = (float)( sum / count );
+      int add = x + radius + 1, drop = x - radius;
+      if ( add < w )   { sum += row[add];  count++; }
+      if ( drop >= 0 ) { sum -= row[drop]; count--; }
+    }
+  }
+  for ( int x = 0; x < w; x++ ) {
+    double sum = 0;
+    int    count = 0;
+    for ( int y = 0; y <= radius && y < h; y++ ) { sum += tmp[(size_t)y * w + x]; count++; }
+    for ( int y = 0; y < h; y++ ) {
+      dst[(size_t)y * w + x] = (float)( sum / count );
+      int add = y + radius + 1, drop = y - radius;
+      if ( add < h )   { sum += tmp[(size_t)add * w + x];  count++; }
+      if ( drop >= 0 ) { sum -= tmp[(size_t)drop * w + x]; count--; }
+    }
+  }
+}
+
+// One channel minus its own local mean: keeps the edges, drops the colour
+// difference between channels that would otherwise swamp the comparison.
+static void caHighPass(
+  const uint8_t *rgba, int channel, int w, int h, int radius,
+  float *out, float *scratchA, float *scratchB
+)
+{
+  size_t n = (size_t)w * h;
+  for ( size_t i = 0; i < n; i++ ) scratchA[i] = (float)rgba[i * 4 + channel];
+  caBoxBlur( scratchA, out, scratchB, w, h, radius );
+  for ( size_t i = 0; i < n; i++ ) out[i] = scratchA[i] - out[i];
+}
+
+// Radial displacement of one channel relative to green, as a fraction of the
+// corner radius (so d(r) = b1 * r in pixels, at any resolution).
+static double caMeasureChannelShift( const float *hpC, const float *hpG, int w, int h )
+{
+  double cx = ( w - 1 ) / 2.0, cy = ( h - 1 ) / 2.0;
+  double rmax = sqrt( cx * cx + cy * cy );
+  if ( rmax < 1 ) return 0;
+
+  double num[kCABinCount], den[kCABinCount];
+  memset( num, 0, sizeof( num ) );
+  memset( den, 0, sizeof( den ) );
+
+  for ( int y = 1; y < h - 1; y++ ) {
+    for ( int x = 1; x < w - 1; x++ ) {
+      size_t i  = (size_t)y * w + x;
+      double dx = x - cx, dy = y - cy;
+      double r  = sqrt( dx * dx + dy * dy );
+      if ( r < 1 ) continue;
+      double gx = 0.5 * ( hpG[i + 1] - hpG[i - 1] );
+      double gy = 0.5 * ( hpG[i + w] - hpG[i - w] );
+      double gr = ( gx * dx + gy * dy ) / r;   // green's derivative along the radius
+      int    bin = (int)( r / rmax * kCABinCount );
+      if ( bin >= kCABinCount ) bin = kCABinCount - 1;
+      num[bin] += gr * ( hpC[i] - hpG[i] );
+      den[bin] += gr * gr;
+    }
+  }
+
+  // Weighted least squares of d/rmax against r/rmax, with an intercept.
+  double sw = 0, swx = 0, swy = 0, swxx = 0, swxy = 0;
+  for ( int b = 0; b < kCABinCount; b++ ) {
+    if ( den[b] <= 0 ) continue;
+    double rn  = ( b + 0.5 ) / kCABinCount;
+    double yv  = ( -num[b] / den[b] ) / rmax;
+    double wgt = den[b];
+    sw   += wgt;
+    swx  += wgt * rn;
+    swy  += wgt * yv;
+    swxx += wgt * rn * rn;
+    swxy += wgt * rn * yv;
+  }
+  double denom = sw * swxx - swx * swx;
+  if ( fabs( denom ) < 1e-12 ) return 0;
+  return ( sw * swxy - swx * swy ) / denom;
+}
+
+// Resamples one channel about the centre so it lands where green does.
+static void caResampleChannel(
+  const uint8_t *src, uint8_t *dst, int w, int h, int channel, double b1
+)
+{
+  double cx = ( w - 1 ) / 2.0, cy = ( h - 1 ) / 2.0;
+  double scale = 1.0 + b1;
+  for ( int y = 0; y < h; y++ ) {
+    for ( int x = 0; x < w; x++ ) {
+      double sx = cx + ( x - cx ) * scale;
+      double sy = cy + ( y - cy ) * scale;
+      if ( sx < 0 ) sx = 0;
+      if ( sy < 0 ) sy = 0;
+      if ( sx > w - 1 ) sx = w - 1;
+      if ( sy > h - 1 ) sy = h - 1;
+      int    x0 = (int)sx, y0 = (int)sy;
+      int    x1 = ( x0 + 1 < w ) ? x0 + 1 : x0;
+      int    y1 = ( y0 + 1 < h ) ? y0 + 1 : y0;
+      double fx = sx - x0, fy = sy - y0;
+      double v00 = src[( (size_t)y0 * w + x0 ) * 4 + channel];
+      double v10 = src[( (size_t)y0 * w + x1 ) * 4 + channel];
+      double v01 = src[( (size_t)y1 * w + x0 ) * 4 + channel];
+      double v11 = src[( (size_t)y1 * w + x1 ) * 4 + channel];
+      double v   = v00 * ( 1 - fx ) * ( 1 - fy ) + v10 * fx * ( 1 - fy )
+                 + v01 * ( 1 - fx ) * fy        + v11 * fx * fy;
+      dst[( (size_t)y * w + x ) * 4 + channel] = (uint8_t)( v + 0.5 );
+    }
+  }
+}
+
+// Draws an image into a freshly allocated RGBA8 buffer at w x h. drawInRect
+// applies the EXIF orientation, so everything downstream works in display
+// orientation and the optical centre really is the centre of the buffer.
+static uint8_t *caBitmapFromImage( UIImage *image, int w, int h )
+{
+  UIGraphicsBeginImageContextWithOptions( CGSizeMake( w, h ), YES, 1.0 );
+  [image drawInRect:CGRectMake( 0, 0, w, h )];
+  UIImage *drawn = UIGraphicsGetImageFromCurrentImageContext( );
+  UIGraphicsEndImageContext( );
+  if ( !drawn.CGImage ) return NULL;
+
+  uint8_t *buf = (uint8_t *)calloc( (size_t)w * h * 4, 1 );
+  if ( !buf ) return NULL;
+  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
+  CGContextRef    bmp = CGBitmapContextCreate(
+    buf, w, h, 8, (size_t)4 * w, cs,
+    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
+  CGColorSpaceRelease( cs );
+  if ( !bmp ) { free( buf ); return NULL; }
+  CGContextDrawImage( bmp, CGRectMake( 0, 0, w, h ), drawn.CGImage );
+  CGContextRelease( bmp );
+  return buf;
+}
+
+static CGImageRef caImageFromBitmap( uint8_t *buf, int w, int h )
+{
+  CGColorSpaceRef cs  = CGColorSpaceCreateDeviceRGB( );
+  CGContextRef    bmp = CGBitmapContextCreate(
+    buf, w, h, 8, (size_t)4 * w, cs,
+    kCGBitmapByteOrder32Big | kCGImageAlphaNoneSkipLast );
+  CGColorSpaceRelease( cs );
+  if ( !bmp ) return NULL;
+  CGImageRef ref = CGBitmapContextCreateImage( bmp );
+  CGContextRelease( bmp );
+  return ref;
+}
+
+// Measures red and blue against green on a downscaled copy, refining over a
+// few passes. Returns NO when there was nothing to measure.
+static BOOL caMeasureShifts( UIImage *image, double *outRed, double *outBlue )
+{
+  CGFloat longest = MAX( image.size.width, image.size.height );
+  double  scale   = ( longest > kCAMeasureMaxPixel ) ? kCAMeasureMaxPixel / longest : 1.0;
+  int     w       = (int)round( image.size.width  * scale );
+  int     h       = (int)round( image.size.height * scale );
+  if ( w < 64 || h < 64 ) return NO;
+
+  uint8_t *base = caBitmapFromImage( image, w, h );
+  if ( !base ) return NO;
+
+  size_t   n     = (size_t)w * h;
+  uint8_t *work  = (uint8_t *)malloc( n * 4 );
+  float   *hpR   = (float *)malloc( n * sizeof( float ) );
+  float   *hpG   = (float *)malloc( n * sizeof( float ) );
+  float   *hpB   = (float *)malloc( n * sizeof( float ) );
+  float   *scrA  = (float *)malloc( n * sizeof( float ) );
+  float   *scrB  = (float *)malloc( n * sizeof( float ) );
+  BOOL     ok    = ( work && hpR && hpG && hpB && scrA && scrB );
+
+  double red = 0, blue = 0;
+  if ( ok ) {
+    int radius = MAX( 2, MIN( w, h ) / 64 );
+    for ( int pass = 0; pass < kCAIterations; pass++ ) {
+      memcpy( work, base, n * 4 );
+      if ( pass > 0 ) {
+        caResampleChannel( base, work, w, h, 0, red );
+        caResampleChannel( base, work, w, h, 2, blue );
+      }
+      caHighPass( work, 0, w, h, radius, hpR, scrA, scrB );
+      caHighPass( work, 1, w, h, radius, hpG, scrA, scrB );
+      caHighPass( work, 2, w, h, radius, hpB, scrA, scrB );
+      red  += caMeasureChannelShift( hpR, hpG, w, h );
+      blue += caMeasureChannelShift( hpB, hpG, w, h );
+    }
+  }
+
+  free( base ); free( work ); free( hpR ); free( hpG ); free( hpB ); free( scrA ); free( scrB );
+  if ( !ok ) return NO;
+  *outRed  = red;
+  *outBlue = blue;
+  return YES;
+}
+
+// Corrects lateral chromatic aberration in a photo and writes the result to
+// outputPath. Resolves with what it measured and whether it wrote anything: a
+// photo whose fringing is already under a fraction of a pixel is left alone
+// rather than resampled (and softened) for nothing.
+RCT_EXPORT_METHOD( correctChromaticAberration
+                  : ( NSString * )inputPath outputPath
+                  : ( NSString * )outputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString *input     = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString *output    = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
+
+  UIImage *image = [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { reject( @"CA_FAILED", @"Could not load image", nil ); return; }
+
+  int W = (int)round( image.size.width );
+  int H = (int)round( image.size.height );
+  if ( W < 64 || H < 64 ) {
+    resolve( @{ @"applied": @NO, @"reason": @"image too small to measure" } );
+    return;
+  }
+  if ( (size_t)W * (size_t)H > kCAMaxPixels ) {
+    resolve( @{ @"applied": @NO, @"reason": @"image too large" } );
+    return;
+  }
+
+  double red = 0, blue = 0;
+  if ( !caMeasureShifts( image, &red, &blue ) ) {
+    reject( @"CA_FAILED", @"Could not measure chromatic aberration", nil );
+    return;
+  }
+
+  double cornerRadius = sqrt( (double)W * W + (double)H * H ) / 2.0;
+  double redPx        = fabs( red )  * cornerRadius;
+  double bluePx       = fabs( blue ) * cornerRadius;
+
+  if ( fabs( red ) > kCAMaxScale || fabs( blue ) > kCAMaxScale ) {
+    resolve( @{ @"applied": @NO, @"reason": @"measurement implausible",
+                @"redScale": @( red ), @"blueScale": @( blue ) } );
+    return;
+  }
+  if ( redPx < kCAMinCornerShiftPx && bluePx < kCAMinCornerShiftPx ) {
+    resolve( @{ @"applied": @NO, @"reason": @"nothing to correct",
+                @"redCornerPx": @( redPx ), @"blueCornerPx": @( bluePx ) } );
+    return;
+  }
+
+  // The photo keeps the metadata it arrived with (GPS, timestamp, camera): the
+  // pixels move, nothing else about it does.
+  NSURL           *inputURL = [NSURL fileURLWithPath:input];
+  CGImageSourceRef src      = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
+  NSDictionary    *srcMeta  = nil;
+  if ( src ) {
+    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+    CFRelease( src );
+  }
+
+  uint8_t *full = caBitmapFromImage( image, W, H );
+  if ( !full ) { reject( @"CA_FAILED", @"Could not read image pixels", nil ); return; }
+  uint8_t *corrected = (uint8_t *)malloc( (size_t)W * H * 4 );
+  if ( !corrected ) {
+    free( full );
+    reject( @"CA_FAILED", @"Out of memory", nil );
+    return;
+  }
+  memcpy( corrected, full, (size_t)W * H * 4 );
+  caResampleChannel( full, corrected, W, H, 0, red );
+  caResampleChannel( full, corrected, W, H, 2, blue );
+  free( full );
+
+  CGImageRef ref  = caImageFromBitmap( corrected, W, H );
+  NSData    *data = ref ? jpegDataFromCroppedImage( ref, srcMeta, W, H ) : nil;
+  if ( ref ) CGImageRelease( ref );
+  free( corrected );
+  if ( !data ) { reject( @"CA_FAILED", @"Could not encode corrected image", nil ); return; }
+
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+  if ( ![data writeToFile:output atomically:YES] ) {
+    reject( @"CA_FAILED", @"Could not write corrected image", nil );
+    return;
+  }
+
+  resolve( @{
+    @"applied":      @YES,
+    @"outputPath":   output,
+    @"redScale":     @( red ),
+    @"blueScale":    @( blue ),
+    @"redCornerPx":  @( redPx ),
+    @"blueCornerPx": @( bluePx ),
+    @"ms":           @( (int)round( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
+  } );
+}
+
 // ─── Video helpers ───────────────────────────────────────────────────────────
 
 // Resolves a ph:// or file:// video URI to an AVAsset asynchronously.
