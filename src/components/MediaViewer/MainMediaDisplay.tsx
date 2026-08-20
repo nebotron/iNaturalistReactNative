@@ -218,6 +218,9 @@ const MainMediaDisplay = ( {
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
           autoDetectSubject={autoDetectSubject}
+          // Pinching here logs the framing, so reopening or paging back to this
+          // photo shows it framed the way the user left it.
+          restoreFramedCrop
           detectUri={uri}
           brightness={BRIGHTNESS_DEFAULT}
           zoomRef={( ref: SharedZoomableImageRef | null ) => {

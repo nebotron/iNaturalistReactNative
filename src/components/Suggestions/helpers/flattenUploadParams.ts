@@ -20,12 +20,13 @@ interface FlattenUploadArgs {
 // entry if one exists) before scoring, so the computer vision request classifies
 // the same subject region shown in the thumbnail. Awaiting the shared detector
 // here means only one scoring request is made per photo — the one built from the
-// cropped image. Only used for images that aren't the current user's own; the
-// user's own photos are scored full-frame. Falls back to the full image if
-// detection or cropping fails.
-const cropToSubject = async ( uri: string ): Promise<string> => {
+// cropped image. The detector only runs for images that aren't the current
+// user's own; the user's own photos are scored full-frame unless the user framed
+// the subject by hand, which is a request to score that region. Falls back to
+// the full image if detection or cropping fails.
+const cropToSubject = async ( uri: string, loggedCropOnly: boolean ): Promise<string> => {
   try {
-    const detection = await resolveSubjectDetectionForUri( uri );
+    const detection = await resolveSubjectDetectionForUri( uri, { loggedCropOnly } );
     if ( !detection ) return uri;
     const localUri = await ensureLocalImageForCrop( uri );
     return await cropImageFile(
@@ -46,9 +47,7 @@ const flattenUploadParams = async (
 ): Promise<FlattenUploadArgs> => {
   await mkdir( outputPath );
 
-  const sourceUri = detectSubject
-    ? await cropToSubject( uri )
-    : uri;
+  const sourceUri = await cropToSubject( uri, !detectSubject );
 
   const uploadUri = await resizeImage( sourceUri, {
     // this max width/height is the same as the legacy Android app

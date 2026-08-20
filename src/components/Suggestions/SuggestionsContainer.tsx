@@ -14,11 +14,13 @@ import React, {
   useReducer,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 import TaxonModel from "realmModels/Taxon";
 import type { RealmPhoto } from "realmModels/types";
+import { getAnimalCrop, subscribeAnimalCropLog } from "sharedHelpers/animalCropLog";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import {
@@ -50,10 +52,24 @@ export enum FETCH_STATUSES {
   FETCH_STATUS_ONLINE_SKIPPED = "online-skipped"
 }
 
+// How the photo is framed decides which region of it gets scored, so a framing
+// the user made by hand is part of what identifies a scoring request.
+const cropSignature = ( uri?: string ): string => {
+  const crop = uri
+    ? getAnimalCrop( uri )
+    : null;
+  return crop
+    ? `${crop.x},${crop.y},${crop.w},${crop.h}`
+    : "";
+};
+
 const getQueryKey = ( selectedPhotoUri: string, shouldUseEvidenceLocation: boolean ) => [
   "scoreImage",
   selectedPhotoUri,
   { shouldUseEvidenceLocation },
+  // Re-framing the photo has to produce a fresh request rather than replay the
+  // suggestions cached for the previous framing.
+  cropSignature( selectedPhotoUri ),
 ];
 
 interface Suggestion {
@@ -96,6 +112,17 @@ const reducer = ( state, action ) => {
         selectedPhotoUri: action.selectedPhotoUri,
         scoreImageParams: action.scoreImageParams,
         queryKey: getQueryKey( action.selectedPhotoUri, state.shouldUseEvidenceLocation ),
+      };
+    // The selected photo was re-framed by hand, so the same photo is scored
+    // again over the newly framed region. Only the online request uses the
+    // crop, so the offline status (and the results already on screen) stay put
+    // until the new suggestions arrive.
+    case "RECROP_PHOTO":
+      return {
+        ...state,
+        onlineFetchStatus: FETCH_STATUSES.FETCH_STATUS_LOADING,
+        scoreImageParams: action.scoreImageParams,
+        queryKey: getQueryKey( state.selectedPhotoUri, state.shouldUseEvidenceLocation ),
       };
     case "SET_ONLINE_FETCH_STATUS":
       return {
@@ -388,6 +415,35 @@ const SuggestionsContainer = ( ) => {
       preferOfflineModel,
     ],
   );
+
+  // Framing the selected photo by hand — pinching it in the media viewer this
+  // screen opens, or saving in the crop editor — is a request to identify that
+  // region, so the photo is scored again with the new framing.
+  const selectedCrop = useSyncExternalStore(
+    subscribeAnimalCropLog,
+    ( ) => cropSignature( selectedPhotoUri ),
+  );
+  const scoredFramingRef = useRef( { uri: selectedPhotoUri, crop: selectedCrop } );
+  useEffect( ( ) => {
+    const previous = scoredFramingRef.current;
+    scoredFramingRef.current = { uri: selectedPhotoUri, crop: selectedCrop };
+    // A different photo is already scored by whatever selected it.
+    if ( previous.uri !== selectedPhotoUri ) return;
+    if ( previous.crop === selectedCrop ) return;
+    // Only the online request is built from the cropped image.
+    if ( !selectedPhotoUri || preferOfflineModel ) return;
+    resetTimeout( );
+    createUploadParams( selectedPhotoUri, shouldUseEvidenceLocation ).then( params => {
+      dispatch( { type: "RECROP_PHOTO", scoreImageParams: params } );
+    } );
+  }, [
+    createUploadParams,
+    preferOfflineModel,
+    resetTimeout,
+    selectedCrop,
+    selectedPhotoUri,
+    shouldUseEvidenceLocation,
+  ] );
 
   // offline suggestions load first, so loading only depends on them unless
   // offline is unavailable (e.g. a remote photo with no connection)

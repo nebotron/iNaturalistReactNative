@@ -39,6 +39,11 @@ interface Props {
   // image). Reuses the same detection cache and framing helper as the Explore
   // grid and crop editor.
   autoDetectSubject?: boolean;
+  // Frame the image to a crop the user made by hand (a crop log entry), without
+  // ever running the detector. Pinching an image logs a crop, so this is what
+  // brings that framing back when the photo is shown again. Screens that do
+  // their own framing (the crop editor) leave it off.
+  restoreFramedCrop?: boolean;
   // Canonical URL to run detection / crop-log lookup against, when it differs
   // from the (possibly tone-mapped) display `uri`. Defaults to `uri`.
   detectUri?: string;
@@ -65,6 +70,7 @@ const CustomImageZoom = ( {
   zoomRef,
   autoReset = true,
   autoDetectSubject = false,
+  restoreFramedCrop = false,
   detectUri,
   cropPanContext,
   brightness = 1,
@@ -102,13 +108,26 @@ const CustomImageZoom = ( {
   ] ), [style, viewportHeight, viewportWidth] );
 
   const detection = useSubjectDetectionForUri(
-    autoDetectSubject
+    autoDetectSubject || restoreFramedCrop
       ? ( detectUri ?? uri )
       : undefined,
+    // Without autoDetectSubject the detector never runs; only a crop the user
+    // framed by hand is honored.
+    { loggedCropOnly: !autoDetectSubject },
   );
 
-  // On mount and whenever the photo changes: if subject detection is enabled
-  // and has resolved, frame the image to the detected subject; otherwise fall
+  // Read through a ref so the framing below runs when a crop first becomes
+  // available, but not every time its value changes: the user's own pinch logs
+  // a new crop, and re-framing to it mid-gesture would fight the gesture.
+  const detectionRef = useRef( detection );
+  const hasDetection = !!detection;
+  // Declared before the framing effect so it always reads the current value.
+  useEffect( ( ) => {
+    detectionRef.current = detection;
+  } );
+
+  // On mount and whenever the photo changes: if there's a subject to frame
+  // (detected, or framed by hand), frame the image to it; otherwise fall
   // back to the plain full-image reset. Reuses the shared crop→transform
   // helper and applyTransform ref path (same as the crop editor), so no new
   // framing math lives here. applyTransform only sets shared values, so it is
@@ -116,24 +135,24 @@ const CustomImageZoom = ( {
   useEffect( () => {
     const zoom = internalZoomRef.current;
     if ( !zoom ) return;
-    if ( autoDetectSubject && detection ) {
+    const detected = detectionRef.current;
+    if ( detected ) {
       const cropSize = Math.min( viewportWidth, viewportHeight )
         * SUBJECT_CROP_FRAME_FRACTION;
       zoom.applyTransform( normalizedCropToImageZoomTransform(
-        detection.imageWidth,
-        detection.imageHeight,
+        detected.imageWidth,
+        detected.imageHeight,
         viewportWidth,
         viewportHeight,
         cropSize,
-        detection.crop,
+        detected.crop,
       ) );
     } else if ( autoReset ) {
       zoom.reset( );
     }
   }, [
     autoReset,
-    autoDetectSubject,
-    detection,
+    hasDetection,
     resetKey,
     selectedMediaIndex,
     viewportWidth,

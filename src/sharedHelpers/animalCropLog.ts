@@ -18,6 +18,12 @@ interface CropLogEntry {
 const animalCropLog = createUrlKeyedFirebaseLog<NormalizedCrop>( {
   storageKey: "animalCropLog",
   firebasePath: "crop_log",
+  // The same photo is framed under whichever size variant the screen happens to
+  // display (the media viewer saves the original URL, Suggestions looks the
+  // medium one up), and the crop is normalized so it means the same thing at
+  // every size. Key on the large URL both ways so a framing saved on one screen
+  // is found on the next.
+  normalizeKeyOnSave: true,
   shouldSync: url => url.startsWith( "http" ),
   toFirebaseEntry: ( url, crop ) => ( {
     url, x: crop.x, y: crop.y, w: crop.w, h: crop.h,
@@ -40,3 +46,10 @@ export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
 export const deleteAnimalCrop = ( photoUrl: string ) => animalCropLog.remove( photoUrl );
 
 export const getAnimalCrop = ( url: string ): NormalizedCrop | null => animalCropLog.get( url );
+
+// Notified whenever any crop is saved or removed, so screens showing a framed
+// photo can pick up a framing the user just made somewhere else (e.g. pinching
+// in the media viewer opened from the Add an ID screen).
+export const subscribeAnimalCropLog = (
+  listener: ( ) => void,
+): ( ) => void => animalCropLog.subscribe( listener );

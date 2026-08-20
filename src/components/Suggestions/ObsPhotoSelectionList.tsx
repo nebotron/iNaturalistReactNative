@@ -21,12 +21,12 @@ interface Props {
 
 // For images that aren't the user's own, frame the thumbnail with the subject
 // detector bounding box (or the crop log entry if one exists) by default. The
-// user's own photos are shown plain.
+// user's own photos are shown plain unless the user framed the subject
+// themselves — pinching in the media viewer or saving in the crop editor — in
+// which case that framing is what they asked to see here.
 const PhotoThumbnail = ( { uri, detectSubject }: { uri: string; detectSubject?: boolean } ) => {
   const [containerSize, setContainerSize] = useState<number | null>( null );
-  const detection = useSubjectDetectionForUri( detectSubject
-    ? uri
-    : undefined );
+  const detection = useSubjectDetectionForUri( uri, { loggedCropOnly: !detectSubject } );
 
   const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
     setContainerSize( event.nativeEvent.layout.width );
