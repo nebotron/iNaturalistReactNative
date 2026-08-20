@@ -6,9 +6,12 @@ import {
   waitFor,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
+import { NativeModules } from "react-native";
+import { recordUploadedDevicePhotoUris } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import {
   mockInteractionManagerRunAfterInteractions,
   navigateToPhotoImporterFromMyObs,
+  waitForMyObservationsScreen,
   waitForMyObsGridItems,
 } from "tests/helpers/addObsBottomSheet";
 import { renderApp } from "tests/helpers/render";
@@ -18,6 +21,34 @@ import setupUniqueRealm from "tests/helpers/uniqueRealm";
 // We're explicitly testing navigation here so we want react-navigation
 // working normally
 jest.unmock( "@react-navigation/native" );
+
+// Importing writes the original asset's bytes out through this native module,
+// and there's no fallback: without it every copy fails and no import can
+// produce anything.
+NativeModules.ImageCropper = {
+  ...NativeModules.ImageCropper,
+  exportPHAsset: async ( phUri, destPath ) => ( { uri: destPath, attempts: 1 } ),
+};
+
+// Imported observations are saved in the background after the user has already
+// been sent back to My Observations, so a test that wants to be the user
+// starting another import mid-save needs that background work to still be
+// running. Only the test that cares sets a delay.
+global.mockSaveObservationsDelayMs = 0;
+jest.mock( "sharedHelpers/applyTrackedLocationToPhotos", ( ) => {
+  const actual = jest.requireActual( "sharedHelpers/applyTrackedLocationToPhotos" );
+  return {
+    ...actual,
+    saveObservationsAndApplyTrackedLocation: async ( ...args ) => {
+      if ( global.mockSaveObservationsDelayMs > 0 ) {
+        await new Promise( resolve => {
+          setTimeout( resolve, global.mockSaveObservationsDelayMs );
+        } );
+      }
+      return actual.saveObservationsAndApplyTrackedLocation( ...args );
+    },
+  };
+} );
 
 // UNIQUE REALM SETUP
 const mockRealmIdentifier = __filename;
@@ -178,6 +209,60 @@ describe( "Photo Import", ( ) => {
 
     const obsGridItems = await waitForMyObsGridItems();
     expect( obsGridItems[0] ).toBeVisible();
+  } );
+
+  it( "should not offer the photos of an import that is still saving", async ( ) => {
+    const importedNode = makeMockNode( "still_saving_import", 1234567890 );
+    const otherNode = makeMockNode( "still_saving_other", 1234567891 );
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+      makeGetPhotosResult( [importedNode, otherNode] ),
+    );
+    global.mockSaveObservationsDelayMs = 3000;
+    try {
+      renderApp( );
+      await navigateToPhotoImporterFromMyObs();
+      await selectPhotosInGallery( [importedNode] );
+
+      await waitFor( ( ) => {
+        expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
+      }, { timeout: 10_000 } );
+      const importButton = await screen.findByText( /IMPORT 1 OBSERVATION/ );
+      await actor.press( importButton );
+
+      // The import sends the user back to My Obs and keeps saving in the
+      // background, so this is a second import started while the first is
+      // still going.
+      await waitForMyObservationsScreen( );
+      await navigateToPhotoImporterFromMyObs();
+      await waitFor( ( ) => {
+        expect( screen.getByTestId( `PhotoGallery.${otherNode.image.uri}` ) ).toBeTruthy( );
+      }, { timeout: 10_000 } );
+      expect( screen.queryByTestId( `PhotoGallery.${importedNode.image.uri}` ) ).toBeNull( );
+    } finally {
+      global.mockSaveObservationsDelayMs = 0;
+    }
+  } );
+
+  it( "should hide a photo that gets saved while the picker is open", async ( ) => {
+    const savedNode = makeMockNode( "saved_while_open", 1234567890 );
+    const keptNode = makeMockNode( "not_saved_while_open", 1234567891 );
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+      makeGetPhotosResult( [savedNode, keptNode] ),
+    );
+    renderApp( );
+    await navigateToPhotoImporterFromMyObs();
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( `PhotoGallery.${savedNode.image.uri}` ) ).toBeTruthy( );
+    }, { timeout: 10_000 } );
+
+    // As an import saving in the background or an upload finishing would.
+    const realm = global.mockRealms[__filename];
+    recordUploadedDevicePhotoUris( realm, [`ph://${savedNode.id}`] );
+
+    await waitFor( ( ) => {
+      expect( screen.queryByTestId( `PhotoGallery.${savedNode.image.uri}` ) ).toBeNull( );
+    }, { timeout: 10_000 } );
+    expect( screen.getByTestId( `PhotoGallery.${keptNode.image.uri}` ) ).toBeTruthy( );
   } );
 
   it( "should hide photos marked as saved without importing them", async ( ) => {

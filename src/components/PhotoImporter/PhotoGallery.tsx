@@ -26,8 +26,11 @@ import {
   Text,
 } from "react-native";
 import { Switch } from "react-native-paper";
+import type Realm from "realm";
+import type { RealmObservation } from "realmModels/types";
 import { formatDateStringFromTimestamp } from "sharedHelpers/dateAndTime";
 import {
+  getDevicePhotoUrisFromObservation,
   getPreviouslyUploadedDevicePhotoUrisSet,
   recordUploadedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
@@ -111,8 +114,51 @@ const PhotoGallery = ( {
   // would just invite re-importing something the user already said to remove.
   const removedGroupPhotoUrisRef = useRef<Set<string>>( new Set( getRemovedGroupPhotoUris( ) ) );
 
+  // Kept up to date while the screen is open rather than read once on mount:
+  // an import saves its observations in the background after the user is
+  // already back on My Observations (see GroupPhotosContainer), and an upload
+  // indexes its photos later still, so photos can become "saved" with this
+  // screen sitting open in the tab stack. Additions are folded in one change
+  // at a time, since recomputing the whole set means walking every saved
+  // observation.
   useEffect( ( ) => {
     setImportedUris( getPreviouslyUploadedDevicePhotoUrisSet( realm ) );
+
+    const addUris = ( uris: ( string | null )[] ) => {
+      const newUris = uris.filter( ( uri ): uri is string => !!uri );
+      if ( newUris.length === 0 ) return;
+      setImportedUris( prev => {
+        if ( newUris.every( uri => prev.has( uri ) ) ) return prev;
+        return new Set( [...prev, ...newUris] );
+      } );
+    };
+
+    const uploadedRecords = realm.objects( "UploadedDevicePhotoUri" );
+    const observations = realm.objects<RealmObservation>( "Observation" );
+    const uploadedListener: Realm.CollectionChangeCallback<
+      Realm.Object
+    > = ( collection, changes ) => {
+      addUris( [...changes.insertions, ...changes.newModifications].map(
+        index => normalizeDevicePhotoUri(
+          ( collection[index] as unknown as { uri?: string } )?.uri,
+        ),
+      ) );
+    };
+    const observationListener: Realm.CollectionChangeCallback<
+      RealmObservation
+    > = ( collection, changes ) => {
+      addUris( [...changes.insertions, ...changes.newModifications].flatMap(
+        index => ( collection[index]
+          ? getDevicePhotoUrisFromObservation( collection[index] )
+          : [] ),
+      ) );
+    };
+    uploadedRecords.addListener( uploadedListener );
+    observations.addListener( observationListener );
+    return ( ) => {
+      uploadedRecords.removeListener( uploadedListener );
+      observations.removeListener( observationListener );
+    };
   }, [realm] );
 
   const loadPhotos = useCallback( async ( after?: string ) => {

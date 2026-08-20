@@ -39,6 +39,32 @@ export const recordUploadedDevicePhotoUris = (
   }, "recording uploaded device photo URIs" );
 };
 
+// Undoes recordUploadedDevicePhotoUris for photos whose import turned out not
+// to happen, so a photo that never made it into an observation isn't hidden
+// from the picker forever. A photo an *earlier* observation already saved stays
+// hidden regardless, since that observation still carries its device URI.
+export const forgetUploadedDevicePhotoUris = (
+  realm: Realm,
+  devicePhotoUris: string[],
+): void => {
+  const normalizedUris = devicePhotoUris
+    .map( normalizeDevicePhotoUri )
+    .filter( ( uri ): uri is string => !!uri );
+
+  if ( normalizedUris.length === 0 ) {
+    return;
+  }
+
+  safeRealmWrite( realm, ( ) => {
+    normalizedUris.forEach( uri => {
+      const record = realm.objectForPrimaryKey( UploadedDevicePhotoUri.schema.name, uri );
+      if ( record ) {
+        realm.delete( record );
+      }
+    } );
+  }, "forgetting uploaded device photo URIs" );
+};
+
 export const recordUploadedDevicePhotoUrisFromObservation = (
   realm: Realm,
   observation: Pick<RealmObservation, "observationPhotos">,

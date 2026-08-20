@@ -30,6 +30,10 @@ import {
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
+import {
+  forgetUploadedDevicePhotoUris,
+  recordUploadedDevicePhotoUris,
+} from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
 import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrops";
 import {
@@ -52,6 +56,14 @@ import flattenAndOrderSelectedPhotos, {
 const { useRealm } = RealmContext;
 
 const logger = log.extend( "GroupPhotosContainer" );
+
+// The device library photos a grouped media item came from, i.e. the photos
+// this import is about to turn into an observation.
+function devicePhotoUrisFromGroup( group ) {
+  return ( group.photos || [] )
+    .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
+    .filter( Boolean );
+}
 
 function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
   if ( uri == null ) return null;
@@ -382,6 +394,22 @@ const GroupPhotosContainer = ( ): Node => {
     } ) );
     setGroupedPhotos( groupsToImport );
 
+    // Index these device photos as saved now, not when their observations
+    // finish saving below. The user is sent to My Observations on the next
+    // line while the rest of this runs in the background, so an import started
+    // right after this one would otherwise open a picker that had read the
+    // index before this import ever reached it, and offer the same photos
+    // again. Groups that fail to import are taken back out below.
+    //
+    // Resolved per group and kept, rather than resolved again on failure:
+    // exiting the flow clears the local-to-device URI mappings a photo that
+    // isn't from the library relies on, so a second pass could no longer say
+    // which device photo it came from.
+    const devicePhotoUrisByGroup = groupsToImport.map(
+      group => devicePhotoUrisFromGroup( group ),
+    );
+    recordUploadedDevicePhotoUris( realm, devicePhotoUrisByGroup.flat( ) );
+
     // Send the user to the Me page (My Observations) immediately. Observation
     // creation, saving, CV prefetch, and the optional delete-originals prompt
     // all continue in the background below.
@@ -406,6 +434,10 @@ const GroupPhotosContainer = ( ): Node => {
     // without it, and reported once at the end: a location silently missing
     // from an observation is invisible until long after the photo is gone.
     let failedCount = 0;
+    // Their device photos were indexed as saved before the import started (see
+    // above), so they have to be taken back out or the picker would go on
+    // hiding photos that never became an observation.
+    const failedDevicePhotoUris = [];
     let defaultsApplied = false;
     // Once per import, and only when a raw came through: what the file held,
     // and how much of it survived into the JPEG the observation carries.
@@ -429,9 +461,12 @@ const GroupPhotosContainer = ( ): Node => {
           batch.map( createObservationFromGroupedMedia ),
         );
         const observationsToSave = [];
-        for ( const result of batchResults ) {
+        for ( const [resultIndex, result] of batchResults.entries( ) ) {
           if ( result.status === "rejected" ) {
             failedCount += 1;
+            failedDevicePhotoUris.push(
+              ...( devicePhotoUrisByGroup[i + resultIndex] || [] ),
+            );
             logger.error(
               "Failed to create an observation from imported media",
               result.reason,
@@ -550,6 +585,7 @@ const GroupPhotosContainer = ( ): Node => {
     }
 
     if ( failedCount > 0 ) {
+      forgetUploadedDevicePhotoUris( realm, failedDevicePhotoUris );
       logger.error(
         `Skipped ${failedCount} of ${groupsToImport.length} item(s): metadata unreadable`,
       );
