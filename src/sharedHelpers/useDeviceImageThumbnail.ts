@@ -2,6 +2,7 @@ import { exists, mkdir, stat } from "@dr.pogodin/react-native-fs";
 import { deviceThumbnailsPath } from "appConstants/paths";
 import { useEffect, useState } from "react";
 import { NativeModules } from "react-native";
+import { fileExtension } from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
 import { unlink } from "sharedHelpers/util";
 
@@ -160,6 +161,32 @@ const raceWithTimeout = (
 // over a thousand. The first report per photo and size is the diagnostic.
 const loggedFailures = new Set<string>( );
 
+// That still leaves a whole import of photos the decoder cannot read, each one
+// a distinct key and so a distinct warning — 1,137 of the 3,000 entries in the
+// Aug 6-19 app log, every one a .CR3, and every one a network POST. The first
+// few of a kind carry the detail; after that a rolling total is all the extra
+// POSTs can add.
+const MAX_DETAILED_FAILURES_PER_TYPE = 3;
+const FAILURE_SUMMARY_EVERY = 100;
+const failuresByType = new Map<string, number>( );
+let totalFailures = 0;
+
+const recordFailure = ( uri: string ): { detailed: boolean; summarize: boolean } => {
+  const type = fileExtension( uri );
+  const count = ( failuresByType.get( type ) ?? 0 ) + 1;
+  failuresByType.set( type, count );
+  totalFailures += 1;
+  return {
+    detailed: count <= MAX_DETAILED_FAILURES_PER_TYPE,
+    summarize: totalFailures % FAILURE_SUMMARY_EVERY === 0,
+  };
+};
+
+const failureTypeCounts = ( ) => Array.from( failuresByType.entries( ) )
+  .sort( ( a, b ) => b[1] - a[1] )
+  .map( ( [type, count] ) => `${type}:${count}` )
+  .join( " " );
+
 const runJob = async ( job: Job ) => {
   let result: string | null = null;
   const highQuality = isHighQuality( job );
@@ -188,10 +215,19 @@ const runJob = async ( job: Job ) => {
     // can't produce a thumbnail at all is worth knowing about at any size.
     if ( !loggedFailures.has( job.key ) ) {
       loggedFailures.add( job.key );
-      logger.warn(
-        `createThumbnail failed after ${Date.now( ) - start}ms for ${job.uri}, `
-        + `maxPixel=${job.maxPixel}: ${e}`,
-      );
+      const { detailed, summarize } = recordFailure( job.uri );
+      if ( detailed ) {
+        logger.warn(
+          `createThumbnail failed after ${Date.now( ) - start}ms for ${job.uri}, `
+          + `maxPixel=${job.maxPixel}: ${e}`,
+        );
+      } else if ( summarize ) {
+        logger.warnWithExtra( "thumbnail_failures", {
+          total: totalFailures,
+          byType: failureTypeCounts( ),
+          lastMaxPixel: job.maxPixel,
+        } );
+      }
     }
     result = null;
   }

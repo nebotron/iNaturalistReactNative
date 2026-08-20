@@ -161,6 +161,16 @@ export interface UsbOffloadMarker {
   saved: number;
   failed: number;
   startedAt: number;
+  // What the run was doing when it last touched the marker, and when. A run
+  // that never finished is either stuck in a native call or was suspended by
+  // iOS mid-loop, and startedAt alone can't tell those apart: both look like a
+  // marker left behind hours ago. The Aug 12 run reported 4h9m of "msRunning"
+  // with one file failed and nothing else said.
+  phase?: string;
+  lastProgressAt?: number;
+  // AppState at the last update. A wedged native call leaves the app active;
+  // iOS freezing the JS thread only happens in the background.
+  appState?: string;
 }
 
 export const markUsbOffloadStarted = ( total: number ) => {
@@ -169,16 +179,30 @@ export const markUsbOffloadStarted = ( total: number ) => {
     saved: 0,
     failed: 0,
     startedAt: Date.now( ),
+    lastProgressAt: Date.now( ),
+    phase: "starting",
   } ) );
 };
 
-export const updateUsbOffloadProgress = ( saved: number, failed: number ) => {
+export const updateUsbOffloadProgress = (
+  saved: number,
+  failed: number,
+  phase?: string,
+  appState?: string,
+) => {
   const raw = store.getString( OFFLOAD_IN_PROGRESS_KEY );
   if ( !raw ) return;
   store.set( OFFLOAD_IN_PROGRESS_KEY, JSON.stringify( {
     ...JSON.parse( raw ),
     saved,
     failed,
+    lastProgressAt: Date.now( ),
+    ...( phase
+      ? { phase }
+      : {} ),
+    ...( appState
+      ? { appState }
+      : {} ),
   } ) );
 };
 

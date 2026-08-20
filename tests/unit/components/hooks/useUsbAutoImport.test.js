@@ -1,5 +1,6 @@
 import { renderHook } from "@testing-library/react-native";
 import useUsbAutoImport from "components/hooks/useUsbAutoImport";
+import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 
 const mockListNewUsbImages = jest.fn( );
 const mockSaveUsbImageToPhotos = jest.fn( );
@@ -87,6 +88,32 @@ describe( "useUsbAutoImport", ( ) => {
     );
   } );
 
+  // The Aug 12 offload sat for 4h9m having saved 0 of 21 and logged nothing:
+  // the 30s timeout only covers the native save once the shared Photos-library
+  // write chain reaches this file, and the wait for the chain itself had no
+  // bound at all. A write queued ahead that never settles must not park the
+  // whole run.
+  it( "gives up when the Photos-library write chain never reaches it", async ( ) => {
+    let releaseChain = ( ) => {};
+    enqueuePhotoLibraryWrite( ( ) => new Promise( resolve => { releaseChain = resolve; } ) );
+    mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "asset" } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    // Three files that never get their turn, at 200s each.
+    await jest.advanceTimersByTimeAsync( 3 * 200_000 );
+
+    // The saves never started: the run gave up waiting rather than hanging.
+    expect( mockSaveUsbImageToPhotos ).not.toHaveBeenCalled( );
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_library_wedged",
+      expect.objectContaining( { saved: 0, failed: 3 } ),
+    );
+
+    // Don't leave the chain blocked for the rest of the file.
+    releaseChain( );
+    await jest.advanceTimersByTimeAsync( 0 );
+  } );
+
   // Every log line is a network POST, so a run the app dies inside takes its
   // last lines with it. The Aug 5 19:08–20:22 log has two offloads of the same
   // 80 files, each followed within a minute by a cold pickup and neither by an
@@ -98,15 +125,27 @@ describe( "useUsbAutoImport", ( ) => {
       saved: 12,
       failed: 1,
       startedAt: Date.now( ) - 44_000,
+      lastProgressAt: Date.now( ) - 30_000,
+      phase: "saving 13/80",
+      appState: "background",
     } );
     mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
 
     renderHook( ( ) => useUsbAutoImport( ) );
     await jest.advanceTimersByTimeAsync( 0 );
 
+    // Where it stopped and what the app was doing there: a native call that
+    // wedges leaves the app active, iOS suspending the process does not.
     expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
       "usb_offload_never_finished",
-      expect.objectContaining( { total: 80, saved: 12, failed: 1 } ),
+      expect.objectContaining( {
+        total: 80,
+        saved: 12,
+        failed: 1,
+        msSinceProgress: 30_000,
+        phase: "saving 13/80",
+        appStateAtLastProgress: "background",
+      } ),
     );
     // The run that did finish clears its own marker rather than leaving one
     // for the next scan to report.
@@ -198,7 +237,7 @@ describe( "useUsbAutoImport", ( ) => {
     // 20 of the 40 failed, alternating so no three are consecutive and the run
     // is never abandoned.
     expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 40 );
-    expect( mockLogger.error.mock.calls.filter(
+    expect( mockLogger.errorWithExtra.mock.calls.filter(
       ( [msg] ) => typeof msg === "string" && msg.startsWith( "USB offload: failed to save" ),
     ) ).toHaveLength( 3 );
     expect( mockLogger.info ).toHaveBeenCalledWith(

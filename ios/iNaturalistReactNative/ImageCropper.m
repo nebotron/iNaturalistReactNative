@@ -1038,11 +1038,24 @@ static UIImage *thumbnailFromImageSource( CGImageSourceRef src, CGFloat maxPixel
   return image;
 }
 
-static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
+// failureReason, when the caller passes one, receives a short description of
+// which step produced nothing, and what the file looked like to ImageIO.
+// "Could not load image" was the same message whether the file had no decoder
+// at all, decoded to an empty image, or drew nothing — three different bugs
+// with three different fixes, and 1,137 lines of the Aug 6-19 app log that
+// could not say which.
+static UIImage *downscaledImageAtPath(
+  NSString *path, CGFloat maxPixel, NSString **failureReason )
 {
   NSURL *url = [NSURL fileURLWithPath:path];
   CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)url, nil );
-  if ( !src ) return nil;
+  if ( !src ) {
+    if ( failureReason ) *failureReason = @"no image source for file";
+    return nil;
+  }
+  // Copied, not borrowed: the source is released before these are used below.
+  NSString *sourceType = [(__bridge NSString *)CGImageSourceGetType( src ) copy];
+  size_t    imageCount = CGImageSourceGetCount( src );
 
   if ( maxPixel >= kFileHighQualityMinPixel ) {
     // Decode now rather than on first draw. Without this the CGImage that
@@ -1081,12 +1094,24 @@ static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
     // produce for these, so it beats having none.
     if ( !decoded ) decoded = thumbnailFromImageSource( src, maxPixel );
     CFRelease( src );
-    if ( !decoded ) return nil;
+    if ( !decoded ) {
+      if ( failureReason ) {
+        *failureReason = [NSString stringWithFormat:
+          @"neither the full decode nor the embedded preview produced an image "
+           "(type=%@, images=%zu)", sourceType ?: @"unknown", imageCount];
+      }
+      return nil;
+    }
     return clampToMaxPixel( decoded, maxPixel );
   }
 
   UIImage *image = thumbnailFromImageSource( src, maxPixel );
   CFRelease( src );
+  if ( !image && failureReason ) {
+    *failureReason = [NSString stringWithFormat:
+      @"thumbnail decode produced no image (type=%@, images=%zu)",
+      sourceType ?: @"unknown", imageCount];
+  }
   return image;
 }
 
@@ -1096,7 +1121,7 @@ RCT_EXPORT_METHOD( detectSubjectBounds
                   : ( RCTPromiseRejectBlock )reject )
 {
   NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  UIImage  *image = downscaledImageAtPath( input, 1024 )
+  UIImage  *image = downscaledImageAtPath( input, 1024, NULL )
     ?: [UIImage imageWithContentsOfFile:input];
   if ( !image ) { resolve( [NSNull null] ); return; }
 
@@ -1333,7 +1358,18 @@ RCT_EXPORT_METHOD( createThumbnail
   }
 
   NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  writeThumbnail( downscaledImageAtPath( input, maxDim ) );
+  NSString *failureReason = nil;
+  UIImage  *image = downscaledImageAtPath( input, maxDim, &failureReason );
+  if ( !image ) {
+    // The file's size distinguishes a file that never finished copying from a
+    // whole one this build simply cannot decode.
+    unsigned long long bytes = [[[NSFileManager defaultManager]
+      attributesOfItemAtPath:input error:nil] fileSize];
+    reject( @"THUMBNAIL_FAILED", [NSString stringWithFormat:@"%@, %llu bytes",
+      failureReason ?: @"Could not load image", bytes], nil );
+    return;
+  }
+  writeThumbnail( image );
 }
 
 // Multiplies every pixel by the brightness gain (scaled down to fit within

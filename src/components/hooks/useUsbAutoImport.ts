@@ -37,6 +37,16 @@ let loggedNoFolderBookmark = false;
 // and the loop moves on.
 const SAVE_TIMEOUT_MS = 30_000;
 
+// The same net around the *wait* for the shared Photos-library write chain.
+// SAVE_TIMEOUT_MS only covers the native call once the chain reaches this
+// file; a task queued ahead of it that never settles holds the chain (see
+// enqueuePhotoLibraryWrite) and the await above it had no bound at all — which
+// is a run that stops dead with no line to say so. The Aug 12 offload sat for
+// 4h9m having saved 0 of 21, and nothing distinguished that from iOS having
+// suspended the app. Sized above the chain's own CHAIN_HOLD_MS (170s) so a
+// merely slow write ahead of us is never mistaken for a wedge.
+const QUEUED_SAVE_TIMEOUT_MS = 200_000;
+
 // Saving to Photos is a PHPhotoLibrary write, and those can wedge for the whole
 // device (see promptDeleteOriginalDevicePhotos.ts). When that happens every
 // remaining file in the run burns the full SAVE_TIMEOUT_MS in turn — the Aug 5
@@ -124,6 +134,15 @@ const useUsbAutoImport = ( ) => {
         saved: unfinished.saved,
         failed: unfinished.failed,
         msRunning: Date.now( ) - unfinished.startedAt,
+        // A run frozen by iOS stops updating the marker the moment the process
+        // is suspended, in the background, mid-file; a native call that wedges
+        // does the same thing with the app still active. Without these three
+        // the two are the same log line.
+        msSinceProgress: unfinished.lastProgressAt
+          ? Date.now( ) - unfinished.lastProgressAt
+          : -1,
+        phase: unfinished.phase ?? "unknown",
+        appStateAtLastProgress: unfinished.appState ?? "unknown",
       } );
     }
     try {
@@ -163,11 +182,25 @@ const useUsbAutoImport = ( ) => {
       let abandonReason: "timeouts" | "out-of-space" | "failures" | "" = "";
       let lastError = "";
       for ( let i = 0; i < images.length; i += 1 ) {
-        const { relativePath } = images[i];
+        const { relativePath, fileSize } = images[i];
         if ( abandonReason ) {
           abandoned = images.length - i;
           break;
         }
+        const fileStartedAt = Date.now( );
+        // Which file, and whether it is waiting for the write chain or inside
+        // the native save. A run that never comes back is reported from this
+        // marker on the next launch, and "queued" vs "saving" is the
+        // difference between a chain held by someone else's write and a save
+        // that hung on its own.
+        const position = `${i + 1}/${images.length}`;
+        const failedBeforeThisFile = failed;
+        updateUsbOffloadProgress(
+          savedPaths.length,
+          failedBeforeThisFile,
+          `queued ${position}`,
+          AppState.currentState,
+        );
         try {
           // On the shared Photos-library write chain, like every other native
           // library write in the app. This is the app's largest source of them
@@ -179,10 +212,15 @@ const useUsbAutoImport = ( ) => {
           // Enqueued per file rather than per run so a deletion waits for one
           // photo, not a whole card.
           // eslint-disable-next-line no-await-in-loop
-          const saved = await enqueuePhotoLibraryWrite( ( ) => withTimeout(
-            saveUsbImageToPhotos( relativePath ),
-            SAVE_TIMEOUT_MS,
-          ) );
+          const saved = await withTimeout( enqueuePhotoLibraryWrite( ( ) => {
+            updateUsbOffloadProgress(
+              savedPaths.length,
+              failedBeforeThisFile,
+              `saving ${position}`,
+              AppState.currentState,
+            );
+            return withTimeout( saveUsbImageToPhotos( relativePath ), SAVE_TIMEOUT_MS );
+          } ), QUEUED_SAVE_TIMEOUT_MS );
           savedPaths.push( relativePath );
           // Remember that this asset is ours. These are the only photos in the
           // library the app created, and the only ones PhotoKit will let it
@@ -215,7 +253,25 @@ const useUsbAutoImport = ( ) => {
           }
           if ( loggedFailures < MAX_LOGGED_SAVE_FAILURES ) {
             loggedFailures += 1;
-            logger.error( `USB offload: failed to save ${relativePath}`, err );
+            // Size and elapsed time: eight saves have timed out at exactly
+            // SAVE_TIMEOUT_MS over ~1,300 files, and nothing said whether 30s
+            // is simply short for a 40MB raw over USB or whether the write
+            // never started. Drive state separates a bad file from a card that
+            // was pulled mid-run — the Aug 13 run saved 15, deleted none, and
+            // logged one file that had stopped existing.
+            // eslint-disable-next-line no-await-in-loop
+            const drive = await getUsbFolderDiagnostics( ).catch( ( ) => null );
+            logger.errorWithExtra( `USB offload: failed to save ${relativePath}`, {
+              fileSizeBytes: fileSize ?? -1,
+              elapsedMs: Date.now( ) - fileStartedAt,
+              timedOut,
+              index: i + 1,
+              total: images.length,
+              driveReachable: drive?.reachable ?? false,
+              driveResolved: drive?.resolved ?? false,
+              driveStale: drive?.stale ?? false,
+              error: lastError,
+            } );
           }
         }
         progress.setCounts( savedPaths.length, failed );
@@ -252,9 +308,20 @@ const useUsbAutoImport = ( ) => {
       // Photos (per the user's choice), and only the files that actually saved.
       let deletedFromDevice = 0;
       let deleteFailures = 0;
+      let driveGoneOnDelete = false;
       if ( savedPaths.length > 0 ) {
         progress.setPhase( "deleting" );
+        updateUsbOffloadProgress(
+          savedPaths.length,
+          failed,
+          "deleting",
+          AppState.currentState,
+        );
         const del = await deleteUsbSourceImages( savedPaths );
+        // The native side already reports this and the run summary dropped it:
+        // "deleted 0 of 15, 15 failures" reads as a deletion bug, when the
+        // drive having been unplugged mid-run explains the whole line.
+        driveGoneOnDelete = del.available === false;
         progress.setDeleted( del.deleted );
         deletedFromDevice = del.deleted;
         deleteFailures = del.failed;
@@ -266,9 +333,13 @@ const useUsbAutoImport = ( ) => {
       // it. Skipped only when the wedged line above already carries the same
       // counts.
       if ( !abandonReason ) {
+        const driveNote = driveGoneOnDelete
+          ? "; drive no longer available"
+          : "";
         logger.info(
           `USB offload: saved ${savedPaths.length}, failed ${failed}; `
-          + `deleted ${deletedFromDevice} from device (${deleteFailures} delete failures)`,
+          + `deleted ${deletedFromDevice} from device `
+          + `(${deleteFailures} delete failures)${driveNote}`,
         );
       }
       if ( abandonReason === "out-of-space" ) {
