@@ -3,6 +3,7 @@ import GroupPhotoCropImage from "components/PhotoImporter/GroupPhotoCropImage";
 import React from "react";
 import { renderComponent } from "tests/helpers/render";
 
+const mockThumbnail = jest.fn( ( ) => undefined );
 // The real one drags in reanimated/gesture-handler. All this component needs
 // from it is somewhere to draw renderImage() and a ref carrying applyTransform,
 // without which the framing effect bails out and nothing is ever framed.
@@ -10,7 +11,7 @@ jest.mock( "sharedHelpers/useDeviceImageThumbnail", ( ) => ( {
   __esModule: true,
   // Both the thumbnail and the full-resolution generation failing is what puts
   // a cell on the ph:// fallback path this test is about.
-  default: jest.fn( ( ) => undefined ),
+  default: ( ...args ) => mockThumbnail( ...args ),
   invalidateDeviceImageThumbnail: jest.fn( ),
 } ) );
 
@@ -32,6 +33,61 @@ const renderCropImage = uri => renderComponent(
 describe( "GroupPhotoCropImage", ( ) => {
   afterEach( ( ) => {
     jest.clearAllMocks( );
+    mockThumbnail.mockReturnValue( undefined );
+  } );
+
+  // A RAW original (.CR3) has no thumbnail iOS can build at full resolution, so
+  // the full-resolution request comes back as the original uri itself. Adopting
+  // that as an "upgrade" swapped the working thumbnail out of the cell's image
+  // view for a file that draws slowly or not at all, and the black backdrop was
+  // left covering the cell every time the user scrolled back to it.
+  it( "keeps showing the thumbnail when full-resolution generation fails", ( ) => {
+    const cropSourceUri = "file:///galleryPhotos/raw.CR3";
+    // maxPixel ordering matches the component: full resolution first.
+    mockThumbnail.mockImplementation( ( uri, maxPixel ) => ( maxPixel >= 8192
+      // Failed generation resolves to the original, not to a generated file.
+      ? cropSourceUri
+      : "file:///thumbnails/raw.jpg" ) );
+    mockDetection.mockReturnValue( {
+      crop: null,
+      imageWidth: 400,
+      imageHeight: 300,
+    } );
+    renderCropImage( cropSourceUri );
+
+    expect( screen.getByTestId( "GroupPhotoCropImage.photo" ).props.source.uri )
+      .toBe( "file:///thumbnails/raw.jpg" );
+  } );
+
+  // The cell upgrades its source in place, so a flag saying "something painted"
+  // outlived the bitmap it referred to: the backdrop stayed while the native
+  // image view was decoding the replacement.
+  it( "drops the backdrop while an upgraded source has yet to paint", ( ) => {
+    // Flipped once the cell has painted its thumbnail, so the re-render the
+    // load event causes is the one that swaps the source -- the same order the
+    // real generation lands in.
+    let fullResolutionReady = false;
+    mockThumbnail.mockImplementation( ( uri, maxPixel ) => {
+      if ( maxPixel < 8192 ) return "file:///thumbnails/upgraded.jpg";
+      return fullResolutionReady
+        ? "file:///thumbnails/upgraded-full.jpg"
+        : undefined;
+    } );
+    mockDetection.mockReturnValue( {
+      crop: null,
+      imageWidth: 400,
+      imageHeight: 300,
+    } );
+    renderCropImage( "ph://upgraded" );
+
+    fullResolutionReady = true;
+    fireEvent( screen.getByTestId( "GroupPhotoCropImage.photo" ), "load", {
+      nativeEvent: { source: { width: 400, height: 300 } },
+    } );
+
+    expect( screen.getByTestId( "GroupPhotoCropImage.photo" ).props.source.uri )
+      .toBe( "file:///thumbnails/upgraded-full.jpg" );
+    expect( screen.queryByTestId( "GroupPhotoCropImage.backdrop" ) ).toBeNull( );
   } );
 
   // The overlay's backdrop is opaque black and covers the whole cell, and the

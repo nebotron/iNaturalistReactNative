@@ -154,6 +154,12 @@ const raceWithTimeout = (
   ] ).finally( ( ) => clearTimeout( timer ) );
 };
 
+// Keys already reported as ungeneratable. Nothing caches a failure, so every
+// pass back through a grid retries it and logged it again: one deleted photo
+// accounted for 39 identical warnings, and a single import filled the log with
+// over a thousand. The first report per photo and size is the diagnostic.
+const loggedFailures = new Set<string>( );
+
 const runJob = async ( job: Job ) => {
   let result: string | null = null;
   const highQuality = isHighQuality( job );
@@ -180,10 +186,13 @@ const runJob = async ( job: Job ) => {
     // Logged whatever the size: generation now rejects an encode that wouldn't
     // decode (see encodedThumbnailData in ImageCropper.m), and a photo that
     // can't produce a thumbnail at all is worth knowing about at any size.
-    logger.warn(
-      `createThumbnail failed after ${Date.now( ) - start}ms for ${job.uri}, `
-      + `maxPixel=${job.maxPixel}: ${e}`,
-    );
+    if ( !loggedFailures.has( job.key ) ) {
+      loggedFailures.add( job.key );
+      logger.warn(
+        `createThumbnail failed after ${Date.now( ) - start}ms for ${job.uri}, `
+        + `maxPixel=${job.maxPixel}: ${e}`,
+      );
+    }
     result = null;
   }
   if ( result ) {

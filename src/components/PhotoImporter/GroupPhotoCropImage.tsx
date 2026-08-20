@@ -110,12 +110,16 @@ const GroupPhotoCropImage = ( {
   // framing, which happens once per photo; the zoom engine owns the transform
   // from then on.
   const [framedCrop, setFramedCrop] = useState<NormalizedCrop | null>( null );
-  // Whether the image below has painted this photo yet. A cell whose crop and
+  // Which uri the image below has actually painted. A cell whose crop and
   // photo are both already cached — every cell recycled by scrolling, and
   // every cell that shifts up when one is deleted — frames itself on its first
   // render, while its image is still decoding. Showing the overlay then is what
-  // turned those cells black.
-  const [painted, setPainted] = useState( false );
+  // turned those cells black. Tracked as the uri rather than a flag because the
+  // cell swaps sources in place as better files arrive: a bare flag stayed true
+  // across the swap, so the backdrop kept covering the cell while the native
+  // image view had already dropped the bitmap it painted and was decoding the
+  // replacement.
+  const [paintedUri, setPaintedUri] = useState<string | null>( null );
   // Dimensions reported by the photo below when it decoded. Subject detection
   // normally supplies these, but it yields nothing at all when it can't measure
   // the file (a photo whose thumbnail failed to generate falls back to its
@@ -133,7 +137,7 @@ const GroupPhotoCropImage = ( {
   if ( prevCropSourceUri !== cropSourceUri ) {
     setPrevCropSourceUri( cropSourceUri );
     setFramedCrop( null );
-    setPainted( false );
+    setPaintedUri( null );
     setDecodedSize( null );
   }
 
@@ -153,6 +157,17 @@ const GroupPhotoCropImage = ( {
     cropSourceUri,
     FULL_RESOLUTION_MAX_PIXEL,
   );
+  // A size whose generation failed resolves to the original uri rather than to
+  // a generated file, so identity with the original is how a fallback is told
+  // from a real upgrade. Ranking that fallback first is what turned cells black
+  // while scrolling: a RAW original (.CR3) has no thumbnail iOS can build at
+  // full resolution, so the full-resolution "result" was the .CR3 path itself,
+  // and adopting it swapped the working thumbnail out of the cell's native
+  // image view for a file that draws slowly or not at all -- leaving the black
+  // backdrop alone over an empty cell on every pass back through the grid.
+  const generatedFullResolutionUri = fullResolutionUri === cropSourceUri
+    ? undefined
+    : fullResolutionUri;
   // Shown as soon as there is anything to show, upgraded in place when the
   // full-resolution file lands. Waiting for that file before mounting anything
   // is what made pinch-to-zoom look dead: it is the most expensive job in the
@@ -161,7 +176,7 @@ const GroupPhotoCropImage = ( {
   // the cell carried no gesture at all. Anything that came back undecodable is
   // skipped in favour of the next candidate, ending at the original itself, so
   // one bad generated file can't cost the cell its crop box.
-  const displayUri = [fullResolutionUri, thumbnailUri, cropSourceUri].find(
+  const displayUri = [generatedFullResolutionUri, thumbnailUri, cropSourceUri].find(
     uri => uri && !undecodableUris.has( uri ),
   );
 
@@ -259,6 +274,8 @@ const GroupPhotoCropImage = ( {
     return null;
   }
 
+  // Only counts while the photo on screen is still the one that painted.
+  const painted = Boolean( paintedUri ) && paintedUri === displayUri;
   const framed = Boolean( framedCrop ) && ( painted || paintedImages.has( cropSourceUri ) );
   // Both halves are load-bearing, and each one on its own has shipped a black
   // cell. Without `painted`, framed trusts paintedImages, which only says some
@@ -321,7 +338,7 @@ const GroupPhotoCropImage = ( {
             source={{ uri: displayUri }}
             onLoad={e => {
               paintedImages.add( cropSourceUri );
-              setPainted( true );
+              setPaintedUri( displayUri as string );
               // Optional: a load that reports no source at all would otherwise
               // throw here, after painted was already set -- which is exactly
               // the state that leaves a cell framed by nothing.

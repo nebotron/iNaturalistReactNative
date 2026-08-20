@@ -1022,6 +1022,22 @@ static UIImageOrientation orientationForImageSource( CGImageSourceRef src )
 // overlay looking soft/pixelated no matter how high maxPixel was raised.
 // At or above kFileHighQualityMinPixel, decode the image data directly
 // instead of asking for a thumbnail.
+// The speed-optimized path: ImageIO subsamples during decode, and for a RAW
+// file hands back the embedded preview the camera baked in.
+static UIImage *thumbnailFromImageSource( CGImageSourceRef src, CGFloat maxPixel )
+{
+  NSDictionary *opts = @{
+    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+    (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform:   @YES,
+    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:          @( maxPixel ),
+  };
+  CGImageRef cg = CGImageSourceCreateThumbnailAtIndex( src, 0, (__bridge CFDictionaryRef)opts );
+  if ( !cg ) return nil;
+  UIImage *image = [UIImage imageWithCGImage:cg];
+  CGImageRelease( cg );
+  return image;
+}
+
 static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
 {
   NSURL *url = [NSURL fileURLWithPath:path];
@@ -1055,21 +1071,22 @@ static UIImage *downscaledImageAtPath( NSString *path, CGFloat maxPixel )
     UIImage *decoded = image
       ? rasterizedImage( image )
       : nil;
+    // iOS's ImageIO reads a Canon CR3's embedded preview but cannot demosaic
+    // its sensor data, so the full decode above returns NULL (in ~40ms, far too
+    // fast to have been a demosaic) for every RAW original from that camera.
+    // Failing outright meant the caller fell back to displaying the .CR3 file
+    // itself, which swapped a Group Photos cell's working thumbnail for a file
+    // <Image> draws nothing for -- leaving the cell's black backdrop alone on
+    // screen. The embedded preview is the largest image iOS can actually
+    // produce for these, so it beats having none.
+    if ( !decoded ) decoded = thumbnailFromImageSource( src, maxPixel );
     CFRelease( src );
     if ( !decoded ) return nil;
     return clampToMaxPixel( decoded, maxPixel );
   }
 
-  NSDictionary *opts = @{
-    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
-    (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform:   @YES,
-    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:          @( maxPixel ),
-  };
-  CGImageRef cg = CGImageSourceCreateThumbnailAtIndex( src, 0, (__bridge CFDictionaryRef)opts );
+  UIImage *image = thumbnailFromImageSource( src, maxPixel );
   CFRelease( src );
-  if ( !cg ) return nil;
-  UIImage *image = [UIImage imageWithCGImage:cg];
-  CGImageRelease( cg );
   return image;
 }
 
