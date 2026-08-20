@@ -20,9 +20,10 @@ import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 import TaxonModel from "realmModels/Taxon";
 import type { RealmPhoto } from "realmModels/types";
-import { getAnimalCrop, subscribeAnimalCropLog } from "sharedHelpers/animalCropLog";
+import { subscribeAnimalCropLog } from "sharedHelpers/animalCropLog";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
 import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
+import { cropSignature, onlineSuggestionsQueryKey } from "sharedHelpers/suggestionsQueryKey";
 import {
   useCurrentUser,
   useLastScreen,
@@ -52,25 +53,11 @@ export enum FETCH_STATUSES {
   FETCH_STATUS_ONLINE_SKIPPED = "online-skipped"
 }
 
-// How the photo is framed decides which region of it gets scored, so a framing
-// the user made by hand is part of what identifies a scoring request.
-const cropSignature = ( uri?: string ): string => {
-  const crop = uri
-    ? getAnimalCrop( uri )
-    : null;
-  return crop
-    ? `${crop.x},${crop.y},${crop.w},${crop.h}`
-    : "";
-};
-
-const getQueryKey = ( selectedPhotoUri: string, shouldUseEvidenceLocation: boolean ) => [
-  "scoreImage",
-  selectedPhotoUri,
-  { shouldUseEvidenceLocation },
-  // Re-framing the photo has to produce a fresh request rather than replay the
-  // suggestions cached for the previous framing.
-  cropSignature( selectedPhotoUri ),
-];
+// Re-framing the photo has to produce a fresh request rather than replay the
+// suggestions cached for the previous framing, so the framing is part of the
+// key. Built in suggestionsQueryKey because the prefetch helper has to key
+// its results identically or the screen won't find them.
+const getQueryKey = onlineSuggestionsQueryKey;
 
 interface Suggestion {
   combined_score: number;

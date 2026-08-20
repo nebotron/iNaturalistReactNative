@@ -7,12 +7,14 @@ import type Realm from "realm";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import type { RealmObservationPojo } from "realmModels/types";
 import User from "realmModels/User";
+import { createRequestTimeoutSignal } from "sharedHelpers/logging";
 import {
   getCachedSuggestions,
   offlineSuggestionsCacheKey,
   onlineSuggestionsCacheKey,
   setCachedSuggestions,
 } from "sharedHelpers/suggestionsCache";
+import { onlineSuggestionsQueryKey } from "sharedHelpers/suggestionsQueryKey";
 import type { OfflineSuggestionsResponse } from "sharedHooks/useSuggestions/useOfflineSuggestions";
 import { predictOffline } from "sharedHooks/useSuggestions/useOfflineSuggestions";
 import type {
@@ -106,7 +108,7 @@ const prefetchOnlineSuggestions = async (
 
   const locale = i18n?.language ?? "en";
   const hasCurrentUser = !!User.currentUser( realm );
-  const queryKey = ["scoreImage", photoUri, { shouldUseEvidenceLocation }];
+  const queryKey = onlineSuggestionsQueryKey( photoUri, shouldUseEvidenceLocation );
 
   const onlineKey = onlineSuggestionsCacheKey( queryKey, hasCurrentUser, locale );
   if ( getCachedSuggestions( onlineKey ) ) {
@@ -128,18 +130,29 @@ const prefetchOnlineSuggestions = async (
     queryKey: authQueryKey,
     queryFn: async ( ) => {
       const apiToken = await getJWT( true );
-      const suggestionsResponse = await scoreImage(
-        {
-          ...scoreImageParams,
-          ...( !hasCurrentUser && { locale } ),
-        },
-        { api_token: apiToken },
-      ) as OnlineSuggestionsApiResponse;
+      // Without a deadline a stalled prefetch holds its connection forever,
+      // and the request the user is actually waiting on queues behind it.
+      const { signal, clear } = createRequestTimeoutSignal( );
+      let suggestionsResponse: OnlineSuggestionsApiResponse;
+      try {
+        suggestionsResponse = await scoreImage(
+          {
+            ...scoreImageParams,
+            ...( !hasCurrentUser && { locale } ),
+          },
+          { api_token: apiToken, signal },
+        ) as OnlineSuggestionsApiResponse;
+      } finally {
+        clear( );
+      }
 
       const shimmed = shimApiResponseForCommonAncestor( suggestionsResponse );
       setCachedSuggestions( onlineKey, shimmed );
       return shimmed;
     },
+    // Nothing is on screen waiting for this, and a retry would only take a
+    // slot from the observation the user is looking at.
+    retry: false,
   } );
 };
 

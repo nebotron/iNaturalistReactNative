@@ -13,7 +13,13 @@ const params = {
   },
 };
 
-const useObservers = ( taxonIds: number[] ): string[] => {
+// `enabled` is false until the attribution these observers appear in is
+// actually on screen. Fetching regardless meant every observation fired this
+// twice — once for the offline suggestions and again for the online ones —
+// including on the many screens that never show the attribution at all, and in
+// the bulk ID flow those requests piled up several deep against the scoring
+// request the user was waiting on.
+const useObservers = ( taxonIds: number[], enabled: boolean = true ): string[] => {
   const { data } = useAuthenticatedQuery(
     ["fetchObservers", taxonIds],
     ( ) => fetchObservers( {
@@ -21,7 +27,7 @@ const useObservers = ( taxonIds: number[] ): string[] => {
       taxon_ids: taxonIds,
     } ),
     {
-      enabled: !!( taxonIds?.length > 0 ),
+      enabled: !!enabled && !!( taxonIds?.length > 0 ),
     },
   );
 
