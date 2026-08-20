@@ -75,8 +75,11 @@ curves themselves. They are found by shape, not by fixed offset:
 - a **falloff** curve starts at 8191 (= 1.0) and decays — peripheral
   illumination,
 - a **gain** curve starts at 16384 (= 1.0) and stays near it — geometry,
-- a **knot table** is a rising radius list; 4095 is taken to be the frame's
-  half-diagonal.
+- a **knot table** is a rising radius list, from near the centre out to the
+  frame corner. The unit is not documented and is not the same on every body —
+  the samples end at 4095 (EOS R8, and 4095 = 2**12-1 looks like a clamp), 4543
+  (R6) and 2934 (R7) — so each curve is normalised by its own last knot, which
+  is the only mapping that holds across all three.
 
 The falloff reading is supported by the samples: a 24-105 at f/16 records a
 28% corner falloff, a 70-200 at f/25 records 6.3% — the right order and the
@@ -126,6 +129,12 @@ resolution, and profiles cache per lens and focal length in a JSON file.
 
 ## Validation
 
+Everything here was checked against public sample files from
+[raw.pixls.us](https://raw.pixls.us/) — an EOS R8 with an EF 24-105, an EOS R6
+with an RF 70-200, and an EOS R7 with an RF-S 18-150. They are not anyone's own
+photos, so the CA figures below describe those three lenses and nothing else.
+The app measures each photo it imports rather than relying on any of them.
+
 On `Canon EOS R8` + `EF24-105mm f/4L IS II USM`, 42 mm f/16 (raw.pixls.us),
 measured with an independent estimator (scanning radial scale for peak
 normalised cross-correlation against green, over the 0.75–0.98 r annulus):
@@ -137,6 +146,15 @@ normalised cross-correlation against green, over the 0.75–0.98 r annulus):
 
 Red drops by 91%. Blue is overcorrected by about 0.15 px — the gradient fit and
 the correlation scan disagree at that level, which is the accuracy floor here.
+
+The app's own correction (`ImageCropper.m`, wired up in
+`src/sharedHelpers/chromaticAberration.ts`) uses a different model to this
+tool's: a displacement measured per radial ring rather than a polynomial fit.
+Real lenses need it. On the R7 sample the red shift peaks near 0.9 px at
+mid-frame and does not keep growing to the corner, and a straight-line fit
+through that overshoots the corner by about half a pixel while under-correcting
+the middle. Measured per ring, the residual is under 0.1 px everywhere on both
+the R7 and the R8 sample.
 
 `tests/test_lenscorr.py` injects a known radial scale into a synthetic image and
 checks it is recovered within 25% and that edge fringing at least halves;

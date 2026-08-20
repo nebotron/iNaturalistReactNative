@@ -409,7 +409,7 @@ const GroupPhotosContainer = ( ): Node => {
     // Totalled across batches so the import reports one line, not one per ten
     // photos.
     const chromaticAberration = {
-      corrected: 0, skipped: 0, failed: 0, measured: 0, fromProfile: 0, maxCornerPx: 0, ms: 0,
+      corrected: 0, skipped: 0, failed: 0, measured: 0, fromProfile: 0, maxShiftPx: 0, ms: 0,
     };
     // One Photos-library transaction (and so one iOS consent alert) for the
     // whole import, however many batches its location writes arrive in.
@@ -459,9 +459,9 @@ const GroupPhotosContainer = ( ): Node => {
         chromaticAberration.measured += caSummary.measured;
         chromaticAberration.fromProfile += caSummary.fromProfile;
         chromaticAberration.ms += caSummary.ms;
-        chromaticAberration.maxCornerPx = Math.max(
-          chromaticAberration.maxCornerPx,
-          caSummary.maxCornerPx,
+        chromaticAberration.maxShiftPx = Math.max(
+          chromaticAberration.maxShiftPx,
+          caSummary.maxShiftPx,
         );
 
         // Save each observation and auto-fill tracked location for any that

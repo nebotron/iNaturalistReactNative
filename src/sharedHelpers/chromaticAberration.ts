@@ -14,11 +14,14 @@ const logger = log.extend( "chromaticAberration" );
 // fringing is big enough to see (see kCAMinCornerShiftPx in ImageCropper.m).
 export interface ChromaticAberrationResult {
   applied: boolean;
+  measured?: boolean;
   reason?: string;
-  redScale?: number;
-  blueScale?: number;
-  redCornerPx?: number;
-  blueCornerPx?: number;
+  // The displacement measured for each of ten rings, from the centre out, as a
+  // fraction of the corner radius.
+  redProfile?: number[];
+  blueProfile?: number[];
+  redShiftPx?: number;
+  blueShiftPx?: number;
   ms?: number;
 }
 
@@ -29,13 +32,13 @@ export interface ChromaticAberrationSummary {
   measured: number;
   fromProfile: number;
   lenses: number;
-  maxCornerPx: number;
+  maxShiftPx: number;
   ms: number;
 }
 
 export interface LensProfile {
-  red: number;
-  blue: number;
+  red: number[];
+  blue: number[];
   samples: number;
 }
 
@@ -47,8 +50,8 @@ interface ImageCropperModule {
   applyChromaticAberration: (
     inputPath: string,
     outputPath: string,
-    redScale: number,
-    blueScale: number,
+    redProfile: number[],
+    blueProfile: number[],
   ) => Promise<ChromaticAberrationResult>;
 }
 
@@ -107,17 +110,39 @@ export function lensProfile( key?: string | null ): LensProfile | null {
   return readProfiles( )[key] ?? null;
 }
 
-export function recordLensMeasurement( key: string, red: number, blue: number ): LensProfile {
+// Ring by ring, so one frame's noise is diluted rather than adopted.
+const averageProfiles = (
+  previous: number[] | undefined,
+  measured: number[],
+  weight: number,
+): number[] => measured.map( ( value, ring ) => (
+  ( ( previous?.[ring] ?? 0 ) * weight + value ) / ( weight + 1 )
+) );
+
+export function recordLensMeasurement(
+  key: string,
+  red: number[],
+  blue: number[],
+): LensProfile | null {
+  if ( !Array.isArray( red ) || !Array.isArray( blue ) || red.length === 0 ) return null;
   const profiles = readProfiles( );
   const previous = profiles[key];
-  const samples = Math.min( ( previous?.samples ?? 0 ) + 1, MAX_SAMPLES );
-  const weight = previous
+  // A profile measured with a different number of rings than this build uses
+  // is from another version; start it over rather than averaging across shapes.
+  const comparable = previous?.red?.length === red.length;
+  const weight = comparable
     ? Math.min( previous.samples, MAX_SAMPLES - 1 )
     : 0;
   const next: LensProfile = {
-    red: ( ( previous?.red ?? 0 ) * weight + red ) / ( weight + 1 ),
-    blue: ( ( previous?.blue ?? 0 ) * weight + blue ) / ( weight + 1 ),
-    samples,
+    red: averageProfiles( comparable
+      ? previous.red
+      : undefined, red, weight ),
+    blue: averageProfiles( comparable
+      ? previous.blue
+      : undefined, blue, weight ),
+    samples: Math.min( ( comparable
+      ? previous.samples
+      : 0 ) + 1, MAX_SAMPLES ),
   };
   profiles[key] = next;
   profileStore.set( PROFILES_KEY, JSON.stringify( profiles ) );
@@ -203,7 +228,7 @@ export async function correctPhotosChromaticAberration(
     measured: 0,
     fromProfile: 0,
     lenses: 0,
-    maxCornerPx: 0,
+    maxShiftPx: 0,
     ms: 0,
   };
   const uris = localFileUris.filter( Boolean ) as string[];
@@ -239,22 +264,17 @@ export async function correctPhotosChromaticAberration(
         summary.failed += 1;
         return;
       }
-      if (
-        result.measured
-        && key
-        && typeof result.redScale === "number"
-        && typeof result.blueScale === "number"
-      ) {
+      if ( result.measured && key && result.redProfile && result.blueProfile ) {
         summary.measured += 1;
-        recordLensMeasurement( key, result.redScale, result.blueScale );
+        recordLensMeasurement( key, result.redProfile, result.blueProfile );
       }
       if ( profile ) summary.fromProfile += 1;
       if ( result.applied ) {
         summary.corrected += 1;
-        summary.maxCornerPx = Math.max(
-          summary.maxCornerPx,
-          result.redCornerPx ?? 0,
-          result.blueCornerPx ?? 0,
+        summary.maxShiftPx = Math.max(
+          summary.maxShiftPx,
+          result.redShiftPx ?? 0,
+          result.blueShiftPx ?? 0,
         );
       } else {
         summary.skipped += 1;

@@ -184,16 +184,16 @@ def measure_ca(img: np.ndarray, centre: Tuple[float, float], bins: int = 10,
 # peripheral illumination
 # --------------------------------------------------------------------------
 def vignetting_gain(shape: Tuple[int, int], centre: Tuple[float, float],
-                    curve: Curve, half_diagonal: float,
+                    curve: Curve, corner_radius_px: float,
                     strength: float = 1.0) -> np.ndarray:
     """Gain map that undoes the falloff the camera recorded for this shot.
 
-    The packet's knot radii are in units where 4095 is the half-diagonal of the
-    uncorrected frame; values are transmission with 1.0 at the centre.  Beyond
-    the last knot the curve is held flat rather than extrapolated.
+    Curve radii are normalised so 1.0 is the outermost knot, taken to be the
+    frame corner (see Curve); values are transmission with 1.0 at the centre.
+    Beyond the last knot the curve is held flat rather than extrapolated.
     """
     r, _, _ = radial_grid(shape, centre)
-    rn = r / half_diagonal
+    rn = r / corner_radius_px
     knots = np.array(curve.radii, dtype=np.float64)
     vals = np.array(curve.values, dtype=np.float64)
     transmission = np.interp(rn, knots, vals, left=vals[0], right=vals[-1])
@@ -207,13 +207,13 @@ def vignetting_gain(shape: Tuple[int, int], centre: Tuple[float, float],
 # geometric distortion (curve semantics unverified - opt in)
 # --------------------------------------------------------------------------
 def apply_geometry_curve(img: np.ndarray, centre: Tuple[float, float],
-                         curve: Curve, half_diagonal: float,
+                         curve: Curve, corner_radius_px: float,
                          order: int = 3) -> np.ndarray:
     """Resample all channels with a packet geometry curve read as a radial
     magnification (16384 == 1.0)."""
     h, w = img.shape[:2]
     r, uy, ux = radial_grid((h, w), centre)
-    rn = r / half_diagonal
+    rn = r / corner_radius_px
     knots = np.array(curve.radii, dtype=np.float64)
     vals = np.array(curve.values, dtype=np.float64)
     scale = np.interp(rn, knots, vals, left=vals[0], right=vals[-1])

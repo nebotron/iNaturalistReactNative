@@ -1449,35 +1449,39 @@ RCT_EXPORT_METHOD( adjustImageBrightness
 //
 // Lateral CA is the red and blue channels landing at slightly the wrong radius
 // from the optical axis, so every high-contrast edge picks up a coloured
-// fringe that grows towards the corners. There is no lens profile to correct
-// it from: the photos arrive from any camera, and a Canon raw's own correction
-// tables are undocumented and not in a form ImageIO hands over. So the shift
-// is measured from the photo itself, with green as the reference. For each
-// ring of the frame we solve for the radial displacement d that best explains
-// the difference between the other channel and green over that ring's
+// fringe. There is no lens profile to correct it from: the photos arrive from
+// any camera, and a raw file's own correction tables are undocumented. So the
+// shift is measured from the photo itself, with green as the reference. For
+// each ring of the frame we solve for the radial displacement d that best
+// explains the difference between the other channel and green over that ring's
 // strongest edges,
 //
 //   C - G  ≈  -d · dG/dr
 //
-// and fit d(r) = b1·r through the rings, letting a constant term absorb a
-// whole-channel offset (sensor decentring, or bias in the estimate) so only
-// the part that grows with radius — the aberration — is corrected.
+// and keep the answer per ring rather than fitting a line through them. A line
+// is the wrong shape for real lenses: on an RF-S 18-150 at 150mm the red shift
+// peaks around 0.8px at mid-frame and comes back to 0.1px in the corner, and a
+// straight fit through that extrapolates to over a pixel of correction in the
+// corner — pushing the corners further out of alignment than they started.
 //
-// Measurement runs on a downscaled copy: b1 is dimensionless, so it applies
-// unchanged at full size, and a megapixel is plenty of edges. It is iterated
-// because the gradient estimate underestimates displacements beyond a pixel,
-// and each pass measures what the previous one left behind.
+// Measurement runs on a downscaled copy (displacements are kept as a fraction
+// of the corner radius, so the profile applies unchanged at full size) and is
+// iterated, because the gradient estimate underestimates displacements beyond
+// a pixel and each pass measures what the last one left behind.
 
 static const int    kCAMeasureMaxPixel  = 1024;
 static const int    kCABinCount         = 10;
 static const int    kCAIterations       = 3;
-// Under a sixth of a pixel at the corner there is nothing to see, and
-// resampling the photo to remove it only costs it a little sharpness.
-static const double kCAMinCornerShiftPx = 0.15;
-// A real lateral CA is a fraction of a percent. Anything past 1% is the
-// measurement having locked onto something else (a colour-fringed subject
-// moving between frames, say), not an aberration; leave the photo alone.
-static const double kCAMaxScale         = 0.01;
+// Under a sixth of a pixel there is nothing to see, and resampling to remove
+// it only costs the photo a little sharpness.
+static const double kCAMinShiftPx       = 0.15;
+// Real lateral CA is a few pixels at most. A profile past this is the
+// measurement having locked onto something else — a subject that fringes on
+// its own, or motion between the channels — so leave the photo alone.
+static const double kCAMaxShiftFraction = 0.002;   // of the corner radius
+// A ring holding almost none of the frame's edges says nothing about the lens;
+// its noise must not become a warp.
+static const double kCAMinBinWeightFrac = 0.02;
 static const size_t kCAMaxPixels        = 60000000;
 
 // Mean of a (2*radius+1) window, run horizontally into tmp then vertically
@@ -1527,17 +1531,32 @@ static void caHighPass(
   for ( size_t i = 0; i < n; i++ ) out[i] = scratchA[i] - out[i];
 }
 
-// Radial displacement of one channel relative to green, as a fraction of the
-// corner radius (so d(r) = b1 * r in pixels, at any resolution).
-static double caMeasureChannelShift( const float *hpC, const float *hpG, int w, int h )
+// The displacement a profile gives at radius rn (0 at the centre, 1 at the
+// corner), interpolated between ring centres and held flat outside them —
+// never extrapolated, which is the whole point of measuring per ring.
+static double caProfileAt( const double *profile, double rn )
+{
+  double x = rn * kCABinCount - 0.5;
+  if ( x <= 0 ) return profile[0];
+  if ( x >= kCABinCount - 1 ) return profile[kCABinCount - 1];
+  int    i = (int)x;
+  double f = x - i;
+  return profile[i] * ( 1 - f ) + profile[i + 1] * f;
+}
+
+// Radial displacement of one channel relative to green, per ring, as a
+// fraction of the corner radius.
+static void caMeasureChannelProfile(
+  const float *hpC, const float *hpG, int w, int h, double *profile
+)
 {
   double cx = ( w - 1 ) / 2.0, cy = ( h - 1 ) / 2.0;
   double rmax = sqrt( cx * cx + cy * cy );
-  if ( rmax < 1 ) return 0;
-
   double num[kCABinCount], den[kCABinCount];
   memset( num, 0, sizeof( num ) );
   memset( den, 0, sizeof( den ) );
+  memset( profile, 0, kCABinCount * sizeof( double ) );
+  if ( rmax < 1 ) return;
 
   for ( int y = 1; y < h - 1; y++ ) {
     for ( int x = 1; x < w - 1; x++ ) {
@@ -1555,35 +1574,48 @@ static double caMeasureChannelShift( const float *hpC, const float *hpG, int w, 
     }
   }
 
-  // Weighted least squares of d/rmax against r/rmax, with an intercept.
-  double sw = 0, swx = 0, swy = 0, swxx = 0, swxy = 0;
+  double maxWeight = 0;
+  for ( int b = 0; b < kCABinCount; b++ ) maxWeight = MAX( maxWeight, den[b] );
+  if ( maxWeight <= 0 ) return;
+
+  BOOL measured[kCABinCount];
   for ( int b = 0; b < kCABinCount; b++ ) {
-    if ( den[b] <= 0 ) continue;
-    double rn  = ( b + 0.5 ) / kCABinCount;
-    double yv  = ( -num[b] / den[b] ) / rmax;
-    double wgt = den[b];
-    sw   += wgt;
-    swx  += wgt * rn;
-    swy  += wgt * yv;
-    swxx += wgt * rn * rn;
-    swxy += wgt * rn * yv;
+    measured[b] = ( den[b] >= maxWeight * kCAMinBinWeightFrac );
+    profile[b] = measured[b] ? ( -num[b] / den[b] ) / rmax : 0;
   }
-  double denom = sw * swxx - swx * swx;
-  if ( fabs( denom ) < 1e-12 ) return 0;
-  return ( sw * swxy - swx * swy ) / denom;
+  // A ring with too few edges takes the nearest ring that had them, rather
+  // than contributing a number made of noise.
+  for ( int b = 0; b < kCABinCount; b++ ) {
+    if ( measured[b] ) continue;
+    for ( int d = 1; d < kCABinCount; d++ ) {
+      if ( b - d >= 0 && measured[b - d] )      { profile[b] = profile[b - d]; break; }
+      if ( b + d < kCABinCount && measured[b + d] ) { profile[b] = profile[b + d]; break; }
+    }
+  }
 }
 
 // Resamples one channel about the centre so it lands where green does.
 static void caResampleChannel(
-  const uint8_t *src, uint8_t *dst, int w, int h, int channel, double b1
+  const uint8_t *src, uint8_t *dst, int w, int h, int channel, const double *profile
 )
 {
   double cx = ( w - 1 ) / 2.0, cy = ( h - 1 ) / 2.0;
-  double scale = 1.0 + b1;
+  double rmax = sqrt( cx * cx + cy * cy );
+  if ( rmax < 1 ) return;
   for ( int y = 0; y < h; y++ ) {
     for ( int x = 0; x < w; x++ ) {
-      double sx = cx + ( x - cx ) * scale;
-      double sy = cy + ( y - cy ) * scale;
+      double dx = x - cx, dy = y - cy;
+      double r  = sqrt( dx * dx + dy * dy );
+      double sx, sy;
+      if ( r < 1e-6 ) {
+        sx = cx;
+        sy = cy;
+      } else {
+        double shift = caProfileAt( profile, r / rmax ) * rmax;
+        double scale = ( r + shift ) / r;
+        sx = cx + dx * scale;
+        sy = cy + dy * scale;
+      }
       if ( sx < 0 ) sx = 0;
       if ( sy < 0 ) sy = 0;
       if ( sx > w - 1 ) sx = w - 1;
@@ -1601,6 +1633,14 @@ static void caResampleChannel(
       dst[( (size_t)y * w + x ) * 4 + channel] = (uint8_t)( v + 0.5 );
     }
   }
+}
+
+// Biggest displacement anywhere in the frame, in pixels.
+static double caMaxShiftPx( const double *profile, double cornerRadius )
+{
+  double most = 0;
+  for ( int b = 0; b < kCABinCount; b++ ) most = MAX( most, fabs( profile[b] ) );
+  return most * cornerRadius;
 }
 
 // Draws an image into a freshly allocated RGBA8 buffer at w x h. drawInRect
@@ -1642,8 +1682,11 @@ static CGImageRef caImageFromBitmap( uint8_t *buf, int w, int h )
 
 // Measures red and blue against green on a downscaled copy, refining over a
 // few passes. Returns NO when there was nothing to measure.
-static BOOL caMeasureShifts( UIImage *image, double *outRed, double *outBlue )
+static BOOL caMeasureProfiles( UIImage *image, double *redProfile, double *blueProfile )
 {
+  memset( redProfile,  0, kCABinCount * sizeof( double ) );
+  memset( blueProfile, 0, kCABinCount * sizeof( double ) );
+
   CGFloat longest = MAX( image.size.width, image.size.height );
   double  scale   = ( longest > kCAMeasureMaxPixel ) ? kCAMeasureMaxPixel / longest : 1.0;
   int     w       = (int)round( image.size.width  * scale );
@@ -1662,35 +1705,56 @@ static BOOL caMeasureShifts( UIImage *image, double *outRed, double *outBlue )
   float   *scrB  = (float *)malloc( n * sizeof( float ) );
   BOOL     ok    = ( work && hpR && hpG && hpB && scrA && scrB );
 
-  double red = 0, blue = 0;
   if ( ok ) {
     int radius = MAX( 2, MIN( w, h ) / 64 );
     for ( int pass = 0; pass < kCAIterations; pass++ ) {
       memcpy( work, base, n * 4 );
       if ( pass > 0 ) {
-        caResampleChannel( base, work, w, h, 0, red );
-        caResampleChannel( base, work, w, h, 2, blue );
+        caResampleChannel( base, work, w, h, 0, redProfile );
+        caResampleChannel( base, work, w, h, 2, blueProfile );
       }
       caHighPass( work, 0, w, h, radius, hpR, scrA, scrB );
       caHighPass( work, 1, w, h, radius, hpG, scrA, scrB );
       caHighPass( work, 2, w, h, radius, hpB, scrA, scrB );
-      red  += caMeasureChannelShift( hpR, hpG, w, h );
-      blue += caMeasureChannelShift( hpB, hpG, w, h );
+
+      double passRed[kCABinCount], passBlue[kCABinCount];
+      caMeasureChannelProfile( hpR, hpG, w, h, passRed );
+      caMeasureChannelProfile( hpB, hpG, w, h, passBlue );
+      for ( int b = 0; b < kCABinCount; b++ ) {
+        redProfile[b]  += passRed[b];
+        blueProfile[b] += passBlue[b];
+      }
     }
   }
 
   free( base ); free( work ); free( hpR ); free( hpG ); free( hpB ); free( scrA ); free( scrB );
-  if ( !ok ) return NO;
-  *outRed  = red;
-  *outBlue = blue;
+  return ok;
+}
+
+static NSArray<NSNumber *> *caProfileToArray( const double *profile )
+{
+  NSMutableArray *out = [NSMutableArray arrayWithCapacity:kCABinCount];
+  for ( int b = 0; b < kCABinCount; b++ ) [out addObject:@( profile[b] )];
+  return out;
+}
+
+// A profile from JS, which is the same ten numbers this module measured.
+static BOOL caProfileFromArray( NSArray *array, double *profile )
+{
+  if ( ![array isKindOfClass:[NSArray class]] || array.count != kCABinCount ) return NO;
+  for ( int b = 0; b < kCABinCount; b++ ) {
+    id value = array[b];
+    if ( ![value isKindOfClass:[NSNumber class]] ) return NO;
+    profile[b] = [value doubleValue];
+  }
   return YES;
 }
 
-// Resamples red and blue by the given shifts and writes the result. The photo
+// Resamples red and blue by the given profiles and writes the result. The photo
 // keeps the metadata it arrived with (GPS, timestamp, camera): the pixels move,
 // nothing else about it does.
 static BOOL caWriteCorrectedImage(
-  UIImage *image, int W, int H, double red, double blue,
+  UIImage *image, int W, int H, const double *redProfile, const double *blueProfile,
   NSString *input, NSString *output, NSString **failureOut
 )
 {
@@ -1714,8 +1778,8 @@ static BOOL caWriteCorrectedImage(
     return NO;
   }
   memcpy( corrected, full, (size_t)W * H * 4 );
-  caResampleChannel( full, corrected, W, H, 0, red );
-  caResampleChannel( full, corrected, W, H, 2, blue );
+  caResampleChannel( full, corrected, W, H, 0, redProfile );
+  caResampleChannel( full, corrected, W, H, 2, blueProfile );
   free( full );
 
   CGImageRef ref  = caImageFromBitmap( corrected, W, H );
@@ -1738,96 +1802,18 @@ static BOOL caWriteCorrectedImage(
 }
 
 // Corrects lateral chromatic aberration in a photo and writes the result to
-// outputPath. Resolves with what it measured and whether it wrote anything: a
-// photo whose fringing is already under a fraction of a pixel is left alone
-// rather than resampled (and softened) for nothing.
+// outputPath. Resolves with the profile it measured and whether it wrote
+// anything: a photo whose fringing is already under a fraction of a pixel is
+// left alone rather than resampled (and softened) for nothing.
 RCT_EXPORT_METHOD( correctChromaticAberration
                   : ( NSString * )inputPath outputPath
                   : ( NSString * )outputPath resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSString *input     = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  NSString *output    = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
-
-  UIImage *image = [UIImage imageWithContentsOfFile:input];
-  if ( !image ) { reject( @"CA_FAILED", @"Could not load image", nil ); return; }
-
-  int W = (int)round( image.size.width );
-  int H = (int)round( image.size.height );
-  if ( W < 64 || H < 64 ) {
-    resolve( @{ @"applied": @NO, @"reason": @"image too small to measure" } );
-    return;
-  }
-  if ( (size_t)W * (size_t)H > kCAMaxPixels ) {
-    resolve( @{ @"applied": @NO, @"reason": @"image too large" } );
-    return;
-  }
-
-  double red = 0, blue = 0;
-  if ( !caMeasureShifts( image, &red, &blue ) ) {
-    reject( @"CA_FAILED", @"Could not measure chromatic aberration", nil );
-    return;
-  }
-
-  double cornerRadius = sqrt( (double)W * W + (double)H * H ) / 2.0;
-  double redPx        = fabs( red )  * cornerRadius;
-  double bluePx       = fabs( blue ) * cornerRadius;
-
-  if ( fabs( red ) > kCAMaxScale || fabs( blue ) > kCAMaxScale ) {
-    // Not recorded against the lens: an implausible number is one to forget,
-    // not to average in.
-    resolve( @{ @"applied": @NO, @"measured": @NO, @"reason": @"measurement implausible",
-                @"redScale": @( red ), @"blueScale": @( blue ) } );
-    return;
-  }
-  if ( redPx < kCAMinCornerShiftPx && bluePx < kCAMinCornerShiftPx ) {
-    // Nothing worth resampling for, but still a real measurement of this lens:
-    // reported as such so the rest of the import can stop measuring.
-    resolve( @{ @"applied": @NO, @"measured": @YES, @"reason": @"nothing to correct",
-                @"redScale": @( red ), @"blueScale": @( blue ),
-                @"redCornerPx": @( redPx ), @"blueCornerPx": @( bluePx ) } );
-    return;
-  }
-
-  NSString *failure = nil;
-  if ( !caWriteCorrectedImage( image, W, H, red, blue, input, output, &failure ) ) {
-    reject( @"CA_FAILED", failure, nil );
-    return;
-  }
-
-  resolve( @{
-    @"applied":      @YES,
-    @"measured":     @YES,
-    @"outputPath":   output,
-    @"redScale":     @( red ),
-    @"blueScale":    @( blue ),
-    @"redCornerPx":  @( redPx ),
-    @"blueCornerPx": @( bluePx ),
-    @"ms":           @( (int)round( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
-  } );
-}
-
-// Corrects a photo with shifts measured from another frame of the same lens at
-// the same focal length (see chromaticAberration.ts): lateral CA is a property
-// of the lens, so a profile measured once holds for every frame it took, and
-// most of an import needs no measuring at all. It also covers the frames a
-// measurement cannot handle — a photo of open sky has no edges to measure and
-// would otherwise be left uncorrected.
-RCT_EXPORT_METHOD( applyChromaticAberration
-                  : ( NSString * )inputPath outputPath
-                  : ( NSString * )outputPath redScale
-                  : ( nonnull NSNumber * )redScale blueScale
-                  : ( nonnull NSNumber * )blueScale resolver
-                  : ( RCTPromiseResolveBlock )resolve rejecter
-                  : ( RCTPromiseRejectBlock )reject )
-{
   NSString       *input   = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
   NSString       *output  = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
   NSTimeInterval  started = [NSDate timeIntervalSinceReferenceDate];
-  double          red     = [redScale doubleValue];
-  double          blue    = [blueScale doubleValue];
 
   UIImage *image = [UIImage imageWithContentsOfFile:input];
   if ( !image ) { reject( @"CA_FAILED", @"Could not load image", nil ); return; }
@@ -1835,40 +1821,122 @@ RCT_EXPORT_METHOD( applyChromaticAberration
   int W = (int)round( image.size.width );
   int H = (int)round( image.size.height );
   if ( W < 64 || H < 64 || (size_t)W * (size_t)H > kCAMaxPixels ) {
-    resolve( @{ @"applied": @NO, @"reason": @"image size out of range" } );
+    resolve( @{ @"applied": @NO, @"measured": @NO, @"reason": @"image size out of range" } );
     return;
   }
 
-  // The same guards a measured correction gets: a profile is only ever worth
-  // applying on the same terms it was worth measuring on.
-  double cornerRadius = sqrt( (double)W * W + (double)H * H ) / 2.0;
-  double redPx        = fabs( red )  * cornerRadius;
-  double bluePx       = fabs( blue ) * cornerRadius;
-  if ( fabs( red ) > kCAMaxScale || fabs( blue ) > kCAMaxScale ) {
-    resolve( @{ @"applied": @NO, @"reason": @"profile implausible" } );
+  double redProfile[kCABinCount], blueProfile[kCABinCount];
+  if ( !caMeasureProfiles( image, redProfile, blueProfile ) ) {
+    reject( @"CA_FAILED", @"Could not measure chromatic aberration", nil );
     return;
   }
-  if ( redPx < kCAMinCornerShiftPx && bluePx < kCAMinCornerShiftPx ) {
-    resolve( @{ @"applied": @NO, @"reason": @"nothing to correct",
-                @"redCornerPx": @( redPx ), @"blueCornerPx": @( bluePx ) } );
+
+  double cornerRadius = sqrt( (double)W * W + (double)H * H ) / 2.0;
+  double redPx        = caMaxShiftPx( redProfile,  cornerRadius );
+  double bluePx       = caMaxShiftPx( blueProfile, cornerRadius );
+  double limitPx      = kCAMaxShiftFraction * cornerRadius;
+
+  if ( redPx > limitPx || bluePx > limitPx ) {
+    // Not reported as measured: an implausible profile is one to forget, not
+    // to average into the lens's.
+    resolve( @{ @"applied": @NO, @"measured": @NO, @"reason": @"measurement implausible",
+                @"redShiftPx": @( redPx ), @"blueShiftPx": @( bluePx ) } );
+    return;
+  }
+  if ( redPx < kCAMinShiftPx && bluePx < kCAMinShiftPx ) {
+    // Nothing worth resampling for, but still a real measurement of this lens:
+    // reported as such so the rest of an import can stop measuring.
+    resolve( @{ @"applied": @NO, @"measured": @YES, @"reason": @"nothing to correct",
+                @"redProfile": caProfileToArray( redProfile ),
+                @"blueProfile": caProfileToArray( blueProfile ),
+                @"redShiftPx": @( redPx ), @"blueShiftPx": @( bluePx ) } );
     return;
   }
 
   NSString *failure = nil;
-  if ( !caWriteCorrectedImage( image, W, H, red, blue, input, output, &failure ) ) {
+  if ( !caWriteCorrectedImage( image, W, H, redProfile, blueProfile,
+                               input, output, &failure ) ) {
     reject( @"CA_FAILED", failure, nil );
     return;
   }
 
   resolve( @{
-    @"applied":      @YES,
-    @"measured":     @NO,
-    @"outputPath":   output,
-    @"redScale":     @( red ),
-    @"blueScale":    @( blue ),
-    @"redCornerPx":  @( redPx ),
-    @"blueCornerPx": @( bluePx ),
-    @"ms":           @( (int)round( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
+    @"applied":     @YES,
+    @"measured":    @YES,
+    @"outputPath":  output,
+    @"redProfile":  caProfileToArray( redProfile ),
+    @"blueProfile": caProfileToArray( blueProfile ),
+    @"redShiftPx":  @( redPx ),
+    @"blueShiftPx": @( bluePx ),
+    @"ms":          @( (int)round( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
+  } );
+}
+
+// Corrects a photo with a profile measured from other frames of the same lens
+// at the same focal length (see chromaticAberration.ts): lateral CA is a
+// property of the lens, so a profile measured once holds for every frame it
+// took, and most of an import needs no measuring at all. It also covers the
+// frames a measurement cannot handle — a photo of open sky has no edges to
+// measure and would otherwise go uncorrected.
+RCT_EXPORT_METHOD( applyChromaticAberration
+                  : ( NSString * )inputPath outputPath
+                  : ( NSString * )outputPath redProfileIn
+                  : ( NSArray * )redProfileIn blueProfileIn
+                  : ( NSArray * )blueProfileIn resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString       *input   = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString       *output  = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSTimeInterval  started = [NSDate timeIntervalSinceReferenceDate];
+
+  double redProfile[kCABinCount], blueProfile[kCABinCount];
+  if ( !caProfileFromArray( redProfileIn, redProfile )
+       || !caProfileFromArray( blueProfileIn, blueProfile ) ) {
+    resolve( @{ @"applied": @NO, @"measured": @NO, @"reason": @"profile not usable" } );
+    return;
+  }
+
+  UIImage *image = [UIImage imageWithContentsOfFile:input];
+  if ( !image ) { reject( @"CA_FAILED", @"Could not load image", nil ); return; }
+
+  int W = (int)round( image.size.width );
+  int H = (int)round( image.size.height );
+  if ( W < 64 || H < 64 || (size_t)W * (size_t)H > kCAMaxPixels ) {
+    resolve( @{ @"applied": @NO, @"measured": @NO, @"reason": @"image size out of range" } );
+    return;
+  }
+
+  // The same guards a measured correction gets: a profile is only worth
+  // applying on the terms it was worth measuring on.
+  double cornerRadius = sqrt( (double)W * W + (double)H * H ) / 2.0;
+  double redPx        = caMaxShiftPx( redProfile,  cornerRadius );
+  double bluePx       = caMaxShiftPx( blueProfile, cornerRadius );
+  double limitPx      = kCAMaxShiftFraction * cornerRadius;
+  if ( redPx > limitPx || bluePx > limitPx ) {
+    resolve( @{ @"applied": @NO, @"measured": @NO, @"reason": @"profile implausible" } );
+    return;
+  }
+  if ( redPx < kCAMinShiftPx && bluePx < kCAMinShiftPx ) {
+    resolve( @{ @"applied": @NO, @"measured": @NO, @"reason": @"nothing to correct",
+                @"redShiftPx": @( redPx ), @"blueShiftPx": @( bluePx ) } );
+    return;
+  }
+
+  NSString *failure = nil;
+  if ( !caWriteCorrectedImage( image, W, H, redProfile, blueProfile,
+                               input, output, &failure ) ) {
+    reject( @"CA_FAILED", failure, nil );
+    return;
+  }
+
+  resolve( @{
+    @"applied":     @YES,
+    @"measured":    @NO,
+    @"outputPath":  output,
+    @"redShiftPx":  @( redPx ),
+    @"blueShiftPx": @( bluePx ),
+    @"ms":          @( (int)round( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
   } );
 }
 

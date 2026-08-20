@@ -28,6 +28,10 @@ const {
 } = require( "sharedHelpers/chromaticAberration" );
 
 const LENS = { LensModel: "RF100mm F2.8 L MACRO IS USM", FocalLength: 100 };
+// A profile is ten numbers, one per ring from the centre out: the fringing on a
+// real lens is not a straight line in radius (see ImageCropper.m).
+const RED_RINGS = [0, 0.0001, 0.0002, 0.0004, 0.0005, 0.0005, 0.0004, 0.0003, 0.0002, 0.0002];
+const BLUE_RINGS = new Array( 10 ).fill( -0.0001 );
 
 const PHOTO = "file:///photoUploads/IMG_1.jpg";
 const PATH = "/photoUploads/IMG_1.jpg";
@@ -43,7 +47,7 @@ describe( "correctPhotoChromaticAberration", ( ) => {
   } );
 
   it( "swaps the corrected file in, keeping the original until it lands", async ( ) => {
-    correctChromaticAberration.mockResolvedValue( { applied: true, redCornerPx: 0.7 } );
+    correctChromaticAberration.mockResolvedValue( { applied: true, redShiftPx: 0.7 } );
 
     const result = await correctPhotoChromaticAberration( PHOTO );
 
@@ -107,7 +111,7 @@ describe( "correctPhotosChromaticAberration", ( ) => {
 
   it( "totals what happened across the batch", async ( ) => {
     correctChromaticAberration
-      .mockResolvedValueOnce( { applied: true, redCornerPx: 0.4, blueCornerPx: 0.9 } )
+      .mockResolvedValueOnce( { applied: true, redShiftPx: 0.4, blueShiftPx: 0.9 } )
       .mockResolvedValueOnce( { applied: false, reason: "nothing to correct" } )
       .mockRejectedValueOnce( new Error( "could not load" ) );
 
@@ -122,7 +126,7 @@ describe( "correctPhotosChromaticAberration", ( ) => {
       corrected: 1,
       skipped: 1,
       failed: 1,
-      maxCornerPx: 0.9,
+      maxShiftPx: 0.9,
     } );
   } );
 
@@ -160,10 +164,14 @@ describe( "lens profiles", ( ) => {
     forgetLensProfiles( );
     Exify.read.mockResolvedValue( LENS );
     correctChromaticAberration.mockResolvedValue( {
-      applied: true, measured: true, redScale: 0.0003, blueScale: -0.0001, redCornerPx: 0.5,
+      applied: true,
+      measured: true,
+      redShiftPx: 0.5,
+      redProfile: RED_RINGS,
+      blueProfile: BLUE_RINGS,
     } );
     applyChromaticAberration.mockResolvedValue( {
-      applied: true, measured: false, redScale: 0.0003, blueScale: -0.0001, redCornerPx: 0.5,
+      applied: true, measured: false, redShiftPx: 0.5,
     } );
   } );
 
@@ -185,14 +193,14 @@ describe( "lens profiles", ( ) => {
     expect( applyChromaticAberration ).toHaveBeenLastCalledWith(
       expect.any( String ),
       expect.any( String ),
-      0.0003,
-      -0.0001,
+      RED_RINGS,
+      BLUE_RINGS,
     );
     expect( summary ).toMatchObject( {
       corrected: 6, measured: 2, fromProfile: 4, lenses: 1,
     } );
     expect( lensProfile( "RF100mm F2.8 L MACRO IS USM@100mm" ) ).toMatchObject( {
-      red: 0.0003, blue: -0.0001, samples: 2,
+      red: RED_RINGS, blue: BLUE_RINGS, samples: 2,
     } );
   } );
 
@@ -201,8 +209,8 @@ describe( "lens profiles", ( ) => {
       applied: false,
       measured: true,
       reason: "nothing to correct",
-      redScale: 0.00001,
-      blueScale: 0.00001,
+      redProfile: new Array( 10 ).fill( 0.00001 ),
+      blueProfile: new Array( 10 ).fill( 0.00001 ),
     } );
     // The native side declines a profile this small for the same reason it
     // declined the measurement it came from.
@@ -224,15 +232,22 @@ describe( "lens profiles", ( ) => {
   it( "averages what it measures rather than trusting one frame", async ( ) => {
     correctChromaticAberration
       .mockResolvedValueOnce( {
-        applied: true, measured: true, redScale: 0.0002, blueScale: 0,
+        applied: true,
+        measured: true,
+        redProfile: new Array( 10 ).fill( 0.0002 ),
+        blueProfile: new Array( 10 ).fill( 0 ),
       } )
       .mockResolvedValueOnce( {
-        applied: true, measured: true, redScale: 0.0004, blueScale: 0,
+        applied: true,
+        measured: true,
+        redProfile: new Array( 10 ).fill( 0.0004 ),
+        blueProfile: new Array( 10 ).fill( 0 ),
       } );
 
     await correctPhotosChromaticAberration( photos( 2 ) );
 
-    expect( lensProfile( "RF100mm F2.8 L MACRO IS USM@100mm" ).red )
+    // Averaged ring by ring, not taken from whichever frame came last.
+    expect( lensProfile( "RF100mm F2.8 L MACRO IS USM@100mm" ).red[5] )
       .toBeCloseTo( 0.0003, 6 );
   } );
 

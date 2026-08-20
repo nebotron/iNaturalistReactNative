@@ -44,16 +44,6 @@ def optical_centre(sizes, geometry: Geometry, half_size: bool = False
     return cx * scale, cy * scale
 
 
-def half_diagonal(geometry: Geometry, sizes, half_size: bool = False) -> float:
-    """Half-diagonal of the uncropped frame, the unit the packet curves use."""
-    scale = 0.5 if half_size else 1.0
-    if geometry.active_width:
-        w, h = geometry.active_width, geometry.active_height
-    else:
-        w, h = sizes.width, sizes.height
-    return 0.5 * float(np.hypot(w, h)) * scale
-
-
 def downsample(img: np.ndarray, factor: int) -> np.ndarray:
     """Block-mean by an integer factor (keeps channels aligned)."""
     if factor <= 1:

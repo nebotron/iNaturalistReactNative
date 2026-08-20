@@ -13,7 +13,7 @@ import numpy as np
 from .cr3 import Cr3
 from .lenscorr import (CaProfile, apply_ca, apply_geometry_curve, corner_radius,
                        measure_ca, vignetting_gain)
-from .rawio import decode, downsample, half_diagonal, optical_centre, write_image
+from .rawio import decode, downsample, optical_centre, write_image
 
 
 # --------------------------------------------------------------------------
@@ -102,7 +102,6 @@ def cmd_correct(args) -> int:
     cr3 = Cr3(args.file)
     img, sizes = decode(args.file, auto_bright=args.auto_bright)
     centre = optical_centre(sizes, cr3.geometry)
-    hdiag = half_diagonal(cr3.geometry, sizes)
     rmax = corner_radius(img.shape[:2], centre)
     applied = []
 
@@ -132,7 +131,7 @@ def cmd_correct(args) -> int:
         if curve is None:
             applied.append("vignetting skipped: no falloff curve in file")
         else:
-            gain = vignetting_gain(img.shape[:2], centre, curve, hdiag,
+            gain = vignetting_gain(img.shape[:2], centre, curve, rmax,
                                    strength=args.vignetting_strength)
             img = np.clip(img * gain[..., None], 0.0, None)
             applied.append(f"vignetting from packet curve "
@@ -145,7 +144,7 @@ def cmd_correct(args) -> int:
             print(f"no curve {args.distortion_curve} in this file", file=sys.stderr)
             return 2
         curve = curves[args.distortion_curve]
-        img = apply_geometry_curve(img, centre, curve, hdiag)
+        img = apply_geometry_curve(img, centre, curve, rmax)
         applied.append(f"geometry curve [{args.distortion_curve}] "
                        f"({curve.values[0]:.4f} -> {curve.values[-1]:.4f})")
 

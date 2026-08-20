@@ -204,17 +204,25 @@ def ctmd_exif_tags(payload: bytes) -> Dict[int, Any]:
 # --------------------------------------------------------------------------
 GAIN_ONE = 16384.0          # fixed-point 1.0 used by the geometry/gain curves
 TRANSMISSION_ONE = 8191.0   # fixed-point 1.0 used by the falloff curve
-KNOT_FULL_SCALE = 4095.0    # knot radius unit; 4095 == half-diagonal (inferred)
 
 
 @dataclass
 class Curve:
-    """One correction curve found inside the lens packet."""
+    """One correction curve found inside the lens packet.
+
+    `radii` are normalised so 1.0 is the curve's outermost sample, which is
+    taken to be the frame corner. The knots are in some absolute unit that is
+    not documented and is not the same on every body — the samples end at 4095
+    (EOS R8, and 4095 = 2**12-1 looks like a clamp), 4543 (R6) and 2934 (R7) —
+    so normalising each curve by its own last knot is the only mapping that
+    holds across all three.
+    """
     kind: str                 # "falloff" | "gain"
     offset: int               # byte offset within the packet
     values: List[float]       # normalised to 1.0
     radii: List[float]        # normalised radius per value (0 == centre)
     raw: List[int] = field(repr=False, default_factory=list)
+    knots: List[int] = field(repr=False, default_factory=list)
 
 
 def _runs(vals: List[int], ok) -> Iterator[Tuple[int, List[int]]]:
@@ -236,7 +244,8 @@ def _scan_curves(blob: bytes) -> List[Curve]:
     Canon does not document this block and its field offsets move between
     bodies, so the curves are found by shape instead:
 
-      * a knot table is a rising run of radii that ends at or past 4095,
+      * a knot table is a rising run of radii, spaced from near zero out to
+        the frame corner (the value it ends at differs per body),
       * a falloff (peripheral illumination) curve starts at 8191 and decays,
       * a geometry/gain curve starts at 16384 and stays near it.
 
@@ -245,7 +254,13 @@ def _scan_curves(blob: bytes) -> List[Curve]:
     v = _ints(blob)
     knots: List[Tuple[int, List[int]]] = []
     for i, run in _runs(v, lambda x: 0 < x < 8000):
-        if len(run) >= 6 and run[-1] >= 3000 and all(b > a for a, b in zip(run, run[1:])):
+        if (
+            len(run) >= 8
+            and all(b > a for a, b in zip(run, run[1:]))
+            # A radius ramp starts near the centre and runs out to the corner,
+            # which is what separates it from any other rising run of numbers.
+            and run[0] * 3 < run[-1]
+        ):
             knots.append((i, run))
 
     curves: List[Curve] = []
@@ -269,9 +284,11 @@ def _scan_curves(blob: bytes) -> List[Curve]:
                 best = (d, krun)
         if best:
             krun = best[1]
-            rad = [0.0] + [k / KNOT_FULL_SCALE for k in krun] \
-                if len(krun) == len(c.values) - 1 else [k / KNOT_FULL_SCALE for k in krun]
+            scale = float(krun[-1])
+            rad = [0.0] + [k / scale for k in krun] \
+                if len(krun) == len(c.values) - 1 else [k / scale for k in krun]
             c.radii = rad[:len(c.values)]
+            c.knots = list(krun)
     return curves
 
 
