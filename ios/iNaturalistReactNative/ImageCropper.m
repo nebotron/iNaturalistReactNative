@@ -1,4 +1,5 @@
 #import <AVFoundation/AVFoundation.h>
+#import <os/proc.h>
 #import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
 #import <Photos/Photos.h>
@@ -1444,6 +1445,18 @@ RCT_EXPORT_METHOD( adjustImageBrightness
   resolve( output );
 }
 
+
+// How much more memory iOS will let this process allocate before it kills it.
+// A run that dies with the app in the foreground, mid-native-call, is usually
+// one iOS killed for memory — and nothing in the log could say so: the Aug 20
+// offload died at "saving 13/29" two seconds after its last progress, with the
+// app active, and left no other trace.
+RCT_EXPORT_METHOD( availableMemoryBytes
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  resolve( @( (double)os_proc_available_memory( ) ) );
+}
 
 // ─── Lateral chromatic aberration ────────────────────────────────────────────
 //

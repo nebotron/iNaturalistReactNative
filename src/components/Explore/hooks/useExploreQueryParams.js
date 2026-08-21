@@ -1,10 +1,9 @@
 // @flow
 
+import mapParamsToAPI from "components/Explore/helpers/mapParamsToAPI";
 import { useMemo } from "react";
 import Taxon from "realmModels/Taxon";
 import { readUserObservationsCache } from "sharedHelpers/userObservationsCache";
-
-import mapParamsToAPI from "../helpers/mapParamsToAPI";
 
 // The API's unobserved_by_user_id filter only excludes taxa the user has
 // observed at that exact rank, so a subspecies whose parent species the user

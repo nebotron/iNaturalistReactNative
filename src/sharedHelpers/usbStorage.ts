@@ -171,6 +171,9 @@ export interface UsbOffloadMarker {
   // AppState at the last update. A wedged native call leaves the app active;
   // iOS freezing the JS thread only happens in the background.
   appState?: string;
+  // Headroom iOS was still allowing when the marker was last written. A run
+  // that vanishes with the app active is usually one iOS killed for memory.
+  availableMemoryMb?: number;
 }
 
 export const markUsbOffloadStarted = ( total: number ) => {
@@ -189,6 +192,7 @@ export const updateUsbOffloadProgress = (
   failed: number,
   phase?: string,
   appState?: string,
+  availableMemoryMb?: number,
 ) => {
   const raw = store.getString( OFFLOAD_IN_PROGRESS_KEY );
   if ( !raw ) return;
@@ -203,7 +207,27 @@ export const updateUsbOffloadProgress = (
     ...( appState
       ? { appState }
       : {} ),
+    ...( availableMemoryMb !== undefined
+      ? { availableMemoryMb }
+      : {} ),
   } ) );
+};
+
+// Read from the native side and cached, so the offload loop can stamp the
+// marker without waiting on a bridge round trip per file.
+let lastAvailableMemoryMb: number | undefined;
+
+export const availableMemoryMb = ( ): number | undefined => lastAvailableMemoryMb;
+
+export const refreshAvailableMemory = ( ): void => {
+  const imageCropper = ( NativeModules as {
+    ImageCropper?: { availableMemoryBytes?: ( ) => Promise<number> };
+  } ).ImageCropper;
+  imageCropper?.availableMemoryBytes?.( )
+    .then( bytes => {
+      lastAvailableMemoryMb = Math.round( bytes / 1e6 );
+    } )
+    .catch( ( ) => undefined );
 };
 
 export const clearUsbOffloadMarker = ( ) => store.delete( OFFLOAD_IN_PROGRESS_KEY );

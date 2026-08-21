@@ -12,6 +12,8 @@ const mockTakeUnfinishedUsbOffload = jest.fn( ( ) => null );
 const mockUpdateUsbOffloadProgress = jest.fn( );
 
 jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
+  availableMemoryMb: ( ) => 512,
+  refreshAvailableMemory: ( ) => undefined,
   clearUsbOffloadMarker: ( ) => mockClearUsbOffloadMarker( ),
   deleteUsbSourceImages: ( ...args ) => mockDeleteUsbSourceImages( ...args ),
   getUsbFolderDiagnostics: async ( ) => ( { bookmarkPresent: true } ),
@@ -128,6 +130,7 @@ describe( "useUsbAutoImport", ( ) => {
       lastProgressAt: Date.now( ) - 30_000,
       phase: "saving 13/80",
       appState: "background",
+      availableMemoryMb: 96,
     } );
     mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
 
@@ -145,6 +148,7 @@ describe( "useUsbAutoImport", ( ) => {
         msSinceProgress: 30_000,
         phase: "saving 13/80",
         appStateAtLastProgress: "background",
+        availableMemoryMbAtLastProgress: 96,
       } ),
     );
     // The run that did finish clears its own marker rather than leaving one

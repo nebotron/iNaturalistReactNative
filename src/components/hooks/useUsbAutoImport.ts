@@ -9,6 +9,7 @@ import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import {
+  availableMemoryMb,
   clearUsbOffloadMarker,
   deleteUsbSourceImages,
   getUsbFolderDiagnostics,
@@ -17,6 +18,7 @@ import {
   listNewUsbImages,
   markUsbImagesImported,
   markUsbOffloadStarted,
+  refreshAvailableMemory,
   requestUsbPhotosPermission,
   saveUsbImageToPhotos,
   takeUnfinishedUsbOffload,
@@ -143,6 +145,9 @@ const useUsbAutoImport = ( ) => {
           : -1,
         phase: unfinished.phase ?? "unknown",
         appStateAtLastProgress: unfinished.appState ?? "unknown",
+        // Headroom left when it stopped: an offload that dies with the app
+        // active and a few MB to spare was killed for memory, not wedged.
+        availableMemoryMbAtLastProgress: unfinished.availableMemoryMb ?? -1,
       } );
     }
     try {
@@ -195,11 +200,15 @@ const useUsbAutoImport = ( ) => {
         // that hung on its own.
         const position = `${i + 1}/${images.length}`;
         const failedBeforeThisFile = failed;
+        // Sampled per file rather than awaited: the value only has to be
+        // recent, and the marker is read after the fact.
+        refreshAvailableMemory( );
         updateUsbOffloadProgress(
           savedPaths.length,
           failedBeforeThisFile,
           `queued ${position}`,
           AppState.currentState,
+          availableMemoryMb( ),
         );
         try {
           // On the shared Photos-library write chain, like every other native
@@ -218,6 +227,7 @@ const useUsbAutoImport = ( ) => {
               failedBeforeThisFile,
               `saving ${position}`,
               AppState.currentState,
+              availableMemoryMb( ),
             );
             return withTimeout( saveUsbImageToPhotos( relativePath ), SAVE_TIMEOUT_MS );
           } ), QUEUED_SAVE_TIMEOUT_MS );
