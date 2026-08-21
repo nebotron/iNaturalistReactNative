@@ -1,5 +1,6 @@
 #import <AVFoundation/AVFoundation.h>
 #import <os/proc.h>
+#import <CoreImage/CoreImage.h>
 #import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
 #import <Photos/Photos.h>
@@ -1456,6 +1457,104 @@ RCT_EXPORT_METHOD( availableMemoryBytes
                   : ( RCTPromiseRejectBlock )reject )
 {
   resolve( @( (double)os_proc_available_memory( ) ) );
+}
+
+// Decodes a camera raw through Core Image's RAW pipeline and writes it as a
+// JPEG, scaled to fit maxPixel.
+//
+// This is a different decoder from the one everything else here uses. ImageIO
+// cannot demosaic a CR3: CGImageSourceCreateImageAtIndex returns NULL and the
+// thumbnail path hands back the full-size JPEG preview the camera embedded —
+// the camera's own rendering, with the camera's own corrections already in it.
+// Core Image's RAW pipeline demosaics the sensor data instead, which is the
+// only way the app ever sees what the sensor actually recorded.
+//
+// Resolves { decoded: NO, reason } rather than rejecting when this build of
+// iOS has no decoder for the file, so the caller can fall back to the old path
+// instead of failing an import.
+RCT_EXPORT_METHOD( decodeRawToJpeg
+                  : ( NSString * )inputPath maxPixel
+                  : ( nonnull NSNumber * )maxPixel outputPath
+                  : ( NSString * )outputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  NSString       *input   = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSString       *output  = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+  NSTimeInterval  started = [NSDate timeIntervalSinceReferenceDate];
+  NSURL          *url     = [NSURL fileURLWithPath:input];
+
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+  // The dictionary form rather than the iOS 15 CIRAWFilter class, so this
+  // builds against the SDKs the project already targets. Vendor lens
+  // correction is left at its default: where Apple has Canon's data for the
+  // lens it applies it, and the chromatic aberration measurement downstream
+  // reports what is left either way.
+  CIFilter *rawFilter = [CIFilter filterWithImageURL:url options:@{}];
+#pragma clang diagnostic pop
+
+  if ( !rawFilter ) {
+    resolve( @{ @"decoded": @NO, @"reason": @"no raw decoder for this file" } );
+    return;
+  }
+  CIImage *decoded = rawFilter.outputImage;
+  if ( !decoded || CGRectIsEmpty( decoded.extent ) || CGRectIsInfinite( decoded.extent ) ) {
+    resolve( @{ @"decoded": @NO, @"reason": @"raw decoder produced no image" } );
+    return;
+  }
+
+  // Scaled before rendering, so the render never materializes the whole
+  // 32-megapixel frame.
+  CGRect  extent = decoded.extent;
+  CGFloat longest = MAX( extent.size.width, extent.size.height );
+  CGFloat scale = ( longest > [maxPixel floatValue] && longest > 0 )
+    ? [maxPixel floatValue] / longest
+    : 1.0;
+  if ( scale < 1.0 ) {
+    decoded = [decoded imageByApplyingTransform:CGAffineTransformMakeScale( scale, scale )];
+    extent = decoded.extent;
+  }
+
+  CIContext  *context = [CIContext contextWithOptions:nil];
+  CGImageRef  cg      = [context createCGImage:decoded fromRect:extent];
+  if ( !cg ) {
+    resolve( @{ @"decoded": @NO, @"reason": @"raw render produced no image" } );
+    return;
+  }
+
+  // The photo keeps the metadata the raw carried: the pixels come from the
+  // sensor, everything else from the file.
+  CGImageSourceRef src     = CGImageSourceCreateWithURL( (__bridge CFURLRef)url, nil );
+  NSDictionary    *srcMeta = nil;
+  if ( src ) {
+    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+    CFRelease( src );
+  }
+  NSInteger width  = (NSInteger)round( extent.size.width );
+  NSInteger height = (NSInteger)round( extent.size.height );
+  NSData   *data   = jpegDataFromCroppedImage( cg, srcMeta, width, height );
+  CGImageRelease( cg );
+  if ( !data ) {
+    resolve( @{ @"decoded": @NO, @"reason": @"could not encode the decoded raw" } );
+    return;
+  }
+
+  [[NSFileManager defaultManager]
+    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+  if ( ![data writeToFile:output atomically:YES] ) {
+    reject( @"RAW_DECODE_FAILED", @"Could not write the decoded raw", nil );
+    return;
+  }
+
+  resolve( @{
+    @"decoded":    @YES,
+    @"outputPath": output,
+    @"width":      @( width ),
+    @"height":     @( height ),
+    @"ms":         @( (int)round( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
+  } );
 }
 
 // ─── Lateral chromatic aberration ────────────────────────────────────────────

@@ -2,8 +2,9 @@ import { copyAssetsFileIOS, mkdir, stat } from "@dr.pogodin/react-native-fs";
 import { Realm } from "@realm/react";
 import type { ApiPhoto } from "api/types";
 import { photoUploadPath } from "appConstants/paths";
-import { Platform } from "react-native";
+import { NativeModules, Platform } from "react-native";
 import type { RealmPhoto } from "realmModels/types";
+import { isCanonRawUri } from "sharedHelpers/cr3Metadata";
 import type { GroupedPhotoCropMetadata } from "sharedHelpers/cropPhotoMetadata";
 import {
   cropOriginalPathFromUri,
@@ -22,6 +23,17 @@ const logger = log.extend( "Photo" );
 // The largest dimension we allow for uploaded photos. Kept well under the
 // API's payload limit so POST /v2/photos doesn't reject uploads with HTTP 413.
 const UPLOAD_MAX_DIMENSION = 2048;
+
+// One line per outcome per session: whether iOS can decode this camera's raws
+// decides what every imported photo is made of, and it does not change from
+// one photo to the next.
+const reportedRawDecodes = new Set<string>( );
+const reportRawDecode = ( outcome: string ) => {
+  const kind = outcome.split( ":" )[0].split( " " )[0];
+  if ( reportedRawDecodes.has( kind ) ) return;
+  reportedRawDecodes.add( kind );
+  logger.info( `raw decode ${outcome}` );
+};
 
 // Photos whose upload file is larger than this get re-resized before upload.
 // Normal resized uploads are a couple of MB; anything much larger is a
@@ -46,6 +58,45 @@ class Photo extends Realm.Object {
     return localPhoto;
   }
 
+  // A camera raw decoded through Core Image rather than resized through
+  // ImageIO. ImageIO cannot demosaic a CR3 — it hands back the JPEG preview the
+  // camera embedded, already rendered and already corrected by the camera — so
+  // an import that went that way never saw the sensor data at all. Returns null
+  // when this build of iOS has no decoder for the file, and the caller falls
+  // back to the resizer.
+  static async decodeRawForUpload( pathOrUri: string ): Promise<string | null> {
+    const imageCropper = ( NativeModules as {
+      ImageCropper?: {
+        decodeRawToJpeg: (
+          inputPath: string,
+          maxPixel: number,
+          outputPath: string,
+        ) => Promise<{ decoded: boolean; outputPath?: string; reason?: string;
+          width?: number; height?: number; ms?: number; }>;
+      };
+    } ).ImageCropper;
+    if ( Platform.OS !== "ios" || !imageCropper?.decodeRawToJpeg ) return null;
+
+    const path = pathOrUri.replace( /^file:\/\//, "" );
+    const name = path.split( "/" ).pop( ) ?? "photo";
+    const outPath = `${photoUploadPath}/${name.replace( /\.[^.]+$/, "" )}.jpg`;
+    try {
+      const result = await imageCropper.decodeRawToJpeg(
+        path,
+        UPLOAD_MAX_DIMENSION,
+        outPath,
+      );
+      if ( result?.decoded && result.outputPath ) {
+        reportRawDecode( `decoded ${result.width}x${result.height} in ${result.ms}ms` );
+        return `file://${result.outputPath}`;
+      }
+      reportRawDecode( `unavailable: ${result?.reason ?? "unknown"}` );
+    } catch ( error ) {
+      reportRawDecode( `failed: ${error}` );
+    }
+    return null;
+  }
+
   static async resizeImageForUpload( pathOrUri: string ): Promise<string> {
     // Cap the largest dimension so uploads stay well under the API's payload
     // limit. Uploading full-resolution originals made /v2/photos reject the
@@ -63,6 +114,13 @@ class Photo extends Realm.Object {
         : pathOrUri.split( "/" ).slice( -1 ).pop( );
       const outPath = `${photoUploadPath}/${outFilename}`;
       return copyAssetsFileIOS( pathOrUri, outPath, width, width );
+    }
+
+    // A raw goes through Core Image first: the resizer below would only ever
+    // see the camera's embedded preview.
+    if ( isCanonRawUri( pathOrUri ) ) {
+      const decoded = await Photo.decodeRawForUpload( pathOrUri );
+      if ( decoded ) return decoded;
     }
 
     // Work around path / uri bug: https://github.com/bamlab/react-native-image-resizer/issues/328
