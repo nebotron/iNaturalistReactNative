@@ -8,6 +8,11 @@ const mockNavigate = jest.fn( );
 const mockDispatch = jest.fn( );
 const mockSaveAndAdvance = jest.fn( async ( ) => true );
 
+let mockRouteParams = {
+  entryScreen: "ObsEdit",
+  lastScreen: "ObsEdit",
+};
+
 jest.mock( "@react-navigation/native", ( ) => ( {
   ...jest.requireActual( "@react-navigation/native" ),
   useNavigation: ( ) => ( {
@@ -15,10 +20,7 @@ jest.mock( "@react-navigation/native", ( ) => ( {
     dispatch: mockDispatch,
   } ),
   useRoute: ( ) => ( {
-    params: {
-      entryScreen: "ObsEdit",
-      lastScreen: "ObsEdit",
-    },
+    params: mockRouteParams,
   } ),
 } ) );
 
@@ -37,6 +39,10 @@ describe( "useNavigateWithTaxonSelected", ( ) => {
 
   beforeEach( ( ) => {
     jest.clearAllMocks( );
+    mockRouteParams = {
+      entryScreen: "ObsEdit",
+      lastScreen: "ObsEdit",
+    };
     useStore.getState( ).resetObservationFlowSlice( );
     useStore.setState( {
       observations: [observation, factory( "LocalObservation", { uuid: "obs-2" } )],
@@ -74,5 +80,37 @@ describe( "useNavigateWithTaxonSelected", ( ) => {
     } );
     expect( mockNavigate ).not.toHaveBeenCalled( );
     expect( mockDispatch ).not.toHaveBeenCalled( );
+  } );
+
+  it( "stays in the bulk ID flow when Suggestions has lost its params", async ( ) => {
+    // Popping back to Suggestions from TaxonDetails replaces that screen's
+    // params, so by the next observation there is no entryScreen or
+    // lastScreen left to identify the flow by. Choosing a taxon should still
+    // save and advance rather than open ObsEdit, which this stack has no
+    // screen for.
+    mockRouteParams = undefined;
+    useStore.setState( { bulkUploadMode: true } );
+    const taxon = factory( "RemoteTaxon", { id: 123, rank_level: 10 } );
+    const { result } = renderHook( () => useNavigateWithTaxonSelected( { vision: true } ) );
+
+    await result.current( taxon );
+
+    await waitFor( ( ) => {
+      expect( mockSaveAndAdvance ).toHaveBeenCalledWith( "upload" );
+    } );
+    expect( mockNavigate ).not.toHaveBeenCalledWith( "ObsEdit" );
+  } );
+
+  it( "returns to ObsDetails when suggesting an ID there after a bulk flow", async ( ) => {
+    mockRouteParams = { entryScreen: "ObsDetails", lastScreen: "ObsDetails" };
+    useStore.setState( { bulkUploadMode: true } );
+    const taxon = factory( "RemoteTaxon", { id: 123, rank_level: 10 } );
+    const { result } = renderHook( () => useNavigateWithTaxonSelected( { vision: false } ) );
+
+    await result.current( taxon );
+
+    expect( mockSaveAndAdvance ).not.toHaveBeenCalled( );
+    expect( mockDispatch ).toHaveBeenCalled( );
+    expect( mockDispatch.mock.calls[0][0]?.payload?.name ).toEqual( "ObsDetails" );
   } );
 } );

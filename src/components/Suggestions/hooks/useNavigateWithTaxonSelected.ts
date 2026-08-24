@@ -31,12 +31,20 @@ const useNavigateWithTaxonSelected = (
 
   // bulkUploadMode means the user entered the bulk ID flow from My
   // Observations, which is a multi-obs flow even when only one observation
-  // needs an ID. Without it, a one-observation bulk ID would fall through to
-  // the single-obs branches below and dump the user in ObsEdit instead of
-  // saving/uploading and returning to My Observations.
-  const isMultiObsCreateFlow = (
-    observations.length > 1 || savedOrUploadedMultiObsFlow || bulkUploadMode
-  ) && entryScreen === "ObsEdit" && lastScreen === "ObsEdit";
+  // needs an ID. That flow can't be recognized by route params, because
+  // popping back to Suggestions from TaxonDetails replaces them, so after the
+  // first ID made from a taxon's detail screen there'd be no entryScreen or
+  // lastScreen left and the next ID would land in ObsEdit -- a screen this
+  // stack doesn't even contain, since the flow starts at Suggestions.
+  // Suggesting an ID from ObsDetails is never this flow, even if an
+  // abandoned bulk flow left the flag set.
+  const isBulkIdFlow = bulkUploadMode
+    && entryScreen !== "ObsDetails"
+    && lastScreen !== "ObsDetails";
+  const isMultiObsCreateFlow = isBulkIdFlow || (
+    ( observations.length > 1 || savedOrUploadedMultiObsFlow )
+    && entryScreen === "ObsEdit" && lastScreen === "ObsEdit"
+  );
 
   const { saveAndAdvance } = useMultiObsSaveAndAdvance( {
     transitionAnimation: ( ) => undefined,

@@ -119,7 +119,35 @@ describe( "TaxonDetails SELECT in bulk ID flow", ( ) => {
     expect( await pressSelectAndGetPopToTarget( ) ).toEqual( "Suggestions" );
   } );
 
+  it( "keeps the Suggestions params so the next observation stays in the flow", async ( ) => {
+    // popTo replaces the target screen's params unless they're merged, and
+    // without entryScreen/lastScreen the *next* ID would be treated as a
+    // single-observation edit and open ObsEdit.
+    useNavigationState.mockImplementation( ( ) => ( {
+      routes: [
+        { name: "ObsList" },
+        { name: "Suggestions", params: { entryScreen: "ObsEdit", lastScreen: "ObsEdit" } },
+        { name: "TaxonDetails", params: { id: mockTaxon.id } },
+      ],
+    } ) );
+    await pressSelectAndGetPopToTarget( );
+    expect( mockDispatch.mock.calls[0][0]?.payload?.merge ).toBe( true );
+  } );
+
+  it( "returns to Suggestions after that screen has lost its params", async ( ) => {
+    useNavigationState.mockImplementation( ( ) => ( {
+      routes: [
+        { name: "ObsList" },
+        { name: "Suggestions" },
+        { name: "TaxonDetails", params: { id: mockTaxon.id } },
+      ],
+    } ) );
+    expect( await pressSelectAndGetPopToTarget( ) ).toEqual( "Suggestions" );
+  } );
+
   it( "still returns to ObsEdit in the regular multi-obs create flow", async ( ) => {
+    // Not the bulk ID flow: these observations were just created in the camera
+    useStore.setState( { bulkUploadMode: false } );
     // Stack includes an ObsEdit screen (obs created then edited)
     useNavigationState.mockImplementation( ( ) => ( {
       routes: [

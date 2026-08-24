@@ -170,12 +170,19 @@ const TaxonDetails = ( ): Node => {
   const { entryScreen: bulkEntryScreen, lastScreen: bulkLastScreen } = bulkFlowRoute?.params || {};
   // bulkUploadMode means the user entered the bulk ID flow from My
   // Observations, which is a multi-obs flow even when only one observation
-  // needs an ID. Without it, a one-observation bulk ID would fall through to
-  // the single-obs branch below and pop to ObsEdit instead of saving/uploading
-  // and returning to My Observations.
-  const isMultiObsCreateFlow = (
-    observations.length > 1 || savedOrUploadedMultiObsFlow || bulkUploadMode
-  ) && bulkEntryScreen === "ObsEdit" && bulkLastScreen === "ObsEdit";
+  // needs an ID. That flow can't be recognized by the Suggestions route's
+  // params, because popping back to it replaces them, so after the first ID
+  // made from here there'd be nothing left to recognize it by and the next ID
+  // would pop to ObsEdit -- a screen this stack doesn't even contain, since
+  // the flow starts at Suggestions. Suggesting an ID from ObsDetails is never
+  // this flow, even if an abandoned bulk flow left the flag set.
+  const isBulkIdFlow = bulkUploadMode
+    && bulkEntryScreen !== "ObsDetails"
+    && bulkLastScreen !== "ObsDetails";
+  const isMultiObsCreateFlow = isBulkIdFlow || (
+    ( observations.length > 1 || savedOrUploadedMultiObsFlow )
+    && bulkEntryScreen === "ObsEdit" && bulkLastScreen === "ObsEdit"
+  );
   const { saveAndAdvance } = useMultiObsSaveAndAdvance( {
     transitionAnimation: ( ) => undefined,
   } );
@@ -626,13 +633,13 @@ const TaxonDetails = ( ): Node => {
                     // pop back to; popping to ObsEdit would drop them into the
                     // editor instead of advancing. Return to Suggestions (now
                     // showing the next observation), matching what choosing a
-                    // suggestion directly does. The regular multi-obs create
-                    // flow still returns to ObsEdit.
-                    navigation.dispatch( StackActions.popTo(
-                      fromObsEdit
-                        ? "ObsEdit"
-                        : "Suggestions",
-                    ) );
+                    // suggestion directly does, and merge so that screen keeps
+                    // the params identifying the flow -- popTo replaces them
+                    // otherwise, and the next ID would leave the flow. The
+                    // regular multi-obs create flow still returns to ObsEdit.
+                    navigation.dispatch( fromObsEdit && !isBulkIdFlow
+                      ? StackActions.popTo( "ObsEdit" )
+                      : StackActions.popTo( "Suggestions", undefined, { merge: true } ) );
                   }
                 } else {
                   navigation.dispatch( StackActions.popTo( "ObsEdit" ) );
