@@ -445,11 +445,19 @@ const GroupPhotosContainer = ( ): Node => {
     // Totalled across batches so the import reports one line, not one per ten
     // photos.
     const chromaticAberration = {
-      corrected: 0, skipped: 0, failed: 0, measured: 0, fromProfile: 0, maxShiftPx: 0, ms: 0,
+      corrected: 0,
+      skipped: 0,
+      failed: 0,
+      measured: 0,
+      fromProfile: 0,
+      maxShiftPx: 0,
+      ms: 0,
+      // The shape of the first thing measured, so the log says what the photo
+      // actually held rather than leaving it to be inferred. Declared here
+      // rather than assigned afterwards: Flow types the literal, so a property
+      // added later isn't one it will let anything read.
+      firstProfile: "",
     };
-    // The shape of the first thing measured, so the log says what the photo
-    // actually held rather than leaving it to be inferred.
-    chromaticAberration.firstProfile = "";
     // One Photos-library transaction (and so one iOS consent alert) for the
     // whole import, however many batches its location writes arrive in.
     beginLocationWriteBatch( );
