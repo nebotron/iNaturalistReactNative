@@ -38,8 +38,6 @@ const { ImageCropper } = NativeModules as {
       appCreatedMs?: number;
       prompted?: number;
       promptedDeleted?: number;
-      promptedChunks?: number;
-      promptedMaxChunk?: number;
       promptedMs?: number;
     }>;
   };
@@ -160,38 +158,18 @@ export const enqueuePhotoLibraryWrite = <T, >(
 // waiting without either calling it a failure or letting go of the native call.
 const UI_WAIT_MS = 15_000;
 
-// Mirrors kInatPromptedDeleteChunkSize / kInatPromptedDeleteChunkStep in
-// ImageCropper.m, where the prompted half goes out in chunks of 15, 20, 25 and
-// so on. Only used to size the diagnostic below, so the two drifting apart costs
-// nothing but a slightly mistimed log line.
-const PROMPTED_DELETE_CHUNK_SIZE = 15;
-const PROMPTED_DELETE_CHUNK_STEP = 5;
-
-// How many transactions the ramp needs to cover this many prompted assets.
-const promptedTransactionCount = ( prompted: number ) => {
-  let remaining = prompted;
-  let size = PROMPTED_DELETE_CHUNK_SIZE;
-  let count = 0;
-  while ( remaining > 0 ) {
-    remaining -= size;
-    size += PROMPTED_DELETE_CHUNK_STEP;
-    count += 1;
-  }
-  return count;
-};
-
 // A PhotoKit transaction costs ~1.6s whatever it holds: 3 assets took 1752ms,
-// 19 took 1442ms, 275 consent-free ones took 1691ms. So a chunked walk's honest
-// duration scales with the number of transactions, not the photo count — and a
-// flat 5s budget reported the first working cleanup (37 photos, 3 chunks,
-// 5005ms) as a hang 4ms before it finished. Allow for the walk, then report.
-const CHUNK_MS_ALLOWANCE = 1800;
+// 19 took 1442ms, 275 consent-free ones took 1691ms. A deletion now issues at
+// most one transaction per half of the split, so its honest duration is that
+// cost per half however many photos each one carries.
+const TRANSACTION_MS_ALLOWANCE = 1800;
 
 // The pending-delete diagnostic has to land while the delete is still in
-// flight, so it stays inside the wait above however many chunks are expected.
+// flight, so it stays inside the wait above however many transactions the
+// split needs.
 const hangReportMs = ( transactions: number ) => Math.min(
   UI_WAIT_MS - 2000,
-  3000 + CHUNK_MS_ALLOWANCE * transactions,
+  3000 + TRANSACTION_MS_ALLOWANCE * transactions,
 );
 
 // Returned by the race below when the OS hasn't answered inside UI_WAIT_MS.
@@ -259,13 +237,15 @@ const performDeleteOriginalDevicePhotos = async (
     ? ourUris
     : [];
 
-  // How many PhotoKit transactions this deletion should take: one per chunk of
-  // the prompted half, plus one for the consent-free half if there is one. It
-  // sizes the pending diagnostic, and a hang report carrying it says how much of
-  // the walk was still to come.
+  // How many PhotoKit transactions this deletion should take: one for the
+  // prompted half, plus one for the consent-free half if there is one. It sizes
+  // the pending diagnostic, and a hang report carrying it says which halves
+  // were expected.
   const expectedTransactions = Math.max(
     1,
-    promptedTransactionCount( requested - appCreatedUris.length )
+    ( requested > appCreatedUris.length
+      ? 1
+      : 0 )
       + ( appCreatedUris.length > 0
         ? 1
         : 0 ),
@@ -423,26 +403,20 @@ const performDeleteOriginalDevicePhotos = async (
       `Deleted ${deleted ?? requested} of ${requested} `
       + `device photo(s); result=${JSON.stringify( result )}`,
     );
-    // What the chunked prompted walk did. promptedChunks is how many
-    // transactions came back, so promptedDeleted < prompted says which chunk
-    // stopped it — and promptedMs/promptedChunks says whether a human is
-    // answering a confirmation per chunk (~1.5s each means nobody is).
-    const promptedWalk = result as {
+    // What the single prompted transaction did. It carries every photo that
+    // needs the user's consent, so promptedDeleted is either all of them or
+    // none, and promptedMs is how long that one transaction took — well above
+    // the ~1.6s a transaction costs means a human answered a confirmation.
+    const promptedDelete = result as {
       prompted?: number;
       promptedDeleted?: number;
-      promptedChunks?: number;
-      promptedMaxChunk?: number;
       promptedMs?: number;
     } | undefined;
-    if ( ( promptedWalk?.prompted ?? 0 ) > 0 ) {
+    if ( ( promptedDelete?.prompted ?? 0 ) > 0 ) {
       logger.infoWithExtra( "photo_delete_prompted", {
-        prompted: promptedWalk?.prompted,
-        promptedDeleted: promptedWalk?.promptedDeleted,
-        promptedChunks: promptedWalk?.promptedChunks,
-        // The largest chunk the ramp got an answer for. This is the number the
-        // chunk size is tuned against: it rises run over run until it stops.
-        promptedMaxChunk: promptedWalk?.promptedMaxChunk,
-        promptedMs: promptedWalk?.promptedMs,
+        prompted: promptedDelete?.prompted,
+        promptedDeleted: promptedDelete?.promptedDeleted,
+        promptedMs: promptedDelete?.promptedMs,
       } );
     }
     // How long the unprompted half took is the measurement this whole split

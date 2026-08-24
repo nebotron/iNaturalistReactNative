@@ -55,12 +55,11 @@ static const NSTimeInterval kInatPendingDeleteWatchdogSeconds = 150;
 // Developer Forums 806349), and the transaction it opened stays open in
 // photolibraryd afterwards — the watchdog above only gives up waiting for it,
 // it cannot cancel it. The Aug 9 app log shows what happens next: a 47-asset
-// deletion whose first chunk never called back, the watchdog rejecting it at
-// 150s, and a new deletion issued 13ms later that photoDeletionContext caught
-// stacking on the still-running walk (walk=active chunkMs=150649). That one
-// hung too, and so did a *one*-asset deletion two launches later — which also
-// retires the chunk-size theory these constants were tuned on: once the library
-// stops answering, transaction size stops mattering.
+// deletion that never called back, the watchdog rejecting it at 150s, and a
+// new deletion issued 13ms later that photoDeletionContext caught stacking on
+// the still-running one (still outstanding at 150649ms). That one hung too,
+// and so did a *one*-asset deletion two launches later: once the library stops
+// answering, transaction size stops mattering.
 //
 // So a write issued while the library is silent buys nothing and costs the user
 // 150s of waiting, on top of stacking transactions on a wedged photolibraryd —
@@ -131,30 +130,17 @@ static NSString *inatOutstandingPhotoWrite( void )
   }
 }
 
-// How many assets we didn't create go into the *first* prompted transaction,
-// and how much bigger each one after it gets.
+// The assets we didn't create go out in a single prompted transaction.
 //
-// A transaction costs ~1.6s whatever it holds, so the fewer of them the better,
-// and the only thing stopping us using one big one is that somewhere above 19
-// they stop coming back. Ramping finds that edge while getting work done: every
-// chunk that returns is both photos deleted and a size proved to work, and the
-// walk stops at the first that doesn't with everything before it already gone.
-// Chunk sizes below have never failed at 15 or 19; 37 and up never succeed, and
-// nothing in between has been tried.
-//
-// The app log separates cleanly on exactly this number, with no exception in
-// eleven attempts: every prompted transaction of 3, 11 or 19 assets called its
-// completion handler in 1.3-1.8s, and every one of 44, 45, 55, 112, 277, 278
-// or 283 never called it at all. Total batch size is not what does it — the
-// Aug 6 deletion of 278 assets came back in 1.7s because 275 of them were ours
-// and only 3 needed a prompt — and neither is a wedged library, because the
-// Aug 7 attempt at 278 prompted assets hung 1.6s after a consent-free probe
-// write had just proved the library was answering. It is the size of the
-// prompted transaction itself.
-//
-// So start under the line and issue them in sequence, growing as they land.
-static const NSUInteger kInatPromptedDeleteChunkSize = 15;
-static const NSUInteger kInatPromptedDeleteChunkStep = 5;
+// They used to be chunked, ramping 15, 20, 25… on the theory that a prompted
+// transaction above ~19 assets never calls its completion handler. The write
+// gate above retires that theory: once the library stops answering, a
+// one-asset deletion hangs as readily as a 283-asset one, so the size of the
+// transaction is not what does it. The chunking's cost was real, though —
+// PhotoKit presents its confirmation once per transaction, so a few hundred
+// photos meant the user confirming the same cleanup nine times, at ~1.6s a
+// transaction. One transaction is one confirmation and one such wait however
+// many photos it carries.
 
 @implementation ImageCropper {
   // Tracks the single in-flight deletePhotoAssets call (JS serializes calls
@@ -167,17 +153,13 @@ static const NSUInteger kInatPromptedDeleteChunkStep = 5;
   // Bumped per deletion so a watchdog can tell its own call from the one that
   // replaced it.
   NSUInteger _pendingDeleteGeneration;
-  // How far the chunked prompted walk has got. A hang only ever reported that
-  // the whole deletion hadn't come back, which cannot say whether the walk is
-  // even in the running build, let alone which chunk stalled — and that is the
-  // one question the chunk-size theory turns on. photoDeletionContext reports
-  // these, so the hang diagnostic that already fires 5s in carries them.
-  BOOL _promptedWalkActive;
-  NSUInteger _promptedWalkChunkSize;
-  NSUInteger _promptedWalkTotal;
-  NSUInteger _promptedWalkDeleted;
-  NSUInteger _promptedWalkChunks;
-  NSDate *_promptedWalkChunkStartedAt;
+  // Whether the prompted transaction is still outstanding, and how big it is.
+  // A hang only ever reported that the whole deletion hadn't come back, which
+  // cannot say which half of the split was in flight. photoDeletionContext
+  // reports these, so the hang diagnostic that already fires 5s in carries them.
+  BOOL _promptedDeleteActive;
+  NSUInteger _promptedDeleteCount;
+  NSDate *_promptedDeleteStartedAt;
 }
 
 RCT_EXPORT_MODULE( );
@@ -2393,22 +2375,18 @@ RCT_EXPORT_METHOD( photoDeletionContext
       ? [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil].count
       : 0;
 
-    // "walk=absent" is itself an answer: a hang reporting it is a hang in an
-    // unchunked transaction, so the running build predates the chunking rather
-    // than disproving it. Otherwise chunkMs is how long the stalled chunk has
-    // been outstanding, and deleted/total is how many photos really went before
-    // it — which is what says whether a chunk under the size line can hang too.
-    NSString *walk = self->_promptedWalkActive
+    // Which half of the split the library still owes us. "prompted=idle" on a
+    // hang means the outstanding transaction is the consent-free one (or that
+    // the deletion hasn't got as far as issuing either), and promptedMs is how
+    // long the prompted one has been outstanding.
+    NSString *walk = self->_promptedDeleteActive
       ? [NSString stringWithFormat:
-          @"walk=active chunkSize=%lu deleted=%lu/%lu chunksDone=%lu chunkMs=%.0f",
-          ( unsigned long )self->_promptedWalkChunkSize,
-          ( unsigned long )self->_promptedWalkDeleted,
-          ( unsigned long )self->_promptedWalkTotal,
-          ( unsigned long )self->_promptedWalkChunks,
-          self->_promptedWalkChunkStartedAt
-            ? [[NSDate date] timeIntervalSinceDate:self->_promptedWalkChunkStartedAt] * 1000
+          @"prompted=active count=%lu promptedMs=%.0f",
+          ( unsigned long )self->_promptedDeleteCount,
+          self->_promptedDeleteStartedAt
+            ? [[NSDate date] timeIntervalSinceDate:self->_promptedDeleteStartedAt] * 1000
             : -1]
-      : @"walk=absent";
+      : @"prompted=idle";
 
     NSString *info = [NSString stringWithFormat:
       @"appState=%ld hasWindowScene=%d sceneState=%ld fgActiveScenes=%lu authStatus=%ld "
@@ -2417,7 +2395,7 @@ RCT_EXPORT_METHOD( photoDeletionContext
       hasScene, sceneState, ( unsigned long )foregroundActiveScenes, auth,
       ( unsigned long )UIApplication.sharedApplication.windows.count,
       ( unsigned long )ids.count, ( unsigned long )fetchedCount,
-      // Which transaction the library still owes us, if any. The walk above
+      // Which transaction the library still owes us, if any. The line above
       // only covers deletions; a location write that never came back is the
       // other way in, and nothing reported it.
       walk, inatOutstandingPhotoWriteLabelCopy( ) ?: @"none",
@@ -2639,9 +2617,9 @@ RCT_EXPORT_METHOD( deletePhotoAssets
       _pendingDeleteResolve = nil;
       _pendingDeleteIds = nil;
     }
-    // A walk whose chunk never came back leaves this set; clear it here so a
-    // later hang can't be misread as that walk still being in flight.
-    _promptedWalkActive = NO;
+    // A prompted transaction that never came back leaves this set; clear it
+    // here so a later hang can't be misread as that one still being in flight.
+    _promptedDeleteActive = NO;
     _pendingDeleteIds = [ids copy];
     _pendingDeleteRequestedCount = ids.count;
     _pendingDeleteSettled = NO;
@@ -2688,20 +2666,14 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     // prompted one does. -1 means it never came back.
     __block NSInteger appCreatedMs = -1;
     __block NSUInteger appCreatedDeleted = 0;
-    // The prompted transactions' total duration. The app-created split exists to
-    // put an unprompted deletion beside a prompted one, and timing only half of
-    // it left the comparison to be guessed from the gap between two prose log
-    // lines. -1 means the first chunk never came back.
+    // The prompted transaction's duration. The app-created split exists to put
+    // an unprompted deletion beside a prompted one, and timing only half of it
+    // left the comparison to be guessed from the gap between two prose log
+    // lines. -1 means it never came back.
     __block NSInteger promptedMs = -1;
-    // How much of the prompted half actually went through, and in how many
-    // chunks. A walk that stops early reports a partial deletion rather than
-    // claiming all of it or none of it.
+    // How much of the prompted half actually went through: all of it, or none
+    // of it if its transaction failed.
     __block NSUInteger promptedDeleted = 0;
-    __block NSUInteger promptedChunks = 0;
-    // The largest chunk that came back, which is the measurement the ramp
-    // exists for: it is a lower bound on how big a prompted transaction this
-    // device will actually answer.
-    __block NSUInteger promptedMaxChunk = 0;
 
     void ( ^finish )( BOOL, NSUInteger, NSError * ) =
       ^( BOOL success, NSUInteger deleted, NSError *error ) {
@@ -2719,8 +2691,6 @@ RCT_EXPORT_METHOD( deletePhotoAssets
             @"appCreatedMs": @( appCreatedMs ),
             @"prompted": @( theirAssets.count ),
             @"promptedDeleted": @( promptedDeleted ),
-            @"promptedChunks": @( promptedChunks ),
-            @"promptedMaxChunk": @( promptedMaxChunk ),
             @"promptedMs": @( promptedMs ),
           } );
         } else {
@@ -2738,71 +2708,33 @@ RCT_EXPORT_METHOD( deletePhotoAssets
 
     // The prompted half: everything we didn't create. Runs after the
     // app-created transaction so its confirmation can't sit in front of one
-    // that needs no confirmation at all, and in chunks of
-    // kInatPromptedDeleteChunkSize because a prompted transaction bigger than
-    // that has never once come back.
+    // that needs no confirmation at all, and goes out whole: one transaction,
+    // so the user answers one confirmation for the entire cleanup.
     void ( ^deleteTheirs )( void ) = ^{
       if ( theirAssets.count == 0 ) {
         finish( YES, appCreatedDeleted, nil );
         return;
       }
       NSDate *promptedStartedAt = [NSDate date];
-      self->_promptedWalkActive = YES;
-      self->_promptedWalkChunkSize = kInatPromptedDeleteChunkSize;
-      self->_promptedWalkTotal = theirAssets.count;
-      self->_promptedWalkDeleted = 0;
-      self->_promptedWalkChunks = 0;
-      self->_promptedWalkChunkStartedAt = promptedStartedAt;
-      // Strong and __block so each chunk's completion handler can start the
-      // next. That makes the block own itself, so the walk releases it when it
-      // ends — on the next main-queue hop, never from inside the block that is
-      // still running.
-      __block void ( ^deleteChunkFrom )( NSUInteger ) = nil;
-      void ( ^endWalk )( BOOL, NSError * ) = ^( BOOL success, NSError *error ) {
+      self->_promptedDeleteActive = YES;
+      self->_promptedDeleteCount = theirAssets.count;
+      self->_promptedDeleteStartedAt = promptedStartedAt;
+      NSUInteger writeToken = inatPhotoWriteBegan(
+        [NSString stringWithFormat:@"deleteAssets(%lu)",
+          ( unsigned long )theirAssets.count] );
+      [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+        [PHAssetChangeRequest deleteAssets:theirAssets];
+      } completionHandler:^( BOOL success, NSError *error ) {
+        inatPhotoWriteEnded( writeToken );
         promptedMs =
           ( NSInteger )( [[NSDate date] timeIntervalSinceDate:promptedStartedAt] * 1000 );
-        self->_promptedWalkActive = NO;
-        dispatch_async( dispatch_get_main_queue(), ^{ deleteChunkFrom = nil; } );
+        self->_promptedDeleteActive = NO;
+        // A transaction deletes all of its assets or none of them, so a failure
+        // here leaves the whole prompted half in place — including the user
+        // simply declining the confirmation.
+        if ( success ) { promptedDeleted = theirAssets.count; }
         finish( success, appCreatedDeleted + promptedDeleted, error );
-      };
-      // Grows by kInatPromptedDeleteChunkStep for every chunk that comes back.
-      __block NSUInteger chunkSize = kInatPromptedDeleteChunkSize;
-      deleteChunkFrom = ^( NSUInteger start ) {
-        if ( start >= theirAssets.count ) {
-          endWalk( YES, nil );
-          return;
-        }
-        NSRange range = NSMakeRange( start,
-          MIN( chunkSize, theirAssets.count - start ) );
-        NSArray<PHAsset *> *chunk = [theirAssets subarrayWithRange:range];
-        // The size actually in flight, so a stalled walk names the chunk that
-        // stalled rather than the size the walk started at.
-        self->_promptedWalkChunkSize = range.length;
-        self->_promptedWalkChunkStartedAt = [NSDate date];
-        NSUInteger writeToken = inatPhotoWriteBegan(
-          [NSString stringWithFormat:@"deleteAssets(%lu)",
-            ( unsigned long )range.length] );
-        [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-          [PHAssetChangeRequest deleteAssets:chunk];
-        } completionHandler:^( BOOL success, NSError *error ) {
-          inatPhotoWriteEnded( writeToken );
-          if ( !success ) {
-            // Whatever earlier chunks deleted is really deleted, so report a
-            // partial deletion rather than failing the lot. JS reports the count
-            // the OS gives it, and the rest are still there on the next scan.
-            endWalk( promptedDeleted > 0, error );
-            return;
-          }
-          promptedDeleted += chunk.count;
-          promptedChunks += 1;
-          promptedMaxChunk = MAX( promptedMaxChunk, chunk.count );
-          chunkSize += kInatPromptedDeleteChunkStep;
-          self->_promptedWalkDeleted = promptedDeleted;
-          self->_promptedWalkChunks = promptedChunks;
-          deleteChunkFrom( start + range.length );
-        }];
-      };
-      deleteChunkFrom( 0 );
+      }];
     };
 
     void ( ^doDelete )( void ) = ^{
@@ -2857,7 +2789,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     // strength of a callback that will never arrive would refuse every write
     // for the rest of the session.
     inatPhotoWriteEnded( 0 );
-    self->_promptedWalkActive = NO;
+    self->_promptedDeleteActive = NO;
     RCTPromiseResolveBlock resolve = self->_pendingDeleteResolve;
     self->_pendingDeleteSettled = YES;
     [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];

@@ -167,41 +167,12 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( JSON.stringify( extra ) ).not.toContain( "ph://" );
     } );
 
-    it( "gives a multi-chunk walk time to finish before calling it a hang", async ( ) => {
-      // A PhotoKit transaction costs ~1.6s whatever it holds, so a walk's honest
-      // duration goes with the chunk count. The first cleanup that ever worked
-      // took 5005ms for 37 photos in 3 chunks and the flat 5s budget reported it
-      // as a hang 4ms before it finished.
-      let finishDeletion;
-      mockDeletePhotos.mockImplementation(
-        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
-      );
-      const uris = Array.from( { length: 37 }, ( _unused, i ) => `ph://P${i}` );
-
-      const deletion = deleteOriginalDevicePhotos( uris );
-      await jest.advanceTimersByTimeAsync( 6000 );
-      expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
-        "photo_delete_pending",
-        expect.anything( ),
-      );
-
-      await jest.advanceTimersByTimeAsync( 3000 );
-      expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
-        "photo_delete_pending",
-        // Three chunks of 15, 15 and 7, so the report says how much of the walk
-        // was still outstanding.
-        expect.objectContaining( { requested: 37, expectedTransactions: 3 } ),
-      );
-
-      finishDeletion( { deleted: 37, requested: 37 } );
-      await deletion;
-    } );
-
-    it( "counts the ramp's chunks, and still reports inside the caller's wait", async ( ) => {
-      // Chunks of 15, 20, 25 … cover 300 assets in nine transactions where a
-      // flat 15 would take twenty. Nine transactions' allowance is longer than
-      // the wait the UI gives the whole deletion, so the report has to be capped
-      // below it — a pending marker that never fires diagnoses nothing.
+    it( "reports a whole-library delete on the one-transaction budget", async ( ) => {
+      // Every photo the user has to confirm goes out in a single transaction,
+      // and a transaction costs ~1.6s whatever it holds, so 300 photos are
+      // owed no more time than three. The ramp this budget used to wait for —
+      // chunks of 15, 20, 25 … covering 300 assets in nine transactions —
+      // pushed the report past the wait the UI gives the whole deletion.
       let finishDeletion;
       mockDeletePhotos.mockImplementation(
         ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
@@ -209,16 +180,20 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://R${i}` );
 
       const deletion = deleteOriginalDevicePhotos( uris );
-      await jest.advanceTimersByTimeAsync( 12000 );
+      await jest.advanceTimersByTimeAsync( 4000 );
       expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
         "photo_delete_pending",
         expect.anything( ),
       );
 
-      await jest.advanceTimersByTimeAsync( 2000 );
+      await jest.advanceTimersByTimeAsync( 1000 );
       expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
         "photo_delete_pending",
-        expect.objectContaining( { requested: 300, expectedTransactions: 9 } ),
+        expect.objectContaining( {
+          requested: 300,
+          prompted: 300,
+          expectedTransactions: 1,
+        } ),
       );
 
       finishDeletion( { deleted: 300, requested: 300 } );
