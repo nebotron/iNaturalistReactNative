@@ -54,19 +54,15 @@ const styles = StyleSheet.create( {
   },
 } );
 
-// One cell of the virtualized grid: either a day's header, spanning the full
-// width, or a single photo. This is the same shape the photo picker feeds
-// DevicePhotoGrid, so both screens get identical virtualization and thumbnail
-// prefetching.
-type CleanupGridItem =
-  | { type: "header"; id: string; label: string }
-  | { type: "photo"; id: string; uri: string };
+// One cell of the virtualized grid: a single photo. This is the same shape the
+// photo picker feeds DevicePhotoGrid, so both screens get identical
+// virtualization and thumbnail prefetching.
+type CleanupGridItem = { type: "photo"; id: string; uri: string };
 
+// One continuous grid, newest first: the days are only how the scan groups its
+// work, not something the user is asked to read.
 const buildGridItems = ( days: UnfavoritedPhotoDay[] ): CleanupGridItem[] => days
-  .flatMap( day => [
-    { type: "header" as const, id: `${day.dateKey}-header`, label: day.label },
-    ...day.uris.map( uri => ( { type: "photo" as const, id: uri, uri } ) ),
-  ] );
+  .flatMap( day => day.uris.map( uri => ( { type: "photo" as const, id: uri, uri } ) ) );
 
 // Brings the shared observation cache up to date, falling back to the last
 // synced copy if the network is unavailable. Stale fave data is worse than
@@ -157,24 +153,18 @@ const DevicePhotoCleanup = ( ) => {
   const { gridItemStyle, gridItemWidth, numColumns } = useGridLayout( undefined, "threeUp" );
   const gridItems = useMemo( ( ) => buildGridItems( days ), [days] );
 
-  const renderHeader = useCallback( ( item: CleanupGridItem ) => ( item.type === "header"
-    ? <Heading4 className="px-5 py-2">{item.label}</Heading4>
-    : null ), [] );
+  const renderHeader = useCallback( ( ) => null, [] );
 
-  const renderPhoto = useCallback( ( item: CleanupGridItem ) => ( item.type === "photo"
-    ? (
-      <DevicePhotoImage
-        uri={item.uri}
-        cellWidth={gridItemWidth}
-        style={gridItemStyle}
-        onPress={( ) => setFullScreenUri( item.uri )}
-      />
-    )
-    : null ), [gridItemStyle, gridItemWidth] );
+  const renderPhoto = useCallback( ( item: CleanupGridItem ) => (
+    <DevicePhotoImage
+      uri={item.uri}
+      cellWidth={gridItemWidth}
+      style={gridItemStyle}
+      onPress={( ) => setFullScreenUri( item.uri )}
+    />
+  ), [gridItemStyle, gridItemWidth] );
 
-  const getPhotoUri = useCallback( ( item: CleanupGridItem ) => ( item.type === "photo"
-    ? item.uri
-    : undefined ), [] );
+  const getPhotoUri = useCallback( ( item: CleanupGridItem ) => item.uri, [] );
 
   // The grid's already-generated thumbnail (same size, so it's a cache hit)
   // fills the full-screen view immediately while the full-resolution asset
@@ -256,19 +246,14 @@ const DevicePhotoCleanup = ( ) => {
 
   return (
     <ViewWrapper>
-      <View className="px-5 pt-4 pb-2">
-        <Body2>
-          {`${allUris.length} photo${allUris.length === 1
-            ? ""
-            : "s"} in your library match observations you haven't favorited.`}
-        </Body2>
-        {stillDeleting && (
-          <Body2 className="mt-2">
+      {stillDeleting && (
+        <View className="px-5 pt-4 pb-2">
+          <Body2>
             The last delete hasn&apos;t come back from iOS yet. These are what is still
             in your library — it may finish on its own, or a restart may be needed.
           </Body2>
-        )}
-      </View>
+        </View>
+      )}
       <View style={styles.list}>
         <DevicePhotoGrid
           items={gridItems}
