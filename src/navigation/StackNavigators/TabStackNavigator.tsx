@@ -22,7 +22,6 @@ import MaverickIdentificationsContainer
   from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
-import NetworkLog from "components/NetworkLog/NetworkLog";
 import Notifications from "components/Notifications/Notifications";
 import DQAContainer from "components/ObsDetails/DQAContainer";
 import ObsDetailsScreen from "components/ObsDetailsSharedComponents/ObsDetailsScreen";
@@ -104,8 +103,6 @@ const postDetailsTitle = () => (
 
 // eslint-disable-next-line i18next/no-literal-string
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
-// eslint-disable-next-line i18next/no-literal-string
-const networkLogTitle = () => <Heading4 numberOfLines={1}>NETWORK LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>PHOTO CLEANUP</Heading4>;
 const locationHistoryTitle = () => (
@@ -343,13 +340,6 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={CropLogViewer}
             options={{
               headerTitle: cropLogTitle,
-            }}
-          />
-          <Stack.Screen
-            name="NetworkLog"
-            component={NetworkLog}
-            options={{
-              headerTitle: networkLogTitle,
             }}
           />
           <Stack.Screen

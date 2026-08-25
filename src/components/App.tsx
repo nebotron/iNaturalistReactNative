@@ -2,7 +2,6 @@ import { useNavigation } from "@react-navigation/native";
 import RootStackNavigator from "navigation/RootStackNavigator";
 import type { PropsWithChildren } from "react";
 import React, { useCallback } from "react";
-import { installNetworkInterceptor } from "sharedHelpers/networkLogger";
 import useCurrentUser from "sharedHooks/useCurrentUser";
 import type { SharedData } from "sharedHooks/useShare";
 import useShare from "sharedHooks/useShare";
@@ -15,8 +14,6 @@ import useUsbAutoImport from "./hooks/useUsbAutoImport";
 import NetworkService from "./NetworkService";
 import StartupService from "./StartupService";
 import UploadService from "./UploadService";
-
-installNetworkInterceptor( );
 
 const handleShare = ( navigation, item?: SharedData | null ) => {
   if ( !item ) {

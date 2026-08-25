@@ -157,12 +157,6 @@ const Menu = ( ) => {
       navigation: "CropLogViewer",
       icon: "clipboard",
     },
-    networkLog: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "NETWORK LOG",
-      navigation: "NetworkLog",
-      icon: "globe-outline",
-    },
     devicePhotoCleanup: {
       // eslint-disable-next-line i18next/no-literal-string
       label: "PHOTO CLEANUP",

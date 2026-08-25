@@ -416,7 +416,6 @@ export type BaseTabStackParamList = {
   MaverickIdentifications: undefined;
   WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   CropLogViewer: undefined;
-  NetworkLog: undefined;
   DevicePhotoCleanup: undefined;
   LocationHistory: undefined;
   LocationHistoryPointsMap: undefined;
