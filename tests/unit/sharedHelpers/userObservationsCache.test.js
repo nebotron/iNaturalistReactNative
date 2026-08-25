@@ -2,6 +2,7 @@ import { searchObservations } from "api/observations";
 import {
   readLastSync,
   readUserObservationsCache,
+  speciesIdFromTaxon,
   syncUserObservations,
 } from "sharedHelpers/userObservationsCache";
 import { zustandStorage } from "stores/useStore";
@@ -20,7 +21,7 @@ const NEEDS_ID_VOTE = { id: 2, user_id: 7, vote_scope: "needs_id" };
 let nextObservationId = 0;
 
 const makeApiObservation = ( {
-  uuid, observedAt, votes = [], qualityGrade = "casual",
+  uuid, observedAt, votes = [], qualityGrade = "casual", taxon = { id: 1, rank_level: 10 },
 } ) => {
   nextObservationId += 1;
   return {
@@ -29,7 +30,7 @@ const makeApiObservation = ( {
     time_observed_at: observedAt,
     votes,
     quality_grade: qualityGrade,
-    taxon: { id: 1, rank_level: 10 },
+    taxon,
   };
 };
 
@@ -39,8 +40,8 @@ const mockPages = ( ...pages ) => {
 
 beforeEach( ( ) => {
   searchObservations.mockReset( );
-  zustandStorage.removeItem( `userObservations-v1-${USER_ID}` );
-  zustandStorage.removeItem( `userObservationsLastSync-v1-${USER_ID}` );
+  zustandStorage.removeItem( `userObservations-v2-${USER_ID}` );
+  zustandStorage.removeItem( `userObservationsLastSync-v2-${USER_ID}` );
 } );
 
 describe( "syncUserObservations", ( ) => {
@@ -116,7 +117,30 @@ describe( "syncUserObservations", ( ) => {
       researchGrade: true,
       taxonId: 1,
       rankLevel: 10,
+      speciesId: 1,
     } );
+  } );
+
+  // Rock Pigeons on the street are usually identified as the domestic variety,
+  // which is a rank below species. Without this the species reads as never
+  // observed, and the next observation identified as plain Columba livia turns
+  // up in My Lifers as though it were the first one.
+  it( "records a below-species identification as an observation of the species", async ( ) => {
+    mockPages( [makeApiObservation( {
+      uuid: "feral-pigeon",
+      observedAt: "2020-07-16T12:00:00Z",
+      qualityGrade: "research",
+      taxon: {
+        id: 122767,
+        rank_level: 5,
+        ancestor_ids: [3, 2708, 2715, 3000, 3017, 122767],
+      },
+    } )] );
+
+    const cache = await syncUserObservations( USER_ID, OPTS );
+
+    expect( cache.get( "feral-pigeon" ).taxonId ).toEqual( 122767 );
+    expect( cache.get( "feral-pigeon" ).speciesId ).toEqual( 3017 );
   } );
 
   // Otherwise the observations that never arrived would be skipped forever by
@@ -184,5 +208,37 @@ describe( "syncUserObservations", ( ) => {
   it( "does nothing without a signed in user", async ( ) => {
     await expect( syncUserObservations( null, OPTS ) ).resolves.toEqual( new Map( ) );
     expect( searchObservations ).not.toHaveBeenCalled( );
+  } );
+} );
+
+describe( "speciesIdFromTaxon", ( ) => {
+  it( "is the taxon itself at species level", ( ) => {
+    expect( speciesIdFromTaxon( { id: 3017, rank_level: 10 } ) ).toEqual( 3017 );
+  } );
+
+  it( "is the parent species for a subspecies, variety, or form", ( ) => {
+    expect( speciesIdFromTaxon( {
+      id: 122767,
+      rank_level: 5,
+      ancestor_ids: [3, 2708, 2715, 3000, 3017, 122767],
+    } ) ).toEqual( 3017 );
+  } );
+
+  it( "is nothing for an identification coarser than a species", ( ) => {
+    expect( speciesIdFromTaxon( {
+      id: 3000,
+      rank_level: 20,
+      ancestor_ids: [3, 2708, 2715, 3000],
+    } ) ).toBeNull( );
+  } );
+
+  // Nothing to roll up to, so it can't count as any species in particular.
+  it( "is nothing for a below-species taxon with no ancestry", ( ) => {
+    expect( speciesIdFromTaxon( { id: 122767, rank_level: 5 } ) ).toBeNull( );
+  } );
+
+  it( "is nothing without a taxon", ( ) => {
+    expect( speciesIdFromTaxon( null ) ).toBeNull( );
+    expect( speciesIdFromTaxon( { id: 3017 } ) ).toBeNull( );
   } );
 } );

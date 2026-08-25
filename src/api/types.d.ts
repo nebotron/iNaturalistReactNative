@@ -151,6 +151,7 @@ export interface ApiObservationSound {
 }
 
 export interface ApiTaxon {
+  ancestor_ids?: number[];
   default_photo?: ApiPhoto;
   representative_photo?: ApiPhoto;
   iconic_taxon_name?: string;

@@ -1,5 +1,5 @@
 import { searchObservations } from "api/observations";
-import type { ApiObservation } from "api/types";
+import type { ApiObservation, ApiTaxon } from "api/types";
 import Taxon from "realmModels/Taxon";
 import { log } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
@@ -31,12 +31,40 @@ export interface CachedObservation {
   researchGrade: boolean;
   taxonId: number | null;
   rankLevel: number | null;
+  // The species this observation records, which is not always the taxon it was
+  // identified as. See speciesIdFromTaxon. Null when the identification is
+  // coarser than a species.
+  speciesId: number | null;
 }
+
+// An identification below species level is still an observation of the
+// species: the Rock Pigeons people photograph on the street are usually
+// identified as the domestic variety (Columba livia domestica, rank_level 5),
+// and those are observations of Columba livia. Keying anything off the
+// identified taxon alone counts a species as never seen until it happens to be
+// identified at exactly species level, so a common bird can turn up as a lifer
+// years after the fact.
+//
+// ancestor_ids runs root to leaf and ends with the taxon's own id, so the entry
+// before it is the parent. Every rank below species on iNaturalist hangs
+// directly off its species, so the parent is the species.
+export const speciesIdFromTaxon = (
+  taxon: ApiTaxon | null | undefined,
+): number | null => {
+  const rankLevel = taxon?.rank_level;
+  if ( !taxon?.id || typeof rankLevel !== "number" ) return null;
+  if ( rankLevel > Taxon.SPECIES_LEVEL ) return null;
+  if ( rankLevel === Taxon.SPECIES_LEVEL ) return taxon.id;
+  const ancestorIds = ( taxon.ancestor_ids ?? [] ).filter( id => id !== taxon.id );
+  return ancestorIds[ancestorIds.length - 1] ?? null;
+};
 
 export type UserObservationsCache = Map<string, CachedObservation>;
 
-const cacheKey = ( userId: number ) => `userObservations-v1-${userId}`;
-const lastSyncKey = ( userId: number ) => `userObservationsLastSync-v1-${userId}`;
+// v2 added speciesId, which can't be derived from what v1 stored, so a v1
+// cache has to be re-synced rather than migrated.
+const cacheKey = ( userId: number ) => `userObservations-v2-${userId}`;
+const lastSyncKey = ( userId: number ) => `userObservationsLastSync-v2-${userId}`;
 
 // Stored as positional tuples rather than objects: a full history is tens of
 // thousands of entries, and the key names would be most of the payload.
@@ -45,6 +73,7 @@ type CachedObservationTuple = [
   number | null,
   0 | 1,
   0 | 1,
+  number | null,
   number | null,
   number | null,
 ];
@@ -60,6 +89,7 @@ const toTuple = ( observation: CachedObservation ): CachedObservationTuple => [
     : 0,
   observation.taxonId,
   observation.rankLevel,
+  observation.speciesId,
 ];
 
 const fromTuple = ( tuple: CachedObservationTuple ): CachedObservation => ( {
@@ -69,6 +99,7 @@ const fromTuple = ( tuple: CachedObservationTuple ): CachedObservation => ( {
   researchGrade: tuple[3] === 1,
   taxonId: tuple[4],
   rankLevel: tuple[5],
+  speciesId: tuple[6] ?? null,
 } );
 
 // Parsing a full history is tens of thousands of entries of JSON, and every
@@ -113,6 +144,10 @@ const writeUserObservationsCache = (
   const raw = JSON.stringify( Array.from( cache.values( ) ).map( toTuple ) );
   const key = cacheKey( userId );
   zustandStorage.setItem( key, raw );
+  // The v1 cache, which nothing reads now. A full history is megabytes, so it's
+  // worth reclaiming rather than leaving on disk.
+  zustandStorage.removeItem( `userObservations-v1-${userId}` );
+  zustandStorage.removeItem( `userObservationsLastSync-v1-${userId}` );
   parsedCache = { key, raw, cache };
 };
 
@@ -138,6 +173,7 @@ const toCachedObservation = ( observation: ApiObservation ): CachedObservation =
   researchGrade: observation.quality_grade === "research",
   taxonId: observation.taxon?.id ?? null,
   rankLevel: observation.taxon?.rank_level ?? null,
+  speciesId: speciesIdFromTaxon( observation.taxon ),
 } );
 
 // The union of what the cache stores and what callers harvest from the same

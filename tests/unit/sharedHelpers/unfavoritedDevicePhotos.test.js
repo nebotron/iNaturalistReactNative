@@ -262,7 +262,13 @@ describe( "findUnfavoritedDevicePhotoDays with the shared observations cache", (
     entries.map( ( { uuid, timeMs, faved } ) => [
       uuid,
       {
-        uuid, observedAtMs: timeMs, faved, researchGrade: false, taxonId: null, rankLevel: null,
+        uuid,
+        observedAtMs: timeMs,
+        faved,
+        researchGrade: false,
+        taxonId: null,
+        rankLevel: null,
+        speciesId: null,
       },
     ] ),
   );

@@ -2,7 +2,6 @@
 
 import mapParamsToAPI from "components/Explore/helpers/mapParamsToAPI";
 import { useMemo } from "react";
-import Taxon from "realmModels/Taxon";
 import { readUserObservationsCache } from "sharedHelpers/userObservationsCache";
 
 // The API's unobserved_by_user_id filter only excludes taxa the user has
@@ -16,12 +15,11 @@ const useExploreQueryParams = ( state: Object, currentUser: ?Object ): Object =>
     if ( !currentUser || !state.unobservedByMe ) return [];
     const ids = new Set( );
     readUserObservationsCache( currentUser.id ).forEach( observation => {
-      if (
-        observation.researchGrade
-        && observation.taxonId
-        && observation.rankLevel === Taxon.SPECIES_LEVEL
-      ) {
-        ids.add( observation.taxonId );
+      // speciesId, not taxonId: an observation identified below species level
+      // is still an observation of the species, and excluding the species
+      // excludes its descendants too.
+      if ( observation.researchGrade && observation.speciesId ) {
+        ids.add( observation.speciesId );
       }
     } );
     return Array.from( ids );

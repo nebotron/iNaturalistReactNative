@@ -16,12 +16,12 @@ import React, {
 } from "react";
 import type { ListRenderItemInfo } from "react-native";
 import Photo from "realmModels/Photo";
-import Taxon from "realmModels/Taxon";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
 import type { CachedObservation, UserObservationsCache } from "sharedHelpers/userObservationsCache";
 import {
   OBSERVATION_SYNC_FIELDS,
   readUserObservationsCache,
+  speciesIdFromTaxon,
   syncUserObservations,
 } from "sharedHelpers/userObservationsCache";
 import {
@@ -47,7 +47,12 @@ interface Lifer {
   observed_on: string | null;
   uuid: string;
   observation_photos: ApiObservation["observation_photos"];
+  // The taxon the observation was identified as, which is what the grid shows.
   taxon: ApiTaxon;
+  // The species it records, which is the taxon itself unless the
+  // identification went below species level. What makes it a lifer, and what
+  // the global observations count is fetched for.
+  speciesId: number | null;
   // How many observations of this species exist on iNaturalist. Undefined
   // until the count has been fetched at least once.
   observationsCount?: number;
@@ -57,7 +62,8 @@ interface Lifer {
 // cache (see userObservationsCache.ts), so this only has to hold the taxon and
 // photo the grid renders. It's keyed by uuid and pruned to the current lifers,
 // so it stays one entry per species rather than one per observation.
-const displayCacheKey = ( userId: number ) => `liferDisplay-v1-${userId}`;
+// v2 added speciesId to each entry, which v1 has no way to fill in.
+const displayCacheKey = ( userId: number ) => `liferDisplay-v2-${userId}`;
 
 type LiferDisplayCache = Record<string, Lifer>;
 
@@ -73,10 +79,12 @@ function readLiferDisplayCache( userId: number ): LiferDisplayCache {
 
 function writeLiferDisplayCache( userId: number, display: LiferDisplayCache ): void {
   zustandStorage.setItem( displayCacheKey( userId ), JSON.stringify( display ) );
-  // The pre-shared-cache lifer list, which nothing reads now. It held a full
-  // record per species, so it's worth reclaiming rather than leaving on disk.
+  // The pre-shared-cache lifer list and the v1 display cache, which nothing
+  // reads now. They held a full record per species, so they're worth
+  // reclaiming rather than leaving on disk.
   zustandStorage.removeItem( `lifers-v2-${userId}` );
   zustandStorage.removeItem( `lifersLastSync-v2-${userId}` );
+  zustandStorage.removeItem( `liferDisplay-v1-${userId}` );
 }
 
 const toLifer = ( obs: ApiObservation ): Lifer | null => (
@@ -86,15 +94,17 @@ const toLifer = ( obs: ApiObservation ): Lifer | null => (
       uuid: obs.uuid,
       observation_photos: obs.observation_photos,
       taxon: obs.taxon,
+      speciesId: speciesIdFromTaxon( obs.taxon ),
     }
     : null
 );
 
-// Only species-level (rank_level === 10) research-grade observations count.
+// Only research-grade observations of a species count. An identification below
+// species level still records its species, so it counts too — see
+// speciesIdFromTaxon.
 const isLiferCandidate = ( observation: CachedObservation ): boolean => (
   observation.researchGrade
-  && !!observation.taxonId
-  && observation.rankLevel === Taxon.SPECIES_LEVEL
+  && !!observation.speciesId
 );
 
 // The earliest research-grade observation of each species, straight out of the
@@ -105,12 +115,12 @@ function earliestBySpecies( cache: UserObservationsCache ): Map<number, CachedOb
   const earliest = new Map<number, CachedObservation>( );
   cache.forEach( observation => {
     if ( !isLiferCandidate( observation ) ) return;
-    const taxonId = observation.taxonId as number;
-    const existing = earliest.get( taxonId );
+    const speciesId = observation.speciesId as number;
+    const existing = earliest.get( speciesId );
     const time = observation.observedAtMs ?? Number.MAX_SAFE_INTEGER;
     const existingTime = existing?.observedAtMs ?? Number.MAX_SAFE_INTEGER;
     if ( !existing || time < existingTime ) {
-      earliest.set( taxonId, observation );
+      earliest.set( speciesId, observation );
     }
   } );
   return earliest;
@@ -134,8 +144,8 @@ const withObservationsCounts = (
   counts: Record<number, number>,
 ): Lifer[] => lifers.map( lifer => ( {
   ...lifer,
-  observationsCount: lifer.taxon?.id
-    ? counts[lifer.taxon.id]
+  observationsCount: lifer.speciesId
+    ? counts[lifer.speciesId]
     : undefined,
 } ) );
 
@@ -193,9 +203,8 @@ async function fetchLifers(
   const cache = await syncUserObservations( userId, opts, {
     onPage: results => results.forEach( obs => {
       if ( obs.quality_grade !== "research" ) return;
-      if ( obs.taxon?.rank_level !== Taxon.SPECIES_LEVEL ) return;
       const lifer = toLifer( obs );
-      if ( lifer ) {
+      if ( lifer?.speciesId ) {
         display[obs.uuid] = lifer;
       }
     } ),
@@ -222,7 +231,7 @@ async function fetchLifers(
   const lifers = Object.values( pruned );
   const counts = await syncTaxonObservationsCounts(
     [...new Set(
-      lifers.map( lifer => lifer.taxon?.id ).filter( ( id ): id is number => Boolean( id ) ),
+      lifers.map( lifer => lifer.speciesId ).filter( ( id ): id is number => Boolean( id ) ),
     )],
     opts,
   );
