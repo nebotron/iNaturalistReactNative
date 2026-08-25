@@ -1,5 +1,6 @@
 import { fetchTaxaObservationsCounts } from "api/taxa";
 import type { ApiTaxon } from "api/types";
+import { withRequestTimeout } from "sharedHelpers/logging";
 import { zustandStorage } from "stores/useStore";
 
 // Max number of taxon ids the /v1/taxa batch endpoint accepts per request
@@ -59,8 +60,13 @@ export async function syncTaxonObservationsCounts(
 
   for ( let i = 0; i < needed.length; i += TAXA_BATCH_SIZE ) {
     const batch = needed.slice( i, i + TAXA_BATCH_SIZE );
+    // Its own timeout per batch, for the same reason the observation sync
+    // takes one: the caller's signal covers a single request, not a loop.
     // eslint-disable-next-line no-await-in-loop
-    const results = await fetchTaxaObservationsCounts( batch, opts );
+    const results = await withRequestTimeout(
+      opts,
+      requestOpts => fetchTaxaObservationsCounts( batch, requestOpts ),
+    );
     ( ( results as ApiTaxon[] ) ?? [] ).forEach( taxon => {
       if ( typeof taxon.id !== "number" || typeof taxon.observations_count !== "number" ) return;
       cache[taxon.id] = { count: taxon.observations_count, fetchedAtMs: now };

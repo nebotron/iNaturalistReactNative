@@ -16,6 +16,8 @@ import React, {
 } from "react";
 import type { ListRenderItemInfo } from "react-native";
 import Photo from "realmModels/Photo";
+import { log } from "sharedHelpers/logger";
+import { withRequestTimeout } from "sharedHelpers/logging";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
 import type { CachedObservation, UserObservationsCache } from "sharedHelpers/userObservationsCache";
 import {
@@ -34,6 +36,8 @@ import {
   readTaxonObservationsCounts,
   syncTaxonObservationsCounts,
 } from "./taxonObservationsCounts";
+
+const logger = log.extend( "LifeList" );
 
 // Max number of observations the API will fetch by uuid in one request.
 const FETCH_BY_UUID_BATCH = 100;
@@ -160,12 +164,14 @@ async function fetchMissingDisplayData(
 ): Promise<void> {
   for ( let i = 0; i < uuids.length; i += FETCH_BY_UUID_BATCH ) {
     const batch = uuids.slice( i, i + FETCH_BY_UUID_BATCH );
+    // Its own timeout per batch, for the same reason the observation sync
+    // takes one: the caller's signal covers a single request, not a loop.
     // eslint-disable-next-line no-await-in-loop
-    const results = await fetchRemoteObservations(
+    const results = await withRequestTimeout( opts, requestOpts => fetchRemoteObservations(
       batch,
       { fields: OBSERVATION_SYNC_FIELDS },
-      opts,
-    );
+      requestOpts,
+    ) );
     ( results ?? [] ).forEach( ( obs: ApiObservation ) => {
       const lifer = toLifer( obs );
       if ( lifer ) {
@@ -200,23 +206,38 @@ async function fetchLifers(
   const display = readLiferDisplayCache( userId );
   // Harvest what the grid renders from the same pass that fills the shared
   // cache, so a first sync needs no extra requests to be able to draw itself.
-  const cache = await syncUserObservations( userId, opts, {
-    onPage: results => results.forEach( obs => {
-      if ( obs.quality_grade !== "research" ) return;
-      const lifer = toLifer( obs );
-      if ( lifer?.speciesId ) {
-        display[obs.uuid] = lifer;
-      }
-    } ),
+  const onPage = ( results: ApiObservation[] ) => results.forEach( obs => {
+    if ( obs.quality_grade !== "research" ) return;
+    const lifer = toLifer( obs );
+    if ( lifer?.speciesId ) {
+      display[obs.uuid] = lifer;
+    }
   } );
+  // A first sync pages the whole history, so a failure partway through is a
+  // real possibility. Everything that landed has still been written, so show
+  // those lifers rather than an empty screen; the sync isn't recorded, so the
+  // next visit picks up where this one left off.
+  let cache: UserObservationsCache;
+  try {
+    cache = await syncUserObservations( userId, opts, { onPage } );
+  } catch ( error ) {
+    logger.warn( "Showing the lifers that synced before this error", error );
+    cache = readUserObservationsCache( userId );
+  }
 
   const liferUuids = Array.from( earliestBySpecies( cache ).values( ) )
     .map( observation => observation.uuid );
-  await fetchMissingDisplayData(
-    liferUuids.filter( uuid => !display[uuid] ),
-    display,
-    opts,
-  );
+  // Filling gaps and fetching counts are both improvements to a list we can
+  // already draw, so neither is allowed to empty the screen.
+  try {
+    await fetchMissingDisplayData(
+      liferUuids.filter( uuid => !display[uuid] ),
+      display,
+      opts,
+    );
+  } catch ( error ) {
+    logger.warn( "Could not fetch display data for every lifer", error );
+  }
 
   // Keep only what's still a lifer, so this cache tracks the user's species
   // count rather than growing with every research-grade observation synced.
@@ -229,12 +250,17 @@ async function fetchLifers(
   writeLiferDisplayCache( userId, pruned );
 
   const lifers = Object.values( pruned );
-  const counts = await syncTaxonObservationsCounts(
-    [...new Set(
-      lifers.map( lifer => lifer.speciesId ).filter( ( id ): id is number => Boolean( id ) ),
-    )],
-    opts,
-  );
+  let counts = readTaxonObservationsCounts( );
+  try {
+    counts = await syncTaxonObservationsCounts(
+      [...new Set(
+        lifers.map( lifer => lifer.speciesId ).filter( ( id ): id is number => Boolean( id ) ),
+      )],
+      opts,
+    );
+  } catch ( error ) {
+    logger.warn( "Could not fetch observations counts for every lifer", error );
+  }
 
   return sortByObservedOnDesc( withObservationsCounts( lifers, counts ) );
 }
