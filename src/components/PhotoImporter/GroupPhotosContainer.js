@@ -40,10 +40,7 @@ import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
 import logRawImportMetadata from "sharedHelpers/rawImportMetadataLog";
-import {
-  addRemovedGroupPhotoUris,
-  clearRemovedGroupPhotoUris,
-} from "sharedHelpers/removedGroupPhotoUris";
+import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { moveSharedGroupedPhotos } from "sharedHelpers/shareExtensionFiles";
 import { useExitObservationFlow, useGridLayout, useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
@@ -85,7 +82,6 @@ const GroupPhotosContainer = ( ): Node => {
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const firstObservationDefaults = useStore( state => state.firstObservationDefaults ) || {};
-  const pendingGroupPhotoDeletionUris = useStore( state => state.pendingGroupPhotoDeletionUris );
   const addPendingGroupPhotoDeletionUri = useStore(
     state => state.addPendingGroupPhotoDeletionUri,
   );
@@ -354,15 +350,17 @@ const GroupPhotosContainer = ( ): Node => {
   // useResumeGroupPhotos), so leaving any of this behind would drop the user
   // back into a stale import on the next cold start.
   const discardImport = useCallback( ( ) => {
-    // Photos the user removed from the grid were recorded as "gone" so they'd
-    // stay hidden from the photo picker. The import never happened, so give
-    // them back rather than hiding photos that still exist on the device.
-    clearRemovedGroupPhotoUris( pendingGroupPhotoDeletionUris );
+    // Photos the user removed from the grid stay recorded as "gone" even
+    // though the import is being abandoned. Removing a photo is a decision
+    // about the photo, not about the import: the user said it shouldn't be
+    // kept, so it stays hidden from the picker and still turns up in Photo
+    // Cleanup rather than quietly coming back.
+    //
     // Resets the observation flow slice: groupedPhotos, photoLibraryUris,
     // pendingGroupPhotoDeletionUris, and the rest of the import state. The
     // staged device photos are deliberately not deleted.
     exitObservationFlow( );
-  }, [exitObservationFlow, pendingGroupPhotoDeletionUris] );
+  }, [exitObservationFlow] );
 
   const navBasedOnUserSettings = async ( ) => {
     setIsCreatingObservations( true );
