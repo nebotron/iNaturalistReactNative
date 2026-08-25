@@ -22,8 +22,11 @@ const { ImageCropper } = NativeModules as { ImageCropper?: ImageCropperModule };
 // old key are treated as misses and regenerated rather than reused stale (this
 // is what made the Group Photos crop overlay stay pixelated even after
 // ImageCropper.m started decoding accurately -- the on-disk cache from before
-// that fix kept getting served).
-const CACHE_VERSION = 5;
+// that fix kept getting served). v6: tile-sized thumbnails of a ph:// asset
+// were square-cropped (PHImageContentModeAspectFill) and are now the whole
+// frame, so anything cached under v5 describes a different frame than the
+// photo it stands for.
+const CACHE_VERSION = 6;
 
 const cacheKey = ( uri: string, maxPixel: number ) => `${uri}:${maxPixel}:v${CACHE_VERSION}`;
 

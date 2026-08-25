@@ -31,6 +31,20 @@ const MAX_SCALE = 100;
 // decimals. Below this it isn't a crop the user made.
 const CROP_EPSILON = 0.001;
 
+// A thumbnail and the original it came from round to slightly different aspect
+// ratios (a 6000x4000 photo scaled to 2048 is 2048x1365, not 2048x1365.33), so
+// only a real difference of frame counts as one.
+const ASPECT_EPSILON = 0.01;
+
+interface Framing {
+  crop: NormalizedCrop;
+  aspect: number;
+}
+
+const aspectsMatch = ( a: number, b: number ) => (
+  a > 0 && b > 0 && Math.abs( a - b ) / Math.max( a, b ) < ASPECT_EPSILON
+);
+
 // Pixels the photo file itself is generated at. Set well above any single-shot
 // camera photo (even a 108MP sensor's long edge is well under this) so the cell
 // always draws the photo at its true native resolution; the cap only exists so
@@ -131,10 +145,15 @@ const GroupPhotoCropImage = ( {
   onCropChange,
 }: Props ) => {
   const zoomRef = useRef<SharedZoomableImageRef | null>( null );
-  // The crop the photo is currently framed to. Null means it still needs
-  // framing, which happens once per photo; the zoom engine owns the transform
-  // from then on.
-  const [framedCrop, setFramedCrop] = useState<NormalizedCrop | null>( null );
+  // The crop the photo is currently framed to, and the aspect ratio it was
+  // framed against. Null means it still needs framing, which happens once per
+  // photo; the zoom engine owns the transform from then on. The aspect ratio is
+  // part of it because the transform is derived from where the photo lands
+  // inside the cell, which is decided by its aspect ratio: framing against one
+  // ratio and then drawing a file with another translates the photo off by the
+  // difference, which for a tightly framed subject is far enough to leave
+  // nothing on screen but the backdrop.
+  const [framing, setFraming] = useState<Framing | null>( null );
   // Which uri the image below has actually painted. A cell whose crop and
   // photo are both already cached — every cell recycled by scrolling, and
   // every cell that shifts up when one is deleted — frames itself on its first
@@ -161,7 +180,7 @@ const GroupPhotoCropImage = ( {
   // first render never frames the new photo with the previous one's crop.
   if ( prevCropSourceUri !== cropSourceUri ) {
     setPrevCropSourceUri( cropSourceUri );
-    setFramedCrop( null );
+    setFraming( null );
     setPaintedUri( null );
     setDecodedSize( null );
   }
@@ -215,14 +234,22 @@ const GroupPhotoCropImage = ( {
     Boolean( savedCrop ),
   );
 
-  const imageWidth = detection?.imageWidth || decodedSize?.width || 0;
-  const imageHeight = detection?.imageHeight || decodedSize?.height || 0;
+  // The image on screen has the final say: detection measures the thumbnail,
+  // and the cell may be drawing a different file (the full-resolution original,
+  // or the uncropped original itself when generation failed). Every crop
+  // calculation here only wants an aspect ratio, and the only aspect ratio that
+  // places the photo correctly is the one belonging to the file being drawn.
+  const imageWidth = decodedSize?.width || detection?.imageWidth || 0;
+  const imageHeight = decodedSize?.height || detection?.imageHeight || 0;
   // A cached detection can carry a crop from before the user's last gesture, so
   // the crop saved on the photo always wins (same as the crop editor). With no
   // crop from either, fall back to the centered square the cell is already
   // showing: detection failing is no reason for the photo to lose its crop box,
   // which is the only thing carrying the pinch gesture.
   const framable = imageWidth > 0 && imageHeight > 0 && size > 0;
+  const aspect = framable
+    ? imageWidth / imageHeight
+    : 0;
   const initialCrop = savedCrop
     ?? detection?.crop
     ?? ( framable
@@ -245,8 +272,17 @@ const GroupPhotoCropImage = ( {
   // layout timing (same path as the crop editor). Runs as a layout effect so a
   // recycled cell is already framed in the frame it first paints, instead of
   // showing the photo uncropped for a beat and then snapping into its crop box.
+  // Re-runs when the aspect ratio changes rather than only once, so a cell that
+  // framed itself from the thumbnail and then drew a file with a different
+  // aspect ratio is re-framed to it instead of being left offset by the
+  // difference. The crop itself is normalized, so it carries over untouched --
+  // including one the user just pinched.
   useLayoutEffect( ( ) => {
-    if ( !framable || !initialCrop || framedCrop ) {
+    if ( !framable ) {
+      return;
+    }
+    const crop = framing?.crop ?? initialCrop;
+    if ( !crop || ( framing && aspectsMatch( framing.aspect, aspect ) ) ) {
       return;
     }
     const zoom = zoomRef.current;
@@ -259,7 +295,7 @@ const GroupPhotoCropImage = ( {
       size,
       size,
       size,
-      initialCrop,
+      crop,
     );
     // Clamp the framing so a subject near an edge doesn't shift the image past
     // that edge (matches the crop clamping applied during gestures).
@@ -270,9 +306,9 @@ const GroupPhotoCropImage = ( {
       translateX: clamp( framed.translateX, limits.minTotalTranslateX, limits.maxTotalTranslateX ),
       translateY: clamp( framed.translateY, limits.minTotalTranslateY, limits.maxTotalTranslateY ),
     } );
-    setFramedCrop( initialCrop );
+    setFraming( { crop, aspect } );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [framable, framedCrop, imageHeight, imageWidth, initialCrop, size] );
+  }, [aspect, framable, framing, imageHeight, imageWidth, initialCrop, size] );
 
   const handleInteractionEnd = useCallback( ( ) => {
     if ( !zoomRef.current || !framable ) {
@@ -288,12 +324,12 @@ const GroupPhotoCropImage = ( {
     );
     // A tap that selects the photo also ends an interaction; only a gesture
     // that actually moved the crop is a crop the user made.
-    if ( framedCrop && cropsMatch( framedCrop, crop ) ) {
+    if ( framing && cropsMatch( framing.crop, crop ) ) {
       return;
     }
-    setFramedCrop( crop );
+    setFraming( { crop, aspect } );
     onCropChange( crop );
-  }, [framable, framedCrop, imageHeight, imageWidth, onCropChange, size] );
+  }, [aspect, framable, framing, imageHeight, imageWidth, onCropChange, size] );
 
   if ( !ready ) {
     return null;
@@ -301,7 +337,7 @@ const GroupPhotoCropImage = ( {
 
   // Only counts while the photo on screen is still the one that painted.
   const painted = Boolean( paintedUri ) && paintedUri === displayUri;
-  const framed = Boolean( framedCrop ) && ( painted || paintedImages.has( cropSourceUri ) );
+  const framed = Boolean( framing ) && ( painted || paintedImages.has( cropSourceUri ) );
   // Both halves are load-bearing, and each one on its own has shipped a black
   // cell. Without `painted`, framed trusts paintedImages, which only says some
   // earlier cell drew this photo: a recycled cell gets a fresh native image
@@ -312,6 +348,8 @@ const GroupPhotoCropImage = ( {
   // photo (detection yields nothing when the thumbnail failed to generate and
   // the fallback is a ph:// uri, which onLoad and Image.getSize both decline to
   // measure) never frames at all, leaving the backdrop alone on screen forever.
+  // Neither half says the photo is framed *correctly*, which is why the framing
+  // above tracks the aspect ratio it used.
   const backdropVisible = framed && painted;
 
   return (

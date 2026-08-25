@@ -1317,12 +1317,18 @@ RCT_EXPORT_METHOD( createThumbnail
     [[PHImageManager defaultManager]
       requestImageForAsset:asset
       targetSize:CGSizeMake( maxDim, maxDim )
-      // AspectFill crops to a square, which is fine for a square grid tile but
-      // would clip a real photo's edges out of the crop overlay's source
-      // image before the user ever gets to frame it.
-      contentMode:( highQualityDecode
-        ? PHImageContentModeAspectFit
-        : PHImageContentModeAspectFill )
+      // Always the whole frame. AspectFill crops to a square, and the Group
+      // Photos crop overlay builds a cell out of this same tile-sized file: it
+      // measures it for the photo's aspect ratio, detects the subject in it,
+      // and draws it under the crop box. A square-cropped thumbnail makes every
+      // one of those describe a different frame from the original the crop is
+      // finally applied to, and a cell framed at the wrong aspect ratio is
+      // translated off by the difference -- far enough, for a tightly framed
+      // subject, to leave nothing on screen but the overlay's black backdrop.
+      // A square grid tile is unaffected: it draws its thumbnail with
+      // resizeMode cover, which crops to the square at draw time, and the
+      // uncropped frame is fewer pixels rather than more.
+      contentMode:PHImageContentModeAspectFit
       options:opts
       resultHandler:^( UIImage *result, NSDictionary *info ) {
         if ( handled ) return;

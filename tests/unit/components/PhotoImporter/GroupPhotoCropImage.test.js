@@ -25,6 +25,35 @@ jest.mock( "sharedHelpers/useThumbnailSubjectDetection", ( ) => ( {
   default: ( ...args ) => mockDetection( ...args ),
 } ) );
 
+// The framing the cell applies, captured at the point it is computed. The
+// dimensions it is computed from are the whole point of these tests: they
+// decide where in the cell the photo lands, so framing against the wrong ones
+// slides the photo out from under the crop box.
+const mockCropToTransform = jest.fn( ( ) => ( {
+  scale: 1,
+  translateX: 0,
+  translateY: 0,
+  focalX: 0,
+  focalY: 0,
+} ) );
+jest.mock( "sharedHelpers/normalizedCropToImageZoomTransform", ( ) => ( {
+  normalizedCropToImageZoomTransform: ( ...args ) => mockCropToTransform( ...args ),
+} ) );
+
+// Calls the transform helper itself, which would otherwise be
+// indistinguishable from the cell's own framing call.
+jest.mock( "sharedHelpers/cropPanTranslateLimits", ( ) => ( {
+  computeCropPanTranslateLimits: ( ) => ( {
+    minTotalTranslateX: -Infinity,
+    maxTotalTranslateX: Infinity,
+    minTotalTranslateY: -Infinity,
+    maxTotalTranslateY: Infinity,
+  } ),
+} ) );
+
+const framedDimensions = ( ) => mockCropToTransform.mock.calls
+  .map( call => [call[0], call[1]] );
+
 const renderCropImage = uri => renderComponent(
   <GroupPhotoCropImage
     cropSourceUri={uri}
@@ -163,6 +192,53 @@ describe( "GroupPhotoCropImage", ( ) => {
     await waitFor( ( ) => {
       expect( invalidateDeviceImageThumbnail ).toHaveBeenCalled( );
     } );
+  } );
+
+  // A tile-sized thumbnail of a ph:// asset used to come back square-cropped,
+  // so the aspect ratio the cell framed itself with belonged to no file it ever
+  // drew. The photo was then translated off by the difference, and for a
+  // tightly framed subject that is far enough to leave the cell showing nothing
+  // but the overlay's opaque black backdrop.
+  it( "re-frames onto the aspect ratio of the photo it actually drew", ( ) => {
+    mockThumbnail.mockReturnValue( "file:///thumbnails/square.jpg" );
+    mockDetection.mockReturnValue( {
+      crop: {
+        x: 0.05, y: 0.05, w: 0.2, h: 0.2,
+      },
+      // A square crop of the photo, not the photo.
+      imageWidth: 1000,
+      imageHeight: 1000,
+    } );
+    renderCropImage( "ph://squareThumbnail" );
+
+    expect( framedDimensions( ) ).toEqual( [[1000, 1000]] );
+
+    fireEvent( screen.getByTestId( "GroupPhotoCropImage.photo" ), "load", {
+      nativeEvent: { source: { width: 6000, height: 4000 } },
+    } );
+
+    expect( framedDimensions( ).at( -1 ) ).toEqual( [6000, 4000] );
+  } );
+
+  // The thumbnail a photo is measured in rounds to a slightly different ratio
+  // than the original (6000x4000 scaled to 2048 is 2048x1365), which is not a
+  // reason to re-frame a cell -- least of all one the user has just pinched.
+  it( "leaves a cell alone when the photo lands at the ratio it was framed at", ( ) => {
+    mockThumbnail.mockReturnValue( "file:///thumbnails/wide.jpg" );
+    mockDetection.mockReturnValue( {
+      crop: {
+        x: 0.1, y: 0.1, w: 0.3, h: 0.3,
+      },
+      imageWidth: 2048,
+      imageHeight: 1365,
+    } );
+    renderCropImage( "ph://wideThumbnail" );
+
+    fireEvent( screen.getByTestId( "GroupPhotoCropImage.photo" ), "load", {
+      nativeEvent: { source: { width: 6000, height: 4000 } },
+    } );
+
+    expect( framedDimensions( ) ).toEqual( [[2048, 1365]] );
   } );
 
   it( "survives a load event that reports no source", ( ) => {
