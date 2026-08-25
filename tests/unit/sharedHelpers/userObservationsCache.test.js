@@ -91,7 +91,7 @@ describe( "syncUserObservations", ( ) => {
 
     expect( searchObservations ).toHaveBeenLastCalledWith(
       expect.objectContaining( { updated_since: expect.any( String ) } ),
-      OPTS,
+      expect.objectContaining( OPTS ),
     );
     // The second pass only returned the one changed observation, but it merged
     // into what the first pass cached rather than replacing it.
@@ -203,6 +203,29 @@ describe( "syncUserObservations", ( ) => {
     // Not recorded, so the next run re-fetches from the top rather than
     // skipping everything that never arrived.
     expect( readLastSync( USER_ID ) ).toBeNull( );
+  } );
+
+  it( "gives each page its own abort signal instead of reusing the caller's", async ( ) => {
+    // The caller's signal is sized for a single request. Paging a whole
+    // history with it aborts every page after the timeout, so the sync can
+    // never finish and My Lifers has nothing to show.
+    const controller = new AbortController( );
+    controller.abort( );
+    mockPages(
+      Array.from( { length: 200 }, ( _, i ) => makeApiObservation( {
+        uuid: `first-${i}`,
+        observedAt: "2026-07-16T12:00:00Z",
+      } ) ),
+      [makeApiObservation( { uuid: "second", observedAt: "2026-07-17T12:00:00Z" } )],
+    );
+
+    const cache = await syncUserObservations( USER_ID, { ...OPTS, signal: controller.signal } );
+
+    expect( cache.get( "second" ) ).toBeTruthy( );
+    searchObservations.mock.calls.forEach( ( [, opts] ) => {
+      expect( opts.signal ).toBeDefined( );
+      expect( opts.signal.aborted ).toBe( false );
+    } );
   } );
 
   it( "does nothing without a signed in user", async ( ) => {

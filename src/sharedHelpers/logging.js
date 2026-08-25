@@ -26,6 +26,21 @@ const createRequestTimeoutSignal = ( ) => {
   };
 };
 
+// The signal above is sized for a single request, but some features are a
+// pipeline of many sequential ones (paging a whole observation history, say).
+// Handing the pipeline one signal aborts every request after the first 20
+// seconds, so the pipeline can never finish. This gives each request in such a
+// pipeline its own timeout instead, replacing whatever signal the caller's
+// opts carry.
+const withRequestTimeout = async ( opts, request ) => {
+  const { signal, clear } = createRequestTimeoutSignal( );
+  try {
+    return await request( { ...opts, signal } );
+  } finally {
+    clear( );
+  }
+};
+
 // Note that this should not be async. When you're using it with reactQuery,
 // returning a promise is like returning true, which means it retries forever.
 // Retries only on 5xx errors, network connection failures, or our own
@@ -64,4 +79,5 @@ export {
   createRequestTimeoutSignal,
   handleRetryDelay,
   reactQueryRetry,
+  withRequestTimeout,
 };

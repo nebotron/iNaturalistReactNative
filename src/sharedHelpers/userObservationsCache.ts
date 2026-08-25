@@ -2,6 +2,7 @@ import { searchObservations } from "api/observations";
 import type { ApiObservation, ApiTaxon } from "api/types";
 import Taxon from "realmModels/Taxon";
 import { log } from "sharedHelpers/logger";
+import { withRequestTimeout } from "sharedHelpers/logging";
 import { zustandStorage } from "stores/useStore";
 
 const logger = log.extend( "userObservationsCache" );
@@ -259,8 +260,11 @@ export const syncUserObservations = async (
     pages += 1;
     let response;
     try {
-      // eslint-disable-next-line no-await-in-loop
-      response = await searchObservations( {
+      // Each page gets its own timeout: the caller's opts carry one signal
+      // sized for a single request, and a first sync is hundreds of them, so
+      // sharing it aborted every page after the first 20 seconds and the sync
+      // could never finish.
+      const params = {
         user_id: userId,
         order_by: "id",
         order: "asc",
@@ -273,7 +277,12 @@ export const syncUserObservations = async (
         ...( lastSync
           ? { updated_since: lastSync }
           : {} ),
-      }, opts );
+      };
+      // eslint-disable-next-line no-await-in-loop
+      response = await withRequestTimeout(
+        opts,
+        requestOpts => searchObservations( params, requestOpts ),
+      );
     } catch ( error ) {
       savePartial( );
       throw error;
