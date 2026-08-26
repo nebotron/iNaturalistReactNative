@@ -14,6 +14,12 @@ import {
 } from "sharedHelpers/appCreatedPhotoAssets";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
+import {
+  isPromptedDeletionBroken,
+  promptedDeletionHangs,
+  recordPromptedDeletionHang,
+  recordPromptedDeletionSuccess,
+} from "sharedHelpers/promptedPhotoDeletion";
 
 const logger = log.extend( "promptDeleteOriginalDevicePhotos" );
 
@@ -26,6 +32,7 @@ let photoLibraryWriteHangCount = 0;
 const { ImageCropper } = NativeModules as {
   ImageCropper?: {
     photoDeletionContext?: ( phUris: string[] ) => Promise<string>;
+    photoAssetDiagnostics?: ( phUris: string[] ) => Promise<string>;
     deletePhotoAssets?: (
       phUris: string[],
       appCreatedUris: string[]
@@ -65,6 +72,9 @@ export interface DeleteOriginalDevicePhotosResult {
   // in a shared album rather than this library). Nothing is wrong and nothing
   // will change by retrying: they were never sent to a transaction.
   undeletable?: number;
+  // Photos left out because deleting them needs iOS's confirmation and this
+  // device has stopped presenting it. See promptedPhotoDeletion.ts.
+  skippedPrompted?: number;
 }
 
 const filterDeletableDevicePhotoUris = ( photoUris: string[] ): string[] => (
@@ -237,8 +247,36 @@ const performDeleteOriginalDevicePhotos = async (
   // transaction was outstanding. Reading that off the adjacent prose line meant
   // loading the dump to answer the single most important question about a hang.
   const ourUris = appCreatedPhotoUris( uniqueUris );
+
+  // Photos that need iOS's confirmation, on a device that has stopped
+  // presenting it, are not sent to a transaction at all. The transaction would
+  // neither prompt nor come back, and would take everything batched with it
+  // down for 150s while holding the write gate shut against every other
+  // library write in the session. Skipping is not a fix — nothing here can fix
+  // it — it is refusing to pay that price again for the same nothing.
+  const promptedCount = uniqueUris.length - ourUris.length;
+  const skipPrompted = promptedCount > 0 && isPromptedDeletionBroken( );
+  if ( skipPrompted ) {
+    logger.warnWithExtra( "photo_delete_prompted_skipped", {
+      skippedPrompted: promptedCount,
+      appCreated: ourUris.length,
+      hangs: promptedDeletionHangs( ),
+    } );
+    if ( ourUris.length === 0 ) {
+      return {
+        deleted: 0,
+        requested,
+        succeeded: true,
+        skippedPrompted: promptedCount,
+      };
+    }
+  }
+  const urisToDelete = skipPrompted
+    ? ourUris
+    : uniqueUris;
+
   const appCreatedUris = (
-    ourUris.length === uniqueUris.length || isAppCreatedDeleteExemptionConfirmed( )
+    ourUris.length === urisToDelete.length || isAppCreatedDeleteExemptionConfirmed( )
   )
     ? ourUris
     : [];
@@ -249,7 +287,7 @@ const performDeleteOriginalDevicePhotos = async (
   // were expected.
   const expectedTransactions = Math.max(
     1,
-    ( requested > appCreatedUris.length
+    ( urisToDelete.length > appCreatedUris.length
       ? 1
       : 0 )
       + ( appCreatedUris.length > 0
@@ -328,7 +366,7 @@ const performDeleteOriginalDevicePhotos = async (
       const askedAt = Date.now( );
       let contextRespondedIn = -1;
       void Promise.race( [
-        ImageCropper.photoDeletionContext( uniqueUris ).then( context => {
+        ImageCropper.photoDeletionContext( urisToDelete ).then( context => {
           contextRespondedIn = Date.now( ) - askedAt;
           return context;
         } ),
@@ -342,6 +380,22 @@ const performDeleteOriginalDevicePhotos = async (
         } ),
       ).catch( ( ) => undefined );
     }
+    // What the photos themselves are. Every property the log has checked so far
+    // says these assets are ordinary and deletable, so the next question is
+    // what kind of photo they are — and what device and iOS this is, since the
+    // failure arrived on a date rather than with a batch.
+    if ( Platform.OS === "ios" && ImageCropper?.photoAssetDiagnostics ) {
+      void Promise.race( [
+        ImageCropper.photoAssetDiagnostics( urisToDelete ),
+        new Promise<null>( resolve => { setTimeout( ( ) => resolve( null ), 5000 ); } ),
+      ] ).catch( ( ) => null ).then(
+        assetsAtHang => logger.errorWithExtra( "photo_delete_asset_detail", {
+          requested,
+          prompted: urisToDelete.length - appCreatedUris.length,
+          assets: assetsAtHang ?? "main queue did not respond in 5000ms",
+        } ),
+      ).catch( ( ) => undefined );
+    }
   }, hangReportMs( expectedTransactions ) );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -352,7 +406,7 @@ const performDeleteOriginalDevicePhotos = async (
         // unbounded meant the diagnostic could stop the deletion it was there
         // to explain from ever starting.
         deletionContext = await Promise.race( [
-          ImageCropper.photoDeletionContext( uniqueUris ),
+          ImageCropper.photoDeletionContext( urisToDelete ),
           new Promise<string>( resolve => {
             setTimeout( ( ) => resolve( "unavailable: main queue busy for 5000ms" ), 5000 );
           } ),
@@ -365,12 +419,17 @@ const performDeleteOriginalDevicePhotos = async (
     const appCreatedNote = appCreatedUris.length > 0
       ? `, ${appCreatedUris.length} of them app-created`
       : "";
-    logger.info( `Deleting ${uniqueUris.length} device photo(s)${appCreatedNote}` );
+    const skippedNote = skipPrompted
+      ? `, skipping ${promptedCount} that need a confirmation this device won't show`
+      : "";
+    logger.info(
+      `Deleting ${urisToDelete.length} device photo(s)${appCreatedNote}${skippedNote}`,
+    );
     // Prefer the native path that dismisses a blocking modal before deleting;
     // fall back to CameraRoll on platforms/builds without it.
     const deletion = ( Platform.OS === "ios" && ImageCropper?.deletePhotoAssets )
-      ? ImageCropper.deletePhotoAssets( uniqueUris, appCreatedUris )
-      : CameraRoll.deletePhotos( uniqueUris );
+      ? ImageCropper.deletePhotoAssets( urisToDelete, appCreatedUris )
+      : CameraRoll.deletePhotos( urisToDelete );
     // Whatever we decide below, the next Photos-library write waits for this
     // transaction rather than stacking on top of it.
     holdChainUntil( deletion );
@@ -396,8 +455,25 @@ const performDeleteOriginalDevicePhotos = async (
           error: String( lateError ),
         } ),
       );
+      // Only the prompted half is judged here: a consent-free transaction has
+      // hung before too (Aug 6), and switching prompted deleting off over one
+      // of those would be reading the wrong evidence.
+      if ( urisToDelete.length > appCreatedUris.length ) {
+        const hangs = recordPromptedDeletionHang( );
+        logger.warnWithExtra( "photo_delete_prompted_hang", {
+          hangs,
+          prompted: urisToDelete.length - appCreatedUris.length,
+          skippingNext: isPromptedDeletionBroken( ),
+        } );
+      }
       return {
-        deleted: 0, requested, succeeded: false, pending: true,
+        deleted: 0,
+        requested,
+        succeeded: false,
+        pending: true,
+        skippedPrompted: skipPrompted
+          ? promptedCount
+          : 0,
       };
     }
     // Report what the OS actually deleted, not what we asked for. A call that
@@ -432,6 +508,11 @@ const performDeleteOriginalDevicePhotos = async (
       promptedDeleted?: number;
       promptedMs?: number;
     } | undefined;
+    if ( ( promptedDelete?.promptedDeleted ?? 0 ) > 0 ) {
+      // Whatever stopped this device presenting the confirmation has stopped
+      // stopping it.
+      recordPromptedDeletionSuccess( );
+    }
     if ( ( promptedDelete?.prompted ?? 0 ) > 0 ) {
       logger.infoWithExtra( "photo_delete_prompted", {
         prompted: promptedDelete?.prompted,
@@ -464,7 +545,13 @@ const performDeleteOriginalDevicePhotos = async (
     // if it failed: they still need deleting, and still without a prompt.
     if ( appCreatedDeleted > 0 ) forgetAppCreatedPhotoAssets( appCreatedUris );
     return {
-      deleted: deleted ?? requested, requested, succeeded: true, undeletable,
+      deleted: deleted ?? urisToDelete.length,
+      requested,
+      succeeded: true,
+      undeletable,
+      skippedPrompted: skipPrompted
+        ? promptedCount
+        : 0,
     };
   } catch ( deleteError ) {
     if ( isLibraryBusy( deleteError ) ) {

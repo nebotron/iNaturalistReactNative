@@ -26,6 +26,10 @@ import {
 } from "react-native";
 import { log } from "sharedHelpers/logger";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import {
+  clearPromptedDeletionHangs,
+  isPromptedDeletionBroken,
+} from "sharedHelpers/promptedPhotoDeletion";
 import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
 import findUnfavoritedDevicePhotoDays, {
   prefetchDeviceAssets,
@@ -92,6 +96,7 @@ const DevicePhotoCleanup = ( ) => {
   const [deleting, setDeleting] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [undeletableCount, setUndeletableCount] = useState( 0 );
+  const [skippedPrompted, setSkippedPrompted] = useState( 0 );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
   const [stillDeleting, setStillDeleting] = useState( false );
   const [rescans, setRescans] = useState( 0 );
@@ -184,12 +189,13 @@ const DevicePhotoCleanup = ( ) => {
     // claiming "Deleted 1,159 photos" while the photos are all still there is
     // worse than saying nothing happened.
     const {
-      deleted, succeeded, pending, undeletable,
+      deleted, succeeded, pending, undeletable, skippedPrompted: skipped,
     } = await deleteOriginalDevicePhotos(
       allUris,
       { userInitiated: true },
     );
     setDeleting( false );
+    setSkippedPrompted( skipped ?? 0 );
     // PhotoKit hasn't answered but is still holding the transaction, and it
     // usually goes through afterwards. Rescanning is the only honest thing to
     // show: the photos left in the grid may already be gone.
@@ -201,6 +207,12 @@ const DevicePhotoCleanup = ( ) => {
     // Leave the grid up when the delete didn't go through so the user can
     // retry; the helper has already explained the failure with an alert.
     if ( !succeeded ) return;
+    // The skipped ones are still there. Clearing the grid would say they were
+    // dealt with, so rescan instead and let the banner explain.
+    if ( skipped ) {
+      setRescans( count => count + 1 );
+      return;
+    }
     setDeletedCount( deleted );
     setUndeletableCount( undeletable ?? 0 );
     setDays( [] );
@@ -258,6 +270,23 @@ const DevicePhotoCleanup = ( ) => {
 
   return (
     <ViewWrapper>
+      {( skippedPrompted > 0 || isPromptedDeletionBroken( ) ) && (
+        <View className="px-5 pt-4 pb-2">
+          <Body2>
+            iOS has stopped showing its deletion confirmation on this device, so
+            photos that need one are being skipped rather than hung on. Delete them
+            in the Photos app, or try again if the device has been fixed since.
+          </Body2>
+          <Button
+            className="mt-2"
+            text="TRY CONFIRMED DELETES AGAIN"
+            onPress={( ) => {
+              clearPromptedDeletionHangs( );
+              setSkippedPrompted( 0 );
+            }}
+          />
+        </View>
+      )}
       {stillDeleting && (
         <View className="px-5 pt-4 pb-2">
           <Body2>

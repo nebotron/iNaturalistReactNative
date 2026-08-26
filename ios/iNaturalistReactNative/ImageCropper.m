@@ -8,6 +8,7 @@
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
 #include <stdlib.h>
+#include <sys/utsname.h>
 #include "onnxruntime_c_api.h"
 
 @interface ImageCropper : NSObject <RCTBridgeModule, PHPhotoLibraryChangeObserver>
@@ -2577,6 +2578,73 @@ RCT_EXPORT_METHOD( existingPhotoAssetUris
     }
   }
   resolve( result );
+}
+
+// How many assets a hang reports in detail. Enough to see whether the stuck
+// batch is all one kind of photo; few enough to stay one readable log line.
+static const NSUInteger kInatAssetDiagnosticLimit = 8;
+
+// A per-asset dossier for the photos a deletion is stuck on, and the device it
+// is stuck on. Fired only from a hang, so it costs nothing on a working
+// deletion.
+//
+// The cheap explanations are used up. The Aug 26 log's ten stuck assets are
+// userLibrary, PhotoKit says every one of them can be deleted, and the
+// transaction still neither presents its confirmation nor calls back. What
+// separates them from the hundreds that did delete isn't in anything logged so
+// far — and the cutover is a date, not a batch: every prompted transaction
+// through Aug 25 04:03 worked, every one since has hung, one of them carrying
+// a single photo. That points at the device rather than at the request, which
+// is why the OS and model are in here and why this exists at all.
+RCT_EXPORT_METHOD( photoAssetDiagnostics
+                  : ( NSArray<NSString *> * )phUris resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    NSMutableArray<NSString *> *ids = [NSMutableArray array];
+    for ( NSString *u in ( phUris ?: @[] ) ) {
+      [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
+    }
+    PHFetchResult<PHAsset *> *fetched = ids.count > 0
+      ? [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil]
+      : nil;
+
+    NSDateFormatter *day = [[NSDateFormatter alloc] init];
+    day.dateFormat = @"yyyy-MM-dd";
+    NSMutableArray<NSString *> *lines = [NSMutableArray array];
+    NSUInteger reported = 0;
+    for ( PHAsset *asset in ( fetched ?: ( id )@[] ) ) {
+      if ( reported >= kInatAssetDiagnosticLimit ) { break; }
+      reported += 1;
+      // The resource types and UTIs say what the photo actually is — a plain
+      // JPEG, a RAW the app imported off a card, one half of a live photo.
+      NSMutableArray<NSString *> *resources = [NSMutableArray array];
+      for ( PHAssetResource *resource in [PHAssetResource assetResourcesForAsset:asset] ) {
+        [resources addObject:[NSString stringWithFormat:@"%ld/%@",
+          ( long )resource.type, resource.uniformTypeIdentifier ?: @"?"]];
+      }
+      [lines addObject:[NSString stringWithFormat:
+        @"{media=%ld sub=%lu %ldx%ld created=%@ hidden=%d fave=%d burst=%d "
+        @"canDelete=%d canEditContent=%d res=[%@]}",
+        ( long )asset.mediaType, ( unsigned long )asset.mediaSubtypes,
+        ( long )asset.pixelWidth, ( long )asset.pixelHeight,
+        asset.creationDate
+          ? [day stringFromDate:asset.creationDate]
+          : @"?",
+        asset.isHidden, asset.isFavorite, asset.representsBurst,
+        [asset canPerformEditOperation:PHAssetEditOperationDelete],
+        [asset canPerformEditOperation:PHAssetEditOperationContent],
+        [resources componentsJoinedByString:@" "]]];
+    }
+
+    struct utsname systemInfo;
+    uname( &systemInfo );
+    resolve( [NSString stringWithFormat:@"os=%@ model=%s requested=%lu fetched=%lu %@",
+      UIDevice.currentDevice.systemVersion, systemInfo.machine,
+      ( unsigned long )ids.count, ( unsigned long )fetched.count,
+      [lines componentsJoinedByString:@" "]] );
+  } );
 }
 
 // Best-effort device-photo deletion. Dismisses any modal presented over the
