@@ -39,6 +39,8 @@ const { ImageCropper } = NativeModules as {
       prompted?: number;
       promptedDeleted?: number;
       promptedMs?: number;
+      undeletable?: number;
+      assets?: string;
     }>;
   };
 };
@@ -59,6 +61,10 @@ export interface DeleteOriginalDevicePhotosResult {
   // the transaction is still open down in PhotoKit and usually still goes
   // through, so a caller should rescan rather than tell the user it went wrong.
   pending?: boolean;
+  // Assets PhotoKit refuses to let this app delete (synced from a computer, or
+  // in a shared album rather than this library). Nothing is wrong and nothing
+  // will change by retrying: they were never sent to a transaction.
+  undeletable?: number;
 }
 
 const filterDeletableDevicePhotoUris = ( photoUris: string[] ): string[] => (
@@ -403,6 +409,20 @@ const performDeleteOriginalDevicePhotos = async (
       `Deleted ${deleted ?? requested} of ${requested} `
       + `device photo(s); result=${JSON.stringify( result )}`,
     );
+    // Photos the app is not allowed to delete. They used to go into the
+    // transaction with everything else and take it down with them — a
+    // transaction is all or nothing, and PhotoKit answers a request it can't
+    // carry out with silence rather than an error. Now they're left out, which
+    // makes them the reason a cleanup can't empty, so say so as its own line.
+    const undeletable = ( result as { undeletable?: number } | undefined )?.undeletable ?? 0;
+    if ( undeletable > 0 ) {
+      logger.warnWithExtra( "photo_delete_undeletable", {
+        undeletable,
+        requested,
+        deleted: deleted ?? 0,
+        assets: ( result as { assets?: string } | undefined )?.assets ?? "unknown",
+      } );
+    }
     // What the single prompted transaction did. It carries every photo that
     // needs the user's consent, so promptedDeleted is either all of them or
     // none, and promptedMs is how long that one transaction took — well above
@@ -443,7 +463,9 @@ const performDeleteOriginalDevicePhotos = async (
     // above zero means these are gone and no longer worth tracking. Keep them
     // if it failed: they still need deleting, and still without a prompt.
     if ( appCreatedDeleted > 0 ) forgetAppCreatedPhotoAssets( appCreatedUris );
-    return { deleted: deleted ?? requested, requested, succeeded: true };
+    return {
+      deleted: deleted ?? requested, requested, succeeded: true, undeletable,
+    };
   } catch ( deleteError ) {
     if ( isLibraryBusy( deleteError ) ) {
       // Comes back in milliseconds, so the user isn't left waiting — and the

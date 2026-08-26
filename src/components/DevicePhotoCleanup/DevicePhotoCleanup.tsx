@@ -91,6 +91,7 @@ const DevicePhotoCleanup = ( ) => {
   const [syncingFaves, setSyncingFaves] = useState( true );
   const [deleting, setDeleting] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
+  const [undeletableCount, setUndeletableCount] = useState( 0 );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
   const [stillDeleting, setStillDeleting] = useState( false );
   const [rescans, setRescans] = useState( 0 );
@@ -182,7 +183,9 @@ const DevicePhotoCleanup = ( ) => {
     // nothing yet resolves normally, and
     // claiming "Deleted 1,159 photos" while the photos are all still there is
     // worse than saying nothing happened.
-    const { deleted, succeeded, pending } = await deleteOriginalDevicePhotos(
+    const {
+      deleted, succeeded, pending, undeletable,
+    } = await deleteOriginalDevicePhotos(
       allUris,
       { userInitiated: true },
     );
@@ -199,6 +202,7 @@ const DevicePhotoCleanup = ( ) => {
     // retry; the helper has already explained the failure with an alert.
     if ( !succeeded ) return;
     setDeletedCount( deleted );
+    setUndeletableCount( undeletable ?? 0 );
     setDays( [] );
   }, [allUris] );
 
@@ -211,6 +215,14 @@ const DevicePhotoCleanup = ( ) => {
               ? ""
               : "s"}`}
           </Heading4>
+          {undeletableCount > 0 && (
+            <Body2 className="mt-4 text-center">
+              {`${undeletableCount} photo${undeletableCount === 1
+                ? ""
+                : "s"} could not be deleted: iOS only lets the Photos app delete `
+                + "photos synced from a computer or belonging to a shared album."}
+            </Body2>
+          )}
         </View>
       </ViewWrapper>
     );

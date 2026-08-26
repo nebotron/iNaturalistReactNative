@@ -130,6 +130,35 @@ static NSString *inatOutstandingPhotoWrite( void )
   }
 }
 
+// What PhotoKit says about the assets a deletion was asked for.
+//
+// An asset this app is not allowed to delete — one synced from a computer, one
+// belonging to a shared album rather than this library — is not a slow delete.
+// deleteAssets has nothing it can do with it, and on iOS 26 that request
+// neither presents a confirmation nor calls its completion handler: it just
+// sits. The Aug 26 log is ten such assets. Every consent-free transaction
+// around them landed, every transaction carrying them hung, the same ten
+// survived three relaunches and a device restart, and one of them alone hung a
+// single-asset deletion on Aug 25 — which is size, staleness and the
+// confirmation dialog all ruled out at once.
+static NSString *inatAssetDeletabilitySummary( id<NSFastEnumeration> assets )
+{
+  NSUInteger userLibrary = 0, cloudShared = 0, itunesSynced = 0, otherSource = 0;
+  NSUInteger notDeletable = 0;
+  for ( PHAsset *asset in assets ) {
+    if ( asset.sourceType & PHAssetSourceTypeUserLibrary ) { userLibrary += 1; }
+    else if ( asset.sourceType & PHAssetSourceTypeCloudShared ) { cloudShared += 1; }
+    else if ( asset.sourceType & PHAssetSourceTypeiTunesSynced ) { itunesSynced += 1; }
+    else { otherSource += 1; }
+    if ( ![asset canPerformEditOperation:PHAssetEditOperationDelete] ) { notDeletable += 1; }
+  }
+  return [NSString stringWithFormat:
+    @"userLibrary=%lu cloudShared=%lu itunesSynced=%lu otherSource=%lu notDeletable=%lu",
+    ( unsigned long )userLibrary, ( unsigned long )cloudShared,
+    ( unsigned long )itunesSynced, ( unsigned long )otherSource,
+    ( unsigned long )notDeletable];
+}
+
 // The assets we didn't create go out in a single prompted transaction.
 //
 // They used to be chunked, ramping 15, 20, 25… on the theory that a prompted
@@ -2392,9 +2421,13 @@ RCT_EXPORT_METHOD( photoDeletionContext
     for ( NSString *u in ( phUris ?: @[] ) ) {
       [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
     }
-    NSUInteger fetchedCount = ids.count > 0
-      ? [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil].count
-      : 0;
+    PHFetchResult<PHAsset *> *contextFetched = ids.count > 0
+      ? [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil]
+      : nil;
+    NSUInteger fetchedCount = contextFetched.count;
+    NSString *assetSummary = contextFetched
+      ? inatAssetDeletabilitySummary( contextFetched )
+      : @"(nothing fetched)";
 
     // Which half of the split the library still owes us. "prompted=idle" on a
     // hang means the outstanding transaction is the consent-free one (or that
@@ -2411,11 +2444,11 @@ RCT_EXPORT_METHOD( photoDeletionContext
 
     NSString *info = [NSString stringWithFormat:
       @"appState=%ld hasWindowScene=%d sceneState=%ld fgActiveScenes=%lu authStatus=%ld "
-      @"windows=%lu requested=%lu fetched=%lu %@ outstanding=%@ vcChain=%@ windowList=[%@]",
+      @"windows=%lu requested=%lu fetched=%lu %@ %@ outstanding=%@ vcChain=%@ windowList=[%@]",
       ( long )UIApplication.sharedApplication.applicationState,
       hasScene, sceneState, ( unsigned long )foregroundActiveScenes, auth,
       ( unsigned long )UIApplication.sharedApplication.windows.count,
-      ( unsigned long )ids.count, ( unsigned long )fetchedCount,
+      ( unsigned long )ids.count, ( unsigned long )fetchedCount, assetSummary,
       // Which transaction the library still owes us, if any. The line above
       // only covers deletions; a location write that never came back is the
       // other way in, and nothing reported it.
@@ -2593,6 +2626,33 @@ RCT_EXPORT_METHOD( deletePhotoAssets
       return;
     }
 
+    // Anything PhotoKit says this app cannot delete is left out of the
+    // transaction entirely. Including one doesn't make the deletion slow, it
+    // makes it silent: no confirmation, no completion handler, and the assets
+    // it was batched with never get deleted either, because a transaction is
+    // all or nothing. Reported either way, so the log says which kind of asset
+    // a cleanup is stuck on instead of only that it is stuck.
+    NSString *assetSummary = inatAssetDeletabilitySummary( fetched );
+    NSMutableArray<PHAsset *> *deletable = [NSMutableArray array];
+    NSUInteger undeletable = 0;
+    for ( PHAsset *asset in fetched ) {
+      if ( [asset canPerformEditOperation:PHAssetEditOperationDelete] ) {
+        [deletable addObject:asset];
+      } else {
+        undeletable += 1;
+      }
+    }
+    if ( deletable.count == 0 ) {
+      resolve( @{
+        @"deleted": @0,
+        @"requested": @( ids.count ),
+        @"fetched": @( fetched.count ),
+        @"undeletable": @( undeletable ),
+        @"assets": assetSummary,
+      } );
+      return;
+    }
+
     // Split the fetched assets by whether we created them. Identifiers are
     // compared on the UUID ahead of the first slash, as elsewhere in this file:
     // a stored "…/L0/001" and a bare UUID name the same asset.
@@ -2606,7 +2666,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     }
     NSMutableArray<PHAsset *> *ourAssets = [NSMutableArray array];
     NSMutableArray<PHAsset *> *theirAssets = [NSMutableArray array];
-    for ( PHAsset *asset in fetched ) {
+    for ( PHAsset *asset in deletable ) {
       NSString *identifier = asset.localIdentifier;
       NSRange slash = [identifier rangeOfString:@"/"];
       if ( slash.location != NSNotFound ) {
@@ -2704,9 +2764,10 @@ RCT_EXPORT_METHOD( deletePhotoAssets
         reject( @"DELETE_NO_CALLBACK",
           [NSString stringWithFormat:
             @"deleteAssets for %lu asset(s) never called back in %.0fs "
-            @"(%lu still in the library)",
+            @"(%lu still in the library; %@)",
             ( unsigned long )ids.count, kInatPendingDeleteWatchdogSeconds,
-            ( unsigned long )stillPresent.count],
+            ( unsigned long )stillPresent.count,
+            inatAssetDeletabilitySummary( stillPresent )],
           nil );
       } );
 
@@ -2747,15 +2808,18 @@ RCT_EXPORT_METHOD( deletePhotoAssets
             @"prompted": @( theirAssets.count ),
             @"promptedDeleted": @( promptedDeleted ),
             @"promptedMs": @( promptedMs ),
+            @"undeletable": @( undeletable ),
+            @"assets": assetSummary,
           } );
         } else {
           reject( @"DELETE_FAILED",
             [NSString stringWithFormat:
               @"requested=%lu fetched=%lu appCreated=%lu appCreatedMs=%ld "
-              @"dismissedModal=%d sceneState=%ld error=%@",
+              @"dismissedModal=%d sceneState=%ld assets=[%@] error=%@",
               ( unsigned long )ids.count, ( unsigned long )fetched.count,
               ( unsigned long )ourAssets.count, ( long )appCreatedMs,
-              dismissedModal, sceneState, error.localizedDescription ?: @"unknown"],
+              dismissedModal, sceneState, assetSummary,
+              error.localizedDescription ?: @"unknown"],
             error );
         }
       } );
