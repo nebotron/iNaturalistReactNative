@@ -3,6 +3,9 @@ import GroupPhotosContainer from "components/PhotoImporter/GroupPhotosContainer"
 import initI18next from "i18n/initI18next";
 import React from "react";
 import {
+  getPreviouslyUploadedDevicePhotoUrisSet,
+} from "sharedHelpers/duplicateUploadedDevicePhotos";
+import {
   clearRemovedGroupPhotoUris,
   getRemovedGroupPhotoUris,
 } from "sharedHelpers/removedGroupPhotoUris";
@@ -85,5 +88,28 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
 
     expect( getRemovedGroupPhotoUris( ) ).toContain( "ph://DEVICE-1" );
     expect( getRemovedGroupPhotoUris( ) ).not.toContain( "ph://DEVICE-2" );
+  } );
+
+  // Discarding is the user saying they're done with these photos, so the
+  // picker's "Hide Saved" toggle stops offering them — but nothing was deleted
+  // or staged for deletion, so Photo Cleanup must not offer them either.
+  it( "indexes a discarded batch as saved without staging it for cleanup", async ( ) => {
+    useStore.setState( {
+      groupedPhotos: [{
+        photos: [{
+          image: { uri: "file:///local_1.jpg" },
+          originalDevicePhotoUri: "ph://DEVICE-1",
+        }],
+      }],
+    } );
+    renderComponent( <GroupPhotosContainer /> );
+
+    fireEvent.press( screen.getByTestId( "GroupPhotos.discard" ) );
+    fireEvent.press( screen.getByText( "DISCARD ALL" ) );
+
+    expect(
+      getPreviouslyUploadedDevicePhotoUrisSet( global.realm ),
+    ).toContain( "ph://DEVICE-1" );
+    expect( getRemovedGroupPhotoUris( ) ).not.toContain( "ph://DEVICE-1" );
   } );
 } );
