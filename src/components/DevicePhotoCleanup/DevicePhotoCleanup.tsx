@@ -181,7 +181,7 @@ const DevicePhotoCleanup = ( ) => {
     PixelRatio.getPixelSizeForLayoutSize( gridItemWidth || 128 ),
   );
 
-  const deletePhotos = useCallback( async ( ) => {
+  const deletePhotos = useCallback( async ( viaCameraRoll = false ) => {
     setDeleting( true );
     setStillDeleting( false );
     // Report what the OS actually deleted. A wedged PHPhotoLibrary deletes
@@ -192,7 +192,7 @@ const DevicePhotoCleanup = ( ) => {
       deleted, succeeded, pending, undeletable, skippedPrompted: skipped,
     } = await deleteOriginalDevicePhotos(
       allUris,
-      { userInitiated: true },
+      { userInitiated: true, viaCameraRoll },
     );
     setDeleting( false );
     setSkippedPrompted( skipped ?? 0 );
@@ -312,8 +312,18 @@ const DevicePhotoCleanup = ( ) => {
           text={`DELETE ${allUris.length} PHOTO${allUris.length === 1
             ? ""
             : "S"}`}
-          onPress={deletePhotos}
+          onPress={( ) => deletePhotos( )}
           loading={deleting}
+          disabled={deleting}
+        />
+        {/* Same photos, through CameraRoll's bare performChanges instead of
+            ImageCropper's. Which of the two comes back says whether the
+            deletion path in this app is at fault or PhotoKit is refusing the
+            process — see viaCameraRoll in promptDeleteOriginalDevicePhotos.ts. */}
+        <Button
+          className="mt-2"
+          text="DELETE VIA CAMERAROLL (TEST)"
+          onPress={( ) => deletePhotos( true )}
           disabled={deleting}
         />
         {deleting && (

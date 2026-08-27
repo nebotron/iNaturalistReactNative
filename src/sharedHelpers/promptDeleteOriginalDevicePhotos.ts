@@ -54,6 +54,19 @@ const { ImageCropper } = NativeModules as {
 
 interface DeleteOriginalDevicePhotosOptions {
   userInitiated?: boolean;
+  // Delete through CameraRoll.deletePhotos instead of ImageCropper's
+  // deletePhotoAssets, and ignore the skip above.
+  //
+  // This is the experiment the log can't run on its own. Deleting these same
+  // photos in the Photos app works and the device has not been updated, so the
+  // fault is inside this process — but that leaves two candidates: PhotoKit
+  // refusing this app, or this file's own deletion path (the modal dismissal,
+  // the app-created split, the change observer, the write gate). CameraRoll
+  // issues a bare performChanges with none of that. If it deletes them, the
+  // native path here is at fault and the diff that broke it is findable. If it
+  // hangs too, everything in this file is exonerated and the question moves to
+  // what PhotoKit has against this process.
+  viaCameraRoll?: boolean;
 }
 
 // What the OS actually did, so callers can tell the user the truth instead of
@@ -255,7 +268,9 @@ const performDeleteOriginalDevicePhotos = async (
   // library write in the session. Skipping is not a fix — nothing here can fix
   // it — it is refusing to pay that price again for the same nothing.
   const promptedCount = uniqueUris.length - ourUris.length;
-  const skipPrompted = promptedCount > 0 && isPromptedDeletionBroken( );
+  const skipPrompted = promptedCount > 0
+    && !options.viaCameraRoll
+    && isPromptedDeletionBroken( );
   if ( skipPrompted ) {
     logger.warnWithExtra( "photo_delete_prompted_skipped", {
       skippedPrompted: promptedCount,
@@ -422,12 +437,16 @@ const performDeleteOriginalDevicePhotos = async (
     const skippedNote = skipPrompted
       ? `, skipping ${promptedCount} that need a confirmation this device won't show`
       : "";
+    const pathNote = options.viaCameraRoll
+      ? " via CameraRoll"
+      : "";
     logger.info(
-      `Deleting ${urisToDelete.length} device photo(s)${appCreatedNote}${skippedNote}`,
+      `Deleting ${urisToDelete.length} device photo(s)${appCreatedNote}${skippedNote}${pathNote}`,
     );
     // Prefer the native path that dismisses a blocking modal before deleting;
     // fall back to CameraRoll on platforms/builds without it.
-    const deletion = ( Platform.OS === "ios" && ImageCropper?.deletePhotoAssets )
+    const deletion = ( Platform.OS === "ios" && ImageCropper?.deletePhotoAssets
+      && !options.viaCameraRoll )
       ? ImageCropper.deletePhotoAssets( urisToDelete, appCreatedUris )
       : CameraRoll.deletePhotos( urisToDelete );
     // Whatever we decide below, the next Photos-library write waits for this
