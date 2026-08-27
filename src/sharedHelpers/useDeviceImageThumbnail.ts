@@ -25,8 +25,11 @@ const { ImageCropper } = NativeModules as { ImageCropper?: ImageCropperModule };
 // that fix kept getting served). v6: tile-sized thumbnails of a ph:// asset
 // were square-cropped (PHImageContentModeAspectFill) and are now the whole
 // frame, so anything cached under v5 describes a different frame than the
-// photo it stands for.
-const CACHE_VERSION = 6;
+// photo it stands for. v7: generation now rejects an encode that came back
+// entirely black rather than caching it, so any black square already sitting in
+// the cache under v6 is regenerated instead of being served for another two
+// days.
+const CACHE_VERSION = 7;
 
 const cacheKey = ( uri: string, maxPixel: number ) => `${uri}:${maxPixel}:v${CACHE_VERSION}`;
 

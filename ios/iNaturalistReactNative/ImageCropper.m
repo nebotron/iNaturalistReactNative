@@ -1155,6 +1155,70 @@ static BOOL jpegDataIsDecodable( NSData *data )
   return decoded != nil && decoded.size.width > 0 && decoded.size.height > 0;
 }
 
+// Longest side the encoded thumbnail is decoded back down to for the check
+// below. ImageIO downsamples a JPEG through its DCT rather than decoding it
+// whole, so this costs a fraction of the encode that produced the data, and at
+// this size any real subject still leaves pixels that aren't black.
+static const size_t kBlackProbePixel = 32;
+
+// Highest channel value still counted as black. A buffer that was cleared and
+// never drawn over encodes as exact zeros; JPEG quantization and chroma
+// subsampling move that by a hair, not by this much.
+static const uint8_t kBlackProbeThreshold = 6;
+
+// Whether encoded JPEG data holds nothing but black pixels. Decodable is not
+// the same as a picture of the photo: encoding a UIImage whose CGImage decodes
+// lazily can hand back the decoder's own cleared buffer when that decode turns
+// into a no-op, and that is a perfectly openable JPEG of the right dimensions
+// that is entirely black -- which jpegDataIsDecodable cannot tell from a
+// photograph of the night sky. Cached on disk under the photo's key and served
+// to every cell from then on, that file is what left Group Photos cells stuck
+// as black squares with no load error anywhere to explain them.
+static BOOL jpegDataIsBlack( NSData *data )
+{
+  CGImageSourceRef source = CGImageSourceCreateWithData( (__bridge CFDataRef)data, NULL );
+  if ( !source ) return NO;
+  NSDictionary *opts = @{
+    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:          @( kBlackProbePixel ),
+  };
+  CGImageRef probe =
+    CGImageSourceCreateThumbnailAtIndex( source, 0, (__bridge CFDictionaryRef)opts );
+  CFRelease( source );
+  if ( !probe ) return NO;
+
+  size_t width  = CGImageGetWidth( probe );
+  size_t height = CGImageGetHeight( probe );
+  if ( width == 0 || height == 0 ) { CGImageRelease( probe ); return NO; }
+
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB( );
+  // Same layout as the rasterization buffer: no alpha, so every pixel is the
+  // four bytes stepped through below.
+  CGContextRef ctx = CGBitmapContextCreate(
+    NULL, width, height, 8, 0, space,
+    kCGImageAlphaNoneSkipFirst | kCGBitmapByteOrder32Little
+  );
+  CGColorSpaceRelease( space );
+  if ( !ctx ) { CGImageRelease( probe ); return NO; }
+  CGContextDrawImage( ctx, CGRectMake( 0, 0, width, height ), probe );
+  CGImageRelease( probe );
+
+  const uint8_t *pixels      = CGBitmapContextGetData( ctx );
+  size_t         bytesPerRow = CGBitmapContextGetBytesPerRow( ctx );
+  BOOL           black       = pixels != NULL;
+  for ( size_t y = 0; black && y < height; y += 1 ) {
+    const uint8_t *row = pixels + ( y * bytesPerRow );
+    for ( size_t x = 0; x < width; x += 1 ) {
+      const uint8_t *px = row + ( x * 4 );
+      if ( px[0] > kBlackProbeThreshold
+        || px[1] > kBlackProbeThreshold
+        || px[2] > kBlackProbeThreshold ) { black = NO; break; }
+    }
+  }
+  CGContextRelease( ctx );
+  return black;
+}
+
 // Longest side a rasterization is allowed to allocate a bitmap for. Well above
 // any camera photo, and four bytes a pixel at this size is already 256MB, so a
 // pathological source (a stitched panorama, say) can't take the app down.
@@ -1256,19 +1320,32 @@ static UIImage *rasterizedImage( UIImage *image )
 }
 
 // JPEG data for a thumbnail, or nil if this image can't be encoded into one a
-// decoder will open. A thumbnail that fails to decode is worse than no
-// thumbnail at all: it is cached on disk under the photo's key and served to
-// every cell that asks for it from then on, so the photo it stands for can
-// never be drawn — which is what left Group Photos cells showing an invisible
-// crop overlay whose pinch gesture appeared dead and whose subject detection
-// appeared never to return.
-static NSData *encodedThumbnailData( UIImage *image )
+// decoder will open and find the photo in. A thumbnail that isn't the photo is
+// worse than no thumbnail at all: it is cached on disk under the photo's key
+// and served to every cell that asks for it from then on, so the photo it
+// stands for can never be drawn — an unopenable one left Group Photos cells
+// showing an invisible crop overlay whose pinch gesture appeared dead and whose
+// subject detection appeared never to return, and an openable but empty one
+// left them as plain black squares.
+static NSData *encodedThumbnailData( UIImage *image, NSString **reason )
 {
   NSData *data = UIImageJPEGRepresentation( image, 0.8 );
-  if ( jpegDataIsDecodable( data ) ) return data;
+  // An all-black encode is treated exactly like an unopenable one, because it
+  // has the same cause -- a decode that never produced any pixels -- and only
+  // the rasterization below can tell that apart from a black photograph: it
+  // draws over a colour no photograph is uniformly made of, so a photo that
+  // really is black comes back drawn and is encoded as normal, while a no-op
+  // draw comes back nil and this photo gets no cached thumbnail at all.
+  if ( jpegDataIsDecodable( data ) && !jpegDataIsBlack( data ) ) return data;
   UIImage *rasterized = rasterizedImage( image );
   data = rasterized ? UIImageJPEGRepresentation( rasterized, 0.8 ) : nil;
-  return jpegDataIsDecodable( data ) ? data : nil;
+  if ( jpegDataIsDecodable( data ) ) return data;
+  if ( reason ) {
+    *reason = rasterized
+      ? @"Could not encode thumbnail"
+      : @"Thumbnail decode produced no pixels";
+  }
+  return nil;
 }
 
 // Writes a downscaled JPEG thumbnail (maxPixel px on the longest side) of a
@@ -1291,8 +1368,12 @@ RCT_EXPORT_METHOD( createThumbnail
 
   void (^writeThumbnail)( UIImage * ) = ^( UIImage *image ) {
     if ( !image ) { reject( @"THUMBNAIL_FAILED", @"Could not load image", nil ); return; }
-    NSData *data = encodedThumbnailData( image );
-    if ( !data ) { reject( @"THUMBNAIL_FAILED", @"Could not encode thumbnail", nil ); return; }
+    NSString *encodeFailure = nil;
+    NSData   *data          = encodedThumbnailData( image, &encodeFailure );
+    if ( !data ) {
+      reject( @"THUMBNAIL_FAILED", encodeFailure ?: @"Could not encode thumbnail", nil );
+      return;
+    }
     [[NSFileManager defaultManager]
       createDirectoryAtPath:[output stringByDeletingLastPathComponent]
       withIntermediateDirectories:YES attributes:nil error:nil];
