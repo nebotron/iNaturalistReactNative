@@ -91,18 +91,36 @@ const paintedImages = new Set<string>( );
 // straight through to an image it can actually draw.
 const undecodableUris = new Set<string>( );
 
-// What actually failed, which the load error alone does not say: the Aug 20 log
-// has three of these where the error names the *original* .CR3 rather than the
-// thumbnail that was being drawn, and each one threw away a 10MB thumbnail that
-// had generated perfectly well. If the original is gone from disk, that
-// explains the failure by itself — and the generated thumbnail is then the only
-// copy of the photo left, so discarding it costs the cell the one image it
-// could still draw.
+// Generated files this process has already thrown away once. Invalidating a
+// thumbnail deletes it so the next request regenerates it -- at the same
+// deterministic path, since the path is a hash of the photo's uri and the size
+// asked for -- so without a bound on it, handing that path back to <Image> is a
+// loop: draw, fail, delete, regenerate, draw. One retry is what separates a
+// thumbnail that generated badly once from a photo that genuinely cannot
+// produce one.
+const retriedUris = new Set<string>( );
+
+// Logs what actually failed, which the load error alone does not say: the Aug
+// 20 log has three of these where the error names the *original* .CR3 rather
+// than the thumbnail that was being drawn, and each one threw away a 10MB
+// thumbnail that had generated perfectly well. If the original is gone from
+// disk, that explains the failure by itself — and the generated thumbnail is
+// then the only copy of the photo left, so discarding it costs the cell the one
+// image it could still draw.
+//
+// Returns whether a regenerated file is on its way, in which case the caller
+// lifts the block on it. A photo imported from the device library is written to
+// a path built from its own filename (see copyImagesFromCameraRoll), the same
+// path on every import, so a thumbnail blocked once stayed blocked for the life
+// of the process even after invalidation had replaced it with a good one --
+// which is why duplicating a stuck photo fixed the duplicate and never the
+// original. The duplicate is copied to a fresh uuid path and so shares none of
+// this photo's cached state.
 async function reportOverlayLoadFailure(
   failedUri: string,
   cropSourceUri: string,
   error?: string,
-): Promise<void> {
+): Promise<boolean> {
   const sourceExists = cropSourceUri.startsWith( "ph://" )
     ? true
     : await exists( cropSourceUri.replace( /^file:\/\//, "" ) ).catch( ( ) => false );
@@ -110,9 +128,19 @@ async function reportOverlayLoadFailure(
     `overlay image failed to load for ${cropSourceUri}: ${failedUri}: ${error} `
     + `(original on disk: ${sourceExists})`,
   );
-  if ( sourceExists ) {
-    invalidateDeviceImageThumbnail( failedUri, cropSourceUri );
+  if ( !sourceExists ) {
+    return false;
   }
+  // Only a generated file is worth waiting for: the original is the end of the
+  // fallback chain, and there is nothing to regenerate it from. Claim the retry
+  // before the file is thrown away, so a second failure still discards the file
+  // (as it always has) without asking for it back a second time.
+  const retryable = failedUri !== cropSourceUri && !retriedUris.has( failedUri );
+  if ( retryable ) {
+    retriedUris.add( failedUri );
+  }
+  await invalidateDeviceImageThumbnail( failedUri, cropSourceUri );
+  return retryable;
 }
 
 const cropsMatch = ( a: NormalizedCrop, b: NormalizedCrop ) => (
@@ -419,10 +447,15 @@ const GroupPhotoCropImage = ( {
             onError={e => {
               const failedUri = displayUri as string;
               undecodableUris.add( failedUri );
-              // Generated files only: the fallback chain ends at the original,
-              // and invalidate ignores anything outside the thumbnail cache.
-              reportOverlayLoadFailure( failedUri, cropSourceUri, e.nativeEvent?.error );
+              // Fall through to the next candidate now, and come back to this
+              // one if the file behind it is being replaced.
               countLoadFailure( count => count + 1 );
+              reportOverlayLoadFailure( failedUri, cropSourceUri, e.nativeEvent?.error )
+                .then( regenerating => {
+                  if ( !regenerating ) return;
+                  undecodableUris.delete( failedUri );
+                  countLoadFailure( count => count + 1 );
+                } );
             }}
           />
         )}

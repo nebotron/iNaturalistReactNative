@@ -170,6 +170,53 @@ describe( "useDeviceImageThumbnail", ( ) => {
     expect( startedUris( ).filter( uri => uri === "ph://f1" ) ).toHaveLength( 2 );
   } );
 
+  it(
+    "regenerates for the cell that was drawing the file when it was thrown away",
+    async ( ) => {
+      const generated = `file://${cachedThumbnailPath}/f2.jpg`;
+      const { result } = renderHook( ( ) => useDeviceImageThumbnail( "ph://f2", 300 ) );
+      await flush( );
+      await finish( "ph://f2", generated );
+      expect( result.current ).toEqual( generated );
+
+      await act( async ( ) => {
+        await invalidateDeviceImageThumbnail( generated, "ph://f2" );
+      } );
+
+      // The cell drawing the deleted file is the one that needs it back, and it
+      // holds the path in its own state: without a signal it keeps handing out a
+      // file that is no longer on disk and nothing ever regenerates it, so
+      // invalidation left the photo with no thumbnail rather than a fresh one.
+      expect( result.current ).toBeUndefined( );
+      await flush( );
+      expect( startedUris( ).filter( uri => uri === "ph://f2" ) ).toHaveLength( 2 );
+
+      await finish( "ph://f2", generated );
+      expect( result.current ).toEqual( generated );
+    },
+  );
+
+  it(
+    "leaves a healthy cell alone when someone else's thumbnail is thrown away",
+    async ( ) => {
+      const generated = `file://${cachedThumbnailPath}/f3.jpg`;
+      const { result } = renderHook( ( ) => useDeviceImageThumbnail( "ph://f3", 300 ) );
+      await flush( );
+      await finish( "ph://f3", generated );
+
+      await act( async ( ) => {
+        await invalidateDeviceImageThumbnail(
+          `file://${cachedThumbnailPath}/somethingElse.jpg`,
+          "ph://other",
+        );
+      } );
+      await flush( );
+
+      expect( result.current ).toEqual( generated );
+      expect( startedUris( ).filter( uri => uri === "ph://f3" ) ).toHaveLength( 1 );
+    },
+  );
+
   it( "never deletes anything outside the thumbnail cache", async ( ) => {
     exists.mockResolvedValue( true );
     unlink.mockClear( );

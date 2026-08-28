@@ -241,6 +241,59 @@ describe( "GroupPhotoCropImage", ( ) => {
     expect( framedDimensions( ) ).toEqual( [[2048, 1365]] );
   } );
 
+  // A regenerated thumbnail lands at the same deterministic path as the one it
+  // replaced, so blocking the path a cell failed on blocked the replacement
+  // too, for the life of the process. The photo's own uri is just as sticky --
+  // an imported photo is written to a path built from its device filename, the
+  // same one on every import -- which is why duplicating a stuck photo fixed
+  // the duplicate (a fresh uuid path, sharing none of this) and never the
+  // original.
+  it( "gives a thumbnail it threw away one chance to come back", async ( ) => {
+    exists.mockResolvedValue( true );
+    const generated = "file:///thumbs/retried.jpg";
+    mockThumbnail.mockReturnValue( generated );
+    renderCropImage( "file:///galleryPhotos/retried.CR3" );
+
+    fireEvent( screen.getByTestId( "GroupPhotoCropImage.photo" ), "error", {
+      nativeEvent: { error: "decode failed" },
+    } );
+
+    await waitFor( ( ) => {
+      expect( invalidateDeviceImageThumbnail ).toHaveBeenCalled( );
+    } );
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( "GroupPhotoCropImage.photo" ).props.source.uri )
+        .toBe( generated );
+    } );
+  } );
+
+  // Bounded, because the retry hands back the same path: without a limit this
+  // is a loop of draw, fail, delete, regenerate, draw.
+  it( "stops retrying a thumbnail that fails a second time", async ( ) => {
+    exists.mockResolvedValue( true );
+    const cropSourceUri = "file:///galleryPhotos/twiceFailed.CR3";
+    mockThumbnail.mockReturnValue( "file:///thumbs/twiceFailed.jpg" );
+    renderCropImage( cropSourceUri );
+
+    const fireError = ( ) => fireEvent(
+      screen.getByTestId( "GroupPhotoCropImage.photo" ),
+      "error",
+      { nativeEvent: { error: "decode failed" } },
+    );
+
+    fireError( );
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( "GroupPhotoCropImage.photo" ).props.source.uri )
+        .toBe( "file:///thumbs/twiceFailed.jpg" );
+    } );
+
+    fireError( );
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( "GroupPhotoCropImage.photo" ).props.source.uri )
+        .toBe( cropSourceUri );
+    } );
+  } );
+
   it( "survives a load event that reports no source", ( ) => {
     mockDetection.mockReturnValue( null );
     renderCropImage( "ph://sourceless" );

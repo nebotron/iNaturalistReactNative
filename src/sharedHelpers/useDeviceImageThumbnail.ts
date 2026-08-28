@@ -51,6 +51,19 @@ function hashKey( key: string ): string {
 // scrolls back, and the entries are just short strings.
 const memoryCache = new Map<string, string>( );
 
+// Bumped whenever a generated thumbnail is thrown away. A caller that already
+// resolved the deleted path holds it in its own state and its request effect
+// has no reason to re-run, so without a signal the file is deleted and nothing
+// ever regenerates it: invalidation left the photo with no thumbnail at all
+// rather than a fresh one, which is the opposite of what it is for.
+let invalidationCount = 0;
+const invalidationListeners = new Set<( ) => void>( );
+
+const notifyInvalidation = ( ) => {
+  invalidationCount += 1;
+  invalidationListeners.forEach( listener => listener( ) );
+};
+
 // Cap concurrent native thumbnail generations so a fast scroll through a large
 // library doesn't fire hundreds of decodes at once.
 const MAX_CONCURRENCY = 4;
@@ -403,6 +416,9 @@ export const invalidateDeviceImageThumbnail = async (
   } catch ( e ) {
     logger.warn( `could not discard undecodable thumbnail for ${context}: ${e}` );
   }
+  // Only after the file is gone: a request that arrives while it is still on
+  // disk is served the same bad file straight back out of it.
+  notifyInvalidation( );
 };
 
 // Returns a small cached thumbnail uri for a device photo, generated off the
@@ -418,7 +434,22 @@ const useDeviceImageThumbnail = (
   const key = uri && available
     ? cacheKey( uri, maxPixel )
     : null;
-  const [resolved, setResolved] = useState<{ key: string; uri: string } | null>( null );
+  const [resolved, setResolved] = useState<
+    { key: string; invalidation: number; uri: string } | null
+  >( null );
+  // Stamped onto whatever this hook resolves, so a result from before an
+  // invalidation is not handed out after it. Healthy callers are untouched by
+  // someone else's invalidation: their entry is still in memoryCache, which is
+  // read first below.
+  const [invalidation, setInvalidation] = useState( invalidationCount );
+
+  useEffect( ( ) => {
+    const listener = ( ) => setInvalidation( invalidationCount );
+    invalidationListeners.add( listener );
+    return ( ) => {
+      invalidationListeners.delete( listener );
+    };
+  }, [] );
 
   useEffect( ( ) => {
     // A cached thumbnail is picked up during render, so there's nothing to
@@ -429,13 +460,13 @@ const useDeviceImageThumbnail = (
     request.promise.then( result => {
       // Fall back to the original uri if generation failed, so the cell shows
       // the photo (full-res) rather than staying blank forever.
-      if ( !cancelled ) setResolved( { key, uri: result ?? uri } );
+      if ( !cancelled ) setResolved( { key, invalidation, uri: result ?? uri } );
     } );
     return ( ) => {
       cancelled = true;
       request.release( );
     };
-  }, [key, maxPixel, uri] );
+  }, [invalidation, key, maxPixel, uri] );
 
   if ( !key ) {
     // No uri at all, or no native generator (e.g. Android): use the original.
@@ -445,7 +476,7 @@ const useDeviceImageThumbnail = (
   // recycled cell shows its photo on the first frame instead of flashing a
   // placeholder (or worse, the previous cell's photo) on the way back.
   return memoryCache.get( key )
-    ?? ( resolved?.key === key
+    ?? ( resolved?.key === key && resolved.invalidation === invalidation
       ? resolved.uri
       : undefined );
 };
