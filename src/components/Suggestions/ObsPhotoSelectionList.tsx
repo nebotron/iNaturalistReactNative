@@ -3,7 +3,7 @@ import { CachedImage, TransparentCircleButton } from "components/SharedComponent
 import {
   Pressable, View,
 } from "components/styledComponents";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import type { LayoutChangeEvent } from "react-native";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
 import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
@@ -19,6 +19,16 @@ interface Props {
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
 }
 
+// The list is keyed on medium-sized remote URLs, but the thumbnail often zooms
+// into a fraction of the frame, where medium pixels look visibly soft. Show the
+// original instead; the uri the rest of the screen uses as the photo's identity
+// is untouched. Local files are already the full resolution we have.
+const fullResolutionUri = ( uri: string ) => (
+  uri.startsWith( "http" )
+    ? uri.replace( /\/(square|small|medium|large)(\.\w+)?(\?.*)?$/i, "/original$2$3" )
+    : uri
+);
+
 // For images that aren't the user's own, frame the thumbnail with the subject
 // detector bounding box (or the crop log entry if one exists) by default. The
 // user's own photos are shown plain unless the user framed the subject
@@ -27,6 +37,7 @@ interface Props {
 const PhotoThumbnail = ( { uri, detectSubject }: { uri: string; detectSubject?: boolean } ) => {
   const [containerSize, setContainerSize] = useState<number | null>( null );
   const detection = useSubjectDetectionForUri( uri, { loggedCropOnly: !detectSubject } );
+  const displayUri = useMemo( ( ) => fullResolutionUri( uri ), [uri] );
 
   const handleLayout = useCallback( ( event: LayoutChangeEvent ) => {
     setContainerSize( event.nativeEvent.layout.width );
@@ -52,7 +63,7 @@ const PhotoThumbnail = ( { uri, detectSubject }: { uri: string; detectSubject?: 
         ? (
           <View style={cropStyles.wrapperStyle}>
             <CachedImage
-              source={{ uri }}
+              source={{ uri: displayUri }}
               style={cropStyles.imageStyle}
               resizeMode="fill"
             />
@@ -60,7 +71,7 @@ const PhotoThumbnail = ( { uri, detectSubject }: { uri: string; detectSubject?: 
         )
         : (
           <CachedImage
-            source={{ uri }}
+            source={{ uri: displayUri }}
             className="w-full h-full"
           />
         )}
