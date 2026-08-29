@@ -2580,6 +2580,111 @@ RCT_EXPORT_METHOD( existingPhotoAssetUris
   resolve( result );
 }
 
+// Two measurements on the assets a deletion is stuck on, run deliberately from
+// the cleanup screen rather than during a delete.
+//
+// Everything cheap is used up: the assets are ordinary and deletable, a bare
+// CameraRoll.deletePhotos hangs the same way, the consent-free half hangs too,
+// Recently Deleted has been emptied, and updateAssetLocations — the same
+// performChanges API from the same process — still writes in ~100ms. Two
+// possibilities remain and no log line separates them: PhotoKit is asking for
+// a confirmation that never appears, or deleteAssets is not getting that far.
+//
+// So ask both questions directly:
+//
+// 1. A no-op modify transaction on one of the stuck assets — its own isFavorite
+//    written back unchanged. Same performChanges, same asset, same consent
+//    rules; only the operation differs. If it comes back quickly, PhotoKit is
+//    servicing writes on this exact asset and the fault is specific to
+//    deleteAssets. If it hangs too, the consent path is what's broken and
+//    deletion is only where it shows.
+//
+// 2. Whether this app can present a UIAlertController at all, right now, from
+//    the same view controller PhotoKit's confirmation would use. If ours
+//    appears and PhotoKit's never does, PhotoKit isn't asking.
+RCT_EXPORT_METHOD( photoDeleteProbe
+                  : ( NSArray<NSString *> * )phUris resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    NSMutableArray<NSString *> *ids = [NSMutableArray array];
+    for ( NSString *u in ( phUris ?: @[] ) ) {
+      [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
+    }
+    PHAsset *asset = ids.count > 0
+      ? [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil].firstObject
+      : nil;
+    if ( !asset ) {
+      resolve( @"no asset to probe" );
+      return;
+    }
+
+    __block BOOL answered = NO;
+    __block NSString *modifyResult = @"still outstanding";
+    NSDate *startedAt = [NSDate date];
+
+    // Runs the presentation test, then answers. Whichever of the modify
+    // transaction and its watchdog gets here first is the one that reports.
+    void ( ^finishProbe )( void ) = ^{
+      if ( answered ) { return; }
+      answered = YES;
+      UIWindow *keyWindow = [self inatKeyWindow];
+      UIViewController *presenter = keyWindow.rootViewController;
+      while ( presenter.presentedViewController ) {
+        presenter = presenter.presentedViewController;
+      }
+      if ( !presenter ) {
+        resolve( [NSString stringWithFormat:@"modify=%@ ownAlert=no-view-controller",
+          modifyResult] );
+        return;
+      }
+      UIAlertController *probe =
+        [UIAlertController alertControllerWithTitle:@"Checking Photos"
+                                            message:nil
+                                     preferredStyle:UIAlertControllerStyleAlert];
+      [presenter presentViewController:probe animated:NO completion:nil];
+      // A beat for UIKit to put it up, then read whether it actually did.
+      dispatch_after(
+        dispatch_time( DISPATCH_TIME_NOW, ( int64_t )( 0.5 * NSEC_PER_SEC ) ),
+        dispatch_get_main_queue(),
+        ^{
+          BOOL presented = presenter.presentedViewController == probe;
+          [probe dismissViewControllerAnimated:NO completion:nil];
+          resolve( [NSString stringWithFormat:@"modify=%@ ownAlert=%@ presenter=%@",
+            modifyResult,
+            presented
+              ? @"presented"
+              : @"refused",
+            NSStringFromClass( [presenter class] )] );
+        } );
+    };
+
+    NSUInteger writeToken = inatPhotoWriteBegan( @"photoDeleteProbe(modify)" );
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+      PHAssetChangeRequest *request = [PHAssetChangeRequest changeRequestForAsset:asset];
+      // Its own value written back: a transaction that changes nothing, and
+      // asks for exactly the consent a real modification would.
+      request.favorite = asset.isFavorite;
+    } completionHandler:^( BOOL success, NSError *error ) {
+      inatPhotoWriteEnded( writeToken );
+      NSInteger ms = ( NSInteger )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 );
+      modifyResult = success
+        ? [NSString stringWithFormat:@"ok-in-%ldms", ( long )ms]
+        : [NSString stringWithFormat:@"failed-in-%ldms:%@", ( long )ms,
+            error.localizedDescription ?: @"unknown"];
+      dispatch_async( dispatch_get_main_queue(), finishProbe );
+    }];
+
+    // The modify transaction can hang exactly like the deletion does, and that
+    // is itself the answer — so don't wait on it forever to report.
+    dispatch_after(
+      dispatch_time( DISPATCH_TIME_NOW, ( int64_t )( 20 * NSEC_PER_SEC ) ),
+      dispatch_get_main_queue(),
+      finishProbe );
+  } );
+}
+
 // How many assets a hang reports in detail. Enough to see whether the stuck
 // batch is all one kind of photo; few enough to stay one readable log line.
 static const NSUInteger kInatAssetDiagnosticLimit = 8;
