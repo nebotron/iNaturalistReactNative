@@ -4,11 +4,14 @@ import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import React, {
   useCallback,
+  useEffect,
   useLayoutEffect,
   useRef,
   useState,
 } from "react";
-import { Image, StyleSheet, View } from "react-native";
+import {
+  AppState, Image, StyleSheet, View,
+} from "react-native";
 import { computeCropPanTranslateLimits } from "sharedHelpers/cropPanTranslateLimits";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import { log } from "sharedHelpers/logger";
@@ -337,6 +340,26 @@ const GroupPhotoCropImage = ( {
     setFraming( { crop, aspect } );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aspect, framable, framing, imageHeight, imageWidth, initialCrop, size] );
+
+  // A bitmap iOS drops under memory pressure takes no callback with it: onError
+  // never fires and onLoad never fires again, so paintedUri goes on naming the
+  // file this cell painted while the native image view has nothing left to
+  // draw. The backdrop behind it is opaque black and covers the whole cell,
+  // which is a photo that rendered correctly and then turned black, and stayed
+  // that way. This grid invites the pressure that causes it: every visible cell
+  // decodes its own photo at FULL_RESOLUTION_MAX_PIXEL.
+  //
+  // A memory warning is the one signal iOS gives that "this cell has painted"
+  // may have stopped being true, so stop trusting it. The photo itself stays
+  // visible (framed survives on paintedImages), and the worst case is the
+  // grid's own thumbnail showing through the letterbox until the cell paints
+  // again -- which is what the backdrop was hiding, and is not a black square.
+  useEffect( ( ) => {
+    const subscription = AppState.addEventListener( "memoryWarning", ( ) => {
+      setPaintedUri( null );
+    } );
+    return ( ) => subscription.remove( );
+  }, [] );
 
   const handleInteractionEnd = useCallback( ( ) => {
     if ( !zoomRef.current || !framable ) {

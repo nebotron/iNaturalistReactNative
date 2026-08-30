@@ -1,8 +1,18 @@
 import { exists } from "@dr.pogodin/react-native-fs";
-import { fireEvent, screen, waitFor } from "@testing-library/react-native";
+import {
+  act, fireEvent, screen, waitFor,
+} from "@testing-library/react-native";
 import GroupPhotoCropImage from "components/PhotoImporter/GroupPhotoCropImage";
 import React from "react";
+import { AppState } from "react-native";
 import { renderComponent } from "tests/helpers/render";
+
+// Fires the iOS memory warning at whatever cells are currently mounted.
+const emitMemoryWarning = ( ) => {
+  AppState.addEventListener.mock.calls
+    .filter( ( [event] ) => event === "memoryWarning" )
+    .forEach( ( [, handler] ) => act( ( ) => handler( ) ) );
+};
 
 const mockThumbnail = jest.fn( ( ) => undefined );
 // The real one drags in reanimated/gesture-handler. All this component needs
@@ -292,6 +302,34 @@ describe( "GroupPhotoCropImage", ( ) => {
       expect( screen.getByTestId( "GroupPhotoCropImage.photo" ).props.source.uri )
         .toBe( cropSourceUri );
     } );
+  } );
+
+  // A photo that rendered correctly and then turned black. iOS can drop a
+  // decoded bitmap without telling anyone -- no onError, no second onLoad -- so
+  // the cell goes on believing it painted while its image view has nothing left
+  // to draw, and the opaque backdrop behind the photo is left covering the
+  // cell. Every cell here decodes at full resolution, so the pressure is real.
+  it( "stops backing a photo iOS may have dropped under memory pressure", ( ) => {
+    mockThumbnail.mockReturnValue( "file:///thumbs/evicted.jpg" );
+    mockDetection.mockReturnValue( {
+      crop: null,
+      imageWidth: 400,
+      imageHeight: 300,
+    } );
+    renderCropImage( "ph://evicted" );
+
+    fireEvent( screen.getByTestId( "GroupPhotoCropImage.photo" ), "load", {
+      nativeEvent: { source: { width: 400, height: 300 } },
+    } );
+    expect( screen.getByTestId( "GroupPhotoCropImage.backdrop" ) ).toBeTruthy( );
+
+    emitMemoryWarning( );
+
+    expect( screen.queryByTestId( "GroupPhotoCropImage.backdrop" ) ).toBeNull( );
+    // The photo stays on screen and stays framed: only the claim that it is
+    // definitely painted was withdrawn.
+    expect( screen.getByTestId( "GroupPhotoCropImage.photo" ).props.style )
+      .not.toContainEqual( { opacity: 0 } );
   } );
 
   it( "survives a load event that reports no source", ( ) => {
