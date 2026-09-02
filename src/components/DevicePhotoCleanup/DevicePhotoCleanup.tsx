@@ -27,10 +27,6 @@ import {
 } from "react-native";
 import { log } from "sharedHelpers/logger";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
-import {
-  clearPromptedDeletionHangs,
-  isPromptedDeletionBroken,
-} from "sharedHelpers/promptedPhotoDeletion";
 import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
 import findUnfavoritedDevicePhotoDays, {
   prefetchDeviceAssets,
@@ -101,7 +97,6 @@ const DevicePhotoCleanup = ( ) => {
   const [deleting, setDeleting] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [undeletableCount, setUndeletableCount] = useState( 0 );
-  const [skippedPrompted, setSkippedPrompted] = useState( 0 );
   const [probing, setProbing] = useState( false );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
   const [stillDeleting, setStillDeleting] = useState( false );
@@ -187,7 +182,7 @@ const DevicePhotoCleanup = ( ) => {
     PixelRatio.getPixelSizeForLayoutSize( gridItemWidth || 128 ),
   );
 
-  const deletePhotos = useCallback( async ( viaCameraRoll = false ) => {
+  const deletePhotos = useCallback( async ( ) => {
     setDeleting( true );
     setStillDeleting( false );
     // Report what the OS actually deleted. A wedged PHPhotoLibrary deletes
@@ -195,13 +190,12 @@ const DevicePhotoCleanup = ( ) => {
     // claiming "Deleted 1,159 photos" while the photos are all still there is
     // worse than saying nothing happened.
     const {
-      deleted, succeeded, pending, undeletable, skippedPrompted: skipped,
+      deleted, succeeded, pending, undeletable,
     } = await deleteOriginalDevicePhotos(
       allUris,
-      { userInitiated: true, viaCameraRoll },
+      { userInitiated: true },
     );
     setDeleting( false );
-    setSkippedPrompted( skipped ?? 0 );
     // PhotoKit hasn't answered but is still holding the transaction, and it
     // usually goes through afterwards. Rescanning is the only honest thing to
     // show: the photos left in the grid may already be gone.
@@ -213,12 +207,6 @@ const DevicePhotoCleanup = ( ) => {
     // Leave the grid up when the delete didn't go through so the user can
     // retry; the helper has already explained the failure with an alert.
     if ( !succeeded ) return;
-    // The skipped ones are still there. Clearing the grid would say they were
-    // dealt with, so rescan instead and let the banner explain.
-    if ( skipped ) {
-      setRescans( count => count + 1 );
-      return;
-    }
     setDeletedCount( deleted );
     setUndeletableCount( undeletable ?? 0 );
     setDays( [] );
@@ -276,23 +264,6 @@ const DevicePhotoCleanup = ( ) => {
 
   return (
     <ViewWrapper>
-      {( skippedPrompted > 0 || isPromptedDeletionBroken( ) ) && (
-        <View className="px-5 pt-4 pb-2">
-          <Body2>
-            iOS has stopped showing its deletion confirmation on this device, so
-            photos that need one are being skipped rather than hung on. Delete them
-            in the Photos app, or try again if the device has been fixed since.
-          </Body2>
-          <Button
-            className="mt-2"
-            text="TRY CONFIRMED DELETES AGAIN"
-            onPress={( ) => {
-              clearPromptedDeletionHangs( );
-              setSkippedPrompted( 0 );
-            }}
-          />
-        </View>
-      )}
       {stillDeleting && (
         <View className="px-5 pt-4 pb-2">
           <Body2>
@@ -318,7 +289,7 @@ const DevicePhotoCleanup = ( ) => {
           text={`DELETE ${allUris.length} PHOTO${allUris.length === 1
             ? ""
             : "S"}`}
-          onPress={( ) => deletePhotos( )}
+          onPress={deletePhotos}
           loading={deleting}
           disabled={deleting}
         />
@@ -343,16 +314,6 @@ const DevicePhotoCleanup = ( ) => {
               setProbing( false );
             }
           }}
-        />
-        {/* Same photos, through CameraRoll's bare performChanges instead of
-            ImageCropper's. Which of the two comes back says whether the
-            deletion path in this app is at fault or PhotoKit is refusing the
-            process — see viaCameraRoll in promptDeleteOriginalDevicePhotos.ts. */}
-        <Button
-          className="mt-2"
-          text="DELETE VIA CAMERAROLL (TEST)"
-          onPress={( ) => deletePhotos( true )}
-          disabled={deleting}
         />
         {deleting && (
           <Body2 className="mt-2 text-center">
