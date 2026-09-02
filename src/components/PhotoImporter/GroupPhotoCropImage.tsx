@@ -1,6 +1,8 @@
 import { exists } from "@dr.pogodin/react-native-fs";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
+import recordGroupPhotoDrawnResolution from
+  "components/PhotoImporter/helpers/groupPhotoResolutionLog";
 import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import React, {
   useCallback,
@@ -460,6 +462,12 @@ const GroupPhotoCropImage = ( {
               const width = loaded?.width ?? 0;
               const height = loaded?.height ?? 0;
               if ( width > 0 && height > 0 ) {
+                recordGroupPhotoDrawnResolution(
+                  cropSourceUri,
+                  width,
+                  height,
+                  displayUri === generatedFullResolutionUri,
+                );
                 setDecodedSize( prev => (
                   prev?.width === width && prev?.height === height
                     ? prev
