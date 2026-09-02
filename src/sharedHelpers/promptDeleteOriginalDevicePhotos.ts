@@ -6,12 +6,7 @@ import i18next from "i18next";
 import {
   Alert, AppState, NativeModules, Platform,
 } from "react-native";
-import {
-  appCreatedPhotoUris,
-  forgetAppCreatedPhotoAssets,
-  isAppCreatedDeleteExemptionConfirmed,
-  recordAppCreatedDeletionTiming,
-} from "sharedHelpers/appCreatedPhotoAssets";
+import { forgetAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
 import DeviceInfo from "react-native-device-info";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
@@ -28,19 +23,12 @@ const { ImageCropper } = NativeModules as {
   ImageCropper?: {
     photoDeletionContext?: ( phUris: string[] ) => Promise<string>;
     photoAssetDiagnostics?: ( phUris: string[] ) => Promise<string>;
-    deletePhotoAssets?: (
-      phUris: string[],
-      appCreatedUris: string[]
-    ) => Promise<{
+    deletePhotoAssets?: ( phUris: string[] ) => Promise<{
       deleted: number;
       requested: number;
       fetched?: number;
       appCreated?: number;
-      appCreatedDeleted?: number;
-      appCreatedMs?: number;
-      prompted?: number;
-      promptedDeleted?: number;
-      promptedMs?: number;
+      transactionMs?: number;
       undeletable?: number;
       assets?: string;
     }>;
@@ -167,17 +155,16 @@ export const enqueuePhotoLibraryWrite = <T, >(
 const UI_WAIT_MS = 15_000;
 
 // A PhotoKit transaction costs ~1.6s whatever it holds: 3 assets took 1752ms,
-// 19 took 1442ms, 275 consent-free ones took 1691ms. A deletion now issues at
-// most one transaction per half of the split, so its honest duration is that
-// cost per half however many photos each one carries.
+// 19 took 1442ms, 275 consent-free ones took 1691ms, 280 mixed ones 1543ms. A
+// deletion issues exactly one, so that cost is its honest duration however many
+// photos it carries.
 const TRANSACTION_MS_ALLOWANCE = 1800;
 
 // The pending-delete diagnostic has to land while the delete is still in
-// flight, so it stays inside the wait above however many transactions the
-// split needs.
-const hangReportMs = ( transactions: number ) => Math.min(
+// flight, so it stays inside the wait above.
+const hangReportMs = ( ) => Math.min(
   UI_WAIT_MS - 2000,
-  3000 + TRANSACTION_MS_ALLOWANCE * transactions,
+  3000 + TRANSACTION_MS_ALLOWANCE,
 );
 
 // Returned by the race below when the OS hasn't answered inside UI_WAIT_MS.
@@ -222,43 +209,6 @@ const performDeleteOriginalDevicePhotos = async (
     return { deleted: 0, requested, succeeded: false };
   }
 
-  // Assets the app added to the library itself (the USB card offload) are the
-  // only ones PhotoKit deletes without presenting its confirmation, so they
-  // can go in a transaction of their own — see deletePhotoAssets in
-  // ImageCropper.m.
-  //
-  // Splitting a *mixed* batch is only safe once that exemption has been seen
-  // to hold on this device: if it doesn't, the split is two prompted
-  // transactions and the user confirms twice for one import. So split when
-  // every asset is ours — one transaction either way, and the controlled
-  // measurement the exemption is judged on — or when such a batch has already
-  // proved the exemption real. Anything else stays a single transaction, and
-  // so a single prompt.
-  //
-  // Decided here, ahead of the hang timers, so a hang report can say which
-  // transaction was outstanding. Reading that off the adjacent prose line meant
-  // loading the dump to answer the single most important question about a hang.
-  const ourUris = appCreatedPhotoUris( uniqueUris );
-  const appCreatedUris = (
-    ourUris.length === uniqueUris.length || isAppCreatedDeleteExemptionConfirmed( )
-  )
-    ? ourUris
-    : [];
-
-  // How many PhotoKit transactions this deletion should take: one for the
-  // prompted half, plus one for the consent-free half if there is one. It sizes
-  // the pending diagnostic, and a hang report carrying it says which halves
-  // were expected.
-  const expectedTransactions = Math.max(
-    1,
-    ( requested > appCreatedUris.length
-      ? 1
-      : 0 )
-      + ( appCreatedUris.length > 0
-        ? 1
-        : 0 ),
-  );
-
   // The ph:// URIs identify the user's photos, say nothing a count doesn't, and
   // made single log lines kilobytes long; the counts below are what a report
   // is read for.
@@ -293,15 +243,6 @@ const performDeleteOriginalDevicePhotos = async (
   const pendingExtra = ( ) => ( {
     requested,
     ms: Date.now( ) - startedAt,
-    // Which half of the split was in flight. A hang with prompted=0 is a
-    // deletion that issued only the consent-free transaction, and the Aug 6
-    // log has one: 17 of 17 app-created, no prompted transaction created at
-    // all, hung exactly like a prompted one. That is what rules the consent
-    // alert out as the thing that wedges the library, so it belongs on the
-    // hang report rather than being inferred from the prose line beside it.
-    appCreated: appCreatedUris.length,
-    prompted: requested - appCreatedUris.length,
-    expectedTransactions,
     backgrounded,
     wentInactive,
     appStateChanges,
@@ -372,12 +313,11 @@ const performDeleteOriginalDevicePhotos = async (
       ] ).catch( ( ) => null ).then(
         assetsAtHang => logger.errorWithExtra( "photo_delete_asset_detail", {
           requested,
-          prompted: requested - appCreatedUris.length,
           assets: assetsAtHang ?? "main queue did not respond in 5000ms",
         } ),
       ).catch( ( ) => undefined );
     }
-  }, hangReportMs( expectedTransactions ) );
+  }, hangReportMs( ) );
   let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
   try {
     if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
@@ -397,14 +337,11 @@ const performDeleteOriginalDevicePhotos = async (
       }
     }
 
-    const appCreatedNote = appCreatedUris.length > 0
-      ? `, ${appCreatedUris.length} of them app-created`
-      : "";
-    logger.info( `Deleting ${uniqueUris.length} device photo(s)${appCreatedNote}` );
+    logger.info( `Deleting ${uniqueUris.length} device photo(s)` );
     // Prefer the native path that dismisses a blocking modal before deleting;
     // fall back to CameraRoll on platforms/builds without it.
     const deletion = ( Platform.OS === "ios" && ImageCropper?.deletePhotoAssets )
-      ? ImageCropper.deletePhotoAssets( uniqueUris, appCreatedUris )
+      ? ImageCropper.deletePhotoAssets( uniqueUris )
       : CameraRoll.deletePhotos( uniqueUris );
     // Whatever we decide below, the next Photos-library write waits for this
     // transaction rather than stacking on top of it.
@@ -458,46 +395,20 @@ const performDeleteOriginalDevicePhotos = async (
         assets: ( result as { assets?: string } | undefined )?.assets ?? "unknown",
       } );
     }
-    // What the single prompted transaction did. It carries every photo that
-    // needs the user's consent, so promptedDeleted is either all of them or
-    // none, and promptedMs is how long that one transaction took — well above
-    // the ~1.6s a transaction costs means a human answered a confirmation.
-    const promptedDelete = result as {
-      prompted?: number;
-      promptedDeleted?: number;
-      promptedMs?: number;
-    } | undefined;
-    if ( ( promptedDelete?.prompted ?? 0 ) > 0 ) {
-      logger.infoWithExtra( "photo_delete_prompted", {
-        prompted: promptedDelete?.prompted,
-        promptedDeleted: promptedDelete?.promptedDeleted,
-        promptedMs: promptedDelete?.promptedMs,
-      } );
-    }
-    // How long the unprompted half took is the measurement this whole split
-    // exists for, and it decides whether to keep splitting.
-    const appCreatedMs = ( result as { appCreatedMs?: number } | undefined )?.appCreatedMs;
-    const appCreatedResult = result as { appCreatedDeleted?: number } | undefined;
-    const appCreatedDeleted = appCreatedResult?.appCreatedDeleted ?? 0;
-    if ( typeof appCreatedMs === "number" && appCreatedUris.length > 0 ) {
-      recordAppCreatedDeletionTiming( appCreatedMs );
-      logger.infoWithExtra( "photo_delete_app_created", {
-        appCreated: appCreatedUris.length,
-        appCreatedDeleted,
-        appCreatedMs,
-        prompted: requested - appCreatedUris.length,
-        // The half of the comparison that was missing. An unprompted
-        // transaction should be quick where a prompted one waits on a human,
-        // so promptedMs >> appCreatedMs per asset is what a real exemption
-        // looks like; the two coming back alike means either both prompt or
-        // neither does.
-        promptedMs: ( result as { promptedMs?: number } | undefined )?.promptedMs ?? -1,
+    // How long the one transaction took. Above the ~1.5s a transaction costs
+    // whatever it carries means a human answered a confirmation for it.
+    const transactionMs = ( result as { transactionMs?: number } | undefined )?.transactionMs;
+    if ( typeof transactionMs === "number" ) {
+      logger.infoWithExtra( "photo_delete_transaction", {
+        requested,
+        deleted: deleted ?? requested,
+        appCreated: ( result as { appCreated?: number } | undefined )?.appCreated ?? -1,
+        transactionMs,
       } );
     }
     // A transaction deletes all of its assets or none of them, so anything
-    // above zero means these are gone and no longer worth tracking. Keep them
-    // if it failed: they still need deleting, and still without a prompt.
-    if ( appCreatedDeleted > 0 ) forgetAppCreatedPhotoAssets( appCreatedUris );
+    // above zero means these are gone and no longer worth tracking as ours.
+    if ( ( deleted ?? requested ) > 0 ) forgetAppCreatedPhotoAssets( uniqueUris );
     return {
       deleted: deleted ?? requested, requested, succeeded: true, undeletable,
     };

@@ -183,28 +183,13 @@ static NSString *inatAssetDeletabilitySummary( id<NSFastEnumeration> assets )
   // Bumped per deletion so a watchdog can tell its own call from the one that
   // replaced it.
   NSUInteger _pendingDeleteGeneration;
-  // Whether the prompted transaction is still outstanding, and how big it is.
-  // A hang only ever reported that the whole deletion hadn't come back, which
-  // cannot say which half of the split was in flight. photoDeletionContext
-  // reports these, so the hang diagnostic that already fires 5s in carries them.
-  BOOL _promptedDeleteActive;
-  NSUInteger _promptedDeleteCount;
-  NSDate *_promptedDeleteStartedAt;
-  // The app-created half of a split deletion, and the block that issues the
-  // prompted half after it.
-  //
-  // The prompted half used to be issued only from the app-created
-  // transaction's completion handler — the one handler this file already knows
-  // can simply never fire. When it didn't, the photos that need the user's
-  // confirmation were never even requested: the Aug 26 log has a 12-photo
-  // cleanup where the 3 app-created assets vanished from the library and the
-  // other 9 were never asked for, so the observer below could never see every
-  // requested asset gone and the call sat there until the 150s watchdog.
-  // photoLibraryDidChange: starts the prompted half itself once the
-  // app-created assets are gone — which is the transaction being over,
-  // whatever PhotoKit still owes us.
-  NSArray<NSString *> *_pendingAppCreatedIds;
-  void ( ^_startPromptedDelete )( void );
+  // Whether the deletion's transaction is still outstanding, and how big it
+  // is. photoDeletionContext reports these, so the hang diagnostic that fires
+  // 5s in says whether PhotoKit ever took the transaction and how long it has
+  // been sitting on it.
+  BOOL _deleteTransactionActive;
+  NSUInteger _deleteTransactionCount;
+  NSDate *_deleteTransactionStartedAt;
 }
 
 RCT_EXPORT_MODULE( );
@@ -2430,18 +2415,17 @@ RCT_EXPORT_METHOD( photoDeletionContext
       ? inatAssetDeletabilitySummary( contextFetched )
       : @"(nothing fetched)";
 
-    // Which half of the split the library still owes us. "prompted=idle" on a
-    // hang means the outstanding transaction is the consent-free one (or that
-    // the deletion hasn't got as far as issuing either), and promptedMs is how
-    // long the prompted one has been outstanding.
-    NSString *walk = self->_promptedDeleteActive
+    // Whether PhotoKit has taken the deletion's transaction at all, and how
+    // long it has been holding it. "transaction=idle" on a hang means the
+    // deletion never got as far as issuing one.
+    NSString *walk = self->_deleteTransactionActive
       ? [NSString stringWithFormat:
-          @"prompted=active count=%lu promptedMs=%.0f",
-          ( unsigned long )self->_promptedDeleteCount,
-          self->_promptedDeleteStartedAt
-            ? [[NSDate date] timeIntervalSinceDate:self->_promptedDeleteStartedAt] * 1000
+          @"transaction=active count=%lu ms=%.0f",
+          ( unsigned long )self->_deleteTransactionCount,
+          self->_deleteTransactionStartedAt
+            ? [[NSDate date] timeIntervalSinceDate:self->_deleteTransactionStartedAt] * 1000
             : -1]
-      : @"prompted=idle";
+      : @"transaction=idle";
 
     NSString *info = [NSString stringWithFormat:
       @"appState=%ld hasWindowScene=%d sceneState=%ld fgActiveScenes=%lu authStatus=%ld "
@@ -2757,23 +2741,10 @@ RCT_EXPORT_METHOD( photoAssetDiagnostics
 // then requests deletion. Rejects with requested/fetched counts so JS can tell
 // whether the identifiers resolved to real assets.
 //
-// appCreatedUris are the assets this app itself added to the library (the USB
-// card offload; see appCreatedPhotoAssets.ts). PhotoKit deletes an app's own
-// assets without presenting its confirmation alert, so those go in a
-// transaction of their own, first, ahead of the prompted one. Two payoffs: the
-// photos we own get deleted even when the prompted batch wedges, and the
-// timings come back separately, which is the controlled comparison the log had
-// been missing.
-//
-// That comparison has now run, and it did *not* pin the wedge on the consent
-// alert: the Aug 6 log has a deletion where every asset was ours, so
-// theirAssets was empty and the only transaction issued was the consent-free
-// one below — and it hung exactly like a prompted one, while two deletions of
-// the same kind minutes earlier came back in ~1.2s. Keep the split for the
-// prompt it saves the user; do not read a hang here as evidence about alerts.
+// Everything goes out in one transaction — see the note beside doDelete below
+// for why the app-created assets no longer get one of their own.
 RCT_EXPORT_METHOD( deletePhotoAssets
-                  : ( NSArray<NSString *> * )phUris appCreated
-                  : ( NSArray<NSString *> * )appCreatedUris resolver
+                  : ( NSArray<NSString *> * )phUris resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
@@ -2826,27 +2797,19 @@ RCT_EXPORT_METHOD( deletePhotoAssets
       return;
     }
 
-    // Split the fetched assets by whether we created them. Identifiers are
-    // compared on the UUID ahead of the first slash, as elsewhere in this file:
-    // a stored "…/L0/001" and a bare UUID name the same asset.
-    NSMutableSet<NSString *> *appCreatedBaseIds = [NSMutableSet set];
-    for ( NSString *u in ( appCreatedUris ?: @[] ) ) {
-      NSString *identifier = [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u;
-      NSRange slash = [identifier rangeOfString:@"/"];
-      [appCreatedBaseIds addObject:( slash.location == NSNotFound
-        ? identifier
-        : [identifier substringToIndex:slash.location] )];
-    }
+    // Only reported, not acted on: a transaction that carries an asset this
+    // app did not create is one PhotoKit will ask the user about, and knowing
+    // that about a hung deletion is worth a line in the log.
     NSMutableArray<PHAsset *> *ourAssets = [NSMutableArray array];
-    NSMutableArray<PHAsset *> *theirAssets = [NSMutableArray array];
     for ( PHAsset *asset in deletable ) {
-      NSString *identifier = asset.localIdentifier;
-      NSRange slash = [identifier rangeOfString:@"/"];
-      if ( slash.location != NSNotFound ) {
-        identifier = [identifier substringToIndex:slash.location];
+      if ( [asset canPerformEditOperation:PHAssetEditOperationContent]
+          && asset.sourceType == PHAssetSourceTypeUserLibrary ) {
+        // Nothing public distinguishes an asset this app added from any other
+        // in the user's library, so this is the closest honest answer: it is
+        // ours to edit. See appCreatedPhotoAssets.ts for the identifiers the
+        // JS side records at creation time.
+        [ourAssets addObject:asset];
       }
-      [( [appCreatedBaseIds containsObject:identifier] ? ourAssets : theirAssets )
-        addObject:asset];
     }
 
     UIWindow *keyWindow = [self inatKeyWindow];
@@ -2873,9 +2836,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     }
     // A prompted transaction that never came back leaves this set; clear it
     // here so a later hang can't be misread as that one still being in flight.
-    _promptedDeleteActive = NO;
-    _pendingAppCreatedIds = nil;
-    _startPromptedDelete = nil;
+    _deleteTransactionActive = NO;
     _pendingDeleteIds = [ids copy];
     _pendingDeleteRequestedCount = ids.count;
     _pendingDeleteSettled = NO;
@@ -2902,8 +2863,6 @@ RCT_EXPORT_METHOD( deletePhotoAssets
       [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];
       self->_pendingDeleteResolve = nil;
       self->_pendingDeleteIds = nil;
-      self->_pendingAppCreatedIds = nil;
-      self->_startPromptedDelete = nil;
       return YES;
     };
 
@@ -2926,7 +2885,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
         if ( !claimSettlement( ) ) { return; }
         if ( landed ) {
           inatPhotoWriteEnded( 0 );
-          self->_promptedDeleteActive = NO;
+          self->_deleteTransactionActive = NO;
           resolve( @{
             @"deleted": @( fetched.count ),
             @"requested": @( ids.count ),
@@ -2944,53 +2903,43 @@ RCT_EXPORT_METHOD( deletePhotoAssets
           nil );
       } );
 
-    // Filled in by the app-created transaction, reported alongside whatever the
-    // prompted one does. -1 means it never came back.
-    __block NSInteger appCreatedMs = -1;
-    __block NSUInteger appCreatedDeleted = 0;
-    // Whether the app-created half was known to have landed from the library
-    // itself rather than from its completion handler. Its duration stays -1 in
-    // that case: the assets are gone, but how long the transaction took is
-    // exactly what a handler that never fired can't say, and feeding the
-    // waiting time into the exemption timing would read as a prompt.
-    __block BOOL appCreatedViaObserver = NO;
-    // The prompted transaction's duration. The app-created split exists to put
-    // an unprompted deletion beside a prompted one, and timing only half of it
-    // left the comparison to be guessed from the gap between two prose log
-    // lines. -1 means it never came back.
-    __block NSInteger promptedMs = -1;
-    // How much of the prompted half actually went through: all of it, or none
-    // of it if its transaction failed.
-    __block NSUInteger promptedDeleted = 0;
+    // One transaction, whatever the batch holds.
+    //
+    // Deletions used to go out as two: the assets this app added to the library
+    // itself, which PhotoKit deletes without presenting its confirmation, and
+    // then everything else. That bought nothing. A confirmation appears when a
+    // transaction carries an asset the app does not own, so a mixed batch asked
+    // the user once either way, and a batch that is all ours still asks nothing
+    // when it goes out whole. What the split did cost was a deadlock: the
+    // second transaction was issued from the first's completion handler, and
+    // when that handler never fired the photos needing consent were never
+    // requested at all — see the Aug 26 log, three app-created assets deleted
+    // and nine never asked for.
+    __block NSInteger transactionMs = -1;
+    __block NSUInteger transactionDeleted = 0;
 
-    void ( ^finish )( BOOL, NSUInteger, NSError * ) =
-      ^( BOOL success, NSUInteger deleted, NSError *error ) {
+    void ( ^finish )( BOOL, NSError * ) = ^( BOOL success, NSError *error ) {
       dispatch_async( dispatch_get_main_queue(), ^{
         if ( !claimSettlement( ) ) { return; }
         if ( success ) {
           resolve( @{
-            @"deleted": @( deleted ),
+            @"deleted": @( transactionDeleted ),
             @"requested": @( ids.count ),
             @"dismissedModal": @( dismissedModal ),
             @"sceneState": @( sceneState ),
             @"viaChangeObserver": @NO,
             @"appCreated": @( ourAssets.count ),
-            @"appCreatedDeleted": @( appCreatedDeleted ),
-            @"appCreatedMs": @( appCreatedMs ),
-            @"appCreatedViaObserver": @( appCreatedViaObserver ),
-            @"prompted": @( theirAssets.count ),
-            @"promptedDeleted": @( promptedDeleted ),
-            @"promptedMs": @( promptedMs ),
+            @"transactionMs": @( transactionMs ),
             @"undeletable": @( undeletable ),
             @"assets": assetSummary,
           } );
         } else {
           reject( @"DELETE_FAILED",
             [NSString stringWithFormat:
-              @"requested=%lu fetched=%lu appCreated=%lu appCreatedMs=%ld "
+              @"requested=%lu fetched=%lu appCreated=%lu transactionMs=%ld "
               @"dismissedModal=%d sceneState=%ld assets=[%@] error=%@",
               ( unsigned long )ids.count, ( unsigned long )fetched.count,
-              ( unsigned long )ourAssets.count, ( long )appCreatedMs,
+              ( unsigned long )ourAssets.count, ( long )transactionMs,
               dismissedModal, sceneState, assetSummary,
               error.localizedDescription ?: @"unknown"],
             error );
@@ -2998,84 +2947,28 @@ RCT_EXPORT_METHOD( deletePhotoAssets
       } );
     };
 
-    // The prompted half: everything we didn't create. Runs after the
-    // app-created transaction so its confirmation can't sit in front of one
-    // that needs no confirmation at all, and goes out whole: one transaction,
-    // so the user answers one confirmation for the entire cleanup.
-    __block BOOL promptedStarted = NO;
-    void ( ^deleteTheirs )( BOOL ) = ^( BOOL appCreatedLanded ) {
-      // Hops to the main queue because this is reached both from PhotoKit's
-      // completion queue and from the change observer, and the once-guard
-      // below decides which of the two issues the single prompted transaction.
-      dispatch_async( dispatch_get_main_queue(), ^{
-        if ( promptedStarted ) { return; }
-        promptedStarted = YES;
-        self->_pendingAppCreatedIds = nil;
-        self->_startPromptedDelete = nil;
-        if ( appCreatedLanded ) {
-          appCreatedViaObserver = YES;
-          appCreatedDeleted = ourAssets.count;
-        }
-        if ( theirAssets.count == 0 ) {
-          finish( YES, appCreatedDeleted, nil );
-          return;
-        }
-        NSDate *promptedStartedAt = [NSDate date];
-        self->_promptedDeleteActive = YES;
-        self->_promptedDeleteCount = theirAssets.count;
-        self->_promptedDeleteStartedAt = promptedStartedAt;
-        NSUInteger writeToken = inatPhotoWriteBegan(
-          [NSString stringWithFormat:@"deleteAssets(%lu)",
-            ( unsigned long )theirAssets.count] );
-        [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-          [PHAssetChangeRequest deleteAssets:theirAssets];
-        } completionHandler:^( BOOL success, NSError *error ) {
-          inatPhotoWriteEnded( writeToken );
-          promptedMs =
-            ( NSInteger )( [[NSDate date] timeIntervalSinceDate:promptedStartedAt] * 1000 );
-          self->_promptedDeleteActive = NO;
-          // A transaction deletes all of its assets or none of them, so a failure
-          // here leaves the whole prompted half in place — including the user
-          // simply declining the confirmation.
-          if ( success ) { promptedDeleted = theirAssets.count; }
-          finish( success, appCreatedDeleted + promptedDeleted, error );
-        }];
-      } );
-    };
-
     void ( ^doDelete )( void ) = ^{
-      if ( ourAssets.count == 0 ) {
-        deleteTheirs( NO );
-        return;
-      }
-      // What the observer watches for, and what it calls when it sees it.
-      NSMutableArray<NSString *> *ourIds = [NSMutableArray array];
-      for ( PHAsset *asset in ourAssets ) { [ourIds addObject:asset.localIdentifier]; }
-      self->_pendingAppCreatedIds = ourIds;
-      self->_startPromptedDelete = [^{ deleteTheirs( YES ); } copy];
       NSDate *startedAt = [NSDate date];
+      self->_deleteTransactionActive = YES;
+      self->_deleteTransactionCount = deletable.count;
+      self->_deleteTransactionStartedAt = startedAt;
       NSUInteger writeToken = inatPhotoWriteBegan(
-        [NSString stringWithFormat:@"deleteAssets(%lu, app-created)",
-          ( unsigned long )ourAssets.count] );
+        [NSString stringWithFormat:@"deleteAssets(%lu)",
+          ( unsigned long )deletable.count] );
       [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-        [PHAssetChangeRequest deleteAssets:ourAssets];
+        [PHAssetChangeRequest deleteAssets:deletable];
       } completionHandler:^( BOOL success, NSError *error ) {
         inatPhotoWriteEnded( writeToken );
-        // A handler that fires only after the observer already saw these
-        // assets gone is timing the wait, not the transaction, and that number
-        // decides whether app-created deletions are treated as prompt-free.
-        // Leave it at -1: unknown is what it is.
-        if ( !appCreatedViaObserver ) {
-          appCreatedMs =
-            ( NSInteger )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 );
-        }
-        if ( success ) { appCreatedDeleted = ourAssets.count; }
-        // A failure here is not fatal to the rest: the photos we don't own
-        // still need deleting, and their transaction is the one that carries
-        // the user's confirmation.
-        deleteTheirs( NO );
+        transactionMs =
+          ( NSInteger )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 );
+        self->_deleteTransactionActive = NO;
+        // A transaction deletes all of its assets or none of them, including
+        // when the user simply declines the confirmation.
+        if ( success ) { transactionDeleted = deletable.count; }
+        finish( success, error );
       }];
     };
+
 
     UIViewController *root = keyWindow.rootViewController;
     if ( root.presentedViewController ) {
@@ -3098,31 +2991,6 @@ RCT_EXPORT_METHOD( deletePhotoAssets
   if ( !ids ) { return; }
   dispatch_async( dispatch_get_main_queue(), ^{
     if ( self->_pendingDeleteSettled || !self->_pendingDeleteResolve ) { return; }
-    // The app-created half is gone from the library, so its transaction is
-    // over however long its completion handler takes to say so — and the
-    // prompted half is still sitting unissued behind it. Issue it now: waiting
-    // on that handler is what left the photos needing the user's confirmation
-    // never requested at all, and the deletion unsettleable (the check below
-    // wants *every* requested asset gone) until the watchdog gave up.
-    NSArray<NSString *> *appCreatedIds = self->_pendingAppCreatedIds;
-    void ( ^startPromptedDelete )( void ) = self->_startPromptedDelete;
-    if ( appCreatedIds.count > 0 && startPromptedDelete ) {
-      PHFetchResult<PHAsset *> *ourStillPresent =
-        [PHAsset fetchAssetsWithLocalIdentifiers:appCreatedIds options:nil];
-      if ( ourStillPresent.count == 0 ) {
-        // Cleared here rather than in the block: another change notification
-        // can arrive before that one runs, and releasing the gate twice would
-        // release the prompted transaction's own hold on it.
-        self->_pendingAppCreatedIds = nil;
-        self->_startPromptedDelete = nil;
-        // The library just carried out that transaction, so it is answering:
-        // release the gate the unfired handler would otherwise hold shut, or
-        // the prompted transaction refuses itself.
-        inatPhotoWriteEnded( 0 );
-        startPromptedDelete( );
-        return;
-      }
-    }
     PHFetchResult<PHAsset *> *stillPresent =
       [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil];
     if ( stillPresent.count > 0 ) { return; }
@@ -3132,7 +3000,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     // strength of a callback that will never arrive would refuse every write
     // for the rest of the session.
     inatPhotoWriteEnded( 0 );
-    self->_promptedDeleteActive = NO;
+    self->_deleteTransactionActive = NO;
     RCTPromiseResolveBlock resolve = self->_pendingDeleteResolve;
     self->_pendingDeleteSettled = YES;
     [[PHPhotoLibrary sharedPhotoLibrary] unregisterChangeObserver:self];

@@ -154,11 +154,6 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
           backgrounded: false,
           wentInactive: false,
           appStateChanges: 0,
-          // Which transaction was in flight. A hang with prompted=0 issued only
-          // the consent-free half, which is what kills the consent-alert
-          // explanation, so it has to be on the hang report itself.
-          appCreated: 0,
-          prompted: 2,
         } ),
       );
       const [, extra] = mockLogger.errorWithExtra.mock.calls[0];
@@ -168,11 +163,11 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     } );
 
     it( "reports a whole-library delete on the one-transaction budget", async ( ) => {
-      // Every photo the user has to confirm goes out in a single transaction,
-      // and a transaction costs ~1.6s whatever it holds, so 300 photos are
-      // owed no more time than three. The ramp this budget used to wait for —
-      // chunks of 15, 20, 25 … covering 300 assets in nine transactions —
-      // pushed the report past the wait the UI gives the whole deletion.
+      // A deletion is one transaction and a transaction costs ~1.6s whatever it
+      // holds, so 300 photos are owed no more time than three. The ramp this
+      // budget used to wait for — chunks of 15, 20, 25 … covering 300 assets in
+      // nine transactions — pushed the report past the wait the UI gives the
+      // whole deletion.
       let finishDeletion;
       mockDeletePhotos.mockImplementation(
         ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
@@ -189,11 +184,7 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       await jest.advanceTimersByTimeAsync( 1000 );
       expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
         "photo_delete_pending",
-        expect.objectContaining( {
-          requested: 300,
-          prompted: 300,
-          expectedTransactions: 1,
-        } ),
+        expect.objectContaining( { requested: 300 } ),
       );
 
       finishDeletion( { deleted: 300, requested: 300 } );
