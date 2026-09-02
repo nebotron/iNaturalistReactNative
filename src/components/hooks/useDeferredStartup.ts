@@ -31,6 +31,7 @@ import { takeUnfinishedPhotoImport } from "sharedHelpers/photoImportMarker";
 import { logSentinelFiles } from "sharedHelpers/sentinelFiles";
 import getStorageMetrics from "sharedHelpers/storageMetrics";
 import syncJoinedProjects from "sharedHelpers/syncJoinedProjects";
+import { logThumbnailDiagnostics } from "sharedHelpers/useDeviceImageThumbnail";
 import { useTranslation } from "sharedHooks";
 
 const { useRealm } = RealmContext;
@@ -128,6 +129,7 @@ const useDeferredStartup = ( ) => {
     const id8 = deferTask( "clearRollbackPhotos", clearRollbackPhotos );
     const id11 = deferTask( "clearExpiredCropSources", clearExpiredCropSources );
     const id13 = deferTask( "clearExpiredDeviceThumbnails", clearExpiredDeviceThumbnails );
+    const id14 = deferTask( "logThumbnailDiagnostics", logThumbnailDiagnostics );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
     const id10 = deferTask( "warmIntlCache", () => {
@@ -160,6 +162,7 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id11 );
       cancelIdleCallback( id12 );
       cancelIdleCallback( id13 );
+      cancelIdleCallback( id14 );
       cancelIdleCallback( idImport );
     };
   }, [i18n, realm] );

@@ -1327,6 +1327,14 @@ static UIImage *rasterizedImage( UIImage *image )
 // showing an invisible crop overlay whose pinch gesture appeared dead and whose
 // subject detection appeared never to return, and an openable but empty one
 // left them as plain black squares.
+// How many encodes came back as a frame of solid black, and how many of those
+// the rasterization below then recovered a real photo from. Neither is an
+// error -- an all-black JPEG opens perfectly well -- so without a count of
+// them nothing anywhere says this is happening. Read once per launch by
+// thumbnailDiagnostics.
+static NSUInteger gBlackEncodes = 0;
+static NSUInteger gBlackEncodesRecovered = 0;
+
 static NSData *encodedThumbnailData( UIImage *image, NSString **reason )
 {
   NSData *data = UIImageJPEGRepresentation( image, 0.8 );
@@ -1336,16 +1344,38 @@ static NSData *encodedThumbnailData( UIImage *image, NSString **reason )
   // draws over a colour no photograph is uniformly made of, so a photo that
   // really is black comes back drawn and is encoded as normal, while a no-op
   // draw comes back nil and this photo gets no cached thumbnail at all.
-  if ( jpegDataIsDecodable( data ) && !jpegDataIsBlack( data ) ) return data;
+  BOOL decodable = jpegDataIsDecodable( data );
+  BOOL black      = decodable && jpegDataIsBlack( data );
+  if ( decodable && !black ) return data;
+  if ( black ) gBlackEncodes += 1;
   UIImage *rasterized = rasterizedImage( image );
   data = rasterized ? UIImageJPEGRepresentation( rasterized, 0.8 ) : nil;
-  if ( jpegDataIsDecodable( data ) ) return data;
+  if ( jpegDataIsDecodable( data ) ) {
+    if ( black ) gBlackEncodesRecovered += 1;
+    return data;
+  }
   if ( reason ) {
     *reason = rasterized
       ? @"Could not encode thumbnail"
       : @"Thumbnail decode produced no pixels";
   }
   return nil;
+}
+
+// Counts of the silent failures above, reset as they are read, so one line per
+// launch can say whether thumbnails are being generated black -- a photo that
+// renders from its original and then turns black when the cell swaps to its
+// generated thumbnail looks like nothing at all from JS.
+RCT_EXPORT_METHOD( thumbnailDiagnostics
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  resolve( @{
+    @"blackEncodes":          @( gBlackEncodes ),
+    @"blackEncodesRecovered": @( gBlackEncodesRecovered ),
+  } );
+  gBlackEncodes          = 0;
+  gBlackEncodesRecovered = 0;
 }
 
 // Writes a downscaled JPEG thumbnail (maxPixel px on the longest side) of a

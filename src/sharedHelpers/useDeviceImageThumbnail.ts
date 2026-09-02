@@ -8,12 +8,18 @@ import { unlink } from "sharedHelpers/util";
 
 const logger = log.extend( "useDeviceImageThumbnail" );
 
+interface ThumbnailDiagnostics {
+  blackEncodes: number;
+  blackEncodesRecovered: number;
+}
+
 interface ImageCropperModule {
   createThumbnail: (
     inputPath: string,
     maxPixel: number,
     outputPath: string,
   ) => Promise<string>;
+  thumbnailDiagnostics?: ( ) => Promise<ThumbnailDiagnostics>;
 }
 
 const { ImageCropper } = NativeModules as { ImageCropper?: ImageCropperModule };
@@ -419,6 +425,30 @@ export const invalidateDeviceImageThumbnail = async (
   // Only after the file is gone: a request that arrives while it is still on
   // disk is served the same bad file straight back out of it.
   notifyInvalidation( );
+};
+
+// Reports thumbnails that generated as a frame of solid black, which nothing
+// else can: an all-black JPEG opens perfectly well, so it reaches the cell with
+// no load error and no failed generation behind it. The cell draws the original
+// photo until its thumbnail is ready and then swaps to it, so one of these is a
+// photo that renders correctly and then turns black. Counts reset as they are
+// read, so this is per launch and silent when there is nothing to say.
+export const logThumbnailDiagnostics = async ( ): Promise<void> => {
+  if ( !ImageCropper?.thumbnailDiagnostics ) return;
+  try {
+    const { blackEncodes, blackEncodesRecovered } = await ImageCropper.thumbnailDiagnostics( );
+    if ( blackEncodes > 0 ) {
+      logger.warnWithExtra( "thumbnail_black_encodes", {
+        blackEncodes,
+        // Rasterizing draws the photo over a colour no photograph is uniformly
+        // made of, so these came back with real pixels and were cached as good
+        // thumbnails. The difference is the ones that could not be recovered.
+        recovered: blackEncodesRecovered,
+      } );
+    }
+  } catch {
+    // Diagnostics must never be the reason startup fails.
+  }
 };
 
 // Returns a small cached thumbnail uri for a device photo, generated off the
