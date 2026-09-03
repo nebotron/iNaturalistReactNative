@@ -70,6 +70,12 @@ const logger = log.extend( "PhotoGallery" );
 
 const PAGE_SIZE = 60;
 
+type GalleryInclude = NonNullable<Parameters<typeof CameraRoll.getPhotos>[0]["include"]>;
+
+const GALLERY_INCLUDE: GalleryInclude = Platform.OS === "android"
+  ? ["filename", "fileSize", "filepath", "imageSize", "location"]
+  : ["filename", "fileSize", "imageSize", "location"];
+
 const getDeviceUriFromNode = ( node: PhotoNode ): string | null => {
   if ( Platform.OS === "ios" ) {
     if ( !node.id ) {
@@ -174,7 +180,11 @@ const PhotoGallery = ( {
         // "location" is PHAsset.location, which is where a location set by
         // hand in the Photos app lives — the photo file itself is never
         // rewritten, so that location is not in the EXIF we import.
-        include: ["filename", "fileSize", "filepath", "imageSize", "location"],
+        // Each included field is resolved per asset, so asking for one that is
+        // never read costs a page of the grid for nothing: "filepath" is only
+        // ever consulted on Android, where it is what bypasses MediaStore's
+        // GPS-stripping (see PhotoLibrary and videoImportHelpers).
+        include: GALLERY_INCLUDE,
       } );
       const removedUris = removedGroupPhotoUrisRef.current;
       const nodes = result.edges.map( e => e.node ).filter( node => {
