@@ -8,7 +8,10 @@ import {
 } from "appConstants/paths";
 import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDetails";
 import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
-import type { ImportedAsset } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
+import type {
+  GroupedMediaItem,
+  ImportedAsset,
+} from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import {
   appendPhotosToObservation,
   buildGroupedMediaItems,
@@ -283,41 +286,54 @@ const PhotoLibrary = ( ) => {
 
       // Extract GIF + audio from each video node and build GroupedMediaItems
       // so they appear in the GroupPhotos screen alongside regular photos.
-      const videoGroupItems = [];
-      for ( const videoNode of videoNodes ) {
-        // eslint-disable-next-line no-await-in-loop
-        const { gifUri, audioUri } = await extractVideoMedia( videoNode );
-        if ( gifUri ) {
-          videoGroupItems.push( {
-            photos: [
-              {
-                image: {
-                  uri: gifUri,
-                  type: "image/gif",
-                  fileName: gifUri.split( "/" ).pop( ),
-                  width: videoNode.image.width,
-                  height: videoNode.image.height,
-                  fileSize: undefined,
-                  id: undefined,
-                  timestamp: videoNode.timestamp,
+      const videoGroupItems: GroupedMediaItem[] = [];
+      const extractVideos = async ( ) => {
+        for ( const videoNode of videoNodes ) {
+          // eslint-disable-next-line no-await-in-loop
+          const { gifUri, audioUri } = await extractVideoMedia( videoNode );
+          if ( gifUri ) {
+            videoGroupItems.push( {
+              photos: [
+                {
+                  image: {
+                    uri: gifUri,
+                    type: "image/gif",
+                    fileName: gifUri.split( "/" ).pop( ),
+                    width: videoNode.image.width,
+                    height: videoNode.image.height,
+                    fileSize: undefined,
+                    id: undefined,
+                    timestamp: videoNode.timestamp,
+                  },
                 },
-              },
-            ],
-          } );
+              ],
+            } );
+          }
+          if ( audioUri ) {
+            videoGroupItems.push(
+              buildGroupedSoundItem( audioUri, videoNode.timestamp ),
+            );
+          }
+          // A video that yields neither a GIF nor audio contributed nothing to
+          // the import, so count it the same as a photo that failed to copy.
+          reportSettled( !!gifUri || !!audioUri );
         }
-        if ( audioUri ) {
-          videoGroupItems.push(
-            buildGroupedSoundItem( audioUri, videoNode.timestamp ),
-          );
-        }
-        // A video that yields neither a GIF nor audio contributed nothing to
-        // the import, so count it the same as a photo that failed to copy.
-        reportSettled( !!gifUri || !!audioUri );
-      }
+      };
 
-      const copiedPhotos = photoNodes.length > 0
-        ? await copyImagesFromCameraRoll( photoNodes, reportSettled )
-        : [];
+      // Transcoding videos and copying photos go through unrelated
+      // subsystems — AVFoundation against a decoder, PhotoKit against the
+      // asset store — so running the videos to completion first made every
+      // photo in the selection wait out GIF conversions that were not
+      // competing with it for anything. Start both and let them overlap. The
+      // videos stay one at a time between themselves: several concurrent
+      // transcodes only contend for the same encoder, and a selection rarely
+      // holds many.
+      const [copiedPhotos] = await Promise.all( [
+        photoNodes.length > 0
+          ? copyImagesFromCameraRoll( photoNodes, reportSettled )
+          : [],
+        extractVideos( ),
+      ] );
 
       // Only photos that actually copied are staged for the "delete the
       // originals?" prompt on exit. Staging every selected photo up front
