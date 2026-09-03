@@ -33,6 +33,7 @@ import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedD
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { fileExtension, summarizeTypes } from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
+import mapWithConcurrency from "sharedHelpers/mapWithConcurrency";
 import { useInputImageTracking, useLayoutPrefs, useTranslation } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useStore from "stores/useStore";
@@ -233,14 +234,22 @@ const PhotoLibrary = ( ) => {
       }
     };
 
-    const BATCH_SIZE = 10;
-    const results = [];
-    for ( let i = 0; i < uniqueNodes.length; i += BATCH_SIZE ) {
-      const batch = uniqueNodes.slice( i, i + BATCH_SIZE );
-      // eslint-disable-next-line no-await-in-loop
-      const batchResults = await Promise.all( batch.map( copyNodeOrNull ) );
-      results.push( ...batchResults.filter( ( r ): r is NonNullable<typeof r> => r !== null ) );
-    }
+    // Ten copies in flight, each slot refilled the moment it frees. This used
+    // to await Promise.all over fixed slices of ten, which made every slice as
+    // slow as its slowest photo: one iCloud-offloaded asset retrying its
+    // download with backoff (2/4/8/16s, then a 60s no-progress watchdog) held
+    // the other nine slots idle until it settled, so a few offloaded photos
+    // scattered through a selection charged that wait once per slice they
+    // landed in. A straggler now costs its own wait and no one else's.
+    // mapWithConcurrency keeps the results in selection order, which matters:
+    // it decides which photo leads an observation (appendPhotosToObservation)
+    // and how the Group Photos screen lays the import out.
+    const MAX_COPIES_IN_FLIGHT = 10;
+    const results = ( await mapWithConcurrency(
+      uniqueNodes,
+      MAX_COPIES_IN_FLIGHT,
+      copyNodeOrNull,
+    ) ).filter( ( r ): r is NonNullable<typeof r> => r !== null );
     if ( results.length < uniqueNodes.length ) {
       logger.warnWithExtra( "camera_roll_copy_incomplete", {
         copied: results.length,
