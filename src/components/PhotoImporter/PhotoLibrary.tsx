@@ -159,12 +159,6 @@ const PhotoLibrary = ( ) => {
       }
       claimedFileNames.add( fileName );
       const destPath = `${path}/${fileName}`;
-      // Remove any file left by a previous import of the same asset. Both
-      // PHAssetResourceManager.writeData (iOS) and copyFile (Android) fail if
-      // the destination already exists — iOS surfaces this as the opaque
-      // "PHPhotosErrorDomain error -1", which was aborting the whole import
-      // when a still-selected, already-imported photo was re-imported.
-      await unlink( destPath ).catch( ( ) => undefined );
       if ( Platform.OS === "ios" ) {
         // Use PHAssetResourceManager.writeData (via ImageCropper.exportPHAsset)
         // to write the original file bytes verbatim — no decode/re-encode,
@@ -193,6 +187,12 @@ const PhotoLibrary = ( ) => {
           logger.info( `Exported a photo after ${attempts} attempt(s)` );
         }
       } else {
+        // Remove any file left by a previous import of the same asset, since
+        // copyFile fails if the destination already exists. iOS needs the same
+        // clearing, but exportPHAsset already does it before every attempt —
+        // doing it from here too was a bridge round trip and a filesystem hit
+        // per photo that bought nothing.
+        await unlink( destPath ).catch( ( ) => undefined );
         // On Android 10+, content:// URIs served by MediaStore strip GPS EXIF
         // from the byte stream. Using the actual file path (filepath) bypasses
         // the MediaStore provider and preserves all EXIF metadata.
