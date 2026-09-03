@@ -659,149 +659,162 @@ RCT_EXPORT_METHOD( exportPHAsset
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSString *localIdentifier = [phUri hasPrefix:@"ph://"]
-    ? [phUri substringFromIndex:5]
-    : phUri;
+  // This module has no methodQueue of its own, so React Native gives it one
+  // serial queue that every call to it shares. Everything below up to
+  // writeDataForAssetResource is a synchronous trip through the Photos
+  // database, and an import runs one of these per photo: on that shared serial
+  // queue the lookups could not overlap, so the setup cost of a 200-photo
+  // import added up end to end before counting a single byte copied — and any
+  // other ImageCropper call (a crop, a thumbnail) queued behind all of it.
+  // Hop to a concurrent queue so the lookups run alongside each other. The
+  // work that follows is unchanged: writeDataForAssetResource is asynchronous
+  // and its handlers already hop to the main queue, which is what serializes
+  // the state they share.
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+    NSString *localIdentifier = [phUri hasPrefix:@"ph://"]
+      ? [phUri substringFromIndex:5]
+      : phUri;
 
-  PHFetchResult<PHAsset *> *result =
-    [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
-  PHAsset *asset = result.firstObject;
-  if ( !asset ) {
-    reject( @"EXPORT_FAILED", @"PHAsset not found", nil );
-    return;
-  }
-
-  PHAssetResource *photoResource = nil;
-  for ( PHAssetResource *r in [PHAssetResource assetResourcesForAsset:asset] ) {
-    if ( r.type == PHAssetResourceTypePhoto ) {
-      photoResource = r;
-      break;
-    }
-  }
-  if ( !photoResource ) {
-    reject( @"EXPORT_FAILED", @"No photo resource found for asset", nil );
-    return;
-  }
-
-  NSString *dest = [destPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  [[NSFileManager defaultManager]
-    createDirectoryAtPath:[dest stringByDeletingLastPathComponent]
-    withIntermediateDirectories:YES attributes:nil error:nil];
-
-  PHAssetResourceRequestOptions *options = [[PHAssetResourceRequestOptions alloc] init];
-  options.networkAccessAllowed = YES;
-
-  // An offloaded (iCloud-optimized) asset over a weak connection can fail the
-  // iCloud fetch rather than just being slow, surfacing as the opaque
-  // "PHPhotosErrorDomain error -1" — retry with backoff instead of failing
-  // the import on the first hiccup, giving the download time to complete.
-  static const NSInteger maxAttempts = 5;
-  NSArray<NSNumber *> *retryDelaySeconds = @[@2, @4, @8, @16];
-
-  // writeDataForAssetResource can also simply never call back: the app log
-  // shows imports that logged "Done tapped" and no "settled" line at all, then
-  // a relaunch — one wedged asset leaves Promise.all pending forever, so the
-  // whole import hangs with a frozen progress bar until the user kills the app.
-  // There is no way to cancel the request, so stop waiting on it instead:
-  // networkAccessAllowed downloads report progress, and an export that has made
-  // none for this long is wedged rather than slow. A download that is merely
-  // slow keeps ticking and is left alone however long it takes.
-  static const NSTimeInterval stallTimeoutSeconds = 60;
-  static const NSTimeInterval stallCheckSeconds = 5;
-  __block BOOL settled = NO;
-  __block double lastProgress = 0;
-  __block NSTimeInterval lastProgressAt = [NSDate timeIntervalSinceReferenceDate];
-  options.progressHandler = ^( double progress ) {
-    lastProgress = progress;
-    lastProgressAt = [NSDate timeIntervalSinceReferenceDate];
-  };
-
-  __block void ( ^attemptExport )( NSInteger );
-  attemptExport = ^( NSInteger attemptNumber ) {
-    lastProgressAt = [NSDate timeIntervalSinceReferenceDate];
-    // writeDataForAssetResource refuses to write to a path that already
-    // exists, and reports that refusal as the same opaque "PHPhotosErrorDomain
-    // error -1" a failed iCloud fetch gives. A first attempt that fails partway
-    // leaves its partial file behind, so every retry after it was failing on
-    // the leftover rather than retrying the download — which is why the app log
-    // held 158 export failures and not one "Exported after N attempt(s)".
-    [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
-    [[PHAssetResourceManager defaultManager]
-      writeDataForAssetResource:photoResource
-      toFile:[NSURL fileURLWithPath:dest]
-      options:options
-      completionHandler:^( NSError *error ) {
-        dispatch_async( dispatch_get_main_queue(), ^{
-          // A write we already gave up on can still call back later; it must
-          // not resolve a promise that was rejected, nor start a retry that
-          // would race a live write over the same destination path.
-          if ( settled ) { return; }
-          if ( !error ) {
-            settled = YES;
-            resolve( @{
-              @"uri": [NSString stringWithFormat:@"file://%@", dest],
-              @"attempts": @( attemptNumber + 1 ),
-            } );
-            attemptExport = nil;
-            return;
-          }
-          if ( attemptNumber + 1 >= maxAttempts ) {
-            // localizedDescription for these is always the same opaque sentence,
-            // so carry the domain and code that identify which failure it was.
-            NSString *message = [NSString stringWithFormat:@"%@ [%@ %ld] (after %ld attempt(s))",
-              error.localizedDescription, error.domain, ( long )error.code,
-              ( long )( attemptNumber + 1 )];
-            settled = YES;
-            reject( @"EXPORT_FAILED", message, error );
-            attemptExport = nil;
-            return;
-          }
-          NSTimeInterval delay = retryDelaySeconds[attemptNumber].doubleValue;
-          dispatch_after(
-            dispatch_time( DISPATCH_TIME_NOW, ( int64_t )( delay * NSEC_PER_SEC ) ),
-            dispatch_get_main_queue(),
-            ^{ if ( !settled ) { attemptExport( attemptNumber + 1 ); } }
-          );
-        } );
-      }];
-  };
-
-  __block void ( ^watchForStall )( void );
-  // watchForStall and the __block slot holding it retain each other, so the
-  // slot has to be cleared to break the cycle — but never from inside the block
-  // itself, which would free the running block (and the reject block it
-  // captures) mid-call. Hop to the next main-queue turn instead.
-  void ( ^releaseWatch )( void ) = ^{
-    dispatch_async( dispatch_get_main_queue(), ^{ watchForStall = nil; } );
-  };
-  watchForStall = ^{
-    if ( settled ) { releaseWatch( ); return; }
-    NSTimeInterval idleFor = [NSDate timeIntervalSinceReferenceDate] - lastProgressAt;
-    if ( idleFor >= stallTimeoutSeconds ) {
-      settled = YES;
-      attemptExport = nil;
-      // A stable marker so the app log can count these separately from the
-      // iCloud fetch failures that do come back with an error.
-      reject( @"EXPORT_STALLED",
-        [NSString stringWithFormat:@"export_stalled: no progress for %.0fs (progress=%.2f)",
-          idleFor, lastProgress],
-        nil );
-      releaseWatch( );
+    PHFetchResult<PHAsset *> *result =
+      [PHAsset fetchAssetsWithLocalIdentifiers:@[localIdentifier] options:nil];
+    PHAsset *asset = result.firstObject;
+    if ( !asset ) {
+      reject( @"EXPORT_FAILED", @"PHAsset not found", nil );
       return;
     }
+
+    PHAssetResource *photoResource = nil;
+    for ( PHAssetResource *r in [PHAssetResource assetResourcesForAsset:asset] ) {
+      if ( r.type == PHAssetResourceTypePhoto ) {
+        photoResource = r;
+        break;
+      }
+    }
+    if ( !photoResource ) {
+      reject( @"EXPORT_FAILED", @"No photo resource found for asset", nil );
+      return;
+    }
+
+    NSString *dest = [destPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    [[NSFileManager defaultManager]
+      createDirectoryAtPath:[dest stringByDeletingLastPathComponent]
+      withIntermediateDirectories:YES attributes:nil error:nil];
+
+    PHAssetResourceRequestOptions *options = [[PHAssetResourceRequestOptions alloc] init];
+    options.networkAccessAllowed = YES;
+
+    // An offloaded (iCloud-optimized) asset over a weak connection can fail the
+    // iCloud fetch rather than just being slow, surfacing as the opaque
+    // "PHPhotosErrorDomain error -1" — retry with backoff instead of failing
+    // the import on the first hiccup, giving the download time to complete.
+    static const NSInteger maxAttempts = 5;
+    NSArray<NSNumber *> *retryDelaySeconds = @[@2, @4, @8, @16];
+
+    // writeDataForAssetResource can also simply never call back: the app log
+    // shows imports that logged "Done tapped" and no "settled" line at all, then
+    // a relaunch — one wedged asset leaves Promise.all pending forever, so the
+    // whole import hangs with a frozen progress bar until the user kills the app.
+    // There is no way to cancel the request, so stop waiting on it instead:
+    // networkAccessAllowed downloads report progress, and an export that has made
+    // none for this long is wedged rather than slow. A download that is merely
+    // slow keeps ticking and is left alone however long it takes.
+    static const NSTimeInterval stallTimeoutSeconds = 60;
+    static const NSTimeInterval stallCheckSeconds = 5;
+    __block BOOL settled = NO;
+    __block double lastProgress = 0;
+    __block NSTimeInterval lastProgressAt = [NSDate timeIntervalSinceReferenceDate];
+    options.progressHandler = ^( double progress ) {
+      lastProgress = progress;
+      lastProgressAt = [NSDate timeIntervalSinceReferenceDate];
+    };
+
+    __block void ( ^attemptExport )( NSInteger );
+    attemptExport = ^( NSInteger attemptNumber ) {
+      lastProgressAt = [NSDate timeIntervalSinceReferenceDate];
+      // writeDataForAssetResource refuses to write to a path that already
+      // exists, and reports that refusal as the same opaque "PHPhotosErrorDomain
+      // error -1" a failed iCloud fetch gives. A first attempt that fails partway
+      // leaves its partial file behind, so every retry after it was failing on
+      // the leftover rather than retrying the download — which is why the app log
+      // held 158 export failures and not one "Exported after N attempt(s)".
+      [[NSFileManager defaultManager] removeItemAtPath:dest error:nil];
+      [[PHAssetResourceManager defaultManager]
+        writeDataForAssetResource:photoResource
+        toFile:[NSURL fileURLWithPath:dest]
+        options:options
+        completionHandler:^( NSError *error ) {
+          dispatch_async( dispatch_get_main_queue(), ^{
+            // A write we already gave up on can still call back later; it must
+            // not resolve a promise that was rejected, nor start a retry that
+            // would race a live write over the same destination path.
+            if ( settled ) { return; }
+            if ( !error ) {
+              settled = YES;
+              resolve( @{
+                @"uri": [NSString stringWithFormat:@"file://%@", dest],
+                @"attempts": @( attemptNumber + 1 ),
+              } );
+              attemptExport = nil;
+              return;
+            }
+            if ( attemptNumber + 1 >= maxAttempts ) {
+              // localizedDescription for these is always the same opaque sentence,
+              // so carry the domain and code that identify which failure it was.
+              NSString *message = [NSString stringWithFormat:@"%@ [%@ %ld] (after %ld attempt(s))",
+                error.localizedDescription, error.domain, ( long )error.code,
+                ( long )( attemptNumber + 1 )];
+              settled = YES;
+              reject( @"EXPORT_FAILED", message, error );
+              attemptExport = nil;
+              return;
+            }
+            NSTimeInterval delay = retryDelaySeconds[attemptNumber].doubleValue;
+            dispatch_after(
+              dispatch_time( DISPATCH_TIME_NOW, ( int64_t )( delay * NSEC_PER_SEC ) ),
+              dispatch_get_main_queue(),
+              ^{ if ( !settled ) { attemptExport( attemptNumber + 1 ); } }
+            );
+          } );
+        }];
+    };
+
+    __block void ( ^watchForStall )( void );
+    // watchForStall and the __block slot holding it retain each other, so the
+    // slot has to be cleared to break the cycle — but never from inside the block
+    // itself, which would free the running block (and the reject block it
+    // captures) mid-call. Hop to the next main-queue turn instead.
+    void ( ^releaseWatch )( void ) = ^{
+      dispatch_async( dispatch_get_main_queue(), ^{ watchForStall = nil; } );
+    };
+    watchForStall = ^{
+      if ( settled ) { releaseWatch( ); return; }
+      NSTimeInterval idleFor = [NSDate timeIntervalSinceReferenceDate] - lastProgressAt;
+      if ( idleFor >= stallTimeoutSeconds ) {
+        settled = YES;
+        attemptExport = nil;
+        // A stable marker so the app log can count these separately from the
+        // iCloud fetch failures that do come back with an error.
+        reject( @"EXPORT_STALLED",
+          [NSString stringWithFormat:@"export_stalled: no progress for %.0fs (progress=%.2f)",
+            idleFor, lastProgress],
+          nil );
+        releaseWatch( );
+        return;
+      }
+      dispatch_after(
+        dispatch_time( DISPATCH_TIME_NOW, ( int64_t )( stallCheckSeconds * NSEC_PER_SEC ) ),
+        dispatch_get_main_queue(),
+        ^{ if ( watchForStall ) { watchForStall( ); } }
+      );
+    };
+
+    attemptExport( 0 );
     dispatch_after(
       dispatch_time( DISPATCH_TIME_NOW, ( int64_t )( stallCheckSeconds * NSEC_PER_SEC ) ),
       dispatch_get_main_queue(),
-      ^{ if ( watchForStall ) { watchForStall( ); } }
+      ^{ watchForStall( ); }
     );
-  };
-
-  attemptExport( 0 );
-  dispatch_after(
-    dispatch_time( DISPATCH_TIME_NOW, ( int64_t )( stallCheckSeconds * NSEC_PER_SEC ) ),
-    dispatch_get_main_queue(),
-    ^{ watchForStall( ); }
-  );
+  } );
 }
 
 // Updates the location metadata of an existing Photos-library asset. Unlike
