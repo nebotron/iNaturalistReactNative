@@ -88,6 +88,17 @@ const GroupPhotosContainer = ( ): Node => {
   const resetMyObsOffsetToRestore = useStore( state => state.resetMyObsOffsetToRestore );
   const setMyObsOffset = useStore( state => state.setMyObsOffset );
 
+  // Cells still standing in for photos being copied out of the device library
+  // (see PhotoLibrary): the grid opens on them and fills each one in as its
+  // photo lands.
+  const pendingCount = useMemo(
+    ( ) => groupedPhotos.reduce(
+      ( count, group ) => count + ( group.photos || [] ).filter( photo => photo.pending ).length,
+      0,
+    ),
+    [groupedPhotos],
+  );
+
   const [selectedIndices, setSelectedIndices] = useState( [] );
   const [isDuplicatingPhotos, setIsDuplicatingPhotos] = useState( false );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
@@ -159,6 +170,12 @@ const GroupPhotosContainer = ( ): Node => {
     pendingScrollOffset.current = Math.max( 0, scrollOffset.current + delta * itemHeight );
   }, [itemHeight] );
 
+  // Read from the store rather than the render closure: a photo that finished
+  // copying (or a background crop) between the last render and this tap would
+  // otherwise be rewritten back to the placeholder it replaced, and nothing
+  // would ever fill it in again.
+  const currentGroupedPhotos = ( ) => useStore.getState( ).groupedPhotos;
+
   const combinePhotos = () => {
     if ( selectedObservations.length < 2 ) {
       return;
@@ -175,7 +192,7 @@ const GroupPhotosContainer = ( ): Node => {
       .map( obs => obs.soundUri );
     const newObsList = [];
 
-    groupedPhotos.forEach( obs => {
+    currentGroupedPhotos( ).forEach( obs => {
       // Sound-only items: merge into combined group if selected, else keep
       if ( obs.soundUri !== undefined && !obs.photos?.length ) {
         if ( !selectedObservations.includes( obs ) ) {
@@ -237,7 +254,7 @@ const GroupPhotosContainer = ( ): Node => {
     const separatedItems = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( observations );
 
-    groupedPhotos.forEach( obs => {
+    currentGroupedPhotos( ).forEach( obs => {
       const filteredGroupedPhotos = obs.photos?.filter(
         item => orderedPhotos.includes( item ),
       ) || [];
@@ -273,15 +290,16 @@ const GroupPhotosContainer = ( ): Node => {
     setIsDuplicatingPhotos( true );
     try {
       const duplicatedGroups = await duplicateGroupedMediaGroups( observations );
+      const groups = currentGroupedPhotos( );
       const indexToDuplicate = {};
       observations.forEach( ( obs, i ) => {
-        const originalIndex = groupedPhotos.indexOf( obs );
+        const originalIndex = groups.indexOf( obs );
         if ( originalIndex >= 0 ) {
           indexToDuplicate[originalIndex] = duplicatedGroups[i];
         }
       } );
       const newGroupedPhotos = [];
-      groupedPhotos.forEach( ( group, index ) => {
+      groups.forEach( ( group, index ) => {
         newGroupedPhotos.push( group );
         if ( indexToDuplicate[index] !== undefined ) {
           newGroupedPhotos.push( indexToDuplicate[index] );
@@ -314,7 +332,7 @@ const GroupPhotosContainer = ( ): Node => {
     // five days, usually "staged 1"), and what was staged is reported again by
     // the deletion itself, which is where a problem would actually show up.
 
-    groupedPhotos.forEach( obs => {
+    currentGroupedPhotos( ).forEach( obs => {
       if ( obs.soundUri !== undefined ) {
         if ( !observations.includes( obs ) ) {
           removedFromGroup.push( obs );
@@ -377,6 +395,10 @@ const GroupPhotosContainer = ( ): Node => {
   }, [exitObservationFlow, realm] );
 
   const navBasedOnUserSettings = async ( ) => {
+    // The import button is disabled while photos are still being copied, but a
+    // tap that lands as the last one arrives must not build observations
+    // around files that don't exist yet.
+    if ( pendingCount > 0 ) { return; }
     setIsCreatingObservations( true );
     // Crops confirmed in the bulk cropper finish writing in the background so
     // the cropper can advance to the next photo instantly. Let them land in
@@ -628,6 +650,7 @@ const GroupPhotosContainer = ( ): Node => {
       navBasedOnUserSettings={navBasedOnUserSettings}
       onScroll={onScroll}
       onViewableItemsChanged={onViewableItemsChanged}
+      pendingCount={pendingCount}
       removeItem={removeItem}
       selectObservationPhotos={selectObservationPhotos}
       selectedObservations={selectedObservations}

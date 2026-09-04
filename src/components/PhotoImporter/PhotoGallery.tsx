@@ -57,11 +57,13 @@ interface Props {
   onCancel: () => void;
   // onProgress reports how many of the selected items have finished importing
   // and how many of those failed, so the overlay can show real progress
-  // instead of an open-ended spinner.
+  // instead of an open-ended spinner. An import that only hands the work off —
+  // Group Photos copies its photos in the background, filling its grid in as
+  // they land — says so, and owns the progress reporting from there.
   onDone: (
     selectedNodes: PhotoNode[],
     onProgress?: ( completed: number, failed: number ) => void
-  ) => void | Promise<void>;
+  ) => Promise<{ continuesInBackground?: boolean } | void>;
 }
 
 const { useRealm } = RealmContext;
@@ -283,6 +285,7 @@ const PhotoGallery = ( {
     // advancing. One line per stuck import, none on the happy path.
     let settledCount = 0;
     let failedSoFar = 0;
+    let continuesInBackground = false;
     const stallTimer = setTimeout( ( ) => {
       logger.errorWithExtra( "photo_import_stalled", {
         selected: selected.length,
@@ -294,13 +297,14 @@ const PhotoGallery = ( {
       } );
     }, 30000 );
     try {
-      await onDone( selected, ( completed, failed ) => {
+      const result = await onDone( selected, ( completed, failed ) => {
         settledCount = completed;
         failedSoFar = failed;
         updatePhotoImportProgress( completed, failed );
         setImportedCount( completed );
         setFailedCount( failed );
       } );
+      continuesInBackground = !!result?.continuesInBackground;
       // The tap used to be bracketed by a line on the way in and a line on the
       // way out, which was 138 of the app log's 889 entries over five days and
       // every one of them said the same thing: a local batch settles in ~150ms.
@@ -309,7 +313,7 @@ const PhotoGallery = ( {
       // by the next launch's marker — so only a slow import that did finish is
       // news.
       const ms = Date.now( ) - startedAt;
-      if ( ms > 3000 ) {
+      if ( ms > 3000 && !continuesInBackground ) {
         logger.infoWithExtra( "photo_import_slow", {
           selected: selected.length,
           ms,
@@ -319,8 +323,11 @@ const PhotoGallery = ( {
       }
     } finally {
       // The import reached an end, however badly, so it is not one of the ones
-      // that vanish with the process.
-      clearPhotoImportMarker( );
+      // that vanish with the process. An import still running in the
+      // background owns its own marker and stall reporting.
+      if ( !continuesInBackground ) {
+        clearPhotoImportMarker( );
+      }
       clearTimeout( stallTimer );
       importingRef.current = false;
       setImportingCount( 0 );

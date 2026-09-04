@@ -7,7 +7,7 @@ import createFeatureFlagSlice from "./createFeatureFlagSlice";
 import createFirebaseTraceSlice from "./createFirebaseTraceSlice";
 import createLayoutSlice from "./createLayoutSlice";
 import createMyObservationsSlice from "./createMyObservationsSlice";
-import createObservationFlowSlice from "./createObservationFlowSlice";
+import createObservationFlowSlice, { dropPendingGroupPhotos } from "./createObservationFlowSlice";
 import createPrivacyZoneSlice from "./createPrivacyZoneSlice";
 import createRootExploreSlice from "./createRootExploreSlice";
 import createSyncObservationsSlice from "./createSyncObservationsSlice";
@@ -100,8 +100,11 @@ const useStore = create( persist(
       // Last location used in the location picker
       lastLocationPickerState: state.lastLocationPickerState,
 
-      // Group Photos progress, so it survives an app kill
-      groupedPhotos: state.groupedPhotos,
+      // Group Photos progress, so it survives an app kill. Photos still being
+      // copied out of the library are left out: their copies die with the
+      // process, so restoring them would resume an import stuck on cells that
+      // can never fill in.
+      groupedPhotos: dropPendingGroupPhotos( state.groupedPhotos ),
       firstObservationDefaults: state.firstObservationDefaults,
       pendingGroupPhotoDeletionUris: state.pendingGroupPhotoDeletionUris,
 

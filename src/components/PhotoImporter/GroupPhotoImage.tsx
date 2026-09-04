@@ -6,6 +6,7 @@ import {
 } from "components/PhotoImporter/helpers/groupPhotoCrops";
 import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import {
+  ActivityIndicator,
   Carousel,
   CarouselDots,
   INatIcon,
@@ -35,6 +36,7 @@ interface PhotoItem {
     crop?: NormalizedCrop;
   };
   isDuplicateUpload?: boolean;
+  pending?: boolean;
 }
 
 interface Item {
@@ -75,6 +77,10 @@ const GroupPhotoImage = ( {
     setPrevMediaUri( mediaUri );
     setPhotoIndex( 0 );
   }
+
+  // Still being copied out of the device library: the cell stands in for a
+  // file the import hasn't written yet (see PhotoLibrary).
+  const isPending = photos.length > 0 && photos.every( photo => photo.pending );
 
   const isSelected = selectedObservations.includes( item );
   const handlePress = useCallback(
@@ -194,6 +200,29 @@ const GroupPhotoImage = ( {
     ( { item: photo }: { item: object } ) => renderPhoto( photo as PhotoItem ),
     [renderPhoto],
   );
+
+  // A photo the import is still copying shows the device library's own
+  // thumbnail, so the grid is populated from the moment it opens. Nothing can
+  // be done to it yet — combining, cropping and removing all act on a file
+  // that doesn't exist — so it draws no buttons and doesn't respond to a tap.
+  if ( isPending ) {
+    return (
+      <View className="relative">
+        <DevicePhotoImage
+          uri={firstPhoto?.image.uri}
+          cellWidth={cellWidth}
+          thumbnailMaxPixel={cellWidth > 0
+            ? groupPhotoThumbnailMaxPixel( cellWidth )
+            : undefined}
+          style={style}
+          testID={`GroupPhotos.pending.${mediaUri}`}
+        />
+        <View className="absolute inset-0 items-center justify-center bg-black/20">
+          <ActivityIndicator />
+        </View>
+      </View>
+    );
+  }
 
   if ( item.soundUri ) {
     return (

@@ -32,13 +32,49 @@ interface RollbackSnapshot {
 }
 
 export interface GroupedPhoto {
-  photos: {
+  // Absent on a sound-only item, e.g. the audio track of an imported video
+  photos?: {
     image: {
         uri: string;
     };
-    timestamp: number;
+    timestamp?: number;
+    // Set while the photo is still being copied out of the device library: the
+    // cell drawn for it is a placeholder standing in for a file the import has
+    // not written yet.
+    pending?: boolean;
   }[];
+  soundUri?: string;
+  // What a sound-only item is sorted by, since it has no photo to read a
+  // timestamp from
+  timestamp?: number;
 }
+
+// What a placeholder turns into once its media has landed: the photos that
+// take its place (none, if the copy failed), anything else that came out of
+// the same asset, and the device-photo bookkeeping that was waiting on the
+// copied file's uri.
+export interface GroupedPhotoResolution {
+  photos?: GroupedPhoto["photos"];
+  // Only ever the sound a video yielded alongside its GIF
+  extraItems?: { soundUri: string; timestamp?: number }[];
+  originalDevicePhotoUris?: string[];
+  deviceUriMappings?: { localUri: string; deviceUri: string | null | undefined }[];
+}
+
+// Placeholders only resolve in the process that started their copy, so
+// persisting them would restore an import that can never finish (see
+// useResumeGroupPhotos).
+export const dropPendingGroupPhotos = ( groups: GroupedPhoto[] ): GroupedPhoto[] => {
+  if ( !groups?.some( group => group.photos?.some( photo => photo.pending ) ) ) {
+    return groups;
+  }
+  return groups
+    .map( group => ( {
+      ...group,
+      photos: ( group.photos || [] ).filter( photo => !photo.pending ),
+    } ) )
+    .filter( group => group.photos.length > 0 || group.soundUri );
+};
 
 export interface LastLocationPickerState {
   region: {
@@ -110,6 +146,10 @@ interface ObservationFlowActions {
   setCurrentObservationIndex: ( index: number ) => void;
   removeObservationFromMultiObsFlowAtIndex: ( removedIndex: number ) => void;
   setGroupedPhotos: ( photos: GroupedPhoto[] ) => void;
+  resolveGroupedPhotoPlaceholder: (
+    placeholderUri: string,
+    resolution: GroupedPhotoResolution | null,
+  ) => boolean;
   setObservationMarkedAsViewedAt: ( date: Date | null ) => void;
   setObservations: ( updatedObservations: RealmObservationPojo[] ) => void;
   setPhotoImporterState: ( options: PhotoImporterOptions ) => void;
@@ -505,6 +545,76 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
   setGroupedPhotos: ( photos: GroupedPhoto[] ) => set( {
     groupedPhotos: photos,
   } ),
+  // Swaps one placeholder cell for the media it was standing in for, leaving
+  // the rest of the grid exactly where it is: the Group Photos screen is shown
+  // before any photo has been copied, and each cell fills in as its own copy
+  // lands. Returns false if the placeholder is gone (the import was discarded,
+  // or the user removed the cell), which is the signal to stop doing work for
+  // that photo.
+  resolveGroupedPhotoPlaceholder: (
+    placeholderUri: string,
+    resolution: GroupedPhotoResolution | null,
+  ): boolean => {
+    const index = get( ).groupedPhotos.findIndex(
+      group => group.photos?.some(
+        photo => photo.pending && photo.image?.uri === placeholderUri,
+      ),
+    );
+    if ( index < 0 ) { return false; }
+    set( state => {
+      const group = state.groupedPhotos[index];
+      const photos = ( group.photos || [] ).flatMap( photo => (
+        photo.pending && photo.image?.uri === placeholderUri
+          ? resolution?.photos || []
+          : [photo] ) );
+      const groupedPhotos = [...state.groupedPhotos];
+      // A copy that failed, or a video that yielded neither a GIF nor audio,
+      // leaves nothing behind and its cell goes away.
+      const keepGroup = photos.length > 0 || !!group.soundUri;
+      if ( keepGroup ) {
+        groupedPhotos[index] = { ...group, photos };
+      } else {
+        groupedPhotos.splice( index, 1 );
+      }
+      // Inserted next to the item they came from rather than re-sorted, so
+      // nothing already on screen moves under the user mid-import.
+      if ( resolution?.extraItems?.length ) {
+        groupedPhotos.splice(
+          keepGroup
+            ? index + 1
+            : index,
+          0,
+          ...resolution.extraItems,
+        );
+      }
+      const importedPhotoDeviceUriByLocalUri = {
+        ...state.importedPhotoDeviceUriByLocalUri,
+      };
+      ( resolution?.deviceUriMappings || [] ).forEach( ( { localUri, deviceUri } ) => {
+        registerImportedPhotoDeviceUriMappings(
+          importedPhotoDeviceUriByLocalUri,
+          localUri,
+          deviceUri,
+        );
+      } );
+      const originalDevicePhotoUris = [...state.originalDevicePhotoUris];
+      ( resolution?.originalDevicePhotoUris || [] ).forEach( uri => {
+        if ( uri && !originalDevicePhotoUris.includes( uri ) ) {
+          originalDevicePhotoUris.push( uri );
+        }
+      } );
+      return {
+        groupedPhotos,
+        photoLibraryUris: [
+          ...state.photoLibraryUris,
+          ...( resolution?.photos || [] ).map( photo => photo.image?.uri ).filter( Boolean ),
+        ],
+        importedPhotoDeviceUriByLocalUri,
+        originalDevicePhotoUris,
+      };
+    } );
+    return true;
+  },
   setObservationMarkedAsViewedAt: ( date: Date | null ) => set( {
     observationMarkedAsViewedAt: date,
   } ),

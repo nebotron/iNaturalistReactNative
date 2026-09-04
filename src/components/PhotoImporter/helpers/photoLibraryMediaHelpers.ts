@@ -15,9 +15,15 @@ export type ImportedAsset = Asset & GroupedPhotoCropMetadata & {
 };
 
 export interface GroupedMediaPhotoItem {
-  image: ImportedAsset;
+  // Always a file the app can read: a copy of a library photo, a baked crop,
+  // or a GIF extracted from a video
+  image: ImportedAsset & { uri: string };
   isDuplicateUpload?: boolean;
   originalDevicePhotoUri?: string | null;
+  // Set while the file is still being copied out of the device library: the
+  // cell Group Photos draws for it stands in for a photo the import has not
+  // written yet (see PhotoLibrary's placeholderGroup).
+  pending?: boolean;
 }
 
 export interface GroupedMediaItem {
@@ -39,7 +45,7 @@ export const buildGroupedMediaItems = (
 export const buildGroupedSoundItem = (
   soundUri: string,
   timestamp?: number,
-): GroupedMediaItem => ( { soundUri, timestamp } );
+): GroupedMediaItem & { soundUri: string } => ( { soundUri, timestamp } );
 
 export const createObservationFromGroupedMedia = async (
   group: GroupedMediaItem,

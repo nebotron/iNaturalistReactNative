@@ -101,6 +101,26 @@ export const getPreviouslyUploadedDevicePhotoUrisSet = (
   return previouslyUploadedUris;
 };
 
+// The same for a single photo, against a set the caller already has. An import
+// that marks its photos one at a time as they land must not walk every saved
+// observation once per photo to do it.
+export function markDuplicatePhotoFromLibrary<T extends Asset>(
+  previouslyUploadedUris: Set<string>,
+  photo: { image: T },
+  sourceAsset?: Asset,
+): {
+  image: T;
+  isDuplicateUpload: boolean;
+  originalDevicePhotoUri?: string;
+} {
+  const deviceUri = getGalleryAssetDevicePhotoUri( sourceAsset ?? photo.image );
+  return {
+    image: photo.image,
+    isDuplicateUpload: !!( deviceUri && previouslyUploadedUris.has( deviceUri ) ),
+    originalDevicePhotoUri: deviceUri ?? undefined,
+  };
+}
+
 // Generic over the image so callers keep whatever they carry alongside the
 // picker's own fields (e.g. the device asset's location) rather than having it
 // typed away here.
@@ -115,13 +135,9 @@ export const markDuplicatePhotosFromLibrary = <T extends Asset>(
 }[] => {
   const previouslyUploadedUris = getPreviouslyUploadedDevicePhotoUrisSet( realm );
 
-  return movedPhotos.map( ( { image }, index ) => {
-    const sourceAsset = sourceAssets[index] ?? image;
-    const deviceUri = getGalleryAssetDevicePhotoUri( sourceAsset );
-    return {
-      image,
-      isDuplicateUpload: !!( deviceUri && previouslyUploadedUris.has( deviceUri ) ),
-      originalDevicePhotoUri: deviceUri ?? undefined,
-    };
-  } );
+  return movedPhotos.map( ( photo, index ) => markDuplicatePhotoFromLibrary(
+    previouslyUploadedUris,
+    photo,
+    sourceAssets[index],
+  ) );
 };

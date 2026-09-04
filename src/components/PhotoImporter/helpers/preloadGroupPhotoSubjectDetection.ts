@@ -10,6 +10,7 @@ import groupPhotoThumbnailMaxPixel from "./groupPhotoThumbnail";
 
 interface GroupedPhotoItem {
   image: GroupedPhotoImage;
+  pending?: boolean;
 }
 
 interface GroupedPhotoGroup {
@@ -46,7 +47,11 @@ const preloadGroupPhotoSubjectDetection = (
   const maxPixel = groupPhotoThumbnailMaxPixel( cellWidth );
   const pending: { sourceUri: string; hasSavedCrop: boolean }[] = [];
   groups.forEach( group => {
-    group.photos?.forEach( ( { image } ) => {
+    group.photos?.forEach( ( { image, pending: isPending } ) => {
+      // A photo still being copied out of the library is drawn from the device
+      // thumbnail and replaced by the imported file the moment it lands, so
+      // detecting a subject in it now is work thrown away twice over.
+      if ( isPending ) return;
       const sourceUri = groupPhotoCropSourceUri( image );
       const hasSavedCrop = Boolean( image.crop );
       if ( walked.has( sourceUri ) || hasThumbnailDetection( sourceUri, hasSavedCrop ) ) {

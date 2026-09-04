@@ -2,6 +2,8 @@ import type {
   FlashListProps, FlashListRef, ListRenderItem, ViewToken,
 } from "@shopify/flash-list";
 import {
+  ActivityIndicator,
+  Body2,
   Button,
   CustomFlashList,
   INatIconButton,
@@ -45,6 +47,7 @@ interface PhotoItem {
     cropOriginalUri?: string;
     crop?: NormalizedCrop;
   };
+  pending?: boolean;
 }
 
 interface Item {
@@ -66,6 +69,8 @@ interface Props {
     viewableItems: ViewToken<Item>[];
     changed: ViewToken<Item>[];
   } ) => void;
+  // How many cells are still standing in for photos the import is copying
+  pendingCount?: number;
   removeItem: ( item: Item ) => void;
   selectedObservations: Item[];
   selectObservationPhotos: ( isSelected: boolean, item: Item ) => void;
@@ -83,6 +88,7 @@ const GroupPhotos = ( {
   navBasedOnUserSettings,
   onScroll,
   onViewableItemsChanged,
+  pendingCount = 0,
   removeItem,
   selectedObservations,
   selectObservationPhotos,
@@ -220,10 +226,30 @@ const GroupPhotos = ( {
           onPress={navBasedOnUserSettings}
           testID="GroupPhotos.next"
           loading={isCreatingObservations}
+          // Importing now would build observations around photos whose files
+          // don't exist yet
+          disabled={pendingCount > 0}
         />
       </View>
     </View>
-  ), [groupedPhotos.length, isCreatingObservations, navBasedOnUserSettings, t] );
+  ), [
+    groupedPhotos.length,
+    isCreatingObservations,
+    navBasedOnUserSettings,
+    pendingCount,
+    t,
+  ] );
+
+  // The grid opens on placeholder cells while the photos are copied off the
+  // device, so say what the cells that haven't filled in yet are waiting for.
+  const headerComponent = useMemo( ( ) => ( pendingCount > 0
+    ? (
+      <View className="flex-row items-center gap-2 px-4 py-2">
+        <ActivityIndicator size={16} />
+        <Body2>{t( "Importing-X-photos", { count: pendingCount } )}</Body2>
+      </View>
+    )
+    : null ), [pendingCount, t] );
 
   const extraData = {
     selectedObservations,
@@ -241,6 +267,7 @@ const GroupPhotos = ( {
     <SharedStackViewWrapper>
       <CustomFlashList
         ListFooterComponent={footerComponent}
+        ListHeaderComponent={headerComponent}
         contentContainerStyle={listStyle}
         data={groupedPhotos}
         extraData={extraData}

@@ -18,7 +18,7 @@ interface SharedPhoto {
   };
 }
 
-type GroupedPhotoItem = GroupedPhoto["photos"][number];
+type GroupedPhotoItem = NonNullable<GroupedPhoto["photos"]>[number];
 
 export function isShareExtensionPhotoUri( pathOrUri: string ): boolean {
   if ( !pathOrUri || pathOrUri.match( /^ph:/ ) ) {
@@ -92,8 +92,9 @@ export async function moveSharedGroupedPhotos(
   try {
     return await Promise.all(
       groupedPhotos.map( async group => ( {
+        // A sound-only item (a video's audio track) carries no photos
         photos: await Promise.all(
-          group.photos.map( photo => moveSingleSharePhotoToGallery( photo ) ),
+          ( group.photos || [] ).map( photo => moveSingleSharePhotoToGallery( photo ) ),
         ),
       } ) ),
     );

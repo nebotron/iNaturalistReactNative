@@ -10,11 +10,11 @@ import navigateToObsDetails from "components/ObsDetails/helpers/navigateToObsDet
 import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
 import type {
   GroupedMediaItem,
+  GroupedMediaPhotoItem,
   ImportedAsset,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import {
   appendPhotosToObservation,
-  buildGroupedMediaItems,
   buildGroupedSoundItem,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import {
@@ -32,17 +32,40 @@ import {
   Alert, NativeModules, Platform,
 } from "react-native";
 import { toDevicePhotoLocation } from "sharedHelpers/devicePhotoLocation";
-import { markDuplicatePhotosFromLibrary } from "sharedHelpers/duplicateUploadedDevicePhotos";
+import {
+  getPreviouslyUploadedDevicePhotoUrisSet,
+  markDuplicatePhotoFromLibrary,
+  markDuplicatePhotosFromLibrary,
+} from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
-import { fileExtension, summarizeTypes } from "sharedHelpers/importedFileTypes";
+import {
+  fileExtension,
+  summarizeTypes,
+  totalMegabytes,
+} from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
 import mapWithConcurrency from "sharedHelpers/mapWithConcurrency";
+import {
+  clearPhotoImportMarker,
+  markPhotoImportStarted,
+  updatePhotoImportProgress,
+} from "sharedHelpers/photoImportMarker";
 import { useInputImageTracking, useLayoutPrefs, useTranslation } from "sharedHooks";
 import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
+import type { GroupedPhoto, GroupedPhotoResolution } from "stores/createObservationFlowSlice";
 import useStore from "stores/useStore";
 import * as uuid from "uuid";
 
 type PhotoNode = PhotoIdentifier["node"];
+
+// A photo copied out of the device library: the file the import will use, and
+// the device asset it came from.
+interface CopiedPhoto {
+  // The file the import wrote, so its uri is known to exist unlike the
+  // picker's own
+  image: ImportedAsset & { uri: string };
+  sourceAsset: ImportedAsset;
+}
 
 const logger = log.extend( "PhotoLibrary" );
 
@@ -55,7 +78,7 @@ const MAX_PHOTOS_ALLOWED = Platform.select( {
 
 const FROM_AICAMERA_MAX_PHOTOS_ALLOWED = 1;
 
-const nodeToSourceAsset = ( node: PhotoNode ): ImportedAsset => ( {
+const nodeToSourceAsset = ( node: PhotoNode ): ImportedAsset & { uri: string } => ( {
   uri: node.image.uri,
   fileName: node.image.filename ?? undefined,
   width: node.image.width,
@@ -67,6 +90,27 @@ const nodeToSourceAsset = ( node: PhotoNode ): ImportedAsset => ( {
   // Carried separately from the file: a location set by hand in Photos lives
   // on the asset, not in the photo's EXIF (see devicePhotoLocation.ts).
   deviceLocation: toDevicePhotoLocation( node.location ) ?? undefined,
+} );
+
+// The cell Group Photos shows for a selected asset while its file is still
+// being copied out of the library. It draws the device library thumbnail, so
+// the grid is populated from the moment it opens, and is replaced by the
+// imported photo as soon as that lands.
+const placeholderGroup = ( node: PhotoNode ): GroupedMediaItem => ( {
+  photos: [{ image: nodeToSourceAsset( node ), pending: true }],
+} );
+
+const gifPhotoItem = ( node: PhotoNode, gifUri: string ): GroupedMediaPhotoItem => ( {
+  image: {
+    uri: gifUri,
+    type: "image/gif",
+    fileName: gifUri.split( "/" ).pop( ),
+    width: node.image.width,
+    height: node.image.height,
+    fileSize: undefined,
+    id: undefined,
+    timestamp: node.timestamp,
+  },
 } );
 
 const PhotoLibrary = ( ) => {
@@ -85,6 +129,9 @@ const PhotoLibrary = ( ) => {
     state => state.addImportedPhotoDeviceUriMappings,
   );
   const setGroupedPhotos = useStore( state => state.setGroupedPhotos );
+  const resolveGroupedPhotoPlaceholder = useStore(
+    state => state.resolveGroupedPhotoPlaceholder,
+  );
   const groupedPhotos = useStore( state => state.groupedPhotos );
   const updateObservations = useStore( state => state.updateObservations );
   const photoLibraryUris = useStore( state => state.photoLibraryUris );
@@ -134,7 +181,7 @@ const PhotoLibrary = ( ) => {
 
   const copyImagesFromCameraRoll = useCallback( async (
     nodes: PhotoNode[],
-    onPhotoSettled?: ( succeeded: boolean ) => void,
+    onPhotoCopied?: ( node: PhotoNode, copied: CopiedPhoto | null ) => void,
   ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
@@ -225,14 +272,16 @@ const PhotoLibrary = ( ) => {
     const copyNodeOrNull = async ( node: PhotoNode ) => {
       try {
         const copied = await copyNode( node );
-        // Report failures as settled too: the progress bar tracks how much of
-        // the wait is left, and a failed copy is over just as a good one is.
-        onPhotoSettled?.( true );
+        onPhotoCopied?.( node, copied );
         return copied;
       } catch ( error ) {
         failedExtensions.push( fileExtension( node.image.filename ) );
         logger.error( "Error copying a photo from camera roll", error );
-        onPhotoSettled?.( false );
+        // Reported like a successful copy, not swallowed: a caller filling a
+        // grid in has to take the cell back out, and a progress bar tracks how
+        // much of the wait is left — a failed copy is over just as a good one
+        // is.
+        onPhotoCopied?.( node, null );
         return null;
       }
     };
@@ -263,77 +312,212 @@ const PhotoLibrary = ( ) => {
     return results;
   }, [] );
 
+  // Runs after the user has already been sent to Group Photos, so it touches
+  // no component state: every photo it copies is reported into the store,
+  // which is what that screen draws from.
+  const importIntoGroupPhotos = useCallback( async (
+    photoNodes: PhotoNode[],
+    videoNodes: PhotoNode[],
+  ) => {
+    const startedAt = Date.now( );
+    const total = photoNodes.length + videoNodes.length;
+    const fileTypes = summarizeTypes( [
+      ...videoNodes.map( ( ) => "video" ),
+      ...photoNodes.map( node => fileExtension( node.image.filename ) ),
+    ] );
+    const megabytes = totalMegabytes(
+      [...photoNodes, ...videoNodes].map( node => node.image.fileSize ),
+    );
+    // An import the app never comes back from — see photoImportMarker.ts. The
+    // marker is reported by the next launch, not here. The picker used to own
+    // this, but it now hands the import off and returns, so the wait that can
+    // wedge is this one.
+    markPhotoImportStarted( total );
+    let settled = 0;
+    let failed = 0;
+    let abandoned = false;
+    const stallTimer = setTimeout( ( ) => {
+      logger.errorWithExtra( "photo_import_stalled", {
+        selected: total,
+        settled,
+        failed,
+        ms: Date.now( ) - startedAt,
+        fileTypes,
+        megabytes,
+      } );
+    }, 30000 );
+
+    // Read once for the whole import: the set walks every saved observation,
+    // and marking each photo as it lands would otherwise walk them per photo.
+    const previouslyUploadedUris = getPreviouslyUploadedDevicePhotoUrisSet( realm );
+    const importedUris: string[] = [];
+    const unsettled = new Set<PhotoNode>( [...photoNodes, ...videoNodes] );
+
+    const settle = ( node: PhotoNode, resolution: GroupedPhotoResolution | null ) => {
+      unsettled.delete( node );
+      settled += 1;
+      if ( !resolution ) { failed += 1; }
+      updatePhotoImportProgress( settled, failed );
+      // A placeholder that has gone means the user discarded the import, or
+      // removed that cell, while its media was still being written.
+      if ( !resolveGroupedPhotoPlaceholder( node.image.uri, resolution ) ) {
+        abandoned = true;
+      }
+    };
+
+    const copyPhotos = async ( ) => {
+      if ( photoNodes.length === 0 ) return;
+      await copyImagesFromCameraRoll( photoNodes, ( node, copied ) => {
+        if ( !copied ) {
+          settle( node, null );
+          return;
+        }
+        const photo = markDuplicatePhotoFromLibrary(
+          previouslyUploadedUris,
+          copied,
+          copied.sourceAsset,
+        );
+        importedUris.push( photo.image.uri );
+        settle( node, {
+          photos: [photo],
+          originalDevicePhotoUris: getOriginalDevicePhotoUrisFromAssets( [copied.sourceAsset] ),
+          deviceUriMappings: [{
+            localUri: photo.image.uri,
+            deviceUri: photo.originalDevicePhotoUri,
+          }],
+        } );
+      } );
+    };
+
+    // Transcoding videos and copying photos go through unrelated subsystems —
+    // AVFoundation against a decoder, PhotoKit against the asset store — so
+    // they overlap. The videos stay one at a time between themselves: several
+    // concurrent transcodes only contend for the same encoder.
+    const extractVideos = async ( ) => {
+      for ( const node of videoNodes ) {
+        // eslint-disable-next-line no-await-in-loop
+        const { gifUri, audioUri } = await extractVideoMedia( node ).catch( error => {
+          logger.error( "Error extracting media from a video", error );
+          return { gifUri: null, audioUri: null };
+        } );
+        // A video that yields neither a GIF nor audio contributed nothing to
+        // the import, so its cell goes away like a photo that failed to copy.
+        settle( node, ( gifUri || audioUri )
+          ? {
+            photos: gifUri
+              ? [gifPhotoItem( node, gifUri )]
+              : [],
+            extraItems: audioUri
+              ? [buildGroupedSoundItem( audioUri, node.timestamp )]
+              : [],
+          }
+          : null );
+      }
+    };
+
+    try {
+      await Promise.all( [copyPhotos( ), extractVideos( )] );
+    } catch ( error ) {
+      // Nothing is still running behind whatever hasn't landed yet, so those
+      // cells would sit on the grid for good and the import button would stay
+      // disabled behind them. Take them out and let the user get on with the
+      // photos that did make it.
+      logger.error( "Error importing photos from camera roll", error );
+      unsettled.forEach( node => settle( node, null ) );
+    } finally {
+      clearTimeout( stallTimer );
+      // The import reached an end, however badly, so it is not one of the ones
+      // that vanish with the process.
+      clearPhotoImportMarker( );
+    }
+
+    if ( importedUris.length > 0 ) {
+      trackImagesLoaded( importedUris, "photoLibrary" );
+    }
+    const ms = Date.now( ) - startedAt;
+    if ( ms > 3000 ) {
+      logger.infoWithExtra( "photo_import_slow", {
+        selected: total, ms, fileTypes, megabytes,
+      } );
+    }
+
+    // Every copy failing leaves the user on an empty Group Photos screen with
+    // nothing to say why. Not raised when the placeholders were abandoned: the
+    // empty screen is then what the user asked for by discarding the import.
+    if ( total > 0 && failed === total && !abandoned ) {
+      logger.errorWithExtra( "photo_import_produced_nothing", {
+        selected: total,
+        fileTypes,
+      } );
+      Alert.alert(
+        t( "Something-went-wrong" ),
+        t( "Could-not-import-selected-photos" ),
+      );
+    }
+  }, [
+    copyImagesFromCameraRoll,
+    realm,
+    resolveGroupedPhotoPlaceholder,
+    t,
+    trackImagesLoaded,
+  ] );
+
   const handleGalleryDone = useCallback( async (
     nodes: PhotoNode[],
     onProgress?: ( completed: number, failed: number ) => void,
   ) => {
     try {
-      const videoNodes = nodes.filter( isVideoNode );
-      const photoNodes = nodes.filter( n => !isVideoNode( n ) );
+      // Every node for a given asset resolves to the same destination path, so
+      // copying one twice in a batch has the two writes racing over the same
+      // file (each unlinking what the other just wrote) and both fail with
+      // "PHPhotosErrorDomain error -1", dropping the photo from the import.
+      const uniqueNodes = [...new Map(
+        nodes.map( node => [node.image.uri, node] ),
+      ).values( )];
 
-      // One tick per selected item, videos included, so the caller's progress
-      // bar advances over the whole import and not just the copying phase.
-      // Failures are counted separately: a photo whose bytes never arrive
-      // (an iCloud asset that won't download) is otherwise invisible until the
-      // user notices it missing from the next screen.
+      if ( !skipGroupPhotos ) {
+        // Group Photos opens on a grid of placeholder cells and fills each one
+        // in as its own photo lands, rather than holding the picker behind a
+        // progress bar until every photo has been copied — which for a large
+        // selection, or one iCloud has to download, is the longest wait in the
+        // import.
+        //
+        // Coming back here from Group Photos to add more, a photo whose copy
+        // is still running is left out: it already has a cell waiting for it,
+        // and copying it twice at once has both writes racing over the same
+        // destination file, which fails them both.
+        const pendingUris = new Set<string>( groupedPhotos.flatMap(
+          ( group: GroupedPhoto ) => ( group.photos || [] )
+            .filter( photo => photo.pending )
+            .map( photo => photo.image.uri ),
+        ) );
+        const newNodes = uniqueNodes.filter( node => !pendingUris.has( node.image.uri ) );
+        const placeholders = newNodes.map( placeholderGroup );
+        setGroupedPhotos( sortGroupsByTime( fromGroupPhotos
+          ? [...groupedPhotos, ...placeholders]
+          : placeholders ) );
+        navigation.setParams( { fromGroupPhotos: false } );
+        navigation.navigate( "GroupPhotos" );
+        importIntoGroupPhotos(
+          newNodes.filter( node => !isVideoNode( node ) ),
+          newNodes.filter( isVideoNode ),
+        );
+        return { continuesInBackground: true };
+      }
+
+      // Adding evidence to an observation already open in ObsEdit: there is no
+      // grid to fill in, so the picker keeps its progress bar until the photos
+      // have been copied. Videos aren't extracted, since a GIF or an audio
+      // track has nowhere to go here — the same as before, when they were
+      // extracted and then dropped.
+      const photoNodes = uniqueNodes.filter( node => !isVideoNode( node ) );
       let settled = 0;
       let failed = 0;
-      const reportSettled = ( succeeded: boolean ) => {
+      const copiedPhotos = await copyImagesFromCameraRoll( photoNodes, ( _node, copied ) => {
         settled += 1;
-        if ( !succeeded ) failed += 1;
+        if ( !copied ) { failed += 1; }
         onProgress?.( settled, failed );
-      };
-
-      // Extract GIF + audio from each video node and build GroupedMediaItems
-      // so they appear in the GroupPhotos screen alongside regular photos.
-      const videoGroupItems: GroupedMediaItem[] = [];
-      const extractVideos = async ( ) => {
-        for ( const videoNode of videoNodes ) {
-          // eslint-disable-next-line no-await-in-loop
-          const { gifUri, audioUri } = await extractVideoMedia( videoNode );
-          if ( gifUri ) {
-            videoGroupItems.push( {
-              photos: [
-                {
-                  image: {
-                    uri: gifUri,
-                    type: "image/gif",
-                    fileName: gifUri.split( "/" ).pop( ),
-                    width: videoNode.image.width,
-                    height: videoNode.image.height,
-                    fileSize: undefined,
-                    id: undefined,
-                    timestamp: videoNode.timestamp,
-                  },
-                },
-              ],
-            } );
-          }
-          if ( audioUri ) {
-            videoGroupItems.push(
-              buildGroupedSoundItem( audioUri, videoNode.timestamp ),
-            );
-          }
-          // A video that yields neither a GIF nor audio contributed nothing to
-          // the import, so count it the same as a photo that failed to copy.
-          reportSettled( !!gifUri || !!audioUri );
-        }
-      };
-
-      // Transcoding videos and copying photos go through unrelated
-      // subsystems — AVFoundation against a decoder, PhotoKit against the
-      // asset store — so running the videos to completion first made every
-      // photo in the selection wait out GIF conversions that were not
-      // competing with it for anything. Start both and let them overlap. The
-      // videos stay one at a time between themselves: several concurrent
-      // transcodes only contend for the same encoder, and a selection rarely
-      // holds many.
-      const [copiedPhotos] = await Promise.all( [
-        photoNodes.length > 0
-          ? copyImagesFromCameraRoll( photoNodes, reportSettled )
-          : [],
-        extractVideos( ),
-      ] );
+      } );
 
       // Only photos that actually copied are staged for the "delete the
       // originals?" prompt on exit. Staging every selected photo up front
@@ -363,14 +547,11 @@ const PhotoLibrary = ( ) => {
           "photoLibrary",
         );
       }
-      const hasPhotos = selectedPhotos.length > 0;
 
-      // Every copy failing leaves nothing to hand on, and navigating onward
-      // anyway lands the user on an empty Group Photos screen — or, coming
-      // from Group Photos, right back where they started, which is
-      // indistinguishable from the check doing nothing at all. Say what
-      // happened and stay put so the selection survives a retry.
-      if ( photoNodes.length > 0 && !hasPhotos && videoGroupItems.length === 0 ) {
+      // Every copy failing leaves nothing to hand on, and returning to ObsEdit
+      // anyway is indistinguishable from the check doing nothing at all. Say
+      // what happened and stay put so the selection survives a retry.
+      if ( photoNodes.length > 0 && selectedPhotos.length === 0 ) {
         logger.errorWithExtra( "photo_import_produced_nothing", {
           selected: photoNodes.length,
           fileTypes: summarizeTypes(
@@ -381,50 +562,26 @@ const PhotoLibrary = ( ) => {
           t( "Something-went-wrong" ),
           t( "Could-not-import-selected-photos" ),
         );
-        return;
-      }
-
-      if ( fromGroupPhotos ) {
-        setGroupedPhotos( sortGroupsByTime( [
-          ...groupedPhotos,
-          ...videoGroupItems,
-          ...buildGroupedMediaItems( selectedPhotos ),
-        ] ) );
-        navigation.setParams( { fromGroupPhotos: false } );
-        navigation.navigate( "GroupPhotos" );
-        return;
-      }
-
-      if ( skipGroupPhotos ) {
-        if ( hasPhotos ) {
-          const importedPhotoUris = selectedPhotos.map( x => x.image.uri );
-          setPhotoImporterState( {
-            photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
-            evidenceToAdd: [...evidenceToAdd, ...importedPhotoUris],
-          } );
-        }
-        const updatedCurrentObservation = await appendPhotosToObservation(
-          selectedPhotos,
-          currentObservation,
-          numOfObsPhotos,
-        );
-        const updatedObservations = [...observations];
-        updatedObservations[currentObservationIndex] = updatedCurrentObservation;
-        updateObservations( updatedObservations );
-        navToObsEdit();
-        return;
+        return { continuesInBackground: false };
       }
 
       const importedPhotoUris = selectedPhotos.map( x => x.image.uri );
-      setPhotoImporterState( {
-        photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
-        groupedPhotos: sortGroupsByTime( [
-          ...videoGroupItems,
-          ...buildGroupedMediaItems( selectedPhotos ),
-        ] ),
-      } );
-      navigation.setParams( { fromGroupPhotos: false } );
-      navigation.navigate( "GroupPhotos" );
+      if ( importedPhotoUris.length > 0 ) {
+        setPhotoImporterState( {
+          photoLibraryUris: [...photoLibraryUris, ...importedPhotoUris],
+          evidenceToAdd: [...evidenceToAdd, ...importedPhotoUris],
+        } );
+      }
+      const updatedCurrentObservation = await appendPhotosToObservation(
+        selectedPhotos,
+        currentObservation,
+        numOfObsPhotos,
+      );
+      const updatedObservations = [...observations];
+      updatedObservations[currentObservationIndex] = updatedCurrentObservation;
+      updateObservations( updatedObservations );
+      navToObsEdit( );
+      return { continuesInBackground: false };
     } catch ( error ) {
       logger.error( "Error importing photos from camera roll", error );
       // Dropping the user out of the flow with no explanation is
@@ -436,6 +593,7 @@ const PhotoLibrary = ( ) => {
         t( "Could-not-import-your-photos-nothing-was-saved" ),
       );
       exitObservationFlow( );
+      return { continuesInBackground: false };
     }
   }, [
     addImportedPhotoDeviceUriMappings,
@@ -447,6 +605,7 @@ const PhotoLibrary = ( ) => {
     exitObservationFlow,
     fromGroupPhotos,
     groupedPhotos,
+    importIntoGroupPhotos,
     navToObsEdit,
     navigation,
     numOfObsPhotos,
