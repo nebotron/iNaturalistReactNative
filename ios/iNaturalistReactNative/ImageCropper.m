@@ -1011,6 +1011,8 @@ static UIImage *clampToMaxPixel( UIImage *image, CGFloat maxPixel )
 
 // Defined below, alongside the encode it was written for.
 static UIImage *rasterizedImage( UIImage *image );
+// Defined with the other silent-failure counters, further down.
+static void notePreviewServed( CGSize declared, CGSize produced, CGFloat maxPixel );
 
 // EXIF orientation of an image source, as a UIImageOrientation.
 // CGImageSourceCreateImageAtIndex hands back the pixels exactly as they are
@@ -1049,6 +1051,32 @@ static UIImageOrientation orientationForImageSource( CGImageSourceRef src )
 // overlay looking soft/pixelated no matter how high maxPixel was raised.
 // At or above kFileHighQualityMinPixel, decode the image data directly
 // instead of asking for a thumbnail.
+// The image a container file is *of*. A HEIF container (Canon writes .HIF)
+// holds several items -- thumbnails and previews alongside the photo -- and
+// index 0 is whichever the file happens to list first, not necessarily the
+// photo. Asking for index 0 is how a full-resolution request came back at the
+// same small size as a tile-sized one: both were decoding the same embedded
+// preview, and neither maxPixel could make it bigger.
+static size_t primaryImageIndex( CGImageSourceRef src )
+{
+  size_t index = CGImageSourceGetPrimaryImageIndex( src );
+  return index < CGImageSourceGetCount( src )
+    ? index
+    : 0;
+}
+
+// Pixel dimensions the file declares for that image, without decoding it, so a
+// decode can be compared against what it should have produced.
+static CGSize declaredImageSize( CGImageSourceRef src, size_t index )
+{
+  NSDictionary *props = (__bridge_transfer NSDictionary *)
+    CGImageSourceCopyPropertiesAtIndex( src, index, NULL );
+  return CGSizeMake(
+    [props[(__bridge NSString *)kCGImagePropertyPixelWidth] doubleValue],
+    [props[(__bridge NSString *)kCGImagePropertyPixelHeight] doubleValue]
+  );
+}
+
 // The speed-optimized path: ImageIO subsamples during decode, and for a RAW
 // file hands back the embedded preview the camera baked in.
 static UIImage *thumbnailFromImageSource( CGImageSourceRef src, CGFloat maxPixel )
@@ -1058,7 +1086,8 @@ static UIImage *thumbnailFromImageSource( CGImageSourceRef src, CGFloat maxPixel
     (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform:   @YES,
     (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:          @( maxPixel ),
   };
-  CGImageRef cg = CGImageSourceCreateThumbnailAtIndex( src, 0, (__bridge CFDictionaryRef)opts );
+  CGImageRef cg = CGImageSourceCreateThumbnailAtIndex(
+    src, primaryImageIndex( src ), (__bridge CFDictionaryRef)opts );
   if ( !cg ) return nil;
   UIImage *image = [UIImage imageWithCGImage:cg];
   CGImageRelease( cg );
@@ -1083,6 +1112,13 @@ static UIImage *downscaledImageAtPath(
   // Copied, not borrowed: the source is released before these are used below.
   NSString *sourceType = [(__bridge NSString *)CGImageSourceGetType( src ) copy];
   size_t    imageCount = CGImageSourceGetCount( src );
+  // Read before the source is released, so whatever comes back can be compared
+  // against the size the file says its photo is.
+  CGSize    declared   = declaredImageSize( src, primaryImageIndex( src ) );
+
+  CGSize ( ^pixelSize )( UIImage * ) = ^( UIImage *img ) {
+    return CGSizeMake( img.size.width * img.scale, img.size.height * img.scale );
+  };
 
   if ( maxPixel >= kFileHighQualityMinPixel ) {
     // Decode now rather than on first draw. Without this the CGImage that
@@ -1096,8 +1132,8 @@ static UIImage *downscaledImageAtPath(
     NSDictionary *fullOpts = @{
       (__bridge NSString *)kCGImageSourceShouldCacheImmediately: @YES,
     };
-    CGImageRef full =
-      CGImageSourceCreateImageAtIndex( src, 0, (__bridge CFDictionaryRef)fullOpts );
+    CGImageRef full = CGImageSourceCreateImageAtIndex(
+      src, primaryImageIndex( src ), (__bridge CFDictionaryRef)fullOpts );
     UIImage *image = full
       ? [UIImage imageWithCGImage:full scale:1 orientation:orientationForImageSource( src )]
       : nil;
@@ -1129,6 +1165,7 @@ static UIImage *downscaledImageAtPath(
       }
       return nil;
     }
+    notePreviewServed( declared, pixelSize( decoded ), maxPixel );
     return clampToMaxPixel( decoded, maxPixel );
   }
 
@@ -1139,6 +1176,7 @@ static UIImage *downscaledImageAtPath(
       @"thumbnail decode produced no image (type=%@, images=%zu)",
       sourceType ?: @"unknown", imageCount];
   }
+  if ( image ) notePreviewServed( declared, pixelSize( image ), maxPixel );
   return image;
 }
 
@@ -1348,6 +1386,32 @@ static UIImage *rasterizedImage( UIImage *image )
 static NSUInteger gBlackEncodes = 0;
 static NSUInteger gBlackEncodesRecovered = 0;
 
+// Decodes that came back materially smaller than the pixel dimensions the file
+// declares for its own primary image -- ImageIO serving an embedded preview
+// instead of the photo. Nothing else can tell that from a photo which is
+// simply that small, since a decode never upscales and so looks correct either
+// way. gPreviewSample keeps the last one in the file's own numbers.
+static NSUInteger gPreviewsServed = 0;
+static NSString  *gPreviewSample  = nil;
+
+// Below this fraction of what the file says it holds, a decode is a different
+// (smaller) image rather than a downscale of the right one.
+static const CGFloat kPreviewServedRatio = 0.9;
+
+static void notePreviewServed( CGSize declared, CGSize produced, CGFloat maxPixel )
+{
+  CGFloat declaredLong = MAX( declared.width, declared.height );
+  CGFloat producedLong  = MAX( produced.width, produced.height );
+  // Only when we asked for at least what the file claims to hold: a smaller
+  // request is supposed to come back smaller.
+  CGFloat wanted = MIN( maxPixel, declaredLong );
+  if ( declaredLong <= 0 || producedLong <= 0 ) return;
+  if ( producedLong >= wanted * kPreviewServedRatio ) return;
+  gPreviewsServed += 1;
+  gPreviewSample = [NSString stringWithFormat:@"declared %.0fx%.0f produced %.0fx%.0f asked %.0f",
+    declared.width, declared.height, produced.width, produced.height, maxPixel];
+}
+
 static NSData *encodedThumbnailData( UIImage *image, NSString **reason )
 {
   NSData *data = UIImageJPEGRepresentation( image, 0.8 );
@@ -1386,9 +1450,13 @@ RCT_EXPORT_METHOD( thumbnailDiagnostics
   resolve( @{
     @"blackEncodes":          @( gBlackEncodes ),
     @"blackEncodesRecovered": @( gBlackEncodesRecovered ),
+    @"previewsServed":        @( gPreviewsServed ),
+    @"previewSample":         gPreviewSample ?: @"",
   } );
   gBlackEncodes          = 0;
   gBlackEncodesRecovered = 0;
+  gPreviewsServed        = 0;
+  gPreviewSample         = nil;
 }
 
 // Writes a downscaled JPEG thumbnail (maxPixel px on the longest side) of a

@@ -11,6 +11,8 @@ const logger = log.extend( "useDeviceImageThumbnail" );
 interface ThumbnailDiagnostics {
   blackEncodes: number;
   blackEncodesRecovered: number;
+  previewsServed: number;
+  previewSample: string;
 }
 
 interface ImageCropperModule {
@@ -436,7 +438,12 @@ export const invalidateDeviceImageThumbnail = async (
 export const logThumbnailDiagnostics = async ( ): Promise<void> => {
   if ( !ImageCropper?.thumbnailDiagnostics ) return;
   try {
-    const { blackEncodes, blackEncodesRecovered } = await ImageCropper.thumbnailDiagnostics( );
+    const {
+      blackEncodes,
+      blackEncodesRecovered,
+      previewsServed,
+      previewSample,
+    } = await ImageCropper.thumbnailDiagnostics( );
     if ( blackEncodes > 0 ) {
       logger.warnWithExtra( "thumbnail_black_encodes", {
         blackEncodes,
@@ -444,6 +451,16 @@ export const logThumbnailDiagnostics = async ( ): Promise<void> => {
         // made of, so these came back with real pixels and were cached as good
         // thumbnails. The difference is the ones that could not be recovered.
         recovered: blackEncodesRecovered,
+      } );
+    }
+    if ( previewsServed > 0 ) {
+      // A decode that came back smaller than the file says its own photo is:
+      // an embedded preview standing in for the photo. Indistinguishable from
+      // a photo that is simply that small unless the two are compared, since a
+      // decode never upscales and so looks correct either way.
+      logger.warnWithExtra( "thumbnail_previews_served", {
+        previewsServed,
+        sample: previewSample,
       } );
     }
   } catch {
