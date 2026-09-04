@@ -2,7 +2,7 @@ import type { ArgumentArray } from "classnames";
 import classNames from "classnames";
 import { INatIcon, PhotoCount } from "components/SharedComponents";
 import { LinearGradient, View } from "components/styledComponents";
-import type { PropsWithChildren, ReactNode } from "react";
+import type { PropsWithChildren } from "react";
 import React, {
   useCallback,
   useLayoutEffect,
@@ -31,9 +31,6 @@ interface Props extends PropsWithChildren {
   height?: string;
   hidePhotoCount?: boolean;
   iconicTaxonName?: string;
-  // Drawn over the photo but under the badges, selection indicator and
-  // children, e.g. the pinch/pan cropper in the Group Photos grid
-  imageOverlay?: ReactNode;
   isBackground?: boolean;
   isMultiplePhotosTop?: boolean;
   isSmall?: boolean;
@@ -74,7 +71,6 @@ const ObsImagePreview = ( {
   height = "h-[62px]",
   hidePhotoCount,
   iconicTaxonName,
-  imageOverlay,
   isBackground = true,
   isMultiplePhotosTop = false,
   isSmall = false,
@@ -388,7 +384,6 @@ const ObsImagePreview = ( {
             ? 22
             : 100}
         />
-        {imageOverlay}
         {renderGradient( )}
         {renderSelectable( )}
         {renderPhotoCount( )}

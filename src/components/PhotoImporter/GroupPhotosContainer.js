@@ -3,7 +3,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { duplicateGroupedMediaGroups } from
   "components/PhotoImporter/helpers/duplicateGroupedMedia";
-import { bakePendingGroupPhotoCrops } from "components/PhotoImporter/helpers/groupPhotoCrops";
 import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
@@ -145,6 +144,17 @@ const GroupPhotosContainer = ( ): Node => {
     }
     return ( ) => clearTimeout( timer );
   }, [groupedPhotos] );
+
+  const selectAllPhotos = () => {
+    // Cells still standing in for photos being copied can't be combined or
+    // cropped yet, so they're left out of a select-all the same way a tap on
+    // one is ignored.
+    setSelectedIndices(
+      groupedPhotos
+        .map( ( _obs, index ) => index )
+        .filter( index => !( groupedPhotos[index].photos || [] ).some( photo => photo.pending ) ),
+    );
+  };
 
   const selectObservationPhotos = ( isSelected, observation ) => {
     const index = groupedPhotos.indexOf( observation );
@@ -406,11 +416,6 @@ const GroupPhotosContainer = ( ): Node => {
     // they finish while the user is still cropping.
     await awaitPendingGroupPhotoCrops( );
 
-    // Crops framed by pinching a photo in the grid are recorded on the photo
-    // but not written to a file until here, so panning around the grid never
-    // costs a full-resolution write per gesture.
-    await bakePendingGroupPhotoCrops( );
-
     // Capture everything we need before navigating away, since exiting the
     // flow resets the store slice (groupedPhotos, pending deletion uris, etc.)
     // Read groupedPhotos from the store rather than the render closure, which
@@ -640,6 +645,7 @@ const GroupPhotosContainer = ( ): Node => {
 
   return (
     <GroupPhotos
+      clearSelection={() => setSelectedIndices( [] )}
       combinePhotos={combinePhotos}
       discardImport={discardImport}
       duplicateItem={duplicateItem}
@@ -652,6 +658,7 @@ const GroupPhotosContainer = ( ): Node => {
       onViewableItemsChanged={onViewableItemsChanged}
       pendingCount={pendingCount}
       removeItem={removeItem}
+      selectAllPhotos={selectAllPhotos}
       selectObservationPhotos={selectObservationPhotos}
       selectedObservations={selectedObservations}
       separateItem={separateItem}

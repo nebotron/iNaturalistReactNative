@@ -1,9 +1,4 @@
 import DevicePhotoImage from "components/PhotoImporter/DevicePhotoImage";
-import GroupPhotoCropImage from "components/PhotoImporter/GroupPhotoCropImage";
-import {
-  groupPhotoCropSourceUri,
-  saveGroupPhotoCrop,
-} from "components/PhotoImporter/helpers/groupPhotoCrops";
 import groupPhotoThumbnailMaxPixel from "components/PhotoImporter/helpers/groupPhotoThumbnail";
 import {
   ActivityIndicator,
@@ -144,10 +139,6 @@ const GroupPhotoImage = ( {
     ? style.width
     : 0;
 
-  // Pinching a cell reframes its crop box, exactly as it does in the Explore
-  // observation grid. The crop is recorded against the photo (the file itself
-  // is written at import time), so the framing survives scrolling away and
-  // carries into the full-screen cropper.
   const renderPhoto = useCallback( ( photo: PhotoItem ) => (
     <DevicePhotoImage
       uri={photo.image.uri}
@@ -160,11 +151,9 @@ const GroupPhotoImage = ( {
         ? photo.image.uri
         : undefined}
       cellWidth={cellWidth}
-      // The same size the whole import is preloaded at and detects its
-      // subject in. Asking for the cell's own 1x size instead meant a second
-      // file per photo that nothing warmed, so a photo reached by scrolling
-      // had to generate it there and then — which is why cells that had
-      // already been shown went back to a placeholder.
+      // The same size the whole import is prefetched at, so a photo reached by
+      // scrolling shows the thumbnail that was already warmed for it rather
+      // than generating a second file at a different size.
       thumbnailMaxPixel={cellWidth > 0
         ? groupPhotoThumbnailMaxPixel( cellWidth )
         : undefined}
@@ -174,16 +163,6 @@ const GroupPhotoImage = ( {
       obsPhotosCount={mediaCount}
       onPress={handlePress}
       testID={`GroupPhotos.${photo.image.uri}`}
-      imageOverlay={cellWidth > 0
-        ? (
-          <GroupPhotoCropImage
-            cropSourceUri={groupPhotoCropSourceUri( photo.image )}
-            savedCrop={photo.image.crop ?? null}
-            size={cellWidth}
-            onCropChange={( crop: NormalizedCrop ) => saveGroupPhotoCrop( photo.image.uri, crop )}
-          />
-        )
-        : undefined}
     >
       {photo.isDuplicateUpload && (
         <DuplicateUploadBadge
@@ -245,9 +224,7 @@ const GroupPhotoImage = ( {
   }
 
   // A group of photos pages horizontally so every photo in it can be seen (and
-  // cropped) without separating them first. The crop overlay leaves
-  // single-finger panning to the pager, so a horizontal drag swipes photos and
-  // a vertical one still scrolls the list.
+  // cropped) without separating them first.
   return (
     <View className="relative">
       {mediaCount > 1

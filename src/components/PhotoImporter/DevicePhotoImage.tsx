@@ -16,10 +16,9 @@ interface Props {
   fallbackUri?: string;
   // Laid-out width of the cell, used to size the generated thumbnail
   cellWidth: number;
-  // Overrides the thumbnail size derived from cellWidth. Grids that zoom into
-  // the photo (Group Photos) pass the larger size their overlay uses, so the
-  // cell and the overlay share one thumbnail file instead of generating — and
-  // waiting on — two different ones for the same photo.
+  // Overrides the thumbnail size derived from cellWidth, so a grid that
+  // prefetches its photos at a particular size (Group Photos) draws the same
+  // thumbnail file it warmed instead of generating a second one.
   thumbnailMaxPixel?: number;
   style?: ViewStyle;
   selectable?: boolean;
@@ -30,8 +29,6 @@ interface Props {
   testID?: string;
   // Badges and overlays, absolutely positioned over the image
   children?: ReactNode;
-  // Drawn over the photo but under the selection indicator and children
-  imageOverlay?: ReactNode;
 }
 
 // A single square device-photo cell, shared by every grid that renders photos
@@ -52,7 +49,6 @@ const DevicePhotoImage = ( {
   accessibilityLabel,
   testID,
   children,
-  imageOverlay,
 }: Props ) => {
   const thumbMaxPixel = thumbnailMaxPixel
     ?? PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
@@ -72,7 +68,6 @@ const DevicePhotoImage = ( {
         hideGradientOverlay
         squareCorners
         style={style}
-        imageOverlay={imageOverlay}
       />
       {children}
     </View>
