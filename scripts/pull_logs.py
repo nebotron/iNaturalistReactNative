@@ -3,7 +3,8 @@
 Pull the crop log and brightness log from Firebase into the (gitignored)
 crop_training.json and brightness_training.json files.
 
-Set CROP_LOG_FIREBASE_URL in .env or as an environment variable.
+Reads firebase_auth.DEFAULT_FIREBASE_URL unless CROP_LOG_FIREBASE_URL is set
+in .env or as an environment variable.
 
 Usage:
     python3 scripts/pull_logs.py
@@ -16,6 +17,10 @@ import os
 import sys
 import urllib.request
 from pathlib import Path
+
+sys.path.insert( 0, str( Path( __file__ ).parent ) )
+
+from firebase_auth import firebase_auth_query, firebase_base_url  # noqa: E402
 
 REPO_ROOT = Path( __file__ ).parent.parent
 CROP_LOG_PATH = REPO_ROOT / "crop_training.json"
@@ -35,7 +40,6 @@ def load_env() -> None:
 
 
 def fetch( base_url: str, path: str ) -> object:
-    from firebase_auth import firebase_auth_query
     url = f"{base_url.rstrip('/')}/{path}{firebase_auth_query()}"
     req = urllib.request.Request( url, headers={ "User-Agent": "iNat-pull-logs/1.0" } )
     with urllib.request.urlopen( req, timeout=15 ) as r:
@@ -111,12 +115,7 @@ def pull_brightness_log( base_url: str ) -> bool:
 
 def main() -> None:
     load_env()
-    base_url = os.environ.get( "CROP_LOG_FIREBASE_URL", "" ).strip()
-    if not base_url:
-        sys.exit(
-            "CROP_LOG_FIREBASE_URL is not set.\n"
-            "Add it to .env or export it as an environment variable."
-        )
+    base_url = firebase_base_url()
 
     changed = pull_crop_log( base_url )
     changed = pull_brightness_log( base_url ) or changed

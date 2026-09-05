@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Firebase email/password auth for the training-log scripts.
+Firebase database URL and email/password auth for the training-log scripts.
 
 The Realtime Database rules allow unauthenticated reads and writes, so this
 is optional — it's only useful if the project's rules are later locked down
@@ -16,6 +16,17 @@ import os
 import time
 import urllib.parse
 import urllib.request
+
+# The Realtime Database the app logs to. Not a secret: react-native-config
+# bakes it into every build as Config.CROP_LOG_FIREBASE_URL, so it ships in the
+# binary either way, and having it here means the log scripts work in a fresh
+# clone with no .env. CROP_LOG_FIREBASE_URL still overrides it.
+DEFAULT_FIREBASE_URL = "https://inaturalist-9001d-default-rtdb.firebaseio.com"
+
+
+def firebase_base_url() -> str:
+    return os.environ.get( "CROP_LOG_FIREBASE_URL", "" ).strip() or DEFAULT_FIREBASE_URL
+
 
 _cached: dict | None = None
 

@@ -37,7 +37,8 @@ Usage:
         --paddings 0.05,0.10,0.15,0.20,0.25,0.30
 
 When no file is given the crop log is fetched live from Firebase Realtime
-Database using CROP_LOG_FIREBASE_URL from .env.
+Database, from firebase_auth.DEFAULT_FIREBASE_URL unless CROP_LOG_FIREBASE_URL
+overrides it.
 """
 
 from __future__ import annotations
@@ -626,9 +627,12 @@ def print_report(cur_results: list[PaddingResult], imp_results: list[PaddingResu
 # Firebase / .env helpers
 # ---------------------------------------------------------------------------
 
+sys.path.insert(0, str(Path(__file__).parent))
+
+from firebase_auth import DEFAULT_FIREBASE_URL as _DEFAULT_FIREBASE_URL  # noqa: E402
+
 _REPO_ROOT = Path(__file__).parent.parent
 _ENV_FILE = _REPO_ROOT / ".env"
-_DEFAULT_FIREBASE_URL = "https://inaturalist-9001d-default-rtdb.firebaseio.com"
 
 
 def _load_env() -> None:
