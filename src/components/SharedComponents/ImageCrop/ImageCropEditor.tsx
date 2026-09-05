@@ -16,7 +16,6 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
 import {
@@ -54,6 +53,10 @@ const logger = log.extend( "ImageCropEditor" );
 // How many upcoming photos in a bulk crop to preload ahead of the one
 // currently shown.
 const PRELOAD_LOOKAHEAD = 3;
+// How many of those to also decode off-screen (see ImageCropView's warmUris).
+// Fewer than the lookahead: a decoded photo sits in memory, and one photo of
+// slack is enough to cover the time it takes to crop the current one.
+const DECODE_LOOKAHEAD = 2;
 
 const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
@@ -207,8 +210,9 @@ const ImageCropEditor = ( ) => {
     navigation.setOptions( { headerShown: false } );
   }, [navigation] );
 
-  // Track which imageUri's preload we've already kicked off to avoid re-triggering
-  const preloadedUrisRef = useRef( new Set<string>( ) );
+  // Local files of the upcoming photos whose preload has finished, handed to
+  // ImageCropView so it can decode them before the user advances.
+  const [warmUris, setWarmUris] = useState<string[]>( [] );
 
   const applyPreloadResult = useCallback( (
     result: PreloadResult,
@@ -288,24 +292,47 @@ const ImageCropEditor = ( ) => {
     const upcomingUris = cropImport
       ? importedUris.filter( uri => !visitedUris.has( uri ) )
       : pendingImageUris;
+    const setWarmUrisTo = ( uris: string[] ) => setWarmUris(
+      prev => ( prev.length === uris.length && prev.every( ( u, i ) => u === uris[i] )
+        ? prev
+        : uris ),
+    );
     if ( !upcomingUris.length || context !== "groupPhotos" ) {
+      // Nothing left to come: stop holding the last photos in memory.
+      setWarmUrisTo( [] );
       return ( ) => {};
     }
-    const preload = ( uri: string ) => {
-      if ( preloadedUrisRef.current.has( uri ) ) {
+    let cancelled = false;
+    // Hand ImageCropView whichever of the next photos are ready to decode. Runs
+    // again as each preload lands, so a photo starts decoding as soon as its
+    // file exists rather than waiting for the whole lookahead.
+    const syncWarmUris = ( ) => {
+      if ( cancelled ) {
         return;
       }
-      preloadedUrisRef.current.add( uri );
+      const uris = upcomingUris
+        .slice( 0, DECODE_LOOKAHEAD )
+        .map( uri => preloadCache.get( uri )?.localUri )
+        .filter( ( uri ): uri is string => !!uri );
+      setWarmUrisTo( uris );
+    };
+    // enqueuePreload dedupes against its cache, its in-flight loads and its
+    // queue, so re-enqueueing on every re-run costs nothing.
+    const preload = ( uri: string ) => {
       const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, uri );
       const cropSourceUri = groupedPhoto?.image.cropOriginalUri || uri;
       const existingSavedCrop = groupedPhoto?.image.crop ?? null;
-      enqueuePreload( uri, cropSourceUri, existingSavedCrop );
+      enqueuePreload( uri, cropSourceUri, existingSavedCrop ).then( syncWarmUris, ( ) => {} );
     };
+    syncWarmUris( );
     preload( upcomingUris[0] );
     const handle = InteractionManager.runAfterInteractions( ( ) => {
       upcomingUris.slice( 1, PRELOAD_LOOKAHEAD ).forEach( preload );
     } );
-    return ( ) => handle.cancel( );
+    return ( ) => {
+      cancelled = true;
+      handle.cancel( );
+    };
   }, [context, cropImport, groupedPhotos, importedUris, pendingImageUris, visitedUris] );
 
   const labels = useMemo( ( ) => ( {
@@ -597,6 +624,7 @@ const ImageCropEditor = ( ) => {
       initialCrop={activeInitialCrop}
       labels={labels}
       brightnessLogKey={brightnessLogKey}
+      warmUris={warmUris}
       onConfirm={handleConfirm}
       onDelete={handleDelete}
     />

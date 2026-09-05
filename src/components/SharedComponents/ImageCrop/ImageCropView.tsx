@@ -13,6 +13,7 @@ import React, {
 import type { ViewStyle } from "react-native";
 import {
   ActivityIndicator,
+  Image,
   StyleSheet,
   useWindowDimensions,
 } from "react-native";
@@ -43,6 +44,12 @@ const UPLOAD_MAX_SIDE = 2048;
 // and off. Use hysteresis instead of a single-sample comparison so crossing
 // the threshold briefly during a gesture doesn't flicker the indicator.
 const DOWNSIZE_HYSTERESIS_PX = 8;
+// How long to wait before showing the loading spinner. With the next photo
+// preloaded and decoded ahead of time (see warmUris), advancing a bulk crop
+// waits a frame or two for the new image to paint -- just long enough to flash
+// a spinner on and off, which reads as jank rather than as loading. Only a load
+// that really is slow gets one.
+const SPINNER_DELAY_MS = 150;
 const isDownsized = ( sizePx: number, wasDownsized: boolean ) => ( wasDownsized
   ? sizePx > UPLOAD_MAX_SIDE - DOWNSIZE_HYSTERESIS_PX
   : sizePx > UPLOAD_MAX_SIDE + DOWNSIZE_HYSTERESIS_PX );
@@ -94,6 +101,16 @@ interface Props {
   // slider is preview-only -- it never alters the cropped output -- so this is
   // just what the saved brightness label is keyed to.
   brightnessLogKey?: string | null;
+  // Local file URIs of the photos coming up next in a bulk crop. They are
+  // mounted invisibly at exactly the size and resize mode the real image uses,
+  // so React Native reads and decodes them into its image cache while the user
+  // is still cropping the current photo. Having the file on disk (what the
+  // preload cache holds) isn't enough on its own: decoding a full-size photo is
+  // what the spinner between photos is waiting on, and that only happens once
+  // an <Image> asks for it. Matching the frame size matters -- the cache is
+  // keyed by url + size + scale + resize mode, so a warm-up at a different size
+  // would be decoded all over again.
+  warmUris?: string[];
   onConfirm: ( crop: NormalizedCrop ) => void | Promise<void>;
   onCropChange?: ( crop: NormalizedCrop ) => void;
   onDelete?: () => void;
@@ -106,6 +123,7 @@ const ImageCropView = ( {
   initialCrop,
   labels,
   brightnessLogKey,
+  warmUris,
   onConfirm,
   onCropChange,
   onDelete,
@@ -129,6 +147,19 @@ const ImageCropView = ( {
   const [loadedUri, setLoadedUri] = useState<string | null>( null );
   const imageReady = loadedUri === sourceUri;
   const handleImageLoad = useCallback( ( ) => setLoadedUri( sourceUri ), [sourceUri] );
+
+  // Which photo has been loading long enough to deserve a spinner. Recorded per
+  // uri rather than as a flag so advancing to the next photo starts the delay
+  // over without an effect having to clear it.
+  const [slowUri, setSlowUri] = useState<string | null>( null );
+  useEffect( ( ) => {
+    if ( imageReady ) {
+      return ( ) => {};
+    }
+    const timer = setTimeout( ( ) => setSlowUri( sourceUri ), SPINNER_DELAY_MS );
+    return ( ) => clearTimeout( timer );
+  }, [imageReady, sourceUri] );
+  const spinnerShown = !imageReady && slowUri === sourceUri;
 
   const boxSize = useMemo( ( ) => {
     // Full screen width, capped by the available crop area height.
@@ -425,6 +456,21 @@ const ImageCropView = ( {
           setCropAreaHeight( event.nativeEvent.layout.height );
         }}
       >
+        {/* Rendered under everything else, invisible and untouchable: these
+            exist only to make React Native decode the next photos. */}
+        {cropAreaHeight > 0 && warmUris?.map( warmUri => (
+          <Image
+            key={warmUri}
+            accessible={false}
+            accessibilityIgnoresInvertColors
+            fadeDuration={0}
+            pointerEvents="none"
+            resizeMode="contain"
+            source={{ uri: warmUri }}
+            style={[styles.zoomLayer, styles.hidden]}
+          />
+        ) )}
+
         {cropAreaHeight > 0 && (
           <View style={[styles.zoomLayer, !imageReady && styles.hidden]}>
             <CustomImageZoom
@@ -445,7 +491,7 @@ const ImageCropView = ( {
           </View>
         )}
 
-        {!imageReady && (
+        {spinnerShown && (
           <View style={styles.zoomLayer} className="items-center justify-center">
             <ActivityIndicator color={colors.white} />
           </View>
