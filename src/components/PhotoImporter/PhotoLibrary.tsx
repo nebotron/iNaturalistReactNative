@@ -498,6 +498,20 @@ const PhotoLibrary = ( ) => {
           : placeholders ) );
         navigation.setParams( { fromGroupPhotos: false } );
         navigation.navigate( "GroupPhotos" );
+        // Straight on into the cropper for the batch just picked, with Group
+        // Photos left underneath it: it crops each photo as the import lands
+        // it and drops the user on the grid after the last one. Coming back
+        // here to add more only crops the photos being added, so the ones
+        // already in the grid are skipped.
+        navigation.navigate( "ImageCropEditor", {
+          context: "groupPhotos",
+          cropImport: true,
+          skipUris: fromGroupPhotos
+            ? groupedPhotos.flatMap( ( group: GroupedPhoto ) => ( group.photos || [] )
+              .filter( photo => !photo.pending )
+              .map( photo => photo.image.uri ) )
+            : [],
+        } );
         importIntoGroupPhotos(
           newNodes.filter( node => !isVideoNode( node ) ),
           newNodes.filter( isVideoNode ),

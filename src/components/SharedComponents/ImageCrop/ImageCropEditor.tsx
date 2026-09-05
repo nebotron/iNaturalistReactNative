@@ -71,6 +71,7 @@ const ImageCropEditor = ( ) => {
   const context = params?.context;
   const observationPhotoUuid = params?.observationPhotoUuid;
   const onCropSaved = params?.onCropSaved;
+  const cropImport = params?.cropImport ?? false;
 
   // The photo currently being cropped and the rest of the bulk crop queue.
   // Held in state rather than read from route params on every render because a
@@ -79,6 +80,42 @@ const ImageCropEditor = ( ) => {
   const [pendingImageUris, setPendingImageUris] = useState<string[]>(
     params?.pendingImageUris ?? [],
   );
+
+  // Cropping a whole import (cropImport) takes its queue from the store rather
+  // than a fixed list of uris, because the photos are still being copied out
+  // of the library while the user crops: a photo joins the queue when its file
+  // lands. Photos already in the grid before this batch was picked, and the
+  // ones this editor has already shown, are what it has to skip.
+  const [visitedUris, setVisitedUris] = useState<Set<string>>( ( ) => new Set( [
+    ...( params?.skipUris ?? [] ),
+    ...( params?.imageUri
+      ? [params.imageUri]
+      : [] ),
+  ] ) );
+  const markVisited = useCallback( ( uri: string ) => setVisitedUris( uris => ( uris.has( uri )
+    ? uris
+    : new Set( uris ).add( uri ) ) ), [] );
+  const importedUris = useMemo( ( ) => ( cropImport
+    ? groupedPhotos.flatMap( group => ( group.photos ?? [] )
+      .filter( photo => !photo.pending )
+      .map( photo => photo.image.uri )
+      // The GIF an imported video was turned into: cropping it would write a
+      // single still frame back over the animation
+      .filter( uri => !uri.toLowerCase( ).endsWith( ".gif" ) ) )
+    : [] ), [cropImport, groupedPhotos] );
+  const importIsPending = useMemo( ( ) => cropImport && groupedPhotos.some(
+    group => ( group.photos ?? [] ).some( photo => photo.pending ),
+  ), [cropImport, groupedPhotos] );
+  const nextImportUri = importedUris.find( uri => !visitedUris.has( uri ) );
+
+  // An import queue has nothing to show before its first photo has been copied,
+  // or between photos while the rest are still copying. Take the next photo the
+  // store has during render, like the preload seed below, so a photo that has
+  // already landed is never behind a frame of spinner.
+  if ( cropImport && !imageUri && nextImportUri ) {
+    markVisited( nextImportUri );
+    setImageUri( nextImportUri );
+  }
 
   // Resolve the crop source URI and any previously-saved crop for the current
   // image. Pure read of props/store, shared by the synchronous cache seed and
@@ -248,7 +285,10 @@ const ImageCropEditor = ( ) => {
   // deferred past interactions so the burst doesn't contend with painting the
   // current image.
   useEffect( ( ) => {
-    if ( !pendingImageUris.length || context !== "groupPhotos" ) {
+    const upcomingUris = cropImport
+      ? importedUris.filter( uri => !visitedUris.has( uri ) )
+      : pendingImageUris;
+    if ( !upcomingUris.length || context !== "groupPhotos" ) {
       return ( ) => {};
     }
     const preload = ( uri: string ) => {
@@ -261,12 +301,12 @@ const ImageCropEditor = ( ) => {
       const existingSavedCrop = groupedPhoto?.image.crop ?? null;
       enqueuePreload( uri, cropSourceUri, existingSavedCrop );
     };
-    preload( pendingImageUris[0] );
+    preload( upcomingUris[0] );
     const handle = InteractionManager.runAfterInteractions( ( ) => {
-      pendingImageUris.slice( 1, PRELOAD_LOOKAHEAD ).forEach( preload );
+      upcomingUris.slice( 1, PRELOAD_LOOKAHEAD ).forEach( preload );
     } );
     return ( ) => handle.cancel( );
-  }, [context, groupedPhotos, pendingImageUris] );
+  }, [context, cropImport, groupedPhotos, importedUris, pendingImageUris, visitedUris] );
 
   const labels = useMemo( ( ) => ( {
     confirm: t( "SAVE-CROP" ),
@@ -286,12 +326,41 @@ const ImageCropEditor = ( ) => {
       setPendingImageUris( uris => uris.slice( 1 ) );
       return;
     }
+    if ( cropImport ) {
+      // Whichever photo comes next is picked during render: the next one the
+      // import has landed, or none while the rest are still copying.
+      if ( imageUri ) {
+        markVisited( imageUri );
+      }
+      setImageUri( undefined );
+      return;
+    }
     onCropSaved?.( );
     navigation.goBack( );
   }, [
+    cropImport,
+    imageUri,
+    markVisited,
     navigation,
     onCropSaved,
     pendingImageUris,
+  ] );
+
+  // The import has nothing left to crop: the last photo has been cropped, or
+  // the ones the user was waiting on failed to copy.
+  useEffect( ( ) => {
+    if ( !cropImport || imageUri || importIsPending || nextImportUri ) {
+      return;
+    }
+    onCropSaved?.( );
+    navigation.goBack( );
+  }, [
+    cropImport,
+    imageUri,
+    importIsPending,
+    navigation,
+    nextImportUri,
+    onCropSaved,
   ] );
 
   const handleDelete = useCallback( ( ) => {
@@ -383,7 +452,10 @@ const ImageCropEditor = ( ) => {
         await new Promise<void>( resolve => {
           InteractionManager.runAfterInteractions( ( ) => resolve( ) );
         } );
-        await applyGroupPhotosCrop( crop, displayUri, sourceUri, size );
+        // Cropping replaces the photo's uri in the store with the cropped
+        // file's, which an import queue reading the store would otherwise
+        // take for a photo it hasn't shown yet and come back to.
+        await applyGroupPhotosCrop( crop, displayUri, sourceUri, size, markVisited );
       } )( ).catch( ( ) => {
         Alert.alert( t( "Something-went-wrong" ) );
       } ) );
@@ -452,6 +524,7 @@ const ImageCropEditor = ( ) => {
     imageSize,
     imageUri,
     localImageUri,
+    markVisited,
     observationPhotoUuid,
     t,
     updateObservationKeys,
@@ -470,6 +543,22 @@ const ImageCropEditor = ( ) => {
     }
     return imageUri || null;
   }, [context, currentObservation, imageUri, observationPhotoUuid] );
+
+  // Between photos of an import: the same black screen the cropper loads
+  // behind, rather than a dead end offering a way back, while the next photo
+  // is copied or the editor closes on the last one.
+  if ( !imageUri && cropImport ) {
+    return (
+      <View className="flex-1 bg-black">
+        <View className="absolute top-8 left-0">
+          <BackButton color={colors.white} onPress={( ) => navigation.goBack( )} />
+        </View>
+        <View className="flex-1 items-center justify-center">
+          <ActivityIndicator color={colors.white} />
+        </View>
+      </View>
+    );
+  }
 
   if ( !imageUri ) {
     return (

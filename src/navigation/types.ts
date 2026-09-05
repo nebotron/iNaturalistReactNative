@@ -213,11 +213,18 @@ export type SharedStackParamList = {
   };
   // From EvidenceList.js and GroupPhotos.tsx
   ImageCropEditor: {
-    imageUri: string;
+    // Omitted when cropImport takes the queue from the import instead
+    imageUri?: string;
     context: "groupPhotos" | "observationEdit";
     observationPhotoUuid?: string;
     onCropSaved?: () => void;
     pendingImageUris?: string[];
+    // Crop every photo of a photo library import, taking them from the
+    // grouped photos in the store as the import lands them
+    cropImport?: boolean;
+    // Photos the import queue skips: the ones already in the grid before
+    // this batch was picked
+    skipUris?: string[];
   };
   // From TaxonDetails
   // { taxonId: number }
