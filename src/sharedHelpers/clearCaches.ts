@@ -101,11 +101,18 @@ const clearSyncedMediaForUpload = async realm => {
     .filter( Boolean );
   await removeSyncedFilesFromDirectory(
     photoUploadPath,
+    // An in-progress Group Photos import keeps its files here too: cropping a
+    // photo writes the cropped file to photoUploads (see cropImageFile), and
+    // preserving the uncropped original writes a second one, both long before
+    // there is an observation in Realm to reference them. Without the import's
+    // own file names the next launch deleted every cropped photo out from
+    // under the grid, leaving cells drawing a placeholder over a file that no
+    // longer existed.
     // .filter( Boolean ) ensures this array has no undefined members. IDK
     //  why the TS compiler can't figure that out
     //  eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    unsyncedPhotoFileNames,
+    [...unsyncedPhotoFileNames, ...groupedPhotoFileNamesToKeep( )],
   );
 
   // Clean out sounds
