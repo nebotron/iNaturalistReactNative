@@ -62,7 +62,7 @@ const styles = StyleSheet.create( {
 // One cell of the virtualized grid: a single photo. This is the same shape the
 // photo picker feeds DevicePhotoGrid, so both screens get identical
 // virtualization and thumbnail prefetching.
-type CleanupGridItem = { type: "photo"; id: string; uri: string };
+interface CleanupGridItem { type: "photo"; id: string; uri: string }
 
 // One continuous grid, newest first: the days are only how the scan groups its
 // work, not something the user is asked to read.
@@ -97,6 +97,7 @@ const DevicePhotoCleanup = ( ) => {
   const [deleting, setDeleting] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [undeletableCount, setUndeletableCount] = useState( 0 );
+  const [quarantinedCount, setQuarantinedCount] = useState( 0 );
   const [probing, setProbing] = useState( false );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
   const [stillDeleting, setStillDeleting] = useState( false );
@@ -190,7 +191,7 @@ const DevicePhotoCleanup = ( ) => {
     // claiming "Deleted 1,159 photos" while the photos are all still there is
     // worse than saying nothing happened.
     const {
-      deleted, succeeded, pending, undeletable,
+      deleted, succeeded, pending, undeletable, quarantined,
     } = await deleteOriginalDevicePhotos(
       allUris,
       { userInitiated: true },
@@ -209,6 +210,7 @@ const DevicePhotoCleanup = ( ) => {
     if ( !succeeded ) return;
     setDeletedCount( deleted );
     setUndeletableCount( undeletable ?? 0 );
+    setQuarantinedCount( quarantined ?? 0 );
     setDays( [] );
   }, [allUris] );
 
@@ -227,6 +229,15 @@ const DevicePhotoCleanup = ( ) => {
                 ? ""
                 : "s"} could not be deleted: iOS only lets the Photos app delete `
                 + "photos synced from a computer or belonging to a shared album."}
+            </Body2>
+          )}
+          {quarantinedCount > 0 && (
+            <Body2 className="mt-4 text-center">
+              {`${quarantinedCount} photo${quarantinedCount === 1
+                ? " was"
+                : "s were"} skipped: iOS accepts them into a deletion and then `
+                + "never finishes it, which stops every other photo from being "
+                + "deleted too. Delete them in the Photos app."}
             </Body2>
           )}
         </View>
