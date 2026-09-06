@@ -162,33 +162,71 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( JSON.stringify( extra ) ).not.toContain( "ph://" );
     } );
 
-    it( "reports a whole-library delete on the one-transaction budget", async ( ) => {
-      // A deletion is one transaction and a transaction costs ~1.6s whatever it
-      // holds, so 300 photos are owed no more time than three. The ramp this
-      // budget used to wait for — chunks of 15, 20, 25 … covering 300 assets in
-      // nine transactions — pushed the report past the wait the UI gives the
-      // whole deletion.
-      let finishDeletion;
+    it( "splits a whole-library delete into transactions of 200", async ( ) => {
+      // 947 photos in one transaction hung six times running while every batch
+      // at or under 280 went through, so a big cleanup goes out in chunks. A
+      // transaction is all or nothing, so this is also what stops one asset
+      // PhotoKit won't answer for from blocking every photo batched with it.
+      mockDeletePhotos.mockResolvedValue( { deleted: 200, requested: 200 } );
+      const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://R${i}` );
+
+      const result = await deleteOriginalDevicePhotos( uris );
+
+      expect( mockDeletePhotos ).toHaveBeenCalledTimes( 2 );
+      expect( mockDeletePhotos.mock.calls[0][0] ).toHaveLength( 200 );
+      expect( mockDeletePhotos.mock.calls[1][0] ).toHaveLength( 100 );
+      expect( result ).toMatchObject( { requested: 300, succeeded: true } );
+    } );
+
+    it( "gives a chunked delete a transaction's budget per chunk", async ( ) => {
+      // A transaction costs ~1.6s whatever it holds, so the hang report waits
+      // one transaction's worth per chunk rather than firing while the second
+      // chunk is legitimately still going.
+      let failDeletion;
       mockDeletePhotos.mockImplementation(
-        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
+        ( ) => new Promise( ( _resolve, reject ) => { failDeletion = reject; } ),
       );
       const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://R${i}` );
 
       const deletion = deleteOriginalDevicePhotos( uris );
-      await jest.advanceTimersByTimeAsync( 4000 );
+      await jest.advanceTimersByTimeAsync( 4800 );
       expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
         "photo_delete_pending",
         expect.anything( ),
       );
 
-      await jest.advanceTimersByTimeAsync( 1000 );
+      await jest.advanceTimersByTimeAsync( 2000 );
       expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
         "photo_delete_pending",
         expect.objectContaining( { requested: 300 } ),
       );
 
-      finishDeletion( { deleted: 300, requested: 300 } );
+      // The first chunk is the only one ever issued: a chunk the library has
+      // not answered stops the run rather than stacking the next transaction on
+      // it. Fail it the way the native watchdog eventually does, so the write
+      // chain is released for the tests that follow.
+      expect( mockDeletePhotos ).toHaveBeenCalledTimes( 1 );
+      failDeletion( new Error( "deleteAssets never called back" ) );
       await deletion;
+      await jest.advanceTimersByTimeAsync( 0 );
+    } );
+
+    it( "keeps the photos a landed chunk deleted when a later chunk fails", async ( ) => {
+      // A cleanup that got most of the way is not a failed one. Reporting zero
+      // deleted when 200 photos are gone is what made a working cleanup and a
+      // dead one look the same in the log.
+      mockDeletePhotos
+        .mockResolvedValueOnce( { deleted: 200, requested: 200 } )
+        .mockRejectedValueOnce( new Error( "deleteAssets never called back" ) );
+      const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://F${i}` );
+
+      const result = await deleteOriginalDevicePhotos( uris );
+
+      expect( result ).toMatchObject( {
+        deleted: 200, requested: 300, succeeded: false,
+      } );
+      // 200 of their photos are gone, so they are not told nothing happened.
+      expect( Alert.alert ).not.toHaveBeenCalled( );
     } );
 
     it( "does not report a foreground-inactive app as having left the foreground", async ( ) => {
