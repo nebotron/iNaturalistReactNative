@@ -18,6 +18,7 @@ import {
   buildGroupedSoundItem,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import {
+  deviceVideoUriFromNode,
   extractVideoMedia,
   isVideoNode,
 } from "components/PhotoImporter/helpers/videoImportHelpers";
@@ -101,6 +102,9 @@ const placeholderGroup = ( node: PhotoNode ): GroupedMediaItem => ( {
 } );
 
 const gifPhotoItem = ( node: PhotoNode, gifUri: string ): GroupedMediaPhotoItem => ( {
+  // The video in the library the GIF was made from, so removing the GIF in
+  // Group Photos stages that video for deletion like any other imported photo.
+  originalDevicePhotoUri: deviceVideoUriFromNode( node ),
   image: {
     uri: gifUri,
     type: "image/gif",
@@ -402,6 +406,7 @@ const PhotoLibrary = ( ) => {
         } );
         // A video that yields neither a GIF nor audio contributed nothing to
         // the import, so its cell goes away like a photo that failed to copy.
+        const deviceVideoUri = deviceVideoUriFromNode( node );
         settle( node, ( gifUri || audioUri )
           ? {
             photos: gifUri
@@ -409,6 +414,14 @@ const PhotoLibrary = ( ) => {
               : [],
             extraItems: audioUri
               ? [buildGroupedSoundItem( audioUri, node.timestamp )]
+              : [],
+            originalDevicePhotoUris: deviceVideoUri
+              ? [deviceVideoUri]
+              : [],
+            // Keeps the video attached to the GIF even after the file is
+            // rewritten (a crop on import hands back a new uri).
+            deviceUriMappings: gifUri && deviceVideoUri
+              ? [{ localUri: gifUri, deviceUri: deviceVideoUri }]
               : [],
           }
           : null );
