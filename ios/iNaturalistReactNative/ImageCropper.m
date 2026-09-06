@@ -131,6 +131,124 @@ static NSString *inatOutstandingPhotoWrite( void )
   }
 }
 
+// How long the outstanding write has to have been silent before the gate stops
+// taking its own word for it. Past the watchdog above, so a write that is
+// merely slow is never re-tested out from under itself: by then JS has given
+// up on it and the only question left is whether the *library* is still stuck.
+// (kInatPendingDeleteWatchdogSeconds + a margin; spelled out because a const
+// in C can't seed another const's initializer.)
+static const NSTimeInterval kInatGateRetestAfterSeconds = 165;
+// A healthy library answers a no-op transaction in ~20ms (the Sep 2 and Sep 4
+// photoDeleteProbe lines are 18ms and 21ms), so anything near this is stuck.
+// Kept under promptDeleteOriginalDevicePhotos' hang report so a re-test that
+// ends in a refusal doesn't also log itself as a hang.
+static const NSTimeInterval kInatGateRetestTimeoutSeconds = 3;
+// A stuck library shouldn't be poked once per write; a transaction issued at a
+// wedged photolibraryd is the one thing known to make the wedge worse.
+static const NSTimeInterval kInatGateRetestMinIntervalSeconds = 60;
+static BOOL inatGateRetestInFlight = NO;
+static NSDate *inatGateRetestLastFinishedAt = nil;
+
+// Whether it's worth asking the library directly instead of refusing on the
+// strength of a callback that stopped coming.
+static BOOL inatGateIsWorthRetesting( void )
+{
+  @synchronized( inatPhotoWriteGateLock( ) ) {
+    if ( !inatOutstandingPhotoWriteLabel ) { return NO; }
+    if ( inatGateRetestInFlight ) { return NO; }
+    if ( !inatOutstandingPhotoWriteStartedAt ) { return NO; }
+    if ( [[NSDate date] timeIntervalSinceDate:inatOutstandingPhotoWriteStartedAt]
+        < kInatGateRetestAfterSeconds ) {
+      return NO;
+    }
+    if ( inatGateRetestLastFinishedAt
+        && [[NSDate date] timeIntervalSinceDate:inatGateRetestLastFinishedAt]
+            < kInatGateRetestMinIntervalSeconds ) {
+      return NO;
+    }
+    inatGateRetestInFlight = YES;
+    return YES;
+  }
+}
+
+// Answers whether the library is free to write to: nil to go ahead, otherwise
+// the reason this write was refused, in words JS can pass on. Called on the
+// main queue and answers there.
+//
+// The gate used to be a latch. Nothing ever reopened it but a callback from the
+// very write that shut it, so a deletion whose completion handler never fired
+// refused every Photos write for the rest of the process — the Sep 5 app log
+// has a one-asset deletion, issued 40ms before an ErrorBoundary reload tore the
+// UI out from under its confirmation, shutting the gate for 8.8 hours: seven
+// location writes and a 370-photo cleanup refused in milliseconds, with the
+// library never asked once whether it was still stuck. It wasn't, as the writes
+// straight after the next launch show. So once the outstanding write is past
+// the watchdog — JS has abandoned it, and only the library's own state is still
+// in question — put a no-op transaction to PhotoKit and let the answer decide.
+static void inatWhenClearToWrite( void ( ^answer )( NSString *refusal ) )
+{
+  NSString *busy = inatOutstandingPhotoWrite( );
+  if ( !busy ) {
+    answer( nil );
+    return;
+  }
+  if ( !inatGateIsWorthRetesting( ) ) {
+    answer( busy );
+    return;
+  }
+
+  // Only this write may reopen the gate. If a newer one began while the probe
+  // was out, inatPhotoWriteEnded leaves that one's gate alone.
+  NSUInteger stuckGeneration;
+  @synchronized( inatPhotoWriteGateLock( ) ) {
+    stuckGeneration = inatPhotoWriteGeneration;
+  }
+
+  PHFetchOptions *options = [[PHFetchOptions alloc] init];
+  options.fetchLimit = 1;
+  PHAsset *probeAsset = [PHAsset fetchAssetsWithOptions:options].firstObject;
+  if ( !probeAsset ) {
+    @synchronized( inatPhotoWriteGateLock( ) ) { inatGateRetestInFlight = NO; }
+    answer( busy );
+    return;
+  }
+
+  __block BOOL answered = NO;
+  void ( ^finishRetest )( NSString * ) = ^( NSString *refusal ) {
+    if ( answered ) { return; }
+    answered = YES;
+    @synchronized( inatPhotoWriteGateLock( ) ) {
+      inatGateRetestInFlight = NO;
+      inatGateRetestLastFinishedAt = [NSDate date];
+    }
+    answer( refusal );
+  };
+
+  NSDate *probeStartedAt = [NSDate date];
+  // Its own value written back: a transaction that changes nothing and asks the
+  // user for nothing, so all it can measure is whether PhotoKit still answers.
+  [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+    PHAssetChangeRequest *request =
+      [PHAssetChangeRequest changeRequestForAsset:probeAsset];
+    request.favorite = probeAsset.isFavorite;
+  } completionHandler:^( BOOL success, NSError *error ) {
+    // Answering at all is the result. A no-op transaction that comes back
+    // rejected still came back, which is what the gate is shut over.
+    inatPhotoWriteEnded( stuckGeneration );
+    dispatch_async( dispatch_get_main_queue(), ^{ finishRetest( nil ); } );
+  }];
+
+  dispatch_after(
+    dispatch_time( DISPATCH_TIME_NOW,
+      ( int64_t )( kInatGateRetestTimeoutSeconds * NSEC_PER_SEC ) ),
+    dispatch_get_main_queue(),
+    ^{
+      finishRetest( [NSString stringWithFormat:
+        @"%@; a no-op transaction issued %.0fs in went unanswered too",
+        busy, [[NSDate date] timeIntervalSinceDate:probeStartedAt]] );
+    } );
+}
+
 // What PhotoKit says about the assets a deletion was asked for.
 //
 // An asset this app is not allowed to delete — one synced from a computer, one
@@ -842,7 +960,7 @@ RCT_EXPORT_METHOD( updateAssetLocation
       ? [phUri substringFromIndex:5]
       : phUri;
 
-    NSString *busy = inatOutstandingPhotoWrite( );
+    inatWhenClearToWrite( ^( NSString *busy ) {
     if ( busy ) {
       reject( @"PHOTOS_LIBRARY_BUSY", busy, nil );
       return;
@@ -888,6 +1006,7 @@ RCT_EXPORT_METHOD( updateAssetLocation
     } else {
       doUpdate();
     }
+    } );
   } );
 }
 
@@ -902,7 +1021,7 @@ RCT_EXPORT_METHOD( updateAssetLocations
                   : ( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
-    NSString *busy = inatOutstandingPhotoWrite( );
+    inatWhenClearToWrite( ^( NSString *busy ) {
     if ( busy ) {
       reject( @"PHOTOS_LIBRARY_BUSY", busy, nil );
       return;
@@ -983,6 +1102,7 @@ RCT_EXPORT_METHOD( updateAssetLocations
     } else {
       doUpdate();
     }
+    } );
   } );
 }
 
@@ -2941,7 +3061,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
                   : ( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
-    NSString *busy = inatOutstandingPhotoWrite( );
+    inatWhenClearToWrite( ^( NSString *busy ) {
     if ( busy ) {
       reject( @"PHOTOS_LIBRARY_BUSY", busy, nil );
       return;
@@ -3170,6 +3290,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
     } else {
       doDelete();
     }
+    } );
   } );
 }
 

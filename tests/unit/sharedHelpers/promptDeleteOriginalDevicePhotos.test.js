@@ -266,7 +266,9 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       // the only way to find out that it has.
       finishDeletion( );
       await jest.advanceTimersByTimeAsync( 0 );
-      expect( await next ).toEqual( { deleted: 1, requested: 1, succeeded: true } );
+      expect( await next ).toEqual( {
+        deleted: 1, requested: 1, succeeded: true, undeletable: 0,
+      } );
       expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://TWO"] );
     } );
 

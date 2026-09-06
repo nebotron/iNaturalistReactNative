@@ -116,7 +116,12 @@ const ObsEdit = ( ): Node => {
     navigation.navigate( "LocationPicker" );
   };
 
-  const hasLocation = !currentObservation.missing_coords;
+  // Optional: currentObservation is briefly null on the render after the last
+  // observation leaves the flow (see the fade effect above), and every other
+  // read of it here allows for that. This one didn't, and the throw took the
+  // whole app down through the ErrorBoundary — which on Sep 5 reloaded the
+  // bundle 40ms after a photo deletion was issued, orphaning it.
+  const hasLocation = !currentObservation?.missing_coords;
 
   const {
     saveAndAdvance,

@@ -7,7 +7,6 @@ import {
   Alert, AppState, NativeModules, Platform,
 } from "react-native";
 import { forgetAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
-import DeviceInfo from "react-native-device-info";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import { log } from "sharedHelpers/logger";
 
@@ -285,23 +284,13 @@ const performDeleteOriginalDevicePhotos = async (
         } ),
       ).catch( ( ) => undefined );
     }
-    // Free space at the moment of the hang.
+    // Free disk space used to be measured here, on the theory that a deletion
+    // needs room to move assets into Recently Deleted. The log has answered it:
+    // the Sep 4 deletions of 61, 15, 83, 67 and 60 photos all landed with 1.8GB
+    // free, and the Sep 6 delete of 932 hung with 9.1GB. Free space is not what
+    // separates a deletion that works from one that doesn't, so the probe is
+    // gone rather than firing on every hang for an answer already given.
     //
-    // deleteAssets is the only Photos-library write that fails: an
-    // updateAssetLocations transaction on assets this app doesn't own — same
-    // API, same process, same consent machinery — was still coming back in
-    // ~100ms hours before the Aug 29 delete of 281 photos hung. What a
-    // deletion does that a property change doesn't is move assets into
-    // Recently Deleted, which holds them for 30 days and, for a library being
-    // filled with 40MB RAWs, is where the free space has been going: 23GB on
-    // Aug 24 down to 2.5GB on Aug 29. So record it here, next to the failure,
-    // rather than only at launch.
-    void DeviceInfo.getFreeDiskStorage( ).then(
-      freeDiskBytes => logger.errorWithExtra( "photo_delete_free_space", {
-        requested,
-        freeDiskBytes,
-      } ),
-    ).catch( ( ) => undefined );
     // What the photos themselves are. Every property the log has checked so far
     // says these assets are ordinary and deletable, so the next question is
     // what kind of photo they are — and what device and iOS this is, since the
