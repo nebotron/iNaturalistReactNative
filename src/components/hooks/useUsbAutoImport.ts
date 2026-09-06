@@ -125,6 +125,10 @@ const useUsbAutoImport = ( ) => {
       return;
     }
     offloading.current = true;
+    // Whether this scan found anything and put the banner on screen. A scan
+    // that finds nothing — every scan, while no drive is attached — must not
+    // touch the progress store or leave a timer behind for it.
+    let started = false;
     const progress = useUsbImportProgress.getState( );
     // An offload the app never came back from. Reported here rather than at
     // launch because a run that died left its files unimported, so the next
@@ -172,6 +176,7 @@ const useUsbAutoImport = ( ) => {
       }
 
       logger.info( `USB offload: saving ${images.length} photos to Photos library` );
+      started = true;
       progress.start( images.length );
       markUsbOffloadStarted( images.length );
 
@@ -360,14 +365,16 @@ const useUsbAutoImport = ( ) => {
         : "done" );
     } catch ( error ) {
       logger.error( "USB offload failed", error );
-      progress.setPhase( "error" );
+      if ( started ) progress.setPhase( "error" );
     } finally {
       // The run reached an end, however badly, so it is not one of the runs
       // that vanish with the process.
       clearUsbOffloadMarker( );
       offloading.current = false;
       // Leave the final state on screen briefly, then dismiss the overlay.
-      setTimeout( ( ) => useUsbImportProgress.getState( ).finish( ), 4000 );
+      if ( started ) {
+        setTimeout( ( ) => useUsbImportProgress.getState( ).finish( ), 4000 );
+      }
     }
   }, [onboardingShown, logDiag] );
 
@@ -394,33 +401,42 @@ const useUsbAutoImport = ( ) => {
         // thread on an interval for the many users who never set one up.
         const folder = await getUsbFolderName( );
         if ( !folder ) {
-          // A null name has two very different causes; report which one so we
-          // don't conflate "never set up" with "drive not mounted right now".
+          // A null name has two very different causes, and they call for
+          // opposite things: with no bookmark there is nothing to watch, but an
+          // unresolvable one is exactly what a saved folder looks like with the
+          // drive unplugged — which is the state the app is in every time the
+          // user is about to plug one in. Bailing out of polling here meant the
+          // interval only ever started if the drive happened to already be
+          // mounted at launch or at the last foreground, so the case this hook
+          // exists for — plugging a card reader into a phone with the app open,
+          // which fires no launch and no foreground event — was the one case it
+          // never noticed. Keep polling and let each scan re-resolve.
           const d = await getUsbFolderDiagnostics( );
-          // An unresolvable bookmark is what a saved folder looks like with the
-          // camera unplugged, i.e. nearly always — nine of these in the Aug 4
-          // log, one per foreground, none of them a bug. Keep it at debug (out
-          // of release builds) rather than reporting "no camera attached" to
-          // the shared log all day. "Never picked a folder" still warrants a
-          // line: it explains a feature that is silently doing nothing.
-          if ( d.bookmarkPresent ) {
-            logDiag(
-              "not polling: folder bookmark saved but did not resolve "
-                + `(resolved=${d.resolved}, reachable=${d.reachable}, stale=${d.stale})`,
-              "debug",
-            );
-          } else if ( !loggedNoFolderBookmark ) {
-            // Once per process. It explains a feature that is silently doing
-            // nothing, which is worth saying — but it fires on every
-            // foreground, and thirty identical copies say nothing the first
-            // one didn't.
-            loggedNoFolderBookmark = true;
-            logDiag( "not polling: no folder bookmark saved (folder never picked in Settings)" );
+          if ( !d.bookmarkPresent ) {
+            if ( !loggedNoFolderBookmark ) {
+              // Once per process. It explains a feature that is silently doing
+              // nothing, which is worth saying — but it fires on every
+              // foreground, and thirty identical copies say nothing the first
+              // one didn't.
+              loggedNoFolderBookmark = true;
+              logDiag( "not polling: no folder bookmark saved (folder never picked in Settings)" );
+            }
+            return;
           }
-          return;
+          // Nine of these in the Aug 4 log, one per foreground, none of them a
+          // bug. Keep it at debug (out of release builds) rather than reporting
+          // "no camera attached" to the shared log all day.
+          logDiag(
+            "polling for the drive: folder bookmark saved but did not resolve "
+              + `(resolved=${d.resolved}, reachable=${d.reachable}, stale=${d.stale})`,
+            "debug",
+          );
+        } else {
+          logDiag( `polling USB folder "${folder}" every ${SCAN_INTERVAL_MS}ms` );
+          offload( );
         }
-        logDiag( `polling USB folder "${folder}" every ${SCAN_INTERVAL_MS}ms` );
-        offload( );
+        // Scan on the interval either way: offload re-resolves the folder each
+        // time and returns in one cheap native call while the drive is absent.
         interval = setInterval( offload, SCAN_INTERVAL_MS );
       } catch ( error ) {
         // A rejected native call would otherwise be an unhandled promise

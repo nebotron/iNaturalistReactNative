@@ -10,14 +10,16 @@ const mockClearUsbOffloadMarker = jest.fn( );
 const mockMarkUsbOffloadStarted = jest.fn( );
 const mockTakeUnfinishedUsbOffload = jest.fn( ( ) => null );
 const mockUpdateUsbOffloadProgress = jest.fn( );
+const mockGetUsbFolderName = jest.fn( );
+const mockGetUsbFolderDiagnostics = jest.fn( );
 
 jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
   availableMemoryMb: ( ) => 512,
   refreshAvailableMemory: ( ) => undefined,
   clearUsbOffloadMarker: ( ) => mockClearUsbOffloadMarker( ),
   deleteUsbSourceImages: ( ...args ) => mockDeleteUsbSourceImages( ...args ),
-  getUsbFolderDiagnostics: async ( ) => ( { bookmarkPresent: true } ),
-  getUsbFolderName: async ( ) => "101EOSR7",
+  getUsbFolderDiagnostics: ( ) => mockGetUsbFolderDiagnostics( ),
+  getUsbFolderName: ( ) => mockGetUsbFolderName( ),
   isUsbImportSupported: ( ) => true,
   listNewUsbImages: ( ...args ) => mockListNewUsbImages( ...args ),
   markUsbImagesImported: ( ...args ) => mockMarkUsbImagesImported( ...args ),
@@ -61,6 +63,8 @@ describe( "useUsbAutoImport", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
     jest.useFakeTimers( );
+    mockGetUsbFolderName.mockResolvedValue( "101EOSR7" );
+    mockGetUsbFolderDiagnostics.mockResolvedValue( { bookmarkPresent: true } );
     mockListNewUsbImages.mockResolvedValue( {
       available: true,
       images: images( 40 ),
@@ -247,6 +251,55 @@ describe( "useUsbAutoImport", ( ) => {
     expect( mockLogger.info ).toHaveBeenCalledWith(
       expect.stringContaining( "USB offload: saved 20, failed 20" ),
     );
+  } );
+
+  // iOS gives no attach notification, and a drive is normally plugged in with
+  // the app already open — a moment that fires neither a launch nor a
+  // foreground event, which is the whole reason this hook polls. But the saved
+  // folder does not resolve while the drive is unplugged, and a null folder
+  // name used to skip setting up the interval at all: the scan only ever ran if
+  // the drive happened to already be mounted at launch or at the last
+  // foreground, so the one case polling exists for was the one it never
+  // noticed.
+  it( "picks up a drive attached while the app is already open", async ( ) => {
+    mockGetUsbFolderName.mockResolvedValue( null );
+    mockListNewUsbImages.mockResolvedValue( {
+      available: false,
+      reason: "drive-disconnected",
+      images: [],
+    } );
+    mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+    expect( mockSaveUsbImageToPhotos ).not.toHaveBeenCalled( );
+
+    // The drive goes in. Nothing else happens: no relaunch, no foregrounding,
+    // just the next scan.
+    mockListNewUsbImages.mockResolvedValue( {
+      available: true,
+      images: images( 2 ),
+      imageFileCount: 2,
+      alreadyImportedCount: 0,
+      knownCount: 0,
+      regularFileCount: 2,
+      extensions: { cr3: 2 },
+    } );
+    await jest.advanceTimersByTimeAsync( 10_000 );
+
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 2 );
+  } );
+
+  // The other cause of a null folder name: nothing to watch, so don't wake the
+  // JS thread every ten seconds for the many users who never picked a folder.
+  it( "does not poll when no folder was ever picked", async ( ) => {
+    mockGetUsbFolderName.mockResolvedValue( null );
+    mockGetUsbFolderDiagnostics.mockResolvedValue( { bookmarkPresent: false } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 60_000 );
+
+    expect( mockListNewUsbImages ).not.toHaveBeenCalled( );
   } );
 
   it( "carries on past an ordinary failure that is not a timeout", async ( ) => {

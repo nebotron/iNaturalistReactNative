@@ -187,7 +187,16 @@ RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
 {
   NSURL *folder = resolveSavedFolder( );
   if ( !folder ) {
-    resolve( @{ @"available": @NO, @"reason": @"no-folder-saved", @"images": @[] } );
+    // A folder that won't resolve is nearly always a drive that isn't mounted,
+    // not a folder the user never picked — and now that JS scans on the
+    // interval while unplugged (so a drive attached mid-session is noticed),
+    // this is the reason the log sees most. Reporting it as "no-folder-saved"
+    // read as a feature nobody had set up.
+    BOOL hasBookmark =
+      [[NSUserDefaults standardUserDefaults] dataForKey:kBookmarkKey] != nil;
+    resolve( @{ @"available": @NO,
+                @"reason": hasBookmark ? @"drive-disconnected" : @"no-folder-saved",
+                @"images": @[] } );
     return;
   }
   if ( ![folder startAccessingSecurityScopedResource] ) {
