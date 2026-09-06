@@ -3,6 +3,7 @@ import { ZoomBrightnessSliders } from "components/MediaViewer/IdentifyPhoto";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import { INatIconButton } from "components/SharedComponents";
 import { View } from "components/styledComponents";
+import { useStackHost } from "navigation/StackHostContext";
 import React, {
   useCallback,
   useEffect,
@@ -130,6 +131,7 @@ const ImageCropView = ( {
 }: Props ) => {
   const { t } = useTranslation( );
   const insets = useSafeAreaInsets( );
+  const { hasBottomTabBar } = useStackHost( );
   const { width: windowWidth } = useWindowDimensions( );
   const zoomRef = useRef<SharedZoomableImageRef>( null );
   const appliedInitialCropKey = useRef<string | null>( null );
@@ -395,10 +397,15 @@ const ImageCropView = ( {
 
   // Padding for the shared bottom control panel (sliders + buttons). The panel
   // clears the home indicator itself so the sliders and buttons are never
-  // pushed under the safe area.
+  // pushed under the safe area -- unless the bottom tab bar is below it, which
+  // clears the safe area itself.
   const bottomPanelStyle = useMemo(
-    ( ) => ( { paddingBottom: insets.bottom } ),
-    [insets.bottom],
+    ( ) => ( {
+      paddingBottom: hasBottomTabBar
+        ? 0
+        : insets.bottom,
+    } ),
+    [hasBottomTabBar, insets.bottom],
   );
 
   const dimTopStyle = useMemo( ( ): ViewStyle => ( {

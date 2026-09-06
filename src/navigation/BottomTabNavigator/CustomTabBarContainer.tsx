@@ -51,8 +51,6 @@ const getActiveTab = ( activeTabName: TabName ): ScreenName => {
   }
 };
 
-const HIDDEN_TAB_BAR_SCREENS = ["ImageCropEditor"];
-
 const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
   const { t } = useTranslation( );
   const currentUser = useCurrentUser( );
@@ -164,16 +162,6 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
     t,
     handleTabPress,
   ] );
-
-  // Hide tab bar on crop/labeling screens — checked after all hooks
-  const activeTabRoute = state?.routes[activeTabIndex];
-  const tabStackState = activeTabRoute?.state;
-  const activeScreenName = tabStackState
-    ? tabStackState.routes[tabStackState.index ?? 0]?.name
-    : null;
-  if ( activeScreenName && HIDDEN_TAB_BAR_SCREENS.includes( activeScreenName ) ) {
-    return null;
-  }
 
   return (
     <CustomTabBar
