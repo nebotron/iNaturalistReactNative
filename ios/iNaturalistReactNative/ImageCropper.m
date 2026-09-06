@@ -703,6 +703,56 @@ static NSData *jpegDataFromCroppedImage(
   return finalized ? destinationData : nil;
 }
 
+// ─── Queues for the heavy image methods ──────────────────────────────────
+
+// This module has no methodQueue of its own, so React Native gives it one
+// serial queue that every call to it shares. Three of its methods are heavy,
+// and a bulk crop runs all three at once: the Group Photos grid behind the
+// cropper generates a thumbnail per photo as it lands, the photo the user just
+// confirmed is decoded and re-encoded at full resolution, and the next photo's
+// subject is detected. On one shared queue the detection the cropper's spinner
+// is actually waiting on sat behind seconds of work for photos that aren't on
+// screen -- which is what the wait between photos was. Give each kind of work
+// its own queue so they overlap. Each queue stays serial, so this adds no
+// concurrent full-resolution decodes: it only stops unrelated work from
+// blocking the one the user is waiting for.
+static dispatch_queue_t heavyImageQueue( const char *label )
+{
+  return dispatch_queue_create( label,
+    dispatch_queue_attr_make_with_qos_class(
+      DISPATCH_QUEUE_SERIAL, QOS_CLASS_USER_INITIATED, 0 ) );
+}
+
+static dispatch_queue_t subjectDetectionQueue( void )
+{
+  static dispatch_queue_t queue;
+  static dispatch_once_t  once;
+  dispatch_once( &once, ^{
+    queue = heavyImageQueue( "org.inaturalist.imagecropper.detect" );
+  } );
+  return queue;
+}
+
+static dispatch_queue_t cropWriteQueue( void )
+{
+  static dispatch_queue_t queue;
+  static dispatch_once_t  once;
+  dispatch_once( &once, ^{
+    queue = heavyImageQueue( "org.inaturalist.imagecropper.crop" );
+  } );
+  return queue;
+}
+
+static dispatch_queue_t thumbnailQueue( void )
+{
+  static dispatch_queue_t queue;
+  static dispatch_once_t  once;
+  dispatch_once( &once, ^{
+    queue = heavyImageQueue( "org.inaturalist.imagecropper.thumbnail" );
+  } );
+  return queue;
+}
+
 // ─── Exported React Native methods ───────────────────────────────────────────
 
 RCT_EXPORT_METHOD( cropImage
@@ -715,57 +765,62 @@ RCT_EXPORT_METHOD( cropImage
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  NSURL    *inputURL    = [NSURL fileURLWithPath:input];
-  CGImageSourceRef src  = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
-  NSDictionary *srcMeta = nil;
-  if ( src ) {
-    srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
-    CFRelease( src );
-  }
+  // Off the shared method queue: a bulk crop writes this photo's crop
+  // while the next photo's subject is being detected, and neither should
+  // wait on the other. See heavyImageQueue above.
+  dispatch_async( cropWriteQueue( ), ^{
+    NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSURL    *inputURL    = [NSURL fileURLWithPath:input];
+    CGImageSourceRef src  = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
+    NSDictionary *srcMeta = nil;
+    if ( src ) {
+      srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+      CFRelease( src );
+    }
 
-  UIImage *image = [UIImage imageWithContentsOfFile:input];
-  if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
+    UIImage *image = [UIImage imageWithContentsOfFile:input];
+    if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
 
-  CGRect     cropRect   = CGRectMake( [originX integerValue], [originY integerValue],
-                                      [width integerValue],   [height integerValue] );
-  CGImageRef croppedRef = NULL;
+    CGRect     cropRect   = CGRectMake( [originX integerValue], [originY integerValue],
+                                        [width integerValue],   [height integerValue] );
+    CGImageRef croppedRef = NULL;
 
-  if ( image.imageOrientation == UIImageOrientationUp ) {
-    croppedRef = CGImageCreateWithImageInRect( image.CGImage, cropRect );
-  } else {
-    // The crop rect is in the display (EXIF-oriented) coordinate space, but
-    // image.CGImage is stored in the raw sensor orientation, so cropping it
-    // directly would take the wrong region. Rather than redraw the entire
-    // full-resolution image just to normalize orientation and then crop out a
-    // small region — a large transient allocation on every image — draw only
-    // the crop-sized region: drawInRect applies the orientation, and offsetting
-    // the full image by -origin lands the wanted region in the small context.
-    // Integer offsets at 1:1 scale, so the pixels match a full redraw + crop.
-    UIGraphicsBeginImageContextWithOptions( cropRect.size, NO, 1.0 );
-    [image drawInRect:CGRectMake( -cropRect.origin.x, -cropRect.origin.y,
-                                  image.size.width, image.size.height )];
-    UIImage *croppedImage = UIGraphicsGetImageFromCurrentImageContext();
-    UIGraphicsEndImageContext();
-    if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
-  }
-  if ( !croppedRef ) { reject( @"CROP_FAILED", @"Crop failed", nil ); return; }
+    if ( image.imageOrientation == UIImageOrientationUp ) {
+      croppedRef = CGImageCreateWithImageInRect( image.CGImage, cropRect );
+    } else {
+      // The crop rect is in the display (EXIF-oriented) coordinate space, but
+      // image.CGImage is stored in the raw sensor orientation, so cropping it
+      // directly would take the wrong region. Rather than redraw the entire
+      // full-resolution image just to normalize orientation and then crop out a
+      // small region — a large transient allocation on every image — draw only
+      // the crop-sized region: drawInRect applies the orientation, and offsetting
+      // the full image by -origin lands the wanted region in the small context.
+      // Integer offsets at 1:1 scale, so the pixels match a full redraw + crop.
+      UIGraphicsBeginImageContextWithOptions( cropRect.size, NO, 1.0 );
+      [image drawInRect:CGRectMake( -cropRect.origin.x, -cropRect.origin.y,
+                                    image.size.width, image.size.height )];
+      UIImage *croppedImage = UIGraphicsGetImageFromCurrentImageContext();
+      UIGraphicsEndImageContext();
+      if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
+    }
+    if ( !croppedRef ) { reject( @"CROP_FAILED", @"Crop failed", nil ); return; }
 
-  NSData *data = jpegDataFromCroppedImage( croppedRef,
-                                           srcMeta,
-                                           [width integerValue],
-                                           [height integerValue] );
-  CGImageRelease( croppedRef );
-  if ( !data ) { reject( @"CROP_FAILED", @"Could not encode cropped image", nil ); return; }
+    NSData *data = jpegDataFromCroppedImage( croppedRef,
+                                             srcMeta,
+                                             [width integerValue],
+                                             [height integerValue] );
+    CGImageRelease( croppedRef );
+    if ( !data ) { reject( @"CROP_FAILED", @"Could not encode cropped image", nil ); return; }
 
-  [[NSFileManager defaultManager]
-    createDirectoryAtPath:[output stringByDeletingLastPathComponent]
-    withIntermediateDirectories:YES attributes:nil error:nil];
-  if ( ![data writeToFile:output atomically:YES] ) {
-    reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
-  }
-  resolve( output );
+    [[NSFileManager defaultManager]
+      createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+      withIntermediateDirectories:YES attributes:nil error:nil];
+    if ( ![data writeToFile:output atomically:YES] ) {
+      reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
+    }
+    resolve( output );
+  } );
 }
 
 // Exports a PHAsset to a local file using PHAssetResourceManager, which writes
@@ -1300,18 +1355,63 @@ static UIImage *downscaledImageAtPath(
   return image;
 }
 
+// Pixel dimensions of an image file as it displays (EXIF orientation applied),
+// read out of the file's metadata without decoding it. React Native's
+// Image.getSize answers the same question by loading and decoding the whole
+// photo -- hundreds of milliseconds and a ~50MB allocation for a 12MP
+// original. In the crop editor's preload that decode ran before subject
+// detection could even start, so every photo was decoded twice before the
+// spinner could come down.
+RCT_EXPORT_METHOD( imageSize
+                  : ( NSString * )inputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+    NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    CGImageSourceRef src =
+      CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
+    if ( !src ) { reject( @"SIZE_FAILED", @"No image source for file", nil ); return; }
+    NSDictionary *props = (__bridge_transfer NSDictionary *)
+      CGImageSourceCopyPropertiesAtIndex( src, primaryImageIndex( src ), NULL );
+    CFRelease( src );
+    CGFloat width  = [props[(__bridge NSString *)kCGImagePropertyPixelWidth] doubleValue];
+    CGFloat height = [props[(__bridge NSString *)kCGImagePropertyPixelHeight] doubleValue];
+    if ( width <= 0 || height <= 0 ) {
+      reject( @"SIZE_FAILED", @"File declares no pixel dimensions", nil );
+      return;
+    }
+    // Orientations 5-8 lay the photo on its side, so what the file stores is
+    // the transpose of how it displays -- and how it displays is the frame
+    // every crop is expressed against.
+    NSInteger orientation =
+      [props[(__bridge NSString *)kCGImagePropertyOrientation] integerValue];
+    if ( orientation >= 5 && orientation <= 8 ) {
+      CGFloat sideways = width;
+      width  = height;
+      height = sideways;
+    }
+    resolve( @{ @"width": @( width ), @"height": @( height ) } );
+  } );
+}
+
 RCT_EXPORT_METHOD( detectSubjectBounds
                   : ( NSString * )inputPath resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  UIImage  *image = downscaledImageAtPath( input, 1024, NULL )
-    ?: [UIImage imageWithContentsOfFile:input];
-  if ( !image ) { resolve( [NSNull null] ); return; }
+  // Off the shared method queue: this is what the crop editor's spinner
+  // waits on, so it must not queue behind a crop write or a grid's
+  // thumbnails. See heavyImageQueue above.
+  dispatch_async( subjectDetectionQueue( ), ^{
+    NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    UIImage  *image = downscaledImageAtPath( input, 1024, NULL )
+      ?: [UIImage imageWithContentsOfFile:input];
+    if ( !image ) { resolve( [NSNull null] ); return; }
 
-  NSDictionary *bounds = detectSubjectBoundsForImage( image );
-  resolve( bounds ?: [NSNull null] );
+    NSDictionary *bounds = detectSubjectBoundsForImage( image );
+    resolve( bounds ?: [NSNull null] );
+  } );
 }
 
 // Whether JPEG data is something a decoder will actually open, checked the
@@ -1594,114 +1694,119 @@ RCT_EXPORT_METHOD( createThumbnail
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
-  NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  CGFloat   maxDim = [maxPixel floatValue];
+  // Off the shared method queue: a grid can ask for hundreds of these,
+  // and they used to delay every other call to this module. See
+  // heavyImageQueue above.
+  dispatch_async( thumbnailQueue( ), ^{
+    NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    CGFloat   maxDim = [maxPixel floatValue];
 
-  void (^writeThumbnail)( UIImage * ) = ^( UIImage *image ) {
-    if ( !image ) { reject( @"THUMBNAIL_FAILED", @"Could not load image", nil ); return; }
-    NSString *encodeFailure = nil;
-    NSData   *data          = encodedThumbnailData( image, &encodeFailure );
-    if ( !data ) {
-      reject( @"THUMBNAIL_FAILED", encodeFailure ?: @"Could not encode thumbnail", nil );
+    void (^writeThumbnail)( UIImage * ) = ^( UIImage *image ) {
+      if ( !image ) { reject( @"THUMBNAIL_FAILED", @"Could not load image", nil ); return; }
+      NSString *encodeFailure = nil;
+      NSData   *data          = encodedThumbnailData( image, &encodeFailure );
+      if ( !data ) {
+        reject( @"THUMBNAIL_FAILED", encodeFailure ?: @"Could not encode thumbnail", nil );
+        return;
+      }
+      [[NSFileManager defaultManager]
+        createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+        withIntermediateDirectories:YES attributes:nil error:nil];
+      if ( ![data writeToFile:output atomically:YES] ) {
+        reject( @"THUMBNAIL_FAILED", @"Could not write thumbnail", nil ); return;
+      }
+      resolve( [NSString stringWithFormat:@"file://%@", output] );
+    };
+
+    if ( [inputPath hasPrefix:@"ph://"] ) {
+      NSString *localId = [inputPath substringFromIndex:5];
+      PHAsset *asset =
+        [PHAsset fetchAssetsWithLocalIdentifiers:@[localId] options:nil].firstObject;
+      if ( !asset ) { reject( @"THUMBNAIL_FAILED", @"PHAsset not found", nil ); return; }
+
+      // A grid tile asks for a few hundred px and wants it fast; the Group
+      // Photos crop overlay asks for this same method at a size comfortably
+      // above any camera photo (see FULL_RESOLUTION_MAX_PIXEL in
+      // GroupPhotoCropImage.tsx) because it wants the actual original detail to
+      // crop into. Fast/Opportunistic optimizes for speed over matching the
+      // requested size, so at that size it was handing back whatever smaller
+      // cached preview Photos already had -- the crop overlay's "full
+      // resolution" request was silently getting a soft, low-quality rendition
+      // no matter how high the JS-side cap was raised.
+      BOOL highQualityDecode = maxDim >= kFileHighQualityMinPixel;
+
+      PHImageRequestOptions *opts = [[PHImageRequestOptions alloc] init];
+      // Never wait on iCloud for a grid tile. Asking for the high-quality format
+      // over the network downloads the full-resolution original, which for an
+      // offloaded asset takes tens of seconds — and since a handful of these
+      // occupy every slot of the generation queue, a screen full of old photos
+      // (Delete Unfaved is nothing but old photos) simply never renders. The
+      // locally cached rendition Photos keeps for offloaded assets is what the
+      // Photos app itself shows in its grid, and it is plenty for a tile.
+      //
+      // The crop overlay is the opposite case: it's one deliberate request the
+      // user is actively waiting on to frame a crop, not one of hundreds in a
+      // scroll list, and ResizeModeExact/HighQualityFormat can't produce real
+      // full-resolution detail from a local rendition that was never that big
+      // to begin with -- for an optimized/offloaded asset, disallowing network
+      // access there just serves the same soft preview the tile path uses.
+      opts.networkAccessAllowed = highQualityDecode;
+      opts.deliveryMode         = highQualityDecode
+        ? PHImageRequestOptionsDeliveryModeHighQualityFormat
+        : PHImageRequestOptionsDeliveryModeOpportunistic;
+      opts.resizeMode           = highQualityDecode
+        ? PHImageRequestOptionsResizeModeExact
+        : PHImageRequestOptionsResizeModeFast;
+
+      __block BOOL     handled       = NO;
+      __block UIImage *degradedImage = nil;
+      [[PHImageManager defaultManager]
+        requestImageForAsset:asset
+        targetSize:CGSizeMake( maxDim, maxDim )
+        // Always the whole frame. AspectFill crops to a square, and the Group
+        // Photos crop overlay builds a cell out of this same tile-sized file: it
+        // measures it for the photo's aspect ratio, detects the subject in it,
+        // and draws it under the crop box. A square-cropped thumbnail makes every
+        // one of those describe a different frame from the original the crop is
+        // finally applied to, and a cell framed at the wrong aspect ratio is
+        // translated off by the difference -- far enough, for a tightly framed
+        // subject, to leave nothing on screen but the overlay's black backdrop.
+        // A square grid tile is unaffected: it draws its thumbnail with
+        // resizeMode cover, which crops to the square at draw time, and the
+        // uncropped frame is fewer pixels rather than more.
+        contentMode:PHImageContentModeAspectFit
+        options:opts
+        resultHandler:^( UIImage *result, NSDictionary *info ) {
+          if ( handled ) return;
+          // Opportunistic delivery calls back twice when the full-quality
+          // rendition isn't loaded: a cached low-res thumbnail first, then the
+          // real one. Hold the low-res one and prefer whatever follows, but fall
+          // back to it if nothing does — that's an offloaded asset, whose
+          // original isn't on this device and isn't worth fetching for a tile.
+          if ( [info[PHImageResultIsDegradedKey] boolValue] ) {
+            if ( result ) degradedImage = result;
+            return;
+          }
+          handled = YES;
+          writeThumbnail( result ?: degradedImage );
+        }];
       return;
     }
-    [[NSFileManager defaultManager]
-      createDirectoryAtPath:[output stringByDeletingLastPathComponent]
-      withIntermediateDirectories:YES attributes:nil error:nil];
-    if ( ![data writeToFile:output atomically:YES] ) {
-      reject( @"THUMBNAIL_FAILED", @"Could not write thumbnail", nil ); return;
+
+    NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSString *failureReason = nil;
+    UIImage  *image = downscaledImageAtPath( input, maxDim, &failureReason );
+    if ( !image ) {
+      // The file's size distinguishes a file that never finished copying from a
+      // whole one this build simply cannot decode.
+      unsigned long long bytes = [[[NSFileManager defaultManager]
+        attributesOfItemAtPath:input error:nil] fileSize];
+      reject( @"THUMBNAIL_FAILED", [NSString stringWithFormat:@"%@, %llu bytes",
+        failureReason ?: @"Could not load image", bytes], nil );
+      return;
     }
-    resolve( [NSString stringWithFormat:@"file://%@", output] );
-  };
-
-  if ( [inputPath hasPrefix:@"ph://"] ) {
-    NSString *localId = [inputPath substringFromIndex:5];
-    PHAsset *asset =
-      [PHAsset fetchAssetsWithLocalIdentifiers:@[localId] options:nil].firstObject;
-    if ( !asset ) { reject( @"THUMBNAIL_FAILED", @"PHAsset not found", nil ); return; }
-
-    // A grid tile asks for a few hundred px and wants it fast; the Group
-    // Photos crop overlay asks for this same method at a size comfortably
-    // above any camera photo (see FULL_RESOLUTION_MAX_PIXEL in
-    // GroupPhotoCropImage.tsx) because it wants the actual original detail to
-    // crop into. Fast/Opportunistic optimizes for speed over matching the
-    // requested size, so at that size it was handing back whatever smaller
-    // cached preview Photos already had -- the crop overlay's "full
-    // resolution" request was silently getting a soft, low-quality rendition
-    // no matter how high the JS-side cap was raised.
-    BOOL highQualityDecode = maxDim >= kFileHighQualityMinPixel;
-
-    PHImageRequestOptions *opts = [[PHImageRequestOptions alloc] init];
-    // Never wait on iCloud for a grid tile. Asking for the high-quality format
-    // over the network downloads the full-resolution original, which for an
-    // offloaded asset takes tens of seconds — and since a handful of these
-    // occupy every slot of the generation queue, a screen full of old photos
-    // (Delete Unfaved is nothing but old photos) simply never renders. The
-    // locally cached rendition Photos keeps for offloaded assets is what the
-    // Photos app itself shows in its grid, and it is plenty for a tile.
-    //
-    // The crop overlay is the opposite case: it's one deliberate request the
-    // user is actively waiting on to frame a crop, not one of hundreds in a
-    // scroll list, and ResizeModeExact/HighQualityFormat can't produce real
-    // full-resolution detail from a local rendition that was never that big
-    // to begin with -- for an optimized/offloaded asset, disallowing network
-    // access there just serves the same soft preview the tile path uses.
-    opts.networkAccessAllowed = highQualityDecode;
-    opts.deliveryMode         = highQualityDecode
-      ? PHImageRequestOptionsDeliveryModeHighQualityFormat
-      : PHImageRequestOptionsDeliveryModeOpportunistic;
-    opts.resizeMode           = highQualityDecode
-      ? PHImageRequestOptionsResizeModeExact
-      : PHImageRequestOptionsResizeModeFast;
-
-    __block BOOL     handled       = NO;
-    __block UIImage *degradedImage = nil;
-    [[PHImageManager defaultManager]
-      requestImageForAsset:asset
-      targetSize:CGSizeMake( maxDim, maxDim )
-      // Always the whole frame. AspectFill crops to a square, and the Group
-      // Photos crop overlay builds a cell out of this same tile-sized file: it
-      // measures it for the photo's aspect ratio, detects the subject in it,
-      // and draws it under the crop box. A square-cropped thumbnail makes every
-      // one of those describe a different frame from the original the crop is
-      // finally applied to, and a cell framed at the wrong aspect ratio is
-      // translated off by the difference -- far enough, for a tightly framed
-      // subject, to leave nothing on screen but the overlay's black backdrop.
-      // A square grid tile is unaffected: it draws its thumbnail with
-      // resizeMode cover, which crops to the square at draw time, and the
-      // uncropped frame is fewer pixels rather than more.
-      contentMode:PHImageContentModeAspectFit
-      options:opts
-      resultHandler:^( UIImage *result, NSDictionary *info ) {
-        if ( handled ) return;
-        // Opportunistic delivery calls back twice when the full-quality
-        // rendition isn't loaded: a cached low-res thumbnail first, then the
-        // real one. Hold the low-res one and prefer whatever follows, but fall
-        // back to it if nothing does — that's an offloaded asset, whose
-        // original isn't on this device and isn't worth fetching for a tile.
-        if ( [info[PHImageResultIsDegradedKey] boolValue] ) {
-          if ( result ) degradedImage = result;
-          return;
-        }
-        handled = YES;
-        writeThumbnail( result ?: degradedImage );
-      }];
-    return;
-  }
-
-  NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-  NSString *failureReason = nil;
-  UIImage  *image = downscaledImageAtPath( input, maxDim, &failureReason );
-  if ( !image ) {
-    // The file's size distinguishes a file that never finished copying from a
-    // whole one this build simply cannot decode.
-    unsigned long long bytes = [[[NSFileManager defaultManager]
-      attributesOfItemAtPath:input error:nil] fileSize];
-    reject( @"THUMBNAIL_FAILED", [NSString stringWithFormat:@"%@, %llu bytes",
-      failureReason ?: @"Could not load image", bytes], nil );
-    return;
-  }
-  writeThumbnail( image );
+    writeThumbnail( image );
+  } );
 }
 
 // Multiplies every pixel by the brightness gain (scaled down to fit within
