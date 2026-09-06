@@ -384,25 +384,16 @@ const GroupPhotosContainer = ( ): Node => {
     // kept, so it stays hidden from the picker and still turns up in Photo
     // Cleanup rather than quietly coming back.
     //
-    // The photos still in the batch are indexed as saved, so "Hide Saved"
-    // hides them from the picker from now on: discarding a batch is the user
-    // saying they're done with these photos, and offering them again on the
-    // next import is exactly what they just declined. Recorded as saved only,
-    // never as removed — nothing here was deleted or staged for deletion, so
-    // Photo Cleanup must not offer them.
-    //
-    // Read from the store rather than the render closure, which is stale if a
-    // background crop landed after the last render.
-    recordUploadedDevicePhotoUris(
-      realm,
-      useStore.getState( ).groupedPhotos.flatMap( devicePhotoUrisFromGroup ),
-    );
+    // The photos still in the batch are left alone. Nothing was saved, so
+    // indexing them as saved would hide photos from the picker that the user
+    // still has, and "discard" is the user backing out of this import, not a
+    // decision about the photos themselves.
 
     // Resets the observation flow slice: groupedPhotos, photoLibraryUris,
     // pendingGroupPhotoDeletionUris, and the rest of the import state. The
     // staged device photos are deliberately not deleted.
     exitObservationFlow( );
-  }, [exitObservationFlow, realm] );
+  }, [exitObservationFlow] );
 
   const navBasedOnUserSettings = async ( ) => {
     // The import button is disabled while photos are still being copied, but a

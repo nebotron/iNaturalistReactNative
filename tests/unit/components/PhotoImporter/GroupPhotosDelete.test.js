@@ -90,10 +90,10 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
     expect( getRemovedGroupPhotoUris( ) ).not.toContain( "ph://DEVICE-2" );
   } );
 
-  // Discarding is the user saying they're done with these photos, so the
-  // picker's "Hide Saved" toggle stops offering them — but nothing was deleted
-  // or staged for deletion, so Photo Cleanup must not offer them either.
-  it( "indexes a discarded batch as saved without staging it for cleanup", async ( ) => {
+  // Discarding saves nothing, so the photos still in the batch are left
+  // exactly as they were: still offered by the picker, and not staged for
+  // Photo Cleanup either, since nothing was deleted.
+  it( "leaves a discarded batch neither saved nor staged for cleanup", async ( ) => {
     useStore.setState( {
       groupedPhotos: [{
         photos: [{
@@ -109,7 +109,7 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
 
     expect(
       getPreviouslyUploadedDevicePhotoUrisSet( global.realm ),
-    ).toContain( "ph://DEVICE-1" );
+    ).not.toContain( "ph://DEVICE-1" );
     expect( getRemovedGroupPhotoUris( ) ).not.toContain( "ph://DEVICE-1" );
   } );
 } );
