@@ -1,6 +1,6 @@
 import { readDir } from "@dr.pogodin/react-native-fs";
-import { photoLibraryPhotosPath } from "appConstants/paths";
-import { clearGalleryPhotos } from "sharedHelpers/clearCaches";
+import { photoLibraryPhotosPath, photoUploadPath } from "appConstants/paths";
+import { clearGalleryPhotos, clearSyncedMediaForUpload } from "sharedHelpers/clearCaches";
 import { unlink } from "sharedHelpers/util";
 import useStore from "stores/useStore";
 
@@ -8,6 +8,7 @@ jest.mock( "@dr.pogodin/react-native-fs", ( ) => ( {
   DocumentDirectoryPath: "/documents",
   exists: jest.fn( ( ) => Promise.resolve( true ) ),
   readDir: jest.fn( ( ) => Promise.resolve( [] ) ),
+  stat: jest.fn( ( ) => Promise.resolve( { size: 1, mtime: 0 } ) ),
 } ) );
 
 jest.mock( "sharedHelpers/util", ( ) => ( {
@@ -48,5 +49,45 @@ describe( "clearGalleryPhotos", ( ) => {
     expect( unlink ).toHaveBeenCalledTimes( 1 );
     expect( unlink ).toHaveBeenCalledWith( `${photoLibraryPhotosPath}/stale.jpg` );
     expect( unlink ).not.toHaveBeenCalledWith( `${photoLibraryPhotosPath}/keep.jpg` );
+  } );
+} );
+
+describe( "clearSyncedMediaForUpload", ( ) => {
+  const realm = {
+    objects: ( ) => ( { filtered: ( ) => [] } ),
+  };
+
+  const uploadFile = name => ( { name, path: `${photoUploadPath}/${name}` } );
+
+  beforeEach( ( ) => {
+    jest.clearAllMocks( );
+    useStore.setState( { groupedPhotos: [] } );
+  } );
+
+  // Group Photos crops are written to photoUploads but don't reach Realm until
+  // the import finishes, so nothing in the Realm query protects them
+  it( "preserves crops of an in-progress Group Photos import", async ( ) => {
+    useStore.setState( {
+      groupedPhotos: [
+        {
+          photos: [{
+            image: {
+              uri: `file://${photoUploadPath}/crop.jpg`,
+              cropOriginalUri: `file://${photoUploadPath}/original-crop-original.jpg`,
+            },
+          }],
+        },
+      ],
+    } );
+    readDir.mockResolvedValueOnce( [
+      uploadFile( "crop.jpg" ),
+      uploadFile( "original-crop-original.jpg" ),
+      uploadFile( "stale.jpg" ),
+    ] );
+
+    await clearSyncedMediaForUpload( realm );
+
+    expect( unlink ).toHaveBeenCalledTimes( 1 );
+    expect( unlink ).toHaveBeenCalledWith( `${photoUploadPath}/stale.jpg` );
   } );
 } );

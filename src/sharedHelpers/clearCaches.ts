@@ -37,10 +37,12 @@ const clearRotatedOriginalPhotosDirectory = async ( ) => {
   await removeAllFilesFromDirectory( rotatedOriginalPhotosPath );
 };
 
-// Gallery photos imported for in-progress Group Photos work are persisted in
-// the Zustand store so grouping survives an app kill, but the underlying image
-// files live in photoLibraryPhotosPath. Collect the file names still referenced
-// by groupedPhotos so we don't delete the images out from under saved progress.
+// Photos for in-progress Group Photos work are persisted in the Zustand store
+// so grouping survives an app kill, but the underlying image files live on
+// disk: the imported copies in photoLibraryPhotosPath, and anything cropped
+// during the import (plus the untouched original preserved for re-cropping) in
+// photoUploadPath. Collect the file names still referenced by groupedPhotos so
+// we don't delete the images out from under saved progress.
 const groupedPhotoFileNamesToKeep = ( ): string[] => {
   // The store types groupedPhotos loosely; at runtime each photo is
   // { image: { uri, cropOriginalUri } }, so read it through that shape.
@@ -101,11 +103,15 @@ const clearSyncedMediaForUpload = async realm => {
     .filter( Boolean );
   await removeSyncedFilesFromDirectory(
     photoUploadPath,
+    // Group Photos crops live here but aren't in Realm until the import
+    // finishes, so nothing above accounts for them: without this a restart
+    // partway through cropping an import deletes every crop already made, and
+    // the grid comes back with cells that can never load.
     // .filter( Boolean ) ensures this array has no undefined members. IDK
     //  why the TS compiler can't figure that out
     //  eslint-disable-next-line @typescript-eslint/ban-ts-comment
     // @ts-ignore
-    unsyncedPhotoFileNames,
+    unsyncedPhotoFileNames.concat( groupedPhotoFileNamesToKeep( ) ),
   );
 
   // Clean out sounds
