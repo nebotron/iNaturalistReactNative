@@ -10,6 +10,7 @@ const DISPLAY_URI = "file:///local_1.jpg";
 
 const mockPreloadResult = {
   localUri: DISPLAY_URI,
+  displayUri: DISPLAY_URI,
   size: { w: 100, h: 100 },
   crop: {
     x: 0, y: 0, w: 1, h: 1,

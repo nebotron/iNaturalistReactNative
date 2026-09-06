@@ -159,6 +159,10 @@ const ImageCropEditor = ( ) => {
   }, [context, currentObservation, groupedPhotos, imageUri, observationPhotoUuid] );
 
   const [localImageUri, setLocalImageUri] = useState<string | null>( null );
+  // What the cropper draws: the display-sized file the preload decoded out of
+  // the original. The crop is still applied to localImageUri, and both describe
+  // the same frame, so every transform below is unaffected by the difference.
+  const [displayImageUri, setDisplayImageUri] = useState<string | null>( null );
   const [imageSize, setImageSize] = useState<{ w: number; h: number } | null>( null );
   const [detectedCrop, setDetectedCrop] = useState<NormalizedCrop | null>( null );
   const [savedInitialCrop, setSavedInitialCrop] = useState<NormalizedCrop | null>( null );
@@ -184,6 +188,7 @@ const ImageCropEditor = ( ) => {
     shownFromCache.current = !!cached;
     const { existingSavedCrop } = resolveCropContext( );
     setLocalImageUri( cached?.localUri ?? null );
+    setDisplayImageUri( cached?.displayUri ?? null );
     setImageSize( cached?.size ?? null );
     setSavedInitialCrop( cached
       ? existingSavedCrop
@@ -220,8 +225,7 @@ const ImageCropEditor = ( ) => {
         ? shownAt.current - timing.finishedAt
         : null,
       exportMs: timing?.exportMs ?? null,
-      sizeMs: timing?.sizeMs ?? null,
-      cropMs: timing?.cropMs ?? null,
+      prepareMs: timing?.prepareMs ?? null,
     } );
   }, [imageUri] );
 
@@ -264,6 +268,7 @@ const ImageCropEditor = ( ) => {
     existingSavedCrop: NormalizedCrop | null,
   ) => {
     setLocalImageUri( result.localUri );
+    setDisplayImageUri( result.displayUri );
     setImageSize( result.size );
     if ( existingSavedCrop ) {
       setSavedInitialCrop( existingSavedCrop );
@@ -309,6 +314,7 @@ const ImageCropEditor = ( ) => {
         if ( !cancelled ) {
           logger.error( "Failed to load an image to crop", error );
           setLocalImageUri( null );
+          setDisplayImageUri( null );
         }
       } finally {
         if ( !cancelled ) {
@@ -357,7 +363,7 @@ const ImageCropEditor = ( ) => {
       }
       const uris = upcomingUris
         .slice( 0, DECODE_LOOKAHEAD )
-        .map( uri => preloadCache.get( uri )?.localUri )
+        .map( uri => preloadCache.get( uri )?.displayUri )
         .filter( ( uri ): uri is string => !!uri );
       setWarmUrisTo( uris );
     };
@@ -648,7 +654,7 @@ const ImageCropEditor = ( ) => {
 
   const activeInitialCrop = savedInitialCrop ?? detectedCrop;
 
-  if ( loadingSource || !localImageUri || !imageSize || !activeInitialCrop ) {
+  if ( loadingSource || !localImageUri || !displayImageUri || !imageSize || !activeInitialCrop ) {
     return (
       <View className="flex-1 bg-black">
         <View className="absolute top-8 left-0">
@@ -663,7 +669,7 @@ const ImageCropEditor = ( ) => {
 
   return (
     <ImageCropView
-      sourceUri={localImageUri}
+      sourceUri={displayImageUri}
       imageWidth={imageSize.w}
       imageHeight={imageSize.h}
       initialCrop={activeInitialCrop}

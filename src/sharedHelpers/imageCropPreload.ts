@@ -1,8 +1,7 @@
 import { Image as RNImage } from "react-native";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
-import getCropForUri from "sharedHelpers/getCropForUri";
-import imageFileSize from "sharedHelpers/imageFileSize";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import prepareCropSource from "sharedHelpers/prepareCropSource";
 
 // What each stage of a preload cost, and when it finished. The wait between
 // photos in a bulk crop is whatever is left of this when the user advances, so
@@ -10,13 +9,15 @@ import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 // opaque number.
 export interface PreloadTiming {
   exportMs: number;
-  sizeMs: number;
-  cropMs: number;
+  prepareMs: number;
   finishedAt: number;
 }
 
 export interface PreloadResult {
+  // The untouched original, which is what a crop is finally applied to.
   localUri: string;
+  // The display-sized file decoded from it, which is what the cropper draws.
+  displayUri: string;
   size: { w: number; h: number };
   crop: NormalizedCrop;
   timing: PreloadTiming;
@@ -36,26 +37,25 @@ async function loadImageData(
   const startedAt = Date.now( );
   const resolvedUri = await ensureLocalImageForCrop( cropSourceUri, "original" );
   const exportedAt = Date.now( );
-  const size = await imageFileSize( resolvedUri );
-  const sizedAt = Date.now( );
-  if ( !size ) {
+  // One decode of the photo, off the screen the user is still cropping on,
+  // producing the size, the framing and the file the cropper will draw.
+  const prepared = await prepareCropSource( imageUri, resolvedUri, existingSavedCrop );
+  if ( !prepared ) {
     return null;
   }
   // Warm React Native's image pipeline for the file the cropper is about to
-  // display, so its <Image> doesn't start a cold read + decode of a full-size
-  // photo at the moment we show it. Fire-and-forget: it can only save time.
-  RNImage.prefetch?.( resolvedUri )?.catch?.( ( ) => {} );
-  const crop = existingSavedCrop
-    ?? await getCropForUri( imageUri, resolvedUri, size.w, size.h );
+  // display, so its <Image> doesn't start a cold read + decode at the moment we
+  // show it. Fire-and-forget: it can only save time.
+  RNImage.prefetch?.( prepared.displayUri )?.catch?.( ( ) => {} );
   const finishedAt = Date.now( );
   return {
     localUri: resolvedUri,
-    size,
-    crop,
+    displayUri: prepared.displayUri,
+    size: prepared.size,
+    crop: prepared.crop,
     timing: {
       exportMs: exportedAt - startedAt,
-      sizeMs: sizedAt - exportedAt,
-      cropMs: finishedAt - sizedAt,
+      prepareMs: finishedAt - exportedAt,
       finishedAt,
     },
   };

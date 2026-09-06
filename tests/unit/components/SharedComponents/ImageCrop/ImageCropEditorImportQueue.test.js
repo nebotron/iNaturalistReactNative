@@ -12,6 +12,7 @@ const ALREADY_IN_GRID_URI = "file:///imported_0.jpg";
 
 const mockPreloadResult = uri => ( {
   localUri: uri,
+  displayUri: uri,
   size: { w: 100, h: 100 },
   crop: {
     x: 0, y: 0, w: 1, h: 1,

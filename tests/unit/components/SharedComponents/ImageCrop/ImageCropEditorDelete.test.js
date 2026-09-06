@@ -37,6 +37,7 @@ describe( "ImageCropEditor delete from Group Photos", ( ) => {
     // Seeds the editor so it renders the cropper instead of the spinner
     preloadCache.set( DISPLAY_URI, {
       localUri: DISPLAY_URI,
+      displayUri: DISPLAY_URI,
       size: { w: 100, h: 100 },
       crop: {
         x: 0, y: 0, width: 1, height: 1,

@@ -15,6 +15,17 @@ interface ImageCropperModule {
   detectSubjectBounds: ( inputPath: string ) => Promise<NormalizedBounds | null>;
 }
 
+// The crop the detector's bounds describe, or the default framing when it
+// found nothing. Shared with prepareCropSource, which gets its bounds from the
+// same detector through a different native call.
+export const subjectCropFromBounds = (
+  bounds: NormalizedBounds | null,
+  imageWidth: number,
+  imageHeight: number,
+): NormalizedCrop => ( bounds
+  ? subjectBoundsToNormalizedCrop( bounds, imageWidth, imageHeight, SUBJECT_DETECTION_PADDING )
+  : defaultSquareCrop( imageWidth, imageHeight ) );
+
 const detectSubjectInImage = async (
   imageUri: string,
   imageWidth: number,
@@ -27,15 +38,7 @@ const detectSubjectInImage = async (
 
   try {
     const bounds = await imageCropper.detectSubjectBounds( stripFilePrefix( imageUri ) );
-    if ( !bounds ) {
-      return defaultSquareCrop( imageWidth, imageHeight );
-    }
-    return subjectBoundsToNormalizedCrop(
-      bounds,
-      imageWidth,
-      imageHeight,
-      SUBJECT_DETECTION_PADDING,
-    );
+    return subjectCropFromBounds( bounds, imageWidth, imageHeight );
   } catch ( error ) {
     logger.warn( "Subject detection failed, using default crop", error );
     return defaultSquareCrop( imageWidth, imageHeight );

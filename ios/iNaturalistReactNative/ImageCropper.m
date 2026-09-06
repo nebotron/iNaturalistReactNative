@@ -638,6 +638,11 @@ static void applyBrightnessMultiplyBuffer( unsigned char *raw, int pixelCount, f
 
 // ─── Public detection entry point ────────────────────────────────────────────
 
+// Longest side the detector reads. Its own preprocessing letterboxes into a
+// 640px square, so a larger input only costs a bigger decode; this is the size
+// the detector's bounds were tuned against.
+static const CGFloat kSubjectDetectionMaxPixel = 1024;
+
 // Try YOLO; fall back to Vision attention saliency when nothing is detected.
 static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
 {
@@ -1405,7 +1410,7 @@ RCT_EXPORT_METHOD( detectSubjectBounds
   // thumbnails. See heavyImageQueue above.
   dispatch_async( subjectDetectionQueue( ), ^{
     NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-    UIImage  *image = downscaledImageAtPath( input, 1024, NULL )
+    UIImage  *image = downscaledImageAtPath( input, kSubjectDetectionMaxPixel, NULL )
       ?: [UIImage imageWithContentsOfFile:input];
     if ( !image ) { resolve( [NSNull null] ); return; }
 
@@ -1806,6 +1811,76 @@ RCT_EXPORT_METHOD( createThumbnail
       return;
     }
     writeThumbnail( image );
+  } );
+}
+
+// Everything the crop editor needs from a photo, out of a single decode of it:
+// the pixel dimensions a decoder actually produces, a display-sized JPEG for
+// React Native to draw, and the subject bounds. The editor used to take these
+// from three separate decodes of the same file -- Image.getSize, then
+// detectSubjectBounds, then RN's own <Image> -- which for the 27MB CR3s a bulk
+// crop is made of was most of the wait between photos.
+//
+// The dimensions are the ones [UIImage imageWithContentsOfFile:] reports, which
+// is the same load cropImage does, so they describe the pixel space the crop is
+// finally applied in. For a camera raw that is the preview the camera embedded,
+// several times smaller than the sensor size the file's metadata declares.
+RCT_EXPORT_METHOD( prepareCropSource
+                  : ( NSString * )inputPath maxPixel
+                  : ( nonnull NSNumber * )maxPixel outputPath
+                  : ( NSString * )outputPath detectSubject
+                  : ( nonnull NSNumber * )detectSubject resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( subjectDetectionQueue( ), ^{
+    NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+
+    // Lazy: this reads the header, and the draw below is what reads the pixels.
+    UIImage *image = [UIImage imageWithContentsOfFile:input];
+    if ( !image || image.size.width <= 0 || image.size.height <= 0 ) {
+      reject( @"PREPARE_FAILED", @"Could not load image", nil );
+      return;
+    }
+    CGFloat width  = image.size.width  * image.scale;
+    CGFloat height = image.size.height * image.scale;
+
+    // The one decode. What comes out of it is both what gets displayed and
+    // what the detector reads, so nothing downstream opens the file again.
+    UIImage *display = clampToMaxPixel( image, [maxPixel floatValue] );
+    if ( !display ) {
+      reject( @"PREPARE_FAILED", @"Could not draw image", nil );
+      return;
+    }
+
+    NSString *encodeFailure = nil;
+    NSData   *data          = encodedThumbnailData( display, &encodeFailure );
+    if ( !data ) {
+      reject( @"PREPARE_FAILED", encodeFailure ?: @"Could not encode display image", nil );
+      return;
+    }
+    [[NSFileManager defaultManager]
+      createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+      withIntermediateDirectories:YES attributes:nil error:nil];
+    if ( ![data writeToFile:output atomically:YES] ) {
+      reject( @"PREPARE_FAILED", @"Could not write display image", nil );
+      return;
+    }
+
+    // Scaling the image already in hand, rather than reading the file again at
+    // detection size: the bounds stay the ones the detector was tuned for and
+    // the second read is gone.
+    NSDictionary *bounds = [detectSubject boolValue]
+      ? detectSubjectBoundsForImage( clampToMaxPixel( display, kSubjectDetectionMaxPixel ) )
+      : nil;
+
+    resolve( @{
+      @"displayUri": [NSString stringWithFormat:@"file://%@", output],
+      @"width":      @( width ),
+      @"height":     @( height ),
+      @"bounds":     bounds ?: [NSNull null],
+    } );
   } );
 }
 
