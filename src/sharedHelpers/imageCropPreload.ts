@@ -1,6 +1,7 @@
 import { Image as RNImage } from "react-native";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import getCropForUri from "sharedHelpers/getCropForUri";
+import imageFileSize from "sharedHelpers/imageFileSize";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 
 export interface PreloadResult {
@@ -21,13 +22,7 @@ async function loadImageData(
   existingSavedCrop: NormalizedCrop | null,
 ): Promise<PreloadResult | null> {
   const resolvedUri = await ensureLocalImageForCrop( cropSourceUri, "original" );
-  const size = await new Promise<{ w: number; h: number } | null>( resolve => {
-    RNImage.getSize(
-      resolvedUri,
-      ( w, h ) => resolve( { w, h } ),
-      ( ) => resolve( null ),
-    );
-  } );
+  const size = await imageFileSize( resolvedUri );
   if ( !size ) {
     return null;
   }
