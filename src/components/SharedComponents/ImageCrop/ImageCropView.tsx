@@ -112,6 +112,10 @@ interface Props {
   // keyed by url + size + scale + resize mode, so a warm-up at a different size
   // would be decoded all over again.
   warmUris?: string[];
+  // How long this photo's file took to decode and paint, reported once it has.
+  // Part of what a bulk crop waits on between photos, and the only part that
+  // happens after the editor already has everything it needs.
+  onDecoded?: ( ms: number ) => void;
   onConfirm: ( crop: NormalizedCrop ) => void | Promise<void>;
   onCropChange?: ( crop: NormalizedCrop ) => void;
   onDelete?: () => void;
@@ -125,6 +129,7 @@ const ImageCropView = ( {
   labels,
   brightnessLogKey,
   warmUris,
+  onDecoded,
   onConfirm,
   onCropChange,
   onDelete,
@@ -148,7 +153,16 @@ const ImageCropView = ( {
   // that can't be decoded doesn't spin forever.
   const [loadedUri, setLoadedUri] = useState<string | null>( null );
   const imageReady = loadedUri === sourceUri;
-  const handleImageLoad = useCallback( ( ) => setLoadedUri( sourceUri ), [sourceUri] );
+  // When this photo became the one to draw, so the decode it then waits on can
+  // be reported separately from the load that preceded it.
+  const shownAt = useRef( { uri: "", at: 0 } );
+  if ( shownAt.current.uri !== sourceUri ) {
+    shownAt.current = { uri: sourceUri, at: Date.now( ) };
+  }
+  const handleImageLoad = useCallback( ( ) => {
+    setLoadedUri( sourceUri );
+    onDecoded?.( Date.now( ) - shownAt.current.at );
+  }, [onDecoded, sourceUri] );
 
   // Which photo has been loading long enough to deserve a spinner. Recorded per
   // uri rather than as a flag so advancing to the next photo starts the delay

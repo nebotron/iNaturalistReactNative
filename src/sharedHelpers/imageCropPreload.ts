@@ -4,10 +4,22 @@ import getCropForUri from "sharedHelpers/getCropForUri";
 import imageFileSize from "sharedHelpers/imageFileSize";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 
+// What each stage of a preload cost, and when it finished. The wait between
+// photos in a bulk crop is whatever is left of this when the user advances, so
+// the editor reports it (crop_photo_slow) rather than leaving the wait as one
+// opaque number.
+export interface PreloadTiming {
+  exportMs: number;
+  sizeMs: number;
+  cropMs: number;
+  finishedAt: number;
+}
+
 export interface PreloadResult {
   localUri: string;
   size: { w: number; h: number };
   crop: NormalizedCrop;
+  timing: PreloadTiming;
 }
 
 // Module-level cache so preloaded data survives navigation.replace cycles
@@ -21,8 +33,11 @@ async function loadImageData(
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
 ): Promise<PreloadResult | null> {
+  const startedAt = Date.now( );
   const resolvedUri = await ensureLocalImageForCrop( cropSourceUri, "original" );
+  const exportedAt = Date.now( );
   const size = await imageFileSize( resolvedUri );
+  const sizedAt = Date.now( );
   if ( !size ) {
     return null;
   }
@@ -32,7 +47,18 @@ async function loadImageData(
   RNImage.prefetch?.( resolvedUri )?.catch?.( ( ) => {} );
   const crop = existingSavedCrop
     ?? await getCropForUri( imageUri, resolvedUri, size.w, size.h );
-  return { localUri: resolvedUri, size, crop };
+  const finishedAt = Date.now( );
+  return {
+    localUri: resolvedUri,
+    size,
+    crop,
+    timing: {
+      exportMs: exportedAt - startedAt,
+      sizeMs: sizedAt - exportedAt,
+      cropMs: finishedAt - sizedAt,
+      finishedAt,
+    },
+  };
 }
 
 // Returns a promise resolving to the preload result. Reuses the module-level

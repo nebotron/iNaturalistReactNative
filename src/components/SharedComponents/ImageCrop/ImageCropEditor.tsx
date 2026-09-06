@@ -16,6 +16,7 @@ import React, {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -57,6 +58,10 @@ const PRELOAD_LOOKAHEAD = 3;
 // Fewer than the lookahead: a decoded photo sits in memory, and one photo of
 // slack is enough to cover the time it takes to crop the current one.
 const DECODE_LOOKAHEAD = 2;
+// Above this, the wait for a photo is long enough for the user to see a
+// spinner, and worth a line in the app log saying which stage it went on.
+// Below it, logging every photo of a 200-photo bulk crop would say nothing.
+const SLOW_PHOTO_MS = 400;
 
 const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
@@ -160,6 +165,13 @@ const ImageCropEditor = ( ) => {
   const [loadingSource, setLoadingSource] = useState( true );
   const [seededUri, setSeededUri] = useState<string | null>( null );
 
+  // When the editor switched to this photo, and whether its preload had
+  // already finished by then -- the two things that decide whether advancing a
+  // bulk crop shows a spinner at all. Reported once the photo is on screen.
+  const shownAt = useRef( 0 );
+  const shownFromCache = useRef( false );
+  const loggedWaitFor = useRef<string | null>( null );
+
   // Seed state from the preload cache during render, before the first paint of
   // each image, so mounting the editor (and advancing to the next photo in a
   // bulk crop) shows an already-preloaded image immediately instead of painting
@@ -168,6 +180,8 @@ const ImageCropEditor = ( ) => {
   if ( imageUri && seededUri !== imageUri ) {
     setSeededUri( imageUri );
     const cached = preloadCache.get( imageUri );
+    shownAt.current = Date.now( );
+    shownFromCache.current = !!cached;
     const { existingSavedCrop } = resolveCropContext( );
     setLocalImageUri( cached?.localUri ?? null );
     setImageSize( cached?.size ?? null );
@@ -179,6 +193,37 @@ const ImageCropEditor = ( ) => {
       : null );
     setLoadingSource( !cached );
   }
+
+  // One line per photo the user actually waited on, saying how the wait split
+  // between the preload's stages and the decode -- the wait between photos in
+  // a bulk crop is whatever of that was still outstanding when they advanced.
+  const handleDecoded = useCallback( ( decodeMs: number ) => {
+    if ( !imageUri || loggedWaitFor.current === imageUri || !shownAt.current ) {
+      return;
+    }
+    loggedWaitFor.current = imageUri;
+    const totalMs = Date.now( ) - shownAt.current;
+    if ( totalMs < SLOW_PHOTO_MS ) {
+      return;
+    }
+    const timing = preloadCache.get( imageUri )?.timing;
+    logger.infoWithExtra( "crop_photo_slow", {
+      totalMs,
+      decodeMs,
+      // A photo whose preload had landed before the user advanced starts with
+      // everything it needs, so anything left is decode and paint.
+      preloaded: shownFromCache.current,
+      // How long before the editor needed it the preload finished. Negative
+      // means the photo was asked for before its load was done, and the
+      // difference is what the spinner was for.
+      readyMs: timing
+        ? shownAt.current - timing.finishedAt
+        : null,
+      exportMs: timing?.exportMs ?? null,
+      sizeMs: timing?.sizeMs ?? null,
+      cropMs: timing?.cropMs ?? null,
+    } );
+  }, [imageUri] );
 
   const getCropFeedbackSourceKey = useCallback( ( ) => {
     if ( context === "groupPhotos" && imageUri ) {
@@ -625,6 +670,7 @@ const ImageCropEditor = ( ) => {
       labels={labels}
       brightnessLogKey={brightnessLogKey}
       warmUris={warmUris}
+      onDecoded={handleDecoded}
       onConfirm={handleConfirm}
       onDelete={handleDelete}
     />
