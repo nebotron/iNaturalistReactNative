@@ -2,12 +2,46 @@ import { tailwindFontBold } from "appConstants/fontFamilies";
 import classnames from "classnames";
 import { ActivityIndicator, Heading4, INatIcon } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
+import { getCurrentRoute } from "navigation/navigationUtils";
 import React, { useEffect, useRef, useState } from "react";
 import type { AccessibilityRole, GestureResponderEvent, ViewStyle } from "react-native";
 import { log } from "sharedHelpers/logger";
 import colors from "styles/tailwindColors";
 
 const logger = log.extend( "Button" );
+
+// uiDelayTracker reports the JS thread being unable to answer a touch. This
+// reports the opposite and so far invisible failure: a healthy thread and a
+// button that has latched, which is what "the app stopped responding to taps
+// until I restarted it" looks like when the log shows no stall at all. A
+// disabled Pressable never fires onPress, so a latched button emits nothing
+// on its own — it has to be noticed from the state that latched.
+//
+// Only these two flags are watched, never the caller's `disabled` prop: plenty
+// of buttons are legitimately disabled for minutes (a form waiting on a field),
+// so watching that would be noise. These two have a bounded honest duration.
+
+// isProcessing is the debounce latch, released debounceTime (300ms) after a
+// press. Anything near this is a bug by construction.
+const STUCK_PROCESSING_MS = 10_000;
+// `loading` is the caller waiting on real work — an upload, a Photos-library
+// delete — so it needs room. Past this the await it hangs on is not coming
+// back, and the button is dead for the life of the screen.
+const STUCK_LOADING_MS = 120_000;
+
+const useStuckWatchdog = ( latched: boolean, marker: string, text: string, forMs: number ) => {
+  useEffect( ( ) => {
+    if ( !latched ) { return ( ) => undefined; }
+    const timer = setTimeout( ( ) => {
+      logger.errorWithExtra( marker, {
+        text,
+        screen: getCurrentRoute( )?.name ?? "unknown",
+        forMs,
+      } );
+    }, forMs );
+    return ( ) => clearTimeout( timer );
+  }, [latched, marker, text, forMs] );
+};
 
 interface ButtonProps {
   accessibilityHint?: string;
@@ -161,6 +195,9 @@ const Button = ( {
   useEffect( ( ) => ( ) => {
     if ( resetTimer.current ) { clearTimeout( resetTimer.current ); }
   }, [] );
+
+  useStuckWatchdog( isProcessing, "button_stuck_processing", text, STUCK_PROCESSING_MS );
+  useStuckWatchdog( !!loading, "button_stuck_loading", text, STUCK_LOADING_MS );
 
   const isPrimary = level === "primary";
   const isWarning = level === "warning";

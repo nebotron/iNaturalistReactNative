@@ -3,7 +3,8 @@
 Pull the crop log and brightness log from Firebase into the (gitignored)
 crop_training.json and brightness_training.json files.
 
-Set CROP_LOG_FIREBASE_URL in .env or as an environment variable.
+Reads the project database by default; set CROP_LOG_FIREBASE_URL in .env or the
+environment only to point it somewhere else.
 
 Usage:
     python3 scripts/pull_logs.py
@@ -21,6 +22,8 @@ REPO_ROOT = Path( __file__ ).parent.parent
 CROP_LOG_PATH = REPO_ROOT / "crop_training.json"
 BRIGHTNESS_LOG_PATH = REPO_ROOT / "brightness_training.json"
 ENV_FILE = REPO_ROOT / ".env"
+# See the note on DEFAULT_DB_URL in app_log.py: reading the log needs no .env.
+DEFAULT_DB_URL = "https://inaturalist-9001d-default-rtdb.firebaseio.com"
 
 
 def load_env() -> None:
@@ -111,12 +114,7 @@ def pull_brightness_log( base_url: str ) -> bool:
 
 def main() -> None:
     load_env()
-    base_url = os.environ.get( "CROP_LOG_FIREBASE_URL", "" ).strip()
-    if not base_url:
-        sys.exit(
-            "CROP_LOG_FIREBASE_URL is not set.\n"
-            "Add it to .env or export it as an environment variable."
-        )
+    base_url = os.environ.get( "CROP_LOG_FIREBASE_URL", "" ).strip() or DEFAULT_DB_URL
 
     changed = pull_crop_log( base_url )
     changed = pull_brightness_log( base_url ) or changed
