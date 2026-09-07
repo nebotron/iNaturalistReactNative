@@ -2,10 +2,13 @@ import type {
   GeolocationError,
   GeolocationResponse,
 } from "@react-native-community/geolocation";
+import { log } from "sharedHelpers/logger";
 
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
 import { clearWatch, watchPosition } from "./geolocationWrapper";
+
+const logger = log.extend( "accuratePositionWatcher" );
 
 export interface UserLocation {
   latitude: number;
@@ -65,13 +68,46 @@ const isBetterThanBestFix = ( location: UserLocation ) => {
   return location.positional_accuracy <= bestFix.location.positional_accuracy;
 };
 
+// Nothing has ever recorded what the OS actually delivers, so we've had to
+// reason about GPS convergence from the CoreLocation docs rather than from
+// this app's own data. Log the accuracy of each fix until one is good enough,
+// then go quiet so a long camera session doesn't flood the log.
+const MAX_LOGGED_FIXES = 8;
+let watchStartedAt = 0;
+let loggedFixes = 0;
+let doneLogging = false;
+
+const logFix = ( position: GeolocationResponse, outcome: string ) => {
+  if ( doneLogging || loggedFixes >= MAX_LOGGED_FIXES ) return;
+  loggedFixes += 1;
+  logger.infoWithExtra( "position fix", {
+    fixNumber: loggedFixes,
+    accuracy: position.coords.accuracy,
+    // when this fix arrived relative to the watch starting
+    msSinceWatchStart: Date.now( ) - watchStartedAt,
+    // how old the fix itself is, which is what gives away a cached one
+    fixAgeMs: Date.now( ) - position.timestamp,
+    outcome,
+  } );
+  if ( outcome === "used" && position.coords.accuracy <= TARGET_POSITIONAL_ACCURACY ) {
+    doneLogging = true;
+  }
+};
+
 const handlePosition = ( position: GeolocationResponse ) => {
-  if ( Date.now( ) - position.timestamp > MAX_POSITION_AGE_MS ) return;
-  // CoreLocation reports a negative accuracy when it couldn't actually
-  // determine the position, and we don't want that in positional_accuracy
-  if ( position.coords.accuracy <= 0 ) return;
   const location = positionToUserLocation( position );
-  if ( !isBetterThanBestFix( location ) ) return;
+  let outcome = "used";
+  if ( Date.now( ) - position.timestamp > MAX_POSITION_AGE_MS ) {
+    outcome = "stale";
+  } else if ( position.coords.accuracy <= 0 ) {
+    // CoreLocation reports a negative accuracy when it couldn't actually
+    // determine the position, and we don't want that in positional_accuracy
+    outcome = "invalid";
+  } else if ( !isBetterThanBestFix( location ) ) {
+    outcome = "worse";
+  }
+  logFix( position, outcome );
+  if ( outcome !== "used" ) return;
   bestFix = { location, receivedAt: Date.now( ) };
   listeners.forEach( listener => listener.onLocation( location ) );
 };
@@ -90,6 +126,9 @@ const handleError = ( error: GeolocationError ) => {
 
 const startWatch = ( ) => {
   if ( watchId !== null ) return;
+  watchStartedAt = Date.now( );
+  loggedFixes = 0;
+  doneLogging = false;
   watchId = watchPosition( handlePosition, handleError, geolocationOptions );
 };
 
