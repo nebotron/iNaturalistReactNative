@@ -20,6 +20,10 @@ const MAX_PLAUSIBLE_HANG_MS = 300_000;
 // Stalls come in bursts (one slow operation trips several ticks), so summarize
 // rather than emitting a line per tick.
 const STALL_LOG_INTERVAL_MS = 30_000;
+// A stall this long isn't jitter, it's the app visibly frozen. Reported at
+// error level so an errors-only read of the log surfaces it instead of leaving
+// it among thousands of info lines.
+const SEVERE_STALL_MS = 5_000;
 // A push/pop animation is ~350ms; past this the screen was waiting on work.
 const SLOW_TRANSITION_MS = 800;
 // Same suspension caveat as stalls: a transition can't really take this long.
@@ -37,6 +41,10 @@ let lastTickAt = 0;
 let activeSinceLastTick = true;
 let stallsSinceLastLog = 0;
 let worstStallMs = 0;
+// The screen the *worst* stall happened on. The summary can be flushed up to
+// STALL_LOG_INTERVAL_MS after that, by which time the user has often moved on,
+// so reading the screen at flush time attributed stalls to the wrong screen.
+let worstStallScreen = "unknown";
 let lastStallLogAt = 0;
 // When the user tapped, as opposed to when navigation state caught up.
 let navigationDispatchedAt: number | null = null;
@@ -65,7 +73,10 @@ const onHeartbeat = ( ) => {
       }
     } else {
       stallsSinceLastLog += 1;
-      worstStallMs = Math.max( worstStallMs, overrunMs );
+      if ( overrunMs > worstStallMs ) {
+        worstStallMs = overrunMs;
+        worstStallScreen = currentScreen( );
+      }
     }
   }
 
@@ -76,13 +87,20 @@ const onHeartbeat = ( ) => {
   if ( now - lastStallLogAt < STALL_LOG_INTERVAL_MS ) return;
 
   lastStallLogAt = now;
-  logger.infoWithExtra( "ui_stall", {
+  const report = worstStallMs >= SEVERE_STALL_MS
+    ? logger.errorWithExtra
+    : logger.infoWithExtra;
+  report( "ui_stall", {
     stalledMs: Math.round( worstStallMs ),
     stallCount: stallsSinceLastLog,
-    screen: currentScreen( ),
+    screen: worstStallScreen,
+    // Where the user was when this was flushed. Differs from `screen` when the
+    // stall was on the way off a screen rather than on it.
+    flushedOn: currentScreen( ),
   } );
   stallsSinceLastLog = 0;
   worstStallMs = 0;
+  worstStallScreen = "unknown";
 };
 
 // Watches the JS thread for the stretches where it can't respond to touches -

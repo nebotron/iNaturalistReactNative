@@ -1,5 +1,6 @@
 import { searchProjects } from "api/projects";
 import flatten from "lodash/flatten";
+import { useMemo } from "react";
 import {
   useAuthenticatedInfiniteQuery,
 } from "sharedHooks";
@@ -54,16 +55,20 @@ const useInfiniteProjectsScroll = ( { params: newInputParams, enabled }: object 
   );
 
   const pages = data?.pages;
-  const allResults = pages?.map( page => page?.results );
-  const projects = flatten( allResults ).sort( ( a, b ) => {
-    if ( a.title < b.title ) {
-      return -1;
-    }
-    if ( a.title > b.title ) {
-      return 1;
-    }
-    return 0;
-  } );
+  // Flattened and sorted in the render body, this rebuilt every project fetched
+  // so far on every render and handed the list a new array each time. See
+  // useInfiniteExploreScroll for what that costs a screen that scrolls.
+  const projects = useMemo( ( ) => flatten( pages?.map( page => page?.results ) ).sort(
+    ( a, b ) => {
+      if ( a.title < b.title ) {
+        return -1;
+      }
+      if ( a.title > b.title ) {
+        return 1;
+      }
+      return 0;
+    },
+  ), [pages] );
 
   return {
     isFetching,

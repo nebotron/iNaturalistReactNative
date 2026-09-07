@@ -8,13 +8,20 @@ import {
 } from "sharedHelpers/uiDelayTracker";
 
 const mockInfoWithExtra = jest.fn( );
+const mockErrorWithExtra = jest.fn( );
 
 jest.mock( "sharedHelpers/logger", ( ) => ( {
-  log: { extend: ( ) => ( { infoWithExtra: ( ...args ) => mockInfoWithExtra( ...args ) } ) },
+  log: {
+    extend: ( ) => ( {
+      infoWithExtra: ( ...args ) => mockInfoWithExtra( ...args ),
+      errorWithExtra: ( ...args ) => mockErrorWithExtra( ...args ),
+    } ),
+  },
 } ) );
 
+let mockCurrentRouteName = "MyObservations";
 jest.mock( "navigation/navigationUtils", ( ) => ( {
-  getCurrentRoute: ( ) => ( { name: "MyObservations" } ),
+  getCurrentRoute: ( ) => ( { name: mockCurrentRouteName } ),
 } ) );
 
 // The tracker measures until the JS thread goes idle; get there immediately.
@@ -26,6 +33,7 @@ global.requestIdleCallback = callback => {
 describe( "uiDelayTracker", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
+    mockCurrentRouteName = "MyObservations";
     jest.spyOn( Date, "now" ).mockReturnValue( 1_000 );
   } );
 
@@ -127,6 +135,42 @@ describe( "uiDelayTracker", ( ) => {
       expect( mockInfoWithExtra ).toHaveBeenCalledWith( "ui_stall", expect.objectContaining( {
         stalledMs: 1_000,
         stallCount: 1,
+        screen: "MyObservations",
+      } ) );
+    } );
+
+    // The summary can be flushed up to 30s after the stall, by which time the
+    // user has usually moved on, so reading the screen at flush time blamed the
+    // wrong one — which is exactly how the app log reads today.
+    it( "blames the screen the worst stall happened on, not the one flushed on", ( ) => {
+      Date.now.mockReturnValue( 3_000_000 );
+      startUiDelayMonitoring( );
+
+      mockCurrentRouteName = "RootExplore";
+      tickAt( 3_002_500 );
+      mockInfoWithExtra.mockClear( );
+      mockErrorWithExtra.mockClear( );
+
+      tickAt( 3_004_500 );
+      mockCurrentRouteName = "ObsDetails";
+      for ( let at = 3_005_000; at <= 3_035_000; at += 500 ) { tickAt( at ); }
+
+      expect( mockInfoWithExtra ).toHaveBeenCalledWith( "ui_stall", expect.objectContaining( {
+        screen: "RootExplore",
+        flushedOn: "ObsDetails",
+      } ) );
+    } );
+
+    it( "reports a stall long enough to be a visible freeze as an error", ( ) => {
+      Date.now.mockReturnValue( 4_000_000 );
+      startUiDelayMonitoring( );
+
+      // 8s of nothing: past SEVERE_STALL_MS, short of the ui_hang threshold.
+      tickAt( 4_008_500 );
+
+      expect( mockInfoWithExtra ).not.toHaveBeenCalledWith( "ui_stall", expect.any( Object ) );
+      expect( mockErrorWithExtra ).toHaveBeenCalledWith( "ui_stall", expect.objectContaining( {
+        stalledMs: 8_000,
         screen: "MyObservations",
       } ) );
     } );
