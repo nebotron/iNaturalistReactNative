@@ -2,9 +2,12 @@ import { tailwindFontBold } from "appConstants/fontFamilies";
 import classnames from "classnames";
 import { ActivityIndicator, Heading4, INatIcon } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { AccessibilityRole, GestureResponderEvent, ViewStyle } from "react-native";
+import { log } from "sharedHelpers/logger";
 import colors from "styles/tailwindColors";
+
+const logger = log.extend( "Button" );
 
 interface ButtonProps {
   accessibilityHint?: string;
@@ -151,8 +154,13 @@ const Button = ( {
 }: ButtonProps ) => {
   const [isProcessing, setIsProcessing] = useState( false );
   const onPressRef = useRef( onPress );
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>( null );
 
   onPressRef.current = onPress;
+
+  useEffect( ( ) => ( ) => {
+    if ( resetTimer.current ) { clearTimeout( resetTimer.current ); }
+  }, [] );
 
   const isPrimary = level === "primary";
   const isWarning = level === "warning";
@@ -173,11 +181,26 @@ const Button = ( {
     }
 
     setIsProcessing( true );
-    onPressRef.current( event );
-
-    setTimeout( ( ) => {
+    // Schedule the re-enable *before* running the handler, not after. A handler
+    // that throws — reading a Realm object the write behind it just
+    // invalidated, say — used to skip this line entirely and leave the button
+    // disabled for as long as its screen stayed mounted, which for a screen
+    // sitting in the navigation stack means until the app is restarted. React
+    // error boundaries don't see throws from event handlers, so nothing on
+    // screen said why the button had stopped answering taps.
+    resetTimer.current = setTimeout( ( ) => {
+      resetTimer.current = null;
       setIsProcessing( false );
     }, debounceTime );
+
+    try {
+      onPressRef.current( event );
+    } catch ( error ) {
+      // Rethrown so dev builds still redbox; logged because in a release build
+      // this is otherwise completely silent.
+      logger.errorWithExtra( "button_press_threw", error, { text } );
+      throw error;
+    }
     return null;
   };
 

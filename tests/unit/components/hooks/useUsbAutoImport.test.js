@@ -1,5 +1,6 @@
 import { renderHook } from "@testing-library/react-native";
 import useUsbAutoImport from "components/hooks/useUsbAutoImport";
+import { AppState } from "react-native";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 
 const mockListNewUsbImages = jest.fn( );
@@ -298,6 +299,35 @@ describe( "useUsbAutoImport", ( ) => {
 
     renderHook( ( ) => useUsbAutoImport( ) );
     await jest.advanceTimersByTimeAsync( 60_000 );
+
+    expect( mockListNewUsbImages ).not.toHaveBeenCalled( );
+  } );
+
+  // startPolling awaits the folder lookup before installing its interval, so a
+  // foreground arriving while startup is still in that await used to leave two
+  // pollers running and only the second one's handle recorded. The first
+  // scanned every ten seconds for the rest of the process, unstoppable, and
+  // another was stranded on every foreground after that.
+  it( "leaves no poller behind when a foreground races startup", async ( ) => {
+    const appStateHandlers = [];
+    jest.spyOn( AppState, "addEventListener" ).mockImplementation( ( _event, handler ) => {
+      appStateHandlers.push( handler );
+      return { remove: ( ) => undefined };
+    } );
+    const folderResolvers = [];
+    mockGetUsbFolderName.mockImplementation( ( ) => new Promise( resolve => {
+      folderResolvers.push( resolve );
+    } ) );
+
+    const { unmount } = renderHook( ( ) => useUsbAutoImport( ) );
+    // Startup is parked in the folder lookup; foregrounding starts a second run.
+    await Promise.all( appStateHandlers.map( handler => handler( "active" ) ) );
+    folderResolvers.forEach( resolve => resolve( "101EOSR7" ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    unmount( );
+    mockListNewUsbImages.mockClear( );
+    await jest.advanceTimersByTimeAsync( 30_000 );
 
     expect( mockListNewUsbImages ).not.toHaveBeenCalled( );
   } );

@@ -390,16 +390,29 @@ const useUsbAutoImport = ( ) => {
     }
 
     let interval: ReturnType<typeof setInterval> | undefined;
+    // startPolling awaits native calls before it installs its interval, so two
+    // overlapping runs — mount racing the first foreground, or two AppState
+    // "active" events in quick succession, which is what dismissing a system
+    // prompt produces — both saw `interval` still undefined in stopPolling and
+    // then both assigned it. The second assignment dropped the first timer's
+    // handle, leaving a scan running every SCAN_INTERVAL_MS that nothing could
+    // ever clear. They accumulate one per foreground for the life of the
+    // process, so the JS thread gets slower to answer a tap until the app is
+    // restarted. Stamping each run lets a superseded one bow out.
+    let pollGeneration = 0;
     const stopPolling = ( ) => {
+      pollGeneration += 1;
       if ( interval ) clearInterval( interval );
       interval = undefined;
     };
     const startPolling = async ( ) => {
       stopPolling( );
+      const generation = pollGeneration;
       try {
         // Nothing to watch until the user has chosen a folder; don't wake the JS
         // thread on an interval for the many users who never set one up.
         const folder = await getUsbFolderName( );
+        if ( generation !== pollGeneration ) return;
         if ( !folder ) {
           // A null name has two very different causes, and they call for
           // opposite things: with no bookmark there is nothing to watch, but an
@@ -437,6 +450,7 @@ const useUsbAutoImport = ( ) => {
         }
         // Scan on the interval either way: offload re-resolves the folder each
         // time and returns in one cheap native call while the drive is absent.
+        if ( generation !== pollGeneration ) return;
         interval = setInterval( offload, SCAN_INTERVAL_MS );
       } catch ( error ) {
         // A rejected native call would otherwise be an unhandled promise
