@@ -93,15 +93,30 @@ const nodeToSourceAsset = ( node: PhotoNode ): ImportedAsset & { uri: string } =
   deviceLocation: toDevicePhotoLocation( node.location ) ?? undefined,
 } );
 
+// Whether the crop editor will ever have something to show for this asset. A
+// video is imported as a GIF, and a GIF picked from the library is one
+// already: cropping either would write a single still frame back over the
+// animation, so the editor skips both. A placeholder that doesn't say so is
+// indistinguishable from a photo still being copied, and a bulk crop waits on
+// it -- a black spinner for the length of the transcode, and forever if the
+// extraction never comes back.
+const isCroppableNode = ( node: PhotoNode ): boolean => !isVideoNode( node )
+  && !( node.image.filename ?? "" ).toLowerCase( ).endsWith( ".gif" );
+
 // The cell Group Photos shows for a selected asset while its file is still
 // being copied out of the library. It draws the device library thumbnail, so
 // the grid is populated from the moment it opens, and is replaced by the
 // imported photo as soon as that lands.
 const placeholderGroup = ( node: PhotoNode ): GroupedMediaItem => ( {
-  photos: [{ image: nodeToSourceAsset( node ), pending: true }],
+  photos: [{
+    image: nodeToSourceAsset( node ),
+    pending: true,
+    croppable: isCroppableNode( node ),
+  }],
 } );
 
 const gifPhotoItem = ( node: PhotoNode, gifUri: string ): GroupedMediaPhotoItem => ( {
+  croppable: false,
   // The video in the library the GIF was made from, so removing the GIF in
   // Group Photos stages that video for deletion like any other imported photo.
   originalDevicePhotoUri: deviceVideoUriFromNode( node ),
@@ -515,16 +530,19 @@ const PhotoLibrary = ( ) => {
         // Photos left underneath it: it crops each photo as the import lands
         // it and drops the user on the grid after the last one. Coming back
         // here to add more only crops the photos being added, so the ones
-        // already in the grid are skipped.
-        navigation.navigate( "ImageCropEditor", {
-          context: "groupPhotos",
-          cropImport: true,
-          skipUris: fromGroupPhotos
-            ? groupedPhotos.flatMap( ( group: GroupedPhoto ) => ( group.photos || [] )
-              .filter( photo => !photo.pending )
-              .map( photo => photo.image.uri ) )
-            : [],
-        } );
+        // already in the grid are skipped. A selection of nothing but videos
+        // and GIFs has nothing for it to show, so it isn't opened at all.
+        if ( newNodes.some( isCroppableNode ) ) {
+          navigation.navigate( "ImageCropEditor", {
+            context: "groupPhotos",
+            cropImport: true,
+            skipUris: fromGroupPhotos
+              ? groupedPhotos.flatMap( ( group: GroupedPhoto ) => ( group.photos || [] )
+                .filter( photo => !photo.pending )
+                .map( photo => photo.image.uri ) )
+              : [],
+          } );
+        }
         importIntoGroupPhotos(
           newNodes.filter( node => !isVideoNode( node ) ),
           newNodes.filter( isVideoNode ),

@@ -63,6 +63,15 @@ const DECODE_LOOKAHEAD = 2;
 // Below it, logging every photo of a 200-photo bulk crop would say nothing.
 const SLOW_PHOTO_MS = 400;
 
+// Whether this editor has anything to show for a grid cell. A GIF -- a video
+// imported as one, or one picked from the library -- is never cropped, since
+// that would write a single still frame back over the animation. A placeholder
+// says so up front (PhotoLibrary's placeholderGroup); once its file has landed
+// the name says it too.
+const isCroppable = ( photo: { croppable?: boolean; image: { uri: string } } ): boolean => (
+  photo.croppable !== false && !photo.image.uri.toLowerCase( ).endsWith( ".gif" )
+);
+
 const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
@@ -105,14 +114,17 @@ const ImageCropEditor = ( ) => {
     : new Set( uris ).add( uri ) ) ), [] );
   const importedUris = useMemo( ( ) => ( cropImport
     ? groupedPhotos.flatMap( group => ( group.photos ?? [] )
-      .filter( photo => !photo.pending )
-      .map( photo => photo.image.uri )
-      // The GIF an imported video was turned into: cropping it would write a
-      // single still frame back over the animation
-      .filter( uri => !uri.toLowerCase( ).endsWith( ".gif" ) ) )
+      .filter( photo => !photo.pending && isCroppable( photo ) )
+      .map( photo => photo.image.uri ) )
     : [] ), [cropImport, groupedPhotos] );
+  // Only media this editor would actually open counts as something to wait
+  // for. A video transcoding into a GIF is not: waiting on it left the bulk
+  // crop of an import sitting on a black spinner for the length of the
+  // transcode, and for good when the extraction never came back.
   const importIsPending = useMemo( ( ) => cropImport && groupedPhotos.some(
-    group => ( group.photos ?? [] ).some( photo => photo.pending ),
+    group => ( group.photos ?? [] ).some(
+      photo => photo.pending && isCroppable( photo ),
+    ),
   ), [cropImport, groupedPhotos] );
   const nextImportUri = importedUris.find( uri => !visitedUris.has( uri ) );
 

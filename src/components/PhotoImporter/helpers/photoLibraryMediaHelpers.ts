@@ -24,6 +24,12 @@ export interface GroupedMediaPhotoItem {
   // cell Group Photos draws for it stands in for a photo the import has not
   // written yet (see PhotoLibrary's placeholderGroup).
   pending?: boolean;
+  // False for media the crop editor will never open: a video (it becomes a
+  // GIF, and cropping that would write one still frame back over the
+  // animation) or a GIF picked from the library. A bulk crop that counts these
+  // as photos it is waiting for sits on a spinner through a transcode whose
+  // output it never shows.
+  croppable?: boolean;
 }
 
 export interface GroupedMediaItem {

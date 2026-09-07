@@ -42,6 +42,9 @@ export interface GroupedPhoto {
     // cell drawn for it is a placeholder standing in for a file the import has
     // not written yet.
     pending?: boolean;
+    // False for media the crop editor will never open -- a video, or a GIF.
+    // See GroupedMediaPhotoItem in photoLibraryMediaHelpers.
+    croppable?: boolean;
   }[];
   soundUri?: string;
   // What a sound-only item is sorted by, since it has no photo to read a
