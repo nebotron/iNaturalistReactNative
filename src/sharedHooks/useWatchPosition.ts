@@ -1,30 +1,13 @@
-import type {
-  GeolocationError,
-  GeolocationResponse,
-} from "@react-native-community/geolocation";
 import { useFocusEffect } from "@react-navigation/native";
 import { useCallback, useState } from "react";
+import type { UserLocation } from "sharedHelpers/accuratePositionWatcher";
+import {
+  getRecentAccurateFix,
+  subscribeToPosition,
+  TARGET_POSITIONAL_ACCURACY,
+} from "sharedHelpers/accuratePositionWatcher";
 
-// Please don't change this to an aliased path or the e2e mock will not get
-// used in our e2e tests on Github Actions
-import { clearWatch, watchPosition } from "../sharedHelpers/geolocationWrapper";
-
-export const TARGET_POSITIONAL_ACCURACY = 10;
-const MAX_POSITION_AGE_MS = 60_000;
-
-export interface UserLocation {
-  latitude: number;
-  longitude: number;
-  positional_accuracy: number;
-  altitude: number | null;
-  altitudinal_accuracy: number | null;
-}
-
-const geolocationOptions = {
-  distanceFilter: 0,
-  enableHighAccuracy: true,
-  maximumAge: 0,
-};
+export type { UserLocation };
 
 const useWatchPosition = ( options: {
   shouldFetchLocation: boolean;
@@ -36,43 +19,40 @@ const useWatchPosition = ( options: {
   useFocusEffect( useCallback( ( ) => {
     if ( !shouldFetchLocation ) return ( ) => {};
 
-    let id: number | null = null;
+    let stopped = false;
+    let unsubscribe: ( ( ) => void ) | null = null;
 
     const stop = ( ) => {
-      if ( id !== null ) {
-        clearWatch( id );
-        id = null;
-      }
+      stopped = true;
+      unsubscribe?.( );
+      unsubscribe = null;
       setIsWatching( false );
     };
 
-    const success = ( position: GeolocationResponse ) => {
-      const age = Date.now() - position.timestamp;
-      // 20260710 - FLGMwt: I don't know if this is necessary since
-      // we're passing maxAge: 0, but left it during a refactor for safety
-      // I didn't notice an impact testing on Android nor iOS with & w/o it.
-      if ( age > MAX_POSITION_AGE_MS ) {
-        return;
-      }
-      setUserLocation( {
-        latitude: position.coords.latitude,
-        longitude: position.coords.longitude,
-        positional_accuracy: position.coords.accuracy,
-        altitude: position.coords.altitude,
-        altitudinal_accuracy: position.coords.altitudeAccuracy,
-      } );
-      if ( position.coords.accuracy < TARGET_POSITIONAL_ACCURACY ) {
-        stop( );
-      }
-    };
+    // A fix the app has already settled on - the camera warms location up
+    // while it's open - is as good as anything a new watch would tell us, so
+    // use it rather than spinning the radio back up
+    const recentFix = getRecentAccurateFix( );
+    if ( recentFix ) {
+      setUserLocation( recentFix );
+      return ( ) => setUserLocation( null );
+    }
 
-    const failure = ( error: GeolocationError ) => {
-      console.warn( "useWatchPosition error:", error );
-      stop( );
-    };
-
-    id = watchPosition( success, failure, geolocationOptions );
-    setIsWatching( true );
+    const subscription = subscribeToPosition( {
+      onLocation: location => {
+        setUserLocation( location );
+        if ( location.positional_accuracy <= TARGET_POSITIONAL_ACCURACY ) {
+          stop( );
+        }
+      },
+      onError: stop,
+    } );
+    if ( stopped ) {
+      subscription( );
+    } else {
+      unsubscribe = subscription;
+      setIsWatching( true );
+    }
 
     return ( ) => {
       stop( );

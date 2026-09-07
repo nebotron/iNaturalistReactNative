@@ -20,6 +20,7 @@ import { Alert, StatusBar } from "react-native";
 import type {
   TakePhotoOptions,
 } from "react-native-vision-camera";
+import { startPositionWarmup } from "sharedHelpers/accuratePositionWatcher";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { log } from "sharedHelpers/logger";
 import { createSentinelFile, deleteSentinelFile, logStage } from "sharedHelpers/sentinelFiles";
@@ -278,15 +279,20 @@ const CameraContainer = ( ) => {
   }, [navigation] );
 
   useEffect( ( ) => {
-    const fetchLocation = async ( ) => {
-      const accurateUserLocation = await fetchAccurateUserLocation( );
-      setUserLocationForGeomodel( accurateUserLocation );
-      return accurateUserLocation;
-    };
+    if ( !hasLocationPermissions ) { return ( ) => {}; }
 
-    if ( hasLocationPermissions ) {
-      fetchLocation( );
-    }
+    // Keep a high accuracy watch running the whole time the camera is open.
+    // GPS needs a few seconds to converge, so warming it up here means the fix
+    // we geotag the photo with is already accurate when the user taps the
+    // shutter, instead of being whatever coarse fix the OS produces first.
+    const stopWarmup = startPositionWarmup( );
+
+    const fetchLocation = async ( ) => {
+      setUserLocationForGeomodel( await fetchAccurateUserLocation( ) );
+    };
+    fetchLocation( );
+
+    return stopWarmup;
   }, [hasLocationPermissions] );
 
   if ( loadingDevices ) {
