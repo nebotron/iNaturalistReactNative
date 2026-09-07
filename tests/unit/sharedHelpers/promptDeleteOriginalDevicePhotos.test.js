@@ -170,19 +170,20 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( JSON.stringify( extra ) ).not.toContain( "ph://" );
     } );
 
-    it( "splits a whole-library delete into transactions of 200", async ( ) => {
+    it( "opens a whole-library delete small and then runs at full size", async ( ) => {
       // A transaction is all or nothing, so one asset PhotoKit won't answer for
       // blocks every photo batched with it. Chunking is what makes each answer
-      // mean something, so the asset can be found.
-      mockDeletePhotos.mockResolvedValue( { deleted: 200, requested: 200 } );
-      const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://R${i}` );
+      // mean something; the small first chunks keep what an early hang costs
+      // down, in both suspects to search and photos left undeleted.
+      mockDeletePhotos.mockResolvedValue( { deleted: 25, requested: 25 } );
+      const uris = Array.from( { length: 500 }, ( _unused, i ) => `ph://R${i}` );
 
       const result = await deleteOriginalDevicePhotos( uris );
 
-      expect( mockDeletePhotos ).toHaveBeenCalledTimes( 2 );
-      expect( mockDeletePhotos.mock.calls[0][0] ).toHaveLength( 200 );
-      expect( mockDeletePhotos.mock.calls[1][0] ).toHaveLength( 100 );
-      expect( result ).toMatchObject( { requested: 300, succeeded: true } );
+      expect(
+        mockDeletePhotos.mock.calls.map( call => call[0].length ),
+      ).toEqual( [25, 50, 100, 200, 125] );
+      expect( result ).toMatchObject( { requested: 500, succeeded: true } );
     } );
 
     it( "makes the assets of a transaction that never answered the suspects", async ( ) => {
@@ -194,10 +195,10 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
 
       await deleteOriginalDevicePhotos( uris );
 
-      expect( suspectAssetIds( ) ).toHaveLength( 200 );
+      expect( suspectAssetIds( ) ).toHaveLength( 25 );
       expect( suspectAssetIds( ) ).toContain( "S0" );
-      // The chunk behind the one that hung was never issued, so its photos are
-      // not under suspicion.
+      // The chunks behind the one that hung were never issued, so their photos
+      // are not under suspicion.
       expect( suspectAssetIds( ) ).not.toContain( "S250" );
     } );
 
@@ -205,23 +206,22 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       mockDeletePhotos.mockRejectedValueOnce( new Error( "never called back" ) );
       const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://H${i}` );
       await deleteOriginalDevicePhotos( uris );
-      expect( suspectAssetIds( ) ).toHaveLength( 200 );
+      expect( suspectAssetIds( ) ).toHaveLength( 25 );
 
-      // Next cleanup: the 100 that were never suspect delete normally, and one
-      // half of the suspects goes out to halve the search.
+      // Next cleanup: the 275 that were never suspect delete normally, and one
+      // half of the suspects goes out last to halve the search.
       mockDeletePhotos.mockReset( );
-      mockDeletePhotos.mockResolvedValue( { deleted: 100, requested: 100 } );
+      mockDeletePhotos.mockResolvedValue( { deleted: 25, requested: 25 } );
       await deleteOriginalDevicePhotos( uris );
 
       const sent = mockDeletePhotos.mock.calls.map( call => call[0] );
-      expect( sent ).toHaveLength( 2 );
+      expect( sent.reduce( ( n, chunk ) => n + chunk.length, 0 ) ).toEqual( 275 + 13 );
       // The ordinary photos first, the suspect probe last.
-      expect( sent[0] ).toHaveLength( 100 );
-      expect( sent[1] ).toHaveLength( 100 );
-      expect( sent[0] ).toContain( "ph://H200" );
-      expect( sent[1] ).toContain( "ph://H0" );
+      expect( sent[0] ).toContain( "ph://H25" );
+      expect( sent.at( -1 ) ).toHaveLength( 13 );
+      expect( sent.at( -1 ) ).toContain( "ph://H0" );
       // That probe came back, so the asset that hangs is in the half held back.
-      expect( suspectAssetIds( ) ).toHaveLength( 100 );
+      expect( suspectAssetIds( ) ).toHaveLength( 12 );
       expect( suspectAssetIds( ) ).not.toContain( "H0" );
     } );
 
@@ -292,8 +292,10 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       );
       const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://R${i}` );
 
+      // 300 photos are four transactions (25, 50, 100, 125), so the report is
+      // owed four transactions' worth of time before it calls this a hang.
       const deletion = deleteOriginalDevicePhotos( uris );
-      await jest.advanceTimersByTimeAsync( 4800 );
+      await jest.advanceTimersByTimeAsync( 9000 );
       expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
         "photo_delete_pending",
         expect.anything( ),
@@ -320,16 +322,16 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       // deleted when 200 photos are gone is what made a working cleanup and a
       // dead one look the same in the log.
       mockDeletePhotos
-        .mockResolvedValueOnce( { deleted: 200, requested: 200 } )
+        .mockResolvedValueOnce( { deleted: 25, requested: 25 } )
         .mockRejectedValueOnce( new Error( "deleteAssets never called back" ) );
       const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://F${i}` );
 
       const result = await deleteOriginalDevicePhotos( uris );
 
       expect( result ).toMatchObject( {
-        deleted: 200, requested: 300, succeeded: false,
+        deleted: 25, requested: 300, succeeded: false,
       } );
-      // 200 of their photos are gone, so they are not told nothing happened.
+      // 25 of their photos are gone, so they are not told nothing happened.
       expect( Alert.alert ).not.toHaveBeenCalled( );
     } );
 

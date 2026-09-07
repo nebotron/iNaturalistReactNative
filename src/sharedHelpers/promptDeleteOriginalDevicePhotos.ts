@@ -192,20 +192,34 @@ const TRANSACTION_MS_ALLOWANCE = 1800;
 // though only for assets the app didn't create, and these are its own USB
 // imports (the Sep 4 deletions report appCreated 61 of 61, 83 of 83, 67 of 67),
 // so in practice these chunks ask nothing.
+//
+// The first transactions are small and the later ones full size, because the
+// two things a chunk costs are not symmetric. A chunk that comes back costs
+// ~1.5s; a chunk that doesn't costs the user a photo library wedged against
+// every write for half an hour — the Sep 7 log has a cleanup refused 28 minutes
+// after the hang, its no-op probe still going unanswered — and leaves its whole
+// chunk under suspicion. Opening small means a cleanup that hits the bad asset
+// early has 25 suspects to search rather than 200 (five more cleanups to a
+// verdict instead of eight), and one that hits it later gets several hundred
+// photos deleted before it stops rather than none.
+const DELETE_CHUNK_SIZES = [25, 50, 100];
 const DELETE_CHUNK_SIZE = 200;
-
-const chunkCount = ( uriCount: number ) => Math.max(
-  1,
-  Math.ceil( uriCount / DELETE_CHUNK_SIZE ),
-);
 
 const chunked = ( uris: string[] ): string[][] => {
   const chunks: string[][] = [];
-  for ( let i = 0; i < uris.length; i += DELETE_CHUNK_SIZE ) {
-    chunks.push( uris.slice( i, i + DELETE_CHUNK_SIZE ) );
+  let start = 0;
+  while ( start < uris.length ) {
+    const size = DELETE_CHUNK_SIZES[chunks.length] ?? DELETE_CHUNK_SIZE;
+    chunks.push( uris.slice( start, start + size ) );
+    start += size;
   }
   return chunks;
 };
+
+const chunkCount = ( uriCount: number ) => Math.max(
+  1,
+  chunked( new Array( uriCount ).fill( "" ) ).length,
+);
 
 // Chunks run one after another, so the budget is per transaction rather than
 // per deletion. Never below the 15s a single one has always had.
