@@ -1,7 +1,6 @@
 import { screen } from "@testing-library/react-native";
 import IdentifyView from "components/Explore/IdentifyView";
 import React from "react";
-import { Image } from "react-native";
 import { renderComponent } from "tests/helpers/render";
 
 const mockObservations = [];
@@ -40,9 +39,6 @@ const renderIdentifyView = ( ) => renderComponent(
 describe( "IdentifyView", ( ) => {
   beforeEach( ( ) => {
     mockObservations.length = 0;
-    // Image.prefetch returns undefined under the react-native jest preset, but
-    // the view chains .catch() off the promise it returns for real
-    jest.spyOn( Image, "prefetch" ).mockResolvedValue( true );
   } );
 
   it( "shows the photo count for an observation with photos", ( ) => {

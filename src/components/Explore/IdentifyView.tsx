@@ -1,3 +1,4 @@
+import { prefetch } from "@candlefinance/faster-image";
 import { useNavigation } from "@react-navigation/native";
 import { createIdentification } from "api/identifications";
 import { markAsReviewed } from "api/observations";
@@ -28,7 +29,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Dimensions, Image, StyleSheet } from "react-native";
+import { Dimensions, StyleSheet } from "react-native";
 import Photo from "realmModels/Photo";
 import { preloadSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
 import {
@@ -165,10 +166,13 @@ const IdentifyView = ( {
       .slice( currentIndex + 1, currentIndex + 1 + PHOTO_PREFETCH_LOOKAHEAD )
       .map( obs => photosForObs( obs )[0] )
       .filter( ( url ): url is string => !!url );
-    [...photoUrls, ...upcoming].forEach( url => {
-      Image.prefetch( url ).catch( ( ) => undefined );
-      preloadSubjectDetectionForUri( url );
-    } );
+    const urls = [...photoUrls, ...upcoming];
+    // faster-image's prefetch, not React Native's: the photos are drawn by
+    // FasterImageView, which reads Nuke's disk cache. Image.prefetch fills
+    // React Native's own image cache instead, which that view never consults,
+    // so the lookahead left every photo to download when it came on screen.
+    prefetch( urls );
+    urls.forEach( preloadSubjectDetectionForUri );
     // observations' array identity changes every render; key off stable signals
     // so we don't re-prefetch on every re-render (e.g. during a pinch).
     // eslint-disable-next-line react-hooks/exhaustive-deps
