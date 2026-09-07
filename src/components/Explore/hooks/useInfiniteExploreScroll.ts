@@ -108,27 +108,39 @@ const useInfiniteExploreScroll = (
 
   const pages = data?.pages as ApiObservationsSearchResponse[] | undefined;
 
-  const allObservations: ApiObservation[] = flatten( pages?.map( r => r.results ) ) || [];
-  const seenKeys = new Set<string | number>();
-  let observations: ApiObservation[] = allObservations.filter( obs => {
-    const key = obs.uuid ?? obs.id;
-    if ( key == null || seenKeys.has( key ) ) return false;
-    seenKeys.add( key );
-    return true;
-  } );
+  // Identity, not contents: excludedUsers is `newInputParams.excludedUsers || []`,
+  // so the fallback is a fresh array on every render and can't be a dep itself.
+  const excludedIdsKey = excludedUsers.map( u => u.id ).sort( ).join( "," );
+
+  // This used to run in the render body. Every render of the Explore screen —
+  // every scroll tick, every filter touch — flattened every page fetched so
+  // far, allocated a Set, and walked the whole list twice, then handed the
+  // list a *new array identity*, so FlashList re-rendered all of it. Infinite
+  // scroll makes that grow without bound, which is what the app log shows:
+  // RootExplore is 35 of 85 ui_stall lines and the worst single stall on it is
+  // 18.8s, on a screen whose only job while you scroll is to append a page.
+  const observations: ApiObservation[] = useMemo( ( ) => {
+    const seenKeys = new Set<string | number>( );
+    const deduped = ( flatten( pages?.map( r => r.results ) ) || [] ).filter( obs => {
+      const key = obs.uuid ?? obs.id;
+      if ( key == null || seenKeys.has( key ) ) return false;
+      seenKeys.add( key );
+      return true;
+    } );
+
+    // filter out obs from excluded users (client-side, no API param available)
+    if ( excludedUsers.length > 0 ) {
+      const excludedIds = new Set( excludedUsers.map( u => u.id ) );
+      return deduped.filter( obs => !excludedIds.has( obs?.user?.id ) );
+    }
+    if ( excludedUser ) {
+      return deduped.filter( observation => observation?.user?.id !== excludedUser.id );
+    }
+    return deduped;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pages, excludedUser?.id, excludedIdsKey] );
+
   let totalResults: number | null | undefined = pages?.[0]?.total_results;
-  let filtered = [];
-
-  // filter out obs from excluded users (client-side, no API param available)
-  if ( excludedUsers.length > 0 && observations ) {
-    const excludedIds = new Set( excludedUsers.map( u => u.id ) );
-    filtered = observations.filter( obs => !excludedIds.has( obs?.user?.id ) );
-    observations = filtered;
-  } else if ( excludedUser && observations ) {
-    filtered = observations.filter( observation => observation?.user?.id !== excludedUser.id );
-    observations = filtered;
-  }
-
   if ( totalResults !== 0 && !totalResults ) {
     totalResults = null;
   }
