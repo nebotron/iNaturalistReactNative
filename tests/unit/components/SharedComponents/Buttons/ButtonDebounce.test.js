@@ -35,4 +35,29 @@ describe( "Button debounce", ( ) => {
     expect( ( ) => fireEvent.press( screen.getByTestId( "btn" ) ) ).toThrow( "boom" );
     expect( onPress ).toHaveBeenCalledTimes( 2 );
   } );
+
+  // The log shows the JS thread healthy through every reported "unresponsive"
+  // episode, so a latched control is what is left to look for and nothing in
+  // the app could see one.
+  it( "reports a button left loading far too long", ( ) => {
+    // The logger mock in jest.setup funnels errorWithExtra into console.error.
+    const reported = jest.spyOn( console, "error" ).mockImplementation( ( ) => undefined );
+    const { rerender } = render( <Button text="DELETE" onPress={jest.fn( )} loading /> );
+
+    act( ( ) => { jest.advanceTimersByTime( 119_000 ); } );
+    expect( reported ).not.toHaveBeenCalled( );
+
+    act( ( ) => { jest.advanceTimersByTime( 2_000 ); } );
+    expect( reported ).toHaveBeenCalledWith(
+      "button_stuck_loading",
+      expect.objectContaining( { text: "DELETE" } ),
+    );
+
+    // Work that finishes normally says nothing.
+    reported.mockClear( );
+    rerender( <Button text="DELETE" onPress={jest.fn( )} loading={false} /> );
+    act( ( ) => { jest.advanceTimersByTime( 300_000 ); } );
+    expect( reported ).not.toHaveBeenCalled( );
+    reported.mockRestore( );
+  } );
 } );

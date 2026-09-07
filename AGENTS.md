@@ -274,6 +274,26 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 
 - Custom logger: `react-native-logs.config.ts`
 - Sentry-style error tracking with Grafana integration
+- **The shipped app's log is readable from a checkout, with no `.env` and no
+  credentials.** Every logger line from a non-dev build is POSTed to a Firebase
+  Realtime Database that allows unauthenticated reads, and
+  `scripts/app_log.py` defaults to it. Read it before theorising about a
+  field bug — it is the only record of what the app actually did:
+  ```bash
+  python3 scripts/app_log.py                   # grouped summary of recent entries
+  python3 scripts/app_log.py --level error     # errors only
+  python3 scripts/app_log.py --grep ui_hang    # entries matching a regex
+  python3 scripts/app_log.py --detail 3        # full entries behind summary group 3
+  python3 scripts/app_log.py --dump log.json   # everything, for analysis
+  ```
+  Never run `--clear`. Entries carry the `commit` they came from, so check
+  whether a crash predates the fix before chasing it.
+- **UI responsiveness markers**, all written by `sharedHelpers/uiDelayTracker.ts`
+  and `slowLoadTracker.ts`, and all searchable in that log: `ui_stall` and
+  `ui_hang` (JS thread unable to answer a touch), `slow_screen_transition`
+  (tap to rendered screen), `slow_ui_work`, `slow_query` / `query_hang`.
+  `button_stuck_processing` and `button_stuck_loading` (below) cover the
+  opposite case — a responsive thread and a control that has latched.
 - **Sentinel files** (`sharedHelpers/sentinelFiles.ts`) - Debug difficult hardware issues:
   - Created at flow start, deleted on success
   - Log stages during flow (e.g., camera permissions, save photo, location fetch)
