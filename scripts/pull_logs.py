@@ -3,7 +3,8 @@
 Pull the crop log and brightness log from Firebase into the (gitignored)
 crop_training.json and brightness_training.json files.
 
-Set CROP_LOG_FIREBASE_URL in .env or as an environment variable.
+Reads the project's database by default; set CROP_LOG_FIREBASE_URL in .env or as
+an environment variable to read another one.
 
 Usage:
     python3 scripts/pull_logs.py
@@ -13,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import sys
 import urllib.request
 from pathlib import Path
 
@@ -110,13 +110,9 @@ def pull_brightness_log( base_url: str ) -> bool:
 
 
 def main() -> None:
+    from firebase_auth import firebase_base_url
     load_env()
-    base_url = os.environ.get( "CROP_LOG_FIREBASE_URL", "" ).strip()
-    if not base_url:
-        sys.exit(
-            "CROP_LOG_FIREBASE_URL is not set.\n"
-            "Add it to .env or export it as an environment variable."
-        )
+    base_url = firebase_base_url()
 
     changed = pull_crop_log( base_url )
     changed = pull_brightness_log( base_url ) or changed

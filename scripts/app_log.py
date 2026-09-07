@@ -3,8 +3,8 @@
 Read (and clear) the app_log the release build writes to Firebase.
 
 Every logger line from a non-dev build is POSTed to {CROP_LOG_FIREBASE_URL}/app_log
-by src/api/log/index.ts. Both reads and writes are unauthenticated; set
-CROP_LOG_FIREBASE_URL in .env to point this script at the database.
+by src/api/log/index.ts. Both reads and writes are unauthenticated, so this works
+in a fresh clone with no .env; set CROP_LOG_FIREBASE_URL to read another database.
 
 Usage:
     python3 scripts/app_log.py                  # grouped summary of recent entries
@@ -29,7 +29,7 @@ from pathlib import Path
 
 sys.path.insert( 0, str( Path( __file__ ).parent ) )
 
-from firebase_auth import firebase_auth_query  # noqa: E402
+from firebase_auth import firebase_auth_query, firebase_base_url  # noqa: E402
 
 REPO_ROOT = Path( __file__ ).parent.parent
 ENV_FILE = REPO_ROOT / ".env"
@@ -179,9 +179,7 @@ def main() -> None:
     args = parser.parse_args()
 
     load_env()
-    base_url = os.environ.get( "CROP_LOG_FIREBASE_URL", "" ).strip()
-    if not base_url:
-        sys.exit( "CROP_LOG_FIREBASE_URL is not set. Add it to .env." )
+    base_url = firebase_base_url()
 
     if args.clear:
         clear_logs( base_url )
