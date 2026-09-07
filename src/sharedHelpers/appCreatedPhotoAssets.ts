@@ -62,6 +62,12 @@ export const recordAppCreatedPhotoAssets = ( localIdentifiers: string[] ) => {
   writeIdentifiers( [...new Set( [...readIdentifiers( ), ...added] )] );
 };
 
+// The identifiers this app put in the library, as a set to test uris against.
+// Used to order a deletion: these are the assets whose deletions the log has
+// actually seen work (the Sep 4 cleanups report appCreated 61 of 61, 83 of 83,
+// 67 of 67), so they are the safest thing to put in the first transactions.
+export const appCreatedPhotoAssetIds = ( ): Set<string> => new Set( readIdentifiers( ) );
+
 export const forgetAppCreatedPhotoAssets = ( uris: string[] ) => {
   if ( uris.length === 0 ) return;
   const gone = new Set( uris.map( basePhotoAssetId ) );

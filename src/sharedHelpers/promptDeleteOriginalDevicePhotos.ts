@@ -7,6 +7,7 @@ import {
   Alert, AppState, NativeModules, Platform,
 } from "react-native";
 import {
+  appCreatedPhotoAssetIds,
   basePhotoAssetId,
   forgetAppCreatedPhotoAssets,
 } from "sharedHelpers/appCreatedPhotoAssets";
@@ -193,33 +194,77 @@ const TRANSACTION_MS_ALLOWANCE = 1800;
 // imports (the Sep 4 deletions report appCreated 61 of 61, 83 of 83, 67 of 67),
 // so in practice these chunks ask nothing.
 //
-// The first transactions are small and the later ones full size, because the
-// two things a chunk costs are not symmetric. A chunk that comes back costs
-// ~1.5s; a chunk that doesn't costs the user a photo library wedged against
-// every write for half an hour — the Sep 7 log has a cleanup refused 28 minutes
-// after the hang, its no-op probe still going unanswered — and leaves its whole
-// chunk under suspicion. Opening small means a cleanup that hits the bad asset
-// early has 25 suspects to search rather than 200 (five more cleanups to a
-// verdict instead of eight), and one that hits it later gets several hundred
-// photos deleted before it stops rather than none.
-const DELETE_CHUNK_SIZES = [25, 50, 100];
+// The two things a chunk costs are not symmetric. One that comes back costs
+// ~1.5s; one that doesn't costs the user a photo library wedged against every
+// write for half an hour — the Sep 7 log has a cleanup refused 28 minutes after
+// the hang, its no-op probe still going unanswered — and takes every chunk
+// behind it down with it, undeleted. So a cleanup is ordered least risky first
+// and the risk is met in small transactions.
 const DELETE_CHUNK_SIZE = 200;
+// What the unfamiliar assets go out in: small at first, because this is the end
+// of the batch where a hang is expected and a hang costs its whole chunk, then
+// ramping back up. Staying at 25 would mean a library the app never imported
+// into going out in dozens of transactions, and PhotoKit asks the user once per
+// transaction for assets like those.
+const UNFAMILIAR_CHUNK_SIZES = [25, 25, 50, 100];
 
-const chunked = ( uris: string[] ): string[][] => {
+const chunked = ( uris: string[], sizes: number[] = [] ): string[][] => {
   const chunks: string[][] = [];
   let start = 0;
   while ( start < uris.length ) {
-    const size = DELETE_CHUNK_SIZES[chunks.length] ?? DELETE_CHUNK_SIZE;
+    const size = sizes[chunks.length] ?? DELETE_CHUNK_SIZE;
     chunks.push( uris.slice( start, start + size ) );
     start += size;
   }
   return chunks;
 };
 
-const chunkCount = ( uriCount: number ) => Math.max(
-  1,
-  chunked( new Array( uriCount ).fill( "" ) ).length,
-);
+// Assets this app put in the library itself go first, in full-size
+// transactions; everything else goes last, in small ones.
+//
+// Not a guess at which asset is bad — it is the difference between the
+// deletions the log has seen work and the ones it has seen hang. Every
+// successful cleanup was the app's own USB imports (Sep 4: appCreated 61 of 61,
+// 83 of 83, 67 of 67, 60 of 60). The assets that stand out in every hung batch
+// are the ones it did not import: among 1400 Canon CR3s at 6960x4640 sit a
+// Live Photo (3024x4032, HEIC paired with a QuickTime movie) and an HEIF with
+// an undocumented subtype, both of them things the iPhone camera made, not the
+// card reader.
+//
+// The ordering is what makes a cleanup useful on its first run rather than its
+// second. These assets are newest-first, the unfamiliar ones are recent, and so
+// they landed in the opening transaction every time — which is why seven
+// cleanups in a row deleted nothing at all rather than all but a handful.
+const orderedForDelete = ( uris: string[] ): { chunks: string[][]; unfamiliar: number } => {
+  const appCreated = appCreatedPhotoAssetIds( );
+  const mine: string[] = [];
+  const unfamiliar: string[] = [];
+  uris.forEach( uri => (
+    appCreated.has( basePhotoAssetId( uri ) )
+      ? mine.push( uri )
+      : unfamiliar.push( uri )
+  ) );
+  return {
+    chunks: [
+      ...chunked( mine ),
+      ...chunked( unfamiliar, UNFAMILIAR_CHUNK_SIZES ),
+    ],
+    unfamiliar: unfamiliar.length,
+  };
+};
+
+// The exit wait is set before the partition is known, so it assumes the worst
+// case: every asset unfamiliar, and so the most transactions this many photos
+// could be split into.
+const chunkCount = ( uriCount: number ) => {
+  let count = 0;
+  let left = uriCount;
+  while ( left > 0 ) {
+    left -= UNFAMILIAR_CHUNK_SIZES[count] ?? DELETE_CHUNK_SIZE;
+    count += 1;
+  }
+  return Math.max( 1, count );
+};
 
 // Chunks run one after another, so the budget is per transaction rather than
 // per deletion. Never below the 15s a single one has always had.
@@ -278,7 +323,7 @@ const performDeleteOriginalDevicePhotos = async (
   // set still being narrowed goes out half at a time, after everything else.
   const { skipped, suspect, ordinary } = partitionForDelete( uniqueUris );
   const probe = suspectProbe( suspect );
-  const chunks = chunked( ordinary );
+  const { chunks, unfamiliar } = orderedForDelete( ordinary );
   if ( probe.length > 0 ) chunks.push( probe );
   if ( chunks.length === 0 ) {
     logger.warnWithExtra( "photo_delete_all_quarantined", { requested } );
@@ -431,7 +476,9 @@ const performDeleteOriginalDevicePhotos = async (
       // What is actually going out, and why it isn't all of it.
       ordinary: ordinary.length,
       chunks: chunks.length,
-      chunkSize: DELETE_CHUNK_SIZE,
+      // How many of them this app did not put in the library itself. These go
+      // last and in small transactions, and are where a hang is expected.
+      unfamiliar,
       // Still narrowing: this many are under suspicion, and this many of them
       // go out in the last transaction to halve it.
       suspect: suspect.length,
