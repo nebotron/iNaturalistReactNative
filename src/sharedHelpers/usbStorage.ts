@@ -28,6 +28,10 @@ export interface UsbListResult {
   images: UsbImageRef[];
   // Present only when available (reason === "ok").
   regularFileCount?: number;
+  directoryCount?: number;
+  // The watched folder's own name and its parent's — see isCameraSubfolder.
+  name?: string;
+  parentName?: string;
   imageFileCount?: number;
   alreadyImportedCount?: number;
   // Histogram of lowercased file extensions seen on the drive, e.g.
@@ -49,7 +53,22 @@ export interface UsbFolderDiagnostics {
   stale: boolean;
   reachable: boolean;
   bookmarkBytes?: number;
+  // Present when the bookmark resolved.
+  name?: string;
+  parentName?: string;
 }
+
+// Whether the watched folder is one of a camera's numbered DCIM subfolders
+// (DCIM/101EOSR7). Those are the folders a user naturally picks — it's where
+// the photos are — and the worst possible choice: the camera starts a new one
+// when the card is formatted or another card is used, and the offload empties
+// this one after every run, so the app is left scanning a folder that resolves,
+// is reachable, and will never hold another photo. The photos land in a sibling
+// the bookmark grants no access to, and nothing says so. Watching DCIM or the
+// drive itself covers every folder the camera creates, since the scan recurses.
+export const isCameraSubfolder = (
+  folder: { parentName?: string } | null | undefined,
+): boolean => folder?.parentName?.toUpperCase( ) === "DCIM";
 
 export type PhotosPermissionStatus =
   | "authorized"

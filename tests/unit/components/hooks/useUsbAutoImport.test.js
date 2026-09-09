@@ -21,6 +21,7 @@ jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
   deleteUsbSourceImages: ( ...args ) => mockDeleteUsbSourceImages( ...args ),
   getUsbFolderDiagnostics: ( ) => mockGetUsbFolderDiagnostics( ),
   getUsbFolderName: ( ) => mockGetUsbFolderName( ),
+  isCameraSubfolder: folder => folder?.parentName?.toUpperCase( ) === "DCIM",
   isUsbImportSupported: ( ) => true,
   listNewUsbImages: ( ...args ) => mockListNewUsbImages( ...args ),
   markUsbImagesImported: ( ...args ) => mockMarkUsbImagesImported( ...args ),
@@ -345,6 +346,36 @@ describe( "useUsbAutoImport", ( ) => {
     expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
       "usb_offload_library_wedged",
       expect.anything( ),
+    );
+  } );
+
+  // The Sep 9 log: the bookmarked folder resolves and is reachable, and holds
+  // nothing at all — no files, no subfolders. The camera has moved on to a
+  // sibling of it that the bookmark grants no access to, and every scan since
+  // Sep 5 has come back clean, which reads in the log exactly like a drive with
+  // nothing new on it. The one test in this file whose listing sits under DCIM:
+  // the marker is logged once per process.
+  it( "reports a watched folder the camera has moved on from", async ( ) => {
+    mockListNewUsbImages.mockResolvedValue( {
+      available: true,
+      reason: "ok",
+      images: [],
+      imageFileCount: 0,
+      alreadyImportedCount: 0,
+      knownCount: 2623,
+      regularFileCount: 0,
+      directoryCount: 0,
+      extensions: {},
+      name: "101EOSR7",
+      parentName: "DCIM",
+    } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_watching_camera_subfolder",
+      expect.objectContaining( { folder: "101EOSR7", imageFiles: 0, directories: 0 } ),
     );
   } );
 } );

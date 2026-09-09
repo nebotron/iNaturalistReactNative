@@ -1640,8 +1640,14 @@ Uploading-x-of-y-observations =
     }
 # Describes automatic USB photo import before a folder has been chosen
 USB-import-description = Choose a folder on a USB drive or in Files. New photos in that folder will be imported automatically when you open the app.
+# Warns that the chosen folder is one folder created by a camera on a memory
+# card, which the camera stops adding to when the card is formatted or replaced
+USB-import-folder-is-a-camera-subfolder = "{ $folder }" is one folder created by your camera. When you format the card or use another one, your camera starts a new folder, and photos in it will not be imported. Choose the DCIM folder or the whole drive instead.
 # Describes automatic USB photo import once a folder has been chosen
 USB-import-watching-folder = New photos in "{ $folder }" will be imported automatically when you open the app.
+# Describes automatic USB photo import when a folder has been chosen but the
+# drive holding it is not currently connected
+USB-import-watching-folder-drive-not-connected = New photos will be imported automatically the next time this drive is connected.
 # Section header in settings for automatic photo import from a USB drive
 USB-PHOTO-IMPORT = USB PHOTO IMPORT
 Use-iNaturalist-to-identify-any-living-thing = Use iNaturalist to identify any living thing

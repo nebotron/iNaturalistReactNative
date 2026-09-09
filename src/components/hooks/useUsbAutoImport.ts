@@ -14,6 +14,7 @@ import {
   deleteUsbSourceImages,
   getUsbFolderDiagnostics,
   getUsbFolderName,
+  isCameraSubfolder,
   isUsbImportSupported,
   listNewUsbImages,
   markUsbImagesImported,
@@ -33,6 +34,11 @@ const SCAN_INTERVAL_MS = 10_000;
 
 // Whether this process has already said the user never picked a folder.
 let loggedNoFolderBookmark = false;
+
+// Whether this process has already reported that the watched folder is one the
+// camera will abandon (see isCameraSubfolder). Once per process: it's a fact
+// about the setup, not an event, and every log line is a network POST.
+let loggedCameraSubfolder = false;
 
 // Safety net so a single native call that never resolves (a stuck copy or
 // Photos import) can't freeze the whole run — that file is counted as failed
@@ -159,9 +165,23 @@ const useUsbAutoImport = ( ) => {
       logDiag( result.available
         ? `list ok: ${result.images.length} new; imageFiles=${result.imageFileCount}, `
           + `alreadyImported=${result.alreadyImportedCount}, known=${result.knownCount}, `
-          + `regularFiles=${result.regularFileCount}, `
+          + `regularFiles=${result.regularFileCount}, dirs=${result.directoryCount}, `
           + `extensions=${JSON.stringify( result.extensions ?? {} )}`
         : `list produced nothing: ${result.reason}` );
+      // A drive that scans clean every time, on a bookmark the camera has
+      // walked away from, is indistinguishable in the log from a feature that
+      // simply has nothing to do — and it is the state the app stays in until
+      // the user picks a different folder. Say it once, as an error, so it
+      // shows up in the grouped summary rather than among the info lines.
+      if ( result.available && isCameraSubfolder( result ) && !loggedCameraSubfolder ) {
+        loggedCameraSubfolder = true;
+        logger.errorWithExtra( "usb_watching_camera_subfolder", {
+          folder: result.name ?? "",
+          imageFiles: result.imageFileCount ?? -1,
+          regularFiles: result.regularFileCount ?? -1,
+          directories: result.directoryCount ?? -1,
+        } );
+      }
       const { images } = result;
       if ( images.length === 0 ) return;
 
