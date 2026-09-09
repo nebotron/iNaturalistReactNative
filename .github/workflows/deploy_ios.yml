@@ -1,0 +1,140 @@
+##
+# Build the iOS app on a GitHub-hosted Mac and upload it to TestFlight, so a
+# build can reach a phone without a Mac of your own. macOS runners are free
+# for public repositories.
+#
+# One-time setup:
+#
+#   1. In App Store Connect, create the app record for IOS_BUNDLE_ID and add
+#      yourself to an internal TestFlight testing group.
+#   2. Create an App Store Connect API key (Users and Access > Integrations)
+#      with the App Manager role. Save the .p8 as ASC_KEY_CONTENT, base64
+#      encoded: `base64 -i AuthKey_XXX.p8 | tr -d '\n'`
+#   3. Create an empty *private* repo to hold the encrypted signing assets and
+#      set MATCH_GIT_URL to its https URL. Match creates the distribution
+#      certificate and both provisioning profiles on the first run.
+#   4. Add the secrets and variables listed in the env blocks below.
+##
+name: deploy-iOS
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    timeout-minutes: 120
+
+    env:
+      IOS_SHARE_BUNDLE_ID: ${{ vars.IOS_SHARE_BUNDLE_ID }}
+
+    steps:
+    - name: Check out Git repository
+      uses: actions/checkout@v6
+      with:
+        fetch-depth: 1
+
+    - name: Install Node.js, NPM and Yarn
+      uses: actions/setup-node@v6
+      with:
+        node-version-file: '.nvmrc'
+        cache: 'npm'
+
+    - name: Setup Ruby version according to .ruby-version with cached gems
+      uses: ruby/setup-ruby@v1
+      with:
+        bundler-cache: true
+
+    # Required workaround for Firebase & XCode >26.0.1
+    # https://github.com/actions/runner-images/issues/13135#issuecomment-3397914993
+    - name: Set Xcode Toolchain
+      shell: bash
+      run: |
+        echo "TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault" >> $GITHUB_ENV
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Cache Pods
+      uses: actions/cache@v5
+      with:
+        path: ios/Pods
+        key: pods-${{ hashFiles('**/Podfile.lock') }}
+
+    - name: Update Pods
+      run: |
+        gem update cocoapods xcodeproj
+        cd ios && pod install && cd ..
+
+    - name: Create .env file
+      env:
+        OAUTH_CLIENT_ID: ${{ secrets.OAUTH_CLIENT_ID }}
+        OAUTH_CLIENT_SECRET: ${{ secrets.OAUTH_CLIENT_SECRET }}
+        JWT_ANONYMOUS_API_SECRET: ${{ secrets.JWT_ANONYMOUS_API_SECRET }}
+        GMAPS_API_KEY: ${{ secrets.GMAPS_API_KEY }}
+        GOOGLE_IOS_CLIENT_ID: ${{ secrets.GOOGLE_IOS_CLIENT_ID }}
+        GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
+      run: |
+        printf 'API_URL=https://api.inaturalist.org/v2\nOAUTH_API_URL=https://www.inaturalist.org\nJWT_ANONYMOUS_API_SECRET=%s\nOAUTH_CLIENT_ID=%s\nOAUTH_CLIENT_SECRET=%s\nGMAPS_API_KEY=%s\nGOOGLE_IOS_CLIENT_ID=%s\nGOOGLE_WEB_CLIENT_ID=%s\nANDROID_MODEL_FILE_NAME=INatVision_Small_2_fact256_8bit.tflite\nANDROID_TAXONOMY_FILE_NAME=taxonomy.csv\nANDROID_GEOMODEL_FILE_NAME=INatGeomodel_Small_2_8bit.tflite\nIOS_MODEL_FILE_NAME=INatVision_Small_2_fact256_8bit.mlmodel\nIOS_TAXONOMY_FILE_NAME=taxonomy.json\nIOS_GEOMODEL_FILE_NAME=INatGeomodel_Small_2_8bit.mlmodel\nCV_MODEL_VERSION=small_2\n' \
+        "$JWT_ANONYMOUS_API_SECRET" \
+        "$OAUTH_CLIENT_ID" \
+        "$OAUTH_CLIENT_SECRET" \
+        "$GMAPS_API_KEY" \
+        "$GOOGLE_IOS_CLIENT_ID" \
+        "$GOOGLE_WEB_CLIENT_ID" > .env
+
+    - name: Create GoogleService-Info.plist from example
+      env:
+        FIREBASE_GOOGLE_APP_ID: ${{ secrets.FIREBASE_GOOGLE_APP_ID }}
+        FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+        FIREBASE_GCM_SENDER_ID: ${{ secrets.FIREBASE_GCM_SENDER_ID }}
+        FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+        IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+      run: |
+        cp ios/GoogleService-Info.example.plist ios/GoogleService-Info.plist
+        /usr/libexec/PlistBuddy -c "Set :GOOGLE_APP_ID $FIREBASE_GOOGLE_APP_ID" \
+          -c "Set :API_KEY $FIREBASE_API_KEY" \
+          -c "Set :GCM_SENDER_ID $FIREBASE_GCM_SENDER_ID" \
+          -c "Set :PROJECT_ID $FIREBASE_PROJECT_ID" \
+          -c "Set :STORAGE_BUCKET $FIREBASE_STORAGE_BUCKET" \
+          -c "Set :BUNDLE_ID $IOS_BUNDLE_ID" \
+          ios/GoogleService-Info.plist
+
+    # Model files are not in the repo but the build links them, requires .env
+    - name: Download the example cv model and taxonomy file into the ios folder
+      run: npm run add-example-model
+
+    # The Fastfile refuses to run without one. Only the identifiers matter
+    # here, since App Store Connect is authenticated with an API key.
+    - name: Create Appfile
+      env:
+        IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
+        IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+        ANDROID_PACKAGE_NAME: ${{ vars.ANDROID_PACKAGE_NAME || 'org.inaturalist.android' }}
+      run: |
+        printf 'package_name("%s")\napp_identifier("%s")\nteam_id("%s")\n' \
+        "$ANDROID_PACKAGE_NAME" \
+        "$IOS_BUNDLE_ID" \
+        "$IOS_TEAM_ID" > fastlane/Appfile
+
+    # Match commits the encrypted signing assets, and the runner has no
+    # identity of its own to commit them under.
+    - name: Configure git identity for match
+      run: |
+        git config --global user.email "actions@github.com"
+        git config --global user.name "GitHub Actions"
+
+    - name: Build and upload to TestFlight
+      env:
+        ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+        ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        ASC_KEY_CONTENT: ${{ secrets.ASC_KEY_CONTENT }}
+        MATCH_GIT_URL: ${{ secrets.MATCH_GIT_URL }}
+        MATCH_GIT_BASIC_AUTHORIZATION: ${{ secrets.MATCH_GIT_BASIC_AUTHORIZATION }}
+        MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+        FASTLANE_XCODEBUILD_SETTINGS_TIMEOUT: 120
+      run: bundle exec fastlane ios ci_testflight

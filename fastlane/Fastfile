@@ -22,11 +22,15 @@ forbidden_env_vars.each do | env_var |
   NO_ENV_ERROR
 end
 
-required_env_vars = [
-  "IOS_PROVISIONING_PROFILE_NAME",
-  "IOS_SHARE_BUNDLE_ID",
-  "IOS_SHARE_PROVISIONING_PROFILE_NAME"
-]
+# The ci_testflight lane gets its provisioning profile names from match, so
+# only the local build lane needs them in ENV.
+required_env_vars = ["IOS_SHARE_BUNDLE_ID"]
+unless ENV["CI"]
+  required_env_vars += [
+    "IOS_PROVISIONING_PROFILE_NAME",
+    "IOS_SHARE_PROVISIONING_PROFILE_NAME"
+  ]
+end
 required_env_vars.each do | env_var |
   next unless ENV[env_var].to_s.empty?
 
@@ -381,6 +385,83 @@ platform :ios do
         }
       )
     end
+  end
+
+  desc "Build and upload a TestFlight build from CI"
+  # Unlike the build lane, this signs without a Mac in the loop: certificates
+  # and profiles come from match, and App Store Connect is authenticated with
+  # an API key rather than an interactive Apple ID login.
+  lane :ci_testflight do
+    setup_ci
+    api_key = app_store_connect_api_key(
+      key_id: ENV.fetch( "ASC_KEY_ID" ),
+      issuer_id: ENV.fetch( "ASC_ISSUER_ID" ),
+      key_content: ENV.fetch( "ASC_KEY_CONTENT" ),
+      is_key_content_base64: true
+    )
+    share_bundle_id = ENV.fetch( "IOS_SHARE_BUNDLE_ID" )
+    bundle_ids = [IOS_BUNDLE_ID, share_bundle_id]
+
+    # Creates the distribution certificate and both profiles on the first run
+    # and reuses them on every run after that.
+    match(
+      type: "appstore",
+      app_identifier: bundle_ids,
+      api_key: api_key,
+      readonly: false
+    )
+    profile_names = bundle_ids.to_h do | bundle_id |
+      [bundle_id, ENV.fetch( "sigh_#{bundle_id}_appstore_profile-name" )]
+    end
+
+    increment_version_number( xcodeproj: XCODEPROJ, version_number: VERSION )
+    increment_build_number(
+      xcodeproj: XCODEPROJ,
+      build_number: latest_testflight_build_number(
+        app_identifier: IOS_BUNDLE_ID,
+        api_key: api_key,
+        initial_build_number: 0
+      ) + 1
+    )
+
+    # The project signs automatically for local development, which cannot work
+    # on a runner with no Apple ID, so pin each target to its match profile.
+    {
+      "iNaturalistReactNative" => IOS_BUNDLE_ID,
+      "iNaturalistReactNative-ShareExtension" => share_bundle_id
+    }.each do | target, bundle_id |
+      update_code_signing_settings(
+        path: XCODEPROJ,
+        targets: [target],
+        build_configurations: ["Release"],
+        use_automatic_signing: false,
+        team_id: CredentialsManager::AppfileConfig.try_fetch_value( :team_id ),
+        code_sign_identity: "Apple Distribution",
+        profile_name: profile_names.fetch( bundle_id )
+      )
+    end
+
+    ipa_path = get_ipa_path
+    build_app(
+      workspace: File.join( "ios", "iNaturalistReactNative.xcworkspace" ),
+      scheme: "iNaturalistReactNative",
+      configuration: "Release",
+      output_directory: File.dirname( ipa_path ),
+      output_name: File.basename( ipa_path ),
+      export_options: {
+        signingStyle: "manual",
+        provisioningProfiles: profile_names
+      }
+    )
+
+    # Internal testers get the build as soon as Apple finishes processing it,
+    # so there is no reason to hold the runner open waiting for that.
+    upload_to_testflight(
+      api_key: api_key,
+      ipa: ipa_path,
+      distribute_external: false,
+      skip_waiting_for_build_processing: true
+    )
   end
 
   lane :clean do
