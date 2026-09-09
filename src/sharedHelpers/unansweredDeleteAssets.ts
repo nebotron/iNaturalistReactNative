@@ -5,28 +5,22 @@ import { basePhotoAssetId } from "sharedHelpers/appCreatedPhotoAssets";
 // confirmation, no completion handler, no library change, and the transaction
 // left open in photolibraryd afterwards so every later write hangs too.
 //
-// A transaction is all or nothing, so one asset it will not answer for blocks
-// every photo batched with it — permanently, because the next cleanup batches
-// them together again. The Sep 6 log is exactly that: 1049 photos, six
-// attempts across three builds and an iOS point update, nothing ever deleted.
-// Chunking the batch didn't help, because the asset is in the first chunk: a
-// transaction of 200 was left outstanding just as the transaction of 947 had
-// been. Every batch that predates Sep 5 deleted in ~1.4s.
+// This module exists to tell two different failures apart, and the log has now
+// settled which one this is. If a single asset were unanswerable it would take
+// every photo batched with it down, permanently, because the next cleanup
+// batches them together again — so the assets of a transaction that never came
+// back become the suspect set, each cleanup puts half of that set to the
+// library, and whichever half is implicated becomes the new suspect set, until
+// one asset is alone in a transaction that hangs and can be quarantined.
 //
-// Nothing PhotoKit exposes says which asset it is. The whole batch reports
-// canDelete=1, sourceType userLibrary, notDeletable=0, and the deletability
-// summary is clean. The only instrument that can tell them apart is the
-// deletion itself, and each attempt costs the user a wedged photo library, so
-// this narrows the search instead of repeating it: the assets of a transaction
-// that never came back are the suspect set, each cleanup puts half of that set
-// to the library, and whichever half is implicated becomes the new suspect set.
-// 200 assets are down to one in eight cleanups, and the photos that aren't
-// suspects delete normally the whole time.
-//
-// Once a single asset is proven — alone in a transaction that hung, or the last
-// one standing after its every companion deleted — it is quarantined: left out
-// of future transactions so it stops taking a thousand other photos down with
-// it, and reported to the user as a photo the app can't delete.
+// That search ran and came back empty. Two disjoint sets both hung, and so did
+// a transaction of one asset, of 166, of 200, of 932 — twelve in a row across
+// five builds since Sep 5, with a no-op modify transaction answering in 37ms in
+// between. It is deleteAssets that is broken on the device, not any asset in
+// it. So the streak below is what the module is mostly for now: knowing when to
+// stop asking. The narrowing stays because it costs nothing while deletions are
+// working, and it is the only thing that could tell us if this ever does come
+// down to one bad photo.
 
 const store = new MMKV( { id: "unanswered-delete-assets" } );
 
@@ -39,6 +33,22 @@ const IN_FLIGHT_KEY = "inFlight";
 const SUSPECTS_KEY = "suspects";
 // Assets proven, one at a time, to be that.
 const QUARANTINED_KEY = "quarantined";
+// How many transactions in a row PhotoKit has left unanswered.
+const STREAK_KEY = "unansweredStreak";
+
+// Past this, deleting is not something this device can currently do, and asking
+// it again is not a retry — it is 150 seconds of the user's time and then half
+// an hour with a photo library that refuses every write, for nothing. The Sep 4
+// to Sep 9 log is twelve unanswered transactions in a row across five builds,
+// of 1, 166, 200, 932 and 947 assets, with a no-op modify answering in 37ms
+// between two of them: it is deleteAssets specifically, and nothing about what
+// is in it has changed the outcome once.
+//
+// Three rather than one because a single unanswered transaction has always
+// been recoverable before, and because two of the twelve were the app's own
+// doing — one issued as the bundle reloaded under it, one stacked on a
+// transaction already open.
+const UNANSWERED_STREAK_LIMIT = 3;
 
 const read = ( key: string ): string[] => {
   const raw = store.getString( key );
@@ -54,6 +64,21 @@ const read = ( key: string ): string[] => {
 };
 
 const write = ( key: string, ids: string[] ) => store.set( key, JSON.stringify( ids ) );
+
+// How many transactions PhotoKit has left unanswered since the last one it
+// answered.
+export const unansweredStreak = ( ): number => store.getNumber( STREAK_KEY ) ?? 0;
+
+// Whether deleting is something this device is currently doing at all. When it
+// isn't, a cleanup says so instead of spending the user's afternoon proving it
+// again.
+export const deletesAreUnanswered = ( ): boolean => (
+  unansweredStreak( ) >= UNANSWERED_STREAK_LIMIT
+);
+
+// The user asking to try anyway, or a transaction that came back. Either way
+// the evidence for giving up is gone.
+export const clearUnansweredStreak = ( ) => store.set( STREAK_KEY, 0 );
 
 export const quarantinedAssetIds = ( ): string[] => read( QUARANTINED_KEY );
 
@@ -80,6 +105,7 @@ export const endDeleteTransaction = ( ) => write( IN_FLIGHT_KEY, [] );
 // is; when it carried only one, that one is proven.
 export const recordUnansweredTransaction = ( ids: string[] ) => {
   if ( ids.length === 0 ) return;
+  store.set( STREAK_KEY, unansweredStreak( ) + 1 );
   if ( ids.length === 1 ) {
     quarantine( ids[0] );
     return;
@@ -145,4 +171,5 @@ export const forgetUnansweredDeleteState = ( ) => {
   write( IN_FLIGHT_KEY, [] );
   write( SUSPECTS_KEY, [] );
   write( QUARANTINED_KEY, [] );
+  clearUnansweredStreak( );
 };

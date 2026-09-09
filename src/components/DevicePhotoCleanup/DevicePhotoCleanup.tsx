@@ -98,6 +98,7 @@ const DevicePhotoCleanup = ( ) => {
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [undeletableCount, setUndeletableCount] = useState( 0 );
   const [quarantinedCount, setQuarantinedCount] = useState( 0 );
+  const [deletesUnavailable, setDeletesUnavailable] = useState( false );
   const [probing, setProbing] = useState( false );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
   const [stillDeleting, setStillDeleting] = useState( false );
@@ -183,20 +184,28 @@ const DevicePhotoCleanup = ( ) => {
     PixelRatio.getPixelSizeForLayoutSize( gridItemWidth || 128 ),
   );
 
-  const deletePhotos = useCallback( async ( ) => {
+  const deletePhotos = useCallback( async ( force = false ) => {
     setDeleting( true );
     setStillDeleting( false );
+    setDeletesUnavailable( false );
     // Report what the OS actually deleted. A wedged PHPhotoLibrary deletes
     // nothing yet resolves normally, and
     // claiming "Deleted 1,159 photos" while the photos are all still there is
     // worse than saying nothing happened.
     const {
-      deleted, succeeded, pending, undeletable, quarantined,
+      deleted, succeeded, pending, undeletable, quarantined, unavailable,
     } = await deleteOriginalDevicePhotos(
       allUris,
-      { userInitiated: true },
+      { userInitiated: true, force },
     );
     setDeleting( false );
+    // Nothing was attempted. iOS has stopped finishing deletions on this
+    // device, and the honest thing is to say so and leave the photos on
+    // screen, rather than spend three minutes proving it again.
+    if ( unavailable ) {
+      setDeletesUnavailable( true );
+      return;
+    }
     // PhotoKit hasn't answered but is still holding the transaction, and it
     // usually goes through afterwards. Rescanning is the only honest thing to
     // show: the photos left in the grid may already be gone.
@@ -295,12 +304,25 @@ const DevicePhotoCleanup = ( ) => {
         />
       </View>
       <View className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-lightGray">
+        {/* Deletions have stopped coming back on this device, so the button
+            below would spend three minutes and half an hour of a wedged photo
+            library to prove it again. Say so, and let the user insist. */}
+        {deletesUnavailable && (
+          <Body2 className="mb-3 text-center">
+            {"iOS has stopped finishing photo deletions on this device: it "
+              + "accepts them and never completes them, whichever photos are "
+              + "in them. Deleting these in the Photos app still works. "
+              + "Restarting the device is the only thing known to clear it."}
+          </Body2>
+        )}
         <Button
           level="warning"
-          text={`DELETE ${allUris.length} PHOTO${allUris.length === 1
-            ? ""
-            : "S"}`}
-          onPress={deletePhotos}
+          text={deletesUnavailable
+            ? "TRY DELETING ANYWAY"
+            : `DELETE ${allUris.length} PHOTO${allUris.length === 1
+              ? ""
+              : "S"}`}
+          onPress={( ) => deletePhotos( deletesUnavailable )}
           loading={deleting}
           disabled={deleting}
         />
