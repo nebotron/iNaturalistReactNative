@@ -41,6 +41,19 @@ static BOOL errorIsOutOfSpace( NSError *error )
   return errorIsOutOfSpace( error.userInfo[NSUnderlyingErrorKey] );
 }
 
+// The watched folder's own name and its parent's. A camera writes into a
+// numbered subfolder of DCIM (DCIM/101EOSR7), and abandons it for the next one
+// when the card is formatted or a different card is used — so a bookmark on
+// that subfolder ends up resolving to a folder that is reachable, empty, and
+// will never receive another photo, while the camera writes into a sibling the
+// app has no access to. Reported so JS can say so instead of silently scanning
+// an empty folder forever.
+static void addFolderNames( NSMutableDictionary *dict, NSURL *url )
+{
+  dict[@"name"] = url.lastPathComponent ?: @"";
+  dict[@"parentName"] = url.URLByDeletingLastPathComponent.lastPathComponent ?: @"";
+}
+
 static NSURL *resolveSavedFolder( void )
 {
   NSData *bookmark = [[NSUserDefaults standardUserDefaults] dataForKey:kBookmarkKey];
@@ -129,13 +142,15 @@ RCT_EXPORT_METHOD(getFolderDiagnostics:(RCTPromiseResolveBlock)resolve
                              bookmarkDataIsStale:&stale
                                            error:nil];
   BOOL reachable = url ? [url checkResourceIsReachableAndReturnError:nil] : NO;
-  resolve( @{
+  NSMutableDictionary *diagnostics = [@{
     @"bookmarkPresent": @YES,
     @"resolved": url ? @YES : @NO,
     @"stale": @( stale ),
     @"reachable": @( reachable ),
     @"bookmarkBytes": @( (double)bookmark.length ),
-  } );
+  } mutableCopy];
+  if ( url ) addFolderNames( diagnostics, url );
+  resolve( diagnostics );
 }
 
 RCT_EXPORT_METHOD(forgetFolder:(RCTPromiseResolveBlock)resolve
@@ -221,6 +236,7 @@ RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
   NSMutableArray<NSDictionary *> *candidates = [NSMutableArray array];
   NSUInteger folderPathLength = folder.path.length;
   NSUInteger regularFileCount = 0;
+  NSUInteger directoryCount = 0;
   NSUInteger imageFileCount = 0;
   NSUInteger alreadyImportedCount = 0;
   NSMutableDictionary<NSString *, NSNumber *> *extCounts = [NSMutableDictionary dictionary];
@@ -232,6 +248,13 @@ RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
       NSString *ext = file.pathExtension.lowercaseString;
       if ( ext.length == 0 ) ext = @"(none)";
       extCounts[ext] = @( extCounts[ext].integerValue + 1 );
+    } else {
+      // Counted so a folder with nothing at all in it — no files and no
+      // subfolders, the state a camera subfolder is left in once its card has
+      // been offloaded and the camera has moved to the next folder — is
+      // distinguishable from a drive whose photos are simply somewhere the
+      // scan can't reach.
+      directoryCount++;
     }
     if ( !isRegular.boolValue || !isImageFile( file.lastPathComponent ) ) continue;
     imageFileCount++;
@@ -270,15 +293,18 @@ RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
   }
 
   [folder stopAccessingSecurityScopedResource];
-  resolve( @{
+  NSMutableDictionary *result = [@{
     @"available": @YES,
     @"reason": @"ok",
     @"images": images,
     @"regularFileCount": @( regularFileCount ),
+    @"directoryCount": @( directoryCount ),
     @"imageFileCount": @( imageFileCount ),
     @"alreadyImportedCount": @( alreadyImportedCount ),
     @"extensions": extCounts,
-  } );
+  } mutableCopy];
+  addFolderNames( result, folder );
+  resolve( result );
 }
 
 static NSString *photosStatusString( PHAuthorizationStatus status )
