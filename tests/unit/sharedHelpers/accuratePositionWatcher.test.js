@@ -39,6 +39,43 @@ const mockWatch = ( ) => {
   };
 };
 
+// infoWithExtra lands on console.info in tests (see tests/jest.setup.js)
+const positionFixLogs = infoSpy => infoSpy.mock.calls
+  .filter( call => call[0] === "position fix" )
+  .map( call => call[1] );
+
+describe( "fix logging", ( ) => {
+  it( "logs the accuracy of every fix, including after one is accurate", ( ) => {
+    const infoSpy = jest.spyOn( console, "info" ).mockImplementation( ( ) => {} );
+    const { subscribeToPosition } = loadWatcher( );
+    const watch = mockWatch( );
+    subscribeToPosition( { onLocation: jest.fn( ) } );
+
+    watch.emit( makePosition( 65, 1 ) );
+    watch.emit( makePosition( 6, 2 ) );
+    watch.emit( makePosition( 40, 3 ) );
+
+    expect( positionFixLogs( infoSpy ).map( extra => extra.accuracy ) )
+      .toEqual( [65, 6, 40] );
+    infoSpy.mockRestore( );
+  } );
+
+  it( "records why a fix wasn't used", ( ) => {
+    const infoSpy = jest.spyOn( console, "info" ).mockImplementation( ( ) => {} );
+    const { subscribeToPosition } = loadWatcher( );
+    const watch = mockWatch( );
+    subscribeToPosition( { onLocation: jest.fn( ) } );
+
+    watch.emit( makePosition( 20, 1 ) );
+    watch.emit( makePosition( -1, 2 ) );
+    watch.emit( makePosition( 50, 3 ) );
+
+    expect( positionFixLogs( infoSpy ).map( extra => extra.outcome ) )
+      .toEqual( ["used", "invalid", "worse"] );
+    infoSpy.mockRestore( );
+  } );
+} );
+
 describe( "subscribeToPosition", ( ) => {
   it( "runs a single watch no matter how many listeners there are", ( ) => {
     const { subscribeToPosition } = loadWatcher( );

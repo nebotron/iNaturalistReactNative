@@ -68,18 +68,24 @@ const isBetterThanBestFix = ( location: UserLocation ) => {
   return location.positional_accuracy <= bestFix.location.positional_accuracy;
 };
 
-// Nothing has ever recorded what the OS actually delivers, so we've had to
-// reason about GPS convergence from the CoreLocation docs rather than from
-// this app's own data. Log the accuracy of each fix until one is good enough,
-// then go quiet so a long camera session doesn't flood the log.
-const MAX_LOGGED_FIXES = 8;
+// Nothing has ever recorded what the OS actually delivers, so how GPS accuracy
+// converges here has only ever been reasoned about, never measured. Log every
+// fix a watch delivers, with a ceiling: the camera holds a watch open for as
+// long as it's on screen, and iOS delivers about one fix a second, so an
+// uncapped log would be a POST per second for the whole session.
+const MAX_LOGGED_FIXES = 25;
 let watchStartedAt = 0;
 let loggedFixes = 0;
-let doneLogging = false;
 
 const logFix = ( position: GeolocationResponse, outcome: string ) => {
-  if ( doneLogging || loggedFixes >= MAX_LOGGED_FIXES ) return;
+  if ( loggedFixes > MAX_LOGGED_FIXES ) return;
   loggedFixes += 1;
+  if ( loggedFixes > MAX_LOGGED_FIXES ) {
+    // Say so rather than trailing off, so a short log isn't read as the watch
+    // having gone quiet
+    logger.info( `position fix: ${MAX_LOGGED_FIXES} logged, not logging the rest` );
+    return;
+  }
   logger.infoWithExtra( "position fix", {
     fixNumber: loggedFixes,
     accuracy: position.coords.accuracy,
@@ -89,9 +95,6 @@ const logFix = ( position: GeolocationResponse, outcome: string ) => {
     fixAgeMs: Date.now( ) - position.timestamp,
     outcome,
   } );
-  if ( outcome === "used" && position.coords.accuracy <= TARGET_POSITIONAL_ACCURACY ) {
-    doneLogging = true;
-  }
 };
 
 const handlePosition = ( position: GeolocationResponse ) => {
@@ -128,7 +131,6 @@ const startWatch = ( ) => {
   if ( watchId !== null ) return;
   watchStartedAt = Date.now( );
   loggedFixes = 0;
-  doneLogging = false;
   watchId = watchPosition( handlePosition, handleError, geolocationOptions );
 };
 
