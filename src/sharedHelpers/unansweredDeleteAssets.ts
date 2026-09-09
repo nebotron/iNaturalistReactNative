@@ -33,22 +33,11 @@ const IN_FLIGHT_KEY = "inFlight";
 const SUSPECTS_KEY = "suspects";
 // Assets proven, one at a time, to be that.
 const QUARANTINED_KEY = "quarantined";
-// How many transactions in a row PhotoKit has left unanswered.
-const STREAK_KEY = "unansweredStreak";
+// The largest transaction this device has been willing to answer lately.
+const CAP_KEY = "maxTransactionSize";
 
-// Past this, deleting is not something this device can currently do, and asking
-// it again is not a retry — it is 150 seconds of the user's time and then half
-// an hour with a photo library that refuses every write, for nothing. The Sep 4
-// to Sep 9 log is twelve unanswered transactions in a row across five builds,
-// of 1, 166, 200, 932 and 947 assets, with a no-op modify answering in 37ms
-// between two of them: it is deleteAssets specifically, and nothing about what
-// is in it has changed the outcome once.
-//
-// Three rather than one because a single unanswered transaction has always
-// been recoverable before, and because two of the twelve were the app's own
-// doing — one issued as the bundle reloaded under it, one stacked on a
-// transaction already open.
-const UNANSWERED_STREAK_LIMIT = 3;
+// The biggest transaction a cleanup will ask for, and where the cap starts.
+export const MAX_TRANSACTION_SIZE = 200;
 
 const read = ( key: string ): string[] => {
   const raw = store.getString( key );
@@ -65,20 +54,37 @@ const read = ( key: string ): string[] => {
 
 const write = ( key: string, ids: string[] ) => store.set( key, JSON.stringify( ids ) );
 
-// How many transactions PhotoKit has left unanswered since the last one it
-// answered.
-export const unansweredStreak = ( ): number => store.getNumber( STREAK_KEY ) ?? 0;
-
-// Whether deleting is something this device is currently doing at all. When it
-// isn't, a cleanup says so instead of spending the user's afternoon proving it
-// again.
-export const deletesAreUnanswered = ( ): boolean => (
-  unansweredStreak( ) >= UNANSWERED_STREAK_LIMIT
+// How many assets this device will currently take in one transaction.
+//
+// Every transaction attempted since deletions stopped working has been 166,
+// 200, 932 or 947 assets, and every one was left unanswered. Nothing smaller
+// has ever been tried: each attempt at chunking put a big chunk first, so the
+// small ones behind it were never reached. Whether PhotoKit will still answer a
+// transaction of five is simply unknown, and it is the last thing about the
+// request itself that has not been ruled out.
+//
+// So the cap moves with the evidence. A transaction the library never answers
+// halves it; one it answers at the cap doubles it back toward the ceiling. A
+// cleanup that hangs at 200 therefore comes back at 100, and one that hangs at
+// 100 comes back at 50, until either the deletions start landing or the cap
+// reaches one asset and the question is finally settled.
+export const maxTransactionSize = ( ): number => (
+  store.getNumber( CAP_KEY ) || MAX_TRANSACTION_SIZE
 );
 
-// The user asking to try anyway, or a transaction that came back. Either way
-// the evidence for giving up is gone.
-export const clearUnansweredStreak = ( ) => store.set( STREAK_KEY, 0 );
+// PhotoKit never answered a transaction of this size, so ask for half as much.
+export const recordUnansweredSize = ( size: number ) => store.set(
+  CAP_KEY,
+  Math.max( 1, Math.floor( size / 2 ) ),
+);
+
+// It answered one. Only a transaction that filled the cap says anything about
+// raising it — the small ones at the head of every cleanup always come back.
+export const recordAnsweredSize = ( size: number ) => {
+  const cap = maxTransactionSize( );
+  if ( size < cap ) return;
+  store.set( CAP_KEY, Math.min( MAX_TRANSACTION_SIZE, cap * 2 ) );
+};
 
 export const quarantinedAssetIds = ( ): string[] => read( QUARANTINED_KEY );
 
@@ -101,12 +107,23 @@ export const beginDeleteTransaction = ( uris: string[] ) => write(
 
 export const endDeleteTransaction = ( ) => write( IN_FLIGHT_KEY, [] );
 
-// A transaction that never came back. Its assets are where the unanswerable one
-// is; when it carried only one, that one is proven.
-export const recordUnansweredTransaction = ( ids: string[] ) => {
+// A transaction that never came back. Its assets are where an unanswerable one
+// would be, and its size is more than this device will currently take.
+//
+// A single asset is only proven when it was sent alone deliberately, as the
+// probe narrowing a suspect set that already contained it. Every cleanup now
+// opens with a transaction of one to find the size the library will still
+// answer, and quarantining that photo whenever the run failed would accuse a
+// different innocent one each time. Sent alone as a probe it has hung twice,
+// once in the set that put it under suspicion and once on its own, which is
+// evidence about the asset rather than about the size.
+export const recordUnansweredTransaction = (
+  ids: string[],
+  fromSuspectProbe = false,
+) => {
   if ( ids.length === 0 ) return;
-  store.set( STREAK_KEY, unansweredStreak( ) + 1 );
-  if ( ids.length === 1 ) {
+  recordUnansweredSize( ids.length );
+  if ( fromSuspectProbe && ids.length === 1 ) {
     quarantine( ids[0] );
     return;
   }
@@ -115,6 +132,9 @@ export const recordUnansweredTransaction = ( ids: string[] ) => {
 
 // Reads and clears a transaction left open by a previous run, folding it into
 // the suspect set. Returns what it found, for the log.
+//
+// Never treated as a probe: the record doesn't say which it was, and accusing
+// an asset needs to be certain of that.
 export const takeUnansweredTransaction = ( ): string[] => {
   const inFlight = read( IN_FLIGHT_KEY );
   if ( inFlight.length === 0 ) return [];
@@ -171,5 +191,5 @@ export const forgetUnansweredDeleteState = ( ) => {
   write( IN_FLIGHT_KEY, [] );
   write( SUSPECTS_KEY, [] );
   write( QUARANTINED_KEY, [] );
-  clearUnansweredStreak( );
+  store.set( CAP_KEY, MAX_TRANSACTION_SIZE );
 };
