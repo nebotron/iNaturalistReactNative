@@ -349,6 +349,38 @@ describe( "useUsbAutoImport", ( ) => {
     );
   } );
 
+  // What a resumed process sees: the clock has moved by ten minutes and the
+  // deadline's ticker gets one wake-up to notice it. Charging that whole gap
+  // would fail the file for time it spent frozen — three of those in a row
+  // abandon the run and hold the card off for ten minutes. Fake timers can't
+  // reproduce the suspension itself (they decouple the clock from when timers
+  // fire, which is the coupling that causes this), so this pins the bounded
+  // charge rather than the wall-clock deadline it replaced.
+  it( "does not count a suspension against a save's deadline", async ( ) => {
+    mockSaveUsbImageToPhotos.mockImplementation( ( ) => new Promise( ( ) => {} ) );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 5_000 );
+
+    // iOS freezes the app for ten minutes: the clock moves, no timer fires.
+    jest.setSystemTime( Date.now( ) + 10 * 60_000 );
+    await jest.advanceTimersByTimeAsync( 1_000 );
+
+    expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+      "USB offload: failed to save IMG_0.CR3",
+      expect.anything( ),
+    );
+
+    // The save really is wedged, though, so the deadline still arrives once the
+    // app has been running for its full length.
+    await jest.advanceTimersByTimeAsync( 30_000 );
+
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "USB offload: failed to save IMG_0.CR3",
+      expect.objectContaining( { timedOut: true } ),
+    );
+  } );
+
   // The Sep 9 log: the bookmarked folder resolves and is reachable, and holds
   // nothing at all — no files, no subfolders. The camera has moved on to a
   // sibling of it that the bookmark grants no access to, and every scan since

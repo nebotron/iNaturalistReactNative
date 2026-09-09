@@ -80,14 +80,47 @@ const SAVE_FAILING_RETRY_DELAY_MS = 10 * 60 * 1000;
 // need to say what the error actually was.
 const MAX_LOGGED_SAVE_FAILURES = 3;
 
-const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => (
-  Promise.race( [
-    promise,
-    new Promise<T>( ( _resolve, reject ) => {
-      setTimeout( ( ) => reject( new Error( `timed out after ${ms}ms` ) ), ms );
-    } ),
-  ] )
-);
+// How often the deadline below wakes up, and the most time any one wake-up can
+// charge against it.
+const TIMEOUT_TICK_MS = 1_000;
+const MAX_CHARGE_PER_TICK_MS = 2 * TIMEOUT_TICK_MS;
+
+// A deadline that counts only the time this process was actually running.
+//
+// Both timeouts here used to be a single setTimeout, i.e. wall clock, and an
+// offload deliberately runs while the app is backgrounded, where iOS ends the
+// background task and freezes the process mid-save. A frozen process runs no
+// code, so the deadline comes due with nothing happening and fires the instant
+// the app resumes: the save is reported as timed out having been given however
+// much of its 30 seconds it was awake for. Three timeouts in a row abandon the
+// run and put the card in a ten-minute cooldown, so a suspension the user never
+// saw can cost them the rest of the import.
+//
+// Whether that is what the seven save failures in the log are is not settled —
+// each says "timed out after 30000ms" against 90s, 409s, once 12 minutes of
+// elapsed time, but that elapsed figure was measured after an unbounded await
+// (fixed below), so it may be reporting the log line's own delay rather than
+// the save's. Either way a deadline that charges a file for time it was frozen
+// is wrong on its face; the appState now recorded on each failure says which.
+//
+// Ticking charges elapsed time in bounded steps: a suspension costs one step,
+// however long it lasted, while a save that really is wedged with the app
+// running still hits the deadline on schedule.
+const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => {
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const deadline = new Promise<T>( ( _resolve, reject ) => {
+    let remaining = ms;
+    let lastTick = Date.now( );
+    timer = setInterval( ( ) => {
+      const now = Date.now( );
+      remaining -= Math.min( now - lastTick, MAX_CHARGE_PER_TICK_MS );
+      lastTick = now;
+      if ( remaining > 0 ) return;
+      reject( new Error( `timed out after ${ms}ms` ) );
+    }, TIMEOUT_TICK_MS );
+  } );
+  return Promise.race( [promise, deadline] ).finally( ( ) => clearInterval( timer ) );
+};
 
 // Watches the user's chosen USB folder (see UsbImportSetting) on launch and
 // on a short interval. iOS offers no attach notification, and a drive is
@@ -272,6 +305,11 @@ const useUsbAutoImport = ( ) => {
         } catch ( err ) {
           failed += 1;
           consecutiveFailures += 1;
+          // Read before anything else is awaited below: taken after the drive
+          // diagnostics call, this was the time until the *log line*, not the
+          // time the save took, and that call is itself a native round trip to
+          // a drive that has just failed a write.
+          const elapsedMs = Date.now( ) - fileStartedAt;
           const timedOut = err instanceof Error && err.message.includes( "timed out" );
           lastError = ( err instanceof Error
             ? err.message
@@ -293,12 +331,15 @@ const useUsbAutoImport = ( ) => {
             // is simply short for a 40MB raw over USB or whether the write
             // never started. Drive state separates a bad file from a card that
             // was pulled mid-run — the Aug 13 run saved 15, deleted none, and
-            // logged one file that had stopped existing.
+            // logged one file that had stopped existing. AppState separates the
+            // third case: a deadline that came due while iOS had the process
+            // frozen, which is not the file's fault at all.
             // eslint-disable-next-line no-await-in-loop
             const drive = await getUsbFolderDiagnostics( ).catch( ( ) => null );
             logger.errorWithExtra( `USB offload: failed to save ${relativePath}`, {
               fileSizeBytes: fileSize ?? -1,
-              elapsedMs: Date.now( ) - fileStartedAt,
+              elapsedMs,
+              appState: AppState.currentState,
               timedOut,
               index: i + 1,
               total: images.length,
