@@ -11,6 +11,7 @@ import {
   forgetAppCreatedPhotoAssets,
 } from "sharedHelpers/appCreatedPhotoAssets";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import addPhotosToImportedAlbum from "sharedHelpers/importedPhotoAlbum";
 import { log } from "sharedHelpers/logger";
 import {
   beginDeleteTransaction,
@@ -309,6 +310,16 @@ const performDeleteOriginalDevicePhotos = async (
     }
     return { deleted: 0, requested, succeeded: false };
   }
+
+  // File them into the album before trying to delete them, and file all of
+  // them — the quarantined and the merely stuck included, since those are the
+  // ones the user will have to deal with by hand. Deleting from the Photos app
+  // works on the device where this app's deletions don't, so an album the user
+  // can select in one go is the difference between a thousand photos they
+  // can't get rid of and a list they can. Awaited before the deletion rather
+  // than alongside it: two Photos-library writes in flight at once is what
+  // wedges photolibraryd, and this one settles in milliseconds.
+  await addPhotosToImportedAlbum( uniqueUris );
 
   // The ph:// URIs identify the user's photos, say nothing a count doesn't, and
   // made single log lines kilobytes long; the counts below are what a report

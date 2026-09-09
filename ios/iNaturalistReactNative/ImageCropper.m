@@ -1166,6 +1166,108 @@ RCT_EXPORT_METHOD( updateAssetLocations
   } );
 }
 
+// Files assets into an album this app owns, creating it the first time.
+//
+// This is the one Photos-library write that still works on a device where
+// deleteAssets has stopped answering, and it is why it exists: adding to an
+// album the app created asks the user for nothing, so PhotoKit takes it and
+// answers it in milliseconds, exactly as the no-op modify probe does. Deleting
+// these photos in the Photos app works fine, so gathering them where the user
+// can select them all at once is worth having whether or not the app's own
+// deletion ever comes back.
+//
+// Assets already in the album are left out: addAssets happily adds a second
+// copy of the same asset, and a cleanup run every day would otherwise fill the
+// album with duplicates.
+RCT_EXPORT_METHOD( addAssetsToAlbum
+                  : ( NSArray<NSString *> * )phUris album
+                  : ( NSString * )title resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    inatWhenClearToWrite( ^( NSString *busy ) {
+    if ( busy ) {
+      reject( @"PHOTOS_LIBRARY_BUSY", busy, nil );
+      return;
+    }
+
+    NSMutableArray<NSString *> *ids = [NSMutableArray array];
+    for ( NSString *u in ( phUris ?: @[] ) ) {
+      [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
+    }
+    PHFetchResult<PHAsset *> *fetched = ids.count > 0
+      ? [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil]
+      : nil;
+    if ( fetched.count == 0 ) {
+      resolve( @{ @"added": @0, @"requested": @( ids.count ), @"alreadyIn": @0 } );
+      return;
+    }
+
+    PHFetchOptions *byTitle = [[PHFetchOptions alloc] init];
+    byTitle.predicate = [NSPredicate predicateWithFormat:@"localizedTitle = %@", title];
+    PHAssetCollection *album =
+      [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
+                                               subtype:PHAssetCollectionSubtypeAlbumRegular
+                                               options:byTitle].firstObject;
+
+    // What the album already holds, so the same photo isn't filed twice.
+    NSMutableSet<NSString *> *present = [NSMutableSet set];
+    if ( album ) {
+      PHFetchResult<PHAsset *> *existing = [PHAsset fetchAssetsInAssetCollection:album
+                                                                        options:nil];
+      for ( PHAsset *asset in existing ) {
+        [present addObject:asset.localIdentifier];
+      }
+    }
+    NSMutableArray<PHAsset *> *toAdd = [NSMutableArray array];
+    for ( PHAsset *asset in fetched ) {
+      if ( ![present containsObject:asset.localIdentifier] ) { [toAdd addObject:asset]; }
+    }
+    NSUInteger alreadyIn = fetched.count - toAdd.count;
+    if ( toAdd.count == 0 ) {
+      resolve( @{
+        @"added": @0,
+        @"requested": @( ids.count ),
+        @"alreadyIn": @( alreadyIn ),
+      } );
+      return;
+    }
+
+    NSUInteger writeToken = inatPhotoWriteBegan(
+      [NSString stringWithFormat:@"addAssetsToAlbum(%lu)", ( unsigned long )toAdd.count] );
+    NSDate *startedAt = [NSDate date];
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+      if ( album ) {
+        [[PHAssetCollectionChangeRequest changeRequestForAssetCollection:album]
+          addAssets:toAdd];
+      } else {
+        [[PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:title]
+          addAssets:toAdd];
+      }
+    } completionHandler:^( BOOL success, NSError *error ) {
+      inatPhotoWriteEnded( writeToken );
+      NSInteger ms = ( NSInteger )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 );
+      if ( success ) {
+        resolve( @{
+          @"added": @( toAdd.count ),
+          @"requested": @( ids.count ),
+          @"alreadyIn": @( alreadyIn ),
+          @"createdAlbum": @( album == nil ),
+          @"ms": @( ms ),
+        } );
+      } else {
+        reject( @"ALBUM_ADD_FAILED",
+          [NSString stringWithFormat:@"adding %lu asset(s) to \"%@\" failed after %ldms: %@",
+            ( unsigned long )toAdd.count, title, ( long )ms,
+            error.localizedDescription ?: @"unknown"],
+          error );
+      }
+    }];
+    } );
+  } );
+}
+
 // Matches the ph:// branch's highQualityDecode threshold in createThumbnail:
 // below this, a request is a grid tile that wants speed; at or above it, only
 // the Group Photos crop overlay is asking, and it wants real detail.

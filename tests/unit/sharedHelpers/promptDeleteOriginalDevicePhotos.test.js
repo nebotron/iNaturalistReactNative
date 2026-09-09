@@ -14,6 +14,9 @@ const mockIosReadGalleryPermission = jest.fn( async () => "not-determined" );
 const mockIosRequestReadWriteGalleryPermission = jest.fn( async () => "granted" );
 const mockDeletePhotos = jest.fn( async () => undefined );
 const mockPhotoDeletionContext = jest.fn( async ( ) => "appState=0" );
+const mockAddAssetsToAlbum = jest.fn(
+  async uris => ( { added: uris.length, requested: uris.length, alreadyIn: 0 } ),
+);
 
 // The module under test destructures NativeModules.ImageCropper at import time,
 // so the native helper has to exist before that import runs. deletePhotoAssets
@@ -23,6 +26,7 @@ jest.mock( "react-native", ( ) => {
   const RN = jest.requireActual( "react-native" );
   RN.NativeModules.ImageCropper = {
     photoDeletionContext: ( ...args ) => mockPhotoDeletionContext( ...args ),
+    addAssetsToAlbum: ( ...args ) => mockAddAssetsToAlbum( ...args ),
   };
   return RN;
 } );
@@ -69,6 +73,10 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     mockIosReadGalleryPermission.mockReset( );
     mockIosRequestReadWriteGalleryPermission.mockReset( );
     mockDeletePhotos.mockReset( );
+    mockAddAssetsToAlbum.mockReset( );
+    mockAddAssetsToAlbum.mockImplementation(
+      async uris => ( { added: uris.length, requested: uris.length, alreadyIn: 0 } ),
+    );
     zustandStorage.removeItem( "deleteOriginalPhotosPermissionRequested" );
     zustandStorage.removeItem( "deleteOriginalPhotosSettingsPrompted" );
     mockIosReadGalleryPermission.mockResolvedValue( "not-determined" );
@@ -171,6 +179,35 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       // Counted for the whole session, so other hangs in this file add to it.
       expect( extra.hangsThisSession ).toBeGreaterThanOrEqual( 1 );
       expect( JSON.stringify( extra ) ).not.toContain( "ph://" );
+    } );
+
+    it( "files the photos into the album before trying to delete them", async ( ) => {
+      // Deleting these from the Photos app works on the device where the app's
+      // own deletions don't, so the album is what the user is left with when
+      // the deletion goes nowhere. It has to be filed first: two Photos-library
+      // writes in flight at once is what wedges photolibraryd.
+      mockDeletePhotos.mockRejectedValue( new Error( "never called back" ) );
+
+      await deleteOriginalDevicePhotos( ["ph://ONE", "ph://TWO"] );
+
+      expect( mockAddAssetsToAlbum ).toHaveBeenCalledWith(
+        ["ph://ONE", "ph://TWO"],
+        "Imported to iNaturalist",
+      );
+      expect( mockAddAssetsToAlbum.mock.invocationCallOrder[0] )
+        .toBeLessThan( mockDeletePhotos.mock.invocationCallOrder[0] );
+    } );
+
+    it( "deletes even when the photos could not be filed", async ( ) => {
+      // A photo that isn't in the album is a smaller problem than a cleanup
+      // that refused to run because the filing failed.
+      mockAddAssetsToAlbum.mockRejectedValue( new Error( "no album" ) );
+      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
+
+      const result = await deleteOriginalDevicePhotos( ["ph://ONE"] );
+
+      expect( mockDeletePhotos ).toHaveBeenCalledWith( ["ph://ONE"] );
+      expect( result ).toMatchObject( { deleted: 1, succeeded: true } );
     } );
 
     it( "ramps a whole-library delete up to the cap", async ( ) => {

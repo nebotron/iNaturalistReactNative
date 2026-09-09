@@ -25,6 +25,7 @@ import {
   StyleSheet,
   View,
 } from "react-native";
+import { IMPORTED_ALBUM_TITLE } from "sharedHelpers/importedPhotoAlbum";
 import { log } from "sharedHelpers/logger";
 import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
@@ -231,6 +232,10 @@ const DevicePhotoCleanup = ( ) => {
                 + "photos synced from a computer or belonging to a shared album."}
             </Body2>
           )}
+          <Body2 className="mt-4 text-center">
+            {`Every photo iNaturalist imported is also in the "${IMPORTED_ALBUM_TITLE}" `
+              + "album in Photos, so you can find or delete them there."}
+          </Body2>
           {quarantinedCount > 0 && (
             <Body2 className="mt-4 text-center">
               {`${quarantinedCount} photo${quarantinedCount === 1
