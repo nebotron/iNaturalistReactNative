@@ -25,6 +25,11 @@ const removeSyncedFilesFromDirectory = async (
     return null;
   }
 
+  // Membership is asked once per file in the directory, so an array turned the
+  // two checks below into files × filesToKeep. Both are one entry per photo on
+  // a device with a large library, and this runs at startup.
+  const keepSet = new Set( filesToKeep );
+
   const files = await readDir( directoryPath );
   let totalSize = 0;
   const fileDetails: FileDetails[] = [];
@@ -43,7 +48,7 @@ const removeSyncedFilesFromDirectory = async (
       }
       const { name, path } = file;
 
-      if ( filesToKeep.includes( name ) ) {
+      if ( keepSet.has( name ) ) {
         skipFile = true;
       }
 
@@ -74,7 +79,7 @@ const removeSyncedFilesFromDirectory = async (
   console.log( `Folder size exceeds limit. Current size: ${totalSize} bytes` );
 
   // Filter out files that are to be kept (e.g. unsynced files)
-  let deletableFiles = fileDetails.filter( file => !filesToKeep.includes( file.name ) );
+  let deletableFiles = fileDetails.filter( file => !keepSet.has( file.name ) );
 
   // Filter out files that are too new
   const now = Date.now();
