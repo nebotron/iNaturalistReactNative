@@ -1,3 +1,4 @@
+import { useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import { NotificationOnboarding } from "components/OnboardingModal/PivotCards";
 import { Tabs } from "components/SharedComponents";
@@ -29,10 +30,12 @@ const Notifications = ( ) => {
   const { t } = useTranslation();
   const { isDefaultMode } = useLayoutPrefs( );
   const currentUser = useCurrentUser( );
+  const { isConnected } = useNetInfo( );
 
   const {
     ownerUnviewedCount: ownerUnviewed,
     followingUnviewedCount: otherUnviewed,
+    countsResolved,
     refetch: refetchUnviewedCounts,
   } = useUnviewedNotificationsCount( );
 
@@ -43,19 +46,20 @@ const Notifications = ( ) => {
   );
 
   useEffect( ( ) => {
-    if (
-      !hasAutoSelectedTab.current
-      && ownerUnviewed !== undefined
-      && otherUnviewed !== undefined
-    ) {
-      hasAutoSelectedTab.current = true;
-      setActiveTab(
-        Number( ownerUnviewed ) === 0 && Number( otherUnviewed ) > 0
-          ? OTHER_TAB
-          : OWNER_TAB,
-      );
-    }
-  }, [ownerUnviewed, otherUnviewed] );
+    if ( hasAutoSelectedTab.current ) return;
+    // Offline the counts never arrive, but the tabs still have cached
+    // notifications to show, so pick one rather than leaving the screen
+    // blank waiting on a number that isn't coming.
+    if ( !countsResolved && isConnected !== false ) return;
+    hasAutoSelectedTab.current = true;
+    // Unknown counts are NaN here, which lands on the user's own
+    // notifications — the same tab they'd get with nothing unviewed.
+    setActiveTab(
+      Number( ownerUnviewed ) === 0 && Number( otherUnviewed ) > 0
+        ? OTHER_TAB
+        : OWNER_TAB,
+    );
+  }, [countsResolved, isConnected, ownerUnviewed, otherUnviewed] );
 
   const realm = useRealm();
   const localObservationCount = realm.objects( "Observation" ).length;

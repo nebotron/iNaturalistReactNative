@@ -58,6 +58,10 @@ const NotificationsListItem = ( { notification }: Props ) => {
         setObsDetailsTab( OBS_DETAILS_TAB.ACTIVITY );
         navigation.push( "ObsDetails", {
           uuid: notification.resource_uuid,
+          // The row already carries enough of the observation to draw the
+          // screen's header, so an offline tap lands on the observation
+          // rather than a spinner even if its detail wasn't pre-cached
+          preloadedObservation: notification.resource,
           targetActivityItemID: notification.identification_id || notification.comment_id,
         } );
       }}

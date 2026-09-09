@@ -62,7 +62,11 @@ const useUnviewedNotificationsCount = () => {
     } );
   }, [queryClient, realm, currentUser] );
 
-  const { data: ownerUnviewedCount, refetch: refetchOwner } = useAuthenticatedQuery(
+  const {
+    data: ownerUnviewedCount,
+    isError: ownerCountIsError,
+    refetch: refetchOwner,
+  } = useAuthenticatedQuery(
     ["notificationsCount", "owner"],
     ( optsWithAuth: ApiOpts ) => fetchUnviewedObservationUpdatesCount(
       { observations_by: "owner" },
@@ -71,7 +75,11 @@ const useUnviewedNotificationsCount = () => {
     { enabled: !!currentUser, refetchInterval: REFETCH_INTERVAL, requireLoggedIn: true },
   );
 
-  const { data: followingUnviewedCount, refetch: refetchFollowing } = useAuthenticatedQuery(
+  const {
+    data: followingUnviewedCount,
+    isError: followingCountIsError,
+    refetch: refetchFollowing,
+  } = useAuthenticatedQuery(
     ["notificationsCount", "following"],
     ( optsWithAuth: ApiOpts ) => fetchUnviewedObservationUpdatesCount(
       { observations_by: "following" },
@@ -102,6 +110,11 @@ const useUnviewedNotificationsCount = () => {
     // distinguish "not loaded yet" from "loaded, zero unviewed"
     ownerUnviewedCount: ownerUnviewedCount as number | undefined,
     followingUnviewedCount: followingUnviewedCount as number | undefined,
+    // Both counts have stopped moving, whether or not they arrived. A caller
+    // waiting on the counts to lay out the screen needs to know a failed
+    // fetch is as final as a successful one, or it waits forever.
+    countsResolved: ( ownerUnviewedCount !== undefined || ownerCountIsError )
+      && ( followingUnviewedCount !== undefined || followingCountIsError ),
     refetch,
   };
 };

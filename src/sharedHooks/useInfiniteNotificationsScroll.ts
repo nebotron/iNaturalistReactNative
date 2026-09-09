@@ -10,9 +10,17 @@ import { RealmContext } from "providers/contexts";
 import { useEffect, useMemo, useState } from "react";
 import type Realm from "realm";
 import Observation from "realmModels/Observation";
+import { log } from "sharedHelpers/logger";
+import {
+  getCachedNotifications,
+  setCachedNotifications,
+} from "sharedHelpers/notificationsCache";
+import precacheNotifiedObservations from "sharedHelpers/precacheNotifiedObservations";
 import { useAuthenticatedInfiniteQuery, useCurrentUser } from "sharedHooks";
 
 const { useRealm } = RealmContext;
+
+const logger = log.extend( "useInfiniteNotificationsScroll" );
 
 const LOADING_TIMEOUT = 5000;
 
@@ -96,6 +104,28 @@ export const getNotificationsQueryKey = (
   notificationParams: ApiObservationsUpdatesParams,
 ): string[] => ["useInfiniteNotificationsScroll", JSON.stringify( notificationParams )];
 
+// Which tab's notifications a persisted entry belongs to
+const cacheKeyFor = (
+  notificationParams: ApiObservationsUpdatesParams,
+): string => JSON.stringify( notificationParams );
+
+// Keep the first page — everything the tab shows before anyone scrolls — on
+// disk, along with the observations it points at. Doing this here rather than
+// in the hook means the background poll in useUnviewedNotificationsCount
+// warms the cache too, so notifications that arrived while the tab was
+// closed are still readable offline.
+const cacheFirstPage = (
+  notificationParams: ApiObservationsUpdatesParams,
+  notifications: Notification[],
+  optsWithAuth: ApiOpts,
+) => {
+  setCachedNotifications( cacheKeyFor( notificationParams ), notifications );
+  // Deliberately not awaited: the list shouldn't wait on the detail behind it
+  precacheNotifiedObservations( notifications, optsWithAuth ).catch( e => {
+    logger.error( "failed to precache notified observations", e );
+  } );
+};
+
 export async function fetchNotificationsPage(
   notificationParams: ApiObservationsUpdatesParams,
   pageParam: number,
@@ -114,6 +144,7 @@ export async function fetchNotificationsPage(
   const updatesWithContent = response?.filter(
     update => update.comment || update.identification,
   ) || [];
+  let notifications: Notification[] = updatesWithContent;
   const obsUUIDs = updatesWithContent.map( obsUpdate => obsUpdate.resource_uuid );
   if ( obsUUIDs.length > 0 ) {
     const observations = await fetchObsByUUIDs(
@@ -123,7 +154,7 @@ export async function fetchNotificationsPage(
       { save: params.observations_by === "owner" },
     );
     if ( observations ) {
-      return updatesWithContent.map( ( update: Notification ) => {
+      notifications = updatesWithContent.map( ( update: Notification ) => {
         const resource = observations.find(
           ( o: ApiObservation ) => o.uuid === update.resource_uuid,
         );
@@ -134,7 +165,13 @@ export async function fetchNotificationsPage(
     }
   }
 
-  return updatesWithContent;
+  // Caching an empty first page matters as much as caching a full one: it's
+  // how a cleared-out list stops showing yesterday's notifications offline.
+  if ( params.page === 1 ) {
+    cacheFirstPage( notificationParams, notifications, optsWithAuth );
+  }
+
+  return notifications;
 }
 
 const useInfiniteNotificationsScroll = (
@@ -147,6 +184,23 @@ const useInfiniteNotificationsScroll = (
   const queryKey = useMemo(
     () => getNotificationsQueryKey( notificationParams ),
     [notificationParams],
+  );
+
+  const cacheKey = useMemo(
+    ( ) => cacheKeyFor( notificationParams ),
+    [notificationParams],
+  );
+  const signedIn = !!currentUser;
+
+  // Seed the query with the last page we persisted so the tab has contents
+  // to show before (or without) a successful fetch. initialDataUpdatedAt
+  // keeps React Query honest about how old that is, so it still refetches
+  // the moment the tab is focused with a connection.
+  const cached = useMemo(
+    ( ) => ( signedIn
+      ? getCachedNotifications<Notification>( cacheKey )
+      : undefined ),
+    [cacheKey, signedIn],
   );
 
   const {
@@ -170,6 +224,8 @@ const useInfiniteNotificationsScroll = (
         ? allPages.length + 1
         : undefined ),
       enabled: !!( currentUser ),
+      initialData: cached && { pages: [cached.value], pageParams: [1] },
+      initialDataUpdatedAt: cached?.cachedAt,
     },
   );
 
