@@ -1,0 +1,27 @@
+diff --git a/node_modules/inaturalistjs/lib/inaturalist_api.js b/node_modules/inaturalistjs/lib/inaturalist_api.js
+index 0282f85..5b4c2dc 100644
+--- a/node_modules/inaturalistjs/lib/inaturalist_api.js
++++ b/node_modules/inaturalistjs/lib/inaturalist_api.js
+@@ -4,12 +4,16 @@
+ // like this seem to work, though they do result in unnecessarily large files
+ // for React native
+ 
+-let localFetch;
+-if ( typeof ( fetch ) !== "undefined" ) {
+-  localFetch = fetch;
+-} else {
+-  localFetch = require( "cross-fetch" ); // eslint-disable-line global-require
+-}
++// Resolve the global fetch when a request is actually made, rather than
++// capturing it here. Capturing it at import time means anything that wraps
++// fetch afterwards — an offline cache, instrumentation, a polyfill — is
++// invisible to every request this client makes, and whether it works at all
++// comes down to which module the bundler happens to load first.
++const localFetch = ( ...args ) => (
++  typeof ( fetch ) !== "undefined"
++    ? fetch( ...args )
++    : require( "cross-fetch" )( ...args ) // eslint-disable-line global-require
++);
+ let LocalFormData;
+ if ( typeof ( FormData ) !== "undefined" ) {
+   LocalFormData = FormData;

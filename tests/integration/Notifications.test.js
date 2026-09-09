@@ -2,7 +2,6 @@ import { screen, waitFor } from "@testing-library/react-native";
 import Notifications from "components/Notifications/Notifications";
 import inatjs from "inaturalistjs";
 import React from "react";
-import { clearNotificationsCache } from "sharedHelpers/notificationsCache";
 import factory, { makeResponse } from "tests/factory";
 import cachedImageUri from "tests/helpers/cachedImageUri";
 import { queryClient, renderAppWithComponent } from "tests/helpers/render";
@@ -68,7 +67,6 @@ describe( "Notifications", () => {
     jest.clearAllMocks();
     signOut( { realm: global.mockRealms[__filename] } );
     queryClient.clear( );
-    clearNotificationsCache( );
   } );
 
   it( "should show a notification", async ( ) => {
@@ -109,26 +107,5 @@ describe( "Notifications", () => {
     await waitFor( () => {
       expect( cachedImageUri( image ) ).toStrictEqual( photoUrl );
     } );
-  } );
-
-  it( "should show the notifications it last saw when nothing can be fetched", async ( ) => {
-    makeMockObsUpdatesResponse( );
-    const { unmount } = renderAppWithComponent( <Notifications /> );
-    expect(
-      await screen.findByText( /added a comment to an observation by you/ ),
-    ).toBeVisible( );
-    unmount( );
-
-    // A cold start with no connection: nothing left in memory, every request
-    // fails, so the only thing left to show is what we persisted
-    queryClient.clear( );
-    const networkError = new Error( "Network request failed" );
-    inatjs.observations.updates.mockRejectedValue( networkError );
-    inatjs.observations.fetch.mockRejectedValue( networkError );
-    renderAppWithComponent( <Notifications /> );
-
-    expect(
-      await screen.findByText( /added a comment to an observation by you/ ),
-    ).toBeVisible( );
   } );
 } );

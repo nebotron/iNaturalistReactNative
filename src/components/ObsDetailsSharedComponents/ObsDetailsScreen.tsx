@@ -32,10 +32,12 @@ const ObsDetailsScreen = () => {
     markViewedLocally,
   } = useLocalObservation( uuid );
 
+  // Deliberately not gated on connectivity: offline the request still goes
+  // out and is answered from the HTTP cache if this observation was ever
+  // fetched before — which is what makes a notification openable offline.
   const fetchRemoteObservationEnabled = !!(
     !remoteObsWasDeleted
     && ( !localObservation || localObservation?.wasSynced( ) )
-    && isConnected
   );
 
   const {

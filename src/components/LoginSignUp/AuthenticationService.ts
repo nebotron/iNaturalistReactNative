@@ -30,9 +30,9 @@ import {
 import Realm, { UpdateMode } from "realm";
 import realmConfig from "realmModels/index";
 import changeLanguage from "sharedHelpers/changeLanguage";
+import { clearHttpCache } from "sharedHelpers/httpCache";
 import { getInstallID } from "sharedHelpers/installData";
 import { log, logFileDirectory } from "sharedHelpers/logger";
-import { clearNotificationsCache } from "sharedHelpers/notificationsCache";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { setFirebaseDataCollectionEnabled } from "sharedHelpers/tracking";
@@ -282,9 +282,9 @@ const signOut = async (
 
   // delete all keys from mmkv
   zustandMMKVBackingStorage.clearAll( );
-  // Cached notifications and the observations behind them describe one
-  // user's content, so they can't survive that user signing out
-  clearNotificationsCache( );
+  // The HTTP cache holds responses to this user's authenticated requests,
+  // so it can't survive them signing out
+  clearHttpCache( );
 
   if ( options.clearRealm ) {
     if ( options.realm ) {

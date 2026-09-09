@@ -4,7 +4,7 @@ import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import { useCallback, useEffect, useMemo } from "react";
 import Observation from "realmModels/Observation";
-import { getCachedObservation } from "sharedHelpers/notificationsCache";
+import remoteObservationParams from "sharedHelpers/remoteObservationParams";
 import { useAuthenticatedQuery, useCurrentUser } from "sharedHooks";
 
 const { useRealm } = RealmContext;
@@ -29,12 +29,6 @@ const useRemoteObservation = ( uuid: string, enabled: boolean ): UseRemoteObserv
 
   const locale = i18n?.language ?? "en";
 
-  // An observation the user was notified about was pre-cached to disk while
-  // they were online, so opening it offline shows the observation instead of
-  // an endless spinner. initialDataUpdatedAt keeps it stale, so a connected
-  // screen still refetches immediately.
-  const cached = useMemo( ( ) => getCachedObservation( uuid ), [uuid] );
-
   const {
     data: remoteObservation,
     refetch: refetchRemoteObservation,
@@ -44,17 +38,13 @@ const useRemoteObservation = ( uuid: string, enabled: boolean ): UseRemoteObserv
     fetchRemoteObservationQueryKey,
     optsWithAuth => fetchRemoteObservation(
       uuid,
-      {
-        include_new_projects: true,
-        ...( !currentUser && { locale } ),
-        fields: Observation.FIELDS,
-      },
+      remoteObservationParams( currentUser
+        ? undefined
+        : locale ),
       optsWithAuth,
     ),
     {
       enabled: !!( enabled && !!uuid && uuid.length > 0 ),
-      initialData: cached?.value,
-      initialDataUpdatedAt: cached?.cachedAt,
     },
   );
 

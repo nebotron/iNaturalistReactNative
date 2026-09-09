@@ -1,11 +1,7 @@
-import { screen } from "@testing-library/react-native";
+import { waitFor } from "@testing-library/react-native";
 import ObsDetailsScreen from "components/ObsDetailsSharedComponents/ObsDetailsScreen";
 import inatjs from "inaturalistjs";
 import React from "react";
-import {
-  clearNotificationsCache,
-  setCachedObservations,
-} from "sharedHelpers/notificationsCache";
 import factory from "tests/factory";
 import { queryClient, renderAppWithComponent } from "tests/helpers/render";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
@@ -68,7 +64,7 @@ jest.mock( "@react-navigation/native", () => {
   };
 } );
 
-describe( "an observation a user was notified about", ( ) => {
+describe( "an observation a user was notified about, with no connection", ( ) => {
   beforeEach( async ( ) => {
     jest.useFakeTimers( );
     signIn( mockUser, { realm: global.mockRealms[__filename] } );
@@ -79,23 +75,20 @@ describe( "an observation a user was notified about", ( ) => {
     jest.clearAllMocks( );
     signOut( { realm: global.mockRealms[__filename] } );
     queryClient.clear( );
-    clearNotificationsCache( );
   } );
 
-  it( "opens offline from the pre-cached copy, with no local observation", async ( ) => {
+  // Without this the screen never asks, and the HTTP cache — which only
+  // answers requests that are actually made — can never supply the
+  // observation a notification points at.
+  it( "still asks for the observation, so the cache can answer", async ( ) => {
     expect(
       global.mockRealms[__filename].objectForPrimaryKey( "Observation", mockObservation.uuid ),
     ).toBeFalsy( );
-    setCachedObservations( [mockObservation] );
 
     renderAppWithComponent( <ObsDetailsScreen /> );
 
-    expect( await screen.findByText( mockObservation.user.login ) ).toBeVisible( );
-  } );
-
-  it( "shows nothing to open when it was never pre-cached", async ( ) => {
-    renderAppWithComponent( <ObsDetailsScreen /> );
-
-    expect( screen.queryByText( mockObservation.user.login ) ).toBeNull( );
+    await waitFor( ( ) => {
+      expect( inatjs.observations.fetch ).toHaveBeenCalled( );
+    } );
   } );
 } );

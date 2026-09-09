@@ -32,6 +32,7 @@ import {
   store as installDataMMKVStorage,
   LAST_CRASH_DATA,
 } from "sharedHelpers/installData";
+import { installHttpCache } from "sharedHelpers/httpCache";
 import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
 import { startSlowLoadMonitoring } from "sharedHelpers/slowLoadTracker";
 import DeviceInfo from "react-native-device-info";
@@ -158,6 +159,12 @@ inatjs.setConfig( {
     "X-Installation-ID": getInstallID( ),
   },
 } );
+
+// Every request the app makes can now be answered from the last response we
+// saw for it when there's no network. Safe to install here rather than before
+// the imports above: inaturalistjs is patched to resolve the global fetch when
+// it makes a request, not when it loads.
+installHttpCache( );
 
 const queryClient = new QueryClient( {
   defaultOptions: {
