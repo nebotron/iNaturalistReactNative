@@ -226,10 +226,12 @@ const DevicePhotoCleanup = ( ) => {
                 + "photos synced from a computer or belonging to a shared album."}
             </Body2>
           )}
-          <Body2 className="mt-4 text-center">
-            {`Every photo iNaturalist imported is also in the "${IMPORTED_ALBUM_TITLE}" `
-              + "album in Photos, so you can find or delete them there."}
-          </Body2>
+          {undeletableCount + quarantinedCount > 0 && (
+            <Body2 className="mt-4 text-center">
+              {`The photos that are still here are in the "${IMPORTED_ALBUM_TITLE}" `
+                + "album in Photos, so you can select and delete them there in one go."}
+            </Body2>
+          )}
           {quarantinedCount > 0 && (
             <Body2 className="mt-4 text-center">
               {`${quarantinedCount} photo${quarantinedCount === 1

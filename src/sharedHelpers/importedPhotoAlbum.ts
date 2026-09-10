@@ -15,15 +15,19 @@ const { ImageCropper } = NativeModules as {
   };
 };
 
-// Where every device photo the app has imported ends up, so the user can find
-// them all in one place in Photos.
+// Where an imported device photo the app could not delete ends up, so the user
+// can find them all in one place in Photos.
 //
-// This is also the answer to a deletion that has stopped working. Deleting
-// these photos from the Photos app works on the device where the app's own
+// This is the answer to a deletion that has stopped working. Deleting these
+// photos from the Photos app works on the device where the app's own
 // deleteAssets has been unanswered for days, so filing them into an album is
 // what turns "1454 photos I can't get rid of" into a list the user can select
 // and delete themselves. Adding to an album this app created asks the user for
 // nothing, which is why it still goes through when the deletion doesn't.
+//
+// It holds only what a cleanup left behind, because it can hold nothing else:
+// a deleted asset leaves every album it is in, so filing the photos a cleanup
+// is about to delete just empties the album again a second later.
 export const IMPORTED_ALBUM_TITLE = "Imported to iNaturalist";
 
 // Files photos into the album. Never throws: this runs alongside a deletion

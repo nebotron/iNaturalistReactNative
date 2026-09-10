@@ -294,8 +294,28 @@ const performDeleteOriginalDevicePhotos = async (
   const chunks = chunked( ordinary, maxTransactionSize( ) );
   const firstProbeIndex = chunks.length;
   chunks.push( ...suspectProbeChunks( suspect, maxTransactionSize( ) ) );
+
+  // Files whatever is still in the library into the album, once the deletion
+  // has had its go at it.
+  //
+  // Filing *before* the deletion is what made the album empty. An asset that
+  // is deleted leaves every album it belongs to, so a cleanup that worked
+  // filed its 40 photos and then deleted all 40 back out again — the Sep 10
+  // log has five runs that each filed everything they asked for and each found
+  // the album empty the next time round. The album was never for the photos
+  // that delete cleanly; it is for the ones the user has to handle by hand,
+  // the undeletable, the quarantined, and the ones PhotoKit never answers for.
+  // So it is filled from what survives.
+  //
+  // The whole request can still be handed over: a URI whose asset is already
+  // gone fetches to nothing natively and is simply left out.
+  const fileSurvivorsIntoAlbum = ( ) => addPhotosToImportedAlbum( uniqueUris );
+
   if ( chunks.length === 0 ) {
     logger.warnWithExtra( "photo_delete_all_quarantined", { requested } );
+    // Nothing was attempted, so every one of these is a photo the user has to
+    // delete themselves — exactly what the album is for.
+    void enqueuePhotoLibraryWrite( fileSurvivorsIntoAlbum );
     return {
       deleted: 0, requested, succeeded: true, quarantined: skipped.length,
     };
@@ -312,16 +332,6 @@ const performDeleteOriginalDevicePhotos = async (
     }
     return { deleted: 0, requested, succeeded: false };
   }
-
-  // File them into the album before trying to delete them, and file all of
-  // them — the quarantined and the merely stuck included, since those are the
-  // ones the user will have to deal with by hand. Deleting from the Photos app
-  // works on the device where this app's deletions don't, so an album the user
-  // can select in one go is the difference between a thousand photos they
-  // can't get rid of and a list they can. Awaited before the deletion rather
-  // than alongside it: two Photos-library writes in flight at once is what
-  // wedges photolibraryd, and this one settles in milliseconds.
-  await addPhotosToImportedAlbum( uniqueUris );
 
   // The ph:// URIs identify the user's photos, say nothing a count doesn't, and
   // made single log lines kilobytes long; the counts below are what a report
@@ -655,6 +665,12 @@ const performDeleteOriginalDevicePhotos = async (
     clearTimeout( hangTimer );
     if ( timeoutTimer ) clearTimeout( timeoutTimer );
     appStateSubscription.remove( );
+    // Queued rather than awaited, and queued from every exit above. A deletion
+    // the UI stopped waiting for is still open down in PhotoKit, and two
+    // Photos-library writes in flight at once is what wedges photolibraryd, so
+    // the filing takes its turn in the same chain the deletion did: it runs
+    // once that transaction has actually settled, whatever this call reported.
+    void enqueuePhotoLibraryWrite( fileSurvivorsIntoAlbum );
   }
 };
 

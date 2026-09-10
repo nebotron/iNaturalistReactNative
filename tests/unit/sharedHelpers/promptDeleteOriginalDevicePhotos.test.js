@@ -181,21 +181,23 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( JSON.stringify( extra ) ).not.toContain( "ph://" );
     } );
 
-    it( "files the photos into the album before trying to delete them", async ( ) => {
+    it( "files the photos into the album after the deletion has had its go", async ( ) => {
       // Deleting these from the Photos app works on the device where the app's
       // own deletions don't, so the album is what the user is left with when
-      // the deletion goes nowhere. It has to be filed first: two Photos-library
-      // writes in flight at once is what wedges photolibraryd.
+      // the deletion goes nowhere. It has to be filed afterwards: a deleted
+      // asset leaves every album it is in, so filing first emptied the album
+      // again on every cleanup that worked.
       mockDeletePhotos.mockRejectedValue( new Error( "never called back" ) );
 
       await deleteOriginalDevicePhotos( ["ph://ONE", "ph://TWO"] );
+      await jest.advanceTimersByTimeAsync( 0 );
 
       expect( mockAddAssetsToAlbum ).toHaveBeenCalledWith(
         ["ph://ONE", "ph://TWO"],
         "Imported to iNaturalist",
       );
       expect( mockAddAssetsToAlbum.mock.invocationCallOrder[0] )
-        .toBeLessThan( mockDeletePhotos.mock.invocationCallOrder[0] );
+        .toBeGreaterThan( mockDeletePhotos.mock.invocationCallOrder[0] );
     } );
 
     it( "deletes even when the photos could not be filed", async ( ) => {
