@@ -19,7 +19,6 @@ import React, {
 } from "react";
 import {
   Image,
-  NativeModules,
   PixelRatio,
   Pressable,
   StyleSheet,
@@ -41,10 +40,6 @@ import {
 import { useCurrentUser, useGridLayout } from "sharedHooks";
 
 const logger = log.extend( "DevicePhotoCleanup" );
-
-const { ImageCropper } = NativeModules as {
-  ImageCropper?: { photoDeleteProbe?: ( phUris: string[] ) => Promise<string> };
-};
 
 const { useRealm } = RealmContext;
 
@@ -99,7 +94,6 @@ const DevicePhotoCleanup = ( ) => {
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [undeletableCount, setUndeletableCount] = useState( 0 );
   const [quarantinedCount, setQuarantinedCount] = useState( 0 );
-  const [probing, setProbing] = useState( false );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
   const [stillDeleting, setStillDeleting] = useState( false );
   const [rescans, setRescans] = useState( 0 );
@@ -308,28 +302,6 @@ const DevicePhotoCleanup = ( ) => {
           onPress={deletePhotos}
           loading={deleting}
           disabled={deleting}
-        />
-        {/* Asks PhotoKit two questions about the stuck photos: whether a
-            transaction that modifies one comes back, and whether this app can
-            put an alert on screen at all. See photoDeleteProbe in
-            ImageCropper.m for what each answer rules out. */}
-        <Button
-          className="mt-2"
-          text="RUN PHOTOS PROBE"
-          disabled={deleting || probing}
-          loading={probing}
-          onPress={async ( ) => {
-            setProbing( true );
-            try {
-              const result = await ImageCropper?.photoDeleteProbe?.( allUris );
-              logger.errorWithExtra( "photo_delete_probe", {
-                photos: allUris.length,
-                result: result ?? "probe unavailable",
-              } );
-            } finally {
-              setProbing( false );
-            }
-          }}
         />
         {deleting && (
           <Body2 className="mt-2 text-center">
