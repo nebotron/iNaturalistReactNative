@@ -305,7 +305,7 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( quarantinedAssetIds( ) ).toEqual( [] );
     } );
 
-    it( "halves the suspects each cleanup and deletes everything else", async ( ) => {
+    it( "sends the suspects in halving transactions rather than holding half back", async ( ) => {
       mockDeletePhotos
         .mockResolvedValueOnce( { deleted: 1, requested: 1 } )
         .mockRejectedValueOnce( new Error( "never called back" ) );
@@ -314,15 +314,46 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( suspectAssetIds( ) ).toEqual( ["H1", "H2", "H3", "H4", "H5"] );
 
       // Next cleanup: everything that was never suspect deletes normally, and
-      // half of the suspects goes out last to halve the search.
+      // the suspects follow it a halving transaction at a time. Every one of
+      // them is asked for -- a photo the user is looking at in the cleanup
+      // grid is never silently left out of the delete they pressed.
       mockDeletePhotos.mockReset( );
       mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
       await deleteOriginalDevicePhotos( uris );
 
       const sent = mockDeletePhotos.mock.calls.map( call => call[0] );
-      expect( sent.at( -1 ) ).toEqual( ["ph://H1", "ph://H2", "ph://H3"] );
-      // That probe came back, so anything unanswerable is in the half held back.
-      expect( suspectAssetIds( ) ).toEqual( ["H4", "H5"] );
+      expect( sent.slice( -2 ) ).toEqual( [["ph://H3", "ph://H4"], ["ph://H5"]] );
+      expect( sent.flat( ) ).toEqual( expect.arrayContaining(
+        ["ph://H1", "ph://H2", "ph://H3", "ph://H4", "ph://H5"],
+      ) );
+      // They all came back, so there is nothing left to explain.
+      expect( suspectAssetIds( ) ).toEqual( [] );
+      expect( quarantinedAssetIds( ) ).toEqual( [] );
+    } );
+
+    it( "narrows to the transaction that hung when one of the halves does", async ( ) => {
+      // The narrowing is what the halving is for: the chunk the library never
+      // answers becomes the suspect set, and the run stops there rather than
+      // issuing another transaction at a wedged photolibraryd.
+      mockDeletePhotos.mockRejectedValueOnce( new Error( "never called back" ) );
+      const uris = Array.from( { length: 8 }, ( _unused, i ) => `ph://N${i}` );
+      await deleteOriginalDevicePhotos( uris );
+      expect( suspectAssetIds( ) ).toEqual(
+        ["N0", "N1", "N2", "N3", "N4", "N5", "N6", "N7"],
+      );
+
+      // The cap is 4 after that hang, so the eight go out as 4, 2, 1, 1. The
+      // half answers, the quarter behind it doesn't, and the search is down to
+      // that quarter.
+      mockDeletePhotos.mockReset( );
+      mockDeletePhotos
+        .mockResolvedValueOnce( { deleted: 4, requested: 4 } )
+        .mockRejectedValueOnce( new Error( "never called back" ) );
+      await deleteOriginalDevicePhotos( uris );
+
+      expect( mockDeletePhotos.mock.calls.map( call => call[0].length ) ).toEqual( [4, 2] );
+      expect( suspectAssetIds( ) ).toEqual( ["N4", "N5"] );
+      expect( quarantinedAssetIds( ) ).toEqual( [] );
     } );
 
     it( "quarantines the asset once it is the only one left under suspicion", async ( ) => {
@@ -351,30 +382,28 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
     } );
 
     it( "narrows to the last suspect but accuses it on its own evidence", async ( ) => {
-      // Two suspects, one of which just deleted. The other is not quarantined
+      // Three suspects, two of which just deleted. The last is not quarantined
       // for being last: a transaction can be recorded unanswered while it is
       // only slow, and a set built from one of those holds nothing wrong. It
-      // goes out alone next time and is judged on that.
+      // goes out alone and is judged on that -- in this same cleanup now,
+      // rather than one cleanup per halving.
       mockDeletePhotos.mockRejectedValueOnce( new Error( "never called back" ) );
       await deleteOriginalDevicePhotos( ["ph://P1", "ph://P2", "ph://P3"] );
       expect( suspectAssetIds( ) ).toEqual( ["P1", "P2", "P3"] );
 
-      // Half of them go out as the probe and come back, so the other half is
-      // what is left to explain.
       mockDeletePhotos.mockReset( );
-      mockDeletePhotos.mockResolvedValue( { deleted: 2, requested: 2 } );
+      mockDeletePhotos
+        .mockResolvedValueOnce( { deleted: 1, requested: 1 } )
+        .mockResolvedValueOnce( { deleted: 1, requested: 1 } )
+        .mockRejectedValue( new Error( "never called back" ) );
       await deleteOriginalDevicePhotos( ["ph://P1", "ph://P2", "ph://P3"] );
-      expect( suspectAssetIds( ) ).toEqual( ["P3"] );
-      expect( quarantinedAssetIds( ) ).toEqual( [] );
 
       // Alone as the probe, in a transaction that never comes back: proven.
-      // Only the suspect is left to delete by now, so the probe is the whole
-      // cleanup -- while ordinary chunks are still hanging the probe is never
-      // reached, which is right, because then the trouble isn't one asset.
-      mockDeletePhotos.mockReset( );
-      mockDeletePhotos.mockRejectedValue( new Error( "never called back" ) );
-      await deleteOriginalDevicePhotos( ["ph://P3"] );
       expect( quarantinedAssetIds( ) ).toEqual( ["P3"] );
+      expect( suspectAssetIds( ) ).toEqual( [] );
+      // The asset is the explanation, so the size is not: a photo that hangs
+      // on its own must not shrink every later cleanup's transactions.
+      expect( maxTransactionSize( ) ).toEqual( 2 );
     } );
 
     it( "ends the search accusing nobody when every suspect deletes", async ( ) => {
@@ -385,10 +414,12 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( suspectAssetIds( ) ).toEqual( ["Q0", "Q1", "Q2"] );
 
       mockDeletePhotos.mockReset( );
-      mockDeletePhotos.mockResolvedValue( { deleted: 2, requested: 2 } );
-      await deleteOriginalDevicePhotos( ["ph://Q0", "ph://Q1", "ph://Q2"] );
-      await deleteOriginalDevicePhotos( ["ph://Q0", "ph://Q1", "ph://Q2"] );
+      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
+      const result = await deleteOriginalDevicePhotos( ["ph://Q0", "ph://Q1", "ph://Q2"] );
 
+      // One cleanup, not three: every suspect was asked for, so the photos the
+      // user was looking at are all gone and the search is over.
+      expect( result ).toMatchObject( { deleted: 3, requested: 3, succeeded: true } );
       expect( suspectAssetIds( ) ).toEqual( [] );
       expect( quarantinedAssetIds( ) ).toEqual( [] );
     } );

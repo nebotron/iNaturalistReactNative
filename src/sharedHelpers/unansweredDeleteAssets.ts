@@ -122,11 +122,13 @@ export const recordUnansweredTransaction = (
   fromSuspectProbe = false,
 ) => {
   if ( ids.length === 0 ) return;
-  recordUnansweredSize( ids.length );
   if ( fromSuspectProbe && ids.length === 1 ) {
+    // The asset is the explanation, so the size isn't. Halving the cap here
+    // would punish every later cleanup for one bad photo.
     quarantine( ids[0] );
     return;
   }
+  recordUnansweredSize( ids.length );
   write( SUSPECTS_KEY, ids );
 };
 
@@ -177,14 +179,29 @@ export const partitionForDelete = ( uris: string[] ) => {
   return { skipped, suspect, ordinary };
 };
 
-// Only what a cleanup would put to PhotoKit this time: the whole suspect set is
-// never sent at once, because a transaction carrying all of it just hangs
-// again and tells us nothing we don't know.
-export const suspectProbe = ( suspect: string[] ): string[] => (
-  suspect.length === 0
-    ? []
-    : suspect.slice( 0, Math.ceil( suspect.length / 2 ) )
-);
+// How the suspect set goes out: never in one transaction, because one carrying
+// all of it just hangs again and tells us nothing we don't know — but all of
+// it, in halving transactions, one after another.
+//
+// This used to be a single transaction of half the set, and the other half was
+// simply left out of the cleanup. That silently kept photos out of a delete the
+// user had asked for: the Sep 9 log has a cleanup of 1454 photos where 25 were
+// suspect, 13 went out, every transaction answered, and 12 photos were left in
+// the library with the screen reporting a clean "Deleted 1442 photos". Halving
+// chunks narrow exactly as well — the loop stops at the first one the library
+// doesn't answer, and that chunk becomes the new suspect set — while a run in
+// which nothing hangs empties the set and deletes the whole list.
+export const suspectProbeChunks = ( suspect: string[], cap: number ): string[][] => {
+  const ceiling = Math.max( 1, cap );
+  const chunks: string[][] = [];
+  let start = 0;
+  while ( start < suspect.length ) {
+    const size = Math.max( 1, Math.min( Math.ceil( ( suspect.length - start ) / 2 ), ceiling ) );
+    chunks.push( suspect.slice( start, start + size ) );
+    start += size;
+  }
+  return chunks;
+};
 
 // Test seam: MMKV persists across a test file otherwise.
 export const forgetUnansweredDeleteState = ( ) => {

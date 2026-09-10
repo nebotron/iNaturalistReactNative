@@ -21,7 +21,7 @@ import {
   recordAnsweredSize,
   recordAnsweredSuspects,
   recordUnansweredTransaction,
-  suspectProbe,
+  suspectProbeChunks,
   takeUnansweredTransaction,
 } from "sharedHelpers/unansweredDeleteAssets";
 
@@ -287,11 +287,13 @@ const performDeleteOriginalDevicePhotos = async (
     } );
   }
   // Assets known to hang a transaction are left out of every transaction; the
-  // set still being narrowed goes out half at a time, after everything else.
+  // set still being narrowed goes out after everything else, halving
+  // transaction by transaction so that a run in which nothing hangs still
+  // deletes all of it.
   const { skipped, suspect, ordinary } = partitionForDelete( uniqueUris );
-  const probe = suspectProbe( suspect );
   const chunks = chunked( ordinary, maxTransactionSize( ) );
-  if ( probe.length > 0 ) chunks.push( probe );
+  const firstProbeIndex = chunks.length;
+  chunks.push( ...suspectProbeChunks( suspect, maxTransactionSize( ) ) );
   if ( chunks.length === 0 ) {
     logger.warnWithExtra( "photo_delete_all_quarantined", { requested } );
     return {
@@ -456,10 +458,10 @@ const performDeleteOriginalDevicePhotos = async (
       // The biggest transaction this cleanup will ask for. Halves every time
       // the library leaves one unanswered.
       cap: maxTransactionSize( ),
-      // Still narrowing: this many are under suspicion, and this many of them
-      // go out in the last transaction to halve it.
+      // Still narrowing: this many are under suspicion, and they go out in
+      // this many transactions behind everything else.
       suspect: suspect.length,
-      probe: probe.length,
+      probeChunks: chunks.length - firstProbeIndex,
       // Proven unanswerable, left out entirely.
       quarantined: skipped.length,
     } );
@@ -470,7 +472,7 @@ const performDeleteOriginalDevicePhotos = async (
     const runChunks = async ( ) => {
       for ( let index = 0; index < chunks.length; index += 1 ) {
         const chunk = chunks[index];
-        const isProbe = probe.length > 0 && index === chunks.length - 1;
+        const isProbe = index >= firstProbeIndex;
         const chunkStartedAt = Date.now( );
         // Recorded before the transaction is asked for, not after it fails: a
         // deletion that never answers is only identifiable by the record it
