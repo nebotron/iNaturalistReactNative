@@ -8,12 +8,11 @@ import {
   Button,
   CustomFlashList,
   INatIconButton,
-  WarningSheet,
 } from "components/SharedComponents";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import React, {
-  useCallback, useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef,
 } from "react";
 import { preloadImage } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -99,7 +98,6 @@ const GroupPhotos = ( {
 }: Props ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
-  const [showDiscardSheet, setShowDiscardSheet] = useState( false );
   const {
     flashListStyle,
     gridItemStyle,
@@ -242,7 +240,7 @@ const GroupPhotos = ( {
         <Button
           level="neutral"
           text={t( "DISCARD" )}
-          onPress={( ) => setShowDiscardSheet( true )}
+          onPress={discardImport}
           testID="GroupPhotos.discard"
         />
         <Button
@@ -259,6 +257,7 @@ const GroupPhotos = ( {
       </View>
     </View>
   ), [
+    discardImport,
     groupedPhotos.length,
     isCreatingObservations,
     navBasedOnUserSettings,
@@ -360,22 +359,6 @@ const GroupPhotos = ( {
             </View>
           </View>
         </View>
-      )}
-      {showDiscardSheet && (
-        <WarningSheet
-          onPressClose={( ) => setShowDiscardSheet( false )}
-          headerText={t( "DISCARD-PHOTOS--question" )}
-          text={t( "By-exiting-your-photos-will-not-be-saved" )}
-          secondButtonText={t( "CANCEL" )}
-          handleSecondButtonPress={( ) => setShowDiscardSheet( false )}
-          buttonText={t( "DISCARD-ALL" )}
-          testID="GroupPhotos.discardSheet"
-          confirm={( ) => {
-            setShowDiscardSheet( false );
-            discardImport( );
-          }}
-          loading={false}
-        />
       )}
     </SharedStackViewWrapper>
   );
