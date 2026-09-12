@@ -1,0 +1,180 @@
+##
+# Build the iOS app on a GitHub runner and upload it to TestFlight, so builds
+# can reach a phone without a local Mac.
+#
+# Fork-only: signs with Ben's own Apple team and the com.benhannel.inat.dev
+# bundle IDs, so it never touches iNaturalist's App Store Connect records.
+# Trigger from the Actions tab or with `gh workflow run testflight-ios.yml`.
+#
+# Required repository secrets:
+#   ASC_KEY_ID     App Store Connect API key ID
+#   ASC_ISSUER_ID  App Store Connect API issuer ID
+#   ASC_KEY_BASE64 base64 of the AuthKey_<ASC_KEY_ID>.p8 private key
+#   DOTENV_BASE64  base64 of the production .env
+#   GOOGLE_SERVICE_INFO_PRODUCTION_BASE64
+#                  base64 of ios/GoogleService-Info.production.plist
+##
+name: TestFlight iOS
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: testflight-ios
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    # Kill the task if not finished after 120 minutes
+    timeout-minutes: 120
+    env:
+      TEAM_ID: DVURLJZFH6
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ARCHIVE_PATH: ${{ github.workspace }}/ios/build/iNaturalistReactNative.xcarchive
+      EXPORT_PATH: ${{ github.workspace }}/ios/build/export
+
+    steps:
+    # Fail in seconds rather than an hour into the build
+    - name: Check that every secret is present
+      env:
+        ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
+        DOTENV_BASE64: ${{ secrets.DOTENV_BASE64 }}
+        GOOGLE_SERVICE_INFO_PRODUCTION_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PRODUCTION_BASE64 }}
+      run: |
+        missing=""
+        for secret in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_BASE64 DOTENV_BASE64 \
+          GOOGLE_SERVICE_INFO_PRODUCTION_BASE64; do
+          [ -n "${!secret}" ] || missing="$missing $secret"
+        done
+        if [ -n "$missing" ]; then
+          echo "Missing repository secrets:$missing" >&2
+          exit 1
+        fi
+
+    - name: Check out Git repository
+      uses: actions/checkout@v6
+
+    - name: Install Node.js and NPM
+      uses: actions/setup-node@v6
+      with:
+        node-version-file: '.nvmrc'
+        cache: 'npm'
+
+    - name: Setup Ruby version according to .ruby-version with cached gems
+      uses: ruby/setup-ruby@v1
+      with:
+        bundler-cache: true
+
+    # Required workaround for Firebase & XCode >26.0.1
+    # https://github.com/actions/runner-images/issues/13135#issuecomment-3397914993
+    - name: Set Xcode Toolchain
+      run: echo "TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault" >> "$GITHUB_ENV"
+
+    - name: Install Dependencies
+      run: npm ci
+
+    - name: Create .env file
+      env:
+        DOTENV_BASE64: ${{ secrets.DOTENV_BASE64 }}
+      run: printf '%s' "$DOTENV_BASE64" | base64 --decode > .env
+
+    - name: Create GoogleService-Info.production.plist
+      env:
+        GOOGLE_SERVICE_INFO_PRODUCTION_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PRODUCTION_BASE64 }}
+      run: |
+        printf '%s' "$GOOGLE_SERVICE_INFO_PRODUCTION_BASE64" | base64 --decode \
+          > ios/GoogleService-Info.production.plist
+
+    # The CV model, geomodel and taxonomy aren't in the repo. Requires .env
+    - name: Download the cv model and taxonomy file into the ios folder
+      run: npm run add-example-model
+
+    - name: Update Pods
+      run: |
+        gem update cocoapods xcodeproj
+        cd ios && pod install
+
+    # altool and xcodebuild both look for the key in ~/.appstoreconnect
+    - name: Install the App Store Connect API key
+      env:
+        ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
+      run: |
+        mkdir -p "$HOME/.appstoreconnect/private_keys"
+        printf '%s' "$ASC_KEY_BASE64" | base64 --decode \
+          > "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
+
+    # CFBundleVersion is a literal in the app's Info.plist but is generated from
+    # CURRENT_PROJECT_VERSION for the share extension, so both need setting. A
+    # UTC timestamp is unique and always increasing, so no bump gets committed.
+    - name: Set the build number
+      run: |
+        BUILD_NUMBER="$( date -u +%Y.%m%d.%H%M%S )"
+        echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" \
+          ios/iNaturalistReactNative/Info.plist
+
+    # -allowProvisioningUpdates lets xcodebuild create the distribution
+    # certificate and App Store profiles with the API key, so no certificates
+    # need to be exported from a Mac
+    - name: Archive
+      run: |
+        set -o pipefail
+        xcodebuild archive \
+          -workspace ios/iNaturalistReactNative.xcworkspace \
+          -scheme iNaturalistReactNative \
+          -configuration Release \
+          -destination 'generic/platform=iOS' \
+          -archivePath "$ARCHIVE_PATH" \
+          -allowProvisioningUpdates \
+          -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8" \
+          -authenticationKeyID "$ASC_KEY_ID" \
+          -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+          CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+    - name: Export the IPA
+      run: |
+        cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>method</key>
+          <string>app-store-connect</string>
+          <key>destination</key>
+          <string>export</string>
+          <key>teamID</key>
+          <string>$TEAM_ID</string>
+          <key>signingStyle</key>
+          <string>automatic</string>
+          <key>uploadSymbols</key>
+          <true/>
+          <key>manageAppVersionAndBuildNumber</key>
+          <false/>
+        </dict>
+        </plist>
+        PLIST
+        xcodebuild -exportArchive \
+          -archivePath "$ARCHIVE_PATH" \
+          -exportPath "$EXPORT_PATH" \
+          -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+          -allowProvisioningUpdates \
+          -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8" \
+          -authenticationKeyID "$ASC_KEY_ID" \
+          -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+    - name: Upload to TestFlight
+      run: |
+        IPA="$( ls "$EXPORT_PATH"/*.ipa | head -1 )"
+        xcrun altool --upload-app --type ios --file "$IPA" \
+          --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+        echo "Uploaded build $BUILD_NUMBER to TestFlight" >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Store the IPA when something goes wrong
+      uses: actions/upload-artifact@v6
+      if: failure()
+      with:
+        name: ipa
+        path: ${{ env.EXPORT_PATH }}
+        retention-days: 5
+        if-no-files-found: ignore
