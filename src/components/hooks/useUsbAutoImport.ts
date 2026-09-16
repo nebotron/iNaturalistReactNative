@@ -9,9 +9,12 @@ import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import {
+  addPendingUsbDeletes,
   availableMemoryMb,
+  clearPendingUsbDeletes,
   clearUsbOffloadMarker,
   deleteUsbSourceImages,
+  getPendingUsbDeletes,
   getUsbFolderDiagnostics,
   getUsbFolderName,
   isCameraSubfolder,
@@ -122,6 +125,24 @@ const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => {
   return Promise.race( [promise, deadline] ).finally( ( ) => clearInterval( timer ) );
 };
 
+// Delete from the card the files already saved into Photos, and stop tracking
+// them once the card has answered. Separate from the run that saved them so it
+// can also finish what an earlier run left behind: deletion happens once, after
+// a whole batch is safely saved, but each file is marked imported the moment it
+// saves, so a run iOS suspends mid-loop strands its saved files on the card
+// where no later scan will ever list them again.
+const deletePendingFromDevice = async ( ) => {
+  const paths = getPendingUsbDeletes( );
+  if ( paths.length === 0 ) return null;
+  const del = await deleteUsbSourceImages( paths );
+  // Keep them pending only when the drive went away — that is the recoverable
+  // case, and the one a later run can finish. A failure with the drive present
+  // means the file is already gone or refuses to be deleted, and retrying it on
+  // every scan from now on would never come good.
+  if ( del.available !== false ) clearPendingUsbDeletes( paths );
+  return { ...del, attempted: paths.length };
+};
+
 // Watches the user's chosen USB folder (see UsbImportSetting) on launch and
 // on a short interval. iOS offers no attach notification, and a drive is
 // commonly plugged in *after* the app is already open — a moment that fires
@@ -138,6 +159,11 @@ const useUsbAutoImport = ( ) => {
   const offloading = useRef( false );
   const savesFailingUntil = useRef( 0 );
   const backgroundTaskActive = useRef( false );
+  // Whether a folder is actually being watched. Without one there is nothing to
+  // scan for, and holding background time on every trip out of the app — for
+  // the many users who never picked a folder — takes a share of the window iOS
+  // grants the whole app away from the features that do have work to do.
+  const watchingFolder = useRef( false );
   // The scan runs every SCAN_INTERVAL_MS while foregrounded, and each remote
   // log line is a network POST, so logging every tick would flood the log.
   // Only emit a diagnostic when its text changes from the last one.
@@ -168,6 +194,9 @@ const useUsbAutoImport = ( ) => {
     // that finds nothing — every scan, while no drive is attached — must not
     // touch the progress store or leave a timer behind for it.
     let started = false;
+    // Whether this run is holding the shared background task, so the release in
+    // `finally` matches the acquisition exactly once.
+    let heldBackgroundTask = false;
     const progress = useUsbImportProgress.getState( );
     // An offload the app never came back from. Reported here rather than at
     // launch because a run that died left its files unimported, so the next
@@ -216,7 +245,22 @@ const useUsbAutoImport = ( ) => {
         } );
       }
       const { images } = result;
-      if ( images.length === 0 ) return;
+      if ( images.length === 0 ) {
+        // Nothing new to save, but an earlier run may still have files sitting
+        // on the card that it saved and never got to delete. This return is the
+        // only place that case is ever reached, since those files are marked
+        // imported and so are invisible to the scan above.
+        if ( result.available ) {
+          const leftovers = await deletePendingFromDevice( );
+          if ( leftovers ) {
+            logger.info(
+              `USB offload: deleted ${leftovers.deleted} of ${leftovers.attempted} file(s) `
+              + `an earlier run saved but did not delete (${leftovers.failed} delete failures)`,
+            );
+          }
+        }
+        return;
+      }
 
       // Get Photos permission before showing progress or touching any file, so
       // the system prompt appears up front rather than mid-loop (where it was
@@ -232,6 +276,17 @@ const useUsbAutoImport = ( ) => {
       started = true;
       progress.start( images.length );
       markUsbOffloadStarted( images.length );
+      // Ask for background execution time now, while the app is still
+      // foregrounded, rather than waiting for the AppState listener to ask for
+      // it as the app is going away. iOS grants the grace period to a task that
+      // is already registered when the app leaves the foreground; a
+      // beginBackgroundTask that only starts once "inactive" has fired is
+      // racing the suspension it exists to survive, and loses often enough to
+      // matter — the Sep 5 run saved 9 of 141 and stopped 6.7 seconds in with
+      // appState "inactive", a fraction of the window it should have had.
+      // Reference-counted, so this nests harmlessly inside any hold the
+      // listener has already taken.
+      heldBackgroundTask = await beginBackgroundUsbImportTask( );
 
       // Save each image to Photos, one at a time so memory stays flat and the
       // progress count is accurate. Track successes for the batch delete.
@@ -301,6 +356,9 @@ const useUsbAutoImport = ( ) => {
           // is killed mid-loop, photos already saved to this point must not
           // be saved again on restart.
           markUsbImagesImported( [relativePath] );
+          // And as still owed a deletion from the card, in storage that
+          // outlives this run — savedPaths alone dies with the process.
+          addPendingUsbDeletes( [relativePath] );
           consecutiveFailures = 0;
         } catch ( err ) {
           failed += 1;
@@ -381,11 +439,12 @@ const useUsbAutoImport = ( ) => {
       }
 
       // Delete from the source device only after the whole batch is safely in
-      // Photos (per the user's choice), and only the files that actually saved.
+      // Photos (per the user's choice), and only files that actually saved —
+      // this run's, plus anything an earlier run saved and never deleted.
       let deletedFromDevice = 0;
       let deleteFailures = 0;
       let driveGoneOnDelete = false;
-      if ( savedPaths.length > 0 ) {
+      if ( getPendingUsbDeletes( ).length > 0 ) {
         progress.setPhase( "deleting" );
         updateUsbOffloadProgress(
           savedPaths.length,
@@ -393,14 +452,14 @@ const useUsbAutoImport = ( ) => {
           "deleting",
           AppState.currentState,
         );
-        const del = await deleteUsbSourceImages( savedPaths );
+        const del = await deletePendingFromDevice( );
         // The native side already reports this and the run summary dropped it:
         // "deleted 0 of 15, 15 failures" reads as a deletion bug, when the
         // drive having been unplugged mid-run explains the whole line.
-        driveGoneOnDelete = del.available === false;
-        progress.setDeleted( del.deleted );
-        deletedFromDevice = del.deleted;
-        deleteFailures = del.failed;
+        driveGoneOnDelete = del?.available === false;
+        deletedFromDevice = del?.deleted ?? 0;
+        deleteFailures = del?.failed ?? 0;
+        progress.setDeleted( deletedFromDevice );
       }
       // Reported even when nothing saved. This line used to sit inside the
       // branch above, so the one run that most needed explaining — every file
@@ -432,6 +491,10 @@ const useUsbAutoImport = ( ) => {
       // that vanish with the process.
       clearUsbOffloadMarker( );
       offloading.current = false;
+      if ( heldBackgroundTask ) {
+        heldBackgroundTask = false;
+        endBackgroundUsbImportTask( );
+      }
       // Leave the final state on screen briefly, then dismiss the overlay.
       if ( started ) {
         setTimeout( ( ) => useUsbImportProgress.getState( ).finish( ), 4000 );
@@ -465,6 +528,7 @@ const useUsbAutoImport = ( ) => {
       pollGeneration += 1;
       if ( interval ) clearInterval( interval );
       interval = undefined;
+      watchingFolder.current = false;
     };
     const startPolling = async ( ) => {
       stopPolling( );
@@ -512,6 +576,7 @@ const useUsbAutoImport = ( ) => {
         // Scan on the interval either way: offload re-resolves the folder each
         // time and returns in one cheap native call while the drive is absent.
         if ( generation !== pollGeneration ) return;
+        watchingFolder.current = true;
         interval = setInterval( offload, SCAN_INTERVAL_MS );
       } catch ( error ) {
         // A rejected native call would otherwise be an unhandled promise
@@ -533,7 +598,7 @@ const useUsbAutoImport = ( ) => {
       // Don't stop polling on background/inactive: hold a background task so
       // iOS keeps the JS thread alive for a while, and let the interval keep
       // checking the folder during that window.
-      if ( !backgroundTaskActive.current ) {
+      if ( watchingFolder.current && !backgroundTaskActive.current ) {
         backgroundTaskActive.current = await beginBackgroundUsbImportTask( );
       }
     } );
