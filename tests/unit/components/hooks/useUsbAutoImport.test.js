@@ -14,6 +14,10 @@ const mockUpdateUsbOffloadProgress = jest.fn( );
 const mockGetUsbFolderName = jest.fn( );
 const mockGetUsbFolderDiagnostics = jest.fn( );
 
+let mockPendingDeletes = [];
+const mockBeginBackgroundTask = jest.fn( ( ) => true );
+const mockEndBackgroundTask = jest.fn( ( ) => undefined );
+
 jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
   availableMemoryMb: ( ) => 512,
   refreshAvailableMemory: ( ) => undefined,
@@ -26,6 +30,15 @@ jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
   listNewUsbImages: ( ...args ) => mockListNewUsbImages( ...args ),
   markUsbImagesImported: ( ...args ) => mockMarkUsbImagesImported( ...args ),
   markUsbOffloadStarted: ( ...args ) => mockMarkUsbOffloadStarted( ...args ),
+  // The real pending-delete list is MMKV-backed and outlives the run; an
+  // in-memory array behaves the same way within a test, and the tests that
+  // care about it reset it in beforeEach.
+  addPendingUsbDeletes: paths => mockPendingDeletes.push( ...paths ),
+  getPendingUsbDeletes: ( ) => [...mockPendingDeletes],
+  clearPendingUsbDeletes: paths => {
+    const done = new Set( paths );
+    mockPendingDeletes = mockPendingDeletes.filter( path => !done.has( path ) );
+  },
   requestUsbPhotosPermission: async ( ) => "authorized",
   saveUsbImageToPhotos: ( ...args ) => mockSaveUsbImageToPhotos( ...args ),
   takeUnfinishedUsbOffload: ( ) => mockTakeUnfinishedUsbOffload( ),
@@ -37,8 +50,8 @@ jest.mock( "sharedHelpers/installData", ( ) => ( {
 } ) );
 
 jest.mock( "sharedHelpers/backgroundExecution", ( ) => ( {
-  beginBackgroundUsbImportTask: async ( ) => false,
-  endBackgroundUsbImportTask: async ( ) => undefined,
+  beginBackgroundUsbImportTask: async ( ) => mockBeginBackgroundTask( ),
+  endBackgroundUsbImportTask: async ( ) => mockEndBackgroundTask( ),
 } ) );
 
 const mockLogger = {
@@ -65,6 +78,7 @@ describe( "useUsbAutoImport", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
     jest.useFakeTimers( );
+    mockPendingDeletes = [];
     mockGetUsbFolderName.mockResolvedValue( "101EOSR7" );
     mockGetUsbFolderDiagnostics.mockResolvedValue( { bookmarkPresent: true } );
     mockListNewUsbImages.mockResolvedValue( {
@@ -409,5 +423,95 @@ describe( "useUsbAutoImport", ( ) => {
       "usb_watching_camera_subfolder",
       expect.objectContaining( { folder: "101EOSR7", imageFiles: 0, directories: 0 } ),
     );
+  } );
+  // iOS grants the background grace period to a task that is already registered
+  // when the app leaves the foreground. Asking for one from the AppState
+  // listener, as the app is going away, is a bridge call racing the suspension
+  // it exists to survive: the Sep 5 run saved 9 of 141 and stopped 6.7s in with
+  // appState "inactive", a fraction of the window it should have had. So the
+  // run takes it up front, while the app is still frontmost.
+  it( "holds background time from the moment the offload starts", async ( ) => {
+    mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "asset" } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    // The run has begun, and the app never left the foreground — so the only
+    // thing that can have asked for background time is the run itself.
+    expect( mockMarkUsbOffloadStarted ).toHaveBeenCalled( );
+    expect( mockBeginBackgroundTask ).toHaveBeenCalled( );
+  } );
+
+  // Each file is marked imported the moment it saves, so no later scan lists it
+  // again — but deletion only happens once the whole batch is saved. A run iOS
+  // suspends in between leaves those photos on the card for good: invisible to
+  // the scan, and never deleted by anyone.
+  it( "deletes what a suspended run saved but never removed", async ( ) => {
+    mockPendingDeletes.push( "IMG_LEFTOVER.CR3" );
+    // The scan finds nothing new, exactly as it would once the dead run's files
+    // are all marked imported.
+    mockListNewUsbImages.mockResolvedValue( {
+      available: true,
+      reason: "ok",
+      images: [],
+      imageFileCount: 1,
+      alreadyImportedCount: 1,
+      knownCount: 1,
+      regularFileCount: 1,
+      extensions: { cr3: 1 },
+    } );
+    mockDeleteUsbSourceImages.mockResolvedValue( { deleted: 1, failed: 0 } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockDeleteUsbSourceImages ).toHaveBeenCalledWith( ["IMG_LEFTOVER.CR3"] );
+    // And forgotten, so the next scan doesn't ask the card to delete it again.
+    expect( mockPendingDeletes ).toEqual( [] );
+  } );
+
+  // The drive being gone is the one delete failure worth retrying — it is the
+  // unplugged-mid-run case, and the card still holds the files.
+  it( "keeps leftovers pending when the drive is gone", async ( ) => {
+    mockPendingDeletes.push( "IMG_LEFTOVER.CR3" );
+    mockListNewUsbImages.mockResolvedValue( {
+      available: true,
+      reason: "ok",
+      images: [],
+      imageFileCount: 0,
+      alreadyImportedCount: 1,
+      knownCount: 1,
+      regularFileCount: 0,
+      extensions: {},
+    } );
+    mockDeleteUsbSourceImages.mockResolvedValue( {
+      deleted: 0,
+      failed: 1,
+      available: false,
+    } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockPendingDeletes ).toEqual( ["IMG_LEFTOVER.CR3"] );
+  } );
+
+  // Nothing to scan for means nothing to stay awake for, and the window iOS
+  // grants is the whole app's to share with uploads.
+  it( "takes no background time when no folder was ever picked", async ( ) => {
+    mockGetUsbFolderName.mockResolvedValue( null );
+    mockGetUsbFolderDiagnostics.mockResolvedValue( { bookmarkPresent: false } );
+
+    const appStateHandlers = [];
+    jest.spyOn( AppState, "addEventListener" ).mockImplementation( ( _event, handler ) => {
+      appStateHandlers.push( handler );
+      return { remove: ( ) => undefined };
+    } );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+    await Promise.all( appStateHandlers.map( handler => handler( "background" ) ) );
+
+    expect( mockBeginBackgroundTask ).not.toHaveBeenCalled( );
   } );
 } );

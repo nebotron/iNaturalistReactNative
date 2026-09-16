@@ -101,6 +101,23 @@ const usbStorage = Platform.OS === "ios"
 const MAX_PHOTOS_PER_SCAN = 500;
 const IMPORTED_NAMES_KEY = "importedNames";
 
+// Files saved into Photos that have not yet been deleted from the card.
+//
+// Deletion happens once per run, after the whole batch is safely saved, but
+// each file is marked imported the moment it saves — so a run that doesn't
+// reach its delete phase leaves those files on the card *and* excluded from
+// every later scan, which is to say on the card for good. That is the ordinary
+// outcome of an offload that runs while the app is backgrounded: iOS suspends
+// the process mid-loop and the run never comes back. Holding the paths here
+// instead of only in the run's local savedPaths lets the next run finish the
+// job, since this survives the suspension that is the whole problem.
+const PENDING_DELETE_KEY = "pendingDeletePaths";
+
+// A cap so a card that never accepts a deletion can't grow this without bound.
+// Oldest entries are the ones dropped: they are the least likely to still be
+// there, and the newest run's files are the ones the user just watched import.
+const MAX_PENDING_DELETES = 2000;
+
 const store = new MMKV( { id: "usb-import" } );
 
 const getImportedNames = ( ): string[] => JSON.parse(
@@ -123,6 +140,7 @@ export const getUsbFolderDiagnostics = ( ): Promise<UsbFolderDiagnostics> => (
 export const forgetUsbFolder = async ( ) => {
   await usbStorage?.forgetFolder( );
   store.delete( IMPORTED_NAMES_KEY );
+  store.delete( PENDING_DELETE_KEY );
 };
 
 export const requestUsbPhotosPermission = ( ): Promise<PhotosPermissionStatus> => (
@@ -161,6 +179,59 @@ export const markUsbImagesImported = ( relativePaths: string[] ) => {
     ...getImportedNames( ),
     ...relativePaths,
   ] ) );
+};
+
+// How long a pending path stays deletable. Files are tracked by their path on
+// the drive, and nothing in a path identifies the card it came from — a
+// freshly formatted card starts numbering at IMG_0001 again, so a stale entry
+// could name a photo on a *different* card that was never imported, and
+// deleting that is destroying someone's photo. In practice the flush happens on
+// the next scan, seconds later, on the card still in the reader; a day is far
+// more than that needs while keeping a list from an unplugged card from acting
+// on whatever is plugged in next week. Entries past it are dropped unread, so
+// the worst case is the old behaviour — files left on a card — never a deletion
+// of something the app did not save.
+const PENDING_DELETE_TTL_MS = 24 * 60 * 60 * 1000;
+
+interface PendingUsbDelete {
+  path: string;
+  savedAt: number;
+}
+
+const readPendingUsbDeletes = ( ): PendingUsbDelete[] => JSON.parse(
+  store.getString( PENDING_DELETE_KEY ) ?? "[]",
+);
+
+export const getPendingUsbDeletes = ( ): string[] => {
+  const cutoff = Date.now( ) - PENDING_DELETE_TTL_MS;
+  return readPendingUsbDeletes( )
+    .filter( entry => entry.savedAt > cutoff )
+    .map( entry => entry.path );
+};
+
+export const addPendingUsbDeletes = ( relativePaths: string[] ) => {
+  if ( relativePaths.length === 0 ) return;
+  const savedAt = Date.now( );
+  const pending = [
+    ...readPendingUsbDeletes( ),
+    ...relativePaths.map( path => ( { path, savedAt } ) ),
+  ];
+  store.set( PENDING_DELETE_KEY, JSON.stringify(
+    pending.slice( -MAX_PENDING_DELETES ),
+  ) );
+};
+
+export const clearPendingUsbDeletes = ( relativePaths: string[] ) => {
+  if ( relativePaths.length === 0 ) return;
+  const done = new Set( relativePaths );
+  // Also drops anything past the TTL, so a card that never comes back cannot
+  // leave entries sitting here for good.
+  const cutoff = Date.now( ) - PENDING_DELETE_TTL_MS;
+  store.set( PENDING_DELETE_KEY, JSON.stringify(
+    readPendingUsbDeletes( ).filter(
+      entry => !done.has( entry.path ) && entry.savedAt > cutoff,
+    ),
+  ) );
 };
 
 // A breadcrumb that outlives the process, so an offload the app never came
