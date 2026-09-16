@@ -384,6 +384,16 @@ export const prefetchDeviceImageThumbnails = (
   }
 };
 
+// Thumbnails already thrown away once (see invalidateDeviceImageThumbnail).
+const invalidatedPaths = new Set<string>( );
+
+// Whether a uri is a thumbnail this module generated rather than a photo. A
+// caller handed one of these can fall back to the original it stands for; a
+// caller handed the original itself has nothing left to try.
+export const isGeneratedThumbnailUri = ( uri?: string ): boolean => Boolean(
+  uri?.replace( /^file:\/\//, "" ).startsWith( `${deviceThumbnailsPath}/` ),
+);
+
 // Throws away a generated thumbnail the caller couldn't decode. Generation
 // reports success as long as the encode and the write succeeded, so a file
 // that holds no usable image still lands in the cache — and once it does, both
@@ -397,6 +407,12 @@ export const invalidateDeviceImageThumbnail = async (
   const path = thumbnailUri.replace( /^file:\/\//, "" );
   // Only ever deletes files this module generated, never an original photo.
   if ( !path.startsWith( `${deviceThumbnailsPath}/` ) ) return;
+  // Once per file per launch: a thumbnail regenerates to the same path, so a
+  // photo the decoder can't read at all would otherwise delete and regenerate
+  // it for every cell that ever draws it. One retry is the recovery; the rest
+  // is a loop.
+  if ( invalidatedPaths.has( path ) ) return;
+  invalidatedPaths.add( path );
   memoryCache.forEach( ( value, key ) => {
     if ( value === thumbnailUri ) memoryCache.delete( key );
   } );

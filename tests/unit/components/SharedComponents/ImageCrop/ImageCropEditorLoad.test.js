@@ -27,9 +27,11 @@ jest.mock( "sharedHelpers/imageCropPreload", ( ) => {
     enqueuePreload: jest.fn( ( ) => Promise.resolve( null ) ),
     preloadImage: jest.fn( uri => {
       const cached = cache.get( uri );
-      return cached
-        ? Promise.resolve( cached )
-        : new Promise( ( ) => {} );
+      if ( cached ) return Promise.resolve( cached );
+      // A photo whose file holds no readable image: the real loader resolves
+      // with nothing rather than throwing.
+      if ( uri === "file:///unreadable.jpg" ) return Promise.resolve( null );
+      return new Promise( ( ) => {} );
     } ),
   };
 } );
@@ -76,5 +78,20 @@ describe( "ImageCropEditor loading the image to crop", ( ) => {
     } );
 
     expect( await screen.findByTestId( "ImageCropView" ) ).toBeTruthy( );
+  } );
+
+  it( "says so when the photo can't be opened at all", async ( ) => {
+    useRoute.mockReturnValue( {
+      params: { imageUri: "file:///unreadable.jpg", context: "groupPhotos" },
+    } );
+
+    renderComponent( <ImageCropEditor /> );
+
+    // Otherwise this is the same black screen and spinner as a photo still
+    // loading, which never resolves and never says why.
+    expect(
+      await screen.findByText( "This photo could not be opened, so there is nothing to crop." ),
+    ).toBeVisible( );
+    expect( screen.getByText( "Go back" ) ).toBeVisible( );
   } );
 } );

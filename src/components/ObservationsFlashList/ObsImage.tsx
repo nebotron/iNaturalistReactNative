@@ -17,6 +17,7 @@ interface Props {
   imageClassName?: string;
   initialContainerSize?: number;
   isBackground?: boolean;
+  onError?: ( ) => void;
   opaque?: boolean;
   uri?: {
     uri: string;
@@ -35,6 +36,7 @@ const ObsImage = ( {
   imageClassName,
   initialContainerSize,
   isBackground = false,
+  onError,
   opaque = false,
   uri,
   white = false,
@@ -93,6 +95,7 @@ const ObsImage = ( {
           className={classNames( CLASS_NAMES )}
           testID="ObsList.photo"
           source={{ uri: displayUri }}
+          onError={onError}
         />
       ) }
       { showZoomable && detection && displayUri && containerSize && (

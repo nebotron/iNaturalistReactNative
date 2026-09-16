@@ -21,7 +21,11 @@ NativeModules.ImageCropper = { createThumbnail };
 const thumbnails = require( "sharedHelpers/useDeviceImageThumbnail" );
 
 const useDeviceImageThumbnail = thumbnails.default;
-const { invalidateDeviceImageThumbnail, prefetchDeviceImageThumbnails } = thumbnails;
+const {
+  invalidateDeviceImageThumbnail,
+  isGeneratedThumbnailUri,
+  prefetchDeviceImageThumbnails,
+} = thumbnails;
 
 // Generation goes through several awaits (mkdir, exists, the native call), so
 // let every pending microtask settle.
@@ -216,6 +220,33 @@ describe( "useDeviceImageThumbnail", ( ) => {
       expect( startedUris( ).filter( uri => uri === "ph://f3" ) ).toHaveLength( 1 );
     },
   );
+
+  it( "throws a thumbnail away once, however many cells were drawing it", async ( ) => {
+    const generated = `file://${cachedThumbnailPath}/f4.jpg`;
+    renderHook( ( ) => useDeviceImageThumbnail( "ph://f4", 300 ) );
+    await flush( );
+    await finish( "ph://f4", generated );
+    // The file is on disk to be deleted (util.unlink checks before it tries).
+    exists.mockResolvedValue( true );
+    unlink.mockClear( );
+
+    await act( async ( ) => {
+      await invalidateDeviceImageThumbnail( generated, "ph://f4" );
+      // Every other cell drawing the same photo reports the same bad file, and
+      // regeneration writes it back to the same path: deleting it again would
+      // just start the cycle over.
+      await invalidateDeviceImageThumbnail( generated, "ph://f4" );
+    } );
+
+    expect( unlink ).toHaveBeenCalledTimes( 1 );
+  } );
+
+  it( "tells a generated thumbnail from the photo it stands for", ( ) => {
+    expect( isGeneratedThumbnailUri( `file://${cachedThumbnailPath}/f5.jpg` ) ).toBe( true );
+    expect( isGeneratedThumbnailUri( "ph://f5" ) ).toBe( false );
+    expect( isGeneratedThumbnailUri( "file:///photoUploads/f5.jpg" ) ).toBe( false );
+    expect( isGeneratedThumbnailUri( undefined ) ).toBe( false );
+  } );
 
   it( "never deletes anything outside the thumbnail cache", async ( ) => {
     exists.mockResolvedValue( true );

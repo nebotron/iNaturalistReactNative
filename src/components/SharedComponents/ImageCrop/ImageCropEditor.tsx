@@ -3,6 +3,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { applyGroupPhotosCrop } from "components/PhotoImporter/helpers/groupPhotoCrops";
 import {
   BackButton,
+  Body2,
   Button,
   ViewWrapper,
 } from "components/SharedComponents";
@@ -179,6 +180,11 @@ const ImageCropEditor = ( ) => {
   const [detectedCrop, setDetectedCrop] = useState<NormalizedCrop | null>( null );
   const [savedInitialCrop, setSavedInitialCrop] = useState<NormalizedCrop | null>( null );
   const [loadingSource, setLoadingSource] = useState( true );
+  // A photo this screen could not read at all, as opposed to one still
+  // loading. The two are the same black screen with a spinner on it otherwise,
+  // so a photo whose file holds no readable image left the cropper spinning
+  // for good with nothing to say why.
+  const [sourceFailed, setSourceFailed] = useState( false );
   const [seededUri, setSeededUri] = useState<string | null>( null );
 
   // When the editor switched to this photo, and whether its preload had
@@ -209,6 +215,7 @@ const ImageCropEditor = ( ) => {
       ? existingSavedCrop ?? cached.crop
       : null );
     setLoadingSource( !cached );
+    setSourceFailed( false );
   }
 
   // One line per photo the user actually waited on, saying how the wait split
@@ -319,6 +326,7 @@ const ImageCropEditor = ( ) => {
           // running. Say which photo it was.
           logger.error( `Could not load an image to crop (source ${cropSourceUri})` );
           setImageSize( null );
+          setSourceFailed( true );
           return;
         }
         applyPreloadResult( result, existingSavedCrop );
@@ -327,6 +335,7 @@ const ImageCropEditor = ( ) => {
           logger.error( "Failed to load an image to crop", error );
           setLocalImageUri( null );
           setDisplayImageUri( null );
+          setSourceFailed( true );
         }
       } finally {
         if ( !cancelled ) {
@@ -665,6 +674,21 @@ const ImageCropEditor = ( ) => {
   }
 
   const activeInitialCrop = savedInitialCrop ?? detectedCrop;
+
+  if ( sourceFailed ) {
+    return (
+      <ViewWrapper>
+        <View className="p-4">
+          <Body2 className="mb-4">{t( "Could-not-open-this-photo-to-crop-it" )}</Body2>
+          <Button
+            level="focus"
+            onPress={( ) => navigation.goBack( )}
+            text={t( "Go-back" )}
+          />
+        </View>
+      </ViewWrapper>
+    );
+  }
 
   if ( loadingSource || !localImageUri || !displayImageUri || !imageSize || !activeInitialCrop ) {
     return (

@@ -1,10 +1,13 @@
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
 import { Pressable, View } from "components/styledComponents";
 import type { ReactNode } from "react";
-import React from "react";
+import React, { useCallback, useState } from "react";
 import type { ViewStyle } from "react-native";
 import { PixelRatio } from "react-native";
-import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
+import useDeviceImageThumbnail, {
+  invalidateDeviceImageThumbnail,
+  isGeneratedThumbnailUri,
+} from "sharedHelpers/useDeviceImageThumbnail";
 
 interface Props {
   // Device photo library uri (ph:// on iOS) or a local file:// path
@@ -53,15 +56,39 @@ const DevicePhotoImage = ( {
   const thumbMaxPixel = thumbnailMaxPixel
     ?? PixelRatio.getPixelSizeForLayoutSize( cellWidth || 128 );
   const thumbnailUri = useDeviceImageThumbnail( uri, thumbMaxPixel );
-  const displayUri = thumbnailUri ?? fallbackUri;
+  // A thumbnail that won't decode is a file, not a state of the photo: nothing
+  // downstream can tell it from a cell still waiting, so the cell sat on the
+  // placeholder (the iconic-taxon leaf) or on a black square for as long as
+  // that file was cached under the photo's key. Fall back to the original the
+  // thumbnail stands for, and throw the bad file away so the next request
+  // regenerates it.
+  const [showOriginal, setShowOriginal] = useState( false );
+  const [prevUri, setPrevUri] = useState( uri );
+  if ( prevUri !== uri ) {
+    // Recycled onto a different photo
+    setPrevUri( uri );
+    setShowOriginal( false );
+  }
+
+  const preferredUri = thumbnailUri ?? fallbackUri;
+  const displayUri = showOriginal
+    ? uri
+    : preferredUri;
   const source = displayUri
     ? { uri: displayUri }
     : undefined;
+
+  const handleError = useCallback( ( ) => {
+    if ( !displayUri || !isGeneratedThumbnailUri( displayUri ) ) return;
+    setShowOriginal( true );
+    invalidateDeviceImageThumbnail( displayUri, uri ?? displayUri );
+  }, [displayUri, uri] );
 
   const image = (
     <View className="relative">
       <ObsImagePreview
         source={source}
+        onError={handleError}
         selected={selected}
         selectable={selectable}
         obsPhotosCount={obsPhotosCount}

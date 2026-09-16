@@ -35,6 +35,9 @@ interface Props extends PropsWithChildren {
   isMultiplePhotosTop?: boolean;
   isSmall?: boolean;
   obsPhotosCount?: number;
+  // Called when the image can't be decoded, so a caller that has another file
+  // to try (a device-photo cell whose generated thumbnail won't open) can.
+  onError?: ( ) => void;
   opaque?: boolean;
   photos?: ( { uri: string } | null )[];
   selectable?: boolean;
@@ -75,6 +78,7 @@ const ObsImagePreview = ( {
   isMultiplePhotosTop = false,
   isSmall = false,
   obsPhotosCount = 0,
+  onError,
   opaque = false,
   photos,
   selectable = false,
@@ -376,6 +380,7 @@ const ObsImagePreview = ( {
         <ObsImage
           autoDetectSubject={autoDetectSubject}
           uri={source}
+          onError={onError}
           opaque={opaque}
           iconicTaxonName={iconicTaxonName}
           white={white}

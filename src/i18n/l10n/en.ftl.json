@@ -166,6 +166,7 @@
   "Could-not-find-a-camera-on-this-device": "Could not find a camera on this device",
   "Could-not-import-selected-photos": "None of the selected photos could be imported. If they are stored in iCloud, connect to a stronger network and try again.",
   "Could-not-import-your-photos-nothing-was-saved": "Your photos could not be imported, so nothing was saved. Please try again.",
+  "Could-not-open-this-photo-to-crop-it": "This photo could not be opened, so there is nothing to crop.",
   "Couldnt-create-comment": "Couldn't create comment",
   "Couldnt-create-identification-error": "Couldn't create identification { $error }",
   "Couldnt-create-identification-unknown-error": "Couldn't create identification, unknown error.",

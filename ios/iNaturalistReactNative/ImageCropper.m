@@ -684,6 +684,26 @@ static void updateMetadataForCrop( NSMutableDictionary *metadata, NSInteger widt
   metadata[tiffKey] = tiff;
 }
 
+// Defined further down, with the thumbnail encode they were written for.
+static BOOL     jpegDataIsDecodable( NSData *data );
+static BOOL     jpegDataIsBlack( NSData *data );
+static UIImage *rasterizedImage( UIImage *image );
+static UIImage *drawnOverSentinel(
+  UIImage *image, size_t width, size_t height, CGRect drawRect );
+
+static NSData *encodedJpegWithMetadata( CGImageRef imageRef, NSDictionary *metadata )
+{
+  NSMutableData      *destinationData = [NSMutableData data];
+  CGImageDestinationRef destination   = CGImageDestinationCreateWithData(
+    (__bridge CFMutableDataRef)destinationData, CFSTR( "public.jpeg" ), 1, nil );
+  if ( destination == NULL ) return nil;
+
+  CGImageDestinationAddImage( destination, imageRef, (__bridge CFDictionaryRef)metadata );
+  BOOL finalized = CGImageDestinationFinalize( destination );
+  CFRelease( destination );
+  return finalized ? destinationData : nil;
+}
+
 static NSData *jpegDataFromCroppedImage(
   CGImageRef       croppedRef,
   NSDictionary    *sourceMetadata,
@@ -697,15 +717,31 @@ static NSData *jpegDataFromCroppedImage(
   updateMetadataForCrop( metadata, width, height );
   metadata[(NSString *)kCGImageDestinationLossyCompressionQuality] = @( 1.0 );
 
-  NSMutableData      *destinationData = [NSMutableData data];
-  CGImageDestinationRef destination   = CGImageDestinationCreateWithData(
-    (__bridge CFMutableDataRef)destinationData, CFSTR( "public.jpeg" ), 1, nil );
-  if ( destination == NULL ) return nil;
+  NSData *data = encodedJpegWithMetadata( croppedRef, metadata );
+  if ( jpegDataIsDecodable( data ) && !jpegDataIsBlack( data ) ) return data;
 
-  CGImageDestinationAddImage( destination, croppedRef, (__bridge CFDictionaryRef)metadata );
-  BOOL finalized = CGImageDestinationFinalize( destination );
-  CFRelease( destination );
-  return finalized ? destinationData : nil;
+  // A CGImage whose pixels never materialized -- a lazy decode of the original
+  // that turned into a no-op -- still encodes: ImageIO writes the container and
+  // the metadata copied from the source and finalizes, so the result is a file
+  // of a few kilobytes that no decoder can open, or one that opens as a frame
+  // of solid black. Neither is the photo, and this data is written over the
+  // photo it replaces (a crop replaces what the grid shows; a chromatic
+  // aberration correction replaces the imported file), which is what left a
+  // photo showing as a black square or a leaf placeholder everywhere it
+  // appeared from then on -- in the picker, in the cropper, in Group Photos --
+  // and what made the upload resizer fail on it with "Error decoding image
+  // data". Rasterizing draws over a colour no photograph is uniformly made of,
+  // which forces the decode to happen now and tells a photo that really is
+  // black from a draw that put nothing there.
+  UIImage *rasterized = rasterizedImage( [UIImage imageWithCGImage:croppedRef] );
+  if ( !rasterized.CGImage ) return nil;
+  // Rasterizing caps its longest side, so the dimensions can come back smaller
+  // than the crop asked for; the metadata has to describe what was encoded.
+  updateMetadataForCrop( metadata,
+    (NSInteger)CGImageGetWidth( rasterized.CGImage ),
+    (NSInteger)CGImageGetHeight( rasterized.CGImage ) );
+  data = encodedJpegWithMetadata( rasterized.CGImage, metadata );
+  return jpegDataIsDecodable( data ) ? data : nil;
 }
 
 // ─── Queues for the heavy image methods ──────────────────────────────────
@@ -802,11 +838,14 @@ RCT_EXPORT_METHOD( cropImage
       // the crop-sized region: drawInRect applies the orientation, and offsetting
       // the full image by -origin lands the wanted region in the small context.
       // Integer offsets at 1:1 scale, so the pixels match a full redraw + crop.
-      UIGraphicsBeginImageContextWithOptions( cropRect.size, NO, 1.0 );
-      [image drawInRect:CGRectMake( -cropRect.origin.x, -cropRect.origin.y,
-                                    image.size.width, image.size.height )];
-      UIImage *croppedImage = UIGraphicsGetImageFromCurrentImageContext();
-      UIGraphicsEndImageContext();
+      // Over the sentinel colour, so a decode that put no pixels there comes
+      // back nil and this crop is refused rather than written as a black frame.
+      UIImage *croppedImage = drawnOverSentinel(
+        image,
+        (size_t)cropRect.size.width,
+        (size_t)cropRect.size.height,
+        CGRectMake( -cropRect.origin.x, -cropRect.origin.y,
+                    image.size.width, image.size.height ) );
       if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
     }
     if ( !croppedRef ) { reject( @"CROP_FAILED", @"Crop failed", nil ); return; }
@@ -1291,8 +1330,6 @@ static UIImage *clampToMaxPixel( UIImage *image, CGFloat maxPixel )
   }];
 }
 
-// Defined below, alongside the encode it was written for.
-static UIImage *rasterizedImage( UIImage *image );
 // Defined with the other silent-failure counters, further down.
 static void notePreviewServed( CGSize declared, CGSize produced, CGFloat maxPixel );
 
@@ -1642,21 +1679,15 @@ static BOOL bitmapIsBlank(
   return YES;
 }
 
-// Draws the image into a fresh opaque RGB bitmap, forcing any deferred decode
-// to happen now (and against the source data, which is still around) rather
-// than inside the JPEG encoder. Returns nil if the draw put nothing there,
-// so a failed decode can't be mistaken for a black photograph.
-static UIImage *rasterizedImage( UIImage *image )
+// Draws the image into a fresh opaque RGB bitmap of the given size, forcing any
+// deferred decode to happen now (and against the source data, which is still
+// around) rather than inside the JPEG encoder. drawRect is in the bitmap's own
+// coordinates, so a caller wanting one region of the image can offset the whole
+// frame rather than materialize it and crop. Returns nil if the draw put
+// nothing there, so a failed decode can't be mistaken for a black photograph.
+static UIImage *drawnOverSentinel( UIImage *image, size_t width, size_t height, CGRect drawRect )
 {
-  CGSize size = CGSizeMake( image.size.width * image.scale, image.size.height * image.scale );
-  CGFloat longest = MAX( size.width, size.height );
-  if ( longest > kMaxRasterizePixel ) {
-    CGFloat scale = kMaxRasterizePixel / longest;
-    size = CGSizeMake( size.width * scale, size.height * scale );
-  }
-  if ( size.width < 1 || size.height < 1 ) return nil;
-  size_t width  = (size_t)size.width;
-  size_t height = (size_t)size.height;
+  if ( width < 1 || height < 1 ) return nil;
 
   CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB( );
   // No alpha channel, so the JPEG encoder gets an opaque bitmap and every
@@ -1681,7 +1712,7 @@ static UIImage *rasterizedImage( UIImage *image )
   CGContextTranslateCTM( ctx, 0, height );
   CGContextScaleCTM( ctx, 1, -1 );
   UIGraphicsPushContext( ctx );
-  [image drawInRect:CGRectMake( 0, 0, width, height )];
+  [image drawInRect:drawRect];
   UIGraphicsPopContext( );
 
   const uint8_t *pixels = CGBitmapContextGetData( ctx );
@@ -1695,6 +1726,22 @@ static UIImage *rasterizedImage( UIImage *image )
   UIImage *rasterized = [UIImage imageWithCGImage:cg];
   CGImageRelease( cg );
   return rasterized;
+}
+
+// The whole image, drawn at its own size (capped so a pathological source
+// can't allocate its way out of memory).
+static UIImage *rasterizedImage( UIImage *image )
+{
+  CGSize size = CGSizeMake( image.size.width * image.scale, image.size.height * image.scale );
+  CGFloat longest = MAX( size.width, size.height );
+  if ( longest > kMaxRasterizePixel ) {
+    CGFloat scale = kMaxRasterizePixel / longest;
+    size = CGSizeMake( size.width * scale, size.height * scale );
+  }
+  if ( size.width < 1 || size.height < 1 ) return nil;
+  return drawnOverSentinel(
+    image, (size_t)size.width, (size_t)size.height,
+    CGRectMake( 0, 0, (size_t)size.width, (size_t)size.height ) );
 }
 
 // JPEG data for a thumbnail, or nil if this image can't be encoded into one a
@@ -2409,10 +2456,12 @@ static double caMaxShiftPx( const double *profile, double cornerRadius )
 // orientation and the optical centre really is the centre of the buffer.
 static uint8_t *caBitmapFromImage( UIImage *image, int w, int h )
 {
-  UIGraphicsBeginImageContextWithOptions( CGSizeMake( w, h ), YES, 1.0 );
-  [image drawInRect:CGRectMake( 0, 0, w, h )];
-  UIImage *drawn = UIGraphicsGetImageFromCurrentImageContext( );
-  UIGraphicsEndImageContext( );
+  // Over the sentinel colour rather than into an opaque (black) context: a
+  // decode that puts no pixels there comes back nil, instead of as a frame of
+  // black that measures as a lens with no aberration and gets written over the
+  // imported photo as its "corrected" version.
+  UIImage *drawn = drawnOverSentinel(
+    image, (size_t)w, (size_t)h, CGRectMake( 0, 0, w, h ) );
   if ( !drawn.CGImage ) return NULL;
 
   uint8_t *buf = (uint8_t *)calloc( (size_t)w * h * 4, 1 );
