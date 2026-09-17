@@ -44,3 +44,11 @@ export function totalMegabytes( sizes: readonly ( number | null | undefined )[] 
   );
   return Math.round( bytes / 1e5 ) / 10;
 }
+
+// Whether a uri points at an image that animates. A video imported from the
+// library is stored as a GIF (see videoImportHelpers), and standing a still
+// thumbnail in for it -- which is what every photo grid does -- leaves the
+// user looking at one frozen frame of their video.
+export function isAnimatedImageUri( uri?: string | null ): boolean {
+  return fileExtension( uri ) === "gif";
+}

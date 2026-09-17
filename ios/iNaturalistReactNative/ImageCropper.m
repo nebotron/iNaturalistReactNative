@@ -2872,6 +2872,12 @@ RCT_EXPORT_METHOD( convertVideoToGif
 
     AVAssetImageGenerator *gen = [[AVAssetImageGenerator alloc] initWithAsset:asset];
     gen.appliesPreferredTrackTransform = YES;
+    // The GIF plays in the app, and every frame of an animated image is
+    // decoded and held at once: at the source video's own resolution, 20
+    // frames of 1080p is ~166MB of live pixels per cell that draws it, in a
+    // grid that draws several. Bounded here rather than at display time
+    // because nothing downstream can decode an animation partially.
+    gen.maximumSize = CGSizeMake( 640, 640 );
     gen.requestedTimeToleranceBefore = CMTimeMakeWithSeconds( 0.5, 600 );
     gen.requestedTimeToleranceAfter  = CMTimeMakeWithSeconds( 0.5, 600 );
 

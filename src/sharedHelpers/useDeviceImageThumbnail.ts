@@ -2,7 +2,7 @@ import { exists, mkdir, stat } from "@dr.pogodin/react-native-fs";
 import { deviceThumbnailsPath } from "appConstants/paths";
 import { useEffect, useState } from "react";
 import { NativeModules } from "react-native";
-import { fileExtension } from "sharedHelpers/importedFileTypes";
+import { fileExtension, isAnimatedImageUri } from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
 import { unlink } from "sharedHelpers/util";
 
@@ -360,7 +360,7 @@ export const prioritizeDeviceImageThumbnails = (
   if ( !ImageCropper?.createThumbnail ) return;
   // Pushed in reverse so the topmost visible photo is the first one popped.
   for ( let i = uris.length - 1; i >= 0; i -= 1 ) {
-    if ( !memoryCache.has( cacheKey( uris[i], maxPixel ) ) ) {
+    if ( !isAnimatedImageUri( uris[i] ) && !memoryCache.has( cacheKey( uris[i], maxPixel ) ) ) {
       scheduleJob( uris[i], maxPixel, true );
     }
   }
@@ -377,7 +377,7 @@ export const prefetchDeviceImageThumbnails = (
     uris.forEach( uri => {
       // Prefetches keep their waiter forever: nothing "unmounts" a prefetch,
       // and a warmed cache is exactly what makes scrolling back instant.
-      if ( !memoryCache.has( cacheKey( uri, maxPixel ) ) ) {
+      if ( !isAnimatedImageUri( uri ) && !memoryCache.has( cacheKey( uri, maxPixel ) ) ) {
         scheduleJob( uri, maxPixel, false );
       }
     } );
@@ -480,7 +480,9 @@ const useDeviceImageThumbnail = (
   maxPixel: number,
 ): string | undefined => {
   const available = Boolean( ImageCropper?.createThumbnail );
-  const key = uri && available
+  // An animated image is served as itself: a generated thumbnail is a single
+  // still frame, so a GIF behind one never plays.
+  const key = uri && available && !isAnimatedImageUri( uri )
     ? cacheKey( uri, maxPixel )
     : null;
   const [resolved, setResolved] = useState<
@@ -518,7 +520,8 @@ const useDeviceImageThumbnail = (
   }, [invalidation, key, maxPixel, uri] );
 
   if ( !key ) {
-    // No uri at all, or no native generator (e.g. Android): use the original.
+    // No uri at all, an animated image, or no native generator (e.g. Android):
+    // use the original.
     return uri;
   }
   // Read the cache during render rather than waiting for the effect, so a

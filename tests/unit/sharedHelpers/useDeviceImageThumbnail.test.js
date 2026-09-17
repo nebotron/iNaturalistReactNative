@@ -248,6 +248,24 @@ describe( "useDeviceImageThumbnail", ( ) => {
     expect( isGeneratedThumbnailUri( undefined ) ).toBe( false );
   } );
 
+  it( "serves an animated image as itself so it keeps playing", async ( ) => {
+    const gif = "file:///videoLibrary/g2.gif";
+    const { result } = renderHook( ( ) => useDeviceImageThumbnail( gif, 300 ) );
+    await flush( );
+
+    // A generated thumbnail is one still frame, so a GIF drawn through one is
+    // a video import frozen on its first frame.
+    expect( result.current ).toEqual( gif );
+    expect( startedUris( ) ).not.toContain( gif );
+  } );
+
+  it( "generates no thumbnail when an animated image is prefetched", async ( ) => {
+    prefetchDeviceImageThumbnails( ["file:///videoLibrary/g3.gif"], 300 );
+    await flush( );
+
+    expect( createThumbnail ).not.toHaveBeenCalled( );
+  } );
+
   it( "never deletes anything outside the thumbnail cache", async ( ) => {
     exists.mockResolvedValue( true );
     unlink.mockClear( );
