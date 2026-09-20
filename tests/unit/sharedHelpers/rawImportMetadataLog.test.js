@@ -98,24 +98,17 @@ describe( "logRawImportMetadata", ( ) => {
     );
   } );
 
-  // Four imports of camera raws produced no line at all, which said the uris an
-  // import carries are not the .CR3 files on disk. What they are instead is the
-  // thing worth knowing.
-  it( "says what an import held when it held no raw", async ( ) => {
+  // This used to log what the import held instead, to answer why four imports
+  // of camera raws produced no line at all. Ninety-nine lines later the answer
+  // had not varied once, so the line went and only the quiet remains.
+  it( "says nothing at all when an import held no raw", async ( ) => {
     expect( await logRawImportMetadata(
       [JPEG, "ph://ABC-123", null],
       [JPEG],
     ) ).toBeNull( );
 
     expect( mockReadCr3SummaryFromFile ).not.toHaveBeenCalled( );
-    expect( mockExtra.infoWithExtra ).toHaveBeenCalledWith(
-      "raw_import_no_raw_source",
-      expect.objectContaining( {
-        sources: 3,
-        types: "unknown:2 jpg:1",
-        schemes: "file:1 none:1 ph:1",
-      } ),
-    );
+    expect( mockExtra.infoWithExtra ).not.toHaveBeenCalled( );
   } );
 
   it( "reports a raw it could not parse rather than staying silent", async ( ) => {

@@ -2,7 +2,7 @@ import * as Exify from "@lodev09/react-native-exify";
 import type { Cr3Summary } from "sharedHelpers/cr3Metadata";
 import { isCanonRawUri, readCr3SummaryFromFile } from "sharedHelpers/cr3Metadata";
 import exifUri from "sharedHelpers/exifUri";
-import { fileExtension, summarizeTypes } from "sharedHelpers/importedFileTypes";
+import { fileExtension } from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "rawImportMetadataLog" );
@@ -66,16 +66,11 @@ async function logRawImportMetadata(
 ): Promise<Cr3Summary | null> {
   const source = sourceUris.find( uri => isCanonRawUri( uri ) );
   if ( !source ) {
-    // Four imports of camera raws on Aug 20 produced no line at all here, which
-    // says the uris an import carries are not the .CR3 files on disk. What they
-    // are instead is the thing to know.
-    logger.infoWithExtra( "raw_import_no_raw_source", {
-      sources: sourceUris.length,
-      types: summarizeTypes( sourceUris.map( uri => fileExtension( uri ) ) ),
-      schemes: summarizeTypes( sourceUris.map( uri => (
-        String( uri ?? "" ).split( ":" )[0] || "none"
-      ) ) ),
-    } );
+    // This used to log what the import carried instead, because four imports of
+    // camera raws on Aug 20 produced no line here at all. Ninety-nine lines
+    // later the answer has not varied once — every uri is a file:// jpg, the
+    // library's own export of the raw — so the question is answered and the
+    // line is only volume.
     return null;
   }
   const derived = derivedUris.find( Boolean );

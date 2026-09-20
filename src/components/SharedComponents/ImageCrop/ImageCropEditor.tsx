@@ -62,7 +62,10 @@ const DECODE_LOOKAHEAD = 2;
 // Above this, the wait for a photo is long enough for the user to see a
 // spinner, and worth a line in the app log saying which stage it went on.
 // Below it, logging every photo of a 200-photo bulk crop would say nothing.
-const SLOW_PHOTO_MS = 400;
+// Raised from 400ms once the preload work landed: half of the 281 lines this
+// wrote were under a second, so clearing the bar had stopped meaning slow and
+// the marker was the largest group in the log without distinguishing anything.
+const SLOW_PHOTO_MS = 1500;
 
 // Whether this editor has anything to show for a grid cell. A GIF -- a video
 // imported as one, or one picked from the library -- is never cropped, since
