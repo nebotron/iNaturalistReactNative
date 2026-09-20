@@ -63,7 +63,22 @@ const cropImageFile = async (
       ? croppedPath
       : `file://${croppedPath}`;
   } catch ( error ) {
-    logger.error( "Failed to crop image", error );
+    // The crop the user framed is lost to a "Something went wrong" alert, so
+    // this line is the only record of which photo it was. Without the geometry
+    // and the source, eleven of these in the Sep 18-19 log said nothing beyond
+    // the fact that it happened.
+    logger.errorWithExtra( "crop_failed", {
+      source: imageUri,
+      imageWidth,
+      imageHeight,
+      originX: pixelCrop.originX,
+      originY: pixelCrop.originY,
+      cropWidth: pixelCrop.width,
+      cropHeight: pixelCrop.height,
+      error: error instanceof Error
+        ? error.message
+        : String( error ),
+    } );
     throw error;
   }
 };

@@ -690,6 +690,9 @@ static BOOL     jpegDataIsBlack( NSData *data );
 static UIImage *rasterizedImage( UIImage *image );
 static UIImage *drawnOverSentinel(
   UIImage *image, size_t width, size_t height, CGRect drawRect );
+// Defined with the thumbnail decode it falls back on.
+static NSData *jpegDataFromDecodablePreviewCrop(
+  NSString *path, NSDictionary *sourceMetadata, CGRect cropRect, CGSize cropSpace );
 
 static NSData *encodedJpegWithMetadata( CGImageRef imageRef, NSDictionary *metadata )
 {
@@ -828,6 +831,9 @@ RCT_EXPORT_METHOD( cropImage
     CGImageRef croppedRef = NULL;
 
     if ( image.imageOrientation == UIImageOrientationUp ) {
+      // A sub-image of a CGImage that still only promises its pixels promises
+      // them too: nothing here forces the decode, so a decode that turns into a
+      // no-op is only discovered by the encoder below.
       croppedRef = CGImageCreateWithImageInRect( image.CGImage, cropRect );
     } else {
       // The crop rect is in the display (EXIF-oriented) coordinate space, but
@@ -848,14 +854,54 @@ RCT_EXPORT_METHOD( cropImage
                     image.size.width, image.size.height ) );
       if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
     }
-    if ( !croppedRef ) { reject( @"CROP_FAILED", @"Crop failed", nil ); return; }
 
-    NSData *data = jpegDataFromCroppedImage( croppedRef,
-                                             srcMeta,
-                                             [width integerValue],
-                                             [height integerValue] );
-    CGImageRelease( croppedRef );
-    if ( !data ) { reject( @"CROP_FAILED", @"Could not encode cropped image", nil ); return; }
+    NSData *data = croppedRef
+      ? jpegDataFromCroppedImage( croppedRef,
+                                  srcMeta,
+                                  [width integerValue],
+                                  [height integerValue] )
+      : nil;
+    if ( croppedRef ) CGImageRelease( croppedRef );
+
+    if ( !data ) {
+      // Everything above rests on a decode of the original that can silently
+      // put no pixels anywhere -- a camera raw iOS reads the header of but
+      // cannot demosaic is the case this file keeps meeting -- and the crop of
+      // an image that isn't there encodes as a file no decoder opens, or as a
+      // frame of solid black. jpegDataFromCroppedImage refuses both, which left
+      // "Could not encode cropped image" and a "Something went wrong" alert as
+      // the whole of the user's crop: the Sep 19 app log has them in pairs,
+      // seconds apart, which is someone framing the same photo twice and losing
+      // it twice. Every other decode in this file already falls back to the
+      // largest image ImageIO will actually produce for the file (for a raw,
+      // the preview the camera embedded) -- and that is the same image
+      // prepareCropSource measured and drew, so it is the frame the user
+      // framed the crop against. Crop that instead of failing.
+      data = jpegDataFromDecodablePreviewCrop( input, srcMeta, cropRect, image.size );
+    }
+
+    if ( !data ) {
+      CGImageSourceRef reread = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
+      NSString *sourceType = reread
+        ? [(__bridge NSString *)CGImageSourceGetType( reread ) copy]
+        : nil;
+      if ( reread ) CFRelease( reread );
+      unsigned long long bytes = [[[NSFileManager defaultManager]
+        attributesOfItemAtPath:input error:nil] fileSize];
+      // "Could not encode cropped image" was the same sentence whether the file
+      // was a raw this build can't demosaic, a copy that never finished, or a
+      // crop rect that missed the image -- three different bugs, and eleven
+      // lines of the Sep 18-19 app log that could not say which.
+      reject( @"CROP_FAILED", [NSString stringWithFormat:
+        @"Could not encode cropped image (type=%@, %llu bytes, decoded=%.0fx%.0f, "
+         "orientation=%ld, crop=%.0f,%.0f %.0fx%.0f)",
+        sourceType ?: @"unknown", bytes,
+        image.size.width * image.scale, image.size.height * image.scale,
+        ( long )image.imageOrientation,
+        cropRect.origin.x, cropRect.origin.y,
+        cropRect.size.width, cropRect.size.height], nil );
+      return;
+    }
 
     [[NSFileManager defaultManager]
       createDirectoryAtPath:[output stringByDeletingLastPathComponent]
@@ -1742,6 +1788,59 @@ static UIImage *rasterizedImage( UIImage *image )
   return drawnOverSentinel(
     image, (size_t)size.width, (size_t)size.height,
     CGRectMake( 0, 0, (size_t)size.width, (size_t)size.height ) );
+}
+
+// A crop taken from the largest image ImageIO will actually produce pixels for,
+// for callers whose own decode of the file produced none. The thumbnail API is
+// what hands back a raw file's embedded preview, and it applies the file's EXIF
+// transform, so what comes back is already in the display coordinate space a
+// crop rect is expressed in -- just possibly at a different scale, which is why
+// the rect is scaled by what the crop was framed against (cropSpace) rather
+// than used as given. Returns nil when even this decode produces nothing, which
+// is a file with no image in it rather than one this path can't read.
+static NSData *jpegDataFromDecodablePreviewCrop(
+  NSString     *path,
+  NSDictionary *sourceMetadata,
+  CGRect        cropRect,
+  CGSize        cropSpace
+)
+{
+  if ( cropSpace.width < 1 || cropSpace.height < 1 ) return nil;
+
+  CGImageSourceRef src =
+    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
+  if ( !src ) return nil;
+  // The cap the rasterization below would apply anyway; ImageIO never upscales
+  // past the image it has, so this asks for the largest one there is.
+  UIImage *preview = thumbnailFromImageSource( src, kMaxRasterizePixel );
+  CFRelease( src );
+  if ( !preview ) return nil;
+
+  CGSize previewSize = CGSizeMake( preview.size.width, preview.size.height );
+  if ( previewSize.width < 1 || previewSize.height < 1 ) return nil;
+
+  CGFloat scaleX = previewSize.width  / cropSpace.width;
+  CGFloat scaleY = previewSize.height / cropSpace.height;
+  CGRect  scaled = CGRectIntersection(
+    CGRectIntegral( CGRectMake(
+      cropRect.origin.x    * scaleX, cropRect.origin.y    * scaleY,
+      cropRect.size.width  * scaleX, cropRect.size.height * scaleY ) ),
+    CGRectMake( 0, 0, previewSize.width, previewSize.height ) );
+  if ( CGRectIsNull( scaled ) || scaled.size.width < 1 || scaled.size.height < 1 ) return nil;
+
+  UIImage *cropped = drawnOverSentinel(
+    preview,
+    ( size_t )scaled.size.width,
+    ( size_t )scaled.size.height,
+    CGRectMake( -scaled.origin.x, -scaled.origin.y,
+                previewSize.width, previewSize.height ) );
+  if ( !cropped.CGImage ) return nil;
+
+  return jpegDataFromCroppedImage(
+    cropped.CGImage,
+    sourceMetadata,
+    ( NSInteger )CGImageGetWidth( cropped.CGImage ),
+    ( NSInteger )CGImageGetHeight( cropped.CGImage ) );
 }
 
 // JPEG data for a thumbnail, or nil if this image can't be encoded into one a
