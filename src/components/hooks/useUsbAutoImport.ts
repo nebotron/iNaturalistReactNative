@@ -413,24 +413,56 @@ const useUsbAutoImport = ( ) => {
       }
 
       if ( abandonReason ) {
-        savesFailingUntil.current = Date.now( ) + SAVE_FAILING_RETRY_DELAY_MS;
+        // A card pulled mid-run fails every remaining copy instantly, which
+        // trips the consecutive-failure counter like a wedged library does —
+        // but it is not a condition of the device, and it is over the moment
+        // the card goes back in. Charging it the ten-minute cooldown below left
+        // the Sep 18 log skipping scans "waiting out a run of failed saves to
+        // the Photos library" when the library had never been asked: the drive
+        // had gone, 148 files unimported, and a card replugged a minute later
+        // would have sat there unread for nine more. Read the drive here rather
+        // than trusting the per-file diagnostics, which are only fetched for
+        // the first MAX_LOGGED_SAVE_FAILURES failures of a run.
+        const driveAtAbandon = await getUsbFolderDiagnostics( ).catch( ( ) => null );
+        // Explicitly false, not merely absent: a diagnostics call that failed
+        // or came back without an answer says nothing about the drive, and
+        // waiving the cooldown on a wedged library is the one mistake here that
+        // costs an hour of grinding.
+        const driveGone = abandonReason === "failures"
+          && driveAtAbandon?.reachable === false;
+        if ( !driveGone ) {
+          savesFailingUntil.current = Date.now( ) + SAVE_FAILING_RETRY_DELAY_MS;
+        }
         // Distinct markers rather than one with a reason field: these are
         // different bugs with different fixes, and the grouped summary is only
         // useful if it can tell "the library is wedged again" from "the phone
         // is full" without opening the entries.
-        const marker = {
-          timeouts: "usb_offload_library_wedged",
-          "out-of-space": "usb_offload_out_of_space",
-          failures: "usb_offload_saves_failing",
-        }[abandonReason];
-        logger.errorWithExtra( marker, {
+        const marker = driveGone
+          ? "usb_offload_drive_gone"
+          : {
+            timeouts: "usb_offload_library_wedged",
+            "out-of-space": "usb_offload_out_of_space",
+            failures: "usb_offload_saves_failing",
+          }[abandonReason];
+        // The card being pulled is the user's doing, not a fault, so it goes in
+        // at warn: still in the grouped summary, not in the error list the next
+        // bug hunt starts from.
+        const logAbandon = driveGone
+          ? logger.warnWithExtra
+          : logger.errorWithExtra;
+        logAbandon( marker, {
           abandoned,
           saved: savedPaths.length,
           failed,
           total: images.length,
           consecutiveFailures,
           timeoutMs: SAVE_TIMEOUT_MS,
-          retryDelayMs: SAVE_FAILING_RETRY_DELAY_MS,
+          // What this run actually costs the next one, which is nothing when
+          // the card simply left.
+          retryDelayMs: driveGone
+            ? 0
+            : SAVE_FAILING_RETRY_DELAY_MS,
+          driveReachable: driveAtAbandon?.reachable ?? false,
           // The last failure's text, so a run abandoned for a reason nothing
           // here anticipated still says what it was. localizedDescription from
           // the native side: a message, never a path.

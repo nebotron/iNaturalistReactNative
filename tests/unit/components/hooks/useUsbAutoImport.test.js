@@ -55,7 +55,12 @@ jest.mock( "sharedHelpers/backgroundExecution", ( ) => ( {
 } ) );
 
 const mockLogger = {
-  info: jest.fn( ), debug: jest.fn( ), error: jest.fn( ), errorWithExtra: jest.fn( ),
+  info: jest.fn( ),
+  debug: jest.fn( ),
+  warn: jest.fn( ),
+  warnWithExtra: jest.fn( ),
+  error: jest.fn( ),
+  errorWithExtra: jest.fn( ),
 };
 jest.mock( "sharedHelpers/logger", ( ) => ( {
   log: {
@@ -63,6 +68,8 @@ jest.mock( "sharedHelpers/logger", ( ) => ( {
       info: ( ...args ) => mockLogger.info( ...args ),
       // eslint-disable-next-line testing-library/no-debugging-utils
       debug: ( ...args ) => mockLogger.debug( ...args ),
+      warn: ( ...args ) => mockLogger.warn( ...args ),
+      warnWithExtra: ( ...args ) => mockLogger.warnWithExtra( ...args ),
       error: ( ...args ) => mockLogger.error( ...args ),
       errorWithExtra: ( ...args ) => mockLogger.errorWithExtra( ...args ),
     } ),
@@ -217,6 +224,35 @@ describe( "useUsbAutoImport", ( ) => {
       "usb_offload_saves_failing",
       expect.objectContaining( { saved: 0, failed: 3, abandoned: 37 } ),
     );
+  } );
+
+  // The Sep 18 log: the card came out mid-run, every remaining copy failed
+  // instantly with "USB folder is not available", and the run was charged the
+  // ten-minute cooldown meant for a wedged library — so the card, back in a
+  // minute later, sat unread for nine more while the log said the app was
+  // "waiting out a run of failed saves to the Photos library".
+  it( "does not make a card wait out a cooldown for having been unplugged", async ( ) => {
+    mockGetUsbFolderDiagnostics.mockResolvedValue( {
+      bookmarkPresent: true, resolved: false, stale: false, reachable: false,
+    } );
+    mockSaveUsbImageToPhotos.mockRejectedValue( new Error( "USB folder is not available" ) );
+
+    renderHook( ( ) => useUsbAutoImport( ) );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockLogger.warnWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_drive_gone",
+      expect.objectContaining( { abandoned: 37, retryDelayMs: 0 } ),
+    );
+
+    // The card is back, so the very next scan reads it rather than skipping.
+    mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
+    mockGetUsbFolderDiagnostics.mockResolvedValue( {
+      bookmarkPresent: true, resolved: true, stale: false, reachable: true,
+    } );
+    mockSaveUsbImageToPhotos.mockClear( );
+    await jest.advanceTimersByTimeAsync( 30_000 );
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalled( );
   } );
 
   // The Aug 6 log: the phone ran out of room, so every copy failed instantly
