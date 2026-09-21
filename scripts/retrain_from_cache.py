@@ -54,6 +54,17 @@ def main() -> None:
                         help="File with one URL per line; matching images are "
                              "forced into the val split (for honest old-vs-new "
                              "comparison on images the old model never saw)")
+    parser.add_argument("--heldout-tail", type=int, default=0,
+                        help="Hold out the last N entries in crop-log order. The log "
+                             "is chronological, so its tail is the only slice no "
+                             "previously shipped model can have trained on — the one "
+                             "honest ground for an old-vs-new comparison.")
+    parser.add_argument("--lr0", type=float, default=1e-4, help="Initial learning rate")
+    parser.add_argument("--scale", type=float, default=0.25,
+                        help="Scale augmentation gain (default 0.25; the ultralytics "
+                             "0.5 shifts subject-size statistics away from device)")
+    parser.add_argument("--translate", type=float, default=0.05,
+                        help="Translation augmentation gain (default 0.05)")
     args = parser.parse_args()
 
     json_path = Path(args.json)
@@ -96,13 +107,21 @@ def main() -> None:
                  "to populate the cache at /tmp/inat_eval_cache.")
 
     random.seed(SEED)
-    random.shuffle(resolved)
-    if args.heldout_urls:
+    if args.heldout_tail:
+        # Split before shuffling — the log's order is its chronology.
+        val_entries = resolved[-args.heldout_tail:]
+        train_entries = resolved[:-args.heldout_tail]
+        random.shuffle(train_entries)
+        Path("/tmp/heldout_tail_urls.txt").write_text(
+            "\n".join(r[5] for r in val_entries) + "\n")
+    elif args.heldout_urls:
+        random.shuffle(resolved)
         heldout = set(Path(args.heldout_urls).read_text().split())
         val_entries = [r for r in resolved if r[5] in heldout]
         train_entries = [r for r in resolved if r[5] not in heldout]
     else:
         # 85/15 split
+        random.shuffle(resolved)
         split = int(len(resolved) * 0.85)
         train_entries = resolved[:split]
         val_entries = resolved[split:]
@@ -159,8 +178,10 @@ def main() -> None:
         # Explicit optimizer: 'auto' (the default) silently discards lr0 and
         # picks 2e-3, which is far too hot for a warm start.
         optimizer="AdamW",
-        lr0=1e-4,
+        lr0=args.lr0,
         lrf=0.05,
+        scale=args.scale,
+        translate=args.translate,
         weight_decay=0.0005,
         warmup_epochs=0.5,
         # Every crop-log image has exactly one subject; mosaic composites four
