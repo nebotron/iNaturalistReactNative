@@ -213,76 +213,113 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( result ).toMatchObject( { deleted: 1, succeeded: true } );
     } );
 
-    it( "ramps a whole-library delete up to the cap", async ( ) => {
-      mockDeletePhotos.mockResolvedValue( { deleted: 200, requested: 200 } );
+    // The native watchdog gave up waiting for a consent alert nobody tapped.
+    const unanswered = ( ) => Object.assign(
+      new Error( "deleteAssets for 200 asset(s) never called back in 150s" ),
+      { code: "DELETE_NO_CALLBACK" },
+    );
+    // The user tapped Don't Allow.
+    const declined = ( ) => Object.assign(
+      new Error(
+        "requested=200 fetched=200 error=The operation couldn't be completed. "
+        + "(PHPhotosErrorDomain error 3072.)",
+      ),
+      { code: "DELETE_FAILED" },
+    );
+    // A refusal the library itself made.
+    const refused = ( ) => Object.assign(
+      new Error( "error=The operation couldn't be completed. (PHPhotosErrorDomain error 3311.)" ),
+      { code: "DELETE_FAILED" },
+    );
+
+    it( "asks in as few transactions as the cap allows", async ( ) => {
+      // One transaction is one consent alert, so chunking costs the user taps
+      // and nothing else. 500 photos is three alerts.
+      mockDeletePhotos.mockImplementation( async uris => (
+        { deleted: uris.length, requested: uris.length }
+      ) );
       const uris = Array.from( { length: 500 }, ( _unused, i ) => `ph://R${i}` );
 
       const result = await deleteOriginalDevicePhotos( uris );
 
       expect(
         mockDeletePhotos.mock.calls.map( call => call[0].length ),
-      ).toEqual( [1, 5, 25, 50, 100, 200, 119] );
+      ).toEqual( [200, 200, 100] );
       expect( result ).toMatchObject( { requested: 500, succeeded: true } );
     } );
 
-    it( "halves the cap when the library leaves a transaction unanswered", async ( ) => {
-      // Nothing smaller than 166 assets has ever been tried on the device this
-      // is failing on, because every chunking attempt put a full chunk first.
-      // A cleanup that dies at 200 comes back at 100, then 50, closing in on a
-      // size the library will still answer.
-      mockDeletePhotos
-        .mockResolvedValueOnce( { deleted: 1, requested: 1 } )
-        .mockResolvedValueOnce( { deleted: 5, requested: 5 } )
-        .mockResolvedValueOnce( { deleted: 25, requested: 25 } )
-        .mockResolvedValueOnce( { deleted: 50, requested: 50 } )
-        .mockResolvedValueOnce( { deleted: 100, requested: 100 } )
-        .mockRejectedValueOnce( new Error( "never called back" ) );
-      const uris = Array.from( { length: 600 }, ( _unused, i ) => `ph://C${i}` );
+    it( "leaves the cap alone when a consent alert goes unanswered", async ( ) => {
+      // This is what collapsed the cap to one photo a transaction. A
+      // transaction the watchdog gave up on is an alert nobody tapped, and
+      // halving for it makes the next cleanup ask more times, so fewer get
+      // answered and it halves again.
+      forgetUnansweredDeleteState( );
+      mockDeletePhotos.mockRejectedValue( unanswered( ) );
 
-      const result = await deleteOriginalDevicePhotos( uris );
+      await deleteOriginalDevicePhotos(
+        Array.from( { length: 600 }, ( _unused, i ) => `ph://U${i}` ),
+      );
 
-      expect(
-        mockDeletePhotos.mock.calls.map( call => call[0].length ),
-      ).toEqual( [1, 5, 25, 50, 100, 200] );
-      // The ramp's photos are deleted even though the run ended on a hang.
-      expect( result ).toMatchObject( { deleted: 181, requested: 600 } );
-      expect( maxTransactionSize( ) ).toEqual( 100 );
-
-      // Next cleanup opens at one again and climbs back through the cap it was
-      // left with, in this run rather than over the next several: every size
-      // it asks for past 100 is one the library has just answered at the cap.
-      mockDeletePhotos.mockReset( );
-      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
-      await deleteOriginalDevicePhotos( uris );
-      const sizes = mockDeletePhotos.mock.calls.map( call => call[0].length );
-      expect( sizes[0] ).toEqual( 1 );
-      expect( sizes ).toContain( 100 );
-      expect( Math.max( ...sizes ) ).toEqual( 200 );
+      expect( maxTransactionSize( ) ).toEqual( 200 );
+      expect( suspectAssetIds( ) ).toEqual( [] );
+      expect( quarantinedAssetIds( ) ).toEqual( [] );
     } );
 
-    it( "climbs back to a working transaction size inside one cleanup", async ( ) => {
-      // The cap collapsed to one photo on the device, and the plan was drawn
-      // up front from it: 382 photos went out as 382 transactions of one, each
-      // costing ~1.15s, seven minutes of deleting one at a time while the
-      // library answered everything it was asked. Sizing each transaction when
-      // the loop reaches it means the cap doubling on every answer is the cap
-      // the next one is sized against.
+    it( "leaves the cap alone when the user declines", async ( ) => {
+      // Declining says something about this deletion, not about the library.
       forgetUnansweredDeleteState( );
-      mockDeletePhotos.mockRejectedValueOnce( new Error( "never called back" ) );
-      await deleteOriginalDevicePhotos( ["ph://COLLAPSE"] );
-      expect( maxTransactionSize( ) ).toEqual( 1 );
+      mockDeletePhotos.mockRejectedValue( declined( ) );
 
-      mockDeletePhotos.mockReset( );
+      await deleteOriginalDevicePhotos(
+        Array.from( { length: 600 }, ( _unused, i ) => `ph://D${i}` ),
+      );
+
+      expect( maxTransactionSize( ) ).toEqual( 200 );
+      expect( suspectAssetIds( ) ).toEqual( [] );
+    } );
+
+    it( "recovers a cap that collapsed under the old halving", async ( ) => {
+      // Every phone that ran those builds is carrying a stored cap of one, and
+      // at one photo per alert a 326-photo cleanup asks 326 times. Clamped on
+      // read, so the next cleanup is two alerts instead.
+      forgetUnansweredDeleteState( 1 );
+
+      expect( maxTransactionSize( ) ).toEqual( 100 );
+
       mockDeletePhotos.mockImplementation( async uris => (
         { deleted: uris.length, requested: uris.length }
       ) );
-      const uris = Array.from( { length: 382 }, ( _unused, i ) => `ph://W${i}` );
+      await deleteOriginalDevicePhotos(
+        Array.from( { length: 326 }, ( _unused, i ) => `ph://L${i}` ),
+      );
+
+      expect(
+        mockDeletePhotos.mock.calls.map( call => call[0].length ),
+      // Clamped up to 100, and the library answering at the cap doubles it
+      // back to the ceiling inside the same cleanup: three alerts, not 326.
+      ).toEqual( [100, 200, 26] );
+    } );
+
+    it( "halves the cap on a refusal the library actually made, down to the floor", async ( ) => {
+      forgetUnansweredDeleteState( );
+      mockDeletePhotos
+        .mockResolvedValueOnce( { deleted: 200, requested: 200 } )
+        .mockRejectedValueOnce( refused( ) );
+      const uris = Array.from( { length: 600 }, ( _unused, i ) => `ph://F${i}` );
+
       const result = await deleteOriginalDevicePhotos( uris );
 
       expect(
         mockDeletePhotos.mock.calls.map( call => call[0].length ),
-      ).toEqual( [1, 2, 4, 8, 16, 32, 64, 128, 127] );
-      expect( result ).toMatchObject( { deleted: 382, requested: 382, succeeded: true } );
+      ).toEqual( [200, 200] );
+      expect( result ).toMatchObject( { deleted: 200, requested: 600 } );
+      // Halved once, and then held: below the floor a cleanup needs more
+      // alerts than anyone will answer.
+      expect( maxTransactionSize( ) ).toEqual( 100 );
+      mockDeletePhotos.mockReset( );
+      mockDeletePhotos.mockRejectedValue( refused( ) );
+      await deleteOriginalDevicePhotos( uris );
+      expect( maxTransactionSize( ) ).toEqual( 100 );
     } );
 
     it( "does not read a transaction left open by a run that was deleting fine", async ( ) => {
@@ -319,96 +356,50 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( suspectAssetIds( ) ).toEqual( ["H1", "H2", "H3", "H4"] );
     } );
 
-    it( "opens at a single photo so the smallest transaction is tried first", async ( ) => {
-      // The one single-asset deletion in the log was issued 40ms before an
-      // ErrorBoundary reloaded the bundle out from under it, so it says nothing
-      // about size. This is the first honest test of one.
-      mockDeletePhotos.mockRejectedValue( new Error( "never called back" ) );
-
-      await deleteOriginalDevicePhotos(
-        Array.from( { length: 600 }, ( _unused, i ) => `ph://O${i}` ),
-      );
-
-      expect( mockDeletePhotos.mock.calls[0][0] ).toHaveLength( 1 );
-      // A transaction of one that goes unanswered leaves nowhere further to
-      // close in on, and the question is settled.
-      expect( maxTransactionSize( ) ).toEqual( 1 );
-    } );
-
-    it( "lets the cap grow back once the library answers at it", async ( ) => {
-      mockDeletePhotos.mockRejectedValueOnce( new Error( "never called back" ) );
-      await deleteOriginalDevicePhotos( ["ph://G1"] );
-      expect( maxTransactionSize( ) ).toEqual( 1 );
-
-      mockDeletePhotos.mockReset( );
-      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
-      await deleteOriginalDevicePhotos( ["ph://G2"] );
-
-      expect( maxTransactionSize( ) ).toEqual( 2 );
-    } );
-
-    it( "accuses nobody when the opening transaction of one goes unanswered", async ( ) => {
-      // Every cleanup leads with a single photo to find the size the library
-      // will still take, so the photo in it is whichever one led the list, not
-      // a photo anything is known about. Naming it a suspect sends it out alone
-      // next cleanup, where a second hang reads as a deliberate probe and
-      // quarantines it: the Sep 19-21 log has one suspect after every failed
-      // run, a different innocent photo each time.
-      mockDeletePhotos.mockRejectedValue( new Error( "never called back" ) );
-
-      await deleteOriginalDevicePhotos(
-        Array.from( { length: 300 }, ( _unused, i ) => `ph://F${i}` ),
-      );
-
-      expect( suspectAssetIds( ) ).toEqual( [] );
-      expect( quarantinedAssetIds( ) ).toEqual( [] );
-      // The size is still the only thing it says anything about.
-      expect( maxTransactionSize( ) ).toEqual( 1 );
-    } );
-
-    it( "makes the assets of a transaction that never answered the suspects", async ( ) => {
+    it( "makes the assets of a transaction the library refused the suspects", async ( ) => {
       // The only instrument that can tell an unanswerable asset from an
       // ordinary one is which transactions come back, so a transaction the
-      // native watchdog gave up on narrows the search to its own assets.
-      // The opening transaction of one comes back, so the first that doesn't
-      // is the five behind it, and those are the suspects.
+      // library refuses narrows the search to its own assets. An alert nobody
+      // answered is not one of those -- see the two tests above.
+      forgetUnansweredDeleteState( );
       mockDeletePhotos
-        .mockResolvedValueOnce( { deleted: 1, requested: 1 } )
-        .mockRejectedValue( new Error( "never called back" ) );
+        .mockResolvedValueOnce( { deleted: 200, requested: 200 } )
+        .mockRejectedValue( refused( ) );
       const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://S${i}` );
 
       await deleteOriginalDevicePhotos( uris );
 
-      expect( suspectAssetIds( ) ).toEqual( ["S1", "S2", "S3", "S4", "S5"] );
-      // The chunks behind the one that hung were never issued, so their photos
-      // are not under suspicion.
-      expect( suspectAssetIds( ) ).not.toContain( "S250" );
-      // Nothing is accused: a transaction that hung because of its size says
-      // nothing about any asset in it.
+      // The first transaction came back, so the refused one is the hundred
+      // behind it, and those are the suspects.
+      expect( suspectAssetIds( ) ).toHaveLength( 100 );
+      expect( suspectAssetIds( ) ).toContain( "S200" );
+      expect( suspectAssetIds( ) ).not.toContain( "S0" );
+      // Nothing is accused: a transaction refused for its size says nothing
+      // about any asset in it.
       expect( quarantinedAssetIds( ) ).toEqual( [] );
     } );
 
     it( "sends the suspects in halving transactions rather than holding half back", async ( ) => {
-      mockDeletePhotos
-        .mockResolvedValueOnce( { deleted: 1, requested: 1 } )
-        .mockRejectedValueOnce( new Error( "never called back" ) );
-      const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://H${i}` );
+      forgetUnansweredDeleteState( );
+      mockDeletePhotos.mockRejectedValueOnce( refused( ) );
+      const uris = ["ph://H0", "ph://H1", "ph://H2"];
       await deleteOriginalDevicePhotos( uris );
-      expect( suspectAssetIds( ) ).toEqual( ["H1", "H2", "H3", "H4", "H5"] );
+      expect( suspectAssetIds( ) ).toEqual( ["H0", "H1", "H2"] );
 
-      // Next cleanup: everything that was never suspect deletes normally, and
-      // the suspects follow it a halving transaction at a time. Every one of
-      // them is asked for -- a photo the user is looking at in the cleanup
-      // grid is never silently left out of the delete they pressed.
+      // Next cleanup: the suspects go out a halving transaction at a time.
+      // Every one of them is asked for -- a photo the user is looking at in
+      // the cleanup grid is never silently left out of the delete they
+      // pressed.
       mockDeletePhotos.mockReset( );
-      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
+      mockDeletePhotos.mockImplementation( async sent => (
+        { deleted: sent.length, requested: sent.length }
+      ) );
       await deleteOriginalDevicePhotos( uris );
 
-      const sent = mockDeletePhotos.mock.calls.map( call => call[0] );
-      expect( sent.slice( -2 ) ).toEqual( [["ph://H3", "ph://H4"], ["ph://H5"]] );
-      expect( sent.flat( ) ).toEqual( expect.arrayContaining(
-        ["ph://H1", "ph://H2", "ph://H3", "ph://H4", "ph://H5"],
-      ) );
+      expect( mockDeletePhotos.mock.calls.map( call => call[0] ) ).toEqual( [
+        ["ph://H0", "ph://H1"],
+        ["ph://H2"],
+      ] );
       // They all came back, so there is nothing left to explain.
       expect( suspectAssetIds( ) ).toEqual( [] );
       expect( quarantinedAssetIds( ) ).toEqual( [] );
@@ -470,34 +461,38 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       // only slow, and a set built from one of those holds nothing wrong. It
       // goes out alone and is judged on that -- in this same cleanup now,
       // rather than one cleanup per halving.
-      mockDeletePhotos.mockRejectedValueOnce( new Error( "never called back" ) );
+      forgetUnansweredDeleteState( );
+      mockDeletePhotos.mockRejectedValueOnce( refused( ) );
       await deleteOriginalDevicePhotos( ["ph://P1", "ph://P2", "ph://P3"] );
       expect( suspectAssetIds( ) ).toEqual( ["P1", "P2", "P3"] );
 
       mockDeletePhotos.mockReset( );
       mockDeletePhotos
-        .mockResolvedValueOnce( { deleted: 1, requested: 1 } )
-        .mockResolvedValueOnce( { deleted: 1, requested: 1 } )
-        .mockRejectedValue( new Error( "never called back" ) );
+        .mockResolvedValueOnce( { deleted: 2, requested: 2 } )
+        .mockRejectedValue( refused( ) );
       await deleteOriginalDevicePhotos( ["ph://P1", "ph://P2", "ph://P3"] );
 
       // Alone as the probe, in a transaction that never comes back: proven.
       expect( quarantinedAssetIds( ) ).toEqual( ["P3"] );
       expect( suspectAssetIds( ) ).toEqual( [] );
-      // The asset is the explanation, so the size is not: a photo that hangs
-      // on its own must not shrink every later cleanup's transactions.
-      expect( maxTransactionSize( ) ).toEqual( 2 );
+      // The first refusal put the cap on the floor and the probe left it
+      // there: the asset is the explanation, so the size is not, and a photo
+      // the library refuses on its own must not shrink later cleanups further.
+      expect( maxTransactionSize( ) ).toEqual( 100 );
     } );
 
     it( "ends the search accusing nobody when every suspect deletes", async ( ) => {
       // A transaction recorded unanswered can still have been merely slow, so
       // the suspect set is not proof that anything is wrong with it.
-      mockDeletePhotos.mockRejectedValueOnce( new Error( "never called back" ) );
+      forgetUnansweredDeleteState( );
+      mockDeletePhotos.mockRejectedValueOnce( refused( ) );
       await deleteOriginalDevicePhotos( ["ph://Q0", "ph://Q1", "ph://Q2"] );
       expect( suspectAssetIds( ) ).toEqual( ["Q0", "Q1", "Q2"] );
 
       mockDeletePhotos.mockReset( );
-      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
+      mockDeletePhotos.mockImplementation( async sent => (
+        { deleted: sent.length, requested: sent.length }
+      ) );
       const result = await deleteOriginalDevicePhotos( ["ph://Q0", "ph://Q1", "ph://Q2"] );
 
       // One cleanup, not three: every suspect was asked for, so the photos the
@@ -511,23 +506,23 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       // A transaction costs ~1.6s whatever it holds, so the hang report waits
       // one transaction's worth per chunk rather than firing while the second
       // chunk is legitimately still going.
+      forgetUnansweredDeleteState( );
       let failDeletion;
       mockDeletePhotos.mockImplementation(
         ( ) => new Promise( ( _resolve, reject ) => { failDeletion = reject; } ),
       );
       const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://R${i}` );
 
-      // 300 photos ramp into six transactions (1, 5, 25, 50, 100, 119), so the
-      // report is owed six transactions' worth of time before it calls this a
-      // hang.
+      // 300 photos go out as two transactions of 200 and 100, so the report is
+      // owed two transactions' worth of time before it calls this a hang.
       const deletion = deleteOriginalDevicePhotos( uris );
-      await jest.advanceTimersByTimeAsync( 12000 );
+      await jest.advanceTimersByTimeAsync( 6000 );
       expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
         "photo_delete_pending",
         expect.anything( ),
       );
 
-      await jest.advanceTimersByTimeAsync( 2000 );
+      await jest.advanceTimersByTimeAsync( 1000 );
       expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
         "photo_delete_pending",
         expect.objectContaining( { requested: 300 } ),
@@ -670,7 +665,8 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       // Describing the whole request instead is why five weeks of hangs never
       // named the photos in them: the Sep 21 log reports one asset outstanding
       // and then dumps the first eight of 326, none of which need be it.
-      mockPhotoDeletionContext.mockResolvedValue( "transaction=active count=1" );
+      forgetUnansweredDeleteState( );
+      mockPhotoDeletionContext.mockResolvedValue( "transaction=active count=200" );
       let finishDeletion;
       mockDeletePhotos.mockImplementation(
         ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
@@ -678,16 +674,16 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
 
       const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://D${i}` );
       const pending = deleteOriginalDevicePhotos( uris );
-      await jest.advanceTimersByTimeAsync( 14000 );
+      await jest.advanceTimersByTimeAsync( 7000 );
 
-      // The opening transaction of one, which is what never came back.
-      expect( mockPhotoDeletionContext ).toHaveBeenCalledWith( ["ph://D0"] );
+      // The first transaction, which is what never came back -- not all 300.
+      expect( mockPhotoDeletionContext ).toHaveBeenCalledWith( uris.slice( 0, 200 ) );
       expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
         "photo_delete_pending",
         expect.objectContaining( {
           requested: 300,
           outstandingChunk: 0,
-          outstandingAssets: 1,
+          outstandingAssets: 200,
           outstandingIsProbe: false,
         } ),
       );

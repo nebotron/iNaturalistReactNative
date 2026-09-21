@@ -41,6 +41,22 @@ const CAP_KEY = "maxTransactionSize";
 // The biggest transaction a cleanup will ask for, and where the cap starts.
 export const MAX_TRANSACTION_SIZE = 200;
 
+// The smallest it may shrink to.
+//
+// Every transaction costs the user one system consent alert, whatever it
+// carries, so the batch size is really the number of times a cleanup asks
+// permission. That is what made the cap a trap: the cap halved on every
+// transaction "the library never answered", but an unanswered transaction is
+// an alert nobody tapped, and the smaller the cap got the more alerts a cleanup
+// needed, so fewer were answered and the cap halved again. It went
+// 200 → 156 → 78 → 39 → 25 → 1 over two days, and at one photo per alert the
+// Sep 21 log has the user approving fifty in a row and then declining — which
+// the app recorded as further proof that the library was broken.
+//
+// Below this a cleanup asks more times than anyone will answer, so shrinking
+// past it can only manufacture the evidence that shrank it.
+export const MIN_TRANSACTION_SIZE = 100;
+
 const read = ( key: string ): string[] => {
   const raw = store.getString( key );
   if ( !raw ) return [];
@@ -65,19 +81,23 @@ const write = ( key: string, ids: string[] ) => store.set( key, JSON.stringify( 
 // transaction of five is simply unknown, and it is the last thing about the
 // request itself that has not been ruled out.
 //
-// So the cap moves with the evidence. A transaction the library never answers
-// halves it; one it answers at the cap doubles it back toward the ceiling. A
-// cleanup that hangs at 200 therefore comes back at 100, and one that hangs at
-// 100 comes back at 50, until either the deletions start landing or the cap
-// reaches one asset and the question is finally settled.
-export const maxTransactionSize = ( ): number => (
-  store.getNumber( CAP_KEY ) || MAX_TRANSACTION_SIZE
+// So the cap moves with the evidence, between the floor and the ceiling above.
+// A transaction the library genuinely refuses halves it; one it answers at the
+// cap doubles it back up. Caps stored before the floor existed are clamped on
+// the way out, so a device sitting at 1 recovers on its next cleanup instead of
+// asking three hundred times.
+export const maxTransactionSize = ( ): number => Math.min(
+  MAX_TRANSACTION_SIZE,
+  Math.max( MIN_TRANSACTION_SIZE, store.getNumber( CAP_KEY ) || MAX_TRANSACTION_SIZE ),
 );
 
-// PhotoKit never answered a transaction of this size, so ask for half as much.
+// PhotoKit refused a transaction of this size, so ask for half as much — but
+// never so little that the cleanup needs more consent alerts than a person will
+// sit through. Only called for a refusal the library actually made: a
+// transaction left waiting on an alert says nothing about size.
 export const recordUnansweredSize = ( size: number ) => store.set(
   CAP_KEY,
-  Math.max( 1, Math.floor( size / 2 ) ),
+  Math.max( MIN_TRANSACTION_SIZE, Math.floor( size / 2 ) ),
 );
 
 // It answered one. Only a transaction that filled the cap says anything about
@@ -261,10 +281,12 @@ export const suspectProbeChunks = ( suspect: string[], cap: number ): string[][]
   return chunks;
 };
 
-// Test seam: MMKV persists across a test file otherwise.
-export const forgetUnansweredDeleteState = ( ) => {
+// Test seam: MMKV persists across a test file otherwise. The cap is settable
+// so a test can stand up a device whose stored cap collapsed under the old
+// halving, which is what every phone that ran those builds is carrying.
+export const forgetUnansweredDeleteState = ( cap = MAX_TRANSACTION_SIZE ) => {
   write( IN_FLIGHT_KEY, [] );
   write( SUSPECTS_KEY, [] );
   write( QUARANTINED_KEY, [] );
-  store.set( CAP_KEY, MAX_TRANSACTION_SIZE );
+  store.set( CAP_KEY, cap );
 };

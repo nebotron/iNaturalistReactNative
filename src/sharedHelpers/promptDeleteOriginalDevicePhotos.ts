@@ -16,7 +16,6 @@ import { log } from "sharedHelpers/logger";
 import {
   beginDeleteTransaction,
   endDeleteTransaction,
-  MAX_TRANSACTION_SIZE,
   maxTransactionSize,
   partitionForDelete,
   recordAnsweredSize,
@@ -181,54 +180,22 @@ const TRANSACTION_MS_ALLOWANCE = 1800;
 
 // How a cleanup's transactions are sized.
 //
-// Every transaction attempted since deletions stopped working has been 166,
-// 200, 932 or 947 assets, and every one was left unanswered — but nothing
-// smaller has ever actually been tried. Each attempt at chunking put a full
-// chunk first, so the small ones behind it were never reached, and the one
-// single-asset deletion in the log was issued 40ms before an ErrorBoundary
-// reloaded the bundle out from under it, which is not evidence about size.
-//
-// So a cleanup now opens at one photo and ramps: 1, 5, 25, 50, 100, then the
-// cap. Every transaction that comes back is both photos deleted and a size
-// known to work, and the first one that doesn't names the ceiling — in a single
-// cleanup rather than one per attempt. The cap itself is remembered and halves
-// on a transaction the library never answers, so a run that dies at 200 comes
-// back at 100 and keeps closing in until the deletions land.
-const DELETE_RAMP = [1, 5, 25, 50, 100];
-
-// The size of the next transaction, given the cap as it stands right now and
-// how far into the ramp the cleanup is.
-//
-// Read per transaction rather than once per cleanup. The cap doubles on every
-// transaction the library answers at it, so a plan drawn up front at a cap of
-// one sends every photo in its own transaction even though the second one was
-// already allowed to carry two: the Sep 21 log has a cleanup of 382 photos
-// planned as 382 transactions of one, each costing ~1.15s, which is seven
-// minutes of grinding for a library that was answering everything asked of it.
-const nextChunkSize = ( left: number, ramp: number, cap: number ): number => {
-  // Never zero: a cap that somehow came back as one would size every
-  // transaction at nothing and loop for ever.
+// One transaction is one system consent alert, whatever it carries, so the only
+// thing chunking costs the user is taps. There used to be a ramp — 1, 5, 25,
+// 50, 100, then the cap — to find the size the library would still answer, on
+// the theory that big transactions were what hung. That theory came from
+// transactions "the library never answered", which are alerts nobody tapped,
+// so the ramp was five extra alerts spent learning something the log never
+// actually showed. A cleanup now asks in as few transactions as the cap allows:
+// 326 photos is two alerts, not the 326 the Sep 21 log ground through.
+const plannedChunkSizes = ( total: number, cap: number ): number[] => {
   const ceiling = Math.max( 1, cap );
-  // A batch the library will take in one go is sent in one go. The ramp is for
-  // finding the size a cleanup can get through, and splitting a delete of six
-  // photos into three transactions would only ask the user to confirm three
-  // times for nothing.
-  if ( left <= ceiling ) return left;
-  return Math.min( DELETE_RAMP[ramp] ?? ceiling, ceiling );
-};
-
-// What the cleanup expects to send, for the timers and the log. Simulates the
-// same doubling the run itself will do, so a cleanup opening at a collapsed cap
-// isn't handed a budget for hundreds of transactions it won't issue.
-const plannedChunkSizes = ( total: number, startingCap: number ): number[] => {
   const sizes: number[] = [];
-  let cap = Math.max( 1, startingCap );
   let left = total;
   while ( left > 0 ) {
-    const size = nextChunkSize( left, sizes.length, cap );
+    const size = Math.min( ceiling, left );
     sizes.push( size );
     left -= size;
-    if ( size >= cap ) cap = Math.min( MAX_TRANSACTION_SIZE, cap * 2 );
   }
   return sizes;
 };
@@ -254,6 +221,29 @@ const hangReportMs = ( chunkCount: number ) => Math.min(
 
 // Returned by the race below when the OS hasn't answered inside UI_WAIT_MS.
 const STILL_PENDING = { stillPending: true } as const;
+
+// Whether the transaction failed because nobody answered its consent alert.
+//
+// Deleting a photo this app can't prove it created puts a system alert in front
+// of the user, and PhotoKit holds the transaction open until they answer it.
+// Two of those outcomes say nothing about the library:
+//
+//   DELETE_NO_CALLBACK — the native watchdog gave up at 150s, which for an
+//     alert-gated transaction means the alert went untapped. The Sep 21 log has
+//     these with the app foreground-active and appStateChanges=0 throughout.
+//   PHPhotosErrorDomain 3072 (PHPhotosErrorUserCancelled) — the user declined,
+//     which is an answer about this deletion and not about the library.
+//
+// Treating either as "PhotoKit never answered" is what halved the cap to one
+// photo per alert, and one photo per alert is what made the alerts go
+// unanswered. So neither narrows the suspects and neither moves the cap.
+const isUnconfirmedByUser = ( error: unknown ): boolean => {
+  if ( ( error as { code?: string } | undefined )?.code === "DELETE_NO_CALLBACK" ) return true;
+  const message = String(
+    ( error as { message?: string } | undefined )?.message ?? error ?? "",
+  );
+  return message.includes( "PHPhotosErrorDomain error 3072" );
+};
 
 // The native module refused to open a transaction because the last one it
 // opened has never come back (see the write gate in ImageCropper.m). Not a
@@ -511,7 +501,6 @@ const performDeleteOriginalDevicePhotos = async (
       // halving they were planned with: that is how they narrow.
       const probes = [...probeChunks];
       let start = 0;
-      let ramp = 0;
       // The largest transaction the library has answered in this run. Goes into
       // the record of the open transaction so that, if the process dies here,
       // the next launch can tell "PhotoKit stopped answering" from "the app was
@@ -519,8 +508,7 @@ const performDeleteOriginalDevicePhotos = async (
       let answeredMax = 0;
       const nextChunk = ( ): { chunk: string[]; isProbe: boolean } | undefined => {
         if ( start < ordinary.length ) {
-          const size = nextChunkSize( ordinary.length - start, ramp, maxTransactionSize( ) );
-          ramp += 1;
+          const size = Math.min( Math.max( 1, maxTransactionSize( ) ), ordinary.length - start );
           const chunk = ordinary.slice( start, start + size );
           start += size;
           return { chunk, isProbe: false };
@@ -553,16 +541,17 @@ const performDeleteOriginalDevicePhotos = async (
           // eslint-disable-next-line no-await-in-loop
           chunkResult = await nativeWrite;
         } catch ( chunkError ) {
-          // The native watchdog gave up on it, so it is one of the transactions
-          // PhotoKit never answered. Narrow the search before rethrowing.
-          // A chunk holding the whole of what this cleanup had to send was
-          // isolated deliberately; one photo at the head of a longer list is
-          // just the opening size probe and accuses nobody.
-          recordUnansweredTransaction(
-            chunk.map( basePhotoAssetId ),
-            isProbe,
-            chunk.length === ordinary.length,
-          );
+          // An alert the user never answered, or declined, says nothing about
+          // the library or about any photo in the transaction — so it neither
+          // moves the cap nor accuses anything. Anything else is a refusal the
+          // library actually made, and narrows the search as before.
+          if ( !isUnconfirmedByUser( chunkError ) ) {
+            recordUnansweredTransaction(
+              chunk.map( basePhotoAssetId ),
+              isProbe,
+              chunk.length === ordinary.length,
+            );
+          }
           endDeleteTransaction( );
           throw chunkError;
         }
