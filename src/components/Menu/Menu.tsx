@@ -118,6 +118,11 @@ const Menu = ( ) => {
           navigation: "LifeList",
           icon: "star",
         },
+        myIdentifications: {
+          label: t( "MY-IDS" ),
+          navigation: "MyIdentifications",
+          icon: "label",
+        },
         mavericks: {
           label: t( "MY-MAVERICK-IDS" ),
           navigation: "MaverickIdentifications",

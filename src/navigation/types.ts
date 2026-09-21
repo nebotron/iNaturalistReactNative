@@ -421,6 +421,7 @@ export type BaseTabStackParamList = {
   };
   LifeList: undefined;
   MaverickIdentifications: undefined;
+  MyIdentifications: undefined;
   WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   CropLogViewer: undefined;
   DevicePhotoCleanup: undefined;

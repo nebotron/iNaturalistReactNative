@@ -203,6 +203,9 @@ export interface ApiIdentification {
   category?: "improving" | "supporting" | "leading" | "maverick";
   created_at?: string;
   current?: boolean;
+  // true when the identifier explicitly disagreed with the previous
+  // observation taxon, null/false otherwise
+  disagreement?: boolean | null;
   hidden?: boolean;
   id?: number;
   observation?: { uuid?: string };

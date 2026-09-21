@@ -910,6 +910,9 @@ Most-Recent-Default = Most Recent (Default)
 # Title for section in Notifications showing notifications about observations
 # created by the viewer. Should be 16 characters or fewer or it will be ellipsized.
 MY-CONTENT--notifications = MY CONTENT
+# Label for a menu item and screen title showing the identifications the
+# user has added to other people's observations, newest first
+MY-IDS = MY IDS
 # Label for a menu item and screen title showing the first time the user
 # observed each species they've seen, newest to oldest
 MY-LIFERS = MY LIFERS
@@ -1444,6 +1447,12 @@ Sign-in-with-Apple-Failed = Sign in with Apple Failed
 Sign-in-with-Google = Sign in with Google
 Sign-in-with-Google-Failed = Sign in with Google Failed
 Skip-for-now = Skip for now
+# Accessibility label for an icon marking an identification that another
+# identifier later agreed with
+Someone-agreed-with-this-identification = Someone agreed with this identification
+# Accessibility label for an icon marking an identification that another
+# identifier later disagreed with
+Someone-disagreed-with-this-identification = Someone disagreed with this identification
 # Generic error message
 Something-went-wrong = Something went wrong.
 Sorry-this-observation-was-deleted = Sorry, this observation was deleted
@@ -1922,6 +1931,9 @@ You-dont-have-any-maverick-identifications = You don't have any maverick identif
 You-have-no-notifications-get-started-by-creating-your-own-observations = You have no notifications! Get started by creating your own observations.
 You-have-no-notifications-you-will-see-updates-to-obs-you-have-left-IDs-or-comments-on = You have no notifications! You will see updates to observations you have left IDs or comments on here.
 You-have-opted-out-of-the-Community-Taxon = You have opted out of the Community Taxon
+# Empty state for the screen listing the identifications the user has added
+# to other people's observations
+You-havent-identified-any-observations-yet = You haven't identified any observations yet.
 You-havent-joined-any-projects-yet = You haven’t joined any projects yet!
 You-havent-joined-any-Traditional-Projects-yet = You haven’t joined any Traditional Projects yet!
 You-havent-observed-any-species-yet = You haven't observed any species yet.

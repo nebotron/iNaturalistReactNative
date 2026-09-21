@@ -21,6 +21,7 @@ import LocationHistoryPointsMap from "components/LocationHistory/LocationHistory
 import MaverickIdentificationsContainer
   from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
+import MyIdentificationsContainer from "components/MyIdentifications/MyIdentificationsContainer";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
 import Notifications from "components/Notifications/Notifications";
 import DQAContainer from "components/ObsDetails/DQAContainer";
@@ -146,6 +147,7 @@ const FadeInLifeList = ( ) => fadeInComponent( <LifeListContainer /> );
 const FadeInMaverickIdentifications = (
   ( ) => fadeInComponent( <MaverickIdentificationsContainer /> )
 );
+const FadeInMyIdentifications = ( ) => fadeInComponent( <MyIdentificationsContainer /> );
 
 const BASE_SCREEN_OPTIONS = {
   headerBackButtonDisplayMode: "minimal",
@@ -352,6 +354,11 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           <Stack.Screen
             name="MaverickIdentifications"
             component={FadeInMaverickIdentifications}
+            options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="MyIdentifications"
+            component={FadeInMyIdentifications}
             options={LIST_OPTIONS}
           />
           <Stack.Screen
