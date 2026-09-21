@@ -24,10 +24,12 @@ import { basePhotoAssetId } from "sharedHelpers/appCreatedPhotoAssets";
 
 const store = new MMKV( { id: "unanswered-delete-assets" } );
 
-// The assets of the transaction currently open. Written before performChanges
-// is asked for and cleared when it answers, so a record still here on the next
-// launch is a transaction that never came back — which is the one thing a
-// callback that never fires cannot tell us.
+// The assets of the transaction currently open, and the largest transaction the
+// same cleanup had already had answered. Written before performChanges is asked
+// for and cleared when it answers, so a record still here on the next launch is
+// a transaction that never came back — which is the one thing a callback that
+// never fires cannot tell us. The size alongside it is what says whether that
+// means anything: see takeUnansweredTransaction.
 const IN_FLIGHT_KEY = "inFlight";
 // Assets known to include one PhotoKit will not answer for.
 const SUSPECTS_KEY = "suspects";
@@ -100,12 +102,38 @@ const quarantine = ( id: string ) => {
 
 // Called before a transaction is asked for, so that a transaction which never
 // answers is still identifiable after the app is killed and relaunched.
-export const beginDeleteTransaction = ( uris: string[] ) => write(
+// answeredMax is the largest transaction this cleanup has already had answered.
+export const beginDeleteTransaction = ( uris: string[], answeredMax = 0 ) => store.set(
   IN_FLIGHT_KEY,
-  uris.map( basePhotoAssetId ),
+  JSON.stringify( { ids: uris.map( basePhotoAssetId ), answeredMax } ),
 );
 
 export const endDeleteTransaction = ( ) => write( IN_FLIGHT_KEY, [] );
+
+// Records written before the size was kept carried the ids alone.
+const readInFlight = ( ): { ids: string[]; answeredMax: number } => {
+  const raw = store.getString( IN_FLIGHT_KEY );
+  if ( !raw ) return { ids: [], answeredMax: 0 };
+  try {
+    const parsed = JSON.parse( raw );
+    if ( Array.isArray( parsed ) ) {
+      return {
+        ids: parsed.filter( ( id ): id is string => typeof id === "string" ),
+        answeredMax: 0,
+      };
+    }
+    return {
+      ids: Array.isArray( parsed?.ids )
+        ? parsed.ids.filter( ( id: unknown ): id is string => typeof id === "string" )
+        : [],
+      answeredMax: typeof parsed?.answeredMax === "number"
+        ? parsed.answeredMax
+        : 0,
+    };
+  } catch {
+    return { ids: [], answeredMax: 0 };
+  }
+};
 
 // A transaction that never came back. Its assets are where an unanswerable one
 // would be, and its size is more than this device will currently take.
@@ -132,17 +160,30 @@ export const recordUnansweredTransaction = (
   write( SUSPECTS_KEY, ids );
 };
 
-// Reads and clears a transaction left open by a previous run, folding it into
-// the suspect set. Returns what it found, for the log.
+// Reads and clears a transaction left open by a previous run. Returns what it
+// found and whether it was taken as evidence, for the log.
+//
+// A record is only evidence when it is bigger than anything that same cleanup
+// had already had answered. A run that was deleting transactions this size and
+// then stopped leaving records is a process that died — the app killed in the
+// background, the bundle reloaded, the user force-quitting a long cleanup — and
+// reading it as a hang costs far more than ignoring it: it halves the cap and
+// accuses an innocent asset on every launch. That is what happened here. The
+// device ground its way down to a cap of one photo, each 382-photo cleanup then
+// took seven minutes, every one of them was abandoned part-way, and the
+// one-asset record each left behind held the cap at one for the next. A
+// transaction PhotoKit really won't answer still gets recorded properly, by the
+// native watchdog, while the app is alive to see it.
 //
 // Never treated as a probe: the record doesn't say which it was, and accusing
 // an asset needs to be certain of that.
-export const takeUnansweredTransaction = ( ): string[] => {
-  const inFlight = read( IN_FLIGHT_KEY );
-  if ( inFlight.length === 0 ) return [];
+export const takeUnansweredTransaction = ( ): { ids: string[]; evidence: boolean } => {
+  const { ids, answeredMax } = readInFlight( );
+  if ( ids.length === 0 ) return { ids: [], evidence: false };
   write( IN_FLIGHT_KEY, [] );
-  recordUnansweredTransaction( inFlight );
-  return inFlight;
+  const evidence = ids.length > answeredMax;
+  if ( evidence ) recordUnansweredTransaction( ids );
+  return { ids, evidence };
 };
 
 // Half of the suspect set deleted normally, so if there is an asset PhotoKit

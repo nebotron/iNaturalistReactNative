@@ -3,6 +3,7 @@ import promptDeleteOriginalDevicePhotos, {
   deleteOriginalDevicePhotos,
 } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import {
+  beginDeleteTransaction,
   forgetUnansweredDeleteState,
   maxTransactionSize,
   quarantinedAssetIds,
@@ -247,14 +248,75 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( result ).toMatchObject( { deleted: 181, requested: 600 } );
       expect( maxTransactionSize( ) ).toEqual( 100 );
 
-      // Next cleanup opens at one again and asks for no more than the library
-      // has shown it will take.
+      // Next cleanup opens at one again and climbs back through the cap it was
+      // left with, in this run rather than over the next several: every size
+      // it asks for past 100 is one the library has just answered at the cap.
       mockDeletePhotos.mockReset( );
       mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
       await deleteOriginalDevicePhotos( uris );
       const sizes = mockDeletePhotos.mock.calls.map( call => call[0].length );
       expect( sizes[0] ).toEqual( 1 );
-      expect( Math.max( ...sizes ) ).toEqual( 100 );
+      expect( sizes ).toContain( 100 );
+      expect( Math.max( ...sizes ) ).toEqual( 200 );
+    } );
+
+    it( "climbs back to a working transaction size inside one cleanup", async ( ) => {
+      // The cap collapsed to one photo on the device, and the plan was drawn
+      // up front from it: 382 photos went out as 382 transactions of one, each
+      // costing ~1.15s, seven minutes of deleting one at a time while the
+      // library answered everything it was asked. Sizing each transaction when
+      // the loop reaches it means the cap doubling on every answer is the cap
+      // the next one is sized against.
+      forgetUnansweredDeleteState( );
+      mockDeletePhotos.mockRejectedValueOnce( new Error( "never called back" ) );
+      await deleteOriginalDevicePhotos( ["ph://COLLAPSE"] );
+      expect( maxTransactionSize( ) ).toEqual( 1 );
+
+      mockDeletePhotos.mockReset( );
+      mockDeletePhotos.mockImplementation( async uris => (
+        { deleted: uris.length, requested: uris.length }
+      ) );
+      const uris = Array.from( { length: 382 }, ( _unused, i ) => `ph://W${i}` );
+      const result = await deleteOriginalDevicePhotos( uris );
+
+      expect(
+        mockDeletePhotos.mock.calls.map( call => call[0].length ),
+      ).toEqual( [1, 2, 4, 8, 16, 32, 64, 128, 127] );
+      expect( result ).toMatchObject( { deleted: 382, requested: 382, succeeded: true } );
+    } );
+
+    it( "does not read a transaction left open by a run that was deleting fine", async ( ) => {
+      // A record still in the store on the next launch is only evidence when
+      // it is bigger than the transactions that same run had already had
+      // answered. Otherwise the process died -- the app killed in the
+      // background, the user force-quitting a long cleanup -- and reading it
+      // as a hang halves the cap and accuses an innocent photo every launch,
+      // which is what held this device at one photo a transaction for days.
+      forgetUnansweredDeleteState( );
+      beginDeleteTransaction( ["ph://LIVE1", "ph://LIVE2"], 100 );
+
+      mockDeletePhotos.mockReset( );
+      mockDeletePhotos.mockImplementation( async uris => (
+        { deleted: uris.length, requested: uris.length }
+      ) );
+      await deleteOriginalDevicePhotos( ["ph://NEXT"] );
+
+      expect( maxTransactionSize( ) ).toEqual( 200 );
+      expect( suspectAssetIds( ) ).toEqual( [] );
+      expect( quarantinedAssetIds( ) ).toEqual( [] );
+    } );
+
+    it( "still reads a transaction bigger than anything its run had answered", async ( ) => {
+      forgetUnansweredDeleteState( );
+      beginDeleteTransaction( ["ph://H1", "ph://H2", "ph://H3", "ph://H4"], 2 );
+
+      mockDeletePhotos.mockReset( );
+      mockDeletePhotos.mockImplementation( async uris => (
+        { deleted: uris.length, requested: uris.length }
+      ) );
+      await deleteOriginalDevicePhotos( ["ph://NEXT"] );
+
+      expect( suspectAssetIds( ) ).toEqual( ["H1", "H2", "H3", "H4"] );
     } );
 
     it( "opens at a single photo so the smallest transaction is tried first", async ( ) => {
