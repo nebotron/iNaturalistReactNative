@@ -111,4 +111,47 @@ describe( "subjectBoundsToNormalizedCrop", ( ) => {
     expect( crop.w ).toBeLessThanOrEqual( 1 );
     expect( crop.h ).toBeLessThanOrEqual( 1 );
   } );
+
+  it( "hedges a small subject outward by more than a large one", ( ) => {
+    const sideFor = size => {
+      const crop = subjectBoundsToNormalizedCrop(
+        {
+          x: 0.5 - size / 2,
+          y: 0.5 - ( size * 2 ) / 2,
+          width: size,
+          height: size * 2,
+        },
+        imageWidth,
+        imageHeight,
+        0,
+      );
+      // The box is square in pixels (size * 2000 === size * 2 * 1000), so this
+      // is how much wider than the subject the crop ends up.
+      return ( crop.w * imageWidth ) / ( size * imageWidth );
+    };
+
+    const smallGain = sideFor( 0.05 );
+    const largeGain = sideFor( 0.4 );
+
+    expect( smallGain ).toBeGreaterThan( 1 );
+    expect( largeGain ).toBeGreaterThan( 1 );
+    expect( smallGain ).toBeGreaterThan( largeGain );
+  } );
+
+  it( "leaves a subject that already fills the frame alone", ( ) => {
+    const crop = subjectBoundsToNormalizedCrop(
+      {
+        x: 0,
+        y: 0,
+        width: 1,
+        height: 1,
+      },
+      1000,
+      1000,
+      0,
+    );
+
+    expect( crop.w ).toBeCloseTo( 1, 6 );
+    expect( crop.h ).toBeCloseTo( 1, 6 );
+  } );
 } );

@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert( 0, str( Path( __file__ ).parent ) )
-from evaluate_subject_detector import _spectral_saliency_bounds
+from evaluate_subject_detector import _spectral_saliency_bounds, SIDE_CALIBRATION_EXPONENT
 
 SAL_CACHE = Path( "/tmp/inat_saliency_cache.npz" )
 
@@ -101,6 +101,9 @@ def score( bounds, truths, sizes, padding=0.0 ):
     bw = np.maximum( b[:, 2], 1e-9 )
     bh = np.maximum( b[:, 3], 1e-9 )
     side_px = np.maximum( bw * ( 1 + padding ) * W, bh * ( 1 + padding ) * H )
+    # Mirrors SIDE_CALIBRATION_EXPONENT in subjectBoundsToNormalizedCrop.ts.
+    M = np.maximum( W, H )
+    side_px = M * ( side_px / M ) ** SIDE_CALIBRATION_EXPONENT
     w = side_px / W
     h = side_px / H
     cx = b[:, 0] + bw / 2

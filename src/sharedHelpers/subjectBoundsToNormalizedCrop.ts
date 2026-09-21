@@ -9,6 +9,21 @@ export interface NormalizedBounds {
 
 const DEFAULT_PADDING_FRACTION = 0.1;
 
+// The detector's box is an estimate of where a human would crop, not the crop
+// itself, and on a photo it has never seen that estimate is noisy. Missing part
+// of the subject costs four times what including extra background costs, so the
+// crop that scores best is not the box: it pays to hedge outward, and to hedge
+// hardest where the box is small, since a small box is where a given amount of
+// localization error matters most. Raising the square's side to this power does
+// that — it leaves a full-frame subject alone, widens a tenth-of-the-frame
+// subject by about 20%, and slightly tightens one that would letterbox.
+//
+// 0.92 is what the crop log picks. Fitting it on photos the detector trained on
+// would choose 1.0, because the detector remembers those and its boxes are
+// already right; cross-validated on held-out photos it lands on 0.92 in every
+// fold, for two models with different training sets. See the tune skill.
+const SIDE_CALIBRATION_EXPONENT = 0.92;
+
 export function subjectBoundsToNormalizedCrop(
   bounds: NormalizedBounds,
   imageWidth: number,
@@ -36,8 +51,14 @@ export function subjectBoundsToNormalizedCrop(
   // dimensions; the caller is expected to letterbox rather than crop.
   const pixelSide = Math.max( paddedW * imageWidth, paddedH * imageHeight );
 
-  const w = pixelSide / imageWidth;
-  const h = pixelSide / imageHeight;
+  // Hedge the side outward, measured against the image's longer edge so the
+  // correction is scale-free and a subject filling the frame stays put.
+  const maxDimension = Math.max( imageWidth, imageHeight );
+  const calibratedSide = maxDimension
+    * ( ( pixelSide / maxDimension ) ** SIDE_CALIBRATION_EXPONENT );
+
+  const w = calibratedSide / imageWidth;
+  const h = calibratedSide / imageHeight;
 
   const centerX = bounds.x + bounds.width / 2;
   const centerY = bounds.y + bounds.height / 2;
