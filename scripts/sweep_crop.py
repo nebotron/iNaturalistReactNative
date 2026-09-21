@@ -43,17 +43,26 @@ def load( npz_path: Path ):
     return dets, z["truths"], z["sizes"], z["urls"], z["paths"]
 
 
-def saliency_for( paths ):
-    """Model-independent, so it is cached once and reused across every run."""
+def saliency_for( paths, workers=4 ):
+    """Model-independent, so it is cached per image and reused across every run.
+
+    Keyed by path rather than by the whole list: a run over a slice of the log
+    has to reuse the cache the full run built, not replace it.
+    """
+    known = {}
     if SAL_CACHE.exists():
         z = np.load( SAL_CACHE, allow_pickle=True )
-        if len( z["paths"] ) == len( paths ) and ( z["paths"] == paths ).all():
-            return z["sal"]
-    print( "Computing saliency fallback …", flush=True )
-    with ProcessPoolExecutor( max_workers=4 ) as ex:
-        sal = np.array( list( ex.map( _sal, list( paths ), chunksize=32 ) ), dtype=np.float32 )
-    np.savez_compressed( SAL_CACHE, paths=paths, sal=sal )
-    return sal
+        known = dict( zip( z["paths"].tolist(), z["sal"] ) )
+    todo = [p for p in map( str, paths ) if p not in known]
+    if todo:
+        print( f"Computing saliency fallback for {len(todo)} images …", flush=True )
+        with ProcessPoolExecutor( max_workers=workers ) as ex:
+            for p, b in zip( todo, ex.map( _sal, todo, chunksize=32 ) ):
+                known[p] = np.array( b, dtype=np.float32 )
+        np.savez_compressed( SAL_CACHE,
+                             paths=np.array( list( known ) ),
+                             sal=np.array( list( known.values() ), dtype=np.float32 ) )
+    return np.array( [known[str( p )] for p in paths], dtype=np.float32 )
 
 
 def union_bounds( d, thresh, k ):

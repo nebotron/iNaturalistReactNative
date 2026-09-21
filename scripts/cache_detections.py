@@ -9,10 +9,12 @@ sweep into a two-second one.
 
 Usage:
     python3 scripts/cache_detections.py MODEL.onnx OUT.npz [crop_training.json]
+                                        [--slice first:last]
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from concurrent.futures import ProcessPoolExecutor
@@ -139,11 +141,21 @@ def load_entries( json_path: Path ):
 
 
 def main() -> None:
-    model_path = str( Path( sys.argv[1] ).resolve() )
-    out_path = Path( sys.argv[2] )
-    json_path = Path( sys.argv[3] ) if len( sys.argv ) > 3 else REPO_ROOT / "crop_training.json"
+    ap = argparse.ArgumentParser()
+    ap.add_argument( "model" )
+    ap.add_argument( "out" )
+    ap.add_argument( "json", nargs="?", default=str( REPO_ROOT / "crop_training.json" ) )
+    ap.add_argument( "--slice", default=None,
+                     help="index range into the log, e.g. -1000: for the held-out tail" )
+    args = ap.parse_args()
 
-    entries = load_entries( json_path )
+    model_path = str( Path( args.model ).resolve() )
+    out_path = Path( args.out )
+
+    entries = load_entries( Path( args.json ) )
+    if args.slice:
+        lo, _, hi = args.slice.partition( ":" )
+        entries = entries[int( lo ) if lo else None:int( hi ) if hi else None]
     print( f"{len(entries)} resolvable entries", flush=True )
 
     tasks = [( i, str( p ), s[0], s[1] ) for i, ( _, p, s, _ ) in enumerate( entries )]
