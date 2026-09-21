@@ -178,22 +178,31 @@ const UI_WAIT_MS = 15_000;
 // photos it carries.
 const TRANSACTION_MS_ALLOWANCE = 1800;
 
-// How a cleanup's transactions are sized.
+// How a cleanup's transactions are sized: 10 photos, then double each time,
+// up to whatever the cap allows.
 //
-// One transaction is one system consent alert, whatever it carries, so the only
-// thing chunking costs the user is taps. There used to be a ramp — 1, 5, 25,
-// 50, 100, then the cap — to find the size the library would still answer, on
-// the theory that big transactions were what hung. That theory came from
-// transactions "the library never answered", which are alerts nobody tapped,
-// so the ramp was five extra alerts spent learning something the log never
-// actually showed. A cleanup now asks in as few transactions as the cap allows:
-// 326 photos is two alerts, not the 326 the Sep 21 log ground through.
+// One transaction is one system consent alert, whatever it carries, so the
+// number of groups is the number of times the cleanup asks permission. Opening
+// at ten rather than at the cap keeps the first ask small — if something is
+// going to go wrong with a transaction, it goes wrong having risked ten photos
+// rather than two hundred — and doubling gets to the cap in five steps, so the
+// tail of a big cleanup still goes out in full-sized groups. 326 photos is
+// 10, 20, 40, 80, 160, 16: six alerts.
+const DELETE_GROUP_START = 10;
+
+// The size of the group at this point in the ramp, never more than the cap and
+// never more than what is left.
+const groupSize = ( left: number, step: number, cap: number ): number => Math.min(
+  DELETE_GROUP_START * ( 2 ** step ),
+  Math.max( 1, cap ),
+  left,
+);
+
 const plannedChunkSizes = ( total: number, cap: number ): number[] => {
-  const ceiling = Math.max( 1, cap );
   const sizes: number[] = [];
   let left = total;
   while ( left > 0 ) {
-    const size = Math.min( ceiling, left );
+    const size = groupSize( left, sizes.length, cap );
     sizes.push( size );
     left -= size;
   }
@@ -501,6 +510,8 @@ const performDeleteOriginalDevicePhotos = async (
       // halving they were planned with: that is how they narrow.
       const probes = [...probeChunks];
       let start = 0;
+      // How far into the doubling ramp the ordinary photos have got.
+      let step = 0;
       // The largest transaction the library has answered in this run. Goes into
       // the record of the open transaction so that, if the process dies here,
       // the next launch can tell "PhotoKit stopped answering" from "the app was
@@ -508,7 +519,10 @@ const performDeleteOriginalDevicePhotos = async (
       let answeredMax = 0;
       const nextChunk = ( ): { chunk: string[]; isProbe: boolean } | undefined => {
         if ( start < ordinary.length ) {
-          const size = Math.min( Math.max( 1, maxTransactionSize( ) ), ordinary.length - start );
+          // Read the cap as the loop reaches each group: a cap the library has
+          // just answered at is the one the next group is sized against.
+          const size = groupSize( ordinary.length - start, step, maxTransactionSize( ) );
+          step += 1;
           const chunk = ordinary.slice( start, start + size );
           start += size;
           return { chunk, isProbe: false };
