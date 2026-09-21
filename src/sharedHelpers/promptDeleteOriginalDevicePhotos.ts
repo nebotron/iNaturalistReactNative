@@ -377,8 +377,20 @@ const performDeleteOriginalDevicePhotos = async (
   // confirmation couldn't present (modal in vcChain, no scene…). Logged only
   // when something goes wrong — on the happy path it was pure volume.
   let deletionContext = "not captured";
+  // The transaction currently waiting on PhotoKit. The hang diagnostics used to
+  // describe `uniqueUris` — the whole cleanup — which is why five weeks of
+  // hangs never named the photos in the transaction that hung: the Sep 21 log
+  // reports a one-asset transaction outstanding for 21s and then dumps the
+  // first eight of 326 photos, none of which need be the one. Chunks are sent
+  // one at a time and the loop stops at the first that doesn't answer, so
+  // whatever is here when the hang timer fires is exactly what PhotoKit has.
+  let inFlight: { chunk: string[]; index: number; isProbe: boolean } | undefined;
   const pendingExtra = ( ) => ( {
     requested,
+    // Which transaction is outstanding, not just that one is.
+    outstandingChunk: inFlight?.index ?? -1,
+    outstandingAssets: inFlight?.chunk.length ?? 0,
+    outstandingIsProbe: inFlight?.isProbe ?? false,
     ms: Date.now( ) - startedAt,
     backgrounded,
     wentInactive,
@@ -408,7 +420,7 @@ const performDeleteOriginalDevicePhotos = async (
       const askedAt = Date.now( );
       let contextRespondedIn = -1;
       void Promise.race( [
-        ImageCropper.photoDeletionContext( uniqueUris ).then( context => {
+        ImageCropper.photoDeletionContext( inFlight?.chunk ?? uniqueUris ).then( context => {
           contextRespondedIn = Date.now( ) - askedAt;
           return context;
         } ),
@@ -435,7 +447,7 @@ const performDeleteOriginalDevicePhotos = async (
     // failure arrived on a date rather than with a batch.
     if ( Platform.OS === "ios" && ImageCropper?.photoAssetDiagnostics ) {
       void Promise.race( [
-        ImageCropper.photoAssetDiagnostics( uniqueUris ),
+        ImageCropper.photoAssetDiagnostics( inFlight?.chunk ?? uniqueUris ),
         new Promise<null>( resolve => { setTimeout( ( ) => resolve( null ), 5000 ); } ),
       ] ).catch( ( ) => null ).then(
         assetsAtHang => logger.errorWithExtra( "photo_delete_asset_detail", {
@@ -521,6 +533,9 @@ const performDeleteOriginalDevicePhotos = async (
       for ( let next = nextChunk( ), index = 0; next; next = nextChunk( ), index += 1 ) {
         const { chunk, isProbe } = next;
         const chunkStartedAt = Date.now( );
+        // What the hang diagnostics describe if PhotoKit doesn't answer this
+        // one. Set before the transaction goes out, cleared once it settles.
+        inFlight = { chunk, index, isProbe };
         // Recorded before the transaction is asked for, not after it fails: a
         // deletion that never answers is only identifiable by the record it
         // left behind, and the app is routinely killed while one is open.
@@ -540,10 +555,18 @@ const performDeleteOriginalDevicePhotos = async (
         } catch ( chunkError ) {
           // The native watchdog gave up on it, so it is one of the transactions
           // PhotoKit never answered. Narrow the search before rethrowing.
-          recordUnansweredTransaction( chunk.map( basePhotoAssetId ), isProbe );
+          // A chunk holding the whole of what this cleanup had to send was
+          // isolated deliberately; one photo at the head of a longer list is
+          // just the opening size probe and accuses nobody.
+          recordUnansweredTransaction(
+            chunk.map( basePhotoAssetId ),
+            isProbe,
+            chunk.length === ordinary.length,
+          );
           endDeleteTransaction( );
           throw chunkError;
         }
+        inFlight = undefined;
         endDeleteTransaction( );
         // PhotoKit answered one this big, so it may be willing to take more.
         recordAnsweredSize( chunk.length );

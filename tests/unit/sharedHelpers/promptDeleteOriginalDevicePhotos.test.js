@@ -347,6 +347,25 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( maxTransactionSize( ) ).toEqual( 2 );
     } );
 
+    it( "accuses nobody when the opening transaction of one goes unanswered", async ( ) => {
+      // Every cleanup leads with a single photo to find the size the library
+      // will still take, so the photo in it is whichever one led the list, not
+      // a photo anything is known about. Naming it a suspect sends it out alone
+      // next cleanup, where a second hang reads as a deliberate probe and
+      // quarantines it: the Sep 19-21 log has one suspect after every failed
+      // run, a different innocent photo each time.
+      mockDeletePhotos.mockRejectedValue( new Error( "never called back" ) );
+
+      await deleteOriginalDevicePhotos(
+        Array.from( { length: 300 }, ( _unused, i ) => `ph://F${i}` ),
+      );
+
+      expect( suspectAssetIds( ) ).toEqual( [] );
+      expect( quarantinedAssetIds( ) ).toEqual( [] );
+      // The size is still the only thing it says anything about.
+      expect( maxTransactionSize( ) ).toEqual( 1 );
+    } );
+
     it( "makes the assets of a transaction that never answered the suspects", async ( ) => {
       // The only instrument that can tell an unanswerable asset from an
       // ordinary one is which transactions come back, so a transaction the
@@ -644,6 +663,41 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
 
       finishDeletion( { deleted: 1, requested: 1 } );
       await deletion;
+    } );
+
+    it( "describes the transaction that hung, not the whole cleanup", async ( ) => {
+      // Chunks go out one at a time, so what PhotoKit is holding is one chunk.
+      // Describing the whole request instead is why five weeks of hangs never
+      // named the photos in them: the Sep 21 log reports one asset outstanding
+      // and then dumps the first eight of 326, none of which need be it.
+      mockPhotoDeletionContext.mockResolvedValue( "transaction=active count=1" );
+      let finishDeletion;
+      mockDeletePhotos.mockImplementation(
+        ( ) => new Promise( resolve => { finishDeletion = resolve; } ),
+      );
+
+      const uris = Array.from( { length: 300 }, ( _unused, i ) => `ph://D${i}` );
+      const pending = deleteOriginalDevicePhotos( uris );
+      await jest.advanceTimersByTimeAsync( 14000 );
+
+      // The opening transaction of one, which is what never came back.
+      expect( mockPhotoDeletionContext ).toHaveBeenCalledWith( ["ph://D0"] );
+      expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+        "photo_delete_pending",
+        expect.objectContaining( {
+          requested: 300,
+          outstandingChunk: 0,
+          outstandingAssets: 1,
+          outstandingIsProbe: false,
+        } ),
+      );
+
+      // Let the abandoned transaction settle rather than leaving it holding the
+      // write chain against whatever runs next.
+      mockDeletePhotos.mockResolvedValue( { deleted: 1, requested: 1 } );
+      finishDeletion( { deleted: 1, requested: 1 } );
+      await jest.advanceTimersByTimeAsync( 30000 );
+      await pending;
     } );
 
     it( "reports a main queue that never answers as the hang's own explanation", async ( ) => {

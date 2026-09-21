@@ -145,15 +145,32 @@ const readInFlight = ( ): { ids: string[]; answeredMax: number } => {
 // different innocent one each time. Sent alone as a probe it has hung twice,
 // once in the set that put it under suspicion and once on its own, which is
 // evidence about the asset rather than about the size.
+// isolated says the transaction held one asset because that was the whole of
+// what the cleanup had to send, rather than because it was the opening size
+// probe of a longer list. Defaults to false: a caller that can't tell the two
+// apart — a record left behind by a dead process — must not accuse anyone.
 export const recordUnansweredTransaction = (
   ids: string[],
   fromSuspectProbe = false,
+  isolated = false,
 ) => {
   if ( ids.length === 0 ) return;
   if ( fromSuspectProbe && ids.length === 1 ) {
     // The asset is the explanation, so the size isn't. Halving the cap here
     // would punish every later cleanup for one bad photo.
     quarantine( ids[0] );
+    return;
+  }
+  if ( ids.length === 1 && !isolated ) {
+    // Every cleanup opens with a transaction of one to find the size the
+    // library will still answer, so the photo in it is whichever one led the
+    // list — not a photo anything is known about. Naming it a suspect sends it
+    // out alone next cleanup, where a second hang reads as a deliberate probe
+    // and quarantines it for good: the Sep 19-21 log has exactly one suspect
+    // after every failed run, a different innocent photo each time, on a device
+    // where it is deleteAssets that hangs rather than any asset in it. The size
+    // is still worth recording; the asset isn't.
+    recordUnansweredSize( 1 );
     return;
   }
   recordUnansweredSize( ids.length );
