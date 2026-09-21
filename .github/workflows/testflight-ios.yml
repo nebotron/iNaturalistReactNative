@@ -33,6 +33,9 @@ jobs:
       ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
       ARCHIVE_PATH: ${{ github.workspace }}/ios/build/iNaturalistReactNative.xcarchive
       EXPORT_PATH: ${{ github.workspace }}/ios/build/export
+      # Makes react_native_post_install wire every target's CC/CXX/LD through
+      # react-native/scripts/xcode/ccache-clang.sh
+      USE_CCACHE: '1'
 
     steps:
     # Fail in seconds rather than an hour into the build
@@ -71,7 +74,18 @@ jobs:
     - name: Set Xcode Toolchain
       run: echo "TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault" >> "$GITHUB_ENV"
 
+    # node_modules itself, not just the npm download cache, so an unchanged
+    # lockfile skips the install and the patch-package run entirely. Cached
+    # after postinstall, so the patches are already applied.
+    - name: Restore node_modules
+      id: node-modules
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ hashFiles( '.nvmrc', 'package-lock.json', 'patches/**' ) }}
+
     - name: Install Dependencies
+      if: steps.node-modules.outputs.cache-hit != 'true'
       run: npm ci
 
     - name: Create .env file
@@ -90,10 +104,47 @@ jobs:
     - name: Download the cv model and taxonomy file into the ios folder
       run: npm run add-example-model
 
-    - name: Update Pods
+    # Half the archive's ~1900 compiles are React Native core and its C++
+    # dependencies, which change only when react-native does. ccache turns
+    # those into cache hits across runs.
+    - name: Install ccache
       run: |
-        gem update cocoapods xcodeproj
-        cd ios && pod install
+        command -v ccache >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install ccache
+        echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
+        echo "CCACHE_MAXSIZE=2G" >> "$GITHUB_ENV"
+
+    # Saved under a new key every run so the cache keeps up with the code; the
+    # restore-keys fall back to the newest cache built against the same Pods.
+    - name: Restore the ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ccache-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}-${{ github.run_id }}
+        restore-keys: |
+          ccache-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}-
+          ccache-${{ runner.os }}-
+
+    # Downloaded pod tarballs — Firebase, GoogleSignIn, onnxruntime — are the
+    # slow part of a cold pod install and are safe to reuse whatever the
+    # lockfile says, since each is stored under its own version.
+    - name: Restore the CocoaPods download cache
+      uses: actions/cache@v4
+      with:
+        path: ~/Library/Caches/CocoaPods
+        key: cocoapods-downloads-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}
+        restore-keys: |
+          cocoapods-downloads-${{ runner.os }}-
+
+    # No restore-keys: an installed Pods tree is only reusable for the exact
+    # lockfile that produced it. pod install still runs on top of it.
+    - name: Restore the installed Pods
+      uses: actions/cache@v4
+      with:
+        path: ios/Pods
+        key: pods-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}
+
+    - name: Update Pods
+      run: cd ios && pod install
 
     # altool and xcodebuild both look for the key in ~/.appstoreconnect
     - name: Install the App Store Connect API key
@@ -116,10 +167,14 @@ jobs:
 
     # -allowProvisioningUpdates lets xcodebuild create the distribution
     # certificate and App Store profiles with the API key, so no certificates
-    # need to be exported from a Mac
+    # need to be exported from a Mac.
+    #
+    # COMPILER_INDEX_STORE_ENABLE=NO drops the index-while-building work, which
+    # only feeds Xcode's editor; nothing opens this archive in an editor.
     - name: Archive
       run: |
         set -o pipefail
+        ccache --zero-stats
         xcodebuild archive \
           -workspace ios/iNaturalistReactNative.xcworkspace \
           -scheme iNaturalistReactNative \
@@ -130,7 +185,14 @@ jobs:
           -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8" \
           -authenticationKeyID "$ASC_KEY_ID" \
           -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+          COMPILER_INDEX_STORE_ENABLE=NO \
           CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+        {
+          echo '### ccache'
+          echo '```'
+          ccache --show-stats
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
 
     - name: Export the IPA
       run: |
