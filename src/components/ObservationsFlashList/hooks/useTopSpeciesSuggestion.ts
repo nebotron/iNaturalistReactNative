@@ -60,7 +60,7 @@ const RANK_LEVEL_BY_RANK: Record<string, number> = {
   subspecies: 5,
 };
 
-const rankLevelForTaxon = ( taxon?: RankedTaxon ): number | undefined => {
+export const rankLevelForTaxon = ( taxon?: RankedTaxon ): number | undefined => {
   if ( typeof taxon?.rank_level === "number" ) return taxon.rank_level;
   return taxon?.rank
     ? RANK_LEVEL_BY_RANK[taxon.rank]

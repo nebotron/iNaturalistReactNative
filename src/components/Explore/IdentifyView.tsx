@@ -11,8 +11,9 @@ import {
   ZoomBrightnessSliders,
 } from "components/MediaViewer/IdentifyPhoto";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
-import useTopSpeciesSuggestion
-  from "components/ObservationsFlashList/hooks/useTopSpeciesSuggestion";
+import useTopSpeciesSuggestion, {
+  rankLevelForTaxon,
+} from "components/ObservationsFlashList/hooks/useTopSpeciesSuggestion";
 import {
   ActivityIndicator,
   Body2,
@@ -31,6 +32,7 @@ import React, {
 } from "react";
 import { Dimensions, StyleSheet } from "react-native";
 import Photo from "realmModels/Photo";
+import Taxon from "realmModels/Taxon";
 import { preloadSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
 import {
   useAuthenticatedMutation,
@@ -256,7 +258,11 @@ const IdentifyView = ( {
   }
 
   const isOwnObs = observation.user?.id != null && observation.user.id === currentUser?.id;
-  const agreeDisabled = !currentUser || !taxon?.id || isOwnObs;
+  // Agreeing is only worth doing at species or finer: an ID broader than that
+  // adds nothing the observation doesn't already have.
+  const taxonRankLevel = rankLevelForTaxon( taxon );
+  const isSpeciesOrFiner = taxonRankLevel != null && taxonRankLevel <= Taxon.SPECIES_LEVEL;
+  const agreeDisabled = !currentUser || !taxon?.id || isOwnObs || !isSpeciesOrFiner;
   const reviewDisabled = !currentUser;
 
   const handleAgree = ( ) => {
