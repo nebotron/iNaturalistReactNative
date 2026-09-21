@@ -17,6 +17,14 @@
 name: TestFlight iOS
 on:
   workflow_dispatch:
+    inputs:
+      prebuilt_react_native:
+        description: >-
+          Link React Native's prebuilt XCFrameworks instead of compiling its
+          source. Removes ~45% of the archive's compiles, but swaps statically
+          linked React Native for two dynamic frameworks — experimental.
+        type: boolean
+        default: false
 
 concurrency:
   group: testflight-ios
@@ -141,10 +149,28 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ios/Pods
-        key: pods-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}
+        key: pods-${{ runner.os }}-${{ inputs.prebuilt_react_native }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}
 
+    # RCT_USE_RN_DEP and RCT_USE_PREBUILT_RNCORE make the React Native podspecs
+    # vend headers only and link Meta's published XCFrameworks instead. Both
+    # check Maven for the artifacts first and fall back to building from source
+    # if they are missing, so neither can fail the install on its own.
+    #
+    # RCT_SYMBOLICATE_PREBUILT_FRAMEWORKS pulls the matching dSYMs. It is worth
+    # its ~350MB because without it every React Native frame in a TestFlight
+    # crash report arrives unsymbolicated.
+    #
+    # Note that pod install rewrites Podfile.lock under these — the prebuilt
+    # pods replace RCT-Folly, boost, glog and fmt — which is why the cache key
+    # above has to know which mode produced the tree.
     - name: Update Pods
-      run: cd ios && pod install
+      run: |
+        if [ "${{ inputs.prebuilt_react_native }}" = "true" ]; then
+          export RCT_USE_RN_DEP=1
+          export RCT_USE_PREBUILT_RNCORE=1
+          export RCT_SYMBOLICATE_PREBUILT_FRAMEWORKS=1
+        fi
+        cd ios && pod install
 
     # altool and xcodebuild both look for the key in ~/.appstoreconnect
     - name: Install the App Store Connect API key

@@ -19,6 +19,13 @@ team and the `com.benhannel.inat.dev` bundle IDs.
    the new run (`gh run list --workflow testflight-ios.yml -L 1`, or
    `actions_list` / `list_workflow_runs`) and report its URL and head commit.
 
+   The workflow takes one optional input, `prebuilt_react_native`, which links
+   Meta's published React Native XCFrameworks instead of compiling that source.
+   It is off by default and experimental — it trades statically linked React
+   Native for two dynamic frameworks. Pass it only when the user asks to try it
+   (`-f prebuilt_react_native=true`), and treat a link error naming a React or
+   folly symbol as that flag's fault rather than the code's.
+
 3. **Wait.** A full run is ~30 minutes: pods ~3, archive ~20, export ~1, upload ~2.
    Sleep in the background between checks — 15 minutes, then 10, then 5 — rather
    than polling in a tight loop. `list_workflow_jobs` shows which step is running.
