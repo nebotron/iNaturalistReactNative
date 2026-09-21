@@ -12,7 +12,8 @@ There is a script scripts/eval_onnx_variants.py for evaluating crop quality. Rep
 ### Setup
 
 - Model: `ios/iNaturalistReactNative/yolov8n.onnx` — single-class YOLOv8n, output `[1, 5, 8400]`
-- Post-processing: NMS (IoU=0.45, conf=0.05) → gate (0.50 → Vision saliency fallback) → union top-K boxes → pad → square crop. The eval script mirrors these constants; change both together.
+- Post-processing: NMS (IoU=0.45, conf=0.05) → gate (0.50 → Vision saliency fallback) → union top-K boxes → pad → square crop, with the square's side raised to `SIDE_CALIBRATION_EXPONENT` = 0.92. The eval script mirrors these constants; change both together.
+- **The squaring is TypeScript, not ObjC.** `ImageCropper.m` returns *bounds*; `src/sharedHelpers/subjectBoundsToNormalizedCrop.ts` turns them into the crop (padding 0, set in `detectSubjectInImage.ts`). Geometry changes belong there — cross-platform, unit-testable, and they apply to the saliency fallback too. `scripts/evaluate_subject_detector.py:bounds_to_crop` mirrors it; a 4-case node-vs-python diff keeps them honest.
 - Eval: `scripts/cache_detections.py MODEL.onnx OUT.npz` (~5 min, 4 procs) then
   `scripts/sweep_crop.py OUT.npz [--full]` (seconds). Inference is the only slow
   part, so cache the raw post-NMS boxes once and every gate/union/padding
@@ -56,7 +57,7 @@ There is a script scripts/eval_onnx_variants.py for evaluating crop quality. Rep
 
 ### Session: the warm start was never working; 0.856 → 0.868 on the log, a tie on held-out
 
-**Result.** Whole labelled log (7,119 images): **0.8558 → 0.8680**, precision 0.392 → 0.445. Held-out tail (1,000): **0.8350 → 0.8357**, 95% CI [−0.006, +0.007], P(better) 0.60 — a tie. Shipped anyway: better or equal everywhere, and on unseen photos the fallback rate drops 55.7% → 46.7% and precision goes 0.332 → 0.369. Gate stayed at 0.50, so the model file is the whole change.
+**Result.** Whole labelled log (7,119 images): **0.8558 → 0.8680**, precision 0.392 → 0.445. Held-out tail (1,000): **0.8350 → 0.8357**, 95% CI [−0.006, +0.007], P(better) 0.60 — a tie. Shipped anyway: better or equal everywhere, and on unseen photos the fallback rate drops 55.7% → 46.7% and precision goes 0.332 → 0.369. Gate stayed at 0.50, so the model file is the whole change. (With the crop calibration from the next section on top, the shipped figures are **0.8645** whole-log and **0.8402** held-out.)
 
 **The warm start of the last two sessions was mostly a cold start.** Two independent faults, both silent, both now fixed in `onnx_to_pt.py` (which asserts against onnxruntime at every stage — that assertion is what caught them):
 - **The trainer does not train the object you hand it.** It re-parses `model.yaml` into an *unfused* `DetectionModel` and copies weights by name. A fused checkpoint has no BN tensors, so **70 of 355** transferred and ultralytics carried on with a one-line warning. The fix un-fuses: fused weight into the conv, then BN reparameterized as gamma = sqrt(var+eps), beta = mean + b from per-channel statistics calibrated on 128 real images. That reproduces the fused function *exactly* in eval mode for any mean/var — correctness does not depend on the calibration, which only buys running statistics matching what training will see. Now 355/355. **Check the transfer count in the log every time; "Transferred 70/355" is the failure.**
@@ -69,5 +70,22 @@ There is a script scripts/eval_onnx_variants.py for evaluating crop quality. Rep
 **Data has saturated.** 47% more training data (4,156 → 6,113) moved held-out score by +0.0007. Either the labels are too idiosyncratic to predict — plausible, since they are whatever crop a human happened to drag — or yolov8n is capacity-limited. **Before spending another 7 hours on more data, test which.** A useful probe: score a second human's crop of the same photo against the first, if the log ever carries repeats; that upper-bounds what any model can score.
 
 **What did not work (this session).** Padding (including negative), union threshold/K, `top1`, and the fallback choice — full frame, centre square, saliency ∪ low-confidence detection — all landed within 0.002 of the deployed configuration on 7,119 images, confirming the previous session. The best post-processing change found anywhere was +0.001, noise.
+
+### Session (same one, continued): the crop geometry was the real lever — held-out 0.8357 → 0.8402
+
+**Read this before tuning any post-processing knob.** Every "X never helps" conclusion in the notes above was measured on the whole log, and the whole log is ~86% photos the model trained on. On those the detector's boxes are *memorized and accurate*, so anything that widens the crop looks harmful. On photos it has never seen the boxes are noisy and widening pays. The sign flips:
+
+| β=0.92 applied to | deployed model | retrained model |
+|---|---|---|
+| photos it trained on | −0.0043 (n=4,898) | −0.0052 (n=6,119) |
+| photos it never saw | **+0.0026** (n=2,221) | **+0.0042** (n=1,000) |
+
+All four CIs exclude zero. **Padding does help on unseen photos** (+0.0016 at pad 0.07) — the earlier "padding never helps" was this artifact. A power law on the side beats padding (+0.0026 vs +0.0016 on the same 2,221 photos) and padding adds nothing on top, because the right correction is proportionally larger for small boxes.
+
+**What shipped:** `side' = M·(side/M)^0.92` where M is the image's longer edge, in `subjectBoundsToNormalizedCrop.ts`. Cross-validated *strictly inside* the held-out photos it picks 0.92 in all 5 folds for both models — a property of the task, not a fit. Worth **6× the entire retrain** and it is one line.
+
+**How to tune post-processing from now on.** Fit and evaluate only on photos the current weights never trained on (`--slice=-1000:`, or for the previously deployed weights everything past the old log's end — a much larger pool, and the deployed model is a free second replicate). Use k-fold CV *inside* that slice; never tune on the whole log. Richer parameterizations lose: 1 parameter (β) scored +0.0042 CV, 3 params +0.0040, 5 params (confidence-dependent size and centring) +0.0040, a 7-param grid over gate+detection+fallback +0.0014. The surface is flat and the data are 1,000 photos — prefer the fewest parameters that capture the effect.
+
+**Also checked, no action needed.** The eval's letterbox branch centres on the subject while the shipping TS centres on the image; despite affecting 37% of crops this is worth 0.0002, so the evaluator is trustworthy as-is. Re-tuning the gate after the calibration leaves 0.50 optimal (0.45/0.50/0.55 within 0.0001 on held-out). Label noise could not be measured — only 6 URLs in the raw Firebase log were ever cropped twice, so the "is this label noise or capacity?" question is still open.
 
 **Costs, for planning.** 4 CPU cores: prefetch 7.1k images ~25 min; detection cache ~5 min; 20 epochs on 6,113 images at 640/batch 16 **6.5 hours** (~19 min/epoch; ultralytics forces `workers=0` on CPU). `pip install torchvision` from PyPI does not match a torch installed from the cpu index — install `torchvision==0.29.0+cpu` from `download.pytorch.org/whl/cpu` or the validator dies on `torchvision::nms does not exist`.
