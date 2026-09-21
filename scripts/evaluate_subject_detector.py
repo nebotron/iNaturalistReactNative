@@ -65,6 +65,12 @@ class Crop:
     h: float
 
 
+# Mirrors SIDE_CALIBRATION_EXPONENT in subjectBoundsToNormalizedCrop.ts — the
+# detector's box is a noisy estimate of the human's crop, and the 4:1 recall
+# weighting makes it pay to hedge outward, hardest where the box is small.
+SIDE_CALIBRATION_EXPONENT = 0.92
+
+
 def clamp_crop(x: float, y: float, w: float, h: float,
                min_frac: float = 0.05) -> Crop:
     w = max(min_frac, min(1.0, w))
@@ -89,6 +95,9 @@ def bounds_to_crop(bx: float, by: float, bw: float, bh: float,
         padded_h = bh * (1 + padding)
         # No longer clamped to image dimensions — very large subjects letterbox.
         pixel_side = max(padded_w * image_width, padded_h * image_height)
+        # Hedge the side outward, as subjectBoundsToNormalizedCrop.ts does.
+        max_dimension = max(image_width, image_height)
+        pixel_side = max_dimension * (pixel_side / max_dimension) ** SIDE_CALIBRATION_EXPONENT
         w = pixel_side / image_width
         h = pixel_side / image_height
         cx = bx + bw / 2
