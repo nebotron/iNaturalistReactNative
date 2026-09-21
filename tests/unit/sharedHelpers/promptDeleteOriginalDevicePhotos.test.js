@@ -283,6 +283,28 @@ describe( "promptDeleteOriginalDevicePhotos", ( ) => {
       expect( quarantinedAssetIds( ) ).toEqual( [] );
     } );
 
+    it( "learns nothing from a transaction the write gate refused to open", async ( ) => {
+      // PHOTOS_LIBRARY_BUSY means the native gate would not open a transaction
+      // at all, because the last one is still outstanding. Nothing was sent,
+      // so nothing can have gone wrong with it. Recording it cost a device
+      // everything it knew in 33ms on Sep 21: a cleanup of 23 photos refused
+      // at a wedged library came back a moment later with the cap at 11 and
+      // all 22 of its photos under suspicion, none of them ever asked for.
+      forgetUnansweredDeleteState( );
+      mockDeletePhotos.mockRejectedValue( Object.assign(
+        new Error( "Photos has not answered deleteAssets(1) for 151s" ),
+        { code: "PHOTOS_LIBRARY_BUSY" },
+      ) );
+
+      const uris = Array.from( { length: 23 }, ( _unused, i ) => `ph://B${i}` );
+      const result = await deleteOriginalDevicePhotos( uris );
+
+      expect( maxTransactionSize( ) ).toEqual( 200 );
+      expect( suspectAssetIds( ) ).toEqual( [] );
+      expect( quarantinedAssetIds( ) ).toEqual( [] );
+      expect( result ).toMatchObject( { deleted: 0, succeeded: false } );
+    } );
+
     it( "leaves the cap alone when the user declines", async ( ) => {
       // Declining says something about this deletion, not about the library.
       forgetUnansweredDeleteState( );

@@ -557,9 +557,15 @@ const performDeleteOriginalDevicePhotos = async (
         } catch ( chunkError ) {
           // An alert the user never answered, or declined, says nothing about
           // the library or about any photo in the transaction — so it neither
-          // moves the cap nor accuses anything. Anything else is a refusal the
-          // library actually made, and narrows the search as before.
-          if ( !isUnconfirmedByUser( chunkError ) ) {
+          // moves the cap nor accuses anything. Neither does a transaction the
+          // write gate refused to open: nothing was sent, so there is nothing
+          // to have gone wrong with. The Sep 21 log has that costing a device
+          // everything it knew in 33ms — a cleanup of 23 photos refused at a
+          // wedged library came back a moment later with the cap at 11 and all
+          // 22 of its photos under suspicion, none of which had been asked
+          // for. Anything else is a refusal the library actually made, and
+          // narrows the search as before.
+          if ( !isUnconfirmedByUser( chunkError ) && !isLibraryBusy( chunkError ) ) {
             recordUnansweredTransaction(
               chunk.map( basePhotoAssetId ),
               isProbe,
