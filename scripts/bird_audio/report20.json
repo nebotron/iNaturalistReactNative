@@ -1,0 +1,161 @@
+{
+ "species": [
+  "Song Sparrow",
+  "American Robin",
+  "Pacific Wren",
+  "Spotted Towhee",
+  "Swainson's Thrush",
+  "Bewick's Wren",
+  "Northern Flicker",
+  "Red-winged Blackbird",
+  "Black-capped Chickadee",
+  "Red-breasted Nuthatch",
+  "Barred Owl",
+  "American Crow",
+  "Dark-eyed Junco",
+  "Steller's Jay",
+  "Varied Thrush",
+  "House Finch",
+  "White-crowned Sparrow",
+  "Chestnut-backed Chickadee",
+  "Western Flycatcher",
+  "Golden-crowned Kinglet"
+ ],
+ "thresholds": [
+  0.3,
+  0.35,
+  0.55,
+  0.3,
+  0.3,
+  0.3,
+  0.3,
+  0.3,
+  0.35,
+  0.3,
+  0.35,
+  0.3,
+  0.3,
+  0.65,
+  0.3,
+  0.3,
+  0.3,
+  0.4,
+  0.3,
+  0.3
+ ],
+ "clip_top1": 0.8262331838565022,
+ "clip_top3": 0.9478699551569507,
+ "soundscape_mAP": 0.5947814741750244,
+ "soundscape_precision": 0.7344524990461656,
+ "soundscape_recall": 0.4970307255357604,
+ "soundscape_f1": 0.5928549430243302,
+ "exact_set_match": 0.422,
+ "recall_by_birds_in_window": {
+  "1": 0.6322020520915549,
+  "2": 0.46255201109570043,
+  "3": 0.39261168384879724
+ },
+ "background_windows_with_false_alarm": 0.25,
+ "per_species": {
+  "Song Sparrow": {
+   "AP": 0.6418146820120424,
+   "precision": 0.75177304964539,
+   "recall": 0.5408163265306123
+  },
+  "American Robin": {
+   "AP": 0.5373277542503727,
+   "precision": 0.6984126984126984,
+   "recall": 0.4512820512820513
+  },
+  "Pacific Wren": {
+   "AP": 0.8087330392380311,
+   "precision": 0.9194630872483222,
+   "recall": 0.6884422110552764
+  },
+  "Spotted Towhee": {
+   "AP": 0.5484774068288331,
+   "precision": 0.7727272727272727,
+   "recall": 0.4207920792079208
+  },
+  "Swainson's Thrush": {
+   "AP": 0.6351911445297458,
+   "precision": 0.6878612716763006,
+   "recall": 0.595
+  },
+  "Bewick's Wren": {
+   "AP": 0.5827287985600574,
+   "precision": 0.7593984962406015,
+   "recall": 0.47641509433962265
+  },
+  "Northern Flicker": {
+   "AP": 0.6015491426253499,
+   "precision": 0.7786885245901639,
+   "recall": 0.46116504854368934
+  },
+  "Red-winged Blackbird": {
+   "AP": 0.6518817153621478,
+   "precision": 0.7876106194690266,
+   "recall": 0.5266272189349113
+  },
+  "Black-capped Chickadee": {
+   "AP": 0.5940212729014376,
+   "precision": 0.6870748299319728,
+   "recall": 0.517948717948718
+  },
+  "Red-breasted Nuthatch": {
+   "AP": 0.44152094261292535,
+   "precision": 0.6782608695652174,
+   "recall": 0.4262295081967213
+  },
+  "Barred Owl": {
+   "AP": 0.6296248972216226,
+   "precision": 0.9518072289156626,
+   "recall": 0.4340659340659341
+  },
+  "American Crow": {
+   "AP": 0.659465806935705,
+   "precision": 0.7931034482758621,
+   "recall": 0.5778894472361809
+  },
+  "Dark-eyed Junco": {
+   "AP": 0.3809200257431809,
+   "precision": 0.5727272727272728,
+   "recall": 0.3387096774193548
+  },
+  "Steller's Jay": {
+   "AP": 0.6216438992291298,
+   "precision": 0.9347826086956522,
+   "recall": 0.48863636363636365
+  },
+  "Varied Thrush": {
+   "AP": 0.43658813486807524,
+   "precision": 0.6904761904761905,
+   "recall": 0.3118279569892473
+  },
+  "House Finch": {
+   "AP": 0.5373496184677468,
+   "precision": 0.5523255813953488,
+   "recall": 0.4439252336448598
+  },
+  "White-crowned Sparrow": {
+   "AP": 0.7386875164477666,
+   "precision": 0.7616279069767442,
+   "recall": 0.6649746192893401
+  },
+  "Chestnut-backed Chickadee": {
+   "AP": 0.6565141778287907,
+   "precision": 0.7846153846153846,
+   "recall": 0.5125628140703518
+  },
+  "Western Flycatcher": {
+   "AP": 0.6394039908765097,
+   "precision": 0.7557251908396947,
+   "recall": 0.5351351351351351
+  },
+  "Golden-crowned Kinglet": {
+   "AP": 0.45799149944951617,
+   "precision": 0.5664739884393064,
+   "recall": 0.5104166666666666
+  }
+ }
+}
