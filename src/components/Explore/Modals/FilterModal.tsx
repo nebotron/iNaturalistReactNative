@@ -1377,7 +1377,13 @@ const FilterModal = ( {
                 setClusterRadiusText( String( clamped ) );
                 dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS, value: clamped } );
               }}
-              onChangeText={setClusterRadiusText}
+              onChangeText={text => {
+                setClusterRadiusText( text );
+                const val = parseFloat( text );
+                if ( !isNaN( val ) ) {
+                  dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS, value: val } );
+                }
+              }}
               returnKeyType="done"
               value={clusterRadiusText}
             />
@@ -1397,7 +1403,16 @@ const FilterModal = ( {
                   value: clamped,
                 } );
               }}
-              onChangeText={setMaxCandidatesText}
+              onChangeText={text => {
+                setMaxCandidatesText( text );
+                const val = parseInt( text, 10 );
+                if ( !isNaN( val ) ) {
+                  dispatch( {
+                    type: EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES,
+                    value: val,
+                  } );
+                }
+              }}
               returnKeyType="done"
               value={maxCandidatesText}
             />
@@ -1414,7 +1429,13 @@ const FilterModal = ( {
                 setObsPerPageText( String( clamped ) );
                 dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE, value: clamped } );
               }}
-              onChangeText={setObsPerPageText}
+              onChangeText={text => {
+                setObsPerPageText( text );
+                const val = parseInt( text, 10 );
+                if ( !isNaN( val ) ) {
+                  dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE, value: val } );
+                }
+              }}
               returnKeyType="done"
               value={obsPerPageText}
             />
@@ -1431,7 +1452,13 @@ const FilterModal = ( {
                 setParkingMinutesText( String( clamped ) );
                 dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES, value: clamped } );
               }}
-              onChangeText={setParkingMinutesText}
+              onChangeText={text => {
+                setParkingMinutesText( text );
+                const val = parseInt( text, 10 );
+                if ( !isNaN( val ) ) {
+                  dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES, value: val } );
+                }
+              }}
               returnKeyType="done"
               value={parkingMinutesText}
             />
@@ -1448,7 +1475,13 @@ const FilterModal = ( {
                 setBboxPaddingText( String( clamped ) );
                 dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM, value: clamped } );
               }}
-              onChangeText={setBboxPaddingText}
+              onChangeText={text => {
+                setBboxPaddingText( text );
+                const val = parseInt( text, 10 );
+                if ( !isNaN( val ) ) {
+                  dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM, value: val } );
+                }
+              }}
               returnKeyType="done"
               value={bboxPaddingText}
             />

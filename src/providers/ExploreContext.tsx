@@ -867,18 +867,18 @@ function exploreReducer( state: State, action: Action ) {
       };
     }
     case EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS:
-      return { ...state, hotspotClusterRadiusKm: Math.max( 0.5, Math.min( 5, action.value ) ) };
+      return { ...state, hotspotClusterRadiusKm: Math.max( 0.1, action.value ) };
     case EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES:
       return {
         ...state,
-        hotspotMaxDetourCandidates: Math.max( 10, Math.min( 100, action.value ) ),
+        hotspotMaxDetourCandidates: Math.max( 1, action.value ),
       };
     case EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE:
-      return { ...state, hotspotObsPerPage: Math.max( 50, action.value ) };
+      return { ...state, hotspotObsPerPage: Math.max( 1, action.value ) };
     case EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES:
-      return { ...state, hotspotParkingMinutes: Math.max( 0, Math.min( 30, action.value ) ) };
+      return { ...state, hotspotParkingMinutes: Math.max( 0, action.value ) };
     case EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM:
-      return { ...state, hotspotBboxPaddingKm: Math.max( 20, Math.min( 200, action.value ) ) };
+      return { ...state, hotspotBboxPaddingKm: Math.max( 0, action.value ) };
     default: {
       throw new Error( `Unhandled action type: ${( action as Action ).type}` );
     }

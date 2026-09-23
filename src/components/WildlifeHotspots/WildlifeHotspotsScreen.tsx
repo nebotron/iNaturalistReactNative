@@ -226,9 +226,14 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
   // effect on each render. That effect also calls setState (setHotspotRouteCoords),
   // so once both stops were confirmed it looped indefinitely ("Maximum update
   // depth exceeded"), breaking the screen right after addresses were entered.
+  // Keyed on content, since the embedded Explore view passes a new object
+  // every render.
+  const rawFilterParams = filterParamsProp ?? route?.params?.filterParams;
+  const filterParamsKey = JSON.stringify( rawFilterParams ?? {} );
   const filterParams = useMemo(
-    () => filterParamsProp ?? route?.params?.filterParams ?? {},
-    [filterParamsProp, route?.params?.filterParams],
+    () => rawFilterParams ?? {},
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filterParamsKey],
   );
 
   const [stops, setStops] = useState<Stop[]>( [
