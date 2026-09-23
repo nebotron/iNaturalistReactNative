@@ -1,5 +1,5 @@
 import { searchObservations } from "api/observations";
-import { useCallback, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
 
 export interface RoutePoint {
@@ -367,6 +367,9 @@ export function useRouteHotspots() {
   const [routeCoords, setRouteCoords] = useState<RoutePoint[]>( [] );
   const [loading, setLoading] = useState( false );
   const [error, setError] = useState<string | null>( null );
+  // Only the latest search may set results, so a slow earlier one run with
+  // old params can't overwrite it.
+  const latestRequestRef = useRef( 0 );
 
   const findHotspots = useCallback(
     async (
@@ -374,6 +377,9 @@ export function useRouteHotspots() {
       filterParams: Record<string, unknown>,
     ) => {
       if ( stops.length < 2 ) return;
+      latestRequestRef.current += 1;
+      const requestId = latestRequestRef.current;
+      const isStale = () => requestId !== latestRequestRef.current;
       setLoading( true );
       setError( null );
       setHotspots( [] );
@@ -385,6 +391,7 @@ export function useRouteHotspots() {
           coords: routePoints,
           durationSec: directDurationSec,
         } = await fetchOSRMRoute( stops );
+        if ( isStale() ) return;
         setRouteCoords( routePoints );
 
         // Read algorithm constants from filterParams (with fallbacks to module defaults)
@@ -512,13 +519,15 @@ export function useRouteHotspots() {
           return ratioA - ratioB;
         } );
 
+        if ( isStale() ) return;
         setHotspots( withDetours.slice( 0, 10 ) );
       } catch ( err ) {
+        if ( isStale() ) return;
         setError( err instanceof Error
           ? err.message
           : "Failed to load hotspot data" );
       } finally {
-        setLoading( false );
+        if ( !isStale() ) setLoading( false );
       }
     },
     [],

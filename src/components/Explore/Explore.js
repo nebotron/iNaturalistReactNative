@@ -13,7 +13,7 @@ import { View } from "components/styledComponents";
 import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
 import { PLACE_MODE, useExplore } from "providers/ExploreContext";
 import type { Node } from "react";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   useStoredLayout,
   useTranslation,
@@ -94,6 +94,12 @@ const Explore = ( {
     hotspotParkingMinutes: exploreState.hotspotParkingMinutes,
     hotspotBboxPaddingKm: exploreState.hotspotBboxPaddingKm,
   };
+  // Hold the hotspot search to the applied filters: while the filters modal is
+  // open every edit re-renders this, and each render would start a new search.
+  const hotspotParamsRef = useRef( { ...queryParams, ...hotspotConfig } );
+  if ( !showFiltersModal ) {
+    hotspotParamsRef.current = { ...queryParams, ...hotspotConfig };
+  }
   const [showExploreBottomSheet, setShowExploreBottomSheet] = useState( false );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreObservationsLayout" );
 
@@ -201,7 +207,7 @@ const Explore = ( {
         {currentExploreView === "hotspots" && (
           <WildlifeHotspotsScreen
             embedded
-            filterParams={{ ...queryParams, ...hotspotConfig }}
+            filterParams={hotspotParamsRef.current}
           />
         )}
       </View>
