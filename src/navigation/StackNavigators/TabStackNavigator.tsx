@@ -1,6 +1,7 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import About from "components/About";
+import AudioId from "components/AudioId/AudioId";
 import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
@@ -102,6 +103,8 @@ const postDetailsTitle = () => (
   </Heading4>
 );
 
+// eslint-disable-next-line i18next/no-literal-string
+const audioIdTitle = () => <Heading4 numberOfLines={1}>AUDIO ID</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
@@ -336,6 +339,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             name="LifeList"
             component={FadeInLifeList}
             options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="AudioId"
+            component={AudioId}
+            options={{
+              headerTitle: audioIdTitle,
+            }}
           />
           <Stack.Screen
             name="CropLogViewer"
