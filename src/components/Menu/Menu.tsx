@@ -156,6 +156,12 @@ const Menu = ( ) => {
       navigation: "Help",
       icon: "help-circle",
     },
+    audioId: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "AUDIO ID",
+      navigation: "AudioId",
+      icon: "microphone",
+    },
     cropLog: {
       // eslint-disable-next-line i18next/no-literal-string
       label: "CROP LOG",
