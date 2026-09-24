@@ -104,7 +104,8 @@ RCT_EXPORT_METHOD( start:( RCTPromiseResolveBlock )resolve
         reject( @"engine", error.localizedDescription ?: @"Could not start the microphone", error );
         return;
       }
-      resolve( @YES );
+      AVAudioFormat *f = [self->_engine.inputNode outputFormatForBus:0];
+      resolve( @{ @"sampleRate": @( f.sampleRate ), @"channels": @( f.channelCount ) } );
     } );
   }];
 }
@@ -247,17 +248,21 @@ RCT_EXPORT_METHOD( stop )
     NSData *window = [NSData dataWithBytes:self->_window length:AB_WIN * sizeof( float )];
     float level = self->_level;
     dispatch_async( self->_inferQueue, ^{
-      NSArray *scores = [self infer:(const float *)window.bytes];
+      NSString *inferError = nil;
+      CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
+      NSArray *scores = [self infer:(const float *)window.bytes error:&inferError];
+      double ms = ( CFAbsoluteTimeGetCurrent( ) - t0 ) * 1000;
       dispatch_async( self->_bufferQueue, ^{ self->_busy = NO; } );
-      if ( scores ) {
-        [self sendEventWithName:@"AudioBirdIdScores"
-                           body:@{ @"scores": scores, @"level": @( level ) }];
-      }
+      [self sendEventWithName:@"AudioBirdIdScores"
+                         body:@{ @"scores": scores ?: @[],
+                                 @"level": @( level ),
+                                 @"inferMs": @( ms ),
+                                 @"error": inferError ?: [NSNull null] }];
     } );
   } );
 }
 
-- (NSArray<NSNumber *> *)infer:(const float *)samples
+- (NSArray<NSNumber *> *)infer:(const float *)samples error:(NSString **)errorMessage
 {
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
   OrtMemoryInfo *memInfo;
@@ -268,7 +273,11 @@ RCT_EXPORT_METHOD( stop )
     memInfo, (void *)samples, AB_WIN * sizeof( float ), shape, 2,
     ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &input );
   ort->ReleaseMemoryInfo( memInfo );
-  if ( status ) { ort->ReleaseStatus( status ); return nil; }
+  if ( status ) {
+    *errorMessage = @( ort->GetErrorMessage( status ) );
+    ort->ReleaseStatus( status );
+    return nil;
+  }
 
   const char *inputNames[]  = { "input" };
   const char *outputNames[] = { "output" };
@@ -276,7 +285,13 @@ RCT_EXPORT_METHOD( stop )
   status = ort->Run( _session, NULL, inputNames, (const OrtValue *const *)&input, 1,
                      outputNames, 1, &output );
   ort->ReleaseValue( input );
-  if ( status || !output ) { if ( status ) ort->ReleaseStatus( status ); return nil; }
+  if ( status || !output ) {
+    if ( status ) {
+      *errorMessage = @( ort->GetErrorMessage( status ) );
+      ort->ReleaseStatus( status );
+    }
+    return nil;
+  }
 
   OrtTensorTypeAndShapeInfo *info;
   ort->GetTensorTypeAndShape( output, &info );

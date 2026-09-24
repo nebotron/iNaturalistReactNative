@@ -2,7 +2,7 @@
 # table the Audio ID screen reads. Run from this directory:
 #   python3 export_birdnet.py <repo root>
 import json, shutil, sys
-repo=sys.argv[1]; keep=json.load(open("keep_species.json")); TH=0.5
+repo=sys.argv[1]; keep=json.load(open("keep_species.json")); TH=0.3
 shutil.copy("audio_birds.onnx",f"{repo}/ios/iNaturalistReactNative/audio_birds.onnx")
 esc=lambda x: (x or "").replace('"','\\"')
 rows="\n".join(f'  ["{s["name"]}", "{esc(s["common"] or s["name"])}", {s["id"]}],' for s in keep)
