@@ -72,7 +72,7 @@ const POOL_SIZE = 20;
 // never-before-seen images (POOL_SIZE * MAX_POOL_PAGES photos per taxon).
 const MAX_POOL_PAGES = 25;
 const LOOKALIKE_RADIUS_KM = 500;
-const LOCATION_FILTER_RADIUS_KM = 1000;
+const LOCATION_FILTER_RADIUS_KM = 200;
 const LOOKALIKE_CACHE_KEY = "speciesGameLookalikes";
 const MAX_LOOKALIKE_OBS = 1000;
 const FETCH_MORE_OBS_COUNT = 400;
@@ -135,6 +135,27 @@ function getCachedLookalikes( taxonId: number ): LookalikeCacheEntry | null {
     return JSON.parse( raw ) as LookalikeCacheEntry;
   } catch {
     return null;
+  }
+}
+
+// Whether taxonId has any observations within LOCATION_FILTER_RADIUS_KM of location.
+// Fails open when there's no location or the request fails.
+async function isFoundNear(
+  taxonId: number,
+  location: { latitude: number; longitude: number } | null,
+): Promise<boolean> {
+  if ( !location ) return true;
+  try {
+    const res = await fetch(
+      `${INATURALIST_API}/observations?taxon_id=${taxonId}`
+        + `&lat=${location.latitude}&lng=${location.longitude}`
+        + `&radius=${LOCATION_FILTER_RADIUS_KM}&per_page=0`,
+    );
+    if ( !res.ok ) return true;
+    const d = await res.json( );
+    return ( d.total_results ?? 0 ) > 0;
+  } catch {
+    return true;
   }
 }
 
@@ -543,6 +564,7 @@ const SpeciesGame = ( ) => {
       if ( newWeightedCandidates.length > 0 ) {
         const newCandidateResults = await Promise.all(
           newWeightedCandidates.map( async ( { taxonId: id, count } ) => {
+            if ( !await isFoundNear( id, location ) ) return null;
             const [info, pool] = await Promise.all( [
               fetchTaxonInfo( id ),
               fetchPhotoPool(
@@ -628,27 +650,11 @@ const SpeciesGame = ( ) => {
           obsScanned,
         } = await findMisidentifiedLookalikes( taxonId, userLocation );
 
-        // Filter misidentification candidates to species actually found within 1000km.
-        const locationFilterParams = userLocation
-          ? `&lat=${userLocation.latitude}&lng=${userLocation.longitude}`
-            + `&radius=${LOCATION_FILTER_RADIUS_KM}`
-          : "";
-        const nearbyMisidentEntries = locationFilterParams
-          ? await ( async ( ) => {
-            const checks = await Promise.all(
-              misidentEntries.map( async entry => {
-                const res = await fetch(
-                  `${INATURALIST_API}/observations`
-                    + `?taxon_id=${entry.taxonId}${locationFilterParams}&per_page=1`,
-                );
-                if ( !res.ok ) return true; // fail open
-                const d = await res.json( );
-                return ( d.total_results ?? 0 ) > 0;
-              } ),
-            );
-            return misidentEntries.filter( ( _, i ) => checks[i] );
-          } )( )
-          : misidentEntries;
+        // Filter misidentification candidates to species actually found nearby.
+        const nearbyChecks = await Promise.all(
+          misidentEntries.map( entry => isFoundNear( entry.taxonId, userLocation ) ),
+        );
+        const nearbyMisidentEntries = misidentEntries.filter( ( _, i ) => nearbyChecks[i] );
 
         // Build weighted candidate list from misidentified species only.
         // Exclude the target species itself from all candidate lists.
