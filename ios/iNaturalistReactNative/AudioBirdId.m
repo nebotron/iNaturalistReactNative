@@ -11,6 +11,8 @@
 // spectrogram frontend, so the window goes in as raw samples and one
 // probability per species comes out (multi-label: several birds can score
 // high at once). Scores are emitted to JS as "AudioBirdIdScores".
+// Listening continues with the app in the background (the "audio" background
+// mode in Info.plist) and resumes after interruptions such as phone calls.
 
 #define AB_SR       32000
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
@@ -32,6 +34,7 @@
   dispatch_queue_t  _inferQueue;
   OrtEnv           *_env;
   OrtSession       *_session;
+  BOOL              _wantListening;
 }
 
 RCT_EXPORT_MODULE( );
@@ -46,12 +49,18 @@ RCT_EXPORT_MODULE( );
     _window      = (float *)calloc( AB_WIN, sizeof( float ) );
     _bufferQueue = dispatch_queue_create( "org.inat.audiobirdid.buffer", DISPATCH_QUEUE_SERIAL );
     _inferQueue  = dispatch_queue_create( "org.inat.audiobirdid.infer", DISPATCH_QUEUE_SERIAL );
+    NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+    [nc addObserver:self selector:@selector( audioInterrupted: )
+               name:AVAudioSessionInterruptionNotification object:nil];
+    [nc addObserver:self selector:@selector( restartIfWanted )
+               name:AVAudioSessionMediaServicesWereResetNotification object:nil];
   }
   return self;
 }
 
 - (void)dealloc
 {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
   [self stopEngine];
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
   if ( _session ) ort->ReleaseSession( _session );
@@ -89,7 +98,9 @@ RCT_EXPORT_METHOD( start:( RCTPromiseResolveBlock )resolve
     }
     dispatch_async( dispatch_get_main_queue(), ^{
       NSError *error = nil;
+      self->_wantListening = YES;
       if ( ![self startEngine:&error] ) {
+        self->_wantListening = NO;
         reject( @"engine", error.localizedDescription ?: @"Could not start the microphone", error );
         return;
       }
@@ -100,7 +111,40 @@ RCT_EXPORT_METHOD( start:( RCTPromiseResolveBlock )resolve
 
 RCT_EXPORT_METHOD( stop )
 {
-  dispatch_async( dispatch_get_main_queue(), ^{ [self stopEngine]; } );
+  dispatch_async( dispatch_get_main_queue(), ^{
+    self->_wantListening = NO;
+    [self stopEngine];
+  } );
+}
+
+// A phone call, Siri, or another app's recording stops the engine; pick
+// listening back up when the interruption ends.
+- (void)audioInterrupted:(NSNotification *)note
+{
+  NSUInteger type = [note.userInfo[AVAudioSessionInterruptionTypeKey] unsignedIntegerValue];
+  dispatch_async( dispatch_get_main_queue(), ^{
+    if ( type == AVAudioSessionInterruptionTypeBegan ) {
+      [self teardownEngine];
+    } else {
+      [self restartIfWanted];
+    }
+  } );
+}
+
+- (void)restartIfWanted
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    if ( !self->_wantListening ) return;
+    [self teardownEngine];
+    [self startEngine:nil];
+  } );
+}
+
+// Also restarts when the engine's configuration changes (e.g. a headset
+// microphone is plugged in or removed), which stops it.
+- (void)engineConfigurationChanged:(NSNotification *)note
+{
+  [self restartIfWanted];
 }
 
 - (BOOL)startEngine:(NSError **)error
@@ -126,6 +170,10 @@ RCT_EXPORT_METHOD( stop )
   _converter = [[AVAudioConverter alloc] initFromFormat:inFormat toFormat:_outFormat];
   dispatch_sync( _bufferQueue, ^{ self->_filled = 0; self->_sinceRun = 0; } );
 
+  [[NSNotificationCenter defaultCenter] addObserver:self
+                                           selector:@selector( engineConfigurationChanged: )
+                                               name:AVAudioEngineConfigurationChangeNotification
+                                             object:_engine];
   __weak AudioBirdId *weakSelf = self;
   [input installTapOnBus:0 bufferSize:4096 format:inFormat
                    block:^( AVAudioPCMBuffer *buffer, AVAudioTime *when ) {
@@ -140,12 +188,21 @@ RCT_EXPORT_METHOD( stop )
   return YES;
 }
 
-- (void)stopEngine
+- (void)teardownEngine
 {
   if ( !_engine ) return;
+  [[NSNotificationCenter defaultCenter] removeObserver:self
+                                                  name:AVAudioEngineConfigurationChangeNotification
+                                                object:_engine];
   [_engine.inputNode removeTapOnBus:0];
   [_engine stop];
   _engine = nil;
+}
+
+- (void)stopEngine
+{
+  if ( !_engine ) return;
+  [self teardownEngine];
   [[AVAudioSession sharedInstance] setActive:NO
                                  withOptions:AVAudioSessionSetActiveOptionNotifyOthersOnDeactivation
                                        error:nil];
