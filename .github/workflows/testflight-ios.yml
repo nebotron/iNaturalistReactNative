@@ -13,6 +13,12 @@
 #   DOTENV_BASE64  base64 of the production .env
 #   GOOGLE_SERVICE_INFO_PRODUCTION_BASE64
 #                  base64 of ios/GoogleService-Info.production.plist
+#
+# Optional, and strongly recommended: reuse one signing certificate.
+#   DIST_CERT_P12_BASE64  base64 of an Apple Distribution certificate + key (.p12)
+#   DIST_CERT_PASSWORD    that .p12's password
+# Without them xcodebuild creates new certificates on every run, and the
+# account soon hits Apple's certificate limit ("Choose a certificate to revoke").
 ##
 name: TestFlight iOS
 on:
@@ -181,6 +187,30 @@ jobs:
         printf '%s' "$ASC_KEY_BASE64" | base64 --decode \
           > "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
 
+    # A throwaway keychain holding the reusable distribution certificate. The
+    # archive then signs with it directly, so no run creates a certificate.
+    - name: Import the signing certificate
+      env:
+        DIST_CERT_P12_BASE64: ${{ secrets.DIST_CERT_P12_BASE64 }}
+        DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
+      run: |
+        if [ -z "$DIST_CERT_P12_BASE64" ]; then
+          echo "::warning::No DIST_CERT_P12_BASE64 secret; xcodebuild will create a new certificate"
+          exit 0
+        fi
+        KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+        KEYCHAIN_PASSWORD="$( uuidgen )"
+        printf '%s' "$DIST_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security import "$RUNNER_TEMP/dist.p12" -P "$DIST_CERT_PASSWORD" \
+          -A -t cert -f pkcs12 -k "$KEYCHAIN"
+        security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security list-keychains -d user -s "$KEYCHAIN" $( security list-keychains -d user | tr -d '"' )
+        rm "$RUNNER_TEMP/dist.p12"
+        echo 'SIGN_IDENTITY=CODE_SIGN_IDENTITY=Apple Distribution' >> "$GITHUB_ENV"
+
     # CFBundleVersion is a literal in the app's Info.plist but is generated from
     # CURRENT_PROJECT_VERSION for the share extension, so both need setting. A
     # UTC timestamp is unique and always increasing, so no bump gets committed.
@@ -191,9 +221,8 @@ jobs:
         /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" \
           ios/iNaturalistReactNative/Info.plist
 
-    # -allowProvisioningUpdates lets xcodebuild create the distribution
-    # certificate and App Store profiles with the API key, so no certificates
-    # need to be exported from a Mac.
+    # -allowProvisioningUpdates lets xcodebuild create App Store profiles (and,
+    # without the reusable certificate, certificates) with the API key.
     #
     # COMPILER_INDEX_STORE_ENABLE=NO drops the index-while-building work, which
     # only feeds Xcode's editor; nothing opens this archive in an editor.
@@ -212,7 +241,8 @@ jobs:
           -authenticationKeyID "$ASC_KEY_ID" \
           -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
           COMPILER_INDEX_STORE_ENABLE=NO \
-          CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+          CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
+          ${SIGN_IDENTITY:+"$SIGN_IDENTITY"}
         {
           echo '### ccache'
           echo '```'
