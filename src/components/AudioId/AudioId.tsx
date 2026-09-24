@@ -158,15 +158,8 @@ const AudioId = ( ) => {
     };
   }, [stop] ) );
 
-  const hearingNow = current
-    .map( ( s, i ) => ( { s, i } ) )
-    .filter( ( { s, i } ) => s >= AUDIO_ID_SPECIES[i].threshold )
-    .sort( ( a, b ) => b.s - a.s );
-  const candidates = current
-    .map( ( s, i ) => ( { s, i } ) )
-    .filter( ( { s, i } ) => s < AUDIO_ID_SPECIES[i].threshold && s >= 0.1 )
-    .sort( ( a, b ) => b.s - a.s )
-    .slice( 0, 3 );
+  const hearingNow = ( i: number ) => listening
+    && ( current[i] || 0 ) >= AUDIO_ID_SPECIES[i].threshold;
   const heardList = Object.values( heard ).sort( ( a, b ) => b.lastHeard - a.lastHeard );
   // RMS of -60 dBFS reads as empty, 0 dBFS as full.
   const meter = Math.max( 0, Math.min( 1, 1 + Math.log10( level + 1e-9 ) / 3 ) );
@@ -175,12 +168,15 @@ const AudioId = ( ) => {
     id: AUDIO_ID_SPECIES[i].taxonId,
   } );
 
+  // Birds being heard right now are highlighted in yellow.
   const row = ( i: number, score: number, detail?: string ) => (
     <Pressable
       key={i}
       accessibilityRole="button"
       accessibilityHint="Opens the species page."
-      className="flex-row items-center py-2 border-b border-lightGray"
+      className={`flex-row items-center py-2 px-2 border-b border-lightGray ${hearingNow( i )
+        ? "bg-yellow"
+        : ""}`}
       onPress={( ) => openTaxon( i )}
     >
       <View className="flex-1">
@@ -199,7 +195,8 @@ const AudioId = ( ) => {
     <ScrollView className="bg-white h-full px-5 pt-4">
       <Body3 className="mb-3">
         {`Identifies ${AUDIO_ID_SPECIES.length} Seattle-area birds by sound, on device, `
-          + "from the last 5 seconds of audio. Powered by BirdNET."}
+          + "from the last 5 seconds of audio, and keeps listening with the app in the "
+          + "background. Birds you are hearing now are highlighted. Powered by BirdNET."}
       </Body3>
       <Button
         level={listening
@@ -246,27 +243,13 @@ const AudioId = ( ) => {
         </View>
       )}
 
-      <Heading4 className="mt-6 mb-1">HEARING NOW</Heading4>
-      {hearingNow.length === 0 && (
-        <Body3 className="py-2">
-          {listening
-            ? "No bird recognized."
-            : "Not listening."}
-        </Body3>
-      )}
-      {hearingNow.map( ( { s, i } ) => row( i, s ) )}
-      {candidates.length > 0 && (
-        <>
-          <Heading4 className="mt-6 mb-1">MAYBE</Heading4>
-          {candidates.map( ( { s, i } ) => row( i, s ) )}
-        </>
-      )}
-
       <Heading4 className="mt-6 mb-1">HEARD THIS SESSION</Heading4>
       {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
       {heardList.map( h => row(
         h.index,
-        h.best,
+        hearingNow( h.index )
+          ? current[h.index]
+          : h.best,
         `${h.count} ${h.count === 1
           ? "time"
           : "times"}, last at ${new Date( h.lastHeard ).toLocaleTimeString( )}`,
