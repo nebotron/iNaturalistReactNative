@@ -235,7 +235,7 @@ const ROWS: [string, string, number][] = [
 ];
 
 // BirdNET score a species needs to count as heard.
-const THRESHOLD = 0.5;
+const THRESHOLD = 0.3;
 
 const AUDIO_ID_SPECIES = ROWS.map( ( [name, commonName, taxonId] ) => ( {
   name, commonName, taxonId, threshold: THRESHOLD,

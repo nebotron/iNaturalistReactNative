@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import { NativeEventEmitter, NativeModules, Vibration } from "react-native";
 import { MMKV } from "react-native-mmkv";
+import { log } from "sharedHelpers/logger";
 import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import colors from "styles/tailwindColors";
@@ -18,14 +19,21 @@ import AUDIO_ID_SPECIES from "./audioIdSpecies";
 
 // Live bird ID by sound (iOS). The AudioBirdId native module runs BirdNET on
 // the last 5 s of microphone audio every second and emits one probability per
-// Seattle-area species. A species counts as heard when its score, averaged over
-// the last two runs, clears that species' threshold.
+// Seattle-area species. A species counts as heard when its score clears that
+// species' threshold.
 
 const { AudioBirdId } = NativeModules as {
-  AudioBirdId?: { start: ( ) => Promise<boolean>; stop: ( ) => void };
+  AudioBirdId?: {
+    start: ( ) => Promise<{ sampleRate: number; channels: number }>;
+    stop: ( ) => void;
+  };
 };
 
-interface ScoresEvent { scores: number[]; level: number }
+const logger = log.extend( "AudioId" );
+// Runs summarized per log line, so field problems show up in the app log.
+const LOG_EVERY = 30;
+
+interface ScoresEvent { scores: number[]; level: number; inferMs: number; error: string | null }
 interface Heard { index: number; lastHeard: number; best: number; count: number }
 
 type VibrateMode = "never" | "new" | "unseen";
@@ -68,7 +76,7 @@ const AudioId = ( ) => {
   const [current, setCurrent] = useState<number[]>( [] );
   const [level, setLevel] = useState( 0 );
   const [heard, setHeard] = useState<Record<number, Heard>>( {} );
-  const previous = useRef<number[]>( [] );
+  const [inferMs, setInferMs] = useState( 0 );
   const heardRef = useRef<Set<number>>( new Set( ) );
   const [vibrateMode, setVibrateModeState] = useState<VibrateMode>(
     ( ) => ( settings.getString( VIBRATE_KEY ) as VibrateMode ) || "never",
@@ -88,7 +96,6 @@ const AudioId = ( ) => {
   const stop = useCallback( ( ) => {
     AudioBirdId?.stop( );
     setListening( false );
-    previous.current = [];
   }, [] );
 
   const start = useCallback( async ( ) => {
@@ -98,9 +105,11 @@ const AudioId = ( ) => {
     }
     setError( null );
     try {
-      await AudioBirdId.start( );
+      const mic = await AudioBirdId.start( );
+      logger.info( `started, mic ${mic.sampleRate} Hz x${mic.channels}` );
       setListening( true );
     } catch ( e ) {
+      logger.error( `start failed: ${( e as Error ).message}` );
       setError( ( e as Error ).message );
     }
   }, [] );
@@ -108,16 +117,34 @@ const AudioId = ( ) => {
   useFocusEffect( useCallback( ( ) => {
     if ( !AudioBirdId ) return ( ) => undefined;
     const emitter = new NativeEventEmitter( AudioBirdId as never );
-    const sub = emitter.addListener( "AudioBirdIdScores", ( { scores, level: l }: ScoresEvent ) => {
-      const prev = previous.current.length === scores.length
-        ? previous.current
-        : scores;
-      const smoothed = scores.map( ( s, i ) => ( s + prev[i] ) / 2 );
-      previous.current = scores;
-      setCurrent( smoothed );
+    let runs: ScoresEvent[] = [];
+    const sub = emitter.addListener( "AudioBirdIdScores", ( event: ScoresEvent ) => {
+      const { scores, level: l } = event;
+      runs.push( event );
+      if ( runs.length >= LOG_EVERY ) {
+        const best = runs.reduce( ( b, r ) => {
+          const top = Math.max( ...r.scores, 0 );
+          return top > b.score
+            ? { score: top, index: r.scores.indexOf( top ) }
+            : b;
+        }, { score: 0, index: -1 } );
+        const mean = ( f: ( r: ScoresEvent ) => number ) => runs
+          .reduce( ( sum, r ) => sum + f( r ), 0 ) / runs.length;
+        logger.info( `${runs.length} runs: level ${
+          ( 20 * Math.log10( mean( r => r.level ) + 1e-9 ) ).toFixed( 0 )} dBFS, `
+          + `infer ${mean( r => r.inferMs ).toFixed( 0 )} ms, best ${
+            best.index >= 0
+              ? AUDIO_ID_SPECIES[best.index].commonName
+              : "none"} ${best.score.toFixed( 2 )}, errors ${
+            runs.filter( r => r.error ).length} ${runs.find( r => r.error )?.error || ""}` );
+        runs = [];
+      }
+      if ( event.error ) setError( `Model error: ${event.error}` );
+      setCurrent( scores );
       setLevel( l );
+      setInferMs( event.inferMs );
       const now = Date.now( );
-      const firsts = smoothed
+      const firsts = scores
         .map( ( s, i ) => ( s >= AUDIO_ID_SPECIES[i].threshold && !heardRef.current.has( i )
           ? i
           : -1 ) )
@@ -133,7 +160,7 @@ const AudioId = ( ) => {
       }
       setHeard( h => {
         let next = h;
-        smoothed.forEach( ( s, i ) => {
+        scores.forEach( ( s, i ) => {
           if ( s < AUDIO_ID_SPECIES[i].threshold ) return;
           const old = next[i];
           const isNewCall = !old || now - old.lastHeard > 3000;
@@ -161,6 +188,9 @@ const AudioId = ( ) => {
   const hearingNow = ( i: number ) => listening
     && ( current[i] || 0 ) >= AUDIO_ID_SPECIES[i].threshold;
   const heardList = Object.values( heard ).sort( ( a, b ) => b.lastHeard - a.lastHeard );
+  const bestNow = current.length
+    ? current.indexOf( Math.max( ...current ) )
+    : -1;
   // RMS of -60 dBFS reads as empty, 0 dBFS as full.
   const meter = Math.max( 0, Math.min( 1, 1 + Math.log10( level + 1e-9 ) / 3 ) );
 
@@ -241,6 +271,14 @@ const AudioId = ( ) => {
             style={{ width: `${meter * 100}%`, backgroundColor: colors.inatGreen }}
           />
         </View>
+      )}
+      {listening && (
+        <Body3 className="mt-1">
+          {bestNow >= 0
+            ? `Best guess: ${AUDIO_ID_SPECIES[bestNow].commonName} ${
+              Math.round( current[bestNow] * 100 )}% · ${inferMs.toFixed( 0 )} ms`
+            : "Listening… first result after 5 seconds"}
+        </Body3>
       )}
 
       <Heading4 className="mt-6 mb-1">HEARD THIS SESSION</Heading4>
