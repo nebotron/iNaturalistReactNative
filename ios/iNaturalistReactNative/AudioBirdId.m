@@ -7,7 +7,7 @@
 // 32 kHz mono, keeps the most recent 5 s in a sliding window, and every second
 // runs audio_birds.onnx on it: BirdNET v3.0 (CC BY-SA 4.0, "Powered by
 // BirdNET"), cut down to Seattle-area species by
-// scripts/bird_audio/slice_birdnet.py. The model contains its own
+// scripts/bird_audio/birdnet/slice_birdnet.py. The model contains its own
 // spectrogram frontend, so the window goes in as raw samples and one
 // probability per species comes out (multi-label: several birds can score
 // high at once). Scores are emitted to JS as "AudioBirdIdScores".
@@ -214,7 +214,7 @@ RCT_EXPORT_METHOD( stop )
   if ( status ) { ort->ReleaseStatus( status ); return nil; }
 
   const char *inputNames[]  = { "input" };
-  const char *outputNames[] = { "predictions" };
+  const char *outputNames[] = { "output" };
   OrtValue *output = NULL;
   status = ort->Run( _session, NULL, inputNames, (const OrtValue *const *)&input, 1,
                      outputNames, 1, &output );
