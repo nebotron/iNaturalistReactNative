@@ -1,0 +1,698 @@
+{
+ "model": "BirdNET v3.0 preview 3.1, NA-west, sliced to Seattle species, fp16",
+ "species": 229,
+ "eval_recordings": 2925,
+ "eval_species": 171,
+ "top1": 0.8225641025641026,
+ "top5": 0.9562393162393162,
+ "macro_top1": 0.78866810150282,
+ "threshold": 0.5,
+ "recall_at_threshold": 0.9035897435897436,
+ "other_species_flagged_per_recording": 0.7452991452991453,
+ "per_species": {
+  "Mallard": {
+   "n": 11,
+   "top1": 0.7272727272727273
+  },
+  "American Crow": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Dark-eyed Junco": {
+   "n": 30,
+   "top1": 0.7666666666666667
+  },
+  "Great Blue Heron": {
+   "n": 20,
+   "top1": 0.4
+  },
+  "American Robin": {
+   "n": 30,
+   "top1": 0.7666666666666667
+  },
+  "Song Sparrow": {
+   "n": 30,
+   "top1": 0.8333333333333334
+  },
+  "Canada Goose": {
+   "n": 30,
+   "top1": 0.7666666666666667
+  },
+  "Anna's Hummingbird": {
+   "n": 30,
+   "top1": 0.7666666666666667
+  },
+  "Bald Eagle": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Northern Flicker": {
+   "n": 30,
+   "top1": 0.9666666666666667
+  },
+  "Spotted Towhee": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "House Finch": {
+   "n": 30,
+   "top1": 0.9666666666666667
+  },
+  "Black-capped Chickadee": {
+   "n": 30,
+   "top1": 1.0
+  },
+  "Red-winged Blackbird": {
+   "n": 30,
+   "top1": 0.8333333333333334
+  },
+  "Gadwall": {
+   "n": 6,
+   "top1": 1.0
+  },
+  "Steller's Jay": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Wood Duck": {
+   "n": 7,
+   "top1": 0.7142857142857143
+  },
+  "Double-crested Cormorant": {
+   "n": 1,
+   "top1": 0.0
+  },
+  "American Wigeon": {
+   "n": 5,
+   "top1": 1.0
+  },
+  "American Coot": {
+   "n": 4,
+   "top1": 0.75
+  },
+  "Hooded Merganser": {
+   "n": 1,
+   "top1": 1.0
+  },
+  "Barred Owl": {
+   "n": 30,
+   "top1": 1.0
+  },
+  "Osprey": {
+   "n": 30,
+   "top1": 0.8
+  },
+  "White-crowned Sparrow": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "European Starling": {
+   "n": 30,
+   "top1": 0.7666666666666667
+  },
+  "Chestnut-backed Chickadee": {
+   "n": 30,
+   "top1": 0.8
+  },
+  "Pigeon Guillemot": {
+   "n": 6,
+   "top1": 1.0
+  },
+  "Cooper's Hawk": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Common Goldeneye": {
+   "n": 1,
+   "top1": 1.0
+  },
+  "Bushtit": {
+   "n": 30,
+   "top1": 0.9333333333333333
+  },
+  "Bewick's Wren": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Belted Kingfisher": {
+   "n": 30,
+   "top1": 0.9333333333333333
+  },
+  "Pileated Woodpecker": {
+   "n": 30,
+   "top1": 0.8
+  },
+  "Red-tailed Hawk": {
+   "n": 30,
+   "top1": 0.8333333333333334
+  },
+  "Pied-billed Grebe": {
+   "n": 6,
+   "top1": 0.6666666666666666
+  },
+  "Horned Grebe": {
+   "n": 1,
+   "top1": 0.0
+  },
+  "Cedar Waxwing": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Golden-crowned Sparrow": {
+   "n": 22,
+   "top1": 0.8181818181818182
+  },
+  "Glaucous-winged Gull": {
+   "n": 7,
+   "top1": 0.42857142857142855
+  },
+  "Downy Woodpecker": {
+   "n": 21,
+   "top1": 0.5714285714285714
+  },
+  "Red-breasted Nuthatch": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Surf Scoter": {
+   "n": 2,
+   "top1": 0.5
+  },
+  "Killdeer": {
+   "n": 30,
+   "top1": 0.9333333333333333
+  },
+  "American Goldfinch": {
+   "n": 30,
+   "top1": 0.7
+  },
+  "House Sparrow": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Varied Thrush": {
+   "n": 30,
+   "top1": 0.8
+  },
+  "Yellow-rumped Warbler": {
+   "n": 30,
+   "top1": 0.5333333333333333
+  },
+  "Ruby-crowned Kinglet": {
+   "n": 30,
+   "top1": 0.8333333333333334
+  },
+  "Brown Creeper": {
+   "n": 30,
+   "top1": 0.7666666666666667
+  },
+  "Golden-crowned Kinglet": {
+   "n": 30,
+   "top1": 0.8333333333333334
+  },
+  "Red-breasted Sapsucker": {
+   "n": 11,
+   "top1": 0.18181818181818182
+  },
+  "Pine Siskin": {
+   "n": 30,
+   "top1": 0.9333333333333333
+  },
+  "Green-winged Teal": {
+   "n": 2,
+   "top1": 1.0
+  },
+  "California Scrub-Jay": {
+   "n": 28,
+   "top1": 0.8214285714285714
+  },
+  "Black-headed Grosbeak": {
+   "n": 30,
+   "top1": 0.7333333333333333
+  },
+  "Brown-headed Cowbird": {
+   "n": 21,
+   "top1": 0.8571428571428571
+  },
+  "Caspian Tern": {
+   "n": 3,
+   "top1": 1.0
+  },
+  "Violet-green Swallow": {
+   "n": 24,
+   "top1": 0.7083333333333334
+  },
+  "Savannah Sparrow": {
+   "n": 18,
+   "top1": 0.9444444444444444
+  },
+  "Barn Swallow": {
+   "n": 17,
+   "top1": 1.0
+  },
+  "Tree Swallow": {
+   "n": 15,
+   "top1": 0.8666666666666667
+  },
+  "California Gull": {
+   "n": 1,
+   "top1": 1.0
+  },
+  "Pacific Wren": {
+   "n": 30,
+   "top1": 0.9333333333333333
+  },
+  "Brant": {
+   "n": 2,
+   "top1": 1.0
+  },
+  "Rufous Hummingbird": {
+   "n": 14,
+   "top1": 0.2857142857142857
+  },
+  "Purple Finch": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Marsh Wren": {
+   "n": 30,
+   "top1": 0.8333333333333334
+  },
+  "Trumpeter Swan": {
+   "n": 13,
+   "top1": 1.0
+  },
+  "Band-tailed Pigeon": {
+   "n": 7,
+   "top1": 0.8571428571428571
+  },
+  "Green Heron": {
+   "n": 1,
+   "top1": 0.0
+  },
+  "Fox Sparrow": {
+   "n": 26,
+   "top1": 0.9230769230769231
+  },
+  "Purple Martin": {
+   "n": 26,
+   "top1": 0.8461538461538461
+  },
+  "Wilson's Warbler": {
+   "n": 30,
+   "top1": 0.7666666666666667
+  },
+  "Ring-billed Gull": {
+   "n": 2,
+   "top1": 1.0
+  },
+  "Common Yellowthroat": {
+   "n": 30,
+   "top1": 0.7333333333333333
+  },
+  "Swainson's Thrush": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Harlequin Duck": {
+   "n": 1,
+   "top1": 0.0
+  },
+  "Common Raven": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Western Tanager": {
+   "n": 30,
+   "top1": 0.7333333333333333
+  },
+  "Townsend's Warbler": {
+   "n": 30,
+   "top1": 0.5666666666666667
+  },
+  "Cackling Goose": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Great Horned Owl": {
+   "n": 30,
+   "top1": 1.0
+  },
+  "Black Turnstone": {
+   "n": 4,
+   "top1": 1.0
+  },
+  "Orange-crowned Warbler": {
+   "n": 30,
+   "top1": 0.7
+  },
+  "Merlin": {
+   "n": 18,
+   "top1": 0.8888888888888888
+  },
+  "Greater White-fronted Goose": {
+   "n": 8,
+   "top1": 1.0
+  },
+  "Wilson's Snipe": {
+   "n": 9,
+   "top1": 0.4444444444444444
+  },
+  "Common Loon": {
+   "n": 19,
+   "top1": 0.7894736842105263
+  },
+  "Least Sandpiper": {
+   "n": 2,
+   "top1": 0.5
+  },
+  "Hermit Thrush": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Mourning Dove": {
+   "n": 13,
+   "top1": 0.7692307692307693
+  },
+  "Western Grebe": {
+   "n": 2,
+   "top1": 1.0
+  },
+  "Spotted Sandpiper": {
+   "n": 10,
+   "top1": 1.0
+  },
+  "Virginia Rail": {
+   "n": 30,
+   "top1": 0.7
+  },
+  "Hutton's Vireo": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Western Flycatcher": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Lincoln's Sparrow": {
+   "n": 10,
+   "top1": 0.9
+  },
+  "Snow Goose": {
+   "n": 9,
+   "top1": 1.0
+  },
+  "Northern Pintail": {
+   "n": 3,
+   "top1": 0.6666666666666666
+  },
+  "Sharp-shinned Hawk": {
+   "n": 1,
+   "top1": 1.0
+  },
+  "Marbled Murrelet": {
+   "n": 30,
+   "top1": 0.5666666666666667
+  },
+  "Brewer's Blackbird": {
+   "n": 11,
+   "top1": 0.7272727272727273
+  },
+  "Willow Flycatcher": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Northern Yellow Warbler": {
+   "n": 30,
+   "top1": 0.03333333333333333
+  },
+  "Black-throated Gray Warbler": {
+   "n": 30,
+   "top1": 0.8
+  },
+  "Eurasian Collared-Dove": {
+   "n": 22,
+   "top1": 0.8636363636363636
+  },
+  "Western Wood-Pewee": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Western Warbling Vireo": {
+   "n": 30,
+   "top1": 0.8333333333333334
+  },
+  "Common Murre": {
+   "n": 4,
+   "top1": 0.25
+  },
+  "Dunlin": {
+   "n": 1,
+   "top1": 0.0
+  },
+  "Ring-necked Pheasant": {
+   "n": 3,
+   "top1": 0.6666666666666666
+  },
+  "Greater Yellowlegs": {
+   "n": 7,
+   "top1": 0.8571428571428571
+  },
+  "Lazuli Bunting": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "White-throated Sparrow": {
+   "n": 10,
+   "top1": 0.9
+  },
+  "Peregrine Falcon": {
+   "n": 6,
+   "top1": 1.0
+  },
+  "American Barn Owl": {
+   "n": 9,
+   "top1": 1.0
+  },
+  "Red Crossbill": {
+   "n": 30,
+   "top1": 0.9333333333333333
+  },
+  "American Dipper": {
+   "n": 12,
+   "top1": 1.0
+  },
+  "Chipping Sparrow": {
+   "n": 21,
+   "top1": 0.8571428571428571
+  },
+  "Sanderling": {
+   "n": 1,
+   "top1": 0.0
+  },
+  "American Bittern": {
+   "n": 4,
+   "top1": 0.75
+  },
+  "American Kestrel": {
+   "n": 8,
+   "top1": 1.0
+  },
+  "Western Meadowlark": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "California Quail": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Black Scoter": {
+   "n": 1,
+   "top1": 1.0
+  },
+  "Northern Rough-winged Swallow": {
+   "n": 4,
+   "top1": 0.75
+  },
+  "American Pipit": {
+   "n": 2,
+   "top1": 1.0
+  },
+  "Northern Harrier": {
+   "n": 4,
+   "top1": 0.75
+  },
+  "Olive-sided Flycatcher": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Red-throated Loon": {
+   "n": 4,
+   "top1": 0.5
+  },
+  "Black Phoebe": {
+   "n": 11,
+   "top1": 1.0
+  },
+  "Townsend's Solitaire": {
+   "n": 22,
+   "top1": 0.9545454545454546
+  },
+  "Western Gull": {
+   "n": 2,
+   "top1": 0.5
+  },
+  "Western Screech-Owl": {
+   "n": 30,
+   "top1": 0.9333333333333333
+  },
+  "Vaux's Swift": {
+   "n": 18,
+   "top1": 0.9444444444444444
+  },
+  "Canada Jay": {
+   "n": 6,
+   "top1": 0.6666666666666666
+  },
+  "Northern Saw-whet Owl": {
+   "n": 30,
+   "top1": 0.9
+  },
+  "Redpoll": {
+   "n": 5,
+   "top1": 1.0
+  },
+  "Cliff Swallow": {
+   "n": 2,
+   "top1": 0.5
+  },
+  "Bullock's Oriole": {
+   "n": 8,
+   "top1": 0.625
+  },
+  "Long-billed Dowitcher": {
+   "n": 4,
+   "top1": 1.0
+  },
+  "Western Kingbird": {
+   "n": 2,
+   "top1": 0.5
+  },
+  "Sora": {
+   "n": 24,
+   "top1": 0.9166666666666666
+  },
+  "Solitary Sandpiper": {
+   "n": 4,
+   "top1": 1.0
+  },
+  "Black Oystercatcher": {
+   "n": 5,
+   "top1": 1.0
+  },
+  "Lesser Goldfinch": {
+   "n": 30,
+   "top1": 0.8333333333333334
+  },
+  "Lapland Longspur": {
+   "n": 2,
+   "top1": 1.0
+  },
+  "Black-bellied Plover": {
+   "n": 1,
+   "top1": 1.0
+  },
+  "Say's Phoebe": {
+   "n": 11,
+   "top1": 0.9090909090909091
+  },
+  "Yellow-headed Blackbird": {
+   "n": 8,
+   "top1": 0.75
+  },
+  "Tundra Swan": {
+   "n": 5,
+   "top1": 1.0
+  },
+  "Northern Pygmy-Owl": {
+   "n": 30,
+   "top1": 0.8333333333333334
+  },
+  "Swamp Sparrow": {
+   "n": 7,
+   "top1": 0.7142857142857143
+  },
+  "Wild Turkey": {
+   "n": 4,
+   "top1": 0.75
+  },
+  "Ancient Murrelet": {
+   "n": 1,
+   "top1": 0.0
+  },
+  "Nashville Warbler": {
+   "n": 13,
+   "top1": 0.8461538461538461
+  },
+  "Cassin's Vireo": {
+   "n": 26,
+   "top1": 0.9230769230769231
+  },
+  "Bank Swallow": {
+   "n": 1,
+   "top1": 1.0
+  },
+  "Mountain Bluebird": {
+   "n": 2,
+   "top1": 1.0
+  },
+  "Eastern Kingbird": {
+   "n": 4,
+   "top1": 1.0
+  },
+  "Franklin's Gull": {
+   "n": 1,
+   "top1": 0.0
+  },
+  "MacGillivray's Warbler": {
+   "n": 30,
+   "top1": 0.7333333333333333
+  },
+  "Hammond's Flycatcher": {
+   "n": 28,
+   "top1": 0.6785714285714286
+  },
+  "Chukar": {
+   "n": 6,
+   "top1": 0.6666666666666666
+  },
+  "Horned Lark": {
+   "n": 6,
+   "top1": 0.6666666666666666
+  },
+  "Short-billed Dowitcher": {
+   "n": 1,
+   "top1": 1.0
+  },
+  "Red-eyed Vireo": {
+   "n": 11,
+   "top1": 0.8181818181818182
+  },
+  "Hudsonian Whimbrel": {
+   "n": 1,
+   "top1": 1.0
+  },
+  "Northern House Wren": {
+   "n": 30,
+   "top1": 0.8666666666666667
+  },
+  "Pine Grosbeak": {
+   "n": 3,
+   "top1": 1.0
+  },
+  "Long-eared Owl": {
+   "n": 5,
+   "top1": 0.6
+  }
+ }
+}
