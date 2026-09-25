@@ -14,11 +14,15 @@
 #   GOOGLE_SERVICE_INFO_PRODUCTION_BASE64
 #                  base64 of ios/GoogleService-Info.production.plist
 #
-# Optional, and strongly recommended: reuse one signing certificate.
-#   DIST_CERT_P12_BASE64  base64 of an Apple Distribution certificate + key (.p12)
+# Optional, and strongly recommended: reuse signing certificates.
+#   DIST_CERT_P12_BASE64  base64 of a .p12 holding the Apple Distribution
+#                         certificate + key, ideally also an Apple Development
+#                         one (automatic signing archives with Development and
+#                         re-signs with Distribution on export)
 #   DIST_CERT_PASSWORD    that .p12's password
-# Without them xcodebuild creates new certificates on every run, and the
-# account soon hits Apple's certificate limit ("Choose a certificate to revoke").
+# xcodebuild creates any certificate it can't find in the keychain, on every
+# run, and the account soon hits Apple's certificate limit ("Choose a
+# certificate to revoke").
 ##
 name: TestFlight iOS
 on:
@@ -187,8 +191,8 @@ jobs:
         printf '%s' "$ASC_KEY_BASE64" | base64 --decode \
           > "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
 
-    # A throwaway keychain holding the reusable distribution certificate. The
-    # archive then signs with it directly, so no run creates a certificate.
+    # A throwaway keychain holding the reusable certificates, which xcodebuild
+    # then finds instead of creating new ones.
     - name: Import the signing certificate
       env:
         DIST_CERT_P12_BASE64: ${{ secrets.DIST_CERT_P12_BASE64 }}
@@ -209,7 +213,6 @@ jobs:
         security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
         security list-keychains -d user -s "$KEYCHAIN" $( security list-keychains -d user | tr -d '"' )
         rm "$RUNNER_TEMP/dist.p12"
-        echo 'SIGN_IDENTITY=CODE_SIGN_IDENTITY=Apple Distribution' >> "$GITHUB_ENV"
 
     # CFBundleVersion is a literal in the app's Info.plist but is generated from
     # CURRENT_PROJECT_VERSION for the share extension, so both need setting. A
@@ -241,8 +244,7 @@ jobs:
           -authenticationKeyID "$ASC_KEY_ID" \
           -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
           COMPILER_INDEX_STORE_ENABLE=NO \
-          CURRENT_PROJECT_VERSION="$BUILD_NUMBER" \
-          ${SIGN_IDENTITY:+"$SIGN_IDENTITY"}
+          CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
         {
           echo '### ccache'
           echo '```'
