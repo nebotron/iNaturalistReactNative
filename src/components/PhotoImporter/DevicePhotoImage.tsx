@@ -4,10 +4,13 @@ import type { ReactNode } from "react";
 import React, { useCallback, useState } from "react";
 import type { ViewStyle } from "react-native";
 import { PixelRatio } from "react-native";
+import { log } from "sharedHelpers/logger";
 import useDeviceImageThumbnail, {
   invalidateDeviceImageThumbnail,
   isGeneratedThumbnailUri,
 } from "sharedHelpers/useDeviceImageThumbnail";
+
+const logger = log.extend( "DevicePhotoImage" );
 
 interface Props {
   // Device photo library uri (ph:// on iOS) or a local file:// path
@@ -79,7 +82,12 @@ const DevicePhotoImage = ( {
     : undefined;
 
   const handleError = useCallback( ( ) => {
-    if ( !displayUri || !isGeneratedThumbnailUri( displayUri ) ) return;
+    if ( !displayUri ) return;
+    if ( !isGeneratedThumbnailUri( displayUri ) ) {
+      // Nothing left to fall back to: the cell stays a black square.
+      logger.errorWithExtra( "device_photo_draw_failed", { uri: displayUri } );
+      return;
+    }
     setShowOriginal( true );
     invalidateDeviceImageThumbnail( displayUri, uri ?? displayUri );
   }, [displayUri, uri] );

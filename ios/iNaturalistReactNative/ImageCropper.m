@@ -2101,6 +2101,11 @@ RCT_EXPORT_METHOD( prepareCropSource
     NSData   *data          = display
       ? encodedThumbnailData( display, &encodeFailure )
       : nil;
+    // Why the decode above produced nothing, when it didn't, so the app log can
+    // say how often the preview below is what the cropper draws.
+    NSString *decodeFailure = data
+      ? nil
+      : ( display ? encodeFailure : @"Could not draw image" ) ?: @"unknown";
     if ( !data ) {
       // The lazy decode above can put no pixels anywhere -- a camera raw iOS
       // reads the header of but cannot demosaic -- and rejecting here left the
@@ -2114,12 +2119,14 @@ RCT_EXPORT_METHOD( prepareCropSource
         ? thumbnailFromImageSource( src, [maxPixel floatValue] )
         : nil;
       if ( src ) CFRelease( src );
+      encodeFailure = nil;
       data = display
         ? encodedThumbnailData( display, &encodeFailure )
         : nil;
     }
     if ( !data ) {
-      reject( @"PREPARE_FAILED", encodeFailure ?: @"Could not encode display image", nil );
+      reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; preview: %@",
+        decodeFailure, encodeFailure ?: @"no embedded preview"], nil );
       return;
     }
     [[NSFileManager defaultManager]
@@ -2142,6 +2149,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"width":      @( width ),
       @"height":     @( height ),
       @"bounds":     bounds ?: [NSNull null],
+      @"decodeFailure": decodeFailure ?: [NSNull null],
     } );
   } );
 }

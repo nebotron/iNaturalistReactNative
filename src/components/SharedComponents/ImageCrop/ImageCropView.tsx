@@ -20,6 +20,7 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
+import { log } from "sharedHelpers/logger";
 import {
   normalizedCropToImageZoomTransform,
 } from "sharedHelpers/normalizedCropToImageZoomTransform";
@@ -32,6 +33,8 @@ import {
 import useIdentifyPhotoControls from "sharedHooks/useIdentifyPhotoControls";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
+
+const logger = log.extend( "ImageCropView" );
 
 const DIM_COLOR = "rgba(0, 0, 0, 0.55)";
 const TOOLBAR_HEIGHT = 104;
@@ -163,6 +166,12 @@ const ImageCropView = ( {
     setLoadedUri( sourceUri );
     onDecoded?.( Date.now( ) - shownAt.current.at );
   }, [onDecoded, sourceUri] );
+  // Counted as loaded so it doesn't spin forever, but what's left on screen is
+  // the black backdrop, so say which file it was.
+  const handleImageError = useCallback( ( ) => {
+    logger.errorWithExtra( "crop_image_draw_failed", { source: sourceUri } );
+    handleImageLoad( );
+  }, [handleImageLoad, sourceUri] );
 
   // Which photo has been loading long enough to deserve a spinner. Recorded per
   // uri rather than as a flag so advancing to the next photo starts the delay
@@ -506,7 +515,7 @@ const ImageCropView = ( {
               testID={`ImageCropView.${sourceUri}`}
               onInteractionEnd={updateDownsizeStatus}
               onLoad={handleImageLoad}
-              onError={handleImageLoad}
+              onError={handleImageError}
               onScaleChange={syncZoomSlider}
             />
           </View>

@@ -4,8 +4,11 @@ import { getAnimalCrop } from "sharedHelpers/animalCropLog";
 import { subjectCropFromBounds } from "sharedHelpers/detectSubjectInImage";
 import getCropForUri from "sharedHelpers/getCropForUri";
 import imageFileSize from "sharedHelpers/imageFileSize";
+import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import type { NormalizedBounds } from "sharedHelpers/subjectBoundsToNormalizedCrop";
+
+const logger = log.extend( "prepareCropSource" );
 
 // Longest side of the file the cropper displays. A crop is capped at 2048 on
 // upload however it was framed, so this is every pixel the user can end up
@@ -34,6 +37,9 @@ interface ImageCropperModule {
     width: number;
     height: number;
     bounds: NormalizedBounds | null;
+    // Set when the photo's own decode drew nothing and the display file is
+    // the embedded preview instead.
+    decodeFailure: string | null;
   }>;
 }
 
@@ -69,7 +75,21 @@ const prepareCropSource = async (
       DISPLAY_MAX_PIXEL,
       displayPathFor( sourceUri ),
       !knownCrop,
-    ).catch( ( ) => null );
+    ).catch( ( error: Error ) => {
+      // What follows draws the source file itself, which for a raw iOS can't
+      // decode is a black screen in the cropper.
+      logger.errorWithExtra( "crop_source_prepare_failed", {
+        source: sourceUri,
+        error: error?.message ?? String( error ),
+      } );
+      return null;
+    } );
+    if ( prepared?.decodeFailure ) {
+      logger.warnWithExtra( "crop_source_drew_preview", {
+        source: sourceUri,
+        decodeFailure: prepared.decodeFailure,
+      } );
+    }
     if ( prepared && prepared.width > 0 && prepared.height > 0 ) {
       const size = { w: prepared.width, h: prepared.height };
       return {
