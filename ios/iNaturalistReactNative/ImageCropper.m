@@ -2097,13 +2097,27 @@ RCT_EXPORT_METHOD( prepareCropSource
     // The one decode. What comes out of it is both what gets displayed and
     // what the detector reads, so nothing downstream opens the file again.
     UIImage *display = clampToMaxPixel( image, [maxPixel floatValue] );
-    if ( !display ) {
-      reject( @"PREPARE_FAILED", @"Could not draw image", nil );
-      return;
-    }
-
     NSString *encodeFailure = nil;
-    NSData   *data          = encodedThumbnailData( display, &encodeFailure );
+    NSData   *data          = display
+      ? encodedThumbnailData( display, &encodeFailure )
+      : nil;
+    if ( !data ) {
+      // The lazy decode above can put no pixels anywhere -- a camera raw iOS
+      // reads the header of but cannot demosaic -- and rejecting here left the
+      // editor drawing the raw file itself, which <Image> draws nothing for: a
+      // black screen in the bulk cropper and in Group Photos. Draw the largest
+      // image ImageIO will actually produce instead, as cropImage does; it is
+      // the same frame, so the crop still lands where the user framed it.
+      CGImageSourceRef src =
+        CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
+      display = src
+        ? thumbnailFromImageSource( src, [maxPixel floatValue] )
+        : nil;
+      if ( src ) CFRelease( src );
+      data = display
+        ? encodedThumbnailData( display, &encodeFailure )
+        : nil;
+    }
     if ( !data ) {
       reject( @"PREPARE_FAILED", encodeFailure ?: @"Could not encode display image", nil );
       return;
