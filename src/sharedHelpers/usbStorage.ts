@@ -1,5 +1,6 @@
 import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
+import { recordAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
 
 // JS side of the UsbStorage native module (iOS): the user grants access to a
 // folder once (e.g. a USB drive mounted in Files), then the offload flow lists
@@ -89,6 +90,8 @@ interface UsbStorageModule {
   ) => Promise<UsbListResult>;
   saveImageToPhotos: ( relativePath: string ) => Promise<{ saved: boolean }>;
   deleteSourceImages: ( relativePaths: string[] ) => Promise<UsbDeleteResult>;
+  getSavedImages: ( ) => Promise<Record<string, string>>;
+  clearSavedImages: ( relativePaths: string[] ) => Promise<void>;
 }
 
 const usbStorage = Platform.OS === "ios"
@@ -232,6 +235,25 @@ export const clearPendingUsbDeletes = ( relativePaths: string[] ) => {
       entry => !done.has( entry.path ) && entry.savedAt > cutoff,
     ),
   ) );
+};
+
+// Fold in saves the native side recorded as committed to Photos but whose
+// result never reached the offload loop (a JS timeout on a write that then
+// landed, or a process killed between commit and resolve). Without this a
+// restarted import saves those files a second time. Cleared natively only after
+// they are persisted here, so a death in between just repeats this next time.
+export const reconcileSavedUsbImages = async ( ): Promise<number> => {
+  if ( !usbStorage ) return 0;
+  const saved = await usbStorage.getSavedImages( );
+  const paths = Object.keys( saved );
+  if ( paths.length === 0 ) return 0;
+  const known = new Set( getImportedNames( ) );
+  const unrecorded = paths.filter( path => !known.has( path ) );
+  markUsbImagesImported( unrecorded );
+  addPendingUsbDeletes( unrecorded );
+  recordAppCreatedPhotoAssets( unrecorded.map( path => saved[path] ) );
+  await usbStorage.clearSavedImages( paths );
+  return unrecorded.length;
 };
 
 // A breadcrumb that outlives the process, so an offload the app never came

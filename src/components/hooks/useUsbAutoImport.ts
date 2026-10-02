@@ -22,6 +22,7 @@ import {
   listNewUsbImages,
   markUsbImagesImported,
   markUsbOffloadStarted,
+  reconcileSavedUsbImages,
   refreshAvailableMemory,
   requestUsbPhotosPermission,
   saveUsbImageToPhotos,
@@ -223,6 +224,12 @@ const useUsbAutoImport = ( ) => {
       } );
     }
     try {
+      const reconciled = await reconcileSavedUsbImages( );
+      if ( reconciled > 0 ) {
+        logger.info(
+          `USB offload: recorded ${reconciled} save(s) an earlier run never heard back from`,
+        );
+      }
       const result = await listNewUsbImages( );
       logDiag( result.available
         ? `list ok: ${result.images.length} new; imageFiles=${result.imageFileCount}, `

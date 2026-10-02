@@ -16,6 +16,32 @@
 
 static NSString *const kBookmarkKey = @"UsbStorageFolderBookmark";
 
+// relativePath → localIdentifier for every save PhotoKit has committed, written
+// from the completion handler itself. JS marks a file imported only once the
+// save's promise reaches it, and that can fail to happen for a save that did
+// land: the JS-side timeout gives up on a slow write that then completes, or iOS
+// suspends or kills the app between the commit and the resolve. Either way the
+// file stayed unimported and the next run saved it to Photos a second time.
+// JS folds these into its imported list (getSavedImages) before each scan and
+// then clears them (clearSavedImages).
+static NSString *const kSavedPathsKey = @"UsbStorageSavedPaths";
+
+// Saves started in this process whose completion handler hasn't fired. Listing
+// skips them, so a save the JS loop abandoned on its timeout isn't started a
+// second time by the next scan while the first may still land.
+static NSMutableSet<NSString *> *inFlightSaves( void )
+{
+  static NSMutableSet<NSString *> *set;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{ set = [NSMutableSet set]; } );
+  return set;
+}
+
+static NSDictionary<NSString *, NSString *> *savedPaths( void )
+{
+  return [[NSUserDefaults standardUserDefaults] dictionaryForKey:kSavedPathsKey] ?: @{};
+}
+
 @interface UsbStorage : NSObject <RCTBridgeModule, UIDocumentPickerDelegate>
 @end
 
@@ -157,6 +183,29 @@ RCT_EXPORT_METHOD(forgetFolder:(RCTPromiseResolveBlock)resolve
                         reject:(__unused RCTPromiseRejectBlock)reject)
 {
   [[NSUserDefaults standardUserDefaults] removeObjectForKey:kBookmarkKey];
+  @synchronized ( inFlightSaves( ) ) {
+    [[NSUserDefaults standardUserDefaults] removeObjectForKey:kSavedPathsKey];
+  }
+  resolve( nil );
+}
+
+RCT_EXPORT_METHOD(getSavedImages:(RCTPromiseResolveBlock)resolve
+                          reject:(__unused RCTPromiseRejectBlock)reject)
+{
+  @synchronized ( inFlightSaves( ) ) {
+    resolve( savedPaths( ) );
+  }
+}
+
+RCT_EXPORT_METHOD(clearSavedImages:(NSArray<NSString *> *)relativePaths
+                           resolve:(RCTPromiseResolveBlock)resolve
+                            reject:(__unused RCTPromiseRejectBlock)reject)
+{
+  @synchronized ( inFlightSaves( ) ) {
+    NSMutableDictionary *saved = [savedPaths( ) mutableCopy];
+    [saved removeObjectsForKeys:relativePaths ?: @[]];
+    [[NSUserDefaults standardUserDefaults] setObject:saved forKey:kSavedPathsKey];
+  }
   resolve( nil );
 }
 
@@ -225,7 +274,11 @@ RCT_EXPORT_METHOD(listNewImages:(NSArray<NSString *> *)knownNames
   }
 
   NSFileManager *fm = [NSFileManager defaultManager];
-  NSSet<NSString *> *known = [NSSet setWithArray:knownNames ?: @[]];
+  NSMutableSet<NSString *> *known = [NSMutableSet setWithArray:knownNames ?: @[]];
+  @synchronized ( inFlightSaves( ) ) {
+    [known unionSet:inFlightSaves( )];
+    [known addObjectsFromArray:savedPaths( ).allKeys];
+  }
   NSDirectoryEnumerator<NSURL *> *enumerator =
     [fm enumeratorAtURL:folder
       includingPropertiesForKeys:@[NSURLIsRegularFileKey, NSURLContentModificationDateKey,
@@ -378,6 +431,15 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
                             resolve:(RCTPromiseResolveBlock)resolve
                              reject:(RCTPromiseRejectBlock)reject)
 {
+  // Already in Photos from an earlier save whose result JS never received.
+  NSString *existingId = nil;
+  @synchronized ( inFlightSaves( ) ) {
+    existingId = savedPaths( )[relativePath];
+  }
+  if ( existingId ) {
+    resolve( @{ @"saved": @YES, @"localIdentifier": existingId } );
+    return;
+  }
   NSFileManager *fm = [NSFileManager defaultManager];
   NSString *tempPath = [NSTemporaryDirectory( ) stringByAppendingPathComponent:
     [[[NSUUID UUID] UUIDString] stringByAppendingPathExtension:relativePath.pathExtension]];
@@ -387,6 +449,20 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
   // way to ask after the fact whether a given asset was ours — so the only
   // chance to record it is here, at creation. See appCreatedPhotoAssets.ts.
   __block NSString *createdId = nil;
+  @synchronized ( inFlightSaves( ) ) {
+    [inFlightSaves( ) addObject:relativePath];
+  }
+  // Records the outcome before JS hears it, so a commit outlives a JS timeout
+  // or the process dying before the resolve is delivered.
+  void ( ^settle )( BOOL ) = ^( BOOL success ) {
+    @synchronized ( inFlightSaves( ) ) {
+      [inFlightSaves( ) removeObject:relativePath];
+      if ( !success ) return;
+      NSMutableDictionary *saved = [savedPaths( ) mutableCopy];
+      saved[relativePath] = createdId ?: @"";
+      [[NSUserDefaults standardUserDefaults] setObject:saved forKey:kSavedPathsKey];
+    }
+  };
   // Returns this save's permit exactly once, from whichever comes first: the
   // completion handler, or the watchdog below when that handler never fires.
   __block BOOL permitReturned = NO;
@@ -411,6 +487,7 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
     NSURL *folder = resolveSavedFolder( );
     if ( !folder || ![folder startAccessingSecurityScopedResource] ) {
       returnPermit( );
+      settle( NO );
       reject( @"unavailable", @"USB folder is not available", nil );
       return;
     }
@@ -420,6 +497,7 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
     [folder stopAccessingSecurityScopedResource];
     if ( !copied ) {
       returnPermit( );
+      settle( NO );
       [fm removeItemAtPath:tempPath error:nil];
       reject( errorIsOutOfSpace( copyError )
                 ? @"out-of-space"
@@ -438,6 +516,7 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
       createdId = request.placeholderForCreatedAsset.localIdentifier;
     } completionHandler:^( BOOL success, NSError *error ) {
       returnPermit( );
+      settle( success );
       if ( !success ) [fm removeItemAtPath:tempPath error:nil];
       if ( success ) {
         resolve( @{ @"saved": @YES, @"localIdentifier": createdId ?: @"" } );
@@ -460,6 +539,7 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
       if ( status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited ) {
         saveBlock( );
       } else {
+        settle( NO );
         reject( @"no-permission", @"Photos permission not granted", nil );
       }
     }];
