@@ -9,9 +9,10 @@ team and the `com.benhannel.inat.dev` bundle IDs.
 
 ## Steps
 
-1. **Pick the ref.** Default to `main`. If the user names a branch, or the work they
-   want on the phone is only on the current branch, push that branch first and
-   dispatch it instead.
+1. **Push local changes to `main`.** Commit any uncommitted work, then rebase onto
+   `origin/main` (`git fetch origin main && git rebase origin/main`) and
+   fast-forward push (`git push origin HEAD:main`). Never force push. Dispatch
+   `main` unless the user names another branch.
 
 2. **Dispatch the workflow** against that ref:
    `gh workflow run testflight-ios.yml --ref <ref>`, or `actions_run_trigger` with
@@ -27,8 +28,9 @@ team and the `com.benhannel.inat.dev` bundle IDs.
    folly symbol as that flag's fault rather than the code's.
 
 3. **Wait.** A full run is ~30 minutes: pods ~3, archive ~20, export ~1, upload ~2.
-   Sleep in the background between checks — 15 minutes, then 10, then 5 — rather
-   than polling in a tight loop. `list_workflow_jobs` shows which step is running.
+   Check the run's status every 5 minutes until it completes (`send_later` with
+   `delay_minutes: 5`, or `ScheduleWakeup` / a background wait) rather than polling
+   in a tight loop. `list_workflow_jobs` shows which step is running.
 
 4. **On success**, report it in one line with the build number (a UTC timestamp, set
    by the `Set the build number` step and echoed in the run summary), and note that
@@ -46,4 +48,6 @@ team and the `com.benhannel.inat.dev` bundle IDs.
    | `altool` rejects the build (`ITMS-...`) | Read the code. A duplicate build number can't happen with the timestamp scheme; anything else is usually a missing Info.plist key or entitlement. |
    | Runner died / timed out with no error | Re-run the job once (`rerun_failed_jobs`). Twice failing the same way is real. |
 
-6. **After fixing**, re-dispatch and repeat until the upload succeeds.
+6. **After fixing**, push the fix to `main` (step 1), dispatch a new run, and keep
+   checking every 5 minutes. Repeat until a run succeeds; stop only for a blocker
+   only the user can fix (e.g. missing secrets).
