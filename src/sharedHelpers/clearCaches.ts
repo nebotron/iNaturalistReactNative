@@ -152,6 +152,7 @@ const clearExpiredFilesByTtl = async (
   dir: string,
   ttlMs = CROP_CACHE_TTL_MS,
   shouldClear: ( name: string ) => boolean = ( ) => true,
+  includeDirectories = false,
 ) => {
   const dirExists = await exists( dir );
   if ( !dirExists ) return;
@@ -159,17 +160,22 @@ const clearExpiredFilesByTtl = async (
   const now = Date.now();
   await Promise.all(
     files
-      .filter( f => f.isFile( ) && shouldClear( f.name ) )
+      .filter( f => ( f.isFile( ) || ( includeDirectories && f.isDirectory( ) ) )
+        && shouldClear( f.name ) )
       .filter( f => now - new Date( f.mtime ).getTime() > ttlMs )
       .map( f => unlink( f.path ) ),
   );
 };
 
 // iOS doesn't reliably purge the app's tmp directory, so orphans there grow
-// without bound; at tens of MB per USB raw that reached tens of GB.
+// without bound; at tens of MB per USB raw that reached tens of GB. Folders
+// count too: libraries and the system write into tmp subfolders, which only
+// files being swept left behind forever. UsbStorage clears its own folders.
 const clearExpiredTempFiles = ( ) => clearExpiredFilesByTtl(
   TemporaryDirectoryPath,
   TEMP_FILE_TTL_MS,
+  name => !name.startsWith( "usbImport-" ),
+  true,
 );
 
 // Brightness-adjusted previews (useLiveToneMappedBrightnessUri) and audio
