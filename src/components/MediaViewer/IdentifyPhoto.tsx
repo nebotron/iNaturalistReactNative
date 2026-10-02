@@ -128,6 +128,7 @@ export const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhoto
   const applyZoom = useCallback( ( scale: number ) => {
     const img = imageRef.current;
     if ( !img ) return;
+    appliedRef.current = true;
     const current = img.readTransform( );
     if ( current.scale <= 0 ) {
       img.applyTransform( {
@@ -155,7 +156,8 @@ export const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhoto
     [applyZoom, saveCrop],
   );
 
-  // Frame the detected (or previously logged) subject once detection resolves.
+  // Frame the detected (or previously logged) subject once detection resolves,
+  // unless the user has already moved the image.
   useEffect( ( ) => {
     if ( appliedRef.current || !detection || !imageRef.current ) return;
     imageRef.current.applyTransform( cropToZoomTransform(
@@ -166,6 +168,8 @@ export const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhoto
     ) );
     appliedRef.current = true;
   }, [detection, size] );
+
+  const markMoved = useCallback( ( ) => { appliedRef.current = true; }, [] );
 
   const handleInteractionEnd = useCallback( ( ) => {
     // Let the gesture's settling animation finish before reading the transform.
@@ -185,6 +189,8 @@ export const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhoto
       isSingleTapEnabled={!!onSingleTap}
       onSingleTap={onSingleTap}
       onScaleChange={onScaleChange}
+      onInteractionStart={markMoved}
+      onDoubleTap={markMoved}
       onInteractionEnd={handleInteractionEnd}
       onImageDimensionsChange={dims => { dimsRef.current = dims; }}
       onLoad={onLoad}
