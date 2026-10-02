@@ -70,6 +70,10 @@ if (
       logger.errorWithExtra( "Unhandled promise rejection: ", error, {
         errorName: error?.name ?? "unknown",
         screen: getCurrentRoute()?.name || "unknown",
+        // inaturalistjs rejects HTTP failures with an empty message and the
+        // Response attached, so this is the only clue to which call leaked
+        status: error?.response?.status,
+        url: error?.response?.url,
       } );
     },
   } );
@@ -104,7 +108,7 @@ const jsErrorHandler = ( e, isFatal ) => {
         timestamp: new Date().toISOString(),
         appVersion: DeviceInfo.getVersion(),
       };
-      installDataMMKVStorage.setItem( LAST_CRASH_DATA, JSON.stringify( crashData ) );
+      installDataMMKVStorage.set( LAST_CRASH_DATA, JSON.stringify( crashData ) );
     } catch ( storageError ) {
       logger.error( "Failed to save fatal JS error context", storageError );
     }
@@ -135,7 +139,7 @@ setNativeExceptionHandler(
       };
 
       // Store crash data for retrieval on next app launch
-      installDataMMKVStorage.setItem( LAST_CRASH_DATA, JSON.stringify( crashData ) );
+      installDataMMKVStorage.set( LAST_CRASH_DATA, JSON.stringify( crashData ) );
 
       logger.error( `Native Error: ${exceptionString}`, JSON.stringify( crashData ) );
     } catch ( e ) {
