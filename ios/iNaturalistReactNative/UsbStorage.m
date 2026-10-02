@@ -53,6 +53,43 @@ RCT_EXPORT_MODULE( );
 
 + (BOOL)requiresMainQueueSetup { return NO; }
 
+// Raws copied for a Photos save go in a folder of this process's own, so
+// whatever a killed earlier run left behind can be deleted at launch, before
+// JS is even up, without racing a save in progress.
+static NSString *usbTempDirectory( void )
+{
+  static NSString *dir;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{
+    dir = [NSTemporaryDirectory( ) stringByAppendingPathComponent:
+      [@"usbImport-" stringByAppendingString:[NSUUID UUID].UUIDString]];
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir
+                              withIntermediateDirectories:YES
+                                               attributes:nil
+                                                    error:nil];
+  } );
+  return dir;
+}
+
++ (void)load
+{
+  NSString *current = usbTempDirectory( ).lastPathComponent;
+  // Listed before main( ), so nothing in it can belong to this run.
+  NSString *tmp = NSTemporaryDirectory( );
+  NSArray<NSString *> *names = [[NSFileManager defaultManager]
+    contentsOfDirectoryAtPath:tmp error:nil];
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
+    NSFileManager *fm = [NSFileManager defaultManager];
+    for ( NSString *name in names ) {
+      // Earlier runs' folders, and the "<UUID>.<ext>" raws builds before the
+      // folder existed copied straight into tmp.
+      BOOL stale = ( [name hasPrefix:@"usbImport-"] && ![name isEqualToString:current] )
+        || [[NSUUID alloc] initWithUUIDString:name.stringByDeletingPathExtension] != nil;
+      if ( stale ) [fm removeItemAtPath:[tmp stringByAppendingPathComponent:name] error:nil];
+    }
+  } );
+}
+
 // A device with no room left is not a per-file problem: every remaining file in
 // the run will fail the same way, instantly. JS abandons the run on this code
 // rather than grinding through the card — the Aug 6 log has 1,084 error lines
@@ -441,7 +478,7 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
     return;
   }
   NSFileManager *fm = [NSFileManager defaultManager];
-  NSString *tempPath = [NSTemporaryDirectory( ) stringByAppendingPathComponent:
+  NSString *tempPath = [usbTempDirectory( ) stringByAppendingPathComponent:
     [[[NSUUID UUID] UUIDString] stringByAppendingPathExtension:relativePath.pathExtension]];
 
   // Report the identifier of the asset we created. PhotoKit deletes an asset
