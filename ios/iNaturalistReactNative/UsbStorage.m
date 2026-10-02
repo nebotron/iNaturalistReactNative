@@ -71,7 +71,8 @@ static NSString *usbTempDirectory( void )
   return dir;
 }
 
-+ (void)load
+// A constructor rather than +load, which RCT_EXPORT_MODULE already defines.
+__attribute__( ( constructor ) ) static void deleteEarlierRunsUsbTemp( void )
 {
   NSString *current = usbTempDirectory( ).lastPathComponent;
   // Listed before main( ), so nothing in it can belong to this run.
