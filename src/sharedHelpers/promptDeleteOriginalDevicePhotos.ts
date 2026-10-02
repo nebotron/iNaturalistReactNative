@@ -307,27 +307,20 @@ const performDeleteOriginalDevicePhotos = async (
   const expectedChunks
     = plannedChunkSizes( ordinary.length, maxTransactionSize( ) ).length + probeChunks.length;
 
-  // Files whatever is still in the library into the album, once the deletion
-  // has had its go at it.
+  // Files the whole request into the album before any deletion is asked for.
   //
-  // Filing *before* the deletion is what made the album empty. An asset that
-  // is deleted leaves every album it belongs to, so a cleanup that worked
-  // filed its 40 photos and then deleted all 40 back out again — the Sep 10
-  // log has five runs that each filed everything they asked for and each found
-  // the album empty the next time round. The album was never for the photos
-  // that delete cleanly; it is for the ones the user has to handle by hand,
-  // the undeletable, the quarantined, and the ones PhotoKit never answers for.
-  // So it is filled from what survives.
-  //
-  // The whole request can still be handed over: a URI whose asset is already
-  // gone fetches to nothing natively and is simply left out.
-  const fileSurvivorsIntoAlbum = ( ) => addPhotosToImportedAlbum( uniqueUris );
+  // The album is for the photos the user has to delete by hand, and it used to
+  // be filled from what survived the deletion. But a deletion PhotoKit never
+  // answers leaves the write gate shut, so the filing behind it was refused
+  // too, and on relaunch the next cleanup hung first again: the Oct 2 log has
+  // every cleanup hanging on its first transaction, across device restarts,
+  // and the album never filled. Filing first always gets through. Photos that
+  // then delete cleanly leave the album with them, so it ends up holding only
+  // what is still in the library.
+  await addPhotosToImportedAlbum( uniqueUris );
 
   if ( expectedChunks === 0 ) {
     logger.warnWithExtra( "photo_delete_all_quarantined", { requested } );
-    // Nothing was attempted, so every one of these is a photo the user has to
-    // delete themselves — exactly what the album is for.
-    void enqueuePhotoLibraryWrite( fileSurvivorsIntoAlbum );
     return {
       deleted: 0, requested, succeeded: true, quarantined: skipped.length,
     };
@@ -735,12 +728,6 @@ const performDeleteOriginalDevicePhotos = async (
     clearTimeout( hangTimer );
     if ( timeoutTimer ) clearTimeout( timeoutTimer );
     appStateSubscription.remove( );
-    // Queued rather than awaited, and queued from every exit above. A deletion
-    // the UI stopped waiting for is still open down in PhotoKit, and two
-    // Photos-library writes in flight at once is what wedges photolibraryd, so
-    // the filing takes its turn in the same chain the deletion did: it runs
-    // once that transaction has actually settled, whatever this call reported.
-    void enqueuePhotoLibraryWrite( fileSurvivorsIntoAlbum );
   }
 };
 

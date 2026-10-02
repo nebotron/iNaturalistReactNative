@@ -25,9 +25,8 @@ const { ImageCropper } = NativeModules as {
 // and delete themselves. Adding to an album this app created asks the user for
 // nothing, which is why it still goes through when the deletion doesn't.
 //
-// It holds only what a cleanup left behind, because it can hold nothing else:
-// a deleted asset leaves every album it is in, so filing the photos a cleanup
-// is about to delete just empties the album again a second later.
+// A cleanup files everything it is about to delete, and a deleted asset leaves
+// every album it is in, so the album ends up holding only what is left behind.
 export const IMPORTED_ALBUM_TITLE = "Imported to iNaturalist";
 
 // Files photos into the album. Never throws: this runs alongside a deletion

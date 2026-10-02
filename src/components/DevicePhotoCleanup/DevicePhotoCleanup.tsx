@@ -280,7 +280,9 @@ const DevicePhotoCleanup = ( ) => {
         <View className="px-5 pt-4 pb-2">
           <Body2>
             The last delete hasn&apos;t come back from iOS yet. These are what is still
-            in your library — it may finish on its own, or a restart may be needed.
+            in your library — it may finish on its own. They are also in the
+            {` "${IMPORTED_ALBUM_TITLE}" `}
+            album in Photos, where you can select and delete them all at once.
           </Body2>
         </View>
       )}
