@@ -30,6 +30,7 @@ jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
   listNewUsbImages: ( ...args ) => mockListNewUsbImages( ...args ),
   markUsbImagesImported: ( ...args ) => mockMarkUsbImagesImported( ...args ),
   markUsbOffloadStarted: ( ...args ) => mockMarkUsbOffloadStarted( ...args ),
+  reconcileSavedUsbImages: async ( ) => 0,
   // The real pending-delete list is MMKV-backed and outlives the run; an
   // in-memory array behaves the same way within a test, and the tests that
   // care about it reset it in beforeEach.
