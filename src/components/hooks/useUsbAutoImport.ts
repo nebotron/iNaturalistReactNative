@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { AppState } from "react-native";
+import DeviceInfo from "react-native-device-info";
 import { recordAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
 import {
   beginBackgroundUsbImportTask,
@@ -72,6 +73,13 @@ const QUEUED_SAVE_TIMEOUT_MS = 200_000;
 // second and a half and the poll did it again ten seconds later, 1,084 error
 // lines in 74 seconds.
 const MAX_CONSECUTIVE_SAVE_FAILURES = 3;
+
+// Free space the offload must leave on the phone. Saving until the copy itself
+// failed took the Oct 2 device down to 166MB free, and with that little room
+// Photos stopped answering deletions: Photo Cleanup's deleteAssets hung for
+// 147s and failed with PHPhotosErrorDomain 3301, so the raws that filled the
+// disk could no longer be removed, and crops failed to write too.
+const MIN_FREE_DISK_BYTES = 3 * 1024 * 1024 * 1024;
 
 // Abandoned files stay unimported, so the next scan — SCAN_INTERVAL_MS later —
 // would pick the same card up and grind through the same failures again.
@@ -309,6 +317,14 @@ const useUsbAutoImport = ( ) => {
       for ( let i = 0; i < images.length; i += 1 ) {
         const { relativePath, fileSize } = images[i];
         if ( abandonReason ) {
+          abandoned = images.length - i;
+          break;
+        }
+        // eslint-disable-next-line no-await-in-loop
+        const freeDiskBytes = await DeviceInfo.getFreeDiskStorage( ).catch( ( ) => -1 );
+        if ( freeDiskBytes >= 0 && freeDiskBytes - ( fileSize ?? 0 ) < MIN_FREE_DISK_BYTES ) {
+          abandonReason = "out-of-space";
+          lastError = `${freeDiskBytes} bytes free`;
           abandoned = images.length - i;
           break;
         }
