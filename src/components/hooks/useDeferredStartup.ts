@@ -19,10 +19,13 @@ import {
   clearComputerVisionPhotos,
   clearExpiredCropSources,
   clearExpiredDeviceThumbnails,
+  clearExpiredMediaCaches,
+  clearExpiredTempFiles,
   clearGalleryPhotos,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,
   clearSyncedMediaForUpload,
+  clearVideoLibrary,
 } from "sharedHelpers/clearCaches";
 import { formatApiDatetime } from "sharedHelpers/dateAndTime";
 import { LAST_CRASH_DATA, store as installDataMMKVStorage } from "sharedHelpers/installData";
@@ -129,6 +132,9 @@ const useDeferredStartup = ( ) => {
     const id8 = deferTask( "clearRollbackPhotos", clearRollbackPhotos );
     const id11 = deferTask( "clearExpiredCropSources", clearExpiredCropSources );
     const id13 = deferTask( "clearExpiredDeviceThumbnails", clearExpiredDeviceThumbnails );
+    const id15 = deferTask( "clearExpiredTempFiles", clearExpiredTempFiles );
+    const id16 = deferTask( "clearVideoLibrary", clearVideoLibrary );
+    const id17 = deferTask( "clearExpiredMediaCaches", clearExpiredMediaCaches );
     const id14 = deferTask( "logThumbnailDiagnostics", logThumbnailDiagnostics );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
@@ -163,6 +169,9 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id12 );
       cancelIdleCallback( id13 );
       cancelIdleCallback( id14 );
+      cancelIdleCallback( id15 );
+      cancelIdleCallback( id16 );
+      cancelIdleCallback( id17 );
       cancelIdleCallback( idImport );
     };
   }, [i18n, realm] );

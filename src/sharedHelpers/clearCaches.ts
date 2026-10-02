@@ -1,7 +1,8 @@
 import {
-  exists, readDir,
+  CachesDirectoryPath, exists, readDir, TemporaryDirectoryPath,
 } from "@dr.pogodin/react-native-fs";
 import {
+  brightnessAdjustedPath,
   computerVisionPath,
   cropSourcesPath,
   deviceThumbnailsPath,
@@ -10,6 +11,7 @@ import {
   rollbackPhotosPath,
   rotatedOriginalPhotosPath,
   soundUploadPath,
+  videoLibraryPath,
 } from "appConstants/paths";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import removeSyncedFilesFromDirectory from "sharedHelpers/removeSyncedFilesFromDirectory";
@@ -17,6 +19,9 @@ import { unlink } from "sharedHelpers/util";
 import useStore from "stores/useStore";
 
 const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
+// Anything still in tmp after an hour belongs to work that died with an earlier
+// run (e.g. a USB raw copied for a Photos save that never completed).
+const TEMP_FILE_TTL_MS = 60 * 60 * 1000;
 
 // TODO replace when Realm classes are properly typed
 interface RealmObservation {
@@ -61,22 +66,27 @@ const groupedPhotoFileNamesToKeep = ( ): string[] => {
   return fileNames;
 };
 
-const clearGalleryPhotos = async ( ) => {
+const clearUngroupedFiles = async ( dir: string ) => {
   const fileNamesToKeep = new Set( groupedPhotoFileNamesToKeep( ) );
   if ( fileNamesToKeep.size === 0 ) {
-    await removeAllFilesFromDirectory( photoLibraryPhotosPath );
+    await removeAllFilesFromDirectory( dir );
     return;
   }
 
-  const directoryExists = await exists( photoLibraryPhotosPath );
+  const directoryExists = await exists( dir );
   if ( !directoryExists ) { return; }
-  const files = await readDir( photoLibraryPhotosPath );
+  const files = await readDir( dir );
   await Promise.all(
     files
       .filter( file => !fileNamesToKeep.has( file.name ) )
       .map( file => unlink( file.path ) ),
   );
 };
+
+const clearGalleryPhotos = ( ) => clearUngroupedFiles( photoLibraryPhotosPath );
+
+// GIFs extracted from imported videos; Photo.new copies them into photoUploads.
+const clearVideoLibrary = ( ) => clearUngroupedFiles( videoLibraryPath );
 
 const clearComputerVisionPhotos = async ( ) => {
   // Clears resized images used for inatjs.computervision.score_image
@@ -138,15 +148,38 @@ const clearRollbackPhotos = async ( ) => {
   await removeAllFilesFromDirectory( rollbackPhotosPath );
 };
 
-const clearExpiredFilesByTtl = async ( dir: string ) => {
+const clearExpiredFilesByTtl = async (
+  dir: string,
+  ttlMs = CROP_CACHE_TTL_MS,
+  shouldClear: ( name: string ) => boolean = ( ) => true,
+) => {
   const dirExists = await exists( dir );
   if ( !dirExists ) return;
   const files = await readDir( dir );
   const now = Date.now();
   await Promise.all(
     files
-      .filter( f => now - new Date( f.mtime ).getTime() > CROP_CACHE_TTL_MS )
+      .filter( f => f.isFile( ) && shouldClear( f.name ) )
+      .filter( f => now - new Date( f.mtime ).getTime() > ttlMs )
       .map( f => unlink( f.path ) ),
+  );
+};
+
+// iOS doesn't reliably purge the app's tmp directory, so orphans there grow
+// without bound; at tens of MB per USB raw that reached tens of GB.
+const clearExpiredTempFiles = ( ) => clearExpiredFilesByTtl(
+  TemporaryDirectoryPath,
+  TEMP_FILE_TTL_MS,
+);
+
+// Brightness-adjusted previews (useLiveToneMappedBrightnessUri) and audio
+// extracted from imported videos are regenerated or moved on use.
+const clearExpiredMediaCaches = async ( ) => {
+  await clearExpiredFilesByTtl( brightnessAdjustedPath );
+  await clearExpiredFilesByTtl(
+    CachesDirectoryPath,
+    CROP_CACHE_TTL_MS,
+    name => name.startsWith( "video_audio_" ),
   );
 };
 
@@ -160,8 +193,11 @@ export {
   clearComputerVisionPhotos,
   clearExpiredCropSources,
   clearExpiredDeviceThumbnails,
+  clearExpiredMediaCaches,
+  clearExpiredTempFiles,
   clearGalleryPhotos,
   clearRollbackPhotos,
   clearRotatedOriginalPhotosDirectory,
   clearSyncedMediaForUpload,
+  clearVideoLibrary,
 };

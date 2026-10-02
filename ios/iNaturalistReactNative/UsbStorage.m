@@ -378,26 +378,9 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
                             resolve:(RCTPromiseResolveBlock)resolve
                              reject:(RCTPromiseRejectBlock)reject)
 {
-  NSURL *folder = resolveSavedFolder( );
-  if ( !folder || ![folder startAccessingSecurityScopedResource] ) {
-    reject( @"unavailable", @"USB folder is not available", nil );
-    return;
-  }
-  NSString *srcPath = [folder.path stringByAppendingPathComponent:relativePath];
   NSFileManager *fm = [NSFileManager defaultManager];
   NSString *tempPath = [NSTemporaryDirectory( ) stringByAppendingPathComponent:
     [[[NSUUID UUID] UUIDString] stringByAppendingPathExtension:relativePath.pathExtension]];
-  NSError *copyError = nil;
-  BOOL copied = [fm copyItemAtPath:srcPath toPath:tempPath error:&copyError];
-  [folder stopAccessingSecurityScopedResource];
-  if ( !copied ) {
-    reject( errorIsOutOfSpace( copyError )
-              ? @"out-of-space"
-              : @"copy-failed",
-            copyError.localizedDescription ?: @"Could not read source file",
-            copyError );
-    return;
-  }
 
   // Report the identifier of the asset we created. PhotoKit deletes an asset
   // the app created without presenting its confirmation alert, but offers no
@@ -422,6 +405,29 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
       dispatch_time( DISPATCH_TIME_NOW, kPhotosWritePermitTimeoutSec * NSEC_PER_SEC ),
       dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ),
       ^{ returnPermit( ); } );
+    // Copy only once this save holds a permit: copying up front left a full
+    // raw in tmp for every save queued behind the semaphore (including ones
+    // JS had already timed out and abandoned), which filled the disk.
+    NSURL *folder = resolveSavedFolder( );
+    if ( !folder || ![folder startAccessingSecurityScopedResource] ) {
+      returnPermit( );
+      reject( @"unavailable", @"USB folder is not available", nil );
+      return;
+    }
+    NSString *srcPath = [folder.path stringByAppendingPathComponent:relativePath];
+    NSError *copyError = nil;
+    BOOL copied = [fm copyItemAtPath:srcPath toPath:tempPath error:&copyError];
+    [folder stopAccessingSecurityScopedResource];
+    if ( !copied ) {
+      returnPermit( );
+      [fm removeItemAtPath:tempPath error:nil];
+      reject( errorIsOutOfSpace( copyError )
+                ? @"out-of-space"
+                : @"copy-failed",
+              copyError.localizedDescription ?: @"Could not read source file",
+              copyError );
+      return;
+    }
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
       PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
       PHAssetResourceCreationOptions *options = [[PHAssetResourceCreationOptions alloc] init];
@@ -454,7 +460,6 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
       if ( status == PHAuthorizationStatusAuthorized || status == PHAuthorizationStatusLimited ) {
         saveBlock( );
       } else {
-        [fm removeItemAtPath:tempPath error:nil];
         reject( @"no-permission", @"Photos permission not granted", nil );
       }
     }];
