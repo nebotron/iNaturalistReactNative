@@ -40,6 +40,8 @@ interface ImageCropperModule {
     // Set when the photo's own decode drew nothing and the display file is
     // the embedded preview instead.
     decodeFailure: string | null;
+    // Mean level (0-255) of the display file.
+    displayLevel: number;
   }>;
 }
 
@@ -88,6 +90,14 @@ const prepareCropSource = async (
       logger.warnWithExtra( "crop_source_drew_preview", {
         source: sourceUri,
         decodeFailure: prepared.decodeFailure,
+        displayLevel: prepared.displayLevel,
+      } );
+    } else if ( prepared && prepared.displayLevel < 24 ) {
+      // Dark, and the preview was no brighter -- or the cropper is about to
+      // draw a black frame, and this is the line that says so.
+      logger.warnWithExtra( "crop_source_dark", {
+        source: sourceUri,
+        displayLevel: prepared.displayLevel,
       } );
     }
     if ( prepared && prepared.width > 0 && prepared.height > 0 ) {

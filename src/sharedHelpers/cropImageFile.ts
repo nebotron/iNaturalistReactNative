@@ -20,8 +20,24 @@ interface ImageCropperModule {
     width: number,
     height: number,
     outputPath: string,
-  ) => Promise<string>;
+  ) => Promise<CropResult>;
 }
+
+interface CropResult {
+  path: string;
+  // "decode" when the crop came from the photo itself, "preview" when that
+  // decode produced nothing, and "preview_dark_decode" when it came back far
+  // darker than the camera's embedded preview of the same frame.
+  origin: string;
+  // Mean levels (0-255) of the decoded crop, the preview crop (-1 when not
+  // compared), and what was written.
+  level: number;
+  previewLevel: number;
+  outputLevel: number;
+}
+
+// Below this, a written crop is dark enough to be worth a line in the log.
+const DARK_OUTPUT_LEVEL = 24;
 
 const { ImageCropper } = NativeModules as {
   ImageCropper?: ImageCropperModule;
@@ -49,7 +65,7 @@ const cropImageFile = async (
   );
 
   try {
-    const croppedPath = await ImageCropper.cropImage(
+    const result = await ImageCropper.cropImage(
       inputPath,
       pixelCrop.originX,
       pixelCrop.originY,
@@ -57,6 +73,18 @@ const cropImageFile = async (
       pixelCrop.height,
       outputPath,
     );
+    const croppedPath = result.path;
+    // A crop that turned out black reached the grid with no error behind it.
+    // Say where its pixels came from and how bright they were.
+    if ( result.origin !== "decode" || result.outputLevel < DARK_OUTPUT_LEVEL ) {
+      logger.warnWithExtra( "crop_output_check", {
+        source: imageUri,
+        origin: result.origin,
+        level: result.level,
+        previewLevel: result.previewLevel,
+        outputLevel: result.outputLevel,
+      } );
+    }
     // Native ImageCropper copies EXIF/metadata from the source image into the
     // cropped JPEG and updates dimension/orientation tags for the new size.
     return croppedPath.startsWith( "file://" )

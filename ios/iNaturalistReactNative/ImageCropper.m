@@ -687,6 +687,11 @@ static void updateMetadataForCrop( NSMutableDictionary *metadata, NSInteger widt
 // Defined further down, with the thumbnail encode they were written for.
 static BOOL     jpegDataIsDecodable( NSData *data );
 static BOOL     jpegDataIsBlack( NSData *data );
+static CGFloat  jpegDataMeanLevel( NSData *data );
+// Below this mean level a decode is checked against the camera's embedded
+// preview of the same frame.
+static const CGFloat kDarkDecodeLevel = 24;
+static BOOL     decodeIsDarkerThanPreview( CGFloat decodedLevel, CGFloat previewLevel );
 static UIImage *rasterizedImage( UIImage *image );
 static UIImage *drawnOverSentinel(
   UIImage *image, size_t width, size_t height, CGRect drawRect );
@@ -863,6 +868,20 @@ RCT_EXPORT_METHOD( cropImage
       : nil;
     if ( croppedRef ) CGImageRelease( croppedRef );
 
+    // Where the written pixels came from, and how bright they and the preview
+    // were, so the app log can say whether a black crop was a dark decode.
+    NSString *origin       = data ? @"decode" : @"preview";
+    CGFloat   level        = jpegDataMeanLevel( data );
+    CGFloat   previewLevel = -1;
+    if ( data && level >= 0 && level < kDarkDecodeLevel ) {
+      NSData *preview = jpegDataFromDecodablePreviewCrop( input, srcMeta, cropRect, image.size );
+      previewLevel = jpegDataMeanLevel( preview );
+      if ( preview && decodeIsDarkerThanPreview( level, previewLevel ) ) {
+        data   = preview;
+        origin = @"preview_dark_decode";
+      }
+    }
+
     if ( !data ) {
       // Everything above rests on a decode of the original that can silently
       // put no pixels anywhere -- a camera raw iOS reads the header of but
@@ -909,7 +928,13 @@ RCT_EXPORT_METHOD( cropImage
     if ( ![data writeToFile:output atomically:YES] ) {
       reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
     }
-    resolve( output );
+    resolve( @{
+      @"path":         output,
+      @"origin":       origin,
+      @"level":        @( level ),
+      @"previewLevel": @( previewLevel ),
+      @"outputLevel":  @( jpegDataMeanLevel( data ) ),
+    } );
   } );
 }
 
@@ -1635,8 +1660,11 @@ static const uint8_t kBlackProbeThreshold = 6;
 // photograph of the night sky. Cached on disk under the photo's key and served
 // to every cell from then on, that file is what left Group Photos cells stuck
 // as black squares with no load error anywhere to explain them.
-static BOOL jpegDataIsBlack( NSData *data )
+// Mean channel level (0-255) of encoded JPEG data, and its brightest channel
+// value, read off the same small probe decode. NO when the data won't decode.
+static BOOL jpegDataLevels( NSData *data, CGFloat *meanOut, uint8_t *maxOut )
 {
+  if ( data.length == 0 ) return NO;
   CGImageSourceRef source = CGImageSourceCreateWithData( (__bridge CFDataRef)data, NULL );
   if ( !source ) return NO;
   NSDictionary *opts = @{
@@ -1666,18 +1694,48 @@ static BOOL jpegDataIsBlack( NSData *data )
 
   const uint8_t *pixels      = CGBitmapContextGetData( ctx );
   size_t         bytesPerRow = CGBitmapContextGetBytesPerRow( ctx );
-  BOOL           black       = pixels != NULL;
-  for ( size_t y = 0; black && y < height; y += 1 ) {
+  if ( !pixels ) { CGContextRelease( ctx ); return NO; }
+  double  sum      = 0;
+  uint8_t maxLevel = 0;
+  for ( size_t y = 0; y < height; y += 1 ) {
     const uint8_t *row = pixels + ( y * bytesPerRow );
     for ( size_t x = 0; x < width; x += 1 ) {
+      // BGRX in memory: the colour channels are bytes 0-2.
       const uint8_t *px = row + ( x * 4 );
-      if ( px[0] > kBlackProbeThreshold
-        || px[1] > kBlackProbeThreshold
-        || px[2] > kBlackProbeThreshold ) { black = NO; break; }
+      sum += px[0] + px[1] + px[2];
+      maxLevel = MAX( maxLevel, MAX( px[0], MAX( px[1], px[2] ) ) );
     }
   }
   CGContextRelease( ctx );
-  return black;
+  if ( meanOut ) *meanOut = sum / ( (double)width * height * 3 );
+  if ( maxOut )  *maxOut  = maxLevel;
+  return YES;
+}
+
+static BOOL jpegDataIsBlack( NSData *data )
+{
+  uint8_t maxLevel = 0;
+  return jpegDataLevels( data, NULL, &maxLevel ) && maxLevel <= kBlackProbeThreshold;
+}
+
+// Mean level of encoded JPEG data, or -1 when it won't decode.
+static CGFloat jpegDataMeanLevel( NSData *data )
+{
+  CGFloat mean = -1;
+  return jpegDataLevels( data, &mean, NULL ) ? mean : -1;
+}
+
+// Whether a decode came back far darker than the embedded preview of the same
+// frame. A raw decode can fail without failing: it hands back a frame that is
+// nearly but not exactly black -- noise, a sliver of real rows -- which the
+// exact-black check above lets through, and which was then written as the crop
+// and drawn as a black square in Group Photos and in the cropper. A photo that
+// really is dark has a preview just as dark, so it is left alone.
+static BOOL decodeIsDarkerThanPreview( CGFloat decodedLevel, CGFloat previewLevel )
+{
+  return decodedLevel >= 0
+    && decodedLevel < kDarkDecodeLevel
+    && previewLevel > decodedLevel * 3 + 16;
 }
 
 // Longest side a rasterization is allowed to allocate a bitmap for. Well above
@@ -2106,6 +2164,27 @@ RCT_EXPORT_METHOD( prepareCropSource
     NSString *decodeFailure = data
       ? nil
       : ( display ? encodeFailure : @"Could not draw image" ) ?: @"unknown";
+    CGFloat decodedLevel = jpegDataMeanLevel( data );
+    if ( data && decodedLevel >= 0 && decodedLevel < kDarkDecodeLevel ) {
+      // Nearly black: compare with the preview before trusting it (see
+      // decodeIsDarkerThanPreview).
+      CGImageSourceRef src =
+        CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
+      UIImage *preview = src
+        ? thumbnailFromImageSource( src, [maxPixel floatValue] )
+        : nil;
+      if ( src ) CFRelease( src );
+      NSData *previewData  = preview
+        ? encodedThumbnailData( preview, NULL )
+        : nil;
+      CGFloat previewLevel = jpegDataMeanLevel( previewData );
+      if ( previewData && decodeIsDarkerThanPreview( decodedLevel, previewLevel ) ) {
+        display       = preview;
+        data          = previewData;
+        decodeFailure = [NSString stringWithFormat:
+          @"Decode came back dark (level %.1f, preview %.1f)", decodedLevel, previewLevel];
+      }
+    }
     if ( !data ) {
       // The lazy decode above can put no pixels anywhere -- a camera raw iOS
       // reads the header of but cannot demosaic -- and rejecting here left the
@@ -2150,6 +2229,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"height":     @( height ),
       @"bounds":     bounds ?: [NSNull null],
       @"decodeFailure": decodeFailure ?: [NSNull null],
+      @"displayLevel":  @( jpegDataMeanLevel( data ) ),
     } );
   } );
 }
