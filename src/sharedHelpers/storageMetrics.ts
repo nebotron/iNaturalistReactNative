@@ -18,9 +18,10 @@ export interface StorageMetrics {
   // could name a full phone. -1 when the platform won't say.
   freeDiskBytes: number;
   totalDiskBytes: number;
-  // MB per folder of Documents, Caches and tmp, largest first. The app grew to
-  // 44GB with nothing in the log saying where.
-  largestDirsMB: Record<string, number>;
+  // MB per folder of Documents, Caches and tmp, largest first, as JSON: the
+  // log's extra takes only primitives. The app grew to 44GB with nothing in the
+  // log saying where.
+  largestDirsMB: string;
 }
 
 const MIN_REPORTED_BYTES = 50 * 1024 * 1024;
@@ -33,7 +34,7 @@ const directoryBytes = async ( path: string ): Promise<number> => {
   return sizes.reduce( ( sum, size ) => sum + size, 0 );
 };
 
-const largestDirs = async ( ): Promise<Record<string, number>> => {
+const largestDirs = async ( ): Promise<string> => {
   const roots = {
     Documents: DocumentDirectoryPath,
     Caches: CachesDirectoryPath,
@@ -52,10 +53,10 @@ const largestDirs = async ( ): Promise<Record<string, number>> => {
     } ) );
     sizes.push( [`${rootName}/*files`, looseBytes] );
   } ) );
-  return Object.fromEntries( sizes
+  return JSON.stringify( Object.fromEntries( sizes
     .filter( ( [, bytes] ) => bytes >= MIN_REPORTED_BYTES )
     .sort( ( a, b ) => b[1] - a[1] )
-    .map( ( [name, bytes] ) => [name, Math.round( bytes / 1024 / 1024 )] ) );
+    .map( ( [name, bytes] ) => [name, Math.round( bytes / 1024 / 1024 )] ) ) );
 };
 
 const getStorageMetrics = async ( realmPath?: string | null ): Promise<StorageMetrics> => {
@@ -65,7 +66,7 @@ const getStorageMetrics = async ( realmPath?: string | null ): Promise<StorageMe
   const [freeDiskBytes, totalDiskBytes, largestDirsMB] = await Promise.all( [
     DeviceInfo.getFreeDiskStorage( ).catch( ( ) => -1 ),
     DeviceInfo.getTotalDiskCapacity( ).catch( ( ) => -1 ),
-    largestDirs( ).catch( ( ) => ( {} ) ),
+    largestDirs( ).catch( error => `failed: ${error}` ),
   ] );
   return {
     realmDbBytes: realmBytes,
