@@ -18,6 +18,7 @@ import React, {
   useState,
 } from "react";
 import {
+  Alert,
   Image,
   PixelRatio,
   Pressable,
@@ -26,7 +27,10 @@ import {
 } from "react-native";
 import { IMPORTED_ALBUM_TITLE } from "sharedHelpers/importedPhotoAlbum";
 import { log } from "sharedHelpers/logger";
-import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import {
+  addDevicePhotosToImportedAlbum,
+  deleteOriginalDevicePhotos,
+} from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
 import findUnfavoritedDevicePhotoDays, {
   prefetchDeviceAssets,
@@ -91,6 +95,7 @@ const DevicePhotoCleanup = ( ) => {
   const [loading, setLoading] = useState( true );
   const [syncingFaves, setSyncingFaves] = useState( true );
   const [deleting, setDeleting] = useState( false );
+  const [filing, setFiling] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [undeletableCount, setUndeletableCount] = useState( 0 );
   const [quarantinedCount, setQuarantinedCount] = useState( 0 );
@@ -189,7 +194,7 @@ const DevicePhotoCleanup = ( ) => {
       deleted, succeeded, pending, undeletable, quarantined,
     } = await deleteOriginalDevicePhotos(
       allUris,
-      { userInitiated: true },
+      { userInitiated: true, skipAlbum: true },
     );
     setDeleting( false );
     // PhotoKit hasn't answered but is still holding the transaction, and it
@@ -207,6 +212,22 @@ const DevicePhotoCleanup = ( ) => {
     setUndeletableCount( undeletable ?? 0 );
     setQuarantinedCount( quarantined ?? 0 );
     setDays( [] );
+  }, [allUris] );
+
+  const addToAlbum = useCallback( async ( ) => {
+    setFiling( true );
+    const result = await addDevicePhotosToImportedAlbum( allUris );
+    setFiling( false );
+    Alert.alert(
+      result
+        ? `Added ${result.added} photo${result.added === 1
+          ? ""
+          : "s"} to "${IMPORTED_ALBUM_TITLE}"`
+        : "Could not add photos to the album",
+      result
+        ? `${result.alreadyIn} were already in it.`
+        : "iOS isn't accepting changes to Photos right now. Restarting the phone may help.",
+    );
   }, [allUris] );
 
   if ( deletedCount !== null ) {
@@ -228,8 +249,8 @@ const DevicePhotoCleanup = ( ) => {
           )}
           {undeletableCount + quarantinedCount > 0 && (
             <Body2 className="mt-4 text-center">
-              {`The photos that are still here are in the "${IMPORTED_ALBUM_TITLE}" `
-                + "album in Photos, so you can select and delete them there in one go."}
+              {"To delete the photos that are still here in Photos, reopen Photo Cleanup "
+                + `and add them to the "${IMPORTED_ALBUM_TITLE}" album.`}
             </Body2>
           )}
           {quarantinedCount > 0 && (
@@ -280,9 +301,9 @@ const DevicePhotoCleanup = ( ) => {
         <View className="px-5 pt-4 pb-2">
           <Body2>
             The last delete hasn&apos;t come back from iOS yet. These are what is still
-            in your library — it may finish on its own. They are also in the
+            in your library — it may finish on its own. Add them to the
             {` "${IMPORTED_ALBUM_TITLE}" `}
-            album in Photos, where you can select and delete them all at once.
+            album to select and delete them all at once in Photos.
           </Body2>
         </View>
       )}
@@ -299,13 +320,20 @@ const DevicePhotoCleanup = ( ) => {
       </View>
       <View className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-lightGray">
         <Button
+          className="mb-3"
+          text={`ADD ${allUris.length} TO ALBUM`}
+          onPress={addToAlbum}
+          loading={filing}
+          disabled={filing || deleting}
+        />
+        <Button
           level="warning"
           text={`DELETE ${allUris.length} PHOTO${allUris.length === 1
             ? ""
             : "S"}`}
           onPress={deletePhotos}
           loading={deleting}
-          disabled={deleting}
+          disabled={deleting || filing}
         />
         {deleting && (
           <Body2 className="mt-2 text-center">

@@ -51,6 +51,8 @@ const { ImageCropper } = NativeModules as {
 
 interface DeleteOriginalDevicePhotosOptions {
   userInitiated?: boolean;
+  // Photo Cleanup files into the album with its own button.
+  skipAlbum?: boolean;
 }
 
 // What the OS actually did, so callers can tell the user the truth instead of
@@ -317,7 +319,7 @@ const performDeleteOriginalDevicePhotos = async (
   // and the album never filled. Filing first always gets through. Photos that
   // then delete cleanly leave the album with them, so it ends up holding only
   // what is still in the library.
-  await addPhotosToImportedAlbum( uniqueUris );
+  if ( !options.skipAlbum ) await addPhotosToImportedAlbum( uniqueUris );
 
   if ( expectedChunks === 0 ) {
     logger.warnWithExtra( "photo_delete_all_quarantined", { requested } );
@@ -736,6 +738,13 @@ export const deleteOriginalDevicePhotos = (
   options: DeleteOriginalDevicePhotosOptions = {},
 ): Promise<DeleteOriginalDevicePhotosResult> => enqueuePhotoLibraryWrite(
   holdChainUntil => performDeleteOriginalDevicePhotos( photoUris, options, holdChainUntil ),
+);
+
+// Queued behind any deletion, so it never stacks on an open transaction.
+export const addDevicePhotosToImportedAlbum = (
+  photoUris: string[],
+) => enqueuePhotoLibraryWrite(
+  ( ) => addPhotosToImportedAlbum( filterDeletableDevicePhotoUris( photoUris ) ),
 );
 
 // Callers hold the user on the current screen until onComplete fires so the

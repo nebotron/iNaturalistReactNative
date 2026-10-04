@@ -36,10 +36,13 @@ export const IMPORTED_ALBUM_TITLE = "Imported to iNaturalist";
 // Files photos into the album. Never throws: this runs alongside a deletion
 // and must not be able to stop one, and a photo that isn't filed is a smaller
 // problem than a cleanup that fails because the filing did.
-const addPhotosToImportedAlbum = async ( photoUris: string[] ): Promise<number> => {
-  if ( Platform.OS !== "ios" || !ImageCropper?.addAssetsToAlbum ) return 0;
+// Resolves null when the filing failed.
+const addPhotosToImportedAlbum = async (
+  photoUris: string[],
+): Promise<{ added: number; alreadyIn: number } | null> => {
+  if ( Platform.OS !== "ios" || !ImageCropper?.addAssetsToAlbum ) return null;
   const uris = [...new Set( photoUris.filter( uri => uri?.startsWith( "ph://" ) ) )];
-  if ( uris.length === 0 ) return 0;
+  if ( uris.length === 0 ) return { added: 0, alreadyIn: 0 };
   try {
     const result = await ImageCropper.addAssetsToAlbum( uris, IMPORTED_ALBUM_TITLE );
     // Only worth a line when something was actually filed: a cleanup the user
@@ -55,13 +58,13 @@ const addPhotosToImportedAlbum = async ( photoUris: string[] ): Promise<number> 
         ms: result.ms ?? -1,
       } );
     }
-    return result.added;
+    return { added: result.added, alreadyIn: result.alreadyIn };
   } catch ( error ) {
     logger.warnWithExtra( "imported_album_failed", {
       requested: uris.length,
       error: String( ( error as { message?: string } )?.message ?? error ),
     } );
-    return 0;
+    return null;
   }
 };
 
