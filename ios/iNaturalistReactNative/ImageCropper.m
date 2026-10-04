@@ -4,6 +4,7 @@
 #import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
 #import <Photos/Photos.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
@@ -699,6 +700,58 @@ static UIImage *drawnOverSentinel(
 static NSData *jpegDataFromDecodablePreviewCrop(
   NSString *path, NSDictionary *sourceMetadata, CGRect cropRect, CGSize cropSpace );
 
+// ─── Raw decodes ──────────────────────────────────────────────────────────────
+
+// Whether a file is a camera raw, by its contents rather than its name: a crop's
+// preserved original is a CR3 written under a .jpg name.
+static BOOL isCameraRawFile( NSString *path )
+{
+  CGImageSourceRef src =
+    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
+  if ( !src ) return NO;
+  NSString *type = (__bridge NSString *)CGImageSourceGetType( src );
+  BOOL      raw  = type && [[UTType typeWithIdentifier:type] conformsToType:UTTypeRAWImage];
+  CFRelease( src );
+  return raw;
+}
+
+// iOS's raw decoder fails intermittently -- it draws nothing, or a frame of
+// solid black, for the embedded preview as well as the photo -- and the same
+// file decodes fine moments later, which is why re-cropping a black photo fixed
+// it. The cropper, its preload and the Group Photos grid each decode on their
+// own queue, so several 27MB CR3s were being decoded at once. Decode raws one
+// at a time, and try a failed one again.
+static const int        kRawDecodeAttempts     = 3;
+static const useconds_t kRawDecodeRetryDelayUs = 300 * 1000;
+
+static NSLock *rawDecodeLock( void )
+{
+  static NSLock         *lock;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{ lock = [[NSLock alloc] init]; } );
+  return lock;
+}
+
+// Runs attempt until it returns YES -- once for anything but a raw, which gets
+// up to kRawDecodeAttempts tries, each holding the raw decode lock. Returns how
+// many tries it took.
+static int withRawDecodeRetries( NSString *path, BOOL ( ^attempt )( void ) )
+{
+  BOOL raw      = isCameraRawFile( path );
+  int  attempts = 0;
+  BOOL done     = NO;
+  while ( !done && attempts < ( raw ? kRawDecodeAttempts : 1 ) ) {
+    if ( attempts > 0 ) usleep( kRawDecodeRetryDelayUs );
+    attempts += 1;
+    if ( raw ) [rawDecodeLock( ) lock];
+    @autoreleasepool {
+      done = attempt( );
+    }
+    if ( raw ) [rawDecodeLock( ) unlock];
+  }
+  return attempts;
+}
+
 static NSData *encodedJpegWithMetadata( CGImageRef imageRef, NSDictionary *metadata )
 {
   NSMutableData      *destinationData = [NSMutableData data];
@@ -749,7 +802,9 @@ static NSData *jpegDataFromCroppedImage(
     (NSInteger)CGImageGetWidth( rasterized.CGImage ),
     (NSInteger)CGImageGetHeight( rasterized.CGImage ) );
   data = encodedJpegWithMetadata( rasterized.CGImage, metadata );
-  return jpegDataIsDecodable( data ) ? data : nil;
+  // Still black once really drawn: a raw decode that drew black pixels rather
+  // than none, which the sentinel can't catch. Not the photo either.
+  return jpegDataIsDecodable( data ) && !jpegDataIsBlack( data ) ? data : nil;
 }
 
 // ─── Queues for the heavy image methods ──────────────────────────────────
@@ -828,11 +883,18 @@ RCT_EXPORT_METHOD( cropImage
       CFRelease( src );
     }
 
-    UIImage *image = [UIImage imageWithContentsOfFile:input];
-    if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
-
-    CGRect     cropRect   = CGRectMake( [originX integerValue], [originY integerValue],
-                                        [width integerValue],   [height integerValue] );
+    CGRect cropRect = CGRectMake( [originX integerValue], [originY integerValue],
+                                  [width integerValue],   [height integerValue] );
+    __block UIImage  *image        = nil;
+    __block NSData   *data         = nil;
+    // Where the written pixels came from, and how bright they and the preview
+    // were, so the app log can say whether a black crop was a dark decode.
+    __block NSString *origin       = @"decode";
+    __block CGFloat   level        = -1;
+    __block CGFloat   previewLevel = -1;
+    int attempts = withRawDecodeRetries( input, ^BOOL {
+    image = [UIImage imageWithContentsOfFile:input];
+    if ( !image ) return YES;
     CGImageRef croppedRef = NULL;
 
     if ( image.imageOrientation == UIImageOrientationUp ) {
@@ -860,7 +922,7 @@ RCT_EXPORT_METHOD( cropImage
       if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
     }
 
-    NSData *data = croppedRef
+    data = croppedRef
       ? jpegDataFromCroppedImage( croppedRef,
                                   srcMeta,
                                   [width integerValue],
@@ -868,11 +930,9 @@ RCT_EXPORT_METHOD( cropImage
       : nil;
     if ( croppedRef ) CGImageRelease( croppedRef );
 
-    // Where the written pixels came from, and how bright they and the preview
-    // were, so the app log can say whether a black crop was a dark decode.
-    NSString *origin       = data ? @"decode" : @"preview";
-    CGFloat   level        = jpegDataMeanLevel( data );
-    CGFloat   previewLevel = -1;
+    origin       = data ? @"decode" : @"preview";
+    level        = jpegDataMeanLevel( data );
+    previewLevel = -1;
     if ( data && level >= 0 && level < kDarkDecodeLevel ) {
       NSData *preview = jpegDataFromDecodablePreviewCrop( input, srcMeta, cropRect, image.size );
       previewLevel = jpegDataMeanLevel( preview );
@@ -898,6 +958,9 @@ RCT_EXPORT_METHOD( cropImage
       // framed the crop against. Crop that instead of failing.
       data = jpegDataFromDecodablePreviewCrop( input, srcMeta, cropRect, image.size );
     }
+    return data != nil;
+    } );
+    if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
 
     if ( !data ) {
       CGImageSourceRef reread = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
@@ -913,12 +976,12 @@ RCT_EXPORT_METHOD( cropImage
       // lines of the Sep 18-19 app log that could not say which.
       reject( @"CROP_FAILED", [NSString stringWithFormat:
         @"Could not encode cropped image (type=%@, %llu bytes, decoded=%.0fx%.0f, "
-         "orientation=%ld, crop=%.0f,%.0f %.0fx%.0f)",
+         "orientation=%ld, crop=%.0f,%.0f %.0fx%.0f, attempts=%d)",
         sourceType ?: @"unknown", bytes,
         image.size.width * image.scale, image.size.height * image.scale,
         ( long )image.imageOrientation,
         cropRect.origin.x, cropRect.origin.y,
-        cropRect.size.width, cropRect.size.height], nil );
+        cropRect.size.width, cropRect.size.height, attempts], nil );
       return;
     }
 
@@ -934,6 +997,7 @@ RCT_EXPORT_METHOD( cropImage
       @"level":        @( level ),
       @"previewLevel": @( previewLevel ),
       @"outputLevel":  @( jpegDataMeanLevel( data ) ),
+      @"attempts":     @( attempts ),
     } );
   } );
 }
@@ -1958,14 +2022,19 @@ static NSData *encodedThumbnailData( UIImage *image, NSString **reason )
   if ( black ) gBlackEncodes += 1;
   UIImage *rasterized = rasterizedImage( image );
   data = rasterized ? UIImageJPEGRepresentation( rasterized, 0.8 ) : nil;
-  if ( jpegDataIsDecodable( data ) ) {
+  // Still black once really drawn is a raw decode that drew black pixels rather
+  // than none -- what the cropper drew, as its whole display, on Oct 4.
+  BOOL stillBlack = black && jpegDataIsDecodable( data ) && jpegDataIsBlack( data );
+  if ( jpegDataIsDecodable( data ) && !stillBlack ) {
     if ( black ) gBlackEncodesRecovered += 1;
     return data;
   }
   if ( reason ) {
-    *reason = rasterized
-      ? @"Could not encode thumbnail"
-      : @"Thumbnail decode produced no pixels";
+    *reason = stillBlack
+      ? @"Decode came back black"
+      : rasterized
+        ? @"Could not encode thumbnail"
+        : @"Thumbnail decode produced no pixels";
   }
   return nil;
 }
@@ -2012,6 +2081,15 @@ RCT_EXPORT_METHOD( createThumbnail
     NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
     CGFloat   maxDim = [maxPixel floatValue];
 
+    void (^writeThumbnailData)( NSData * ) = ^( NSData *data ) {
+      [[NSFileManager defaultManager]
+        createDirectoryAtPath:[output stringByDeletingLastPathComponent]
+        withIntermediateDirectories:YES attributes:nil error:nil];
+      if ( ![data writeToFile:output atomically:YES] ) {
+        reject( @"THUMBNAIL_FAILED", @"Could not write thumbnail", nil ); return;
+      }
+      resolve( [NSString stringWithFormat:@"file://%@", output] );
+    };
     void (^writeThumbnail)( UIImage * ) = ^( UIImage *image ) {
       if ( !image ) { reject( @"THUMBNAIL_FAILED", @"Could not load image", nil ); return; }
       NSString *encodeFailure = nil;
@@ -2020,13 +2098,7 @@ RCT_EXPORT_METHOD( createThumbnail
         reject( @"THUMBNAIL_FAILED", encodeFailure ?: @"Could not encode thumbnail", nil );
         return;
       }
-      [[NSFileManager defaultManager]
-        createDirectoryAtPath:[output stringByDeletingLastPathComponent]
-        withIntermediateDirectories:YES attributes:nil error:nil];
-      if ( ![data writeToFile:output atomically:YES] ) {
-        reject( @"THUMBNAIL_FAILED", @"Could not write thumbnail", nil ); return;
-      }
-      resolve( [NSString stringWithFormat:@"file://%@", output] );
+      writeThumbnailData( data );
     };
 
     if ( [inputPath hasPrefix:@"ph://"] ) {
@@ -2105,18 +2177,36 @@ RCT_EXPORT_METHOD( createThumbnail
     }
 
     NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
-    NSString *failureReason = nil;
-    UIImage  *image = downscaledImageAtPath( input, maxDim, &failureReason );
+    __block NSString *failureReason = nil;
+    __block NSString *encodeFailure = nil;
+    __block UIImage  *image         = nil;
+    __block NSData   *data          = nil;
+    int attempts = withRawDecodeRetries( input, ^BOOL {
+      NSString *decodeFailure = nil;
+      NSString *encodeError   = nil;
+      image = downscaledImageAtPath( input, maxDim, &decodeFailure );
+      data  = image
+        ? encodedThumbnailData( image, &encodeError )
+        : nil;
+      failureReason = decodeFailure;
+      encodeFailure = encodeError;
+      return data != nil;
+    } );
     if ( !image ) {
       // The file's size distinguishes a file that never finished copying from a
       // whole one this build simply cannot decode.
       unsigned long long bytes = [[[NSFileManager defaultManager]
         attributesOfItemAtPath:input error:nil] fileSize];
-      reject( @"THUMBNAIL_FAILED", [NSString stringWithFormat:@"%@, %llu bytes",
-        failureReason ?: @"Could not load image", bytes], nil );
+      reject( @"THUMBNAIL_FAILED", [NSString stringWithFormat:@"%@, %llu bytes, attempts %d",
+        failureReason ?: @"Could not load image", bytes, attempts], nil );
       return;
     }
-    writeThumbnail( image );
+    if ( !data ) {
+      reject( @"THUMBNAIL_FAILED", [NSString stringWithFormat:@"%@, attempts %d",
+        encodeFailure ?: @"Could not encode thumbnail", attempts], nil );
+      return;
+    }
+    writeThumbnailData( data );
   } );
 }
 
@@ -2143,25 +2233,32 @@ RCT_EXPORT_METHOD( prepareCropSource
     NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
     NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
 
+    __block BOOL      loaded        = NO;
+    __block CGFloat   width         = 0;
+    __block CGFloat   height        = 0;
+    __block UIImage  *display       = nil;
+    __block NSData   *data          = nil;
+    __block NSString *encodeFailure = nil;
+    __block NSString *decodeFailure = nil;
+    int attempts = withRawDecodeRetries( input, ^BOOL {
     // Lazy: this reads the header, and the draw below is what reads the pixels.
     UIImage *image = [UIImage imageWithContentsOfFile:input];
-    if ( !image || image.size.width <= 0 || image.size.height <= 0 ) {
-      reject( @"PREPARE_FAILED", @"Could not load image", nil );
-      return;
-    }
-    CGFloat width  = image.size.width  * image.scale;
-    CGFloat height = image.size.height * image.scale;
+    loaded = image && image.size.width > 0 && image.size.height > 0;
+    if ( !loaded ) return YES;
+    width  = image.size.width  * image.scale;
+    height = image.size.height * image.scale;
 
     // The one decode. What comes out of it is both what gets displayed and
     // what the detector reads, so nothing downstream opens the file again.
-    UIImage *display = clampToMaxPixel( image, [maxPixel floatValue] );
-    NSString *encodeFailure = nil;
-    NSData   *data          = display
-      ? encodedThumbnailData( display, &encodeFailure )
+    display = clampToMaxPixel( image, [maxPixel floatValue] );
+    NSString *decodeEncodeFailure = nil;
+    data    = display
+      ? encodedThumbnailData( display, &decodeEncodeFailure )
       : nil;
+    encodeFailure = decodeEncodeFailure;
     // Why the decode above produced nothing, when it didn't, so the app log can
     // say how often the preview below is what the cropper draws.
-    NSString *decodeFailure = data
+    decodeFailure = data
       ? nil
       : ( display ? encodeFailure : @"Could not draw image" ) ?: @"unknown";
     CGFloat decodedLevel = jpegDataMeanLevel( data );
@@ -2198,14 +2295,21 @@ RCT_EXPORT_METHOD( prepareCropSource
         ? thumbnailFromImageSource( src, [maxPixel floatValue] )
         : nil;
       if ( src ) CFRelease( src );
-      encodeFailure = nil;
+      NSString *previewFailure = nil;
       data = display
-        ? encodedThumbnailData( display, &encodeFailure )
+        ? encodedThumbnailData( display, &previewFailure )
         : nil;
+      encodeFailure = previewFailure;
+    }
+    return data != nil;
+    } );
+    if ( !loaded ) {
+      reject( @"PREPARE_FAILED", @"Could not load image", nil );
+      return;
     }
     if ( !data ) {
-      reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; preview: %@",
-        decodeFailure, encodeFailure ?: @"no embedded preview"], nil );
+      reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; preview: %@; attempts: %d",
+        decodeFailure, encodeFailure ?: @"no embedded preview", attempts], nil );
       return;
     }
     [[NSFileManager defaultManager]
@@ -2230,6 +2334,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"bounds":     bounds ?: [NSNull null],
       @"decodeFailure": decodeFailure ?: [NSNull null],
       @"displayLevel":  @( jpegDataMeanLevel( data ) ),
+      @"attempts":      @( attempts ),
     } );
   } );
 }

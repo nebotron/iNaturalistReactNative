@@ -189,7 +189,12 @@ describe( "cropImageFile block alignment", ( ) => {
 
   it( "passes block-aligned pixel bounds to the native cropper", async ( ) => {
     const cropImage = jest.fn( ( ) => Promise.resolve( {
-      path: "/tmp/cropped.jpg", origin: "decode", level: 100, previewLevel: -1, outputLevel: 100,
+      path: "/tmp/cropped.jpg",
+      origin: "decode",
+      level: 100,
+      previewLevel: -1,
+      outputLevel: 100,
+      attempts: 1,
     } ) );
     jest.doMock( "react-native", ( ) => ( {
       NativeModules: {

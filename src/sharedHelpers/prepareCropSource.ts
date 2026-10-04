@@ -42,6 +42,8 @@ interface ImageCropperModule {
     decodeFailure: string | null;
     // Mean level (0-255) of the display file.
     displayLevel: number;
+    // Decodes it took; a raw that failed is tried again.
+    attempts: number;
   }>;
 }
 
@@ -91,13 +93,16 @@ const prepareCropSource = async (
         source: sourceUri,
         decodeFailure: prepared.decodeFailure,
         displayLevel: prepared.displayLevel,
+        attempts: prepared.attempts,
       } );
-    } else if ( prepared && prepared.displayLevel < 24 ) {
+    } else if ( prepared && ( prepared.displayLevel < 24 || prepared.attempts > 1 ) ) {
       // Dark, and the preview was no brighter -- or the cropper is about to
-      // draw a black frame, and this is the line that says so.
+      // draw a black frame, and this is the line that says so. Also logged
+      // when a raw needed another decode to come out at all.
       logger.warnWithExtra( "crop_source_dark", {
         source: sourceUri,
         displayLevel: prepared.displayLevel,
+        attempts: prepared.attempts,
       } );
     }
     if ( prepared && prepared.width > 0 && prepared.height > 0 ) {

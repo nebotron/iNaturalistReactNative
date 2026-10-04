@@ -34,6 +34,8 @@ interface CropResult {
   level: number;
   previewLevel: number;
   outputLevel: number;
+  // Decodes it took; a raw that failed is tried again.
+  attempts: number;
 }
 
 // Below this, a written crop is dark enough to be worth a line in the log.
@@ -76,13 +78,18 @@ const cropImageFile = async (
     const croppedPath = result.path;
     // A crop that turned out black reached the grid with no error behind it.
     // Say where its pixels came from and how bright they were.
-    if ( result.origin !== "decode" || result.outputLevel < DARK_OUTPUT_LEVEL ) {
+    if (
+      result.origin !== "decode"
+      || result.outputLevel < DARK_OUTPUT_LEVEL
+      || result.attempts > 1
+    ) {
       logger.warnWithExtra( "crop_output_check", {
         source: imageUri,
         origin: result.origin,
         level: result.level,
         previewLevel: result.previewLevel,
         outputLevel: result.outputLevel,
+        attempts: result.attempts,
       } );
     }
     // Native ImageCropper copies EXIF/metadata from the source image into the
