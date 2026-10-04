@@ -1380,60 +1380,89 @@ RCT_EXPORT_METHOD( addAssetsToAlbum
 
     PHFetchOptions *byTitle = [[PHFetchOptions alloc] init];
     byTitle.predicate = [NSPredicate predicateWithFormat:@"localizedTitle = %@", title];
-    PHAssetCollection *album =
+    // Every album with this title, not just the first: iCloud can leave two
+    // behind (one per device that created it), and filing into whichever the
+    // fetch happens to return first left the one the user opened holding a
+    // single photo after 293 had been "added".
+    PHFetchResult<PHAssetCollection *> *albums =
       [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
                                                subtype:PHAssetCollectionSubtypeAlbumRegular
-                                               options:byTitle].firstObject;
+                                               options:byTitle];
 
-    // What the album already holds, so the same photo isn't filed twice.
-    NSMutableSet<NSString *> *present = [NSMutableSet set];
-    if ( album ) {
-      PHFetchResult<PHAsset *> *existing = [PHAsset fetchAssetsInAssetCollection:album
-                                                                        options:nil];
-      for ( PHAsset *asset in existing ) {
+    // Per album, what it lacks, so the same photo isn't filed twice.
+    NSMutableArray<PHAssetCollection *> *targets = [NSMutableArray array];
+    NSMutableArray<NSArray<PHAsset *> *> *missing = [NSMutableArray array];
+    NSUInteger toAddCount = 0;
+    for ( PHAssetCollection *album in albums ) {
+      NSMutableSet<NSString *> *present = [NSMutableSet set];
+      for ( PHAsset *asset in [PHAsset fetchAssetsInAssetCollection:album options:nil] ) {
         [present addObject:asset.localIdentifier];
       }
+      NSMutableArray<PHAsset *> *lacking = [NSMutableArray array];
+      for ( PHAsset *asset in fetched ) {
+        if ( ![present containsObject:asset.localIdentifier] ) { [lacking addObject:asset]; }
+      }
+      if ( lacking.count == 0 ) { continue; }
+      [targets addObject:album];
+      [missing addObject:lacking];
+      toAddCount = MAX( toAddCount, lacking.count );
     }
-    NSMutableArray<PHAsset *> *toAdd = [NSMutableArray array];
-    for ( PHAsset *asset in fetched ) {
-      if ( ![present containsObject:asset.localIdentifier] ) { [toAdd addObject:asset]; }
-    }
-    NSUInteger alreadyIn = fetched.count - toAdd.count;
-    if ( toAdd.count == 0 ) {
+    NSUInteger alreadyIn = fetched.count - toAddCount;
+    if ( albums.count > 0 && targets.count == 0 ) {
       resolve( @{
         @"added": @0,
         @"requested": @( ids.count ),
         @"alreadyIn": @( alreadyIn ),
+        @"albums": @( albums.count ),
       } );
       return;
     }
+    if ( albums.count == 0 ) { toAddCount = fetched.count; alreadyIn = 0; }
 
     NSUInteger writeToken = inatPhotoWriteBegan(
-      [NSString stringWithFormat:@"addAssetsToAlbum(%lu)", ( unsigned long )toAdd.count] );
+      [NSString stringWithFormat:@"addAssetsToAlbum(%lu)", ( unsigned long )toAddCount] );
     NSDate *startedAt = [NSDate date];
     [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
-      if ( album ) {
-        [[PHAssetCollectionChangeRequest changeRequestForAssetCollection:album]
-          addAssets:toAdd];
-      } else {
+      if ( albums.count == 0 ) {
         [[PHAssetCollectionChangeRequest creationRequestForAssetCollectionWithTitle:title]
-          addAssets:toAdd];
+          addAssets:fetched];
+        return;
       }
+      [targets enumerateObjectsUsingBlock:^( PHAssetCollection *album, NSUInteger idx, BOOL *stop ) {
+        [[PHAssetCollectionChangeRequest changeRequestForAssetCollection:album]
+          addAssets:missing[idx]];
+      }];
     } completionHandler:^( BOOL success, NSError *error ) {
       inatPhotoWriteEnded( writeToken );
       NSInteger ms = ( NSInteger )( [[NSDate date] timeIntervalSinceDate:startedAt] * 1000 );
       if ( success ) {
+        // Read back, rather than report what was asked for: success has been
+        // logged for photos the user then couldn't find in the album.
+        NSMutableArray<NSString *> *fetchedIds = [NSMutableArray array];
+        for ( PHAsset *asset in fetched ) { [fetchedIds addObject:asset.localIdentifier]; }
+        PHFetchOptions *only = [[PHFetchOptions alloc] init];
+        only.predicate = [NSPredicate predicateWithFormat:@"localIdentifier IN %@", fetchedIds];
+        NSUInteger inAlbum = NSUIntegerMax;
+        for ( PHAssetCollection *album in [PHAssetCollection
+          fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
+                                subtype:PHAssetCollectionSubtypeAlbumRegular
+                                options:byTitle] ) {
+          inAlbum = MIN( inAlbum,
+            ( NSUInteger )[PHAsset fetchAssetsInAssetCollection:album options:only].count );
+        }
         resolve( @{
-          @"added": @( toAdd.count ),
+          @"added": @( toAddCount ),
           @"requested": @( ids.count ),
           @"alreadyIn": @( alreadyIn ),
-          @"createdAlbum": @( album == nil ),
+          @"createdAlbum": @( albums.count == 0 ),
+          @"albums": @( MAX( albums.count, ( NSUInteger )1 ) ),
+          @"inAlbum": @( inAlbum == NSUIntegerMax ? 0 : inAlbum ),
           @"ms": @( ms ),
         } );
       } else {
         reject( @"ALBUM_ADD_FAILED",
           [NSString stringWithFormat:@"adding %lu asset(s) to \"%@\" failed after %ldms: %@",
-            ( unsigned long )toAdd.count, title, ( long )ms,
+            ( unsigned long )toAddCount, title, ( long )ms,
             error.localizedDescription ?: @"unknown"],
           error );
       }
