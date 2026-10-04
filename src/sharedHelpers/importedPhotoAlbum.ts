@@ -10,6 +10,10 @@ const { ImageCropper } = NativeModules as {
       requested: number;
       alreadyIn: number;
       createdAlbum?: boolean;
+      // Albums with this title; iCloud can leave more than one.
+      albums?: number;
+      // Of the requested photos, how many every such album holds afterwards.
+      inAlbum?: number;
       ms?: number;
     }>;
   };
@@ -46,6 +50,8 @@ const addPhotosToImportedAlbum = async ( photoUris: string[] ): Promise<number> 
         requested: result.requested,
         alreadyIn: result.alreadyIn,
         createdAlbum: result.createdAlbum ?? false,
+        albums: result.albums ?? -1,
+        inAlbum: result.inAlbum ?? -1,
         ms: result.ms ?? -1,
       } );
     }
