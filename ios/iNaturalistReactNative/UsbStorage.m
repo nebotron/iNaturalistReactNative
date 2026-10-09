@@ -257,6 +257,7 @@ static BOOL isImageFile( NSString *name )
     exts = [NSSet setWithArray:@[
       // Standard formats.
       @"jpg", @"jpeg", @"png", @"heic", @"heif",
+      @"hif",                           // Canon's HEIF extension
       @"tif", @"tiff", @"gif", @"webp", @"bmp",
       // Camera raw formats. A Canon EOS R7 card (folder 101EOSR7) held only
       // .cr3 files, so a raw-only shooter saw nothing import. ImageIO decodes
@@ -548,6 +549,10 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
       PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
       PHAssetResourceCreationOptions *options = [[PHAssetResourceCreationOptions alloc] init];
       options.shouldMoveFile = YES;
+      // Photos infers the type from the extension and doesn't know .hif.
+      if ( [tempPath.pathExtension.lowercaseString isEqualToString:@"hif"] ) {
+        options.uniformTypeIdentifier = @"public.heif";
+      }
       [request addResourceWithType:PHAssetResourceTypePhoto
                            fileURL:[NSURL fileURLWithPath:tempPath]
                            options:options];
