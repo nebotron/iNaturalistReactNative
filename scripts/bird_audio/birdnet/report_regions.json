@@ -1,0 +1,122 @@
+{
+ "birds, Britain / geo filter": {
+  "n": 70,
+  "models": [
+   "british-isles"
+  ],
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.929,
+  "precision": 0.481,
+  "fp_per_rec": 1.0,
+  "top1": 0.857
+ },
+ "birds, Britain / no geo filter": {
+  "n": 70,
+  "models": [
+   "british-isles"
+  ],
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.929,
+  "precision": 0.471,
+  "fp_per_rec": 1.04,
+  "top1": 0.857
+ },
+ "birds, eastern Australia / geo filter": {
+  "n": 70,
+  "models": [
+   "australia-east"
+  ],
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.986,
+  "precision": 0.418,
+  "fp_per_rec": 1.37,
+  "top1": 0.786
+ },
+ "birds, eastern Australia / no geo filter": {
+  "n": 70,
+  "models": [
+   "australia-east"
+  ],
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.986,
+  "precision": 0.416,
+  "fp_per_rec": 1.39,
+  "top1": 0.786
+ },
+ "birds, eastern US / geo filter": {
+  "n": 70,
+  "models": [
+   "north-america-east"
+  ],
+  "species_in_model": 0.986,
+  "species_kept": 0.986,
+  "recall": 0.986,
+  "precision": 0.548,
+  "fp_per_rec": 0.81,
+  "top1": 0.943
+ },
+ "birds, eastern US / no geo filter": {
+  "n": 70,
+  "models": [
+   "north-america-east"
+  ],
+  "species_in_model": 0.986,
+  "species_kept": 0.986,
+  "recall": 0.986,
+  "precision": 0.527,
+  "fp_per_rec": 0.89,
+  "top1": 0.943
+ },
+ "frogs, eastern US / geo filter": {
+  "n": 70,
+  "models": [
+   "north-america-east"
+  ],
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.9,
+  "precision": 0.573,
+  "fp_per_rec": 0.67,
+  "top1": 0.729
+ },
+ "frogs, eastern US / no geo filter": {
+  "n": 70,
+  "models": [
+   "north-america-east"
+  ],
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.9,
+  "precision": 0.568,
+  "fp_per_rec": 0.69,
+  "top1": 0.729
+ },
+ "insects, eastern US / geo filter": {
+  "n": 70,
+  "models": [
+   "north-america-east"
+  ],
+  "species_in_model": 0.943,
+  "species_kept": 0.943,
+  "recall": 0.7,
+  "precision": 0.7,
+  "fp_per_rec": 0.3,
+  "top1": 0.7
+ },
+ "insects, eastern US / no geo filter": {
+  "n": 70,
+  "models": [
+   "north-america-east"
+  ],
+  "species_in_model": 0.943,
+  "species_kept": 0.943,
+  "recall": 0.7,
+  "precision": 0.69,
+  "fp_per_rec": 0.31,
+  "top1": 0.7
+ }
+}

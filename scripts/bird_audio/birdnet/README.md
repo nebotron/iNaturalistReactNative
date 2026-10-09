@@ -3,7 +3,7 @@
 Within 100 km of Seattle Audio ID runs the bundled Seattle model below.
 Elsewhere it downloads BirdNET's model for the region (~75 MB, or the 279 MB
 worldwide model where no region applies) from a pinned revision of
-https://huggingface.co/tphakala/BirdNET-v3.0-Models. Everywhere, species that
+https://huggingface.co/tphakala/BirdNET-v3.0-Models. Everywhere, birds that
 the bundled BirdNET geomodel (`audio_geo.onnx`, V3.0.3, from
 https://huggingface.co/sammlapp/BirdNET_GeoModel) scores below 0.03 for the
 user's place and week are left out. Model outputs are matched by scientific name
@@ -48,3 +48,20 @@ observers absent from the training set (0.823 -> 0.883). A geomodel
 location/season filter, per-species thresholds, requiring 2-3 consecutive
 windows, and Perch v2 (alone or ensembled) did no better than moving the global
 threshold.
+
+## Outside Seattle (`eval_regions.py`, `report_regions.json`)
+
+70 recent research-grade recordings per set, threshold 0.3, run with the
+model the app picks for each location; the geomodel filter (birds only)
+trims false species slightly and never drops the true one:
+
+| set | model | recall | precision | other species / rec. | top-1 |
+|---|---|---|---|---|---|
+| birds, eastern US | north-america-east | 0.986 | 0.548 | 0.81 | 0.943 |
+| birds, Britain | british-isles | 0.929 | 0.481 | 1.00 | 0.857 |
+| birds, eastern Australia | australia-east | 0.986 | 0.418 | 1.37 | 0.786 |
+| frogs, eastern US | north-america-east | 0.900 | 0.573 | 0.67 | 0.729 |
+| insects, eastern US | north-america-east | 0.700 | 0.700 | 0.30 | 0.700 |
+
+Applied to all animals, the geomodel dropped the true species for 17% of
+insect and 3% of frog recordings, so it filters birds only.

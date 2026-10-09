@@ -1,6 +1,7 @@
 # Small check of Audio ID outside Seattle, run the way the app runs it: the
 # model picked for each recording's location from audioIdCatalog.json, scores
-# kept only for species the geomodel puts at that place and week, threshold 0.3.
+# with and without dropping birds the geomodel doesn't put at that place and
+# week (the catalog has geomodel indices for birds only), threshold 0.3.
 # A few recent research-grade sound observations per set (~70 each).
 # Usage (from this directory): python3 eval_regions.py <repo root>
 import json, math, os, subprocess, sys, time, urllib.request

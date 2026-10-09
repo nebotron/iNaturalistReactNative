@@ -5,9 +5,9 @@
 #    app on first use from a pinned revision of tphakala/BirdNET-v3.0-Models).
 #  - "global": the full model (279 MB) for places no region covers.
 # BirdNET outputs are matched to iNaturalist species with research-grade sound
-# observations by scientific name (unmatched outputs are ignored), and to the
-# BirdNET geomodel, which the app uses to drop species unlikely at the user's
-# place and week. Also copies the fp16 geomodel into the iOS bundle.
+# observations by scientific name (unmatched outputs are ignored), and birds to
+# the BirdNET geomodel, which the app uses to drop birds unlikely at the user's
+# place and week (it dropped 17% of true species for insects, 3% for frogs). Also copies the fp16 geomodel into the iOS bundle.
 # Usage (from this directory): python3 export_catalog.py <repo root>
 import json, os, shutil, sys, time, urllib.request
 from huggingface_hub import HfApi, hf_hub_download
@@ -33,21 +33,22 @@ if not os.path.exists("inat_sound_species.json"):  # ~25 requests
             "https://api.inaturalist.org/v1/observations/species_counts?sounds=true&quality_grade=research"
             f"&per_page=500&page={p}&locale=en", timeout=120).read())["results"]
         if not r: break
-        out += [dict(id=x["taxon"]["id"], name=x["taxon"]["name"], common=x["taxon"].get("preferred_common_name"))
+        out += [dict(id=x["taxon"]["id"], name=x["taxon"]["name"], common=x["taxon"].get("preferred_common_name"),
+                     iconic=x["taxon"].get("iconic_taxon_name"))
                 for x in r]
         time.sleep(1.5)
     json.dump(out, open("inat_sound_species.json", "w"))
 inat = {s["name"]: s for s in json.load(open("inat_sound_species.json"))}
 
 species, row = [], {}
-def add(taxon_id, name, common, bn_name):
+def add(taxon_id, name, common, bn_name, bird=True):
     if taxon_id not in row:
-        g = geo.get(bn_name, geo.get(name, -1))
+        g = geo.get(bn_name, geo.get(name, -1)) if bird else -1
         row[taxon_id] = len(species); species.append([name, common or name, taxon_id, g])
     return row[taxon_id]
 def by_full_index(i):
     name, common = labels[i]; s = inat.get(name)
-    return add(s["id"], name, s["common"] or common, name) if s else -1
+    return add(s["id"], name, s["common"] or common, name, s.get("iconic") == "Aves") if s else -1
 
 keep = json.load(open("keep_species.json"))
 models = {"seattle": dict(name="Seattle area", center=[47.61, -122.33], radiusKm=100, species=[
