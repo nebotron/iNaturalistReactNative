@@ -115,12 +115,18 @@ const GroupPhotos = ( {
 
   const noObsSelected = selectedObservations.length === 0;
   const oneObsSelected = selectedObservations.length === 1;
-  // A photo the import is still copying has no file to open in the cropper yet
+  // In grid order (newest first), not tap order, so the cropper walks the
+  // photos in the same order the grid shows them. A photo the import is still
+  // copying has no file to open in the cropper yet.
+  const selectedPhotos = useMemo(
+    ( ) => flattenAndOrderSelectedPhotos(
+      groupedPhotos.filter( group => selectedObservations.includes( group ) ),
+    ).filter( photo => !photo.pending ),
+    [groupedPhotos, selectedObservations],
+  );
   const selectedPhotoUris = useMemo(
-    ( ) => flattenAndOrderSelectedPhotos( selectedObservations )
-      .filter( photo => !photo.pending )
-      .map( photo => photo.image.uri ),
-    [selectedObservations],
+    ( ) => selectedPhotos.map( photo => photo.image.uri ),
+    [selectedPhotos],
   );
   // A crop left part way resumes where it was, unless the user has since
   // selected photos it wasn't going to show
@@ -140,13 +146,12 @@ const GroupPhotos = ( {
   // so their loads don't contend with the first image's. preloadImage caches
   // and dedupes, so re-running on selection changes is cheap.
   useEffect( ( ) => {
-    const [firstPhoto] = flattenAndOrderSelectedPhotos( selectedObservations )
-      .filter( photo => !photo.pending );
+    const [firstPhoto] = selectedPhotos;
     if ( firstPhoto ) {
       const { uri, cropOriginalUri, crop } = firstPhoto.image;
       preloadImage( uri, cropOriginalUri || uri, crop ?? null );
     }
-  }, [selectedObservations] );
+  }, [selectedPhotos] );
 
   // Read through a ref so the viewability callback stays stable; FlashList
   // treats a changed onViewableItemsChanged as a fresh viewability config.
