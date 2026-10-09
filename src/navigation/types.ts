@@ -218,6 +218,9 @@ export type SharedStackParamList = {
     context: "groupPhotos" | "observationEdit";
     observationPhotoUuid?: string;
     onCropSaved?: () => void;
+    // Save the crop only as the framing computer vision scores, leaving the
+    // photo itself unchanged
+    cvOnly?: boolean;
     pendingImageUris?: string[];
     // Crop every photo of a photo library import, taking them from the
     // grouped photos in the store as the import lands them

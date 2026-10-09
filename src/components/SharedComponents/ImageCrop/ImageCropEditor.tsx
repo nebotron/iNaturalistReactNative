@@ -28,7 +28,7 @@ import {
 } from "react-native";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
-import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import { getAnimalCrop, saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath } from "sharedHelpers/cropPhotoMetadata";
@@ -86,6 +86,7 @@ const ImageCropEditor = ( ) => {
   const observationPhotoUuid = params?.observationPhotoUuid;
   const onCropSaved = params?.onCropSaved;
   const cropImport = params?.cropImport ?? false;
+  const cvOnly = params?.cvOnly ?? false;
 
   // The photo currently being cropped and the rest of the bulk crop queue.
   // Held in state rather than read from route params on every render because a
@@ -154,6 +155,9 @@ const ImageCropEditor = ( ) => {
     if ( !imageUri ) {
       return { cropSourceUri: "", existingSavedCrop: null };
     }
+    if ( cvOnly ) {
+      return { cropSourceUri: imageUri, existingSavedCrop: getAnimalCrop( imageUri ) };
+    }
     if ( context === "observationEdit" && observationPhotoUuid && currentObservation ) {
       const obsPhoto = currentObservation.observationPhotos?.find(
         op => op.uuid === observationPhotoUuid,
@@ -175,7 +179,7 @@ const ImageCropEditor = ( ) => {
       }
     }
     return { cropSourceUri: imageUri, existingSavedCrop: null };
-  }, [context, currentObservation, groupedPhotos, imageUri, observationPhotoUuid] );
+  }, [context, currentObservation, cvOnly, groupedPhotos, imageUri, observationPhotoUuid] );
 
   const [localImageUri, setLocalImageUri] = useState<string | null>( null );
   // What the cropper draws: the display-sized file the preload decoded out of
@@ -565,6 +569,13 @@ const ImageCropEditor = ( ) => {
       return Promise.resolve( );
     }
 
+    // Only reframes what computer vision scores; the photo itself is untouched.
+    if ( cvOnly ) {
+      saveAnimalCrop( imageUri, crop );
+      finishOrAdvance( );
+      return Promise.resolve( );
+    }
+
     // Cropping the file and copying the original take long enough to feel like
     // a stall after every checkmark tap in a bulk crop, and nothing on screen
     // needs the result, so advance right away and let the writes finish in the
@@ -655,6 +666,7 @@ const ImageCropEditor = ( ) => {
   }, [
     context,
     currentObservation,
+    cvOnly,
     finishOrAdvance,
     getCropFeedbackSourceKey,
     imageSize,

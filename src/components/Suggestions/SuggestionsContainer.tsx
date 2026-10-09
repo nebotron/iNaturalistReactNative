@@ -179,6 +179,7 @@ const SuggestionsContainer = ( ) => {
   );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
+  const bulkUploadMode = useStore( state => state.bulkUploadMode );
   const { trackImageDeleted } = useInputImageTracking( );
 
   const observationPhotos = useMemo(
@@ -654,8 +655,32 @@ const SuggestionsContainer = ( ) => {
     if ( photoIdx === -1 ) { return; }
     const photo = innerPhotos[photoIdx] as RealmPhoto;
     if ( !photo ) { return; }
+    // In bulk ID a crop only reframes what computer vision scores (re-scored by
+    // the crop log effect above); the observation photo stays as it is.
+    if ( bulkUploadMode ) {
+      dispatch( { type: "TOGGLE_MEDIA_VIEWER", mediaViewerVisible: false } );
+      navigation.navigate( "ImageCropEditor", {
+        imageUri: uri,
+        context: "observationEdit",
+        observationPhotoUuid: observationPhotos[photoIdx]?.uuid,
+        cvOnly: true,
+        onCropSaved: ( ) => {
+          if ( uri !== selectedPhotoUri ) { void onPressPhoto( uri ); }
+        },
+      } );
+      return;
+    }
     onCropPhoto( photo );
-  }, [innerPhotos, onCropPhoto, photoUris] );
+  }, [
+    bulkUploadMode,
+    innerPhotos,
+    navigation,
+    observationPhotos,
+    onCropPhoto,
+    onPressPhoto,
+    photoUris,
+    selectedPhotoUri,
+  ] );
 
   const handleReorderPhotos = useCallback( ( { data: newPhotoUris }: { data: string[] } ) => {
     const newObsPhotos = observationPhotos.map( obsPhoto => {
