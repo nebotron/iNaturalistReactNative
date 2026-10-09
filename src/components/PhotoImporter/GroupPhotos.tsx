@@ -9,6 +9,7 @@ import {
   CustomFlashList,
   INatIconButton,
 } from "components/SharedComponents";
+import { groupCropResumeParams } from "components/SharedComponents/ImageCrop/groupCropResume";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import React, {
@@ -21,6 +22,7 @@ import {
   prioritizeDeviceImageThumbnails,
 } from "sharedHelpers/useDeviceImageThumbnail";
 import { useGridLayout, useTranslation } from "sharedHooks";
+import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -120,7 +122,17 @@ const GroupPhotos = ( {
       .map( photo => photo.image.uri ),
     [selectedObservations],
   );
-  const canCropSelectedPhotos = selectedPhotoUris.length > 0;
+  // A crop left part way resumes where it was, unless the user has since
+  // selected photos it wasn't going to show
+  const groupCropResume = useStore( state => state.groupCropResume );
+  const resume = useMemo( ( ) => {
+    const found = groupCropResumeParams( groupCropResume, groupedPhotos );
+    const selected = new Set( selectedPhotoUris );
+    return found && ( !selected.size || found.remainingUris.every( uri => selected.has( uri ) ) )
+      ? found.params
+      : null;
+  }, [groupCropResume, groupedPhotos, selectedPhotoUris] );
+  const canCropSelectedPhotos = selectedPhotoUris.length > 0 || !!resume;
 
   // Preload the first selected image as soon as it's selected so its data is
   // usually ready by the time the user taps crop. The remaining images are
@@ -186,6 +198,10 @@ const GroupPhotos = ( {
   // cropper: the first opens immediately and the rest queue behind it, so the
   // checkmark advances to the next photo instead of returning to the grid.
   const cropSelectedPhotos = useCallback( ( ) => {
+    if ( resume ) {
+      navigation.navigate( "ImageCropEditor", { ...resume, onCropSaved: clearSelection } );
+      return;
+    }
     if ( selectedPhotoUris.length === 0 ) {
       return;
     }
@@ -198,7 +214,7 @@ const GroupPhotos = ( {
       context: "groupPhotos",
       onCropSaved: clearSelection,
     } );
-  }, [clearSelection, navigation, selectedPhotoUris] );
+  }, [clearSelection, navigation, resume, selectedPhotoUris] );
 
   const allPhotosSelected = groupedPhotos.length > 0
     && selectedObservations.length === groupedPhotos.length;

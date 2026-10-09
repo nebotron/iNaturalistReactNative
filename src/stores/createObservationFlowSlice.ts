@@ -14,6 +14,7 @@ import {
   normalizeDevicePhotoUri,
   registerImportedPhotoDeviceUriMappings,
 } from "sharedHelpers/getOriginalDevicePhotoUri";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import type { BackupMapping } from "sharedHelpers/rollbackPhotos";
 import type { StateCreator } from "zustand";
 
@@ -36,6 +37,8 @@ export interface GroupedPhoto {
   photos?: {
     image: {
         uri: string;
+        // Set once the photo has been cropped
+        crop?: NormalizedCrop;
     };
     timestamp?: number;
     // Set while the photo is still being copied out of the device library: the
@@ -90,6 +93,13 @@ export interface LastLocationPickerState {
   locationName: string;
 }
 
+export interface GroupCropResume {
+  imageUri?: string;
+  pendingImageUris: string[];
+  cropImport: boolean;
+  skipUris: string[];
+}
+
 interface CameraStateOptions {
   evidenceToAdd?: string[];
   cameraUris?: string[];
@@ -116,6 +126,9 @@ interface ObservationFlowState {
   removedOriginalDevicePhotoUris: string[];
   pendingGroupPhotoDeletionUris: string[];
   groupedPhotos: GroupedPhoto[];
+  // Where the Group Photos cropper was left with photos still to crop, so
+  // opening it again picks up there
+  groupCropResume: GroupCropResume | null;
   observations: RealmObservationPojo[];
   observationMarkedAsViewedAt: Date | null;
   cameraUris: string[];
@@ -136,6 +149,7 @@ interface ObservationFlowActions {
   deletePhotoFromObservation: ( uri: string ) => void;
   deleteSoundFromObservation: ( uri: string ) => void;
   resetObservationFlowSlice: ( ) => void;
+  setGroupCropResume: ( resume: GroupCropResume | null ) => void;
   addCameraRollUris: ( uris: string[] ) => void;
   addOriginalDevicePhotoUris: ( uris: string[] ) => void;
   addImportedPhotoDeviceUriMappings: (
@@ -189,6 +203,7 @@ const DEFAULT_STATE: ObservationFlowState = {
   removedOriginalDevicePhotoUris: [],
   pendingGroupPhotoDeletionUris: [],
   groupedPhotos: [],
+  groupCropResume: null,
   observations: [],
   // Track when any obs was last marked as viewed so we know when to update
   // the notifications indicator
@@ -545,6 +560,7 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
         : null,
     };
   } ),
+  setGroupCropResume: ( resume: GroupCropResume | null ) => set( { groupCropResume: resume } ),
   setGroupedPhotos: ( photos: GroupedPhoto[] ) => set( {
     groupedPhotos: photos,
   } ),

@@ -9,6 +9,7 @@ import {
 } from "components/SharedComponents";
 import findGroupedPhotoByDisplayUri
   from "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
+import { isCroppable } from "components/SharedComponents/ImageCrop/groupCropResume";
 import ImageCropView from "components/SharedComponents/ImageCrop/ImageCropView";
 import { View } from "components/styledComponents";
 import cloneDeep from "lodash/cloneDeep";
@@ -67,15 +68,6 @@ const DECODE_LOOKAHEAD = 2;
 // the marker was the largest group in the log without distinguishing anything.
 const SLOW_PHOTO_MS = 1500;
 
-// Whether this editor has anything to show for a grid cell. A GIF -- a video
-// imported as one, or one picked from the library -- is never cropped, since
-// that would write a single still frame back over the animation. A placeholder
-// says so up front (PhotoLibrary's placeholderGroup); once its file has landed
-// the name says it too.
-const isCroppable = ( photo: { croppable?: boolean; image: { uri: string } } ): boolean => (
-  photo.croppable !== false && !photo.image.uri.toLowerCase( ).endsWith( ".gif" )
-);
-
 const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
@@ -88,6 +80,7 @@ const ImageCropEditor = ( ) => {
   const addPendingGroupPhotoDeletionUri = useStore(
     state => state.addPendingGroupPhotoDeletionUri,
   );
+  const setGroupCropResume = useStore( state => state.setGroupCropResume );
 
   const context = params?.context;
   const observationPhotoUuid = params?.observationPhotoUuid;
@@ -281,6 +274,31 @@ const ImageCropEditor = ( ) => {
     navigation.setOptions( { headerShown: false } );
   }, [navigation] );
 
+  // Leaving a Group Photos crop with photos still to go keeps its place, so
+  // opening the cropper again from Group Photos resumes it (groupCropResume).
+  const doneRef = useRef( false );
+  const resumeRef = useRef( { imageUri, pendingImageUris, visitedUris } );
+  useEffect( ( ) => {
+    resumeRef.current = { imageUri, pendingImageUris, visitedUris };
+  } );
+  useEffect( ( ) => {
+    if ( context !== "groupPhotos" ) {
+      return ( ) => {};
+    }
+    setGroupCropResume( null );
+    return navigation.addListener( "beforeRemove", ( ) => {
+      const { current } = resumeRef;
+      setGroupCropResume( doneRef.current
+        ? null
+        : {
+          imageUri: current.imageUri,
+          pendingImageUris: current.pendingImageUris,
+          cropImport,
+          skipUris: [...current.visitedUris],
+        } );
+    } );
+  }, [context, cropImport, navigation, setGroupCropResume] );
+
   // Local files of the upcoming photos whose preload has finished, handed to
   // ImageCropView so it can decode them before the user advances.
   const [warmUris, setWarmUris] = useState<string[]>( [] );
@@ -437,6 +455,7 @@ const ImageCropEditor = ( ) => {
       setImageUri( undefined );
       return;
     }
+    doneRef.current = true;
     onCropSaved?.( );
     navigation.goBack( );
   }, [
@@ -454,6 +473,7 @@ const ImageCropEditor = ( ) => {
     if ( !cropImport || imageUri || importIsPending || nextImportUri ) {
       return;
     }
+    doneRef.current = true;
     onCropSaved?.( );
     navigation.goBack( );
   }, [
