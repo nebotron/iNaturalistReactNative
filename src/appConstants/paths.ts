@@ -26,3 +26,6 @@ export const cropSourcesPath = `${CachesDirectoryPath}/inatCropSources`;
 export const brightnessAdjustedPath = `${CachesDirectoryPath}/inatBrightnessAdjusted`;
 
 export const deviceThumbnailsPath = `${CachesDirectoryPath}/inatDeviceThumbnails`;
+
+// faster-image's (Nuke's) disk cache of remote images.
+export const remoteImageCachePath = `${CachesDirectoryPath}/com.github.kean.Nuke.DataCache`;

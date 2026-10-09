@@ -26,6 +26,7 @@ import {
   clearRotatedOriginalPhotosDirectory,
   clearSyncedMediaForUpload,
   clearVideoLibrary,
+  trimRemoteImageCache,
 } from "sharedHelpers/clearCaches";
 import { formatApiDatetime } from "sharedHelpers/dateAndTime";
 import { LAST_CRASH_DATA, store as installDataMMKVStorage } from "sharedHelpers/installData";
@@ -135,6 +136,7 @@ const useDeferredStartup = ( ) => {
     const id15 = deferTask( "clearExpiredTempFiles", clearExpiredTempFiles );
     const id16 = deferTask( "clearVideoLibrary", clearVideoLibrary );
     const id17 = deferTask( "clearExpiredMediaCaches", clearExpiredMediaCaches );
+    const id18 = deferTask( "trimRemoteImageCache", trimRemoteImageCache );
     const id14 = deferTask( "logThumbnailDiagnostics", logThumbnailDiagnostics );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
@@ -172,6 +174,7 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id15 );
       cancelIdleCallback( id16 );
       cancelIdleCallback( id17 );
+      cancelIdleCallback( id18 );
       cancelIdleCallback( idImport );
     };
   }, [i18n, realm] );

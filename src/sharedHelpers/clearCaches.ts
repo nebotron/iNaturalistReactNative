@@ -8,6 +8,7 @@ import {
   deviceThumbnailsPath,
   photoLibraryPhotosPath,
   photoUploadPath,
+  remoteImageCachePath,
   rollbackPhotosPath,
   rotatedOriginalPhotosPath,
   soundUploadPath,
@@ -19,6 +20,7 @@ import { unlink } from "sharedHelpers/util";
 import useStore from "stores/useStore";
 
 const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
+const REMOTE_IMAGE_CACHE_MAX_BYTES = 500 * 1024 * 1024;
 // Anything still in tmp after an hour belongs to work that died with an earlier
 // run (e.g. a USB raw copied for a Photos save that never completed).
 const TEMP_FILE_TTL_MS = 60 * 60 * 1000;
@@ -195,6 +197,26 @@ const clearExpiredCropSources = ( ) => clearExpiredFilesByTtl( cropSourcesPath )
 // cache, safe to drop once stale; they regenerate on demand.
 const clearExpiredDeviceThumbnails = ( ) => clearExpiredFilesByTtl( deviceThumbnailsPath );
 
+// Nuke is meant to sweep this down to 150MB, but on device it grew from 0.5GB
+// to 3.7GB in three days without once shrinking. faster-image builds a new
+// pipeline, and so a new DataCache, per image view. Drop the least recently
+// written files until it is back under the limit.
+const trimRemoteImageCache = async ( ) => {
+  if ( !( await exists( remoteImageCachePath ) ) ) return;
+  const files = ( await readDir( remoteImageCachePath ) ).filter( f => f.isFile( ) );
+  let total = files.reduce( ( sum, f ) => sum + ( Number( f.size ) || 0 ), 0 );
+  if ( total <= REMOTE_IMAGE_CACHE_MAX_BYTES ) return;
+  const oldestFirst = files.sort(
+    ( a, b ) => new Date( a.mtime ).getTime( ) - new Date( b.mtime ).getTime( ),
+  );
+  const toDelete = oldestFirst.filter( file => {
+    if ( total <= REMOTE_IMAGE_CACHE_MAX_BYTES * 0.7 ) return false;
+    total -= Number( file.size ) || 0;
+    return true;
+  } );
+  await Promise.all( toDelete.map( file => unlink( file.path ) ) );
+};
+
 export {
   clearComputerVisionPhotos,
   clearExpiredCropSources,
@@ -206,4 +228,5 @@ export {
   clearRotatedOriginalPhotosDirectory,
   clearSyncedMediaForUpload,
   clearVideoLibrary,
+  trimRemoteImageCache,
 };

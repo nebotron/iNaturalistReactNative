@@ -1,6 +1,7 @@
 import {
   CachesDirectoryPath,
   DocumentDirectoryPath,
+  LibraryDirectoryPath,
   readDir,
   stat,
   TemporaryDirectoryPath,
@@ -18,7 +19,7 @@ export interface StorageMetrics {
   // could name a full phone. -1 when the platform won't say.
   freeDiskBytes: number;
   totalDiskBytes: number;
-  // MB per folder of Documents, Caches and tmp, largest first, as JSON: the
+  // MB per folder of Documents, Caches, tmp and Library, largest first, as JSON: the
   // log's extra takes only primitives. The app grew to 44GB with nothing in the
   // log saying where.
   largestDirsMB: string;
@@ -39,12 +40,15 @@ const largestDirs = async ( ): Promise<string> => {
     Documents: DocumentDirectoryPath,
     Caches: CachesDirectoryPath,
     tmp: TemporaryDirectoryPath,
+    Library: LibraryDirectoryPath,
   };
   const sizes: [string, number][] = [];
   await Promise.all( Object.entries( roots ).map( async ( [rootName, root] ) => {
     const entries = await readDir( root ).catch( ( ) => [] );
     let looseBytes = 0;
     await Promise.all( entries.map( async entry => {
+      // Library/Caches is already its own root.
+      if ( rootName === "Library" && entry.name === "Caches" ) return;
       if ( entry.isDirectory( ) ) {
         sizes.push( [`${rootName}/${entry.name}`, await directoryBytes( entry.path )] );
       } else {
