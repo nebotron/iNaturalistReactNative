@@ -565,7 +565,7 @@ const ImageCropView = ( {
         />
 
         <View
-          className="flex-row items-center justify-center gap-4 px-10"
+          className="mt-4 flex-row items-center justify-center gap-4 px-10"
           style={styles.toolbar}
         >
           {onDelete && labels.delete
