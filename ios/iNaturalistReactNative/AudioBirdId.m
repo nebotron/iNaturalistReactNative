@@ -5,9 +5,10 @@
 
 // Live bird identification by sound. Taps the microphone, resamples to
 // 32 kHz mono, keeps the most recent 5 s in a sliding window, and every second
-// runs audio_birds.onnx on it: BirdNET v3.0 (CC BY-SA 4.0, "Powered by
-// BirdNET"), cut down to Seattle-area species by
-// scripts/bird_audio/birdnet/slice_birdnet.py. The model contains its own
+// runs a BirdNET v3.0 model on it (CC BY-SA 4.0, "Powered by BirdNET"): the
+// bundled audio_birds.onnx (Seattle-area species, see
+// scripts/bird_audio/birdnet) or a regional model the JS side downloaded.
+// Scores go out only for the outputs JS asks for. The model contains its own
 // spectrogram frontend, so the window goes in as raw samples and one
 // probability per species comes out (multi-label: several birds can score
 // high at once). Scores are emitted to JS as "AudioBirdIdScores".
@@ -34,6 +35,9 @@
   dispatch_queue_t  _inferQueue;
   OrtEnv           *_env;
   OrtSession       *_session;
+  NSString         *_modelPath;
+  NSArray<NSNumber *> *_outputs;
+  OrtSession       *_geoSession;
   BOOL              _wantListening;
 }
 
@@ -64,30 +68,69 @@ RCT_EXPORT_MODULE( );
   [self stopEngine];
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
   if ( _session ) ort->ReleaseSession( _session );
+  if ( _geoSession ) ort->ReleaseSession( _geoSession );
   if ( _env ) ort->ReleaseEnv( _env );
   free( _window );
 }
 
-- (BOOL)loadModel
+- (OrtSession *)openSession:(NSString *)path
 {
-  if ( _session ) return YES;
-  NSString *path = [[NSBundle mainBundle] pathForResource:@"audio_birds" ofType:@"onnx"];
-  if ( !path ) return NO;
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
-  if ( !_env && ort->CreateEnv( ORT_LOGGING_LEVEL_WARNING, "iNatAudio", &_env ) ) return NO;
+  if ( !_env && ort->CreateEnv( ORT_LOGGING_LEVEL_WARNING, "iNatAudio", &_env ) ) return NULL;
   OrtSessionOptions *opts;
-  if ( ort->CreateSessionOptions( &opts ) ) return NO;
+  if ( ort->CreateSessionOptions( &opts ) ) return NULL;
   ort->SetIntraOpNumThreads( opts, 2 );
-  OrtStatus *status = ort->CreateSession( _env, [path UTF8String], opts, &_session );
+  OrtSession *session = NULL;
+  OrtStatus *status = ort->CreateSession( _env, [path UTF8String], opts, &session );
   ort->ReleaseSessionOptions( opts );
-  if ( status ) { ort->ReleaseStatus( status ); _session = NULL; return NO; }
-  return YES;
+  if ( status ) { ort->ReleaseStatus( status ); return NULL; }
+  return session;
 }
 
-RCT_EXPORT_METHOD( start:( RCTPromiseResolveBlock )resolve
+// A nil path means the bundled model.
+- (BOOL)loadModel:(NSString *)path
+{
+  path = path ?: [[NSBundle mainBundle] pathForResource:@"audio_birds" ofType:@"onnx"];
+  if ( !path ) return NO;
+  if ( _session && [path isEqualToString:_modelPath] ) return YES;
+  __block BOOL ok = NO;
+  dispatch_sync( _inferQueue, ^{
+    const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
+    if ( self->_session ) ort->ReleaseSession( self->_session );
+    self->_session = [self openSession:path];
+    self->_modelPath = self->_session ? path : nil;
+    ok = self->_session != NULL;
+  } );
+  return ok;
+}
+
+// The BirdNET geomodel's occurrence score for each of its species at a place
+// and week (1-48, four per month).
+RCT_EXPORT_METHOD( geo:( double )lat lng:( double )lng week:( double )week
+                   resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
-  if ( ![self loadModel] ) {
+  dispatch_async( _inferQueue, ^{
+    if ( !self->_geoSession ) {
+      NSString *path = [[NSBundle mainBundle] pathForResource:@"audio_geo" ofType:@"onnx"];
+      self->_geoSession = path ? [self openSession:path] : NULL;
+    }
+    float pos[3] = { (float)lat, (float)lng, (float)week };
+    NSString *error = nil;
+    NSArray *out = self->_geoSession
+      ? [self run:self->_geoSession input:pos length:3 inputName:"input" outputName:"probabilities"
+          outputs:nil error:&error]
+      : nil;
+    if ( out ) resolve( out ); else reject( @"geo", error ?: @"Could not load the geomodel", nil );
+  } );
+}
+
+RCT_EXPORT_METHOD( start:( NSString * )modelPath outputs:( NSArray<NSNumber *> * )outputs
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  dispatch_sync( _inferQueue, ^{ self->_outputs = [outputs copy]; } );
+  if ( ![self loadModel:modelPath.length ? modelPath : nil] ) {
     reject( @"model", @"Could not load the audio model", nil );
     return;
   }
@@ -250,7 +293,9 @@ RCT_EXPORT_METHOD( stop )
     dispatch_async( self->_inferQueue, ^{
       NSString *inferError = nil;
       CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
-      NSArray *scores = [self infer:(const float *)window.bytes error:&inferError];
+      NSArray *scores = [self run:self->_session input:(const float *)window.bytes length:AB_WIN
+                        inputName:"input" outputName:"output" outputs:self->_outputs
+                            error:&inferError];
       double ms = ( CFAbsoluteTimeGetCurrent( ) - t0 ) * 1000;
       dispatch_async( self->_bufferQueue, ^{ self->_busy = NO; } );
       [self sendEventWithName:@"AudioBirdIdScores"
@@ -262,15 +307,21 @@ RCT_EXPORT_METHOD( stop )
   } );
 }
 
-- (NSArray<NSNumber *> *)infer:(const float *)samples error:(NSString **)errorMessage
+// One run of a [1, length] -> [1, n] model; returns the outputs listed in
+// `outputs`, in that order, or all of them when it is nil.
+- (NSArray<NSNumber *> *)run:(OrtSession *)session input:(const float *)samples
+                      length:(int64_t)length inputName:(const char *)inputName
+                  outputName:(const char *)outputName outputs:(NSArray<NSNumber *> *)outputs
+                       error:(NSString **)errorMessage
 {
+  if ( !session ) return nil;
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
   OrtMemoryInfo *memInfo;
   ort->CreateCpuMemoryInfo( OrtArenaAllocator, OrtMemTypeDefault, &memInfo );
-  int64_t shape[] = { 1, AB_WIN };
+  int64_t shape[] = { 1, length };
   OrtValue *input = NULL;
   OrtStatus *status = ort->CreateTensorWithDataAsOrtValue(
-    memInfo, (void *)samples, AB_WIN * sizeof( float ), shape, 2,
+    memInfo, (void *)samples, length * sizeof( float ), shape, 2,
     ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT, &input );
   ort->ReleaseMemoryInfo( memInfo );
   if ( status ) {
@@ -279,10 +330,10 @@ RCT_EXPORT_METHOD( stop )
     return nil;
   }
 
-  const char *inputNames[]  = { "input" };
-  const char *outputNames[] = { "output" };
+  const char *inputNames[]  = { inputName };
+  const char *outputNames[] = { outputName };
   OrtValue *output = NULL;
-  status = ort->Run( _session, NULL, inputNames, (const OrtValue *const *)&input, 1,
+  status = ort->Run( session, NULL, inputNames, (const OrtValue *const *)&input, 1,
                      outputNames, 1, &output );
   ort->ReleaseValue( input );
   if ( status || !output ) {
@@ -300,8 +351,15 @@ RCT_EXPORT_METHOD( stop )
   ort->ReleaseTensorTypeAndShapeInfo( info );
   float *probs;
   ort->GetTensorMutableData( output, (void **)&probs );
-  NSMutableArray *scores = [NSMutableArray arrayWithCapacity:count];
-  for ( size_t i = 0; i < count; i++ ) [scores addObject:@( probs[i] )];
+  NSMutableArray *scores = [NSMutableArray arrayWithCapacity:outputs ? outputs.count : count];
+  if ( outputs ) {
+    for ( NSNumber *i in outputs ) {
+      size_t k = i.unsignedIntegerValue;
+      [scores addObject:@( k < count ? probs[k] : 0 )];
+    }
+  } else {
+    for ( size_t i = 0; i < count; i++ ) [scores addObject:@( probs[i] )];
+  }
   ort->ReleaseValue( output );
   return scores;
 }

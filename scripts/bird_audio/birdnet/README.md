@@ -1,4 +1,16 @@
-# Audio ID model (BirdNET v3.0, Seattle species)
+# Audio ID models (BirdNET v3.0)
+
+Within 100 km of Seattle Audio ID runs the bundled Seattle model below.
+Elsewhere it downloads BirdNET's model for the region (~75 MB, or the 279 MB
+worldwide model where no region applies) from a pinned revision of
+https://huggingface.co/tphakala/BirdNET-v3.0-Models. Everywhere, species that
+the bundled BirdNET geomodel (`audio_geo.onnx`, V3.0.3, from
+https://huggingface.co/sammlapp/BirdNET_GeoModel) scores below 0.03 for the
+user's place and week are left out. Model outputs are matched by scientific name
+to iNaturalist species with research-grade sound observations, birds and other
+animals alike (`export_catalog.py` -> `audioIdCatalog.json`).
+
+## Seattle model
 
 The Audio ID screen runs **BirdNET+ V3.0 developer preview 3.1**
 (K. Lisa Yang Center for Conservation Bioacoustics, Cornell University;
@@ -21,6 +33,8 @@ models and labels):
     python3 score.py eval && python3 score.py train   # needs the NA-west fp32 model and Perch v2
     python3 head_birdnet.py <fp16.onnx> audio_birds.onnx
     python3 export_birdnet.py <repo>
+    python3 export_catalog.py <repo>       # species table, regional models, geomodel
+    python3 eval_regions.py <repo>         # small check outside Seattle -> report_regions.json
     python3 analyze.py                     # precision/recall of each lever -> report_levers.json
 
 Held-out results are in `report_birdnet.json`.

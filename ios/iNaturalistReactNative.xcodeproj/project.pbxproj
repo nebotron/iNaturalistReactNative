@@ -40,6 +40,7 @@
 		US1B2C3D4E5F60718293A4B5 /* UsbStorage.m in Sources */ = {isa = PBXBuildFile; fileRef = US1B2C3D4E5F60718293A4B6 /* UsbStorage.m */; };
 		AB1B2C3D4E5F60718293A4B5 /* AudioBirdId.m in Sources */ = {isa = PBXBuildFile; fileRef = AB1B2C3D4E5F60718293A4B6 /* AudioBirdId.m */; };
 		AB4BF6B1234567890ABCDEF0 /* audio_birds.onnx in Resources */ = {isa = PBXBuildFile; fileRef = AB4BF6A1234567890ABCDEF0 /* audio_birds.onnx */; };
+		AB4BF6B2234567890ABCDEF0 /* audio_geo.onnx in Resources */ = {isa = PBXBuildFile; fileRef = AB4BF6A2234567890ABCDEF0 /* audio_geo.onnx */; };
 		YO4BF6B1234567890ABCDEF0 /* yolov8n.onnx in Resources */ = {isa = PBXBuildFile; fileRef = YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */; };
 /* End PBXBuildFile section */
 
@@ -113,6 +114,7 @@
 		US1B2C3D4E5F60718293A4B6 /* UsbStorage.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = UsbStorage.m; path = iNaturalistReactNative/UsbStorage.m; sourceTree = "<group>"; };
 		AB1B2C3D4E5F60718293A4B6 /* AudioBirdId.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = AudioBirdId.m; path = iNaturalistReactNative/AudioBirdId.m; sourceTree = "<group>"; };
 		AB4BF6A1234567890ABCDEF0 /* audio_birds.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = audio_birds.onnx; path = iNaturalistReactNative/audio_birds.onnx; sourceTree = "<group>"; };
+		AB4BF6A2234567890ABCDEF0 /* audio_geo.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = audio_geo.onnx; path = iNaturalistReactNative/audio_geo.onnx; sourceTree = "<group>"; };
 		YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = yolov8n.onnx; path = iNaturalistReactNative/yolov8n.onnx; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -157,6 +159,7 @@
 				US1B2C3D4E5F60718293A4B6 /* UsbStorage.m */,
 				AB1B2C3D4E5F60718293A4B6 /* AudioBirdId.m */,
 				AB4BF6A1234567890ABCDEF0 /* audio_birds.onnx */,
+				AB4BF6A2234567890ABCDEF0 /* audio_geo.onnx */,
 				LR1B2C3D4E5F60718293A4B7 /* LocationRelaunch.h */,
 				LR1B2C3D4E5F60718293A4B6 /* LocationRelaunch.m */,
 				YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */,
@@ -362,6 +365,7 @@
 				C237572DBA1C4CA0B77F898C /* INatIcon.ttf in Resources */,
 				YO4BF6B1234567890ABCDEF0 /* yolov8n.onnx in Resources */,
 				AB4BF6B1234567890ABCDEF0 /* audio_birds.onnx in Resources */,
+				AB4BF6B2234567890ABCDEF0 /* audio_geo.onnx in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

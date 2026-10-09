@@ -15,26 +15,31 @@ import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import colors from "styles/tailwindColors";
 
-import AUDIO_ID_SPECIES from "./audioIdSpecies";
+import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
+import { prepareAudioId } from "./audioIdModel";
 
-// Live bird ID by sound (iOS). The AudioBirdId native module runs BirdNET on
-// the last 5 s of microphone audio every second and emits one probability per
-// Seattle-area species. A species counts as heard when its score clears that
-// species' threshold.
+// Live ID of birds and other animals by sound (iOS). The AudioBirdId native
+// module runs BirdNET on the last 5 s of microphone audio every second and
+// emits one probability per species likely at the user's place and week (see
+// audioIdModel.ts). A species counts as heard when its score clears THRESHOLD.
 
 const { AudioBirdId } = NativeModules as {
   AudioBirdId?: {
-    start: ( ) => Promise<{ sampleRate: number; channels: number }>;
+    start: ( modelPath: string | null, outputs: number[] )
+      => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
+    geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
   };
 };
+
+const THRESHOLD = 0.3;
 
 const logger = log.extend( "AudioId" );
 // Runs summarized per log line, so field problems show up in the app log.
 const LOG_EVERY = 30;
 
 interface ScoresEvent { scores: number[]; level: number; inferMs: number; error: string | null }
-interface Heard { index: number; lastHeard: number; best: number; count: number }
+interface Heard { sp: AudioIdSpecies; lastHeard: number; best: number; count: number }
 
 type VibrateMode = "never" | "new" | "unseen";
 const VIBRATE_OPTIONS: [VibrateMode, string][] = [
@@ -46,25 +51,34 @@ const settings = new MMKV( { id: "audio-id" } );
 const VIBRATE_KEY = "vibrateMode";
 
 // Taxon IDs the user has research-grade observations of, including the
-// ancestors of any subspecies-level observations, limited to the model's species.
-const useSeenTaxonIds = ( userId?: number ): Set<number> => {
-  const params = {
-    user_id: userId,
-    quality_grade: "research",
-    taxon_id: AUDIO_ID_SPECIES.map( sp => sp.taxonId ).join( "," ),
-    per_page: 500,
-  };
+// ancestors of any subspecies-level observations, limited to the model's species
+// (asked for 200 at a time to keep URLs short).
+const useSeenTaxonIds = (
+  userId: number | undefined,
+  species: AudioIdSpecies[],
+): Set<number> => {
+  const taxonIds = species.map( sp => sp.taxonId );
   const { data } = useAuthenticatedQuery(
-    ["audioIdSeenTaxa", params],
-    optsWithAuth => fetchSpeciesCounts( params, optsWithAuth ),
-    { enabled: !!userId },
+    ["audioIdSeenTaxa", userId, taxonIds.join( "," )],
+    optsWithAuth => Promise.all( Array.from(
+      { length: Math.ceil( taxonIds.length / 200 ) },
+      ( _, i ) => fetchSpeciesCounts( {
+        user_id: userId,
+        quality_grade: "research",
+        taxon_id: taxonIds.slice( i * 200, ( i + 1 ) * 200 ).join( "," ),
+        per_page: 500,
+      }, optsWithAuth ),
+    ) ),
+    { enabled: !!userId && taxonIds.length > 0 },
   );
   return useMemo( ( ) => {
     const ids = new Set<number>( );
-    ( data?.results || [] ).forEach( ( r: { taxon: { id: number; ancestor_ids?: number[] } } ) => {
-      ids.add( r.taxon.id );
-      r.taxon.ancestor_ids?.forEach( id => ids.add( id ) );
-    } );
+    ( data || [] ).forEach( page => ( page?.results || [] ).forEach(
+      ( r: { taxon: { id: number; ancestor_ids?: number[] } } ) => {
+        ids.add( r.taxon.id );
+        r.taxon.ancestor_ids?.forEach( id => ids.add( id ) );
+      },
+    ) );
     return ids;
   }, [data] );
 };
@@ -75,7 +89,11 @@ const AudioId = ( ) => {
   const [error, setError] = useState<string | null>( null );
   const [current, setCurrent] = useState<number[]>( [] );
   const [level, setLevel] = useState( 0 );
-  const [heard, setHeard] = useState<Record<number, Heard>>( {} );
+  const [heard, setHeard] = useState<Record<number, Heard>>( {} ); // by taxon ID
+  const [setup, setSetup] = useState<AudioIdSetup | null>( null );
+  const [status, setStatus] = useState<string | null>( null );
+  const species = useMemo( ( ) => setup?.species || [], [setup] );
+  const speciesRef = useRef<AudioIdSpecies[]>( [] );
   const [inferMs, setInferMs] = useState( 0 );
   const heardRef = useRef<Set<number>>( new Set( ) );
   const [vibrateMode, setVibrateModeState] = useState<VibrateMode>(
@@ -86,7 +104,7 @@ const AudioId = ( ) => {
     setVibrateModeState( mode );
   };
   const currentUser = useCurrentUser( );
-  const seen = useSeenTaxonIds( currentUser?.id );
+  const seen = useSeenTaxonIds( currentUser?.id, species );
   // The score listener is registered once per focus; read these through refs.
   const alertRef = useRef( { vibrateMode, seen } );
   useEffect( ( ) => {
@@ -105,11 +123,18 @@ const AudioId = ( ) => {
     }
     setError( null );
     try {
-      const mic = await AudioBirdId.start( );
-      logger.info( `started, mic ${mic.sampleRate} Hz x${mic.channels}` );
+      setStatus( "Finding the species likely here this week…" );
+      const s = await prepareAudioId( AudioBirdId.geo, setStatus );
+      setStatus( null );
+      speciesRef.current = s.species;
+      setSetup( s );
+      const mic = await AudioBirdId.start( s.modelPath, s.outputs );
+      logger.info( `started, ${s.modelName} model, ${s.species.length} species, `
+        + `mic ${mic.sampleRate} Hz x${mic.channels}` );
       setListening( true );
     } catch ( e ) {
       logger.error( `start failed: ${( e as Error ).message}` );
+      setStatus( null );
       setError( ( e as Error ).message );
     }
   }, [] );
@@ -120,6 +145,7 @@ const AudioId = ( ) => {
     let runs: ScoresEvent[] = [];
     const sub = emitter.addListener( "AudioBirdIdScores", ( event: ScoresEvent ) => {
       const { scores, level: l } = event;
+      const sps = speciesRef.current;
       runs.push( event );
       if ( runs.length >= LOG_EVERY ) {
         const best = runs.reduce( ( b, r ) => {
@@ -134,7 +160,7 @@ const AudioId = ( ) => {
           ( 20 * Math.log10( mean( r => r.level ) + 1e-9 ) ).toFixed( 0 )} dBFS, `
           + `infer ${mean( r => r.inferMs ).toFixed( 0 )} ms, best ${
             best.index >= 0
-              ? AUDIO_ID_SPECIES[best.index].commonName
+              ? sps[best.index]?.commonName
               : "none"} ${best.score.toFixed( 2 )}, errors ${
             runs.filter( r => r.error ).length} ${runs.find( r => r.error )?.error || ""}` );
         runs = [];
@@ -145,29 +171,29 @@ const AudioId = ( ) => {
       setInferMs( event.inferMs );
       const now = Date.now( );
       const firsts = scores
-        .map( ( s, i ) => ( s >= AUDIO_ID_SPECIES[i].threshold && !heardRef.current.has( i )
-          ? i
+        .map( ( s, i ) => ( s >= THRESHOLD && sps[i] && !heardRef.current.has( sps[i].taxonId )
+          ? sps[i].taxonId
           : -1 ) )
-        .filter( i => i >= 0 );
-      firsts.forEach( i => heardRef.current.add( i ) );
+        .filter( id => id >= 0 );
+      firsts.forEach( id => heardRef.current.add( id ) );
       const { vibrateMode: mode, seen: seenIds } = alertRef.current;
       if (
         ( mode === "new" && firsts.length > 0 )
-        || ( mode === "unseen"
-          && firsts.some( i => !seenIds.has( AUDIO_ID_SPECIES[i].taxonId ) ) )
+        || ( mode === "unseen" && firsts.some( id => !seenIds.has( id ) ) )
       ) {
         Vibration.vibrate( );
       }
       setHeard( h => {
         let next = h;
         scores.forEach( ( s, i ) => {
-          if ( s < AUDIO_ID_SPECIES[i].threshold ) return;
-          const old = next[i];
+          const sp = sps[i];
+          if ( s < THRESHOLD || !sp ) return;
+          const old = next[sp.taxonId];
           const isNewCall = !old || now - old.lastHeard > 3000;
           next = {
             ...next,
-            [i]: {
-              index: i,
+            [sp.taxonId]: {
+              sp,
               lastHeard: now,
               best: Math.max( old?.best || 0, s ),
               count: ( old?.count || 0 ) + ( isNewCall
@@ -185,8 +211,12 @@ const AudioId = ( ) => {
     };
   }, [stop] ) );
 
-  const hearingNow = ( i: number ) => listening
-    && ( current[i] || 0 ) >= AUDIO_ID_SPECIES[i].threshold;
+  const outputOf = useMemo(
+    ( ) => new Map( species.map( ( sp, i ) => [sp.taxonId, i] ) ),
+    [species],
+  );
+  const scoreNow = ( taxonId: number ) => current[outputOf.get( taxonId ) ?? -1] || 0;
+  const hearingNow = ( taxonId: number ) => listening && scoreNow( taxonId ) >= THRESHOLD;
   const heardList = Object.values( heard ).sort( ( a, b ) => b.lastHeard - a.lastHeard );
   const bestNow = current.length
     ? current.indexOf( Math.max( ...current ) )
@@ -194,26 +224,25 @@ const AudioId = ( ) => {
   // RMS of -60 dBFS reads as empty, 0 dBFS as full.
   const meter = Math.max( 0, Math.min( 1, 1 + Math.log10( level + 1e-9 ) / 3 ) );
 
-  const openTaxon = ( i: number ) => navigation.navigate( "TaxonDetails", {
-    id: AUDIO_ID_SPECIES[i].taxonId,
-  } );
+  const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", { id: taxonId } );
 
-  // Birds being heard right now are highlighted in yellow.
-  const row = ( i: number, score: number, detail?: string ) => (
+  // Species being heard right now are highlighted in yellow.
+  const row = ( sp: AudioIdSpecies, score: number, detail?: string ) => (
     <Pressable
-      key={i}
+      key={sp.taxonId}
       accessibilityRole="button"
       accessibilityHint="Opens the species page."
-      className={`flex-row items-center py-2 px-2 border-b border-lightGray ${hearingNow( i )
-        ? "bg-yellow"
-        : ""}`}
-      onPress={( ) => openTaxon( i )}
+      className={`flex-row items-center py-2 px-2 border-b border-lightGray ${
+        hearingNow( sp.taxonId )
+          ? "bg-yellow"
+          : ""}`}
+      onPress={( ) => openTaxon( sp.taxonId )}
     >
       <View className="flex-1">
-        <Body1>{AUDIO_ID_SPECIES[i].commonName}</Body1>
-        <List2 className="italic">{AUDIO_ID_SPECIES[i].name}</List2>
+        <Body1>{sp.commonName}</Body1>
+        <List2 className="italic">{sp.name}</List2>
         {detail && <Body3>{detail}</Body3>}
-        {currentUser && !seen.has( AUDIO_ID_SPECIES[i].taxonId ) && (
+        {currentUser && !seen.has( sp.taxonId ) && (
           <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
         )}
       </View>
@@ -224,9 +253,13 @@ const AudioId = ( ) => {
   return (
     <ScrollView className="bg-white h-full px-5 pt-4">
       <Body3 className="mb-3">
-        {`Identifies ${AUDIO_ID_SPECIES.length} Seattle-area birds by sound, on device, `
+        {`Identifies ${setup
+          ? `${species.length} birds and other animals likely ${setup.located
+            ? "here this week"
+            : "around Seattle"} (${setup.modelName} model)`
+          : "birds and other animals likely here this week"} by sound, on device, `
           + "from the last 5 seconds of audio, and keeps listening with the app in the "
-          + "background. Birds you are hearing now are highlighted. Powered by BirdNET."}
+          + "background. Species you are hearing now are highlighted. Powered by BirdNET."}
       </Body3>
       <Button
         level={listening
@@ -263,6 +296,7 @@ const AudioId = ( ) => {
           </Pressable>
         ) )}
       </View>
+      {status && <Body3 className="mt-2">{status}</Body3>}
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
       {listening && (
         <View className="h-2 bg-lightGray rounded-full mt-4 overflow-hidden">
@@ -274,8 +308,8 @@ const AudioId = ( ) => {
       )}
       {listening && (
         <Body3 className="mt-1">
-          {bestNow >= 0
-            ? `Best guess: ${AUDIO_ID_SPECIES[bestNow].commonName} ${
+          {bestNow >= 0 && species[bestNow]
+            ? `Best guess: ${species[bestNow].commonName} ${
               Math.round( current[bestNow] * 100 )}% · ${inferMs.toFixed( 0 )} ms`
             : "Listening… first result after 5 seconds"}
         </Body3>
@@ -284,9 +318,9 @@ const AudioId = ( ) => {
       <Heading4 className="mt-6 mb-1">HEARD THIS SESSION</Heading4>
       {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
       {heardList.map( h => row(
-        h.index,
-        hearingNow( h.index )
-          ? current[h.index]
+        h.sp,
+        hearingNow( h.sp.taxonId )
+          ? scoreNow( h.sp.taxonId )
           : h.best,
         `${h.count} ${h.count === 1
           ? "time"
