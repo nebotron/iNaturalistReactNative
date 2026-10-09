@@ -179,7 +179,6 @@ const SuggestionsContainer = ( ) => {
   );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
-  const bulkUploadMode = useStore( state => state.bulkUploadMode );
   const { trackImageDeleted } = useInputImageTracking( );
 
   const observationPhotos = useMemo(
@@ -606,81 +605,30 @@ const SuggestionsContainer = ( ) => {
     afterMediaDeleted( );
   }, [afterMediaDeleted, currentObservation, deletePhotoFromObservation, trackImageDeleted] );
 
-  const onCropPhoto = useCallback( ( photo: RealmPhoto ) => {
-    const cropUri = Photo.displayCropSourcePhoto( photo );
-    if ( !cropUri ) { return; }
-
-    const obsPhoto = observationPhotos.find( candidate => {
-      const candidateUri = Photo.displayCropSourcePhoto( candidate.photo );
-      const candidateLargeUri = Photo.displayLocalOrRemoteLargePhoto( candidate.photo );
-      const candidateSquareUri = Photo.displayLocalOrRemoteSquarePhoto( candidate.photo );
-      return candidateUri === cropUri
-        || candidateLargeUri === Photo.displayLocalOrRemoteLargePhoto( photo )
-        || candidateSquareUri === Photo.displayLocalOrRemoteSquarePhoto( photo );
-    } );
-    if ( !obsPhoto ) { return; }
-
-    dispatch( { type: "TOGGLE_MEDIA_VIEWER", mediaViewerVisible: false } );
-    navigation.navigate( "ImageCropEditor", {
-      imageUri: cropUri,
-      context: "observationEdit",
-      observationPhotoUuid: obsPhoto.uuid,
-      onCropSaved: ( ) => {
-        const freshObservation = useStore.getState( ).currentObservation;
-        const freshPhotoUris = ObservationPhoto.mapObsPhotoUris( freshObservation );
-        const photoIdx = ( currentObservation?.observationPhotos || [] )
-          .findIndex( op => op.uuid === obsPhoto.uuid );
-        const newUri = freshPhotoUris[photoIdx] ?? freshPhotoUris[0];
-        if ( newUri ) {
-          createUploadParams( newUri, shouldUseEvidenceLocation ).then( params => {
-            dispatch( {
-              type: "SELECT_PHOTO",
-              selectedPhotoUri: newUri,
-              scoreImageParams: params,
-            } );
-          } );
-        }
-      },
-    } );
-  }, [
-    createUploadParams,
-    currentObservation,
-    navigation,
-    observationPhotos,
-    shouldUseEvidenceLocation,
-  ] );
-
+  // Cropping here only reframes what computer vision scores (re-scored by the
+  // crop log effect above); the observation photo stays as it is.
   const onCropPhotoUri = useCallback( ( uri: string ) => {
     const photoIdx = photoUris.indexOf( uri );
     if ( photoIdx === -1 ) { return; }
-    const photo = innerPhotos[photoIdx] as RealmPhoto;
-    if ( !photo ) { return; }
-    // In bulk ID a crop only reframes what computer vision scores (re-scored by
-    // the crop log effect above); the observation photo stays as it is.
-    if ( bulkUploadMode ) {
-      dispatch( { type: "TOGGLE_MEDIA_VIEWER", mediaViewerVisible: false } );
-      navigation.navigate( "ImageCropEditor", {
-        imageUri: uri,
-        context: "observationEdit",
-        observationPhotoUuid: observationPhotos[photoIdx]?.uuid,
-        cvOnly: true,
-        onCropSaved: ( ) => {
-          if ( uri !== selectedPhotoUri ) { void onPressPhoto( uri ); }
-        },
-      } );
-      return;
-    }
-    onCropPhoto( photo );
-  }, [
-    bulkUploadMode,
-    innerPhotos,
-    navigation,
-    observationPhotos,
-    onCropPhoto,
-    onPressPhoto,
-    photoUris,
-    selectedPhotoUri,
-  ] );
+    dispatch( { type: "TOGGLE_MEDIA_VIEWER", mediaViewerVisible: false } );
+    navigation.navigate( "ImageCropEditor", {
+      imageUri: uri,
+      context: "observationEdit",
+      observationPhotoUuid: observationPhotos[photoIdx]?.uuid,
+      cvOnly: true,
+      onCropSaved: ( ) => {
+        if ( uri !== selectedPhotoUri ) { void onPressPhoto( uri ); }
+      },
+    } );
+  }, [navigation, observationPhotos, onPressPhoto, photoUris, selectedPhotoUri] );
+
+  const onCropPhoto = useCallback( ( photo: RealmPhoto ) => {
+    const photoIdx = innerPhotos.findIndex( candidate => (
+      Photo.displayLocalOrRemoteLargePhoto( candidate as RealmPhoto )
+        === Photo.displayLocalOrRemoteLargePhoto( photo )
+    ) );
+    if ( photoUris[photoIdx] ) { onCropPhotoUri( photoUris[photoIdx] ); }
+  }, [innerPhotos, onCropPhotoUri, photoUris] );
 
   const handleReorderPhotos = useCallback( ( { data: newPhotoUris }: { data: string[] } ) => {
     const newObsPhotos = observationPhotos.map( obsPhoto => {
