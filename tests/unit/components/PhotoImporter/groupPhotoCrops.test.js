@@ -36,7 +36,7 @@ describe( "applyGroupPhotosCrop", ( ) => {
 
     await applyGroupPhotosCrop( crop, "file://photo.jpg", "file://photo.jpg", size );
 
-    expect( cropImageFile ).toHaveBeenCalledWith( "file://photo.jpg", crop, 100, 100 );
+    expect( cropImageFile ).toHaveBeenCalledWith( "file://photo.jpg", crop, 100, 100, undefined, 1 );
     expect( firstPhotoImage( ).uri ).toBe( "file://cropped-2.jpg" );
     expect( firstPhotoImage( ).cropOriginalUri ).toBe( "file://photo.jpg" );
     expect( firstPhotoImage( ).crop ).toEqual( crop );
@@ -60,7 +60,7 @@ describe( "applyGroupPhotosCrop", ( ) => {
 
     await applyGroupPhotosCrop( crop, "file://cropped-1.jpg", "file://original.jpg", size );
 
-    expect( cropImageFile ).toHaveBeenCalledWith( "file://original.jpg", crop, 100, 100 );
+    expect( cropImageFile ).toHaveBeenCalledWith( "file://original.jpg", crop, 100, 100, undefined, 1 );
     expect( firstPhotoImage( ).uri ).toBe( "file://cropped-2.jpg" );
     expect( firstPhotoImage( ).cropOriginalUri ).toBe( "file://original.jpg" );
   } );

@@ -560,7 +560,7 @@ const ImageCropEditor = ( ) => {
     setGroupedPhotos,
   ] );
 
-  const handleConfirm = useCallback( ( crop: NormalizedCrop ) => {
+  const handleConfirm = useCallback( ( crop: NormalizedCrop, brightness: number ) => {
     if ( !localImageUri || !imageUri || !imageSize ) {
       return Promise.resolve( );
     }
@@ -582,7 +582,14 @@ const ImageCropEditor = ( ) => {
         // Cropping replaces the photo's uri in the store with the cropped
         // file's, which an import queue reading the store would otherwise
         // take for a photo it hasn't shown yet and come back to.
-        await applyGroupPhotosCrop( crop, displayUri, sourceUri, size, markVisited );
+        await applyGroupPhotosCrop(
+          crop,
+          displayUri,
+          sourceUri,
+          size,
+          markVisited,
+          brightness,
+        );
       } )( ).catch( ( ) => {
         Alert.alert( t( "Something-went-wrong" ) );
       } ) );
@@ -596,6 +603,8 @@ const ImageCropEditor = ( ) => {
         crop,
         imageSize.w,
         imageSize.h,
+        undefined,
+        brightness,
       );
 
       let feedbackSourceKey = getCropFeedbackSourceKey( );

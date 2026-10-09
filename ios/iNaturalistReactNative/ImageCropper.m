@@ -2415,21 +2415,20 @@ RCT_EXPORT_METHOD( adjustImageBrightness
   free( raw );
   if ( !adjustedRef ) { reject( @"BRIGHTNESS_FAILED", @"Could not create adjusted image", nil ); return; }
 
-  NSMutableData *destData = [NSMutableData data];
-  CGImageDestinationRef destination = CGImageDestinationCreateWithData(
-    (__bridge CFMutableDataRef)destData, CFSTR( "public.jpeg" ), 1, nil );
-  if ( !destination ) {
-    CGImageRelease( adjustedRef );
-    reject( @"BRIGHTNESS_FAILED", @"Could not create image destination", nil );
-    return;
+  // Keep the source's EXIF (date, location) -- the crop editor writes this
+  // over the photo it uploads. Orientation was normalized by the redraw above.
+  NSMutableDictionary *metadata = [NSMutableDictionary dictionary];
+  CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
+  if ( src ) {
+    NSDictionary *srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+    if ( srcMeta ) [metadata addEntriesFromDictionary:srcMeta];
+    CFRelease( src );
   }
-  CGImageDestinationAddImage( destination, adjustedRef, (__bridge CFDictionaryRef)@{
-    (NSString *)kCGImageDestinationLossyCompressionQuality: @( 0.9 ),
-  } );
-  BOOL finalized = CGImageDestinationFinalize( destination );
-  CFRelease( destination );
+  updateMetadataForCrop( metadata, W, H );
+  metadata[(NSString *)kCGImageDestinationLossyCompressionQuality] = @( 0.9 );
+  NSData *destData = encodedJpegWithMetadata( adjustedRef, metadata );
   CGImageRelease( adjustedRef );
-  if ( !finalized ) { reject( @"BRIGHTNESS_FAILED", @"Could not encode adjusted image", nil ); return; }
+  if ( !destData ) { reject( @"BRIGHTNESS_FAILED", @"Could not encode adjusted image", nil ); return; }
 
   [[NSFileManager defaultManager]
     createDirectoryAtPath:[output stringByDeletingLastPathComponent]

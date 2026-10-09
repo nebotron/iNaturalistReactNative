@@ -101,9 +101,8 @@ interface Props {
   imageHeight: number;
   initialCrop?: NormalizedCrop | null;
   labels: ImageCropLabels;
-  // Key under which the exposure slider reads/writes the brightness log. The
-  // slider is preview-only -- it never alters the cropped output -- so this is
-  // just what the saved brightness label is keyed to.
+  // Key under which the exposure slider reads/writes the brightness log, so a
+  // re-crop starts from the brightness last applied to this photo.
   brightnessLogKey?: string | null;
   // Local file URIs of the photos coming up next in a bulk crop. They are
   // mounted invisibly at exactly the size and resize mode the real image uses,
@@ -119,7 +118,8 @@ interface Props {
   // Part of what a bulk crop waits on between photos, and the only part that
   // happens after the editor already has everything it needs.
   onDecoded?: ( ms: number ) => void;
-  onConfirm: ( crop: NormalizedCrop ) => void | Promise<void>;
+  // brightness is the exposure gain to bake into the cropped file.
+  onConfirm: ( crop: NormalizedCrop, brightness: number ) => void | Promise<void>;
   onCropChange?: ( crop: NormalizedCrop ) => void;
   onDelete?: () => void;
 }
@@ -283,9 +283,9 @@ const ImageCropView = ( {
     } );
   }, [cropAreaHeight, windowWidth] );
 
-  // Zoom slider plus preview-only exposure. Brightness drives the CSS filter
-  // live and, on release, records the label to the brightness log; it never
-  // feeds into the cropped file (onConfirm reads the untouched source). Zoom
+  // Zoom slider plus exposure. Brightness drives the CSS filter live, is
+  // recorded to the brightness log on release, and is baked into the cropped
+  // file on confirm. Zoom
   // never resets on a new photo here — the initialCrop effect below frames each
   // one, and snapping the slider to MIN_ZOOM first would show the wrong value.
   const {
@@ -404,12 +404,13 @@ const ImageCropView = ( {
         boxSize,
         transform,
       );
-      await onConfirm( crop );
+      await onConfirm( crop, brightness );
     } finally {
       setSaving( false );
     }
   }, [
     boxSize,
+    brightness,
     cropAreaHeight,
     imageHeight,
     imageWidth,

@@ -1,6 +1,7 @@
-import { mkdir } from "@dr.pogodin/react-native-fs";
+import { mkdir, unlink } from "@dr.pogodin/react-native-fs";
 import { photoUploadPath } from "appConstants/paths";
 import { NativeModules } from "react-native";
+import adjustImageBrightness from "sharedHelpers/adjustImageBrightness";
 import {
   alignPixelCropOutwardToJpegBlocks,
   pixelCropFromNormalizedCrop,
@@ -51,6 +52,9 @@ const cropImageFile = async (
   imageWidth: number,
   imageHeight: number,
   outputDir = photoUploadPath,
+  // Exposure gain from the crop editor's brightness slider, baked into the
+  // cropped file. 1 leaves the pixels untouched.
+  brightness = 1,
 ): Promise<string> => {
   if ( !ImageCropper?.cropImage ) {
     throw new Error( "ImageCropper native module is unavailable" );
@@ -94,9 +98,22 @@ const cropImageFile = async (
     }
     // Native ImageCropper copies EXIF/metadata from the source image into the
     // cropped JPEG and updates dimension/orientation tags for the new size.
-    return croppedPath.startsWith( "file://" )
+    const croppedUri = croppedPath.startsWith( "file://" )
       ? croppedPath
       : `file://${croppedPath}`;
+    if ( brightness === 1 ) return croppedUri;
+    const adjustedUri = await adjustImageBrightness(
+      croppedUri,
+      brightness,
+      Number.MAX_SAFE_INTEGER,
+      `${outputDir}/${uuid.v4()}.jpg`,
+    );
+    if ( !adjustedUri ) {
+      logger.warnWithExtra( "crop_brightness_failed", { source: imageUri, brightness } );
+      return croppedUri;
+    }
+    await unlink( stripFilePrefix( croppedUri ) ).catch( ( ) => undefined );
+    return adjustedUri;
   } catch ( error ) {
     // The crop the user framed is lost to a "Something went wrong" alert, so
     // this line is the only record of which photo it was. Without the geometry

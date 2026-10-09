@@ -56,8 +56,9 @@ async function cropGroupPhotoFile(
   sourceUri: string,
   size: { w: number; h: number },
   existingCropOriginalUri?: string,
+  brightness = 1,
 ): Promise<Partial<GroupedPhotoImage>> {
-  const croppedUri = await cropImageFile( sourceUri, crop, size.w, size.h );
+  const croppedUri = await cropImageFile( sourceUri, crop, size.w, size.h, undefined, brightness );
   const cropOriginalPath = await preserveCropOriginalPath( sourceUri, existingCropOriginalUri );
   const cropOriginalUri = cropOriginalUriFromPath( cropOriginalPath ) || sourceUri;
   saveAnimalCrop( displayUri, crop );
@@ -80,6 +81,7 @@ export async function applyGroupPhotosCrop(
   sourceUri: string,
   size: { w: number; h: number },
   onCropped?: ( croppedUri: string ) => void,
+  brightness = 1,
 ): Promise<void> {
   const existingPhoto = findGroupedPhotoByDisplayUri(
     useStore.getState( ).groupedPhotos,
@@ -91,6 +93,7 @@ export async function applyGroupPhotosCrop(
     sourceUri,
     size,
     existingPhoto?.image.cropOriginalUri,
+    brightness,
   );
   if ( update.uri ) {
     onCropped?.( update.uri );

@@ -13,6 +13,7 @@ import colors from "styles/tailwindColors";
 const THUMB_SIZE = 20;
 const TRACK_HEIGHT = 4;
 const ROW_HEIGHT = 36;
+const TICK_HEIGHT = 12;
 
 // Drag gain as a function of how far the finger has strayed from the track,
 // mirroring iOS scrubbing: the slider keeps its full 0..1 range, but pulling
@@ -49,6 +50,13 @@ const styles = StyleSheet.create( {
     marginLeft: 8,
     paddingHorizontal: THUMB_SIZE / 2,
   },
+  tick: {
+    backgroundColor: colors.white,
+    height: TICK_HEIGHT,
+    position: "absolute",
+    top: ( ROW_HEIGHT - TICK_HEIGHT ) / 2,
+    width: 2,
+  },
   thumb: {
     backgroundColor: colors.inatGreen,
     borderRadius: THUMB_SIZE / 2,
@@ -74,6 +82,9 @@ interface Props {
   disabled?: boolean;
   minimumValue?: number;
   maximumValue?: number;
+  // Values within snapThreshold of snapValue snap to it, marked with a tick.
+  snapValue?: number;
+  snapThreshold?: number;
 }
 
 // A slider with variable-precision dragging. Tapping seeks, as with the
@@ -87,6 +98,8 @@ const FineSlider = ( {
   disabled = false,
   minimumValue = 0,
   maximumValue = 1,
+  snapValue,
+  snapThreshold = 0,
 }: Props ) => {
   const [trackWidth, setTrackWidth] = useState( 0 );
   const [dragging, setDragging] = useState( false );
@@ -101,10 +114,14 @@ const FineSlider = ( {
       : ( val - minimumValue ) / range ),
     [minimumValue, range],
   );
-  const toValue = useCallback(
-    ( position: number ) => minimumValue + position * range,
-    [minimumValue, range],
-  );
+  // posRef holds the raw drag position; only what's shown and reported snaps,
+  // so dragging on through the snap zone still escapes it.
+  const toValue = useCallback( ( position: number ) => {
+    const val = minimumValue + position * range;
+    return snapValue !== undefined && Math.abs( val - snapValue ) < snapThreshold
+      ? snapValue
+      : val;
+  }, [minimumValue, range, snapThreshold, snapValue] );
 
   const [pos, setPos] = useState( ( ) => toPos( value ) );
   const posRef = useRef( toPos( value ) );
@@ -122,9 +139,10 @@ const FineSlider = ( {
   const emit = useCallback( ( next: number ) => {
     const clamped = clamp01( next );
     posRef.current = clamped;
-    setPos( clamped );
-    onChange( toValue( clamped ) );
-  }, [onChange, toValue] );
+    const val = toValue( clamped );
+    setPos( toPos( val ) );
+    onChange( val );
+  }, [onChange, toPos, toValue] );
 
   const gesture = useMemo( ( ) => Gesture.Pan( )
     .enabled( !disabled && trackWidth > 0 )
@@ -177,6 +195,9 @@ const FineSlider = ( {
         >
           <View style={[styles.filled, { width: pos * trackWidth }]} />
         </View>
+        {snapValue !== undefined && (
+          <View style={[styles.tick, { left: toPos( snapValue ) * trackWidth - 1 }]} />
+        )}
         <View style={[styles.thumb, { left: thumbLeft }]} />
         {precisionLabel && (
           <Text style={[styles.precision, { left: thumbLeft }]}>
