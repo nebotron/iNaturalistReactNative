@@ -123,7 +123,17 @@ const ImageCropEditor = ( ) => {
       photo => photo.pending && isCroppable( photo ),
     ),
   ), [cropImport, groupedPhotos] );
-  const nextImportUri = importedUris.find( uri => !visitedUris.has( uri ) );
+  // Shown in grid order (newest first), not the order the copies land in: the
+  // next photo is the first one left in the grid, waited on while it copies.
+  const nextImportUri = useMemo( ( ) => {
+    if ( !cropImport ) return undefined;
+    const next = groupedPhotos
+      .flatMap( group => group.photos ?? [] )
+      .find( photo => isCroppable( photo ) && !visitedUris.has( photo.image.uri ) );
+    return next && !next.pending
+      ? next.image.uri
+      : undefined;
+  }, [cropImport, groupedPhotos, visitedUris] );
 
   // An import queue has nothing to show before its first photo has been copied,
   // or between photos while the rest are still copying. Take the next photo the

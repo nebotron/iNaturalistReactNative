@@ -543,8 +543,11 @@ const PhotoLibrary = ( ) => {
               : [],
           } );
         }
+        // Copied newest first, the order the grid and the cropper show them in
         importIntoGroupPhotos(
-          newNodes.filter( node => !isVideoNode( node ) ),
+          [...newNodes]
+            .sort( ( a, b ) => b.timestamp - a.timestamp )
+            .filter( node => !isVideoNode( node ) ),
           newNodes.filter( isVideoNode ),
         );
         return { continuesInBackground: true };
