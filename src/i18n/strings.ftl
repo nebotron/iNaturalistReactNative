@@ -582,6 +582,10 @@ EXPLORE-SPECIES = EXPLORE SPECIES
 Failed-to-delete-sound = Failed to delete sound
 # Error message with log in fails
 Failed-to-log-in = Failed to log in
+# Heading for the list of users who favorited an observation
+FAVORITES = FAVORITES
+# Heading for the list of users who favorited an observation
+Favorites = Favorites
 # Header for featured projects
 FEATURED = FEATURED
 # Month of February

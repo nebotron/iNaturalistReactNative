@@ -3,6 +3,7 @@
 import { useNavigation } from "@react-navigation/native";
 import checkCamelAndSnakeCase from "components/ObsDetails/helpers/checkCamelAndSnakeCase";
 import Attribution from "components/ObsDetailsSharedComponents/DetailsTab/Attribution";
+import FavoritesList from "components/ObsDetailsSharedComponents/FavoritesList";
 import {
   Body4,
   Button,
@@ -173,6 +174,11 @@ const DetailsTab = ( { currentUser, observation }: Props ): Node => {
       </View>
       <Divider />
       <ProjectSection observation={observation} />
+      <FavoritesList
+        observation={observation}
+        className={sectionClass}
+        heading={<Heading4 className={headingClass}>{t( "FAVORITES" )}</Heading4>}
+      />
       <View className={`${sectionClass} space-y-[11px]`}>
         <Heading4 className={headingClass}>{t( "OTHER-DATA" )}</Heading4>
         <Attribution observation={observation} />
