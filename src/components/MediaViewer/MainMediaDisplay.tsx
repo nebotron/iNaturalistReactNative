@@ -81,7 +81,6 @@ interface Props {
   onClose: ( ) => void;
   onDeleteSound: ( uri: string ) => void;
   onSharePhoto?: ( uri: string ) => void;
-  onShowMetadata?: ( photo: Omit<PhotoItem, "type"> ) => void;
   photos: Omit<PhotoItem, "type">[];
   sounds?: Omit<SoundItem, "type">[];
   selectedMediaIndex: number;
@@ -98,7 +97,6 @@ const MainMediaDisplay = ( {
   onDeleteSound,
   onClose,
   onSharePhoto,
-  onShowMetadata,
   photos,
   sounds = [],
   selectedMediaIndex,
@@ -291,17 +289,6 @@ const MainMediaDisplay = ( {
             testID="MediaViewer.brightnessButton"
             size={20}
           />
-          { onShowMetadata && (
-            <INatIconButton
-              onPress={( ) => onShowMetadata( photo )}
-              icon="info-circle-outline"
-              color={colors.white}
-              className={`${iconBtnClass} ml-2`}
-              accessibilityLabel={t( "View-photo-metadata" )}
-              testID="MediaViewer.metadataButton"
-              size={20}
-            />
-          ) }
           { onSharePhoto && (
             <INatIconButton
               onPress={( ) => onSharePhoto( uri )}
