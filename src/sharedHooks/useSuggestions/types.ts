@@ -28,6 +28,7 @@ export interface UseSuggestionsOfflineSuggestion {
     name: string;
     rank_level: number;
     iconic_taxon_name?: string;
+    ancestor_ids?: number[];
   };
 }
 

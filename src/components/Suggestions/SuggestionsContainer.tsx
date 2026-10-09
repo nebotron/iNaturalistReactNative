@@ -310,7 +310,14 @@ const SuggestionsContainer = ( ) => {
   const findGenusForSuggestion = useCallback( async suggestion => {
     const taxonId = suggestion.taxon.id;
     const realmTaxon = realm.objectForPrimaryKey( "Taxon", taxonId );
-    const ancestorIds = Array.from( realmTaxon?.ancestor_ids || [] );
+    // Offline suggestions carry ancestry from the model, so the genus can be
+    // found without a network request even when the taxon isn't in Realm
+    const ancestorIds = Array.from(
+      realmTaxon?.ancestor_ids?.length
+        ? realmTaxon.ancestor_ids
+        : suggestion.taxon.ancestor_ids || [],
+    );
+    let offlineGenus = null;
     let foundGenusId: number | null = null;
 
     if ( ancestorIds.length > 0 ) {
@@ -328,6 +335,7 @@ const SuggestionsContainer = ( ) => {
         const genusAncestor = offlineAncestors.find(
           a => a.rank_level === TaxonModel.GENUS_LEVEL,
         );
+        offlineGenus = genusAncestor || null;
         foundGenusId = genusAncestor?.id ?? null;
       } catch { /* Taxonomy file unavailable */ }
     }
@@ -346,10 +354,12 @@ const SuggestionsContainer = ( ) => {
 
     let fullGenusTaxon = realm.objectForPrimaryKey( "Taxon", foundGenusId );
     if ( !fullGenusTaxon ) {
-      fullGenusTaxon = await fetchTaxonAndSave( foundGenusId, realm );
+      try {
+        fullGenusTaxon = await fetchTaxonAndSave( foundGenusId, realm );
+      } catch { /* API unavailable */ }
     }
 
-    return fullGenusTaxon || null;
+    return fullGenusTaxon || offlineGenus;
   }, [realm] );
 
   const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: true } );

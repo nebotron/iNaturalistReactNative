@@ -66,7 +66,7 @@ export const predictOffline = async ( {
   const formatPrediction = ( prediction: Prediction ): UseSuggestionsOfflineSuggestion => {
     // The "lowest" ancestor_id that matches an iconic taxon
     // is the iconic taxon of this prediction.
-    const iconicTaxonId = prediction.ancestor_ids
+    const iconicTaxonId = [...prediction.ancestor_ids]
     // Need to reverse so we find the most specific iconic taxon first as an ancestor_ids is
     // a list of ancestor ids from tip to root of taxonomy
     // e.g. Aves is included in Animalia
@@ -83,6 +83,7 @@ export const predictOffline = async ( {
         iconic_taxon_name: iconicTaxonId !== undefined
           ? iconicTaxaLookup[iconicTaxonId]
           : undefined,
+        ancestor_ids: prediction.ancestor_ids,
       },
     };
   };
