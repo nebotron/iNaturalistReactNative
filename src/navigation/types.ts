@@ -426,6 +426,7 @@ export type BaseTabStackParamList = {
   AudioId: undefined;
   CropLogViewer: undefined;
   DevicePhotoCleanup: undefined;
+  MergeObservations: undefined;
   LocationHistory: undefined;
   LocationHistoryPointsMap: undefined;
   LocationHistoryDetailMap: {

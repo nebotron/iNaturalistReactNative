@@ -117,6 +117,12 @@ const Menu = ( ) => {
       navigation: "DevicePhotoCleanup",
       icon: "trash-outline",
     },
+    mergeObservations: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "MERGE OBSERVATIONS",
+      navigation: "MergeObservations",
+      icon: "copy",
+    },
     ...( currentUser
       ? {
         lifeList: {

@@ -19,6 +19,8 @@ interface SyncObservationsSlice {
   deleteQueue: string[];
   deletionsCompletedAt: Date | null;
   initialNumDeletionsInQueue: number;
+  // Merged-away observations to delete remotely once their target has synced
+  mergeDeletions: { source: string; target: string }[];
   syncingStatus: SyncingStatus;
 }
 
@@ -29,6 +31,7 @@ const DEFAULT_STATE: SyncObservationsSlice = {
   deleteQueue: [],
   deletionsCompletedAt: null,
   initialNumDeletionsInQueue: 0,
+  mergeDeletions: [],
   syncingStatus: SYNC_PENDING,
 };
 
@@ -56,6 +59,18 @@ const createSyncObservationsSlice: StateCreator<SyncObservationsSlice> = ( set, 
       deleteQueue: copyOfDeleteQueue,
     } );
   } ),
+  addMergeDeletions: ( sources: string[], target: string ) => set( state => ( {
+    mergeDeletions: [
+      // Anything previously merged into a source now waits on the new target
+      ...state.mergeDeletions.map( m => ( sources.includes( m.target )
+        ? { ...m, target }
+        : m ) ),
+      ...sources.map( source => ( { source, target } ) ),
+    ],
+  } ) ),
+  removeMergeDeletion: ( source: string ) => set( state => ( {
+    mergeDeletions: state.mergeDeletions.filter( m => m.source !== source ),
+  } ) ),
   startNextDeletion: ( ) => set( state => ( {
     currentDeleteCount: state.currentDeleteCount + 1,
   } ) ),

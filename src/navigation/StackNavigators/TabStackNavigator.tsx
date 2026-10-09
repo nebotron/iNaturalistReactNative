@@ -22,6 +22,7 @@ import LocationHistoryPointsMap from "components/LocationHistory/LocationHistory
 import MaverickIdentificationsContainer
   from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
+import MergeObservations from "components/MergeObservations/MergeObservations";
 import MyIdentificationsContainer from "components/MyIdentifications/MyIdentificationsContainer";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
 import Notifications from "components/Notifications/Notifications";
@@ -109,6 +110,8 @@ const audioIdTitle = () => <Heading4 numberOfLines={1}>AUDIO ID</Heading4>;
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>PHOTO CLEANUP</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const mergeObservationsTitle = () => <Heading4 numberOfLines={1}>MERGE OBSERVATIONS</Heading4>;
 const locationHistoryTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "LOCATION-HISTORY" )}
@@ -359,6 +362,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={DevicePhotoCleanup}
             options={{
               headerTitle: devicePhotoCleanupTitle,
+            }}
+          />
+          <Stack.Screen
+            name="MergeObservations"
+            component={MergeObservations}
+            options={{
+              headerTitle: mergeObservationsTitle,
             }}
           />
           <Stack.Screen

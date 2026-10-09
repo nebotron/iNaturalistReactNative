@@ -38,6 +38,8 @@ const useSyncObservations = (
   const completeSync = useStore( state => state.completeSync );
   const resetSyncToolbar = useStore( state => state.resetSyncToolbar );
   const removeFromDeleteQueue = useStore( state => state.removeFromDeleteQueue );
+  const mergeDeletions = useStore( state => state.mergeDeletions );
+  const removeMergeDeletion = useStore( state => state.removeMergeDeletion );
   const autoSyncAbortController = useStore( storeState => storeState.autoSyncAbortController );
   const [currentDeletionUuid, setCurrentDeletionUuid] = useState( null );
 
@@ -104,6 +106,34 @@ const useSyncObservations = (
     startNextDeletion,
   ] );
 
+  const { mutateAsync: deleteMergedObservationMutateAsync } = useAuthenticatedMutation(
+    ( params: object, optsWithAuth: object ) => deleteRemoteObservation( params, optsWithAuth ),
+  );
+
+  // Deletes merged-away observations from the server once the observation they
+  // were merged into has uploaded with their photos (or has itself been deleted)
+  const deleteMergedObservations = useCallback( async ( ) => {
+    // eslint-disable-next-line no-restricted-syntax
+    for ( const { source, target } of mergeDeletions ) {
+      const targetObs = realm.objectForPrimaryKey<Observation>( "Observation", target );
+      if ( targetObs && ( !targetObs._synced_at || targetObs.needsSync( ) ) ) {
+        // eslint-disable-next-line no-continue
+        continue;
+      }
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        await deleteMergedObservationMutateAsync( { uuid: source } );
+      } catch ( error ) {
+        if ( !( error instanceof INatApiError && error.status === 404 ) ) {
+          // eslint-disable-next-line no-continue
+          continue;
+        }
+      }
+      Observation.deleteLocalObservation( realm, source );
+      removeMergeDeletion( source );
+    }
+  }, [deleteMergedObservationMutateAsync, mergeDeletions, realm, removeMergeDeletion] );
+
   const fetchRemoteDeletions = useCallback( async ( ) => {
     try {
       await syncRemoteDeletedObservations( realm );
@@ -162,6 +192,10 @@ const useSyncObservations = (
       await deleteLocalObservations( );
     }
 
+    if ( !signalAborted && canSync ) {
+      await deleteMergedObservations( );
+    }
+
     // While this is redundant with the first load from
     // useInfiniteObservationsScroll on MyObs, we need it for subsequent
     // arrivals on MyObs, i.e. when data is already loaded. ~~~~kueda 20241203
@@ -176,6 +210,7 @@ const useSyncObservations = (
     canSync,
     completeSync,
     deleteLocalObservations,
+    deleteMergedObservations,
     fetchRemoteDeletions,
     fetchRemoteObservations,
     signalAborted,
@@ -196,6 +231,7 @@ const useSyncObservations = (
     }
     await deleteLocalObservations( );
     if ( canSync ) {
+      await deleteMergedObservations( );
       await fetchRemoteObservations( );
     }
     resetSyncToolbar( );
@@ -217,6 +253,7 @@ const useSyncObservations = (
     canSync,
     completeSync,
     deleteLocalObservations,
+    deleteMergedObservations,
     fetchRemoteDeletions,
     fetchRemoteObservations,
     loggedIn,
