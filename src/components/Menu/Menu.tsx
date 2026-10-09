@@ -111,6 +111,12 @@ const Menu = ( ) => {
   const [modalState, setModalState] = useState<MenuModalState | null>( null );
 
   const menuItems: Record<string, MenuOption> = {
+    devicePhotoCleanup: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "PHOTO CLEANUP",
+      navigation: "DevicePhotoCleanup",
+      icon: "trash-outline",
+    },
     ...( currentUser
       ? {
         lifeList: {
@@ -167,12 +173,6 @@ const Menu = ( ) => {
       label: "CROP LOG",
       navigation: "CropLogViewer",
       icon: "clipboard",
-    },
-    devicePhotoCleanup: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "PHOTO CLEANUP",
-      navigation: "DevicePhotoCleanup",
-      icon: "trash-outline",
     },
     settings: {
       testID: "settings",
