@@ -6,6 +6,7 @@ import { View } from "components/styledComponents";
 import Attribution from "components/Suggestions/Attribution";
 import React from "react";
 import { useTranslation } from "sharedHooks";
+import useStore from "stores/useStore";
 
 interface Props {
   handleSkip: ( ) => void;
@@ -25,6 +26,7 @@ const SuggestionsFooter = ( {
   toggleLocation,
 }: Props ) => {
   const { t } = useTranslation( );
+  const bulkUploadMode = useStore( state => state.bulkUploadMode );
 
   return (
     <View className="mb-9">
@@ -51,7 +53,16 @@ const SuggestionsFooter = ( {
           <Attribution observers={observers} />
         </>
       )}
-      { !hideSkip && (
+      { !hideSkip && bulkUploadMode && (
+        <View className="px-4 py-6">
+          <Button
+            text={t( "SKIP-LEAVE-UNKNOWN" )}
+            onPress={handleSkip}
+            accessibilityHint={t( "Skips-this-observation-and-leaves-it-unknown" )}
+          />
+        </View>
+      ) }
+      { !hideSkip && !bulkUploadMode && (
         <Body1
           className="underline text-center py-6"
           onPress={handleSkip}

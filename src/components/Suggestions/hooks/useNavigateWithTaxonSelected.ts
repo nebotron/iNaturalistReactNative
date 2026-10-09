@@ -3,6 +3,7 @@ import { UPLOAD } from "components/ObsEdit/BottomButtons";
 import useMultiObsSaveAndAdvance from "components/ObsEdit/hooks/useMultiObsSaveAndAdvance";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { useCallback } from "react";
+import { useExitObservationFlow } from "sharedHooks";
 import useStore from "stores/useStore";
 
 const useNavigateWithTaxonSelected = (
@@ -27,6 +28,10 @@ const useNavigateWithTaxonSelected = (
   const savedOrUploadedMultiObsFlow = useStore( state => state.savedOrUploadedMultiObsFlow );
   const bulkUploadMode = useStore( state => state.bulkUploadMode );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
+  const removeObservationFromMultiObsFlowAtIndex = useStore(
+    state => state.removeObservationFromMultiObsFlowAtIndex,
+  );
+  const exitObservationFlow = useExitObservationFlow( );
   const vision = options?.vision;
 
   // bulkUploadMode means the user entered the bulk ID flow from My
@@ -51,6 +56,17 @@ const useNavigateWithTaxonSelected = (
   } );
 
   const navigateWithTaxonSelected = useCallback( async ( selectedTaxon: object | undefined ) => {
+    // Skipping in the bulk ID flow leaves the observation unknown (it's
+    // already saved) and moves on to the next one
+    if ( selectedTaxon === undefined && isBulkIdFlow ) {
+      const { observations: obs, currentObservationIndex } = useStore.getState( );
+      if ( obs.length <= 1 ) {
+        exitObservationFlow( );
+      } else {
+        removeObservationFromMultiObsFlowAtIndex( currentObservationIndex );
+      }
+      return;
+    }
     if ( selectedTaxon === undefined ) {
       updateObservationKeys( {
         owners_identification_from_vision: false,
@@ -109,9 +125,12 @@ const useNavigateWithTaxonSelected = (
     bulkUploadMode,
     currentObservation?.uuid,
     entryScreen,
+    exitObservationFlow,
+    isBulkIdFlow,
     isMultiObsCreateFlow,
     lastScreen,
     navigation,
+    removeObservationFromMultiObsFlowAtIndex,
     routeName,
     saveAndAdvance,
     updateObservationKeys,

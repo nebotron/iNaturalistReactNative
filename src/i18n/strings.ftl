@@ -1447,6 +1447,10 @@ Sign-in-with-Apple-Failed = Sign in with Apple Failed
 Sign-in-with-Google = Sign in with Google
 Sign-in-with-Google-Failed = Sign in with Google Failed
 Skip-for-now = Skip for now
+# Button in bulk ID flow to move on without identifying the current observation
+SKIP-LEAVE-UNKNOWN = SKIP (LEAVE UNKNOWN)
+# Accessibility hint for SKIP-LEAVE-UNKNOWN
+Skips-this-observation-and-leaves-it-unknown = Skips this observation and leaves it unknown.
 # Accessibility label for an icon marking an identification that another
 # identifier later agreed with
 Someone-agreed-with-this-identification = Someone agreed with this identification
