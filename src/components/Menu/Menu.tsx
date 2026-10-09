@@ -174,6 +174,12 @@ const Menu = ( ) => {
       navigation: "CropLogViewer",
       icon: "clipboard",
     },
+    photoStats: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "PHOTO STATS",
+      navigation: "PhotoStats",
+      icon: "camera",
+    },
     settings: {
       testID: "settings",
       label: t( "SETTINGS" ),
