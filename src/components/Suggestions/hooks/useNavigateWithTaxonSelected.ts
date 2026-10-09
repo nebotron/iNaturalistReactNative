@@ -2,7 +2,8 @@ import { StackActions, useNavigation, useRoute } from "@react-navigation/native"
 import { UPLOAD } from "components/ObsEdit/BottomButtons";
 import useMultiObsSaveAndAdvance from "components/ObsEdit/hooks/useMultiObsSaveAndAdvance";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
+import { Keyboard } from "react-native";
 import { useExitObservationFlow } from "sharedHooks";
 import useStore from "stores/useStore";
 
@@ -55,7 +56,13 @@ const useNavigateWithTaxonSelected = (
     transitionAnimation: ( ) => undefined,
   } );
 
+  // Saving in the multi-obs flow can take a second or more before we navigate.
+  // A repeat tap in that window would apply the taxon again to whichever
+  // observation is current by then, so ignore it.
+  const savingRef = useRef( false );
+
   const navigateWithTaxonSelected = useCallback( async ( selectedTaxon: object | undefined ) => {
+    if ( savingRef.current ) return;
     // Skipping in the bulk ID flow leaves the observation unknown (it's
     // already saved) and moves on to the next one
     if ( selectedTaxon === undefined && isBulkIdFlow ) {
@@ -81,9 +88,16 @@ const useNavigateWithTaxonSelected = (
 
     if ( selectedTaxon !== undefined && isMultiObsCreateFlow ) {
       const numObservations = useStore.getState( ).observations.length;
-      await saveAndAdvance( bulkUploadMode
-        ? UPLOAD
-        : "save" );
+      // Acknowledge the tap right away on the search screen
+      Keyboard.dismiss( );
+      savingRef.current = true;
+      try {
+        await saveAndAdvance( bulkUploadMode
+          ? UPLOAD
+          : "save" );
+      } finally {
+        savingRef.current = false;
+      }
       if ( numObservations > 1 ) {
         if ( routeName === "SuggestionsTaxonSearch" ) {
           // Explicitly navigate back to Suggestions (now showing the next
