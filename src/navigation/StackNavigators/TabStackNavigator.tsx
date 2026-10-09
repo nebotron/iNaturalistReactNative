@@ -27,7 +27,6 @@ import MyObservationsContainer from "components/MyObservations/MyObservationsCon
 import Notifications from "components/Notifications/Notifications";
 import DQAContainer from "components/ObsDetails/DQAContainer";
 import ObsDetailsScreen from "components/ObsDetailsSharedComponents/ObsDetailsScreen";
-import PhotoStats from "components/PhotoStats/PhotoStats";
 import PrivacyZone from "components/PrivacyZone/PrivacyZone";
 import PrivacyZoneMap from "components/PrivacyZone/PrivacyZoneMap";
 import ProjectDetailsContainer from "components/ProjectDetails/ProjectDetailsContainer";
@@ -108,8 +107,6 @@ const postDetailsTitle = () => (
 const audioIdTitle = () => <Heading4 numberOfLines={1}>AUDIO ID</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
-// eslint-disable-next-line i18next/no-literal-string
-const photoStatsTitle = () => <Heading4 numberOfLines={1}>PHOTO STATS</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>PHOTO CLEANUP</Heading4>;
 const locationHistoryTitle = () => (
@@ -355,13 +352,6 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={CropLogViewer}
             options={{
               headerTitle: cropLogTitle,
-            }}
-          />
-          <Stack.Screen
-            name="PhotoStats"
-            component={PhotoStats}
-            options={{
-              headerTitle: photoStatsTitle,
             }}
           />
           <Stack.Screen
