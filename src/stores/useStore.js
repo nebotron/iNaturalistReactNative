@@ -107,6 +107,7 @@ const useStore = create( persist(
       groupedPhotos: dropPendingGroupPhotos( state.groupedPhotos ),
       firstObservationDefaults: state.firstObservationDefaults,
       pendingGroupPhotoDeletionUris: state.pendingGroupPhotoDeletionUris,
+      groupCropResume: state.groupCropResume,
 
       // Explore tab filters and related search state
       rootExploreView: state.rootExploreView,

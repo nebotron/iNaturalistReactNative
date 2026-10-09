@@ -274,30 +274,21 @@ const ImageCropEditor = ( ) => {
     navigation.setOptions( { headerShown: false } );
   }, [navigation] );
 
-  // Leaving a Group Photos crop with photos still to go keeps its place, so
-  // opening the cropper again from Group Photos resumes it (groupCropResume).
+  // A Group Photos crop keeps its place in the store (persisted, so it
+  // survives an app kill) until it finishes, so opening the cropper again from
+  // Group Photos resumes it (groupCropResume).
   const doneRef = useRef( false );
-  const resumeRef = useRef( { imageUri, pendingImageUris, visitedUris } );
   useEffect( ( ) => {
-    resumeRef.current = { imageUri, pendingImageUris, visitedUris };
-  } );
-  useEffect( ( ) => {
-    if ( context !== "groupPhotos" ) {
-      return ( ) => {};
+    if ( context !== "groupPhotos" || doneRef.current ) {
+      return;
     }
-    setGroupCropResume( null );
-    return navigation.addListener( "beforeRemove", ( ) => {
-      const { current } = resumeRef;
-      setGroupCropResume( doneRef.current
-        ? null
-        : {
-          imageUri: current.imageUri,
-          pendingImageUris: current.pendingImageUris,
-          cropImport,
-          skipUris: [...current.visitedUris],
-        } );
+    setGroupCropResume( {
+      imageUri,
+      pendingImageUris,
+      cropImport,
+      skipUris: [...visitedUris],
     } );
-  }, [context, cropImport, navigation, setGroupCropResume] );
+  }, [context, cropImport, imageUri, pendingImageUris, setGroupCropResume, visitedUris] );
 
   // Local files of the upcoming photos whose preload has finished, handed to
   // ImageCropView so it can decode them before the user advances.
@@ -456,6 +447,7 @@ const ImageCropEditor = ( ) => {
       return;
     }
     doneRef.current = true;
+    setGroupCropResume( null );
     onCropSaved?.( );
     navigation.goBack( );
   }, [
@@ -465,6 +457,7 @@ const ImageCropEditor = ( ) => {
     navigation,
     onCropSaved,
     pendingImageUris,
+    setGroupCropResume,
   ] );
 
   // The import has nothing left to crop: the last photo has been cropped, or
@@ -474,6 +467,7 @@ const ImageCropEditor = ( ) => {
       return;
     }
     doneRef.current = true;
+    setGroupCropResume( null );
     onCropSaved?.( );
     navigation.goBack( );
   }, [
@@ -483,6 +477,7 @@ const ImageCropEditor = ( ) => {
     navigation,
     nextImportUri,
     onCropSaved,
+    setGroupCropResume,
   ] );
 
   const handleDelete = useCallback( ( ) => {
