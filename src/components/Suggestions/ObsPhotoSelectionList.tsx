@@ -95,7 +95,7 @@ const ObsPhotoSelectionList = ( {
         }}
         onLongPress={drag}
         className={classnames(
-          "w-[125px] h-[125px] justify-center mx-1.5 rounded-lg",
+          "w-[188px] h-[188px] justify-center mx-1.5 rounded-lg",
         )}
         accessibilityLabel={t( "Select-photo" )}
         testID={`ObsPhotoSelectionList.${item}`}
