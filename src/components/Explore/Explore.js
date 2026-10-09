@@ -25,6 +25,11 @@ import IdentifyView from "./IdentifyView";
 import ObservationsView from "./ObservationsView";
 import ObservationsViewBar from "./ObservationsViewBar";
 import ObserversView from "./ObserversView";
+import {
+  OfflineObservationsView,
+  SaveOfflineButton,
+  useOfflineExploreResults,
+} from "./OfflineExplore";
 import SpeciesView from "./SpeciesView";
 
 const exploreViewIcon = {
@@ -102,6 +107,8 @@ const Explore = ( {
   }
   const [showExploreBottomSheet, setShowExploreBottomSheet] = useState( false );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreObservationsLayout" );
+  const offlineResults = useOfflineExploreResults( );
+  const showOfflineResults = isConnected === false && !!offlineResults;
 
   const exploreViewA11yLabel = {
     observations: t( "Observations-View" ),
@@ -136,6 +143,9 @@ const Explore = ( {
   );
 
   const renderMainContent = ( ) => {
+    if ( showOfflineResults ) {
+      return <OfflineObservationsView layout={layout} queryParams={queryParams} />;
+    }
     if ( isConnected === false ) {
       return (
         <OfflineNotice
@@ -286,12 +296,17 @@ const Explore = ( {
       <ViewWrapper testID="Explore" wrapperClassName="overflow-hidden">
         <View className="flex-1 overflow-hidden">
           {renderHeader()}
-          {currentExploreView === "observations" && (
+          {( currentExploreView === "observations" || showOfflineResults ) && (
             <ObservationsViewBar
               layout={layout}
               updateObservationsView={writeLayoutToStorage}
-              viewOptions={["map", "grid", "list"]}
+              viewOptions={showOfflineResults
+                ? ["grid", "list"]
+                : ["map", "grid", "list"]}
             />
+          )}
+          {currentExploreView === "observations" && isConnected && canFetch && (
+            <SaveOfflineButton queryParams={queryParams} />
           )}
           {renderMainContent()}
         </View>

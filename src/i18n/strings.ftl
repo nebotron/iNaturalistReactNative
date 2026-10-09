@@ -442,6 +442,8 @@ Delete-current-observation = Delete current observation
 # Button that deletes an observation
 Delete-observation = Delete observation
 DELETE-OBSERVATION--question = DELETE OBSERVATION?
+# Title of dialog to delete Explore results saved for offline use
+Delete-offline-results = Delete saved offline results?
 # Button label or accessibility label for an element that deletes a photo
 Delete-photo = Delete photo
 Delete-saved-filter = Delete saved filter
@@ -1105,6 +1107,8 @@ October = October
 Offline-DQA-description = The DQA may not be accurate. Check your internet connection and try again.
 Offline-suggestions = Offline
 Offline-suggestions-may-differ-from-online = Offline suggestions may differ from online suggestions, and taxon images and common names may not load.
+# Label shown in Explore when offline, with the count of saved results matching the filters
+Offline-X-of-Y-saved-observations = Offline: { $count } of { $total } saved
 # Generic confirmation, e.g. button on a warning alert
 OK = OK
 # Sort order, refers to newest or oldest date
@@ -1366,11 +1370,19 @@ SAVE-CHANGES = SAVE CHANGES
 SAVE-CROP = SAVE CROP
 Save-current-filters = Save current filters
 SAVE-FOR-LATER = SAVE FOR LATER
+# Button and dialog title to save the current Explore results for offline use
+Save-for-offline-use = Save for offline use
 SAVE-LOCATION = SAVE LOCATION
+Save-up-to-observations-from-this-search = Save up to { $count } observations from this search? You can filter them further while offline.
 Saved-filter-already-exists-description = You already have a saved filter with this name. Choose a different name.
 Saved-filter-already-exists-title = Name already in use
 Saved-filter-name-placeholder = e.g. Nearby birds
 Saved-filters = Saved filters
+Saved-for-offline-use =
+    Saved { $count ->
+        [one] { $count } observation
+       *[other] { $count } observations
+    } for offline use
 Saved-Observation = Saved observation, in queue to upload
 Scientific-Name = Scientific Name
 Scientific-Name-Common-Name = Scientific Name (Common Name)
