@@ -1,4 +1,3 @@
-import { prefetch } from "@candlefinance/faster-image";
 import {
   DocumentDirectoryPath,
   exists,
@@ -15,7 +14,6 @@ import {
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import Observation from "realmModels/Observation";
 import ObservationSound from "realmModels/ObservationSound";
-import Photo from "realmModels/Photo";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "offlineExploreResults" );
@@ -24,7 +22,7 @@ const logger = log.extend( "offlineExploreResults" );
 // filtered further with no connection.
 const FILE_PATH = `${DocumentDirectoryPath}/offlineExploreResults.json`;
 const PAGE_SIZE = 200;
-export const MAX_OFFLINE_OBSERVATIONS = 2000;
+export const MAX_OFFLINE_OBSERVATIONS = 5000;
 
 type Params = Record<string, unknown>;
 
@@ -122,13 +120,6 @@ export const downloadOfflineExploreResults = async (
   await writeFile( FILE_PATH, JSON.stringify( results ), "utf8" );
   cached = results;
   notify( );
-  // Warm the image cache with each observation's first photo so the grid and
-  // list have something to show offline.
-  prefetch( results.observations
-    .map( obs => obs.observation_photos?.[0]?.photo )
-    .filter( Boolean )
-    .map( photo => Photo.displayLocalOrRemoteOriginalPhoto( photo ) )
-    .filter( Boolean ) );
   return results;
 };
 
