@@ -18,15 +18,8 @@ import {
   getNextPageParamForExplore,
 } from "../helpers/exploreParams";
 
-interface ExcludeUser {
-  id: number;
-}
-
 interface UseInfiniteExploreScrollParams {
-  params: ApiObservationsSearchParams & {
-    excludeUser?: ExcludeUser;
-    excludedUsers?: ExcludeUser[];
-  };
+  params: ApiObservationsSearchParams;
   enabled: boolean;
 }
 
@@ -59,7 +52,7 @@ const useInfiniteExploreScroll = (
       // ADVANCED_MODE_LIST_FIELDS only asks for the sound uuid, but the Identify
       // view plays the sounds of observations that have no photos.
       observation_sounds: ObservationSound.OBSERVATION_SOUNDS_FIELDS,
-      user: { // included here for "exclude by current user" in explore filters
+      user: {
         id: true,
         uuid: true,
         login: true,
@@ -67,9 +60,6 @@ const useInfiniteExploreScroll = (
     },
     ttl: -1,
   } ), [newInputParams] );
-
-  const excludedUser: ExcludeUser | undefined = newInputParams.excludeUser;
-  const excludedUsers: ExcludeUser[] = newInputParams.excludedUsers || [];
 
   const queryKey = ["useInfiniteExploreScroll", newInputParams];
 
@@ -108,10 +98,6 @@ const useInfiniteExploreScroll = (
 
   const pages = data?.pages as ApiObservationsSearchResponse[] | undefined;
 
-  // Identity, not contents: excludedUsers is `newInputParams.excludedUsers || []`,
-  // so the fallback is a fresh array on every render and can't be a dep itself.
-  const excludedIdsKey = excludedUsers.map( u => u.id ).sort( ).join( "," );
-
   // This used to run in the render body. Every render of the Explore screen —
   // every scroll tick, every filter touch — flattened every page fetched so
   // far, allocated a Set, and walked the whole list twice, then handed the
@@ -127,18 +113,8 @@ const useInfiniteExploreScroll = (
       seenKeys.add( key );
       return true;
     } );
-
-    // filter out obs from excluded users (client-side, no API param available)
-    if ( excludedUsers.length > 0 ) {
-      const excludedIds = new Set( excludedUsers.map( u => u.id ) );
-      return deduped.filter( obs => !excludedIds.has( obs?.user?.id ) );
-    }
-    if ( excludedUser ) {
-      return deduped.filter( observation => observation?.user?.id !== excludedUser.id );
-    }
     return deduped;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pages, excludedUser?.id, excludedIdsKey] );
+  }, [pages] );
 
   let totalResults: number | null | undefined = pages?.[0]?.total_results;
   if ( totalResults !== 0 && !totalResults ) {

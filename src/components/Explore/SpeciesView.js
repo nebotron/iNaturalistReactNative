@@ -3,9 +3,6 @@
 import { fetchSpeciesCounts } from "api/observations";
 import ExploreTaxonGridItem from "components/Explore/ExploreTaxonGridItem";
 import i18n from "i18next";
-import {
-  useExplore,
-} from "providers/ExploreContext";
 import type { Node } from "react";
 import React, {
   useEffect, useMemo, useRef, useState,
@@ -40,38 +37,11 @@ const SpeciesView = ( {
   const queriedTaxonIdsRef = useRef( new Set( ) );
   const [pendingTaxonIds, setPendingTaxonIds] = useState( [] );
   const currentUser = useCurrentUser( );
-  const { state } = useExplore();
-  const { excludeUser } = state;
   const {
     flashListStyle,
     gridItemStyle,
     numColumns,
   } = useGridLayout( );
-
-  // query all of current users seen species if "not by me" explore filter
-  const { data: seenByCurrentUserAll } = useQuery(
-    ["fetchSpeciesCountsAll"],
-    ( ) => fetchSpeciesCounts( {
-      user_id: currentUser?.id,
-      ttl: -1,
-      fields: {
-        taxon: {
-          id: true,
-        },
-      },
-    } ),
-    {
-      enabled: ( !!currentUser && !!excludeUser ),
-    },
-  );
-
-  const pageObservedTaxonIdsAll = useMemo( ( ) => seenByCurrentUserAll?.results?.map(
-    r => r.taxon.id,
-  ) || [], [seenByCurrentUserAll?.results] );
-
-  const params = excludeUser
-    ? { ...queryParams, without_taxon_id: pageObservedTaxonIdsAll }
-    : queryParams;
 
   const locale = i18n?.language ?? "en";
 
@@ -84,7 +54,7 @@ const SpeciesView = ( {
     "fetchSpeciesCounts",
     fetchSpeciesCounts,
     {
-      ...params,
+      ...queryParams,
       ...( !currentUser && { locale } ),
       fields: {
         taxon: Taxon.LIMITED_TAXON_FIELDS,

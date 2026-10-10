@@ -41,7 +41,7 @@ describe( "filterOfflineObservations", ( ) => {
   } );
 
   it( "filters by user and sorts", ( ) => {
-    expect( uuids( { excludedUsers: [{ id: 10 }] } ) ).toEqual( ["b"] );
+    expect( uuids( { not_user_id: 10 } ) ).toEqual( ["b"] );
     expect( uuids( { order_by: "created_at", order: "asc" } ) ).toEqual( ["a", "b"] );
     expect( uuids( { } ) ).toEqual( ["b", "a"] );
   } );

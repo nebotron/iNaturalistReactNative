@@ -170,9 +170,7 @@ export const filterOfflineObservations = (
   const months = toNumbers( params.month );
   const hours = toNumbers( params.hour );
   const userIds = toNumbers( params.user_id );
-  const excludedUserIds = new Set(
-    ( params.excludedUsers as { id: number }[] | undefined || [] ).map( u => u.id ),
-  );
+  const excludedUserIds = new Set( toNumbers( params.not_user_id ) );
 
   const filtered = observations.filter( obs => {
     const lineage = taxonLineage( obs );

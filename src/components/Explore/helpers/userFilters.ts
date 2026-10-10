@@ -85,19 +85,22 @@ export function userFiltersToApiParams(
   userFilters: ExploreUserFilter[] | undefined,
 ): {
   user_id?: number | string;
+  not_user_id?: number | string;
 } {
-  const includeIds = ( userFilters || [] )
-    .filter( filter => !filter.exclude )
-    .map( filter => filter.user.id );
+  const idsParam = ( exclude: boolean ) => {
+    const ids = ( userFilters || [] )
+      .filter( filter => filter.exclude === exclude )
+      .map( filter => filter.user.id );
+    return ids.length > 1
+      ? ids.join( "," )
+      : ids[0];
+  };
 
-  const params: { user_id?: number | string } = {};
-
-  if ( includeIds.length === 1 ) {
-    params.user_id = includeIds[0];
-  } else if ( includeIds.length > 1 ) {
-    params.user_id = includeIds.join( "," );
-  }
-
+  const params: { user_id?: number | string; not_user_id?: number | string } = {};
+  const userId = idsParam( false );
+  const notUserId = idsParam( true );
+  if ( userId ) params.user_id = userId;
+  if ( notUserId ) params.not_user_id = notUserId;
   return params;
 }
 

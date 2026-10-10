@@ -164,12 +164,10 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     delete filteredParams.user_id;
   }
 
-  // Excluded users are filtered client-side (no API param for without_user_id)
-  const excludedUsers = ( params.userFilters || [] )
-    .filter( f => f.exclude )
-    .map( f => ( { id: f.user.id } ) );
-  if ( excludedUsers.length > 0 ) {
-    filteredParams.excludedUsers = excludedUsers;
+  if ( userFilterParams.not_user_id ) {
+    filteredParams.not_user_id = userFilterParams.not_user_id;
+  } else {
+    delete filteredParams.not_user_id;
   }
 
   delete filteredParams.taxon;
