@@ -5,10 +5,11 @@
 
 // Live bird identification by sound. Taps the microphone, resamples to
 // 32 kHz mono, keeps the most recent 5 s in a sliding window, and every second
-// runs a BirdNET v3.0 model on it (CC BY-SA 4.0, "Powered by BirdNET"): the
-// bundled audio_birds.onnx (Seattle-area species, see
-// scripts/bird_audio/birdnet) or a regional model the JS side downloaded.
-// Scores go out only for the outputs JS asks for. The model contains its own
+// runs the bundled audio_id.onnx on it: BirdNET v3.0 (CC BY-SA 4.0, "Powered
+// by BirdNET") cut down to the species iNaturalist has sound observations of,
+// with its weights in audio_id.data<N> (scripts/bird_audio/birdnet/
+// build_model.py). Scores go out only for the outputs JS asks for. Everything
+// runs offline. The model contains its own
 // spectrogram frontend, so the window goes in as raw samples and one
 // probability per species comes out (multi-label: several birds can score
 // high at once). Scores are emitted to JS as "AudioBirdIdScores".
@@ -35,7 +36,6 @@
   dispatch_queue_t  _inferQueue;
   OrtEnv           *_env;
   OrtSession       *_session;
-  NSString         *_modelPath;
   NSArray<NSNumber *> *_outputs;
   OrtSession       *_geoSession;
   BOOL              _wantListening;
@@ -87,18 +87,14 @@ RCT_EXPORT_MODULE( );
   return session;
 }
 
-// A nil path means the bundled model.
-- (BOOL)loadModel:(NSString *)path
+- (BOOL)loadModel
 {
-  path = path ?: [[NSBundle mainBundle] pathForResource:@"audio_birds" ofType:@"onnx"];
-  if ( !path ) return NO;
-  if ( _session && [path isEqualToString:_modelPath] ) return YES;
   __block BOOL ok = NO;
   dispatch_sync( _inferQueue, ^{
-    const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
-    if ( self->_session ) ort->ReleaseSession( self->_session );
-    self->_session = [self openSession:path];
-    self->_modelPath = self->_session ? path : nil;
+    if ( !self->_session ) {
+      NSString *path = [[NSBundle mainBundle] pathForResource:@"audio_id" ofType:@"onnx"];
+      self->_session = path ? [self openSession:path] : NULL;
+    }
     ok = self->_session != NULL;
   } );
   return ok;
@@ -125,12 +121,12 @@ RCT_EXPORT_METHOD( geo:( double )lat lng:( double )lng week:( double )week
   } );
 }
 
-RCT_EXPORT_METHOD( start:( NSString * )modelPath outputs:( NSArray<NSNumber *> * )outputs
+RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
   dispatch_sync( _inferQueue, ^{ self->_outputs = [outputs copy]; } );
-  if ( ![self loadModel:modelPath.length ? modelPath : nil] ) {
+  if ( ![self loadModel] ) {
     reject( @"model", @"Could not load the audio model", nil );
     return;
   }

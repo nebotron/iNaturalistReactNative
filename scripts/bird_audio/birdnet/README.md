@@ -1,67 +1,21 @@
-# Audio ID models (BirdNET v3.0)
+# Audio ID model (BirdNET v3.0, worldwide, offline)
 
-Within 100 km of Seattle Audio ID runs the bundled Seattle model below.
-Elsewhere it downloads BirdNET's model for the region (~75 MB, or the 279 MB
-worldwide model where no region applies) from a pinned revision of
-https://huggingface.co/tphakala/BirdNET-v3.0-Models. Everywhere, birds that
-the bundled BirdNET geomodel (`audio_geo.onnx`, V3.0.3, from
-https://huggingface.co/sammlapp/BirdNET_GeoModel) scores below 0.03 for the
-user's place and week are left out. Model outputs are matched by scientific name
-to iNaturalist species with research-grade sound observations, birds and other
-animals alike (`export_catalog.py` -> `audioIdCatalog.json`).
+Audio ID runs **BirdNET+ V3.0 developer preview 3.1** (K. Lisa Yang Center for
+Conservation Bioacoustics, Cornell University; Chemnitz University of
+Technology; Museum für Naturkunde Berlin), "Powered by BirdNET", licensed
+CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/), from the full
+fp16 ONNX export at https://huggingface.co/tphakala/BirdNET-v3.0-Models.
+Changes: the classifier heads are sliced to the 7,994 species that iNaturalist
+has research-grade sound observations of (birds, frogs, insects, mammals), and
+the weights are split across `audio_id.data0-2` to stay under GitHub's file size
+limit. The result, `ios/iNaturalistReactNative/audio_id.onnx` and its data
+files, is under the same license. The bundled BirdNET geomodel
+(`audio_geo.onnx`, V3.0.3, https://huggingface.co/sammlapp/BirdNET_GeoModel)
+drops birds unlikely at the user's place and week when location is available.
+Everything runs on device with no network. Poaching and military use are
+prohibited by BirdNET's terms of use.
 
-## Seattle model
+Rebuild and check (from this directory):
 
-The Audio ID screen runs **BirdNET+ V3.0 developer preview 3.1**
-(K. Lisa Yang Center for Conservation Bioacoustics, Cornell University;
-Chemnitz University of Technology; Museum für Naturkunde Berlin), "Powered by
-BirdNET", licensed CC BY-SA 4.0 (https://creativecommons.org/licenses/by-sa/4.0/),
-using the North America (West) fp16 ONNX export from
-https://huggingface.co/tphakala/BirdNET-v3.0-Models. Changes: the classifier
-heads are sliced to the 229 species below, and for the 189 of them with
-training data each score is averaged with a linear head on BirdNET's
-embedding, trained on older iNaturalist recordings (`head_birdnet.py`); the result,
-`ios/iNaturalistReactNative/audio_birds.onnx`, is under the same license.
-Poaching and military use are prohibited by BirdNET's terms of use.
-
-Rebuild (run in a scratch directory holding the BirdNET v3.0 NA-west fp32/fp16
-models and labels):
-
-    python3 seattle_species.py     # iNat bird species near Seattle
-    python3 select_species.py      # ones BirdNET knows -> keep_idx.json
-    python3 fetch_sets.py                  # eval + training recordings
-    python3 score.py eval && python3 score.py train   # needs the NA-west fp32 model and Perch v2
-    python3 head_birdnet.py <fp16.onnx> audio_birds.onnx
-    python3 export_birdnet.py <repo>
-    python3 export_catalog.py <repo>       # species table, regional models, geomodel
-    python3 eval_regions.py <repo>         # small check outside Seattle -> report_regions.json
-    python3 analyze.py                     # precision/recall of each lever -> report_levers.json
-
-Held-out results are in `report_birdnet.json`.
-
-## What improved precision and recall (`analyze.py`, `report_levers.json`)
-
-On the 2,951 held-out recordings, at the app's threshold of 0.3, the head
-raises recall from 0.944 to 0.953, and lowers other species flagged per recording
-from 1.20 to 0.95; average precision rises from 0.786 to 0.866, and holds for
-observers absent from the training set (0.823 -> 0.883). A geomodel
-location/season filter, per-species thresholds, requiring 2-3 consecutive
-windows, and Perch v2 (alone or ensembled) did no better than moving the global
-threshold.
-
-## Outside Seattle (`eval_regions.py`, `report_regions.json`)
-
-70 recent research-grade recordings per set, threshold 0.3, run with the
-model the app picks for each location; the geomodel filter (birds only)
-trims false species slightly and never drops the true one:
-
-| set | model | recall | precision | other species / rec. | top-1 |
-|---|---|---|---|---|---|
-| birds, eastern US | north-america-east | 0.986 | 0.548 | 0.81 | 0.943 |
-| birds, Britain | british-isles | 0.929 | 0.481 | 1.00 | 0.857 |
-| birds, eastern Australia | australia-east | 0.986 | 0.418 | 1.37 | 0.786 |
-| frogs, eastern US | north-america-east | 0.900 | 0.573 | 0.67 | 0.729 |
-| insects, eastern US | north-america-east | 0.700 | 0.700 | 0.30 | 0.700 |
-
-Applied to all animals, the geomodel dropped the true species for 17% of
-insect and 3% of frog recordings, so it filters birds only.
+    python3 build_model.py <repo>     # model, data files, geomodel, audioIdSpecies.json
+    python3 eval_regions.py <repo>    # small accuracy check -> report_regions.json

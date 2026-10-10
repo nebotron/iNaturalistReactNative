@@ -25,8 +25,7 @@ import { prepareAudioId } from "./audioIdModel";
 
 const { AudioBirdId } = NativeModules as {
   AudioBirdId?: {
-    start: ( modelPath: string | null, outputs: number[] )
-      => Promise<{ sampleRate: number; channels: number }>;
+    start: ( outputs: number[] ) => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
   };
@@ -50,26 +49,39 @@ const VIBRATE_OPTIONS: [VibrateMode, string][] = [
 const settings = new MMKV( { id: "audio-id" } );
 const VIBRATE_KEY = "vibrateMode";
 
+// Animal classes the model covers, for asking which of them the user has seen.
+const SEEN_TAXON_IDS = [
+  3, // birds
+  20978, // amphibians
+  47158, // insects
+  40151, // mammals
+  26036, // reptiles
+].join( "," );
+const SEEN_MAX_PAGES = 10;
+
 // Taxon IDs the user has research-grade observations of, including the
-// ancestors of any subspecies-level observations, limited to the model's species
-// (asked for 200 at a time to keep URLs short).
-const useSeenTaxonIds = (
-  userId: number | undefined,
-  species: AudioIdSpecies[],
-): Set<number> => {
-  const taxonIds = species.map( sp => sp.taxonId );
+// ancestors of any subspecies-level observations. Needs the network; without
+// it nothing is marked as not yet seen.
+const useSeenTaxonIds = ( userId: number | undefined ): Set<number> => {
   const { data } = useAuthenticatedQuery(
-    ["audioIdSeenTaxa", userId, taxonIds.join( "," )],
-    optsWithAuth => Promise.all( Array.from(
-      { length: Math.ceil( taxonIds.length / 200 ) },
-      ( _, i ) => fetchSpeciesCounts( {
-        user_id: userId,
-        quality_grade: "research",
-        taxon_id: taxonIds.slice( i * 200, ( i + 1 ) * 200 ).join( "," ),
-        per_page: 500,
-      }, optsWithAuth ),
-    ) ),
-    { enabled: !!userId && taxonIds.length > 0 },
+    ["audioIdSeenTaxa", userId],
+    async optsWithAuth => {
+      const pages = [];
+      for ( let page = 1; page <= SEEN_MAX_PAGES; page += 1 ) {
+        // eslint-disable-next-line no-await-in-loop
+        const p = await fetchSpeciesCounts( {
+          user_id: userId,
+          quality_grade: "research",
+          taxon_id: SEEN_TAXON_IDS,
+          per_page: 500,
+          page,
+        }, optsWithAuth );
+        pages.push( p );
+        if ( !p?.results || p.results.length < 500 ) break;
+      }
+      return pages;
+    },
+    { enabled: !!userId },
   );
   return useMemo( ( ) => {
     const ids = new Set<number>( );
@@ -91,7 +103,6 @@ const AudioId = ( ) => {
   const [level, setLevel] = useState( 0 );
   const [heard, setHeard] = useState<Record<number, Heard>>( {} ); // by taxon ID
   const [setup, setSetup] = useState<AudioIdSetup | null>( null );
-  const [status, setStatus] = useState<string | null>( null );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
   const speciesRef = useRef<AudioIdSpecies[]>( [] );
   const [inferMs, setInferMs] = useState( 0 );
@@ -104,7 +115,7 @@ const AudioId = ( ) => {
     setVibrateModeState( mode );
   };
   const currentUser = useCurrentUser( );
-  const seen = useSeenTaxonIds( currentUser?.id, species );
+  const seen = useSeenTaxonIds( currentUser?.id );
   // The score listener is registered once per focus; read these through refs.
   const alertRef = useRef( { vibrateMode, seen } );
   useEffect( ( ) => {
@@ -123,18 +134,15 @@ const AudioId = ( ) => {
     }
     setError( null );
     try {
-      setStatus( "Finding the species likely here this week…" );
-      const s = await prepareAudioId( AudioBirdId.geo, setStatus );
-      setStatus( null );
+      const s = await prepareAudioId( AudioBirdId.geo );
       speciesRef.current = s.species;
       setSetup( s );
-      const mic = await AudioBirdId.start( s.modelPath, s.outputs );
-      logger.info( `started, ${s.modelName} model, ${s.species.length} species, `
+      const mic = await AudioBirdId.start( s.outputs );
+      logger.info( `started, ${s.species.length} species, located ${s.located}, `
         + `mic ${mic.sampleRate} Hz x${mic.channels}` );
       setListening( true );
     } catch ( e ) {
       logger.error( `start failed: ${( e as Error ).message}` );
-      setStatus( null );
       setError( ( e as Error ).message );
     }
   }, [] );
@@ -254,10 +262,10 @@ const AudioId = ( ) => {
     <ScrollView className="bg-white h-full px-5 pt-4">
       <Body3 className="mb-3">
         {`Identifies ${setup
-          ? `${species.length} birds and other animals likely ${setup.located
-            ? "here this week"
-            : "around Seattle"} (${setup.modelName} model)`
-          : "birds and other animals likely here this week"} by sound, on device, `
+          ? `${species.length} birds and other animals${setup.located
+            ? " likely here this week"
+            : " (allow location to limit birds to those likely here)"}`
+          : "birds and other animals"} by sound, on device and offline, `
           + "from the last 5 seconds of audio, and keeps listening with the app in the "
           + "background. Species you are hearing now are highlighted. Powered by BirdNET."}
       </Body3>
@@ -296,7 +304,6 @@ const AudioId = ( ) => {
           </Pressable>
         ) )}
       </View>
-      {status && <Body3 className="mt-2">{status}</Body3>}
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
       {listening && (
         <View className="h-2 bg-lightGray rounded-full mt-4 overflow-hidden">
