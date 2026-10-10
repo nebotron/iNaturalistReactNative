@@ -19,3 +19,19 @@ Rebuild and check (from this directory):
 
     python3 build_model.py <repo>     # model, data files, geomodel, audioIdSpecies.json
     python3 eval_regions.py <repo>    # small accuracy check -> report_regions.json
+
+## Accuracy (`report_regions.json`)
+
+70 recent research-grade recordings per set, run as the app runs: 5 s windows
+every second, threshold 0.3, with the geomodel filter (birds only). The filter
+never dropped a true species here; without it, wrong species per recording rise
+by 10-35% for birds.
+
+| set | recall | precision | other species / rec. | top-1 |
+|---|---|---|---|---|
+| birds, Seattle area | 0.957 | 0.554 | 0.77 | 0.900 |
+| birds, eastern US | 0.986 | 0.527 | 0.89 | 0.943 |
+| birds, Britain | 0.929 | 0.481 | 1.00 | 0.857 |
+| birds, eastern Australia | 0.957 | 0.419 | 1.33 | 0.757 |
+| frogs, eastern US | 0.900 | 0.529 | 0.80 | 0.729 |
+| insects, eastern US | 0.743 | 0.627 | 0.44 | 0.671 |
