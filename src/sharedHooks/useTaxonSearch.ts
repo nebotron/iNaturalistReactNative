@@ -23,6 +23,11 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
   const taxonQuery = taxonQueryArg.trim();
   const [localTaxa, setLocalTaxa] = useState<RealmTaxon[] | null>( null );
   const [isUpdatingLocalDb, setIsUpdatingLocalDb] = useState( false );
+  // Online results, keyed by the query they answer so stale ones are ignored
+  const [remoteResult, setRemoteResult] = useState<{
+    query: string;
+    taxa: RealmTaxon[];
+  } | null>( null );
   const { isConnected } = useNetInfo( );
 
   // Do the substring match in JS rather than via Realm's query language.
@@ -62,8 +67,8 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
   }, [realm] );
 
   // When online, fetch taxa matching the query from the API and save them to
-  // Realm, so they show up now and in future offline searches. Then re-run
-  // the local search so the newly-saved taxa show up immediately.
+  // Realm, so they show up now and in future offline searches. Local results
+  // are shown until the online results arrive.
   useEffect( ( ) => {
     if ( taxonQuery.length === 0 || !isConnected ) return ( ) => undefined;
     let isSubscribed = true;
@@ -81,8 +86,10 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
             realm.create( "Taxon", Taxon.forUpdate( mappedTaxon ), UpdateMode.Modified );
           } );
         }, "updating local species db from search" );
-        const results = await safeRealmSearch( taxonQuery );
-        if ( isSubscribed ) setLocalTaxa( results );
+        const taxa = mappedTaxa
+          .map( mappedTaxon => realm.objectForPrimaryKey<RealmTaxon>( "Taxon", mappedTaxon.id ) )
+          .filter( ( taxon ): taxon is RealmTaxon => !!taxon );
+        if ( isSubscribed ) setRemoteResult( { query: taxonQuery, taxa } );
       } catch ( error ) {
         console.error( "Online taxon search failed:", error );
       } finally {
@@ -94,7 +101,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       clearTimeout( timer );
       setIsUpdatingLocalDb( false );
     };
-  }, [taxonQuery, isConnected, realm, safeRealmSearch] );
+  }, [taxonQuery, isConnected, realm] );
 
   useEffect( ( ) => {
     let isSubscribed = true;
@@ -134,10 +141,18 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       };
     }
 
-    // Show local taxa from offline search
-    if ( localTaxa !== null && localTaxa.length > 0 ) {
+    // Show online results once they arrive, followed by any other local matches
+    const remoteTaxa = remoteResult?.query === taxonQuery
+      ? remoteResult.taxa
+      : [];
+    const remoteIds = new Set( remoteTaxa.map( taxon => taxon.id ) );
+    const taxa = [
+      ...remoteTaxa,
+      ...( localTaxa || [] ).filter( taxon => !remoteIds.has( taxon.id ) ),
+    ];
+    if ( taxa.length > 0 ) {
       return {
-        taxa: localTaxa,
+        taxa,
         refetch: () => undefined,
         isLoading: false,
       };
@@ -149,7 +164,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       refetch: () => undefined,
       isLoading: isUpdatingLocalDb,
     };
-  }, [taxonQuery, localTaxa, iconicTaxa, isUpdatingLocalDb] );
+  }, [taxonQuery, localTaxa, remoteResult, iconicTaxa, isUpdatingLocalDb] );
 
   return searchResult;
 };

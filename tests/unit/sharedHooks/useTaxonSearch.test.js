@@ -45,6 +45,7 @@ jest.mock( "providers/contexts", ( ) => {
   const realm = {
     objects: ( ...args ) => mockRealmObjects( ...args ),
     create: ( ...args ) => mockRealmCreate( ...args ),
+    objectForPrimaryKey: jest.fn( ( ) => null ),
   };
   return {
     __esModule: true,
