@@ -1,6 +1,5 @@
 // @flow
 import classnames from "classnames";
-import FaveButton from "components/ObsDetails/FaveButton";
 import checkCamelAndSnakeCase from "components/ObsDetails/helpers/checkCamelAndSnakeCase";
 import {
   DateDisplay,
@@ -116,14 +115,7 @@ const ObsListItem = ( {
           opaque={!!currentUser && unsynced}
           isSmall
           iconicTaxonName={observation.taxon?.iconic_taxon_name}
-        >
-          {!explore && currentUser && (
-            <FaveButton
-              observation={observation}
-              currentUser={currentUser}
-            />
-          )}
-        </ObsImagePreview>
+        />
         {missingBasics && (
           <View className="absolute bottom-2 right-2">
             <INatIcon
