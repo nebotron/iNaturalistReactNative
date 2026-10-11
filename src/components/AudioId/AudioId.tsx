@@ -21,7 +21,10 @@ import { prepareAudioId } from "./audioIdModel";
 // Live ID of birds and other animals by sound (iOS). The AudioBirdId native
 // module runs BirdNET on the last 5 s of microphone audio every second and
 // emits one probability per species likely at the user's place and week (see
-// audioIdModel.ts). A species counts as heard when its score clears THRESHOLD.
+// audioIdModel.ts). A species counts as heard when its score clears THRESHOLD
+// and it is either the top species in that run or scores at least ALSO_HEARD:
+// on held-out recordings this cut wrong species by about a quarter for under
+// half a point of recall, while still showing confident overlapping callers.
 
 const { AudioBirdId } = NativeModules as {
   AudioBirdId?: {
@@ -32,6 +35,11 @@ const { AudioBirdId } = NativeModules as {
 };
 
 const THRESHOLD = 0.3;
+const ALSO_HEARD = 0.7;
+const heardIn = ( scores: number[] ) => {
+  const top = Math.max( ...scores, 0 );
+  return ( s: number ) => s >= THRESHOLD && ( s >= top || s >= ALSO_HEARD );
+};
 
 const logger = log.extend( "AudioId" );
 // Runs summarized per log line, so field problems show up in the app log.
@@ -178,8 +186,9 @@ const AudioId = ( ) => {
       setLevel( l );
       setInferMs( event.inferMs );
       const now = Date.now( );
+      const isHeard = heardIn( scores );
       const firsts = scores
-        .map( ( s, i ) => ( s >= THRESHOLD && sps[i] && !heardRef.current.has( sps[i].taxonId )
+        .map( ( s, i ) => ( isHeard( s ) && sps[i] && !heardRef.current.has( sps[i].taxonId )
           ? sps[i].taxonId
           : -1 ) )
         .filter( id => id >= 0 );
@@ -195,7 +204,7 @@ const AudioId = ( ) => {
         let next = h;
         scores.forEach( ( s, i ) => {
           const sp = sps[i];
-          if ( s < THRESHOLD || !sp ) return;
+          if ( !isHeard( s ) || !sp ) return;
           const old = next[sp.taxonId];
           const isNewCall = !old || now - old.lastHeard > 3000;
           next = {
@@ -224,7 +233,8 @@ const AudioId = ( ) => {
     [species],
   );
   const scoreNow = ( taxonId: number ) => current[outputOf.get( taxonId ) ?? -1] || 0;
-  const hearingNow = ( taxonId: number ) => listening && scoreNow( taxonId ) >= THRESHOLD;
+  const isHeardNow = useMemo( ( ) => heardIn( current ), [current] );
+  const hearingNow = ( taxonId: number ) => listening && isHeardNow( scoreNow( taxonId ) );
   const heardList = Object.values( heard ).sort( ( a, b ) => b.lastHeard - a.lastHeard );
   const bestNow = current.length
     ? current.indexOf( Math.max( ...current ) )

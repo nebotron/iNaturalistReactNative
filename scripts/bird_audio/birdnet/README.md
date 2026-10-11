@@ -22,16 +22,24 @@ Rebuild and check (from this directory):
 
 ## Accuracy (`report_regions.json`)
 
-70 recent research-grade recordings per set, run as the app runs: 5 s windows
-every second, threshold 0.3, with the geomodel filter (birds only). The filter
-never dropped a true species here; without it, wrong species per recording rise
-by 10-35% for birds.
+Run as the app runs: 5 s windows every second, the geomodel filter (birds
+only), and a species counts as heard in a window when it scores 0.3+ and is
+the window's top species or scores 0.7+. On the same 923 recordings (600 from
+the Seattle area, 323 from the sets below), that top-species rule cut wrong
+species per recording from 1.17 to 0.83 (Seattle) and 0.86 to 0.65 (others)
+while recall went from 0.927 to 0.925 and 0.920 to 0.916. Raising the
+threshold, stricter geomodel cutoffs, a score ratio to the top species, and
+requiring consecutive windows all lost more recall for less gain.
 
-| set | recall | precision | other species / rec. | top-1 |
-|---|---|---|---|---|
-| birds, Seattle area | 0.957 | 0.554 | 0.77 | 0.900 |
-| birds, eastern US | 0.986 | 0.527 | 0.89 | 0.943 |
-| birds, Britain | 0.929 | 0.481 | 1.00 | 0.857 |
-| birds, eastern Australia | 0.957 | 0.419 | 1.33 | 0.757 |
-| frogs, eastern US | 0.900 | 0.529 | 0.80 | 0.729 |
-| insects, eastern US | 0.743 | 0.627 | 0.44 | 0.671 |
+| set | n | recall | precision | other species / rec. | top-1 |
+|---|---|---|---|---|---|
+| Seattle eval sample | 600 | 0.925 | 0.528 | 0.83 | 0.810 |
+| birds, Seattle area | 68 | 0.985 | 0.663 | 0.50 | 0.912 |
+| birds, eastern US | 20 | 0.950 | 0.543 | 0.80 | 0.900 |
+| birds, Britain | 60 | 0.950 | 0.594 | 0.65 | 0.833 |
+| birds, eastern Australia | 50 | 0.960 | 0.471 | 1.08 | 0.760 |
+| frogs, eastern US | 63 | 0.921 | 0.552 | 0.75 | 0.714 |
+| insects, eastern US | 62 | 0.758 | 0.691 | 0.34 | 0.710 |
+
+Recordings carry one label, so some "other species" are real background
+animals; the geomodel filter never dropped a true species here.
