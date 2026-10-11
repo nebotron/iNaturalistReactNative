@@ -122,6 +122,8 @@ artifacts/
 .claude/*
 !.claude/CLAUDE.md
 !.claude/skills
+!.claude/settings.json
+!.claude/hooks
 
 yolov8n.pt
 
