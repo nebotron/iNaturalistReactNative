@@ -22,6 +22,7 @@ import {
 import ExploreHeader from "./Header/ExploreHeader";
 import IdentifiersView from "./IdentifiersView";
 import IdentifyView from "./IdentifyView";
+import LifeListView from "./LifeListView";
 import ObservationsView from "./ObservationsView";
 import ObservationsViewBar from "./ObservationsViewBar";
 import ObserversView from "./ObserversView";
@@ -36,6 +37,7 @@ const exploreViewIcon = {
   observations: "binoculars",
   identify: "id-agree",
   species: "leaf",
+  lifelist: "list",
   observers: "observers",
   identifiers: "identifiers",
   hotspots: "location",
@@ -114,6 +116,7 @@ const Explore = ( {
     observations: t( "Observations-View" ),
     identify: t( "Identify-View" ),
     species: t( "Species-View" ),
+    lifelist: t( "Life-List-View" ),
     observers: t( "Observers-View" ),
     identifiers: t( "Identifiers-View" ),
     hotspots: t( "Hotspots-View" ),
@@ -198,6 +201,14 @@ const Explore = ( {
             handleUpdateCount={handleUpdateCount}
           />
         )}
+        {currentExploreView === "lifelist" && (
+          <LifeListView
+            canFetch={canFetch}
+            isConnected={isConnected}
+            queryParams={queryParams}
+            handleUpdateCount={handleUpdateCount}
+          />
+        )}
         {currentExploreView === "observers" && (
           <ObserversView
             canFetch={canFetch}
@@ -235,6 +246,13 @@ const Explore = ( {
         label: t( "Species" ),
         text: t( "Organisms-that-are-identified-to-species" ),
         value: "species",
+      },
+      lifelist: {
+        buttonText: t( "EXPLORE-LIFE-LIST" ),
+        icon: "list",
+        label: t( "Life-List" ),
+        text: t( "Each-species-with-the-date-it-was-first-observed" ),
+        value: "lifelist",
       },
       observations: {
         buttonText: t( "EXPLORE-OBSERVATIONS" ),

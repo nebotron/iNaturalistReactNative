@@ -9,6 +9,7 @@ const useExploreHeaderCount = ( ): Object => {
     observations: null,
     identify: null,
     species: null,
+    lifelist: null,
     observers: null,
     identifiers: null,
   } );

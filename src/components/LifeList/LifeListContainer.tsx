@@ -47,7 +47,7 @@ enum LIFER_SORT {
   RAREST = "RAREST",
 }
 
-interface Lifer {
+export interface Lifer {
   observed_on: string | null;
   uuid: string;
   observation_photos: ApiObservation["observation_photos"];
@@ -91,7 +91,7 @@ function writeLiferDisplayCache( userId: number, display: LiferDisplayCache ): v
   zustandStorage.removeItem( `liferDisplay-v1-${userId}` );
 }
 
-const toLifer = ( obs: ApiObservation ): Lifer | null => (
+export const toLifer = ( obs: ApiObservation ): Lifer | null => (
   obs.taxon?.id
     ? {
       observed_on: obs.observed_on ?? null,
@@ -270,7 +270,7 @@ interface LiferGridItemProps {
   style?: object;
 }
 
-const LiferGridItem = ( { item, style }: LiferGridItemProps ) => {
+export const LiferGridItem = ( { item, style }: LiferGridItemProps ) => {
   const navigation = useNavigation( );
   const { t } = useTranslation( );
   const currentUser = useCurrentUser( );

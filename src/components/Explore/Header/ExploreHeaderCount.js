@@ -35,7 +35,7 @@ const ExploreHeaderCount = ( {
     if ( exploreView === "observations" || exploreView === "identify" ) {
       return t( "X-Observations", { count } );
     }
-    if ( exploreView === "species" ) {
+    if ( exploreView === "species" || exploreView === "lifelist" ) {
       return t( "X-Species", { count } );
     }
     if ( exploreView === "identifiers" ) {

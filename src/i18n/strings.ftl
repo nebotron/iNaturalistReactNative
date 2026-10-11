@@ -513,6 +513,8 @@ Duplicate-photo-indicator = Previously uploaded photo
 Duplicate-Photos = Duplicate Photos
 During-app-start-no-model-found = During app start there was no computer vision model found. There will be no AI camera.
 # Button for editing something
+# Description of the Life List view in Explore
+Each-species-with-the-date-it-was-first-observed = Each species with the date it was first observed, most recent first
 Edit = Edit
 EDIT-COMMENT = EDIT COMMENT
 Edit-comment = Edit comment
@@ -578,6 +580,7 @@ EXPLORE = EXPLORE
 Explore-Filters = Explore Filters
 EXPLORE-HOTSPOTS = EXPLORE HOTSPOTS
 EXPLORE-IDENTIFIERS = EXPLORE IDENTIFIERS
+EXPLORE-LIFE-LIST = EXPLORE LIFE LIST
 EXPLORE-OBSERVATIONS = EXPLORE OBSERVATIONS
 EXPLORE-OBSERVERS = EXPLORE OBSERVERS
 EXPLORE-SPECIES = EXPLORE SPECIES
@@ -832,6 +835,9 @@ LEAVE-PROJECT--question = LEAVE PROJECT?
 LEAVE-US-A-REVIEW = LEAVE US A REVIEW!
 Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
+Life-List = Life List
+# Accessibility label for the Life List view in Explore
+Life-List-View = Life List View
 Load-saved-filter = Load saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
 # Loading message shown while fetching the route through a selected hotspot
