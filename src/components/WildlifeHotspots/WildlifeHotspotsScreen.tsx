@@ -636,6 +636,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
           }}
           rotateEnabled={false}
           pitchEnabled={false}
+          showsScale
           showsUserLocation
         >
           {stops.map( ( stop, index ) => stop.point && (
