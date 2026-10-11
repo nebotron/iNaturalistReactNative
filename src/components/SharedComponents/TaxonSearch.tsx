@@ -1,5 +1,4 @@
 import EmptySearchResults from "components/Explore/SearchScreens/EmptySearchResults";
-import Button from "components/SharedComponents/Buttons/Button";
 import SearchBar from "components/SharedComponents/SearchBar";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
@@ -9,7 +8,7 @@ import type { ListRenderItem } from "react-native";
 import { FlatList } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RealmTaxon } from "realmModels/types";
-import { useKeyboardInfo, useTranslation } from "sharedHooks";
+import { useKeyboardInfo } from "sharedHooks";
 import { getShadow } from "styles/global";
 
 const DROP_SHADOW = getShadow( {
@@ -22,27 +21,22 @@ interface Props {
   query?: string;
   setQuery: ( newQuery: string ) => void;
   isLoading?: boolean;
-  isUpdatingLocalDb?: boolean;
-  updateLocalSpeciesDb?: ( ) => void;
   renderItem: ListRenderItem<RealmTaxon>;
   taxa: RealmTaxon[];
 }
 
 const TaxonSearch = ( {
   isLoading = false,
-  isUpdatingLocalDb = false,
   query = "",
   renderItem,
   setQuery,
   taxa = EMPTY_TAXA,
-  updateLocalSpeciesDb,
 }: Props ) => {
   const { hasBottomTabBar } = useStackHost( );
   const { bottom } = useSafeAreaInsets( );
   const paddingBottom = !hasBottomTabBar
     ? bottom
     : 0;
-  const { t } = useTranslation( );
   const { keyboardHeight, keyboardShown } = useKeyboardInfo( );
 
   const emptyListComponent = useMemo( ( ) => (
@@ -60,21 +54,9 @@ const TaxonSearch = ( {
   // Make sure all of the results can be scrolled to even with the keyboard
   // up
   const footerComponent = ( ) => (
-    <>
-      {query.length > 0 && updateLocalSpeciesDb && (
-        <Button
-          className="mx-6 mt-3"
-          onPress={updateLocalSpeciesDb}
-          loading={isUpdatingLocalDb}
-          disabled={isUpdatingLocalDb}
-          text={t( "UPDATE-LOCAL-SPECIES-DATABASE" )}
-          testID="TaxonSearch.updateLocalSpeciesDb"
-        />
-      )}
-      {keyboardShown
-        ? <View style={{ paddingBottom: paddingBottom + keyboardHeight }} />
-        : <View style={{ paddingBottom }} />}
-    </>
+    keyboardShown
+      ? <View style={{ paddingBottom: paddingBottom + keyboardHeight }} />
+      : <View style={{ paddingBottom }} />
   );
 
   return (

@@ -1638,9 +1638,6 @@ Unmark-as-reviewed = Unmark as reviewed
 Unobserved = Unobserved
 Unobserved-by-me = Unobserved by me
 Unreviewed-observations-only = Unreviewed observations only
-# Button at the bottom of species search results that fetches matching taxa
-# from the server and saves them locally for future offline searches
-UPDATE-LOCAL-SPECIES-DATABASE = UPDATE LOCAL SPECIES DATABASE
 Upload-Complete = Upload Complete
 Upload-in-progress = Upload in progress
 UPLOAD-NOW = UPLOAD NOW

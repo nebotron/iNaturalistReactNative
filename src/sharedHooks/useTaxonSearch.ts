@@ -1,3 +1,4 @@
+import { useNetInfo } from "@react-native-community/netinfo";
 import { searchTaxa } from "api/taxa";
 import type { ApiTaxon } from "api/types";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
@@ -14,12 +15,15 @@ import { useIconicTaxa } from "sharedHooks";
 
 const { useRealm } = RealmContext;
 
+const ONLINE_SEARCH_DEBOUNCE_MS = 400;
+
 const useTaxonSearch = ( taxonQueryArg = "" ) => {
   const realm = useRealm( );
   const iconicTaxa = useIconicTaxa( { reload: false } );
   const taxonQuery = taxonQueryArg.trim();
   const [localTaxa, setLocalTaxa] = useState<RealmTaxon[] | null>( null );
   const [isUpdatingLocalDb, setIsUpdatingLocalDb] = useState( false );
+  const { isConnected } = useNetInfo( );
 
   // Do the substring match in JS rather than via Realm's query language.
   // Realm's CONTAINS operator on this property was unreliable in
@@ -57,16 +61,18 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     }
   }, [realm] );
 
-  // Fetches taxa matching the current query from the API and saves them to
-  // Realm, so they show up in future offline searches. Then re-runs the
-  // local search so the newly-saved taxa show up immediately.
-  const updateLocalSpeciesDb = useCallback( async ( ) => {
-    if ( taxonQuery.length === 0 ) return;
-    setIsUpdatingLocalDb( true );
-    try {
-      const apiToken = await getJWT( );
-      const remoteTaxa = await searchTaxa( { q: taxonQuery }, { api_token: apiToken } );
-      if ( remoteTaxa && remoteTaxa.length > 0 ) {
+  // When online, fetch taxa matching the query from the API and save them to
+  // Realm, so they show up now and in future offline searches. Then re-run
+  // the local search so the newly-saved taxa show up immediately.
+  useEffect( ( ) => {
+    if ( taxonQuery.length === 0 || !isConnected ) return ( ) => undefined;
+    let isSubscribed = true;
+    const timer = setTimeout( async ( ) => {
+      setIsUpdatingLocalDb( true );
+      try {
+        const apiToken = await getJWT( );
+        const remoteTaxa = await searchTaxa( { q: taxonQuery }, { api_token: apiToken } );
+        if ( !isSubscribed || !remoteTaxa || remoteTaxa.length === 0 ) return;
         const mappedTaxa = remoteTaxa.map(
           ( remoteTaxon: ApiTaxon ) => Taxon.mapApiToRealm( remoteTaxon, realm ),
         );
@@ -75,12 +81,20 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
             realm.create( "Taxon", Taxon.forUpdate( mappedTaxon ), UpdateMode.Modified );
           } );
         }, "updating local species db from search" );
-        setLocalTaxa( await safeRealmSearch( taxonQuery ) );
+        const results = await safeRealmSearch( taxonQuery );
+        if ( isSubscribed ) setLocalTaxa( results );
+      } catch ( error ) {
+        console.error( "Online taxon search failed:", error );
+      } finally {
+        if ( isSubscribed ) setIsUpdatingLocalDb( false );
       }
-    } finally {
+    }, ONLINE_SEARCH_DEBOUNCE_MS );
+    return ( ) => {
+      isSubscribed = false;
+      clearTimeout( timer );
       setIsUpdatingLocalDb( false );
-    }
-  }, [taxonQuery, realm, safeRealmSearch] );
+    };
+  }, [taxonQuery, isConnected, realm, safeRealmSearch] );
 
   useEffect( ( ) => {
     let isSubscribed = true;
@@ -133,15 +147,11 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     return {
       taxa: [],
       refetch: () => undefined,
-      isLoading: false,
+      isLoading: isUpdatingLocalDb,
     };
-  }, [taxonQuery, localTaxa, iconicTaxa] );
+  }, [taxonQuery, localTaxa, iconicTaxa, isUpdatingLocalDb] );
 
-  return {
-    ...searchResult,
-    isUpdatingLocalDb,
-    updateLocalSpeciesDb,
-  };
+  return searchResult;
 };
 
 export default useTaxonSearch;

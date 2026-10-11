@@ -21,7 +21,7 @@ const MatchTaxonSearchScreen = ( ) => {
   const [taxonQuery, setTaxonQuery] = useState( "" );
   const [selectedTaxon, setSelectedTaxon] = useState<ApiTaxon | null>( null );
   const {
-    taxa, isLoading, isUpdatingLocalDb, updateLocalSpeciesDb,
+    taxa, isLoading,
   } = useTaxonSearch( taxonQuery );
   const { t } = useTranslation( );
   const realm = useRealm( );
@@ -81,12 +81,10 @@ const MatchTaxonSearchScreen = ( ) => {
   return (
     <TaxonSearch
       isLoading={isLoading}
-      isUpdatingLocalDb={isUpdatingLocalDb}
       query={taxonQuery}
       renderItem={renderTaxonResult}
       setQuery={setTaxonQuery}
       taxa={taxa}
-      updateLocalSpeciesDb={updateLocalSpeciesDb}
     />
   );
 };

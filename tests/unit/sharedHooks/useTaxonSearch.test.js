@@ -77,23 +77,22 @@ describe( "useTaxonSearch", ( ) => {
     expect( mockRealmObjects ).not.toHaveBeenCalledWith( "Taxon" );
   } );
 
-  it( "should fetch remote taxa and save them to Realm via updateLocalSpeciesDb", async ( ) => {
+  it( "should automatically fetch remote taxa and save them to Realm", async ( ) => {
     mockSearchTaxa.mockResolvedValueOnce( [factory( "LocalTaxon" )] );
-    const { result } = renderHook( ( ) => useTaxonSearch( "foo" ) );
-    await act( async ( ) => {
-      await result.current.updateLocalSpeciesDb( );
+    renderHook( ( ) => useTaxonSearch( "foo" ) );
+    await waitFor( ( ) => {
+      expect( mockSafeRealmWrite ).toHaveBeenCalled( );
     } );
     expect( mockSearchTaxa ).toHaveBeenCalledWith(
       { q: "foo" },
       expect.objectContaining( { api_token: "jwt-token" } ),
     );
-    expect( mockSafeRealmWrite ).toHaveBeenCalled( );
   } );
 
   it( "should not fetch remote taxa for an empty query", async ( ) => {
-    const { result } = renderHook( ( ) => useTaxonSearch( "" ) );
+    renderHook( ( ) => useTaxonSearch( "" ) );
     await act( async ( ) => {
-      await result.current.updateLocalSpeciesDb( );
+      await new Promise( resolve => { setTimeout( resolve, 500 ); } );
     } );
     expect( mockSearchTaxa ).not.toHaveBeenCalled( );
   } );
