@@ -157,7 +157,7 @@ const withObservationsCounts = (
 // first sync every lifer was seen during the pass, so this does nothing; it
 // only fires when a species' lifer changes to an older observation that wasn't
 // in the pass (e.g. the previous one lost research grade).
-async function fetchMissingDisplayData(
+export async function fetchMissingDisplayData(
   uuids: string[],
   display: LiferDisplayCache,
   opts: { api_token: string | null },

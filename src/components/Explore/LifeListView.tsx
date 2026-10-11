@@ -1,28 +1,22 @@
-import { searchObservations } from "api/observations";
-import type { ApiObservation } from "api/types";
 import type { Lifer } from "components/LifeList/LifeListContainer";
-import { LiferGridItem, toLifer } from "components/LifeList/LifeListContainer";
-import React, { useEffect, useMemo } from "react";
+import { LiferGridItem } from "components/LifeList/LifeListContainer";
+import React, { useEffect, useMemo, useState } from "react";
 import type { ListRenderItemInfo } from "react-native";
-import { OBSERVATION_SYNC_FIELDS } from "sharedHelpers/userObservationsCache";
-import { useGridLayout, useInfiniteScroll } from "sharedHooks";
+import { useAuthenticatedQuery, useGridLayout } from "sharedHooks";
 
 import ExploreFlashList from "./ExploreFlashList";
-
-const PER_PAGE = 200;
-// The API won't page past 10,000 results.
-const MAX_RESULTS = 10000;
+import { lifeListCacheKey, readCachedLifeList, syncLifeList } from "./lifeListCache";
 
 interface Props {
   canFetch?: boolean;
   isConnected: boolean;
-  queryParams: object;
+  queryParams: Record<string, unknown>;
   handleUpdateCount: ( view: string, count: number ) => void;
 }
 
 // Every matching observation, grouped by species and keeping the earliest, so
 // each species appears once with the date it was first observed. Newest first,
-// like My Lifers.
+// like My Lifers, and cached locally and synced incrementally the same way.
 const LifeListView = ( {
   canFetch,
   isConnected,
@@ -30,50 +24,39 @@ const LifeListView = ( {
   handleUpdateCount,
 }: Props ) => {
   const { flashListStyle, gridItemStyle, numColumns } = useGridLayout( );
+  const cacheKey = lifeListCacheKey( queryParams );
+  // What a first sync has found so far, so it doesn't sit on a spinner.
+  const [progress, setProgress] = useState<{ key: string; lifers: Lifer[] } | null>( null );
 
-  const {
-    data, isFetching, fetchNextPage, totalResults,
-  } = useInfiniteScroll(
-    "lifeListObservations",
-    searchObservations,
+  const { data, isFetching } = useAuthenticatedQuery(
+    ["exploreLifeList", cacheKey],
+    optsWithAuth => syncLifeList( queryParams, optsWithAuth, lifers => {
+      setProgress( { key: cacheKey, lifers } );
+    } ),
     {
-      ...queryParams,
-      order_by: "observed_on",
-      order: "asc",
-      per_page: PER_PAGE,
-      fields: OBSERVATION_SYNC_FIELDS,
+      enabled: !!canFetch,
+      initialData: ( ) => {
+        const cached = readCachedLifeList( cacheKey );
+        return cached.length
+          ? cached
+          : undefined;
+      },
     },
-    { enabled: canFetch },
   );
 
-  // Grouping needs every observation, so page through them without waiting
-  // for the user to scroll.
-  const hasMore = totalResults !== null
-    && data.length < Math.min( totalResults, MAX_RESULTS );
-  useEffect( ( ) => {
-    if ( hasMore && !isFetching ) fetchNextPage( );
-  }, [hasMore, isFetching, fetchNextPage] );
-
   const lifers = useMemo( ( ) => {
-    const earliest = new Map<number, Lifer>( );
-    data.forEach( ( obs: ApiObservation ) => {
-      const lifer = toLifer( obs );
-      if ( !lifer?.speciesId ) return;
-      const existing = earliest.get( lifer.speciesId );
-      const isEarlier = !!lifer.observed_on
-        && ( !existing?.observed_on || lifer.observed_on < existing.observed_on );
-      if ( !existing || isEarlier ) {
-        earliest.set( lifer.speciesId, lifer );
-      }
-    } );
-    return Array.from( earliest.values( ) ).sort(
-      ( a, b ) => ( b.observed_on ?? "" ).localeCompare( a.observed_on ?? "" ),
-    );
-  }, [data] );
+    const partial = isFetching && progress?.key === cacheKey
+      ? progress.lifers
+      : [];
+    if ( partial.length > ( data?.length ?? 0 ) ) {
+      return partial;
+    }
+    return data ?? [];
+  }, [cacheKey, data, isFetching, progress] );
 
   useEffect( ( ) => {
-    if ( totalResults !== null ) handleUpdateCount( "lifelist", lifers.length );
-  }, [handleUpdateCount, lifers.length, totalResults] );
+    if ( !isFetching || lifers.length > 0 ) handleUpdateCount( "lifelist", lifers.length );
+  }, [handleUpdateCount, isFetching, lifers.length] );
 
   const contentContainerStyle = useMemo( ( ) => ( {
     ...flashListStyle,
@@ -86,8 +69,8 @@ const LifeListView = ( {
       contentContainerStyle={contentContainerStyle}
       data={lifers}
       fetchNextPage={( ) => undefined}
-      hideLoadingWheel={!hasMore}
-      isFetchingNextPage={hasMore}
+      hideLoadingWheel={!isFetching}
+      isFetchingNextPage={isFetching}
       isConnected={isConnected}
       keyExtractor={( item: Lifer ) => item.uuid}
       layout="grid"
@@ -95,7 +78,7 @@ const LifeListView = ( {
       renderItem={( { item }: ListRenderItemInfo<Lifer> ) => (
         <LiferGridItem item={item} style={gridItemStyle} />
       )}
-      totalResults={totalResults === null
+      totalResults={isFetching && lifers.length === 0
         ? null
         : lifers.length}
       testID="ExploreLifeListAnimatedList"
