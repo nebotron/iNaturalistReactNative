@@ -195,6 +195,8 @@ const SuggestionsContainer = ( ) => {
     ...initialState,
     selectedPhotoUri: photoUris[0],
     shouldUseEvidenceLocation: evidenceHasLocation,
+    // set up front so cached online suggestions can be read on first render
+    queryKey: getQueryKey( photoUris[0], evidenceHasLocation ),
   } );
   const [preferOfflineModel, setPreferOfflineModel] = useState( false );
   const previousObservationUuidRef = useRef<string | undefined>( currentObservation?.uuid );
@@ -484,9 +486,9 @@ const SuggestionsContainer = ( ) => {
 
   // offline suggestions load first, so loading only depends on them unless
   // offline is unavailable (e.g. a remote photo with no connection)
-  const isLoading = tryOfflineSuggestions
+  const isLoading = usingOfflineSuggestions && ( tryOfflineSuggestions
     ? offlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING
-    : onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING;
+    : onlineFetchStatus === FETCH_STATUSES.FETCH_STATUS_LOADING );
 
   const toggleLocation = useCallback( async ( { showLocation }: { showLocation: boolean } ) => {
     const newImageParams = await createUploadParams( selectedPhotoUri, showLocation );

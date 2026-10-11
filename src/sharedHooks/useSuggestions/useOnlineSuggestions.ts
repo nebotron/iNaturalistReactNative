@@ -5,7 +5,7 @@ import scoreImage from "api/computerVision";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import {
-  useCallback, useEffect, useState,
+  useCallback, useEffect, useMemo, useState,
 } from "react";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
@@ -99,11 +99,19 @@ const useOnlineSuggestions = (
 
   const getCurrentObservation = useStore( state => state.getCurrentObservation );
 
+  // Read already-scored results synchronously so they show on the first render
+  // instead of after the image is resized and the query runs, which would
+  // briefly flash the offline suggestions
+  const syncCacheKey = onlineSuggestionsCacheKey( queryKey, !!currentUser, locale );
+  const cachedOnlineSuggestions = useMemo( ( ) => ( queryKey.length > 0
+    ? getCachedSuggestions<OnlineSuggestionsQueryResponse>( syncCacheKey )
+    : undefined ), [queryKey.length, syncCacheKey] );
+
   // TODO if this is a remote observation with an `id` param, use
   // scoreObservation instead so we don't have to spend time resizing and
   // uploading images
   const {
-    data: onlineSuggestions,
+    data: fetchedOnlineSuggestions,
     dataUpdatedAt,
     refetch,
     fetchStatus,
@@ -155,6 +163,8 @@ const useOnlineSuggestions = (
       allowAnonymousJWT: true,
     },
   );
+
+  const onlineSuggestions = fetchedOnlineSuggestions ?? cachedOnlineSuggestions;
 
   // Stop blocking the UI on online suggestions after a timeout so the offline
   // suggestions are shown. We intentionally do NOT cancel the query: a slow
