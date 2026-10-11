@@ -14,7 +14,8 @@
 // probability per species comes out (multi-label: several birds can score
 // high at once). Scores are emitted to JS as "AudioBirdIdScores".
 // Listening continues with the app in the background (the "audio" background
-// mode in Info.plist) and resumes after interruptions such as phone calls.
+// mode in Info.plist) and resumes after interruptions such as phone calls or
+// other audio in the app (recording or playing a sound) stopping the engine.
 
 #define AB_SR       32000
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
@@ -39,6 +40,7 @@
   NSArray<NSNumber *> *_outputs;
   OrtSession       *_geoSession;
   BOOL              _wantListening;
+  dispatch_source_t _watchdog;
 }
 
 RCT_EXPORT_MODULE( );
@@ -143,6 +145,7 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
         reject( @"engine", error.localizedDescription ?: @"Could not start the microphone", error );
         return;
       }
+      [self startWatchdog];
       AVAudioFormat *f = [self->_engine.inputNode outputFormatForBus:0];
       resolve( @{ @"sampleRate": @( f.sampleRate ), @"channels": @( f.channelCount ) } );
     } );
@@ -153,8 +156,26 @@ RCT_EXPORT_METHOD( stop )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
     self->_wantListening = NO;
+    if ( self->_watchdog ) dispatch_source_cancel( self->_watchdog );
+    self->_watchdog = nil;
     [self stopEngine];
   } );
+}
+
+// Other audio in the app can reconfigure or deactivate the shared audio
+// session without a notification reaching us; check every few seconds.
+- (void)startWatchdog
+{
+  if ( _watchdog ) return;
+  _watchdog = dispatch_source_create( DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue() );
+  dispatch_source_set_timer( _watchdog, dispatch_time( DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC ),
+                             3 * NSEC_PER_SEC, NSEC_PER_SEC );
+  __weak AudioBirdId *weakSelf = self;
+  dispatch_source_set_event_handler( _watchdog, ^{
+    AudioBirdId *me = weakSelf;
+    if ( me && me->_wantListening && !me->_engine.isRunning ) [me restartIfWanted];
+  } );
+  dispatch_resume( _watchdog );
 }
 
 // A phone call, Siri, or another app's recording stops the engine; pick
