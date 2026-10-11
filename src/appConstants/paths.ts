@@ -9,8 +9,6 @@ export const photoLibraryPhotosPath = `${DocumentDirectoryPath}/galleryPhotos`;
 
 export const photoUploadPath = `${DocumentDirectoryPath}/photoUploads`;
 
-export const usbImportPhotosPath = `${DocumentDirectoryPath}/usbImportPhotos`;
-
 export const rotatedOriginalPhotosPath = `${DocumentDirectoryPath}/rotatedOriginalPhotos`;
 
 export const sentinelFilePath = `${DocumentDirectoryPath}/sentinelFiles`;

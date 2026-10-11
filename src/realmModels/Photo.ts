@@ -16,6 +16,7 @@ import {
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import resizeImage from "sharedHelpers/resizeImage";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { unlink } from "sharedHelpers/util";
 
 const logger = log.extend( "Photo" );
@@ -77,7 +78,7 @@ class Photo extends Realm.Object {
     } ).ImageCropper;
     if ( Platform.OS !== "ios" || !imageCropper?.decodeRawToJpeg ) return null;
 
-    const path = pathOrUri.replace( /^file:\/\//, "" );
+    const path = stripFilePrefix( pathOrUri );
     const name = path.split( "/" ).pop( ) ?? "photo";
     const outPath = `${photoUploadPath}/${name.replace( /\.[^.]+$/, "" )}.jpg`;
     try {
@@ -153,7 +154,7 @@ class Photo extends Realm.Object {
 
     let size = NaN;
     try {
-      size = Number( ( await stat( uri.replace( /^file:\/\//, "" ) ) ).size );
+      size = Number( ( await stat( stripFilePrefix( uri ) ) ).size );
     } catch {
       // If we can't stat it, leave it alone and let the upload proceed.
       return uri;

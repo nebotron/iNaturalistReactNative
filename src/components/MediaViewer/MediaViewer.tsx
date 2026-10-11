@@ -20,6 +20,7 @@ import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Photo from "realmModels/Photo";
 import { BREAKPOINTS } from "sharedHelpers/breakpoint";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import useTranslation from "sharedHooks/useTranslation";
 
@@ -184,7 +185,7 @@ const MediaViewer = ( {
 
     // Get a local file we can annotate and share
     if ( photoUri.startsWith( "file://" ) ) {
-      await copyFile( photoUri.replace( "file://", "" ), tempPath );
+      await copyFile( stripFilePrefix( photoUri ), tempPath );
     } else {
       await downloadFile( { fromUrl: photoUri, toFile: tempPath } ).promise;
     }

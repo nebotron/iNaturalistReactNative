@@ -1,5 +1,4 @@
-// @flow
-
+import type { FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import { duplicateGroupedMediaGroups } from
   "components/PhotoImporter/helpers/duplicateGroupedMedia";
@@ -7,7 +6,6 @@ import {
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import { RealmContext } from "providers/contexts";
-import type { Node } from "react";
 import React, {
   useCallback,
   useEffect,
@@ -15,7 +13,9 @@ import React, {
   useRef,
   useState,
 } from "react";
+import type { NativeScrollEvent, NativeSyntheticEvent, ViewToken } from "react-native";
 import { Alert } from "react-native";
+import type { RealmObservationPojo } from "realmModels/types";
 import {
   beginLocationWriteBatch,
   endLocationWriteBatch,
@@ -42,6 +42,7 @@ import logRawImportMetadata from "sharedHelpers/rawImportMetadataLog";
 import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { moveSharedGroupedPhotos } from "sharedHelpers/shareExtensionFiles";
 import { useExitObservationFlow, useGridLayout, useTranslation } from "sharedHooks";
+import type { GroupedPhoto } from "stores/createObservationFlowSlice";
 import useStore from "stores/useStore";
 
 import GroupPhotos from "./GroupPhotos";
@@ -55,13 +56,17 @@ const logger = log.extend( "GroupPhotosContainer" );
 
 // The device library photos a grouped media item came from, i.e. the photos
 // this import is about to turn into an observation.
-function devicePhotoUrisFromGroup( group ) {
+function devicePhotoUrisFromGroup( group: GroupedPhoto ): string[] {
   return ( group.photos || [] )
     .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
-    .filter( Boolean );
+    .filter( ( uri ): uri is string => !!uri );
 }
 
-function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
+function findScrollTargetIndex(
+  newPhotos: GroupedPhoto[],
+  uri: string | null,
+  fallbackIndex: number | null,
+): number | null {
   if ( uri == null ) return null;
   const index = newPhotos.findIndex( obs => obs.photos?.some( p => p.image.uri === uri ) );
   if ( index >= 0 ) return index;
@@ -71,7 +76,7 @@ function findScrollTargetIndex( newPhotos, uri, fallbackIndex ) {
   return null;
 }
 
-const GroupPhotosContainer = ( ): Node => {
+const GroupPhotosContainer = ( ) => {
   const queryClient = useQueryClient( );
   const { t } = useTranslation( );
   const { gridItemStyle } = useGridLayout( undefined, "fullWidth" );
@@ -98,7 +103,7 @@ const GroupPhotosContainer = ( ): Node => {
     [groupedPhotos],
   );
 
-  const [selectedIndices, setSelectedIndices] = useState( [] );
+  const [selectedIndices, setSelectedIndices] = useState<number[]>( [] );
   const [isDuplicatingPhotos, setIsDuplicatingPhotos] = useState( false );
   const [isCreatingObservations, setIsCreatingObservations] = useState( false );
 
@@ -115,26 +120,28 @@ const GroupPhotosContainer = ( ): Node => {
     ) );
   }, [groupedPhotos.length] );
 
-  const flashListRef = useRef( null );
-  const firstVisibleItemUri = useRef( null );
-  const firstVisibleItemIndex = useRef( null );
-  const pendingScrollOffset = useRef( null );
+  const flashListRef = useRef<FlashListRef<GroupedPhoto>>( null );
+  const firstVisibleItemUri = useRef<string | null>( null );
+  const firstVisibleItemIndex = useRef<number | null>( null );
+  const pendingScrollOffset = useRef<number | null>( null );
   const scrollOffset = useRef( 0 );
 
-  const onScroll = useCallback( event => {
+  const onScroll = useCallback( ( event: NativeSyntheticEvent<NativeScrollEvent> ) => {
     scrollOffset.current = event.nativeEvent.contentOffset.y;
   }, [] );
 
-  const onViewableItemsChanged = useCallback( ( { viewableItems } ) => {
+  const onViewableItemsChanged = useCallback( (
+    { viewableItems }: { viewableItems: ViewToken<GroupedPhoto>[] },
+  ) => {
     const firstVisible = viewableItems.find( vi => vi.item?.photos );
     if ( firstVisible ) {
-      firstVisibleItemUri.current = firstVisible.item.photos[0]?.image?.uri ?? null;
+      firstVisibleItemUri.current = firstVisible.item.photos?.[0]?.image?.uri ?? null;
       firstVisibleItemIndex.current = firstVisible.index ?? null;
     }
   }, [] );
 
   useEffect( ( ) => {
-    let timer;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     if ( pendingScrollOffset.current !== null ) {
       const offset = pendingScrollOffset.current;
       pendingScrollOffset.current = null;
@@ -156,7 +163,7 @@ const GroupPhotosContainer = ( ): Node => {
     );
   };
 
-  const selectObservationPhotos = ( isSelected, observation ) => {
+  const selectObservationPhotos = ( isSelected: boolean, observation: GroupedPhoto ) => {
     const index = groupedPhotos.indexOf( observation );
     if ( index < 0 ) {
       return;
@@ -173,7 +180,7 @@ const GroupPhotosContainer = ( ): Node => {
     }
   };
 
-  const setPendingScrollOffset = useCallback( targetIndex => {
+  const setPendingScrollOffset = useCallback( ( targetIndex: number | null ) => {
     if ( targetIndex === null ) return;
     const oldIndex = firstVisibleItemIndex.current ?? targetIndex;
     const delta = targetIndex - oldIndex;
@@ -198,9 +205,9 @@ const GroupPhotosContainer = ( ): Node => {
     const mostRecentPhoto = orderedPhotos[0];
     // Collect soundUris from all selected items (sound-only or mixed groups)
     const selectedSoundUris = selectedObservations
-      .filter( obs => obs.soundUri )
-      .map( obs => obs.soundUri );
-    const newObsList = [];
+      .map( obs => obs.soundUri )
+      .filter( ( uri ): uri is string => !!uri );
+    const newObsList: GroupedPhoto[] = [];
 
     currentGroupedPhotos( ).forEach( obs => {
       // Sound-only items: merge into combined group if selected, else keep
@@ -221,7 +228,7 @@ const GroupPhotosContainer = ( ): Node => {
         const filteredPhotos = obs.photos?.filter(
           item => !orderedPhotos.includes( item ),
         );
-        if ( filteredPhotos?.length > 0 ) {
+        if ( filteredPhotos && filteredPhotos.length > 0 ) {
           const group = obs.soundUri
             ? { photos: filteredPhotos, soundUri: obs.soundUri }
             : { photos: filteredPhotos };
@@ -244,7 +251,7 @@ const GroupPhotosContainer = ( ): Node => {
     setSelectedIndices( [] );
   };
 
-  const separateObservations = observations => {
+  const separateObservations = ( observations: GroupedPhoto[] ) => {
     let maxCombinedItems = 0;
 
     observations.forEach( obs => {
@@ -261,7 +268,7 @@ const GroupPhotosContainer = ( ): Node => {
       return;
     }
 
-    const separatedItems = [];
+    const separatedItems: GroupedPhoto[] = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( observations );
 
     currentGroupedPhotos( ).forEach( obs => {
@@ -292,7 +299,7 @@ const GroupPhotosContainer = ( ): Node => {
     setSelectedIndices( [] );
   };
 
-  const duplicateObservations = async observations => {
+  const duplicateObservations = async ( observations: GroupedPhoto[] ) => {
     if ( observations.length === 0 ) {
       return;
     }
@@ -301,14 +308,14 @@ const GroupPhotosContainer = ( ): Node => {
     try {
       const duplicatedGroups = await duplicateGroupedMediaGroups( observations );
       const groups = currentGroupedPhotos( );
-      const indexToDuplicate = {};
+      const indexToDuplicate: Record<number, GroupedPhoto> = {};
       observations.forEach( ( obs, i ) => {
         const originalIndex = groups.indexOf( obs );
         if ( originalIndex >= 0 ) {
           indexToDuplicate[originalIndex] = duplicatedGroups[i];
         }
       } );
-      const newGroupedPhotos = [];
+      const newGroupedPhotos: GroupedPhoto[] = [];
       groups.forEach( ( group, index ) => {
         newGroupedPhotos.push( group );
         if ( indexToDuplicate[index] !== undefined ) {
@@ -322,8 +329,8 @@ const GroupPhotosContainer = ( ): Node => {
     }
   };
 
-  const removeObservations = observations => {
-    const removedFromGroup = [];
+  const removeObservations = ( observations: GroupedPhoto[] ) => {
+    const removedFromGroup: GroupedPhoto[] = [];
     const orderedPhotos = flattenAndOrderSelectedPhotos( observations );
 
     // Record the removed photos' device URIs instead of deleting them. An
@@ -334,7 +341,7 @@ const GroupPhotosContainer = ( ): Node => {
     // picker and can be deleted in one pass later from Photo Cleanup.
     const deviceUrisToDelete = orderedPhotos
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
-      .filter( Boolean );
+      .filter( ( uri ): uri is string => !!uri );
     deviceUrisToDelete.forEach( uri => addPendingGroupPhotoDeletionUri( uri ) );
     addRemovedGroupPhotoUris( deviceUrisToDelete );
 
@@ -369,9 +376,9 @@ const GroupPhotosContainer = ( ): Node => {
 
   // The separate, duplicate, and remove buttons live on each photo, so they
   // always act on the photo they're drawn on rather than on the selection.
-  const separateItem = item => separateObservations( [item] );
-  const duplicateItem = item => duplicateObservations( [item] );
-  const removeItem = item => removeObservations( [item] );
+  const separateItem = ( item: GroupedPhoto ) => separateObservations( [item] );
+  const duplicateItem = ( item: GroupedPhoto ) => duplicateObservations( [item] );
+  const removeItem = ( item: GroupedPhoto ) => removeObservations( [item] );
 
   // Backing out of Group Photos abandons the import entirely: nothing here has
   // been saved yet, and the grouped photos are persisted (see
@@ -459,7 +466,7 @@ const GroupPhotosContainer = ( ): Node => {
     // Prefetches are chained rather than fired per batch so they still run one
     // observation at a time, instead of every batch's CV work piling up
     // concurrently.
-    let prefetchChain = Promise.resolve( );
+    let prefetchChain: Promise<void> = Promise.resolve( );
     // Photos whose metadata could not be read are left out rather than imported
     // without it, and reported once at the end: a location silently missing
     // from an observation is invisible until long after the photo is gone.
@@ -467,7 +474,7 @@ const GroupPhotosContainer = ( ): Node => {
     // Their device photos were indexed as saved before the import started (see
     // above), so they have to be taken back out or the picker would go on
     // hiding photos that never became an observation.
-    const failedDevicePhotoUris = [];
+    const failedDevicePhotoUris: string[] = [];
     let defaultsApplied = false;
     // Once per import, and only when a raw came through: what the file held,
     // and how much of it survived into the JPEG the observation carries.
@@ -483,9 +490,7 @@ const GroupPhotosContainer = ( ): Node => {
       maxShiftPx: 0,
       ms: 0,
       // The shape of the first thing measured, so the log says what the photo
-      // actually held rather than leaving it to be inferred. Declared here
-      // rather than assigned afterwards: Flow types the literal, so a property
-      // added later isn't one it will let anything read.
+      // actually held rather than leaving it to be inferred.
       firstProfile: "",
     };
     // One Photos-library transaction (and so one iOS consent alert) for the
@@ -498,7 +503,7 @@ const GroupPhotosContainer = ( ): Node => {
         const batchResults = await Promise.allSettled(
           batch.map( createObservationFromGroupedMedia ),
         );
-        const observationsToSave = [];
+        const observationsToSave: RealmObservationPojo[] = [];
         for ( const [resultIndex, result] of batchResults.entries( ) ) {
           if ( result.status === "rejected" ) {
             failedCount += 1;

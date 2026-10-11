@@ -103,28 +103,3 @@ export function userFiltersToApiParams(
   if ( notUserId ) params.not_user_id = notUserId;
   return params;
 }
-
-export function toggleUserFilter(
-  userFilters: ExploreUserFilter[],
-  user: ExploreUserFilter["user"] | UserLike,
-  exclude = false,
-): ExploreUserFilter[] {
-  const normalizedUser = toExploreUserFilterUser( user );
-  const existingIndex = userFilters.findIndex(
-    filter => filter.user.id === normalizedUser.id,
-  );
-
-  if ( existingIndex >= 0 ) {
-    const existing = userFilters[existingIndex];
-    if ( existing.exclude === exclude ) {
-      return userFilters.filter( filter => filter.user.id !== normalizedUser.id );
-    }
-    return userFilters.map( ( filter, index ) => (
-      index === existingIndex
-        ? { user: normalizedUser, exclude }
-        : filter
-    ) );
-  }
-
-  return [...userFilters, { user: normalizedUser, exclude }];
-}

@@ -1,7 +1,5 @@
 import { createUrlKeyedFirebaseLog } from "sharedHelpers/urlKeyedFirebaseLog";
 
-export type BrightnessLog = Record<string, number>;
-
 // Skip local paths (ephemeral, unfetchable by the offline scripts) and
 // static.inaturalist.org placeholders — neither is worth syncing.
 const brightnessLog = createUrlKeyedFirebaseLog<number>( {

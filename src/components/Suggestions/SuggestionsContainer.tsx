@@ -22,7 +22,6 @@ import TaxonModel from "realmModels/Taxon";
 import type { RealmPhoto } from "realmModels/types";
 import { subscribeAnimalCropLog } from "sharedHelpers/animalCropLog";
 import fetchTaxonAndSave from "sharedHelpers/fetchTaxonAndSave";
-import { log } from "sharedHelpers/logger";
 import { getAncestorsFromTaxonomyFile } from "sharedHelpers/offlineTaxonomy";
 import { cropSignature, onlineSuggestionsQueryKey } from "sharedHelpers/suggestionsQueryKey";
 import {
@@ -155,8 +154,6 @@ const reducer = ( state, action ) => {
       throw new Error( );
   }
 };
-
-const logger = log.extend( "SuggestionsContainer" );
 
 const SuggestionsContainer = ( ) => {
   const navigation = useNavigation( );
@@ -311,12 +308,8 @@ const SuggestionsContainer = ( ) => {
     return eligibleIds;
   }, [suggestions, realm] );
 
-  // The actual genus taxon is only looked up once the user taps the button.
-  // `trace` records which lookups ran and how they ended, for the genus_select log
-  const findGenusForSuggestion = useCallback( async (
-    suggestion,
-    trace: Record<string, unknown>,
-  ) => {
+  // The actual genus taxon is only looked up once the user taps the button
+  const findGenusForSuggestion = useCallback( async suggestion => {
     const taxonId = suggestion.taxon.id;
     const realmTaxon = realm.objectForPrimaryKey( "Taxon", taxonId );
     // Offline suggestions carry ancestry from the model, so the genus can be
@@ -328,11 +321,6 @@ const SuggestionsContainer = ( ) => {
     );
     let offlineGenus = null;
     let foundGenusId: number | null = null;
-    trace.taxonId = taxonId;
-    trace.rankLevel = suggestion.taxon.rank_level;
-    trace.inRealm = !!realmTaxon;
-    trace.realmAncestors = realmTaxon?.ancestor_ids?.length ?? 0;
-    trace.suggestionAncestors = suggestion.taxon.ancestor_ids?.length ?? 0;
 
     if ( ancestorIds.length > 0 ) {
       const genusFromRealm = realm.objects( "Taxon" ).filtered(
@@ -341,7 +329,6 @@ const SuggestionsContainer = ( ) => {
         TaxonModel.GENUS_LEVEL,
       )[0];
       if ( genusFromRealm ) foundGenusId = genusFromRealm.id;
-      trace.realmGenus = !!genusFromRealm;
     }
 
     if ( !foundGenusId && ancestorIds.length > 0 ) {
@@ -352,41 +339,27 @@ const SuggestionsContainer = ( ) => {
         );
         offlineGenus = genusAncestor || null;
         foundGenusId = genusAncestor?.id ?? null;
-        trace.taxonomyFileGenus = !!genusAncestor;
-      } catch ( e ) {
-        trace.taxonomyFileError = ( e as Error ).message;
-      }
+      } catch { /* Taxonomy file unavailable */ }
     }
 
     if ( !foundGenusId ) {
-      const start = Date.now( );
       try {
         const taxonWithAncestors = await fetchTaxon( taxonId );
         const genusAncestor = taxonWithAncestors?.ancestors?.find(
           ( a: { rank_level?: number } ) => a.rank_level === TaxonModel.GENUS_LEVEL,
         );
         foundGenusId = genusAncestor?.id ?? null;
-        trace.apiGenus = !!genusAncestor;
-      } catch ( e ) {
-        trace.apiError = ( e as Error ).message;
-      }
-      trace.apiMs = Date.now( ) - start;
+      } catch { /* API unavailable */ }
     }
 
-    trace.genusId = foundGenusId;
     if ( !foundGenusId ) return null;
 
     let fullGenusTaxon = realm.objectForPrimaryKey( "Taxon", foundGenusId );
     if ( !fullGenusTaxon ) {
-      const start = Date.now( );
       try {
         fullGenusTaxon = await fetchTaxonAndSave( foundGenusId, realm );
-      } catch ( e ) {
-        trace.saveError = ( e as Error ).message;
-      }
-      trace.saveMs = Date.now( ) - start;
+      } catch { /* API unavailable */ }
     }
-    trace.usedOfflineGenus = !fullGenusTaxon;
 
     return fullGenusTaxon || offlineGenus;
   }, [realm] );
@@ -394,22 +367,9 @@ const SuggestionsContainer = ( ) => {
   const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: true } );
 
   const handleSelectGenus = useCallback( async suggestion => {
-    const start = Date.now( );
-    const trace: Record<string, unknown> = {};
-    let genusTaxon = null;
-    try {
-      genusTaxon = await findGenusForSuggestion( suggestion, trace );
-      if ( genusTaxon ) {
-        await navigateWithTaxonSelected( genusTaxon );
-      }
-    } catch ( e ) {
-      trace.error = ( e as Error ).message;
-    }
-    const entry = { ...trace, found: !!genusTaxon, elapsedMs: Date.now( ) - start };
-    if ( genusTaxon && !trace.error ) {
-      logger.infoWithExtra( "genus_select", entry );
-    } else {
-      logger.warnWithExtra( "genus_select_failed", entry );
+    const genusTaxon = await findGenusForSuggestion( suggestion );
+    if ( genusTaxon ) {
+      navigateWithTaxonSelected( genusTaxon );
     }
   }, [findGenusForSuggestion, navigateWithTaxonSelected] );
 

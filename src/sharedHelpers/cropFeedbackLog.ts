@@ -1,5 +1,6 @@
 import { cropOriginalUriFromPath } from "sharedHelpers/cropPhotoMetadata";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { zustandStorage } from "stores/useStore";
 
 const CROP_FEEDBACK_STORAGE_KEY = "cropFeedbackLog";
@@ -52,8 +53,6 @@ export const recordCropFeedback = (
   saveCropFeedback( data );
 };
 
-const normalizeSourceKey = ( key: string ) => key.replace( /^file:\/\//, "" );
-
 const findCropFeedbackKey = (
   data: StoredCropFeedback,
   candidate: string,
@@ -62,12 +61,12 @@ const findCropFeedbackKey = (
     return candidate;
   }
 
-  const normalizedCandidate = normalizeSourceKey( candidate );
+  const normalizedCandidate = stripFilePrefix( candidate );
   return Object.keys( data ).find( key => (
     key === candidate
-    || normalizeSourceKey( key ) === normalizedCandidate
+    || stripFilePrefix( key ) === normalizedCandidate
     || key.includes( normalizedCandidate )
-    || normalizedCandidate.includes( normalizeSourceKey( key ) )
+    || normalizedCandidate.includes( stripFilePrefix( key ) )
   ) );
 };
 

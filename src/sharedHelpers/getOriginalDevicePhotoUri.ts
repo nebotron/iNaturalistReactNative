@@ -1,5 +1,6 @@
 import { Platform } from "react-native";
 import type { Asset } from "react-native-image-picker";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 
 export const normalizeDevicePhotoUri = ( uri: string | null | undefined ): string | null => {
   if ( !uri ) {
@@ -74,7 +75,7 @@ export const registerImportedPhotoDeviceUriMappings = (
   }
   mappings[localUri] = normalizedDeviceUri;
   if ( localUri.startsWith( "file://" ) ) {
-    mappings[localUri.replace( "file://", "" )] = normalizedDeviceUri;
+    mappings[stripFilePrefix( localUri )] = normalizedDeviceUri;
   } else {
     mappings[`file://${localUri}`] = normalizedDeviceUri;
   }

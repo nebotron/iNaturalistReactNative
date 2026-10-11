@@ -2,8 +2,8 @@
 """
 Fine-tune YOLOv8 subject detector using cached images and crop_training.json.
 
-Unlike prepare_training_dataset.py (which requires Firebase), this script
-uses the local crop_training.json and the image cache at /tmp/inat_eval_cache.
+Uses the local crop_training.json (see scripts/pull_logs.py) and the image
+cache at /tmp/inat_eval_cache.
 
 Usage:
     python3 scripts/retrain_from_cache.py [--epochs 100] [--base yolov8s-worldv2.pt]

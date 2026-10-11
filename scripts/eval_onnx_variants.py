@@ -2,10 +2,8 @@
 """
 Evaluate multiple ONNX model variants on crop_training.json.
 
-Tests:
-  - ios/iNaturalistReactNative/yolov8n.onnx        (current deployed, finetuned single-cls)
-  - ios/iNaturalistReactNative/yolov8n_finetuned.onnx  (older finetuned version)
-  - yolov8s-worldv2-int8.onnx                      (larger YOLO World model, INT8)
+Tests ios/iNaturalistReactNative/yolov8n.onnx (the deployed, finetuned
+single-class model); add other .onnx files to MODELS to compare them.
 
 For each model, tests multiple algorithm variants (union, top1, smallest) and
 padding values to find the best combination.
@@ -49,8 +47,6 @@ YOLO_UNION_MAX_K = 3
 
 MODELS = {
     "yolov8n_current":   REPO_ROOT / "ios/iNaturalistReactNative/yolov8n.onnx",
-    "yolov8n_finetuned": REPO_ROOT / "ios/iNaturalistReactNative/yolov8n_finetuned.onnx",
-    "yolov8s_world_int8": REPO_ROOT / "yolov8s-worldv2-int8.onnx",
 }
 
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { NativeModules } from "react-native";
 import { fileExtension, isAnimatedImageUri } from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { unlink } from "sharedHelpers/util";
 
 const logger = log.extend( "useDeviceImageThumbnail" );
@@ -391,7 +392,7 @@ const invalidatedPaths = new Set<string>( );
 // caller handed one of these can fall back to the original it stands for; a
 // caller handed the original itself has nothing left to try.
 export const isGeneratedThumbnailUri = ( uri?: string ): boolean => Boolean(
-  uri?.replace( /^file:\/\//, "" ).startsWith( `${deviceThumbnailsPath}/` ),
+  uri && stripFilePrefix( uri ).startsWith( `${deviceThumbnailsPath}/` ),
 );
 
 // Throws away a generated thumbnail the caller couldn't decode. Generation
@@ -404,7 +405,7 @@ export const invalidateDeviceImageThumbnail = async (
   thumbnailUri: string,
   context: string,
 ): Promise<void> => {
-  const path = thumbnailUri.replace( /^file:\/\//, "" );
+  const path = stripFilePrefix( thumbnailUri );
   // Only ever deletes files this module generated, never an original photo.
   if ( !path.startsWith( `${deviceThumbnailsPath}/` ) ) return;
   // Once per file per launch: a thumbnail regenerates to the same path, so a

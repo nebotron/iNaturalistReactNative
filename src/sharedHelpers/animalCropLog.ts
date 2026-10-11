@@ -1,8 +1,6 @@
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { createUrlKeyedFirebaseLog } from "sharedHelpers/urlKeyedFirebaseLog";
 
-export type AnimalCropLog = Record<string, NormalizedCrop>;
-
 interface CropLogEntry {
   url: string;
   x: number;

@@ -21,13 +21,6 @@ interface GroupedPhotoGroup {
   photos?: GroupedPhotoItem[];
 }
 
-// The uncropped original a photo's crop is expressed against. Once a crop has
-// been baked into a file, image.uri points at the cropped file and the
-// untouched original lives at cropOriginalUri.
-export const groupPhotoCropSourceUri = ( image: GroupedPhotoImage ): string => (
-  image.cropOriginalUri || image.uri
-);
-
 const updateGroupedPhotoImages = (
   updates: Map<string, Partial<GroupedPhotoImage>>,
 ) => {

@@ -19,6 +19,7 @@
 // shape (see scanCurves), the same way tools/craw does it.
 
 import { read, stat } from "@dr.pogodin/react-native-fs";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 
 // Reads `length` bytes at `position`, as one character per byte.
 export type SliceReader = ( length: number, position: number ) => Promise<string>;
@@ -476,7 +477,7 @@ export function isCanonRawUri( pathOrUri?: string | null ): boolean {
 }
 
 export async function readCr3SummaryFromFile( pathOrUri: string ): Promise<Cr3Summary | null> {
-  const path = pathOrUri.replace( /^file:\/\//, "" );
+  const path = stripFilePrefix( pathOrUri );
   const { size } = await stat( path );
   return readCr3Summary(
     ( length, position ) => read( path, length, position, "ascii" ),

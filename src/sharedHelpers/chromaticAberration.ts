@@ -5,6 +5,7 @@ import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import exifUri from "sharedHelpers/exifUri";
 import { log } from "sharedHelpers/logger";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { unlink } from "sharedHelpers/util";
 
 const logger = log.extend( "chromaticAberration" );
@@ -65,8 +66,6 @@ const { ImageCropper } = NativeModules as { ImageCropper?: ImageCropperModule };
 export const chromaticAberrationCorrectionAvailable = ( ): boolean => (
   Platform.OS === "ios" && Boolean( ImageCropper?.correctChromaticAberration )
 );
-
-const stripScheme = ( uri: string ) => uri.replace( /^file:\/\//, "" );
 
 // Ring by ring, in millionths of the corner radius: small enough integers to
 // read at a glance, and the shape is the point.
@@ -189,7 +188,7 @@ export async function correctPhotoChromaticAberration(
   profile?: LensProfile | null,
 ): Promise<ChromaticAberrationResult | null> {
   if ( !localFileUri || !chromaticAberrationCorrectionAvailable( ) ) return null;
-  const path = stripScheme( localFileUri );
+  const path = stripFilePrefix( localFileUri );
   const workingPath = `${path}.ca-working.jpg`;
   const backupPath = `${path}.ca-original.jpg`;
   try {
