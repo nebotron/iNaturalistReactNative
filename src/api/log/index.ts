@@ -54,6 +54,44 @@ function extractExtra( rawMsg: unknown ) {
   };
 }
 
+// The log DB is publicly readable, so strip credentials and coordinates from
+// anything we send. Values are matched in plain text, JSON (incl. escaped
+// JSON inside a message string), and URL query strings.
+const SECRET_KEYS = "api_token|access_token|refresh_token|id_token|authorization|password"
+  + "|jwt|token|secret|api_key|apikey";
+const LOCATION_KEYS = "latitude|longitude|private_latitude|private_longitude|lat|lng|lon"
+  + "|nelat|nelng|swlat|swlng";
+const KEY_PREFIX = "(\\\\?\"?\\b(?:{keys})\\\\?\"?\\s*[:=]\\s*\\\\?\"?)";
+const SECRET_VALUE_RE = new RegExp( `${KEY_PREFIX.replace( "{keys}", SECRET_KEYS )}`
+  + "(?:Bearer\\s+)?[^\"\\\\&,\\s}]+", "gi" );
+const LOCATION_VALUE_RE = new RegExp( `${KEY_PREFIX.replace( "{keys}", LOCATION_KEYS )}`
+  + "-?\\d+(?:\\.\\d+)?", "gi" );
+const JWT_RE = /eyJ[\w-]+\.[\w-]+(?:\.[\w-]+)?/g;
+// "37.1234,-122.5678", e.g. a location param or a formatted coordinate pair
+const COORD_PAIR_RE = /-?\d{1,3}\.\d{3,}\s*(?:,|%2C)\s*-?\d{1,3}\.\d{3,}/gi;
+const SENSITIVE_KEY_RE = new RegExp( `^(?:${SECRET_KEYS}|${LOCATION_KEYS}|location|coords)$`, "i" );
+const REDACTED = "[REDACTED]";
+
+export function redact( text: string ): string {
+  return text
+    .replace( JWT_RE, REDACTED )
+    .replace( SECRET_VALUE_RE, `$1${REDACTED}` )
+    .replace( LOCATION_VALUE_RE, `$1${REDACTED}` )
+    .replace( COORD_PAIR_RE, REDACTED );
+}
+
+function redactExtra( extra: Record<string, unknown> ) {
+  return Object.fromEntries( Object.entries( extra ).map( ( [key, value] ) => [
+    key,
+    // eslint-disable-next-line no-nested-ternary
+    SENSITIVE_KEY_RE.test( key )
+      ? REDACTED
+      : typeof value === "string"
+        ? redact( value )
+        : value,
+  ] ) );
+}
+
 // our transport has no options but this needs to be explicitly `object` for generic typing
 type firebaseLogTransportOptions = object;
 
@@ -97,10 +135,12 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
     extension: props.extension,
     // commit lets a log line be traced back to the exact code that produced it
     commit: APP_COMMIT,
-    message,
-    ...( extra ?? {} ),
+    message: redact( message ),
+    ...( extra
+      ? redactExtra( extra )
+      : {} ),
     ...( error?.stack
-      ? { stack: error.stack }
+      ? { stack: redact( error.stack ) }
       : {} ),
   };
 
