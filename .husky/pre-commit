@@ -1,3 +1,6 @@
+# Install dependencies if they're missing (e.g. fresh cloud containers)
+[ -d node_modules ] || npm install --no-audit --no-fund
+
 # Run lint on staged files and run flow
 npm run lint:staged:fix
 
