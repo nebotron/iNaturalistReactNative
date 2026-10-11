@@ -126,7 +126,8 @@ const AudioId = ( ) => {
             : " (allow location to limit birds to those likely here)"}`
           : "birds and other animals"} by sound, on device and offline, `
           + "from the last 5 seconds of audio, and keeps listening elsewhere in the app "
-          + "and in the background. Species you are hearing now are highlighted. Powered by BirdNET."}
+          + "and in the background. Species you are hearing now are highlighted. "
+          + "Powered by BirdNET."}
       </Body3>
       <Button
         level={listening
