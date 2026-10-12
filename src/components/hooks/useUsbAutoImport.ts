@@ -535,7 +535,9 @@ const useUsbAutoImport = ( ) => {
       if ( abandonReason === "out-of-space" ) {
         progress.setNote( "There's no room left on this device." );
       }
-      progress.setPhase( failed > 0
+      // An abandoned run can have no failures — the free-space check stops it
+      // before any save — and must not read as "Import complete".
+      progress.setPhase( failed > 0 || abandonReason
         ? "error"
         : "done" );
     } catch ( error ) {
