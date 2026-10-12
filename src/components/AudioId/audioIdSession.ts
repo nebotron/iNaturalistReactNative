@@ -35,7 +35,9 @@ const logger = log.extend( "AudioId" );
 // Runs summarized per log line, so field problems show up in the app log.
 const LOG_EVERY = 30;
 
-interface ScoresEvent { scores: number[]; level: number; inferMs: number; error: string | null }
+interface ScoresEvent {
+  scores: number[]; level: number; inferMs: number; memMB: number; error: string | null;
+}
 export interface Heard { sp: AudioIdSpecies; lastHeard: number; best: number; count: number }
 
 export type VibrateMode = "never" | "new" | "unseen";
@@ -119,7 +121,8 @@ const onScores = ( event: ScoresEvent ) => {
       .reduce( ( sum, r ) => sum + f( r ), 0 ) / runs.length;
     logger.info( `${runs.length} runs: level ${
       ( 20 * Math.log10( mean( r => r.level ) + 1e-9 ) ).toFixed( 0 )} dBFS, `
-      + `infer ${mean( r => r.inferMs ).toFixed( 0 )} ms, best ${
+      + `infer ${mean( r => r.inferMs ).toFixed( 0 )} ms, `
+      + `mem ${Math.round( runs[runs.length - 1].memMB )} MB, best ${
         best.index >= 0
           ? sps[best.index]?.commonName
           : "none"} ${best.score.toFixed( 2 )}, errors ${
@@ -170,7 +173,9 @@ const onScores = ( event: ScoresEvent ) => {
 };
 
 if ( AudioBirdId ) {
-  new NativeEventEmitter( AudioBirdId as never ).addListener( "AudioBirdIdScores", onScores );
+  const emitter = new NativeEventEmitter( AudioBirdId as never );
+  emitter.addListener( "AudioBirdIdScores", onScores );
+  emitter.addListener( "AudioBirdIdStatus", ( message: string ) => logger.info( message ) );
 }
 
 export default useAudioIdSession;
