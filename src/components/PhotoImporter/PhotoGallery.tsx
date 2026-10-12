@@ -425,7 +425,9 @@ const PhotoGallery = ( {
     return (
       <View className="px-3 py-1 flex-row items-center justify-between">
         <Body2>
-          {`${formatDateStringFromTimestamp( item.timestamp )} (${item.nodes.length})`}
+          {`${
+            formatDateStringFromTimestamp( item.timestamp ).replace( "T", " " )
+          } (${item.nodes.length})`}
         </Body2>
         <INatIconButton
           icon="checkmark"
