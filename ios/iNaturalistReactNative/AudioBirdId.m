@@ -1,6 +1,6 @@
 #import <AVFoundation/AVFoundation.h>
 #import <AudioToolbox/AudioToolbox.h>
-#import <UIKit/UIKit.h>
+#import <CoreHaptics/CoreHaptics.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
 #include "onnxruntime_c_api.h"
@@ -43,6 +43,7 @@
   OrtSession       *_geoSession;
   BOOL              _wantListening;
   dispatch_source_t _watchdog;
+  CHHapticEngine   *_haptics;
 }
 
 RCT_EXPORT_MODULE( );
@@ -164,20 +165,40 @@ RCT_EXPORT_METHOD( stop )
   } );
 }
 
-// Vibrates for a detection. iOS mutes vibration while recording unless the
-// session allows it, so re-assert that first; a notification haptic backs up
-// the system vibration while the app is in the foreground.
+// Vibrates for a detection. Core Haptics plays regardless of the silent
+// switch and Do Not Disturb, and keeps playing in the background alongside
+// the recording audio session; the system vibration is a fallback for when
+// the engine can't run.
 RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
                    reject:( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
     AVAudioSession *session = [AVAudioSession sharedInstance];
     NSError *error = nil;
-    [session setAllowHapticsAndSystemSoundsDuringRecording:YES error:&error];
-    AudioServicesPlayAlertSound( kSystemSoundID_Vibrate );
-    if ( UIApplication.sharedApplication.applicationState == UIApplicationStateActive ) {
-      [[[UINotificationFeedbackGenerator alloc] init]
-        notificationOccurred:UINotificationFeedbackTypeSuccess];
+    [session setAllowHapticsAndSystemSoundsDuringRecording:YES error:nil];
+    if ( !self->_haptics ) {
+      self->_haptics = [[CHHapticEngine alloc] initWithAudioSession:session error:&error];
+      self->_haptics.playsHapticsOnly = YES;
+      self->_haptics.isAutoShutdownEnabled = YES;
+      self->_haptics.resetHandler = ^{ self->_haptics = nil; };
+    }
+    CHHapticEvent *buzz = [[CHHapticEvent alloc]
+      initWithEventType:CHHapticEventTypeHapticContinuous
+             parameters:@[
+               [[CHHapticEventParameter alloc]
+                 initWithParameterID:CHHapticEventParameterIDHapticIntensity value:1]
+             ]
+           relativeTime:0
+               duration:0.4];
+    CHHapticPattern *pattern = [[CHHapticPattern alloc]
+      initWithEvents:@[buzz] parameters:@[] error:&error];
+    id<CHHapticPatternPlayer> player = pattern
+      ? [self->_haptics createPlayerWithPattern:pattern error:&error]
+      : nil;
+    if ( !player
+        || ![self->_haptics startAndReturnError:&error]
+        || ![player startAtTime:CHHapticTimeImmediate error:&error] ) {
+      AudioServicesPlayAlertSound( kSystemSoundID_Vibrate );
     }
     resolve( @{
       @"allowed": @( session.allowHapticsAndSystemSoundsDuringRecording ),
