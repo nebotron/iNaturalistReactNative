@@ -38,6 +38,7 @@ import {
 } from "./helpers/mapHelpers";
 import LocationIndicator from "./LocationIndicator";
 import ObscuredLocationIndicator from "./ObscuredLocationIndicator";
+import ScaleBar from "./ScaleBar";
 import SwitchMapTypeButton from "./SwitchMapTypeButton";
 
 const NEARBY_DIM_M = 50_000;
@@ -74,6 +75,7 @@ interface Props {
   ref?: React.Ref<MapView>;
   regionToAnimate?: Region;
   scrollEnabled?: boolean;
+  showScaleBar?: boolean;
   showCurrentLocationButton?: boolean;
   showsCompass?: boolean;
   showSwitchMapTypeButton?: boolean;
@@ -109,6 +111,7 @@ const Map = ( {
   ref,
   regionToAnimate,
   scrollEnabled = true,
+  showScaleBar,
   showCurrentLocationButton,
   showsCompass,
   showSwitchMapTypeButton,
@@ -131,6 +134,7 @@ const Map = ( {
   const { isDebug } = useDebugMode( );
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   const [currentZoom, setCurrentZoom] = useState( 0 );
+  const [scaleRegion, setScaleRegion] = useState<Region | null>( null );
   const navigation = useNavigation( );
   const { hasPermissions, renderPermissionsGate, requestPermissions } = useLocationPermission( );
   const [userLocation, setUserLocation] = useState<{
@@ -386,6 +390,7 @@ const Map = ( {
       }
     }
     setCurrentZoom( calculateZoom( screenWidth, newRegion.longitudeDelta ) );
+    setScaleRegion( newRegion );
   }, [
     previousTileUrl,
     tileUrlTemplate,
@@ -618,6 +623,12 @@ const Map = ( {
         onPermissionGranted={onPermissionGranted}
         onPress={handleCurrentLocationPress}
       />
+      {showScaleBar && (
+        <ScaleBar
+          region={scaleRegion || mapRegion || initialRegion}
+          mapWidth={screenWidth}
+        />
+      )}
       <SwitchMapTypeButton
         mapType={mapType}
         showSwitchMapTypeButton={showSwitchMapTypeButton}

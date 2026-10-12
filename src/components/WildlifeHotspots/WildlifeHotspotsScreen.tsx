@@ -7,6 +7,7 @@ import {
   INatIcon,
   ViewWrapper,
 } from "components/SharedComponents";
+import ScaleBar from "components/SharedComponents/Map/ScaleBar";
 import { TextInput, View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
 import type { TabStackScreenProps } from "navigation/types";
@@ -26,7 +27,7 @@ import {
 } from "react-native";
 import type { RenderItemParams } from "react-native-draggable-flatlist";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
-import type { LatLng } from "react-native-maps";
+import type { LatLng, Region } from "react-native-maps";
 import MapView, {
   Marker,
   Polyline,
@@ -48,6 +49,12 @@ import { searchPlaces } from "./placeSearch";
 // Synthetic place_id marking the "current location" row in the dropdown, which
 // resolves to the device location rather than a searched address.
 const CURRENT_LOCATION_PLACE_ID = -1;
+const INITIAL_REGION: Region = {
+  latitude: 25,
+  longitude: -40,
+  latitudeDelta: 80,
+  longitudeDelta: 100,
+};
 // Number of recently entered addresses to offer before the user types.
 const RECENT_ADDRESS_COUNT = 4;
 
@@ -216,6 +223,8 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     ? 0
     : insets.bottom;
   const mapRef = useRef<MapView>( null );
+  const [scaleRegion, setScaleRegion] = useState<Region>( INITIAL_REGION );
+  const [mapWidth, setMapWidth] = useState( 0 );
   const carouselRef = useRef<ICarouselInstance>( null );
   // Index the carousel was scrolled to programmatically (by tapping a map
   // marker), so the resulting snap doesn't redo the selection work.
@@ -628,14 +637,11 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
         <MapView
           ref={mapRef}
           style={StyleSheet.absoluteFillObject}
-          initialRegion={{
-            latitude: 25,
-            longitude: -40,
-            latitudeDelta: 80,
-            longitudeDelta: 100,
-          }}
+          initialRegion={INITIAL_REGION}
           rotateEnabled={false}
           pitchEnabled={false}
+          onLayout={e => setMapWidth( e.nativeEvent.layout.width )}
+          onRegionChangeComplete={setScaleRegion}
           showsScale
           showsUserLocation
         >
@@ -699,6 +705,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
               </Marker>
             ) )}
         </MapView>
+        <ScaleBar region={scaleRegion} mapWidth={mapWidth} />
 
         {( loading || hotspotRouteLoading ) && (
           <View
