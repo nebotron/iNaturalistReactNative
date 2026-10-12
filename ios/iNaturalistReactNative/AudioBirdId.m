@@ -1,4 +1,6 @@
 #import <AVFoundation/AVFoundation.h>
+#import <AudioToolbox/AudioToolbox.h>
+#import <UIKit/UIKit.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
 #include "onnxruntime_c_api.h"
@@ -159,6 +161,28 @@ RCT_EXPORT_METHOD( stop )
     if ( self->_watchdog ) dispatch_source_cancel( self->_watchdog );
     self->_watchdog = nil;
     [self stopEngine];
+  } );
+}
+
+// Vibrates for a detection. iOS mutes vibration while recording unless the
+// session allows it, so re-assert that first; a notification haptic backs up
+// the system vibration while the app is in the foreground.
+RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
+                   reject:( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    NSError *error = nil;
+    [session setAllowHapticsAndSystemSoundsDuringRecording:YES error:&error];
+    AudioServicesPlayAlertSound( kSystemSoundID_Vibrate );
+    if ( UIApplication.sharedApplication.applicationState == UIApplicationStateActive ) {
+      [[[UINotificationFeedbackGenerator alloc] init]
+        notificationOccurred:UINotificationFeedbackTypeSuccess];
+    }
+    resolve( @{
+      @"allowed": @( session.allowHapticsAndSystemSoundsDuringRecording ),
+      @"error": error ? error.localizedDescription : [NSNull null],
+    } );
   } );
 }
 

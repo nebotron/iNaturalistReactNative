@@ -1,4 +1,4 @@
-import { NativeEventEmitter, NativeModules, Vibration } from "react-native";
+import { NativeEventEmitter, NativeModules } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import { log } from "sharedHelpers/logger";
 import { create } from "zustand";
@@ -20,6 +20,7 @@ const { AudioBirdId } = NativeModules as {
   AudioBirdId?: {
     start: ( outputs: number[] ) => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
+    vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
   };
 };
@@ -80,6 +81,7 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
     }
     if ( get( ).listening ) return;
     set( { error: null } );
+    heardTaxa.clear( );
     try {
       const s = await prepareAudioId( AudioBirdId.geo );
       set( { setup: s } );
@@ -138,7 +140,11 @@ const onScores = ( event: ScoresEvent ) => {
     ( vibrateMode === "new" && firsts.length > 0 )
     || ( vibrateMode === "unseen" && firsts.some( id => !seen.has( id ) ) )
   ) {
-    Vibration.vibrate( );
+    AudioBirdId?.vibrate( )
+      .then( r => {
+        if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${r.error}` );
+      } )
+      .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
   }
   let next = heard;
   scores.forEach( ( s, i ) => {
