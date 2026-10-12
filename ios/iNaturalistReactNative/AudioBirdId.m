@@ -219,6 +219,8 @@ RCT_EXPORT_METHOD( stop )
                      options:AVAudioSessionCategoryOptionMixWithOthers
                            | AVAudioSessionCategoryOptionDefaultToSpeaker
                        error:error] ) return NO;
+  // iOS silences vibration while recording unless we opt in.
+  [session setAllowHapticsAndSystemSoundsDuringRecording:YES error:nil];
   if ( ![session setActive:YES error:error] ) return NO;
 
   _engine = [[AVAudioEngine alloc] init];
