@@ -23,7 +23,8 @@ import type { RenderLocationPermissionsGateFunction } from "sharedHooks/useLocat
 import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 
-const NEARBY_DELTA = 0.02;
+// ~100km span, i.e. 50km around the current location
+const NEARBY_DELTA = 0.9;
 
 const WORLDWIDE_DELTA = 180;
 const WORLDWIDE_LAT_LNG = 0.0;
@@ -179,7 +180,8 @@ const MapView = ( {
   delete tileMapParams.orderBy;
 
   const initialRegion: Region = useMemo( () => {
-    if ( lastExploreMapRegion ) {
+    // Don't restore the worldwide placeholder shown while location was loading
+    if ( lastExploreMapRegion && lastExploreMapRegion.latitudeDelta < WORLDWIDE_DELTA / 2 ) {
       return lastExploreMapRegion;
     }
 
