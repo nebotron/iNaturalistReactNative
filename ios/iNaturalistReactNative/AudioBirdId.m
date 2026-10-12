@@ -22,6 +22,9 @@
 #define AB_SR       32000
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
 #define AB_STEP     32000   // run every 1 s of new audio
+#define AB_SPEC_HOP 4000    // spectrogram columns, 8 per second
+#define AB_SPEC_N   1024    // samples per spectrogram column
+#define AB_SPEC_BINS 32     // log-spaced bins from 500 Hz to 12 kHz
 
 @interface AudioBirdId : RCTEventEmitter <RCTBridgeModule>
 @end
@@ -350,6 +353,7 @@ RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
     // Wait for a full window, and drop a step rather than queue up if the
     // previous inference is still running.
     if ( self->_filled < AB_WIN || self->_sinceRun < AB_STEP || self->_busy ) return;
+    NSArray *spectrogram = [self spectrogramOfLast:MIN( self->_sinceRun, (NSInteger)AB_WIN )];
     self->_sinceRun = 0;
     self->_busy = YES;
     NSData *window = [NSData dataWithBytes:self->_window length:AB_WIN * sizeof( float )];
@@ -366,9 +370,48 @@ RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
                          body:@{ @"scores": scores ?: @[],
                                  @"level": @( level ),
                                  @"inferMs": @( ms ),
+                                 @"spectrogram": spectrogram,
                                  @"error": inferError ?: [NSNull null] }];
     } );
   } );
+}
+
+// Spectrogram columns for the newest `samples` of the window, oldest first:
+// each is AB_SPEC_BINS Goertzel magnitudes of a Hann-windowed frame, mapped
+// from -100..-20 dB to 0..1.
+- (NSArray<NSArray<NSNumber *> *> *)spectrogramOfLast:(NSInteger)samples
+{
+  static float hann[AB_SPEC_N];
+  static float coeff[AB_SPEC_BINS];
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{
+    for ( int i = 0; i < AB_SPEC_N; i++ ) {
+      hann[i] = 0.5f - 0.5f * cosf( 2 * M_PI * i / ( AB_SPEC_N - 1 ) );
+    }
+    for ( int b = 0; b < AB_SPEC_BINS; b++ ) {
+      double hz = 500 * pow( 12000.0 / 500, (double)b / ( AB_SPEC_BINS - 1 ) );
+      coeff[b] = (float)( 2 * cos( 2 * M_PI * hz / AB_SR ) );
+    }
+  } );
+  NSInteger cols = samples / AB_SPEC_HOP;
+  NSMutableArray *out = [NSMutableArray arrayWithCapacity:cols];
+  for ( NSInteger c = cols; c > 0; c-- ) {
+    const float *frame = _window + AB_WIN - c * AB_SPEC_HOP;
+    NSMutableArray *col = [NSMutableArray arrayWithCapacity:AB_SPEC_BINS];
+    for ( int b = 0; b < AB_SPEC_BINS; b++ ) {
+      float s1 = 0, s2 = 0;
+      for ( int i = 0; i < AB_SPEC_N; i++ ) {
+        float s0 = frame[i] * hann[i] + coeff[b] * s1 - s2;
+        s2 = s1;
+        s1 = s0;
+      }
+      float power = ( s1 * s1 + s2 * s2 - coeff[b] * s1 * s2 ) / ( AB_SPEC_N * AB_SPEC_N / 4.0f );
+      float db = 10 * log10f( power + 1e-12f );
+      [col addObject:@( MAX( 0.0f, MIN( 1.0f, ( db + 100 ) / 80 ) ) )];
+    }
+    [out addObject:col];
+  }
+  return out;
 }
 
 // One run of a [1, length] -> [1, n] model; returns the outputs listed in

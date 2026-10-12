@@ -36,8 +36,25 @@ const logger = log.extend( "AudioId" );
 // Runs summarized per log line, so field problems show up in the app log.
 const LOG_EVERY = 30;
 
-interface ScoresEvent { scores: number[]; level: number; inferMs: number; error: string | null }
-export interface Heard { sp: AudioIdSpecies; lastHeard: number; best: number; count: number }
+interface ScoresEvent {
+  scores: number[];
+  level: number;
+  inferMs: number;
+  error: string | null;
+  spectrogram?: number[][];
+}
+export interface Heard {
+  sp: AudioIdSpecies; lastHeard: number; best: number; count: number; color: string;
+}
+// Spectrogram columns, each colored by the top species heard in its run.
+export interface SpectrogramColumn { bins: number[]; color: string | null }
+const SPECTROGRAM_COLUMNS = 80; // 10 s
+
+// One color per species heard this session, in the order first heard.
+const PALETTE = [
+  "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
+  "#42d4f4", "#f032e6", "#bfef45", "#9a6324", "#469990",
+];
 
 export type VibrateMode = "never" | "new" | "unseen";
 const settings = new MMKV( { id: "audio-id" } );
@@ -50,6 +67,7 @@ interface AudioIdState {
   level: number;
   inferMs: number;
   heard: Record<number, Heard>; // by taxon ID
+  spectrogram: SpectrogramColumn[];
   setup: AudioIdSetup | null;
   vibrateMode: VibrateMode;
   seen: Set<number>;
@@ -66,6 +84,7 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
   level: 0,
   inferMs: 0,
   heard: {},
+  spectrogram: [],
   setup: null,
   vibrateMode: ( settings.getString( VIBRATE_KEY ) as VibrateMode ) || "never",
   seen: new Set( ),
@@ -158,14 +177,24 @@ const onScores = ( event: ScoresEvent ) => {
         sp,
         lastHeard: now,
         best: Math.max( old?.best || 0, s ),
+        color: old?.color || PALETTE[Object.keys( next ).length % PALETTE.length],
         count: ( old?.count || 0 ) + ( isNewCall
           ? 1
           : 0 ),
       },
     };
   } );
+  const top = scores.indexOf( Math.max( ...scores ) );
+  const color = top >= 0 && isHeard( scores[top] ) && sps[top]
+    ? next[sps[top].taxonId]?.color || null
+    : null;
+  const spectrogram = [
+    ...useAudioIdSession.getState( ).spectrogram,
+    ...( event.spectrogram || [] ).map( bins => ( { bins, color } ) ),
+  ].slice( -SPECTROGRAM_COLUMNS );
   useAudioIdSession.setState( {
     current: scores,
+    spectrogram,
     level,
     inferMs: event.inferMs,
     heard: next,

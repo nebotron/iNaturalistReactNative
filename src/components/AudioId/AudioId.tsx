@@ -6,12 +6,13 @@ import {
 } from "components/SharedComponents";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React, { useEffect, useMemo } from "react";
+import Svg, { Rect } from "react-native-svg";
 import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import colors from "styles/tailwindColors";
 
 import type { AudioIdSpecies } from "./audioIdModel";
-import type { VibrateMode } from "./audioIdSession";
+import type { SpectrogramColumn, VibrateMode } from "./audioIdSession";
 import useAudioIdSession, { heardIn } from "./audioIdSession";
 
 const VIBRATE_OPTIONS: [VibrateMode, string][] = [
@@ -66,10 +67,39 @@ const useSeenTaxonIds = ( userId: number | undefined ): Set<number> => {
   }, [data] );
 };
 
+// The last 10 s of sound, low frequencies at the bottom, each moment tinted
+// with the color of the species identified then.
+const Spectrogram = ( { columns }: { columns: SpectrogramColumn[] } ) => {
+  const bins = columns[0]?.bins.length || 1;
+  return (
+    <Svg
+      width="100%"
+      height={96}
+      viewBox={`0 0 80 ${bins}`}
+      preserveAspectRatio="none"
+      style={{ marginTop: 16 }}
+    >
+      <Rect x={0} y={0} width={80} height={bins} fill={colors.black} />
+      {columns.map( ( col, x ) => col.bins.map( ( v, b ) => (
+        // eslint-disable-next-line react/no-array-index-key
+        <Rect
+          key={`${x}-${b}`}
+          x={x + 80 - columns.length}
+          y={bins - 1 - b}
+          width={1.05}
+          height={1.05}
+          fill={col.color || colors.white}
+          opacity={v}
+        />
+      ) ) )}
+    </Svg>
+  );
+};
+
 const AudioId = ( ) => {
   const navigation = useNavigation( );
   const {
-    listening, error, current, level, inferMs, heard, setup, vibrateMode,
+    listening, error, current, spectrogram, heard, setup, vibrateMode,
     setVibrateMode, setSeen, start, stop,
   } = useAudioIdSession( );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
@@ -85,16 +115,11 @@ const AudioId = ( ) => {
   const isHeardNow = useMemo( ( ) => heardIn( current ), [current] );
   const hearingNow = ( taxonId: number ) => listening && isHeardNow( scoreNow( taxonId ) );
   const heardList = Object.values( heard ).sort( ( a, b ) => b.lastHeard - a.lastHeard );
-  const bestNow = current.length
-    ? current.indexOf( Math.max( ...current ) )
-    : -1;
-  // RMS of -60 dBFS reads as empty, 0 dBFS as full.
-  const meter = Math.max( 0, Math.min( 1, 1 + Math.log10( level + 1e-9 ) / 3 ) );
 
   const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", { id: taxonId } );
 
   // Species being heard right now are highlighted in yellow.
-  const row = ( sp: AudioIdSpecies, score: number, detail?: string ) => (
+  const row = ( sp: AudioIdSpecies, score: number, color: string, detail?: string ) => (
     <Pressable
       key={sp.taxonId}
       accessibilityRole="button"
@@ -105,6 +130,7 @@ const AudioId = ( ) => {
           : ""}`}
       onPress={( ) => openTaxon( sp.taxonId )}
     >
+      <View className="w-3 h-3 rounded-full mr-3" style={{ backgroundColor: color }} />
       <View className="flex-1">
         <Body1>{sp.commonName}</Body1>
         <List2 className="italic">{sp.name}</List2>
@@ -165,21 +191,9 @@ const AudioId = ( ) => {
         ) )}
       </View>
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
-      {listening && (
-        <View className="h-2 bg-lightGray rounded-full mt-4 overflow-hidden">
-          <View
-            className="h-2 rounded-full"
-            style={{ width: `${meter * 100}%`, backgroundColor: colors.inatGreen }}
-          />
-        </View>
-      )}
-      {listening && (
-        <Body3 className="mt-1">
-          {bestNow >= 0 && species[bestNow]
-            ? `Best guess: ${species[bestNow].commonName} ${
-              Math.round( current[bestNow] * 100 )}% · ${inferMs.toFixed( 0 )} ms`
-            : "Listening… first result after 5 seconds"}
-        </Body3>
+      {listening && <Spectrogram columns={spectrogram} />}
+      {listening && current.length === 0 && (
+        <Body3 className="mt-1">Listening… first result after 5 seconds</Body3>
       )}
 
       <Heading4 className="mt-6 mb-1">HEARD THIS SESSION</Heading4>
@@ -189,6 +203,7 @@ const AudioId = ( ) => {
         hearingNow( h.sp.taxonId )
           ? scoreNow( h.sp.taxonId )
           : h.best,
+        h.color,
         `${h.count} ${h.count === 1
           ? "time"
           : "times"}, last at ${new Date( h.lastHeard ).toLocaleTimeString( )}`,
