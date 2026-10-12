@@ -3,6 +3,7 @@
 #import <CoreHaptics/CoreHaptics.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
+#import <UserNotifications/UserNotifications.h>
 #include "onnxruntime_c_api.h"
 
 // Live bird identification by sound. Taps the microphone, resamples to
@@ -26,7 +27,7 @@
 #define AB_SPEC_N   1024    // samples per spectrogram column
 #define AB_SPEC_BINS 32     // log-spaced bins from 500 Hz to 12 kHz
 
-@interface AudioBirdId : RCTEventEmitter <RCTBridgeModule>
+@interface AudioBirdId : RCTEventEmitter <RCTBridgeModule, UNUserNotificationCenterDelegate>
 @end
 
 @implementation AudioBirdId {
@@ -208,6 +209,31 @@ RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
       @"error": error ? error.localizedDescription : [NSNull null],
     } );
   } );
+}
+
+// Posts a local notification for a detection, shown as a banner even with the
+// app in the foreground. Asks for permission on first use.
+RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
+{
+  UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+  if ( !center.delegate ) center.delegate = self;
+  [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert | UNAuthorizationOptionSound
+                        completionHandler:^( BOOL granted, NSError *error ) {
+    if ( !granted ) return;
+    UNMutableNotificationContent *content = [UNMutableNotificationContent new];
+    content.title = title;
+    content.body = body;
+    [center addNotificationRequest:[UNNotificationRequest
+      requestWithIdentifier:[NSUUID UUID].UUIDString content:content trigger:nil]
+             withCompletionHandler:nil];
+  }];
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center
+       willPresentNotification:(UNNotification *)notification
+         withCompletionHandler:(void ( ^ )( UNNotificationPresentationOptions ))completionHandler
+{
+  completionHandler( UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList );
 }
 
 // Other audio in the app can reconfigure or deactivate the shared audio

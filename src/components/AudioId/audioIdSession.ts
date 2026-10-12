@@ -1,5 +1,4 @@
 import { NativeEventEmitter, NativeModules } from "react-native";
-import { MMKV } from "react-native-mmkv";
 import { log } from "sharedHelpers/logger";
 import { create } from "zustand";
 
@@ -21,6 +20,7 @@ const { AudioBirdId } = NativeModules as {
     start: ( outputs: number[] ) => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
+    notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
   };
 };
@@ -56,9 +56,7 @@ const PALETTE = [
   "#42d4f4", "#f032e6", "#bfef45", "#9a6324", "#469990",
 ];
 
-export type VibrateMode = "never" | "new" | "unseen";
-const settings = new MMKV( { id: "audio-id" } );
-const VIBRATE_KEY = "vibrateMode";
+const heardTaxa = new Set<number>( );
 
 interface AudioIdState {
   listening: boolean;
@@ -69,10 +67,8 @@ interface AudioIdState {
   heard: Record<number, Heard>; // by taxon ID
   spectrogram: SpectrogramColumn[];
   setup: AudioIdSetup | null;
-  vibrateMode: VibrateMode;
-  seen: Set<number>;
-  setVibrateMode: ( mode: VibrateMode ) => void;
-  setSeen: ( seen: Set<number> ) => void;
+  seen: Set<number> | null; // null when signed out
+  setSeen: ( seen: Set<number> | null ) => void;
   start: ( ) => Promise<void>;
   stop: ( ) => void;
 }
@@ -86,12 +82,7 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
   heard: {},
   spectrogram: [],
   setup: null,
-  vibrateMode: ( settings.getString( VIBRATE_KEY ) as VibrateMode ) || "never",
-  seen: new Set( ),
-  setVibrateMode: mode => {
-    settings.set( VIBRATE_KEY, mode );
-    set( { vibrateMode: mode } );
-  },
+  seen: null,
   setSeen: seen => set( { seen } ),
   start: async ( ) => {
     if ( !AudioBirdId ) {
@@ -119,13 +110,12 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
   },
 } ) );
 
-const heardTaxa = new Set<number>( );
 let runs: ScoresEvent[] = [];
 
 const onScores = ( event: ScoresEvent ) => {
   const { scores, level } = event;
   const {
-    setup, vibrateMode, seen, heard,
+    setup, seen, heard,
   } = useAudioIdSession.getState( );
   const sps = setup?.species || [];
   runs.push( event );
@@ -149,28 +139,19 @@ const onScores = ( event: ScoresEvent ) => {
   }
   const now = Date.now( );
   const isHeard = heardIn( scores );
-  const firsts = scores
-    .map( ( s, i ) => ( isHeard( s ) && sps[i] && !heardTaxa.has( sps[i].taxonId )
-      ? sps[i].taxonId
-      : -1 ) )
-    .filter( id => id >= 0 );
-  firsts.forEach( id => heardTaxa.add( id ) );
-  if (
-    ( vibrateMode === "new" && firsts.length > 0 )
-    || ( vibrateMode === "unseen" && firsts.some( id => !seen.has( id ) ) )
-  ) {
-    AudioBirdId?.vibrate( )
-      .then( r => {
-        if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${r.error}` );
-      } )
-      .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
-  }
+  // Alert on the first call of each species this session, and on every call
+  // of a species the user hasn't observed at research grade.
+  const alerts: AudioIdSpecies[] = [];
   let next = heard;
   scores.forEach( ( s, i ) => {
     const sp = sps[i];
     if ( !isHeard( s ) || !sp ) return;
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;
+    if ( !heardTaxa.has( sp.taxonId ) || ( isNewCall && seen && !seen.has( sp.taxonId ) ) ) {
+      alerts.push( sp );
+    }
+    heardTaxa.add( sp.taxonId );
     next = {
       ...next,
       [sp.taxonId]: {
@@ -192,6 +173,19 @@ const onScores = ( event: ScoresEvent ) => {
     ...useAudioIdSession.getState( ).spectrogram,
     ...( event.spectrogram || [] ).map( bins => ( { bins, color } ) ),
   ].slice( -SPECTROGRAM_COLUMNS );
+  if ( alerts.length > 0 ) {
+    AudioBirdId?.vibrate( )
+      .then( r => {
+        if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${r.error}` );
+      } )
+      .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
+    AudioBirdId?.notify(
+      `Heard ${alerts.map( sp => sp.commonName ).join( ", " )}`,
+      alerts.map( sp => ( seen && !seen.has( sp.taxonId )
+        ? `${sp.name}: not yet seen at research grade`
+        : sp.name ) ).join( "\n" ),
+    );
+  }
   useAudioIdSession.setState( {
     current: scores,
     spectrogram,

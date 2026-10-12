@@ -12,14 +12,8 @@ import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import colors from "styles/tailwindColors";
 
 import type { AudioIdSpecies } from "./audioIdModel";
-import type { SpectrogramColumn, VibrateMode } from "./audioIdSession";
+import type { SpectrogramColumn } from "./audioIdSession";
 import useAudioIdSession, { heardIn } from "./audioIdSession";
-
-const VIBRATE_OPTIONS: [VibrateMode, string][] = [
-  ["never", "Never"],
-  ["new", "A new bird"],
-  ["unseen", "A bird I haven't seen"],
-];
 
 // Animal classes the model covers, for asking which of them the user has seen.
 const SEEN_TAXON_IDS = [
@@ -72,40 +66,43 @@ const useSeenTaxonIds = ( userId: number | undefined ): Set<number> => {
 const Spectrogram = ( { columns }: { columns: SpectrogramColumn[] } ) => {
   const bins = columns[0]?.bins.length || 1;
   return (
-    <Svg
-      width="100%"
-      height={96}
-      viewBox={`0 0 80 ${bins}`}
-      preserveAspectRatio="none"
-      style={{ marginTop: 16 }}
-    >
-      <Rect x={0} y={0} width={80} height={bins} fill={colors.black} />
-      {columns.map( ( col, x ) => col.bins.map( ( v, b ) => (
-        // eslint-disable-next-line react/no-array-index-key
-        <Rect
-          key={`${x}-${b}`}
-          x={x + 80 - columns.length}
-          y={bins - 1 - b}
-          width={1.05}
-          height={1.05}
-          fill={col.color || colors.white}
-          opacity={v}
-        />
-      ) ) )}
-    </Svg>
+    <View className="mt-4">
+      <Svg
+        width="100%"
+        height={96}
+        viewBox={`0 0 80 ${bins}`}
+        preserveAspectRatio="none"
+      >
+        <Rect x={0} y={0} width={80} height={bins} fill={colors.black} />
+        {columns.map( ( col, x ) => col.bins.map( ( v, b ) => (
+          <Rect
+            // eslint-disable-next-line react/no-array-index-key
+            key={`${x}-${b}`}
+            x={x + 80 - columns.length}
+            y={bins - 1 - b}
+            width={1.05}
+            height={1.05}
+            fill={col.color || colors.white}
+            opacity={v}
+          />
+        ) ) )}
+      </Svg>
+    </View>
   );
 };
 
 const AudioId = ( ) => {
   const navigation = useNavigation( );
   const {
-    listening, error, current, spectrogram, heard, setup, vibrateMode,
-    setVibrateMode, setSeen, start, stop,
+    listening, error, current, spectrogram, heard, setup, setSeen, start,
+    stop,
   } = useAudioIdSession( );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
   const currentUser = useCurrentUser( );
   const seen = useSeenTaxonIds( currentUser?.id );
-  useEffect( ( ) => setSeen( seen ), [seen, setSeen] );
+  useEffect( ( ) => setSeen( currentUser
+    ? seen
+    : null ), [currentUser, seen, setSeen] );
 
   const outputOf = useMemo(
     ( ) => new Map( species.map( ( sp, i ) => [sp.taxonId, i] ) ),
@@ -166,30 +163,6 @@ const AudioId = ( ) => {
           ? stop
           : start}
       />
-      <Body3 className="mt-4 mb-1">Vibrate when I hear:</Body3>
-      <View className="flex-row">
-        {VIBRATE_OPTIONS.map( ( [mode, label] ) => (
-          <Pressable
-            key={mode}
-            accessibilityRole="button"
-            accessibilityState={{ selected: vibrateMode === mode }}
-            className={`flex-1 mr-1 py-2 rounded-lg border border-darkGray ${
-              vibrateMode === mode
-                ? "bg-darkGray"
-                : ""
-            }`}
-            onPress={( ) => setVibrateMode( mode )}
-          >
-            <Body3
-              className={`text-center ${vibrateMode === mode
-                ? "text-white"
-                : ""}`}
-            >
-              {label}
-            </Body3>
-          </Pressable>
-        ) )}
-      </View>
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
       {listening && <Spectrogram columns={spectrogram} />}
       {listening && current.length === 0 && (
