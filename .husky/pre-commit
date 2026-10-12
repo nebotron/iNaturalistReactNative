@@ -1,5 +1,10 @@
+set -e
+
 # Install dependencies if they're missing (e.g. fresh cloud containers)
 [ -d node_modules ] || npm install --no-audit --no-fund
+bundle check > /dev/null 2>&1 || bundle install --quiet
+# Gem executables (e.g. rubocop) aren't always on PATH
+export PATH="$(ruby -e 'print Gem.bindir'):$PATH"
 
 # Run lint on staged files and run flow
 npm run lint:staged:fix
