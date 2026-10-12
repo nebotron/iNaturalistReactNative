@@ -7,7 +7,7 @@ import {
   INatIcon,
   ViewWrapper,
 } from "components/SharedComponents";
-import ScaleBar from "components/SharedComponents/Map/ScaleBar";
+import Map from "components/SharedComponents/Map/Map";
 import { TextInput, View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
 import type { TabStackScreenProps } from "navigation/types";
@@ -27,11 +27,9 @@ import {
 } from "react-native";
 import type { RenderItemParams } from "react-native-draggable-flatlist";
 import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatlist";
+import type MapView from "react-native-maps";
 import type { LatLng, Region } from "react-native-maps";
-import MapView, {
-  Marker,
-  Polyline,
-} from "react-native-maps";
+import { Marker, Polyline } from "react-native-maps";
 import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import Carousel from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -223,8 +221,6 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     ? 0
     : insets.bottom;
   const mapRef = useRef<MapView>( null );
-  const [scaleRegion, setScaleRegion] = useState<Region>( INITIAL_REGION );
-  const [mapWidth, setMapWidth] = useState( 0 );
   const carouselRef = useRef<ICarouselInstance>( null );
   // Index the carousel was scrolled to programmatically (by tapping a map
   // marker), so the resulting snap doesn't redo the selection work.
@@ -634,78 +630,77 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
 
       {/* Map */}
       <View className="flex-1">
-        <MapView
+        <Map
           ref={mapRef}
-          style={StyleSheet.absoluteFillObject}
           initialRegion={INITIAL_REGION}
-          rotateEnabled={false}
-          pitchEnabled={false}
-          onLayout={e => setMapWidth( e.nativeEvent.layout.width )}
-          onRegionChangeComplete={setScaleRegion}
-          showsScale
+          showCurrentLocationButton
+          showScaleBar
+          showSwitchMapTypeButton
           showsUserLocation
-        >
-          {stops.map( ( stop, index ) => stop.point && (
-            <Marker
-              key={stop.id}
-              coordinate={stop.point}
-              pinColor={stopDotColor( index, stops.length )}
-              title={stop.text || `${t( "Stop-noun" )} ${index + 1}`}
-            />
-          ) )}
-          {routeCoords.length > 1 && (
-            <Polyline
-              coordinates={routeCoords.map( toMapCoord )}
-              strokeColor={colors.blue}
-              strokeWidth={3}
-            />
-          )}
-          {hotspotRouteCoords.length > 1 && (
-            <Polyline
-              coordinates={hotspotRouteCoords.map( toMapCoord )}
-              strokeColor={colors.inatGreen}
-              strokeWidth={4}
-            />
-          )}
-          {hotspots.map( ( hotspot, idx ) => (
-            <Marker
-              key={hotspot.id}
-              coordinate={{
-                latitude: hotspot.centerLatitude,
-                longitude: hotspot.centerLongitude,
-              }}
-              anchor={{ x: 0.5, y: 0.5 }}
-              onPress={() => handleHotspotMarkerPress( hotspot, idx )}
-            >
-              <View
-                className="w-6 h-6 rounded-full items-center justify-center border border-white"
-                style={{
-                  backgroundColor: selectedHotspotId === hotspot.id
-                    ? colors.inatGreen
-                    : colors.warningYellow,
-                }}
-              >
-                <Body4 className="text-white font-bold">{idx + 1}</Body4>
-              </View>
-            </Marker>
-          ) )}
-          {hotspots
-            .find( h => h.id === selectedHotspotId )
-            ?.observations.map( obs => (
-              <Marker
-                key={obs.uuid}
-                coordinate={{ latitude: obs.latitude, longitude: obs.longitude }}
-                anchor={{ x: 0.5, y: 0.5 }}
-                onPress={() => handleObservationPress( obs.uuid )}
-              >
-                <View
-                  className="w-2.5 h-2.5 rounded-full border border-white"
-                  style={{ backgroundColor: colors.inatGreen }}
+          mapChildren={(
+            <>
+              {stops.map( ( stop, index ) => stop.point && (
+                <Marker
+                  key={stop.id}
+                  coordinate={stop.point}
+                  pinColor={stopDotColor( index, stops.length )}
+                  title={stop.text || `${t( "Stop-noun" )} ${index + 1}`}
                 />
-              </Marker>
-            ) )}
-        </MapView>
-        <ScaleBar region={scaleRegion} mapWidth={mapWidth} />
+              ) )}
+              {routeCoords.length > 1 && (
+                <Polyline
+                  coordinates={routeCoords.map( toMapCoord )}
+                  strokeColor={colors.blue}
+                  strokeWidth={3}
+                />
+              )}
+              {hotspotRouteCoords.length > 1 && (
+                <Polyline
+                  coordinates={hotspotRouteCoords.map( toMapCoord )}
+                  strokeColor={colors.inatGreen}
+                  strokeWidth={4}
+                />
+              )}
+              {hotspots.map( ( hotspot, idx ) => (
+                <Marker
+                  key={hotspot.id}
+                  coordinate={{
+                    latitude: hotspot.centerLatitude,
+                    longitude: hotspot.centerLongitude,
+                  }}
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  onPress={() => handleHotspotMarkerPress( hotspot, idx )}
+                >
+                  <View
+                    className="w-6 h-6 rounded-full items-center justify-center border border-white"
+                    style={{
+                      backgroundColor: selectedHotspotId === hotspot.id
+                        ? colors.inatGreen
+                        : colors.warningYellow,
+                    }}
+                  >
+                    <Body4 className="text-white font-bold">{idx + 1}</Body4>
+                  </View>
+                </Marker>
+              ) )}
+              {hotspots
+                .find( h => h.id === selectedHotspotId )
+                ?.observations.map( obs => (
+                  <Marker
+                    key={obs.uuid}
+                    coordinate={{ latitude: obs.latitude, longitude: obs.longitude }}
+                    anchor={{ x: 0.5, y: 0.5 }}
+                    onPress={() => handleObservationPress( obs.uuid )}
+                  >
+                    <View
+                      className="w-2.5 h-2.5 rounded-full border border-white"
+                      style={{ backgroundColor: colors.inatGreen }}
+                    />
+                  </Marker>
+                ) )}
+            </>
+          )}
+        />
 
         {( loading || hotspotRouteLoading ) && (
           <View
