@@ -116,10 +116,9 @@ const PhotoGallery = ( {
   const isFetchingRef = useRef( false );
   const importingRef = useRef( false );
   // Photos the user removed from a Group Photos import previously (see
-  // removedGroupPhotoUris.ts) — always hidden, unlike hideImported which the
-  // user can toggle, since the underlying device deletion may have silently
-  // failed (iOS 26's PHPhotoLibrary confirmation bug) and re-showing them
-  // would just invite re-importing something the user already said to remove.
+  // removedGroupPhotoUris.ts) — the device deletion may have silently failed
+  // (iOS 26's PHPhotoLibrary confirmation bug), so they count as saved and are
+  // hidden along with them unless the user unchecks Hide Saved.
   const removedGroupPhotoUrisRef = useRef<Set<string>>( new Set( getRemovedGroupPhotoUris( ) ) );
 
   // Kept up to date while the screen is open rather than read once on mount:
@@ -188,11 +187,7 @@ const PhotoGallery = ( {
         // GPS-stripping (see PhotoLibrary and videoImportHelpers).
         include: GALLERY_INCLUDE,
       } );
-      const removedUris = removedGroupPhotoUrisRef.current;
-      const nodes = result.edges.map( e => e.node ).filter( node => {
-        const uri = getDeviceUriFromNode( node );
-        return !uri || !removedUris.has( uri );
-      } );
+      const nodes = result.edges.map( e => e.node );
       setPhotos( prev => {
         if ( !after ) return nodes;
         // CameraRoll's cursor-based pages overlap when the library changes
@@ -352,7 +347,7 @@ const PhotoGallery = ( {
     if ( !uri ) {
       return false;
     }
-    return importedUris.has( uri );
+    return importedUris.has( uri ) || removedGroupPhotoUrisRef.current.has( uri );
   }, [importedUris] );
 
   const hasImportedPhotos = importedUris.size > 0;
