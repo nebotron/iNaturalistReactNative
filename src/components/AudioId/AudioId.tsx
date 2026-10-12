@@ -2,12 +2,13 @@
 import { useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
 import {
-  Body1, Body3, Button, Heading4, List2,
+  Body1, Body3, Button, Heading4, IconicTaxonIcon, List2,
 } from "components/SharedComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React, { useEffect, useMemo } from "react";
 import Svg, { Rect } from "react-native-svg";
-import { useCurrentUser } from "sharedHooks";
+import { useCurrentUser, useTaxon } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import colors from "styles/tailwindColors";
 
@@ -59,6 +60,18 @@ const useSeenTaxonIds = ( userId: number | undefined ): Set<number> => {
     ) );
     return ids;
   }, [data] );
+};
+
+const TaxonThumb = ( { taxonId }: { taxonId: number } ) => {
+  const { taxon } = useTaxon( { id: taxonId } );
+  const url = taxon?.default_photo?.url;
+  return url
+    ? <CachedImage source={{ uri: url }} className="w-10 h-10 rounded-lg mr-3" />
+    : (
+      <View className="mr-3">
+        <IconicTaxonIcon imageClassName="w-10 h-10 rounded-lg" iconicTaxonName="Aves" />
+      </View>
+    );
 };
 
 // The last 10 s of sound, low frequencies at the bottom, each moment tinted
@@ -127,6 +140,7 @@ const AudioId = ( ) => {
           : ""}`}
       onPress={( ) => openTaxon( sp.taxonId )}
     >
+      <TaxonThumb taxonId={sp.taxonId} />
       <View className="w-3 h-3 rounded-full mr-3" style={{ backgroundColor: color }} />
       <View className="flex-1">
         <Body1>{sp.commonName}</Body1>
