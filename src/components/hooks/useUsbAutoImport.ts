@@ -76,6 +76,9 @@ const MAX_CONSECUTIVE_SAVE_FAILURES = 3;
 
 // How often to re-check free space while waiting for room for the next file.
 const WAIT_FOR_SPACE_INTERVAL_MS = 1_000;
+const waitForSpaceInterval = ( ) => new Promise( resolve => {
+  setTimeout( resolve, WAIT_FOR_SPACE_INTERVAL_MS );
+} );
 
 // Abandoned files stay unimported, so the next scan — SCAN_INTERVAL_MS later —
 // would pick the same card up and grind through the same failures again.
@@ -308,7 +311,7 @@ const useUsbAutoImport = ( ) => {
       let abandoned = 0;
       // Which condition ended the run early, and so which marker reports it and
       // what the banner tells the user.
-      let abandonReason: "timeouts" | "out-of-space" | "failures" | "" = "";
+      let abandonReason: "timeouts" | "failures" | "" = "";
       let lastError = "";
       for ( let i = 0; i < images.length; i += 1 ) {
         const { relativePath, fileSize } = images[i];
@@ -329,8 +332,10 @@ const useUsbAutoImport = ( ) => {
           // eslint-disable-next-line no-await-in-loop
           while ( !( await hasRoom( ) ) ) {
             // eslint-disable-next-line no-await-in-loop
-            await new Promise( r => { setTimeout( r, WAIT_FOR_SPACE_INTERVAL_MS ); } );
+            await waitForSpaceInterval( );
           }
+        }
+        if ( useUsbImportProgress.getState( ).phase === "waitingForSpace" ) {
           progress.setPhase( "saving" );
         }
         const fileStartedAt = Date.now( );
@@ -389,6 +394,17 @@ const useUsbAutoImport = ( ) => {
           addPendingUsbDeletes( [relativePath] );
           consecutiveFailures = 0;
         } catch ( err ) {
+          // The save needs more room than the file's own size. Not this file's
+          // fault: wait and retry it, like the free-space check above.
+          if ( ( err as { code?: string } )?.code === "out-of-space" ) {
+            progress.setPhase( "waitingForSpace" );
+            updateUsbOffloadProgress( savedPaths.length, failed, "waiting for space" );
+            // eslint-disable-next-line no-await-in-loop
+            await waitForSpaceInterval( );
+            i -= 1;
+            // eslint-disable-next-line no-continue
+            continue;
+          }
           failed += 1;
           consecutiveFailures += 1;
           // Read before anything else is awaited below: taken after the drive
@@ -400,12 +416,7 @@ const useUsbAutoImport = ( ) => {
           lastError = ( err instanceof Error
             ? err.message
             : String( err ) ).slice( 0, 200 );
-          // No room on the phone is a whole-device condition, not this file's
-          // problem — the next 156 copies cannot succeed either, so don't try
-          // them.
-          if ( ( err as { code?: string } )?.code === "out-of-space" ) {
-            abandonReason = "out-of-space";
-          } else if ( consecutiveFailures >= MAX_CONSECUTIVE_SAVE_FAILURES ) {
+          if ( consecutiveFailures >= MAX_CONSECUTIVE_SAVE_FAILURES ) {
             abandonReason = timedOut
               ? "timeouts"
               : "failures";
@@ -469,7 +480,6 @@ const useUsbAutoImport = ( ) => {
           ? "usb_offload_drive_gone"
           : {
             timeouts: "usb_offload_library_wedged",
-            "out-of-space": "usb_offload_out_of_space",
             failures: "usb_offload_saves_failing",
           }[abandonReason];
         // The card being pulled is the user's doing, not a fault, so it goes in
@@ -536,9 +546,6 @@ const useUsbAutoImport = ( ) => {
           + `deleted ${deletedFromDevice} from device `
           + `(${deleteFailures} delete failures)${driveNote}`,
         );
-      }
-      if ( abandonReason === "out-of-space" ) {
-        progress.setNote( "There's no room left on this device." );
       }
       // An abandoned run can have no failures — the free-space check stops it
       // before any save — and must not read as "Import complete".
