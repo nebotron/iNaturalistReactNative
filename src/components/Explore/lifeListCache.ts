@@ -10,6 +10,8 @@ import { zustandStorage } from "stores/useStore";
 const logger = log.extend( "exploreLifeListCache" );
 
 const PAGE_SIZE = 200;
+// Safety valve so a huge result set can't loop forever; 500 pages is 100k obs.
+const MAX_PAGES = 500;
 // Persist progress this often, so an interrupted first sync resumes rather than
 // starting over, without re-serializing everything on every page.
 const SAVE_EVERY_PAGES = 10;
@@ -38,7 +40,7 @@ export const lifeListCacheKey = ( queryParams: Record<string, unknown> ): string
     .filter( key => !NON_FILTER_PARAMS.includes( key ) && queryParams[key] !== undefined )
     .sort( )
     .map( key => [key, queryParams[key]] );
-  return `exploreLifeList-v2-${JSON.stringify( filters )}`;
+  return `exploreLifeList-v1-${JSON.stringify( filters )}`;
 };
 
 const readCache = ( key: string ): LifeListCache => {
@@ -139,8 +141,9 @@ export const syncLifeList = async (
     } ) );
   };
 
+  let done = false;
   try {
-    for ( let page = 1; ; page += 1 ) {
+    for ( let page = 1; page <= MAX_PAGES; page += 1 ) {
       if ( page > 1 && shouldStop?.( ) ) {
         save( false );
         return toLifers( entries, display );
@@ -171,24 +174,22 @@ export const syncLifeList = async (
       const earliest = earliestBySpecies( entries );
       results.forEach( obs => {
         const lifer = toLifer( obs );
-        // Genus hybrids are ranked above species, but are each one kind of organism
-        const speciesId = lifer?.speciesId
-          ?? ( lifer?.taxon.rank === "genushybrid"
-            ? lifer.taxon.id
-            : null );
-        if ( !lifer || !speciesId ) {
+        if ( !lifer?.speciesId ) {
           // Re-identified above species level
           entries.delete( obs.uuid );
           return;
         }
-        const current = earliest.get( speciesId );
+        const current = earliest.get( lifer.speciesId );
         if ( !current || current[0] === obs.uuid || isEarlier( lifer.observed_on, current[2] ) ) {
           display[obs.uuid] = lifer;
         }
-        entries.set( obs.uuid, [obs.uuid, speciesId, lifer.observed_on] );
+        entries.set( obs.uuid, [obs.uuid, lifer.speciesId, lifer.observed_on] );
       } );
       const lastId = results[results.length - 1]?.id;
-      if ( results.length < PAGE_SIZE || typeof lastId !== "number" ) break;
+      if ( results.length < PAGE_SIZE || typeof lastId !== "number" ) {
+        done = true;
+        break;
+      }
       idAbove = lastId;
       onProgress?.( toLifers( entries, display ) );
       if ( page % SAVE_EVERY_PAGES === 0 ) save( false );
@@ -211,6 +212,6 @@ export const syncLifeList = async (
   } catch ( error ) {
     logger.warn( "Could not fetch display data for every species", error );
   }
-  save( true );
+  save( done );
   return toLifers( entries, display );
 };

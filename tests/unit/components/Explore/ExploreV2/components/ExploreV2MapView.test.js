@@ -95,7 +95,7 @@ describe( "ExploreV2MapView", ( ) => {
     const { initialRegion } = mapProps( );
     expect( initialRegion.latitude ).toBe( 37.5 );
     expect( initialRegion.longitude ).toBe( -122.1 );
-    expect( initialRegion.latitudeDelta ).toBe( 0.9 );
+    expect( initialRegion.latitudeDelta ).toBe( 0.02 );
   } );
 
   it( "ignores the result bounds when the search is nearby", ( ) => {

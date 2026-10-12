@@ -2,7 +2,6 @@ import { renderHook } from "@testing-library/react-native";
 import useUsbAutoImport from "components/hooks/useUsbAutoImport";
 import { AppState } from "react-native";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
-import useUsbImportProgress from "stores/usbImportProgress";
 
 const mockListNewUsbImages = jest.fn( );
 const mockSaveUsbImageToPhotos = jest.fn( );
@@ -257,33 +256,30 @@ describe( "useUsbAutoImport", ( ) => {
     expect( mockSaveUsbImageToPhotos ).toHaveBeenCalled( );
   } );
 
-  it( "waits for space and retries when a save runs out of room", async ( ) => {
-    let full = true;
-    mockSaveUsbImageToPhotos.mockImplementation( async relativePath => {
-      if ( full ) {
-        const err = new Error( "“IMG.CR3” couldn’t be copied to “tmp”" );
-        err.code = "out-of-space";
-        throw err;
-      }
-      return { localIdentifier: relativePath };
+  // The Aug 6 log: the phone ran out of room, so every copy failed instantly
+  // instead of timing out, the timeouts-only counter reset on each one, and the
+  // run ground through all 157 files in a second and a half — then the poll did
+  // it again ten seconds later. 1,084 error lines in 74 seconds.
+  it( "abandons the run as soon as the device is out of space", async ( ) => {
+    mockSaveUsbImageToPhotos.mockImplementation( ( ) => {
+      const err = new Error( "“IMG.CR3” couldn’t be copied to “tmp”" );
+      err.code = "out-of-space";
+      return Promise.reject( err );
     } );
 
     renderHook( ( ) => useUsbAutoImport( ) );
     await jest.advanceTimersByTimeAsync( 0 );
-    expect( useUsbImportProgress.getState( ).phase ).toBe( "waitingForSpace" );
 
-    full = false;
-    await jest.advanceTimersByTimeAsync( 1_000 );
-    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 41 );
-    expect( mockLogger.errorWithExtra ).not.toHaveBeenCalled( );
-    expect( mockLogger.warnWithExtra ).toHaveBeenCalledTimes( 1 );
-    expect( mockLogger.warnWithExtra ).toHaveBeenCalledWith(
-      "usb_offload_waiting_for_space",
-      expect.objectContaining( { reason: "save-out-of-space", position: "1/40" } ),
+    // The first file's failure is the whole device's answer for the other 39.
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 1 );
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_out_of_space",
+      expect.objectContaining( { abandoned: 39, saved: 0, failed: 1 } ),
     );
-    expect( mockLogger.info ).toHaveBeenCalledWith(
-      expect.stringContaining( "resumed after waiting" ),
-    );
+
+    // And the next scans don't start it over.
+    await jest.advanceTimersByTimeAsync( 60_000 );
+    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 1 );
   } );
 
   // Every log line is a network POST. A run that fails file after file used to

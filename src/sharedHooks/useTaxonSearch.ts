@@ -15,7 +15,7 @@ import { useIconicTaxa } from "sharedHooks";
 
 const { useRealm } = RealmContext;
 
-const ONLINE_SEARCH_DEBOUNCE_MS = 400;
+const ONLINE_SEARCH_DEBOUNCE_MS = 250;
 
 const useTaxonSearch = ( taxonQueryArg = "" ) => {
   const realm = useRealm( );
@@ -141,15 +141,10 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       };
     }
 
-    // Show online results once they arrive, followed by any other local matches
-    const remoteTaxa = remoteResult?.query === taxonQuery
+    // Show local results until online results arrive, then replace them
+    const taxa = remoteResult?.query === taxonQuery
       ? remoteResult.taxa
-      : [];
-    const remoteIds = new Set( remoteTaxa.map( taxon => taxon.id ) );
-    const taxa = [
-      ...remoteTaxa,
-      ...( localTaxa || [] ).filter( taxon => !remoteIds.has( taxon.id ) ),
-    ];
+      : localTaxa || [];
     if ( taxa.length > 0 ) {
       return {
         taxa,
