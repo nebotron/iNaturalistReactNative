@@ -15,7 +15,7 @@ import { useIconicTaxa } from "sharedHooks";
 
 const { useRealm } = RealmContext;
 
-const ONLINE_SEARCH_DEBOUNCE_MS = 400;
+const ONLINE_SEARCH_DEBOUNCE_MS = 250;
 
 const useTaxonSearch = ( taxonQueryArg = "" ) => {
   const realm = useRealm( );
@@ -67,8 +67,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
   }, [realm] );
 
   // When online, fetch taxa matching the query from the API and save them to
-  // Realm, so they show up now and in future offline searches. Local results
-  // are shown until the online results arrive.
+  // Realm, so they show up now and in future offline searches.
   useEffect( ( ) => {
     if ( taxonQuery.length === 0 || !isConnected ) return ( ) => undefined;
     let isSubscribed = true;
@@ -141,14 +140,15 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       };
     }
 
-    // Show online results once they arrive, followed by any other local matches
+    // Local results show first, so keep them in place and append online-only
+    // results when they arrive, rather than reshuffling the list
     const remoteTaxa = remoteResult?.query === taxonQuery
       ? remoteResult.taxa
       : [];
-    const remoteIds = new Set( remoteTaxa.map( taxon => taxon.id ) );
+    const localIds = new Set( ( localTaxa || [] ).map( taxon => taxon.id ) );
     const taxa = [
-      ...remoteTaxa,
-      ...( localTaxa || [] ).filter( taxon => !remoteIds.has( taxon.id ) ),
+      ...( localTaxa || [] ),
+      ...remoteTaxa.filter( taxon => !localIds.has( taxon.id ) ),
     ];
     if ( taxa.length > 0 ) {
       return {
