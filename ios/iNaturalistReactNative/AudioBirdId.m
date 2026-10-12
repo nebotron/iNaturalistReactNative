@@ -1,6 +1,8 @@
 #import <AVFoundation/AVFoundation.h>
 #import <AudioToolbox/AudioToolbox.h>
 #import <CoreHaptics/CoreHaptics.h>
+#import <mach/mach.h>
+#import <UIKit/UIKit.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
 #import <UserNotifications/UserNotifications.h>
@@ -19,6 +21,7 @@
 // Listening continues with the app in the background (the "audio" background
 // mode in Info.plist) and resumes after interruptions such as phone calls or
 // other audio in the app (recording or playing a sound) stopping the engine.
+// Restarts and their outcomes go to JS as "AudioBirdIdStatus" for the app log.
 
 #define AB_SR       32000
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
@@ -48,13 +51,15 @@
   BOOL              _wantListening;
   dispatch_source_t _watchdog;
   CHHapticEngine   *_haptics;
+  CFAbsoluteTime    _lastAudio;
+  NSInteger         _restartFailures;
 }
 
 RCT_EXPORT_MODULE( );
 
 + (BOOL)requiresMainQueueSetup { return NO; }
 
-- (NSArray<NSString *> *)supportedEvents { return @[@"AudioBirdIdScores"]; }
+- (NSArray<NSString *> *)supportedEvents { return @[@"AudioBirdIdScores", @"AudioBirdIdStatus"]; }
 
 - (instancetype)init
 {
@@ -65,7 +70,7 @@ RCT_EXPORT_MODULE( );
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
     [nc addObserver:self selector:@selector( audioInterrupted: )
                name:AVAudioSessionInterruptionNotification object:nil];
-    [nc addObserver:self selector:@selector( restartIfWanted )
+    [nc addObserver:self selector:@selector( mediaServicesReset )
                name:AVAudioSessionMediaServicesWereResetNotification object:nil];
   }
   return self;
@@ -89,6 +94,9 @@ RCT_EXPORT_MODULE( );
   OrtSessionOptions *opts;
   if ( ort->CreateSessionOptions( &opts ) ) return NULL;
   ort->SetIntraOpNumThreads( opts, 2 );
+  // The arena keeps peak scratch memory for good; a smaller footprint makes
+  // iOS less likely to kill the app in the background.
+  ort->DisableCpuMemArena( opts );
   OrtSession *session = NULL;
   OrtStatus *status = ort->CreateSession( _env, [path UTF8String], opts, &session );
   ort->ReleaseSessionOptions( opts );
@@ -126,6 +134,10 @@ RCT_EXPORT_METHOD( geo:( double )lat lng:( double )lng week:( double )week
       ? [self run:self->_geoSession input:pos length:3 inputName:"input" outputName:"probabilities"
           outputs:nil error:&error]
       : nil;
+    // Used once per start; free its memory until the next.
+    const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
+    if ( self->_geoSession ) ort->ReleaseSession( self->_geoSession );
+    self->_geoSession = NULL;
     if ( out ) resolve( out ); else reject( @"geo", error ?: @"Could not load the geomodel", nil );
   } );
 }
@@ -236,8 +248,15 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
   completionHandler( UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList );
 }
 
-// Other audio in the app can reconfigure or deactivate the shared audio
-// session without a notification reaching us; check every few seconds.
+- (void)status:(NSString *)message
+{
+  [self sendEventWithName:@"AudioBirdIdStatus" body:message];
+}
+
+// Other audio in the app, or another app taking the microphone while this one
+// is in the background, can stop audio without a notification reaching us,
+// sometimes with the engine still reporting itself running. So check every
+// few seconds that audio is still arriving.
 - (void)startWatchdog
 {
   if ( _watchdog ) return;
@@ -247,7 +266,12 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
   __weak AudioBirdId *weakSelf = self;
   dispatch_source_set_event_handler( _watchdog, ^{
     AudioBirdId *me = weakSelf;
-    if ( me && me->_wantListening && !me->_engine.isRunning ) [me restartIfWanted];
+    if ( !me || !me->_wantListening ) return;
+    double silentFor = CFAbsoluteTimeGetCurrent( ) - me->_lastAudio;
+    if ( !me->_engine.isRunning || silentFor > 5 ) {
+      [me restart:[NSString stringWithFormat:@"no audio for %.0f s, engine %@", silentFor,
+                   me->_engine.isRunning ? @"running" : @"stopped"]];
+    }
   } );
   dispatch_resume( _watchdog );
 }
@@ -259,19 +283,39 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
   NSUInteger type = [note.userInfo[AVAudioSessionInterruptionTypeKey] unsignedIntegerValue];
   dispatch_async( dispatch_get_main_queue(), ^{
     if ( type == AVAudioSessionInterruptionTypeBegan ) {
+      [self status:[NSString stringWithFormat:@"interrupted, reason %@",
+                    note.userInfo[AVAudioSessionInterruptionReasonKey] ?: @"none"]];
       [self teardownEngine];
     } else {
-      [self restartIfWanted];
+      [self restart:@"interruption ended"];
     }
   } );
 }
 
-- (void)restartIfWanted
+- (void)mediaServicesReset
+{
+  [self restart:@"media services reset"];
+}
+
+// Starting the microphone can fail while the app is in the background; the
+// watchdog keeps retrying, so only the first failure in a row is reported.
+- (void)restart:(NSString *)reason
 {
   dispatch_async( dispatch_get_main_queue(), ^{
     if ( !self->_wantListening ) return;
     [self teardownEngine];
-    [self startEngine:nil];
+    NSError *error = nil;
+    BOOL ok = [self startEngine:&error];
+    NSInteger failures = self->_restartFailures;
+    self->_restartFailures = ok ? 0 : failures + 1;
+    if ( ok || failures == 0 ) {
+      BOOL background = [UIApplication sharedApplication].applicationState
+        == UIApplicationStateBackground;
+      [self status:[NSString stringWithFormat:@"restart after %@ in %@: %@", reason,
+                    background ? @"background" : @"foreground",
+                    ok ? [NSString stringWithFormat:@"ok after %ld failures", (long)failures]
+                       : error.localizedDescription ?: @"failed"]];
+    }
   } );
 }
 
@@ -279,7 +323,7 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
 // microphone is plugged in or removed), which stops it.
 - (void)engineConfigurationChanged:(NSNotification *)note
 {
-  [self restartIfWanted];
+  [self restart:@"configuration change"];
 }
 
 - (BOOL)startEngine:(NSError **)error
@@ -306,6 +350,7 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
                                                interleaved:NO];
   _converter = [[AVAudioConverter alloc] initFromFormat:inFormat toFormat:_outFormat];
   dispatch_sync( _bufferQueue, ^{ self->_filled = 0; self->_sinceRun = 0; } );
+  _lastAudio = CFAbsoluteTimeGetCurrent( );
 
   [[NSNotificationCenter defaultCenter] addObserver:self
                                            selector:@selector( engineConfigurationChanged: )
@@ -361,6 +406,7 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
   }];
   NSInteger n = out.frameLength;
   if ( error || n == 0 ) return;
+  _lastAudio = CFAbsoluteTimeGetCurrent( );
   NSData *samples = [NSData dataWithBytes:out.floatChannelData[0] length:n * sizeof( float )];
 
   dispatch_async( _bufferQueue, ^{
@@ -397,6 +443,7 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
                                  @"level": @( level ),
                                  @"inferMs": @( ms ),
                                  @"spectrogram": spectrogram,
+                                 @"memMB": @( [self footprintMB] ),
                                  @"error": inferError ?: [NSNull null] }];
     } );
   } );
@@ -438,6 +485,17 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
     [out addObject:col];
   }
   return out;
+}
+
+// What iOS counts against the app when deciding what to kill.
+- (double)footprintMB
+{
+  task_vm_info_data_t info;
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  if ( task_info( mach_task_self( ), TASK_VM_INFO, (task_info_t)&info, &count ) != KERN_SUCCESS ) {
+    return 0;
+  }
+  return info.phys_footprint / 1048576.0;
 }
 
 // One run of a [1, length] -> [1, n] model; returns the outputs listed in
