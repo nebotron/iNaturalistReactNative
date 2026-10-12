@@ -10,15 +10,13 @@ import type { NormalizedBounds } from "sharedHelpers/subjectBoundsToNormalizedCr
 
 const logger = log.extend( "prepareCropSource" );
 
-// Longest side of the file the cropper displays. A crop is capped at 2048 on
-// upload however it was framed, so this is every pixel the user can end up
-// with -- and a fraction of the ~24 megapixels of an original, which is what
-// the editor used to hand React Native to decode for each photo.
-const DISPLAY_MAX_PIXEL = 2048;
+// Longest side of the file the cropper displays. Large enough to never
+// downscale, so the cropper draws the photo at full resolution.
+const DISPLAY_MAX_PIXEL = 99999;
 
 interface PreparedSource {
   // The file the cropper draws. The crop itself is still applied to the
-  // original, so this being smaller costs no quality in the saved photo.
+  // original.
   displayUri: string;
   // Dimensions of the original as a decoder sees it, which is the pixel space
   // the crop is expressed in.
