@@ -276,6 +276,14 @@ describe( "useUsbAutoImport", ( ) => {
     await jest.advanceTimersByTimeAsync( 1_000 );
     expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 41 );
     expect( mockLogger.errorWithExtra ).not.toHaveBeenCalled( );
+    expect( mockLogger.warnWithExtra ).toHaveBeenCalledTimes( 1 );
+    expect( mockLogger.warnWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_waiting_for_space",
+      expect.objectContaining( { reason: "save-out-of-space", position: "1/40" } ),
+    );
+    expect( mockLogger.info ).toHaveBeenCalledWith(
+      expect.stringContaining( "resumed after waiting" ),
+    );
   } );
 
   // Every log line is a network POST. A run that fails file after file used to
