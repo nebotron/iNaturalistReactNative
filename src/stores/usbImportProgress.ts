@@ -3,7 +3,7 @@ import { create } from "zustand";
 // Transient UI state for the USB → Photos offload, driven by useUsbAutoImport
 // and rendered by UsbImportProgress. Not persisted: it only reflects an
 // in-progress offload and is cleared shortly after one finishes.
-export type UsbImportPhase = "saving" | "deleting" | "done" | "error";
+export type UsbImportPhase = "saving" | "waitingForSpace" | "deleting" | "done" | "error";
 
 interface UsbImportProgressState {
   active: boolean;

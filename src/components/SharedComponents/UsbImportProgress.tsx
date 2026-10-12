@@ -30,7 +30,10 @@ const UsbImportProgress = ( ) => {
 
   let title;
   let detail;
-  if ( phase === "deleting" ) {
+  if ( phase === "waitingForSpace" ) {
+    title = "Waiting for space…";
+    detail = `Saved ${saved} of ${total}. Free up space on this device to continue.`;
+  } else if ( phase === "deleting" ) {
     title = "Clearing the storage device…";
     detail = `Saved ${saved} of ${total}. Removing them from the device…`;
   } else if ( phase === "done" ) {

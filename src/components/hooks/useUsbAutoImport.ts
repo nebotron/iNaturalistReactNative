@@ -74,12 +74,8 @@ const QUEUED_SAVE_TIMEOUT_MS = 200_000;
 // lines in 74 seconds.
 const MAX_CONSECUTIVE_SAVE_FAILURES = 3;
 
-// Free space the offload must leave on the phone. Saving until the copy itself
-// failed took the Oct 2 device down to 166MB free, and with that little room
-// Photos stopped answering deletions: Photo Cleanup's deleteAssets hung for
-// 147s and failed with PHPhotosErrorDomain 3301, so the raws that filled the
-// disk could no longer be removed, and crops failed to write too.
-const MIN_FREE_DISK_BYTES = 3 * 1024 * 1024 * 1024;
+// How often to re-check free space while waiting for room for the next file.
+const WAIT_FOR_SPACE_INTERVAL_MS = 1_000;
 
 // Abandoned files stay unimported, so the next scan — SCAN_INTERVAL_MS later —
 // would pick the same card up and grind through the same failures again.
@@ -320,13 +316,22 @@ const useUsbAutoImport = ( ) => {
           abandoned = images.length - i;
           break;
         }
+        // Wait, rather than give up, until there is room for this file: the
+        // user can free space while the banner says so.
+        const hasRoom = async ( ) => {
+          const free = await DeviceInfo.getFreeDiskStorage( ).catch( ( ) => -1 );
+          return free < 0 || free >= ( fileSize ?? 0 );
+        };
         // eslint-disable-next-line no-await-in-loop
-        const freeDiskBytes = await DeviceInfo.getFreeDiskStorage( ).catch( ( ) => -1 );
-        if ( freeDiskBytes >= 0 && freeDiskBytes - ( fileSize ?? 0 ) < MIN_FREE_DISK_BYTES ) {
-          abandonReason = "out-of-space";
-          lastError = `${freeDiskBytes} bytes free`;
-          abandoned = images.length - i;
-          break;
+        if ( !( await hasRoom( ) ) ) {
+          progress.setPhase( "waitingForSpace" );
+          updateUsbOffloadProgress( savedPaths.length, failed, "waiting for space" );
+          // eslint-disable-next-line no-await-in-loop
+          while ( !( await hasRoom( ) ) ) {
+            // eslint-disable-next-line no-await-in-loop
+            await new Promise( r => { setTimeout( r, WAIT_FOR_SPACE_INTERVAL_MS ); } );
+          }
+          progress.setPhase( "saving" );
         }
         const fileStartedAt = Date.now( );
         // Which file, and whether it is waiting for the write chain or inside
