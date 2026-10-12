@@ -183,7 +183,7 @@ RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
     if ( !self->_haptics ) {
       self->_haptics = [[CHHapticEngine alloc] initWithAudioSession:session error:&error];
       self->_haptics.playsHapticsOnly = YES;
-      self->_haptics.isAutoShutdownEnabled = YES;
+      self->_haptics.autoShutdownEnabled = YES;
       self->_haptics.resetHandler = ^{ self->_haptics = nil; };
     }
     CHHapticEvent *buzz = [[CHHapticEvent alloc]
