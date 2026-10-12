@@ -123,11 +123,24 @@ class Taxon extends Realm.Object {
   // characters) so search is agnostic to them: "Ring-billed Gull" is stored
   // as "RingbilledGull", matching a query of "ring-billed", "ring billed",
   // or "ringbilled" cleaned the same way in validateRealmSearch.
+  // Derives the ABA/AOU 4-letter banding code for a bird species from its
+  // common name, e.g. "American Robin" -> "AMRO", "Cooper's Hawk" -> "COHA".
+  static abaCode( taxon ) {
+    const commonName = taxon.preferred_common_name || taxon.preferredCommonName;
+    const isBird = taxon.iconic_taxon_name === "Aves"
+      || Array.from( taxon.ancestor_ids || [] ).includes( 3 );
+    if ( !commonName || !isBird || taxon.rank_level !== Taxon.SPECIES_LEVEL ) return null;
+    const words = commonName.replace( /[^a-zA-Z\s-]/g, "" ).split( /[\s-]+/ ).filter( Boolean );
+    const lengths = { 1: [4], 2: [2, 2], 3: [1, 1, 2] }[words.length] || [1, 1, 1, 1];
+    return lengths.map( ( len, i ) => ( words[i] || "" ).slice( 0, len ) ).join( "" );
+  }
+
   static compileSearchableName( taxon ) {
     const names = [
       taxon.name,
       taxon.preferred_common_name,
       taxon.preferredCommonName,
+      Taxon.abaCode( taxon ),
     ];
     return [...new Set( names )]
       .filter( Boolean )
