@@ -107,6 +107,11 @@ const Explore = ( {
   if ( !showFiltersModal ) {
     hotspotParamsRef.current = { ...queryParams, ...hotspotConfig };
   }
+  // Same for the life list, which pages through every matching observation
+  const lifeListParamsRef = useRef( queryParams );
+  if ( !showFiltersModal ) {
+    lifeListParamsRef.current = queryParams;
+  }
   const [showExploreBottomSheet, setShowExploreBottomSheet] = useState( false );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreObservationsLayout" );
   const offlineResults = useOfflineExploreResults( );
@@ -205,7 +210,7 @@ const Explore = ( {
           <LifeListView
             canFetch={canFetch}
             isConnected={isConnected}
-            queryParams={queryParams}
+            queryParams={lifeListParamsRef.current}
             handleUpdateCount={handleUpdateCount}
           />
         )}

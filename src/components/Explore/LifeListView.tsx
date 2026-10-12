@@ -1,6 +1,8 @@
 import type { Lifer } from "components/LifeList/LifeListContainer";
 import { LiferGridItem } from "components/LifeList/LifeListContainer";
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useEffect, useMemo, useRef, useState,
+} from "react";
 import type { ListRenderItemInfo } from "react-native";
 import { useAuthenticatedQuery, useGridLayout } from "sharedHooks";
 
@@ -27,11 +29,19 @@ const LifeListView = ( {
   const cacheKey = lifeListCacheKey( queryParams );
   // What a first sync has found so far, so it doesn't sit on a spinner.
   const [progress, setProgress] = useState<{ key: string; lifers: Lifer[] } | null>( null );
+  const activeKeyRef = useRef( cacheKey );
+  useEffect( ( ) => {
+    activeKeyRef.current = cacheKey;
+    return ( ) => { activeKeyRef.current = ""; };
+  }, [cacheKey] );
 
   const { data, isFetching } = useAuthenticatedQuery(
     ["exploreLifeList", cacheKey],
-    optsWithAuth => syncLifeList( queryParams, optsWithAuth, lifers => {
-      setProgress( { key: cacheKey, lifers } );
+    optsWithAuth => syncLifeList( queryParams, optsWithAuth, {
+      onProgress: lifers => {
+        if ( activeKeyRef.current === cacheKey ) setProgress( { key: cacheKey, lifers } );
+      },
+      shouldStop: ( ) => activeKeyRef.current !== cacheKey,
     } ),
     {
       enabled: !!canFetch,

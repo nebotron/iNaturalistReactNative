@@ -107,7 +107,12 @@ export const readCachedLifeList = ( key: string ): Lifer[] => {
 export const syncLifeList = async (
   queryParams: Record<string, unknown>,
   opts: { api_token: string | null },
-  onProgress?: ( lifers: Lifer[] ) => void,
+  { onProgress, shouldStop }: {
+    onProgress?: ( lifers: Lifer[] ) => void;
+    // Checked between pages, so a sync for filters the user has moved on from
+    // stops and saves its place rather than paging on alongside the new one.
+    shouldStop?: ( ) => boolean;
+  } = {},
 ): Promise<Lifer[]> => {
   const key = lifeListCacheKey( queryParams );
   touchIndex( key );
@@ -139,6 +144,10 @@ export const syncLifeList = async (
   let done = false;
   try {
     for ( let page = 1; page <= MAX_PAGES; page += 1 ) {
+      if ( page > 1 && shouldStop?.( ) ) {
+        save( false );
+        return toLifers( entries, display );
+      }
       const params = {
         ...queryParams,
         order_by: "id",
