@@ -89,3 +89,38 @@ All four CIs exclude zero. **Padding does help on unseen photos** (+0.0016 at pa
 **Also checked, no action needed.** The eval's letterbox branch centres on the subject while the shipping TS centres on the image; despite affecting 37% of crops this is worth 0.0002, so the evaluator is trustworthy as-is. Re-tuning the gate after the calibration leaves 0.50 optimal (0.45/0.50/0.55 within 0.0001 on held-out). Label noise could not be measured — only 6 URLs in the raw Firebase log were ever cropped twice, so the "is this label noise or capacity?" question is still open.
 
 **Costs, for planning.** 4 CPU cores: prefetch 7.1k images ~25 min; detection cache ~5 min; 20 epochs on 6,113 images at 640/batch 16 **6.5 hours** (~19 min/epoch; ultralytics forces `workers=0` on CPU). `pip install torchvision` from PyPI does not match a torch installed from the cpu index — install `torchvision==0.29.0+cpu` from `download.pytorch.org/whl/cpu` or the validator dies on `torchvision::nms does not exist`.
+
+### Session: small subjects — retrain with small-subject oversampling, held-out 0.8412 → 0.8425
+
+**Prompt:** "performs very poorly for subjects very small in frame." Log is now 10,743 entries / **8,454** evaluable. Held-out = last **1,500** (`--heldout-tail 1500`; URL list verified identical to `cache_detections --slice=-1500:`), which neither the old nor the new weights trained on.
+
+**Diagnosis — read this before chasing small subjects again.** Bucket by truth size `max(w·W, h·H)/max(W,H)`:
+- Truths under 0.10 score worst (0.815 held-out) with precision ~0.10: they get a near-full-frame crop. Only ~29% pass the gate; median top-box confidence on them is 0.37.
+- The detector usually *does* find them (top box contains the truth centre ~91%, median size ratio ~1.0), but **low-confidence small boxes really are worse than the fallback**: conf 0.3–0.4, box <0.1 → detection 0.67 vs fallback 0.81. The gate is right; confidence is the problem.
+- **The metric caps the upside.** Truth-as-box (perfect detector) on held-out small truths scores only 0.892 vs 0.80 for fallback, because of the 4:1 recall weighting and β. Watch precision and detection rate on the <0.10 bucket as well as the score — that's what the user sees.
+- Truths under 0.05 essentially don't exist (5 of 2,335): the crop UI seems to have a minimum size.
+
+**What shipped:** new weights (warm start, 16 epochs, AdamW 1e-4, `--scale 0.4 --small-oversample 1` = training images whose truth is <0.15 of the frame appear twice; 1,792 of them) and `YOLO_GATE_CONF` 0.50 → **0.45**. β=0.92 re-checked: still optimal for both models.
+
+| held-out 1,500 | old | new |
+|---|---|---|
+| score (gate picked by 5-fold CV inside the tail) | 0.8412 | **0.8425** |
+| truth <0.10: score / precision / detected | 0.815 / 0.102 / 29% | 0.820 / 0.143 / 37% |
+| truth 0.10–0.20 | 0.843 / 0.254 / 50% | 0.846 / 0.308 / 60% |
+| whole log (memorization-inflated) | 0.8608 (p 0.384) | 0.8626 (p 0.417) |
+
+Every bucket delta's bootstrap CI includes zero; the overall gain is within noise, but precision and detection rate rise consistently below 0.35, and the large-subject buckets dip slightly (−0.003 to −0.005, also not significant).
+
+**What did not work**
+- **Zoomed second pass** (`scripts/cache_zoom.py`: re-detect inside a square 3× the top box, upscaled to 640): the zoomed boxes come out 10–20% *tighter* than the truth, so recall drops. Zoom confidence doesn't tell right boxes from wrong ones either. Best variant: −0.002 overall on unseen photos, +0.006 on the <0.10 bucket. Not worth a second inference.
+- **2×2 tiled inference** (cached by the same script): no gain.
+- **Hedged crop for low-confidence small boxes** (k× the box, centred on it, in place of the fallback): every k in 1.5–4 and cmin 0.15–0.35 lost overall. Low-confidence boxes are too often on the wrong object.
+- **A size-dependent gate:** the per-(conf, size) table shows no cell below conf 0.5 where detection beats the fallback for small boxes.
+- **5-parameter `calibrate_crop.py` at gate 0:** −0.029. Keep the hard gate.
+
+**Ops**
+- **The container is reclaimed after ~30 min with no tool activity, and that kills detached training.** `send_later` check-ins don't count as activity: the first attempt died after epoch 1 while waiting on a 100-min check-in. Stay active with chained foreground waits (`timeout 590 bash -c 'while pgrep …; do sleep 30; done'`). Resume a killed run with `YOLO('…/weights/last.pt').train(resume=True)`. `/tmp` and pip installs survived the restart.
+- Throughput: 8,746 training images at 640/batch 16 on 4 cores ≈ 30 min/epoch, 16 epochs ≈ 8 h.
+- The pre-commit hook runs a full `npm install` on a fresh clone (~2 min) and stalls the shell; expect it.
+
+**Next idea, if small subjects still matter:** the labels have a minimum size and the detector is accurate but under-confident on small subjects. Fine-tune with a loss that weights small boxes more, or add a *small-box-specific* confidence recalibration (Platt on conf × log size) fitted strictly on held-out photos. Both are cheaper than more data, which already looked saturated last session.
