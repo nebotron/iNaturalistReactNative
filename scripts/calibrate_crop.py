@@ -32,7 +32,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert( 0, str( Path( __file__ ).parent ) )
-from sweep_crop import load, saliency_for, bounds_array, score
+from sweep_crop import load, saliency_for, bounds_array, score, DEFAULT_GATE
 
 # (k0, k1, beta, g0, g1) — the shipped behaviour, and the search bounds.
 SHIPPED = ( 1.0, 0.0, 1.0, 0.0, 0.0 )
@@ -103,9 +103,9 @@ def main() -> None:
     conf = np.array( [d[0, 4] if len( d ) else 0.0 for d in dets], dtype=float )
     have_det = np.array( [len( d ) > 0 for d in dets] )
 
-    shipped = bounds_array( dets, sal, 0.50 )
+    shipped = bounds_array( dets, sal, DEFAULT_GATE )
     base = float( score( shipped[tail], truths[tail], sizes[tail], 0.0 )[0].mean() )
-    print( f"shipped (gate 0.50) on the held-out tail: {base:.4f}\n" )
+    print( f"shipped (gate {DEFAULT_GATE:.2f}) on the held-out tail: {base:.4f}\n" )
 
     bounds = bounds_array( dets, sal, args.gate )
     apply_to = have_det if args.gate <= 0 else ( conf >= args.gate )

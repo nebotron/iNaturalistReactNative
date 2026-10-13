@@ -24,7 +24,7 @@ from evaluate_subject_detector import _spectral_saliency_bounds, SIDE_CALIBRATIO
 
 SAL_CACHE = Path( "/tmp/inat_saliency_cache.npz" )
 
-DEFAULT_GATE = 0.50
+DEFAULT_GATE = 0.45
 DEFAULT_UNION_THRESH = 0.60
 DEFAULT_UNION_K = 3
 
