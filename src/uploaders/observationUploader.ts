@@ -101,9 +101,12 @@ async function createOrUpdateObservation(
       ...uploadParams,
       id: newObs.uuid,
       ignore_photos: true,
-    }, options ) );
+    }, options ), { signal: options.signal } );
   }
-  return withRetry( () => createObservation( uploadParams, options ) );
+  return withRetry(
+    () => createObservation( uploadParams, options ),
+    { signal: options.signal },
+  );
 }
 
 function createErrorContext( stage: string, startTime: number ) {
@@ -271,7 +274,7 @@ async function uploadObservation(
       await withRetry( () => faveObservation(
         { uuid: obsUUID },
         { ...opts, api_token: apiToken },
-      ), { alsoRetryStatuses: [404] } );
+      ), { alsoRetryStatuses: [404], signal: opts.signal } );
     } catch ( error ) {
       const { uploadFailureDetails } = attachUploadFailureDetails(
         error,

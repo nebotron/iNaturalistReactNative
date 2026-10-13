@@ -206,9 +206,12 @@ const deleteRemoteObservation = async (
   }
 };
 
-const fetchObservers = async ( params: Object = {} ) : Promise<?Object> => {
+const fetchObservers = async (
+  params: Object = {},
+  opts: Object = {},
+) : Promise<?Object> => {
   try {
-    return inatjs.observations.observers( params );
+    return inatjs.observations.observers( params, opts );
   } catch ( e ) {
     return handleError( e, { context: { functionName: "fetchObservers" }, throw: true } );
   }

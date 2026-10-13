@@ -22,10 +22,10 @@ const params = {
 const useObservers = ( taxonIds: number[], enabled: boolean = true ): string[] => {
   const { data } = useAuthenticatedQuery(
     ["fetchObservers", taxonIds],
-    ( ) => fetchObservers( {
+    optsWithAuth => fetchObservers( {
       ...params,
       taxon_ids: taxonIds,
-    } ),
+    }, optsWithAuth ),
     {
       enabled: !!enabled && !!( taxonIds?.length > 0 ),
     },

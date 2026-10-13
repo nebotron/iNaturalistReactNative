@@ -141,7 +141,7 @@ const uploadSingleEvidence = async (
     apiEndpoint,
     params,
     options,
-  ) );
+  ), { signal: options.signal } );
 
   if ( !response ) {
     throw new Error( `Failed to upload ${type} ${evidenceUUID}: no response from server` );

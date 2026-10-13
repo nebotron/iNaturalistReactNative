@@ -52,10 +52,10 @@ const ProjectDetailsContainer = ( ) => {
 
   const { data: projectStats } = useAuthenticatedQuery<ApiObservationsSearchResponse>(
     ["searchObservations", "projectStats", id],
-    ( ) => searchObservations( {
+    optsWithAuth => searchObservations( {
       project_id: id,
       per_page: 0,
-    } ),
+    }, optsWithAuth ),
   );
 
   const { data: usersObservations } = useAuthenticatedQuery<ApiObservationsSearchResponse>(

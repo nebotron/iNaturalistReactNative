@@ -1,3 +1,4 @@
+import NetInfo from "@react-native-community/netinfo";
 import { INatApiError } from "api/error";
 import withRetry from "uploaders/utils/retry";
 
@@ -76,5 +77,49 @@ describe( "withRetry", () => {
       settle( withRetry( fn, { alsoRetryStatuses: [404] } ) ),
     ).resolves.toBeInstanceOf( INatApiError );
     expect( fn ).toHaveBeenCalledTimes( 1 );
+  } );
+
+  describe( "while offline", () => {
+    let reconnect;
+    beforeEach( () => {
+      NetInfo.fetch.mockResolvedValueOnce( { isConnected: false } );
+      NetInfo.addEventListener.mockImplementationOnce( listener => {
+        reconnect = () => listener( { isConnected: true } );
+        return jest.fn();
+      } );
+    } );
+    afterEach( () => NetInfo.addEventListener.mockReset() );
+
+    it( "waits for the connection without spending a retry", async () => {
+      const fn = jest.fn()
+        .mockRejectedValueOnce( new Error( "Network request failed" ) )
+        .mockRejectedValueOnce( apiError( 500 ) )
+        .mockRejectedValueOnce( apiError( 500 ) )
+        .mockRejectedValueOnce( apiError( 500 ) )
+        .mockResolvedValueOnce( "ok" );
+
+      const result = withRetry( fn );
+      await jest.runAllTimersAsync();
+      expect( fn ).toHaveBeenCalledTimes( 1 );
+
+      reconnect();
+      await expect( settle( result ) ).resolves.toEqual( "ok" );
+      expect( fn ).toHaveBeenCalledTimes( 5 );
+    } );
+
+    it( "stops waiting when the upload is aborted", async () => {
+      const controller = new AbortController();
+      const abortError = new Error( "Aborted" );
+      abortError.name = "AbortError";
+      const fn = jest.fn()
+        .mockRejectedValueOnce( new Error( "Network request failed" ) )
+        .mockRejectedValueOnce( abortError );
+
+      const result = withRetry( fn, { signal: controller.signal } );
+      await jest.runAllTimersAsync();
+      controller.abort();
+      await expect( settle( result ) ).resolves.toBe( abortError );
+      expect( fn ).toHaveBeenCalledTimes( 2 );
+    } );
   } );
 } );
