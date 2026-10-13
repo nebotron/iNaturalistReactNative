@@ -48,7 +48,8 @@ export interface Heard {
   sp: AudioIdSpecies; lastHeard: number; best: number; count: number; color: string;
 }
 // Spectrogram columns, each colored by the top species heard in its run.
-export interface SpectrogramColumn { bins: number[]; color: string | null }
+// id counts up, so a column keeps its identity as the window scrolls.
+export interface SpectrogramColumn { id: number; bins: number[]; color: string | null }
 const SPECTROGRAM_COLUMNS = 80; // 10 s
 
 // One color per species heard this session, in the order first heard.
@@ -112,6 +113,7 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
 } ) );
 
 let runs: ScoresEvent[] = [];
+let nextColumnId = 0;
 
 const onScores = ( event: ScoresEvent ) => {
   const { scores, level } = event;
@@ -173,7 +175,10 @@ const onScores = ( event: ScoresEvent ) => {
     : null;
   const spectrogram = [
     ...useAudioIdSession.getState( ).spectrogram,
-    ...( event.spectrogram || [] ).map( bins => ( { bins, color } ) ),
+    ...( event.spectrogram || [] ).map( bins => {
+      nextColumnId += 1;
+      return { id: nextColumnId, bins, color };
+    } ),
   ].slice( -SPECTROGRAM_COLUMNS );
   if ( alerts.length > 0 ) {
     AudioBirdId?.vibrate( )
