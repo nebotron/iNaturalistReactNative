@@ -74,20 +74,21 @@ const TaxonThumb = ( { taxonId }: { taxonId: number } ) => {
     );
 };
 
-// The last 10 s of sound, low frequencies at the bottom, each moment tinted
-// with the color of the species identified then.
+// The last 10 s of sound, Merlin-style: dark marks on a full-width white
+// strip, low frequencies at the bottom, faint noise suppressed, and each
+// moment tinted with the color of the species identified then.
 const Spectrogram = ( { columns }: { columns: SpectrogramColumn[] } ) => {
   const bins = columns[0]?.bins.length || 1;
   return (
-    <View className="mt-4">
+    <View className="mt-4 -mx-5 border-y border-lightGray">
       <Svg
         width="100%"
-        height={96}
+        height={140}
         viewBox={`0 0 80 ${bins}`}
         preserveAspectRatio="none"
       >
-        <Rect x={0} y={0} width={80} height={bins} fill={colors.black} />
-        {columns.map( ( col, x ) => col.bins.map( ( v, b ) => (
+        <Rect x={0} y={0} width={80} height={bins} fill={colors.white} />
+        {columns.map( ( col, x ) => col.bins.map( ( v, b ) => v > 0.1 && (
           <Rect
             // eslint-disable-next-line react/no-array-index-key
             key={`${x}-${b}`}
@@ -95,8 +96,8 @@ const Spectrogram = ( { columns }: { columns: SpectrogramColumn[] } ) => {
             y={bins - 1 - b}
             width={1.05}
             height={1.05}
-            fill={col.color || colors.white}
-            opacity={v}
+            fill={col.color || colors.black}
+            opacity={( ( v - 0.1 ) / 0.9 ) ** 1.5}
           />
         ) ) )}
       </Svg>
