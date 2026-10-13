@@ -581,7 +581,7 @@ const Map = ( {
         scrollEnabled={scrollEnabled}
         showsCompass={showsCompass}
         showsMyLocationButton={false}
-        showsScale
+        showsScale={!showScaleBar}
         showsUserLocation={showsUserLocation && hasPermissions}
         style={style}
         testID={testID || "Map.MapView"}
