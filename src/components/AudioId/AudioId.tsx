@@ -1,5 +1,5 @@
 /* eslint-disable i18next/no-literal-string */
-import { copyFile, TemporaryDirectoryPath } from "@dr.pogodin/react-native-fs";
+import { TemporaryDirectoryPath } from "@dr.pogodin/react-native-fs";
 import { useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
 import {
@@ -7,10 +7,16 @@ import {
 } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
+import { RealmContext } from "providers/contexts";
 import React, { useEffect, useMemo } from "react";
 import Svg, { Rect } from "react-native-svg";
 import Observation from "realmModels/Observation";
 import { formatISONoTimezone } from "sharedHelpers/dateAndTime";
+import {
+  findInterpolatedLocation, MAX_MATCH_GAP_MS,
+} from "sharedHelpers/interpolateTrackedLocation";
+import { drainTrackedLocationFixes } from "sharedHelpers/locationHistoryTracker";
+import { log } from "sharedHelpers/logger";
 import { useCurrentUser, useTaxon } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import useStore from "stores/useStore";
@@ -19,7 +25,10 @@ import * as uuid from "uuid";
 
 import type { AudioIdSpecies } from "./audioIdModel";
 import type { Heard, SpectrogramColumn } from "./audioIdSession";
-import useAudioIdSession, { clipPath, heardIn } from "./audioIdSession";
+import useAudioIdSession, { CLIP_SECONDS, extractClip, heardIn } from "./audioIdSession";
+
+const { useRealm } = RealmContext;
+const logger = log.extend( "AudioId" );
 
 // Animal classes the model covers, for asking which of them the user has seen.
 const SEEN_TAXON_IDS = [
@@ -113,8 +122,9 @@ const AudioId = ( ) => {
   const navigation = useNavigation( );
   const {
     listening, error, current, spectrogram, heard, setup, setSeen, start,
-    stop, clear,
+    stop, clear, recording,
   } = useAudioIdSession( );
+  const realm = useRealm( );
   const setObservations = useStore( state => state.setObservations );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
   const currentUser = useCurrentUser( );
@@ -134,21 +144,35 @@ const AudioId = ( ) => {
 
   const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", { id: taxonId } );
 
-  // A new sound observation of the species from its best clip, observed when
-  // and where the clip was heard. The clip is copied since saving the
-  // observation moves its sound.
+  // A new sound observation of the species from the stretch of the session
+  // recording where it scored best, observed then, at the place the location
+  // history puts the user at that moment.
   const makeObservation = async ( { sp, clip }: Heard ) => {
     if ( !clip ) return;
     const tmp = `${TemporaryDirectoryPath}/${uuid.v4( )}.m4a`;
-    await copyFile( clipPath( clip ), tmp );
+    try {
+      await extractClip( clip, tmp );
+    } catch ( e ) {
+      logger.error( `extractClip failed: ${( e as Error ).message}` );
+      return;
+    }
+    const time = clip.time - ( CLIP_SECONDS * 1000 ) / 2;
+    await drainTrackedLocationFixes( realm );
+    const location = findInterpolatedLocation( realm.objects( "LocationHistoryPoint" )
+      .filtered(
+        "recordedAt >= $0 && recordedAt <= $1",
+        new Date( time - MAX_MATCH_GAP_MS ),
+        new Date( time + MAX_MATCH_GAP_MS ),
+      )
+      .sorted( "recordedAt" ), time );
     const observation = await Observation.createObsWithSoundPath( `file://${tmp}` );
     setObservations( [{
       ...observation,
-      observed_on_string: formatISONoTimezone( new Date( clip.time ) ),
-      ...( clip.location && {
-        latitude: clip.location.latitude,
-        longitude: clip.location.longitude,
-        positional_accuracy: clip.location.accuracy,
+      observed_on_string: formatISONoTimezone( new Date( time ) ),
+      ...( location && {
+        latitude: location.latitude,
+        longitude: location.longitude,
+        positional_accuracy: location.accuracy,
       } ),
       taxon: { id: sp.taxonId, name: sp.name, preferred_common_name: sp.commonName },
       owners_identification_from_vision: true,
@@ -183,10 +207,10 @@ const AudioId = ( ) => {
         {currentUser && !seen.has( sp.taxonId ) && (
           <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
         )}
-        {h?.clip && (
+        {h?.clip && !( listening && h.clip.recording === recording ) && (
           <Pressable
             accessibilityRole="button"
-            accessibilityHint="Creates a sound observation from the best recording."
+            accessibilityHint="Creates a sound observation from the session recording."
             onPress={( ) => makeObservation( h )}
           >
             <Body3 className="text-inatGreen underline">

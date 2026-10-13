@@ -19,8 +19,9 @@
 // Listening continues with the app in the background (the "audio" background
 // mode in Info.plist) and resumes after interruptions such as phone calls or
 // other audio in the app (recording or playing a sound) stopping the engine.
-// Each session is also recorded to Documents/audio_id/<start time>.m4a, and
-// saveClip writes the 5 s window of the latest result to a file of its own.
+// Each session is also recorded to Documents/audio_id/<start time>.m4a; each
+// result carries the recording's length at the end of its window, and
+// extractClip cuts a stretch out of a finished recording.
 
 #define AB_SR       32000
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
@@ -51,7 +52,7 @@
   dispatch_source_t _watchdog;
   CHHapticEngine   *_haptics;
   AVAudioFile      *_recording;  // written on _bufferQueue
-  NSData           *_lastWindow; // the latest window run, on _inferQueue
+  int64_t           _recorded;   // frames written to it
 }
 
 RCT_EXPORT_MODULE( );
@@ -199,32 +200,40 @@ RCT_EXPORT_METHOD( stop )
   NSString *path = [NSString stringWithFormat:@"%@/audio_id/%@.m4a", docs,
                     [df stringFromDate:[NSDate date]]];
   AVAudioFile *file = [self aacFileAt:path];
-  dispatch_async( _bufferQueue, ^{ self->_recording = file; } );
+  dispatch_async( _bufferQueue, ^{ self->_recording = file; self->_recorded = 0; } );
   return file ? path : nil;
 }
 
-// Writes the 5 s window behind the latest scores to an AAC file at `path`.
-RCT_EXPORT_METHOD( saveClip:( NSString * )path
+// Copies `frames` frames from `start` of a finished recording (32 kHz) to a
+// new AAC file at `outPath`.
+RCT_EXPORT_METHOD( extractClip:( NSString * )path start:( double )start frames:( double )frames
+                   outPath:( NSString * )outPath
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
-  dispatch_async( _inferQueue, ^{
-    NSData *window = self->_lastWindow;
-    if ( !window ) { reject( @"clip", @"Nothing heard yet", nil ); return; }
-    AVAudioPCMBuffer *buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:self->_outFormat
-                                                             frameCapacity:AB_WIN];
-    memcpy( buffer.floatChannelData[0], window.bytes, window.length );
-    buffer.frameLength = AB_WIN;
-    [[NSFileManager defaultManager] removeItemAtPath:path error:nil];
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
     NSError *error = nil;
     @autoreleasepool {
-      AVAudioFile *file = [self aacFileAt:path];
-      if ( !file || ![file writeFromBuffer:buffer error:&error] ) {
-        reject( @"clip", error.localizedDescription ?: @"Could not write the clip", error );
+      AVAudioFile *in = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:path]
+                                               commonFormat:AVAudioPCMFormatFloat32
+                                                interleaved:NO
+                                                      error:&error];
+      AVAudioFrameCount n = in
+        ? (AVAudioFrameCount)MAX( 0, MIN( (int64_t)frames, in.length - (int64_t)start ) )
+        : 0;
+      AVAudioPCMBuffer *buffer = n
+        ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:in.processingFormat frameCapacity:n]
+        : nil;
+      if ( buffer ) in.framePosition = (AVAudioFramePosition)start;
+      AVAudioFile *out = buffer && [in readIntoBuffer:buffer frameCount:n error:&error]
+        ? [self aacFileAt:outPath]
+        : nil;
+      if ( !out || ![out writeFromBuffer:buffer error:&error] ) {
+        reject( @"clip", error.localizedDescription ?: @"Could not cut the clip", error );
         return;
       }
     }
-    resolve( path );
+    resolve( outPath );
   } );
 }
 
@@ -423,7 +432,7 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
   NSData *samples = [NSData dataWithBytes:out.floatChannelData[0] length:n * sizeof( float )];
 
   dispatch_async( _bufferQueue, ^{
-    [self->_recording writeFromBuffer:out error:nil];
+    if ( [self->_recording writeFromBuffer:out error:nil] ) self->_recorded += n;
     const float *s = (const float *)samples.bytes;
     NSInteger count = MIN( n, (NSInteger)AB_WIN );
     s += n - count;
@@ -444,6 +453,7 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
     self->_busy = YES;
     NSData *window = [NSData dataWithBytes:self->_window length:AB_WIN * sizeof( float )];
     float level = self->_level;
+    int64_t recorded = self->_recorded;
     dispatch_async( self->_inferQueue, ^{
       NSString *inferError = nil;
       CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
@@ -451,13 +461,13 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
                         inputName:"input" outputName:"output" outputs:self->_outputs
                             error:&inferError];
       double ms = ( CFAbsoluteTimeGetCurrent( ) - t0 ) * 1000;
-      self->_lastWindow = window;
       dispatch_async( self->_bufferQueue, ^{ self->_busy = NO; } );
       [self sendEventWithName:@"AudioBirdIdScores"
                          body:@{ @"scores": scores ?: @[],
                                  @"level": @( level ),
                                  @"inferMs": @( ms ),
                                  @"spectrogram": spectrogram,
+                                 @"recordedFrames": @( recorded ),
                                  @"error": inferError ?: [NSNull null] }];
     } );
   } );
