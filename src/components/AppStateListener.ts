@@ -17,6 +17,10 @@ const AppStateListener = ( ) => {
         }
 
         focusManager.setFocused( true );
+      } else if ( nextAppState === "background" ) {
+        // Otherwise refetchInterval queries keep polling the network while the
+        // app is kept alive in the background (e.g. by location tracking).
+        focusManager.setFocused( false );
       }
     } );
 

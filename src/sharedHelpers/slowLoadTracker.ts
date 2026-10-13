@@ -217,6 +217,13 @@ export const startSlowLoadMonitoring = ( queryClient: QueryClient ) => {
   unsubscribe = queryClient.getQueryCache( ).subscribe( onCacheEvent );
   appStateSubscription = AppState.addEventListener( "change", state => {
     if ( state !== "active" ) { lastNonActiveAt = Date.now( ); }
+    // Background time is never reported, so don't keep waking JS to sweep.
+    if ( state === "background" && sweep ) {
+      clearInterval( sweep );
+      sweep = null;
+    } else if ( state === "active" && !sweep ) {
+      sweep = setInterval( onSweep, HANG_SWEEP_MS );
+    }
   } );
   sweep = setInterval( onSweep, HANG_SWEEP_MS );
 };

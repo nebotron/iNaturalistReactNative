@@ -112,6 +112,15 @@ export const startUiDelayMonitoring = ( ) => {
   activeSinceLastTick = AppState.currentState === "active";
   appStateSubscription = AppState.addEventListener( "change", state => {
     if ( state !== "active" ) { activeSinceLastTick = false; }
+    // Don't wake the JS thread twice a second while backgrounded (background
+    // location or audio can keep the app running indefinitely).
+    if ( state === "background" && heartbeat ) {
+      clearInterval( heartbeat );
+      heartbeat = null;
+    } else if ( state === "active" && !heartbeat ) {
+      lastTickAt = Date.now( );
+      heartbeat = setInterval( onHeartbeat, HEARTBEAT_MS );
+    }
   } );
   heartbeat = setInterval( onHeartbeat, HEARTBEAT_MS );
 };
