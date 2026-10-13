@@ -89,7 +89,11 @@ def _detect( args ):
         img_arr = np.array( img )
     except Exception:
         return idx, np.zeros( ( 0, 5 ), dtype=np.float32 )
+    return idx, _detect_array( img_arr, orig_w, orig_h )
 
+
+def _detect_array( img_arr: np.ndarray, orig_w: int, orig_h: int ) -> np.ndarray:
+    """Post-NMS boxes (x, y, w, h, conf) normalised to (orig_w, orig_h), best first."""
     lb, pad_left, pad_top, scale = _letterbox( img_arr )
     x = lb.transpose( 2, 0, 1 )[None]
     out = _sess.run( None, { _sess.get_inputs()[0].name: x } )[0][0]
@@ -102,7 +106,7 @@ def _detect( args ):
 
     mask = conf_raw >= YOLO_CONF_THRESH
     if not mask.any():
-        return idx, np.zeros( ( 0, 5 ), dtype=np.float32 )
+        return np.zeros( ( 0, 5 ), dtype=np.float32 )
     cx, cy, w, h, conf_raw = cx[mask], cy[mask], w[mask], h[mask], conf_raw[mask]
     boxes = np.stack( [cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2], axis=1 )
     kept = _nms( boxes, conf_raw, YOLO_IOU_THRESH )[:MAX_DETS]
@@ -115,7 +119,7 @@ def _detect( args ):
         hn = max( 0.01, min( 1.0 - yn, ( float( boxes[i, 3] ) - float( boxes[i, 1] ) ) / scale / orig_h ) )
         rows.append( ( xn, yn, wn, hn, float( conf_raw[i] ) ) )
     rows.sort( key=lambda r: r[4], reverse=True )
-    return idx, np.array( rows, dtype=np.float32 ).reshape( -1, 5 )
+    return np.array( rows, dtype=np.float32 ).reshape( -1, 5 )
 
 
 def load_entries( json_path: Path ):
