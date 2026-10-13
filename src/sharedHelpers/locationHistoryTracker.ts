@@ -2,7 +2,7 @@ import {
   LOCATION_PERMISSIONS,
 } from "components/SharedComponents/PermissionGateContainer";
 import { t } from "i18next";
-import { NativeModules, Platform } from "react-native";
+import { AppState, NativeModules, Platform } from "react-native";
 import BackgroundService from "react-native-background-actions";
 import { useMMKVBoolean } from "react-native-mmkv";
 import {
@@ -151,6 +151,9 @@ export const drainTrackedLocationFixes = drainPendingFixes;
 const startDraining = ( ) => {
   if ( drainInterval ) return;
   drainInterval = setInterval( ( ) => {
+    // The native monitor buffers fixes while backgrounded; skip the Realm write
+    // until the app is in use again (geotagging drains on demand anyway).
+    if ( AppState.currentState !== "active" ) return;
     drainPendingFixes( );
   }, DRAIN_INTERVAL_MS );
 };
