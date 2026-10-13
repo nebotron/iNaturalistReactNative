@@ -1,7 +1,9 @@
 set -e
 
-# Install dependencies if they're missing (e.g. fresh cloud containers)
-[ -d node_modules ] || npm install --no-audit --no-fund
+# Install dependencies if they're missing (e.g. fresh cloud containers).
+# Retries are off because a retried git-dependency clone collides with the
+# half-finished first attempt ("destination path ... already exists").
+[ -d node_modules ] || npm install --no-audit --no-fund --fetch-retries=0
 bundle check > /dev/null 2>&1 || bundle install --quiet
 # Gem executables (e.g. rubocop) aren't always on PATH
 export PATH="$(ruby -e 'print Gem.bindir'):$PATH"
