@@ -66,6 +66,7 @@ export enum EXPLORE_ACTION {
   TOGGLE_UNOBSERVED_BY_ME = "TOGGLE_UNOBSERVED_BY_ME",
   TOGGLE_POPULAR = "TOGGLE_POPULAR",
   SET_WILD_STATUS = "SET_WILD_STATUS",
+  TOGGLE_EVIDENCE_TYPE = "TOGGLE_EVIDENCE_TYPE",
   SET_NEARBY_RADIUS = "SET_NEARBY_RADIUS",
   TOGGLE_CASUAL = "TOGGLE_CASUAL",
   TOGGLE_NEEDS_ID = "TOGGLE_NEEDS_ID",
@@ -158,6 +159,22 @@ export enum WILD_STATUS {
   CAPTIVE = "CAPTIVE"
 }
 
+export enum EVIDENCE_TYPE {
+  LIVE_ORGANISM = "LIVE_ORGANISM",
+  DEAD_ORGANISM = "DEAD_ORGANISM",
+  FEATHER = "FEATHER",
+  SCAT = "SCAT",
+  TRACK = "TRACK",
+  BONE = "BONE",
+  MOLT = "MOLT",
+  GALL = "GALL",
+  EGG = "EGG",
+  HAIR = "HAIR",
+  LEAFMINE = "LEAFMINE",
+  CONSTRUCTION = "CONSTRUCTION",
+  UNKNOWN = "UNKNOWN",
+}
+
 export enum REVIEWED {
   ALL = "ALL",
   // eslint-disable-next-line @typescript-eslint/no-shadow
@@ -221,6 +238,7 @@ interface State {
   dateObserved: DATE_OBSERVED;
   dateUploaded: DATE_UPLOADED;
   establishmentMean: ESTABLISHMENT_MEAN;
+  evidenceTypes: EVIDENCE_TYPE[];
   h1: number | null | undefined;
   h2: number | null | undefined;
   hrank: TAXONOMIC_RANK | undefined | null;
@@ -339,6 +357,7 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.SET_MEDIA; media: MEDIA}
   | {type: EXPLORE_ACTION.SET_ESTABLISHMENT_MEAN; establishmentMean: ESTABLISHMENT_MEAN}
   | {type: EXPLORE_ACTION.SET_WILD_STATUS; wildStatus: WILD_STATUS}
+  | {type: EXPLORE_ACTION.TOGGLE_EVIDENCE_TYPE; evidenceType: EVIDENCE_TYPE}
   | {type: EXPLORE_ACTION.SET_NEARBY_RADIUS; radius: number}
   | {type: EXPLORE_ACTION.SET_REVIEWED; reviewedFilter: REVIEWED}
   | {type: EXPLORE_ACTION.SET_PHOTO_LICENSE; photoLicense: PHOTO_LICENSE}
@@ -383,6 +402,7 @@ const calculatedFilters = {
   media: MEDIA.ALL,
   establishmentMean: ESTABLISHMENT_MEAN.ANY,
   wildStatus: WILD_STATUS.ALL,
+  evidenceTypes: [] as EVIDENCE_TYPE[],
   reviewedFilter: REVIEWED.ALL,
   photoLicense: PHOTO_LICENSE.ALL,
   hasLocationMissing: false,
@@ -815,6 +835,22 @@ function exploreReducer( state: State, action: Action ) {
           : state.casual,
         wildStatus: action.wildStatus,
       };
+    // Unknown is exclusive of the other evidence types
+    case EXPLORE_ACTION.TOGGLE_EVIDENCE_TYPE: {
+      const current = state.evidenceTypes || [];
+      let evidenceTypes: EVIDENCE_TYPE[];
+      if ( current.includes( action.evidenceType ) ) {
+        evidenceTypes = current.filter( type => type !== action.evidenceType );
+      } else if ( action.evidenceType === EVIDENCE_TYPE.UNKNOWN ) {
+        evidenceTypes = [EVIDENCE_TYPE.UNKNOWN];
+      } else {
+        evidenceTypes = [
+          ...current.filter( type => type !== EVIDENCE_TYPE.UNKNOWN ),
+          action.evidenceType,
+        ];
+      }
+      return { ...state, evidenceTypes };
+    }
     case EXPLORE_ACTION.SET_PHOTO_LICENSE:
       return {
         ...state,
@@ -915,8 +951,8 @@ const ExploreProvider = ( { children }: ExploreProviderProps ) => {
 
   let numberOfFilters: number = Object.keys( calculatedFilters ).reduce(
     ( count, key ) => {
-      if ( key === "userFilters" ) {
-        return count + ( state.userFilters?.length > 0
+      if ( key === "userFilters" || key === "evidenceTypes" ) {
+        return count + ( state[key]?.length > 0
           ? 1
           : 0 );
       }
