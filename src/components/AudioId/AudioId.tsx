@@ -28,8 +28,8 @@ const SEEN_MAX_PAGES = 10;
 
 // Taxon IDs the user has research-grade observations of, including the
 // ancestors of any subspecies-level observations. Needs the network; without
-// it nothing is marked as not yet seen.
-const useSeenTaxonIds = ( userId: number | undefined ): Set<number> => {
+// it (or until it loads) nothing is marked as not yet seen.
+const useSeenTaxonIds = ( userId: number | undefined ): Set<number> | null => {
   const { data } = useAuthenticatedQuery(
     ["audioIdSeenTaxa", userId],
     async optsWithAuth => {
@@ -43,16 +43,18 @@ const useSeenTaxonIds = ( userId: number | undefined ): Set<number> => {
           per_page: 500,
           page,
         }, optsWithAuth );
+        if ( !p?.results ) throw new Error( "Couldn't fetch seen taxa" );
         pages.push( p );
-        if ( !p?.results || p.results.length < 500 ) break;
+        if ( p.results.length < 500 ) break;
       }
       return pages;
     },
     { enabled: !!userId },
   );
   return useMemo( ( ) => {
+    if ( !data ) return null;
     const ids = new Set<number>( );
-    ( data || [] ).forEach( page => ( page?.results || [] ).forEach(
+    data.forEach( page => ( page?.results || [] ).forEach(
       ( r: { taxon: { id: number; ancestor_ids?: number[] } } ) => {
         ids.add( r.taxon.id );
         r.taxon.ancestor_ids?.forEach( id => ids.add( id ) );
@@ -163,7 +165,7 @@ const AudioId = ( ) => {
         <Body1>{sp.commonName}</Body1>
         <List2 className="italic">{sp.name}</List2>
         {detail && <Body3>{detail}</Body3>}
-        {currentUser && !seen.has( sp.taxonId ) && (
+        {currentUser && seen && !seen.has( sp.taxonId ) && (
           <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
         )}
       </View>
