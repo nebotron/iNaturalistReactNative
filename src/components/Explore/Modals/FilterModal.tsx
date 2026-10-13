@@ -38,6 +38,7 @@ import {
   DATE_OBSERVED,
   DATE_UPLOADED,
   ESTABLISHMENT_MEAN,
+  EVIDENCE_TYPE,
   EXPLORE_ACTION,
   MEDIA,
   PHOTO_LICENSE,
@@ -124,6 +125,7 @@ const FilterModal = ( {
     dateObserved,
     dateUploaded,
     establishmentMean,
+    evidenceTypes,
     h1,
     h2,
     hrank,
@@ -541,6 +543,22 @@ const FilterModal = ( {
       label: t( "Endemic" ),
       value: ESTABLISHMENT_MEAN.ENDEMIC,
     },
+  };
+
+  const evidenceTypeLabels = {
+    [EVIDENCE_TYPE.LIVE_ORGANISM]: t( "Live-organism--evidence" ),
+    [EVIDENCE_TYPE.DEAD_ORGANISM]: t( "Dead-organism--evidence" ),
+    [EVIDENCE_TYPE.FEATHER]: t( "Feather--evidence" ),
+    [EVIDENCE_TYPE.SCAT]: t( "Scat--evidence" ),
+    [EVIDENCE_TYPE.TRACK]: t( "Track--evidence" ),
+    [EVIDENCE_TYPE.BONE]: t( "Bone--evidence" ),
+    [EVIDENCE_TYPE.MOLT]: t( "Molt--evidence" ),
+    [EVIDENCE_TYPE.GALL]: t( "Gall--evidence" ),
+    [EVIDENCE_TYPE.EGG]: t( "Egg--evidence" ),
+    [EVIDENCE_TYPE.HAIR]: t( "Hair--evidence" ),
+    [EVIDENCE_TYPE.LEAFMINE]: t( "Leafmine--evidence" ),
+    [EVIDENCE_TYPE.CONSTRUCTION]: t( "Construction--evidence" ),
+    [EVIDENCE_TYPE.UNKNOWN]: t( "Unknown--evidence" ),
   };
 
   const wildValues = {
@@ -1320,6 +1338,23 @@ const FilterModal = ( {
                     wildStatus: wildValues[wildKey].value,
                   } )}
                   label={wildValues[wildKey].label}
+                />
+              </View>
+            ) )}
+          </View>
+
+          {/* Evidence Type section */}
+          <View className="mb-3">
+            <Heading4 className="mb-5">{t( "EVIDENCE-TYPE" )}</Heading4>
+            {Object.values( EVIDENCE_TYPE ).map( evidenceType => (
+              <View key={evidenceType} className="mb-4">
+                <Checkbox
+                  text={evidenceTypeLabels[evidenceType]}
+                  isChecked={!!evidenceTypes?.includes( evidenceType )}
+                  onPress={() => dispatch( {
+                    type: EXPLORE_ACTION.TOGGLE_EVIDENCE_TYPE,
+                    evidenceType,
+                  } )}
                 />
               </View>
             ) )}

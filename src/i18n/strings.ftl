@@ -179,6 +179,8 @@ BACK-TO-LOGIN = BACK TO LOGIN
 # Display name for the iconic taxa category for aves
 Birds = Birds
 BLOG = BLOG
+# Explore filter option for an observation's evidence of presence annotation
+Bone--evidence = Bone
 # Accessibility label for bulk import / photo import button
 # These are used by screen readers to label actionable elements iOS: https://developer.apple.com/documentation/uikit/uiaccessibilityelement/1619577-accessibilitylabel
 # iOS Guidelines "A string that succinctly identifies the accessibility element." Starts with capital letter, no ending punctuation.
@@ -295,6 +297,8 @@ Congratulations-You-made-your-first-observation = Congratulations! You made your
 Connect-with-expert-naturalists = Connect with expert naturalists
 Connect-with-other-naturalists = Connect with other naturalists and engage in conversations.
 Connection-problem-Please-try-again-later = Connection problem. Please try again later.
+# Explore filter option for an observation's evidence of presence annotation
+Construction--evidence = Construction
 CONTACT-SUPPORT = CONTACT SUPPORT
 Content-Hidden = Content Hidden
 # Continue button in onboarding screen
@@ -431,6 +435,8 @@ datetime-format-short = M/d/yy h:mm a
 # characters at
 # https://github.com/marnusw/date-fns-tz?tab=readme-ov-file#formatintimezone
 datetime-format-short-with-zone = M/d/yy h:mm a zzz
+# Explore filter option for an observation's evidence of presence annotation
+Dead-organism--evidence = Dead organism
 # Month of December
 December = December
 DELETE = DELETE
@@ -528,6 +534,8 @@ Edit-your-profile-change-your-settings = Edit your profile, change your notifica
 # Label for button that edits an observation's taxon
 Edits-this-observations-taxon = Edits this observation's taxon
 EDUCATORS = EDUCATORS
+# Explore filter option for an observation's evidence of presence annotation
+Egg--evidence = Egg
 EMAIL = EMAIL
 EMAIL-DEBUG-LOGS = EMAIL DEBUG LOGS
 # Button that enables the camera's flash
@@ -568,6 +576,8 @@ ESTABLISHMENT-MEANS = ESTABLISHMENT MEANS
 Every-observation-needs = Every observation needs a location, date, and time to be helpful to identifiers. You can edit geoprivacy if you’re concerned about location privacy.
 Every-time-a-collection-project = Every time a collection project's page is loaded, iNaturalist will perform a quick search and display all observations that match the project's requirements. It is an easy way to display a set of observations, such as for a class project, a park, or a bioblitz without making participants take the extra step of manually adding their observations to a project.
 EVIDENCE = EVIDENCE
+# Explore filter section heading
+EVIDENCE-TYPE = EVIDENCE TYPE
 Exact-Date = Exact Date
 EXACT-DATE = EXACT DATE
 except = except
@@ -591,6 +601,8 @@ Failed-to-log-in = Failed to log in
 FAVORITES = FAVORITES
 # Heading for the list of users who favorited an observation
 Favorites = Favorites
+# Explore filter option for an observation's evidence of presence annotation
+Feather--evidence = Feather
 # Header for featured projects
 FEATURED = FEATURED
 # Month of February
@@ -633,6 +645,8 @@ FORGET-USB-FOLDER = FORGET USB FOLDER
 Forgot-Password = Forgot Password
 # Display name for the iconic taxa category for fungi
 Fungi = Fungi
+# Explore filter option for an observation's evidence of presence annotation
+Gall--evidence = Gall
 GEOPRIVACY = GEOPRIVACY
 Geoprivacy-status = Geoprivacy: { $status }
 # Onboarding message describing one of the reasons to use iNat
@@ -647,6 +661,8 @@ Google-Play-Services-Not-Installed = Google Play Services Not Installed
 GRANT-PERMISSION = GRANT PERMISSION
 # Title of a screen asking for permission
 Grant-Permission-title = Grant Permission
+# Explore filter option for an observation's evidence of presence annotation
+Hair--evidence = Hair
 HELP = HELP
 Help-create-Research-Grade-data-used-in-science-and-conservation = Help create Research Grade data used in science and conservation.
 # Onboarding message describing one of the reasons to use iNat
@@ -822,6 +838,8 @@ Lat-Lon-Acc = Lat: { NUMBER($latitude, maximumFractionDigits: 6) }, Lon: { NUMBE
 Latitude-Longitude = { $latitude }, { $longitude }
 # Identification category
 leading--identification = Leading
+# Explore filter option for an observation's evidence of presence annotation
+Leafmine--evidence = Leafmine
 Learn-from-people-who-verify-and-refine-your-identifications = Learn from people who verify and refine your identifications.
 Learn-More = Learn More
 LEARN-MORE-ABOUT-THIS-GROUP = LEARN MORE ABOUT THIS GROUP
@@ -838,6 +856,8 @@ Licenses = Licenses
 Life-List = Life List
 # Accessibility label for the Life List view in Explore
 Life-List-View = Life List View
+# Explore filter option for an observation's evidence of presence annotation
+Live-organism--evidence = Live organism
 Load-saved-filter = Load saved filter
 Loading-iNaturalists-AI-Camera = Loading iNaturalist's AI Camera
 # Loading message shown while fetching the route through a selected hotspot
@@ -906,6 +926,8 @@ Missing-photo-and-tracked-location = Missing photo and tracked location
 Missing-photo-location = Missing photo location
 # Display name for the iconic taxa category for mollusca
 Mollusks = Mollusks
+# Explore filter option for an observation's evidence of presence annotation
+Molt--evidence = Molt
 Monthly-Donor = Monthly Donor
 Months = Months
 MONTHS = MONTHS
@@ -1390,6 +1412,8 @@ Saved-for-offline-use =
        *[other] { $count } observations
     } for offline use
 Saved-Observation = Saved observation, in queue to upload
+# Explore filter option for an observation's evidence of presence annotation
+Scat--evidence = Scat
 Scientific-Name = Scientific Name
 Scientific-Name-Common-Name = Scientific Name (Common Name)
 # Title for a search interface
@@ -1618,6 +1642,8 @@ Toggle-map-type = Toggle map type
 # Accessibility hint for tapping a collapsible section header
 Toggles-the-section-open-or-closed = Toggles the section open or closed.
 TOP-ID-SUGGESTION = TOP ID SUGGESTION
+# Explore filter option for an observation's evidence of presence annotation
+Track--evidence = Track
 # Switch label for enabling continuous background location tracking
 Track-location-in-the-background = Track location in the background
 # Legend label for the marker showing a location from tracked history
@@ -1629,6 +1655,8 @@ Traditional-Projects = Traditional Projects
 Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?
+# Explore filter option for an observation's evidence of presence annotation
+Unknown--evidence = Unknown
 # Text to show when a taoxn rank is unknown or missing
 Unknown--rank = Unknown
 # Text to show when a taxon or identification is unknown or missing
