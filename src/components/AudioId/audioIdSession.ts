@@ -1,6 +1,10 @@
+import { DocumentDirectoryPath } from "@dr.pogodin/react-native-fs";
 import { NativeEventEmitter, NativeModules } from "react-native";
+import { clearWatch, watchPosition } from "sharedHelpers/geolocationWrapper";
 import { log } from "sharedHelpers/logger";
+import { zustandStorage } from "stores/useStore";
 import { create } from "zustand";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
 import { prepareAudioId } from "./audioIdModel";
@@ -14,10 +18,16 @@ import { prepareAudioId } from "./audioIdModel";
 // scores at least ALSO_HEARD: on held-out recordings this cut wrong species by
 // about a quarter for under half a point of recall, while still showing
 // confident overlapping callers.
+// Each session is recorded to Documents/audio_id, and the 5 s clip behind each
+// species' best score is kept there too, with when and where it was heard, so
+// it can be made into a sound observation.
 
 const { AudioBirdId } = NativeModules as {
   AudioBirdId?: {
-    start: ( outputs: number[] ) => Promise<{ sampleRate: number; channels: number }>;
+    start: ( outputs: number[] ) => Promise<{
+      sampleRate: number; channels: number; recording: string | null;
+    }>;
+    saveClip: ( path: string ) => Promise<string>;
     stop: ( ) => void;
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     notify: ( title: string, body: string ) => void;
@@ -43,9 +53,16 @@ interface ScoresEvent {
   error: string | null;
   spectrogram?: number[][];
 }
+export interface Clip {
+  file: string; // relative to the documents directory, which moves on updates
+  time: number;
+  location: { latitude: number; longitude: number; accuracy: number | null } | null;
+}
 export interface Heard {
   sp: AudioIdSpecies; lastHeard: number; best: number; count: number; color: string;
+  clip?: Clip;
 }
+export const clipPath = ( clip: Clip ) => `${DocumentDirectoryPath}/${clip.file}`;
 // Spectrogram columns, each colored by the top species heard in its run.
 export interface SpectrogramColumn { bins: number[]; color: string | null }
 const SPECTROGRAM_COLUMNS = 80; // 10 s
@@ -57,6 +74,9 @@ const PALETTE = [
 ];
 
 const heardTaxa = new Set<number>( );
+let session = "";
+let location: Clip["location"] = null;
+let locationWatch: number | null = null;
 
 interface AudioIdState {
   listening: boolean;
@@ -71,9 +91,10 @@ interface AudioIdState {
   setSeen: ( seen: Set<number> | null ) => void;
   start: ( ) => Promise<void>;
   stop: ( ) => void;
+  clear: ( ) => void;
 }
 
-const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
+const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
   listening: false,
   error: null,
   current: [],
@@ -96,8 +117,16 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
       const s = await prepareAudioId( AudioBirdId.geo );
       set( { setup: s } );
       const mic = await AudioBirdId.start( s.outputs );
+      session = String( Date.now( ) );
       logger.info( `started, ${s.species.length} species, located ${s.located}, `
-        + `mic ${mic.sampleRate} Hz x${mic.channels}` );
+        + `mic ${mic.sampleRate} Hz x${mic.channels}, recording ${mic.recording}` );
+      if ( locationWatch === null ) {
+        locationWatch = watchPosition( ( { coords } ) => {
+          location = {
+            latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy,
+          };
+        }, ( ) => undefined, { enableHighAccuracy: true, distanceFilter: 10 } );
+      }
       set( { listening: true } );
     } catch ( e ) {
       logger.error( `start failed: ${( e as Error ).message}` );
@@ -106,9 +135,33 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
   },
   stop: ( ) => {
     AudioBirdId?.stop( );
+    if ( locationWatch !== null ) clearWatch( locationWatch );
+    locationWatch = null;
     set( { listening: false } );
   },
+  clear: ( ) => set( { heard: {} } ),
+} ), {
+  name: "audioIdSession",
+  storage: createJSONStorage( ( ) => zustandStorage ),
+  partialize: state => ( { heard: state.heard } ),
 } ) );
+
+// Keeps the clip behind a species' best score so far.
+const saveClip = async ( taxonId: number ) => {
+  const clip: Clip = {
+    file: `audio_id/clips/${session}_${taxonId}.m4a`, time: Date.now( ), location,
+  };
+  try {
+    await AudioBirdId?.saveClip( clipPath( clip ) );
+  } catch ( e ) {
+    logger.error( `saveClip failed: ${( e as Error ).message}` );
+    return;
+  }
+  const { heard } = useAudioIdSession.getState( );
+  if ( heard[taxonId] ) {
+    useAudioIdSession.setState( { heard: { ...heard, [taxonId]: { ...heard[taxonId], clip } } } );
+  }
+};
 
 let runs: ScoresEvent[] = [];
 
@@ -152,9 +205,11 @@ const onScores = ( event: ScoresEvent ) => {
       alerts.push( sp );
     }
     heardTaxa.add( sp.taxonId );
+    if ( s > ( old?.best || 0 ) ) saveClip( sp.taxonId );
     next = {
       ...next,
       [sp.taxonId]: {
+        ...old,
         sp,
         lastHeard: now,
         best: Math.max( old?.best || 0, s ),

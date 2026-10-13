@@ -1,4 +1,5 @@
 /* eslint-disable i18next/no-literal-string */
+import { copyFile, TemporaryDirectoryPath } from "@dr.pogodin/react-native-fs";
 import { useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
 import {
@@ -8,13 +9,17 @@ import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React, { useEffect, useMemo } from "react";
 import Svg, { Rect } from "react-native-svg";
+import Observation from "realmModels/Observation";
+import { formatISONoTimezone } from "sharedHelpers/dateAndTime";
 import { useCurrentUser, useTaxon } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
+import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
+import * as uuid from "uuid";
 
 import type { AudioIdSpecies } from "./audioIdModel";
-import type { SpectrogramColumn } from "./audioIdSession";
-import useAudioIdSession, { heardIn } from "./audioIdSession";
+import type { Heard, SpectrogramColumn } from "./audioIdSession";
+import useAudioIdSession, { clipPath, heardIn } from "./audioIdSession";
 
 // Animal classes the model covers, for asking which of them the user has seen.
 const SEEN_TAXON_IDS = [
@@ -108,8 +113,9 @@ const AudioId = ( ) => {
   const navigation = useNavigation( );
   const {
     listening, error, current, spectrogram, heard, setup, setSeen, start,
-    stop,
+    stop, clear,
   } = useAudioIdSession( );
+  const setObservations = useStore( state => state.setObservations );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
   const currentUser = useCurrentUser( );
   const seen = useSeenTaxonIds( currentUser?.id );
@@ -128,8 +134,36 @@ const AudioId = ( ) => {
 
   const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", { id: taxonId } );
 
+  // A new sound observation of the species from its best clip, observed when
+  // and where the clip was heard. The clip is copied since saving the
+  // observation moves its sound.
+  const makeObservation = async ( { sp, clip }: Heard ) => {
+    if ( !clip ) return;
+    const tmp = `${TemporaryDirectoryPath}/${uuid.v4( )}.m4a`;
+    await copyFile( clipPath( clip ), tmp );
+    const observation = await Observation.createObsWithSoundPath( `file://${tmp}` );
+    setObservations( [{
+      ...observation,
+      observed_on_string: formatISONoTimezone( new Date( clip.time ) ),
+      ...( clip.location && {
+        latitude: clip.location.latitude,
+        longitude: clip.location.longitude,
+        positional_accuracy: clip.location.accuracy,
+      } ),
+      taxon: { id: sp.taxonId, name: sp.name, preferred_common_name: sp.commonName },
+      owners_identification_from_vision: true,
+    }] );
+    navigation.navigate( "ObsEdit" );
+  };
+
   // Species being heard right now are highlighted in yellow.
-  const row = ( sp: AudioIdSpecies, score: number, color: string, detail?: string ) => (
+  const row = (
+    sp: AudioIdSpecies,
+    score: number,
+    color: string,
+    detail?: string,
+    h?: Heard,
+  ) => (
     <Pressable
       key={sp.taxonId}
       accessibilityRole="button"
@@ -148,6 +182,17 @@ const AudioId = ( ) => {
         {detail && <Body3>{detail}</Body3>}
         {currentUser && !seen.has( sp.taxonId ) && (
           <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
+        )}
+        {h?.clip && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityHint="Creates a sound observation from the best recording."
+            onPress={( ) => makeObservation( h )}
+          >
+            <Body3 className="text-inatGreen underline">
+              {`Make observation from ${new Date( h.clip.time ).toLocaleTimeString( )} clip`}
+            </Body3>
+          </Pressable>
         )}
       </View>
       <Body1>{`${Math.round( score * 100 )}%`}</Body1>
@@ -183,7 +228,14 @@ const AudioId = ( ) => {
         <Body3 className="mt-1">Listening… first result after 5 seconds</Body3>
       )}
 
-      <Heading4 className="mt-6 mb-1">HEARD THIS SESSION</Heading4>
+      <View className="flex-row justify-between items-center mt-6 mb-1">
+        <Heading4>HEARD</Heading4>
+        {heardList.length > 0 && !listening && (
+          <Pressable accessibilityRole="button" onPress={clear}>
+            <Body3 className="underline">Clear</Body3>
+          </Pressable>
+        )}
+      </View>
       {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
       {heardList.map( h => row(
         h.sp,
@@ -193,7 +245,8 @@ const AudioId = ( ) => {
         h.color,
         `${h.count} ${h.count === 1
           ? "time"
-          : "times"}, last at ${new Date( h.lastHeard ).toLocaleTimeString( )}`,
+          : "times"}, last ${new Date( h.lastHeard ).toLocaleString( )}`,
+        h,
       ) )}
       <View className="h-20" />
     </ScrollView>
