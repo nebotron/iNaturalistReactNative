@@ -20,11 +20,11 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert( 0, str( Path( __file__ ).parent ) )
-from evaluate_subject_detector import _spectral_saliency_bounds, SIDE_CALIBRATION_EXPONENT
+from evaluate_subject_detector import _spectral_saliency_bounds
 
 SAL_CACHE = Path( "/tmp/inat_saliency_cache.npz" )
 
-DEFAULT_GATE = 0.45
+DEFAULT_GATE = 0.0
 DEFAULT_UNION_THRESH = 0.60
 DEFAULT_UNION_K = 3
 
@@ -91,7 +91,7 @@ def bounds_array( dets, sal, gate, thresh=DEFAULT_UNION_THRESH, k=DEFAULT_UNION_
 
 
 def score( bounds, truths, sizes, padding=0.0 ):
-    """Vectorized replica of bounds_to_crop + recall/precision/weighted_score."""
+    """Vectorized replica of bounds_to_crop + recall/precision/crop_score (IoU)."""
     ok = ~np.isnan( bounds[:, 0] )
     b = bounds[ok]
     t = truths[ok].astype( np.float64 )
@@ -101,9 +101,6 @@ def score( bounds, truths, sizes, padding=0.0 ):
     bw = np.maximum( b[:, 2], 1e-9 )
     bh = np.maximum( b[:, 3], 1e-9 )
     side_px = np.maximum( bw * ( 1 + padding ) * W, bh * ( 1 + padding ) * H )
-    # Mirrors SIDE_CALIBRATION_EXPONENT in subjectBoundsToNormalizedCrop.ts.
-    M = np.maximum( W, H )
-    side_px = M * ( side_px / M ) ** SIDE_CALIBRATION_EXPONENT
     w = side_px / W
     h = side_px / H
     cx = b[:, 0] + bw / 2
@@ -127,7 +124,8 @@ def score( bounds, truths, sizes, padding=0.0 ):
     side = np.maximum( w, h )
     p = inter_t / np.maximum( side * side, 1e-12 )
 
-    s = ( 4 * r + p ) / 5
+    area_t = t[:, 2] * t[:, 3]
+    s = inter_t / np.maximum( w * h + area_t - inter_t, 1e-12 )
     return s, r, p, ok
 
 

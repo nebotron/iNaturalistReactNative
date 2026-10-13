@@ -7,14 +7,14 @@ scripts/pull_logs.py), downloads the original images, re-runs subject detection,
 and evaluates how well
 different padding values and detection strategies match the crops you actually chose.
 
-Two metrics (both 0–1, higher = better):
+Score = IoU of the AI crop with the crop you chose (0–1, higher = better).
+Recall and precision are reported alongside it as diagnostics:
   recall    = fraction of the ground-truth crop (shrunk 8% per side) covered
               by the AI crop (must be ≈1.0 — the AI crop should always
               contain the subject)
   precision = fraction of the AI crop's square viewport that overlaps with
               ground truth (tightness; penalizes letterboxing; 1.0 = perfect fit)
 
-Weighted score = (4·recall + 1·precision) / 5
 
 Two detection algorithms are compared:
   current  — union of all detections (human ∪ animal ∪ all saliency objects)
@@ -65,12 +65,6 @@ class Crop:
     h: float
 
 
-# Mirrors SIDE_CALIBRATION_EXPONENT in subjectBoundsToNormalizedCrop.ts — the
-# detector's box is a noisy estimate of the human's crop, and the 4:1 recall
-# weighting makes it pay to hedge outward, hardest where the box is small.
-SIDE_CALIBRATION_EXPONENT = 0.92
-
-
 def clamp_crop(x: float, y: float, w: float, h: float,
                min_frac: float = 0.05) -> Crop:
     w = max(min_frac, min(1.0, w))
@@ -95,9 +89,6 @@ def bounds_to_crop(bx: float, by: float, bw: float, bh: float,
         padded_h = bh * (1 + padding)
         # No longer clamped to image dimensions — very large subjects letterbox.
         pixel_side = max(padded_w * image_width, padded_h * image_height)
-        # Hedge the side outward, as subjectBoundsToNormalizedCrop.ts does.
-        max_dimension = max(image_width, image_height)
-        pixel_side = max_dimension * (pixel_side / max_dimension) ** SIDE_CALIBRATION_EXPONENT
         w = pixel_side / image_width
         h = pixel_side / image_height
         cx = bx + bw / 2
@@ -172,15 +163,10 @@ def precision(pred: Crop, truth: Crop) -> float:
     return intersection_area(pred, truth) / pred_area
 
 
-# Weight recall (superset coverage) four times as much as precision (tightness).
-RECALL_WEIGHT = 4.0
-PRECISION_WEIGHT = 1.0
-
-
-def weighted_score(pred: Crop, truth: Crop) -> float:
-    r = recall(pred, truth)
-    p = precision(pred, truth)
-    return (RECALL_WEIGHT * r + PRECISION_WEIGHT * p) / (RECALL_WEIGHT + PRECISION_WEIGHT)
+def crop_score(pred: Crop, truth: Crop) -> float:
+    """IoU with the chosen crop: rewards tight crops of small subjects as much as
+    full coverage, which a recall-weighted score did not."""
+    return iou(pred, truth)
 
 
 # ---------------------------------------------------------------------------
@@ -554,7 +540,7 @@ def _evaluate_one(entries: list[EvalEntry], paddings: list[float],
             preds.append(bounds_to_crop(*b, pad, e.image_width, e.image_height))  # type: ignore[arg-type]
         recalls = [recall(p, e.truth) for p, e in zip(preds, detected)]
         precisions = [precision(p, e.truth) for p, e in zip(preds, detected)]
-        scores = [weighted_score(p, e.truth) for p, e in zip(preds, detected)]
+        scores = [crop_score(p, e.truth) for p, e in zip(preds, detected)]
         n = len(scores)
         mean_r = sum(recalls) / n if n else 0.0
         mean_p = sum(precisions) / n if n else 0.0
@@ -583,7 +569,7 @@ def print_report(cur_results: list[PaddingResult], imp_results: list[PaddingResu
     kept = sum(1 for e in entries if e.kept)
     print("=" * 80)
     print(f"Total: {len(entries)}  |  Photo kept: {kept} ({kept/len(entries)*100:.0f}%)")
-    print(f"Score = {RECALL_WEIGHT:.0f}×recall + {PRECISION_WEIGHT:.0f}×precision  "
+    print(f"Score = IoU with the chosen crop  "
           f"(recall = % of truth inside AI crop; precision = % of AI crop inside truth)")
     print("=" * 80)
 
@@ -787,14 +773,14 @@ def main() -> None:
                         pred_c = bounds_to_crop(*e.bounds_current, p, e.image_width, e.image_height)
                         row += (f",{recall(pred_c, e.truth):.4f}"
                                 f",{precision(pred_c, e.truth):.4f}"
-                                f",{weighted_score(pred_c, e.truth):.4f}")
+                                f",{crop_score(pred_c, e.truth):.4f}")
                     else:
                         row += ",,,"
                     if e.bounds_improved is not None:
                         pred_i = bounds_to_crop(*e.bounds_improved, p, e.image_width, e.image_height)
                         row += (f",{recall(pred_i, e.truth):.4f}"
                                 f",{precision(pred_i, e.truth):.4f}"
-                                f",{weighted_score(pred_i, e.truth):.4f}")
+                                f",{crop_score(pred_i, e.truth):.4f}")
                     else:
                         row += ",,,"
                 csvf.write(row + "\n")
