@@ -54,12 +54,12 @@ type Route = RouteProp<SharedStackParamList, "ImageCropEditor">;
 const logger = log.extend( "ImageCropEditor" );
 
 // How many upcoming photos in a bulk crop to preload ahead of the one
-// currently shown.
-const PRELOAD_LOOKAHEAD = 3;
+// currently shown. Each preload is a full-resolution raw decode, and iOS's raw
+// decoder draws black once memory runs short.
+const PRELOAD_LOOKAHEAD = 2;
 // How many of those to also decode off-screen (see ImageCropView's warmUris).
-// Fewer than the lookahead: a decoded photo sits in memory, and one photo of
-// slack is enough to cover the time it takes to crop the current one.
-const DECODE_LOOKAHEAD = 2;
+// A decoded full-resolution photo is ~130MB, so only the next one.
+const DECODE_LOOKAHEAD = 1;
 // Above this, the wait for a photo is long enough for the user to see a
 // spinner, and worth a line in the app log saying which stage it went on.
 // Below it, logging every photo of a 200-photo bulk crop would say nothing.
@@ -127,8 +127,7 @@ const ImageCropEditor = ( ) => {
   // Shown in grid order (newest first), not the order the copies land in: the
   // next photo is the first one left in the grid, waited on while it copies.
   const nextImportUri = useMemo( ( ) => {
-    if ( !cropImport ) return undefined;
-    const next = groupedPhotos
+    const next = cropImport && groupedPhotos
       .flatMap( group => group.photos ?? [] )
       .find( photo => isCroppable( photo ) && !visitedUris.has( photo.image.uri ) );
     return next && !next.pending

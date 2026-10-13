@@ -962,6 +962,12 @@ RCT_EXPORT_METHOD( cropImage
     return data != nil;
     } );
     if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
+    // Done with the decoded original (~130MB for a 32MP raw); free it before the
+    // write rather than when this block ends, so the next raw decode has room.
+    CGSize             decodedSize = CGSizeMake(
+      image.size.width * image.scale, image.size.height * image.scale );
+    UIImageOrientation orientation = image.imageOrientation;
+    image = nil;
 
     if ( !data ) {
       CGImageSourceRef reread = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
@@ -977,12 +983,13 @@ RCT_EXPORT_METHOD( cropImage
       // lines of the Sep 18-19 app log that could not say which.
       reject( @"CROP_FAILED", [NSString stringWithFormat:
         @"Could not encode cropped image (type=%@, %llu bytes, decoded=%.0fx%.0f, "
-         "orientation=%ld, crop=%.0f,%.0f %.0fx%.0f, attempts=%d)",
+         "orientation=%ld, crop=%.0f,%.0f %.0fx%.0f, attempts=%d, freeMB=%zu)",
         sourceType ?: @"unknown", bytes,
-        image.size.width * image.scale, image.size.height * image.scale,
-        ( long )image.imageOrientation,
+        decodedSize.width, decodedSize.height,
+        ( long )orientation,
         cropRect.origin.x, cropRect.origin.y,
-        cropRect.size.width, cropRect.size.height, attempts], nil );
+        cropRect.size.width, cropRect.size.height, attempts,
+        os_proc_available_memory( ) >> 20], nil );
       return;
     }
 
@@ -2336,8 +2343,10 @@ RCT_EXPORT_METHOD( prepareCropSource
       return;
     }
     if ( !data ) {
-      reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; preview: %@; attempts: %d",
-        decodeFailure, encodeFailure ?: @"no embedded preview", attempts], nil );
+      reject( @"PREPARE_FAILED", [NSString stringWithFormat:
+        @"%@; preview: %@; attempts: %d; freeMB: %zu",
+        decodeFailure, encodeFailure ?: @"no embedded preview", attempts,
+        os_proc_available_memory( ) >> 20], nil );
       return;
     }
     [[NSFileManager defaultManager]
@@ -2348,11 +2357,19 @@ RCT_EXPORT_METHOD( prepareCropSource
       return;
     }
 
+    // Free the full-resolution pixels and their JPEG as soon as they're on disk,
+    // keeping only what detection needs, so the next raw decode has room.
+    CGFloat displayLevel = jpegDataMeanLevel( data );
+    data = nil;
     // Scaling the image already in hand, rather than reading the file again at
     // detection size: the bounds stay the ones the detector was tuned for and
     // the second read is gone.
-    NSDictionary *bounds = [detectSubject boolValue]
-      ? detectSubjectBoundsForImage( clampToMaxPixel( display, kSubjectDetectionMaxPixel ) )
+    UIImage *detectionImage = [detectSubject boolValue]
+      ? clampToMaxPixel( display, kSubjectDetectionMaxPixel )
+      : nil;
+    display = nil;
+    NSDictionary *bounds = detectionImage
+      ? detectSubjectBoundsForImage( detectionImage )
       : nil;
 
     resolve( @{
@@ -2361,7 +2378,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"height":     @( height ),
       @"bounds":     bounds ?: [NSNull null],
       @"decodeFailure": decodeFailure ?: [NSNull null],
-      @"displayLevel":  @( jpegDataMeanLevel( data ) ),
+      @"displayLevel":  @( displayLevel ),
       @"attempts":      @( attempts ),
     } );
   } );

@@ -1,4 +1,3 @@
-import { Image as RNImage } from "react-native";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import prepareCropSource from "sharedHelpers/prepareCropSource";
@@ -43,10 +42,6 @@ async function loadImageData(
   if ( !prepared ) {
     return null;
   }
-  // Warm React Native's image pipeline for the file the cropper is about to
-  // display, so its <Image> doesn't start a cold read + decode at the moment we
-  // show it. Fire-and-forget: it can only save time.
-  RNImage.prefetch?.( prepared.displayUri )?.catch?.( ( ) => {} );
   const finishedAt = Date.now( );
   return {
     localUri: resolvedUri,
