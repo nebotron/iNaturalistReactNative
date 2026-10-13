@@ -695,6 +695,12 @@ static UIImage *drawnOverSentinel(
 static NSData *jpegDataFromDecodablePreviewCrop(
   NSString *path, NSDictionary *sourceMetadata, CGRect cropRect, CGSize cropSpace );
 
+// Longest side asked of the fallback decode when the full decode drew nothing.
+// Asking at or above a raw's sensor size makes ImageIO attempt the same full
+// demosaic that just failed, instead of serving the embedded preview -- which
+// left both the cropper's display and the crop itself black.
+static const CGFloat kPreviewFallbackMaxPixel = 2048;
+
 // ─── Raw decodes ──────────────────────────────────────────────────────────────
 
 // Whether a file is a camera raw, by its contents rather than its name: a crop's
@@ -1956,9 +1962,7 @@ static NSData *jpegDataFromDecodablePreviewCrop(
   CGImageSourceRef src =
     CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
   if ( !src ) return nil;
-  // The cap the rasterization below would apply anyway; ImageIO never upscales
-  // past the image it has, so this asks for the largest one there is.
-  UIImage *preview = thumbnailFromImageSource( src, kMaxRasterizePixel );
+  UIImage *preview = thumbnailFromImageSource( src, kPreviewFallbackMaxPixel );
   CFRelease( src );
   if ( !preview ) return nil;
 
@@ -2292,7 +2296,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       CGImageSourceRef src =
         CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
       UIImage *preview = src
-        ? thumbnailFromImageSource( src, [maxPixel floatValue] )
+        ? thumbnailFromImageSource( src, MIN( [maxPixel floatValue], kPreviewFallbackMaxPixel ) )
         : nil;
       if ( src ) CFRelease( src );
       NSData *previewData  = preview
@@ -2316,7 +2320,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       CGImageSourceRef src =
         CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
       display = src
-        ? thumbnailFromImageSource( src, [maxPixel floatValue] )
+        ? thumbnailFromImageSource( src, MIN( [maxPixel floatValue], kPreviewFallbackMaxPixel ) )
         : nil;
       if ( src ) CFRelease( src );
       NSString *previewFailure = nil;
