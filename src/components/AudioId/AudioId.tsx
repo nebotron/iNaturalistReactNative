@@ -83,7 +83,10 @@ const SpectrogramColumnView = React.memo( ( { col }: { col: SpectrogramColumn } 
   const paths: string[] = Array( OPACITY_LEVELS + 1 ).fill( "" );
   const bins = col.bins.length;
   col.bins.forEach( ( v, b ) => {
-    const level = Math.round( v * OPACITY_LEVELS );
+    // Faint noise is dropped and contrast boosted, as in Merlin.
+    const level = v > 0.1
+      ? Math.round( ( ( v - 0.1 ) / 0.9 ) ** 1.5 * OPACITY_LEVELS )
+      : 0;
     if ( level > 0 ) paths[level] += `M${col.id} ${bins - 1 - b}h1.05v1.05h-1.05z`;
   } );
   return (
@@ -93,7 +96,7 @@ const SpectrogramColumnView = React.memo( ( { col }: { col: SpectrogramColumn } 
           // eslint-disable-next-line react/no-array-index-key
           key={level}
           d={d}
-          fill={col.color || colors.white}
+          fill={col.color || colors.black}
           opacity={level / OPACITY_LEVELS}
         />
       ) )}
@@ -101,20 +104,21 @@ const SpectrogramColumnView = React.memo( ( { col }: { col: SpectrogramColumn } 
   );
 } );
 
-// The last 10 s of sound, low frequencies at the bottom, each moment tinted
-// with the color of the species identified then.
+// The last 10 s of sound, Merlin-style: dark marks on a full-width white
+// strip, low frequencies at the bottom, each moment tinted with the color of
+// the species identified then.
 const Spectrogram = ( { columns }: { columns: SpectrogramColumn[] } ) => {
   const bins = columns[0]?.bins.length || 1;
   const lastId = columns[columns.length - 1]?.id || 0;
   return (
-    <View className="mt-4">
+    <View className="mt-4 -mx-5 border-y border-lightGray">
       <Svg
         width="100%"
-        height={96}
+        height={140}
         viewBox={`0 0 80 ${bins}`}
         preserveAspectRatio="none"
       >
-        <Rect x={0} y={0} width={80} height={bins} fill={colors.black} />
+        <Rect x={0} y={0} width={80} height={bins} fill={colors.white} />
         <G transform={`translate(${79 - lastId} 0)`}>
           {columns.map( col => <SpectrogramColumnView key={col.id} col={col} /> )}
         </G>
