@@ -21,7 +21,7 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).parent))
-from evaluate_subject_detector import resolve_image
+from evaluate_subject_detector import resolve_image, get_image_size
 
 REPO_ROOT = Path(__file__).parent.parent
 CACHE_DIR = Path("/tmp/inat_eval_cache")
@@ -65,6 +65,12 @@ def main() -> None:
                              "0.5 shifts subject-size statistics away from device)")
     parser.add_argument("--translate", type=float, default=0.05,
                         help="Translation augmentation gain (default 0.05)")
+    parser.add_argument("--small-oversample", type=int, default=0,
+                        help="Extra copies of each training image whose subject's longer "
+                             "side is under --small-frac of the image's longer edge. Small "
+                             "subjects are a minority of the log and the detector is least "
+                             "confident on them.")
+    parser.add_argument("--small-frac", type=float, default=0.15)
     args = parser.parse_args()
 
     json_path = Path(args.json)
@@ -125,6 +131,15 @@ def main() -> None:
         split = int(len(resolved) * 0.85)
         train_entries = resolved[:split]
         val_entries = resolved[split:]
+    if args.small_oversample:
+        small = []
+        for r in train_entries:
+            iw, ih = get_image_size(r[0])
+            if iw and ih and max(r[3] * iw, r[4] * ih) / max(iw, ih) < args.small_frac:
+                small.append(r)
+        train_entries = train_entries + small * args.small_oversample
+        random.shuffle(train_entries)
+        print(f"Oversampled {len(small)} small-subject images ×{args.small_oversample}")
     print(f"Train: {len(train_entries)}, Val: {len(val_entries)}")
 
     if OUT_DIR.exists():
@@ -194,6 +209,7 @@ def main() -> None:
         name="run",
         exist_ok=True,
         single_cls=True,
+        save_period=1,
     )
 
     best_pt = Path("/tmp/inat_train_local/run/weights/best.pt")
