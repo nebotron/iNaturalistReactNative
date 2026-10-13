@@ -7,7 +7,7 @@ import {
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React, { useEffect, useMemo } from "react";
-import Svg, { Rect } from "react-native-svg";
+import Svg, { G, Path, Rect } from "react-native-svg";
 import { useCurrentUser, useTaxon } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import colors from "styles/tailwindColors";
@@ -74,10 +74,36 @@ const TaxonThumb = ( { taxonId }: { taxonId: number } ) => {
     );
 };
 
+// One spectrogram column, drawn as a path per opacity level rather than a
+// rect per bin, and memoized so only new columns render as the window scrolls.
+const OPACITY_LEVELS = 4;
+const SpectrogramColumnView = React.memo( ( { col }: { col: SpectrogramColumn } ) => {
+  const paths: string[] = Array( OPACITY_LEVELS + 1 ).fill( "" );
+  const bins = col.bins.length;
+  col.bins.forEach( ( v, b ) => {
+    const level = Math.round( v * OPACITY_LEVELS );
+    if ( level > 0 ) paths[level] += `M${col.id} ${bins - 1 - b}h1.05v1.05h-1.05z`;
+  } );
+  return (
+    <G>
+      {paths.map( ( d, level ) => d && (
+        <Path
+          // eslint-disable-next-line react/no-array-index-key
+          key={level}
+          d={d}
+          fill={col.color || colors.white}
+          opacity={level / OPACITY_LEVELS}
+        />
+      ) )}
+    </G>
+  );
+} );
+
 // The last 10 s of sound, low frequencies at the bottom, each moment tinted
 // with the color of the species identified then.
 const Spectrogram = ( { columns }: { columns: SpectrogramColumn[] } ) => {
   const bins = columns[0]?.bins.length || 1;
+  const lastId = columns[columns.length - 1]?.id || 0;
   return (
     <View className="mt-4">
       <Svg
@@ -87,18 +113,9 @@ const Spectrogram = ( { columns }: { columns: SpectrogramColumn[] } ) => {
         preserveAspectRatio="none"
       >
         <Rect x={0} y={0} width={80} height={bins} fill={colors.black} />
-        {columns.map( ( col, x ) => col.bins.map( ( v, b ) => (
-          <Rect
-            // eslint-disable-next-line react/no-array-index-key
-            key={`${x}-${b}`}
-            x={x + 80 - columns.length}
-            y={bins - 1 - b}
-            width={1.05}
-            height={1.05}
-            fill={col.color || colors.white}
-            opacity={v}
-          />
-        ) ) )}
+        <G transform={`translate(${79 - lastId} 0)`}>
+          {columns.map( col => <SpectrogramColumnView key={col.id} col={col} /> )}
+        </G>
       </Svg>
     </View>
   );
