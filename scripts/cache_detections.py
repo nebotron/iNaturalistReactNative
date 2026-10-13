@@ -15,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import sys
 from concurrent.futures import ProcessPoolExecutor
@@ -30,7 +31,7 @@ from evaluate_subject_detector import resolve_image, get_image_size
 REPO_ROOT = Path( __file__ ).parent.parent
 CACHE_DIR = Path( "/tmp/inat_eval_cache" )
 
-YOLO_INPUT_SIZE = 640
+YOLO_INPUT_SIZE = int( os.environ.get( "YOLO_INPUT_SIZE", 640 ) )
 YOLO_CONF_THRESH = 0.05
 YOLO_IOU_THRESH = 0.45
 MAX_DETS = 16

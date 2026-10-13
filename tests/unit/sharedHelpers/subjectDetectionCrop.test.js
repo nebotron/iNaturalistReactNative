@@ -112,30 +112,24 @@ describe( "subjectBoundsToNormalizedCrop", ( ) => {
     expect( crop.h ).toBeLessThanOrEqual( 1 );
   } );
 
-  it( "hedges a small subject outward by more than a large one", ( ) => {
-    const sideFor = size => {
-      const crop = subjectBoundsToNormalizedCrop(
-        {
-          x: 0.5 - size / 2,
-          y: 0.5 - ( size * 2 ) / 2,
-          width: size,
-          height: size * 2,
-        },
-        imageWidth,
-        imageHeight,
-        0,
-      );
-      // The box is square in pixels (size * 2000 === size * 2 * 1000), so this
-      // is how much wider than the subject the crop ends up.
-      return ( crop.w * imageWidth ) / ( size * imageWidth );
-    };
+  it( "crops a small subject to its own box without widening it", ( ) => {
+    const crop = subjectBoundsToNormalizedCrop(
+      {
+        x: 0.475,
+        y: 0.45,
+        width: 0.05,
+        height: 0.1,
+      },
+      imageWidth,
+      imageHeight,
+      0,
+    );
 
-    const smallGain = sideFor( 0.05 );
-    const largeGain = sideFor( 0.4 );
-
-    expect( smallGain ).toBeGreaterThan( 1 );
-    expect( largeGain ).toBeGreaterThan( 1 );
-    expect( smallGain ).toBeGreaterThan( largeGain );
+    // The box is square in pixels (0.05 * 2000 === 0.1 * 1000).
+    expect( crop.w ).toBeCloseTo( 0.05, 6 );
+    expect( crop.h ).toBeCloseTo( 0.1, 6 );
+    expect( crop.x ).toBeCloseTo( 0.475, 6 );
+    expect( crop.y ).toBeCloseTo( 0.45, 6 );
   } );
 
   it( "leaves a subject that already fills the frame alone", ( ) => {

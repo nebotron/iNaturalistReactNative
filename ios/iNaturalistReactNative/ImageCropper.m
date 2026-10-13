@@ -377,12 +377,6 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 #define YOLO_INPUT_SIZE  640
 #define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
 #define YOLO_IOU_THRESH  0.45f
-// If the best post-NMS box is below this threshold the detection is likely spurious;
-// returning nil triggers the Vision attention-saliency fallback instead. Below
-// ~0.45 the detector's crop scores worse against the crop log than simply framing
-// the whole photo, so the fallback is the better bet there. Retune whenever the
-// weights change: confidence calibration moves with them.
-#define YOLO_GATE_CONF   0.45f
 // Union: include box if its confidence is at least this fraction of the best box.
 // Cap at this many boxes to prevent noisy low-conf detections from bloating the union.
 #define YOLO_UNION_THRESH 0.60f
@@ -573,9 +567,9 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
 
   if ( kept == 0 ) { free( dets ); free( suppressed ); return nil; }
 
-  // Gate: if the strongest detection is still weak, the model is uncertain — fall
-  // back to Vision attention saliency rather than crop to a likely-wrong location.
-  if ( bestConf < YOLO_GATE_CONF ) { free( dets ); free( suppressed ); return nil; }
+  // No confidence gate: scored by IoU against the crops people choose, even a
+  // weak detection beats the saliency fallback, so saliency only runs when
+  // nothing clears YOLO_CONF_THRESH.
 
   // Second pass: union top-K boxes at ≥ YOLO_UNION_THRESH of best confidence.
   float confThreshold = YOLO_UNION_THRESH * bestConf;

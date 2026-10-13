@@ -12,7 +12,8 @@ There is a script scripts/eval_onnx_variants.py for evaluating crop quality. Rep
 ### Setup
 
 - Model: `ios/iNaturalistReactNative/yolov8n.onnx` — single-class YOLOv8n, output `[1, 5, 8400]`
-- Post-processing: NMS (IoU=0.45, conf=0.05) → gate (0.50 → Vision saliency fallback) → union top-K boxes → pad → square crop, with the square's side raised to `SIDE_CALIBRATION_EXPONENT` = 0.92 (fit by `scripts/calibrate_crop.py DETS.npz`; refit it whenever the weights change). The eval script mirrors these constants; change both together.
+- **Metric (since the IoU session): score = IoU of the predicted square crop with the human's crop.** It replaced `(4·recall + 1·precision) / 5`, which hid the small-subject problem. Every score in the sessions below that one is on the old metric and is not comparable.
+- Post-processing: NMS (IoU=0.45, conf=0.05) → union top-K boxes (no confidence gate; Vision saliency only when nothing clears 0.05) → square crop circumscribing the box. There is no widening (`SIDE_CALIBRATION_EXPONENT` was removed) and no padding. The eval scripts mirror this; change both together.
 - **The squaring is TypeScript, not ObjC.** `ImageCropper.m` returns *bounds*; `src/sharedHelpers/subjectBoundsToNormalizedCrop.ts` turns them into the crop (padding 0, set in `detectSubjectInImage.ts`). Geometry changes belong there — cross-platform, unit-testable, and they apply to the saliency fallback too. `scripts/evaluate_subject_detector.py:bounds_to_crop` mirrors it; a 4-case node-vs-python diff keeps them honest.
 - Eval: `scripts/cache_detections.py MODEL.onnx OUT.npz` (~5 min, 4 procs) then
   `scripts/sweep_crop.py OUT.npz [--full]` (seconds). Inference is the only slow

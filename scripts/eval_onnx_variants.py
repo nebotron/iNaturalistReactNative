@@ -26,7 +26,7 @@ from PIL import Image as PILImage
 
 sys.path.insert(0, str(Path(__file__).parent))
 from evaluate_subject_detector import (
-    Crop, bounds_to_crop, recall, precision, weighted_score,
+    Crop, bounds_to_crop, recall, precision, crop_score,
     _spectral_saliency_bounds, intersection_area,
     resolve_image, get_image_size,
 )
@@ -41,7 +41,7 @@ PADDINGS = [0.00, 0.03, 0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.25, 0.30]
 YOLO_INPUT_SIZE = 640
 YOLO_CONF_THRESH = 0.05
 YOLO_IOU_THRESH = 0.45
-YOLO_GATE_CONF = 0.45
+YOLO_GATE_CONF = 0.0
 YOLO_UNION_THRESH = 0.60
 YOLO_UNION_MAX_K = 3
 
@@ -239,7 +239,7 @@ def evaluate_combo(entries, model_key: str, model_path: Path, algo_name: str, al
         truths = [t for t, _, _, _ in detected]
         rs = [recall(p, t) for p, t in zip(preds, truths)]
         ps = [precision(p, t) for p, t in zip(preds, truths)]
-        ss = [weighted_score(p, t) for p, t in zip(preds, truths)]
+        ss = [crop_score(p, t) for p, t in zip(preds, truths)]
         n = len(ss)
         ms = sum(ss) / n if n else 0.0
         mr = sum(rs) / n if n else 0.0
@@ -303,7 +303,7 @@ def main():
     all_results.sort(key=lambda r: r.best_score, reverse=True)
 
     print("\n" + "=" * 80)
-    print("RESULTS — sorted by weighted score (4×recall + 1×precision) / 5")
+    print("RESULTS — sorted by score (IoU with the chosen crop)")
     print("=" * 80)
     print(f"  {'Model':<24}  {'Algo':<12}  {'Pad':>6}  {'Recall':>8}  {'Precision':>10}  {'Score':>7}")
     print("  " + "-" * 72)
