@@ -506,6 +506,15 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
     } );
   }, [navigation] );
 
+  const handleObservationCountPress = useCallback( ( hotspot: Hotspot ) => {
+    navigation.navigate( "Explore", {
+      lat: hotspot.centerLatitude,
+      lng: hotspot.centerLongitude,
+      radius: 2,
+      worldwide: false,
+    } );
+  }, [navigation] );
+
   const renderStopItem = useCallback( ( {
     item: stop, getIndex, drag, isActive,
   }: RenderItemParams<Stop> ) => {
@@ -782,6 +791,7 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
                       onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
                       onAddToRoute={() => handleAddHotspotToRoute( hotspot )}
                       onSpeciesCountPress={species => handleSpeciesCountPress( hotspot, species )}
+                      onObservationCountPress={() => handleObservationCountPress( hotspot )}
                     />
                   </View>
                 )}
