@@ -125,3 +125,28 @@ Every bucket delta's bootstrap CI includes zero; the overall gain is within nois
 - The pre-commit hook runs a full `npm install` on a fresh clone (~2 min) and stalls the shell; expect it.
 
 **Next idea, if small subjects still matter:** the labels have a minimum size and the detector is accurate but under-confident on small subjects. Fine-tune with a loss that weights small boxes more, or add a *small-box-specific* confidence recalibration (Platt on conf × log size) fitted strictly on held-out photos. Both are cheaper than more data, which already looked saturated last session.
+
+### Session: IoU metric, no widening, no gate — small-subject IoU 0.20 → 0.41
+
+**Metric change.** The user asked for IoU scoring and no deliberate widening. `crop_score` in `evaluate_subject_detector.py` and `sweep_crop.score` now return the IoU of the predicted square crop with the human's crop (vectorized and scalar agree to 0.0 over 1,500 images; human crops are square in pixels: median aspect 1.000). Recall and precision are still printed as diagnostics. `SIDE_CALIBRATION_EXPONENT` was removed from TS and Python.
+
+**Under IoU the old post-processing is badly wrong.** Held-out 1,500 (the same tail as the previous session):
+
+| config | all | truth <0.10 | 0.10–0.20 | 0.20–0.35 | 0.35–0.50 | ≥0.50 |
+|---|---|---|---|---|---|---|
+| old weights, gate 0.50, β 0.92 | 0.413 | 0.145 | 0.341 | 0.358 | 0.495 | 0.650 |
+| new weights, gate 0.45, β 0.92 | 0.452 | 0.202 | 0.410 | 0.404 | 0.531 | 0.644 |
+| old weights, no gate, no β | 0.553 | 0.378 | 0.533 | 0.549 | 0.615 | 0.645 |
+| **new weights, no gate, no β (shipped)** | **0.565** | **0.409** | 0.563 | 0.565 | 0.605 | 0.634 |
+
+The IoU-optimal gate is 0: every detection that clears the 0.05 NMS threshold beats the saliency fallback, so the gate was removed from `ImageCropper.m`. Padding 0 is optimal (−0.02 → 0.5638, +0.03 → 0.5623). On IoU the small-subject-oversampled weights from the previous session beat the old ones significantly: +0.012 overall (CI [+0.003, +0.021]) and +0.031 on small subjects (CI [+0.008, +0.054]).
+
+**What did not work (all on IoU, held-out)**
+- **Post-processing search** (gate × union threshold × K × top1-below-size × fallback × padding, 1,000+ configs): best 0.5662 vs 0.5650 plain, and 5-fold CV of the selection gives 0.5627. Flat. `top1` alone helps small subjects (0.446) but loses big ones (0.598 vs 0.634).
+- **Box re-ranking** by conf × size^a × exp(−b·centre distance): best 0.5664, CV 0.5611. Picking the oracle-best existing box would give 0.655 overall and 0.531 on small subjects, so ranking is a real headroom, but no simple rule captures it.
+- **Larger input** (export the same weights at 800/960): 0.543 / 0.502. The weights are tuned to 640's scale; it would need training at that size and ~1.6–2.3× inference.
+- **Second retrain** (warm start from the shipped weights, small subjects ×3, 10 epochs, lr 5e-5): small subjects +0.027 (CI [+0.004, +0.051]) but overall −0.006 (CI [−0.015, +0.003]), losing on 0.2+ subjects. Not shipped. **Routing** small first-pass boxes to it doesn't capture the gain (best 0.5667 overall, small 0.406): on small truths the first model's box is often large or misplaced, so they never get routed.
+
+**Where small subjects fail now:** 34% of crops on truths under 0.10 have IoU < 0.1 (wrong object), 20% are 0.1–0.5, 46% are ≥ 0.5. The misses are a detection/ranking problem, not geometry.
+
+**Tooling:** `cache_detections.py` takes `YOLO_INPUT_SIZE` from the environment to test other input sizes.
