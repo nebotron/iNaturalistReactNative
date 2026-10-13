@@ -117,6 +117,12 @@ const Menu = ( ) => {
       navigation: "DevicePhotoCleanup",
       icon: "trash-outline",
     },
+    audioId: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "AUDIO ID",
+      navigation: "AudioId",
+      icon: "microphone",
+    },
     ...( currentUser
       ? {
         lifeList: {
@@ -161,12 +167,6 @@ const Menu = ( ) => {
       label: t( "HELP" ),
       navigation: "Help",
       icon: "help-circle",
-    },
-    audioId: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "AUDIO ID",
-      navigation: "AudioId",
-      icon: "microphone",
     },
     cropLog: {
       // eslint-disable-next-line i18next/no-literal-string
