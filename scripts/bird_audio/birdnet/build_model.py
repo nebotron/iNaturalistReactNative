@@ -6,9 +6,10 @@
 #    files under 95 MB each (GitHub's limit is 100 MB) next to audio_id.onnx;
 #    the Xcode project bundles audio_id.data0-2, so update it if the count changes.
 #  - src/components/AudioId/audioIdSpecies.json: [scientific name, common name,
-#    taxon ID, geomodel index or -1] per model output. Only birds get a geomodel
-#    index: it dropped the true species for 17% of insect and 3% of frog
-#    recordings (eval_regions.py).
+#    taxon ID, geomodel index or -1, 1 if a bird] per model output. The app's
+#    geomodel cutoff is 0.03 for birds; at that cutoff it dropped the true
+#    species for 17% of insect and 3% of frog recordings, so other taxa use
+#    0.0003 (eval_regions.py).
 #  - ios/iNaturalistReactNative/audio_geo.onnx: the BirdNET geomodel.
 # Usage (from this directory): python3 build_model.py <repo root>
 import glob, json, os, shutil, sys, time, urllib.request
@@ -42,7 +43,7 @@ for i, (name, common) in enumerate(labels):
     s = inat.get(name)
     if not s: continue
     idx.append(i)
-    species.append([name, s["common"] or common, s["id"], geo.get(name, -1) if s["iconic"] == "Aves" else -1])
+    species.append([name, s["common"] or common, s["id"], geo.get(name, -1), int(s["iconic"] == "Aves")])
 json.dump(species, open(f"{repo}/src/components/AudioId/audioIdSpecies.json", "w"), separators=(",", ":"))
 
 m = onnx.load(hf_hub_download(HF, "full/birdnet-v3.0-preview3.1-fp16-b1.onnx", revision=REV)); g = m.graph
