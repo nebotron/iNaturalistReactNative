@@ -1,15 +1,16 @@
 # Small check of Audio ID run the way the app runs it: the bundled model on 5 s
 # windows every second; a species is heard in a window when it scores 0.3+ and
-# is the window's top species or scores 0.7+; with and without dropping birds the
+# is the window's top species or scores 0.7+; with and without dropping species the
 # geomodel doesn't put at the recording's place and week. ~70 recent
 # research-grade sound observations per set.
 # Usage (from this directory): python3 eval_regions.py <repo root>
 import json, os, subprocess, sys, time, urllib.request
 import numpy as np, onnxruntime as ort, imageio_ffmpeg
 repo = sys.argv[1]; ios = f"{repo}/ios/iNaturalistReactNative"
-FF = imageio_ffmpeg.get_ffmpeg_exe(); TH, ALSO, GEO_TH = 0.3, 0.7, 0.03
+FF = imageio_ffmpeg.get_ffmpeg_exe(); TH, ALSO, GEO_TH, NON_BIRD_GEO_TH = 0.3, 0.7, 0.03, 0.0003
 species = json.load(open(f"{repo}/src/components/AudioId/audioIdSpecies.json"))
 row = {s[2]: i for i, s in enumerate(species)}; gi = np.array([s[3] for s in species])
+geo_th = np.array([GEO_TH if s[4] else NON_BIRD_GEO_TH for s in species])
 SETS = {  # name: (iconic taxon, swlat, swlng, nelat, nelng)
     "birds, Seattle area": ("Aves", 47, -123, 48.2, -121.6),
     "birds, eastern US": ("Aves", 38, -80, 45, -70), "birds, Britain": ("Aves", 50, -6, 56, 2),
@@ -44,7 +45,7 @@ for r in recs:
     X = np.stack([y[j:j + 160000] for j in range(0, len(y) - 160000 + 1, 32000)])
     S = np.concatenate([model.run(["output"], {"input": X[b:b + 8]})[0] for b in range(0, len(X), 8)])
     g = geo.run(None, {"input": np.array([[r["lat"], r["lng"], r["week"]]], np.float32)})[0][0]
-    keep = (gi < 0) | (g[np.maximum(gi, 0)] >= GEO_TH); t = row.get(r["taxon"], -1)
+    keep = (gi < 0) | (g[np.maximum(gi, 0)] >= geo_th); t = row.get(r["taxon"], -1)
     for variant, mask in (("no geo filter", np.ones_like(keep)), ("geo filter", keep)):
         M = S * mask; heard = (M >= TH) & ((M >= M.max(1, keepdims=True)) | (M >= ALSO))
         det = set(np.where(heard.any(0))[0])

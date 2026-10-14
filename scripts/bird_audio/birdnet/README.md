@@ -11,7 +11,7 @@ the weights are split across `audio_id.data0-2` to stay under GitHub's file size
 limit. The result, `ios/iNaturalistReactNative/audio_id.onnx` and its data
 files, is under the same license. The bundled BirdNET geomodel
 (`audio_geo.onnx`, V3.0.3, https://huggingface.co/sammlapp/BirdNET_GeoModel)
-drops birds unlikely at the user's place and week when location is available.
+drops species unlikely at the user's place and week when location is available.
 Everything runs on device with no network. Poaching and military use are
 prohibited by BirdNET's terms of use.
 
@@ -22,9 +22,9 @@ Rebuild and check (from this directory):
 
 ## Accuracy (`report_regions.json`)
 
-Run as the app runs: 5 s windows every second, the geomodel filter (birds
-only), and a species counts as heard in a window when it scores 0.3+ and is
-the window's top species or scores 0.7+. On the same 923 recordings (600 from
+Run as the app runs: 5 s windows every second, the geomodel filter, and a
+species counts as heard in a window when it scores 0.3+ and is the window's
+top species or scores 0.7+. On the same 923 recordings (600 from
 the Seattle area, 323 from the sets below), that top-species rule cut wrong
 species per recording from 1.17 to 0.83 (Seattle) and 0.86 to 0.65 (others)
 while recall went from 0.927 to 0.925 and 0.920 to 0.916. Raising the
@@ -43,3 +43,10 @@ requiring consecutive windows all lost more recall for less gain.
 
 Recordings carry one label, so some "other species" are real background
 animals; the geomodel filter never dropped a true species here.
+
+Non-birds score lower in the geomodel (Hoary Marmot at Mount Rainier is
+0.01-0.03), so they use a 0.0003 cutoff, which still drops species from the
+wrong region (Chimpanzee there is 0.0). On 560 recordings of mammals, frogs and
+insects (North America, Europe, eastern Australia), it cut wrong non-bird
+species per recording from 0.28 to 0.17 and lost 3 of 372 true detections (two
+western US frogs the geomodel misplaces); 0.03 lost 15.
