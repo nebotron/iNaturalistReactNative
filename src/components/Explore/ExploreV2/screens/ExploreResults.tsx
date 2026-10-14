@@ -11,6 +11,7 @@ import {
   SPECIES_TAB,
 } from "appConstants/tabs";
 import classnames from "classnames";
+import EbirdResults from "components/Explore/EbirdResults";
 import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2MapView
@@ -381,6 +382,7 @@ const ExploreResults = ( ) => {
                   layout={layout === "list"
                     ? "list"
                     : "grid"}
+                  listHeaderContent={<EbirdResults enabled={canFetch} params={queryParams} />}
                   // bit over a misnomer on this prop; in this case it hides the
                   // ID/comments/quality badges that grid results can technically have
                   hideObsUploadStatus={layout !== "list"}
