@@ -29,6 +29,8 @@ const { AudioBirdId } = NativeModules as {
 
 const THRESHOLD = 0.3;
 const ALSO_HEARD = 0.7;
+// Only vibrate/notify for calls above this confidence
+const ALERT = 0.6;
 export const heardIn = ( scores: number[] ) => {
   const top = Math.max( ...scores, 0 );
   return ( s: number ) => s >= THRESHOLD && ( s >= top || s >= ALSO_HEARD );
@@ -145,10 +147,12 @@ const onScores = ( event: ScoresEvent ) => {
     if ( !isHeard( s ) || !sp ) return;
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;
-    if ( !heardTaxa.has( sp.taxonId ) || ( isNewCall && seen && !seen.has( sp.taxonId ) ) ) {
-      alerts.push( sp );
+    if ( s > ALERT ) {
+      if ( !heardTaxa.has( sp.taxonId ) || ( isNewCall && seen && !seen.has( sp.taxonId ) ) ) {
+        alerts.push( sp );
+      }
+      heardTaxa.add( sp.taxonId );
     }
-    heardTaxa.add( sp.taxonId );
     next = {
       ...next,
       [sp.taxonId]: {
