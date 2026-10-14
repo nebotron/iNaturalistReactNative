@@ -1,5 +1,5 @@
 import {
-  copyAssetsFileIOS, downloadFile, exists, mkdir, stat,
+  copyAssetsFileIOS, downloadFile, exists, mkdir, moveFile, stat,
   unlink,
 } from "@dr.pogodin/react-native-fs";
 import { cropSourcesPath } from "appConstants/paths";
@@ -31,6 +31,30 @@ async function getCachedOrNull( filePath: string ): Promise<string | null> {
   return `file://${filePath}`;
 }
 
+// Writes land in a temp file and are renamed into place, so destPath only ever
+// holds a whole file. Writing straight to it let a concurrent caller (or the
+// next launch, after an interrupted copy) find a truncated JPEG, which iOS
+// draws with everything below the cut as solid grey -- and the cache kept
+// serving it.
+const writesInFlight = new Map<string, Promise<void>>( );
+function writeAtomically(
+  destPath: string,
+  write: ( tmpPath: string ) => Promise<void>,
+): Promise<void> {
+  const inFlight = writesInFlight.get( destPath );
+  if ( inFlight ) return inFlight;
+  const tmpPath = `${destPath}.${Date.now( )}.tmp`;
+  const promise = write( tmpPath )
+    .then( ( ) => moveFile( tmpPath, destPath ) )
+    .catch( async error => {
+      await unlink( tmpPath ).catch( ( ) => {} );
+      throw error;
+    } )
+    .finally( ( ) => writesInFlight.delete( destPath ) );
+  writesInFlight.set( destPath, promise );
+  return promise;
+}
+
 const ensureLocalImageForCrop = async (
   uri: string,
   // "large" is plenty for subject detection, which only needs to locate a
@@ -44,10 +68,15 @@ const ensureLocalImageForCrop = async (
     const destPath = `${cropSourcesPath}/${urlToFilename( downloadUrl )}`;
     const cached = await getCachedOrNull( destPath );
     if ( cached ) return cached;
-    await downloadFile( {
-      fromUrl: downloadUrl,
-      toFile: destPath,
-    } ).promise;
+    await writeAtomically( destPath, async tmpPath => {
+      const { statusCode } = await downloadFile( {
+        fromUrl: downloadUrl,
+        toFile: tmpPath,
+      } ).promise;
+      if ( statusCode < 200 || statusCode >= 300 ) {
+        throw new Error( `Download failed with status ${statusCode}` );
+      }
+    } );
     return `file://${destPath}`;
   }
 
@@ -65,7 +94,9 @@ const ensureLocalImageForCrop = async (
       const cached = await getCachedOrNull( destPath );
       if ( cached ) return cached;
       // 99999 → no upscaling; copyAssetsFileIOS caps at the asset's natural dimensions
-      await copyAssetsFileIOS( uri, destPath, 99999, 99999 );
+      await writeAtomically( destPath, async tmpPath => {
+        await copyAssetsFileIOS( uri, tmpPath, 99999, 99999 );
+      } );
       return `file://${destPath}`;
     }
   }
