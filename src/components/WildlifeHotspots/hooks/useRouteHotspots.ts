@@ -306,10 +306,20 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
     const key = `${centroid.lat.toFixed( 5 )},${centroid.lng.toFixed( 5 )}`;
     const taxa = new Map<number, HotspotSpeciesBuilder>();
     const cellObservations: HotspotObservation[] = [];
+    // Observations of the same species on the same day count once
+    const seenSpeciesDays = new Set<string>();
+    let count = 0;
     for ( const i of memberIndices ) {
       const obs = obsForPoint[i];
       const { taxon } = obs;
-      if ( taxon?.id ) {
+      const day = obs.observed_on ?? obs.time_observed_at?.slice( 0, 10 );
+      const speciesDayKey = taxon?.id && day
+        ? `${taxon.id}|${day}`
+        : null;
+      const isDuplicate = speciesDayKey !== null && seenSpeciesDays.has( speciesDayKey );
+      if ( speciesDayKey ) seenSpeciesDays.add( speciesDayKey );
+      if ( !isDuplicate ) count += 1;
+      if ( taxon?.id && !isDuplicate ) {
         const prev = taxa.get( taxon.id );
         const timeMinutes = obs.time_observed_at
           ? parseTimeToMinutes( obs.time_observed_at )
@@ -353,7 +363,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
     cells.set( key, {
       centerLat: centroid.lat,
       centerLng: centroid.lng,
-      count: memberIndices.length,
+      count,
       taxa,
       observations: cellObservations,
     } );
@@ -429,6 +439,7 @@ export function useRouteHotspots() {
             uuid: true,
             geojson: true,
             time_observed_at: true,
+            observed_on: true,
             taxon: {
               id: true,
               name: true,
