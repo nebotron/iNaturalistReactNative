@@ -76,8 +76,8 @@ const TaxonThumb = ( { taxonId }: { taxonId: number } ) => {
 };
 
 // The last 10 s of sound, Merlin-style: dark marks on a full-width white
-// strip, low frequencies at the bottom, each moment tinted with the color of
-// the species identified then. Drawn natively from the microphone audio.
+// strip, low frequencies at the bottom. Drawn natively from the microphone
+// audio.
 const AudioSpectrogram = requireNativeComponent<ViewProps>( "AudioSpectrogram" );
 const SPECTROGRAM_STYLE = { height: 140 };
 const Spectrogram = ( ) => (
@@ -111,7 +111,7 @@ const AudioId = ( ) => {
   const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", { id: taxonId } );
 
   // Species being heard right now are highlighted in yellow.
-  const row = ( sp: AudioIdSpecies, score: number, color: string, detail?: string ) => (
+  const row = ( sp: AudioIdSpecies, score: number, detail?: string ) => (
     <Pressable
       key={sp.taxonId}
       accessibilityRole="button"
@@ -123,7 +123,6 @@ const AudioId = ( ) => {
       onPress={( ) => openTaxon( sp.taxonId )}
     >
       <TaxonThumb taxonId={sp.taxonId} />
-      <View className="w-3 h-3 rounded-full mr-3" style={{ backgroundColor: color }} />
       <View className="flex-1">
         <Body1>{sp.commonName}</Body1>
         <List2 className="italic">{sp.name}</List2>
@@ -172,7 +171,6 @@ const AudioId = ( ) => {
         hearingNow( h.sp.taxonId )
           ? scoreNow( h.sp.taxonId )
           : h.best,
-        h.color,
         `${h.count} ${h.count === 1
           ? "time"
           : "times"}, last at ${new Date( h.lastHeard ).toLocaleTimeString( )}`,

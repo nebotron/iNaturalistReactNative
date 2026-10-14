@@ -38,20 +38,16 @@
 
 // The live spectrogram, shared between the module, which adds a column for
 // every AB_SPEC_HOP new samples, and AudioSpectrogram views, which draw it.
-// Intensities are kept in a ring of columns, each tinted with the color of the
-// top species in the run that covered it.
+// Intensities are kept in a ring of columns.
 static os_unfair_lock abSpecLock = OS_UNFAIR_LOCK_INIT;
 static uint8_t  abSpecLevel[AB_SPEC_W][AB_SPEC_H]; // 0..255, low frequencies first
-static uint32_t abSpecTint[AB_SPEC_W];             // 0xRRGGBB
 static NSInteger abSpecCount;                      // columns added so far
-static NSInteger abSpecTinted;                     // columns tinted so far
 
 static void ABSpectrogramReset( void )
 {
   os_unfair_lock_lock( &abSpecLock );
   memset( abSpecLevel, 0, sizeof( abSpecLevel ) );
   abSpecCount = 0;
-  abSpecTinted = 0;
   os_unfair_lock_unlock( &abSpecLock );
 }
 
@@ -84,9 +80,7 @@ static void ABSpectrogramPush( const float *frame )
   os_unfair_lock_lock( &abSpecLock );
   NSInteger x = abSpecCount % AB_SPEC_W;
   memcpy( abSpecLevel[x], col, AB_SPEC_H );
-  abSpecTint[x] = 0;
   abSpecCount++;
-  abSpecTinted = MAX( abSpecTinted, abSpecCount - AB_SPEC_W );
   os_unfair_lock_unlock( &abSpecLock );
 }
 
@@ -231,18 +225,6 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
       resolve( @{ @"sampleRate": @( f.sampleRate ), @"channels": @( f.channelCount ) } );
     } );
   }];
-}
-
-// Tints the spectrogram columns added since the last call, which the latest
-// run covered, with "#rrggbb", or leaves them black for "".
-RCT_EXPORT_METHOD( tintSpectrogram:( NSString * )color )
-{
-  unsigned int rgb = 0;
-  if ( color.length == 7 ) [[NSScanner scannerWithString:[color substringFromIndex:1]] scanHexInt:&rgb];
-  os_unfair_lock_lock( &abSpecLock );
-  for ( NSInteger c = abSpecTinted; c < abSpecCount; c++ ) abSpecTint[c % AB_SPEC_W] = rgb;
-  abSpecTinted = abSpecCount;
-  os_unfair_lock_unlock( &abSpecLock );
 }
 
 RCT_EXPORT_METHOD( stop )
@@ -617,7 +599,6 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 @implementation AudioSpectrogramView {
   CADisplayLink *_link;
   NSInteger      _drawnCount;
-  NSInteger      _drawnTinted;
 }
 
 - (void)didMoveToWindow
@@ -637,25 +618,19 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 {
   static uint32_t pixels[AB_SPEC_H * AB_SPEC_W];
   os_unfair_lock_lock( &abSpecLock );
-  if ( abSpecCount == _drawnCount && abSpecTinted == _drawnTinted ) {
+  if ( abSpecCount == _drawnCount ) {
     os_unfair_lock_unlock( &abSpecLock );
     return;
   }
   _drawnCount = abSpecCount;
-  _drawnTinted = abSpecTinted;
   for ( NSInteger x = 0; x < AB_SPEC_W; x++ ) {
     // Oldest column on the left; columns not yet heard stay blank.
     NSInteger c = abSpecCount - AB_SPEC_W + x;
     const uint8_t *levels = c >= 0 ? abSpecLevel[c % AB_SPEC_W] : NULL;
-    uint32_t tint = c >= 0 ? abSpecTint[c % AB_SPEC_W] : 0;
-    int tr = ( tint >> 16 ) & 255, tg = ( tint >> 8 ) & 255, tb = tint & 255;
     for ( int y = 0; y < AB_SPEC_H; y++ ) {
-      int v = levels ? levels[y] : 0;
-      int r = 255 - v * ( 255 - tr ) / 255;
-      int g = 255 - v * ( 255 - tg ) / 255;
-      int b = 255 - v * ( 255 - tb ) / 255;
+      uint32_t g = 255 - ( levels ? levels[y] : 0 );
       // Little-endian RGBX, top row first.
-      pixels[( AB_SPEC_H - 1 - y ) * AB_SPEC_W + x] = r | g << 8 | b << 16 | 0xff000000u;
+      pixels[( AB_SPEC_H - 1 - y ) * AB_SPEC_W + x] = g | g << 8 | g << 16 | 0xff000000u;
     }
   }
   os_unfair_lock_unlock( &abSpecLock );

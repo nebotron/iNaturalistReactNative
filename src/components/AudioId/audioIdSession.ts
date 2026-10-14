@@ -23,7 +23,6 @@ const { AudioBirdId } = NativeModules as {
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
-    tintSpectrogram: ( color: string ) => void;
   };
 };
 
@@ -48,13 +47,8 @@ interface ScoresEvent {
   error: string | null;
 }
 export interface Heard {
-  sp: AudioIdSpecies; lastHeard: number; best: number; count: number; color: string;
+  sp: AudioIdSpecies; lastHeard: number; best: number; count: number;
 }
-// One color per species heard this session, in the order first heard.
-const PALETTE = [
-  "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
-  "#42d4f4", "#f032e6", "#bfef45", "#9a6324", "#469990",
-];
 
 const heardTaxa = new Set<number>( );
 
@@ -159,19 +153,12 @@ const onScores = ( event: ScoresEvent ) => {
         sp,
         lastHeard: now,
         best: Math.max( old?.best || 0, s ),
-        color: old?.color || PALETTE[Object.keys( next ).length % PALETTE.length],
         count: ( old?.count || 0 ) + ( isNewCall
           ? 1
           : 0 ),
       },
     };
   } );
-  const top = scores.indexOf( Math.max( ...scores ) );
-  const color = top >= 0 && isHeard( scores[top] ) && sps[top]
-    ? next[sps[top].taxonId]?.color || null
-    : null;
-  // Spectrogram columns are colored by the top species heard in their run.
-  AudioBirdId?.tintSpectrogram( color || "" );
   if ( alerts.length > 0 ) {
     AudioBirdId?.vibrate( )
       .then( r => {
