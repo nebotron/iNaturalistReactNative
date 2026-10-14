@@ -29,6 +29,14 @@ const useParams = ( ): Object => {
       } );
     };
 
+    // Full Explore state to start from (e.g. from a hotspot link), applied
+    // first so the location and taxon params below override it
+    if ( params?.exploreState ) {
+      dispatch( {
+        type: EXPLORE_ACTION.USE_STORED_STATE,
+        storedState: params.exploreState,
+      } );
+    }
     if ( params?.worldwide ) {
       setWorldwide( );
     }

@@ -234,6 +234,7 @@ const Explore = ( {
           <WildlifeHotspotsScreen
             embedded
             filterParams={hotspotParamsRef.current}
+            exploreState={exploreState}
           />
         )}
       </View>

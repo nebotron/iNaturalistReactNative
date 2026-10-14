@@ -192,6 +192,9 @@ type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
   // its own safe-area wrapper since the host already provides one.
   embedded?: boolean;
   filterParams?: Record<string, unknown>;
+  // Explore filters the observation-count links carry over, with the location
+  // replaced by the hotspot
+  exploreState?: object;
 };
 
 // Used only until the hidden measurement view below reports the real height.
@@ -209,7 +212,9 @@ const styles = StyleSheet.create( {
   },
 } );
 
-const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsProp }: Props ) => {
+const WildlifeHotspotsScreen = ( {
+  route, embedded, filterParams: filterParamsProp, exploreState,
+}: Props ) => {
   const { t } = useTranslation();
   const navigation = useNavigation();
   const { width: windowWidth } = useWindowDimensions();
@@ -499,21 +504,23 @@ const WildlifeHotspotsScreen = ( { route, embedded, filterParams: filterParamsPr
         name: species.name,
         preferred_common_name: species.preferred_common_name,
       },
+      exploreState,
       lat: hotspot.centerLatitude,
       lng: hotspot.centerLongitude,
       radius: 2,
       worldwide: false,
     } );
-  }, [navigation] );
+  }, [navigation, exploreState] );
 
   const handleObservationCountPress = useCallback( ( hotspot: Hotspot ) => {
     navigation.navigate( "Explore", {
+      exploreState,
       lat: hotspot.centerLatitude,
       lng: hotspot.centerLongitude,
       radius: 2,
       worldwide: false,
     } );
-  }, [navigation] );
+  }, [navigation, exploreState] );
 
   const renderStopItem = useCallback( ( {
     item: stop, getIndex, drag, isActive,

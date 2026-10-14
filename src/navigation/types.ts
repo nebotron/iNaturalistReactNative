@@ -30,6 +30,10 @@ interface LegacyExploreParams {
   project?: { id?: number; title?: string };
   place?: { id?: number; display_name?: string } | null;
   worldwide?: boolean;
+  lat?: number;
+  lng?: number;
+  radius?: number;
+  exploreState?: object;
 }
 
 // Note from the documentation:
