@@ -1,4 +1,9 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(curl *inaturalist.org*)"
+    ]
+  },
   "hooks": {
     "SessionStart": [
       {
