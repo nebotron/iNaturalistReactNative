@@ -297,7 +297,7 @@ type Action = {type: EXPLORE_ACTION.RESET}
   | {type: EXPLORE_ACTION.DISCARD; snapshot: State}
   | {type: EXPLORE_ACTION.SET_USER; user: object | null; storedState: State}
   | {
-    type: EXPLORE_ACTION.EXCLUDE_USER;
+    type: EXPLORE_ACTION.SET_EXCLUDE_USER;
     excludeUser: object;
     storedState: State;
   }
@@ -650,7 +650,7 @@ function exploreReducer( state: State, action: Action ) {
         ...derivedUserFields( userFilters ),
       };
     }
-    case EXPLORE_ACTION.EXCLUDE_USER: {
+    case EXPLORE_ACTION.SET_EXCLUDE_USER: {
       const userFilters = action.excludeUser
         ? [{
           user: toExploreUserFilterUser( action.excludeUser as ExploreUserFilter["user"] ),
@@ -993,10 +993,16 @@ function useExplore() {
   return context;
 }
 
+// For screens shared with Explore v2, which has no ExploreProvider
+function useOptionalExplore() {
+  return React.useContext( ExploreContext );
+}
+
 export {
   ExploreProvider,
   exploreReducer,
   initialState as initialExploreState,
   useExplore,
+  useOptionalExplore,
 };
 export type { State as ExploreState };

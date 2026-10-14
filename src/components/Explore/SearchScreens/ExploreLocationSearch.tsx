@@ -11,7 +11,7 @@ import {
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import inatPlaceTypes from "dictionaries/places";
-import { PLACE_MODE, useExplore } from "providers/ExploreContext";
+import { PLACE_MODE, useOptionalExplore } from "providers/ExploreContext";
 import React, {
   useCallback,
   useEffect,
@@ -50,18 +50,19 @@ const ExploreLocationSearch = ( {
   updateLocation,
 }: Props ) => {
   const { t } = useTranslation( );
-  const { state } = useExplore( );
+  const explore = useOptionalExplore( );
+  const placeMode = explore?.state.placeMode;
 
   const [locationName, setLocationName] = useState( "" );
   const [showNearbyRadius, setShowNearbyRadius] = useState(
-    state.placeMode === PLACE_MODE.NEARBY,
+    placeMode === PLACE_MODE.NEARBY,
   );
 
   useEffect( ( ) => {
-    if ( state.placeMode === PLACE_MODE.NEARBY ) {
+    if ( placeMode === PLACE_MODE.NEARBY ) {
       setShowNearbyRadius( true );
     }
-  }, [state.placeMode] );
+  }, [placeMode] );
 
   const resetPlace = useCallback(
     ( ) => {
@@ -124,8 +125,12 @@ const ExploreLocationSearch = ( {
   // Keeps the modal open after picking Nearby so the radius input is reachable
   const activateNearby = useCallback( async ( ) => {
     await onSelectNearby( );
-    setShowNearbyRadius( true );
-  }, [onSelectNearby] );
+    if ( explore ) {
+      setShowNearbyRadius( true );
+    } else {
+      closeModal( );
+    }
+  }, [onSelectNearby, explore, closeModal] );
 
   const onNearbyPressed = () => {
     if ( hasPermissions || !requestPermissions ) {
@@ -177,7 +182,8 @@ const ExploreLocationSearch = ( {
             testID="ExploreLocationSearch.locationSearch"
           />
           <ButtonBar buttonConfiguration={buttons} containerClass="justify-center p-[15px]" />
-          {showNearbyRadius && <NearbyRadiusInput />}
+          {/* Explore v2 has no nearby radius */}
+          {showNearbyRadius && explore && <NearbyRadiusInput />}
         </View>
       </View>
       <FlatList
