@@ -78,7 +78,7 @@ const ExploreContainerWithContext = ( ): Node => {
   const updateUser = ( user: Object, exclude = false ) => {
     if ( exclude ) {
       dispatch( {
-        type: EXPLORE_ACTION.EXCLUDE_USER,
+        type: EXPLORE_ACTION.SET_EXCLUDE_USER,
         excludeUser: user,
       } );
     } else {
