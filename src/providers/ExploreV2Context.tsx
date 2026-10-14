@@ -1,5 +1,7 @@
 import type { ApiProjectSummary, ApiTotalBounds, ApiUser } from "api/types";
-import type { IDENTIFIERS_TAB, OBSERVERS_TAB, SPECIES_TAB } from "appConstants/tabs";
+import type {
+  HOTSPOTS_TAB, IDENTIFIERS_TAB, LIFELIST_TAB, OBSERVERS_TAB, SPECIES_TAB,
+} from "appConstants/tabs";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import type { ExploreV2EntryParams } from "navigation/types";
 import type { TAXONOMIC_RANK } from "providers/ExploreContext";
@@ -64,7 +66,9 @@ export type ExploreV2Tab =
   | typeof OBSERVATIONS_TAB
   | typeof SPECIES_TAB
   | typeof OBSERVERS_TAB
-  | typeof IDENTIFIERS_TAB;
+  | typeof IDENTIFIERS_TAB
+  | typeof HOTSPOTS_TAB
+  | typeof LIFELIST_TAB;
 
 export type ExploreV2Subject =
   | { type: "taxon"; taxon: Taxon }

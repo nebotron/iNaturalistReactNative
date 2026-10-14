@@ -3,7 +3,6 @@ import LocationSubtitle
   from "components/Explore/ExploreV2/components/LocationSubtitle";
 import SubjectThumbnail
   from "components/Explore/ExploreV2/components/SubjectThumbnail";
-import buildExploreV2QueryParams from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import countFilters from "components/Explore/ExploreV2/helpers/countFilters";
 import locationLabel from "components/Explore/ExploreV2/helpers/locationLabel";
 import primarySubject from "components/Explore/ExploreV2/helpers/primarySubject";
@@ -83,10 +82,18 @@ const SubjectHeader = ( {
 );
 
 interface Props {
+  exploreViewIcon: string;
+  exploreViewLabel: string;
+  onPressChangeView: ( ) => void;
   showBackButton: boolean;
 }
 
-const ExploreV2Header = ( { showBackButton }: Props ) => {
+const ExploreV2Header = ( {
+  exploreViewIcon,
+  exploreViewLabel,
+  onPressChangeView,
+  showBackButton,
+}: Props ) => {
   const { t } = useTranslation( );
   const { state } = useExploreV2( );
   const currentUser = useCurrentUser( );
@@ -139,14 +146,12 @@ const ExploreV2Header = ( { showBackButton }: Props ) => {
         {headerContent}
         <View className="mr-2">
           <ContainedSquareButton
-            accessibilityHint={t( "Opens-route-hotspots" )}
-            accessibilityLabel={t( "Wildlife-Hotspots" )}
+            accessibilityHint={t( "Opens-explore-view-options" )}
+            accessibilityLabel={exploreViewLabel}
             backgroundColor={colors.darkGray}
-            icon="location"
-            onPress={() => navigation.navigate( "WildlifeHotspots", {
-              filterParams: buildExploreV2QueryParams( state ),
-            } )}
-            testID="ExploreV2Header.hotspotsButton"
+            icon={exploreViewIcon}
+            onPress={onPressChangeView}
+            testID="ExploreV2Header.viewButton"
           />
         </View>
         <View>

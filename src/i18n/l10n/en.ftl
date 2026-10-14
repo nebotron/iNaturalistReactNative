@@ -1172,9 +1172,9 @@ Opens-add-comment-form = Opens add comment form.
 Opens-AI-camera = Opens AI camera.
 # Accessibility hint for a button that opens a form for editing a comment
 Opens-edit-comment-form = Opens edit comment form.
+# Accessibility hint for the button in the Explore header that picks what Explore shows
+Opens-explore-view-options = Opens Explore view options.
 Opens-location-permission-prompt = Opens location permission prompt
-# Accessibility hint for the Wildlife Hotspots button in the Explore header
-Opens-route-hotspots = Opens the Wildlife Hotspots route finder
 # Accessibility hint for search button in Explore header that navigates to the search interface
 Opens-search-interface = Opens search interface.
 OR-SIGN-IN-WITH = OR SIGN IN WITH
@@ -1809,8 +1809,6 @@ When-tapping-the-green-observation-button = When tapping the green observation b
 WIKIPEDIA = WIKIPEDIA
 Wild = Wild
 WILD-STATUS = WILD STATUS
-# Wildlife Hotspots along a route
-Wildlife-Hotspots = Wildlife Hotspots
 # Label for a button that withdraws an identification
 Withdraw = Withdraw
 # Button to Withdraw identification made by user

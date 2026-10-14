@@ -2,7 +2,6 @@ import {
   screen,
   userEvent,
   waitFor,
-  within,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
 import i18next from "i18next";
@@ -138,33 +137,18 @@ describe( "advanced search", ( ) => {
   } );
 
   it(
-    "offers observers and identifiers, with the filters in effect, only in advanced search",
+    "shows observers with the filters in effect from the view picker",
     async ( ) => {
       renderApp( );
       await navigateToExplore( );
-
-      const tabs = await screen.findByTestId( "ExploreV2Tabs" );
-      expect( within( tabs ).queryByTestId( "ExploreV2Tabs.observers" ) ).toBeNull( );
-      expect( within( tabs ).queryByTestId( "ExploreV2Tabs.identifiers" ) ).toBeNull( );
       expect( inatjs.observations.observers ).not.toHaveBeenCalled( );
 
       await openAdvancedSearch( );
       await actor.press( screen.getByText( t( "Sounds" ) ) );
       await submitAdvancedSearch( );
 
-      // Each tab shows the count from its own endpoint
-      const observersTab = await screen.findByTestId( "ExploreV2Tabs.observers" );
-      const identifiersTab = await screen.findByTestId( "ExploreV2Tabs.identifiers" );
-      await waitFor( ( ) => {
-        expect(
-          within( observersTab ).getByText( String( mockObserverCounts.length ) ),
-        ).toBeVisible( );
-        expect(
-          within( identifiersTab ).getByText( String( mockIdentifierCounts.length ) ),
-        ).toBeVisible( );
-      } );
-
-      await actor.press( observersTab );
+      await actor.press( await screen.findByTestId( "ExploreV2Header.viewButton" ) );
+      await actor.press( await screen.findByText( t( "Observers" ) ) );
 
       expect( await screen.findByText( mockObserver.login ) ).toBeVisible( );
       const observerQueries = inatjs.observations.observers.mock.calls

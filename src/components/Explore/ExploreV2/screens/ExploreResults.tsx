@@ -2,7 +2,9 @@ import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect, useRoute } from "@react-navigation/native";
 import type { ApiTotalBounds } from "api/types";
 import {
+  HOTSPOTS_TAB,
   IDENTIFIERS_TAB,
+  LIFELIST_TAB,
   OBSERVATIONS_TAB,
   OBSERVERS_TAB,
   SPECIES_TAB,
@@ -12,8 +14,6 @@ import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2MapView
   from "components/Explore/ExploreV2/components/ExploreV2MapView";
-import ExploreV2Tabs
-  from "components/Explore/ExploreV2/components/ExploreV2Tabs";
 import SaveSearchButton
   from "components/Explore/ExploreV2/components/SaveSearchButton";
 import ExploreV2DebugSheet
@@ -23,14 +23,13 @@ import type { NearbyCoords }
 import buildExploreV2QueryParams
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import savedSearchKey from "components/Explore/ExploreV2/helpers/savedSearchKey";
-import useUserTabCounts
-  from "components/Explore/ExploreV2/hooks/useUserTabCounts";
 import ExploreV2SpeciesView
   from "components/Explore/ExploreV2/screens/ExploreV2SpeciesView";
 import ExploreV2UsersView
   from "components/Explore/ExploreV2/screens/ExploreV2UsersView";
 import useInfiniteExploreScroll
   from "components/Explore/hooks/useInfiniteExploreScroll";
+import LifeListView from "components/Explore/LifeListView";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import {
@@ -43,7 +42,9 @@ import {
 import SortButton from "components/SharedComponents/Buttons/SortButton";
 import Toast from "components/SharedComponents/Toast";
 import { View } from "components/styledComponents";
+import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
 import type { ExploreStackScreenProps } from "navigation/types";
+import type { ExploreV2Tab } from "providers/ExploreV2Context";
 import { EXPLORE_V2_ACTION, EXPLORE_V2_PLACE_MODE, useExploreV2 } from "providers/ExploreV2Context";
 import React, { useCallback, useMemo, useState } from "react";
 import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
@@ -80,6 +81,17 @@ interface SortOption<SortValue> {
 
 type SaveToast = "added" | "removed" | "limitReached";
 
+const EXPLORE_VIEW_ICONS: Record<ExploreV2Tab, string> = {
+  [OBSERVATIONS_TAB]: "binoculars",
+  [SPECIES_TAB]: "leaf",
+  [HOTSPOTS_TAB]: "location",
+  [OBSERVERS_TAB]: "observers",
+  [IDENTIFIERS_TAB]: "identifiers",
+  [LIFELIST_TAB]: "list",
+};
+
+const noop = ( ) => undefined;
+
 const ExploreResults = ( ) => {
   const { dispatch, state } = useExploreV2( );
   const { params } = useRoute<ExploreStackScreenProps<"ExploreResults">["route"]>( );
@@ -94,6 +106,7 @@ const ExploreResults = ( ) => {
   const { isConnected } = useNetInfo( );
   const { t } = useTranslation( );
   const [showSortSheet, setShowSortSheet] = useState( false );
+  const [showViewSheet, setShowViewSheet] = useState( false );
   const [saveToast, setSaveToast] = useState<SaveToast | null>( null );
   const savedSearches = useStore( storeState => storeState.exploreSavedSearches.searches );
   const saveSearch = useStore( storeState => storeState.exploreSavedSearches.saveSearch );
@@ -101,9 +114,6 @@ const ExploreResults = ( ) => {
   const observationsSortLabels = useObservationsSortLabels( );
   const speciesSortLabels = useSpeciesSortLabels( );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreV2ObservationsLayout" );
-  const advancedSearchMode = useStore(
-    storeState => storeState.exploreV2AdvancedSearch.advancedSearchMode,
-  );
 
   const showMap = layout === "map";
 
@@ -216,10 +226,64 @@ const ExploreResults = ( ) => {
     { enabled: canFetch, keyPrefix: "exploreV2SpeciesCount" },
   );
 
-  const { observersCount, identifiersCount } = useUserTabCounts(
-    baseSearchParams,
-    { enabled: canFetch && advancedSearchMode },
-  );
+  const exploreViews: Record<ExploreV2Tab, {
+    buttonText: string;
+    icon: string;
+    label: string;
+    text: string;
+    value: ExploreV2Tab;
+  }> = {
+    [OBSERVATIONS_TAB]: {
+      buttonText: t( "EXPLORE-OBSERVATIONS" ),
+      icon: "observations",
+      label: t( "Observations" ),
+      text: t( "Individual-encounters-with-organisms" ),
+      value: OBSERVATIONS_TAB,
+    },
+    [SPECIES_TAB]: {
+      buttonText: t( "EXPLORE-SPECIES" ),
+      icon: "species",
+      label: t( "Species" ),
+      text: t( "Organisms-that-are-identified-to-species" ),
+      value: SPECIES_TAB,
+    },
+    [HOTSPOTS_TAB]: {
+      buttonText: t( "EXPLORE-HOTSPOTS" ),
+      icon: "location",
+      label: t( "Hotspots" ),
+      text: t( "Clusters-of-observations-along-a-route" ),
+      value: HOTSPOTS_TAB,
+    },
+    [OBSERVERS_TAB]: {
+      buttonText: t( "EXPLORE-OBSERVERS" ),
+      icon: "observers",
+      label: t( "Observers" ),
+      text: t( "iNaturalist-users-who-have-observed" ),
+      value: OBSERVERS_TAB,
+    },
+    [IDENTIFIERS_TAB]: {
+      buttonText: t( "EXPLORE-IDENTIFIERS" ),
+      icon: "identifiers",
+      label: t( "Identifiers" ),
+      text: t( "iNaturalist-users-who-have-left-an-identification" ),
+      value: IDENTIFIERS_TAB,
+    },
+    [LIFELIST_TAB]: {
+      buttonText: t( "EXPLORE-LIFE-LIST" ),
+      icon: "list",
+      label: t( "Life-List" ),
+      text: t( "Each-species-with-the-date-it-was-first-observed" ),
+      value: LIFELIST_TAB,
+    },
+  };
+  const exploreViewA11yLabels: Record<ExploreV2Tab, string> = {
+    [OBSERVATIONS_TAB]: t( "Observations-View" ),
+    [SPECIES_TAB]: t( "Species-View" ),
+    [HOTSPOTS_TAB]: t( "Hotspots-View" ),
+    [OBSERVERS_TAB]: t( "Observers-View" ),
+    [IDENTIFIERS_TAB]: t( "Identifiers-View" ),
+    [LIFELIST_TAB]: t( "Life-List-View" ),
+  };
 
   const renderPermissionPrompt = ( ) => (
     <View className="flex-1 justify-center p-4">
@@ -349,6 +413,22 @@ const ExploreResults = ( ) => {
           </>
         );
       }
+      case HOTSPOTS_TAB:
+        return (
+          <WildlifeHotspotsScreen
+            embedded
+            filterParams={baseSearchParams}
+          />
+        );
+      case LIFELIST_TAB:
+        return (
+          <LifeListView
+            canFetch={canFetch}
+            isConnected={Boolean( isConnected )}
+            queryParams={baseSearchParams}
+            handleUpdateCount={noop}
+          />
+        );
       case OBSERVERS_TAB:
       case IDENTIFIERS_TAB:
         return (
@@ -390,23 +470,14 @@ const ExploreResults = ( ) => {
   return (
     <ViewWrapper testID="ExploreResults" wrapperClassName="overflow-hidden">
       <View className="flex-1 overflow-hidden">
-        <ExploreV2Header showBackButton={Boolean( params?.showBackButton )} />
-        <ExploreV2Tabs
-          observationsCount={canFetch
-            ? totalResults
-            : undefined}
-          speciesCount={canFetch
-            ? speciesCount
-            : undefined}
-          observersCount={canFetch
-            ? observersCount
-            : undefined}
-          identifiersCount={canFetch
-            ? identifiersCount
-            : undefined}
+        <ExploreV2Header
+          exploreViewIcon={EXPLORE_VIEW_ICONS[state.activeTab]}
+          exploreViewLabel={exploreViewA11yLabels[state.activeTab]}
+          onPressChangeView={( ) => setShowViewSheet( true )}
+          showBackButton={Boolean( params?.showBackButton )}
         />
         {renderContent( )}
-        {showingResults && (
+        {showingResults && state.activeTab !== HOTSPOTS_TAB && (
           <View
             className={classnames(
               "absolute left-5 right-5 z-10 flex-row items-center justify-end",
@@ -463,6 +534,23 @@ const ExploreResults = ( ) => {
             setShowSortSheet( false );
           }}
           onPressClose={() => setShowSortSheet( false )}
+        />
+      )}
+      {showViewSheet && (
+        <RadioButtonSheet
+          immediate
+          headerText={t( "EXPLORE" )}
+          radioValues={exploreViews}
+          selectedValue={state.activeTab}
+          confirm={tab => {
+            dispatch( {
+              type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB,
+              tab: tab as ExploreV2Tab,
+            } );
+            setShowViewSheet( false );
+          }}
+          onPressClose={() => setShowViewSheet( false )}
+          testID="ExploreV2ViewSheet"
         />
       )}
       {renderPermissionsGate( {} )}
