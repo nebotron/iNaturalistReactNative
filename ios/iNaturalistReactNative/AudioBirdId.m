@@ -1,10 +1,13 @@
+#import <Accelerate/Accelerate.h>
 #import <AVFoundation/AVFoundation.h>
 #import <AudioToolbox/AudioToolbox.h>
 #import <CoreHaptics/CoreHaptics.h>
 #import <mach/mach.h>
+#import <os/lock.h>
 #import <UIKit/UIKit.h>
 #import <React/RCTBridgeModule.h>
 #import <React/RCTEventEmitter.h>
+#import <React/RCTViewManager.h>
 #import <UserNotifications/UserNotifications.h>
 #include "onnxruntime_c_api.h"
 
@@ -26,9 +29,66 @@
 #define AB_SR       32000
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
 #define AB_STEP     32000   // run every 1 s of new audio
-#define AB_SPEC_HOP 4000    // spectrogram columns, 8 per second
-#define AB_SPEC_N   1024    // samples per spectrogram column
-#define AB_SPEC_BINS 32     // log-spaced bins from 500 Hz to 12 kHz
+#define AB_SPEC_HOP 400     // spectrogram columns, 80 per second
+#define AB_SPEC_LOG2N 10
+#define AB_SPEC_N   ( 1 << AB_SPEC_LOG2N ) // samples per FFT, 31.25 Hz bins
+#define AB_SPEC_LO  8       // lowest bin shown, 250 Hz
+#define AB_SPEC_H   376     // bins shown, up to 12 kHz
+#define AB_SPEC_W   800     // columns shown, 10 s
+
+// The live spectrogram, shared between the module, which adds a column for
+// every AB_SPEC_HOP new samples, and AudioSpectrogram views, which draw it.
+// Intensities are kept in a ring of columns, each tinted with the color of the
+// top species in the run that covered it.
+static os_unfair_lock abSpecLock = OS_UNFAIR_LOCK_INIT;
+static uint8_t  abSpecLevel[AB_SPEC_W][AB_SPEC_H]; // 0..255, low frequencies first
+static uint32_t abSpecTint[AB_SPEC_W];             // 0xRRGGBB
+static NSInteger abSpecCount;                      // columns added so far
+static NSInteger abSpecTinted;                     // columns tinted so far
+
+static void ABSpectrogramReset( void )
+{
+  os_unfair_lock_lock( &abSpecLock );
+  memset( abSpecLevel, 0, sizeof( abSpecLevel ) );
+  abSpecCount = 0;
+  abSpecTinted = 0;
+  os_unfair_lock_unlock( &abSpecLock );
+}
+
+// One column from the AB_SPEC_N samples at `frame`: power of a Hann-windowed
+// FFT, mapped from -100..-20 dB to 0..1, with faint noise dropped and contrast
+// boosted as in Merlin.
+static void ABSpectrogramPush( const float *frame )
+{
+  static FFTSetup fft;
+  static float hann[AB_SPEC_N];
+  static float re[AB_SPEC_N / 2], im[AB_SPEC_N / 2], power[AB_SPEC_N / 2];
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{
+    fft = vDSP_create_fftsetup( AB_SPEC_LOG2N, kFFTRadix2 );
+    vDSP_hann_window( hann, AB_SPEC_N, vDSP_HANN_DENORM );
+  } );
+  float windowed[AB_SPEC_N];
+  vDSP_vmul( frame, 1, hann, 1, windowed, 1, AB_SPEC_N );
+  DSPSplitComplex split = { re, im };
+  vDSP_ctoz( (const DSPComplex *)windowed, 2, &split, 1, AB_SPEC_N / 2 );
+  vDSP_fft_zrip( fft, &split, 1, AB_SPEC_LOG2N, FFT_FORWARD );
+  vDSP_zvmags( &split, 1, power, 1, AB_SPEC_N / 2 );
+  uint8_t col[AB_SPEC_H];
+  for ( int b = 0; b < AB_SPEC_H; b++ ) {
+    // zrip doubles the DFT, so this matches a sine's amplitude^2 / 4.
+    float db = 10 * log10f( power[AB_SPEC_LO + b] / ( AB_SPEC_N * AB_SPEC_N ) + 1e-12f );
+    float v = ( db + 100 ) / 80;
+    col[b] = v > 0.1f ? (uint8_t)( 255 * powf( MIN( 1, ( v - 0.1f ) / 0.9f ), 1.5f ) ) : 0;
+  }
+  os_unfair_lock_lock( &abSpecLock );
+  NSInteger x = abSpecCount % AB_SPEC_W;
+  memcpy( abSpecLevel[x], col, AB_SPEC_H );
+  abSpecTint[x] = 0;
+  abSpecCount++;
+  abSpecTinted = MAX( abSpecTinted, abSpecCount - AB_SPEC_W );
+  os_unfair_lock_unlock( &abSpecLock );
+}
 
 @interface AudioBirdId : RCTEventEmitter <RCTBridgeModule, UNUserNotificationCenterDelegate>
 @end
@@ -40,6 +100,7 @@
   float            *_window;
   NSInteger         _filled;
   NSInteger         _sinceRun;
+  NSInteger         _specPending;
   float             _level;
   BOOL              _busy;
   dispatch_queue_t  _bufferQueue;
@@ -147,6 +208,7 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
   dispatch_sync( _inferQueue, ^{ self->_outputs = [outputs copy]; } );
+  ABSpectrogramReset( );
   if ( ![self loadModel] ) {
     reject( @"model", @"Could not load the audio model", nil );
     return;
@@ -169,6 +231,18 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
       resolve( @{ @"sampleRate": @( f.sampleRate ), @"channels": @( f.channelCount ) } );
     } );
   }];
+}
+
+// Tints the spectrogram columns added since the last call, which the latest
+// run covered, with "#rrggbb", or leaves them black for "".
+RCT_EXPORT_METHOD( tintSpectrogram:( NSString * )color )
+{
+  unsigned int rgb = 0;
+  if ( color.length == 7 ) [[NSScanner scannerWithString:[color substringFromIndex:1]] scanHexInt:&rgb];
+  os_unfair_lock_lock( &abSpecLock );
+  for ( NSInteger c = abSpecTinted; c < abSpecCount; c++ ) abSpecTint[c % AB_SPEC_W] = rgb;
+  abSpecTinted = abSpecCount;
+  os_unfair_lock_unlock( &abSpecLock );
 }
 
 RCT_EXPORT_METHOD( stop )
@@ -358,7 +432,11 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
                                                   channels:1
                                                interleaved:NO];
   _converter = [[AVAudioConverter alloc] initFromFormat:inFormat toFormat:_outFormat];
-  dispatch_sync( _bufferQueue, ^{ self->_filled = 0; self->_sinceRun = 0; } );
+  dispatch_sync( _bufferQueue, ^{
+    self->_filled = 0;
+    self->_sinceRun = 0;
+    self->_specPending = 0;
+  } );
   _lastAudio = CFAbsoluteTimeGetCurrent( );
 
   [[NSNotificationCenter defaultCenter] addObserver:self
@@ -426,6 +504,11 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     memcpy( self->_window + AB_WIN - count, s, count * sizeof( float ) );
     self->_filled = MIN( self->_filled + count, (NSInteger)AB_WIN );
     self->_sinceRun += count;
+    self->_specPending += count;
+    while ( self->_specPending >= AB_SPEC_HOP ) {
+      self->_specPending -= AB_SPEC_HOP;
+      ABSpectrogramPush( self->_window + AB_WIN - self->_specPending - AB_SPEC_N );
+    }
 
     float sumSq = 0;
     for ( NSInteger i = 0; i < count; i++ ) sumSq += s[i] * s[i];
@@ -434,7 +517,6 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     // Wait for a full window, and drop a step rather than queue up if the
     // previous inference is still running.
     if ( self->_filled < AB_WIN || self->_sinceRun < AB_STEP || self->_busy ) return;
-    NSArray *spectrogram = [self spectrogramOfLast:MIN( self->_sinceRun, (NSInteger)AB_WIN )];
     self->_sinceRun = 0;
     self->_busy = YES;
     NSData *window = [NSData dataWithBytes:self->_window length:AB_WIN * sizeof( float )];
@@ -451,49 +533,10 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
                          body:@{ @"scores": scores ?: @[],
                                  @"level": @( level ),
                                  @"inferMs": @( ms ),
-                                 @"spectrogram": spectrogram,
                                  @"memMB": @( [self footprintMB] ),
                                  @"error": inferError ?: [NSNull null] }];
     } );
   } );
-}
-
-// Spectrogram columns for the newest `samples` of the window, oldest first:
-// each is AB_SPEC_BINS Goertzel magnitudes of a Hann-windowed frame, mapped
-// from -100..-20 dB to 0..1.
-- (NSArray<NSArray<NSNumber *> *> *)spectrogramOfLast:(NSInteger)samples
-{
-  static float hann[AB_SPEC_N];
-  static float coeff[AB_SPEC_BINS];
-  static dispatch_once_t once;
-  dispatch_once( &once, ^{
-    for ( int i = 0; i < AB_SPEC_N; i++ ) {
-      hann[i] = 0.5f - 0.5f * cosf( 2 * M_PI * i / ( AB_SPEC_N - 1 ) );
-    }
-    for ( int b = 0; b < AB_SPEC_BINS; b++ ) {
-      double hz = 500 * pow( 12000.0 / 500, (double)b / ( AB_SPEC_BINS - 1 ) );
-      coeff[b] = (float)( 2 * cos( 2 * M_PI * hz / AB_SR ) );
-    }
-  } );
-  NSInteger cols = samples / AB_SPEC_HOP;
-  NSMutableArray *out = [NSMutableArray arrayWithCapacity:cols];
-  for ( NSInteger c = cols; c > 0; c-- ) {
-    const float *frame = _window + AB_WIN - c * AB_SPEC_HOP;
-    NSMutableArray *col = [NSMutableArray arrayWithCapacity:AB_SPEC_BINS];
-    for ( int b = 0; b < AB_SPEC_BINS; b++ ) {
-      float s1 = 0, s2 = 0;
-      for ( int i = 0; i < AB_SPEC_N; i++ ) {
-        float s0 = frame[i] * hann[i] + coeff[b] * s1 - s2;
-        s2 = s1;
-        s1 = s0;
-      }
-      float power = ( s1 * s1 + s2 * s2 - coeff[b] * s1 * s2 ) / ( AB_SPEC_N * AB_SPEC_N / 4.0f );
-      float db = 10 * log10f( power + 1e-12f );
-      [col addObject:@( MAX( 0.0f, MIN( 1.0f, ( db + 100 ) / 80 ) ) )];
-    }
-    [out addObject:col];
-  }
-  return out;
 }
 
 // What iOS counts against the app when deciding what to kill.
@@ -563,5 +606,78 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   ort->ReleaseValue( output );
   return scores;
 }
+
+@end
+
+// Draws the live spectrogram: the last 10 s, dark marks on white, low
+// frequencies at the bottom, redrawn each frame that new columns arrive.
+@interface AudioSpectrogramView : UIView
+@end
+
+@implementation AudioSpectrogramView {
+  CADisplayLink *_link;
+  NSInteger      _drawnCount;
+  NSInteger      _drawnTinted;
+}
+
+- (void)didMoveToWindow
+{
+  [super didMoveToWindow];
+  [_link invalidate];
+  _link = nil;
+  if ( !self.window ) return;
+  self.layer.magnificationFilter = kCAFilterLinear;
+  _drawnCount = -1;
+  _link = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick )];
+  _link.preferredFrameRateRange = CAFrameRateRangeMake( 30, 60, 60 );
+  [_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+}
+
+- (void)tick
+{
+  static uint32_t pixels[AB_SPEC_H * AB_SPEC_W];
+  os_unfair_lock_lock( &abSpecLock );
+  if ( abSpecCount == _drawnCount && abSpecTinted == _drawnTinted ) {
+    os_unfair_lock_unlock( &abSpecLock );
+    return;
+  }
+  _drawnCount = abSpecCount;
+  _drawnTinted = abSpecTinted;
+  for ( NSInteger x = 0; x < AB_SPEC_W; x++ ) {
+    // Oldest column on the left; columns not yet heard stay blank.
+    NSInteger c = abSpecCount - AB_SPEC_W + x;
+    const uint8_t *levels = c >= 0 ? abSpecLevel[c % AB_SPEC_W] : NULL;
+    uint32_t tint = c >= 0 ? abSpecTint[c % AB_SPEC_W] : 0;
+    int tr = ( tint >> 16 ) & 255, tg = ( tint >> 8 ) & 255, tb = tint & 255;
+    for ( int y = 0; y < AB_SPEC_H; y++ ) {
+      int v = levels ? levels[y] : 0;
+      int r = 255 - v * ( 255 - tr ) / 255;
+      int g = 255 - v * ( 255 - tg ) / 255;
+      int b = 255 - v * ( 255 - tb ) / 255;
+      // Little-endian RGBX, top row first.
+      pixels[( AB_SPEC_H - 1 - y ) * AB_SPEC_W + x] = r | g << 8 | b << 16 | 0xff000000u;
+    }
+  }
+  os_unfair_lock_unlock( &abSpecLock );
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB( );
+  CGContextRef ctx = CGBitmapContextCreate( pixels, AB_SPEC_W, AB_SPEC_H, 8, AB_SPEC_W * 4, space,
+                                            kCGImageAlphaNoneSkipLast | kCGBitmapByteOrder32Big );
+  CGImageRef image = CGBitmapContextCreateImage( ctx );
+  self.layer.contents = (__bridge id)image;
+  CGImageRelease( image );
+  CGContextRelease( ctx );
+  CGColorSpaceRelease( space );
+}
+
+@end
+
+@interface AudioSpectrogramManager : RCTViewManager
+@end
+
+@implementation AudioSpectrogramManager
+
+RCT_EXPORT_MODULE( )
+
+- (UIView *)view { return [AudioSpectrogramView new]; }
 
 @end

@@ -23,6 +23,7 @@ const { AudioBirdId } = NativeModules as {
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
+    tintSpectrogram: ( color: string ) => void;
   };
 };
 
@@ -43,16 +44,10 @@ interface ScoresEvent {
   inferMs: number;
   memMB: number;
   error: string | null;
-  spectrogram?: number[][];
 }
 export interface Heard {
   sp: AudioIdSpecies; lastHeard: number; best: number; count: number; color: string;
 }
-// Spectrogram columns, each colored by the top species heard in its run.
-// id counts up, so a column keeps its identity as the window scrolls.
-export interface SpectrogramColumn { id: number; bins: number[]; color: string | null }
-const SPECTROGRAM_COLUMNS = 80; // 10 s
-
 // One color per species heard this session, in the order first heard.
 const PALETTE = [
   "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
@@ -68,7 +63,6 @@ interface AudioIdState {
   level: number;
   inferMs: number;
   heard: Record<number, Heard>; // by taxon ID
-  spectrogram: SpectrogramColumn[];
   setup: AudioIdSetup | null;
   seen: Set<number> | null; // null when signed out
   setSeen: ( seen: Set<number> | null ) => void;
@@ -83,7 +77,6 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
   level: 0,
   inferMs: 0,
   heard: {},
-  spectrogram: [],
   setup: null,
   seen: null,
   setSeen: seen => set( { seen } ),
@@ -114,7 +107,6 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
 } ) );
 
 let runs: ScoresEvent[] = [];
-let nextColumnId = 0;
 
 const onScores = ( event: ScoresEvent ) => {
   const { scores, level } = event;
@@ -174,13 +166,8 @@ const onScores = ( event: ScoresEvent ) => {
   const color = top >= 0 && isHeard( scores[top] ) && sps[top]
     ? next[sps[top].taxonId]?.color || null
     : null;
-  const spectrogram = [
-    ...useAudioIdSession.getState( ).spectrogram,
-    ...( event.spectrogram || [] ).map( bins => {
-      nextColumnId += 1;
-      return { id: nextColumnId, bins, color };
-    } ),
-  ].slice( -SPECTROGRAM_COLUMNS );
+  // Spectrogram columns are colored by the top species heard in their run.
+  AudioBirdId?.tintSpectrogram( color || "" );
   if ( alerts.length > 0 ) {
     AudioBirdId?.vibrate( )
       .then( r => {
@@ -196,7 +183,6 @@ const onScores = ( event: ScoresEvent ) => {
   }
   useAudioIdSession.setState( {
     current: scores,
-    spectrogram,
     level,
     inferMs: event.inferMs,
     heard: next,

@@ -7,13 +7,12 @@ import {
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React, { useEffect, useMemo } from "react";
-import Svg, { G, Path, Rect } from "react-native-svg";
+import type { ViewProps } from "react-native";
+import { requireNativeComponent } from "react-native";
 import { useCurrentUser, useTaxon } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
-import colors from "styles/tailwindColors";
 
 import type { AudioIdSpecies } from "./audioIdModel";
-import type { SpectrogramColumn } from "./audioIdSession";
 import useAudioIdSession, { heardIn } from "./audioIdSession";
 
 // Animal classes the model covers, for asking which of them the user has seen.
@@ -76,61 +75,21 @@ const TaxonThumb = ( { taxonId }: { taxonId: number } ) => {
     );
 };
 
-// One spectrogram column, drawn as a path per opacity level rather than a
-// rect per bin, and memoized so only new columns render as the window scrolls.
-const OPACITY_LEVELS = 4;
-const SpectrogramColumnView = React.memo( ( { col }: { col: SpectrogramColumn } ) => {
-  const paths: string[] = Array( OPACITY_LEVELS + 1 ).fill( "" );
-  const bins = col.bins.length;
-  col.bins.forEach( ( v, b ) => {
-    // Faint noise is dropped and contrast boosted, as in Merlin.
-    const level = v > 0.1
-      ? Math.round( ( ( v - 0.1 ) / 0.9 ) ** 1.5 * OPACITY_LEVELS )
-      : 0;
-    if ( level > 0 ) paths[level] += `M${col.id} ${bins - 1 - b}h1.05v1.05h-1.05z`;
-  } );
-  return (
-    <G>
-      {paths.map( ( d, level ) => d && (
-        <Path
-          // eslint-disable-next-line react/no-array-index-key
-          key={level}
-          d={d}
-          fill={col.color || colors.black}
-          opacity={level / OPACITY_LEVELS}
-        />
-      ) )}
-    </G>
-  );
-} );
-
 // The last 10 s of sound, Merlin-style: dark marks on a full-width white
 // strip, low frequencies at the bottom, each moment tinted with the color of
-// the species identified then.
-const Spectrogram = ( { columns }: { columns: SpectrogramColumn[] } ) => {
-  const bins = columns[0]?.bins.length || 1;
-  const lastId = columns[columns.length - 1]?.id || 0;
-  return (
-    <View className="mt-4 -mx-5 border-y border-lightGray">
-      <Svg
-        width="100%"
-        height={140}
-        viewBox={`0 0 80 ${bins}`}
-        preserveAspectRatio="none"
-      >
-        <Rect x={0} y={0} width={80} height={bins} fill={colors.white} />
-        <G transform={`translate(${79 - lastId} 0)`}>
-          {columns.map( col => <SpectrogramColumnView key={col.id} col={col} /> )}
-        </G>
-      </Svg>
-    </View>
-  );
-};
+// the species identified then. Drawn natively from the microphone audio.
+const AudioSpectrogram = requireNativeComponent<ViewProps>( "AudioSpectrogram" );
+const SPECTROGRAM_STYLE = { height: 140 };
+const Spectrogram = ( ) => (
+  <View className="mt-4 -mx-5 border-y border-lightGray">
+    <AudioSpectrogram style={SPECTROGRAM_STYLE} />
+  </View>
+);
 
 const AudioId = ( ) => {
   const navigation = useNavigation( );
   const {
-    listening, error, current, spectrogram, heard, setup, setSeen, start,
+    listening, error, current, heard, setup, setSeen, start,
     stop,
   } = useAudioIdSession( );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
@@ -201,7 +160,7 @@ const AudioId = ( ) => {
           : start}
       />
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
-      {listening && <Spectrogram columns={spectrogram} />}
+      {listening && <Spectrogram />}
       {listening && current.length === 0 && (
         <Body3 className="mt-1">Listening… first result after 5 seconds</Body3>
       )}
