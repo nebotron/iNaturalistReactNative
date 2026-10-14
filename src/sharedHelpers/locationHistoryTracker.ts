@@ -154,8 +154,8 @@ export const getLatestTrackedLocation = async ( ): Promise<{
   latitude: number;
   longitude: number;
 } | null> => {
-  if ( !isLocationHistoryTrackingEnabled( ) ) return null;
   try {
+    if ( !isLocationHistoryTrackingEnabled( ) ) return null;
     const realm = await getRealmInstance( );
     await drainPendingFixes( realm );
     const latest = realm.objects<LocationHistoryPoint>( "LocationHistoryPoint" )
