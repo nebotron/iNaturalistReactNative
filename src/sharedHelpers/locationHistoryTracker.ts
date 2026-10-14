@@ -148,6 +148,27 @@ const drainPendingFixes = async ( intoRealm?: Realm ) => {
 // user just took) pull in the newest fixes rather than waiting for the timer.
 export const drainTrackedLocationFixes = drainPendingFixes;
 
+// The newest tracked fix, for callers that want a current location without
+// waiting on a fresh GPS fix. Only used while tracking is on, so it's recent.
+export const getLatestTrackedLocation = async ( ): Promise<{
+  latitude: number;
+  longitude: number;
+} | null> => {
+  if ( !isLocationHistoryTrackingEnabled( ) ) return null;
+  try {
+    const realm = await getRealmInstance( );
+    await drainPendingFixes( realm );
+    const latest = realm.objects<LocationHistoryPoint>( "LocationHistoryPoint" )
+      .sorted( "recordedAt", true )[0];
+    return latest
+      ? { latitude: latest.latitude, longitude: latest.longitude }
+      : null;
+  } catch ( error ) {
+    logger.warn( "Failed to read latest tracked location", error );
+    return null;
+  }
+};
+
 const startDraining = ( ) => {
   if ( drainInterval ) return;
   drainInterval = setInterval( ( ) => {

@@ -19,6 +19,7 @@ import * as React from "react";
 import type { LatLng } from "react-native-maps";
 
 import fetchCoarseUserLocation from "../sharedHelpers/fetchCoarseUserLocation";
+import { getLatestTrackedLocation } from "../sharedHelpers/locationHistoryTracker";
 import { DEFAULT_NEARBY_RADIUS_KM } from "../sharedHelpers/nearbyRadius";
 
 export type { ExploreTaxonFilter };
@@ -466,7 +467,7 @@ function isValidHour( hour: number ): boolean {
 async function defaultExploreLocation(
   nearbyRadiusKm: number = DEFAULT_NEARBY_RADIUS_KM,
 ): Promise<DefaultLocation> {
-  const location = await fetchCoarseUserLocation( );
+  const location = await getLatestTrackedLocation( ) ?? await fetchCoarseUserLocation( );
   if ( !location || !location.latitude ) {
     return {
       placeMode: PLACE_MODE.WORLDWIDE,
