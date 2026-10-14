@@ -1,15 +1,16 @@
+import "tests/helpers/mockMortalForIntegration";
+
+import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import {
+  fireEvent,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react-native";
 import initI18next from "i18n/initI18next";
-import * as rnImagePicker from "react-native-image-picker";
-import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 import {
-  mockInteractionManagerRunAfterInteractions,
   navigateToPhotoImporterFromMyObs,
 } from "tests/helpers/addObsBottomSheet";
-import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
 import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
@@ -43,82 +44,134 @@ afterAll( uniqueRealmAfterAll );
 beforeAll( async () => {
   await initI18next();
   jest.useFakeTimers( );
-  mockInteractionManagerRunAfterInteractions( );
 } );
 
-const mockAsset = [{
-  uri: faker.image.url( ),
-  fileName: `${faker.string.uuid( )}.jpg`,
-}];
+const mockNode1 = {
+  id: "MOCK-ID-1",
+  type: "image",
+  group_name: "Camera Roll",
+  image: {
+    filename: "IMG_0001.jpg",
+    filepath: "/path/to/IMG_0001.jpg",
+    extension: "jpg",
+    uri: "file:///path/to/IMG_0001.jpg",
+    height: 1920,
+    width: 1080,
+    fileSize: 123456,
+    playableDuration: NaN,
+    orientation: 1,
+  },
+  timestamp: 1234567890,
+  location: null,
+};
 
-const mockMultipleAssets = [{
-  uri: faker.image.url( ),
-  fileName: `${faker.string.uuid( )}.jpg`,
-}, {
-  uri: faker.image.url( ),
-  fileName: `${faker.string.uuid( )}.jpg`,
-}];
+const mockNode2 = {
+  ...mockNode1,
+  id: "MOCK-ID-2",
+  image: {
+    ...mockNode1.image,
+    filename: "IMG_0002.jpg",
+    filepath: "/path/to/IMG_0002.jpg",
+    uri: "file:///path/to/IMG_0002.jpg",
+  },
+};
 
-jest.mock( "react-native-image-picker", ( ) => ( {
-  launchImageLibrary: jest.fn( ),
-} ) );
+const makeGetPhotosResult = nodes => ( {
+  page_info: { end_cursor: undefined, has_next_page: false },
+  edges: nodes.map( node => ( { node } ) ),
+} );
 
 describe( "PhotoLibrary navigation", ( ) => {
   global.withAnimatedTimeTravelEnabled( { skipFakeTimers: true } );
 
   beforeEach( ( ) => {
     setStoreStateLayout( {
-      screenAfterPhotoEvidence: SCREEN_AFTER_PHOTO_EVIDENCE.OBS_EDIT,
       isDefaultMode: false,
       isAllAddObsOptionsMode: true,
     } );
   } );
 
   it( "advances to GroupPhotos when multiple photos are selected", async ( ) => {
-    jest.spyOn( rnImagePicker, "launchImageLibrary" ).mockImplementation(
-      ( ) => ( {
-        assets: mockMultipleAssets,
-      } ),
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+      makeGetPhotosResult( [mockNode1, mockNode2] ),
     );
     renderApp( );
     await navigateToPhotoImporterFromMyObs( );
+
     await waitFor( ( ) => {
-      expect( screen.getByText( /Group Photos/ ) ).toBeVisible( );
+      expect(
+        screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ),
+      ).toBeTruthy( );
+    }, { timeout: 10_000 } );
+
+    fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
+    fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode2.image.uri}` ) );
+    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
   } );
 
-  it( "advances to ObsEdit when one photo is selected", async ( ) => {
-    jest.spyOn( rnImagePicker, "launchImageLibrary" ).mockImplementation(
-      ( ) => ( {
-        assets: mockAsset,
-      } ),
+  it( "advances to GroupPhotos when one photo is selected", async ( ) => {
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+      makeGetPhotosResult( [mockNode1] ),
     );
     renderApp( );
     await navigateToPhotoImporterFromMyObs( );
-    await waitFor( () => {
-      expect( screen.getByText( /New Observation/ ) ).toBeVisible( );
+
+    await waitFor( ( ) => {
+      expect(
+        screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ),
+      ).toBeTruthy( );
+    }, { timeout: 10_000 } );
+
+    fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
+    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
     }, { timeout: 10_000 } );
   } );
-} );
 
-describe( "PhotoLibrary navigation when suggestions screen is preferred next screen", () => {
-  global.withAnimatedTimeTravelEnabled( { skipFakeTimers: true } );
-
-  beforeEach( () => {
-    setStoreStateLayout( {
-      screenAfterPhotoEvidence: SCREEN_AFTER_PHOTO_EVIDENCE.SUGGESTIONS,
-      isDefaultMode: false,
-      isAllAddObsOptionsMode: true,
-    } );
-  } );
-  it( "advances to Suggestions when one photo is selected", async () => {
-    jest.spyOn( rnImagePicker, "launchImageLibrary" ).mockImplementation( () => ( {
-      assets: mockAsset,
-    } ) );
-    renderApp();
+  it( "keeps the bottom tab bar on the photo picker and on GroupPhotos", async ( ) => {
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+      makeGetPhotosResult( [mockNode1] ),
+    );
+    renderApp( );
     await navigateToPhotoImporterFromMyObs( );
-    await waitFor( () => {
-      expect( screen.getByText( /Add an ID Later/ ) ).toBeVisible( );
+    expect( screen.getByTestId( "CustomTabBar" ) ).toBeVisible( );
+
+    await waitFor( ( ) => {
+      expect(
+        screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ),
+      ).toBeTruthy( );
+    }, { timeout: 10_000 } );
+    fireEvent.press( screen.getByTestId( `PhotoGallery.${mockNode1.image.uri}` ) );
+    fireEvent.press( screen.getByTestId( "PhotoGallery.done" ) );
+
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( "GroupPhotos.list" ) ).toBeVisible( );
+    }, { timeout: 10_000 } );
+    expect( screen.getByTestId( "CustomTabBar" ) ).toBeVisible( );
+  } );
+
+  it( "returns to an import the user left via another tab", async ( ) => {
+    jest.spyOn( CameraRoll, "getPhotos" ).mockResolvedValue(
+      makeGetPhotosResult( [mockNode1] ),
+    );
+    renderApp( );
+    await navigateToPhotoImporterFromMyObs( );
+
+    const tabBar = screen.getByTestId( "CustomTabBar" );
+    fireEvent.press( within( tabBar ).getByLabelText( "Explore" ) );
+    await waitFor( ( ) => {
+      expect( screen.queryByTestId( "PhotoLibrary" ) ).toBeNull( );
+    }, { timeout: 10_000 } );
+
+    fireEvent.press( within( tabBar ).getByTestId( "NavButton.personIcon" ) );
+    await waitFor( ( ) => {
+      expect( screen.getByTestId( "PhotoLibrary" ) ).toBeTruthy( );
     }, { timeout: 10_000 } );
   } );
 } );

@@ -1,0 +1,579 @@
+import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
+import {
+  CameraRoll,
+  iosRequestReadWriteGalleryPermission,
+} from "@react-native-camera-roll/camera-roll";
+import DevicePhotoGrid from "components/PhotoImporter/DevicePhotoGrid";
+import type { PhotoGalleryListItem } from "components/PhotoImporter/helpers/photoGallerySections";
+import buildSectionedGalleryItems from "components/PhotoImporter/helpers/photoGallerySections";
+import { isVideoNode } from "components/PhotoImporter/helpers/videoImportHelpers";
+import PhotoGalleryImage from "components/PhotoImporter/PhotoGalleryImage";
+import { Body2 } from "components/SharedComponents";
+import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
+import ImportProgressBanner from "components/SharedComponents/ImportProgressBanner";
+import { View } from "components/styledComponents";
+import { RealmContext } from "providers/contexts";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  ActivityIndicator,
+  Platform,
+  Text,
+} from "react-native";
+import { Switch } from "react-native-paper";
+import type Realm from "realm";
+import type { RealmObservation } from "realmModels/types";
+import { formatDateStringFromTimestamp } from "sharedHelpers/dateAndTime";
+import {
+  getDevicePhotoUrisFromObservation,
+  getPreviouslyUploadedDevicePhotoUrisSet,
+  recordUploadedDevicePhotoUris,
+} from "sharedHelpers/duplicateUploadedDevicePhotos";
+import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import {
+  fileExtension,
+  summarizeTypes,
+  totalMegabytes,
+} from "sharedHelpers/importedFileTypes";
+import { log } from "sharedHelpers/logger";
+import {
+  clearPhotoImportMarker,
+  markPhotoImportStarted,
+  updatePhotoImportProgress,
+} from "sharedHelpers/photoImportMarker";
+import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
+import { useGridLayout, useTranslation } from "sharedHooks";
+import colors from "styles/tailwindColors";
+
+type PhotoNode = PhotoIdentifier["node"];
+
+interface Props {
+  maxPhotos: number;
+  onCancel: () => void;
+  // onProgress reports how many of the selected items have finished importing
+  // and how many of those failed, so the overlay can show real progress
+  // instead of an open-ended spinner. An import that only hands the work off —
+  // Group Photos copies its photos in the background, filling its grid in as
+  // they land — says so, and owns the progress reporting from there.
+  onDone: (
+    selectedNodes: PhotoNode[],
+    onProgress?: ( completed: number, failed: number ) => void
+  ) => Promise<{ continuesInBackground?: boolean } | void>;
+}
+
+const { useRealm } = RealmContext;
+
+const logger = log.extend( "PhotoGallery" );
+
+const PAGE_SIZE = 60;
+
+type GalleryInclude = NonNullable<Parameters<typeof CameraRoll.getPhotos>[0]["include"]>;
+
+const GALLERY_INCLUDE: GalleryInclude = Platform.OS === "android"
+  ? ["filename", "fileSize", "filepath", "imageSize", "location"]
+  : ["filename", "fileSize", "imageSize", "location"];
+
+const getDeviceUriFromNode = ( node: PhotoNode ): string | null => {
+  if ( Platform.OS === "ios" ) {
+    if ( !node.id ) {
+      return null;
+    }
+    return normalizeDevicePhotoUri( `ph://${node.id}` );
+  }
+  return normalizeDevicePhotoUri( node.image.uri );
+};
+
+const getSelectionKey = ( node: PhotoNode ) => node.image.uri;
+
+const PhotoGallery = ( {
+  maxPhotos,
+  onCancel,
+  onDone,
+}: Props ) => {
+  const { t } = useTranslation( );
+  const realm = useRealm( );
+  const {
+    gridItemStyle,
+    gridItemWidth,
+    numColumns,
+  } = useGridLayout( undefined, "threeUp" );
+
+  const [photos, setPhotos] = useState<PhotoNode[]>( [] );
+  const [hasNextPage, setHasNextPage] = useState( true );
+  const [loading, setLoading] = useState( true );
+  const [endCursor, setEndCursor] = useState<string | undefined>( undefined );
+  const [selectedUris, setSelectedUris] = useState<Set<string>>( new Set( ) );
+  const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
+  const [hideImported, setHideImported] = useState( true );
+  const [importingCount, setImportingCount] = useState( 0 );
+  const [importedCount, setImportedCount] = useState( 0 );
+  const [failedCount, setFailedCount] = useState( 0 );
+  const isFetchingRef = useRef( false );
+  const importingRef = useRef( false );
+  // Photos the user removed from a Group Photos import previously (see
+  // removedGroupPhotoUris.ts) — the device deletion may have silently failed
+  // (iOS 26's PHPhotoLibrary confirmation bug), so they count as saved and are
+  // hidden along with them unless the user unchecks Hide Saved.
+  const removedGroupPhotoUrisRef = useRef<Set<string>>( new Set( getRemovedGroupPhotoUris( ) ) );
+
+  // Kept up to date while the screen is open rather than read once on mount:
+  // an import saves its observations in the background after the user is
+  // already back on My Observations (see GroupPhotosContainer), and an upload
+  // indexes its photos later still, so photos can become "saved" with this
+  // screen sitting open in the tab stack. Additions are folded in one change
+  // at a time, since recomputing the whole set means walking every saved
+  // observation.
+  useEffect( ( ) => {
+    setImportedUris( getPreviouslyUploadedDevicePhotoUrisSet( realm ) );
+
+    const addUris = ( uris: ( string | null )[] ) => {
+      const newUris = uris.filter( ( uri ): uri is string => !!uri );
+      if ( newUris.length === 0 ) return;
+      setImportedUris( prev => {
+        if ( newUris.every( uri => prev.has( uri ) ) ) return prev;
+        return new Set( [...prev, ...newUris] );
+      } );
+    };
+
+    const uploadedRecords = realm.objects( "UploadedDevicePhotoUri" );
+    const observations = realm.objects<RealmObservation>( "Observation" );
+    const uploadedListener: Realm.CollectionChangeCallback<
+      Realm.Object
+    > = ( collection, changes ) => {
+      addUris( [...changes.insertions, ...changes.newModifications].map(
+        index => normalizeDevicePhotoUri(
+          ( collection[index] as unknown as { uri?: string } )?.uri,
+        ),
+      ) );
+    };
+    const observationListener: Realm.CollectionChangeCallback<
+      RealmObservation
+    > = ( collection, changes ) => {
+      addUris( [...changes.insertions, ...changes.newModifications].flatMap(
+        index => ( collection[index]
+          ? getDevicePhotoUrisFromObservation( collection[index] )
+          : [] ),
+      ) );
+    };
+    uploadedRecords.addListener( uploadedListener );
+    observations.addListener( observationListener );
+    return ( ) => {
+      uploadedRecords.removeListener( uploadedListener );
+      observations.removeListener( observationListener );
+    };
+  }, [realm] );
+
+  const loadPhotos = useCallback( async ( after?: string ) => {
+    if ( isFetchingRef.current ) {
+      return;
+    }
+    isFetchingRef.current = true;
+    try {
+      const result = await CameraRoll.getPhotos( {
+        first: PAGE_SIZE,
+        assetType: "All",
+        after,
+        // "location" is PHAsset.location, which is where a location set by
+        // hand in the Photos app lives — the photo file itself is never
+        // rewritten, so that location is not in the EXIF we import.
+        // Each included field is resolved per asset, so asking for one that is
+        // never read costs a page of the grid for nothing: "filepath" is only
+        // ever consulted on Android, where it is what bypasses MediaStore's
+        // GPS-stripping (see PhotoLibrary and videoImportHelpers).
+        include: GALLERY_INCLUDE,
+      } );
+      const nodes = result.edges.map( e => e.node );
+      setPhotos( prev => {
+        if ( !after ) return nodes;
+        // CameraRoll's cursor-based pages overlap when the library changes
+        // mid-pagination — which it does constantly here, since importing
+        // deletes device photos and rewrites asset locations. A duplicated
+        // node meant two concurrent copies racing to write the same
+        // destination file on import, and both failing with the opaque
+        // "PHPhotosErrorDomain error -1".
+        const seen = new Set( prev.map( getSelectionKey ) );
+        return [
+          ...prev,
+          ...nodes.filter( node => !seen.has( getSelectionKey( node ) ) ),
+        ];
+      } );
+      setHasNextPage( result.page_info.has_next_page );
+      setEndCursor( result.page_info.end_cursor );
+    } catch {
+      // permissions denied or no photos available
+    } finally {
+      isFetchingRef.current = false;
+      setLoading( false );
+    }
+  }, [] );
+
+  useEffect( ( ) => {
+    if ( Platform.OS === "ios" ) {
+      iosRequestReadWriteGalleryPermission( ).then( status => {
+        if ( status === "granted" || status === "limited" ) {
+          loadPhotos( );
+        } else {
+          onCancel( );
+        }
+      } ).catch( ( ) => loadPhotos( ) );
+    } else {
+      loadPhotos( );
+    }
+  }, [loadPhotos, onCancel] );
+
+  const loadMore = useCallback( ( ) => {
+    if ( hasNextPage && !isFetchingRef.current ) {
+      loadPhotos( endCursor );
+    }
+  }, [hasNextPage, endCursor, loadPhotos] );
+
+  const toggleSelection = useCallback( ( node: PhotoNode ) => {
+    const key = getSelectionKey( node );
+    setSelectedUris( prev => {
+      const next = new Set( prev );
+      if ( next.has( key ) ) {
+        next.delete( key );
+      } else if ( next.size < maxPhotos ) {
+        next.add( key );
+      }
+      return next;
+    } );
+  }, [maxPhotos] );
+
+  // Importing can take tens of seconds (an iCloud-offloaded asset retries the
+  // download with backoff) and this screen stays up the whole time, so without
+  // a guard every extra tap starts another import of the same assets. Those
+  // concurrent imports then race on the same destination file, which fails
+  // *every* copy with the opaque "PHPhotosErrorDomain error -1" — so nothing
+  // imports at all and the check looks dead rather than merely slow.
+  const handleDone = useCallback( async ( ) => {
+    if ( importingRef.current ) {
+      logger.info( "Done tapped while an import was already running; ignoring" );
+      return;
+    }
+    const selected = photos.filter( node => selectedUris.has( getSelectionKey( node ) ) );
+    importingRef.current = true;
+    setImportingCount( selected.length );
+    setImportedCount( 0 );
+    setFailedCount( 0 );
+    const startedAt = Date.now( );
+    // What the import was actually handed. A stalled or slow import says
+    // nothing about *which* files it was chewing on otherwise, and "all five
+    // were HEIC" or "one was a 90MB video" is the first thing worth knowing.
+    const fileTypes = summarizeTypes( selected.map( node => ( isVideoNode( node )
+      ? "video"
+      : fileExtension( node.image.filename ) ) ) );
+    const megabytes = totalMegabytes( selected.map( node => node.image.fileSize ) );
+    // An import the app never comes back from — see photoImportMarker.ts. The
+    // marker is reported by the next launch, not here.
+    markPhotoImportStarted( selected.length );
+    // Three imports in the app log logged the tap above and no "settled" line
+    // at all before the app was relaunched — the import wedged on one asset and
+    // the log could only say that, not where or how far in. Report the progress
+    // counts once the import is far past the ~300ms a local batch takes, so a
+    // wedge is distinguishable from a slow iCloud download that is still
+    // advancing. One line per stuck import, none on the happy path.
+    let settledCount = 0;
+    let failedSoFar = 0;
+    let continuesInBackground = false;
+    const stallTimer = setTimeout( ( ) => {
+      logger.errorWithExtra( "photo_import_stalled", {
+        selected: selected.length,
+        settled: settledCount,
+        failed: failedSoFar,
+        ms: Date.now( ) - startedAt,
+        fileTypes,
+        megabytes,
+      } );
+    }, 30000 );
+    try {
+      const result = await onDone( selected, ( completed, failed ) => {
+        settledCount = completed;
+        failedSoFar = failed;
+        updatePhotoImportProgress( completed, failed );
+        setImportedCount( completed );
+        setFailedCount( failed );
+      } );
+      continuesInBackground = !!result?.continuesInBackground;
+      // The tap used to be bracketed by a line on the way in and a line on the
+      // way out, which was 138 of the app log's 889 entries over five days and
+      // every one of them said the same thing: a local batch settles in ~150ms.
+      // A wedge is already covered from both ends — photo_import_stalled below
+      // fires at 30s, and an import the process never returns from is reported
+      // by the next launch's marker — so only a slow import that did finish is
+      // news.
+      const ms = Date.now( ) - startedAt;
+      if ( ms > 3000 && !continuesInBackground ) {
+        logger.infoWithExtra( "photo_import_slow", {
+          selected: selected.length,
+          ms,
+          fileTypes,
+          megabytes,
+        } );
+      }
+    } finally {
+      // The import reached an end, however badly, so it is not one of the ones
+      // that vanish with the process. An import still running in the
+      // background owns its own marker and stall reporting.
+      if ( !continuesInBackground ) {
+        clearPhotoImportMarker( );
+      }
+      clearTimeout( stallTimer );
+      importingRef.current = false;
+      setImportingCount( 0 );
+    }
+  }, [photos, selectedUris, onDone] );
+
+  // Record the selected photos as already saved without importing them, so the
+  // "Hide Saved" toggle hides them from now on. Useful for photos the user has
+  // already uploaded some other way, or never wants offered for import again.
+  const markSelectedAsSaved = useCallback( ( ) => {
+    const deviceUris = photos
+      .filter( node => selectedUris.has( getSelectionKey( node ) ) )
+      .map( getDeviceUriFromNode )
+      .filter( ( uri ): uri is string => !!uri );
+    recordUploadedDevicePhotoUris( realm, deviceUris );
+    setImportedUris( prev => new Set( [...prev, ...deviceUris] ) );
+    setSelectedUris( new Set( ) );
+  }, [photos, realm, selectedUris] );
+
+  const isImported = useCallback( ( node: PhotoNode ): boolean => {
+    const uri = getDeviceUriFromNode( node );
+    if ( !uri ) {
+      return false;
+    }
+    return importedUris.has( uri ) || removedGroupPhotoUrisRef.current.has( uri );
+  }, [importedUris] );
+
+  const hasImportedPhotos = importedUris.size > 0;
+
+  // Photos newer than the most recently imported one, i.e. everything
+  // that's shown up since the last time photos were imported from here.
+  const photosSinceLastImport = useMemo( ( ) => {
+    if ( !hasImportedPhotos ) {
+      return [];
+    }
+    const lastImportedIndex = photos.findIndex( isImported );
+    if ( lastImportedIndex === -1 ) {
+      return photos;
+    }
+    return photos.slice( 0, lastImportedIndex );
+  }, [photos, isImported, hasImportedPhotos] );
+
+  const selectSinceLastImport = useCallback( ( ) => {
+    setSelectedUris( prev => {
+      const next = new Set( prev );
+      for ( let i = 0; i < photosSinceLastImport.length; i += 1 ) {
+        if ( next.size >= maxPhotos ) {
+          break;
+        }
+        next.add( getSelectionKey( photosSinceLastImport[i] ) );
+      }
+      return next;
+    } );
+  }, [photosSinceLastImport, maxPhotos] );
+
+  const visiblePhotos = useMemo(
+    ( ) => ( hideImported
+      ? photos.filter( node => !isImported( node ) )
+      : photos ),
+    [photos, hideImported, isImported],
+  );
+
+  const galleryItems = useMemo(
+    ( ) => buildSectionedGalleryItems( visiblePhotos, getSelectionKey, hasNextPage ),
+    [visiblePhotos, hasNextPage],
+  );
+
+  // The last section is withheld while more pages remain, since it may
+  // still grow or split further. If that leaves nothing to show, the list
+  // is empty and onEndReached never fires, so keep fetching automatically
+  // until a finalized section appears or there are no more photos.
+  useEffect( ( ) => {
+    if ( !loading && hasNextPage && photos.length > 0 && galleryItems.length === 0 ) {
+      loadMore( );
+    }
+  }, [loading, hasNextPage, photos.length, galleryItems.length, loadMore] );
+
+  const toggleSectionSelection = useCallback( ( nodes: PhotoNode[] ) => {
+    setSelectedUris( prev => {
+      const next = new Set( prev );
+      const allSelected = nodes.every( node => next.has( getSelectionKey( node ) ) );
+      if ( allSelected ) {
+        nodes.forEach( node => next.delete( getSelectionKey( node ) ) );
+      } else {
+        for ( let i = 0; i < nodes.length; i += 1 ) {
+          if ( next.size >= maxPhotos ) {
+            break;
+          }
+          next.add( getSelectionKey( nodes[i] ) );
+        }
+      }
+      return next;
+    } );
+  }, [maxPhotos] );
+
+  const renderHeader = useCallback( ( item: PhotoGalleryListItem ) => {
+    if ( item.type !== "header" ) return null;
+    const allSelected = item.nodes.length > 0
+      && item.nodes.every( node => selectedUris.has( getSelectionKey( node ) ) );
+    return (
+      <View className="px-3 py-1 flex-row items-center justify-between">
+        <Body2>
+          {`${
+            formatDateStringFromTimestamp( item.timestamp ).replace( "T", " " )
+          } (${item.nodes.length})`}
+        </Body2>
+        <INatIconButton
+          icon="checkmark"
+          onPress={( ) => toggleSectionSelection( item.nodes )}
+          accessibilityLabel={allSelected
+            ? t( "Deselect-all-photos" )
+            : t( "Select-all-photos" )}
+          size={18}
+          color={allSelected
+            ? colors.inatGreen
+            : colors.darkGray}
+          testID={`PhotoGallery.section.${item.id}`}
+        />
+      </View>
+    );
+  }, [selectedUris, toggleSectionSelection, t] );
+
+  const renderPhoto = useCallback( ( item: PhotoGalleryListItem ) => {
+    if ( item.type !== "photo" ) return null;
+    const { node } = item;
+    const key = getSelectionKey( node );
+    return (
+      <PhotoGalleryImage
+        node={node}
+        selectionKey={key}
+        selected={selectedUris.has( key )}
+        imported={isImported( node )}
+        isVideo={isVideoNode( node )}
+        cellWidth={gridItemWidth}
+        gridItemStyle={gridItemStyle}
+        onPress={toggleSelection}
+      />
+    );
+  }, [
+    selectedUris,
+    isImported,
+    toggleSelection,
+    gridItemStyle,
+    gridItemWidth,
+  ] );
+
+  const getPhotoUri = useCallback( ( item: PhotoGalleryListItem ) => ( item.type === "photo"
+    ? item.node.image.uri
+    : undefined ), [] );
+
+  if ( loading ) {
+    return (
+      <View className="flex-1 justify-center items-center">
+        <ActivityIndicator />
+      </View>
+    );
+  }
+
+  const selectedCount = selectedUris.size;
+  const importing = importingCount > 0;
+
+  return (
+    <View className="flex-1">
+      <View
+        className="flex-row items-center px-2 py-1 gap-1"
+      >
+        <INatIconButton
+          icon="close"
+          onPress={onCancel}
+          accessibilityLabel={t( "Cancel" )}
+          size={22}
+          color={colors.darkGray}
+        />
+        {hasImportedPhotos && (
+          <View className="flex-row items-center gap-2 px-2">
+            { /* eslint-disable-next-line react-native/no-inline-styles */ }
+            <Text style={{ fontSize: 12, color: colors.darkGray }}>
+              {t( "Hide-already-saved-photos" )}
+            </Text>
+            <Switch
+              value={hideImported}
+              onValueChange={setHideImported}
+              color={colors.inatGreen}
+              testID="PhotoGallery.hideImported"
+            />
+          </View>
+        )}
+        <View className="flex-1" />
+        {hasImportedPhotos && (
+          <INatIconButton
+            icon="date"
+            onPress={selectSinceLastImport}
+            accessibilityLabel={t( "Select-photos-since-last-import" )}
+            disabled={photosSinceLastImport.length === 0}
+            size={22}
+            color={colors.darkGray}
+            testID="PhotoGallery.selectSinceLastImport"
+          />
+        )}
+        <INatIconButton
+          icon="checkmark-circle"
+          onPress={markSelectedAsSaved}
+          accessibilityLabel={t( "Mark-photos-as-already-saved" )}
+          disabled={selectedCount === 0 || importing}
+          size={22}
+          color={colors.darkGray}
+          testID="PhotoGallery.markAsSaved"
+        />
+        <INatIconButton
+          icon="checkmark"
+          onPress={handleDone}
+          accessibilityLabel={t( "DONE" )}
+          disabled={selectedCount === 0 || importing}
+          size={22}
+          color={colors.inatGreen}
+          testID="PhotoGallery.done"
+        />
+      </View>
+      <DevicePhotoGrid
+        items={galleryItems}
+        numColumns={numColumns}
+        itemWidth={gridItemWidth}
+        renderHeader={renderHeader}
+        renderPhoto={renderPhoto}
+        getPhotoUri={getPhotoUri}
+        onEndReached={loadMore}
+        extraData={{ selectedUris, importedUris }}
+      />
+      {/* Swapping the small header check for an equally small spinner was too
+          easy to miss on an import that runs for tens of seconds, which is the
+          whole window in which the screen looks dead. Cover the grid instead,
+          so the wait is unmistakable and taps can't land on the photos
+          underneath. */}
+      {importing && (
+        <View
+          className="absolute inset-0 justify-center items-center px-6 bg-black/60"
+          testID="PhotoGallery.importingOverlay"
+        >
+          <ImportProgressBanner
+            title={t( "Importing-X-photos", { count: importingCount } )}
+            detail={t( "X-of-Y", { x: importedCount, y: importingCount } )}
+            warning={failedCount > 0
+              ? t( "x-failed", { count: failedCount } )
+              : undefined}
+            completed={importedCount}
+            total={importingCount}
+          />
+        </View>
+      )}
+    </View>
+  );
+};
+
+export default PhotoGallery;

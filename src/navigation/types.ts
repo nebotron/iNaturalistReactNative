@@ -30,6 +30,10 @@ interface LegacyExploreParams {
   project?: { id?: number; title?: string };
   place?: { id?: number; display_name?: string } | null;
   worldwide?: boolean;
+  lat?: number;
+  lng?: number;
+  radius?: number;
+  exploreState?: object;
 }
 
 // Note from the documentation:
@@ -117,9 +121,14 @@ export type SharedStackParamList = {
     };
     hideNavButtons?: boolean;
     lastScreen?: "Suggestions";
+    // Hint from callers that know the taxon rank without full taxon data (e.g. SpeciesGame)
+    rankLevel?: number;
     // TODO: do we really use both?
     vision?: boolean;
     usesVision?: boolean;
+    // Opened from the Explore taxon filter search (or a relative drill-down from it);
+    // shows a select button that adds this taxon to the Explore taxon filters
+    selectableForExplore?: boolean;
   };
   // From App.js
   PhotoSharing: {
@@ -206,6 +215,29 @@ export type SharedStackParamList = {
     initialUrl: string;
     loggedIn: boolean;
   };
+  // From EvidenceList.js and GroupPhotos.tsx
+  ImageCropEditor: {
+    // Omitted when cropImport takes the queue from the import instead
+    imageUri?: string;
+    context: "groupPhotos" | "observationEdit";
+    observationPhotoUuid?: string;
+    onCropSaved?: () => void;
+    // Save the crop only as the framing computer vision scores, leaving the
+    // photo itself unchanged
+    cvOnly?: boolean;
+    pendingImageUris?: string[];
+    // Crop every photo of a photo library import, taking them from the
+    // grouped photos in the store as the import lands them
+    cropImport?: boolean;
+    // Photos the import queue skips: the ones already in the grid before
+    // this batch was picked
+    skipUris?: string[];
+  };
+  // From TaxonDetails
+  // { taxonId: number }
+  SpeciesGame: {
+    taxonId: number;
+  };
 };
 
 // Note from the documentation:
@@ -232,6 +264,49 @@ export type MyObservationsStackParamList = {
   SearchMyObservations: undefined;
 };
 
+// Screens hosted by PhotoImporterStackScreens, which is registered in both the
+// TabStackNavigator and the NoBottomTabStackNavigator
+// Note from the documentation:
+// The type containing the mapping must be a type alias. It cannot be an interface.
+// eslint-disable-next-line @typescript-eslint/consistent-type-definitions
+export type PhotoImporterStackParamList = {
+  // PhotoLibrary param options:
+  // Being set on PhotoLibrary:
+  // {
+  //   fromGroupPhotos: false;
+  // }
+  // From GroupPhotos
+  // {
+  //   fromGroupPhotos: true;
+  // }
+  // From PhotoLibraryIcon
+  // {
+  //   cmonBack: true;
+  //   lastScreen: "Camera";
+  //   fromAICamera: true;
+  // }
+  // From AddEvidenceSheet
+  // {
+  //   skipGroupPhotos: true;
+  // }
+  // From AddObsButton
+  // {
+  //   previousScreen: ParamListRoute<RootStackParamList>;
+  // };
+  PhotoLibrary: {
+    fromGroupPhotos?: boolean;
+    cmonBack?: boolean;
+    lastScreen?: "Camera";
+    fromAICamera?: boolean;
+    skipGroupPhotos?: boolean;
+    // eslint-disable-next-line no-use-before-define
+    previousScreen?: ParamListRoute<RootStackParamList>;
+  } | undefined;
+  // From PhotoSharing
+  // { lastScreen: "PhotoSharing" }
+  GroupPhotos: { lastScreen?: "PhotoSharing" } | undefined;
+};
+
 // Tab-only routes (not from SharedStackScreens). Intersected with SharedStackParamList
 // so TabStackParamList matches TabStackNavigator + SharedStackScreens.
 // Note from the documentation:
@@ -240,10 +315,16 @@ export type MyObservationsStackParamList = {
 export type BaseTabStackParamList = {
   Menu: undefined;
   ObsList: undefined;
-  RootExplore: undefined;
+  RootExplore: {
+    // Set when a taxon is selected on TaxonDetails (opened from the Explore taxon
+    // filter search, or a relative drill-down from it) to add it to the taxon filters
+    selectedTaxonForFilter?: object;
+  } | undefined;
   // Explore opened from another screen (TaxonDetails, UserProfile,
   // ProjectDetails, ProjectRequirements) rather than from the Explore tab.
-  Explore: ExploreV2EntryParams & LegacyExploreParams;
+  Explore: ExploreV2EntryParams & LegacyExploreParams & {
+    selectedTaxonForFilter?: object;
+  };
   // From NotificationsListItem
   // {
   //   uuid: notification.resource_uuid,
@@ -270,6 +351,7 @@ export type BaseTabStackParamList = {
     identAt?: number;
     identTaxonId?: number;
     identTaxonFromVision?: boolean;
+    preloadedObservation?: object;
   };
   Notifications: undefined;
   // From ProjectRequirements, InlineUserBase, UserList
@@ -344,6 +426,26 @@ export type BaseTabStackParamList = {
     published_at: string;
     title: string;
   };
+  LifeList: undefined;
+  MaverickIdentifications: undefined;
+  MyIdentifications: undefined;
+  WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
+  AudioId: undefined;
+  CropLogViewer: undefined;
+  DevicePhotoCleanup: undefined;
+  LocationHistory: undefined;
+  LocationHistoryPointsMap: undefined;
+  LocationHistoryDetailMap: {
+    uuid: string;
+    observationLat: number;
+    observationLng: number;
+    trackedLat: number;
+    trackedLng: number;
+    observationDate: string;
+    distanceMeters: number | null;
+  };
+  PrivacyZone: undefined;
+  PrivacyZoneMap: undefined;
   Debug: undefined;
   UILibrary: undefined;
   UiLibraryItem: undefined;
@@ -354,7 +456,9 @@ export type BaseTabStackParamList = {
   Help: undefined;
 };
 
-export type TabStackParamList = BaseTabStackParamList & SharedStackParamList;
+export type TabStackParamList = BaseTabStackParamList &
+  SharedStackParamList &
+  PhotoImporterStackParamList;
 
 // Params for TabStackNavigator when hosted inside BottomTabNavigator, including which
 // inner stack screen should be shown first (see BottomTabNavigator initialParams).
@@ -377,38 +481,6 @@ export type BottomTabParamList = {
 // The type containing the mapping must be a type alias. It cannot be an interface.
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 export type BaseNoBottomTabStackParamList = {
-  // PhotoLibrary param options:
-  // Being set on PhotoLibrary:
-  // {
-  //   fromGroupPhotos: false;
-  // }
-  // From GroupPhotos
-  // {
-  //   fromGroupPhotos: true;
-  // }
-  // From PhotoLibraryIcon
-  // {
-  //   cmonBack: true;
-  //   lastScreen: "Camera";
-  //   fromAICamera: true;
-  // }
-  // From AddEvidenceSheet
-  // {
-  //   skipGroupPhotos: true;
-  // }
-  // From AddObsButton
-  // {
-  //   previousScreen: ParamListRoute<RootStackParamList>;
-  // };
-  PhotoLibrary: {
-    fromGroupPhotos?: boolean;
-    cmonBack?: boolean;
-    lastScreen?: "Camera";
-    fromAICamera?: boolean;
-    skipGroupPhotos?: boolean;
-    // eslint-disable-next-line no-use-before-define
-    previousScreen?: ParamListRoute<RootStackParamList>;
-  };
   // From AddObsButton
   // {
   //   previousScreen: ParamListRoute<RootStackParamList>;
@@ -427,13 +499,11 @@ export type BaseNoBottomTabStackParamList = {
     previousScreen?: ParamListRoute<RootStackParamList>;
   };
   SoundRecorder: undefined;
-  // From PhotoSharing
-  // { lastScreen: "PhotoSharing" }
-  GroupPhotos: { lastScreen: "PhotoSharing" };
 };
 
 export type NoBottomTabStackParamList = BaseNoBottomTabStackParamList &
-  SharedStackParamList;
+  SharedStackParamList &
+  PhotoImporterStackParamList;
 
 // Note from the documentation:
 // The type containing the mapping must be a type alias. It cannot be an interface.

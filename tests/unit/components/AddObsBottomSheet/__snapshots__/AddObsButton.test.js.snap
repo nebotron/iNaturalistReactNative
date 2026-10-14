@@ -110,38 +110,6 @@ exports[`AddObsButton renders correctly 1`] = `
             testID="camera-button"
           >
             <View
-              accessibilityHint="Navigates to camera"
-              accessibilityLabel="Camera"
-              accessibilityRole="button"
-              accessibilityState={
-                {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": false,
-                  "expanded": undefined,
-                  "selected": undefined,
-                }
-              }
-              accessibilityValue={
-                {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
-              }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onBlur={[Function]}
-              onClick={[Function]}
-              onFocus={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
               style={
                 {
                   "alignItems": "center",
@@ -182,7 +150,7 @@ exports[`AddObsButton renders correctly 1`] = `
                     ]
                   }
                 >
-                  
+                  
                 </Text>
               </View>
             </View>
@@ -275,38 +243,6 @@ exports[`AddObsButton renders correctly 1`] = `
             testID="record-sound-button"
           >
             <View
-              accessibilityHint="Navigates to sound recorder"
-              accessibilityLabel="Sound recorder"
-              accessibilityRole="button"
-              accessibilityState={
-                {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": false,
-                  "expanded": undefined,
-                  "selected": undefined,
-                }
-              }
-              accessibilityValue={
-                {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
-              }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onBlur={[Function]}
-              onClick={[Function]}
-              onFocus={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
               style={
                 {
                   "alignItems": "center",
@@ -347,7 +283,7 @@ exports[`AddObsButton renders correctly 1`] = `
                     ]
                   }
                 >
-                  
+                  
                 </Text>
               </View>
             </View>
@@ -426,38 +362,6 @@ exports[`AddObsButton renders correctly 1`] = `
             testID="import-media-button"
           >
             <View
-              accessibilityHint="Navigates to photo importer"
-              accessibilityLabel="Photo importer"
-              accessibilityRole="button"
-              accessibilityState={
-                {
-                  "busy": undefined,
-                  "checked": undefined,
-                  "disabled": false,
-                  "expanded": undefined,
-                  "selected": undefined,
-                }
-              }
-              accessibilityValue={
-                {
-                  "max": undefined,
-                  "min": undefined,
-                  "now": undefined,
-                  "text": undefined,
-                }
-              }
-              accessible={true}
-              collapsable={false}
-              focusable={true}
-              onBlur={[Function]}
-              onClick={[Function]}
-              onFocus={[Function]}
-              onResponderGrant={[Function]}
-              onResponderMove={[Function]}
-              onResponderRelease={[Function]}
-              onResponderTerminate={[Function]}
-              onResponderTerminationRequest={[Function]}
-              onStartShouldSetResponder={[Function]}
               style={
                 {
                   "alignItems": "center",
@@ -498,7 +402,7 @@ exports[`AddObsButton renders correctly 1`] = `
                     ]
                   }
                 >
-                  
+                  
                 </Text>
               </View>
             </View>
@@ -591,7 +495,7 @@ exports[`AddObsButton renders correctly 1`] = `
                 ]
               }
             >
-              
+              
             </Text>
           </View>
           <Text
@@ -717,7 +621,7 @@ exports[`AddObsButton renders correctly 1`] = `
               ]
             }
           >
-            
+            
           </Text>
         </View>
       </BVLinearGradient>

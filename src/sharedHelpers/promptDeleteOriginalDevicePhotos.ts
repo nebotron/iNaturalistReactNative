@@ -1,0 +1,792 @@
+import {
+  CameraRoll,
+  iosRequestReadWriteGalleryPermission,
+} from "@react-native-camera-roll/camera-roll";
+import i18next from "i18next";
+import {
+  Alert, AppState, NativeModules, Platform,
+} from "react-native";
+import {
+  basePhotoAssetId,
+  forgetAppCreatedPhotoAssets,
+} from "sharedHelpers/appCreatedPhotoAssets";
+import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import addPhotosToImportedAlbum from "sharedHelpers/importedPhotoAlbum";
+import { log } from "sharedHelpers/logger";
+import {
+  beginDeleteTransaction,
+  endDeleteTransaction,
+  maxTransactionSize,
+  partitionForDelete,
+  recordAnsweredSize,
+  recordAnsweredSuspects,
+  recordUnansweredTransaction,
+  suspectProbeChunks,
+  takeUnansweredTransaction,
+} from "sharedHelpers/unansweredDeleteAssets";
+
+const logger = log.extend( "promptDeleteOriginalDevicePhotos" );
+
+// How many Photos-library writes have hung this session.
+let photoLibraryWriteHangCount = 0;
+
+// Native helpers (iOS) that (a) report the window/scene/modal state governing
+// whether the iOS deletion confirmation can present, and (b) delete after
+// dismissing any modal that would block that confirmation.
+const { ImageCropper } = NativeModules as {
+  ImageCropper?: {
+    photoDeletionContext?: ( phUris: string[] ) => Promise<string>;
+    photoAssetDiagnostics?: ( phUris: string[] ) => Promise<string>;
+    deletePhotoAssets?: ( phUris: string[] ) => Promise<{
+      deleted: number;
+      requested: number;
+      fetched?: number;
+      appCreated?: number;
+      transactionMs?: number;
+      undeletable?: number;
+      assets?: string;
+    }>;
+  };
+};
+
+interface DeleteOriginalDevicePhotosOptions {
+  userInitiated?: boolean;
+  // Photo Cleanup files into the album with its own button.
+  skipAlbum?: boolean;
+}
+
+// What the OS actually did, so callers can tell the user the truth instead of
+// assuming every requested URI was deleted. A hung delete resolves normally
+// (the error is handled here), so without this a caller can't distinguish
+// "deleted 1159 photos" from "deleted none of them".
+export interface DeleteOriginalDevicePhotosResult {
+  deleted: number;
+  requested: number;
+  succeeded: boolean;
+  // The OS hasn't answered yet and we stopped waiting. Distinct from a failure:
+  // the transaction is still open down in PhotoKit and usually still goes
+  // through, so a caller should rescan rather than tell the user it went wrong.
+  pending?: boolean;
+  // Assets PhotoKit refuses to let this app delete (synced from a computer, or
+  // in a shared album rather than this library). Nothing is wrong and nothing
+  // will change by retrying: they were never sent to a transaction.
+  undeletable?: number;
+  // Assets PhotoKit accepts into a transaction and then never answers for, so
+  // the app leaves them out rather than let them hang every photo batched with
+  // them. See unansweredDeleteAssets.ts.
+  quarantined?: number;
+}
+
+const filterDeletableDevicePhotoUris = ( photoUris: string[] ): string[] => (
+  [...new Set(
+    photoUris
+      .map( uri => normalizeDevicePhotoUri( uri ) )
+      .filter( ( uri ): uri is string => !!uri ),
+  )].filter( uri => {
+    if ( Platform.OS === "ios" ) {
+      return uri.startsWith( "ph://" );
+    }
+    return uri.startsWith( "content://" ) || uri.startsWith( "file://" );
+  } )
+);
+
+// Requests readWrite photo library permission. iOS shows the system dialog
+// exactly once (when status is notDetermined); subsequent calls return the
+// cached status silently, so this acts as a global one-time grant.
+const ensureDeletePhotosPermission = async ( requested: number ): Promise<boolean> => {
+  if ( Platform.OS !== "ios" ) {
+    return true;
+  }
+  const status = await iosRequestReadWriteGalleryPermission( );
+  // Only worth a line when it isn't the answer we expect: a granted status is
+  // implied by the deletion that follows, and logging it on every delete was
+  // one remote write per delete for no information.
+  if ( status !== "granted" ) {
+    logger.info( `photo library readWrite permission status: ${status} (${requested} photo(s))` );
+  }
+  // "limited" access (the user picked specific photos) still lets us delete
+  // those photos — iOS shows its own deletion confirmation — so treat it the
+  // same as full access. Rejecting it here silently skipped deletion for the
+  // many users who grant limited access.
+  return status === "granted" || status === "limited";
+};
+
+// iOS presents a single system confirmation per Photos-library write. Firing
+// a second write (delete OR location update, see applyTrackedLocationToPhotos.ts)
+// while one is still in flight can make both hang (iOS won't present a second
+// confirmation over the first), and a burst of concurrent writes can also
+// spuriously trip each other's timeout under normal I/O load. Route every
+// native Photos-library write (not just deletions) through this single chain
+// so only one is ever in flight.
+let photoLibraryWriteChain: Promise<void> = Promise.resolve( );
+
+const settled = ( promise: Promise<unknown> ): Promise<void> => promise.then(
+  ( ) => undefined,
+  ( ) => undefined,
+);
+
+// Waits for a native write to settle, but not forever: a task whose native call
+// never comes back must not poison the chain for the rest of the session.
+const heldUntilSettled = ( promise: Promise<unknown>, ms: number ): Promise<void> => {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race( [
+    settled( promise ),
+    new Promise<void>( resolve => { timer = setTimeout( resolve, ms ); } ),
+  ] ).then( ( ) => { clearTimeout( timer ); } );
+};
+
+// Sits above the native deletion watchdog (kInatPendingDeleteWatchdogSeconds in
+// ImageCropper.m), so a native call that is merely slow has always settled
+// before the chain stops waiting for it.
+const CHAIN_HOLD_MS = 170_000;
+
+export const enqueuePhotoLibraryWrite = <T, >(
+  task: ( holdChainUntil: ( nativeWrite: Promise<unknown> ) => void ) => Promise<T>,
+): Promise<T> => {
+  // The native transaction this task opened, when it tells us about one. A task
+  // that gives up on its own native call leaves iOS still holding an open
+  // performChanges, and opening a second one behind it is what wedges
+  // photolibraryd — the whole point of this chain. So the chain waits on the
+  // transaction, not on our patience with it.
+  let nativeWrite: Promise<unknown> | undefined;
+  const run = photoLibraryWriteChain.then(
+    ( ) => task( write => { nativeWrite = write; } ),
+  );
+  // Keep the chain alive even if this write rejects, so later writes still fire.
+  photoLibraryWriteChain = settled( run ).then( ( ) => (
+    nativeWrite
+      ? heldUntilSettled( nativeWrite, CHAIN_HOLD_MS )
+      : undefined
+  ) );
+  return run;
+};
+
+// How long a caller waits on a deletion before we stop holding it there.
+//
+// This used to be a hard timeout that also decided the outcome: at 10s the
+// promise rejected, the caller reported "Something went wrong", and the chain
+// above was released. All three were wrong. The native module gives the same
+// call 150s and has a PHPhotoLibraryChangeObserver fallback that resolves as
+// soon as the assets really vanish, so at 10s the deletion is usually still
+// going to happen: the Aug 8 log has a "failed" delete of 112 photos followed a
+// minute later by a rescan that found 44. Every deletion that did complete came
+// back in 1.3-1.8s, so 15s is well clear of a working one — but past it we stop
+// waiting without either calling it a failure or letting go of the native call.
+const UI_WAIT_MS = 15_000;
+
+// A PhotoKit transaction costs ~1.6s whatever it holds: 3 assets took 1752ms,
+// 19 took 1442ms, 275 consent-free ones took 1691ms, 280 mixed ones 1543ms. A
+// deletion issues exactly one, so that cost is its honest duration however many
+// photos it carries.
+const TRANSACTION_MS_ALLOWANCE = 1800;
+
+// How a cleanup's transactions are sized: 10 photos, then double each time,
+// up to whatever the cap allows.
+//
+// One transaction is one system consent alert, whatever it carries, so the
+// number of groups is the number of times the cleanup asks permission. Opening
+// at ten rather than at the cap keeps the first ask small — if something is
+// going to go wrong with a transaction, it goes wrong having risked ten photos
+// rather than two hundred — and doubling gets to the cap in five steps, so the
+// tail of a big cleanup still goes out in full-sized groups. 326 photos is
+// 10, 20, 40, 80, 160, 16: six alerts.
+const DELETE_GROUP_START = 10;
+
+// The size of the group at this point in the ramp, never more than the cap and
+// never more than what is left.
+const groupSize = ( left: number, step: number, cap: number ): number => Math.min(
+  DELETE_GROUP_START * ( 2 ** step ),
+  Math.max( 1, cap ),
+  left,
+);
+
+const plannedChunkSizes = ( total: number, cap: number ): number[] => {
+  const sizes: number[] = [];
+  let left = total;
+  while ( left > 0 ) {
+    const size = groupSize( left, sizes.length, cap );
+    sizes.push( size );
+    left -= size;
+  }
+  return sizes;
+};
+
+const chunkCount = ( uriCount: number ) => Math.max(
+  1,
+  plannedChunkSizes( uriCount, maxTransactionSize( ) ).length,
+);
+
+// Chunks run one after another, so the budget is per transaction rather than
+// per deletion. Never below the 15s a single one has always had.
+const uiWaitMs = ( chunkCount: number ) => Math.max(
+  UI_WAIT_MS,
+  3000 + ( TRANSACTION_MS_ALLOWANCE * chunkCount ) + 4000,
+);
+
+// The pending-delete diagnostic has to land while the delete is still in
+// flight, so it stays inside the wait above.
+const hangReportMs = ( chunkCount: number ) => Math.min(
+  uiWaitMs( chunkCount ) - 2000,
+  3000 + ( TRANSACTION_MS_ALLOWANCE * chunkCount ),
+);
+
+// Returned by the race below when the OS hasn't answered inside UI_WAIT_MS.
+const STILL_PENDING = { stillPending: true } as const;
+
+// Whether the transaction failed because nobody answered its consent alert.
+//
+// Deleting a photo this app can't prove it created puts a system alert in front
+// of the user, and PhotoKit holds the transaction open until they answer it.
+// Two of those outcomes say nothing about the library:
+//
+//   DELETE_NO_CALLBACK — the native watchdog gave up at 150s, which for an
+//     alert-gated transaction means the alert went untapped. The Sep 21 log has
+//     these with the app foreground-active and appStateChanges=0 throughout.
+//   PHPhotosErrorDomain 3072 (PHPhotosErrorUserCancelled) — the user declined,
+//     which is an answer about this deletion and not about the library.
+//
+// Treating either as "PhotoKit never answered" is what halved the cap to one
+// photo per alert, and one photo per alert is what made the alerts go
+// unanswered. So neither narrows the suspects and neither moves the cap.
+const isUnconfirmedByUser = ( error: unknown ): boolean => {
+  if ( ( error as { code?: string } | undefined )?.code === "DELETE_NO_CALLBACK" ) return true;
+  const message = String(
+    ( error as { message?: string } | undefined )?.message ?? error ?? "",
+  );
+  return message.includes( "PHPhotosErrorDomain error 3072" );
+};
+
+// The native module refused to open a transaction because the last one it
+// opened has never come back (see the write gate in ImageCropper.m). Not a
+// failure of this deletion: nothing was attempted, and nothing will be until
+// the app is relaunched, so it needs its own report and its own message rather
+// than a third copy of "Something went wrong".
+const isLibraryBusy = ( error: unknown ): boolean => (
+  ( error as { code?: string } | undefined )?.code === "PHOTOS_LIBRARY_BUSY"
+);
+
+const performDeleteOriginalDevicePhotos = async (
+  photoUris: string[],
+  options: DeleteOriginalDevicePhotosOptions = {},
+  holdChainUntil: ( nativeWrite: Promise<unknown> ) => void = ( ) => undefined,
+): Promise<DeleteOriginalDevicePhotosResult> => {
+  const uniqueUris = filterDeletableDevicePhotoUris( photoUris );
+  if ( uniqueUris.length === 0 ) {
+    if ( photoUris.filter( Boolean ).length > 0 ) {
+      logger.warn(
+        "Skipped deleting device photos because no deletable URIs were resolved",
+        { photoUris },
+      );
+    }
+    return { deleted: 0, requested: 0, succeeded: true };
+  }
+
+  const requested = uniqueUris.length;
+
+  // A transaction left open by an earlier run — this app's own process killed
+  // mid-delete, or PhotoKit simply never answering — is the only evidence there
+  // is about which asset hangs, so fold it in before deciding what to send.
+  const stranded = takeUnansweredTransaction( );
+  if ( stranded.ids.length > 0 ) {
+    logger.errorWithExtra( "photo_delete_unanswered_transaction", {
+      assets: stranded.ids.length,
+      // Whether it was taken as evidence about transaction size. A record left
+      // by a run that had already had bigger transactions answered says the
+      // process died mid-cleanup, not that PhotoKit hung, and acting on it is
+      // what pinned this device's cap at one photo for days.
+      evidence: stranded.evidence,
+    } );
+  }
+  // Assets known to hang a transaction are left out of every transaction; the
+  // set still being narrowed goes out after everything else, halving
+  // transaction by transaction so that a run in which nothing hangs still
+  // deletes all of it.
+  const { skipped, suspect, ordinary } = partitionForDelete( uniqueUris );
+  const probeChunks = suspectProbeChunks( suspect, maxTransactionSize( ) );
+  // Only what the cleanup expects to send: the ordinary photos are sized one
+  // transaction at a time, against the cap as it stands then, so the real count
+  // can come in under this if the cap grows on the way through.
+  const expectedChunks
+    = plannedChunkSizes( ordinary.length, maxTransactionSize( ) ).length + probeChunks.length;
+
+  // Files the whole request into the album before any deletion is asked for.
+  //
+  // The album is for the photos the user has to delete by hand, and it used to
+  // be filled from what survived the deletion. But a deletion PhotoKit never
+  // answers leaves the write gate shut, so the filing behind it was refused
+  // too, and on relaunch the next cleanup hung first again: the Oct 2 log has
+  // every cleanup hanging on its first transaction, across device restarts,
+  // and the album never filled. Filing first always gets through. Photos that
+  // then delete cleanly leave the album with them, so it ends up holding only
+  // what is still in the library.
+  if ( !options.skipAlbum ) await addPhotosToImportedAlbum( uniqueUris );
+
+  if ( expectedChunks === 0 ) {
+    logger.warnWithExtra( "photo_delete_all_quarantined", { requested } );
+    return {
+      deleted: 0, requested, succeeded: true, quarantined: skipped.length,
+    };
+  }
+
+  const hasPermission = await ensureDeletePhotosPermission( requested );
+  if ( !hasPermission ) {
+    logger.warn( "Skipped deleting device photos: photo library permission not granted" );
+    if ( options.userInitiated ) {
+      Alert.alert(
+        i18next.t( "Something-went-wrong" ),
+        i18next.t( "Could-not-delete-original-photos" ),
+      );
+    }
+    return { deleted: 0, requested, succeeded: false };
+  }
+
+  // The ph:// URIs identify the user's photos, say nothing a count doesn't, and
+  // made single log lines kilobytes long; the counts below are what a report
+  // is read for.
+  const startedAt = Date.now( );
+  // iOS can only present the deletion confirmation to a foreground app, so a
+  // delete that spans a trip to the background is a different failure from one
+  // that hangs while the user is watching it.
+  //
+  // This used to count "inactive" as having left the foreground, and that made
+  // the flag useless: the Aug 6 log has three *successful* deletions, and the
+  // native context captured before each one says sceneState=1
+  // (foregroundInactive). These deletes are issued straight after a navigation
+  // or a modal dismissal, so foreground-inactive is the normal state to be in
+  // when one starts, not an anomaly — the old flag was true before the delete
+  // even began. A whole theory ("a consent alert requested by an app that then
+  // leaves the foreground wedges photolibraryd") rested on one hang reporting
+  // it. Only "background" is the user actually leaving; "inactive" is recorded
+  // separately so nothing is lost. Neither reads anything into iOS's "unknown",
+  // which is what it reports early in a launch.
+  let backgrounded = AppState.currentState === "background";
+  let wentInactive = AppState.currentState === "inactive";
+  let appStateChanges = 0;
+  const appStateSubscription = AppState.addEventListener( "change", nextState => {
+    appStateChanges += 1;
+    if ( nextState === "background" ) backgrounded = true;
+    if ( nextState === "inactive" ) wentInactive = true;
+  } );
+  // Populated before the delete starts so a hang report still carries why the
+  // confirmation couldn't present (modal in vcChain, no scene…). Logged only
+  // when something goes wrong — on the happy path it was pure volume.
+  let deletionContext = "not captured";
+  // The transaction currently waiting on PhotoKit. The hang diagnostics used to
+  // describe `uniqueUris` — the whole cleanup — which is why five weeks of
+  // hangs never named the photos in the transaction that hung: the Sep 21 log
+  // reports a one-asset transaction outstanding for 21s and then dumps the
+  // first eight of 326 photos, none of which need be the one. Chunks are sent
+  // one at a time and the loop stops at the first that doesn't answer, so
+  // whatever is here when the hang timer fires is exactly what PhotoKit has.
+  let inFlight: { chunk: string[]; index: number; isProbe: boolean } | undefined;
+  const pendingExtra = ( ) => ( {
+    requested,
+    // Which transaction is outstanding, not just that one is.
+    outstandingChunk: inFlight?.index ?? -1,
+    outstandingAssets: inFlight?.chunk.length ?? 0,
+    outstandingIsProbe: inFlight?.isProbe ?? false,
+    ms: Date.now( ) - startedAt,
+    backgrounded,
+    wentInactive,
+    appStateChanges,
+    appState: typeof AppState.currentState === "string"
+      ? AppState.currentState
+      : "unknown",
+    hangsThisSession: photoLibraryWriteHangCount,
+    context: deletionContext,
+  } );
+  const hangTimer = setTimeout( ( ) => {
+    photoLibraryWriteHangCount += 1;
+    // Named without the interval: it moved with DELETE_TIMEOUT_MS, and a marker
+    // that changes name is a marker whose history stops grouping. `ms` says
+    // when it fired. Was photo_delete_pending_20s up to and including build
+    // 3ef9032d1.
+    logger.errorWithExtra( "photo_delete_pending", pendingExtra( ) );
+    // The context above is a snapshot from *before* the delete, so it can't say
+    // whether something presented over the app afterwards — and the log's three
+    // hangs all showed a foreground app with no modal and every asset fetched,
+    // which killed the "the app lost the foreground" explanation without
+    // offering another. Re-read it now. photoDeletionContext hops to the main
+    // queue, so a request that doesn't come back is itself the answer: the main
+    // thread is wedged, and no confirmation could present on it whatever Photos
+    // is doing.
+    if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
+      const askedAt = Date.now( );
+      let contextRespondedIn = -1;
+      void Promise.race( [
+        ImageCropper.photoDeletionContext( inFlight?.chunk ?? uniqueUris ).then( context => {
+          contextRespondedIn = Date.now( ) - askedAt;
+          return context;
+        } ),
+        new Promise<null>( resolve => { setTimeout( ( ) => resolve( null ), 5000 ); } ),
+      ] ).catch( ( ) => null ).then(
+        contextAtHang => logger.errorWithExtra( "photo_delete_hang_context", {
+          requested,
+          mainQueueResponsive: contextAtHang !== null,
+          msToRespond: contextRespondedIn,
+          contextAtHang: contextAtHang ?? "main queue did not respond in 5000ms",
+        } ),
+      ).catch( ( ) => undefined );
+    }
+    // Free disk space used to be measured here, on the theory that a deletion
+    // needs room to move assets into Recently Deleted. The log has answered it:
+    // the Sep 4 deletions of 61, 15, 83, 67 and 60 photos all landed with 1.8GB
+    // free, and the Sep 6 delete of 932 hung with 9.1GB. Free space is not what
+    // separates a deletion that works from one that doesn't, so the probe is
+    // gone rather than firing on every hang for an answer already given.
+    //
+    // What the photos themselves are. Every property the log has checked so far
+    // says these assets are ordinary and deletable, so the next question is
+    // what kind of photo they are — and what device and iOS this is, since the
+    // failure arrived on a date rather than with a batch.
+    if ( Platform.OS === "ios" && ImageCropper?.photoAssetDiagnostics ) {
+      void Promise.race( [
+        ImageCropper.photoAssetDiagnostics( inFlight?.chunk ?? uniqueUris ),
+        new Promise<null>( resolve => { setTimeout( ( ) => resolve( null ), 5000 ); } ),
+      ] ).catch( ( ) => null ).then(
+        assetsAtHang => logger.errorWithExtra( "photo_delete_asset_detail", {
+          requested,
+          assets: assetsAtHang ?? "main queue did not respond in 5000ms",
+        } ),
+      ).catch( ( ) => undefined );
+    }
+  }, hangReportMs( expectedChunks ) );
+  let timeoutTimer: ReturnType<typeof setTimeout> | undefined;
+  // What the chunks below have managed between them. Out here because both the
+  // late-settling report, which fires after the UI has stopped waiting, and the
+  // catch, which sees a chunk that failed after earlier ones landed, have to
+  // read it.
+  const progress = { deleted: 0, undeletable: 0, done: 0 };
+  // Deliberately not a field on `progress`, which gets logged: the ph:// URIs
+  // identify the user's photos, say nothing a count doesn't, and made single
+  // log lines kilobytes long.
+  const cleared: string[] = [];
+  try {
+    if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
+      try {
+        // Bounded: this hops to the main queue, and a main queue slow enough to
+        // sit on it is exactly the condition being diagnosed. Awaiting it
+        // unbounded meant the diagnostic could stop the deletion it was there
+        // to explain from ever starting.
+        deletionContext = await Promise.race( [
+          ImageCropper.photoDeletionContext( uniqueUris ),
+          new Promise<string>( resolve => {
+            setTimeout( ( ) => resolve( "unavailable: main queue busy for 5000ms" ), 5000 );
+          } ),
+        ] );
+      } catch ( ctxError ) {
+        deletionContext = `unavailable: ${String( ctxError )}`;
+      }
+    }
+
+    logger.infoWithExtra( "photo_delete_started", {
+      requested,
+      // What is actually going out, and why it isn't all of it.
+      ordinary: ordinary.length,
+      chunks: expectedChunks,
+      // The biggest transaction this cleanup will ask for. Halves every time
+      // the library leaves one unanswered.
+      cap: maxTransactionSize( ),
+      // Still narrowing: this many are under suspicion, and they go out in
+      // this many transactions behind everything else.
+      suspect: suspect.length,
+      probeChunks: probeChunks.length,
+      // Proven unanswerable, left out entirely.
+      quarantined: skipped.length,
+    } );
+    // Chunks go out one at a time and stop at the first one the library doesn't
+    // answer: the next transaction issued at a wedged photolibraryd is the one
+    // thing known to make the wedge worse, and by then this deletion has its
+    // answer anyway.
+    const runChunks = async ( ) => {
+      // The ordinary photos are sized as the loop reaches them so that a cap
+      // raised by the transactions this run has already had answered is the one
+      // the next transaction is sized against. The probes behind them keep the
+      // halving they were planned with: that is how they narrow.
+      const probes = [...probeChunks];
+      let start = 0;
+      // How far into the doubling ramp the ordinary photos have got.
+      let step = 0;
+      // The largest transaction the library has answered in this run. Goes into
+      // the record of the open transaction so that, if the process dies here,
+      // the next launch can tell "PhotoKit stopped answering" from "the app was
+      // killed while it was deleting fine".
+      let answeredMax = 0;
+      const nextChunk = ( ): { chunk: string[]; isProbe: boolean } | undefined => {
+        if ( start < ordinary.length ) {
+          // Read the cap as the loop reaches each group: a cap the library has
+          // just answered at is the one the next group is sized against.
+          const size = groupSize( ordinary.length - start, step, maxTransactionSize( ) );
+          step += 1;
+          const chunk = ordinary.slice( start, start + size );
+          start += size;
+          return { chunk, isProbe: false };
+        }
+        const probe = probes.shift( );
+        return probe
+          ? { chunk: probe, isProbe: true }
+          : undefined;
+      };
+      for ( let next = nextChunk( ), index = 0; next; next = nextChunk( ), index += 1 ) {
+        const { chunk, isProbe } = next;
+        const chunkStartedAt = Date.now( );
+        // What the hang diagnostics describe if PhotoKit doesn't answer this
+        // one. Set before the transaction goes out, cleared once it settles.
+        inFlight = { chunk, index, isProbe };
+        // Recorded before the transaction is asked for, not after it fails: a
+        // deletion that never answers is only identifiable by the record it
+        // left behind, and the app is routinely killed while one is open.
+        beginDeleteTransaction( chunk, answeredMax );
+        // Prefer the native path that dismisses a blocking modal before
+        // deleting; fall back to CameraRoll on platforms/builds without it.
+        const nativeWrite = ( Platform.OS === "ios" && ImageCropper?.deletePhotoAssets )
+          ? ImageCropper.deletePhotoAssets( chunk )
+          : CameraRoll.deletePhotos( chunk );
+        // Whatever we decide below, the next Photos-library write waits for this
+        // transaction rather than stacking on top of it.
+        holdChainUntil( nativeWrite );
+        let chunkResult;
+        try {
+          // eslint-disable-next-line no-await-in-loop
+          chunkResult = await nativeWrite;
+        } catch ( chunkError ) {
+          // An alert the user never answered, or declined, says nothing about
+          // the library or about any photo in the transaction — so it neither
+          // moves the cap nor accuses anything. Neither does a transaction the
+          // write gate refused to open: nothing was sent, so there is nothing
+          // to have gone wrong with. The Sep 21 log has that costing a device
+          // everything it knew in 33ms — a cleanup of 23 photos refused at a
+          // wedged library came back a moment later with the cap at 11 and all
+          // 22 of its photos under suspicion, none of which had been asked
+          // for. Anything else is a refusal the library actually made, and
+          // narrows the search as before.
+          if ( !isUnconfirmedByUser( chunkError ) && !isLibraryBusy( chunkError ) ) {
+            recordUnansweredTransaction(
+              chunk.map( basePhotoAssetId ),
+              isProbe,
+              chunk.length === ordinary.length,
+            );
+          }
+          endDeleteTransaction( );
+          throw chunkError;
+        }
+        inFlight = undefined;
+        endDeleteTransaction( );
+        // PhotoKit answered one this big, so it may be willing to take more.
+        recordAnsweredSize( chunk.length );
+        answeredMax = Math.max( answeredMax, chunk.length );
+        // This half of the suspect set deleted normally, so the asset that
+        // hangs is in the half held back.
+        if ( isProbe ) recordAnsweredSuspects( chunk.map( basePhotoAssetId ) );
+        // Report what the OS actually deleted, not what we asked for. A call
+        // that resolves with deleted:0 (e.g. fetched:0 — every URI is a ghost
+        // pointing at an already-deleted asset) is a no-op, and logging it as a
+        // deletion of all N made a repeating no-op look like a working cleanup.
+        const chunkDeleted = ( chunkResult as { deleted?: number } | undefined )?.deleted
+          ?? chunk.length;
+        const chunkUndeletable
+          = ( chunkResult as { undeletable?: number } | undefined )?.undeletable ?? 0;
+        progress.deleted += chunkDeleted;
+        progress.undeletable += chunkUndeletable;
+        progress.done = index + 1;
+        // A transaction deletes all of its assets or none of them, so anything
+        // above zero means these are gone and no longer worth tracking as ours.
+        if ( chunkDeleted > 0 ) cleared.push( ...chunk );
+        // Photos the app is not allowed to delete. They used to go into the
+        // transaction with everything else and take it down with them — a
+        // transaction is all or nothing, and PhotoKit answers a request it
+        // can't carry out with silence rather than an error. Now they're left
+        // out, which makes them the reason a cleanup can't empty, so say so as
+        // its own line.
+        if ( chunkUndeletable > 0 ) {
+          logger.warnWithExtra( "photo_delete_undeletable", {
+            undeletable: chunkUndeletable,
+            requested: chunk.length,
+            deleted: chunkDeleted,
+            assets: ( chunkResult as { assets?: string } | undefined )?.assets ?? "unknown",
+          } );
+        }
+        // How long the transaction took, and which of the batch it was. Above
+        // the ~1.5s a transaction costs whatever it carries means a human
+        // answered a confirmation for it.
+        logger.infoWithExtra( "photo_delete_transaction", {
+          chunk: index,
+          chunks: expectedChunks,
+          requested: chunk.length,
+          deleted: chunkDeleted,
+          appCreated: ( chunkResult as { appCreated?: number } | undefined )?.appCreated ?? -1,
+          transactionMs: ( chunkResult as { transactionMs?: number } | undefined )?.transactionMs
+            ?? Date.now( ) - chunkStartedAt,
+        } );
+      }
+      return progress;
+    };
+    const deletion = runChunks( );
+    const result = await Promise.race( [
+      deletion,
+      new Promise<typeof STILL_PENDING>( resolve => {
+        timeoutTimer = setTimeout(
+          ( ) => resolve( STILL_PENDING ),
+          uiWaitMs( expectedChunks ),
+        );
+      } ),
+    ] );
+    if ( result === STILL_PENDING ) {
+      // Say so when it does land. Whether a deletion the UI gave up on still
+      // goes through is the open question in this whole investigation, and the
+      // log could only ever answer it by comparing photo counts across two
+      // visits to the cleanup screen.
+      void deletion.then(
+        lateResult => logger.info(
+          `Delete of ${requested} device photo(s) settled ${Date.now( ) - startedAt}ms in, `
+          + `after the UI stopped waiting; result=${JSON.stringify( lateResult )}`,
+        ),
+        lateError => logger.errorWithExtra( "photo_delete_late_failure", {
+          requested,
+          chunk: progress.done,
+          chunks: expectedChunks,
+          deletedBefore: progress.deleted,
+          ms: Date.now( ) - startedAt,
+          error: String( lateError ),
+        } ),
+      // Chunks that did land are gone whatever the abandoned one does, so stop
+      // tracking them as ours either way.
+      ).finally( ( ) => forgetAppCreatedPhotoAssets( cleared ) );
+      return {
+        deleted: progress.deleted,
+        requested,
+        succeeded: false,
+        pending: true,
+        quarantined: skipped.length,
+      };
+    }
+    logger.info(
+      `Deleted ${progress.deleted} of ${requested} `
+      + `device photo(s); result=${JSON.stringify( result )}`,
+    );
+    if ( cleared.length > 0 ) forgetAppCreatedPhotoAssets( cleared );
+    return {
+      deleted: progress.deleted,
+      requested,
+      succeeded: true,
+      undeletable: progress.undeletable,
+      quarantined: skipped.length,
+    };
+  } catch ( deleteError ) {
+    // Chunks that landed before this one failed are gone, so they stop being
+    // ours to track and they count towards what the caller reports.
+    if ( cleared.length > 0 ) forgetAppCreatedPhotoAssets( cleared );
+    if ( isLibraryBusy( deleteError ) ) {
+      // Comes back in milliseconds, so the user isn't left waiting — and the
+      // 150s this would otherwise have spent stacked on a wedged
+      // photolibraryd is exactly what made the Aug 9 log's second and third
+      // attempts as useless as the first.
+      logger.warnWithExtra( "photo_delete_library_busy", {
+        requested,
+        chunk: progress.done,
+        chunks: expectedChunks,
+        detail: String( ( deleteError as { message?: string } )?.message ?? deleteError ),
+      } );
+      if ( options.userInitiated ) {
+        Alert.alert(
+          i18next.t( "Something-went-wrong" ),
+          i18next.t( "Photos-stopped-responding-restart-the-app" ),
+        );
+      }
+      return {
+        deleted: progress.deleted, requested, succeeded: false, quarantined: skipped.length,
+      };
+    }
+    // As of iOS 26, PHPhotoLibrary.performChanges' completion handler for
+    // deleteAssets can simply never fire — no confirmation dialog, no error,
+    // no library change (confirmed via a native PHPhotoLibraryChangeObserver
+    // fallback in ImageCropper.m, and matches Apple Developer Forums thread
+    // 806349). There's no way to make the OS call back, and restarting the
+    // device is still the only known way to clear it — but a failure here says
+    // nothing about the next delete, so nothing is remembered from it. Every
+    // deletion gets its own attempt, however the last one ended.
+    logger.errorWithExtra(
+      "photo_delete_failed",
+      deleteError,
+      { ...pendingExtra( ), chunk: progress.done, chunks: expectedChunks },
+    );
+    // A chunked cleanup that got most of the way is not a failed one: telling
+    // the user nothing was deleted when 800 photos were is the report that sent
+    // this whole investigation looking in the wrong place to begin with.
+    if ( options.userInitiated && progress.deleted === 0 ) {
+      Alert.alert(
+        i18next.t( "Something-went-wrong" ),
+        i18next.t( "Could-not-delete-original-photos" ),
+      );
+    }
+    return {
+      deleted: progress.deleted,
+      requested,
+      succeeded: false,
+      undeletable: progress.undeletable,
+      quarantined: skipped.length,
+    };
+  } finally {
+    clearTimeout( hangTimer );
+    if ( timeoutTimer ) clearTimeout( timeoutTimer );
+    appStateSubscription.remove( );
+  }
+};
+
+export const deleteOriginalDevicePhotos = (
+  photoUris: string[],
+  options: DeleteOriginalDevicePhotosOptions = {},
+): Promise<DeleteOriginalDevicePhotosResult> => enqueuePhotoLibraryWrite(
+  holdChainUntil => performDeleteOriginalDevicePhotos( photoUris, options, holdChainUntil ),
+);
+
+// Queued behind any deletion, so it never stacks on an open transaction.
+export const addDevicePhotosToImportedAlbum = (
+  photoUris: string[],
+) => enqueuePhotoLibraryWrite(
+  ( ) => addPhotosToImportedAlbum( filterDeletableDevicePhotoUris( photoUris ) ),
+);
+
+// Callers hold the user on the current screen until onComplete fires so the
+// iOS deletion confirmation isn't asked to present mid-navigation. A deletion
+// normally settles in a couple of seconds, and one that hasn't answered stops
+// being waited on after uiWaitMs. This stays above that: a delete queued
+// behind another
+// Photos-library write (see enqueuePhotoLibraryWrite) can wait longer than its
+// own timeout, and stranding the user on a screen they asked to leave is far
+// worse than letting the deletion finish unobserved in the background.
+const exitWaitTimeoutMs = ( uriCount: number ) => uiWaitMs( chunkCount( uriCount ) ) + 5000;
+
+// Deletes the original device photos that were imported, without prompting.
+const promptDeleteOriginalDevicePhotos = (
+  photoUris: string[],
+  onComplete: () => void,
+) => {
+  const uniqueUris = filterDeletableDevicePhotoUris( photoUris );
+  if ( uniqueUris.length === 0 ) {
+    onComplete( );
+    return;
+  }
+
+  let completed = false;
+  const completeOnce = ( ) => {
+    if ( completed ) return;
+    completed = true;
+    onComplete( );
+  };
+  const exitWaitMs = exitWaitTimeoutMs( uniqueUris.length );
+  const waitTimer = setTimeout( ( ) => {
+    logger.warn(
+      `Proceeding without waiting for deletion of ${uniqueUris.length} device photo(s): `
+      + `still pending after ${exitWaitMs}ms`,
+    );
+    completeOnce( );
+  }, exitWaitMs );
+
+  void deleteOriginalDevicePhotos( uniqueUris ).finally( ( ) => {
+    clearTimeout( waitTimer );
+    completeOnce( );
+  } );
+};
+
+export default promptDeleteOriginalDevicePhotos;

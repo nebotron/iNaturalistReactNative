@@ -3,7 +3,7 @@ import { photoLibraryPhotosPath, rotatedOriginalPhotosPath } from "appConstants/
 import type { RealmObservation } from "realmModels/types";
 import {
   TARGET_POSITIONAL_ACCURACY,
-} from "sharedHooks/useWatchPosition";
+} from "sharedHelpers/accuratePositionWatcher";
 
 // In theory all of these functions belong in Observation.js... but we often
 // map API responses to behave like Realm records, so they don't always have

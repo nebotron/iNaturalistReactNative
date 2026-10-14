@@ -68,6 +68,9 @@ import useStore from "stores/useStore";
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
 import fetchCoarseUserLocation from "../../../../sharedHelpers/fetchCoarseUserLocation";
+import {
+  getLatestTrackedLocation,
+} from "../../../../sharedHelpers/locationHistoryTracker";
 
 interface SortOption<SortValue> {
   label: string;
@@ -139,7 +142,9 @@ const ExploreResults = ( ) => {
       // perms blocked: fall back to worldwide
       dispatch( { type: EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE } );
     } else if ( isNearby && hasPermissions === true && nearbyCoords === undefined ) {
-      fetchCoarseUserLocation( ).then( location => {
+      getLatestTrackedLocation( ).then(
+        tracked => tracked ?? fetchCoarseUserLocation( ),
+      ).then( location => {
         if ( cancelled ) return;
         if ( typeof location?.latitude === "number" ) {
           setNearbyCoords( { lat: location.latitude, lng: location.longitude, radius: 1 } );

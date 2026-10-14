@@ -96,7 +96,7 @@ describe( "ExploreV2MapView", ( ) => {
     const { initialRegion } = mapProps( );
     expect( initialRegion.latitude ).toBe( 37.5 );
     expect( initialRegion.longitude ).toBe( -122.1 );
-    expect( initialRegion.latitudeDelta ).toBe( 0.02 );
+    expect( initialRegion.latitudeDelta ).toBe( 0.9 );
   } );
 
   it( "ignores the result bounds when the search is nearby", ( ) => {
@@ -340,8 +340,8 @@ describe( "ExploreV2MapView", ( ) => {
       expect( animateToRegion ).toHaveBeenCalledWith( {
         latitude: 37.5,
         longitude: -122.1,
-        latitudeDelta: 0.02,
-        longitudeDelta: 0.02,
+        latitudeDelta: 0.9,
+        longitudeDelta: 0.9,
       } );
     } );
   } );

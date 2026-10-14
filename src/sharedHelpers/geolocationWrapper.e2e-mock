@@ -12,7 +12,14 @@ import {
   RESULTS
 } from "react-native-permissions";
 
-let counter = 0;
+const activeWatches = {};
+/*
+  Keep each watch delivering for a few seconds so code that waits for an
+  accurate fix gets one, then stop so the JS thread idles and Detox doesn't
+  time out.
+*/
+const WATCH_FIXES = 5;
+const WATCH_INTERVAL_MS = 1000;
 
 function getCurrentPosition(
   success: (position: GeolocationResponse) => void,
@@ -34,25 +41,26 @@ function watchPosition(
 ) {
   console.log( "[DEBUG geolocationWrapper.e2e-mock] watchPosition" );
   const watchID = Date.now();
-  /*
-    We have to limit this here to not run forever otherwise the e2e
-    test never idles and times out.
-  */
-  if ( counter < 5 ) {
-    setTimeout( ( ) => {
-      console.log( "[DEBUG geolocationWrapper.e2e-mock] watchPosition success" );
-      counter += 1;
-      success( {
-        coords: CHUCKS_PAD,
-        timestamp: Date.now()
-      } );
-    }, 1000 );
-  }
+  let fixes = 0;
+  activeWatches[watchID] = setInterval( ( ) => {
+    console.log( "[DEBUG geolocationWrapper.e2e-mock] watchPosition success" );
+    fixes += 1;
+    if ( fixes >= WATCH_FIXES ) {
+      clearInterval( activeWatches[watchID] );
+      delete activeWatches[watchID];
+    }
+    success( {
+      coords: CHUCKS_PAD,
+      timestamp: Date.now()
+    } );
+  }, WATCH_INTERVAL_MS );
   return watchID;
 }
 
 function clearWatch( watchID: number ) {
   console.log( "[DEBUG geolocationWrapper.e2e-mock] clearWatch, watchID: ", watchID );
+  clearInterval( activeWatches[watchID] );
+  delete activeWatches[watchID];
 }
 
 const highAccuracyOptions = {

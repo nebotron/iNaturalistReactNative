@@ -120,11 +120,9 @@ const AddObsBottomSheet = ( {
     >
       <INatIconButton
         className={GREEN_CIRCLE_CLASS}
-        accessibilityHint={accessibilityHint}
-        accessibilityLabel={accessibilityLabel}
+        iconOnly
         color={String( colors?.white )}
         icon={icon}
-        onPress={onPress}
         size={icon === "aicamera"
           ? 28
           : 20}

@@ -88,6 +88,23 @@ const expectNavigationReset = ( mockDispatch, screenName, lastScreen = "PhotoSha
   );
 };
 
+// Group Photos lives in the tab stack so the import keeps the bottom tab bar
+const expectGroupPhotosReset = ( mocks, lastScreen = "PhotoSharing" ) => {
+  expect( mocks.dispatch ).toHaveBeenCalledWith(
+    CommonActions.reset( {
+      index: 0,
+      routes: [{ name: "TabNavigator" }],
+    } ),
+  );
+  expect( mocks.navigate ).toHaveBeenCalledWith( "TabNavigator", {
+    screen: "ObservationsTab",
+    params: {
+      screen: "GroupPhotos",
+      params: { lastScreen },
+    },
+  } );
+};
+
 describe( "PhotoSharing", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
@@ -134,9 +151,12 @@ describe( "PhotoSharing", ( ) => {
       renderComponent( <PhotoSharing /> );
 
       await waitFor( ( ) => {
+        // The alert body has to be a string: an Error handed to Alert.alert
+        // crosses the bridge as an empty object, so the user saw a title and
+        // nothing else.
         expect( alertSpy ).toHaveBeenCalledWith(
           "Photo sharing failed: couldn't create new observation:",
-          error,
+          "Error: Creation failed",
         );
       } );
       expect( mocks.dispatch ).not.toHaveBeenCalled( );
@@ -166,7 +186,7 @@ describe( "PhotoSharing", ( ) => {
           ],
         } );
       } );
-      expectNavigationReset( mocks.dispatch, "GroupPhotos" );
+      expectGroupPhotosReset( mocks );
       expect( Observation.createObservationWithPhotos ).not.toHaveBeenCalled( );
     } );
 

@@ -95,6 +95,14 @@ const markAsReviewed = async ( params: Object = {}, opts: Object = {} ): Promise
   }
 };
 
+const markAsUnreviewed = async ( params: Object = {}, opts: Object = {} ): Promise<?number> => {
+  try {
+    return await inatjs.observations.unreview( params, opts );
+  } catch ( e ) {
+    return handleError( e, { context: { functionName: "markAsUnreviewed", opts } } );
+  }
+};
+
 const markObservationUpdatesViewed = async (
   params: Object = {},
   opts: Object = {},
@@ -148,6 +156,11 @@ const fetchObservationUpdates = async (
   params: Object = {},
   opts: Object = {},
 ): Promise<?Object> => {
+  // Same endpoint, same guarantee, as fetchUnviewedObservationUpdatesCount
+  // below: /observations/updates 401s without a token, and getJWT() can return
+  // null while isLoggedIn() is true. The app log has that 401, with
+  // opts.api_token null.
+  if ( !opts?.api_token ) return null;
   try {
     const { results } = await inatjs.observations.updates( params, opts );
     return results;
@@ -160,6 +173,11 @@ const fetchUnviewedObservationUpdatesCount = async (
   params: Object = {},
   opts: Object = {},
 ): Promise<number> => {
+  // This endpoint always 401s without a token. isLoggedIn() can be true (an
+  // accessToken exists) while getJWT() returns null because a JWT refresh
+  // failed, so the query still fires tokenless. Skip the guaranteed-failing
+  // request rather than logging an auth error on every background poll.
+  if ( !opts?.api_token ) return 0;
   try {
     const { total_results: updatesCount } = await inatjs.observations.updates( {
       ...params,
@@ -246,6 +264,7 @@ export {
   fetchSubscriptions,
   fetchUnviewedObservationUpdatesCount,
   markAsReviewed,
+  markAsUnreviewed,
   markObservationUpdatesViewed,
   searchObservations,
   unfaveObservation,

@@ -69,6 +69,25 @@ describe( "MediaViewer", ( ) => {
         await screen.findByLabelText( "Delete photo" );
         expect( screen.queryByTestId( "AttributionButton" ) ).toBeFalsy( );
       } );
+
+      it( "shows a draggable photo strip when there are multiple photos", async ( ) => {
+        const multiplePhotos = [
+          factory( "LocalPhoto" ),
+          factory( "LocalPhoto" ),
+        ];
+
+        renderComponent(
+          <MediaViewer
+            photos={multiplePhotos}
+            editable
+            onReorderPhotos={jest.fn( )}
+          />,
+        );
+
+        expect(
+          await screen.findByTestId( "MediaSelector.DraggableFlatList" ),
+        ).toBeTruthy( );
+      } );
     } );
 
     describe( "when not editable", ( ) => {

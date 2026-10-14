@@ -1,5 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import type { ApiTaxon } from "api/types";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import ExploreTaxonSearch from "components/Explore/SearchScreens/ExploreTaxonSearch";
 import Modal from "components/SharedComponents/Modal";
 import React from "react";
@@ -10,7 +11,8 @@ interface Props {
   hideInfoButton?: boolean;
   onPressInfo?: ( ) => void;
   showModal: boolean;
-  updateTaxon: ( taxon: RealmTaxon | null ) => void;
+  taxonFilters: ExploreTaxonFilter[];
+  updateTaxonFilters: ( taxonFilters: ExploreTaxonFilter[] ) => void;
 }
 
 const ExploreTaxonSearchModal = ( {
@@ -18,7 +20,8 @@ const ExploreTaxonSearchModal = ( {
   hideInfoButton = false,
   onPressInfo,
   showModal,
-  updateTaxon,
+  taxonFilters,
+  updateTaxonFilters,
 }: Props ) => {
   const navigation = useNavigation( );
   return (
@@ -32,13 +35,14 @@ const ExploreTaxonSearchModal = ( {
           closeModal={closeModal}
           hideInfoButton={hideInfoButton}
           onPressInfo={( taxon: RealmTaxon | ApiTaxon ) => {
-            navigation.push( "TaxonDetails", { id: taxon.id } );
+            navigation.push( "TaxonDetails", { id: taxon.id, selectableForExplore: true } );
             closeModal();
             if ( onPressInfo ) {
               onPressInfo( );
             }
           }}
-          updateTaxon={updateTaxon}
+          taxonFilters={taxonFilters}
+          updateTaxonFilters={updateTaxonFilters}
         />
       )}
     />

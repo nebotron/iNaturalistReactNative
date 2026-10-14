@@ -54,11 +54,10 @@ const AddEvidenceSheet = ( {
           <EvidenceButton
             icon="photo-library"
             handlePress={( ) => {
-              // Show photo library, but skip group photos phase
-              navigation.navigate( "NoBottomTabStackNavigator", {
-                screen: "PhotoLibrary",
-                params: { skipGroupPhotos: true },
-              } );
+              // Show photo library, but skip group photos phase. Unqualified
+              // so it opens in whichever stack this ObsEdit lives in, keeping
+              // the bottom tab bar when there is one.
+              navigation.navigate( "PhotoLibrary", { skipGroupPhotos: true } );
             }}
             disabled={disableAddingMoreEvidence}
             accessibilityLabel={t( "Bulk-importer" )}

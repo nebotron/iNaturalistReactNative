@@ -14,17 +14,25 @@ import {
 import colors from "styles/tailwindColors";
 
 type Props = {
+  autoDetectSubject?: boolean,
   loading: boolean,
+  latitude?: number,
+  longitude?: number,
   photos: Object[],
   sounds: Object[],
-  tablet?: boolean
+  tablet?: boolean,
+  timeObservedAt?: string
 }
 
 const ObsMediaDisplay = ( {
+  autoDetectSubject,
   loading,
+  latitude,
+  longitude,
   photos = [],
   sounds = [],
   tablet = false,
+  timeObservedAt,
 }: Props ): Node => {
   const { t } = useTranslation( );
 
@@ -34,10 +42,14 @@ const ObsMediaDisplay = ( {
     return (
       <View className="bg-black">
         <ObsMedia
+          autoDetectSubject={autoDetectSubject}
           loading={loading}
+          latitude={latitude}
+          longitude={longitude}
           photos={photos}
           sounds={sounds}
           tablet={tablet}
+          timeObservedAt={timeObservedAt}
         />
         {!loading && items.length > 1 && (
           <View className="absolute bottom-5 left-5">

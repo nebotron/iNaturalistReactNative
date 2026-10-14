@@ -2,12 +2,17 @@
 
 import {
   ESTABLISHMENT_MEAN,
+  EVIDENCE_TYPE,
   MEDIA,
   PHOTO_LICENSE,
   REVIEWED,
   SORT_BY,
+  TIME_OF_DAY,
   WILD_STATUS,
 } from "providers/ExploreContext";
+
+import { taxonFiltersToApiParams } from "./taxonFilters";
+import { userFiltersToApiParams } from "./userFilters";
 
 const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   const RESEARCH = "research";
@@ -69,6 +74,18 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     delete filteredParams.months;
   }
 
+  // The API doesn't support an hour range (h1/h2); it only supports a list
+  // of discrete hours, like month, so expand the selected range into hours.
+  // Wraps around midnight when h1 > h2, e.g. 22 -> 2 becomes [22, 23, 0, 1, 2]
+  if ( params.timeOfDay === TIME_OF_DAY.RANGE && params.h1 != null && params.h2 != null ) {
+    const span = ( ( params.h2 - params.h1 + 24 ) % 24 ) + 1;
+    filteredParams.hour = new Array( span )
+      .fill( 0 )
+      .map( ( _, i ) => ( params.h1 + i ) % 24 );
+  }
+  delete filteredParams.h1;
+  delete filteredParams.h2;
+
   // MEDIA.ALL is the default media filter and for it we don't need to pass any params
   if ( params.media === MEDIA.PHOTOS ) {
     filteredParams.photos = true;
@@ -94,12 +111,55 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.captive = true;
   }
 
+  // Controlled term values: Evidence of Presence (22) and Alive or Dead (17).
+  // The API matches any annotation whose term is in term_id and value is in
+  // term_value_id, so selected types are ORed together.
+  const evidenceTypes = params.evidenceTypes || [];
+  if ( evidenceTypes.includes( EVIDENCE_TYPE.UNKNOWN ) ) {
+    filteredParams.without_term_id = 22;
+  } else if ( evidenceTypes.length > 0 ) {
+    const valueIds = {
+      [EVIDENCE_TYPE.LIVE_ORGANISM]: 18,
+      [EVIDENCE_TYPE.DEAD_ORGANISM]: 19,
+      [EVIDENCE_TYPE.FEATHER]: 23,
+      [EVIDENCE_TYPE.SCAT]: 25,
+      [EVIDENCE_TYPE.TRACK]: 26,
+      [EVIDENCE_TYPE.BONE]: 27,
+      [EVIDENCE_TYPE.MOLT]: 28,
+      [EVIDENCE_TYPE.GALL]: 29,
+      [EVIDENCE_TYPE.EGG]: 30,
+      [EVIDENCE_TYPE.HAIR]: 31,
+      [EVIDENCE_TYPE.LEAFMINE]: 32,
+      [EVIDENCE_TYPE.CONSTRUCTION]: 35,
+    };
+    filteredParams.term_id = [22, 17];
+    filteredParams.term_value_id = evidenceTypes.map( type => valueIds[type] );
+    // Live and dead together means any organism, including ones only
+    // annotated with the Organism evidence value
+    if ( evidenceTypes.includes( EVIDENCE_TYPE.LIVE_ORGANISM )
+      && evidenceTypes.includes( EVIDENCE_TYPE.DEAD_ORGANISM ) ) {
+      filteredParams.term_value_id.push( 24 );
+    }
+  }
+
   if ( params.reviewedFilter === REVIEWED.REVIEWED ) {
     filteredParams.reviewed = true;
     filteredParams.viewer_id = currentUser?.id;
   } else if ( params.reviewedFilter === REVIEWED.UNREVIEWED ) {
     filteredParams.reviewed = false;
     filteredParams.viewer_id = currentUser?.id;
+  }
+
+  if ( params.unobservedByMe && currentUser?.id ) {
+    filteredParams.unobserved_by_user_id = currentUser.id;
+  }
+
+  if ( params.popular ) {
+    filteredParams.popular = true;
+  }
+
+  if ( params.hasLocationMissing ) {
+    filteredParams.geo = false;
   }
 
   if ( params.photoLicense !== PHOTO_LICENSE.ALL ) {
@@ -116,28 +176,56 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.photo_license = licenseParams[params.photoLicense];
   }
 
-  if ( params.excludeUser?.id ) {
-    filteredParams.not_user_id = params.excludeUser.id;
+  const taxonFilterParams = taxonFiltersToApiParams( params.taxonFilters );
+  if ( taxonFilterParams.taxon_id ) {
+    filteredParams.taxon_id = taxonFilterParams.taxon_id;
+    delete filteredParams.taxon_ids;
+  } else {
+    delete filteredParams.taxon_id;
+  }
+  if ( taxonFilterParams.without_taxon_id ) {
+    filteredParams.without_taxon_id = taxonFilterParams.without_taxon_id;
+  } else {
+    delete filteredParams.without_taxon_id;
+  }
+
+  const userFilterParams = userFiltersToApiParams( params.userFilters );
+  if ( userFilterParams.user_id ) {
+    filteredParams.user_id = userFilterParams.user_id;
+  } else {
+    delete filteredParams.user_id;
+  }
+
+  if ( userFilterParams.not_user_id ) {
+    filteredParams.not_user_id = userFilterParams.not_user_id;
+  } else {
+    delete filteredParams.not_user_id;
   }
 
   delete filteredParams.taxon;
+  delete filteredParams.taxonFilters;
+  delete filteredParams.userFilters;
   delete filteredParams.place_guess;
   delete filteredParams.placeMode;
   delete filteredParams.user;
-  delete filteredParams.project;
   delete filteredParams.excludeUser;
+  delete filteredParams.project;
   delete filteredParams.sortBy;
   delete filteredParams.researchGrade;
   delete filteredParams.needsID;
   delete filteredParams.casual;
   delete filteredParams.dateObserved;
   delete filteredParams.dateUploaded;
+  delete filteredParams.timeOfDay;
   delete filteredParams.media;
   delete filteredParams.establishmentMean;
   delete filteredParams.wildStatus;
+  delete filteredParams.evidenceTypes;
   delete filteredParams.reviewedFilter;
   delete filteredParams.photoLicense;
   delete filteredParams.place;
+  delete filteredParams.unobservedByMe;
+  delete filteredParams.hasLocationMissing;
 
   return filteredParams;
 };

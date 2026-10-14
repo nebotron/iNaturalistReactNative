@@ -1,10 +1,15 @@
+import { useFocusEffect } from "@react-navigation/native";
 import { NotificationOnboarding } from "components/OnboardingModal/PivotCards";
 import { Tabs } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
-import React, { useState } from "react";
+import React, {
+  useCallback, useEffect, useRef, useState,
+} from "react";
 import { EventRegister } from "react-native-event-listeners";
-import { useCurrentUser, useLayoutPrefs, useTranslation } from "sharedHooks";
+import {
+  useCurrentUser, useLayoutPrefs, useTranslation, useUnviewedNotificationsCount,
+} from "sharedHooks";
 
 import NotificationsContainer from "./NotificationsContainer";
 import NotificationsTab, {
@@ -19,32 +24,62 @@ const OWNER_TAB_PARAMS = { observations_by: "owner" } as const;
 const FOLLOWING_TAB_PARAMS = { observations_by: "following" } as const;
 
 const Notifications = ( ) => {
-  const [activeTab, setActiveTab] = useState<typeof OWNER_TAB | typeof OTHER_TAB>( OWNER_TAB );
+  const [activeTab, setActiveTab] = useState<typeof OWNER_TAB | typeof OTHER_TAB | null>( null );
+  const hasAutoSelectedTab = useRef( false );
   const { t } = useTranslation();
   const { isDefaultMode } = useLayoutPrefs( );
   const currentUser = useCurrentUser( );
+
+  const {
+    ownerUnviewedCount: ownerUnviewed,
+    followingUnviewedCount: otherUnviewed,
+    refetch: refetchUnviewedCounts,
+  } = useUnviewedNotificationsCount( );
+
+  useFocusEffect(
+    useCallback( ( ) => {
+      refetchUnviewedCounts( );
+    }, [refetchUnviewedCounts] ),
+  );
+
+  useEffect( ( ) => {
+    if (
+      !hasAutoSelectedTab.current
+      && ownerUnviewed !== undefined
+      && otherUnviewed !== undefined
+    ) {
+      hasAutoSelectedTab.current = true;
+      setActiveTab(
+        Number( ownerUnviewed ) === 0 && Number( otherUnviewed ) > 0
+          ? OTHER_TAB
+          : OWNER_TAB,
+      );
+    }
+  }, [ownerUnviewed, otherUnviewed] );
 
   const realm = useRealm();
   const localObservationCount = realm.objects( "Observation" ).length;
 
   return (
     <View className="flex-1 bg-white">
-      <Tabs
-        tabs={[
-          {
-            id: OWNER_TAB,
-            text: t( "MY-CONTENT--notifications" ),
-            onPress: () => setActiveTab( OWNER_TAB ),
-          },
-          {
-            id: OTHER_TAB,
-            text: t( "OTHERS--notifications" ),
-            onPress: () => setActiveTab( OTHER_TAB ),
-          },
-        ]}
-        activeId={activeTab}
-        TabComponent={NotificationsTab}
-      />
+      {activeTab !== null && (
+        <Tabs
+          tabs={[
+            {
+              id: OWNER_TAB,
+              text: t( "MY-CONTENT--notifications" ),
+              onPress: () => setActiveTab( OWNER_TAB ),
+            },
+            {
+              id: OTHER_TAB,
+              text: t( "OTHERS--notifications" ),
+              onPress: () => setActiveTab( OTHER_TAB ),
+            },
+          ]}
+          activeId={activeTab}
+          TabComponent={NotificationsTab}
+        />
+      )}
       {activeTab === OWNER_TAB && (
         <NotificationsContainer
           currentUser={currentUser}

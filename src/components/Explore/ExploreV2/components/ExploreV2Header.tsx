@@ -3,6 +3,7 @@ import LocationSubtitle
   from "components/Explore/ExploreV2/components/LocationSubtitle";
 import SubjectThumbnail
   from "components/Explore/ExploreV2/components/SubjectThumbnail";
+import buildExploreV2QueryParams from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import countFilters from "components/Explore/ExploreV2/helpers/countFilters";
 import locationLabel from "components/Explore/ExploreV2/helpers/locationLabel";
 import primarySubject from "components/Explore/ExploreV2/helpers/primarySubject";
@@ -136,6 +137,18 @@ const ExploreV2Header = ( { showBackButton }: Props ) => {
       >
         {showBackButton && <BackButton />}
         {headerContent}
+        <View className="mr-2">
+          <ContainedSquareButton
+            accessibilityHint={t( "Opens-route-hotspots" )}
+            accessibilityLabel={t( "Wildlife-Hotspots" )}
+            backgroundColor={colors.darkGray}
+            icon="location"
+            onPress={() => navigation.navigate( "WildlifeHotspots", {
+              filterParams: buildExploreV2QueryParams( state ),
+            } )}
+            testID="ExploreV2Header.hotspotsButton"
+          />
+        </View>
         <View>
           <ContainedSquareButton
             accessibilityHint={t( "Opens-search-interface" )}

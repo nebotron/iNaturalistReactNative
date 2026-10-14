@@ -1,6 +1,7 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { screen, userEvent } from "@testing-library/react-native";
 import BottomButtonsContainer from "components/ObsEdit/BottomButtonsContainer";
+import useMultiObsSaveAndAdvance from "components/ObsEdit/hooks/useMultiObsSaveAndAdvance";
 import React from "react";
 import * as useCurrentUser from "sharedHooks/useCurrentUser";
 import useStore from "stores/useStore";
@@ -40,17 +41,30 @@ function renderBottomButtonsContainer( props = {} ) {
   return renderComponent(
     <BottomButtonsContainer
       passesEvidenceTest
-      observations={[]}
       currentObservation={mockObservation}
-      currentObservationIndex={0}
-      setCurrentObservationIndex={0}
-      // eslint-disable-next-line @typescript-eslint/no-empty-function
-      transitionAnimation={() => {}}
+      loading={false}
+      saveAndAdvance={async () => true}
       // eslint-disable-next-line react/jsx-props-no-spreading
       {...props}
     />,
   );
 }
+
+// Saving lives in useMultiObsSaveAndAdvance, so exercise the real hook
+const BottomButtonsContainerWithSave = props => {
+  const { saveAndAdvance } = useMultiObsSaveAndAdvance( {
+    transitionAnimation: ( ) => undefined,
+  } );
+  return (
+    <BottomButtonsContainer
+      passesEvidenceTest
+      loading={false}
+      saveAndAdvance={saveAndAdvance}
+      // eslint-disable-next-line react/jsx-props-no-spreading
+      {...props}
+    />
+  );
+};
 
 describe( "BottomButtonsContainer", () => {
   it( "has no accessibility errors", () => {
@@ -113,12 +127,13 @@ describe( "BottomButtonsContainer", () => {
       useNetInfo.mockImplementation( defaultUseNetInfo );
     } );
 
-    async function saveObservationWithButton( observation, testID, props = {} ) {
-      renderBottomButtonsContainer( {
+    async function saveObservationWithButton( observation, testID ) {
+      useStore.setState( {
         currentObservation: observation,
+        currentObservationIndex: 0,
         observations: [observation],
-        ...props,
       } );
+      renderComponent( <BottomButtonsContainerWithSave currentObservation={observation} /> );
       await actor.press( screen.getByTestId( testID ) );
     }
 

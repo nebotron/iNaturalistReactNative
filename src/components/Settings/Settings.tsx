@@ -1,4 +1,6 @@
+import { useNavigation } from "@react-navigation/native";
 import {
+  Button,
   Heading4,
   ScrollViewWrapper,
   SwitchRow,
@@ -17,10 +19,12 @@ import {
 import AdvancedSettings from "./AdvancedSettings";
 import LanguageSetting from "./LanguageSetting";
 import LoggedInDefaultSettings from "./LoggedInDefaultSettings";
+import UsbImportSetting from "./UsbImportSetting";
 
 const Settings = ( ) => {
   const { t } = useTranslation();
   const currentUser = useCurrentUser( );
+  const navigation = useNavigation( );
   const {
     isDefaultMode,
     setIsDefaultMode,
@@ -54,6 +58,13 @@ const Settings = ( ) => {
               <LanguageSetting onChange={changeLanguage} />
             </View>
           )}
+        <UsbImportSetting />
+        <Heading4 className="mt-[30px] mb-[15px]">{t( "PRIVACY-ZONE" )}</Heading4>
+        <Button
+          text={t( "Set-Up-Privacy-Zone" )}
+          onPress={( ) => navigation.navigate( "PrivacyZone" )}
+          testID="Settings.PrivacyZoneButton"
+        />
       </View>
     </ScrollViewWrapper>
   );

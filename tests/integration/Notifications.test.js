@@ -3,6 +3,7 @@ import Notifications from "components/Notifications/Notifications";
 import inatjs from "inaturalistjs";
 import React from "react";
 import factory, { makeResponse } from "tests/factory";
+import cachedImageUri from "tests/helpers/cachedImageUri";
 import { queryClient, renderAppWithComponent } from "tests/helpers/render";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 import { signIn, signOut } from "tests/helpers/user";
@@ -104,7 +105,7 @@ describe( "Notifications", () => {
     expect( localObservationAfter ).toBeTruthy( );
     const image = await screen.findByTestId( "ObservationIcon.photo" );
     await waitFor( () => {
-      expect( image.props.source ).toStrictEqual( { uri: photoUrl } );
+      expect( cachedImageUri( image ) ).toStrictEqual( photoUrl );
     } );
   } );
 } );

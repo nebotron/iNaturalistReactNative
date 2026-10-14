@@ -87,11 +87,13 @@ const useTaxon = ( taxon: Object, fetchRemote = true, retryQuery = true ): Objec
   }
 
   // Local is best, local-ish version of remote will be available sooner, use
-  // whatever was passed in as a last resort
+  // whatever was passed in as a last resort. A local copy without a name is a
+  // stub (e.g. an identification's taxon synced with only id and is_active),
+  // so it would render blank.
   return {
     error,
     refetch,
-    taxon: localTaxon || mappedRemoteTaxon || taxon,
+    taxon: ( localTaxon?.name && localTaxon ) || mappedRemoteTaxon || taxon,
     // Apparently useQuery isLoading is true if the query is disabled
     isLoading: enabled && isLoading,
   };

@@ -1,0 +1,100 @@
+{
+ "birds, Britain / geo filter": {
+  "n": 60,
+  "recall": 0.95,
+  "precision": 0.594,
+  "fp_per_rec": 0.65,
+  "top1": 0.833
+ },
+ "birds, Britain / no geo filter": {
+  "n": 60,
+  "recall": 0.95,
+  "precision": 0.523,
+  "fp_per_rec": 0.87,
+  "top1": 0.783
+ },
+ "birds, Seattle area / geo filter": {
+  "n": 68,
+  "recall": 0.985,
+  "precision": 0.663,
+  "fp_per_rec": 0.5,
+  "top1": 0.912
+ },
+ "birds, Seattle area / no geo filter": {
+  "n": 68,
+  "recall": 0.985,
+  "precision": 0.588,
+  "fp_per_rec": 0.69,
+  "top1": 0.912
+ },
+ "birds, eastern Australia / geo filter": {
+  "n": 50,
+  "recall": 0.96,
+  "precision": 0.471,
+  "fp_per_rec": 1.08,
+  "top1": 0.76
+ },
+ "birds, eastern Australia / no geo filter": {
+  "n": 50,
+  "recall": 0.96,
+  "precision": 0.39,
+  "fp_per_rec": 1.5,
+  "top1": 0.74
+ },
+ "birds, eastern US / geo filter": {
+  "n": 20,
+  "recall": 0.95,
+  "precision": 0.543,
+  "fp_per_rec": 0.8,
+  "top1": 0.9
+ },
+ "birds, eastern US / no geo filter": {
+  "n": 20,
+  "recall": 0.95,
+  "precision": 0.514,
+  "fp_per_rec": 0.9,
+  "top1": 0.9
+ },
+ "frogs, eastern US / geo filter": {
+  "n": 63,
+  "recall": 0.921,
+  "precision": 0.552,
+  "fp_per_rec": 0.75,
+  "top1": 0.714
+ },
+ "frogs, eastern US / no geo filter": {
+  "n": 63,
+  "recall": 0.921,
+  "precision": 0.537,
+  "fp_per_rec": 0.79,
+  "top1": 0.714
+ },
+ "insects, eastern US / geo filter": {
+  "n": 62,
+  "recall": 0.758,
+  "precision": 0.691,
+  "fp_per_rec": 0.34,
+  "top1": 0.71
+ },
+ "insects, eastern US / no geo filter": {
+  "n": 62,
+  "recall": 0.758,
+  "precision": 0.653,
+  "fp_per_rec": 0.4,
+  "top1": 0.71
+ },
+ "seattle-eval / geo filter": {
+  "n": 600,
+  "recall": 0.925,
+  "precision": 0.528,
+  "fp_per_rec": 0.83,
+  "top1": 0.81
+ },
+ "seattle-eval / no geo filter": {
+  "n": 600,
+  "recall": 0.927,
+  "precision": 0.461,
+  "fp_per_rec": 1.08,
+  "top1": 0.793
+ }
+}

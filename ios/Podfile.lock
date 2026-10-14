@@ -238,6 +238,7 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
+  - onnxruntime-c (1.26.0)
   - PromisesObjC (2.4.0)
   - PromisesSwift (2.4.0):
     - PromisesObjC (= 2.4.0)
@@ -2178,6 +2179,8 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
+  - react-native-background-actions (4.1.0):
+    - React-Core
   - react-native-cameraroll (7.10.2):
     - boost
     - DoubleConversion
@@ -4036,6 +4039,7 @@ DEPENDENCIES:
   - hermes-engine (from `../node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)
   - NitroImage (from `../node_modules/react-native-nitro-image`)
   - NitroModules (from `../node_modules/react-native-nitro-modules`)
+  - onnxruntime-c
   - RCT-Folly (from `../node_modules/react-native/third-party-podspecs/RCT-Folly.podspec`)
   - RCTDeprecation (from `../node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)
   - RCTRequired (from `../node_modules/react-native/Libraries/Required`)
@@ -4074,6 +4078,7 @@ DEPENDENCIES:
   - React-Mapbuffer (from `../node_modules/react-native/ReactCommon`)
   - React-microtasksnativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/microtasks`)
   - React-mutationobservernativemodule (from `../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver`)
+  - react-native-background-actions (from `../node_modules/react-native-background-actions`)
   - "react-native-cameraroll (from `../node_modules/@react-native-camera-roll/camera-roll`)"
   - react-native-config (from `../node_modules/react-native-config`)
   - react-native-geocoder-reborn (from `../node_modules/react-native-geocoder-reborn`)
@@ -4180,6 +4185,7 @@ SPEC REPOS:
     - LicensePlist
     - Mute
     - nanopb
+    - onnxruntime-c
     - PromisesObjC
     - PromisesSwift
     - React-Codegen
@@ -4285,6 +4291,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/microtasks"
   React-mutationobservernativemodule:
     :path: "../node_modules/react-native/ReactCommon/react/nativemodule/mutationobserver"
+  react-native-background-actions:
+    :path: "../node_modules/react-native-background-actions"
   react-native-cameraroll:
     :path: "../node_modules/@react-native-camera-roll/camera-roll"
   react-native-config:
@@ -4481,6 +4489,8 @@ SPEC CHECKSUMS:
   nanopb: fad817b59e0457d11a5dfbde799381cd727c1275
   NitroImage: aaf23abdf2f5446f392b43867c27860508b52965
   NitroModules: d52aaa5db99af2be4c2b171460e3a7541d78fe4d
+  NitroModules: d2d7b8a417d5f498ef5affa78d82113ad8c35c59
+  onnxruntime-c: e6e9272f5996fed3ea3ca3c9bc843478b2ecbc73
   PromisesObjC: f5707f49cb48b9636751c5b2e7d227e43fba9f47
   PromisesSwift: 9d77319bbe72ebf6d872900551f7eeba9bce2851
   RCT-Folly: b29feb752b08042c62badaef7d453f3bb5e6ae23
@@ -4521,6 +4531,7 @@ SPEC CHECKSUMS:
   React-Mapbuffer: aac411b32eabc0aef05b0bc38c010eb461a6a0fc
   React-microtasksnativemodule: a2ff1eb11061ca170faac36c8a77089ab1f2f053
   React-mutationobservernativemodule: 7e78b1a0aa0b6219f785cf1db3a53f98498b08d2
+  react-native-background-actions: 35a1e298faed0957d36469eb21d634f0b6243bcb
   react-native-cameraroll: ae31ba7ee17d31c5ee05d7bb248742e3af482783
   react-native-config: 916e53e7333d5b2bcb7ee9882f5605143b4fc4c5
   react-native-geocoder-reborn: a3c3d8460910309e750609c373b6887ec6f67a8f
@@ -4590,7 +4601,7 @@ SPEC CHECKSUMS:
   RNGestureHandler: c6327cf6e2bd384dc90351ccfff0da8142d62f54
   RNGoogleSignin: b126da02b9402311c8093e72b064a7e85d139921
   RNLocalize: d8ccb568b40c72c767714db3808ce66a1ecf444a
-  RNPermissions: 79345e03d8bede3692368496ec89dcc4768585b5
+  RNPermissions: c48f4b72bc2e549c83b1ab06977d30d4b5b437e3
   RNReanimated: c7f41b239964ff97c0ac083b2f1801d3d754516e
   RNScreens: cfb11dc33b79eac5e09a10b25e1ad0c2499d5b8b
   RNShareMenu: 85b0a3d8b0d34e4b088d8a18600bc0a0b69a96a6
@@ -4603,6 +4614,6 @@ SPEC CHECKSUMS:
   VisionCameraPluginInatVision: 3b006a7a434ddfc23d789729b6d98e451f90c4e4
   Yoga: 36c8d57a563ad609c1f7342857de6e23fa1edd5a
 
-PODFILE CHECKSUM: 73e24a8590e365c9fec451abf69476ae07116d98
+PODFILE CHECKSUM: 22de6ac73e38a6324bbcb86f6622ec4ecae48684
 
-COCOAPODS: 1.15.2
+COCOAPODS: 1.16.2

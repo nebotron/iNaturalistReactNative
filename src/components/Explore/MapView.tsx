@@ -3,23 +3,28 @@ import {
   Button,
   Map,
 } from "components/SharedComponents";
-import { getMapRegion } from "components/SharedComponents/Map/helpers/mapHelpers";
+import {
+  getMapBoundariesSafely,
+  getMapRegion,
+} from "components/SharedComponents/Map/helpers/mapHelpers";
 import { View } from "components/styledComponents";
 import type { MapBoundaries } from "providers/ExploreContext";
 import {
   EXPLORE_ACTION, PLACE_MODE, useExplore,
 } from "providers/ExploreContext";
 import React, {
-  useEffect, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import type { StyleProp, ViewStyle } from "react-native";
 import type RNMapView from "react-native-maps";
 import type { Region } from "react-native-maps";
 import { useTranslation } from "sharedHooks";
 import type { RenderLocationPermissionsGateFunction } from "sharedHooks/useLocationPermission";
+import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 
-const NEARBY_DELTA = 0.02;
+// ~100km span, i.e. 50km around the current location
+const NEARBY_DELTA = 0.9;
 
 const WORLDWIDE_DELTA = 180;
 const WORLDWIDE_LAT_LNG = 0.0;
@@ -79,6 +84,8 @@ const MapView = ( {
   const [showRedoSearchButton, setShowRedoSearchButton] = useState( false );
   const [regionToAnimate, setRegionToAnimate] = useState<Region | null>( null );
   const isFirstRender = useRef( true );
+  const lastExploreMapRegion = useStore( state => state.layout.lastExploreMapRegion );
+  const setLastExploreMapRegion = useStore( state => state.layout.setLastExploreMapRegion );
 
   const mapRef = useRef<RNMapView | null>( null );
 
@@ -150,7 +157,7 @@ const MapView = ( {
 
   const handleRedoSearch = async ( ) => {
     setShowRedoSearchButton( false );
-    const currentBounds = await mapRef?.current?.getMapBoundaries( );
+    const currentBounds = await getMapBoundariesSafely( mapRef?.current );
     if ( !currentBounds ) { return; }
     dispatch( { type: EXPLORE_ACTION.SET_PLACE_MODE_MAP_AREA } );
     dispatch( {
@@ -173,6 +180,11 @@ const MapView = ( {
   delete tileMapParams.orderBy;
 
   const initialRegion: Region = useMemo( () => {
+    // Don't restore the worldwide placeholder shown while location was loading
+    if ( lastExploreMapRegion && lastExploreMapRegion.latitudeDelta < WORLDWIDE_DELTA / 2 ) {
+      return lastExploreMapRegion;
+    }
+
     if ( exploreState.placeMode === PLACE_MODE.NEARBY ) {
       if ( nearbyRegion.latitude !== undefined && nearbyRegion.longitude !== undefined ) {
         return {
@@ -190,7 +202,11 @@ const MapView = ( {
     }
 
     return worldwideRegion;
-  }, [exploreState.placeMode, nearbyRegion, regionFromCoordinates] );
+  }, [exploreState.placeMode, lastExploreMapRegion, nearbyRegion, regionFromCoordinates] );
+
+  const handleRegionChangeComplete = useCallback( ( region: Region ) => {
+    setLastExploreMapRegion( region );
+  }, [setLastExploreMapRegion] );
 
   const handlePanDrag = ( ) => setShowRedoSearchButton( true );
 
@@ -212,17 +228,18 @@ const MapView = ( {
         ref={mapRef}
         currentLocationButtonClassName="left-5 bottom-20"
         onPanDrag={handlePanDrag}
+        onRegionChangeComplete={handleRegionChangeComplete}
         initialRegion={initialRegion}
         regionToAnimate={regionToAnimate}
         showCurrentLocationButton
         showSwitchMapTypeButton
         showsCompass={false}
         switchMapTypeButtonClassName="left-20 bottom-20"
+        showScaleBar
         showsUserLocation
         tileMapParams={tileMapParams}
         withPressableObsTiles={tileMapParams !== null}
         onCurrentLocationPress={handleCurrentLocationPress}
-        isLoading={isLoading}
       />
       {showRedoSearchButton && (
         <View

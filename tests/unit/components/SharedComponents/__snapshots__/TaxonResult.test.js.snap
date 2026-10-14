@@ -69,6 +69,7 @@ exports[`TaxonResult should render correctly 1`] = `
       }
     >
       <View
+        onLayout={[Function]}
         style={
           {
             "alignItems": "center",
@@ -89,6 +90,7 @@ exports[`TaxonResult should render correctly 1`] = `
             {
               "aspectRatio": 1,
               "flexGrow": 1,
+              "overflow": "hidden",
               "position": "relative",
             }
           }
@@ -136,7 +138,7 @@ exports[`TaxonResult should render correctly 1`] = `
                   ]
                 }
               >
-                
+                
               </Text>
             </View>
           </View>
@@ -289,7 +291,7 @@ exports[`TaxonResult should render correctly 1`] = `
             ]
           }
         >
-          
+          
         </Text>
       </View>
     </View>

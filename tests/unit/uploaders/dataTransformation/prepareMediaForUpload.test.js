@@ -63,6 +63,7 @@ describe( "prepareMediaForUpload", () => {
       observation_photo: {
         observation_id: mockObservation.id,
         position: mockObservationPhoto.position,
+        photo_id: mockPhoto.id,
       },
     } );
 
@@ -147,6 +148,7 @@ describe( "prepareMediaForUpload", () => {
       observation_photo: {
         observation_id: mockObservation.id,
         position: mockObservationPhoto.position,
+        photo_id: mockPhoto.id,
       },
     } );
   } );

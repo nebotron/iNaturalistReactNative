@@ -58,7 +58,8 @@ interface SoundContainerProps {
   sizeClass: string;
   sound: {
     file_url: string;
-    hidden: boolean;
+    // Absent on API sounds that were never moderated
+    hidden?: boolean;
   };
 }
 

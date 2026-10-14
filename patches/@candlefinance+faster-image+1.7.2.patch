@@ -1,0 +1,80 @@
+diff --git a/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift b/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
+index e1cb690..a7a2235 100644
+--- a/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
++++ b/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
+@@ -1,17 +1,35 @@
+ /// How aggressively the cache should be used.
+ enum CachePolicy: String {
+     case memory, discWithCacheControl, discNoCacheControl, memoryAndDisc
+-    
++
++    // Pipelines are shared instead of being rebuilt per view. Every
++    // ImagePipeline owns its own operation queues and in-flight task pool, so
++    // constructing one per mounted image (the upstream behavior) both
++    // multiplies thread pools across a scrolling list and stops Nuke from
++    // coalescing duplicate requests for the same URL.
++    private static let memoryPipeline = ImagePipeline.shared
++
++    private static let urlCachePipeline = ImagePipeline(configuration: .withURLCache)
++
++    /// Aggressive disk cache (`DataCache`) that ignores HTTP cache headers.
++    ///
++    /// The size limit is deliberately unbounded. `DataCache` writes to
++    /// `Library/Caches`, which iOS purges under disk pressure and excludes from
++    /// backups, so the system already evicts on our behalf and can let the
++    /// cache grow to the free space actually available. Nuke's own hourly LRU
++    /// sweep short-circuits on `guard size > sizeLimit`, so it becomes a no-op
++    /// rather than throwing away images the device still has room for.
++    static let dataCachePipeline = ImagePipeline(configuration: .withDataCache(sizeLimit: .max))
++
+     var pipeline: ImagePipeline {
+         switch self {
+         case .memory:
+-            return .shared
++            return Self.memoryPipeline
+         case .discWithCacheControl, .memoryAndDisc:
+           // A configuration with an HTTP disk cache (URLCache) with a size limit of 150 MB. This is a default configuration. Also uses shared for in-memory caching.
+-            return ImagePipeline(configuration: .withURLCache)
++            return Self.urlCachePipeline
+         case .discNoCacheControl:
+-          // A configuration with an aggressive disk cache (DataCache) with a size limit of 150 MB. An HTTP cache (URLCache) is disabled.
+-            return ImagePipeline(configuration: .withDataCache)
++            return Self.dataCachePipeline
+         }
+     }
+ }
+diff --git a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
+index d653e1c..4804ca8 100644
+--- a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
++++ b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
+@@ -15,6 +15,9 @@ final class FasterImageViewManager: RCTViewManager {
+     DispatchQueue.global(qos: .userInteractive).async {
+       ImagePipeline.shared.cache.removeAll()
+       ImageCache.shared.removeAll()
++      // The aggressive DataCache is a separate store from the shared
++      // pipeline's, so clearing the shared one alone leaves it on disk.
++      CachePolicy.dataCachePipeline.cache.removeAll()
+       DataLoader.sharedUrlCache.removeAllCachedResponses()
+       URLSession.shared.invalidateAndCancel()
+       DispatchQueue.main.async {
+@@ -23,12 +26,18 @@ final class FasterImageViewManager: RCTViewManager {
+     }
+   }
+   
++  // Retained for the lifetime of the app. ImagePrefetcher.deinit cancels every
++  // task it started, so a prefetcher scoped to prefetch(sources:) cancelled its
++  // own work the moment the method returned, making prefetching a no-op. It is
++  // pinned to the aggressive disk-cache pipeline so prefetched bytes land in
++  // the same store the views read from.
++  private static let prefetcher = ImagePrefetcher(pipeline: CachePolicy.dataCachePipeline)
++
+   @objc(prefetch:withResolver:withRejecter:)
+   func prefetch(sources: [String],
+                 resolve: @escaping RCTPromiseResolveBlock,
+                 reject: @escaping RCTPromiseRejectBlock) {
+-    let prefetcher = ImagePrefetcher()
+-    prefetcher.startPrefetching(with: sources.compactMap(URL.init(string:)))
++    Self.prefetcher.startPrefetching(with: sources.compactMap(URL.init(string:)))
+     resolve(true)
+   }
+ }

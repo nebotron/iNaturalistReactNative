@@ -32,7 +32,9 @@ const SearchMyObservationsTaxon = ( ) => {
       : ""
   ) );
 
-  const { taxa, isLoading, isLocal } = useTaxonSearch( taxonQuery );
+  const {
+    taxa, isLoading,
+  } = useTaxonSearch( taxonQuery );
 
   const closeScreen = useCallback( ( ) => navigation.goBack( ), [navigation] );
 
@@ -102,7 +104,6 @@ const SearchMyObservationsTaxon = ( ) => {
       <TaxonSearch
         focusAfterTransition
         isLoading={isLoading}
-        isLocal={isLocal}
         query={taxonQuery}
         renderItem={renderItem}
         setQuery={setTaxonQuery}
