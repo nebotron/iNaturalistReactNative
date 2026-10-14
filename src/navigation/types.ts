@@ -434,6 +434,7 @@ export type BaseTabStackParamList = {
   CropLogViewer: undefined;
   DevicePhotoCleanup: undefined;
   LocationHistory: undefined;
+  CameraClockCheck: undefined;
   LocationHistoryPointsMap: undefined;
   LocationHistoryDetailMap: {
     uuid: string;

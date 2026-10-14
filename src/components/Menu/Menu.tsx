@@ -152,6 +152,12 @@ const Menu = ( ) => {
       navigation: "LocationHistory",
       icon: "location",
     },
+    cameraClockCheck: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CAMERA CLOCK",
+      navigation: "CameraClockCheck",
+      icon: "clock-outline",
+    },
     about: {
       label: t( "ABOUT" ),
       navigation: "About",

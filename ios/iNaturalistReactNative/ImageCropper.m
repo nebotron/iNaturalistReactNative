@@ -1711,6 +1711,76 @@ RCT_EXPORT_METHOD( imageSize
   } );
 }
 
+// Camera clock check: the phone shows a QR code of its current time, the
+// camera photographs it, and comparing the code with the photo's EXIF capture
+// time gives the camera's clock offset.
+RCT_EXPORT_METHOD( qrCodePng
+                  : ( NSString * )text resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  static CIContext *context;
+  static dispatch_once_t once;
+  dispatch_once( &once, ^{ context = [CIContext contextWithOptions:nil]; } );
+  CIFilter *filter = [CIFilter filterWithName:@"CIQRCodeGenerator"];
+  [filter setValue:[text dataUsingEncoding:NSUTF8StringEncoding] forKey:@"inputMessage"];
+  [filter setValue:@"M" forKey:@"inputCorrectionLevel"];
+  CIImage *qr =
+    [filter.outputImage imageByApplyingTransform:CGAffineTransformMakeScale( 12, 12 )];
+  CGImageRef cg = [context createCGImage:qr fromRect:qr.extent];
+  if ( !cg ) { reject( @"QR_FAILED", @"Could not render QR code", nil ); return; }
+  NSData *png = UIImagePNGRepresentation( [UIImage imageWithCGImage:cg] );
+  CGImageRelease( cg );
+  resolve( [@"data:image/png;base64," stringByAppendingString:
+    [png base64EncodedStringWithOptions:0]] );
+}
+
+RCT_EXPORT_METHOD( readClockCheckPhoto
+                  : ( NSString * )inputPath resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+    NSString *input = [inputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    CGImageSourceRef src =
+      CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
+    if ( !src ) { reject( @"CLOCK_CHECK_FAILED", @"No image source for file", nil ); return; }
+    size_t index = primaryImageIndex( src );
+    NSDictionary *props = (__bridge_transfer NSDictionary *)
+      CGImageSourceCopyPropertiesAtIndex( src, index, NULL );
+    NSDictionary *exif = props[(__bridge NSString *)kCGImagePropertyExifDictionary];
+    NSDictionary *tiff = props[(__bridge NSString *)kCGImagePropertyTIFFDictionary];
+    NSString *dateTime = exif[(__bridge NSString *)kCGImagePropertyExifDateTimeOriginal]
+      ?: tiff[(__bridge NSString *)kCGImagePropertyTIFFDateTime];
+    NSString *subsec = exif[(__bridge NSString *)kCGImagePropertyExifSubsecTimeOriginal];
+    NSDictionary *thumbOpts = @{
+      (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+      (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform: @YES,
+      (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize: @3000,
+    };
+    CGImageRef cg = CGImageSourceCreateThumbnailAtIndex(
+      src, index, (__bridge CFDictionaryRef)thumbOpts );
+    CFRelease( src );
+    NSString *qr = nil;
+    if ( cg ) {
+      VNDetectBarcodesRequest *request = [[VNDetectBarcodesRequest alloc] init];
+      request.symbologies = @[VNBarcodeSymbologyQR];
+      VNImageRequestHandler *handler =
+        [[VNImageRequestHandler alloc] initWithCGImage:cg options:@{}];
+      [handler performRequests:@[request] error:nil];
+      for ( VNBarcodeObservation *observation in request.results ) {
+        if ( observation.payloadStringValue ) { qr = observation.payloadStringValue; break; }
+      }
+      CGImageRelease( cg );
+    }
+    resolve( @{
+      @"dateTime": dateTime ?: [NSNull null],
+      @"subsec": subsec ?: [NSNull null],
+      @"qr": qr ?: [NSNull null],
+    } );
+  } );
+}
+
 RCT_EXPORT_METHOD( detectSubjectBounds
                   : ( NSString * )inputPath resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
