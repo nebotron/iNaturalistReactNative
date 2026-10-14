@@ -515,6 +515,32 @@ During-app-start-no-model-found = During app start there was no computer vision 
 # Button for editing something
 # Description of the Life List view in Explore
 Each-species-with-the-date-it-was-first-observed = Each species with the date it was first observed, most recent first
+# Number of birds counted in an eBird sighting
+eBird-individuals-count =
+    { $count ->
+        [one] { $count } individual
+       *[other] { $count } individuals
+    }
+# Shown with eBird results when the search area is larger than eBird allows
+eBird-limit-area = Only sightings within 50 km of the center of the search area are included.
+# Shown with eBird results when the search has date filters, which eBird results ignore
+eBird-limit-dates = Date filters do not apply to eBird sightings. Only the last 30 days are included.
+# Shown with eBird results when the search has no location
+eBird-limit-no-location = Choose a location to include eBird sightings.
+# Shown with eBird results when the app has paused eBird searches to limit traffic
+eBird-limit-rate = Too many eBird searches. Try again in a few minutes.
+# Shown with eBird results when the maximum number of sightings was returned
+eBird-limit-results = Only the first 100 eBird sightings are included.
+# Header for sightings from eBird (a bird observation database) shown with Explore results
+eBird-recent-sightings =
+    { $count ->
+        [one] { $count } recent eBird sighting
+       *[other] { $count } recent eBird sightings
+    }
+# Warning shown above the reasons eBird results are incomplete
+eBird-results-incomplete = eBird results are incomplete:
+# Shown when eBird results could not be loaded
+eBird-results-unavailable = eBird results could not be loaded.
 Edit = Edit
 EDIT-COMMENT = EDIT COMMENT
 Edit-comment = Edit comment
@@ -1131,6 +1157,8 @@ OPEN-SETTINGS = OPEN SETTINGS
 Opens-add-comment-form = Opens add comment form.
 # Accessibility hint for button that opens the AI camera
 Opens-AI-camera = Opens AI camera.
+# Accessibility hint for an eBird sighting in Explore results
+Opens-eBird-checklist = Opens the eBird checklist.
 # Accessibility hint for a button that opens a form for editing a comment
 Opens-edit-comment-form = Opens edit comment form.
 Opens-location-permission-prompt = Opens location permission prompt
@@ -1450,6 +1478,10 @@ Share-map = Share map
 # Preceded by the fragment # Preceded by the fragment, "By uploading your observation to iNaturalist, you can:"
 Share-your-observation-where-it-can-help-scientists = Share your observation, where it can help scientists across the world better understand biodiversity.
 SHOP-INATURALIST-MERCH = SHOP INATURALIST MERCH
+# Button to expand the list of eBird sightings in Explore results
+Show-all-eBird-sightings = Show all eBird sightings
+# Button to collapse the list of eBird sightings in Explore results
+Show-fewer-eBird-sightings = Show fewer eBird sightings
 Show-observation-options = Show observation options.
 # Label for button that shows identification suggestions
 Shows-identification-suggestions = Shows identification suggestions

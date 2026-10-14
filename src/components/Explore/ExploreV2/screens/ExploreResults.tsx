@@ -2,6 +2,7 @@ import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect } from "@react-navigation/native";
 import type { ApiTotalBounds } from "api/types";
 import { OBSERVATIONS_TAB, SPECIES_TAB } from "appConstants/tabs";
+import EbirdResults from "components/Explore/EbirdResults";
 import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2MapView
@@ -242,6 +243,7 @@ const ExploreResults = ( ) => {
                     layout={layout === "list"
                       ? "list"
                       : "grid"}
+                    listHeaderContent={<EbirdResults enabled={canFetch} params={queryParams} />}
                     // bit over a misnomer on this prop; in this case it hides the
                     // ID/comments/quality badges that grid results can technically have
                     hideObsUploadStatus={layout !== "list"}
