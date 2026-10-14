@@ -1,4 +1,4 @@
-import { NativeEventEmitter, NativeModules } from "react-native";
+import { AppState, NativeEventEmitter, NativeModules } from "react-native";
 import { navigationRef } from "navigation/navigationUtils";
 import { log } from "sharedHelpers/logger";
 import { create } from "zustand";
@@ -210,12 +210,22 @@ if ( AudioBirdId ) {
   const emitter = new NativeEventEmitter( AudioBirdId as never );
   emitter.addListener( "AudioBirdIdScores", onScores );
   emitter.addListener( "AudioBirdIdStatus", ( message: string ) => logger.info( message ) );
-  emitter.addListener( "AudioBirdIdOpen", ( ) => {
+  const openAudioId = ( ) => {
     if ( !navigationRef.isReady( ) ) return;
     navigationRef.navigate( "TabNavigator", {
       screen: "MenuTab",
       params: { screen: "AudioId" },
     } );
+  };
+  emitter.addListener( "AudioBirdIdOpen", openAudioId );
+  // iOS doesn't say how the app was opened, so returning from the background
+  // while listening (e.g. tapping the mic in the Dynamic Island) opens Audio ID.
+  let wasBackground = false;
+  AppState.addEventListener( "change", state => {
+    if ( state === "background" ) wasBackground = true;
+    if ( state !== "active" ) return;
+    if ( wasBackground && useAudioIdSession.getState( ).listening ) openAudioId( );
+    wasBackground = false;
   } );
 }
 
