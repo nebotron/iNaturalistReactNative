@@ -37,14 +37,17 @@ interface Props {
   className?: string;
 }
 
-const ScaleBar = ( { region, mapWidth, className = "absolute left-3 top-3" }: Props ) => {
+const ScaleBar = ( { region, mapWidth, className = "absolute left-3 top-12" }: Props ) => {
   if ( !region?.longitudeDelta || !mapWidth ) return null;
   const metersPerPixel = ( region.longitudeDelta * METERS_PER_DEGREE
     * Math.cos( ( region.latitude * Math.PI ) / 180 ) ) / mapWidth;
   if ( !( metersPerPixel > 0 ) ) return null;
   const { label, width } = scaleFor( metersPerPixel );
   return (
-    <View className={className} pointerEvents="none">
+    <View
+      className={`${className} bg-white/80 rounded px-1.5 py-1`}
+      pointerEvents="none"
+    >
       {/* eslint-disable-next-line i18next/no-literal-string */}
       <Body4 className="text-black mb-0.5">{label}</Body4>
       <View
