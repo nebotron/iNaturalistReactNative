@@ -3,6 +3,7 @@ import { NativeEventEmitter, NativeModules } from "react-native";
 import { log } from "sharedHelpers/logger";
 import { create } from "zustand";
 
+import useAudioIdHistory, { clipPath } from "./audioIdHistory";
 import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
 import { prepareAudioId } from "./audioIdModel";
 
@@ -23,6 +24,7 @@ const { AudioBirdId } = NativeModules as {
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
+    saveClip: ( path: string ) => Promise<string>;
   };
 };
 
@@ -51,6 +53,25 @@ export interface Heard {
 }
 
 const heardTaxa = new Set<number>( );
+// The clip of each species' current call, by taxon ID.
+const callClips = new Map<number, string>( );
+
+// Keeps the 5 s clip of the run a call scored best in.
+const saveCallClip = ( sp: AudioIdSpecies, score: number, isNewCall: boolean ) => {
+  const history = useAudioIdHistory.getState( );
+  const existing = callClips.get( sp.taxonId );
+  const clip = !isNewCall && existing
+    ? history.clips[existing]
+    : undefined;
+  if ( clip && score <= clip.confidence ) return;
+  const id = clip
+    ? clip.id
+    : history.addClip( sp, score ).id;
+  if ( clip ) history.updateClip( id, { confidence: score } );
+  callClips.set( sp.taxonId, id );
+  AudioBirdId?.saveClip( clipPath( id ) )
+    .catch( ( e: Error ) => logger.error( `saving clip failed: ${e.message}` ) );
+};
 
 interface AudioIdState {
   listening: boolean;
@@ -84,6 +105,7 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
     if ( get( ).listening ) return;
     set( { error: null } );
     heardTaxa.clear( );
+    callClips.clear( );
     try {
       const s = await prepareAudioId( AudioBirdId.geo );
       set( { setup: s } );
@@ -141,6 +163,7 @@ const onScores = ( event: ScoresEvent ) => {
     if ( !isHeard( s ) || !sp ) return;
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;
+    saveCallClip( sp, s, isNewCall );
     if ( s > ALERT ) {
       if ( !heardTaxa.has( sp.taxonId ) || ( isNewCall && seen && !seen.has( sp.taxonId ) ) ) {
         alerts.push( sp );

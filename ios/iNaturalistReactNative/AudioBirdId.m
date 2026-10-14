@@ -227,6 +227,36 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
   }];
 }
 
+// Saves the last 5 s of audio, the window of the latest run, as AAC at
+// `path` (replacing any file there), for Audio ID's history of detections.
+RCT_EXPORT_METHOD( saveClip:( NSString * )path
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( _bufferQueue, ^{
+    NSData *window = [NSData dataWithBytes:self->_window length:AB_WIN * sizeof( float )];
+    dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
+      NSFileManager *fm = [NSFileManager defaultManager];
+      [fm createDirectoryAtPath:[path stringByDeletingLastPathComponent]
+    withIntermediateDirectories:YES attributes:nil error:nil];
+      [fm removeItemAtPath:path error:nil];
+      NSError *error = nil;
+      AVAudioFile *file = [[AVAudioFile alloc]
+        initForWriting:[NSURL fileURLWithPath:path]
+              settings:@{ AVFormatIDKey: @( kAudioFormatMPEG4AAC ), AVSampleRateKey: @( AB_SR ),
+                          AVNumberOfChannelsKey: @1, AVEncoderBitRateKey: @64000 }
+          commonFormat:AVAudioPCMFormatFloat32 interleaved:NO error:&error];
+      AVAudioPCMBuffer *buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                                              frameCapacity:AB_WIN];
+      buffer.frameLength = AB_WIN;
+      if ( buffer ) memcpy( buffer.floatChannelData[0], window.bytes, window.length );
+      BOOL ok = file && buffer && [file writeFromBuffer:buffer error:&error];
+      file = nil; // closes the file
+      if ( ok ) resolve( path ); else reject( @"clip", error.localizedDescription ?: @"Could not save the clip", error );
+    } );
+  } );
+}
+
 RCT_EXPORT_METHOD( stop )
 {
   dispatch_async( dispatch_get_main_queue(), ^{

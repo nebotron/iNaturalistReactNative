@@ -63,16 +63,21 @@ const useSeenTaxonIds = ( userId: number | undefined ): Set<number> | null => {
   }, [data] );
 };
 
-const TaxonThumb = ( { taxonId }: { taxonId: number } ) => {
+const TaxonThumb = ( { taxonId, onPress }: { taxonId: number; onPress: ( ) => void } ) => {
   const { taxon } = useTaxon( { id: taxonId } );
   const url = taxon?.default_photo?.url;
-  return url
-    ? <CachedImage source={{ uri: url }} className="w-10 h-10 rounded-lg mr-3" />
-    : (
-      <View className="mr-3">
-        <IconicTaxonIcon imageClassName="w-10 h-10 rounded-lg" iconicTaxonName="Aves" />
-      </View>
-    );
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint="Opens the species page."
+      className="mr-3"
+      onPress={onPress}
+    >
+      {url
+        ? <CachedImage source={{ uri: url }} className="w-10 h-10 rounded-lg" />
+        : <IconicTaxonIcon imageClassName="w-10 h-10 rounded-lg" iconicTaxonName="Aves" />}
+    </Pressable>
+  );
 };
 
 // The last 10 s of sound, Merlin-style: dark marks on a full-width white
@@ -115,14 +120,14 @@ const AudioId = ( ) => {
     <Pressable
       key={sp.taxonId}
       accessibilityRole="button"
-      accessibilityHint="Opens the species page."
+      accessibilityHint="Opens the history of when this species was heard."
       className={`flex-row items-center py-2 px-2 border-b border-lightGray ${
         hearingNow( sp.taxonId )
           ? "bg-yellow"
           : ""}`}
-      onPress={( ) => openTaxon( sp.taxonId )}
+      onPress={( ) => navigation.navigate( "AudioIdHistory", { taxonId: sp.taxonId } )}
     >
-      <TaxonThumb taxonId={sp.taxonId} />
+      <TaxonThumb taxonId={sp.taxonId} onPress={( ) => openTaxon( sp.taxonId )} />
       <View className="flex-1">
         <Body1>{sp.commonName}</Body1>
         <List2 className="italic">{sp.name}</List2>

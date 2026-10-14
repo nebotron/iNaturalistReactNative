@@ -431,6 +431,8 @@ export type BaseTabStackParamList = {
   MyIdentifications: undefined;
   WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   AudioId: undefined;
+  AudioIdHistory: { taxonId: number };
+  AudioIdClip: { id: string };
   CropLogViewer: undefined;
   DevicePhotoCleanup: undefined;
   LocationHistory: undefined;

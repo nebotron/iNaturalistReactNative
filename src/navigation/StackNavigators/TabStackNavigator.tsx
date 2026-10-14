@@ -2,6 +2,8 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import About from "components/About";
 import AudioId from "components/AudioId/AudioId";
+import AudioIdClip from "components/AudioId/AudioIdClip";
+import AudioIdHistory from "components/AudioId/AudioIdHistory";
 import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
@@ -106,6 +108,10 @@ const postDetailsTitle = () => (
 
 // eslint-disable-next-line i18next/no-literal-string
 const audioIdTitle = () => <Heading4 numberOfLines={1}>AUDIO ID</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const audioIdHistoryTitle = () => <Heading4 numberOfLines={1}>HEARD</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const audioIdClipTitle = () => <Heading4 numberOfLines={1}>CLIP</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
@@ -349,6 +355,16 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             options={{
               headerTitle: audioIdTitle,
             }}
+          />
+          <Stack.Screen
+            name="AudioIdHistory"
+            component={AudioIdHistory}
+            options={{ headerTitle: audioIdHistoryTitle }}
+          />
+          <Stack.Screen
+            name="AudioIdClip"
+            component={AudioIdClip}
+            options={{ headerTitle: audioIdClipTitle }}
           />
           <Stack.Screen
             name="CropLogViewer"
