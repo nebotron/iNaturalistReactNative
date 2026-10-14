@@ -1,3 +1,4 @@
+import { fontBold } from "appConstants/fontFamilies";
 import { Body4 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React from "react";
@@ -45,11 +46,11 @@ const ScaleBar = ( { region, mapWidth, className = "absolute left-3 top-12" }: P
   const { label, width } = scaleFor( metersPerPixel );
   return (
     <View
-      className={`${className} bg-white/80 rounded px-1.5 py-1`}
+      className={`${className} px-1.5 py-1`}
       pointerEvents="none"
     >
       {/* eslint-disable-next-line i18next/no-literal-string */}
-      <Body4 className="text-black mb-0.5">{label}</Body4>
+      <Body4 className="text-white mb-0.5" style={{ fontFamily: fontBold }}>{label}</Body4>
       <View
         className="h-1 bg-white border border-t-0 border-black"
         style={{ width }}
