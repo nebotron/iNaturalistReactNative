@@ -282,18 +282,17 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
   ```bash
   python3 scripts/app_log.py                   # grouped summary of recent entries
   python3 scripts/app_log.py --level error     # errors only
-  python3 scripts/app_log.py --grep ui_hang    # entries matching a regex
+  python3 scripts/app_log.py --grep slow_ui    # entries matching a regex
   python3 scripts/app_log.py --detail 3        # full entries behind summary group 3
   python3 scripts/app_log.py --dump log.json   # everything, for analysis
   ```
   Never run `--clear`. Entries carry the `commit` they came from, so check
   whether a crash predates the fix before chasing it.
-- **UI responsiveness markers**, all written by `sharedHelpers/uiDelayTracker.ts`
-  and `slowLoadTracker.ts`, and all searchable in that log: `ui_stall` and
-  `ui_hang` (JS thread unable to answer a touch), `slow_screen_transition`
-  (tap to rendered screen), `slow_ui_work`, `slow_query` / `query_hang`.
-  `button_stuck_processing` and `button_stuck_loading` (below) cover the
-  opposite case — a responsive thread and a control that has latched.
+- **UI responsiveness markers**, written by `sharedHelpers/uiDelayTracker.ts`
+  and searchable in that log: `slow_screen_transition` (tap to rendered
+  screen) and `slow_ui_work`. `button_stuck_processing` and
+  `button_stuck_loading` cover a responsive thread and a control that has
+  latched.
 - **Sentinel files** (`sharedHelpers/sentinelFiles.ts`) - Debug difficult hardware issues:
   - Created at flow start, deleted on success
   - Log stages during flow (e.g., camera permissions, save photo, location fetch)

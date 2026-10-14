@@ -1,136 +1,21 @@
 import { getCurrentRoute } from "navigation/navigationUtils";
-import { AppState } from "react-native";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "uiDelayTracker" );
 
-// How often the heartbeat timer is scheduled. Whatever the JS thread spends
-// beyond this between ticks is time it spent unable to answer a touch.
-const HEARTBEAT_MS = 500;
-// Overrun that counts as a user-visible stall rather than scheduling jitter.
-const STALL_THRESHOLD_MS = 1000;
-// Past this an overrun is more likely the app having been suspended (iOS stops
-// timers when the app is backgrounded or the screen locks) than the JS thread
-// blocking, but a freeze this long is the worst thing we could fail to hear
-// about, so it's logged on its own with that caveat attached.
-const SUSPECTED_HANG_MS = 30_000;
-// A suspension we didn't detect is the only plausible explanation past this, so
-// there's nothing to learn from logging it.
-const MAX_PLAUSIBLE_HANG_MS = 300_000;
-// Stalls come in bursts (one slow operation trips several ticks), so summarize
-// rather than emitting a line per tick.
-const STALL_LOG_INTERVAL_MS = 30_000;
-// A stall this long isn't jitter, it's the app visibly frozen. Reported at
-// error level so an errors-only read of the log surfaces it instead of leaving
-// it among thousands of info lines.
-const SEVERE_STALL_MS = 5_000;
 // A push/pop animation is ~350ms; past this the screen was waiting on work.
 const SLOW_TRANSITION_MS = 800;
-// Same suspension caveat as stalls: a transition can't really take this long.
+// Past this the app was likely suspended mid-transition rather than slow.
 const MAX_PLAUSIBLE_TRANSITION_MS = 30_000;
 // Work between a tap and the navigation it triggers is invisible to
 // trackScreenTransition, whose clock can only start once navigation is asked to
 // move. trackUiWork covers that gap for the handlers slow enough to need it.
 const SLOW_UI_WORK_MS = 500;
 
-let heartbeat: ReturnType<typeof setInterval> | null = null;
-let appStateSubscription: { remove: ( ) => void } | null = null;
-let lastTickAt = 0;
-// Timers don't fire while the app is suspended, so any tick spanning a period
-// when the app wasn't active measures background time, not a stall.
-let activeSinceLastTick = true;
-let stallsSinceLastLog = 0;
-let worstStallMs = 0;
-// The screen the *worst* stall happened on. The summary can be flushed up to
-// STALL_LOG_INTERVAL_MS after that, by which time the user has often moved on,
-// so reading the screen at flush time attributed stalls to the wrong screen.
-let worstStallScreen = "unknown";
-let lastStallLogAt = 0;
 // When the user tapped, as opposed to when navigation state caught up.
 let navigationDispatchedAt: number | null = null;
 
 const currentScreen = ( ): string => getCurrentRoute( )?.name ?? "unknown";
-
-const onHeartbeat = ( ) => {
-  const now = Date.now( );
-  const overrunMs = now - lastTickAt - HEARTBEAT_MS;
-  const wasActive = activeSinceLastTick;
-  lastTickAt = now;
-  activeSinceLastTick = AppState.currentState === "active";
-
-  if ( wasActive && overrunMs >= STALL_THRESHOLD_MS ) {
-    if ( overrunMs > SUSPECTED_HANG_MS ) {
-      // Rare enough to log on its own rather than fold into a summary that
-      // might not be emitted for another 30s.
-      if ( overrunMs <= MAX_PLAUSIBLE_HANG_MS ) {
-        logger.infoWithExtra( "ui_hang", {
-          stalledMs: Math.round( overrunMs ),
-          screen: currentScreen( ),
-          // We never saw the app leave the foreground, but an AppState change
-          // can't be delivered while the JS thread is blocked either.
-          mayBeSuspension: true,
-        } );
-      }
-    } else {
-      stallsSinceLastLog += 1;
-      if ( overrunMs > worstStallMs ) {
-        worstStallMs = overrunMs;
-        worstStallScreen = currentScreen( );
-      }
-    }
-  }
-
-  // Flush on any tick, not only one that stalled: a burst that ends before the
-  // interval elapses would otherwise sit in the counters unreported until the
-  // next burst, and be dropped entirely if none came.
-  if ( stallsSinceLastLog === 0 ) return;
-  if ( now - lastStallLogAt < STALL_LOG_INTERVAL_MS ) return;
-
-  lastStallLogAt = now;
-  const report = worstStallMs >= SEVERE_STALL_MS
-    ? logger.errorWithExtra
-    : logger.infoWithExtra;
-  report( "ui_stall", {
-    stalledMs: Math.round( worstStallMs ),
-    stallCount: stallsSinceLastLog,
-    screen: worstStallScreen,
-    // Where the user was when this was flushed. Differs from `screen` when the
-    // stall was on the way off a screen rather than on it.
-    flushedOn: currentScreen( ),
-  } );
-  stallsSinceLastLog = 0;
-  worstStallMs = 0;
-  worstStallScreen = "unknown";
-};
-
-// Watches the JS thread for the stretches where it can't respond to touches -
-// the delays a user experiences as the app freezing. Safe to call more than
-// once; only the first call starts the timer.
-export const startUiDelayMonitoring = ( ) => {
-  if ( heartbeat ) return;
-  lastTickAt = Date.now( );
-  activeSinceLastTick = AppState.currentState === "active";
-  appStateSubscription = AppState.addEventListener( "change", state => {
-    if ( state !== "active" ) { activeSinceLastTick = false; }
-    // Don't wake the JS thread twice a second while backgrounded (background
-    // location or audio can keep the app running indefinitely).
-    if ( state === "background" && heartbeat ) {
-      clearInterval( heartbeat );
-      heartbeat = null;
-    } else if ( state === "active" && !heartbeat ) {
-      lastTickAt = Date.now( );
-      heartbeat = setInterval( onHeartbeat, HEARTBEAT_MS );
-    }
-  } );
-  heartbeat = setInterval( onHeartbeat, HEARTBEAT_MS );
-};
-
-export const stopUiDelayMonitoring = ( ) => {
-  if ( heartbeat ) { clearInterval( heartbeat ); }
-  heartbeat = null;
-  appStateSubscription?.remove( );
-  appStateSubscription = null;
-};
 
 // Called when a navigation action is dispatched, which is the closest thing we
 // have to "when the user tapped". Timing from the resulting state change

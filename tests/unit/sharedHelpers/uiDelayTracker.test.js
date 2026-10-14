@@ -1,20 +1,15 @@
-import { AppState } from "react-native";
 import {
   markNavigationDispatched,
-  startUiDelayMonitoring,
-  stopUiDelayMonitoring,
   trackScreenTransition,
   trackUiWork,
 } from "sharedHelpers/uiDelayTracker";
 
 const mockInfoWithExtra = jest.fn( );
-const mockErrorWithExtra = jest.fn( );
 
 jest.mock( "sharedHelpers/logger", ( ) => ( {
   log: {
     extend: ( ) => ( {
       infoWithExtra: ( ...args ) => mockInfoWithExtra( ...args ),
-      errorWithExtra: ( ...args ) => mockErrorWithExtra( ...args ),
     } ),
   },
 } ) );
@@ -93,99 +88,5 @@ describe( "uiDelayTracker", ( ) => {
         screen: "MyObservations",
       } ),
     );
-  } );
-
-  describe( "heartbeat", ( ) => {
-    // Runs the heartbeat once with the clock at the given time, i.e. an
-    // interval that took ( at - previous at ) instead of the scheduled 500ms.
-    const tickAt = at => {
-      Date.now.mockReturnValue( at );
-      jest.advanceTimersByTime( 500 );
-    };
-
-    beforeEach( ( ) => {
-      // Faking Date as well would replace the Date.now spy the outer beforeEach
-      // installed, and tickAt drives the clock through that spy.
-      jest.useFakeTimers( { doNotFake: ["Date"] } );
-      AppState.currentState = "active";
-      jest.spyOn( AppState, "addEventListener" ).mockReturnValue( { remove: jest.fn( ) } );
-    } );
-
-    afterEach( ( ) => {
-      stopUiDelayMonitoring( );
-      jest.useRealTimers( );
-    } );
-
-    it( "reports stalls it was still holding when the burst ended", ( ) => {
-      Date.now.mockReturnValue( 1_000_000 );
-      startUiDelayMonitoring( );
-
-      // The first stall is reported immediately; the rest of the burst is
-      // summarized so one slow operation doesn't emit a line per tick.
-      tickAt( 1_002_500 );
-      expect( mockInfoWithExtra ).toHaveBeenCalledWith( "ui_stall", expect.any( Object ) );
-      mockInfoWithExtra.mockClear( );
-
-      tickAt( 1_004_000 );
-      expect( mockInfoWithExtra ).not.toHaveBeenCalled( );
-
-      // Nothing stalls again, so only a flush on a quiet tick can report it.
-      for ( let at = 1_004_500; at <= 1_034_500; at += 500 ) { tickAt( at ); }
-
-      expect( mockInfoWithExtra ).toHaveBeenCalledWith( "ui_stall", expect.objectContaining( {
-        stalledMs: 1_000,
-        stallCount: 1,
-        screen: "MyObservations",
-      } ) );
-    } );
-
-    // The summary can be flushed up to 30s after the stall, by which time the
-    // user has usually moved on, so reading the screen at flush time blamed the
-    // wrong one — which is exactly how the app log reads today.
-    it( "blames the screen the worst stall happened on, not the one flushed on", ( ) => {
-      Date.now.mockReturnValue( 3_000_000 );
-      startUiDelayMonitoring( );
-
-      mockCurrentRouteName = "RootExplore";
-      tickAt( 3_002_500 );
-      mockInfoWithExtra.mockClear( );
-      mockErrorWithExtra.mockClear( );
-
-      tickAt( 3_004_500 );
-      mockCurrentRouteName = "ObsDetails";
-      for ( let at = 3_005_000; at <= 3_035_000; at += 500 ) { tickAt( at ); }
-
-      expect( mockInfoWithExtra ).toHaveBeenCalledWith( "ui_stall", expect.objectContaining( {
-        screen: "RootExplore",
-        flushedOn: "ObsDetails",
-      } ) );
-    } );
-
-    it( "reports a stall long enough to be a visible freeze as an error", ( ) => {
-      Date.now.mockReturnValue( 4_000_000 );
-      startUiDelayMonitoring( );
-
-      // 8s of nothing: past SEVERE_STALL_MS, short of the ui_hang threshold.
-      tickAt( 4_008_500 );
-
-      expect( mockInfoWithExtra ).not.toHaveBeenCalledWith( "ui_stall", expect.any( Object ) );
-      expect( mockErrorWithExtra ).toHaveBeenCalledWith( "ui_stall", expect.objectContaining( {
-        stalledMs: 8_000,
-        screen: "MyObservations",
-      } ) );
-    } );
-
-    it( "logs a freeze too long to be ordinary jitter", ( ) => {
-      Date.now.mockReturnValue( 2_000_000 );
-      startUiDelayMonitoring( );
-
-      tickAt( 2_045_000 );
-
-      expect( mockInfoWithExtra ).toHaveBeenCalledWith( "ui_hang", expect.objectContaining( {
-        stalledMs: 44_500,
-        screen: "MyObservations",
-        mayBeSuspension: true,
-      } ) );
-    } );
   } );
 } );

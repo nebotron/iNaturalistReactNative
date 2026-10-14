@@ -10,12 +10,11 @@ import colors from "styles/tailwindColors";
 
 const logger = log.extend( "Button" );
 
-// uiDelayTracker reports the JS thread being unable to answer a touch. This
-// reports the opposite and so far invisible failure: a healthy thread and a
-// button that has latched, which is what "the app stopped responding to taps
-// until I restarted it" looks like when the log shows no stall at all. A
-// disabled Pressable never fires onPress, so a latched button emits nothing
-// on its own — it has to be noticed from the state that latched.
+// Reports an otherwise invisible failure: a healthy JS thread and a button
+// that has latched, which is what "the app stopped responding to taps until I
+// restarted it" looks like. A disabled Pressable never fires onPress, so a
+// latched button emits nothing on its own — it has to be noticed from the
+// state that latched.
 //
 // Only these two flags are watched, never the caller's `disabled` prop: plenty
 // of buttons are legitimately disabled for minutes (a form waiting on a field),

@@ -9,12 +9,9 @@ function handleRetryDelay( failureCount ) {
 }
 
 // A stalled fetch has no upper bound of its own, so a network hiccup that
-// never surfaces a connection error just sits there — see slowLoadTracker's
-// HANG_FETCH_MS, which is where the app itself gives up waiting and reports
-// one of these as a hang rather than a request that ever resolved. Aborting
-// authenticated requests at the same threshold (see useAuthenticatedQuery /
-// useAuthenticatedInfiniteQuery) turns that indefinite hang into a retryable
-// failure instead.
+// never surfaces a connection error just sits there. Aborting authenticated
+// requests (see useAuthenticatedQuery / useAuthenticatedInfiniteQuery) turns
+// that indefinite hang into a retryable failure instead.
 const REQUEST_TIMEOUT_MS = 20000;
 
 const createRequestTimeoutSignal = ( ) => {

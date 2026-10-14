@@ -4,11 +4,10 @@ import {
 import { NavigationContainer } from "@react-navigation/native";
 import { useReactNavigationDevTools } from "@rozenite/react-navigation-plugin";
 import type { PropsWithChildren } from "react";
-import React, { useEffect, useRef } from "react";
+import React, { useRef } from "react";
 import { logFirebaseScreenView } from "sharedHelpers/tracking";
 import {
   markNavigationDispatched,
-  startUiDelayMonitoring,
   trackScreenTransition,
 } from "sharedHelpers/uiDelayTracker";
 
@@ -19,10 +18,6 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
   const { isConnected } = useNetInfo( );
 
   useReactNavigationDevTools( { ref: navigationRef } );
-
-  useEffect( ( ) => {
-    startUiDelayMonitoring( );
-  }, [] );
 
   // if a user tries to navigate to the Login screen while they're
   // offline, they'll see this no internet alert and automatically land
