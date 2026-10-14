@@ -1,6 +1,3 @@
-import {
-  LOCATION_PERMISSIONS,
-} from "components/SharedComponents/PermissionGateContainer";
 import { t } from "i18next";
 import { AppState, NativeModules, Platform } from "react-native";
 import BackgroundService from "react-native-background-actions";
@@ -17,6 +14,9 @@ import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
 import { clearWatch, watchPosition } from "sharedHelpers/geolocationWrapper";
 import { store } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
+import {
+  LOCATION_PERMISSIONS,
+} from "sharedHelpers/permissions";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { sleep } from "sharedHelpers/util";
 

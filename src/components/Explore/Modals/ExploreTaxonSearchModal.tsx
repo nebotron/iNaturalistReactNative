@@ -11,8 +11,9 @@ interface Props {
   hideInfoButton?: boolean;
   onPressInfo?: ( ) => void;
   showModal: boolean;
-  taxonFilters: ExploreTaxonFilter[];
-  updateTaxonFilters: ( taxonFilters: ExploreTaxonFilter[] ) => void;
+  taxonFilters?: ExploreTaxonFilter[];
+  updateTaxon?: ( taxon: RealmTaxon | null ) => void;
+  updateTaxonFilters?: ( taxonFilters: ExploreTaxonFilter[] ) => void;
 }
 
 const ExploreTaxonSearchModal = ( {
@@ -21,6 +22,7 @@ const ExploreTaxonSearchModal = ( {
   onPressInfo,
   showModal,
   taxonFilters,
+  updateTaxon,
   updateTaxonFilters,
 }: Props ) => {
   const navigation = useNavigation( );
@@ -42,6 +44,7 @@ const ExploreTaxonSearchModal = ( {
             }
           }}
           taxonFilters={taxonFilters}
+          updateTaxon={updateTaxon}
           updateTaxonFilters={updateTaxonFilters}
         />
       )}

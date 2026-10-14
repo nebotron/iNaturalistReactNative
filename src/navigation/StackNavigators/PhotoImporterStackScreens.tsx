@@ -2,14 +2,13 @@
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import GroupPhotosContainer from "components/PhotoImporter/GroupPhotosContainer";
 import PhotoLibrary from "components/PhotoImporter/PhotoLibrary";
-import PermissionGateContainer, {
-  READ_WRITE_MEDIA_PERMISSIONS,
-} from "components/SharedComponents/PermissionGateContainer";
+import PermissionGateContainer from "components/SharedComponents/PermissionGateContainer";
 import { t } from "i18next";
 import { hideHeader } from "navigation/navigationOptions";
 import type { PhotoImporterStackParamList } from "navigation/types";
 import React from "react";
 import { Platform } from "react-native";
+import { READ_WRITE_MEDIA_PERMISSIONS } from "sharedHelpers/permissions";
 
 const Stack = createNativeStackNavigator<PhotoImporterStackParamList>( );
 

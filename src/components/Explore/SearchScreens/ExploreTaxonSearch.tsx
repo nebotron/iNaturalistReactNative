@@ -24,7 +24,10 @@ interface Props {
   hideInfoButton?: boolean;
   onPressInfo?: ( taxon: RealmTaxon | ApiTaxon ) => void;
   taxonFilters?: ExploreTaxonFilter[];
-  updateTaxonFilters: ( taxonFilters: ExploreTaxonFilter[] ) => void;
+  // Single-taxon pickers (project fields, Advanced Search) pass updateTaxon;
+  // Explore's multi-taxon filter passes updateTaxonFilters
+  updateTaxon?: ( taxon: RealmTaxon | null ) => void;
+  updateTaxonFilters?: ( taxonFilters: ExploreTaxonFilter[] ) => void;
 }
 
 const ExploreTaxonSearch = ( {
@@ -32,6 +35,7 @@ const ExploreTaxonSearch = ( {
   hideInfoButton = false,
   onPressInfo,
   taxonFilters = [],
+  updateTaxon,
   updateTaxonFilters,
 }: Props ) => {
   const { t } = useTranslation( );
@@ -43,20 +47,26 @@ const ExploreTaxonSearch = ( {
   } = useTaxonSearch( taxonQuery );
 
   const onTaxonSelected = useCallback( ( taxon: RealmTaxon ) => {
+    if ( updateTaxon ) {
+      updateTaxon( taxon );
+      closeModal( );
+      return;
+    }
     const alreadyAdded = taxonFilters.some( f => f.taxon.id === taxon.id );
     if ( !alreadyAdded ) {
-      updateTaxonFilters( normalizeTaxonFilters( [
+      updateTaxonFilters?.( normalizeTaxonFilters( [
         ...taxonFilters,
         { taxon: toExploreTaxonFilterTaxon( taxon ), exclude: false },
       ] ) );
     }
     closeModal( );
-  }, [closeModal, taxonFilters, updateTaxonFilters] );
+  }, [closeModal, taxonFilters, updateTaxon, updateTaxonFilters] );
 
   const resetTaxon = useCallback( ( ) => {
-    updateTaxonFilters( [] );
+    updateTaxon?.( null );
+    updateTaxonFilters?.( [] );
     closeModal( );
-  }, [updateTaxonFilters, closeModal] );
+  }, [updateTaxon, updateTaxonFilters, closeModal] );
 
   const getFilterForTaxon = useCallback( ( taxonId: number ) => (
     taxonFilters.find( filter => filter.taxon.id === taxonId )
