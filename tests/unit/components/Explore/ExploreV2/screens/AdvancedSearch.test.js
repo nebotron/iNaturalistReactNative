@@ -276,13 +276,12 @@ describe( "AdvancedSearch screen", ( ) => {
       expect( screen.queryByText( t( "FILTER-BY-A-PROJECT" ) ) ).toBeNull( );
     } );
 
-    it( "shows a carried unobserved subject in the user section", ( ) => {
+    it( "shows a carried unobserved subject as a checked taxon checkbox", ( ) => {
       setExploreState( { subject: { type: "unobserved", user: CURRENT_USER } } );
       renderComponent( <AdvancedSearch /> );
 
-      expect( screen.getByText( t( "USER" ) ) ).toBeVisible( );
-      expect( screen.getByText( t( "Species-I-havent-observed" ) ) ).toBeVisible( );
-      expect( screen.queryByText( t( "FILTER-BY-A-USER" ) ) ).toBeNull( );
+      expect( screen.getByText( t( "Unobserved-by-me" ) ) ).toBeVisible( );
+      expect( screen.getByText( t( "FILTER-BY-A-USER" ) ) ).toBeVisible( );
     } );
 
     it( "shows the unknown subject as an unknown taxon", ( ) => {
@@ -482,7 +481,7 @@ describe( "AdvancedSearch screen", ( ) => {
       setExploreState( { subject: { type: "unobserved", user: CURRENT_USER } } );
       renderComponent( <AdvancedSearch /> );
 
-      await actor.press( screen.getByLabelText( t( "Remove-user-filter" ) ) );
+      await actor.press( screen.getByText( t( "Unobserved-by-me" ) ) );
       await pressSearch( );
 
       expect( committedSearch( ).subject ).toBeNull( );

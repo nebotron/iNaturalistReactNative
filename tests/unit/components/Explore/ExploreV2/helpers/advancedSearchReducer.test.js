@@ -135,16 +135,16 @@ describe( "advancedSearchReducer", ( ) => {
   } );
 
   describe( "user filter", ( ) => {
-    it( "sets a user and clears an unobserved-by user", ( ) => {
+    it( "sets a user and keeps an unobserved-by user", ( ) => {
       const draft = makeDraft( { filters: { unobservedByUser: OTHER_USER } } );
 
       const newDraft = advancedSearchReducer( draft, { type: "SET_USER", user: USER } );
 
       expect( newDraft.filters.user ).toEqual( USER );
-      expect( newDraft.filters.unobservedByUser ).toBeNull( );
+      expect( newDraft.filters.unobservedByUser ).toEqual( OTHER_USER );
     } );
 
-    it( "sets an unobserved-by user and clears any user", ( ) => {
+    it( "sets an unobserved-by user and keeps any user", ( ) => {
       const draft = makeDraft( { filters: { user: USER } } );
 
       const newDraft = advancedSearchReducer( draft, {
@@ -153,7 +153,7 @@ describe( "advancedSearchReducer", ( ) => {
       } );
 
       expect( newDraft.filters.unobservedByUser ).toEqual( OTHER_USER );
-      expect( newDraft.filters.user ).toBeNull( );
+      expect( newDraft.filters.user ).toEqual( USER );
     } );
 
     it( "keeps a carried taxon subject", ( ) => {

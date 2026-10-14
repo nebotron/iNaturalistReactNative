@@ -52,7 +52,6 @@ import {
 import SearchHeader from "components/SharedComponents/SearchHeader";
 import BottomSheetV2 from "components/SharedComponents/Sheets/BottomSheetV2";
 import WarningSheet from "components/SharedComponents/Sheets/WarningSheet";
-import Body1 from "components/SharedComponents/Typography/Body1";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { ScrollView, View } from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
@@ -149,16 +148,14 @@ const AdvancedSearch = ( ) => {
     user: selectedUser,
   } );
 
-  const updateUnobservedByUser = ( selectedUser: ExploreSearchUser ) => dispatch( {
+  const updateUnobservedByUser = ( selectedUser: ExploreSearchUser | null ) => dispatch( {
     type: "SET_UNOBSERVED_BY_USER",
-    user: {
+    user: selectedUser && {
       id: selectedUser.id,
       login: selectedUser.login,
       icon_url: selectedUser.icon_url,
     },
   } );
-
-  const clearUserFilters = ( ) => dispatch( { type: "SET_USER", user: null } );
 
   const updateProject = ( selectedProject: ApiProjectSummary | null ) => dispatch( {
     type: "SET_PROJECT",
@@ -383,6 +380,17 @@ const AdvancedSearch = ( ) => {
               }
             }}
           />
+          {currentUser && (
+            <View className="px-4 mt-5">
+              <Checkbox
+                text={t( "Unobserved-by-me" )}
+                isChecked={!!unobservedByUser}
+                onPress={() => updateUnobservedByUser( unobservedByUser
+                  ? null
+                  : currentUser )}
+              />
+            </View>
+          )}
         </View>
         <View className="px-4 pb-4">
           {/* Location Section */}
@@ -449,22 +457,12 @@ const AdvancedSearch = ( ) => {
           <View className="mb-7">
             <Heading4 className="mb-5">{t( "USER" )}</Heading4>
             <View className="mb-5">
-              {unobservedByUser && (
-                <SelectedFilterRow
-                  accessibilityLabel={t( "Change-user" )}
-                  onEdit={() => setOpenPicker( "user" )}
-                  onRemove={clearUserFilters}
-                  removeAccessibilityLabel={t( "Remove-user-filter" )}
-                >
-                  <Body1>{t( "Species-I-havent-observed" )}</Body1>
-                </SelectedFilterRow>
-              )}
               {user && (
                 <SelectedFilterRow
                   accessibilityLabel={t( "Change-user" )}
                   justify="justify-around"
                   onEdit={() => setOpenPicker( "user" )}
-                  onRemove={clearUserFilters}
+                  onRemove={() => updateUser( null )}
                   removeAccessibilityLabel={t( "Remove-user-filter" )}
                 >
                   <UserListItem
@@ -474,7 +472,7 @@ const AdvancedSearch = ( ) => {
                   />
                 </SelectedFilterRow>
               )}
-              {!user && !unobservedByUser && (
+              {!user && (
                 <Button
                   text={t( "FILTER-BY-A-USER" )}
                   onPress={() => {

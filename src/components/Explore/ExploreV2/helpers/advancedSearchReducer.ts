@@ -46,7 +46,7 @@ export const draftFromV2State = ( v2: ExploreV2State ): AdvancedSearchDraft => {
       return {
         ...base,
         subject: null,
-        filters: { ...v2.filters, user: subject.user, unobservedByUser: null },
+        filters: { ...v2.filters, user: subject.user },
       };
     case "project":
       return { ...base, subject: null, filters: { ...v2.filters, project: subject.project } };
@@ -54,7 +54,7 @@ export const draftFromV2State = ( v2: ExploreV2State ): AdvancedSearchDraft => {
       return {
         ...base,
         subject: null,
-        filters: { ...v2.filters, unobservedByUser: subject.user, user: null },
+        filters: { ...v2.filters, unobservedByUser: subject.user },
       };
     default:
       return { ...base, subject: subject ?? null, filters: v2.filters };
@@ -140,9 +140,9 @@ export const advancedSearchReducer = (
     case "SET_SORT":
       return { ...draft, sortBy: action.sortBy };
     case "SET_USER":
-      return withFilters( draft, { user: action.user, unobservedByUser: null } );
+      return withFilters( draft, { user: action.user } );
     case "SET_UNOBSERVED_BY_USER":
-      return withFilters( draft, { unobservedByUser: action.user, user: null } );
+      return withFilters( draft, { unobservedByUser: action.user } );
     case "SET_PROJECT":
       return withFilters( draft, { project: action.project } );
     case "TOGGLE_RESEARCH_GRADE":
