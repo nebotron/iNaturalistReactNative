@@ -1,5 +1,5 @@
-import { NativeEventEmitter, NativeModules } from "react-native";
 import { navigationRef } from "navigation/navigationUtils";
+import { NativeEventEmitter, NativeModules } from "react-native";
 import { log } from "sharedHelpers/logger";
 import { create } from "zustand";
 
@@ -190,8 +190,8 @@ const onScores = ( event: ScoresEvent ) => {
     AudioBirdId?.notify(
       `Heard ${alerts.map( sp => sp.commonName ).join( ", " )}`,
       alerts.map( sp => ( seen && !seen.has( sp.taxonId )
-        ? `${sp.name}: not yet seen at research grade`
-        : sp.name ) ).join( "\n" ),
+        ? `${sp.commonName}: not yet seen at research grade`
+        : sp.commonName ) ).join( "\n" ),
     );
   }
   useAudioIdSession.setState( {
