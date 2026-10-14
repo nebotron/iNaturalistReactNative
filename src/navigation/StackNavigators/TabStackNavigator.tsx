@@ -16,6 +16,7 @@ import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
 import PostDetails from "components/Journal/PostDetails";
 import LifeListContainer from "components/LifeList/LifeListContainer";
+import CameraClockCheck from "components/LocationHistory/CameraClockCheck";
 import LocationHistory from "components/LocationHistory/LocationHistory";
 import LocationHistoryDetailMap from "components/LocationHistory/LocationHistoryDetailMap";
 import LocationHistoryPointsMap from "components/LocationHistory/LocationHistoryPointsMap";
@@ -107,6 +108,8 @@ const postDetailsTitle = () => (
 const audioIdTitle = () => <Heading4 numberOfLines={1}>AUDIO ID</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const cameraClockTitle = () => <Heading4 numberOfLines={1}>CAMERA CLOCK</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>PHOTO CLEANUP</Heading4>;
 const locationHistoryTitle = () => (
@@ -376,6 +379,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={LocationHistory}
             options={{
               headerTitle: locationHistoryTitle,
+            }}
+          />
+          <Stack.Screen
+            name="CameraClockCheck"
+            component={CameraClockCheck}
+            options={{
+              headerTitle: cameraClockTitle,
             }}
           />
           <Stack.Screen
