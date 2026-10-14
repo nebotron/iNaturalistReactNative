@@ -59,7 +59,7 @@ RCT_EXPORT_MODULE( );
 
 + (BOOL)requiresMainQueueSetup { return NO; }
 
-- (NSArray<NSString *> *)supportedEvents { return @[@"AudioBirdIdScores", @"AudioBirdIdStatus"]; }
+- (NSArray<NSString *> *)supportedEvents { return @[@"AudioBirdIdScores", @"AudioBirdIdStatus", @"AudioBirdIdOpen"]; }
 
 - (instancetype)init
 {
@@ -246,6 +246,15 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
          withCompletionHandler:(void ( ^ )( UNNotificationPresentationOptions ))completionHandler
 {
   completionHandler( UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList );
+}
+
+// Tapping a detection notification opens Audio ID.
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center
+didReceiveNotificationResponse:(UNNotificationResponse *)response
+         withCompletionHandler:(void ( ^ )( void ))completionHandler
+{
+  [self sendEventWithName:@"AudioBirdIdOpen" body:nil];
+  completionHandler( );
 }
 
 - (void)status:(NSString *)message

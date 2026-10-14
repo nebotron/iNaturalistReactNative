@@ -1,4 +1,5 @@
 import { NativeEventEmitter, NativeModules } from "react-native";
+import { navigationRef } from "navigation/navigationUtils";
 import { log } from "sharedHelpers/logger";
 import { create } from "zustand";
 
@@ -209,6 +210,13 @@ if ( AudioBirdId ) {
   const emitter = new NativeEventEmitter( AudioBirdId as never );
   emitter.addListener( "AudioBirdIdScores", onScores );
   emitter.addListener( "AudioBirdIdStatus", ( message: string ) => logger.info( message ) );
+  emitter.addListener( "AudioBirdIdOpen", ( ) => {
+    if ( !navigationRef.isReady( ) ) return;
+    navigationRef.navigate( "TabNavigator", {
+      screen: "MenuTab",
+      params: { screen: "AudioId" },
+    } );
+  } );
 }
 
 export default useAudioIdSession;
