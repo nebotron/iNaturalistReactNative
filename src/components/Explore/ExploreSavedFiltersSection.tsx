@@ -43,7 +43,6 @@ const ExploreSavedFiltersSection = ( {
     storeState => storeState.updateSavedExploreFilter,
   );
   const rootExploreView = useStore( storeState => storeState.rootExploreView );
-  const setRootExploreView = useStore( storeState => storeState.setRootExploreView );
 
   const sortedSavedFilters = useMemo(
     ( ) => sortSavedExploreFilters( savedExploreFilters ),
@@ -82,9 +81,6 @@ const ExploreSavedFiltersSection = ( {
       ),
     } );
 
-    if ( savedFilter.view ) {
-      setRootExploreView( savedFilter.view );
-    }
     if ( savedFilter.observationsLayout ) {
       zustandStorage.setItem( "exploreObservationsLayout", savedFilter.observationsLayout );
     }
