@@ -15,8 +15,9 @@ Variants (score of the predicted species):
   raw    window at offset 0 (AAC priming shifts it a few ms from the app's)
   mean3  mean over offsets 0, 7, 13 ms
   min3   min over those offsets
-  nbr    max of the runs 1 s earlier / later, the missing second as silence
-         (a 5 s clip has no audio outside it, so this reads low)
+  nbr    max of the runs 1 s earlier / later; 15 s clips (newer builds) have
+         the real audio around the centered window, 5 s ones pad with
+         silence, so there it reads low
   both   mean3 if nbr also clears the threshold, else 0
 Non-bird scores are not geomodel-weighted here, as they are in the app.
 """
@@ -59,7 +60,11 @@ def load_clip( clip_id, cache ):
         subprocess.run( ["ffmpeg", "-v", "error", "-y", "-i", m4a, "-ac", "1", "-ar", str( SR ),
                          "-f", "f32le", pcm], check=True )
     x = np.fromfile( pcm, np.float32 )
-    return np.pad( x, ( 0, max( 0, WIN + OFFSETS[-1] - len( x ) ) ) )
+    # A 15 s clip is centered on the detection's window; pad a 5 s one with a
+    # second of silence on each side.
+    start = ( len( x ) - WIN ) // 2 if len( x ) > WIN + 2 * SR else 0
+    x = x[start - SR:] if start else np.pad( x, ( SR, 0 ) )
+    return np.pad( x, ( 0, max( 0, 2 * SR + WIN + OFFSETS[-1] - len( x ) ) ) )
 
 
 def main( ):
@@ -92,9 +97,7 @@ def main( ):
             continue
         k = index[lab["predictedTaxonId"]]
         x = load_clip( clip_id, args.cache )
-        silence = np.zeros( SR, np.float32 )
-        windows = [x[o:o + WIN] for o in OFFSETS] + [
-            np.concatenate( [silence, x[:WIN - SR]] ), np.concatenate( [x[SR:WIN], silence] )]
+        windows = [x[SR + o:SR + o + WIN] for o in OFFSETS] + [x[:WIN], x[2 * SR:2 * SR + WIN]]
         s = session.run( ["output"], {"input": np.stack( windows )} )[0][:, k]
         mean3 = s[:3].mean( )
         nbr = s[3:].max( )
@@ -104,7 +107,7 @@ def main( ):
             if v[n] >= THRESHOLD:
                 tally[n][0 if lab["correct"] else 1] += 1
         label = "no organism" if lab.get( "noOrganism" ) else lab.get( "labelName" ) or "wrong ID"
-        db = 20 * np.log10( np.abs( x ).max( ) + 1e-9 )
+        db = 20 * np.log10( np.abs( x[SR:SR + WIN] ).max( ) + 1e-9 )
         print( f"{clip_id[:8]:8} {'Y' if lab['correct'] else 'N':2} {species[k][1][:22]:22} "
                f"{lab['confidence']:5.2f} " + " ".join( f"{v[n]:5.2f}" for n in names )
                + f"  {db:4.0f}  {label}" )

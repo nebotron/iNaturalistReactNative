@@ -41,3 +41,23 @@ notes of what did and did not work at the end of this skill.
   wrong there). Nothing measured on right detections yet: there were none with audio, so
   no change shipped. Neighbour scores are low-biased (silence padding); saving ~7 s clips
   would let consecutive runs be tested on real audio.
+
+### Session 2 (16 clips with audio: 3 right, 13 wrong)
+
+- 32 labels: 7 right, 25 wrong. All 16 clips are still 5 s (no 15 s context clips yet).
+- Right clips are all Steller's Jay (one user, one place), mean3 0.68–0.93 and nbr 0.67–0.96,
+  so every variant keeps them. Still reported (right / wrong): raw 3/7, mean3 3/8, min3 3/6,
+  nbr 3/6, both 3/5. Clay-colored Sparrow (4 clips) and Northern Flicker (2, 0.50 and 0.74)
+  are the stable confident false positives; nothing in the scores separates them.
+- Not shipped: `both`/`nbr` fit the "no right lost" rule here, but the README measured
+  consecutive windows losing more recall than they gained on 923 recordings, and 3 right
+  clips of one species can't outweigh that. mean3 would also triple inference.
+- Tried, not useful: a loudness gate (right clips are −36 to −40 dBFS, wrong ones −18 to −50);
+  a raised threshold (would need ~0.65, far above what the README eval supports); top-2 margin
+  (most wrong clips have no runner-up above 0.05). Scoring each 2.5 s half (tiled to 5 s) and
+  requiring both ≥ 0.3 dropped all 13 wrong and kept all 3 right, but only because the jays
+  called throughout: it would drop any single short call, so don't ship it on this data.
+- `eval_clips.py` now takes the centered 5 s window and real neighbouring runs from 15 s clips
+  (checked on a synthetic 15 s clip: center scores match the 5 s clip). Re-run once those
+  arrive; nbr on real neighbours is the next thing to measure.
+- Geomodel weighting couldn't be checked: labels carry no location.
