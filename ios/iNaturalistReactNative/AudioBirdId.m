@@ -28,6 +28,7 @@
 
 #define AB_SR       32000
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
+#define AB_HIST     480000  // 15 s kept, for clips with context around the window
 #define AB_STEP     32000   // run every 1 s of new audio
 #define AB_SPEC_HOP 400     // spectrogram columns, 80 per second
 #define AB_SPEC_LOG2N 10
@@ -118,7 +119,7 @@ RCT_EXPORT_MODULE( );
 - (instancetype)init
 {
   if ( ( self = [super init] ) ) {
-    _window      = (float *)calloc( AB_WIN, sizeof( float ) );
+    _window      = (float *)calloc( AB_HIST, sizeof( float ) );
     _bufferQueue = dispatch_queue_create( "org.inat.audiobirdid.buffer", DISPATCH_QUEUE_SERIAL );
     _inferQueue  = dispatch_queue_create( "org.inat.audiobirdid.infer", DISPATCH_QUEUE_SERIAL );
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
@@ -226,14 +227,18 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
   }];
 }
 
-// Saves the last 5 s of audio, the window of the latest run, as AAC at
-// `path` (replacing any file there), for Audio ID's history of detections.
+// Saves the last `seconds` (up to 15) of audio as AAC at `path` (replacing
+// any file there), for Audio ID's history of detections; 5 s is the window of
+// the latest run.
 RCT_EXPORT_METHOD( saveClip:( NSString * )path
+                   seconds:( double )seconds
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( _bufferQueue, ^{
-    NSData *window = [NSData dataWithBytes:self->_window length:AB_WIN * sizeof( float )];
+    AVAudioFrameCount frames = (AVAudioFrameCount)MIN( MAX( seconds, 0 ) * AB_SR, AB_HIST );
+    NSData *window = [NSData dataWithBytes:self->_window + AB_HIST - frames
+                                    length:frames * sizeof( float )];
     dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
       NSFileManager *fm = [NSFileManager defaultManager];
       [fm createDirectoryAtPath:[path stringByDeletingLastPathComponent]
@@ -246,8 +251,8 @@ RCT_EXPORT_METHOD( saveClip:( NSString * )path
                           AVNumberOfChannelsKey: @1, AVEncoderBitRateKey: @64000 }
           commonFormat:AVAudioPCMFormatFloat32 interleaved:NO error:&error];
       AVAudioPCMBuffer *buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
-                                                              frameCapacity:AB_WIN];
-      buffer.frameLength = AB_WIN;
+                                                              frameCapacity:frames];
+      buffer.frameLength = frames;
       if ( buffer ) memcpy( buffer.floatChannelData[0], window.bytes, window.length );
       BOOL ok = file && buffer && [file writeFromBuffer:buffer error:&error];
       file = nil; // closes the file
@@ -459,7 +464,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   dispatch_sync( _bufferQueue, ^{
     // Start with silence so the first run happens right away, before 5 s of
     // audio have arrived.
-    memset( self->_window, 0, AB_WIN * sizeof( float ) );
+    memset( self->_window, 0, AB_HIST * sizeof( float ) );
     self->_sinceRun = AB_STEP;
     self->_specPending = 0;
   } );
@@ -524,15 +529,15 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 
   dispatch_async( _bufferQueue, ^{
     const float *s = (const float *)samples.bytes;
-    NSInteger count = MIN( n, (NSInteger)AB_WIN );
+    NSInteger count = MIN( n, (NSInteger)AB_HIST );
     s += n - count;
-    memmove( self->_window, self->_window + count, ( AB_WIN - count ) * sizeof( float ) );
-    memcpy( self->_window + AB_WIN - count, s, count * sizeof( float ) );
+    memmove( self->_window, self->_window + count, ( AB_HIST - count ) * sizeof( float ) );
+    memcpy( self->_window + AB_HIST - count, s, count * sizeof( float ) );
     self->_sinceRun += count;
     self->_specPending += count;
     while ( self->_specPending >= AB_SPEC_HOP ) {
       self->_specPending -= AB_SPEC_HOP;
-      ABSpectrogramPush( self->_window + AB_WIN - self->_specPending - AB_SPEC_N );
+      ABSpectrogramPush( self->_window + AB_HIST - self->_specPending - AB_SPEC_N );
     }
 
     float sumSq = 0;
@@ -544,7 +549,8 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     if ( self->_sinceRun < AB_STEP || self->_busy ) return;
     self->_sinceRun = 0;
     self->_busy = YES;
-    NSData *window = [NSData dataWithBytes:self->_window length:AB_WIN * sizeof( float )];
+    NSData *window = [NSData dataWithBytes:self->_window + AB_HIST - AB_WIN
+                                    length:AB_WIN * sizeof( float )];
     float level = self->_level;
     // When the window's last sample arrived, on the clock JS's Date.now uses.
     double windowEnd = [[NSDate date] timeIntervalSince1970] * 1000;

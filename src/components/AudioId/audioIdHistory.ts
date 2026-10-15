@@ -41,6 +41,8 @@ export interface ListeningSession {
 
 // The app container's path changes across installs, so only ids are stored.
 export const clipPath = ( id: string ) => `${CLIPS_PATH}/${id}.m4a`;
+// 15 s centered on the clip, uploaded with labels.
+export const contextClipPath = ( id: string ) => `${CLIPS_PATH}/${id}-15s.m4a`;
 
 interface AudioIdHistoryState {
   clips: Record<string, AudioIdClip>;
@@ -109,7 +111,9 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
       } ),
     } ).catch( ( ) => undefined );
     // The audio goes in its own path so the labels stay quick to download.
-    readFile( clipPath( id ), "base64" ).then( audio => fetch(
+    // Clips from before 15 s ones were saved fall back to the 5 s clip.
+    readFile( contextClipPath( id ), "base64" )
+      .catch( ( ) => readFile( clipPath( id ), "base64" ) ).then( audio => fetch(
       `${baseUrl}/audio_id_clips/${id}.json`,
       {
         method: "PUT",

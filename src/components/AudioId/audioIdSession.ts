@@ -6,7 +6,7 @@ import { create } from "zustand";
 import type { StateStorage } from "zustand/middleware";
 import { createJSONStorage, persist } from "zustand/middleware";
 
-import useAudioIdHistory, { clipPath } from "./audioIdHistory";
+import useAudioIdHistory, { clipPath, contextClipPath } from "./audioIdHistory";
 import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
 import { fuseScore, prepareAudioId } from "./audioIdModel";
 
@@ -28,7 +28,7 @@ const { AudioBirdId } = NativeModules as {
     vibrateHaptics: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
-    saveClip: ( path: string ) => Promise<string>;
+    saveClip: ( path: string, seconds: number ) => Promise<string>;
   };
 };
 
@@ -61,6 +61,8 @@ export interface Heard {
 const heardTaxa = new Set<number>( );
 // The clip of each species' current call, by taxon ID.
 const callClips = new Map<number, string>( );
+// Pending saves of 15 s centered on each clip's window, by clip ID.
+const contextTimers = new Map<string, ReturnType<typeof setTimeout>>( );
 let sessionId: string | undefined;
 
 // Keeps the 5 s clip of the run a call scored best in.
@@ -76,8 +78,15 @@ const saveCallClip = ( sp: AudioIdSpecies, score: number, isNewCall: boolean ) =
     : history.addClip( sp, score, sessionId ).id;
   if ( clip ) history.updateClip( id, { confidence: score } );
   callClips.set( sp.taxonId, id );
-  AudioBirdId?.saveClip( clipPath( id ) )
+  AudioBirdId?.saveClip( clipPath( id ), 5 )
     .catch( ( e: Error ) => logger.error( `saving clip failed: ${e.message}` ) );
+  // 5 s on, the last 15 s are centered on this window.
+  clearTimeout( contextTimers.get( id ) );
+  contextTimers.set( id, setTimeout( ( ) => {
+    contextTimers.delete( id );
+    AudioBirdId?.saveClip( contextClipPath( id ), 15 )
+      .catch( ( e: Error ) => logger.error( `saving context clip failed: ${e.message}` ) );
+  }, 5000 ) );
 };
 
 interface AudioIdState {
