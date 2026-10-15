@@ -346,39 +346,34 @@ const MyObservationsSimple = ( {
   // The tabs show the total counts, so they live in the list header and scroll
   // off the top with the list whenever there's a list to scroll
   const tabsHeader = (
-    <>
-      <Tabs
-        activeColor={String( colors?.inatGreen )}
-        activeId={activeTab}
-        tabs={[
-          {
-            id: OBSERVATIONS_TAB,
-            text: t( "Observations" ),
-            onPress: () => setActiveTab( OBSERVATIONS_TAB ),
-            renderComponent: ( ) => (
-              <ObservationsStatTab
-                count={numTotalObservations}
-                wrapperClassName={STAT_TAB_PADDING}
-              />
-            ),
-          },
-          {
-            id: TAXA_TAB,
-            text: t( "Species" ),
-            onPress: () => setActiveTab( TAXA_TAB ),
-            renderComponent: ( ) => (
-              <SpeciesStatTab
-                count={numTotalTaxa}
-                wrapperClassName={STAT_TAB_PADDING}
-              />
-            ),
-          },
-        ]}
-      />
-      {searchMyObservationsEnabled && (
-        <SearchedTaxonBanner />
-      )}
-    </>
+    <Tabs
+      activeColor={String( colors?.inatGreen )}
+      activeId={activeTab}
+      tabs={[
+        {
+          id: OBSERVATIONS_TAB,
+          text: t( "Observations" ),
+          onPress: () => setActiveTab( OBSERVATIONS_TAB ),
+          renderComponent: ( ) => (
+            <ObservationsStatTab
+              count={numTotalObservations}
+              wrapperClassName={STAT_TAB_PADDING}
+            />
+          ),
+        },
+        {
+          id: TAXA_TAB,
+          text: t( "Species" ),
+          onPress: () => setActiveTab( TAXA_TAB ),
+          renderComponent: ( ) => (
+            <SpeciesStatTab
+              count={numTotalTaxa}
+              wrapperClassName={STAT_TAB_PADDING}
+            />
+          ),
+        },
+      ]}
+    />
   );
 
   const observationsListShown = !showSearchOfflineNotice
@@ -610,6 +605,9 @@ const MyObservationsSimple = ( {
           handleSyncButtonPress={handleSyncButtonPress}
         />
         { !listShowsTabs && tabsHeader }
+        {searchMyObservationsEnabled && (
+          <SearchedTaxonBanner />
+        )}
         { activeTab === OBSERVATIONS_TAB && renderObservationsTabContent( ) }
         { ( activeTab === TAXA_TAB && taxa.length > 0 ) && (
           <>
