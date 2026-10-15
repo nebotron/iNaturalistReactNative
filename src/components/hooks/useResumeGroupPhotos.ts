@@ -1,3 +1,5 @@
+import { CommonActions } from "@react-navigation/native";
+import { groupCropResumeParams } from "components/SharedComponents/ImageCrop/groupCropResume";
 import { navigationRef } from "navigation/navigationUtils";
 import { useEffect, useRef } from "react";
 import { useOnboardingShown } from "sharedHelpers/installData";
@@ -19,9 +21,33 @@ const useResumeGroupPhotos = ( ) => {
       // Guard against firing before the navigator has mounted, e.g. right
       // as the app cold-starts on the Login/Onboarding screen.
       if ( !navigationRef.isReady( ) ) { return; }
-      const { groupedPhotos } = useStore.getState( );
+      const { groupedPhotos, groupCropResume } = useStore.getState( );
       if ( groupedPhotos && groupedPhotos.length > 0 ) {
         resumedRef.current = true;
+        // A crop left part way reopens the cropper on top of Group Photos
+        const crop = groupCropResumeParams( groupCropResume, groupedPhotos );
+        if ( crop ) {
+          navigationRef.dispatch( CommonActions.reset( {
+            index: 0,
+            routes: [{
+              name: "TabNavigator",
+              state: {
+                routes: [{
+                  name: "ObservationsTab",
+                  state: {
+                    index: 2,
+                    routes: [
+                      { name: "ObsList" },
+                      { name: "GroupPhotos" },
+                      { name: "ImageCropEditor", params: crop.params },
+                    ],
+                  },
+                }],
+              },
+            }],
+          } ) );
+          return;
+        }
         // Resume inside the My Observations tab so the import keeps the bottom
         // tab bar and the user can step away from it and come back
         navigationRef.navigate( "TabNavigator", {

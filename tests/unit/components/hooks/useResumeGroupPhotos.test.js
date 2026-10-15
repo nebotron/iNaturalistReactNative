@@ -3,11 +3,13 @@ import useResumeGroupPhotos from "components/hooks/useResumeGroupPhotos";
 import useStore from "stores/useStore";
 
 const mockNavigate = jest.fn();
+const mockDispatch = jest.fn();
 let mockIsReady = true;
 jest.mock( "navigation/navigationUtils", () => ( {
   navigationRef: {
     isReady: () => mockIsReady,
     navigate: ( ...args ) => mockNavigate( ...args ),
+    dispatch: ( ...args ) => mockDispatch( ...args ),
   },
 } ) );
 
@@ -24,7 +26,7 @@ describe( "useResumeGroupPhotos", () => {
     jest.clearAllMocks();
     mockOnboardingShown = true;
     mockIsReady = true;
-    useStore.setState( { groupedPhotos: [] } );
+    useStore.setState( { groupedPhotos: [], groupCropResume: null } );
     jest.spyOn( useStore.persist, "hasHydrated" ).mockReturnValue( true );
   } );
 
@@ -37,6 +39,32 @@ describe( "useResumeGroupPhotos", () => {
     expect( mockNavigate ).toHaveBeenCalledWith( "TabNavigator", {
       screen: "ObservationsTab",
       params: { screen: "GroupPhotos" },
+    } );
+  } );
+
+  it( "reopens the cropper on top of Group Photos when a crop was left part way", () => {
+    useStore.setState( {
+      groupedPhotos: [groupPhoto( "file:///a.jpg" ), groupPhoto( "file:///b.jpg" )],
+      groupCropResume: {
+        imageUri: "file:///a.jpg",
+        pendingImageUris: ["file:///b.jpg"],
+        cropImport: false,
+        skipUris: [],
+      },
+    } );
+
+    renderHook( () => useResumeGroupPhotos() );
+
+    expect( mockNavigate ).not.toHaveBeenCalled();
+    const { payload } = mockDispatch.mock.calls[0][0];
+    const tabStack = payload.routes[0].state.routes[0];
+    expect( tabStack.name ).toBe( "ObservationsTab" );
+    expect( tabStack.state.routes.map( route => route.name ) )
+      .toEqual( ["ObsList", "GroupPhotos", "ImageCropEditor"] );
+    expect( tabStack.state.routes[2].params ).toEqual( {
+      context: "groupPhotos",
+      imageUri: "file:///a.jpg",
+      pendingImageUris: ["file:///b.jpg"],
     } );
   } );
 
