@@ -161,7 +161,7 @@ const ExploreResults = ( ) => {
       ).then( location => {
         if ( cancelled ) return;
         if ( typeof location?.latitude === "number" ) {
-          setNearbyCoords( { lat: location.latitude, lng: location.longitude, radius: 1 } );
+          setNearbyCoords( { lat: location.latitude, lng: location.longitude } );
         } else {
           // Perms granted but no fix — fall back to worldwide.
           dispatch( { type: EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE } );

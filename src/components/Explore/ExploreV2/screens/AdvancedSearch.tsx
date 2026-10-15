@@ -64,10 +64,12 @@ import {
 } from "providers/ExploreContext";
 import {
   EXPLORE_V2_ACTION,
+  EXPLORE_V2_PLACE_MODE,
   useExploreV2,
 } from "providers/ExploreV2Context";
 import React, { useMemo, useReducer, useState } from "react";
 import { formatObsFieldDate } from "sharedHelpers/dateAndTime";
+import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useIconicTaxa from "sharedHooks/useIconicTaxa";
 import useStore from "stores/useStore";
@@ -163,6 +165,13 @@ const AdvancedSearch = ( ) => {
   };
 
   const closePicker = ( ) => setOpenPicker( null );
+
+  const isNearby = location.placeMode === EXPLORE_V2_PLACE_MODE.NEARBY;
+  const nearbyRadiusKm = ( isNearby && location.radius ) || DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM;
+  const setNearby = ( radius = nearbyRadiusKm ) => dispatch( {
+    type: "SET_LOCATION_NEARBY",
+    radius,
+  } );
 
   const handleSearch = () => {
     dispatchV2( {
@@ -745,7 +754,13 @@ const AdvancedSearch = ( ) => {
         <ExploreLocationSearchModal
           showModal
           closeModal={closePicker}
-          onSelectNearby={() => dispatch( { type: "SET_LOCATION_NEARBY" } )}
+          nearbyRadius={{
+            selected: isNearby,
+            radiusKm: nearbyRadiusKm,
+            defaultRadiusKm: DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM,
+            onChange: setNearby,
+          }}
+          onSelectNearby={() => setNearby( )}
           updateLocation={updateLocation}
         />
       )}

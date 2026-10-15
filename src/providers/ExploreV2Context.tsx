@@ -129,7 +129,7 @@ export const defaultExploreV2Filters: ExploreV2Filters = {
 
 export type ExploreV2LocationState =
   | { placeMode: EXPLORE_V2_PLACE_MODE.WORLDWIDE }
-  | { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY }
+  | { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY; radius?: number }
   | { placeMode: EXPLORE_V2_PLACE_MODE.PLACE; place: Place }
   | { placeMode: EXPLORE_V2_PLACE_MODE.MAP_AREA; bounds: ApiTotalBounds };
 
@@ -152,7 +152,7 @@ export type ExploreV2Search = Omit<ExploreV2State, "activeTab" | "appliedSearchC
 export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_SUBJECT; subject: ExploreV2Subject }
   | { type: EXPLORE_V2_ACTION.CLEAR_SUBJECT }
-  | { type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY }
+  | { type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY; radius?: number }
   | { type: EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE }
   | {
     type: EXPLORE_V2_ACTION.SET_LOCATION_PLACE;
@@ -202,7 +202,7 @@ export function exploreV2Reducer(
     case EXPLORE_V2_ACTION.SET_LOCATION_NEARBY:
       return {
         ...state,
-        location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY },
+        location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY, radius: action.radius },
       };
     case EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE:
       return {

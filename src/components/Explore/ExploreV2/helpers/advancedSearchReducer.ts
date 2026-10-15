@@ -87,7 +87,7 @@ export type AdvancedSearchAction =
   | { type: "SET_TAXON_FILTERS"; taxonFilters: ExploreTaxonFilter[] }
   | { type: "FILTER_BY_ICONIC_UNKNOWN" }
   | { type: "SET_LOCATION_PLACE"; place: { id: number; display_name?: string } }
-  | { type: "SET_LOCATION_NEARBY" }
+  | { type: "SET_LOCATION_NEARBY"; radius?: number }
   | { type: "SET_LOCATION_WORLDWIDE" }
   | { type: "SET_SORT"; sortBy: OBSERVATIONS_SORT }
   | { type: "SET_USER"; user: ApiUser | null }
@@ -154,7 +154,7 @@ export const advancedSearchReducer = (
     case "SET_LOCATION_NEARBY":
       return {
         ...draft,
-        location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY },
+        location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY, radius: action.radius },
       };
     case "SET_LOCATION_WORLDWIDE":
       return {

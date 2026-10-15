@@ -1,22 +1,26 @@
 import { Body2, Body3 } from "components/SharedComponents";
 import { TextInput, View } from "components/styledComponents";
-import {
-  EXPLORE_ACTION,
-  useExplore,
-} from "providers/ExploreContext";
 import React, { useCallback, useEffect, useState } from "react";
 import {
-  DEFAULT_NEARBY_RADIUS_KM,
   MAX_NEARBY_RADIUS_KM,
   parseNearbyRadiusKm,
 } from "sharedHelpers/nearbyRadius";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
-const NearbyRadiusInput = ( ) => {
+export interface NearbyRadiusConfig {
+  selected: boolean;
+  radiusKm: number;
+  defaultRadiusKm: number;
+  onChange: ( radiusKm: number ) => void;
+}
+
+type Props = Omit<NearbyRadiusConfig, "selected">;
+
+const NearbyRadiusInput = ( {
+  radiusKm: nearbyRadiusKm, defaultRadiusKm, onChange,
+}: Props ) => {
   const { t } = useTranslation( );
-  const { state, dispatch } = useExplore( );
-  const nearbyRadiusKm = state.nearbyRadiusKm ?? DEFAULT_NEARBY_RADIUS_KM;
   const [radiusText, setRadiusText] = useState( String( nearbyRadiusKm ) );
   const [isFocused, setIsFocused] = useState( false );
 
@@ -27,13 +31,10 @@ const NearbyRadiusInput = ( ) => {
   }, [isFocused, nearbyRadiusKm] );
 
   const commitRadius = useCallback( ( text: string ) => {
-    const radius = parseNearbyRadiusKm( text );
+    const radius = parseNearbyRadiusKm( text, defaultRadiusKm );
     setRadiusText( String( radius ) );
-    dispatch( {
-      type: EXPLORE_ACTION.SET_NEARBY_RADIUS,
-      radius,
-    } );
-  }, [dispatch] );
+    onChange( radius );
+  }, [defaultRadiusKm, onChange] );
 
   return (
     <View className="mt-4 px-6 pb-2" testID="nearby-radius-input">
@@ -53,7 +54,7 @@ const NearbyRadiusInput = ( ) => {
           }}
           onFocus={() => setIsFocused( true )}
           onSubmitEditing={() => commitRadius( radiusText )}
-          placeholder={String( DEFAULT_NEARBY_RADIUS_KM )}
+          placeholder={String( defaultRadiusKm )}
           placeholderTextColor={colors.darkGray}
           returnKeyType="done"
           testID="nearby-radius-km-input"

@@ -4,6 +4,7 @@ import type { ExploreV2State } from "providers/ExploreV2Context";
 import {
   EXPLORE_V2_PLACE_MODE,
 } from "providers/ExploreV2Context";
+import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { observationSortToApiParams } from "sharedHelpers/observationsSort";
 import type { ObservationOrderBy, SortDirection } from "types/sorting";
 
@@ -40,7 +41,6 @@ export type ExploreV2BaseQueryParams = Omit<
 export interface NearbyCoords {
   lat: number;
   lng: number;
-  radius: number;
 }
 
 const buildExploreV2QueryParams = (
@@ -84,7 +84,7 @@ const buildExploreV2QueryParams = (
       if ( nearbyCoords ) {
         params.lat = nearbyCoords.lat;
         params.lng = nearbyCoords.lng;
-        params.radius = nearbyCoords.radius;
+        params.radius = location.radius ?? DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM;
       }
       break;
     case EXPLORE_V2_PLACE_MODE.PLACE:

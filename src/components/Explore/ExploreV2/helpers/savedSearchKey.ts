@@ -2,6 +2,7 @@ import type {
   ExploreV2Filters, ExploreV2LocationState, ExploreV2Search,
 } from "providers/ExploreV2Context";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
+import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { subjectKey } from "stores/createExploreV2SearchesSlice";
 
 export type SavedSearchIdentity = ExploreV2Search;
@@ -11,7 +12,10 @@ const locationKey = ( location: ExploreV2LocationState ): string => {
     case EXPLORE_V2_PLACE_MODE.WORLDWIDE:
       return "worldwide";
     case EXPLORE_V2_PLACE_MODE.NEARBY:
-      return "nearby";
+      // Default radius keeps the key that searches saved before radii existed have
+      return !location.radius || location.radius === DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM
+        ? "nearby"
+        : `nearby-${location.radius}`;
     case EXPLORE_V2_PLACE_MODE.PLACE:
       return `place-${location.place.id}`;
     case EXPLORE_V2_PLACE_MODE.MAP_AREA: {
