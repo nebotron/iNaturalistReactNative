@@ -6,6 +6,7 @@ import {
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React from "react";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
+import colors from "styles/tailwindColors";
 
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
 import ClipPlayButton from "./ClipPlayButton";
@@ -76,12 +77,14 @@ const AudioIdHistory = ( ) => {
           </View>
           <INatIconButton
             icon="check"
+            color={colors.inatGreen}
             onPress={( ) => tagClip( clip.id, true )}
             accessibilityLabel="Right"
             accessibilityHint="Tags the ID as right."
           />
           <INatIconButton
             icon="close"
+            color={colors.warningRed}
             onPress={( ) => tagClip( clip.id, false )}
             accessibilityLabel="Wrong"
             accessibilityHint="Tags the ID as wrong."
