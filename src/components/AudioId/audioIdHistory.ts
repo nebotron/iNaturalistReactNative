@@ -54,6 +54,7 @@ interface AudioIdHistoryState {
   labelClip: (
     id: string, taxonId: number | null | undefined, name: string | null
   ) => Promise<void>;
+  unlabelClip: ( id: string ) => void;
   tagClip: ( id: string, correct: boolean ) => void;
 }
 
@@ -122,10 +123,13 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
         },
       ) ).catch( ( ) => undefined );
   },
+  unlabelClip: id => get( ).updateClip( id, { label: undefined } ),
   tagClip: ( id, correct ) => {
     const clip = get( ).clips[id];
     if ( !clip ) return;
-    if ( correct ) get( ).labelClip( id, clip.sp.taxonId, clip.sp.name );
+    // Tapping the same tag again undoes it.
+    if ( isClipCorrect( clip ) === correct ) get( ).unlabelClip( id );
+    else if ( correct ) get( ).labelClip( id, clip.sp.taxonId, clip.sp.name );
     else get( ).labelClip( id, undefined, null );
   },
 } ), {
