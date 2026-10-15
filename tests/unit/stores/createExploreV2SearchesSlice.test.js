@@ -112,6 +112,16 @@ describe( "exploreSavedSearches", ( ) => {
     expect( saved( ).searches[0].speciesSortBy ).toEqual( SPECIES_SORT.COUNT_DESC );
   } );
 
+  it( "overwrites a search in place, keeping its name", ( ) => {
+    saved( ).saveSearch( { ...search( ), name: "Cup plants" } );
+    const { key } = saved( ).searches[0];
+    saved( ).updateSearch( key, search( { subject: taxonSubject( 13 ) } ) );
+
+    expect( saved( ).searches ).toHaveLength( 1 );
+    expect( saved( ).searches[0] ).toMatchObject( { key, name: "Cup plants" } );
+    expect( saved( ).searches[0].subject.taxon.id ).toEqual( 13 );
+  } );
+
   it( "removes a search by key", ( ) => {
     saved( ).saveSearch( search( ) );
     saved( ).removeSearch( saved( ).searches[0].key );

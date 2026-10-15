@@ -3,8 +3,6 @@ import type { StateCreator } from "zustand";
 
 export const RECENT_LIMIT = 10;
 
-export const SAVED_LIMIT = 20;
-
 export const subjectKey = ( subject: ExploreV2Subject ): string => {
   switch ( subject.type ) {
     case "taxon":
@@ -38,14 +36,14 @@ export const addRecent = <T>(
     ...items.filter( existing => keyFn( existing ) !== keyFn( item ) ),
   ].slice( 0, cap );
 
-// A search plus how we identify it and when it was saved
+// A named search plus a unique id and when it was saved. Searches saved before names
+// existed have no name.
 export type SavedSearch = {
   key: string;
+  name?: string;
   savedAt: number;
 } & ExploreV2Search;
 
-// What a caller hands us. The key comes from savedSearchKey in the ExploreV2 helpers, which
-// imports subjectKey from here. computing it in the slice would be circular.
 export type SavedSearchInput = Omit<SavedSearch, "savedAt">;
 
 export interface ExploreV2SearchesSlice {
@@ -59,6 +57,7 @@ export interface ExploreV2SearchesSlice {
   exploreSavedSearches: {
     searches: SavedSearch[];
     saveSearch: ( _search: SavedSearchInput ) => void;
+    updateSearch: ( _key: string, _search: ExploreV2Search ) => void;
     removeSearch: ( _key: string ) => void;
     clearSavedSearches: ( ) => void;
   };
@@ -108,6 +107,14 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
           { ...search, savedAt: Date.now( ) },
           ...state.exploreSavedSearches.searches,
         ],
+      },
+    } ) ),
+    updateSearch: ( key, search ) => set( state => ( {
+      exploreSavedSearches: {
+        ...state.exploreSavedSearches,
+        searches: state.exploreSavedSearches.searches.map( saved => ( saved.key === key
+          ? { ...saved, ...search, key }
+          : saved ) ),
       },
     } ) ),
     removeSearch: key => set( state => ( {

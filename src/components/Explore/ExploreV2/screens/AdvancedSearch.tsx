@@ -6,7 +6,8 @@ import DateFilterSection
   from "components/Explore/ExploreV2/components/DateFilterSection";
 import RadioGroupSection
   from "components/Explore/ExploreV2/components/RadioGroupSection";
-import SavedSearches from "components/Explore/ExploreV2/components/SavedSearches";
+import SavedSearches, { SavedSearchSheets }
+  from "components/Explore/ExploreV2/components/SavedSearches";
 import SelectedFilterRow
   from "components/Explore/ExploreV2/components/SelectedFilterRow";
 import {
@@ -51,7 +52,6 @@ import {
   RadioButtonSheet,
 } from "components/SharedComponents";
 import SearchHeader from "components/SharedComponents/SearchHeader";
-import BottomSheetV2 from "components/SharedComponents/Sheets/BottomSheetV2";
 import WarningSheet from "components/SharedComponents/Sheets/WarningSheet";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { ScrollView, View } from "components/styledComponents";
@@ -72,7 +72,7 @@ import { formatObsFieldDate } from "sharedHelpers/dateAndTime";
 import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useIconicTaxa from "sharedHooks/useIconicTaxa";
-import useStore from "stores/useStore";
+import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
 
 type SheetName = "sortBy" | "hrank" | "lrank" | "photoLicense";
 
@@ -90,7 +90,6 @@ const AdvancedSearch = ( ) => {
   const currentUser = useCurrentUser();
 
   const { state: v2State, dispatch: dispatchV2 } = useExploreV2();
-  const savedSearchCount = useStore( state => state.exploreSavedSearches.searches.length );
   const applySavedSearch = useApplySavedSearch( );
   const [initialDraft] = useState( ( ) => draftFromV2State( v2State ) );
   const [draft, dispatch] = useReducer( advancedSearchReducer, initialDraft );
@@ -109,8 +108,11 @@ const AdvancedSearch = ( ) => {
   );
 
   const [pendingExit, setPendingExit] = useState( false );
-  const [showSavedSearches, setShowSavedSearches] = useState( false );
-  const savedSearchesOpen = showSavedSearches && savedSearchCount > 0;
+  const [showSaveSheet, setShowSaveSheet] = useState( false );
+  const [searchToDelete, setSearchToDelete] = useState<SavedSearch | null>( null );
+  const currentSearch = {
+    subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
+  };
   const requestExit = ( ) => {
     if ( differsFromInitial ) {
       setPendingExit( true );
@@ -174,12 +176,7 @@ const AdvancedSearch = ( ) => {
   } );
 
   const handleSearch = () => {
-    dispatchV2( {
-      type: EXPLORE_V2_ACTION.APPLY_SEARCH,
-      search: {
-        subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
-      },
-    } );
+    dispatchV2( { type: EXPLORE_V2_ACTION.APPLY_SEARCH, search: currentSearch } );
     dispatchV2( { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB, tab: OBSERVATIONS_TAB } );
     navigation.popTo( "ExploreResults" );
   };
@@ -305,18 +302,12 @@ const AdvancedSearch = ( ) => {
       />
 
       <ScrollView className="py-4">
-        {savedSearchCount > 0 && (
-          <View className="mb-7">
-            <Heading4 className="px-4 mb-5">{t( "SAVED-SEARCHES" )}</Heading4>
-            <View className="px-4">
-              <Button
-                text={t( "CHOOSE-A-SAVED-SEARCH" )}
-                onPress={( ) => setShowSavedSearches( true )}
-                testID="AdvancedSearch.savedSearchesButton"
-              />
-            </View>
-          </View>
-        )}
+        <SavedSearches
+          currentSearch={currentSearch}
+          onDelete={setSearchToDelete}
+          onSave={( ) => setShowSaveSheet( true )}
+          onSelect={applySavedSearch}
+        />
 
         {/* Taxon Section */}
         <ExploreTaxonFiltersSection
@@ -764,15 +755,13 @@ const AdvancedSearch = ( ) => {
           updateLocation={updateLocation}
         />
       )}
-      {savedSearchesOpen && (
-        <BottomSheetV2
-          enableSwipeToClose={false}
-          headerText={t( "SAVED-SEARCHES" )}
-          onPressClose={( ) => setShowSavedSearches( false )}
-        >
-          <SavedSearches hideHeader onSelect={applySavedSearch} />
-        </BottomSheetV2>
-      )}
+      <SavedSearchSheets
+        currentSearch={currentSearch}
+        onCloseDelete={( ) => setSearchToDelete( null )}
+        onCloseSave={( ) => setShowSaveSheet( false )}
+        searchToDelete={searchToDelete}
+        showSaveSheet={showSaveSheet}
+      />
       {pendingExit && (
         <WarningSheet
           onPressClose={( ) => setPendingExit( false )}

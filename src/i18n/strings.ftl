@@ -69,8 +69,6 @@ Add-stop = Add stop
 ADD-TAXON-FILTER = ADD TAXON FILTER
 Add-to-Projects = Add to Projects
 ADD-TO-PROJECTS = ADD TO PROJECTS
-# Toast shown after the user saves the current Explore search
-Added-to-Saved-Searches = Added to Saved Searches
 Added-to-X-Projects =
     Added to { $count } { $count ->
         [one] Project
@@ -241,8 +239,6 @@ Change-zoom = Change zoom
 CHECK-YOUR-EMAIL = CHECK YOUR EMAIL!
 Choose-a-date = Choose a date
 Choose-a-date-time = Choose a date & time
-# Button on the advanced search screen that opens the list of saved searches
-CHOOSE-A-SAVED-SEARCH = CHOOSE A SAVED SEARCH
 Choose-a-time = Choose a time
 # Label for a text input field during sign up to choose a username
 CHOOSE-A-USERNAME = CHOOSE A USERNAME
@@ -457,8 +453,6 @@ Delete-photo = Delete photo
 Delete-saved-filter = Delete saved filter
 Delete-saved-filter-description = { $name } will be removed from your saved filters.
 Delete-saved-filter-title = DELETE SAVED FILTER?
-# Accessibility label for the control that deletes a saved search
-Delete-saved-search = Delete saved search
 Delete-sound = Delete sound
 # Shows the progress of deletions for X of Y observations, but omits the
 # word "observations" so the message won't get cut off on small screens
@@ -1390,11 +1384,7 @@ Remove-project-filter = Remove project filter
 # Accessibility label for a button that removes an intermediate stop from a multi-stop route
 Remove-stop = Remove stop
 Remove-taxon-filter = Remove taxon filter
-# Accessibility label for the star button when the current search is already saved
-Remove-this-saved-search = Remove this saved search
 Remove-user-filter = Remove user filter
-# Toast shown after the user un-saves a saved Explore search
-Removed-from-Saved-Searches = Removed from Saved Searches
 # Label for button that removes an observation's taxon
 Removes-this-observations-taxon = Removes this observation's taxon
 # Hint for a button that removes a vote of agreement
@@ -1446,8 +1436,6 @@ SAVE-FOR-LATER = SAVE FOR LATER
 # Button and dialog title to save the current Explore results for offline use
 Save-for-offline-use = Save for offline use
 SAVE-LOCATION = SAVE LOCATION
-# Accessibility label for the star button that saves the current search
-Save-this-search = Save this search
 Save-up-to-observations-from-this-search = Save up to { $count } observations from this search? You can filter them further while offline.
 Saved-filter-already-exists-description = You already have a saved filter with this name. Choose a different name.
 Saved-filter-already-exists-title = Name already in use
@@ -1459,11 +1447,6 @@ Saved-for-offline-use =
        *[other] { $count } observations
     } for offline use
 Saved-Observation = Saved observation, in queue to upload
-# Toast shown when the user tries to save a search but has already saved as many
-# as we can keep. { $count } is the maximum number of saved searches we keep
-Saved-search-not-added-maximum-of-X = Saved search not added, maximum of { $count }
-# Heading above the list of searches the user has saved
-Saved-searches = Saved searches
 # Heading of the saved searches section on the advanced search screen
 SAVED-SEARCHES = SAVED SEARCHES
 # Explore filter option for an observation's evidence of presence annotation
@@ -1843,12 +1826,6 @@ x-failed =
     { $count ->
         [one] { $count } failed
        *[other] { $count } failed
-    }
-# Number of filters applied to a saved search
-X-filters =
-    { $count ->
-        [one] { $count } filter
-       *[other] { $count } filters
     }
 # Subtitle for a screen showing the list of followers a user has
 X-FOLLOWERS =
