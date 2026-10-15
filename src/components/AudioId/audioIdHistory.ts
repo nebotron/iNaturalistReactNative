@@ -25,10 +25,18 @@ export interface AudioIdLabel {
 }
 export interface AudioIdClip {
   id: string;
+  sessionId?: string;
   sp: AudioIdSpecies;
   time: number;
   confidence: number;
   label?: AudioIdLabel;
+}
+
+// One stretch of listening; endedAt is unset if the app quit while listening.
+export interface ListeningSession {
+  id: string;
+  startedAt: number;
+  endedAt?: number;
 }
 
 // The app container's path changes across installs, so only ids are stored.
@@ -36,16 +44,31 @@ export const clipPath = ( id: string ) => `${CLIPS_PATH}/${id}.m4a`;
 
 interface AudioIdHistoryState {
   clips: Record<string, AudioIdClip>;
-  addClip: ( sp: AudioIdSpecies, confidence: number ) => AudioIdClip;
+  sessions: Record<string, ListeningSession>;
+  startSession: ( ) => string;
+  endSession: ( id: string ) => void;
+  addClip: ( sp: AudioIdSpecies, confidence: number, sessionId?: string ) => AudioIdClip;
   updateClip: ( id: string, changes: Partial<AudioIdClip> ) => void;
   labelClip: ( id: string, taxonId: number | null, name: string | null ) => void;
 }
 
 const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) => ( {
   clips: {},
-  addClip: ( sp, confidence ) => {
+  sessions: {},
+  startSession: ( ) => {
+    const id = uuid.v4( );
+    set( { sessions: { ...get( ).sessions, [id]: { id, startedAt: Date.now( ) } } } );
+    return id;
+  },
+  endSession: id => {
+    const session = get( ).sessions[id];
+    if ( session ) {
+      set( { sessions: { ...get( ).sessions, [id]: { ...session, endedAt: Date.now( ) } } } );
+    }
+  },
+  addClip: ( sp, confidence, sessionId ) => {
     const clip = {
-      id: uuid.v4( ), sp, time: Date.now( ), confidence,
+      id: uuid.v4( ), sessionId, sp, time: Date.now( ), confidence,
     };
     const clips = { ...get( ).clips, [clip.id]: clip };
     const ofSpecies = Object.values( clips )
@@ -87,7 +110,7 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
 } ), {
   name: "audio-id-history",
   storage: createJSONStorage( ( ) => zustandStorage as unknown as StateStorage ),
-  partialize: state => ( { clips: state.clips } ),
+  partialize: state => ( { clips: state.clips, sessions: state.sessions } ),
 } ) );
 
 export default useAudioIdHistory;

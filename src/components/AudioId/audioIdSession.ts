@@ -55,6 +55,7 @@ export interface Heard {
 const heardTaxa = new Set<number>( );
 // The clip of each species' current call, by taxon ID.
 const callClips = new Map<number, string>( );
+let sessionId: string | undefined;
 
 // Keeps the 5 s clip of the run a call scored best in.
 const saveCallClip = ( sp: AudioIdSpecies, score: number, isNewCall: boolean ) => {
@@ -66,7 +67,7 @@ const saveCallClip = ( sp: AudioIdSpecies, score: number, isNewCall: boolean ) =
   if ( clip && score <= clip.confidence ) return;
   const id = clip
     ? clip.id
-    : history.addClip( sp, score ).id;
+    : history.addClip( sp, score, sessionId ).id;
   if ( clip ) history.updateClip( id, { confidence: score } );
   callClips.set( sp.taxonId, id );
   AudioBirdId?.saveClip( clipPath( id ) )
@@ -112,6 +113,7 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
       const mic = await AudioBirdId.start( s.outputs );
       logger.info( `started, ${s.species.length} species, located ${s.located}, `
         + `mic ${mic.sampleRate} Hz x${mic.channels}` );
+      sessionId = useAudioIdHistory.getState( ).startSession( );
       set( { listening: true } );
     } catch ( e ) {
       logger.error( `start failed: ${( e as Error ).message}` );
@@ -120,6 +122,8 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
   },
   stop: ( ) => {
     AudioBirdId?.stop( );
+    if ( sessionId ) useAudioIdHistory.getState( ).endSession( sessionId );
+    sessionId = undefined;
     set( { listening: false } );
   },
 } ) );

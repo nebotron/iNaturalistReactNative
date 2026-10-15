@@ -12,6 +12,7 @@ import { requireNativeComponent } from "react-native";
 import { useCurrentUser, useTaxon } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 
+import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import useAudioIdSession, { heardIn } from "./audioIdSession";
 
@@ -112,6 +113,20 @@ const AudioId = ( ) => {
   const isHeardNow = useMemo( ( ) => heardIn( current ), [current] );
   const hearingNow = ( taxonId: number ) => listening && isHeardNow( scoreNow( taxonId ) );
   const heardList = Object.values( heard ).sort( ( a, b ) => b.lastHeard - a.lastHeard );
+  const clips = useAudioIdHistory( state => state.clips );
+  const sessions = useAudioIdHistory( state => state.sessions );
+  const pastSessions = useMemo( ( ) => {
+    const species = new Map<string, Set<number>>( );
+    Object.values( clips ).forEach( c => {
+      if ( !c.sessionId ) return;
+      if ( !species.has( c.sessionId ) ) species.set( c.sessionId, new Set( ) );
+      species.get( c.sessionId )?.add( c.sp.taxonId );
+    } );
+    return Object.values( sessions )
+      .filter( s => species.has( s.id ) )
+      .sort( ( a, b ) => b.startedAt - a.startedAt )
+      .map( s => ( { ...s, speciesCount: species.get( s.id )?.size || 0 } ) );
+  }, [clips, sessions] );
 
   const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", { id: taxonId } );
 
@@ -179,6 +194,25 @@ const AudioId = ( ) => {
         `${h.count} ${h.count === 1
           ? "time"
           : "times"}, last at ${new Date( h.lastHeard ).toLocaleTimeString( )}`,
+      ) )}
+
+      <Heading4 className="mt-6 mb-1">PAST SESSIONS</Heading4>
+      {pastSessions.length === 0 && <Body3 className="py-2">None yet.</Body3>}
+      {pastSessions.map( s => (
+        <Pressable
+          key={s.id}
+          accessibilityRole="button"
+          accessibilityHint="Opens everything heard in this session."
+          className="py-2 px-2 border-b border-lightGray"
+          onPress={( ) => navigation.navigate( "AudioIdHistory", { sessionId: s.id } )}
+        >
+          <Body1>{new Date( s.startedAt ).toLocaleString( )}</Body1>
+          <Body3>
+            {`${s.speciesCount} species${s.endedAt
+              ? `, ${Math.max( 1, Math.round( ( s.endedAt - s.startedAt ) / 60000 ) )} min`
+              : ""}`}
+          </Body3>
+        </Pressable>
       ) )}
       <View className="h-20" />
     </ScrollView>

@@ -430,7 +430,7 @@ export type BaseTabStackParamList = {
   MyIdentifications: undefined;
   WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   AudioId: undefined;
-  AudioIdHistory: { taxonId: number };
+  AudioIdHistory: { taxonId: number } | { sessionId: string };
   AudioIdClip: { id: string };
   CropLogViewer: undefined;
   DevicePhotoCleanup: undefined;
