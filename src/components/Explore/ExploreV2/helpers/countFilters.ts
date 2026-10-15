@@ -7,6 +7,7 @@ const countedDefaults = {
   unobservedByUser: null,
   project: null,
   taxonFilters: null,
+  evidenceTypes: null,
 };
 
 type CountedKey = keyof typeof countedDefaults;

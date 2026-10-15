@@ -14,6 +14,7 @@ import {
   getDateObservedValues,
   getDateUploadedValues,
   getEstablishmentValues,
+  getEvidenceTypeValues,
   getMediaValues,
   getMonthValues,
   getPhotoLicenseValues,
@@ -191,6 +192,7 @@ const AdvancedSearch = ( ) => {
     dateObserved,
     dateUploaded,
     establishmentMean,
+    evidenceTypes,
     hrank,
     lrank,
     media,
@@ -614,6 +616,20 @@ const AdvancedSearch = ( ) => {
               wildStatus: newWildStatus,
             } )}
           />
+
+          {/* Evidence Type section */}
+          <View className="mb-7">
+            <Heading4 className="mb-5">{t( "EVIDENCE-TYPE" )}</Heading4>
+            {Object.values( getEvidenceTypeValues( t ) ).map( ( { label, value } ) => (
+              <View key={value} className="mb-4">
+                <Checkbox
+                  text={label}
+                  isChecked={!!evidenceTypes?.includes( value )}
+                  onPress={() => dispatch( { type: "TOGGLE_EVIDENCE_TYPE", evidenceType: value } )}
+                />
+              </View>
+            ) )}
+          </View>
 
           {/* Reviewed section */}
           {currentUser && (

@@ -58,6 +58,7 @@ const filtersKey = ( filters: ExploreV2Filters ): string => {
     wildStatus: filters.wildStatus,
     reviewedFilter: filters.reviewedFilter,
     photoLicense: filters.photoLicense,
+    evidenceTypes: [...( filters.evidenceTypes ?? [] )].sort( ).join( "," ),
     user: String( filters.user?.id ?? "" ),
     unobservedByUser: String( filters.unobservedByUser?.id ?? "" ),
     project: String( filters.project?.id ?? "" ),

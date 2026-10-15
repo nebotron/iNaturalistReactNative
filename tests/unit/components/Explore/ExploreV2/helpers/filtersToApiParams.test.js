@@ -1,6 +1,7 @@
 import filtersToApiParams from "components/Explore/ExploreV2/helpers/filtersToApiParams";
 import {
   ESTABLISHMENT_MEAN,
+  EVIDENCE_TYPE,
   MEDIA,
   PHOTO_LICENSE,
   REVIEWED,
@@ -204,6 +205,24 @@ describe( "filtersToApiParams", ( ) => {
       } ) );
       expect( params.unobserved_by_user_id ).toBe( 7 );
       expect( params.project_id ).toBe( 9 );
+    } );
+  } );
+
+  describe( "evidence type", ( ) => {
+    it( "ORs live and dead organisms, including the Organism value", ( ) => {
+      const params = filtersToApiParams( makeFilters( {
+        evidenceTypes: [EVIDENCE_TYPE.LIVE_ORGANISM, EVIDENCE_TYPE.DEAD_ORGANISM],
+      } ) );
+      expect( params.term_id ).toEqual( [22, 17] );
+      expect( params.term_value_id ).toEqual( [18, 19, 24] );
+    } );
+
+    it( "maps not annotated to without_term_id", ( ) => {
+      const params = filtersToApiParams( makeFilters( {
+        evidenceTypes: [EVIDENCE_TYPE.UNKNOWN],
+      } ) );
+      expect( params.without_term_id ).toBe( 22 );
+      expect( params.term_id ).toBeUndefined( );
     } );
   } );
 } );

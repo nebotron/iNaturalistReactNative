@@ -1063,10 +1063,12 @@ No-tracked-location-nearby = No tracked location nearby
 none--accuracy = none
 # Option when selecting taxonomic ranks that indicates no rank was selected
 NONE--ranks = NONE
-# Button in explore filters to search for species or observations NOT by the signed in user
-NOT-BY-ME = NOT BY ME
 # Error message title when not enough storage space on device, e.g. when the
 # disk is full and you try to save a photo
+# Evidence type filter option for observations without an Evidence of Presence annotation
+Not-annotated--evidence = Not annotated
+# Button in explore filters to search for species or observations NOT by the signed in user
+NOT-BY-ME = NOT BY ME
 Not-enough-space-left-on-device = Not enough space left on device
 # Error message description when not enough storage space on device, e.g. when
 # the disk is full and you try to save a photo

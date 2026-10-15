@@ -2,7 +2,6 @@
 
 import {
   ESTABLISHMENT_MEAN,
-  EVIDENCE_TYPE,
   MEDIA,
   PHOTO_LICENSE,
   REVIEWED,
@@ -11,6 +10,7 @@ import {
   WILD_STATUS,
 } from "providers/ExploreContext";
 
+import { evidenceTypesToApiParams } from "./evidenceTypes";
 import { taxonFiltersToApiParams } from "./taxonFilters";
 import { userFiltersToApiParams } from "./userFilters";
 
@@ -111,36 +111,7 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.captive = true;
   }
 
-  // Controlled term values: Evidence of Presence (22) and Alive or Dead (17).
-  // The API matches any annotation whose term is in term_id and value is in
-  // term_value_id, so selected types are ORed together.
-  const evidenceTypes = params.evidenceTypes || [];
-  if ( evidenceTypes.includes( EVIDENCE_TYPE.UNKNOWN ) ) {
-    filteredParams.without_term_id = 22;
-  } else if ( evidenceTypes.length > 0 ) {
-    const valueIds = {
-      [EVIDENCE_TYPE.LIVE_ORGANISM]: 18,
-      [EVIDENCE_TYPE.DEAD_ORGANISM]: 19,
-      [EVIDENCE_TYPE.FEATHER]: 23,
-      [EVIDENCE_TYPE.SCAT]: 25,
-      [EVIDENCE_TYPE.TRACK]: 26,
-      [EVIDENCE_TYPE.BONE]: 27,
-      [EVIDENCE_TYPE.MOLT]: 28,
-      [EVIDENCE_TYPE.GALL]: 29,
-      [EVIDENCE_TYPE.EGG]: 30,
-      [EVIDENCE_TYPE.HAIR]: 31,
-      [EVIDENCE_TYPE.LEAFMINE]: 32,
-      [EVIDENCE_TYPE.CONSTRUCTION]: 35,
-    };
-    filteredParams.term_id = [22, 17];
-    filteredParams.term_value_id = evidenceTypes.map( type => valueIds[type] );
-    // Live and dead together means any organism, including ones only
-    // annotated with the Organism evidence value
-    if ( evidenceTypes.includes( EVIDENCE_TYPE.LIVE_ORGANISM )
-      && evidenceTypes.includes( EVIDENCE_TYPE.DEAD_ORGANISM ) ) {
-      filteredParams.term_value_id.push( 24 );
-    }
-  }
+  Object.assign( filteredParams, evidenceTypesToApiParams( params.evidenceTypes ) );
 
   if ( params.reviewedFilter === REVIEWED.REVIEWED ) {
     filteredParams.reviewed = true;

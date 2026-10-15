@@ -1,8 +1,10 @@
 import type { ApiProjectSummary, ApiUser } from "api/types";
+import { toggleEvidenceType } from "components/Explore/helpers/evidenceTypes";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import { toExploreTaxonFilterTaxon } from "components/Explore/helpers/taxonFilters";
 import type {
   ESTABLISHMENT_MEAN,
+  EVIDENCE_TYPE,
   MEDIA,
   PHOTO_LICENSE,
   REVIEWED,
@@ -110,6 +112,7 @@ export type AdvancedSearchAction =
   | { type: "SET_WILD_STATUS"; wildStatus: WILD_STATUS }
   | { type: "SET_REVIEWED"; reviewedFilter: REVIEWED }
   | { type: "SET_PHOTO_LICENSE"; photoLicense: PHOTO_LICENSE }
+  | { type: "TOGGLE_EVIDENCE_TYPE"; evidenceType: EVIDENCE_TYPE }
   | { type: "RESET" };
 
 const withFilters = (
@@ -255,6 +258,14 @@ export const advancedSearchReducer = (
       return withFilters( draft, { reviewedFilter: action.reviewedFilter } );
     case "SET_PHOTO_LICENSE":
       return withFilters( draft, { photoLicense: action.photoLicense } );
+    case "TOGGLE_EVIDENCE_TYPE": {
+      const evidenceTypes = toggleEvidenceType( draft.filters.evidenceTypes, action.evidenceType );
+      return withFilters( draft, {
+        evidenceTypes: evidenceTypes.length > 0
+          ? evidenceTypes
+          : null,
+      } );
+    }
     case "RESET":
       return defaultAdvancedSearchDraft;
     default: {

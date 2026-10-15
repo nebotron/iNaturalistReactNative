@@ -5,7 +5,7 @@ import type {
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import type { ExploreV2EntryParams } from "navigation/types";
-import type { TAXONOMIC_RANK } from "providers/ExploreContext";
+import type { EVIDENCE_TYPE, TAXONOMIC_RANK } from "providers/ExploreContext";
 import {
   DATE_OBSERVED,
   DATE_UPLOADED,
@@ -104,6 +104,7 @@ export interface ExploreV2Filters {
   wildStatus: WILD_STATUS;
   reviewedFilter: REVIEWED;
   photoLicense: PHOTO_LICENSE;
+  evidenceTypes?: EVIDENCE_TYPE[] | null;
   // User / project, in ExploreV2 parlance we always consider taxon to be the "subject"
   user?: ApiUser | null;
   unobservedByUser?: ApiUser | null;
