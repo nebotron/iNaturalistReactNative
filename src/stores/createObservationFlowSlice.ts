@@ -98,6 +98,8 @@ export interface GroupCropResume {
   pendingImageUris: string[];
   cropImport: boolean;
   skipUris: string[];
+  // The unsaved crop the user had framed on imageUri
+  crop?: NormalizedCrop;
 }
 
 interface CameraStateOptions {

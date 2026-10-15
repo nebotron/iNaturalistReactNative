@@ -287,6 +287,19 @@ const ImageCropEditor = ( ) => {
     navigation.setOptions( { headerShown: false } );
   }, [navigation] );
 
+  // The crop the user had framed, unsaved, on the photo this cropper was left
+  // on, so resuming shows it as they left it rather than re-framed from scratch.
+  const [restoredCrop] = useState( ( ) => {
+    const resume = useStore.getState( ).groupCropResume;
+    return context === "groupPhotos" && resume?.crop && resume.imageUri === params?.imageUri
+      ? { uri: resume.imageUri, crop: resume.crop }
+      : null;
+  } );
+  const [draftCrop, setDraftCrop] = useState( restoredCrop );
+  const handleCropChange = useCallback( ( crop: NormalizedCrop ) => {
+    if ( imageUri ) setDraftCrop( { uri: imageUri, crop } );
+  }, [imageUri] );
+
   // A Group Photos crop keeps its place in the store (persisted, so it
   // survives an app kill) until it finishes, so opening the cropper again from
   // Group Photos resumes it (groupCropResume).
@@ -300,8 +313,19 @@ const ImageCropEditor = ( ) => {
       pendingImageUris,
       cropImport,
       skipUris: [...visitedUris],
+      crop: draftCrop?.uri === imageUri
+        ? draftCrop?.crop
+        : undefined,
     } );
-  }, [context, cropImport, imageUri, pendingImageUris, setGroupCropResume, visitedUris] );
+  }, [
+    context,
+    cropImport,
+    draftCrop,
+    imageUri,
+    pendingImageUris,
+    setGroupCropResume,
+    visitedUris,
+  ] );
 
   // Local files of the upcoming photos whose preload has finished, handed to
   // ImageCropView so it can decode them before the user advances.
@@ -721,7 +745,9 @@ const ImageCropEditor = ( ) => {
     );
   }
 
-  const activeInitialCrop = savedInitialCrop ?? detectedCrop;
+  const activeInitialCrop = ( restoredCrop?.uri === imageUri
+    ? restoredCrop.crop
+    : null ) ?? savedInitialCrop ?? detectedCrop;
 
   if ( sourceFailed ) {
     return (
@@ -762,6 +788,9 @@ const ImageCropEditor = ( ) => {
       warmUris={warmUris}
       onDecoded={handleDecoded}
       onConfirm={handleConfirm}
+      onCropChange={context === "groupPhotos"
+        ? handleCropChange
+        : undefined}
       onDelete={handleDelete}
     />
   );
