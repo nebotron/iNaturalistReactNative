@@ -114,13 +114,13 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
     // Clips from before 15 s ones were saved fall back to the 5 s clip.
     readFile( contextClipPath( id ), "base64" )
       .catch( ( ) => readFile( clipPath( id ), "base64" ) ).then( audio => fetch(
-      `${baseUrl}/audio_id_clips/${id}.json`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify( { format: "m4a", audioBase64: audio } ),
-      },
-    ) ).catch( ( ) => undefined );
+        `${baseUrl}/audio_id_clips/${id}.json`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify( { format: "m4a", audioBase64: audio } ),
+        },
+      ) ).catch( ( ) => undefined );
   },
   tagClip: ( id, correct ) => {
     const clip = get( ).clips[id];
