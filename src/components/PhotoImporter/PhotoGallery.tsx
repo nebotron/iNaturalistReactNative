@@ -352,32 +352,6 @@ const PhotoGallery = ( {
 
   const hasImportedPhotos = importedUris.size > 0;
 
-  // Photos newer than the most recently imported one, i.e. everything
-  // that's shown up since the last time photos were imported from here.
-  const photosSinceLastImport = useMemo( ( ) => {
-    if ( !hasImportedPhotos ) {
-      return [];
-    }
-    const lastImportedIndex = photos.findIndex( isImported );
-    if ( lastImportedIndex === -1 ) {
-      return photos;
-    }
-    return photos.slice( 0, lastImportedIndex );
-  }, [photos, isImported, hasImportedPhotos] );
-
-  const selectSinceLastImport = useCallback( ( ) => {
-    setSelectedUris( prev => {
-      const next = new Set( prev );
-      for ( let i = 0; i < photosSinceLastImport.length; i += 1 ) {
-        if ( next.size >= maxPhotos ) {
-          break;
-        }
-        next.add( getSelectionKey( photosSinceLastImport[i] ) );
-      }
-      return next;
-    } );
-  }, [photosSinceLastImport, maxPhotos] );
-
   const visiblePhotos = useMemo(
     ( ) => ( hideImported
       ? photos.filter( node => !isImported( node ) )
@@ -511,17 +485,6 @@ const PhotoGallery = ( {
           </View>
         )}
         <View className="flex-1" />
-        {hasImportedPhotos && (
-          <INatIconButton
-            icon="date"
-            onPress={selectSinceLastImport}
-            accessibilityLabel={t( "Select-photos-since-last-import" )}
-            disabled={photosSinceLastImport.length === 0}
-            size={22}
-            color={colors.darkGray}
-            testID="PhotoGallery.selectSinceLastImport"
-          />
-        )}
         <INatIconButton
           icon="checkmark-circle"
           onPress={markSelectedAsSaved}
