@@ -15,6 +15,7 @@ import {
   toExploreUserFilterUser,
 } from "components/Explore/helpers/userFilters";
 import isEqual from "lodash/isEqual";
+import xor from "lodash/xor";
 import * as React from "react";
 import type { LatLng } from "react-native-maps";
 
@@ -836,22 +837,11 @@ function exploreReducer( state: State, action: Action ) {
           : state.casual,
         wildStatus: action.wildStatus,
       };
-    // Unknown is exclusive of the other evidence types
-    case EXPLORE_ACTION.TOGGLE_EVIDENCE_TYPE: {
-      const current = state.evidenceTypes || [];
-      let evidenceTypes: EVIDENCE_TYPE[];
-      if ( current.includes( action.evidenceType ) ) {
-        evidenceTypes = current.filter( type => type !== action.evidenceType );
-      } else if ( action.evidenceType === EVIDENCE_TYPE.UNKNOWN ) {
-        evidenceTypes = [EVIDENCE_TYPE.UNKNOWN];
-      } else {
-        evidenceTypes = [
-          ...current.filter( type => type !== EVIDENCE_TYPE.UNKNOWN ),
-          action.evidenceType,
-        ];
-      }
-      return { ...state, evidenceTypes };
-    }
+    case EXPLORE_ACTION.TOGGLE_EVIDENCE_TYPE:
+      return {
+        ...state,
+        evidenceTypes: xor( state.evidenceTypes || [], [action.evidenceType] ),
+      };
     case EXPLORE_ACTION.SET_PHOTO_LICENSE:
       return {
         ...state,

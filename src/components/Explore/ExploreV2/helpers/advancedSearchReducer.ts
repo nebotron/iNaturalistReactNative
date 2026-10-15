@@ -1,7 +1,7 @@
 import type { ApiProjectSummary, ApiUser } from "api/types";
-import { toggleEvidenceType } from "components/Explore/helpers/evidenceTypes";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import { toExploreTaxonFilterTaxon } from "components/Explore/helpers/taxonFilters";
+import xor from "lodash/xor";
 import type {
   ESTABLISHMENT_MEAN,
   EVIDENCE_TYPE,
@@ -260,7 +260,7 @@ export const advancedSearchReducer = (
     case "SET_PHOTO_LICENSE":
       return withFilters( draft, { photoLicense: action.photoLicense } );
     case "TOGGLE_EVIDENCE_TYPE": {
-      const evidenceTypes = toggleEvidenceType( draft.filters.evidenceTypes, action.evidenceType );
+      const evidenceTypes = xor( draft.filters.evidenceTypes || [], [action.evidenceType] );
       return withFilters( draft, {
         evidenceTypes: evidenceTypes.length > 0
           ? evidenceTypes

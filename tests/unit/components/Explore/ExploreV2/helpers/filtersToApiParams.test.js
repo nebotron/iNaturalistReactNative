@@ -224,6 +224,15 @@ describe( "filtersToApiParams", ( ) => {
       expect( params.without_term_id ).toBe( 22 );
       expect( params.term_id ).toBeUndefined( );
     } );
+
+    it( "ORs not annotated with other types by excluding unselected values", ( ) => {
+      const params = filtersToApiParams( makeFilters( {
+        evidenceTypes: [EVIDENCE_TYPE.UNKNOWN, EVIDENCE_TYPE.LIVE_ORGANISM, EVIDENCE_TYPE.FEATHER],
+      } ) );
+      expect( params.term_id_or_unknown ).toEqual( [22, 17] );
+      expect( params.without_term_value_id ).toEqual( [19, 25, 26, 27, 28, 29, 30, 31, 32, 35] );
+      expect( params.term_id ).toBeUndefined( );
+    } );
   } );
 
   it( "maps popular to popular=true", ( ) => {
