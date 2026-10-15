@@ -149,7 +149,8 @@ jobs:
           ccache-${{ runner.os }}-
 
     # Metro's transform cache, read by metro.config.js through METRO_CACHE_DIR,
-    # so the bundle phase only re-transforms changed files.
+    # so the bundle phase only re-transforms changed files. react-native-xcode.sh
+    # always bundles with --reset-cache, which would wipe it, so drop the flag.
     - name: Restore the Metro cache
       uses: actions/cache@v4
       with:
@@ -157,6 +158,11 @@ jobs:
         key: metro-${{ runner.os }}-${{ hashFiles( 'package-lock.json' ) }}-${{ github.run_id }}
         restore-keys: |
           metro-${{ runner.os }}-${{ hashFiles( 'package-lock.json' ) }}-
+
+    - name: Stop the bundle phase resetting the Metro cache
+      run: |
+        sed -i '' '/^  --reset-cache \\$/d' node_modules/react-native/scripts/react-native-xcode.sh
+        ! grep -q -- --reset-cache node_modules/react-native/scripts/react-native-xcode.sh
 
     # Downloaded pod tarballs — Firebase, GoogleSignIn, onnxruntime — are the
     # slow part of a cold pod install and are safe to reuse whatever the
