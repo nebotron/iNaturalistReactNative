@@ -54,6 +54,8 @@ export interface LayoutSlice {
     toggleDebugMode: ( ) => void;
     mapType: MAP_TYPES;
     setMapType: ( mapType: MAP_TYPES ) => void;
+    ebirdEnabled: boolean;
+    setEbirdEnabled: ( ebirdEnabled: boolean ) => void;
     hotspotSettings: HotspotSettings;
     setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
   };
@@ -173,6 +175,14 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         debugModeEnabled: !state.layout.debugModeEnabled,
+      },
+    } ) ),
+    // Whether Explore includes eBird sightings
+    ebirdEnabled: false,
+    setEbirdEnabled: newValue => set( state => ( {
+      layout: {
+        ...state.layout,
+        ebirdEnabled: newValue,
       },
     } ) ),
     // Last selected map layers type for react-native-maps MapView ("standard" or "hybrid")
