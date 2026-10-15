@@ -62,6 +62,9 @@ export interface ExploreV2SearchesSlice {
     removeSearch: ( _key: string ) => void;
     clearSavedSearches: ( ) => void;
   };
+  // The Explore tab's most recent search, restored when the app relaunches
+  lastExploreSearch: ExploreV2Search | null;
+  setLastExploreSearch: ( _search: ExploreV2Search ) => void;
 }
 
 const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set => ( {
@@ -117,6 +120,8 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
       exploreSavedSearches: { ...state.exploreSavedSearches, searches: [] },
     } ) ),
   },
+  lastExploreSearch: null,
+  setLastExploreSearch: lastExploreSearch => set( { lastExploreSearch } ),
 } );
 
 export default createExploreV2SearchesSlice;

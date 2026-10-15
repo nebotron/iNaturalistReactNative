@@ -135,6 +135,10 @@ const useStore = create<StoreState>()( persist(
       exploreSavedSearches: {
         searches: state.exploreSavedSearches.searches,
       },
+      lastExploreSearch: state.lastExploreSearch,
+      exploreV2AdvancedSearch: {
+        advancedSearchMode: state.exploreV2AdvancedSearch.advancedSearchMode,
+      },
 
       // Privacy zone (auto-obscure observations near a place, e.g. home)
       privacyZone: persistableValues( state.privacyZone ),
