@@ -2317,14 +2317,17 @@ RCT_EXPORT_METHOD( prepareCropSource
     width  = image.size.width  * image.scale;
     height = image.size.height * image.scale;
 
-    // The one decode. What comes out of it is both what gets displayed and
-    // what the detector reads, so nothing downstream opens the file again.
-    display = clampToMaxPixel( image, [maxPixel floatValue] );
+    // The one decode, drawn into a bitmap kept for what follows: both the
+    // display JPEG and the detector read these pixels. Encoding the lazy image
+    // instead left it undecoded, so detection's downscale below decoded the
+    // raw a second time -- outside the raw decode lock, alongside the previous
+    // photo's crop.
+    display = rasterizedImage( clampToMaxPixel( image, [maxPixel floatValue] ) );
     NSString *decodeEncodeFailure = nil;
     data    = display
       ? encodedThumbnailData( display, &decodeEncodeFailure )
       : nil;
-    encodeFailure = decodeEncodeFailure;
+    encodeFailure = display ? decodeEncodeFailure : @"Decode drew no pixels";
     return data != nil;
     } );
     if ( !loaded ) {
@@ -2333,7 +2336,7 @@ RCT_EXPORT_METHOD( prepareCropSource
     }
     if ( !data ) {
       reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; attempts: %d",
-        display ? encodeFailure ?: @"unknown" : @"Could not draw image", attempts],
+        encodeFailure ?: @"unknown", attempts],
         diagnosticsError( rawDecodeFailureDiagnostics( input, started, attemptMs ) ) );
       return;
     }
@@ -2349,9 +2352,9 @@ RCT_EXPORT_METHOD( prepareCropSource
     // keeping only what detection needs, so the next raw decode has room.
     CGFloat displayLevel = jpegDataMeanLevel( data );
     data = nil;
-    // Scaling the image already in hand, rather than reading the file again at
-    // detection size: the bounds stay the ones the detector was tuned for and
-    // the second read is gone.
+    // Scaling the decoded bitmap already in hand, rather than reading the file
+    // again at detection size: the bounds stay the ones the detector was tuned
+    // for and the second decode is gone.
     UIImage *detectionImage = [detectSubject boolValue]
       ? clampToMaxPixel( display, kSubjectDetectionMaxPixel )
       : nil;
