@@ -31,7 +31,9 @@ import IdentifyView from "components/Explore/IdentifyView";
 import LifeListView from "components/Explore/LifeListView";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
 import {
+  OfflineMapView,
   OfflineObservationsView,
+  OfflineSpeciesView,
   useOfflineExploreResults,
 } from "components/Explore/OfflineExplore";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
@@ -435,13 +437,30 @@ const ExploreResults = ( ) => {
 
   const renderContent = ( ) => {
     if ( isConnected === false && offlineResults && state.activeTab === OBSERVATIONS_TAB ) {
+      // Grid is unavailable offline; show the list in its place
+      const offlineLayout = showMap
+        ? "map"
+        : "list";
       return (
         <>
-          <OfflineObservationsView layout={layout} queryParams={queryParams} />
+          {showMap
+            ? <OfflineMapView queryParams={queryParams} />
+            : <OfflineObservationsView layout={offlineLayout} queryParams={queryParams} />}
           <ObservationsViewBar
-            layout={layout}
+            layout={offlineLayout}
             updateObservationsView={writeLayoutToStorage}
-            viewOptions={["grid", "list"]}
+            viewOptions={["map", "list"]}
+          />
+        </>
+      );
+    }
+    if ( isConnected === false && offlineResults && state.activeTab === SPECIES_TAB ) {
+      return (
+        <>
+          <OfflineSpeciesView queryParams={speciesListParams} />
+          <SortButton
+            onPress={() => setShowSortSheet( true )}
+            accessibilityLabel={t( "Change-species-sort-order" )}
           />
         </>
       );
