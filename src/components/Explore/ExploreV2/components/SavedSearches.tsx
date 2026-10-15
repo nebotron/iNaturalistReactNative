@@ -12,7 +12,7 @@ import {
   WarningSheet,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
-import type { ExploreV2Search } from "providers/ExploreV2Context";
+import type { ExploreV2SearchWithTab } from "providers/ExploreV2Context";
 import React from "react";
 import { Alert } from "react-native";
 import useTranslation from "sharedHooks/useTranslation";
@@ -32,7 +32,7 @@ const searchName = ( search: SavedSearch, t: T ) => {
 };
 
 interface SheetsProps {
-  currentSearch: ExploreV2Search;
+  currentSearch: ExploreV2SearchWithTab;
   onCloseDelete: ( ) => void;
   onCloseSave: ( ) => void;
   searchToDelete: SavedSearch | null;
@@ -96,7 +96,7 @@ export const SavedSearchSheets = ( {
 };
 
 interface Props {
-  currentSearch: ExploreV2Search;
+  currentSearch: ExploreV2SearchWithTab;
   onDelete: ( search: SavedSearch ) => void;
   onSave: ( ) => void;
   onSelect: ( search: SavedSearch ) => void;

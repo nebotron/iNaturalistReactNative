@@ -150,6 +150,10 @@ export interface ExploreV2State {
 // Everything that defines a search, as opposed to how the results are being viewed
 export type ExploreV2Search = Omit<ExploreV2State, "activeTab" | "appliedSearchCount">;
 
+// A saved search also remembers the view it was saved from. Optional because searches saved
+// before views were recorded don't have one.
+export type ExploreV2SearchWithTab = ExploreV2Search & { activeTab?: ExploreV2Tab };
+
 export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_SUBJECT; subject: ExploreV2Subject }
   | { type: EXPLORE_V2_ACTION.CLEAR_SUBJECT }
@@ -167,7 +171,7 @@ export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_SPECIES_SORT; speciesSortBy: SPECIES_SORT }
   | { type: EXPLORE_V2_ACTION.SET_FILTERS; filters: ExploreV2Filters }
   | { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB; tab: ExploreV2Tab }
-  | { type: EXPLORE_V2_ACTION.APPLY_SEARCH; search: ExploreV2Search }
+  | { type: EXPLORE_V2_ACTION.APPLY_SEARCH; search: ExploreV2SearchWithTab }
   | { type: EXPLORE_V2_ACTION.RESET };
 
 export const initialExploreV2State: ExploreV2State = {
@@ -245,6 +249,7 @@ export function exploreV2Reducer(
         sortBy,
         speciesSortBy,
         filters,
+        activeTab: action.search.activeTab ?? state.activeTab,
         appliedSearchCount: state.appliedSearchCount + 1,
       };
     }

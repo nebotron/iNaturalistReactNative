@@ -1,11 +1,11 @@
 import type {
-  ExploreV2Filters, ExploreV2LocationState, ExploreV2Search,
+  ExploreV2Filters, ExploreV2LocationState, ExploreV2SearchWithTab,
 } from "providers/ExploreV2Context";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
 import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { subjectKey } from "stores/createExploreV2SearchesSlice";
 
-export type SavedSearchIdentity = ExploreV2Search;
+export type SavedSearchIdentity = ExploreV2SearchWithTab;
 
 const locationKey = ( location: ExploreV2LocationState ): string => {
   switch ( location.placeMode ) {
@@ -84,6 +84,7 @@ const savedSearchKey = ( search: SavedSearchIdentity ): string => {
     sortBy: search.sortBy,
     speciesSortBy: search.speciesSortBy,
     filters: filtersKey( search.filters ),
+    activeTab: search.activeTab ?? "",
   };
 
   return ( Object.keys( parts ) as ( keyof SavedSearchIdentity )[] )

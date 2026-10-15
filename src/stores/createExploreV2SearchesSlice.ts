@@ -1,4 +1,6 @@
-import type { ExploreV2Search, ExploreV2Subject, Place } from "providers/ExploreV2Context";
+import type {
+  ExploreV2Search, ExploreV2SearchWithTab, ExploreV2Subject, Place,
+} from "providers/ExploreV2Context";
 import type { StateCreator } from "zustand";
 
 export const RECENT_LIMIT = 10;
@@ -42,7 +44,7 @@ export type SavedSearch = {
   key: string;
   name?: string;
   savedAt: number;
-} & ExploreV2Search;
+} & ExploreV2SearchWithTab;
 
 export type SavedSearchInput = Omit<SavedSearch, "savedAt">;
 
@@ -57,7 +59,7 @@ export interface ExploreV2SearchesSlice {
   exploreSavedSearches: {
     searches: SavedSearch[];
     saveSearch: ( _search: SavedSearchInput ) => void;
-    updateSearch: ( _key: string, _search: ExploreV2Search ) => void;
+    updateSearch: ( _key: string, _search: ExploreV2SearchWithTab ) => void;
     removeSearch: ( _key: string ) => void;
     clearSavedSearches: ( ) => void;
   };

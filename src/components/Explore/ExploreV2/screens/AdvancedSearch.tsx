@@ -114,6 +114,8 @@ const AdvancedSearch = ( ) => {
   const currentSearch = {
     subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
   };
+  // Saved searches also remember the view they were saved from
+  const currentSavedSearch = { ...currentSearch, activeTab: v2State.activeTab };
   const requestExit = ( ) => {
     if ( differsFromInitial ) {
       setPendingExit( true );
@@ -305,7 +307,7 @@ const AdvancedSearch = ( ) => {
 
       <ScrollView className="py-4">
         <SavedSearches
-          currentSearch={currentSearch}
+          currentSearch={currentSavedSearch}
           onDelete={setSearchToDelete}
           onSave={( ) => setShowSaveSheet( true )}
           onSelect={applySavedSearch}
@@ -772,7 +774,7 @@ const AdvancedSearch = ( ) => {
         />
       )}
       <SavedSearchSheets
-        currentSearch={currentSearch}
+        currentSearch={currentSavedSearch}
         onCloseDelete={( ) => setSearchToDelete( null )}
         onCloseSave={( ) => setShowSaveSheet( false )}
         searchToDelete={searchToDelete}
