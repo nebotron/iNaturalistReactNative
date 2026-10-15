@@ -128,7 +128,9 @@ const AudioId = ( ) => {
       .map( s => ( { ...s, speciesCount: species.get( s.id )?.size || 0 } ) );
   }, [clips, sessions] );
 
-  const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", { id: taxonId } );
+  const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", {
+    id: taxonId, fromAudioId: true,
+  } );
 
   // Species being heard right now are highlighted in yellow.
   const row = ( sp: AudioIdSpecies, score: number, detail?: string ) => (

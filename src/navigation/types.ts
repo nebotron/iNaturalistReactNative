@@ -129,6 +129,8 @@ export type SharedStackParamList = {
     // Opened from the Explore taxon filter search (or a relative drill-down from it);
     // shows a select button that adds this taxon to the Explore taxon filters
     selectableForExplore?: boolean;
+    // Opened from Audio ID; shows a link to top-faved sound observations
+    fromAudioId?: boolean;
   };
   // From App.js
   PhotoSharing: {

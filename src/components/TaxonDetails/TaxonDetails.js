@@ -8,6 +8,7 @@ import {
   useRoute,
 } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
+import AudioIdSoundsLink from "components/AudioId/AudioIdSoundsLink";
 import MatchSaveDiscardButtons from "components/Match/SaveDiscardButtons";
 import MediaViewerModal from "components/MediaViewer/MediaViewerModal";
 import { UPLOAD } from "components/ObsEdit/BottomButtons";
@@ -116,6 +117,7 @@ const TaxonDetails = ( ): Node => {
   const { params } = useRoute( );
   const {
     id, hideNavButtons, firstPhotoID, representativePhoto, rankLevel, selectableForExplore,
+    fromAudioId,
   } = params;
   const { t } = useTranslation( );
   const { isConnected } = useNetInfo( );
@@ -409,6 +411,7 @@ const TaxonDetails = ( ): Node => {
 
     return (
       <View className="mx-3">
+        {fromAudioId && <AudioIdSoundsLink taxonId={taxon.id} />}
         <EstablishmentMeans taxon={taxon} />
         <Wikipedia taxon={taxon} />
         <Taxonomy

@@ -32,7 +32,9 @@ const AudioIdTaxa = ( ) => {
       accessibilityRole="button"
       accessibilityHint="Opens the species page."
       className="py-2 px-5 border-b border-lightGray"
-      onPress={( ) => navigation.navigate( "TaxonDetails", { id: item.taxonId } )}
+      onPress={( ) => navigation.navigate( "TaxonDetails", {
+        id: item.taxonId, fromAudioId: true,
+      } )}
     >
       <Body1>{item.commonName}</Body1>
       <List2 className="italic">{item.name}</List2>
