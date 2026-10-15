@@ -1201,6 +1201,8 @@ Opens-explore-view-options = Opens Explore view options.
 Opens-location-permission-prompt = Opens location permission prompt
 # Accessibility hint for search button in Explore header that navigates to the search interface
 Opens-search-interface = Opens search interface.
+# Attribution for OpenStreetMap map tiles shown on the offline map
+OpenStreetMap-contributors = © OpenStreetMap contributors
 OR-SIGN-IN-WITH = OR SIGN IN WITH
 Or-you-can-try-to-get-a-clearer-photo-by-zooming-in-getting-closer = Or, you can try to get a clearer photo by zooming in, getting closer, or trying a different angle.
 # Picker prompt on observation edit

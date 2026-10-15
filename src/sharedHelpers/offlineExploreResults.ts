@@ -1,6 +1,9 @@
-import { DocumentDirectoryPath } from "@dr.pogodin/react-native-fs";
+import {
+  DocumentDirectoryPath, downloadFile, exists, mkdir, unlink,
+} from "@dr.pogodin/react-native-fs";
 import { searchObservations } from "api/observations";
 import type { ApiObservation } from "api/types";
+import { getUserAgent } from "api/userAgent";
 import {
   addPageParamsForExplore,
   getNextPageParamForExplore,
@@ -16,6 +19,12 @@ const logger = log.extend( "offlineExploreResults" );
 const PAGE_SIZE = 200;
 // Per save; each save adds to what's already saved
 export const MAX_OFFLINE_OBSERVATIONS = 5000;
+// Base map tiles saved alongside the results, stored as {z}/{x}/{y}.png
+export const OFFLINE_TILES_PATH = `${DocumentDirectoryPath}/offlineExploreTiles`;
+const TILE_URL = "https://tile.openstreetmap.org";
+// Per save, from the lowest zoom up, so a wide area gets fewer zoom levels
+const MAX_TILES = 1000;
+const MAX_TILE_ZOOM = 16;
 
 type Params = Record<string, unknown>;
 
@@ -144,6 +153,56 @@ export const deleteOfflineExploreResults = async ( ) => {
   if ( !db ) return;
   db.write( ( ) => db.deleteAll( ) );
   notify( );
+  await unlink( OFFLINE_TILES_PATH ).catch( ( ) => undefined );
+};
+
+interface Bounds {
+  swlat: number;
+  swlng: number;
+  nelat: number;
+  nelng: number;
+}
+
+const tileX = ( lng: number, z: number ) => Math.min(
+  Math.floor( ( ( lng + 180 ) / 360 ) * 2 ** z ),
+  2 ** z - 1,
+);
+
+const tileY = ( lat: number, z: number ) => {
+  const rad = ( Math.max( Math.min( lat, 85 ), -85 ) * Math.PI ) / 180;
+  const y = ( 1 - Math.log( Math.tan( rad ) + 1 / Math.cos( rad ) ) / Math.PI ) / 2;
+  return Math.min( Math.floor( y * 2 ** z ), 2 ** z - 1 );
+};
+
+// Saves the base map tiles covering bounds, skipping ones already saved
+const downloadOfflineTiles = async ( {
+  swlat, swlng, nelat, nelng,
+}: Bounds ) => {
+  const tiles: { z: number; x: number; y: number }[] = [];
+  for ( let z = 0; z <= MAX_TILE_ZOOM; z += 1 ) {
+    const [x1, x2] = [tileX( swlng, z ), tileX( nelng, z )];
+    const [y1, y2] = [tileY( nelat, z ), tileY( swlat, z )];
+    if ( tiles.length + ( x2 - x1 + 1 ) * ( y2 - y1 + 1 ) > MAX_TILES ) break;
+    for ( let x = x1; x <= x2; x += 1 ) {
+      for ( let y = y1; y <= y2; y += 1 ) tiles.push( { z, x, y } );
+    }
+  }
+  const headers = { "User-Agent": getUserAgent( ) };
+  for ( let i = 0; i < tiles.length; i += 1 ) {
+    const { z, x, y } = tiles[i];
+    const path = `${OFFLINE_TILES_PATH}/${z}/${x}/${y}.png`;
+    /* eslint-disable no-await-in-loop */
+    if ( !( await exists( path ) ) ) {
+      await mkdir( `${OFFLINE_TILES_PATH}/${z}/${x}` );
+      const { statusCode } = await downloadFile( {
+        fromUrl: `${TILE_URL}/${z}/${x}/${y}.png`,
+        toFile: path,
+        headers,
+      } ).promise;
+      if ( statusCode !== 200 ) await unlink( path ).catch( ( ) => undefined );
+    }
+    /* eslint-enable no-await-in-loop */
+  }
 };
 
 const dayInt = ( value?: string | null ) => {
@@ -192,6 +251,17 @@ const toRow = ( obs: ApiObservation ) => {
   };
 };
 
+const extendBounds = ( bounds: Bounds | undefined, obs: ApiObservation ) => {
+  const { latitude, longitude } = toRow( obs );
+  if ( latitude == null || longitude == null ) return bounds;
+  return {
+    swlat: Math.min( bounds?.swlat ?? latitude, latitude ),
+    swlng: Math.min( bounds?.swlng ?? longitude, longitude ),
+    nelat: Math.max( bounds?.nelat ?? latitude, latitude ),
+    nelng: Math.max( bounds?.nelng ?? longitude, longitude ),
+  };
+};
+
 const FIELDS = {
   ...Observation.ADVANCED_MODE_LIST_FIELDS,
   captive: true,
@@ -230,6 +300,7 @@ export const downloadOfflineExploreResults = async (
   const apiToken = await getJWT( true );
   let fetched = 0;
   let pageParam: unknown;
+  let bounds: Bounds | undefined;
   while ( fetched < MAX_OFFLINE_OBSERVATIONS ) {
     // eslint-disable-next-line no-await-in-loop
     const response = await searchObservations(
@@ -245,11 +316,18 @@ export const downloadOfflineExploreResults = async (
         db.create( "OfflineExploreObservation", toRow( obs ), Realm.UpdateMode.Modified );
       } );
     } );
+    bounds = results.reduce( extendBounds, bounds );
     fetched += results.length;
     notify( );
     onProgress?.( fetched );
     pageParam = getNextPageParamForExplore( response, baseParams );
     if ( pageParam == null || response.results.length < PAGE_SIZE ) break;
+  }
+  if ( bounds ) {
+    // The results are saved even if the map can't be
+    await downloadOfflineTiles( bounds ).catch( e => {
+      logger.error( "Failed to save offline map tiles", e );
+    } );
   }
   const total = allSaved( db ).length;
   return { added: total - before, total };

@@ -15,13 +15,14 @@ import React, {
   useEffect, useMemo, useState, useSyncExternalStore,
 } from "react";
 import { Alert } from "react-native";
-import { Marker } from "react-native-maps";
+import { LocalTile, Marker } from "react-native-maps";
 import {
   deleteOfflineExploreResults,
   downloadOfflineExploreResults,
   getOfflineExploreRealm,
   getOfflineExploreVersion,
   MAX_OFFLINE_OBSERVATIONS,
+  OFFLINE_TILES_PATH,
   openOfflineExploreRealm,
   queryOfflineObservations,
   subscribeOfflineExploreResults,
@@ -173,6 +174,7 @@ export const OfflineObservationsView = ( { layout, queryParams }: ViewProps ) =>
 
 // Saved results as pins, since the observation tiles need the server
 export const OfflineMapView = ( { queryParams }: { queryParams: Params } ) => {
+  const { t } = useTranslation( );
   const navigation = useNavigation( );
   const saved = useOfflineExploreResults( queryParams );
   const { pins, region } = useMemo( ( ) => {
@@ -203,15 +205,23 @@ export const OfflineMapView = ( { queryParams }: { queryParams: Params } ) => {
         showScaleBar
         showsUserLocation
         switchMapTypeButtonClassName="right-5 bottom-20"
-        mapChildren={pins.map( ( { uuid, coordinate } ) => (
-          <Marker
-            key={uuid}
-            coordinate={coordinate}
-            tracksViewChanges={false}
-            onPress={( ) => navigation.navigate( "ObsDetails", { uuid } )}
-          />
-        ) )}
+        mapChildren={(
+          <>
+            <LocalTile pathTemplate={`${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`} tileSize={256} />
+            {pins.map( ( { uuid, coordinate } ) => (
+              <Marker
+                key={uuid}
+                coordinate={coordinate}
+                tracksViewChanges={false}
+                onPress={( ) => navigation.navigate( "ObsDetails", { uuid } )}
+              />
+            ) )}
+          </>
+        )}
       />
+      <Body3 className="absolute bottom-1 right-2 text-xs">
+        {t( "OpenStreetMap-contributors" )}
+      </Body3>
     </View>
   );
 };
