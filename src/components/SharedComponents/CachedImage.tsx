@@ -1,12 +1,12 @@
 import classnames from "classnames";
 import { FasterImageView, Image, View } from "components/styledComponents";
-import React, { useCallback } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import type {
   ImageSourcePropType,
   StyleProp,
   ViewStyle,
 } from "react-native";
-import { StyleSheet } from "react-native";
+import { NativeModules, StyleSheet } from "react-native";
 
 // Every remote image in the app loads through this one policy, so they all
 // share a single on-disk cache.
@@ -53,6 +53,49 @@ const remoteUriFor = ( source: Props["source"] ): string | null => {
     : null;
 };
 
+// iNaturalist photo sizes, smallest first. They share a URL apart from the
+// size segment, e.g. .../photos/123/large.jpg.
+const PHOTO_SIZES = ["square", "small", "medium", "large", "original"];
+const PHOTO_SIZE_REGEX = /\/(square|small|medium|large|original)\.(jpe?g|png|gif)/i;
+
+// Smaller variants of a large or original iNaturalist photo URL, largest
+// first. Thumbnails load fast enough not to need a placeholder.
+const smallerVariants = ( uri: string ): string[] => {
+  const match = uri.match( PHOTO_SIZE_REGEX );
+  const index = match
+    ? PHOTO_SIZES.indexOf( match[1].toLowerCase( ) )
+    : -1;
+  if ( index < PHOTO_SIZES.indexOf( "large" ) ) return [];
+  return PHOTO_SIZES.slice( 0, index ).reverse( ).map(
+    size => uri.replace( PHOTO_SIZE_REGEX, `/${size}.$2` ),
+  );
+};
+
+// The largest smaller variant of `remoteUri` that is already cached, to show
+// while `remoteUri` itself downloads. Never fetches anything new.
+const useCachedPlaceholder = ( remoteUri: string | null ) => {
+  const [placeholder, setPlaceholder] = useState<{ for: string; uri: string } | null>( null );
+  useEffect( ( ) => {
+    const cachedSources = NativeModules.FasterImageViewManager?.cachedSources;
+    const variants = remoteUri
+      ? smallerVariants( remoteUri )
+      : [];
+    let cancelled = false;
+    if ( remoteUri && cachedSources && variants.length > 0 ) {
+      cachedSources( variants ).then( ( cached: string[] ) => {
+        const best = variants.find( variant => cached.includes( variant ) );
+        if ( !cancelled && best ) setPlaceholder( { for: remoteUri, uri: best } );
+      } ).catch( ( ) => null );
+    }
+    return ( ) => {
+      cancelled = true;
+    };
+  }, [remoteUri] );
+  return placeholder?.for === remoteUri
+    ? placeholder.uri
+    : null;
+};
+
 /**
  * The single image component for anything that might load over the network.
  *
@@ -76,13 +119,16 @@ const CachedImage = ( {
   transitionDuration = 0,
 }: Props ) => {
   const remoteUri = remoteUriFor( source );
+  const placeholderUri = useCachedPlaceholder( remoteUri );
+  const [loadedUri, setLoadedUri] = useState<string | null>( null );
 
   const handleFasterImageSuccess = useCallback( ( event: {
     nativeEvent: { width: number; height: number };
   } ) => {
+    setLoadedUri( remoteUri );
     const { width, height } = event.nativeEvent;
     onLoad?.( { width, height } );
-  }, [onLoad] );
+  }, [onLoad, remoteUri] );
 
   const handleImageLoad = useCallback( ( event: {
     nativeEvent: { source: { width: number; height: number } };
@@ -99,6 +145,19 @@ const CachedImage = ( {
       accessibilityLabel={accessibilityLabel}
       testID={testID}
     >
+      {placeholderUri && loadedUri !== remoteUri && (
+        <FasterImageView
+          key={placeholderUri}
+          style={StyleSheet.absoluteFill}
+          accessibilityIgnoresInvertColors={accessibilityIgnoresInvertColors}
+          source={{
+            url: placeholderUri,
+            cachePolicy: IMMUTABLE_CACHE_POLICY,
+            resizeMode,
+            transitionDuration: 0,
+          }}
+        />
+      )}
       {remoteUri
         ? (
           <FasterImageView
@@ -114,7 +173,7 @@ const CachedImage = ( {
               resizeMode,
               transitionDuration,
             }}
-            onSuccess={onLoad
+            onSuccess={onLoad || placeholderUri
               ? handleFasterImageSuccess
               : undefined}
             onError={onError}

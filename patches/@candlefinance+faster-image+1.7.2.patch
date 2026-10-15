@@ -43,8 +43,19 @@ index e1cb690..a7a2235 100644
          }
      }
  }
+diff --git a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m
+index a8401df..7e51b7a 100644
+--- a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m
++++ b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.m
+@@ -12,4 +12,6 @@ RCT_EXTERN_METHOD(clearCache:(RCTPromiseResolveBlock)resolve rejecter:(RCTPromis
+ 
+ RCT_EXTERN_METHOD(prefetch:(NSArray *)sources withResolver:(RCTPromiseResolveBlock)resolve withRejecter:(RCTPromiseRejectBlock)reject)
+ 
++RCT_EXTERN_METHOD(cachedSources:(NSArray *)sources withResolver:(RCTPromiseResolveBlock)resolve withRejecter:(RCTPromiseRejectBlock)reject)
++
+ @end
 diff --git a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
-index d653e1c..4804ca8 100644
+index d653e1c..5472406 100644
 --- a/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 +++ b/node_modules/@candlefinance/faster-image/ios/FasterImageViewManager.swift
 @@ -15,6 +15,9 @@ final class FasterImageViewManager: RCTViewManager {
@@ -57,7 +68,7 @@ index d653e1c..4804ca8 100644
        DataLoader.sharedUrlCache.removeAllCachedResponses()
        URLSession.shared.invalidateAndCancel()
        DispatchQueue.main.async {
-@@ -23,12 +26,18 @@ final class FasterImageViewManager: RCTViewManager {
+@@ -23,14 +26,33 @@ final class FasterImageViewManager: RCTViewManager {
      }
    }
    
@@ -77,4 +88,19 @@ index d653e1c..4804ca8 100644
 +    Self.prefetcher.startPrefetching(with: sources.compactMap(URL.init(string:)))
      resolve(true)
    }
++
++  // The subset of `sources` already in the memory or disk cache, so JS can
++  // show a cached lower-resolution variant while a larger one downloads.
++  @objc(cachedSources:withResolver:withRejecter:)
++  func cachedSources(sources: [String],
++                     resolve: @escaping RCTPromiseResolveBlock,
++                     reject: @escaping RCTPromiseRejectBlock) {
++    let pipeline = CachePolicy.dataCachePipeline
++    resolve(sources.filter { source in
++      guard let url = URL(string: source) else { return false }
++      return pipeline.cache.containsCachedImage(for: ImageRequest(url: url))
++    })
++  }
  }
+ 
+ struct ImageOptions: Decodable {
