@@ -12,10 +12,10 @@ import {
   enableExploreV2,
   lastObservationsSearchParams,
   navigateToExplore,
-  openUniversalSearch,
-  resetUniversalSearch,
+  openAdvancedSearch,
+  resetAdvancedSearch,
   searchForTaxon,
-  submitUniversalSearch,
+  submitAdvancedSearch,
 } from "tests/helpers/exploreV2";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
@@ -103,8 +103,7 @@ describe( "saved searches", ( ) => {
   it( "saves the search, runs it again later, and unsaves it", async ( ) => {
     renderApp( );
     await navigateToExplore( );
-    await openUniversalSearch( );
-    await searchForTaxon( mockTaxon );
+    await searchForTaxon( mockTaxon, global.mockRealms[__filename] );
 
     await actor.press( await screen.findByLabelText( t( "Save-this-search" ) ) );
 
@@ -114,15 +113,16 @@ describe( "saved searches", ( ) => {
 
     // Clear the subject, so the search goes back to all organisms worldwide and applying
     // the saved search has something to change
-    await openUniversalSearch( );
-    await resetUniversalSearch( );
-    await submitUniversalSearch( );
+    await openAdvancedSearch( );
+    await resetAdvancedSearch( );
+    await submitAdvancedSearch( );
     await waitFor( ( ) => {
       expect( lastObservationsSearchParams( ) ).not.toHaveProperty( "taxon_id" );
     } );
     expect( await screen.findByLabelText( t( "Save-this-search" ) ) ).toBeVisible( );
 
-    await openUniversalSearch( );
+    await openAdvancedSearch( );
+    await actor.press( screen.getByTestId( "AdvancedSearch.savedSearchesButton" ) );
     const savedList = await screen.findByTestId( "SavedSearches" );
     await actor.press( within( savedList ).getByText( mockTaxon.name ) );
 
@@ -139,7 +139,7 @@ describe( "saved searches", ( ) => {
     await actor.press( removeStar );
 
     expect( await screen.findByText( t( "Removed-from-Saved-Searches" ) ) ).toBeOnTheScreen( );
-    await openUniversalSearch( );
-    expect( screen.queryByTestId( "SavedSearches" ) ).toBeNull( );
+    await openAdvancedSearch( );
+    expect( screen.queryByTestId( "AdvancedSearch.savedSearchesButton" ) ).toBeNull( );
   } );
 } );

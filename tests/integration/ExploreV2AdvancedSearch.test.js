@@ -11,8 +11,8 @@ import {
   enableExploreV2,
   lastObservationsSearchParams,
   navigateToExplore,
-  openUniversalSearch,
-  submitUniversalSearch,
+  openAdvancedSearch,
+  submitAdvancedSearch,
 } from "tests/helpers/exploreV2";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
@@ -105,17 +105,6 @@ afterEach( async ( ) => {
 
 global.withAnimatedTimeTravelEnabled( { skipFakeTimers: true } );
 
-const openAdvancedSearch = async ( ) => {
-  await openUniversalSearch( );
-  await actor.press( screen.getByText( t( "Advanced-Search" ) ) );
-  await screen.findByTestId( "AdvancedSearch" );
-};
-
-const submitAdvancedSearch = async ( ) => {
-  await actor.press( screen.getByTestId( "AdvancedSearch.searchButton" ) );
-  await screen.findByTestId( "ExploreResults" );
-};
-
 describe( "advanced search", ( ) => {
   it( "filters the results query by the filters the user chose", async ( ) => {
     renderApp( );
@@ -159,32 +148,4 @@ describe( "advanced search", ( ) => {
       } );
     },
   );
-
-  it( "returns to standard search, dropping the filters", async ( ) => {
-    renderApp( );
-    await navigateToExplore( );
-    await openAdvancedSearch( );
-    await actor.press( screen.getByText( t( "Sounds" ) ) );
-    await submitAdvancedSearch( );
-
-    const filterBadge = ( ) => screen.queryByTestId(
-      "ExploreV2Header.filterCount",
-      { includeHiddenElements: true },
-    );
-    expect( filterBadge( ) ).toBeOnTheScreen( );
-
-    // In advanced mode the header goes straight to Advanced Search
-    await actor.press( screen.getByTestId( "ExploreV2Header.searchButton" ) );
-    await screen.findByTestId( "AdvancedSearch" );
-    await actor.press( screen.getByTestId( "AdvancedSearch.returnToStandardSearch" ) );
-    await screen.findByTestId( "UniversalSearch" );
-    await submitUniversalSearch( );
-
-    await waitFor( ( ) => {
-      expect( lastObservationsSearchParams( ) ).not.toHaveProperty( "sounds" );
-    } );
-    expect( filterBadge( ) ).not.toBeOnTheScreen( );
-    expect( screen.getByTestId( "ExploreV2Header.searchButton" ) )
-      .toHaveAccessibleName( t( "Search" ) );
-  } );
 } );

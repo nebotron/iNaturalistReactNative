@@ -252,7 +252,6 @@ export type OnboardingStackParamList = {
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 export type ExploreStackParamList = {
   ExploreResults: { showBackButton?: boolean } | undefined;
-  UniversalSearch: undefined;
   AdvancedSearch: undefined;
 };
 

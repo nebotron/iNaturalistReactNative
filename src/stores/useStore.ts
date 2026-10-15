@@ -5,8 +5,6 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { ExploreSlice } from "./createExploreSlice";
 import createExploreSlice from "./createExploreSlice";
-import type { ExploreV2AdvancedSearchSlice } from "./createExploreV2AdvancedSearchSlice";
-import createExploreV2AdvancedSearchSlice from "./createExploreV2AdvancedSearchSlice";
 import type { ExploreV2SearchesSlice } from "./createExploreV2SearchesSlice";
 import createExploreV2SearchesSlice from "./createExploreV2SearchesSlice";
 import type { FeatureFlagSlice } from "./createFeatureFlagSlice";
@@ -30,7 +28,6 @@ import storage from "./zustandMMKVBackingStorage";
 
 type StoreState =
   ExploreSlice
-  & ExploreV2AdvancedSearchSlice
   & ExploreV2SearchesSlice
   & FeatureFlagSlice
   & FirebaseTraceSlice
@@ -74,7 +71,6 @@ const useStore = create<StoreState>()( persist(
     const slices = [
       createExploreV2SearchesSlice( ...args ),
       createExploreSlice( ...args ),
-      createExploreV2AdvancedSearchSlice( ...args ),
       createFeatureFlagSlice( ...args ),
       createFirebaseTraceSlice( ...args ),
       createLayoutSlice( ...args ),

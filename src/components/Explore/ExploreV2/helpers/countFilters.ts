@@ -6,6 +6,7 @@ const countedDefaults = {
   user: null,
   unobservedByUser: null,
   project: null,
+  taxonFilters: null,
 };
 
 type CountedKey = keyof typeof countedDefaults;

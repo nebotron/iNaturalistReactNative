@@ -3,6 +3,7 @@ import type {
   HOTSPOTS_TAB, IDENTIFIERS_TAB, IDENTIFY_TAB, LIFELIST_TAB, OBSERVERS_TAB, SPECIES_TAB,
 } from "appConstants/tabs";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import type { ExploreV2EntryParams } from "navigation/types";
 import type { TAXONOMIC_RANK } from "providers/ExploreContext";
 import {
@@ -107,6 +108,8 @@ export interface ExploreV2Filters {
   user?: ApiUser | null;
   unobservedByUser?: ApiUser | null;
   project?: ApiProjectSummary | null;
+  // Taxa searched for beyond the subject taxon, and excluded taxa
+  taxonFilters?: ExploreTaxonFilter[] | null;
 }
 
 export const defaultExploreV2Filters: ExploreV2Filters = {

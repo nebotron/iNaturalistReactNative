@@ -5,6 +5,7 @@ import {
   within,
 } from "@testing-library/react-native";
 import inatjs from "inaturalistjs";
+import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import useStore from "stores/useStore";
 
 const actor = userEvent.setup( );
@@ -26,43 +27,50 @@ export async function navigateToExplore( ) {
   await screen.findByTestId( "ExploreResults" );
 }
 
-export async function openUniversalSearch( ) {
+export async function openAdvancedSearch( ) {
   const header = await screen.findByTestId( "ExploreV2Header" );
   await actor.press( within( header ).getByTestId( "ExploreV2Header.searchButton" ) );
-  await screen.findByTestId( "UniversalSearch" );
+  await screen.findByTestId( "AdvancedSearch" );
 }
 
-/** Types into a Universal Search field and lets the debounced autocomplete run.
- * Needs fake timers. The result list follows the focused field and only the subject field
- * autofocuses, so skipBlur keeps this field focused after typing. */
-export async function typeIntoSearchField( testID, text ) {
-  await actor.type( screen.getByTestId( testID ), text, { skipBlur: true } );
-  act( ( ) => {
-    jest.advanceTimersByTime( 400 );
-  } );
+/** Clears the search Advanced Search reopened with, i.e. the search currently applied. */
+export async function resetAdvancedSearch( ) {
+  await actor.press( screen.getByTestId( "AdvancedSearch.back.reset" ) );
 }
 
-/** Focuses a Universal Search field without typing. userEvent has no focus action and its
- * press( ) does not emit focus, so type an empty string. */
-export async function focusSearchField( testID ) {
-  await typeIntoSearchField( testID, "" );
-}
-
-/** Clears the search Universal Search reopened with, i.e. the search currently applied. */
-export async function resetUniversalSearch( ) {
-  await actor.press( screen.getByTestId( "UniversalSearch.back.reset" ) );
-}
-
-export async function submitUniversalSearch( ) {
-  await actor.press( screen.getByTestId( "UniversalSearch.searchButton" ) );
+export async function submitAdvancedSearch( ) {
+  await actor.press( screen.getByTestId( "AdvancedSearch.searchButton" ) );
   await screen.findByTestId( "ExploreResults" );
 }
 
-/** Picks a taxon from the subject autocomplete and searches for it. */
-export async function searchForTaxon( taxon ) {
-  await typeIntoSearchField( "UniversalSearch.subjectInput", taxon.name );
-  await actor.press( await screen.findByTestId( `UniversalSearchResult.taxon.${taxon.id}` ) );
-  await submitUniversalSearch( );
+/** Adds a taxon to the open Advanced Search's taxon filters. Taxon search reads the local
+ * species database, so the taxon is written to the given realm first. */
+export async function addTaxonFilter( taxon, realm ) {
+  safeRealmWrite( realm, ( ) => {
+    realm.create( "Taxon", {
+      id: taxon.id,
+      name: taxon.name,
+      preferred_common_name: taxon.preferred_common_name,
+      rank: taxon.rank,
+      rank_level: taxon.rank_level,
+    }, "modified" );
+  }, "writing a searchable taxon for an Explore integration test" );
+  const addButton = screen.queryByText( "ADD TAXON FILTER" )
+    || screen.getByText( "SEARCH FOR A TAXON" );
+  await actor.press( addButton );
+  await actor.type( await screen.findByLabelText( "Search for a taxon" ), taxon.name );
+  act( ( ) => {
+    jest.advanceTimersByTime( 400 );
+  } );
+  await actor.press( await screen.findByTestId( `Search.taxa.${taxon.id}` ) );
+}
+
+/** Searches for a taxon from Advanced Search. */
+export async function searchForTaxon( taxon, realm ) {
+  await openAdvancedSearch( );
+  await resetAdvancedSearch( );
+  await addTaxonFilter( taxon, realm );
+  await submitAdvancedSearch( );
 }
 
 /** The params of the most recent observations search, i.e. what the user's choices produced. */

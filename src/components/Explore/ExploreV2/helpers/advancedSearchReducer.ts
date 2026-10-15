@@ -1,4 +1,6 @@
 import type { ApiProjectSummary, ApiUser } from "api/types";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import { toExploreTaxonFilterTaxon } from "components/Explore/helpers/taxonFilters";
 import type {
   ESTABLISHMENT_MEAN,
   MEDIA,
@@ -70,8 +72,19 @@ export const defaultAdvancedSearchDraft: AdvancedSearchDraft = {
 
 export type SubjectTaxon = Extract<ExploreV2Subject, { type: "taxon" }>["taxon"];
 
+// All taxon filters of a search: the subject taxon first, then the extra ones in filters
+export const searchTaxonFilters = (
+  subject: ExploreV2Subject | null,
+  filters: ExploreV2Filters,
+): ExploreTaxonFilter[] => [
+  ...( subject?.type === "taxon"
+    ? [{ taxon: toExploreTaxonFilterTaxon( subject.taxon ), exclude: false }]
+    : [] ),
+  ...( filters.taxonFilters || [] ),
+];
+
 export type AdvancedSearchAction =
-  | { type: "SET_TAXON"; taxon: SubjectTaxon | null }
+  | { type: "SET_TAXON_FILTERS"; taxonFilters: ExploreTaxonFilter[] }
   | { type: "FILTER_BY_ICONIC_UNKNOWN" }
   | { type: "SET_LOCATION_PLACE"; place: { id: number; display_name?: string } }
   | { type: "SET_LOCATION_NEARBY" }
@@ -112,16 +125,27 @@ export const advancedSearchReducer = (
   action: AdvancedSearchAction,
 ): AdvancedSearchDraft => {
   switch ( action.type ) {
-    case "SET_TAXON":
+    case "SET_TAXON_FILTERS": {
+      // The first included taxon is the subject, the rest ride along in filters
+      const first = action.taxonFilters.find( filter => !filter.exclude );
+      const rest = action.taxonFilters.filter( filter => filter !== first );
       return {
-        ...draft,
-        subject: action.taxon
-          ? { type: "taxon", taxon: action.taxon }
+        ...withFilters( draft, {
+          taxonFilters: rest.length > 0
+            ? rest
+            : null,
+        } ),
+        subject: first
+          ? { type: "taxon", taxon: { ...first.taxon, name: first.taxon.name || "" } }
           : null,
       };
+    }
     case "FILTER_BY_ICONIC_UNKNOWN":
       // special case -- not a taxon
-      return { ...draft, subject: { type: "unknown" } };
+      return {
+        ...withFilters( draft, { taxonFilters: null } ),
+        subject: { type: "unknown" },
+      };
     case "SET_LOCATION_PLACE":
       return {
         ...draft,

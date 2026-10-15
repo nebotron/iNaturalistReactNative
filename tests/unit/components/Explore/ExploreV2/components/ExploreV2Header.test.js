@@ -3,7 +3,6 @@ import ExploreV2Header from "components/Explore/ExploreV2/components/ExploreV2He
 import { MEDIA } from "providers/ExploreContext";
 import { defaultExploreV2Filters, EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
 import React from "react";
-import useStore from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
 
 const mockNavigate = jest.fn();
@@ -60,7 +59,6 @@ describe( "ExploreV2Header", () => {
   beforeEach( () => {
     mockNavigate.mockClear();
     mockCanGoBack.mockReturnValue( false );
-    useStore.getState().exploreV2AdvancedSearch.setAdvancedSearchMode( false );
   } );
 
   it( "renders a user subject with login and location", () => {
@@ -253,22 +251,11 @@ describe( "ExploreV2Header", () => {
 
     await actor.press( screen.getByTestId( "ExploreV2Header.pressable" ) );
 
-    expect( mockNavigate ).toHaveBeenCalledWith( "UniversalSearch" );
+    expect( mockNavigate ).toHaveBeenCalledWith( "AdvancedSearch" );
   } );
 
-  it( "navigates to Universal Search when the search button is tapped", async () => {
+  it( "navigates to Advanced Search when the filters button is tapped", async () => {
     const actor = userEvent.setup();
-    setState( null );
-    renderComponent( <ExploreV2Header {...viewProps} showBackButton={false} /> );
-
-    await actor.press( screen.getByLabelText( "Search" ) );
-
-    expect( mockNavigate ).toHaveBeenCalledWith( "UniversalSearch" );
-  } );
-
-  it( "navigates to Advanced Search from a filters button in advanced search mode", async () => {
-    const actor = userEvent.setup();
-    useStore.getState().exploreV2AdvancedSearch.setAdvancedSearchMode( true );
     setState( null );
     renderComponent( <ExploreV2Header {...viewProps} showBackButton={false} /> );
 
@@ -297,7 +284,6 @@ describe( "ExploreV2Header", () => {
   } );
 
   it( "badges the filters button with the number of filters applied", () => {
-    useStore.getState().exploreV2AdvancedSearch.setAdvancedSearchMode( true );
     setState( null, PLACE_LOCATION, {
       ...defaultExploreV2Filters,
       casual: true,
@@ -309,7 +295,6 @@ describe( "ExploreV2Header", () => {
   } );
 
   it( "shows no badge when the search has no filters", () => {
-    useStore.getState().exploreV2AdvancedSearch.setAdvancedSearchMode( true );
     setState( null );
     renderComponent( <ExploreV2Header {...viewProps} showBackButton={false} /> );
 

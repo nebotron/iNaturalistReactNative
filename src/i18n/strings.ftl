@@ -88,8 +88,6 @@ Adjust-zoom = Adjust zoom
 Advanced-Mode = Advanced Mode
 # Header of the advanced search screen
 ADVANCED-SEARCH = ADVANCED SEARCH
-# Link to the advanced search screen with more search filters
-Advanced-Search = Advanced Search
 ADVANCED-SETTINGS = ADVANCED SETTINGS
 Affiliation = Affiliation: { $site }
 After-capturing-or-importing-photos-show = After capturing or importing photos, show:
@@ -630,10 +628,6 @@ Filter-by-observed-on-date = Filter by observations observed on a specific date
 Filter-by-uploaded-between-dates = Filter by observations uploaded between two specific dates
 Filter-by-uploaded-on-date = Filter by observations uploaded on a specific date
 Filters = Filters
-# Accessibility hint for the "Worldwide" default option in the location search
-Filters-observations-to-anywhere-in-the-world = Filters observations to anywhere in the world.
-# Accessibility hint for the "Nearby" default option in the location search
-Filters-observations-to-your-current-location = Filters observations to your current location.
 # Display name for the iconic taxa category for actinopterygii
 Fish = Fish
 # Status when an item has been flagged
@@ -1341,8 +1335,6 @@ Ranks-Zoosubsection = Zoosubsection
 # observations on iNaturalist first
 Rarest = Rarest
 Read-more-on-Wikipedia = Read more on Wikipedia
-# Heading above the list of recently used searches
-Recent-searches = Recent searches
 # Help text for the button that opens the sound recorder
 Record-a-sound = Record a sound
 # Title of screen asking for permission to access the microphone
@@ -1408,8 +1400,6 @@ Reset-verb = Reset
 RESTART-APP = RESTART APP
 # Label for button that restores a withdrawn identification
 Restore = Restore
-# Button on the advanced search screen that switches to the simpler search screen
-RETURN-TO-STANDARD-SEARCH = RETURN TO STANDARD SEARCH
 Reveal = Reveal
 REVIEW-INATURALIST = REVIEW INATURALIST
 REVIEWED = REVIEWED
@@ -1458,15 +1448,9 @@ Scientific-Name-Common-Name = Scientific Name (Common Name)
 SEARCH = SEARCH
 # Title for a search interface
 Search = Search
-# Label for the button that submits a search on the universal search screen
-SEARCH--button = SEARCH
-# Placeholder for the location field in universal search
-Search-for-a-location = Search for a location
 Search-for-a-project = Search for a project
 SEARCH-FOR-A-TAXON = SEARCH FOR A TAXON
 Search-for-a-taxon = Search for a taxon
-# Placeholder for the taxon/user/project field in universal search
-Search-for-species-user-or-project = Search for species, user, or project
 SEARCH-LOCATION = SEARCH LOCATION
 SEARCH-PROJECTS = SEARCH PROJECTS
 # Accessibility label for a saved search, combining what is being searched for with where,

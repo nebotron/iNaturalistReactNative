@@ -110,7 +110,6 @@ beforeEach( ( ) => {
   mockRequestPermissions.mockClear( );
   mockExploreV2SpeciesView.mockClear( );
   mockExploreV2UsersView.mockClear( );
-  useStore.getState( ).exploreV2AdvancedSearch.setAdvancedSearchMode( false );
   fetchCoarseUserLocation.mockReset( );
   mockUseInfiniteExploreScroll.mockReset( );
   mockUseInfiniteExploreScroll.mockReturnValue( {

@@ -1,3 +1,5 @@
+import { searchTaxonFilters } from "components/Explore/ExploreV2/helpers/advancedSearchReducer";
+import { taxonFiltersToApiParams } from "components/Explore/helpers/taxonFilters";
 import type { ExploreV2State } from "providers/ExploreV2Context";
 import {
   EXPLORE_V2_PLACE_MODE,
@@ -14,7 +16,8 @@ export interface ExploreV2QueryParams extends FilterApiParams {
   per_page: number;
   order_by: ObservationOrderBy;
   order: SortDirection;
-  taxon_id?: number;
+  taxon_id?: number | string;
+  without_taxon_id?: number | string;
   iconic_taxa?: string[];
   lat?: number;
   lng?: number;
@@ -52,11 +55,12 @@ const buildExploreV2QueryParams = (
     ...observationSortToApiParams( state.sortBy ),
   };
 
+  Object.assign( params, taxonFiltersToApiParams(
+    searchTaxonFilters( state.subject, state.filters ),
+  ) );
+
   // this might warrant moving into a selector function at some point
   switch ( state.subject?.type ) {
-    case "taxon":
-      params.taxon_id = state.subject.taxon.id;
-      break;
     case "user":
       params.user_id = state.subject.user.id;
       break;

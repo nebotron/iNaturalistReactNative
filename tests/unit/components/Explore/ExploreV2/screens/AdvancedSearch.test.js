@@ -12,13 +12,11 @@ import {
 } from "providers/ExploreV2Context";
 import React from "react";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
-import useStore from "stores/useStore";
 import factory from "tests/factory";
 import { renderComponent } from "tests/helpers/render";
 
 const mockGoBack = jest.fn( );
 const mockPopTo = jest.fn( );
-const mockReplace = jest.fn( );
 jest.mock( "@react-navigation/native", ( ) => {
   const actualNav = jest.requireActual( "@react-navigation/native" );
   return {
@@ -28,7 +26,6 @@ jest.mock( "@react-navigation/native", ( ) => {
       navigate: jest.fn( ),
       popTo: mockPopTo,
       push: jest.fn( ),
-      replace: mockReplace,
       canGoBack: ( ) => true,
     } ),
   };
@@ -80,6 +77,15 @@ const BIRDS = {
   iconic_taxon_name: "Aves",
 };
 
+const PLANTS = {
+  id: 47126,
+  name: "Plantae",
+  preferred_common_name: "Plants",
+  rank: "kingdom",
+  rank_level: 70,
+  iconic_taxon_name: "Plantae",
+};
+
 const USER = factory( "RemoteUser", { id: 7, login: "seth_msp" } );
 const PROJECT = factory( "RemoteProject", {
   id: 9,
@@ -118,9 +124,6 @@ const pressSearch = ( ) => actor.press( screen.getByTestId( "AdvancedSearch.sear
 
 const qualityGrade = key => screen.getByRole( "radio", { name: t( key ) } );
 
-const advancedSearchMode = ( ) => useStore
-  .getState( ).exploreV2AdvancedSearch.advancedSearchMode;
-
 const committedSearch = ( ) => mockDispatch.mock.calls
   .map( ( [action] ) => action )
   .find( action => action.type === EXPLORE_V2_ACTION.APPLY_SEARCH )
@@ -135,11 +138,9 @@ beforeAll( async ( ) => {
 beforeEach( ( ) => {
   mockGoBack.mockClear( );
   mockPopTo.mockClear( );
-  mockReplace.mockClear( );
   mockDispatch.mockClear( );
-  useStore.getState( ).exploreV2AdvancedSearch.setAdvancedSearchMode( false );
   useCurrentUser.mockReturnValue( CURRENT_USER );
-  useIconicTaxa.mockReturnValue( iconicTaxaCollection( [BIRDS] ) );
+  useIconicTaxa.mockReturnValue( iconicTaxaCollection( [BIRDS, PLANTS] ) );
   setExploreState( );
 } );
 
@@ -183,44 +184,17 @@ describe( "AdvancedSearch screen", ( ) => {
 
     expect( mockGoBack ).toHaveBeenCalled( );
     expect( mockDispatch ).not.toHaveBeenCalled( );
-    expect( advancedSearchMode( ) ).toBe( false );
   } );
 
   describe( "leaving with unsaved changes", ( ) => {
-    const pressReturnToStandardSearch = ( ) => actor.press(
-      screen.getByTestId( "AdvancedSearch.returnToStandardSearch" ),
-    );
-
-    it( "returns to standard search without asking when nothing changed", async ( ) => {
-      renderComponent( <AdvancedSearch /> );
-
-      await pressReturnToStandardSearch( );
-
-      expect( mockReplace ).toHaveBeenCalledWith( "UniversalSearch" );
-      expect( screen.queryByText( t( "DISCARD-FILTER-CHANGES" ) ) ).toBeNull( );
-    } );
-
-    it( "asks before returning to standard search and goes on discard", async ( ) => {
-      renderComponent( <AdvancedSearch /> );
-      await actor.press( screen.getByText( t( "Casual--quality-grade" ) ) );
-
-      await pressReturnToStandardSearch( );
-
-      expect( mockReplace ).not.toHaveBeenCalled( );
-      expect( screen.getByText( t( "DISCARD-FILTER-CHANGES" ) ) ).toBeVisible( );
-      await actor.press( screen.getByText( t( "DISCARD-CHANGES" ) ) );
-      expect( mockReplace ).toHaveBeenCalledWith( "UniversalSearch" );
-      expect( mockGoBack ).not.toHaveBeenCalled( );
-    } );
-
     it( "stays put when the discard is canceled", async ( ) => {
       renderComponent( <AdvancedSearch /> );
       await actor.press( screen.getByText( t( "Casual--quality-grade" ) ) );
 
-      await pressReturnToStandardSearch( );
+      await actor.press( screen.getByTestId( "AdvancedSearch.back" ) );
       await actor.press( screen.getByText( t( "CANCEL" ) ) );
 
-      expect( mockReplace ).not.toHaveBeenCalled( );
+      expect( mockGoBack ).not.toHaveBeenCalled( );
       expect( screen.queryByText( t( "DISCARD-FILTER-CHANGES" ) ) ).toBeNull( );
     } );
 
@@ -233,7 +207,6 @@ describe( "AdvancedSearch screen", ( ) => {
       expect( mockGoBack ).not.toHaveBeenCalled( );
       await actor.press( screen.getByText( t( "DISCARD-CHANGES" ) ) );
       expect( mockGoBack ).toHaveBeenCalled( );
-      expect( mockReplace ).not.toHaveBeenCalled( );
     } );
   } );
 
@@ -318,6 +291,24 @@ describe( "AdvancedSearch screen", ( ) => {
         type: "taxon",
         taxon: expect.objectContaining( { id: BIRDS.id, name: BIRDS.name } ),
       } );
+    } );
+
+    it( "searches for several taxa and excludes one", async ( ) => {
+      setExploreState( { subject: { type: "taxon", taxon: TAXON } } );
+      renderComponent( <AdvancedSearch /> );
+
+      await actor.press( screen.getByTestId( "INatIconButton.IconicTaxonButton.aves" ) );
+      await actor.press( screen.getByTestId( "INatIconButton.IconicTaxonButton.plantae" ) );
+      expect( screen.getByText( "Cup Plant" ) ).toBeVisible( );
+      expect( screen.getByText( "Birds" ) ).toBeVisible( );
+      await actor.press( screen.getAllByText( t( "Include-taxon" ) )[2] );
+
+      await pressSearch( );
+      expect( committedSearch( ).subject ).toEqual( { type: "taxon", taxon: TAXON } );
+      expect( committedFilters( ).taxonFilters ).toEqual( [
+        { taxon: expect.objectContaining( { id: BIRDS.id } ), exclude: false },
+        { taxon: expect.objectContaining( { id: PLANTS.id } ), exclude: true },
+      ] );
     } );
 
     it( "deselects an iconic taxon that is tapped again", async ( ) => {
@@ -428,14 +419,6 @@ describe( "AdvancedSearch screen", ( ) => {
         tab: OBSERVATIONS_TAB,
       } );
       expect( mockPopTo ).toHaveBeenCalledWith( "ExploreResults" );
-    } );
-
-    it( "puts explore into advanced search mode", async ( ) => {
-      renderComponent( <AdvancedSearch /> );
-
-      await pressSearch( );
-
-      expect( advancedSearchMode( ) ).toBe( true );
     } );
 
     it( "carries a nearby search through untouched", async ( ) => {
