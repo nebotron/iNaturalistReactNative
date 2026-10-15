@@ -86,8 +86,6 @@ Adjust-brightness = Adjust brightness
 Adjust-zoom = Adjust zoom
 # Label for toggling app mode between default and advanced settings
 Advanced-Mode = Advanced Mode
-# Header of the advanced search screen
-ADVANCED-SEARCH = ADVANCED SEARCH
 ADVANCED-SETTINGS = ADVANCED SETTINGS
 Affiliation = Affiliation: { $site }
 After-capturing-or-importing-photos-show = After capturing or importing photos, show:

@@ -288,7 +288,7 @@ const AdvancedSearch = ( ) => {
   return (
     <SharedStackViewWrapper testID="AdvancedSearch">
       <SearchHeader
-        headerText={t( "ADVANCED-SEARCH" )}
+        headerText={t( "SEARCH" )}
         onClose={requestExit}
         onReset={() => dispatch( { type: "RESET" } )}
         resetDisabled={resetDisabled}
