@@ -432,6 +432,7 @@ export type BaseTabStackParamList = {
   AudioId: undefined;
   AudioIdHistory: { taxonId: number } | { sessionId: string };
   AudioIdClip: { id: string };
+  AudioIdTaxa: undefined;
   CropLogViewer: undefined;
   DevicePhotoCleanup: undefined;
   LocationHistory: undefined;

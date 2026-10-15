@@ -4,6 +4,7 @@ import About from "components/About";
 import AudioId from "components/AudioId/AudioId";
 import AudioIdClip from "components/AudioId/AudioIdClip";
 import AudioIdHistory from "components/AudioId/AudioIdHistory";
+import AudioIdTaxa from "components/AudioId/AudioIdTaxa";
 import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
@@ -112,6 +113,8 @@ const audioIdTitle = () => <Heading4 numberOfLines={1}>AUDIO ID</Heading4>;
 const audioIdHistoryTitle = () => <Heading4 numberOfLines={1}>HEARD</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const audioIdClipTitle = () => <Heading4 numberOfLines={1}>CLIP</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const audioIdTaxaTitle = () => <Heading4 numberOfLines={1}>LISTENING FOR</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
@@ -365,6 +368,11 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             name="AudioIdClip"
             component={AudioIdClip}
             options={{ headerTitle: audioIdClipTitle }}
+          />
+          <Stack.Screen
+            name="AudioIdTaxa"
+            component={AudioIdTaxa}
+            options={{ headerTitle: audioIdTaxaTitle }}
           />
           <Stack.Screen
             name="CropLogViewer"
