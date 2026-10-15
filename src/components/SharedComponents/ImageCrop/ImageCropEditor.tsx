@@ -308,6 +308,9 @@ const ImageCropEditor = ( ) => {
     if ( context !== "groupPhotos" || doneRef.current ) {
       return;
     }
+    // Keep the route on the current photo too, so a remount (the tab tree
+    // unmounts while the user is away from it) picks up here, not at the start
+    navigation.setParams( { imageUri, pendingImageUris, skipUris: [...visitedUris] } );
     setGroupCropResume( {
       imageUri,
       pendingImageUris,
@@ -322,6 +325,7 @@ const ImageCropEditor = ( ) => {
     cropImport,
     draftCrop,
     imageUri,
+    navigation,
     pendingImageUris,
     setGroupCropResume,
     visitedUris,
