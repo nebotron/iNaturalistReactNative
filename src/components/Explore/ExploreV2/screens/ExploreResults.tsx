@@ -478,8 +478,19 @@ const ExploreResults = ( ) => {
     if ( needsPermission ) {
       return renderPermissionPrompt( );
     }
+    const totalCount = {
+      [OBSERVATIONS_TAB]: typeof totalResults === "number"
+        && t( "X-Observations", { count: totalResults } ),
+      [SPECIES_TAB]: typeof speciesCount === "number"
+        && t( "X-Species", { count: speciesCount } ),
+    }[state.activeTab as string];
     return (
       <>
+        {totalCount && (
+          <Body2 className="px-5 pb-2" testID="ExploreResults.totalCount">
+            {totalCount}
+          </Body2>
+        )}
         {renderTabContent( )}
         <ExploreV2DebugSheet />
       </>
