@@ -427,7 +427,8 @@ export type BaseTabStackParamList = {
   };
   LifeList: undefined;
   MaverickIdentifications: undefined;
-  MyIdentifications: undefined;
+  // From UserProfile: { userId }
+  MyIdentifications: { userId?: number } | undefined;
   WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   AudioId: undefined;
   AudioIdHistory: { taxonId: number } | { sessionId: string };

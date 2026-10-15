@@ -1481,6 +1481,8 @@ SEARCH-TAXA = SEARCH TAXA
 SEARCH-USERS = SEARCH USERS
 # Loading message shown while searching for wildlife hotspots
 Searching-for-hotspots = Searching for hotspots…
+# Accessibility label for Identifications button on UserProfile screen
+See-identifications-by-this-user = See identifications by this user
 # Accessibility label for navigating to journal posts screen
 See-journal-posts = See journal posts
 # Accessibility label for Observations button on UserProfile screen

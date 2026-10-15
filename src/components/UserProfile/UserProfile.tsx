@@ -138,6 +138,10 @@ const UserProfile = ( ) => {
 
   const onSpeciesPressed = ( ) => exploreUser( SPECIES_TAB );
 
+  const onIdentificationsPressed = ( ) => {
+    navigation.navigate( "MyIdentifications", { userId: user?.id } );
+  };
+
   const onJournalPostsPressed = ( ) => {
     navigation.navigate( "Journal", {
       userIcon: User.uri( user ),
@@ -171,6 +175,7 @@ const UserProfile = ( ) => {
         counts={user}
         onObservationPressed={onObservationPressed}
         onSpeciesPressed={onSpeciesPressed}
+        onIdentificationsPressed={onIdentificationsPressed}
         onJournalPostsPressed={onJournalPostsPressed}
       />
       <View className="mx-3">

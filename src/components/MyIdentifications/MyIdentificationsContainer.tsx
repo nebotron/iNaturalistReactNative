@@ -151,18 +151,21 @@ const MyIdentificationsContainer = ( ) => {
   const navigation = useNavigation<
     TabStackScreenProps<"MyIdentifications">["navigation"]
   >( );
+  const { params } = useRoute<TabStackScreenProps<"MyIdentifications">["route"]>( );
   const currentUser = useCurrentUser( );
   const { t } = useTranslation( );
+  const userId = params?.userId ?? currentUser?.id;
+  const isOtherUser = userId !== currentUser?.id;
 
   const {
     data,
     isLoading,
     fetchNextPage,
   } = useAuthenticatedInfiniteQuery(
-    ["fetchMyIdentifications", currentUser?.id],
+    ["fetchMyIdentifications", userId],
     ( { pageParam }: { pageParam?: number }, optsWithAuth: object ) => searchIdentifications(
       {
-        user_id: currentUser?.id,
+        user_id: userId,
         // Identifications on other people's observations only
         own_observation: false,
         current: true,
@@ -174,7 +177,7 @@ const MyIdentificationsContainer = ( ) => {
       optsWithAuth,
     ),
     {
-      enabled: !!currentUser,
+      enabled: !!userId,
       initialPageParam: 1,
       getNextPageParam: ( lastPage: { page?: number; total_results?: number } | null ) => (
         lastPage?.page && lastPage.page * PAGE_SIZE < ( lastPage.total_results ?? 0 )
@@ -192,8 +195,12 @@ const MyIdentificationsContainer = ( ) => {
   );
 
   useEffect( ( ) => {
-    navigation.setOptions( { headerTitle: t( "MY-IDS" ) } );
-  }, [navigation, t] );
+    navigation.setOptions( {
+      headerTitle: isOtherUser
+        ? t( "IDENTIFICATIONS-WITHOUT-NUMBER", { count: 2 } )
+        : t( "MY-IDS" ),
+    } );
+  }, [isOtherUser, navigation, t] );
 
   const renderItem = useCallback( ( { item }: ListRenderItemInfo<MyIdentification> ) => (
     <MyIdentificationItem item={item} />
@@ -219,7 +226,9 @@ const MyIdentificationsContainer = ( ) => {
         ListEmptyComponent={(
           <View className="self-center mt-5 p-4">
             <Body1 className="align-center text-center">
-              {t( "You-havent-identified-any-observations-yet" )}
+              {isOtherUser
+                ? t( "No-results-found" )
+                : t( "You-havent-identified-any-observations-yet" )}
             </Body1>
           </View>
         )}
