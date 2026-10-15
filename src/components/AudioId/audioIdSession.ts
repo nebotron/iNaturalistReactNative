@@ -24,6 +24,7 @@ const { AudioBirdId } = NativeModules as {
   AudioBirdId?: {
     start: ( outputs: number[] ) => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
+    setPlayingClip: ( playing: boolean ) => void;
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     vibrateHaptics: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     notify: ( title: string, body: string ) => void;
@@ -173,6 +174,7 @@ export const setPlayingAudio = ( player: object, playing: boolean ) => {
   } else if ( players.delete( player ) ) {
     lastPlayed = Date.now( );
   }
+  AudioBirdId?.setPlayingClip( players.size > 0 );
 };
 const overlapsPlayback = ( windowEnd: number ) => players.size > 0
   || windowEnd - WINDOW_MS < lastPlayed + TAIL_MS;

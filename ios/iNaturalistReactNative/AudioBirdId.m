@@ -108,6 +108,7 @@ static void ABSpectrogramPush( const float *frame )
   CHHapticEngine   *_haptics;
   CFAbsoluteTime    _lastAudio;
   NSInteger         _restartFailures;
+  BOOL              _playingClip;
 }
 
 RCT_EXPORT_MODULE( );
@@ -288,6 +289,20 @@ RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
   } );
 }
 
+// Measurement mode plays back far quieter through the speaker, so clips play
+// in the default mode while listening; detections pause during playback anyway.
+RCT_EXPORT_METHOD( setPlayingClip:( BOOL )playing )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    self->_playingClip = playing;
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    if ( [session.category isEqualToString:AVAudioSessionCategoryPlayAndRecord] ) {
+      [session setMode:playing ? AVAudioSessionModeDefault : AVAudioSessionModeMeasurement
+                 error:nil];
+    }
+  } );
+}
+
 // Vibrates with Core Haptics, for comparing against the system vibration.
 // iOS stops Core Haptics once the app leaves the foreground.
 RCT_EXPORT_METHOD( vibrateHaptics:( RCTPromiseResolveBlock )resolve
@@ -445,7 +460,8 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   // Measurement mode turns off voice processing and gain control, which
   // would otherwise suppress exactly the quiet, tonal sounds we want.
   if ( ![session setCategory:AVAudioSessionCategoryPlayAndRecord
-                        mode:AVAudioSessionModeMeasurement
+                        mode:_playingClip ? AVAudioSessionModeDefault
+                                          : AVAudioSessionModeMeasurement
                      options:AVAudioSessionCategoryOptionMixWithOthers
                            | AVAudioSessionCategoryOptionDefaultToSpeaker
                        error:error] ) return NO;
