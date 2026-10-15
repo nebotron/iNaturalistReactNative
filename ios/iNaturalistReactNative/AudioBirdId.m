@@ -266,13 +266,26 @@ RCT_EXPORT_METHOD( stop )
   } );
 }
 
-// Vibrates for a detection. Core Haptics plays regardless of the silent
-// switch and Do Not Disturb, but iOS stops it, often without an error, once
-// the app is in the background or the screen is off. There the system
-// vibration plays instead: the active recording session (the "audio"
-// background mode) keeps it allowed, and it too ignores the silent switch and
-// Do Not Disturb.
+// Vibrates for a detection with the system vibration, which plays in the
+// background and with the screen off while the recording session keeps the
+// app running, and ignores the silent switch and Do Not Disturb.
 RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
+                   reject:( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    [session setAllowHapticsAndSystemSoundsDuringRecording:YES error:nil];
+    AudioServicesPlayAlertSound( kSystemSoundID_Vibrate );
+    resolve( @{
+      @"allowed": @( session.allowHapticsAndSystemSoundsDuringRecording ),
+      @"error": [NSNull null],
+    } );
+  } );
+}
+
+// Vibrates with Core Haptics, for comparing against the system vibration.
+// iOS stops Core Haptics once the app leaves the foreground.
+RCT_EXPORT_METHOD( vibrateHaptics:( RCTPromiseResolveBlock )resolve
                    reject:( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
@@ -298,11 +311,8 @@ RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
     id<CHHapticPatternPlayer> player = pattern
       ? [self->_haptics createPlayerWithPattern:pattern error:&error]
       : nil;
-    if ( [UIApplication sharedApplication].applicationState != UIApplicationStateActive
-        || !player
-        || ![self->_haptics startAndReturnError:&error]
-        || ![player startAtTime:CHHapticTimeImmediate error:&error] ) {
-      AudioServicesPlayAlertSound( kSystemSoundID_Vibrate );
+    if ( player && [self->_haptics startAndReturnError:&error] ) {
+      [player startAtTime:CHHapticTimeImmediate error:&error];
     }
     resolve( @{
       @"allowed": @( session.allowHapticsAndSystemSoundsDuringRecording ),
