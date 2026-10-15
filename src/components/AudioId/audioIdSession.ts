@@ -139,6 +139,21 @@ export const vibrate = ( haptics = false ) => {
     .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
 };
 
+// Echo cancellation would need iOS voice processing, which also applies
+// speech noise suppression and gain control that distort bird calls, so
+// instead scores are ignored while the app plays a sound and until the 5 s
+// window has refilled with fresh audio afterwards.
+const WINDOW_MS = 5000;
+const players = new Set<object>( );
+let mutedUntil = 0;
+export const setPlayingAudio = ( player: object, playing: boolean ) => {
+  if ( playing ) {
+    players.add( player );
+  } else if ( players.delete( player ) ) {
+    mutedUntil = Date.now( ) + WINDOW_MS;
+  }
+};
+
 let runs: ScoresEvent[] = [];
 
 const onScores = ( event: ScoresEvent ) => {
@@ -169,6 +184,10 @@ const onScores = ( event: ScoresEvent ) => {
     runs = [];
   }
   const now = Date.now( );
+  if ( players.size > 0 || now < mutedUntil ) {
+    useAudioIdSession.setState( { level } );
+    return;
+  }
   const isHeard = heardIn( scores );
   // Alert on the first call of each species this session, and on every call
   // of a species the user hasn't observed at research grade.
