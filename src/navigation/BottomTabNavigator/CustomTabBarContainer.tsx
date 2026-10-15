@@ -87,8 +87,9 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
       queryClient.removeQueries( { queryKey: ["useInfiniteExploreScroll"] } );
     }
 
-    // If pressing the currently active tab, reset its stack
-    if ( targetTabName === activeTabName ) {
+    // If pressing the currently active tab, reset its stack. The Me tab always
+    // opens the observation list; an import left in its stack resumes from +
+    if ( targetTabName === activeTabName || targetTabName === "ObservationsTab" ) {
       const idx = newStacks.findIndex( r => r.name === targetTabName );
       newStacks.splice( idx, 1, {
         name: targetTabName,
