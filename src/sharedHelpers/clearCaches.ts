@@ -21,6 +21,9 @@ import useStore from "stores/useStore";
 
 const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
 const REMOTE_IMAGE_CACHE_MAX_BYTES = 500 * 1024 * 1024;
+// Full-size exports of USB raws are ~50MB each, so the TTL alone let this reach
+// 5.8GB on device while crops failed for want of disk space.
+const CROP_SOURCES_MAX_BYTES = 1024 * 1024 * 1024;
 // Anything still in tmp after an hour belongs to work that died with an earlier
 // run (e.g. a USB raw copied for a Photos save that never completed).
 const TEMP_FILE_TTL_MS = 60 * 60 * 1000;
@@ -191,31 +194,40 @@ const clearExpiredMediaCaches = async ( ) => {
   );
 };
 
-const clearExpiredCropSources = ( ) => clearExpiredFilesByTtl( cropSourcesPath );
-
 // Device-photo grid thumbnails (see useDeviceImageThumbnail) are pure display
 // cache, safe to drop once stale; they regenerate on demand.
 const clearExpiredDeviceThumbnails = ( ) => clearExpiredFilesByTtl( deviceThumbnailsPath );
 
-// Nuke is meant to sweep this down to 150MB, but on device it grew from 0.5GB
-// to 3.7GB in three days without once shrinking. faster-image builds a new
-// pipeline, and so a new DataCache, per image view. Drop the least recently
-// written files until it is back under the limit.
-const trimRemoteImageCache = async ( ) => {
-  if ( !( await exists( remoteImageCachePath ) ) ) return;
-  const files = ( await readDir( remoteImageCachePath ) ).filter( f => f.isFile( ) );
+// Drop the least recently written files until the directory is back under
+// maxBytes.
+const trimDirectoryToSize = async ( dir: string, maxBytes: number ) => {
+  if ( !( await exists( dir ) ) ) return;
+  const files = ( await readDir( dir ) ).filter( f => f.isFile( ) );
   let total = files.reduce( ( sum, f ) => sum + ( Number( f.size ) || 0 ), 0 );
-  if ( total <= REMOTE_IMAGE_CACHE_MAX_BYTES ) return;
+  if ( total <= maxBytes ) return;
   const oldestFirst = files.sort(
     ( a, b ) => new Date( a.mtime ).getTime( ) - new Date( b.mtime ).getTime( ),
   );
   const toDelete = oldestFirst.filter( file => {
-    if ( total <= REMOTE_IMAGE_CACHE_MAX_BYTES * 0.7 ) return false;
+    if ( total <= maxBytes * 0.7 ) return false;
     total -= Number( file.size ) || 0;
     return true;
   } );
   await Promise.all( toDelete.map( file => unlink( file.path ) ) );
 };
+
+const clearExpiredCropSources = async ( ) => {
+  await clearExpiredFilesByTtl( cropSourcesPath );
+  await trimDirectoryToSize( cropSourcesPath, CROP_SOURCES_MAX_BYTES );
+};
+
+// Nuke is meant to sweep this down to 150MB, but on device it grew from 0.5GB
+// to 3.7GB in three days without once shrinking. faster-image builds a new
+// pipeline, and so a new DataCache, per image view.
+const trimRemoteImageCache = ( ) => trimDirectoryToSize(
+  remoteImageCachePath,
+  REMOTE_IMAGE_CACHE_MAX_BYTES,
+);
 
 export {
   clearComputerVisionPhotos,
