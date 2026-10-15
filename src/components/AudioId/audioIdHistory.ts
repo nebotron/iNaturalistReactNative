@@ -1,4 +1,4 @@
-import { DocumentDirectoryPath, readFile, unlink } from "@dr.pogodin/react-native-fs";
+import { DocumentDirectoryPath, readFile } from "@dr.pogodin/react-native-fs";
 import Config from "react-native-config";
 import { zustandStorage } from "stores/useStore";
 import * as uuid from "uuid";
@@ -14,8 +14,6 @@ import type { AudioIdSpecies } from "./audioIdModel";
 // Labels the user gives a clip are mirrored to Firebase for checking the model.
 
 const CLIPS_PATH = `${DocumentDirectoryPath}/audioIdClips`;
-// Oldest clips of a species beyond this are deleted.
-const MAX_CLIPS_PER_SPECIES = 100;
 
 export interface AudioIdLabel {
   // null when the user says no organism is in the clip; undefined when they
@@ -77,15 +75,7 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
     const clip = {
       id: uuid.v4( ), sessionId, sp, time: Date.now( ), confidence,
     };
-    const clips = { ...get( ).clips, [clip.id]: clip };
-    const ofSpecies = Object.values( clips )
-      .filter( c => c.sp.taxonId === sp.taxonId )
-      .sort( ( a, b ) => b.time - a.time );
-    ofSpecies.slice( MAX_CLIPS_PER_SPECIES ).forEach( old => {
-      delete clips[old.id];
-      unlink( clipPath( old.id ) ).catch( ( ) => undefined );
-    } );
-    set( { clips } );
+    set( { clips: { ...get( ).clips, [clip.id]: clip } } );
     return clip;
   },
   updateClip: ( id, changes ) => {

@@ -1,7 +1,10 @@
 import { navigationRef } from "navigation/navigationUtils";
 import { NativeEventEmitter, NativeModules } from "react-native";
 import { log } from "sharedHelpers/logger";
+import { zustandStorage } from "stores/useStore";
 import { create } from "zustand";
+import type { StateStorage } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
 
 import useAudioIdHistory, { clipPath } from "./audioIdHistory";
 import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
@@ -89,7 +92,8 @@ interface AudioIdState {
   stop: ( ) => void;
 }
 
-const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
+// What was heard is kept across app restarts.
+const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
   listening: false,
   error: null,
   current: [],
@@ -127,6 +131,10 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
     sessionId = undefined;
     set( { listening: false } );
   },
+} ), {
+  name: "audio-id-session",
+  storage: createJSONStorage( ( ) => zustandStorage as unknown as StateStorage ),
+  partialize: state => ( { heard: state.heard } ),
 } ) );
 
 export const vibrate = ( haptics = false ) => {
