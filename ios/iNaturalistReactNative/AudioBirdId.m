@@ -546,6 +546,8 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     self->_busy = YES;
     NSData *window = [NSData dataWithBytes:self->_window length:AB_WIN * sizeof( float )];
     float level = self->_level;
+    // When the window's last sample arrived, on the clock JS's Date.now uses.
+    double windowEnd = [[NSDate date] timeIntervalSince1970] * 1000;
     dispatch_async( self->_inferQueue, ^{
       NSString *inferError = nil;
       CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
@@ -557,6 +559,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
       [self sendEventWithName:@"AudioBirdIdScores"
                          body:@{ @"scores": scores ?: @[],
                                  @"level": @( level ),
+                                 @"windowEnd": @( windowEnd ),
                                  @"inferMs": @( ms ),
                                  @"memMB": @( [self footprintMB] ),
                                  @"error": inferError ?: [NSNull null] }];

@@ -48,6 +48,8 @@ const LOG_EVERY = 30;
 interface ScoresEvent {
   scores: number[];
   level: number;
+  // Epoch ms when the window's last sample arrived
+  windowEnd: number;
   inferMs: number;
   memMB: number;
   error: string | null;
@@ -149,18 +151,22 @@ export const vibrate = ( haptics = false ) => {
 
 // Echo cancellation would need iOS voice processing, which also applies
 // speech noise suppression and gain control that distort bird calls, so
-// instead scores are ignored while the app plays a sound and until the 5 s
-// window has refilled with fresh audio afterwards.
+// instead runs (and their clips) are dropped when their 5 s window overlaps
+// any time the app was playing a sound. The tail covers speaker latency and
+// the playback listener reporting the end late.
 const WINDOW_MS = 5000;
+const TAIL_MS = 1000;
 const players = new Set<object>( );
-let mutedUntil = 0;
+let lastPlayed = 0;
 export const setPlayingAudio = ( player: object, playing: boolean ) => {
   if ( playing ) {
     players.add( player );
   } else if ( players.delete( player ) ) {
-    mutedUntil = Date.now( ) + WINDOW_MS;
+    lastPlayed = Date.now( );
   }
 };
+const overlapsPlayback = ( windowEnd: number ) => players.size > 0
+  || windowEnd - WINDOW_MS < lastPlayed + TAIL_MS;
 
 let runs: ScoresEvent[] = [];
 
@@ -192,7 +198,7 @@ const onScores = ( event: ScoresEvent ) => {
     runs = [];
   }
   const now = Date.now( );
-  if ( players.size > 0 || now < mutedUntil ) {
+  if ( overlapsPlayback( event.windowEnd || now ) ) {
     useAudioIdSession.setState( { level } );
     return;
   }
