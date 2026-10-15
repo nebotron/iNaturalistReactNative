@@ -31,10 +31,7 @@ import {
   addDevicePhotosToImportedAlbum,
   deleteOriginalDevicePhotos,
 } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
-import type { UnfavoritedPhotoDay } from "sharedHelpers/unfavoritedDevicePhotos";
-import findUnfavoritedDevicePhotoDays, {
-  prefetchDeviceAssets,
-} from "sharedHelpers/unfavoritedDevicePhotos";
+import findUnfavoritedDevicePhotoUris from "sharedHelpers/unfavoritedDevicePhotos";
 import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
 import type { UserObservationsCache } from "sharedHelpers/userObservationsCache";
 import {
@@ -64,10 +61,8 @@ const styles = StyleSheet.create( {
 // virtualization and thumbnail prefetching.
 interface CleanupGridItem { type: "photo"; id: string; uri: string }
 
-// One continuous grid, newest first: the days are only how the scan groups its
-// work, not something the user is asked to read.
-const buildGridItems = ( days: UnfavoritedPhotoDay[] ): CleanupGridItem[] => days
-  .flatMap( day => day.uris.map( uri => ( { type: "photo" as const, id: uri, uri } ) ) );
+const buildGridItems = ( uris: string[] ): CleanupGridItem[] => uris
+  .map( uri => ( { type: "photo" as const, id: uri, uri } ) );
 
 // Brings the shared observation cache up to date, falling back to the last
 // synced copy if the network is unavailable. Stale fave data is worse than
@@ -91,7 +86,7 @@ const DevicePhotoCleanup = ( ) => {
   const realm = useRealm( );
   const currentUser = useCurrentUser( );
   const currentUserId = currentUser?.id;
-  const [days, setDays] = useState<UnfavoritedPhotoDay[]>( [] );
+  const [allUris, setAllUris] = useState<string[]>( [] );
   const [loading, setLoading] = useState( true );
   const [syncingFaves, setSyncingFaves] = useState( true );
   const [deleting, setDeleting] = useState( false );
@@ -108,18 +103,7 @@ const DevicePhotoCleanup = ( ) => {
     setLoading( true );
     setSyncingFaves( true );
     // Sync the shared observation cache before matching. A fave toggled on
-    // another device or in the website isn't here yet, and scanning against
-    // stale faves is what makes freshly unfavorited observations look like they
-    // don't exist. The library scan doesn't depend on that answer, though, so
-    // start it now and let the two waits overlap instead of stacking. With
-    // nothing synced yet there's no way to know which era to scan, so the scan
-    // waits for the sync in that one case.
-    const lastSynced = currentUserId
-      ? readUserObservationsCache( currentUserId )
-      : undefined;
-    const scan = lastSynced?.size
-      ? prefetchDeviceAssets( realm, lastSynced )
-      : undefined;
+    // another device or in the website isn't here yet.
     const startedAt = Date.now( );
     let syncedAt = startedAt;
     loadObservationsCache( currentUserId )
@@ -128,18 +112,18 @@ const DevicePhotoCleanup = ( ) => {
           setSyncingFaves( false );
         }
         syncedAt = Date.now( );
-        return findUnfavoritedDevicePhotoDays( realm, scan, cache );
+        return findUnfavoritedDevicePhotoUris( realm, cache );
       } )
       .then( result => {
         // How long the user sat on the spinner, split into the two waits, so
         // the app log can say which one to shorten next.
         logger.info(
-          `Found ${result.reduce( ( count, day ) => count + day.uris.length, 0 )} `
+          `Found ${result.length} `
           + `photo(s) in ${Date.now( ) - startedAt}ms `
           + `(sync ${syncedAt - startedAt}ms, match ${Date.now( ) - syncedAt}ms)`,
         );
         if ( !cancelled ) {
-          setDays( result );
+          setAllUris( result );
         }
       } )
       .finally( ( ) => {
@@ -153,13 +137,8 @@ const DevicePhotoCleanup = ( ) => {
     };
   }, [realm, currentUserId, rescans] );
 
-  const allUris = useMemo(
-    ( ) => days.flatMap( day => day.uris ),
-    [days],
-  );
-
   const { gridItemStyle, gridItemWidth, numColumns } = useGridLayout( undefined, "threeUp" );
-  const gridItems = useMemo( ( ) => buildGridItems( days ), [days] );
+  const gridItems = useMemo( ( ) => buildGridItems( allUris ), [allUris] );
 
   const renderHeader = useCallback( ( ) => null, [] );
 
@@ -211,7 +190,7 @@ const DevicePhotoCleanup = ( ) => {
     setDeletedCount( deleted );
     setUndeletableCount( undeletable ?? 0 );
     setQuarantinedCount( quarantined ?? 0 );
-    setDays( [] );
+    setAllUris( [] );
   }, [allUris] );
 
   const addToAlbum = useCallback( async ( ) => {
@@ -274,7 +253,7 @@ const DevicePhotoCleanup = ( ) => {
           <ActivityIndicator size={40} />
           <Body2 className="mt-4 text-center">
             {syncingFaves
-              ? "Checking your faves and scanning your photo library…"
+              ? "Checking your faves…"
               : "Matching photos to your observations…"}
           </Body2>
         </View>
