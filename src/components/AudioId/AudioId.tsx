@@ -9,6 +9,7 @@ import { Pressable, ScrollView, View } from "components/styledComponents";
 import React, { useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
 import { Linking, requireNativeComponent } from "react-native";
+import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { useCurrentUser, useTaxon } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 
@@ -222,7 +223,7 @@ const AudioId = ( ) => {
           : h.best,
         `${h.count} ${h.count === 1
           ? "time"
-          : "times"}, last at ${new Date( h.lastHeard ).toLocaleTimeString( )}`,
+          : "times"}, last at ${formatISOTimestamp( h.lastHeard ).slice( 11 )}`,
       ) )}
 
       <Heading4 className="mt-6 mb-1">PAST SESSIONS</Heading4>
@@ -235,7 +236,7 @@ const AudioId = ( ) => {
           className="py-2 px-2 border-b border-lightGray"
           onPress={( ) => navigation.navigate( "AudioIdHistory", { sessionId: s.id } )}
         >
-          <Body1>{new Date( s.startedAt ).toLocaleString( )}</Body1>
+          <Body1>{formatISOTimestamp( s.startedAt )}</Body1>
           <Body3>
             {`${s.speciesCount} species${s.endedAt
               ? `, ${Math.max( 1, Math.round( ( s.endedAt - s.startedAt ) / 60000 ) )} min`

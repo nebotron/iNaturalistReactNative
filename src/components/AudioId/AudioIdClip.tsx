@@ -9,7 +9,7 @@ import {
 } from "components/styledComponents";
 import React, { useState } from "react";
 import Observation from "realmModels/Observation";
-import { formatISONoTimezone } from "sharedHelpers/dateAndTime";
+import { formatISONoTimezone, formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { useTaxonSearch } from "sharedHooks";
 import useStore from "stores/useStore";
 import * as uuid from "uuid";
@@ -59,7 +59,7 @@ const AudioIdClip = ( ) => {
         <View className="flex-1">
           <Body1>{clip.sp.commonName}</Body1>
           <List2 className="italic">{clip.sp.name}</List2>
-          <Body3>{new Date( clip.time ).toLocaleString( )}</Body3>
+          <Body3>{formatISOTimestamp( clip.time )}</Body3>
           <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
         </View>
         <ClipPlayButton id={id} />

@@ -5,6 +5,7 @@ import {
 } from "components/SharedComponents";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React from "react";
+import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
 import ClipPlayButton from "./ClipPlayButton";
@@ -41,7 +42,7 @@ const AudioIdHistory = ( ) => {
     <ScrollView className="bg-white h-full px-5 pt-4">
       {session && (
         <View className="mb-3">
-          <Body1>{`Session ${new Date( session.startedAt ).toLocaleString( )}`}</Body1>
+          <Body1>{`Session ${formatISOTimestamp( session.startedAt )}`}</Body1>
           <List2>{`${new Set( ofSpecies.map( c => c.sp.taxonId ) ).size} species`}</List2>
         </View>
       )}
@@ -67,8 +68,8 @@ const AudioIdHistory = ( ) => {
             {session && <Body1>{clip.sp.commonName}</Body1>}
             <Body1>
               {session
-                ? new Date( clip.time ).toLocaleTimeString( )
-                : new Date( clip.time ).toLocaleString( )}
+                ? formatISOTimestamp( clip.time ).slice( 11 )
+                : formatISOTimestamp( clip.time )}
             </Body1>
             <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
             {clip.label && <Body3 className="text-inatGreen">{clipLabelText( clip.label )}</Body3>}
