@@ -59,7 +59,6 @@ const PHOTO_PREFETCH_LOOKAHEAD = 15;
 const TAXON_DELAY_MS = 100;
 
 const styles = StyleSheet.create( {
-  container: { paddingTop: 30 },
   buttonRow: { height: 60 },
 } );
 
@@ -243,7 +242,7 @@ const IdentifyView = ( {
 
   if ( isLoading && observations.length === 0 ) {
     return (
-      <View className="flex-1 items-center justify-center" style={styles.container}>
+      <View className="flex-1 items-center justify-center">
         <ActivityIndicator size={40} />
       </View>
     );
@@ -251,7 +250,7 @@ const IdentifyView = ( {
 
   if ( !observation ) {
     return (
-      <View className="flex-1 items-center justify-center p-4" style={styles.container}>
+      <View className="flex-1 items-center justify-center p-4">
         <Body2 className="text-center">{t( "No-results-found" )}</Body2>
       </View>
     );
@@ -328,7 +327,7 @@ const IdentifyView = ( {
   };
 
   return (
-    <View className="flex-1" style={styles.container}>
+    <View className="flex-1">
       {/* Square, zoomable/pannable image with subject detection. Nothing is
           drawn over the image; tapping it opens the full observation. */}
       <View
