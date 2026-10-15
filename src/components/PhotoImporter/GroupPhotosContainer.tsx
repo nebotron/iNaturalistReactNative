@@ -22,11 +22,6 @@ import {
   saveObservationsAndApplyTrackedLocation,
 } from "sharedHelpers/applyTrackedLocationToPhotos";
 import {
-  correctPhotosChromaticAberration,
-  knownLensProfileCount,
-  localFileUrisForObservations,
-} from "sharedHelpers/chromaticAberration";
-import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
 import {
@@ -38,7 +33,9 @@ import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrop
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
-import logRawImportMetadata from "sharedHelpers/rawImportMetadataLog";
+import logRawImportMetadata, {
+  localFileUrisForObservations,
+} from "sharedHelpers/rawImportMetadataLog";
 import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import { moveSharedGroupedPhotos } from "sharedHelpers/shareExtensionFiles";
 import { useExitObservationFlow, useGridLayout, useTranslation } from "sharedHooks";
@@ -479,20 +476,6 @@ const GroupPhotosContainer = ( ) => {
     // Once per import, and only when a raw came through: what the file held,
     // and how much of it survived into the JPEG the observation carries.
     let rawMetadataLogged = false;
-    // Totalled across batches so the import reports one line, not one per ten
-    // photos.
-    const chromaticAberration = {
-      corrected: 0,
-      skipped: 0,
-      failed: 0,
-      measured: 0,
-      fromProfile: 0,
-      maxShiftPx: 0,
-      ms: 0,
-      // The shape of the first thing measured, so the log says what the photo
-      // actually held rather than leaving it to be inferred.
-      firstProfile: "",
-    };
     // One Photos-library transaction (and so one iOS consent alert) for the
     // whole import, however many batches its location writes arrive in.
     beginLocationWriteBatch( );
@@ -534,8 +517,7 @@ const GroupPhotosContainer = ( ) => {
           const sourceUris = batch.flatMap( group => ( group.photos || [] ).map(
             photo => photo.image?.cropOriginalUri || photo.image?.uri,
           ) );
-          // Awaited so its line lands beside the correction's, and because it
-          // reads a header and one record rather than the whole file.
+          // Reads a header and one record rather than the whole file.
           // eslint-disable-next-line no-await-in-loop
           await logRawImportMetadata(
             sourceUris,
@@ -544,29 +526,6 @@ const GroupPhotosContainer = ( ) => {
             logger.error( "Failed to report raw import metadata", error );
             return null;
           } );
-        }
-
-        // Correct lateral chromatic aberration before anything reads these
-        // files: the photo the observation carries from here on is the one
-        // that gets scored, shown and uploaded. Measured per photo from the
-        // photo itself, so it costs nothing on a lens that doesn't fringe —
-        // those come back "nothing to correct" and are left untouched.
-        // eslint-disable-next-line no-await-in-loop
-        const caSummary = await correctPhotosChromaticAberration(
-          localFileUrisForObservations( observationsToSave ),
-        );
-        chromaticAberration.corrected += caSummary.corrected;
-        chromaticAberration.skipped += caSummary.skipped;
-        chromaticAberration.failed += caSummary.failed;
-        chromaticAberration.measured += caSummary.measured;
-        chromaticAberration.fromProfile += caSummary.fromProfile;
-        chromaticAberration.ms += caSummary.ms;
-        chromaticAberration.maxShiftPx = Math.max(
-          chromaticAberration.maxShiftPx,
-          caSummary.maxShiftPx,
-        );
-        if ( !chromaticAberration.firstProfile && caSummary.firstProfile ) {
-          chromaticAberration.firstProfile = caSummary.firstProfile;
         }
 
         // Save each observation and auto-fill tracked location for any that
@@ -615,16 +574,6 @@ const GroupPhotosContainer = ( ) => {
       }
     } finally {
       await endLocationWriteBatch( );
-    }
-
-    if ( chromaticAberration.corrected > 0 || chromaticAberration.failed > 0 ) {
-      logger.infoWithExtra( "group_photos_chromatic_aberration", {
-        ...chromaticAberration,
-        firstProfile: chromaticAberration.firstProfile,
-        // Cumulative, not this import's: it says how much of the next one will
-        // need no measuring.
-        lensProfilesKnown: knownLensProfileCount( ),
-      } );
     }
 
     if ( failedCount > 0 ) {

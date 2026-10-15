@@ -26,8 +26,6 @@ const describeCurves = ( summary: Cr3Summary ) => trim( summary.curves.map( curv
   + `:[${curve.low.toFixed( 3 )},${curve.high.toFixed( 3 )}]:k${curve.knotCount}/${curve.knotLast}`
 ) ).join( "|" ) );
 
-// The lens the JPEG kept is what the correction profile is keyed on
-// (chromaticAberration.ts), so it is worth seeing beside what the raw held.
 const exifSummary = async ( uri?: string | null ) => {
   if ( !uri ) {
     return {
@@ -127,6 +125,14 @@ async function logRawImportMetadata(
     logger.error( "Could not read the metadata of an imported raw file", error );
     return null;
   }
+}
+
+export function localFileUrisForObservations(
+  observations: { observationPhotos?: { photo?: { localFilePath?: string } }[] }[],
+): string[] {
+  return observations.flatMap( observation => (
+    observation.observationPhotos ?? []
+  ).map( obsPhoto => obsPhoto?.photo?.localFilePath ).filter( Boolean ) as string[] );
 }
 
 export default logRawImportMetadata;

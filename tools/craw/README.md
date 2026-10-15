@@ -106,10 +106,8 @@ per-annulus displacement does not rescue it:
 
 So the packet says which corrections the camera was set to apply, and it
 carries a usable falloff curve, but there is no lateral CA profile to be had
-from it. What the file does give the app is the lens identity (EXIF
-`LensModel` + `FocalLength`), which survives into a JPEG where this packet does
-not: `src/sharedHelpers/chromaticAberration.ts` uses it to key CA measured from
-the photos themselves, so a lens is measured a couple of times and then reused.
+from it. What the file does give is the lens identity (EXIF `LensModel` +
+`FocalLength`), which survives into a JPEG where this packet does not.
 
 ## How the CA correction works
 
@@ -146,15 +144,6 @@ normalised cross-correlation against green, over the 0.75–0.98 r annulus):
 
 Red drops by 91%. Blue is overcorrected by about 0.15 px — the gradient fit and
 the correlation scan disagree at that level, which is the accuracy floor here.
-
-The app's own correction (`ImageCropper.m`, wired up in
-`src/sharedHelpers/chromaticAberration.ts`) uses a different model to this
-tool's: a displacement measured per radial ring rather than a polynomial fit.
-Real lenses need it. On the R7 sample the red shift peaks near 0.9 px at
-mid-frame and does not keep growing to the corner, and a straight-line fit
-through that overshoots the corner by about half a pixel while under-correcting
-the middle. Measured per ring, the residual is under 0.1 px everywhere on both
-the R7 and the R8 sample.
 
 `tests/test_lenscorr.py` injects a known radial scale into a synthetic image and
 checks it is recovered within 25% and that edge fringing at least halves;
