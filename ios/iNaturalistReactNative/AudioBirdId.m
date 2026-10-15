@@ -92,7 +92,6 @@ static void ABSpectrogramPush( const float *frame )
   AVAudioConverter *_converter;
   AVAudioFormat    *_outFormat;
   float            *_window;
-  NSInteger         _filled;
   NSInteger         _sinceRun;
   NSInteger         _specPending;
   float             _level;
@@ -445,8 +444,10 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
                                                interleaved:NO];
   _converter = [[AVAudioConverter alloc] initFromFormat:inFormat toFormat:_outFormat];
   dispatch_sync( _bufferQueue, ^{
-    self->_filled = 0;
-    self->_sinceRun = 0;
+    // Start with silence so the first run happens right away, before 5 s of
+    // audio have arrived.
+    memset( self->_window, 0, AB_WIN * sizeof( float ) );
+    self->_sinceRun = AB_STEP;
     self->_specPending = 0;
   } );
   _lastAudio = CFAbsoluteTimeGetCurrent( );
@@ -514,7 +515,6 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     s += n - count;
     memmove( self->_window, self->_window + count, ( AB_WIN - count ) * sizeof( float ) );
     memcpy( self->_window + AB_WIN - count, s, count * sizeof( float ) );
-    self->_filled = MIN( self->_filled + count, (NSInteger)AB_WIN );
     self->_sinceRun += count;
     self->_specPending += count;
     while ( self->_specPending >= AB_SPEC_HOP ) {
@@ -526,9 +526,9 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     for ( NSInteger i = 0; i < count; i++ ) sumSq += s[i] * s[i];
     self->_level = sqrtf( sumSq / MAX( count, 1 ) );
 
-    // Wait for a full window, and drop a step rather than queue up if the
-    // previous inference is still running.
-    if ( self->_filled < AB_WIN || self->_sinceRun < AB_STEP || self->_busy ) return;
+    // Drop a step rather than queue up if the previous inference is still
+    // running.
+    if ( self->_sinceRun < AB_STEP || self->_busy ) return;
     self->_sinceRun = 0;
     self->_busy = YES;
     NSData *window = [NSData dataWithBytes:self->_window length:AB_WIN * sizeof( float )];

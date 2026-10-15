@@ -191,7 +191,7 @@ const AudioId = ( ) => {
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
       {listening && <Spectrogram />}
       {listening && current.length === 0 && (
-        <Body3 className="mt-1">Listening… first result after 5 seconds</Body3>
+        <Body3 className="mt-1">Listening…</Body3>
       )}
 
       <Heading4 className="mt-6 mb-1">HEARD THIS SESSION</Heading4>
