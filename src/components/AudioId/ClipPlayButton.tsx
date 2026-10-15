@@ -3,11 +3,17 @@ import React, { useEffect, useState } from "react";
 import AudioRecorderPlayer from "react-native-audio-recorder-player";
 
 import { clipPath } from "./audioIdHistory";
+import { setPlayingAudio } from "./audioIdSession";
 
 // Plays or stops one Audio ID clip.
 const ClipPlayButton = ( { id }: { id: string } ) => {
   const [player] = useState( ( ) => new AudioRecorderPlayer( ) );
   const [playing, setPlaying] = useState( false );
+
+  useEffect( ( ) => {
+    setPlayingAudio( player, playing );
+    return ( ) => setPlayingAudio( player, false );
+  }, [player, playing] );
 
   useEffect( ( ) => ( ) => {
     player.removePlayBackListener( );
