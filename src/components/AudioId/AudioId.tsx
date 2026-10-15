@@ -8,7 +8,7 @@ import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React, { useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
-import { requireNativeComponent } from "react-native";
+import { Linking, requireNativeComponent } from "react-native";
 import { useCurrentUser, useTaxon } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 
@@ -159,23 +159,28 @@ const AudioId = ( ) => {
     <ScrollView className="bg-white h-full px-5 pt-4">
       <Body3 className="mb-3">
         {"Identifies "}
-        {setup && (
-          <Body3
-            accessibilityRole="link"
-            accessibilityHint="Opens a searchable list of the species it listens for."
-            className="underline"
-            onPress={( ) => navigation.navigate( "AudioIdTaxa" )}
-          >
-            {`${species.length} birds and other animals`}
-          </Body3>
-        )}
-        {!setup && "birds and other animals"}
-        {setup?.located && " likely here this week"}
-        {setup && !setup.located && " (allow location to limit birds to those likely here)"}
-        {" by sound, on device and offline, "
-          + "from the last 5 seconds of audio, and keeps listening elsewhere in the app "
-          + "and in the background. Species you are hearing now are highlighted. "
-          + "Powered by BirdNET."}
+        {setup
+          ? (
+            <Body3
+              accessibilityRole="link"
+              accessibilityHint="Opens a searchable list of the species it listens for."
+              className="underline"
+              onPress={( ) => navigation.navigate( "AudioIdTaxa" )}
+            >
+              {`${species.length} animals`}
+            </Body3>
+          )
+          : "animals"}
+        {" by sound, using "}
+        <Body3
+          accessibilityRole="link"
+          accessibilityHint="Opens the BirdNET website."
+          className="underline"
+          onPress={( ) => Linking.openURL( "https://birdnet.cornell.edu" )}
+        >
+          BirdNET
+        </Body3>
+        .
       </Body3>
       <Button
         level={listening
