@@ -267,9 +267,11 @@ RCT_EXPORT_METHOD( stop )
 }
 
 // Vibrates for a detection. Core Haptics plays regardless of the silent
-// switch and Do Not Disturb, and keeps playing in the background alongside
-// the recording audio session; the system vibration is a fallback for when
-// the engine can't run.
+// switch and Do Not Disturb, but iOS stops it, often without an error, once
+// the app is in the background or the screen is off. There the system
+// vibration plays instead: the active recording session (the "audio"
+// background mode) keeps it allowed, and it too ignores the silent switch and
+// Do Not Disturb.
 RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
                    reject:( RCTPromiseRejectBlock )reject )
 {
@@ -296,7 +298,8 @@ RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
     id<CHHapticPatternPlayer> player = pattern
       ? [self->_haptics createPlayerWithPattern:pattern error:&error]
       : nil;
-    if ( !player
+    if ( [UIApplication sharedApplication].applicationState != UIApplicationStateActive
+        || !player
         || ![self->_haptics startAndReturnError:&error]
         || ![player startAtTime:CHHapticTimeImmediate error:&error] ) {
       AudioServicesPlayAlertSound( kSystemSoundID_Vibrate );
