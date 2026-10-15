@@ -93,7 +93,6 @@ const DevicePhotoCleanup = ( ) => {
   const [filing, setFiling] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [undeletableCount, setUndeletableCount] = useState( 0 );
-  const [quarantinedCount, setQuarantinedCount] = useState( 0 );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
   const [stillDeleting, setStillDeleting] = useState( false );
   const [rescans, setRescans] = useState( 0 );
@@ -170,7 +169,7 @@ const DevicePhotoCleanup = ( ) => {
     // claiming "Deleted 1,159 photos" while the photos are all still there is
     // worse than saying nothing happened.
     const {
-      deleted, succeeded, pending, undeletable, quarantined,
+      deleted, succeeded, pending, undeletable,
     } = await deleteOriginalDevicePhotos(
       allUris,
       { userInitiated: true, skipAlbum: true },
@@ -189,7 +188,6 @@ const DevicePhotoCleanup = ( ) => {
     if ( !succeeded ) return;
     setDeletedCount( deleted );
     setUndeletableCount( undeletable ?? 0 );
-    setQuarantinedCount( quarantined ?? 0 );
     setAllUris( [] );
   }, [allUris] );
 
@@ -226,19 +224,10 @@ const DevicePhotoCleanup = ( ) => {
                 + "photos synced from a computer or belonging to a shared album."}
             </Body2>
           )}
-          {undeletableCount + quarantinedCount > 0 && (
+          {undeletableCount > 0 && (
             <Body2 className="mt-4 text-center">
               {"To delete the photos that are still here in Photos, reopen Photo Cleanup "
                 + `and add them to the "${IMPORTED_ALBUM_TITLE}" album.`}
-            </Body2>
-          )}
-          {quarantinedCount > 0 && (
-            <Body2 className="mt-4 text-center">
-              {`${quarantinedCount} photo${quarantinedCount === 1
-                ? " was"
-                : "s were"} skipped: iOS accepts them into a deletion and then `
-                + "never finishes it, which stops every other photo from being "
-                + "deleted too. Delete them in the Photos app."}
             </Body2>
           )}
         </View>

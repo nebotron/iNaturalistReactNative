@@ -6,10 +6,7 @@ import i18next from "i18next";
 import {
   Alert, AppState, NativeModules, Platform,
 } from "react-native";
-import {
-  basePhotoAssetId,
-  forgetAppCreatedPhotoAssets,
-} from "sharedHelpers/appCreatedPhotoAssets";
+import { forgetAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import addPhotosToImportedAlbum from "sharedHelpers/importedPhotoAlbum";
 import { log } from "sharedHelpers/logger";
@@ -17,11 +14,8 @@ import {
   beginDeleteTransaction,
   endDeleteTransaction,
   maxTransactionSize,
-  partitionForDelete,
   recordAnsweredSize,
-  recordAnsweredSuspects,
-  recordUnansweredTransaction,
-  suspectProbeChunks,
+  recordUnansweredSize,
   takeUnansweredTransaction,
 } from "sharedHelpers/unansweredDeleteAssets";
 
@@ -71,10 +65,6 @@ export interface DeleteOriginalDevicePhotosResult {
   // in a shared album rather than this library). Nothing is wrong and nothing
   // will change by retrying: they were never sent to a transaction.
   undeletable?: number;
-  // Assets PhotoKit accepts into a transaction and then never answers for, so
-  // the app leaves them out rather than let them hang every photo batched with
-  // them. See unansweredDeleteAssets.ts.
-  quarantined?: number;
 }
 
 const filterDeletableDevicePhotoUris = ( photoUris: string[] ): string[] => (
@@ -247,7 +237,7 @@ const STILL_PENDING = { stillPending: true } as const;
 //
 // Treating either as "PhotoKit never answered" is what halved the cap to one
 // photo per alert, and one photo per alert is what made the alerts go
-// unanswered. So neither narrows the suspects and neither moves the cap.
+// unanswered. So neither moves the cap.
 const isUnconfirmedByUser = ( error: unknown ): boolean => {
   if ( ( error as { code?: string } | undefined )?.code === "DELETE_NO_CALLBACK" ) return true;
   const message = String(
@@ -285,7 +275,8 @@ const performDeleteOriginalDevicePhotos = async (
 
   // A transaction left open by an earlier run — this app's own process killed
   // mid-delete, or PhotoKit simply never answering — is the only evidence there
-  // is about which asset hangs, so fold it in before deciding what to send.
+  // is about the transaction size the library will answer, so fold it in
+  // before deciding what to send.
   const stranded = takeUnansweredTransaction( );
   if ( stranded.ids.length > 0 ) {
     logger.errorWithExtra( "photo_delete_unanswered_transaction", {
@@ -297,17 +288,10 @@ const performDeleteOriginalDevicePhotos = async (
       evidence: stranded.evidence,
     } );
   }
-  // Assets known to hang a transaction are left out of every transaction; the
-  // set still being narrowed goes out after everything else, halving
-  // transaction by transaction so that a run in which nothing hangs still
-  // deletes all of it.
-  const { skipped, suspect, ordinary } = partitionForDelete( uniqueUris );
-  const probeChunks = suspectProbeChunks( suspect, maxTransactionSize( ) );
-  // Only what the cleanup expects to send: the ordinary photos are sized one
-  // transaction at a time, against the cap as it stands then, so the real count
-  // can come in under this if the cap grows on the way through.
-  const expectedChunks
-    = plannedChunkSizes( ordinary.length, maxTransactionSize( ) ).length + probeChunks.length;
+  // Only what the cleanup expects to send: transactions are sized one at a
+  // time, against the cap as it stands then, so the real count can come in
+  // under this if the cap grows on the way through.
+  const expectedChunks = plannedChunkSizes( uniqueUris.length, maxTransactionSize( ) ).length;
 
   // Files the whole request into the album before any deletion is asked for.
   //
@@ -320,13 +304,6 @@ const performDeleteOriginalDevicePhotos = async (
   // then delete cleanly leave the album with them, so it ends up holding only
   // what is still in the library.
   if ( !options.skipAlbum ) await addPhotosToImportedAlbum( uniqueUris );
-
-  if ( expectedChunks === 0 ) {
-    logger.warnWithExtra( "photo_delete_all_quarantined", { requested } );
-    return {
-      deleted: 0, requested, succeeded: true, quarantined: skipped.length,
-    };
-  }
 
   const hasPermission = await ensureDeletePhotosPermission( requested );
   if ( !hasPermission ) {
@@ -378,13 +355,12 @@ const performDeleteOriginalDevicePhotos = async (
   // first eight of 326 photos, none of which need be the one. Chunks are sent
   // one at a time and the loop stops at the first that doesn't answer, so
   // whatever is here when the hang timer fires is exactly what PhotoKit has.
-  let inFlight: { chunk: string[]; index: number; isProbe: boolean } | undefined;
+  let inFlight: { chunk: string[]; index: number } | undefined;
   const pendingExtra = ( ) => ( {
     requested,
     // Which transaction is outstanding, not just that one is.
     outstandingChunk: inFlight?.index ?? -1,
     outstandingAssets: inFlight?.chunk.length ?? 0,
-    outstandingIsProbe: inFlight?.isProbe ?? false,
     ms: Date.now( ) - startedAt,
     backgrounded,
     wentInactive,
@@ -481,58 +457,46 @@ const performDeleteOriginalDevicePhotos = async (
 
     logger.infoWithExtra( "photo_delete_started", {
       requested,
-      // What is actually going out, and why it isn't all of it.
-      ordinary: ordinary.length,
       chunks: expectedChunks,
       // The biggest transaction this cleanup will ask for. Halves every time
       // the library leaves one unanswered.
       cap: maxTransactionSize( ),
-      // Still narrowing: this many are under suspicion, and they go out in
-      // this many transactions behind everything else.
-      suspect: suspect.length,
-      probeChunks: probeChunks.length,
-      // Proven unanswerable, left out entirely.
-      quarantined: skipped.length,
     } );
     // Chunks go out one at a time and stop at the first one the library doesn't
     // answer: the next transaction issued at a wedged photolibraryd is the one
     // thing known to make the wedge worse, and by then this deletion has its
     // answer anyway.
     const runChunks = async ( ) => {
-      // The ordinary photos are sized as the loop reaches them so that a cap
-      // raised by the transactions this run has already had answered is the one
-      // the next transaction is sized against. The probes behind them keep the
-      // halving they were planned with: that is how they narrow.
-      const probes = [...probeChunks];
+      // Transactions are sized as the loop reaches them so that a cap raised
+      // by the transactions this run has already had answered is the one the
+      // next transaction is sized against.
       let start = 0;
-      // How far into the doubling ramp the ordinary photos have got.
+      // How far into the doubling ramp the cleanup has got.
       let step = 0;
       // The largest transaction the library has answered in this run. Goes into
       // the record of the open transaction so that, if the process dies here,
       // the next launch can tell "PhotoKit stopped answering" from "the app was
       // killed while it was deleting fine".
       let answeredMax = 0;
-      const nextChunk = ( ): { chunk: string[]; isProbe: boolean } | undefined => {
-        if ( start < ordinary.length ) {
-          // Read the cap as the loop reaches each group: a cap the library has
-          // just answered at is the one the next group is sized against.
-          const size = groupSize( ordinary.length - start, step, maxTransactionSize( ) );
-          step += 1;
-          const chunk = ordinary.slice( start, start + size );
-          start += size;
-          return { chunk, isProbe: false };
-        }
-        const probe = probes.shift( );
-        return probe
-          ? { chunk: probe, isProbe: true }
-          : undefined;
+      const nextChunk = ( ): string[] => {
+        if ( start >= uniqueUris.length ) return [];
+        // Read the cap as the loop reaches each group: a cap the library has
+        // just answered at is the one the next group is sized against.
+        const size = groupSize( uniqueUris.length - start, step, maxTransactionSize( ) );
+        step += 1;
+        const chunk = uniqueUris.slice( start, start + size );
+        start += size;
+        return chunk;
       };
-      for ( let next = nextChunk( ), index = 0; next; next = nextChunk( ), index += 1 ) {
-        const { chunk, isProbe } = next;
+      for (
+        let chunk = nextChunk( ), index = 0;
+        chunk.length > 0;
+        chunk = nextChunk( ), index += 1
+      ) {
         const chunkStartedAt = Date.now( );
         // What the hang diagnostics describe if PhotoKit doesn't answer this
         // one. Set before the transaction goes out, cleared once it settles.
-        inFlight = { chunk, index, isProbe };
+        inFlight = { chunk, index };
         // Recorded before the transaction is asked for, not after it fails: a
         // deletion that never answers is only identifiable by the record it
         // left behind, and the app is routinely killed while one is open.
@@ -551,21 +515,15 @@ const performDeleteOriginalDevicePhotos = async (
           chunkResult = await nativeWrite;
         } catch ( chunkError ) {
           // An alert the user never answered, or declined, says nothing about
-          // the library or about any photo in the transaction — so it neither
-          // moves the cap nor accuses anything. Neither does a transaction the
+          // the library — so it doesn't move the cap. Neither does a transaction the
           // write gate refused to open: nothing was sent, so there is nothing
           // to have gone wrong with. The Sep 21 log has that costing a device
           // everything it knew in 33ms — a cleanup of 23 photos refused at a
           // wedged library came back a moment later with the cap at 11 and all
           // 22 of its photos under suspicion, none of which had been asked
-          // for. Anything else is a refusal the library actually made, and
-          // narrows the search as before.
+          // for. Anything else is a refusal the library actually made.
           if ( !isUnconfirmedByUser( chunkError ) && !isLibraryBusy( chunkError ) ) {
-            recordUnansweredTransaction(
-              chunk.map( basePhotoAssetId ),
-              isProbe,
-              chunk.length === ordinary.length,
-            );
+            recordUnansweredSize( chunk.length );
           }
           endDeleteTransaction( );
           throw chunkError;
@@ -575,9 +533,6 @@ const performDeleteOriginalDevicePhotos = async (
         // PhotoKit answered one this big, so it may be willing to take more.
         recordAnsweredSize( chunk.length );
         answeredMax = Math.max( answeredMax, chunk.length );
-        // This half of the suspect set deleted normally, so the asset that
-        // hangs is in the half held back.
-        if ( isProbe ) recordAnsweredSuspects( chunk.map( basePhotoAssetId ) );
         // Report what the OS actually deleted, not what we asked for. A call
         // that resolves with deleted:0 (e.g. fetched:0 — every URI is a ghost
         // pointing at an already-deleted asset) is a no-op, and logging it as a
@@ -657,7 +612,6 @@ const performDeleteOriginalDevicePhotos = async (
         requested,
         succeeded: false,
         pending: true,
-        quarantined: skipped.length,
       };
     }
     logger.info(
@@ -670,7 +624,6 @@ const performDeleteOriginalDevicePhotos = async (
       requested,
       succeeded: true,
       undeletable: progress.undeletable,
-      quarantined: skipped.length,
     };
   } catch ( deleteError ) {
     // Chunks that landed before this one failed are gone, so they stop being
@@ -693,9 +646,7 @@ const performDeleteOriginalDevicePhotos = async (
           i18next.t( "Photos-stopped-responding-restart-the-app" ),
         );
       }
-      return {
-        deleted: progress.deleted, requested, succeeded: false, quarantined: skipped.length,
-      };
+      return { deleted: progress.deleted, requested, succeeded: false };
     }
     // As of iOS 26, PHPhotoLibrary.performChanges' completion handler for
     // deleteAssets can simply never fire — no confirmation dialog, no error,
@@ -724,7 +675,6 @@ const performDeleteOriginalDevicePhotos = async (
       requested,
       succeeded: false,
       undeletable: progress.undeletable,
-      quarantined: skipped.length,
     };
   } finally {
     clearTimeout( hangTimer );
