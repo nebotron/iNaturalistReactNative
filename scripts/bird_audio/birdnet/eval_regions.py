@@ -1,7 +1,8 @@
 # Small check of Audio ID run the way the app runs it: the bundled model on 5 s
 # windows every second; a species is heard in a window when it scores 0.3+ and
 # is the window's top species or scores 0.7+; with and without dropping species the
-# geomodel doesn't put at the recording's place and week. ~70 recent
+# geomodel doesn't put at the recording's place and week, and with non-bird odds
+# weighted by (geomodel score / 0.037) ^ 0.4 as the app does. ~70 recent
 # research-grade sound observations per set.
 # Usage (from this directory): python3 eval_regions.py <repo root>
 import json, os, subprocess, sys, time, urllib.request
@@ -11,11 +12,14 @@ FF = imageio_ffmpeg.get_ffmpeg_exe(); TH, ALSO, GEO_TH, NON_BIRD_GEO_TH = 0.3, 0
 species = json.load(open(f"{repo}/src/components/AudioId/audioIdSpecies.json"))
 row = {s[2]: i for i, s in enumerate(species)}; gi = np.array([s[3] for s in species])
 geo_th = np.array([GEO_TH if s[4] else NON_BIRD_GEO_TH for s in species])
+bird = np.array([s[4] for s in species], bool)
 SETS = {  # name: (iconic taxon, swlat, swlng, nelat, nelng)
     "birds, Seattle area": ("Aves", 47, -123, 48.2, -121.6),
     "birds, eastern US": ("Aves", 38, -80, 45, -70), "birds, Britain": ("Aves", 50, -6, 56, 2),
     "frogs, eastern US": ("Amphibia", 30, -90, 45, -70), "insects, eastern US": ("Insecta", 30, -90, 45, -70),
-    "birds, eastern Australia": ("Aves", -38, 145, -26, 154)}
+    "birds, eastern Australia": ("Aves", -38, 145, -26, 154), "birds, California": ("Aves", 32.5, -122, 38.5, -116),
+    "mammals, North America": ("Mammalia", 25, -125, 55, -65), "frogs, western US": ("Amphibia", 32, -125, 49, -110),
+    "insects, Europe": ("Insecta", 40, -5, 55, 20)}
 def week(d):
     y, mo, da = map(int, d.split("-")); return (mo - 1) * 4 + min(4, (da - 1) // 7 + 1)
 
@@ -45,8 +49,10 @@ for r in recs:
     X = np.stack([y[j:j + 160000] for j in range(0, len(y) - 160000 + 1, 32000)])
     S = np.concatenate([model.run(["output"], {"input": X[b:b + 8]})[0] for b in range(0, len(X), 8)])
     g = geo.run(None, {"input": np.array([[r["lat"], r["lng"], r["week"]]], np.float32)})[0][0]
-    keep = (gi < 0) | (g[np.maximum(gi, 0)] >= geo_th); t = row.get(r["taxon"], -1)
-    for variant, mask in (("no geo filter", np.ones_like(keep)), ("geo filter", keep)):
+    gs = g[np.maximum(gi, 0)]; keep = (gi < 0) | (gs >= geo_th); t = row.get(r["taxon"], -1)
+    k = np.where((gi >= 0) & ~bird, (gs / 0.037) ** 0.4, 1); F = S * k / (1 + S * (k - 1))
+    for variant, mask, S in (("no geo filter", np.ones_like(keep), S), ("geo filter", keep, S),
+                             ("geo filter + weight", keep, F)):
         M = S * mask; heard = (M >= TH) & ((M >= M.max(1, keepdims=True)) | (M >= ALSO))
         det = set(np.where(heard.any(0))[0])
         res.setdefault((r["set"], variant), []).append(dict(
