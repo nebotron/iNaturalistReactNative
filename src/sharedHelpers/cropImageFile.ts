@@ -15,17 +15,11 @@ const logger = log.extend( "cropImageFile" );
 
 interface CropResult {
   path: string;
-  // "decode" when the crop came from the photo itself, "preview" when that
-  // decode produced nothing, and "preview_dark_decode" when it came back far
-  // darker than the camera's embedded preview of the same frame.
-  origin: string;
-  // Mean levels (0-255) of the decoded crop, the preview crop (-1 when not
-  // compared), and what was written.
-  level: number;
-  previewLevel: number;
+  // Mean level (0-255) of what was written.
   outputLevel: number;
-  // Decodes it took; a raw that failed is tried again.
+  // Decodes it took, and how long each ran; a raw that failed is tried again.
   attempts: number;
+  attemptMs: number[];
 }
 
 interface ImageCropperModule {
@@ -81,19 +75,12 @@ const cropImageFile = async (
     );
     const croppedPath = result.path;
     // A crop that turned out black reached the grid with no error behind it.
-    // Say where its pixels came from and how bright they were.
-    if (
-      result.origin !== "decode"
-      || result.outputLevel < DARK_OUTPUT_LEVEL
-      || result.attempts > 1
-    ) {
+    if ( result.outputLevel < DARK_OUTPUT_LEVEL || result.attempts > 1 ) {
       logger.warnWithExtra( "crop_output_check", {
         source: imageUri,
-        origin: result.origin,
-        level: result.level,
-        previewLevel: result.previewLevel,
         outputLevel: result.outputLevel,
         attempts: result.attempts,
+        attemptMs: result.attemptMs,
       } );
     }
     // Native ImageCropper copies EXIF/metadata from the source image into the
@@ -130,6 +117,9 @@ const cropImageFile = async (
       error: error instanceof Error
         ? error.message
         : String( error ),
+      // Why a raw decode drew nothing (see rawDecodeFailureDiagnostics).
+      diagnostics: ( error as { userInfo?: { diagnostics?: unknown } } )
+        ?.userInfo?.diagnostics,
     } );
     throw error;
   }

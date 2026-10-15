@@ -35,13 +35,11 @@ interface ImageCropperModule {
     width: number;
     height: number;
     bounds: NormalizedBounds | null;
-    // Set when the photo's own decode drew nothing and the display file is
-    // the embedded preview instead.
-    decodeFailure: string | null;
     // Mean level (0-255) of the display file.
     displayLevel: number;
-    // Decodes it took; a raw that failed is tried again.
+    // Decodes it took, and how long each ran; a raw that failed is tried again.
     attempts: number;
+    attemptMs: number[];
   }>;
 }
 
@@ -59,8 +57,8 @@ const displayPathFor = ( uri: string ): string => {
 
 // Everything the crop editor needs from a photo, from one decode of it: the
 // dimensions a crop is expressed against, a display-sized file to draw, and the
-// initial framing. Falls back to reading the size and detecting separately
-// (each its own decode) wherever the native call isn't available.
+// initial framing. Reads the size and detects separately (each its own decode)
+// wherever the native call isn't available.
 const prepareCropSource = async (
   imageUri: string,
   sourceUri: string,
@@ -77,40 +75,34 @@ const prepareCropSource = async (
       DISPLAY_MAX_PIXEL,
       displayPathFor( sourceUri ),
       !knownCrop,
-    ).catch( ( error: Error ) => {
-      // What follows draws the source file itself, which for a raw iOS can't
-      // decode is a black screen in the cropper.
+    ).catch( ( error: Error & { userInfo?: { diagnostics?: unknown } } ) => {
       logger.errorWithExtra( "crop_source_prepare_failed", {
         source: sourceUri,
         error: error?.message ?? String( error ),
+        // Why a raw decode drew nothing (see rawDecodeFailureDiagnostics).
+        diagnostics: error?.userInfo?.diagnostics,
       } );
       return null;
     } );
-    if ( prepared?.decodeFailure ) {
-      logger.warnWithExtra( "crop_source_drew_preview", {
-        source: sourceUri,
-        decodeFailure: prepared.decodeFailure,
-        displayLevel: prepared.displayLevel,
-        attempts: prepared.attempts,
-      } );
-    } else if ( prepared && ( prepared.displayLevel < 24 || prepared.attempts > 1 ) ) {
-      // Dark, and the preview was no brighter -- or the cropper is about to
-      // draw a black frame, and this is the line that says so. Also logged
-      // when a raw needed another decode to come out at all.
+    if ( prepared && ( prepared.displayLevel < 24 || prepared.attempts > 1 ) ) {
+      // The cropper is about to draw a near-black frame, or a raw needed
+      // another decode to come out at all.
       logger.warnWithExtra( "crop_source_dark", {
         source: sourceUri,
         displayLevel: prepared.displayLevel,
         attempts: prepared.attempts,
+        attemptMs: prepared.attemptMs,
       } );
     }
-    if ( prepared && prepared.width > 0 && prepared.height > 0 ) {
-      const size = { w: prepared.width, h: prepared.height };
-      return {
-        displayUri: prepared.displayUri,
-        size,
-        crop: knownCrop ?? subjectCropFromBounds( prepared.bounds, size.w, size.h ),
-      };
+    if ( !prepared || prepared.width <= 0 || prepared.height <= 0 ) {
+      return null;
     }
+    const size = { w: prepared.width, h: prepared.height };
+    return {
+      displayUri: prepared.displayUri,
+      size,
+      crop: knownCrop ?? subjectCropFromBounds( prepared.bounds, size.w, size.h ),
+    };
   }
 
   const size = await imageFileSize( sourceUri );
