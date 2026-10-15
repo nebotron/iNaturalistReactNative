@@ -10,7 +10,6 @@ import { recordUploadedDevicePhotoUrisFromObservation } from
   "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
 import readExifFromMultiplePhotos from "sharedHelpers/parseExif";
-import { privacyZoneGeoprivacy } from "sharedHelpers/privacyZone";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import * as uuid from "uuid";
 
@@ -455,16 +454,6 @@ class Observation extends Realm.Object {
       obsToSave.longitude = existingObservation.longitude;
       obsToSave.positional_accuracy ??= existingObservation.positional_accuracy;
       obsToSave.place_guess ??= existingObservation.place_guess;
-    }
-
-    // Every local save runs through here, so this is where the user's privacy
-    // zone gets enforced: anything saved inside it is obscured before it can
-    // be uploaded. Runs after the location is restored above so a stale save
-    // can't slip a zone location past the check by arriving without one.
-    const zoneGeoprivacy = privacyZoneGeoprivacy( obsToSave );
-    if ( zoneGeoprivacy ) {
-      obsToSave.geoprivacy = zoneGeoprivacy;
-      logger.info( `Obscuring observation ${obs.uuid} because it is inside the privacy zone` );
     }
 
     safeRealmWrite( realm, ( ) => {

@@ -17,7 +17,6 @@ import type { MyObservationsSlice } from "./createMyObservationsSlice";
 import createMyObservationsSlice from "./createMyObservationsSlice";
 import type { ObservationFlowSlice } from "./createObservationFlowSlice";
 import createObservationFlowSlice, { dropPendingGroupPhotos } from "./createObservationFlowSlice";
-import createPrivacyZoneSlice from "./createPrivacyZoneSlice";
 import type { RootExploreSlice } from "./createRootExploreSlice";
 import createRootExploreSlice from "./createRootExploreSlice";
 import type { SyncObservationsSlice } from "./createSyncObservationsSlice";
@@ -34,7 +33,6 @@ type StoreState =
   & LayoutSlice
   & MyObservationsSlice
   & ObservationFlowSlice
-  & ReturnType<typeof createPrivacyZoneSlice>
   & RootExploreSlice
   & SyncObservationsSlice
   & UploadObservationsSlice;
@@ -76,7 +74,6 @@ const useStore = create<StoreState>()( persist(
       createLayoutSlice( ...args ),
       createMyObservationsSlice( ...args ),
       createObservationFlowSlice( ...args ),
-      createPrivacyZoneSlice( ...args ),
       createRootExploreSlice( ...args ),
       createSyncObservationsSlice( ...args ),
       createUploadObservationsSlice( ...args ),
@@ -132,9 +129,6 @@ const useStore = create<StoreState>()( persist(
         searches: state.exploreSavedSearches.searches,
       },
       lastExploreSearch: state.lastExploreSearch,
-
-      // Privacy zone (auto-obscure observations near a place, e.g. home)
-      privacyZone: persistableValues( state.privacyZone ),
 
       // Last location used in the location picker
       lastLocationPickerState: state.lastLocationPickerState,

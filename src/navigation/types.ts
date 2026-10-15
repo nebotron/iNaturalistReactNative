@@ -448,8 +448,6 @@ export type BaseTabStackParamList = {
     observationDate: string;
     distanceMeters: number | null;
   };
-  PrivacyZone: undefined;
-  PrivacyZoneMap: undefined;
   Debug: undefined;
   UILibrary: undefined;
   UiLibraryItem: undefined;

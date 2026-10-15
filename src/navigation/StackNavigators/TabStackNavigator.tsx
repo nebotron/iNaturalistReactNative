@@ -31,8 +31,6 @@ import MyObservationsContainer from "components/MyObservations/MyObservationsCon
 import Notifications from "components/Notifications/Notifications";
 import DQAContainer from "components/ObsDetails/DQAContainer";
 import ObsDetailsScreen from "components/ObsDetailsSharedComponents/ObsDetailsScreen";
-import PrivacyZone from "components/PrivacyZone/PrivacyZone";
-import PrivacyZoneMap from "components/PrivacyZone/PrivacyZoneMap";
 import ProjectDetailsContainer from "components/ProjectDetails/ProjectDetailsContainer";
 import ProjectMembers from "components/ProjectDetails/ProjectMembers";
 import ProjectRequirements from "components/ProjectDetails/ProjectRequirements";
@@ -124,11 +122,6 @@ const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>PHOTO CLEANUP<
 const locationHistoryTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "LOCATION-HISTORY" )}
-  </Heading4>
-);
-const privacyZoneTitle = () => (
-  <Heading4 accessibilityRole="header" numberOfLines={1}>
-    {t( "PRIVACY-ZONE" )}
   </Heading4>
 );
 // eslint-disable-next-line i18next/no-literal-string
@@ -425,21 +418,6 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             options={{
               // Reuses the LocationPicker interface, which renders its own
               // header and close button, so hide the native stack header.
-              headerShown: false,
-            }}
-          />
-          <Stack.Screen
-            name="PrivacyZone"
-            component={PrivacyZone}
-            options={{
-              headerTitle: privacyZoneTitle,
-            }}
-          />
-          <Stack.Screen
-            name="PrivacyZoneMap"
-            component={PrivacyZoneMap}
-            options={{
-              // Reuses the LocationPicker interface, which renders its own header
               headerShown: false,
             }}
           />

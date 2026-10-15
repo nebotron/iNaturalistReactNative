@@ -16,7 +16,6 @@ import {
 } from "sharedHelpers/interpolateTrackedLocation";
 import { drainTrackedLocationFixes } from "sharedHelpers/locationHistoryTracker";
 import { log } from "sharedHelpers/logger";
-import { privacyZoneGeoprivacy } from "sharedHelpers/privacyZone";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import useStore from "stores/useStore";
@@ -322,23 +321,11 @@ const applyTrackedLocationToObservation = async (
   const mutableObservation = observation as RealmObservation & {
     _updated_at?: Date;
     needs_sync?: boolean;
-    geoprivacy?: string;
   };
-
-  // The observation only gets a location here, after it was saved, so the
-  // privacy zone has to be re-checked against the location being applied.
-  const zoneGeoprivacy = privacyZoneGeoprivacy( {
-    latitude: match.latitude,
-    longitude: match.longitude,
-    geoprivacy: observation.geoprivacy,
-  } );
 
   safeRealmWrite( realm, ( ) => {
     mutableObservation.latitude = match.latitude;
     mutableObservation.longitude = match.longitude;
-    if ( zoneGeoprivacy ) {
-      mutableObservation.geoprivacy = zoneGeoprivacy;
-    }
     if ( match.accuracy != null ) {
       mutableObservation.positional_accuracy = match.accuracy;
     }
