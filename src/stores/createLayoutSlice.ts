@@ -16,6 +16,14 @@ export enum MAP_TYPES {
   HYBRID = "hybrid",
 }
 
+export interface HotspotSettings {
+  hotspotClusterRadiusKm: number;
+  hotspotMaxDetourCandidates: number;
+  hotspotObsPerPage: number;
+  hotspotParkingMinutes: number;
+  hotspotBboxPaddingKm: number;
+}
+
 export interface LayoutSlice {
   isAdvancedUser: boolean;
   obsDetailsTab: OBS_DETAILS_TAB;
@@ -46,6 +54,8 @@ export interface LayoutSlice {
     toggleDebugMode: ( ) => void;
     mapType: MAP_TYPES;
     setMapType: ( mapType: MAP_TYPES ) => void;
+    hotspotSettings: HotspotSettings;
+    setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
   };
 }
 
@@ -171,6 +181,20 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         mapType: newMapType,
+      },
+    } ) ),
+    // Wildlife Hotspots algorithm tuning, edited in ExploreV2 Advanced Search
+    hotspotSettings: {
+      hotspotClusterRadiusKm: 1.5,
+      hotspotMaxDetourCandidates: 50,
+      hotspotObsPerPage: 200,
+      hotspotParkingMinutes: 5,
+      hotspotBboxPaddingKm: 80,
+    },
+    setHotspotSetting: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotSettings: { ...state.layout.hotspotSettings, [key]: value },
       },
     } ) ),
     // Recently entered addresses in the Wildlife Hotspots address search,

@@ -5,6 +5,8 @@ import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
 import DateFilterSection
   from "components/Explore/ExploreV2/components/DateFilterSection";
+import HotspotSettingsSection
+  from "components/Explore/ExploreV2/components/HotspotSettingsSection";
 import RadioGroupSection
   from "components/Explore/ExploreV2/components/RadioGroupSection";
 import SavedSearches, { SavedSearchSheets }
@@ -690,6 +692,8 @@ const AdvancedSearch = ( ) => {
               accessibilityLabel={t( "View-photo-licensing-info" )}
             />
           </View>
+
+          <HotspotSettingsSection />
         </View>
       </ScrollView>
       <ButtonBar containerClass="bg-white border-t border-lightGray">

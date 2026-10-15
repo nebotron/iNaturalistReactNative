@@ -65,6 +65,7 @@ import useCurrentUser from "sharedHooks/useCurrentUser";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import useSpeciesCount from "sharedHooks/useSpeciesCount";
 import useStoredLayout from "sharedHooks/useStoredLayout";
+import useStore from "stores/useStore";
 
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
@@ -211,6 +212,12 @@ const ExploreResults = ( ) => {
     } = queryParams;
     return filterParams;
   }, [queryParams] );
+
+  const hotspotSettings = useStore( s => s.layout.hotspotSettings );
+  const hotspotParams = useMemo(
+    ( ) => ( { ...baseSearchParams, ...hotspotSettings } ),
+    [baseSearchParams, hotspotSettings],
+  );
 
   const speciesListParams = useMemo( ( ) => ( {
     ...baseSearchParams,
@@ -387,7 +394,7 @@ const ExploreResults = ( ) => {
         return (
           <WildlifeHotspotsScreen
             embedded
-            filterParams={baseSearchParams}
+            filterParams={hotspotParams}
           />
         );
       case IDENTIFY_TAB:
