@@ -81,13 +81,40 @@ describe( "advancedSearchReducer", ( ) => {
   } );
 
   describe( "taxon subject", ( ) => {
-    it( "sets the unknown subject, which is not a taxon", ( ) => {
-      const newDraft = advancedSearchReducer( makeDraft( ), {
+    const OTHER_TAXON = { id: 47126, name: "Plantae" };
+
+    it( "sets the unknown subject, which is not a taxon, dropping other taxa", ( ) => {
+      const newDraft = advancedSearchReducer( makeDraft( {
+        filters: { taxonFilters: [{ taxon: OTHER_TAXON, exclude: true }] },
+      } ), {
         type: "FILTER_BY_ICONIC_UNKNOWN",
       } );
 
       expect( newDraft.subject ).toEqual( { type: "unknown" } );
-      expect( newDraft.filters ).toEqual( defaultExploreV2Filters );
+      expect( newDraft.filters ).toEqual( { ...defaultExploreV2Filters, taxonFilters: null } );
+    } );
+
+    it( "makes the first included taxon the subject and keeps the rest in filters", ( ) => {
+      const newDraft = advancedSearchReducer( makeDraft( ), {
+        type: "SET_TAXON_FILTERS",
+        taxonFilters: [
+          { taxon: OTHER_TAXON, exclude: true },
+          { taxon: TAXON, exclude: false },
+        ],
+      } );
+
+      expect( newDraft.subject ).toEqual( { type: "taxon", taxon: TAXON } );
+      expect( newDraft.filters.taxonFilters ).toEqual( [{ taxon: OTHER_TAXON, exclude: true }] );
+    } );
+
+    it( "clears the subject and taxon filters when no taxa are left", ( ) => {
+      const newDraft = advancedSearchReducer( makeDraft( { subject: { type: "unknown" } } ), {
+        type: "SET_TAXON_FILTERS",
+        taxonFilters: [],
+      } );
+
+      expect( newDraft.subject ).toBeNull( );
+      expect( newDraft.filters.taxonFilters ).toBeNull( );
     } );
   } );
 
@@ -135,16 +162,16 @@ describe( "advancedSearchReducer", ( ) => {
   } );
 
   describe( "user filter", ( ) => {
-    it( "sets a user and clears an unobserved-by user", ( ) => {
+    it( "sets a user and keeps an unobserved-by user", ( ) => {
       const draft = makeDraft( { filters: { unobservedByUser: OTHER_USER } } );
 
       const newDraft = advancedSearchReducer( draft, { type: "SET_USER", user: USER } );
 
       expect( newDraft.filters.user ).toEqual( USER );
-      expect( newDraft.filters.unobservedByUser ).toBeNull( );
+      expect( newDraft.filters.unobservedByUser ).toEqual( OTHER_USER );
     } );
 
-    it( "sets an unobserved-by user and clears any user", ( ) => {
+    it( "sets an unobserved-by user and keeps any user", ( ) => {
       const draft = makeDraft( { filters: { user: USER } } );
 
       const newDraft = advancedSearchReducer( draft, {
@@ -153,7 +180,7 @@ describe( "advancedSearchReducer", ( ) => {
       } );
 
       expect( newDraft.filters.unobservedByUser ).toEqual( OTHER_USER );
-      expect( newDraft.filters.user ).toBeNull( );
+      expect( newDraft.filters.user ).toEqual( USER );
     } );
 
     it( "keeps a carried taxon subject", ( ) => {

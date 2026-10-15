@@ -35,6 +35,7 @@ interface Props {
   // whether to render an upload icon at all. Don't default/coalesce this at call sites.
   uploadProgress?: number;
   unsynced: boolean;
+  squareCorners?: boolean;
 }
 
 const ObsPressable = ( {
@@ -56,6 +57,7 @@ const ObsPressable = ( {
   uuid,
   uploadProgress,
   unsynced,
+  squareCorners = false,
 }: Props ) => {
   const { t } = useTranslation( );
   const { isDefaultMode } = useLayoutPrefs( );
@@ -86,6 +88,7 @@ const ObsPressable = ( {
         // better with RN styles than with Tailwind classes
         style={gridItemStyle}
         uploadProgress={uploadProgress}
+        squareCorners={squareCorners}
       />
     );
   } else if ( layout === "smallGrid" ) {

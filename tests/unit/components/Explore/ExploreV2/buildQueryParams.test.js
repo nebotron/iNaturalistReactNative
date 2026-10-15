@@ -19,6 +19,23 @@ describe( "buildExploreV2QueryParams", ( ) => {
       expect( params.project_id ).toBeUndefined( );
     } );
 
+    it( "adds included and excluded taxa from the taxon filters", ( ) => {
+      const state = {
+        ...initialExploreV2State,
+        subject: { type: "taxon", taxon: { id: 42 } },
+        filters: {
+          ...initialExploreV2State.filters,
+          taxonFilters: [
+            { taxon: { id: 3 }, exclude: false },
+            { taxon: { id: 7 }, exclude: true },
+          ],
+        },
+      };
+      const params = buildExploreV2QueryParams( state );
+      expect( params.taxon_id ).toBe( "42,3" );
+      expect( params.without_taxon_id ).toBe( 7 );
+    } );
+
     it( "maps a selected user to user_id", ( ) => {
       const state = {
         ...initialExploreV2State,

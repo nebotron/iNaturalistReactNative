@@ -1,12 +1,46 @@
 #import "AppDelegate.h"
+#import "LocationRelaunch.h"
 
 #import <Firebase.h>
 #import <React/RCTBundleURLProvider.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <RNShareMenu/ShareMenuManager.h>
 #import <React/RCTLinkingManager.h>
+#import <QuartzCore/QuartzCore.h>
+#import <objc/runtime.h>
 
 @interface AppDelegate ()
+@end
+
+// React Native's Image component (both legacy and Fabric) renders by setting
+// CALayer.contents directly to a CGImage rather than going through
+// UIImageView, so swizzling this is the one hook point that covers every
+// image view in the app for a pixelated, nearest-neighbor look.
+@interface CALayer (PixelatedImages)
+@end
+
+@implementation CALayer (PixelatedImages)
+
++ (void)load
+{
+  static dispatch_once_t onceToken;
+  dispatch_once(&onceToken, ^{
+    Method originalMethod = class_getInstanceMethod(self, @selector(setContents:));
+    Method swizzledMethod = class_getInstanceMethod(self, @selector(pixelated_setContents:));
+    method_exchangeImplementations(originalMethod, swizzledMethod);
+  });
+}
+
+- (void)pixelated_setContents:(id)contents
+{
+  // Calls through to the original -setContents: implementation (swapped via the exchange above).
+  [self pixelated_setContents:contents];
+  if (contents) {
+    self.magnificationFilter = kCAFilterNearest;
+    self.minificationFilter = kCAFilterNearest;
+  }
+}
+
 @end
 
 @implementation AppDelegate
@@ -34,7 +68,11 @@
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions
 {
   // Required for react-native-firebase: https://rnfirebase.io/#configure-firebase-with-ios-credentials-react-native--077
-  [FIRApp configure];
+  @try {
+    [FIRApp configure];
+  } @catch (NSException *exception) {
+    NSLog(@"Skipping Firebase configuration due to invalid local GoogleService-Info.plist: %@", exception.reason);
+  }
   self.reactNativeFactory = [[RCTReactNativeFactory alloc] initWithDelegate:self];
   self.dependencyProvider = [RCTAppDependencyProvider new];
 
@@ -44,6 +82,17 @@
                                                  inWindow:self.window
                                         initialProperties:@{}
                                             launchOptions:launchOptions];
+
+  // Resume location monitoring when the user had location history tracking
+  // enabled, or when iOS relaunched us because of a location event. Starting
+  // here rather than waiting for JS means a background relaunch resumes the
+  // continuous watch immediately, and significant-change monitoring keeps the
+  // app relaunchable after iOS terminates it - which is what prevents
+  // multi-hour gaps in the tracked history, since a standard-location watch
+  // alone cannot relaunch a killed app.
+  if ( launchOptions[UIApplicationLaunchOptionsLocationKey] || [INatLocationMonitor enabled] ) {
+    [[INatLocationMonitor shared] start];
+  }
 
   return YES;
 }

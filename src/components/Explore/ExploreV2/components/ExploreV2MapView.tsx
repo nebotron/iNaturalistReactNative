@@ -21,8 +21,8 @@ import type { Region } from "react-native-maps";
 import { useTranslation } from "sharedHooks";
 import { getShadow } from "styles/global";
 
-// matching v1 explore
-const NEARBY_DELTA = 0.02;
+// matching v1 explore: ~50km around the current location
+const NEARBY_DELTA = 0.9;
 
 const WORLDWIDE_REGION: Region = {
   latitude: 0,
@@ -196,6 +196,7 @@ const ExploreV2MapView = ( {
         showCurrentLocationButton
         showsCompass={false}
         showSwitchMapTypeButton
+        showScaleBar
         showsUserLocation
         switchMapTypeButtonClassName="right-5 bottom-20"
         tileMapParams={queryParams}

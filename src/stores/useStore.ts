@@ -1,12 +1,10 @@
-import merge from "lodash/merge";
+import mergeWith from "lodash/mergeWith";
 import { create } from "zustand";
 import type { StateStorage } from "zustand/middleware";
 import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { ExploreSlice } from "./createExploreSlice";
 import createExploreSlice from "./createExploreSlice";
-import type { ExploreV2AdvancedSearchSlice } from "./createExploreV2AdvancedSearchSlice";
-import createExploreV2AdvancedSearchSlice from "./createExploreV2AdvancedSearchSlice";
 import type { ExploreV2SearchesSlice } from "./createExploreV2SearchesSlice";
 import createExploreV2SearchesSlice from "./createExploreV2SearchesSlice";
 import type { FeatureFlagSlice } from "./createFeatureFlagSlice";
@@ -18,7 +16,7 @@ import createLayoutSlice from "./createLayoutSlice";
 import type { MyObservationsSlice } from "./createMyObservationsSlice";
 import createMyObservationsSlice from "./createMyObservationsSlice";
 import type { ObservationFlowSlice } from "./createObservationFlowSlice";
-import createObservationFlowSlice from "./createObservationFlowSlice";
+import createObservationFlowSlice, { dropPendingGroupPhotos } from "./createObservationFlowSlice";
 import type { RootExploreSlice } from "./createRootExploreSlice";
 import createRootExploreSlice from "./createRootExploreSlice";
 import type { SyncObservationsSlice } from "./createSyncObservationsSlice";
@@ -29,7 +27,6 @@ import storage from "./zustandMMKVBackingStorage";
 
 type StoreState =
   ExploreSlice
-  & ExploreV2AdvancedSearchSlice
   & ExploreV2SearchesSlice
   & FeatureFlagSlice
   & FirebaseTraceSlice
@@ -52,6 +49,18 @@ export const zustandStorage = {
   removeItem: ( name: string ) => storage.delete( name ),
 };
 
+// Everything in a namespaced slice except its setters, which can't be
+// serialized and are recreated on every launch anyway
+const persistableValues = ( namespace: object ) => Object.entries( namespace ).reduce(
+  ( memo: Record<string, unknown>, [key, value] ) => {
+    if ( typeof value !== "function" ) {
+      memo[key] = value;
+    }
+    return memo;
+  },
+  {},
+);
+
 // Using slices to separate store for Explore and Observation creation flow
 // https://docs.pmnd.rs/zustand/guides/slices-pattern
 const useStore = create<StoreState>()( persist(
@@ -60,7 +69,6 @@ const useStore = create<StoreState>()( persist(
     const slices = [
       createExploreV2SearchesSlice( ...args ),
       createExploreSlice( ...args ),
-      createExploreV2AdvancedSearchSlice( ...args ),
       createFeatureFlagSlice( ...args ),
       createFirebaseTraceSlice( ...args ),
       createLayoutSlice( ...args ),
@@ -110,15 +118,7 @@ const useStore = create<StoreState>()( persist(
       obsDetailsTab: state.obsDetailsTab,
 
       // Dynamically select all values in the layout slice's namespace
-      layout: ( ( Object.keys( state.layout ) as ( keyof LayoutSlice["layout"] )[] ).reduce(
-        ( memo: Record<string, unknown>, key ) => {
-          if ( typeof ( state.layout[key] ) !== "function" ) {
-            memo[key] = state.layout[key];
-          }
-          return memo;
-        },
-        {},
-      ) ),
+      layout: persistableValues( state.layout ),
 
       exploreRecentSearches: {
         subjects: state.exploreRecentSearches.subjects,
@@ -128,6 +128,25 @@ const useStore = create<StoreState>()( persist(
       exploreSavedSearches: {
         searches: state.exploreSavedSearches.searches,
       },
+      lastExploreSearch: state.lastExploreSearch,
+
+      // Last location used in the location picker
+      lastLocationPickerState: state.lastLocationPickerState,
+
+      // Group Photos progress, so it survives an app kill. Photos still being
+      // copied out of the library are left out: their copies die with the
+      // process, so restoring them would resume an import stuck on cells that
+      // can never fill in.
+      groupedPhotos: dropPendingGroupPhotos( state.groupedPhotos ),
+      firstObservationDefaults: state.firstObservationDefaults,
+      pendingGroupPhotoDeletionUris: state.pendingGroupPhotoDeletionUris,
+      groupCropResume: state.groupCropResume,
+
+      // Explore tab filters and related search state
+      rootExploreView: state.rootExploreView,
+      rootRelativeDateOffsets: state.rootRelativeDateOffsets,
+      rootStoredParams: state.rootStoredParams,
+      savedExploreFilters: state.savedExploreFilters,
     } ),
     // zustandStorage's getItem actually returns string | number | null instead of zustand's
     // expected string | null. There are some keys in this store (at least `numOfUserObservations`)
@@ -138,7 +157,15 @@ const useStore = create<StoreState>()( persist(
     storage: createJSONStorage( () => zustandStorage as unknown as StateStorage ),
     // We need to deep merge to persist nested objects, like layout
     // https://zustand.docs.pmnd.rs/middlewares/persist#persisting-a-state-with-nested-objects
-    merge: ( persisted, current ) => merge( current, persisted ),
+    // Arrays must be replaced wholesale rather than merged index-by-index:
+    // lodash's default array merging leaves stale trailing elements behind
+    // when the persisted array (e.g. groupedPhotos cleared after a Group
+    // Photos import) is shorter than what's currently in memory.
+    merge: ( persisted, current ) => mergeWith( current, persisted, ( _objValue, srcValue ) => (
+      Array.isArray( srcValue )
+        ? srcValue
+        : undefined
+    ) ),
   },
 ) );
 

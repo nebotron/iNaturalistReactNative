@@ -3,6 +3,7 @@
 import {
   useNetInfo,
 } from "@react-native-community/netinfo";
+import EbirdResults from "components/Explore/EbirdResults";
 import useInfiniteExploreScroll from "components/Explore/hooks/useInfiniteExploreScroll";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import { View } from "components/styledComponents";
@@ -101,10 +102,12 @@ const ObservationsView = ( {
         isFetchingNextPage={isFetchingNextPage}
         isConnected={isConnected}
         layout={layout}
+        listHeaderContent={<EbirdResults enabled={canFetch} params={queryParams} />}
         obsListKey="ExploreObservations"
         onEndReached={fetchNextPage}
         showNoResults={!canFetch || totalResults === 0}
         hideObsUploadStatus={layout === "grid"}
+        fullWidthGrid={layout === "grid"}
         testID="ExploreObservationsAnimatedList"
       />
       <MapView

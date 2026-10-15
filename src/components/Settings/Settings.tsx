@@ -17,6 +17,7 @@ import {
 import AdvancedSettings from "./AdvancedSettings";
 import LanguageSetting from "./LanguageSetting";
 import LoggedInDefaultSettings from "./LoggedInDefaultSettings";
+import UsbImportSetting from "./UsbImportSetting";
 
 const Settings = ( ) => {
   const { t } = useTranslation();
@@ -54,6 +55,7 @@ const Settings = ( ) => {
               <LanguageSetting onChange={changeLanguage} />
             </View>
           )}
+        <UsbImportSetting />
       </View>
     </ScrollViewWrapper>
   );

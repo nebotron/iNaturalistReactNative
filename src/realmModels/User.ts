@@ -10,6 +10,7 @@ export interface TaxonNamesSettings {
 }
 class User extends Realm.Object {
   static FIELDS = {
+    created_at: true,
     identifications_count: true,
     icon_url: true,
     id: true,
@@ -80,6 +81,7 @@ class User extends Realm.Object {
     primaryKey: "id",
     properties: {
       id: "int",
+      created_at: { type: "string", mapTo: "createdAt", optional: true },
       identifications_count: "int?",
       icon_url: {
         type: "string",

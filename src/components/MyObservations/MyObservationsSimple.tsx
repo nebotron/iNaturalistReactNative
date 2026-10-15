@@ -23,13 +23,13 @@ import {
 import SortButton from "components/SharedComponents/Buttons/SortButton";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
 import { ObservationsStatTab, SpeciesStatTab } from "components/SharedComponents/StatTab";
+import UsbImportProgress from "components/SharedComponents/UsbImportProgress";
 import { View } from "components/styledComponents";
 import {
   MY_OBSERVATIONS_ACTION,
   useMyObservations,
 } from "providers/MyObservationsContext";
 import React, { useCallback, useMemo } from "react";
-import { Alert } from "react-native";
 import Photo from "realmModels/Photo";
 import type {
   RealmObservation,
@@ -82,6 +82,7 @@ interface Props {
   numTotalTaxa?: number;
   numUnuploadedObservations: number;
   numObsMissingBasics: number;
+  numUnuploadedObsNoTaxon: number;
   observationIds: { uuid: string }[];
   observationsSortOptionId: OBSERVATIONS_SORT;
   onEndReached: ( ) => void;
@@ -146,6 +147,7 @@ const MyObservationsSimple = ( {
   numTotalTaxa,
   numUnuploadedObservations,
   numObsMissingBasics: numUnuploadedObsMissingBasics,
+  numUnuploadedObsNoTaxon,
   observationIds,
   observationsSortOptionId,
   onEndReached,
@@ -191,14 +193,14 @@ const MyObservationsSimple = ( {
   const navigation = useNavigation( );
   const route = useRoute( );
   const {
-    flashListStyle,
-    gridItemStyle,
-    numColumns,
+    flashListStyle: taxaFlashListStyleBase,
+    gridItemStyle: taxaGridItemStyle,
+    numColumns: taxaNumColumns,
   } = useGridLayout( );
   const taxaFlashListStyle = useMemo( ( ) => ( {
-    ...flashListStyle,
+    ...taxaFlashListStyleBase,
     paddingTop: 10,
-  } ), [flashListStyle] );
+  } ), [taxaFlashListStyleBase] );
 
   const taxaSortOptions = MY_OBSERVATIONS_SPECIES_SORT_OPTIONS.reduce(
     ( acc, sortBy ) => {
@@ -279,7 +281,7 @@ const MyObservationsSimple = ( {
     return (
       <SimpleTaxonGridItem
         key={itemKey}
-        style={gridItemStyle}
+        style={taxaGridItemStyle}
         speciesCount={speciesCount}
         canSearchFromSpeciesTab={canSearchFromSpeciesTab}
         navToTaxonDetails={navToTaxonDetails}
@@ -292,11 +294,11 @@ const MyObservationsSimple = ( {
     canSearchFromSpeciesTab,
     currentUser,
     dispatch,
-    gridItemStyle,
     navigation,
     route.key,
     setActiveTab,
     t,
+    taxaGridItemStyle,
   ] );
 
   const taxaFooterComponent = useMemo( ( ) => {
@@ -332,14 +334,58 @@ const MyObservationsSimple = ( {
     ? numUnuploadedObservations - numUnuploadedObsMissingBasics
     : numUnuploadedObservations;
 
-  const observationsHeader = useMemo( ( ) => {
+  // The tabs show the total counts, so they live in the list header and scroll
+  // off the top with the list whenever there's a list to scroll
+  const tabsHeader = (
+    <Tabs
+      activeColor={String( colors?.inatGreen )}
+      activeId={activeTab}
+      tabs={[
+        {
+          id: OBSERVATIONS_TAB,
+          text: t( "Observations" ),
+          onPress: () => setActiveTab( OBSERVATIONS_TAB ),
+          renderComponent: ( ) => (
+            <ObservationsStatTab
+              count={numTotalObservations}
+              wrapperClassName={STAT_TAB_PADDING}
+            />
+          ),
+        },
+        {
+          id: TAXA_TAB,
+          text: t( "Species" ),
+          onPress: () => setActiveTab( TAXA_TAB ),
+          renderComponent: ( ) => (
+            <SpeciesStatTab
+              count={numTotalTaxa}
+              wrapperClassName={STAT_TAB_PADDING}
+            />
+          ),
+        },
+      ]}
+    />
+  );
+
+  const observationsListShown = !showSearchOfflineNotice
+    && !showSearchEmptyState
+    && layout !== "map"
+    && !( layout === "smallGrid" && isConnected === false );
+  const listShowsTabs = activeTab === OBSERVATIONS_TAB
+    ? observationsListShown
+    : !!taxa?.length;
+
+  const observationsHeader = ( ( ) => {
     if ( layout !== "grid" ) {
       return (
-        <SimpleHeader
-          isConnected={isConnected}
-          obsMissingBasicsExist={obsMissingBasicsExist}
-          numTotalObservations={numTotalObservations}
-        />
+        <>
+          {tabsHeader}
+          <SimpleHeader
+            isConnected={isConnected}
+            obsMissingBasicsExist={obsMissingBasicsExist}
+            numTotalObservations={numTotalObservations}
+          />
+        </>
       );
     }
 
@@ -350,12 +396,13 @@ const MyObservationsSimple = ( {
     return (
       <View
         style={{
-          marginTop: -Math.ceil( flashListStyle.paddingTop ),
-          marginLeft: -Math.ceil( flashListStyle.paddingLeft ),
-          marginRight: -Math.ceil( flashListStyle.paddingRight ),
-          marginBottom: TARGET_SPACING - flashListStyle.paddingTop,
+          marginTop: -Math.ceil( taxaFlashListStyleBase.paddingTop ),
+          marginLeft: -Math.ceil( taxaFlashListStyleBase.paddingLeft ),
+          marginRight: -Math.ceil( taxaFlashListStyleBase.paddingRight ),
+          marginBottom: TARGET_SPACING - taxaFlashListStyleBase.paddingTop,
         }}
       >
+        {tabsHeader}
         <SimpleHeader
           isConnected={isConnected}
           obsMissingBasicsExist={obsMissingBasicsExist}
@@ -363,7 +410,7 @@ const MyObservationsSimple = ( {
         />
       </View>
     );
-  }, [flashListStyle, isConnected, layout, numTotalObservations, obsMissingBasicsExist] );
+  } )( );
 
   const dataFilledWithEmptyBoxes = useMemo( ( ) => {
     const data = observationIds;
@@ -431,6 +478,7 @@ const MyObservationsSimple = ( {
       <ObservationsFlashList
         data={dataFilledWithEmptyBoxes}
         dataCanBeFetched={!!currentUser}
+        fullWidthGrid={layout === "grid"}
         fetchFromLastObservation={fetchFromLastObservation}
         handlePullToRefresh={handlePullToRefresh}
         handleIndividualUploadPress={handleIndividualUploadPress}
@@ -491,9 +539,7 @@ const MyObservationsSimple = ( {
     return null;
   };
 
-  function showOfflineAlert( ) {
-    Alert.alert( t( "You-are-offline" ), t( "Please-try-again-when-you-are-online" ) );
-  }
+  function showOfflineAlert( ) { }
 
   const handleSpeciesSortConfirm = ( optionId: SPECIES_SORT ) => {
     if ( currentUser && !isConnected ) {
@@ -546,36 +592,10 @@ const MyObservationsSimple = ( {
           currentUser={currentUser}
           isConnected={isConnected}
           numUploadableObservations={numUploadableObservations}
+          numUnuploadedObsNoTaxon={numUnuploadedObsNoTaxon}
           handleSyncButtonPress={handleSyncButtonPress}
         />
-        <Tabs
-          activeColor={String( colors?.inatGreen )}
-          activeId={activeTab}
-          tabs={[
-            {
-              id: OBSERVATIONS_TAB,
-              text: t( "Observations" ),
-              onPress: () => setActiveTab( OBSERVATIONS_TAB ),
-              renderComponent: ( ) => (
-                <ObservationsStatTab
-                  count={numTotalObservations}
-                  wrapperClassName={STAT_TAB_PADDING}
-                />
-              ),
-            },
-            {
-              id: TAXA_TAB,
-              text: t( "Species" ),
-              onPress: () => setActiveTab( TAXA_TAB ),
-              renderComponent: ( ) => (
-                <SpeciesStatTab
-                  count={numTotalTaxa}
-                  wrapperClassName={STAT_TAB_PADDING}
-                />
-              ),
-            },
-          ]}
-        />
+        { !listShowsTabs && tabsHeader }
         <SearchedTaxonBanner />
         { activeTab === OBSERVATIONS_TAB && renderObservationsTabContent( ) }
         { ( activeTab === TAXA_TAB && taxa.length > 0 ) && (
@@ -591,7 +611,7 @@ const MyObservationsSimple = ( {
                 item: SpeciesCount,
               ) => `${item.taxon.id}-${item?.taxon?.default_photo?.url || "no-photo"}`}
               layout="grid"
-              numColumns={numColumns}
+              numColumns={taxaNumColumns}
               renderItem={renderTaxaItem}
               totalResults={numTotalTaxa}
               onEndReached={
@@ -600,6 +620,18 @@ const MyObservationsSimple = ( {
                   : undefined
               }
               refreshing={isFetchingTaxa}
+              ListHeaderComponent={(
+                <View
+                  style={{
+                    marginTop: -taxaFlashListStyle.paddingTop,
+                    marginLeft: -Math.ceil( taxaFlashListStyle.paddingLeft ),
+                    marginRight: -Math.ceil( taxaFlashListStyle.paddingRight ),
+                    marginBottom: taxaFlashListStyle.paddingTop,
+                  }}
+                >
+                  {tabsHeader}
+                </View>
+              )}
               ListFooterComponent={taxaFooterComponent}
             />
             <SortButton
@@ -633,6 +665,7 @@ const MyObservationsSimple = ( {
         />
       )}
       {openSheet === ACTIVE_SHEET.LOGIN && <LoginSheet setShowLoginSheet={setOpenSheet} />}
+      <UsbImportProgress />
       {isDefaultMode && (
         <>
           {/* These four cards should show only in default mode */}

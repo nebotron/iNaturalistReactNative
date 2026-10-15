@@ -233,6 +233,11 @@ function formatISONoTimezone( date: Date | null ): string {
   return formattedISODate.substring( 0, 19 );
 }
 
+// "2022-12-31 23:59:59", as shown in the photo picker
+function formatISOTimestamp( ms: number ): string {
+  return formatISONoTimezone( new Date( ms ) ).replace( "T", " " );
+}
+
 // two options for observed_on_string in uploader are:
 // 2020-03-01 00:00 or 2021-03-24T14:40:25
 // this is using the second format
@@ -546,6 +551,7 @@ export {
   formatDifferenceForHumans,
   formatISONoSeconds,
   formatISONoTimezone,
+  formatISOTimestamp,
   formatLongDate,
   formatLongDatetime,
   formatMonthYearDate,

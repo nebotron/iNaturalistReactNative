@@ -10,6 +10,7 @@ import type {
 import flatten from "lodash/flatten";
 import { useCallback, useMemo } from "react";
 import Observation from "realmModels/Observation";
+import ObservationSound from "realmModels/ObservationSound";
 import { useAuthenticatedInfiniteQuery } from "sharedHooks";
 
 import {
@@ -44,6 +45,13 @@ const useInfiniteExploreScroll = (
       // the most data we display in the UI on any Observations view in Explore
       // is the same amount of data we show for the Advanced list mode in MyObservations
       ...Observation.ADVANCED_MODE_LIST_FIELDS,
+      // geojson is the reliable coordinate source on API observations (top-level
+      // latitude/longitude are often absent); the Identify auto-CV reads it to
+      // score with location, matching the Suggest ID screen.
+      geojson: true,
+      // ADVANCED_MODE_LIST_FIELDS only asks for the sound uuid, but the Identify
+      // view plays the sounds of observations that have no photos.
+      observation_sounds: ObservationSound.OBSERVATION_SOUNDS_FIELDS,
       // login is needed so ObsListItem can tell whether an observation belongs
       // to the current user (geoprivacy/obscured handling differs in that case)
       user: {
@@ -92,9 +100,25 @@ const useInfiniteExploreScroll = (
 
   const pages = data?.pages as ApiObservationsSearchResponse[] | undefined;
 
-  const observations: ApiObservation[] = flatten( pages?.map( r => r.results ) ) || [];
-  let totalResults: number | null | undefined = pages?.[0]?.total_results;
+  // This used to run in the render body. Every render of the Explore screen —
+  // every scroll tick, every filter touch — flattened every page fetched so
+  // far, allocated a Set, and walked the whole list twice, then handed the
+  // list a *new array identity*, so FlashList re-rendered all of it. Infinite
+  // scroll makes that grow without bound, which is what the app log shows:
+  // RootExplore is 35 of 85 ui_stall lines and the worst single stall on it is
+  // 18.8s, on a screen whose only job while you scroll is to append a page.
+  const observations: ApiObservation[] = useMemo( ( ) => {
+    const seenKeys = new Set<string | number>( );
+    const deduped = ( flatten( pages?.map( r => r.results ) ) || [] ).filter( obs => {
+      const key = obs.uuid ?? obs.id;
+      if ( key == null || seenKeys.has( key ) ) return false;
+      seenKeys.add( key );
+      return true;
+    } );
+    return deduped;
+  }, [pages] );
 
+  let totalResults: number | null | undefined = pages?.[0]?.total_results;
   if ( totalResults !== 0 && !totalResults ) {
     totalResults = null;
   }

@@ -24,4 +24,27 @@ const scoreImage = async (
   }
 };
 
+const scoreObservation = async (
+  // `id` is the v2 route param, which expects the observation UUID (the v2
+  // endpoint converts it to a serial id server-side).
+  params: { id: number | string },
+  opts = {},
+): Promise<object> => {
+  try {
+    // Must await so a rejected request is caught here and routed through
+    // handleError; a bare `return` would leak the raw inatjs error.
+    return await inatjs.computervision.score_observation( {
+      ...PARAMS,
+      ...params,
+      fields: {
+        ...PARAMS.fields,
+        taxon: { ...PARAMS.fields.taxon, is_active: true },
+      },
+    }, opts );
+  } catch ( e ) {
+    return handleError( e as Error, { context: { functionName: "scoreObservation", opts } } );
+  }
+};
+
 export default scoreImage;
+export { scoreObservation };

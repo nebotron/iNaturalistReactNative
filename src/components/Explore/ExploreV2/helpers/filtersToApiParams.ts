@@ -1,3 +1,5 @@
+import type { EvidenceTypeApiParams } from "components/Explore/helpers/evidenceTypes";
+import { evidenceTypesToApiParams } from "components/Explore/helpers/evidenceTypes";
 import {
   ESTABLISHMENT_MEAN,
   MEDIA,
@@ -8,7 +10,7 @@ import {
 import type { ExploreV2Filters } from "providers/ExploreV2Context";
 
 // Maps the typed AdvancedSearch filters to iNat API query params.
-export interface FilterApiParams {
+export interface FilterApiParams extends EvidenceTypeApiParams {
   quality_grade?: string[];
   hrank?: string;
   lrank?: string;
@@ -31,6 +33,7 @@ export interface FilterApiParams {
   user_id?: number;
   unobserved_by_user_id?: number;
   project_id?: number;
+  popular?: boolean;
 }
 
 const PHOTO_LICENSE_PARAMS: Partial<Record<PHOTO_LICENSE, string>> = {
@@ -102,6 +105,10 @@ const filtersToApiParams = (
     const license = PHOTO_LICENSE_PARAMS[filters.photoLicense];
     if ( license ) { params.photo_license = license; }
   }
+
+  Object.assign( params, evidenceTypesToApiParams( filters.evidenceTypes ) );
+
+  if ( filters.popular ) { params.popular = true; }
 
   if ( filters.user?.id ) { params.user_id = filters.user.id; }
 

@@ -145,6 +145,7 @@ export interface ApiTaxon {
   iconic_taxon_name?: string;
   id?: number;
   name?: string;
+  observations_count?: number;
   preferred_common_name?: string;
   rank?: string;
   rank_level?: number;
@@ -235,9 +236,18 @@ export interface ApiComment {
 
 export interface ApiIdentification {
   body?: string;
+  category?: "improving" | "supporting" | "leading" | "maverick";
+  created_at?: string;
+  current?: boolean;
+  // true when the identifier explicitly disagreed with the previous
+  // observation taxon, null/false otherwise
+  disagreement?: boolean | null;
+  hidden?: boolean;
+  id?: number;
+  observation?: { uuid?: string };
   taxon?: ApiTaxon;
   user?: ApiUser;
-  hidden?: boolean;
+  uuid?: string;
 }
 
 export interface ApiNotification {
@@ -267,18 +277,37 @@ export interface ApiObservationFieldValue {
   value: string;
 }
 
+export interface ApiVote {
+  id?: number;
+  created_at?: string | null;
+  user_id?: number;
+  vote_flag?: boolean;
+  // Faves are the votes whose scope is null; a non-null scope is some other
+  // kind of vote (e.g. "needs_id").
+  vote_scope?: string | null;
+}
+
 export interface ApiObservation extends ApiRecord {
+  captive?: boolean;
   comments?: ApiComment[];
+  geojson?: { coordinates?: [number, number] };
+  latitude?: number | null;
+  longitude?: number | null;
   identifications?: ApiIdentification[];
   non_traditional_projects?: { project: ApiProjectSummary }[];
   observation_photos?: ApiObservationPhoto[];
   observation_sounds?: ApiObservationSound[];
+  observed_on?: string | null;
   project_observations?: ApiProjectObservation[];
   ofvs?: ApiObservationFieldValue[];
+  place_ids?: number[];
+  project_ids?: number[];
+  quality_grade?: string;
   taxon?: ApiTaxon;
   time_observed_at?: string;
   user?: ApiUser;
   uuid: string;
+  votes?: ApiVote[];
 }
 
 export interface ApiRelationship extends ApiRecord {
@@ -329,6 +358,7 @@ export interface ApiObservationFilterParams extends ApiParams {
   d1?: string;
   d2?: string;
   endemic?: boolean;
+  hour?: number[];
   hrank?: string;
   iconic_taxa?: string[];
   identified?: boolean;

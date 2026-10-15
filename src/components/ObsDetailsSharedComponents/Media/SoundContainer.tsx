@@ -4,6 +4,7 @@ import {
 } from "@react-native-community/netinfo";
 import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
+import { setPlayingAudio } from "components/AudioId/audioIdSession";
 import {
   Body1,
   Body2,
@@ -58,7 +59,8 @@ interface SoundContainerProps {
   sizeClass: string;
   sound: {
     file_url: string;
-    hidden: boolean;
+    // Absent on API sounds that were never moderated
+    hidden?: boolean;
   };
 }
 
@@ -147,6 +149,11 @@ const SoundContainer = ( {
     isVisible,
     player,
   ] );
+
+  useEffect( ( ) => {
+    setPlayingAudio( player, playing );
+    return ( ) => setPlayingAudio( player, false );
+  }, [player, playing] );
 
   // Tapping the button can play, pause, or resume
   const togglePlay = useCallback( ( ) => {

@@ -1,8 +1,9 @@
 import { THUMBNAIL_CLASS } from "appConstants/classNames";
+import CachedImage from "components/SharedComponents/CachedImage";
 import IconicTaxonIcon from "components/SharedComponents/IconicTaxonIcon";
 import INatIcon from "components/SharedComponents/INatIcon";
 import UserIcon from "components/SharedComponents/UserIcon";
-import { Image, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import type { ExploreV2Subject } from "providers/ExploreV2Context";
 import React from "react";
 import colors from "styles/tailwindColors";
@@ -17,10 +18,9 @@ const SubjectThumbnail = ( { subject }: Props ) => {
       const photo = subject.taxon.default_photo?.url;
       return photo
         ? (
-          <Image
+          <CachedImage
             source={{ uri: photo }}
             className={THUMBNAIL_CLASS}
-            accessibilityIgnoresInvertColors
             testID="ExploreV2Header.taxonImage"
           />
         )
@@ -36,10 +36,9 @@ const SubjectThumbnail = ( { subject }: Props ) => {
     case "project":
       return subject.project.icon
         ? (
-          <Image
+          <CachedImage
             source={{ uri: subject.project.icon }}
             className={THUMBNAIL_CLASS}
-            accessibilityIgnoresInvertColors
             testID="ExploreV2Header.projectImage"
           />
         )

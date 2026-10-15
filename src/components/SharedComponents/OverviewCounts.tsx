@@ -18,6 +18,7 @@ interface Props {
   counts: Counts;
   onObservationPressed: () => void;
   onSpeciesPressed: () => void;
+  onIdentificationsPressed?: () => void;
   onMembersPressed?: () => void;
   onJournalPostsPressed?: () => void;
   newsEnabled?: boolean;
@@ -88,6 +89,7 @@ const OverviewCounts = ( {
   counts,
   onObservationPressed,
   onSpeciesPressed,
+  onIdentificationsPressed,
   onMembersPressed,
   onJournalPostsPressed,
   newsEnabled,
@@ -108,11 +110,23 @@ const OverviewCounts = ( {
       onPress={onSpeciesPressed}
     />
     {typeof ( counts.identifications_count ) === "number" && (
-      <Count
-        count={counts.identifications_count}
-        label={t( "IDENTIFICATIONS-WITHOUT-NUMBER", { count: counts.identifications_count } )}
-        icon="label"
-      />
+      onIdentificationsPressed
+        ? (
+          <CountPressable
+            accessibilityLabel={t( "See-identifications-by-this-user" )}
+            count={counts.identifications_count}
+            label={t( "IDENTIFICATIONS-WITHOUT-NUMBER", { count: counts.identifications_count } )}
+            icon="label"
+            onPress={onIdentificationsPressed}
+          />
+        )
+        : (
+          <Count
+            count={counts.identifications_count}
+            label={t( "IDENTIFICATIONS-WITHOUT-NUMBER", { count: counts.identifications_count } )}
+            icon="label"
+          />
+        )
     )}
     {( typeof ( counts.members_count ) === "number" || onMembersPressed !== undefined ) && (
       <CountPressable

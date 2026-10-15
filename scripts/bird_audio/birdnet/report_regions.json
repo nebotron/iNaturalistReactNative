@@ -1,0 +1,272 @@
+{
+ "birds, Britain / geo filter": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.971,
+  "precision": 0.66,
+  "fp_per_rec": 0.5,
+  "top1": 0.857
+ },
+ "birds, Britain / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.971,
+  "precision": 0.66,
+  "fp_per_rec": 0.5,
+  "top1": 0.857
+ },
+ "birds, Britain / no geo filter": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.971,
+  "precision": 0.602,
+  "fp_per_rec": 0.64,
+  "top1": 0.857
+ },
+ "birds, California / geo filter": {
+  "n": 70,
+  "species_in_model": 0.971,
+  "species_kept": 0.971,
+  "recall": 0.886,
+  "precision": 0.453,
+  "fp_per_rec": 1.07,
+  "top1": 0.7
+ },
+ "birds, California / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 0.971,
+  "species_kept": 0.971,
+  "recall": 0.886,
+  "precision": 0.449,
+  "fp_per_rec": 1.09,
+  "top1": 0.7
+ },
+ "birds, California / no geo filter": {
+  "n": 70,
+  "species_in_model": 0.971,
+  "species_kept": 0.971,
+  "recall": 0.886,
+  "precision": 0.4,
+  "fp_per_rec": 1.33,
+  "top1": 0.671
+ },
+ "birds, Seattle area / geo filter": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.986,
+  "precision": 0.645,
+  "fp_per_rec": 0.54,
+  "top1": 0.914
+ },
+ "birds, Seattle area / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.986,
+  "precision": 0.645,
+  "fp_per_rec": 0.54,
+  "top1": 0.914
+ },
+ "birds, Seattle area / no geo filter": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.986,
+  "precision": 0.575,
+  "fp_per_rec": 0.73,
+  "top1": 0.914
+ },
+ "birds, eastern Australia / geo filter": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.971,
+  "precision": 0.463,
+  "fp_per_rec": 1.13,
+  "top1": 0.9
+ },
+ "birds, eastern Australia / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.971,
+  "precision": 0.459,
+  "fp_per_rec": 1.14,
+  "top1": 0.9
+ },
+ "birds, eastern Australia / no geo filter": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.971,
+  "precision": 0.389,
+  "fp_per_rec": 1.53,
+  "top1": 0.9
+ },
+ "birds, eastern US / geo filter": {
+  "n": 70,
+  "species_in_model": 0.971,
+  "species_kept": 0.971,
+  "recall": 0.957,
+  "precision": 0.632,
+  "fp_per_rec": 0.56,
+  "top1": 0.8
+ },
+ "birds, eastern US / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 0.971,
+  "species_kept": 0.971,
+  "recall": 0.957,
+  "precision": 0.626,
+  "fp_per_rec": 0.57,
+  "top1": 0.8
+ },
+ "birds, eastern US / no geo filter": {
+  "n": 70,
+  "species_in_model": 0.971,
+  "species_kept": 0.971,
+  "recall": 0.943,
+  "precision": 0.545,
+  "fp_per_rec": 0.79,
+  "top1": 0.786
+ },
+ "frogs, eastern US / geo filter": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.9,
+  "precision": 0.589,
+  "fp_per_rec": 0.63,
+  "top1": 0.786
+ },
+ "frogs, eastern US / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.943,
+  "precision": 0.617,
+  "fp_per_rec": 0.59,
+  "top1": 0.843
+ },
+ "frogs, eastern US / no geo filter": {
+  "n": 70,
+  "species_in_model": 1.0,
+  "species_kept": 1.0,
+  "recall": 0.9,
+  "precision": 0.534,
+  "fp_per_rec": 0.79,
+  "top1": 0.771
+ },
+ "frogs, western US / geo filter": {
+  "n": 70,
+  "species_in_model": 0.586,
+  "species_kept": 0.571,
+  "recall": 0.514,
+  "precision": 0.493,
+  "fp_per_rec": 0.53,
+  "top1": 0.471
+ },
+ "frogs, western US / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 0.586,
+  "species_kept": 0.571,
+  "recall": 0.543,
+  "precision": 0.521,
+  "fp_per_rec": 0.5,
+  "top1": 0.486
+ },
+ "frogs, western US / no geo filter": {
+  "n": 70,
+  "species_in_model": 0.586,
+  "species_kept": 0.586,
+  "recall": 0.529,
+  "precision": 0.416,
+  "fp_per_rec": 0.74,
+  "top1": 0.457
+ },
+ "insects, Europe / geo filter": {
+  "n": 70,
+  "species_in_model": 0.886,
+  "species_kept": 0.886,
+  "recall": 0.671,
+  "precision": 0.662,
+  "fp_per_rec": 0.34,
+  "top1": 0.686
+ },
+ "insects, Europe / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 0.886,
+  "species_kept": 0.886,
+  "recall": 0.7,
+  "precision": 0.653,
+  "fp_per_rec": 0.37,
+  "top1": 0.7
+ },
+ "insects, Europe / no geo filter": {
+  "n": 70,
+  "species_in_model": 0.886,
+  "species_kept": 0.886,
+  "recall": 0.671,
+  "precision": 0.547,
+  "fp_per_rec": 0.56,
+  "top1": 0.643
+ },
+ "insects, eastern US / geo filter": {
+  "n": 70,
+  "species_in_model": 0.986,
+  "species_kept": 0.957,
+  "recall": 0.829,
+  "precision": 0.716,
+  "fp_per_rec": 0.33,
+  "top1": 0.829
+ },
+ "insects, eastern US / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 0.986,
+  "species_kept": 0.957,
+  "recall": 0.829,
+  "precision": 0.699,
+  "fp_per_rec": 0.36,
+  "top1": 0.814
+ },
+ "insects, eastern US / no geo filter": {
+  "n": 70,
+  "species_in_model": 0.986,
+  "species_kept": 0.986,
+  "recall": 0.843,
+  "precision": 0.67,
+  "fp_per_rec": 0.41,
+  "top1": 0.8
+ },
+ "mammals, North America / geo filter": {
+  "n": 70,
+  "species_in_model": 0.986,
+  "species_kept": 0.986,
+  "recall": 0.843,
+  "precision": 0.634,
+  "fp_per_rec": 0.49,
+  "top1": 0.8
+ },
+ "mammals, North America / geo filter + weight": {
+  "n": 70,
+  "species_in_model": 0.986,
+  "species_kept": 0.986,
+  "recall": 0.857,
+  "precision": 0.645,
+  "fp_per_rec": 0.47,
+  "top1": 0.843
+ },
+ "mammals, North America / no geo filter": {
+  "n": 70,
+  "species_in_model": 0.986,
+  "species_kept": 0.986,
+  "recall": 0.843,
+  "precision": 0.546,
+  "fp_per_rec": 0.7,
+  "top1": 0.771
+ }
+}

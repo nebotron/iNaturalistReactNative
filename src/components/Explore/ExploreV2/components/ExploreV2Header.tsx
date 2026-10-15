@@ -21,7 +21,6 @@ import type { ExploreV2Subject } from "providers/ExploreV2Context";
 import { useExploreV2 } from "providers/ExploreV2Context";
 import React from "react";
 import { useCurrentUser, useTranslation } from "sharedHooks";
-import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 const TitleHeader = ( {
@@ -82,20 +81,22 @@ const SubjectHeader = ( {
 );
 
 interface Props {
+  exploreViewIcon: string;
+  exploreViewLabel: string;
+  onPressChangeView: ( ) => void;
   showBackButton: boolean;
 }
 
-const ExploreV2Header = ( { showBackButton }: Props ) => {
+const ExploreV2Header = ( {
+  exploreViewIcon,
+  exploreViewLabel,
+  onPressChangeView,
+  showBackButton,
+}: Props ) => {
   const { t } = useTranslation( );
   const { state } = useExploreV2( );
   const currentUser = useCurrentUser( );
   const navigation = useNavigation<ExploreStackScreenProps<"ExploreResults">["navigation"]>( );
-  const advancedSearchMode = useStore(
-    storeState => storeState.exploreV2AdvancedSearch.advancedSearchMode,
-  );
-  const searchScreen = advancedSearchMode
-    ? "AdvancedSearch"
-    : "UniversalSearch";
   const filterCount = countFilters( state.filters );
 
   const place = locationLabel( state.location, t );
@@ -131,22 +132,28 @@ const ExploreV2Header = ( { showBackButton }: Props ) => {
       <Pressable
         accessible={false}
         className="px-4 pt-1 pb-[10px] flex-row items-center"
-        onPress={() => navigation.navigate( searchScreen )}
+        onPress={() => navigation.navigate( "AdvancedSearch" )}
         testID="ExploreV2Header.pressable"
       >
         {showBackButton && <BackButton />}
         {headerContent}
+        <View className="mr-2">
+          <ContainedSquareButton
+            accessibilityHint={t( "Opens-explore-view-options" )}
+            accessibilityLabel={exploreViewLabel}
+            backgroundColor={colors.darkGray}
+            icon={exploreViewIcon}
+            onPress={onPressChangeView}
+            testID="ExploreV2Header.viewButton"
+          />
+        </View>
         <View>
           <ContainedSquareButton
             accessibilityHint={t( "Opens-search-interface" )}
-            accessibilityLabel={advancedSearchMode
-              ? t( "Filters" )
-              : t( "Search" )}
+            accessibilityLabel={t( "Filters" )}
             backgroundColor={colors.inatGreen}
-            icon={advancedSearchMode
-              ? "sliders"
-              : "magnifying-glass"}
-            onPress={() => navigation.navigate( searchScreen )}
+            icon="sliders"
+            onPress={() => navigation.navigate( "AdvancedSearch" )}
             testID="ExploreV2Header.searchButton"
           />
           {filterCount > 0 && (

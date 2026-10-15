@@ -1,6 +1,7 @@
 import type { PROJECT_SUMMARY_FIELDS } from "api/fields";
 import { searchProjects } from "api/projects";
 import flatten from "lodash/flatten";
+import { useMemo } from "react";
 import {
   useAuthenticatedInfiniteQuery,
 } from "sharedHooks";
@@ -63,21 +64,25 @@ const useInfiniteProjectsScroll = (
   );
 
   const pages = data?.pages;
-  const allResults = pages?.map( page => page?.results );
-  const flattenedProjects = flatten( allResults );
-  // If the server has a requested order, keep it (e.g. Nearby tab's order_by=distance);
-  // otherwise, alphabetize
-  const projects = baseParams.order_by
-    ? flattenedProjects
-    : flattenedProjects.sort( ( a, b ) => {
-      if ( a.title < b.title ) {
-        return -1;
-      }
-      if ( a.title > b.title ) {
-        return 1;
-      }
-      return 0;
-    } );
+  // Flattened and sorted in the render body, this rebuilt every project fetched
+  // so far on every render and handed the list a new array each time. See
+  // useInfiniteExploreScroll for what that costs a screen that scrolls.
+  const projects = useMemo( ( ) => {
+    const flattenedProjects = flatten( pages?.map( page => page?.results ) );
+    // If the server has a requested order, keep it (e.g. Nearby tab's order_by=distance);
+    // otherwise, alphabetize
+    return baseParams.order_by
+      ? flattenedProjects
+      : flattenedProjects.sort( ( a, b ) => {
+        if ( a.title < b.title ) {
+          return -1;
+        }
+        if ( a.title > b.title ) {
+          return 1;
+        }
+        return 0;
+      } );
+  }, [baseParams.order_by, pages] );
 
   return {
     isFetching,

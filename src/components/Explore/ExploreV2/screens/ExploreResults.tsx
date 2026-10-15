@@ -2,36 +2,40 @@ import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect, useRoute } from "@react-navigation/native";
 import type { ApiTotalBounds } from "api/types";
 import {
+  HOTSPOTS_TAB,
   IDENTIFIERS_TAB,
+  IDENTIFY_TAB,
+  LIFELIST_TAB,
   OBSERVATIONS_TAB,
   OBSERVERS_TAB,
   SPECIES_TAB,
 } from "appConstants/tabs";
-import classnames from "classnames";
+import EbirdResults from "components/Explore/EbirdResults";
 import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2MapView
   from "components/Explore/ExploreV2/components/ExploreV2MapView";
-import ExploreV2Tabs
-  from "components/Explore/ExploreV2/components/ExploreV2Tabs";
-import SaveSearchButton
-  from "components/Explore/ExploreV2/components/SaveSearchButton";
 import ExploreV2DebugSheet
   from "components/Explore/ExploreV2/ExploreV2DebugSheet";
 import type { NearbyCoords }
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import buildExploreV2QueryParams
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
-import savedSearchKey from "components/Explore/ExploreV2/helpers/savedSearchKey";
-import useUserTabCounts
-  from "components/Explore/ExploreV2/hooks/useUserTabCounts";
 import ExploreV2SpeciesView
   from "components/Explore/ExploreV2/screens/ExploreV2SpeciesView";
 import ExploreV2UsersView
   from "components/Explore/ExploreV2/screens/ExploreV2UsersView";
 import useInfiniteExploreScroll
   from "components/Explore/hooks/useInfiniteExploreScroll";
+import IdentifyView from "components/Explore/IdentifyView";
+import LifeListView from "components/Explore/LifeListView";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
+import {
+  OfflineMapView,
+  OfflineObservationsView,
+  OfflineSpeciesView,
+  useOfflineExploreResults,
+} from "components/Explore/OfflineExplore";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import {
   Body2,
@@ -41,9 +45,10 @@ import {
   ViewWrapper,
 } from "components/SharedComponents";
 import SortButton from "components/SharedComponents/Buttons/SortButton";
-import Toast from "components/SharedComponents/Toast";
 import { View } from "components/styledComponents";
+import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
 import type { ExploreStackScreenProps } from "navigation/types";
+import type { ExploreV2Tab } from "providers/ExploreV2Context";
 import { EXPLORE_V2_ACTION, EXPLORE_V2_PLACE_MODE, useExploreV2 } from "providers/ExploreV2Context";
 import React, { useCallback, useMemo, useState } from "react";
 import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
@@ -62,12 +67,14 @@ import useCurrentUser from "sharedHooks/useCurrentUser";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import useSpeciesCount from "sharedHooks/useSpeciesCount";
 import useStoredLayout from "sharedHooks/useStoredLayout";
-import { SAVED_LIMIT } from "stores/createExploreV2SearchesSlice";
 import useStore from "stores/useStore";
 
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
 import fetchCoarseUserLocation from "../../../../sharedHelpers/fetchCoarseUserLocation";
+import {
+  getLatestTrackedLocation,
+} from "../../../../sharedHelpers/locationHistoryTracker";
 
 interface SortOption<SortValue> {
   label: string;
@@ -75,7 +82,17 @@ interface SortOption<SortValue> {
   value: SortValue;
 }
 
-type SaveToast = "added" | "removed" | "limitReached";
+const EXPLORE_VIEW_ICONS: Record<ExploreV2Tab, string> = {
+  [OBSERVATIONS_TAB]: "binoculars",
+  [IDENTIFY_TAB]: "id-agree",
+  [SPECIES_TAB]: "leaf",
+  [HOTSPOTS_TAB]: "location",
+  [OBSERVERS_TAB]: "observers",
+  [IDENTIFIERS_TAB]: "identifiers",
+  [LIFELIST_TAB]: "list",
+};
+
+const noop = ( ) => undefined;
 
 const ExploreResults = ( ) => {
   const { dispatch, state } = useExploreV2( );
@@ -91,16 +108,10 @@ const ExploreResults = ( ) => {
   const { isConnected } = useNetInfo( );
   const { t } = useTranslation( );
   const [showSortSheet, setShowSortSheet] = useState( false );
-  const [saveToast, setSaveToast] = useState<SaveToast | null>( null );
-  const savedSearches = useStore( storeState => storeState.exploreSavedSearches.searches );
-  const saveSearch = useStore( storeState => storeState.exploreSavedSearches.saveSearch );
-  const removeSearch = useStore( storeState => storeState.exploreSavedSearches.removeSearch );
+  const [showViewSheet, setShowViewSheet] = useState( false );
   const observationsSortLabels = useObservationsSortLabels( );
   const speciesSortLabels = useSpeciesSortLabels( );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreV2ObservationsLayout" );
-  const advancedSearchMode = useStore(
-    storeState => storeState.exploreV2AdvancedSearch.advancedSearchMode,
-  );
 
   const showMap = layout === "map";
 
@@ -139,10 +150,12 @@ const ExploreResults = ( ) => {
       // perms blocked: fall back to worldwide
       dispatch( { type: EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE } );
     } else if ( isNearby && hasPermissions === true && nearbyCoords === undefined ) {
-      fetchCoarseUserLocation( ).then( location => {
+      getLatestTrackedLocation( ).then(
+        tracked => tracked ?? fetchCoarseUserLocation( ),
+      ).then( location => {
         if ( cancelled ) return;
         if ( typeof location?.latitude === "number" ) {
-          setNearbyCoords( { lat: location.latitude, lng: location.longitude, radius: 1 } );
+          setNearbyCoords( { lat: location.latitude, lng: location.longitude } );
         } else {
           // Perms granted but no fix — fall back to worldwide.
           dispatch( { type: EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE } );
@@ -168,12 +181,13 @@ const ExploreResults = ( ) => {
   const needsPermission = isNearby && hasPermissions === false && !hasBlockedPermissions;
   const nearbyResolved = !isNearby || nearbyCoords !== undefined;
   const canFetch = !needsPermission && nearbyResolved;
-  const showingResults = isConnected !== false && !needsPermission;
 
   const queryParams = useMemo(
     ( ) => buildExploreV2QueryParams( state, nearbyCoords, currentUserId ),
     [state, nearbyCoords, currentUserId],
   );
+
+  const offlineResults = useOfflineExploreResults( queryParams );
 
   const {
     fetchNextPage,
@@ -201,6 +215,12 @@ const ExploreResults = ( ) => {
     return filterParams;
   }, [queryParams] );
 
+  const hotspotSettings = useStore( s => s.layout.hotspotSettings );
+  const hotspotParams = useMemo(
+    ( ) => ( { ...baseSearchParams, ...hotspotSettings } ),
+    [baseSearchParams, hotspotSettings],
+  );
+
   const speciesListParams = useMemo( ( ) => ( {
     ...baseSearchParams,
     ...speciesSortToApiParams( state.speciesSortBy ),
@@ -211,10 +231,72 @@ const ExploreResults = ( ) => {
     { enabled: canFetch, keyPrefix: "exploreV2SpeciesCount" },
   );
 
-  const { observersCount, identifiersCount } = useUserTabCounts(
-    baseSearchParams,
-    { enabled: canFetch && advancedSearchMode },
-  );
+  const exploreViews: Record<ExploreV2Tab, {
+    buttonText: string;
+    icon: string;
+    label: string;
+    text: string;
+    value: ExploreV2Tab;
+  }> = {
+    [OBSERVATIONS_TAB]: {
+      buttonText: t( "EXPLORE-OBSERVATIONS" ),
+      icon: "observations",
+      label: t( "Observations" ),
+      text: t( "Individual-encounters-with-organisms" ),
+      value: OBSERVATIONS_TAB,
+    },
+    [IDENTIFY_TAB]: {
+      buttonText: t( "IDENTIFY" ),
+      icon: "id-agree",
+      label: t( "Identify" ),
+      text: t( "Identify-observations-one-at-a-time" ),
+      value: IDENTIFY_TAB,
+    },
+    [SPECIES_TAB]: {
+      buttonText: t( "EXPLORE-SPECIES" ),
+      icon: "species",
+      label: t( "Species" ),
+      text: t( "Organisms-that-are-identified-to-species" ),
+      value: SPECIES_TAB,
+    },
+    [HOTSPOTS_TAB]: {
+      buttonText: t( "EXPLORE-HOTSPOTS" ),
+      icon: "location",
+      label: t( "Hotspots" ),
+      text: t( "Clusters-of-observations-along-a-route" ),
+      value: HOTSPOTS_TAB,
+    },
+    [OBSERVERS_TAB]: {
+      buttonText: t( "EXPLORE-OBSERVERS" ),
+      icon: "observers",
+      label: t( "Observers" ),
+      text: t( "iNaturalist-users-who-have-observed" ),
+      value: OBSERVERS_TAB,
+    },
+    [IDENTIFIERS_TAB]: {
+      buttonText: t( "EXPLORE-IDENTIFIERS" ),
+      icon: "identifiers",
+      label: t( "Identifiers" ),
+      text: t( "iNaturalist-users-who-have-left-an-identification" ),
+      value: IDENTIFIERS_TAB,
+    },
+    [LIFELIST_TAB]: {
+      buttonText: t( "EXPLORE-LIFE-LIST" ),
+      icon: "list",
+      label: t( "Life-List" ),
+      text: t( "Each-species-with-the-date-it-was-first-observed" ),
+      value: LIFELIST_TAB,
+    },
+  };
+  const exploreViewA11yLabels: Record<ExploreV2Tab, string> = {
+    [OBSERVATIONS_TAB]: t( "Observations-View" ),
+    [IDENTIFY_TAB]: t( "Identify-View" ),
+    [SPECIES_TAB]: t( "Species-View" ),
+    [HOTSPOTS_TAB]: t( "Hotspots-View" ),
+    [OBSERVERS_TAB]: t( "Observers-View" ),
+    [IDENTIFIERS_TAB]: t( "Identifiers-View" ),
+    [LIFELIST_TAB]: t( "Life-List-View" ),
+  };
 
   const renderPermissionPrompt = ( ) => (
     <View className="flex-1 justify-center p-4">
@@ -230,42 +312,6 @@ const ExploreResults = ( ) => {
       />
     </View>
   );
-
-  const {
-    subject, location, filters, sortBy, speciesSortBy,
-  } = state;
-  const currentSearchKey = useMemo(
-    ( ) => savedSearchKey( {
-      subject, location, sortBy, speciesSortBy, filters,
-    } ),
-    [filters, location, sortBy, speciesSortBy, subject],
-  );
-  const isSaved = savedSearches.some( saved => saved.key === currentSearchKey );
-
-  const saveToastText = ( toast: SaveToast ) => {
-    switch ( toast ) {
-      case "added":
-        return t( "Added-to-Saved-Searches" );
-      case "removed":
-        return t( "Removed-from-Saved-Searches" );
-      default:
-        return t( "Saved-search-not-added-maximum-of-X", { count: SAVED_LIMIT } );
-    }
-  };
-
-  const handleSavePress = ( ) => {
-    if ( isSaved ) {
-      removeSearch( currentSearchKey );
-      setSaveToast( "removed" );
-    } else if ( savedSearches.length >= SAVED_LIMIT ) {
-      setSaveToast( "limitReached" );
-    } else {
-      saveSearch( {
-        key: currentSearchKey, subject, location, sortBy, speciesSortBy, filters,
-      } );
-      setSaveToast( "added" );
-    }
-  };
 
   const renderTabContent = ( ) => {
     switch ( state.activeTab ) {
@@ -294,6 +340,7 @@ const ExploreResults = ( ) => {
                   data={observations}
                   dataCanBeFetched={canFetch}
                   explore
+                  fullWidthGrid={layout !== "list"}
                   handlePullToRefresh={handlePullToRefresh}
                   hideLoadingWheel={!isFetchingNextPage}
                   isFetchingNextPage={isFetchingNextPage}
@@ -301,6 +348,7 @@ const ExploreResults = ( ) => {
                   layout={layout === "list"
                     ? "list"
                     : "grid"}
+                  listHeaderContent={<EbirdResults enabled={canFetch} params={queryParams} />}
                   // bit over a misnomer on this prop; in this case it hides the
                   // ID/comments/quality badges that grid results can technically have
                   hideObsUploadStatus={layout !== "list"}
@@ -344,6 +392,30 @@ const ExploreResults = ( ) => {
           </>
         );
       }
+      case HOTSPOTS_TAB:
+        return (
+          <WildlifeHotspotsScreen
+            embedded
+            filterParams={hotspotParams}
+          />
+        );
+      case IDENTIFY_TAB:
+        return (
+          <IdentifyView
+            canFetch={canFetch}
+            queryParams={baseSearchParams}
+            handleUpdateCount={noop}
+          />
+        );
+      case LIFELIST_TAB:
+        return (
+          <LifeListView
+            canFetch={canFetch}
+            isConnected={Boolean( isConnected )}
+            queryParams={baseSearchParams}
+            handleUpdateCount={noop}
+          />
+        );
       case OBSERVERS_TAB:
       case IDENTIFIERS_TAB:
         return (
@@ -364,6 +436,35 @@ const ExploreResults = ( ) => {
   };
 
   const renderContent = ( ) => {
+    if ( isConnected === false && offlineResults && state.activeTab === OBSERVATIONS_TAB ) {
+      // Grid is unavailable offline; show the list in its place
+      const offlineLayout = showMap
+        ? "map"
+        : "list";
+      return (
+        <>
+          {showMap
+            ? <OfflineMapView queryParams={queryParams} />
+            : <OfflineObservationsView layout={offlineLayout} queryParams={queryParams} />}
+          <ObservationsViewBar
+            layout={offlineLayout}
+            updateObservationsView={writeLayoutToStorage}
+            viewOptions={["map", "list"]}
+          />
+        </>
+      );
+    }
+    if ( isConnected === false && offlineResults && state.activeTab === SPECIES_TAB ) {
+      return (
+        <>
+          <OfflineSpeciesView queryParams={speciesListParams} />
+          <SortButton
+            onPress={() => setShowSortSheet( true )}
+            accessibilityLabel={t( "Change-species-sort-order" )}
+          />
+        </>
+      );
+    }
     if ( isConnected === false ) {
       return (
         <View className="flex-1">
@@ -374,8 +475,19 @@ const ExploreResults = ( ) => {
     if ( needsPermission ) {
       return renderPermissionPrompt( );
     }
+    const totalCount = {
+      [OBSERVATIONS_TAB]: typeof totalResults === "number"
+        && t( "X-Observations", { count: totalResults } ),
+      [SPECIES_TAB]: typeof speciesCount === "number"
+        && t( "X-Species", { count: speciesCount } ),
+    }[state.activeTab as string];
     return (
       <>
+        {totalCount && (
+          <Body2 className="px-5 pb-2" testID="ExploreResults.totalCount">
+            {totalCount}
+          </Body2>
+        )}
         {renderTabContent( )}
         <ExploreV2DebugSheet />
       </>
@@ -385,50 +497,13 @@ const ExploreResults = ( ) => {
   return (
     <ViewWrapper testID="ExploreResults" wrapperClassName="overflow-hidden">
       <View className="flex-1 overflow-hidden">
-        <ExploreV2Header showBackButton={Boolean( params?.showBackButton )} />
-        <ExploreV2Tabs
-          observationsCount={canFetch
-            ? totalResults
-            : undefined}
-          speciesCount={canFetch
-            ? speciesCount
-            : undefined}
-          observersCount={canFetch
-            ? observersCount
-            : undefined}
-          identifiersCount={canFetch
-            ? identifiersCount
-            : undefined}
+        <ExploreV2Header
+          exploreViewIcon={EXPLORE_VIEW_ICONS[state.activeTab]}
+          exploreViewLabel={exploreViewA11yLabels[state.activeTab]}
+          onPressChangeView={( ) => setShowViewSheet( true )}
+          showBackButton={Boolean( params?.showBackButton )}
         />
         {renderContent( )}
-        {showingResults && (
-          <View
-            className={classnames(
-              "absolute left-5 right-5 z-10 flex-row items-center justify-end",
-              state.activeTab === OBSERVATIONS_TAB && showMap
-                ? "bottom-[140px]"
-                : "bottom-[82px]",
-            )}
-            pointerEvents="box-none"
-          >
-            {saveToast && (
-              <View
-                className="absolute left-0 right-0 items-center"
-                pointerEvents="box-none"
-              >
-                <Toast
-                  onHide={( ) => setSaveToast( null )}
-                  testID="ExploreResults.saveToast"
-                  text={saveToastText( saveToast )}
-                />
-              </View>
-            )}
-            <SaveSearchButton
-              isSaved={isSaved}
-              onPress={handleSavePress}
-            />
-          </View>
-        )}
       </View>
       {showSortSheet && state.activeTab === OBSERVATIONS_TAB && (
         <RadioButtonSheet
@@ -458,6 +533,23 @@ const ExploreResults = ( ) => {
             setShowSortSheet( false );
           }}
           onPressClose={() => setShowSortSheet( false )}
+        />
+      )}
+      {showViewSheet && (
+        <RadioButtonSheet
+          immediate
+          headerText={t( "EXPLORE" )}
+          radioValues={exploreViews}
+          selectedValue={state.activeTab}
+          confirm={tab => {
+            dispatch( {
+              type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB,
+              tab: tab as ExploreV2Tab,
+            } );
+            setShowViewSheet( false );
+          }}
+          onPressClose={() => setShowViewSheet( false )}
+          testID="ExploreV2ViewSheet"
         />
       )}
       {renderPermissionsGate( {} )}

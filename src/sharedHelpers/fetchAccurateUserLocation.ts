@@ -1,19 +1,12 @@
+import type { UserLocation } from "./accuratePositionWatcher";
+import { waitForAccuratePosition } from "./accuratePositionWatcher";
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
 import {
   checkLocationPermissions,
   getCurrentPositionWithOptions,
-  highAccuracyOptions,
   lowAccuracyOptions,
 } from "./geolocationWrapper";
-
-interface UserLocation {
-  latitude: number;
-  longitude: number;
-  positional_accuracy: number;
-  altitude: number | null;
-  altitudinal_accuracy: number | null;
-}
 
 const fetchAccurateUserLocation = async (): Promise<UserLocation | null> => {
   const permissionResult = await checkLocationPermissions( );
@@ -22,23 +15,14 @@ const fetchAccurateUserLocation = async (): Promise<UserLocation | null> => {
   }
 
   try {
-    const highAccuracyResult = await getCurrentPositionWithOptions( highAccuracyOptions )
-      .catch( error => {
-        console.warn( "High accuracy location failed, falling back to low accuracy", error );
-        return null;
-      } );
-
-    if ( highAccuracyResult ) {
-      return {
-        latitude: highAccuracyResult.coords.latitude,
-        longitude: highAccuracyResult.coords.longitude,
-        positional_accuracy: highAccuracyResult.coords.accuracy,
-        altitude: highAccuracyResult.coords.altitude,
-        altitudinal_accuracy: highAccuracyResult.coords.altitudeAccuracy,
-      };
+    // Watches until the fix is accurate enough rather than taking the first
+    // one the OS produces, which is usually a coarse network or cached fix
+    const accurateResult = await waitForAccuratePosition( );
+    if ( accurateResult ) {
+      return accurateResult;
     }
 
-    const lowAccuracyResult = await getCurrentPositionWithOptions( lowAccuracyOptions, 2 );
+    const lowAccuracyResult = await getCurrentPositionWithOptions( lowAccuracyOptions );
 
     return {
       latitude: lowAccuracyResult.coords.latitude,

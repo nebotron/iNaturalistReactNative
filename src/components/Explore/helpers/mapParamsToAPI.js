@@ -9,6 +9,10 @@ import {
   WILD_STATUS,
 } from "providers/ExploreContext";
 
+import { evidenceTypesToApiParams } from "./evidenceTypes";
+import { taxonFiltersToApiParams } from "./taxonFilters";
+import { userFiltersToApiParams } from "./userFilters";
+
 const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   const RESEARCH = "research";
   const NEEDS_ID = "needs_id";
@@ -94,12 +98,26 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.captive = true;
   }
 
+  Object.assign( filteredParams, evidenceTypesToApiParams( params.evidenceTypes ) );
+
   if ( params.reviewedFilter === REVIEWED.REVIEWED ) {
     filteredParams.reviewed = true;
     filteredParams.viewer_id = currentUser?.id;
   } else if ( params.reviewedFilter === REVIEWED.UNREVIEWED ) {
     filteredParams.reviewed = false;
     filteredParams.viewer_id = currentUser?.id;
+  }
+
+  if ( params.unobservedByMe && currentUser?.id ) {
+    filteredParams.unobserved_by_user_id = currentUser.id;
+  }
+
+  if ( params.popular ) {
+    filteredParams.popular = true;
+  }
+
+  if ( params.hasLocationMissing ) {
+    filteredParams.geo = false;
   }
 
   if ( params.photoLicense !== PHOTO_LICENSE.ALL ) {
@@ -116,16 +134,40 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.photo_license = licenseParams[params.photoLicense];
   }
 
-  if ( params.excludeUser?.id ) {
-    filteredParams.not_user_id = params.excludeUser.id;
+  const taxonFilterParams = taxonFiltersToApiParams( params.taxonFilters );
+  if ( taxonFilterParams.taxon_id ) {
+    filteredParams.taxon_id = taxonFilterParams.taxon_id;
+    delete filteredParams.taxon_ids;
+  } else {
+    delete filteredParams.taxon_id;
+  }
+  if ( taxonFilterParams.without_taxon_id ) {
+    filteredParams.without_taxon_id = taxonFilterParams.without_taxon_id;
+  } else {
+    delete filteredParams.without_taxon_id;
+  }
+
+  const userFilterParams = userFiltersToApiParams( params.userFilters );
+  if ( userFilterParams.user_id ) {
+    filteredParams.user_id = userFilterParams.user_id;
+  } else {
+    delete filteredParams.user_id;
+  }
+
+  if ( userFilterParams.not_user_id ) {
+    filteredParams.not_user_id = userFilterParams.not_user_id;
+  } else {
+    delete filteredParams.not_user_id;
   }
 
   delete filteredParams.taxon;
+  delete filteredParams.taxonFilters;
+  delete filteredParams.userFilters;
   delete filteredParams.place_guess;
   delete filteredParams.placeMode;
   delete filteredParams.user;
-  delete filteredParams.project;
   delete filteredParams.excludeUser;
+  delete filteredParams.project;
   delete filteredParams.sortBy;
   delete filteredParams.researchGrade;
   delete filteredParams.needsID;
@@ -135,9 +177,12 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   delete filteredParams.media;
   delete filteredParams.establishmentMean;
   delete filteredParams.wildStatus;
+  delete filteredParams.evidenceTypes;
   delete filteredParams.reviewedFilter;
   delete filteredParams.photoLicense;
   delete filteredParams.place;
+  delete filteredParams.unobservedByMe;
+  delete filteredParams.hasLocationMissing;
 
   return filteredParams;
 };

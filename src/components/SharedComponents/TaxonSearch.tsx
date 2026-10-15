@@ -2,11 +2,7 @@ import type { ParamListBase } from "@react-navigation/native";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import EmptySearchResults from "components/Explore/SearchScreens/EmptySearchResults";
-import {
-  Body2,
-  INatIcon,
-  SearchBar,
-} from "components/SharedComponents";
+import SearchBar from "components/SharedComponents/SearchBar";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
@@ -17,7 +13,7 @@ import type { ListRenderItem, TextInput } from "react-native";
 import { FlatList } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { RealmTaxon } from "realmModels/types";
-import { useKeyboardInfo, useTranslation } from "sharedHooks";
+import { useKeyboardInfo } from "sharedHooks";
 import { getShadow } from "styles/global";
 
 const DROP_SHADOW = getShadow( {
@@ -35,7 +31,6 @@ interface Props {
   // component is rendered as its own navigation screen.
   focusAfterTransition?: boolean;
   isLoading?: boolean;
-  isLocal?: boolean;
   renderItem: ListRenderItem<RealmTaxon>;
   taxa: RealmTaxon[];
 }
@@ -43,7 +38,6 @@ interface Props {
 const TaxonSearch = ( {
   focusAfterTransition = false,
   isLoading = false,
-  isLocal = false,
   query = "",
   renderItem,
   setQuery,
@@ -54,7 +48,6 @@ const TaxonSearch = ( {
   const paddingBottom = !hasBottomTabBar
     ? bottom
     : 0;
-  const { t } = useTranslation( );
   const { keyboardHeight, keyboardShown } = useKeyboardInfo( );
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>( );
   const searchInputRef = useRef<TextInput>( null );
@@ -113,16 +106,6 @@ const TaxonSearch = ( {
           autoFocus={!focusAfterTransition && query === ""}
           input={searchInputRef}
         />
-        { isLocal && (
-          <View className="flex-row items-center gap-x-[19px] mt-[21px]">
-            <View accessibilityElementsHidden importantForAccessibility="no" aria-hidden>
-              <INatIcon name="offline" size={34} />
-            </View>
-            <Body2 className="flex-1">
-              { t( "Showing-offline-search-results--taxa" )}
-            </Body2>
-          </View>
-        ) }
       </View>
       <FlatList
         keyboardShouldPersistTaps="always"

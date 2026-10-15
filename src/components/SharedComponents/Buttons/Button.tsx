@@ -1,10 +1,46 @@
 import { tailwindFontBold } from "appConstants/fontFamilies";
 import { ActivityIndicator, Heading4, INatIcon } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
-import React, { useRef, useState } from "react";
+import { getCurrentRoute } from "navigation/navigationUtils";
+import React, { useEffect, useRef, useState } from "react";
 import type { AccessibilityRole, GestureResponderEvent, ViewStyle } from "react-native";
+import { log } from "sharedHelpers/logger";
 import colors from "styles/tailwindColors";
 import { twMerge } from "tailwind-merge";
+
+const logger = log.extend( "Button" );
+
+// Reports an otherwise invisible failure: a healthy JS thread and a button
+// that has latched, which is what "the app stopped responding to taps until I
+// restarted it" looks like. A disabled Pressable never fires onPress, so a
+// latched button emits nothing on its own — it has to be noticed from the
+// state that latched.
+//
+// Only these two flags are watched, never the caller's `disabled` prop: plenty
+// of buttons are legitimately disabled for minutes (a form waiting on a field),
+// so watching that would be noise. These two have a bounded honest duration.
+
+// isProcessing is the debounce latch, released debounceTime (300ms) after a
+// press. Anything near this is a bug by construction.
+const STUCK_PROCESSING_MS = 10_000;
+// `loading` is the caller waiting on real work — an upload, a Photos-library
+// delete — so it needs room. Past this the await it hangs on is not coming
+// back, and the button is dead for the life of the screen.
+const STUCK_LOADING_MS = 120_000;
+
+const useStuckWatchdog = ( latched: boolean, marker: string, text: string, forMs: number ) => {
+  useEffect( ( ) => {
+    if ( !latched ) { return ( ) => undefined; }
+    const timer = setTimeout( ( ) => {
+      logger.errorWithExtra( marker, {
+        text,
+        screen: getCurrentRoute( )?.name ?? "unknown",
+        forMs,
+      } );
+    }, forMs );
+    return ( ) => clearTimeout( timer );
+  }, [latched, marker, text, forMs] );
+};
 
 interface ButtonProps {
   accessibilityHint?: string;
@@ -23,6 +59,7 @@ interface ButtonProps {
   text: string;
   dropdown?: boolean;
   maxFontSizeMultiplier?: number;
+  adjustsFontSizeToFit?: boolean;
   debounceTime?: number;
   preventMultipleTaps?: boolean;
 }
@@ -145,13 +182,22 @@ const Button = ( {
   text,
   dropdown,
   maxFontSizeMultiplier = 1.5,
+  adjustsFontSizeToFit = false,
   debounceTime = 300,
   preventMultipleTaps = true,
 }: ButtonProps ) => {
   const [isProcessing, setIsProcessing] = useState( false );
   const onPressRef = useRef( onPress );
+  const resetTimer = useRef<ReturnType<typeof setTimeout> | null>( null );
 
   onPressRef.current = onPress;
+
+  useEffect( ( ) => ( ) => {
+    if ( resetTimer.current ) { clearTimeout( resetTimer.current ); }
+  }, [] );
+
+  useStuckWatchdog( isProcessing, "button_stuck_processing", text, STUCK_PROCESSING_MS );
+  useStuckWatchdog( !!loading, "button_stuck_loading", text, STUCK_LOADING_MS );
 
   const isPrimary = level === "primary";
   const isWarning = level === "warning";
@@ -172,11 +218,26 @@ const Button = ( {
     }
 
     setIsProcessing( true );
-    onPressRef.current( event );
-
-    setTimeout( ( ) => {
+    // Schedule the re-enable *before* running the handler, not after. A handler
+    // that throws — reading a Realm object the write behind it just
+    // invalidated, say — used to skip this line entirely and leave the button
+    // disabled for as long as its screen stayed mounted, which for a screen
+    // sitting in the navigation stack means until the app is restarted. React
+    // error boundaries don't see throws from event handlers, so nothing on
+    // screen said why the button had stopped answering taps.
+    resetTimer.current = setTimeout( ( ) => {
+      resetTimer.current = null;
       setIsProcessing( false );
     }, debounceTime );
+
+    try {
+      onPressRef.current( event );
+    } catch ( error ) {
+      // Rethrown so dev builds still redbox; logged because in a release build
+      // this is otherwise completely silent.
+      logger.errorWithExtra( "button_press_threw", error, { text } );
+      throw error;
+    }
     return null;
   };
 
@@ -217,6 +278,7 @@ const Button = ( {
         className={twMerge( ...textClasses )}
         testID={`${testID || "RNButton"}.text`}
         maxFontSizeMultiplier={maxFontSizeMultiplier}
+        adjustsFontSizeToFit={adjustsFontSizeToFit}
         numberOfLines={3}
       >
         {text}

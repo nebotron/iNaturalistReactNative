@@ -1,4 +1,9 @@
 import type { ApiTaxon } from "api/types";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import {
+  normalizeTaxonFilters,
+  toExploreTaxonFilterTaxon,
+} from "components/Explore/helpers/taxonFilters";
 import {
   SearchHeader,
   TaxonResult,
@@ -18,14 +23,20 @@ interface Props {
   closeModal: ( ) => void;
   hideInfoButton?: boolean;
   onPressInfo?: ( taxon: RealmTaxon | ApiTaxon ) => void;
-  updateTaxon: ( taxon: RealmTaxon | null ) => void;
+  taxonFilters?: ExploreTaxonFilter[];
+  // Single-taxon pickers (project fields, Advanced Search) pass updateTaxon;
+  // Explore's multi-taxon filter passes updateTaxonFilters
+  updateTaxon?: ( taxon: RealmTaxon | null ) => void;
+  updateTaxonFilters?: ( taxonFilters: ExploreTaxonFilter[] ) => void;
 }
 
 const ExploreTaxonSearch = ( {
   closeModal,
   hideInfoButton = false,
   onPressInfo,
+  taxonFilters = [],
   updateTaxon,
+  updateTaxonFilters,
 }: Props ) => {
   const { t } = useTranslation( );
   const [taxonQuery, setTaxonQuery] = useState( "" );
@@ -33,21 +44,33 @@ const ExploreTaxonSearch = ( {
   const {
     taxa,
     isLoading,
-    isLocal,
   } = useTaxonSearch( taxonQuery );
 
-  const onTaxonSelected = useCallback( async ( newTaxon: RealmTaxon ) => {
-    updateTaxon( newTaxon );
-    closeModal();
-  }, [closeModal, updateTaxon] );
+  const onTaxonSelected = useCallback( ( taxon: RealmTaxon ) => {
+    if ( updateTaxon ) {
+      updateTaxon( taxon );
+      closeModal( );
+      return;
+    }
+    const alreadyAdded = taxonFilters.some( f => f.taxon.id === taxon.id );
+    if ( !alreadyAdded ) {
+      updateTaxonFilters?.( normalizeTaxonFilters( [
+        ...taxonFilters,
+        { taxon: toExploreTaxonFilterTaxon( taxon ), exclude: false },
+      ] ) );
+    }
+    closeModal( );
+  }, [closeModal, taxonFilters, updateTaxon, updateTaxonFilters] );
 
-  const resetTaxon = useCallback(
-    ( ) => {
-      updateTaxon( null );
-      closeModal();
-    },
-    [updateTaxon, closeModal],
-  );
+  const resetTaxon = useCallback( ( ) => {
+    updateTaxon?.( null );
+    updateTaxonFilters?.( [] );
+    closeModal( );
+  }, [updateTaxon, updateTaxonFilters, closeModal] );
+
+  const getFilterForTaxon = useCallback( ( taxonId: number ) => (
+    taxonFilters.find( filter => filter.taxon.id === taxonId )
+  ), [taxonFilters] );
 
   const renderItem: ListRenderItem<RealmTaxon> = useCallback(
     ( { item: taxon, index } ) => (
@@ -57,11 +80,13 @@ const ExploreTaxonSearch = ( {
         handleTaxonOrEditPress={() => onTaxonSelected( taxon )}
         hideInfoButton={hideInfoButton}
         onPressInfo={onPressInfo}
+        showCheckmark={!!getFilterForTaxon( taxon.id )}
         taxon={taxon}
         testID={`Search.taxa.${taxon.id}`}
       />
     ),
     [
+      getFilterForTaxon,
       hideInfoButton,
       onPressInfo,
       onTaxonSelected,
@@ -78,7 +103,6 @@ const ExploreTaxonSearch = ( {
       />
       <TaxonSearch
         isLoading={isLoading}
-        isLocal={isLocal}
         query={taxonQuery}
         renderItem={renderItem}
         setQuery={setTaxonQuery}

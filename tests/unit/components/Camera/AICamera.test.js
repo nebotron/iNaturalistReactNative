@@ -4,6 +4,7 @@ import * as usePredictions from "components/Camera/AICamera/hooks/usePredictions
 import i18next from "i18next";
 import React from "react";
 import * as useTaxon from "sharedHooks/useTaxon";
+import cachedImageUri from "tests/helpers/cachedImageUri";
 
 const mockTaxonPrediction = {
   id: 144351,
@@ -113,11 +114,7 @@ describe( "AI Camera", ( ) => {
 
     const taxonPhoto = screen.getByTestId( "ObsList.photo" );
 
-    expect( taxonPhoto.props.source ).toMatchObject(
-      {
-        url: mockLocalTaxon.default_photo.url,
-      },
-    );
+    expect( cachedImageUri( taxonPhoto ) ).toStrictEqual( mockLocalTaxon.default_photo.url );
   } );
 
   it( "displays iconic taxon icon if taxon does not exist in realm", ( ) => {

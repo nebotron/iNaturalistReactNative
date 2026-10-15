@@ -12,7 +12,10 @@ import React, {
   useCallback, useState,
 } from "react";
 import { BackHandler } from "react-native";
-import Observation from "realmModels/Observation";
+import {
+  saveObservationsAndApplyTrackedLocation,
+} from "sharedHelpers/applyTrackedLocationToPhotos";
+import shouldPromptDeleteOriginalPhotos from "sharedHelpers/shouldPromptDeleteOriginalPhotos";
 import { useExitObservationFlow, useTranslation } from "sharedHooks";
 import useObsEditRollback from "sharedHooks/useObsEditRollback";
 import useStore from "stores/useStore";
@@ -184,10 +187,10 @@ const ObsEditHeader = ( {
           <KebabMenu.Item
             testID="Header.save-all-observation"
             onPress={async ( ) => {
-              await Promise.all(
-                observations.map( o => Observation.saveLocalObservationForUpload( o, realm ) ),
-              );
-              exitObservationFlow( );
+              await saveObservationsAndApplyTrackedLocation( observations, realm );
+              exitObservationFlow( {
+                promptDeleteOriginalPhotos: shouldPromptDeleteOriginalPhotos( ),
+              } );
               setKebabMenuVisible( false );
             }}
             title={t( "Save-all-observations" )}
@@ -233,7 +236,9 @@ const ObsEditHeader = ( {
           discardObservation={discardObservation}
           onPressClose={( ) => setDiscardObservationSheetVisible( false )}
           observations={observations}
-          onSave={( ) => exitObservationFlow( )}
+          onSave={( ) => exitObservationFlow( {
+            promptDeleteOriginalPhotos: shouldPromptDeleteOriginalPhotos( ),
+          } )}
         />
       )}
       {discardChangesSheetVisible && (

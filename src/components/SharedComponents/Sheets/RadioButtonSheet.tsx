@@ -26,6 +26,7 @@ interface Props<ValueT extends RadioSheetPrimitive> {
   confirmText?: string;
   headerText: string;
   hidden?: boolean;
+  immediate?: boolean;
   insideModal?: boolean;
   loading?: boolean;
   onPressClose?: ( ) => void;
@@ -45,6 +46,7 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
   confirmText,
   headerText,
   hidden,
+  immediate,
   insideModal,
   loading,
   onPressClose,
@@ -68,7 +70,12 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
         value={radioValues[radioRow].value.toString( )}
         icon={radioValues[radioRow].icon}
         checked={checkedValue === radioValues[radioRow].value}
-        onPress={() => setCheckedValue( radioValues[radioRow].value )}
+        onPress={() => {
+          setCheckedValue( radioValues[radioRow].value );
+          if ( immediate ) {
+            confirm( radioValues[radioRow].value );
+          }
+        }}
         label={radioValues[radioRow].label}
         description={radioValues[radioRow].text}
         labelComponent={radioValues[radioRow].labelComponent}
@@ -108,14 +115,16 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
           {Object.keys( radioValues ).map( radioRow => radioButtonRow( radioRow ) )}
         </View>
         {bottomComponent}
-        {secondaryButton
-          ? (
-            <View className="flex-row gap-x-4">
-              {secondaryButton}
-              {renderConfirmButton( "flex-1" )}
-            </View>
-          )
-          : renderConfirmButton( )}
+        {!immediate && (
+          secondaryButton
+            ? (
+              <View className="flex-row gap-x-4">
+                {secondaryButton}
+                {renderConfirmButton( "flex-1" )}
+              </View>
+            )
+            : renderConfirmButton( )
+        )}
       </View>
     </BottomSheet>
   );

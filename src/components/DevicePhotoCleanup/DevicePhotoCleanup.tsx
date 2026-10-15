@@ -1,0 +1,355 @@
+/* eslint-disable i18next/no-literal-string */
+import { getJWT } from "components/LoginSignUp/AuthenticationService";
+import DevicePhotoGrid from "components/PhotoImporter/DevicePhotoGrid";
+import DevicePhotoImage from "components/PhotoImporter/DevicePhotoImage";
+import {
+  ActivityIndicator,
+  Body2,
+  Button,
+  Heading4,
+  ViewWrapper,
+} from "components/SharedComponents";
+import Modal from "components/SharedComponents/Modal";
+import { RealmContext } from "providers/contexts";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import {
+  Alert,
+  Image,
+  PixelRatio,
+  Pressable,
+  StyleSheet,
+  View,
+} from "react-native";
+import { IMPORTED_ALBUM_TITLE } from "sharedHelpers/importedPhotoAlbum";
+import { log } from "sharedHelpers/logger";
+import {
+  addDevicePhotosToImportedAlbum,
+  deleteOriginalDevicePhotos,
+} from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import findUnfavoritedDevicePhotoUris from "sharedHelpers/unfavoritedDevicePhotos";
+import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
+import type { UserObservationsCache } from "sharedHelpers/userObservationsCache";
+import {
+  readUserObservationsCache,
+  syncUserObservations,
+} from "sharedHelpers/userObservationsCache";
+import { useCurrentUser, useGridLayout } from "sharedHooks";
+
+const logger = log.extend( "DevicePhotoCleanup" );
+
+const { useRealm } = RealmContext;
+
+const styles = StyleSheet.create( {
+  fullScreenImage: {
+    flex: 1,
+  },
+  list: {
+    flex: 1,
+  },
+  scrollContent: {
+    paddingBottom: 100,
+  },
+} );
+
+// One cell of the virtualized grid: a single photo. This is the same shape the
+// photo picker feeds DevicePhotoGrid, so both screens get identical
+// virtualization and thumbnail prefetching.
+interface CleanupGridItem { type: "photo"; id: string; uri: string }
+
+const buildGridItems = ( uris: string[] ): CleanupGridItem[] => uris
+  .map( uri => ( { type: "photo" as const, id: uri, uri } ) );
+
+// Brings the shared observation cache up to date, falling back to the last
+// synced copy if the network is unavailable. Stale fave data is worse than
+// none — it's what makes a freshly unfavorited observation look like it doesn't
+// exist — but it still beats refusing to show anything.
+const loadObservationsCache = async (
+  userId?: number,
+): Promise<UserObservationsCache> => {
+  try {
+    const apiToken = await getJWT( );
+    return await syncUserObservations( userId, { api_token: apiToken } );
+  } catch ( error ) {
+    logger.warn( "Falling back to the last synced observations", error );
+    return userId
+      ? readUserObservationsCache( userId )
+      : new Map( );
+  }
+};
+
+const DevicePhotoCleanup = ( ) => {
+  const realm = useRealm( );
+  const currentUser = useCurrentUser( );
+  const currentUserId = currentUser?.id;
+  const [allUris, setAllUris] = useState<string[]>( [] );
+  const [loading, setLoading] = useState( true );
+  const [syncingFaves, setSyncingFaves] = useState( true );
+  const [deleting, setDeleting] = useState( false );
+  const [filing, setFiling] = useState( false );
+  const [deletedCount, setDeletedCount] = useState<number | null>( null );
+  const [undeletableCount, setUndeletableCount] = useState( 0 );
+  const [quarantinedCount, setQuarantinedCount] = useState( 0 );
+  const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
+  const [stillDeleting, setStillDeleting] = useState( false );
+  const [rescans, setRescans] = useState( 0 );
+
+  useEffect( ( ) => {
+    let cancelled = false;
+    setLoading( true );
+    setSyncingFaves( true );
+    // Sync the shared observation cache before matching. A fave toggled on
+    // another device or in the website isn't here yet.
+    const startedAt = Date.now( );
+    let syncedAt = startedAt;
+    loadObservationsCache( currentUserId )
+      .then( cache => {
+        if ( !cancelled ) {
+          setSyncingFaves( false );
+        }
+        syncedAt = Date.now( );
+        return findUnfavoritedDevicePhotoUris( realm, cache );
+      } )
+      .then( result => {
+        // How long the user sat on the spinner, split into the two waits, so
+        // the app log can say which one to shorten next.
+        logger.info(
+          `Found ${result.length} `
+          + `photo(s) in ${Date.now( ) - startedAt}ms `
+          + `(sync ${syncedAt - startedAt}ms, match ${Date.now( ) - syncedAt}ms)`,
+        );
+        if ( !cancelled ) {
+          setAllUris( result );
+        }
+      } )
+      .finally( ( ) => {
+        if ( !cancelled ) {
+          setSyncingFaves( false );
+          setLoading( false );
+        }
+      } );
+    return ( ) => {
+      cancelled = true;
+    };
+  }, [realm, currentUserId, rescans] );
+
+  const { gridItemStyle, gridItemWidth, numColumns } = useGridLayout( undefined, "threeUp" );
+  const gridItems = useMemo( ( ) => buildGridItems( allUris ), [allUris] );
+
+  const renderHeader = useCallback( ( ) => null, [] );
+
+  const renderPhoto = useCallback( ( item: CleanupGridItem ) => (
+    <DevicePhotoImage
+      uri={item.uri}
+      cellWidth={gridItemWidth}
+      style={gridItemStyle}
+      onPress={( ) => setFullScreenUri( item.uri )}
+    />
+  ), [gridItemStyle, gridItemWidth] );
+
+  const getPhotoUri = useCallback( ( item: CleanupGridItem ) => item.uri, [] );
+
+  // The grid's already-generated thumbnail (same size, so it's a cache hit)
+  // fills the full-screen view immediately while the full-resolution asset
+  // loads, instead of showing black. Requested at the grid cell size so it
+  // reuses the exact cache entry the tapped tile used.
+  const fullScreenThumbUri = useDeviceImageThumbnail(
+    fullScreenUri ?? undefined,
+    PixelRatio.getPixelSizeForLayoutSize( gridItemWidth || 128 ),
+  );
+
+  const deletePhotos = useCallback( async ( ) => {
+    setDeleting( true );
+    setStillDeleting( false );
+    // Report what the OS actually deleted. A wedged PHPhotoLibrary deletes
+    // nothing yet resolves normally, and
+    // claiming "Deleted 1,159 photos" while the photos are all still there is
+    // worse than saying nothing happened.
+    const {
+      deleted, succeeded, pending, undeletable, quarantined,
+    } = await deleteOriginalDevicePhotos(
+      allUris,
+      { userInitiated: true, skipAlbum: true },
+    );
+    setDeleting( false );
+    // PhotoKit hasn't answered but is still holding the transaction, and it
+    // usually goes through afterwards. Rescanning is the only honest thing to
+    // show: the photos left in the grid may already be gone.
+    if ( pending ) {
+      setStillDeleting( true );
+      setRescans( count => count + 1 );
+      return;
+    }
+    // Leave the grid up when the delete didn't go through so the user can
+    // retry; the helper has already explained the failure with an alert.
+    if ( !succeeded ) return;
+    setDeletedCount( deleted );
+    setUndeletableCount( undeletable ?? 0 );
+    setQuarantinedCount( quarantined ?? 0 );
+    setAllUris( [] );
+  }, [allUris] );
+
+  const addToAlbum = useCallback( async ( ) => {
+    setFiling( true );
+    const result = await addDevicePhotosToImportedAlbum( allUris );
+    setFiling( false );
+    Alert.alert(
+      result
+        ? `Added ${result.added} photo${result.added === 1
+          ? ""
+          : "s"} to "${IMPORTED_ALBUM_TITLE}"`
+        : "Could not add photos to the album",
+      result
+        ? `${result.alreadyIn} were already in it.`
+        : "iOS isn't accepting changes to Photos right now. Restarting the phone may help.",
+    );
+  }, [allUris] );
+
+  if ( deletedCount !== null ) {
+    return (
+      <ViewWrapper>
+        <View className="p-5 items-center justify-center flex-1">
+          <Heading4>
+            {`Deleted ${deletedCount} photo${deletedCount === 1
+              ? ""
+              : "s"}`}
+          </Heading4>
+          {undeletableCount > 0 && (
+            <Body2 className="mt-4 text-center">
+              {`${undeletableCount} photo${undeletableCount === 1
+                ? ""
+                : "s"} could not be deleted: iOS only lets the Photos app delete `
+                + "photos synced from a computer or belonging to a shared album."}
+            </Body2>
+          )}
+          {undeletableCount + quarantinedCount > 0 && (
+            <Body2 className="mt-4 text-center">
+              {"To delete the photos that are still here in Photos, reopen Photo Cleanup "
+                + `and add them to the "${IMPORTED_ALBUM_TITLE}" album.`}
+            </Body2>
+          )}
+          {quarantinedCount > 0 && (
+            <Body2 className="mt-4 text-center">
+              {`${quarantinedCount} photo${quarantinedCount === 1
+                ? " was"
+                : "s were"} skipped: iOS accepts them into a deletion and then `
+                + "never finishes it, which stops every other photo from being "
+                + "deleted too. Delete them in the Photos app."}
+            </Body2>
+          )}
+        </View>
+      </ViewWrapper>
+    );
+  }
+
+  if ( loading ) {
+    return (
+      <ViewWrapper>
+        <View className="p-5 items-center justify-center flex-1">
+          <ActivityIndicator size={40} />
+          <Body2 className="mt-4 text-center">
+            {syncingFaves
+              ? "Checking your faves…"
+              : "Matching photos to your observations…"}
+          </Body2>
+        </View>
+      </ViewWrapper>
+    );
+  }
+
+  if ( allUris.length === 0 ) {
+    return (
+      <ViewWrapper>
+        <View className="p-5 items-center justify-center flex-1">
+          <Heading4>No matching photos found</Heading4>
+          <Body2 className="mt-2 text-center">
+            None of the photos in your library match an unfavorited observation.
+          </Body2>
+        </View>
+      </ViewWrapper>
+    );
+  }
+
+  return (
+    <ViewWrapper>
+      {stillDeleting && (
+        <View className="px-5 pt-4 pb-2">
+          <Body2>
+            The last delete hasn&apos;t come back from iOS yet. These are what is still
+            in your library — it may finish on its own. Add them to the
+            {` "${IMPORTED_ALBUM_TITLE}" `}
+            album to select and delete them all at once in Photos.
+          </Body2>
+        </View>
+      )}
+      <View style={styles.list}>
+        <DevicePhotoGrid
+          items={gridItems}
+          numColumns={numColumns}
+          itemWidth={gridItemWidth}
+          renderHeader={renderHeader}
+          renderPhoto={renderPhoto}
+          getPhotoUri={getPhotoUri}
+          contentContainerStyle={styles.scrollContent}
+        />
+      </View>
+      <View className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-lightGray">
+        <Button
+          className="mb-3"
+          text={`ADD ${allUris.length} TO ALBUM`}
+          onPress={addToAlbum}
+          loading={filing}
+          disabled={filing || deleting}
+        />
+        <Button
+          level="warning"
+          text={`DELETE ${allUris.length} PHOTO${allUris.length === 1
+            ? ""
+            : "S"}`}
+          onPress={deletePhotos}
+          loading={deleting}
+          disabled={deleting || filing}
+        />
+        {deleting && (
+          <Body2 className="mt-2 text-center">
+            iOS confirms and carries out the deletion itself, which can take a while.
+          </Body2>
+        )}
+      </View>
+      <Modal
+        showModal={!!fullScreenUri}
+        fullScreen
+        closeModal={( ) => setFullScreenUri( null )}
+        backdropOpacity={1}
+        modal={(
+          <Pressable
+            className="flex-1 bg-black"
+            accessibilityRole="button"
+            onPress={( ) => setFullScreenUri( null )}
+          >
+            {fullScreenThumbUri && (
+              <Image
+                source={{ uri: fullScreenThumbUri }}
+                style={StyleSheet.absoluteFill}
+                resizeMode="contain"
+              />
+            )}
+            {fullScreenUri && (
+              <Image
+                source={{ uri: fullScreenUri }}
+                style={styles.fullScreenImage}
+                resizeMode="contain"
+              />
+            )}
+          </Pressable>
+        )}
+      />
+    </ViewWrapper>
+  );
+};
+
+export default DevicePhotoCleanup;

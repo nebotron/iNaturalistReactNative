@@ -7,14 +7,14 @@ interface Props {
   showModal: boolean;
   closeModal: () => void;
   updateUser: ( user: ExploreSearchUser | null, exclude?: boolean ) => void;
-  onSelectUnobserved?: ( user: ExploreSearchUser ) => void;
+  defaultToCurrentUser?: boolean;
 }
 
 const ExploreUserSearchModal = ( {
   showModal,
   closeModal,
   updateUser,
-  onSelectUnobserved,
+  defaultToCurrentUser,
 }: Props ) => (
   <Modal
     showModal={showModal}
@@ -25,7 +25,7 @@ const ExploreUserSearchModal = ( {
       <ExploreUserSearch
         closeModal={closeModal}
         updateUser={updateUser}
-        onSelectUnobserved={onSelectUnobserved}
+        defaultToCurrentUser={defaultToCurrentUser}
       />
     )}
   />

@@ -3,6 +3,7 @@ import {
   DATE_OBSERVED,
   DATE_UPLOADED,
   ESTABLISHMENT_MEAN,
+  EVIDENCE_TYPE,
   MEDIA,
   PHOTO_LICENSE,
   REVIEWED,
@@ -183,4 +184,20 @@ export const getPhotoLicenseValues = ( t: TFunction ) => Object.fromEntries( [
   option( PHOTO_LICENSE.CCBYND, t( "CC-BY-ND" ) ),
   option( PHOTO_LICENSE.CCBYNCSA, t( "CC-BY-NC-SA" ) ),
   option( PHOTO_LICENSE.CCBYNCND, t( "CC-BY-NC-ND" ) ),
+] );
+
+export const getEvidenceTypeValues = ( t: TFunction ) => Object.fromEntries( [
+  option( EVIDENCE_TYPE.LIVE_ORGANISM, t( "Live-organism--evidence" ) ),
+  option( EVIDENCE_TYPE.DEAD_ORGANISM, t( "Dead-organism--evidence" ) ),
+  option( EVIDENCE_TYPE.FEATHER, t( "Feather--evidence" ) ),
+  option( EVIDENCE_TYPE.SCAT, t( "Scat--evidence" ) ),
+  option( EVIDENCE_TYPE.TRACK, t( "Track--evidence" ) ),
+  option( EVIDENCE_TYPE.BONE, t( "Bone--evidence" ) ),
+  option( EVIDENCE_TYPE.MOLT, t( "Molt--evidence" ) ),
+  option( EVIDENCE_TYPE.GALL, t( "Gall--evidence" ) ),
+  option( EVIDENCE_TYPE.EGG, t( "Egg--evidence" ) ),
+  option( EVIDENCE_TYPE.HAIR, t( "Hair--evidence" ) ),
+  option( EVIDENCE_TYPE.LEAFMINE, t( "Leafmine--evidence" ) ),
+  option( EVIDENCE_TYPE.CONSTRUCTION, t( "Construction--evidence" ) ),
+  option( EVIDENCE_TYPE.UNKNOWN, t( "Not-annotated--evidence" ) ),
 ] );

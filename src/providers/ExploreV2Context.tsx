@@ -1,8 +1,11 @@
 import type { ApiProjectSummary, ApiTotalBounds, ApiUser } from "api/types";
-import type { IDENTIFIERS_TAB, OBSERVERS_TAB, SPECIES_TAB } from "appConstants/tabs";
+import type {
+  HOTSPOTS_TAB, IDENTIFIERS_TAB, IDENTIFY_TAB, LIFELIST_TAB, OBSERVERS_TAB, SPECIES_TAB,
+} from "appConstants/tabs";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import type { ExploreV2EntryParams } from "navigation/types";
-import type { TAXONOMIC_RANK } from "providers/ExploreContext";
+import type { EVIDENCE_TYPE, TAXONOMIC_RANK } from "providers/ExploreContext";
 import {
   DATE_OBSERVED,
   DATE_UPLOADED,
@@ -64,7 +67,10 @@ export type ExploreV2Tab =
   | typeof OBSERVATIONS_TAB
   | typeof SPECIES_TAB
   | typeof OBSERVERS_TAB
-  | typeof IDENTIFIERS_TAB;
+  | typeof IDENTIFIERS_TAB
+  | typeof HOTSPOTS_TAB
+  | typeof LIFELIST_TAB
+  | typeof IDENTIFY_TAB;
 
 export type ExploreV2Subject =
   | { type: "taxon"; taxon: Taxon }
@@ -98,10 +104,15 @@ export interface ExploreV2Filters {
   wildStatus: WILD_STATUS;
   reviewedFilter: REVIEWED;
   photoLicense: PHOTO_LICENSE;
+  evidenceTypes?: EVIDENCE_TYPE[] | null;
+  // At least one fave
+  popular?: boolean | null;
   // User / project, in ExploreV2 parlance we always consider taxon to be the "subject"
   user?: ApiUser | null;
   unobservedByUser?: ApiUser | null;
   project?: ApiProjectSummary | null;
+  // Taxa searched for beyond the subject taxon, and excluded taxa
+  taxonFilters?: ExploreTaxonFilter[] | null;
 }
 
 export const defaultExploreV2Filters: ExploreV2Filters = {
@@ -121,7 +132,7 @@ export const defaultExploreV2Filters: ExploreV2Filters = {
 
 export type ExploreV2LocationState =
   | { placeMode: EXPLORE_V2_PLACE_MODE.WORLDWIDE }
-  | { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY }
+  | { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY; radius?: number }
   | { placeMode: EXPLORE_V2_PLACE_MODE.PLACE; place: Place }
   | { placeMode: EXPLORE_V2_PLACE_MODE.MAP_AREA; bounds: ApiTotalBounds };
 
@@ -141,10 +152,14 @@ export interface ExploreV2State {
 // Everything that defines a search, as opposed to how the results are being viewed
 export type ExploreV2Search = Omit<ExploreV2State, "activeTab" | "appliedSearchCount">;
 
+// A saved search also remembers the view it was saved from. Optional because searches saved
+// before views were recorded don't have one.
+export type ExploreV2SearchWithTab = ExploreV2Search & { activeTab?: ExploreV2Tab };
+
 export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_SUBJECT; subject: ExploreV2Subject }
   | { type: EXPLORE_V2_ACTION.CLEAR_SUBJECT }
-  | { type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY }
+  | { type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY; radius?: number }
   | { type: EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE }
   | {
     type: EXPLORE_V2_ACTION.SET_LOCATION_PLACE;
@@ -158,7 +173,7 @@ export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_SPECIES_SORT; speciesSortBy: SPECIES_SORT }
   | { type: EXPLORE_V2_ACTION.SET_FILTERS; filters: ExploreV2Filters }
   | { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB; tab: ExploreV2Tab }
-  | { type: EXPLORE_V2_ACTION.APPLY_SEARCH; search: ExploreV2Search }
+  | { type: EXPLORE_V2_ACTION.APPLY_SEARCH; search: ExploreV2SearchWithTab }
   | { type: EXPLORE_V2_ACTION.RESET };
 
 export const initialExploreV2State: ExploreV2State = {
@@ -194,7 +209,7 @@ export function exploreV2Reducer(
     case EXPLORE_V2_ACTION.SET_LOCATION_NEARBY:
       return {
         ...state,
-        location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY },
+        location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY, radius: action.radius },
       };
     case EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE:
       return {
@@ -236,6 +251,7 @@ export function exploreV2Reducer(
         sortBy,
         speciesSortBy,
         filters,
+        activeTab: action.search.activeTab ?? state.activeTab,
         appliedSearchCount: state.appliedSearchCount + 1,
       };
     }

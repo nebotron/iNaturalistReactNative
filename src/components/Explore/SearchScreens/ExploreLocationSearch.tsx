@@ -1,5 +1,7 @@
 import { fetchSearchResults } from "api/search";
 import type { ApiPlace } from "api/types";
+import type { NearbyRadiusConfig } from "components/Explore/NearbyRadiusInput";
+import NearbyRadiusInput from "components/Explore/NearbyRadiusInput";
 import {
   Body1,
   ButtonBar,
@@ -10,12 +12,17 @@ import {
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import inatPlaceTypes from "dictionaries/places";
+import {
+  EXPLORE_ACTION, PLACE_MODE, useOptionalExplore,
+} from "providers/ExploreContext";
 import React, {
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
 import { FlatList } from "react-native";
+import { DEFAULT_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { useAuthenticatedQuery, useTranslation } from "sharedHooks";
 import type { RenderLocationPermissionsGateFunction } from "sharedHooks/useLocationPermission";
 import { getShadow } from "styles/global";
@@ -31,27 +38,47 @@ const Footer = ( ) => <View className="h-[336px]" />;
 interface Props {
   closeModal: () => void;
   hasPermissions?: boolean;
+  // Explore v1 reads the radius from ExploreContext instead
+  nearbyRadius?: NearbyRadiusConfig;
   onSelectNearby: ( ) => Promise<void> | void;
   // Optional: exploreV2 relies on ExploreResults for all perms handling
   renderPermissionsGate?: RenderLocationPermissionsGateFunction;
   requestPermissions?: ( ) => void;
-  updateLocation: ( location: "worldwide" | ApiPlace ) => void;
+  updateLocation: ( location: "worldwide" | "nearby" | ApiPlace ) => void | Promise<void>;
 }
 
 const ExploreLocationSearch = ( {
   closeModal,
   hasPermissions,
+  nearbyRadius,
   onSelectNearby,
   renderPermissionsGate,
   requestPermissions,
   updateLocation,
 }: Props ) => {
   const { t } = useTranslation( );
+  const explore = useOptionalExplore( );
+  const radiusConfig: NearbyRadiusConfig | undefined = nearbyRadius ?? ( explore && {
+    selected: explore.state.placeMode === PLACE_MODE.NEARBY,
+    radiusKm: explore.state.nearbyRadiusKm ?? DEFAULT_NEARBY_RADIUS_KM,
+    defaultRadiusKm: DEFAULT_NEARBY_RADIUS_KM,
+    onChange: radius => explore.dispatch( { type: EXPLORE_ACTION.SET_NEARBY_RADIUS, radius } ),
+  } );
+  const nearbySelected = !!radiusConfig?.selected;
+  const hasRadius = !!radiusConfig;
 
   const [locationName, setLocationName] = useState( "" );
+  const [showNearbyRadius, setShowNearbyRadius] = useState( nearbySelected );
+
+  useEffect( ( ) => {
+    if ( nearbySelected ) {
+      setShowNearbyRadius( true );
+    }
+  }, [nearbySelected] );
 
   const resetPlace = useCallback(
     ( ) => {
+      setShowNearbyRadius( false );
       updateLocation( "worldwide" );
       closeModal();
     },
@@ -80,6 +107,7 @@ const ExploreLocationSearch = ( {
   );
 
   const onPlaceSelected = useCallback( ( place: ApiPlace ) => {
+    setShowNearbyRadius( false );
     updateLocation( place );
     closeModal();
   }, [updateLocation, closeModal] );
@@ -106,17 +134,19 @@ const ExploreLocationSearch = ( {
 
   const data = placeResults || [];
 
-  const setNearbyLocation = useCallback( ( ) => {
-    async function getNearbyLocation( ) {
-      await onSelectNearby( );
-      closeModal();
+  // Keeps the modal open after picking Nearby so the radius input is reachable
+  const activateNearby = useCallback( async ( ) => {
+    await onSelectNearby( );
+    if ( hasRadius ) {
+      setShowNearbyRadius( true );
+    } else {
+      closeModal( );
     }
-    getNearbyLocation( );
-  }, [onSelectNearby, closeModal] );
+  }, [onSelectNearby, hasRadius, closeModal] );
 
   const onNearbyPressed = () => {
     if ( hasPermissions || !requestPermissions ) {
-      setNearbyLocation( );
+      activateNearby( );
     } else {
       requestPermissions( );
     }
@@ -134,7 +164,7 @@ const ExploreLocationSearch = ( {
     {
       title: t( "NEARBY" ),
       onPress: onNearbyPressed,
-      isPrimary: false,
+      isPrimary: showNearbyRadius,
       className: "w-1/2 mx-6",
     },
     {
@@ -164,6 +194,13 @@ const ExploreLocationSearch = ( {
             testID="ExploreLocationSearch.locationSearch"
           />
           <ButtonBar buttonConfiguration={buttons} containerClass="justify-center p-[15px]" />
+          {showNearbyRadius && radiusConfig && (
+            <NearbyRadiusInput
+              radiusKm={radiusConfig.radiusKm}
+              defaultRadiusKm={radiusConfig.defaultRadiusKm}
+              onChange={radiusConfig.onChange}
+            />
+          )}
         </View>
       </View>
       <FlatList
@@ -174,7 +211,7 @@ const ExploreLocationSearch = ( {
         ListEmptyComponent={emptyListComponent}
         ListFooterComponent={Footer}
       />
-      {renderPermissionsGate?.( { onPermissionGranted: setNearbyLocation } )}
+      {renderPermissionsGate?.( { onPermissionGranted: activateNearby } )}
     </ViewWrapper>
   );
 };

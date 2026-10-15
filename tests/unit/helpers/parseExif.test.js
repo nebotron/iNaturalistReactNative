@@ -1,5 +1,5 @@
 import * as Exify from "@lodev09/react-native-exify";
-import readExifFromMultiplePhotos from "sharedHelpers/parseExif";
+import readExifFromMultiplePhotos, { PhotoExifReadError } from "sharedHelpers/parseExif";
 import faker from "tests/helpers/faker";
 
 // Expected EXIF metadata of the above file
@@ -29,10 +29,18 @@ const MOCK_READ_EXIF_RESPONSE_OTHER_TIME_ZONE = {
 describe( "readExifFromMultiplePhotos", ( ) => {
   beforeEach( ( ) => Exify.read.mockReset( ) );
 
-  it( "should return an object if EXIF fails to parse for one photo", async ( ) => {
+  // Importing a photo whose metadata can't be read used to leave the
+  // observation silently without a location; the caller reports it instead.
+  it( "should throw when a photo's EXIF cannot be read", async ( ) => {
     Exify.read.mockRejectedValueOnce( new Error( "failed to catch test error" ) );
+    await expect( readExifFromMultiplePhotos( [faker.image.url()] ) )
+      .rejects.toThrow( PhotoExifReadError );
+  } );
+
+  it( "should return an empty object for a photo with no GPS or date tags", async ( ) => {
+    Exify.read.mockResolvedValueOnce( { PixelWidth: 100, PixelHeight: 100 } );
     const unified = await readExifFromMultiplePhotos( [faker.image.url()] );
-    expect( unified ).toEqual( {} );
+    expect( unified ).toEqual( { observed_on_string: null } );
   } );
 
   it( "should merge coords/accuracy/date from one successful EXIF read", async ( ) => {
@@ -59,10 +67,24 @@ describe( "readExifFromMultiplePhotos", ( ) => {
     expect( unified.longitude ).toEqual( EXPECTED_EXIF_LONGITUDE );
   } );
 
+  // An imported photo keeps its device filename, which can contain characters
+  // that make [NSURL URLWithString:] return nil, so Exify rejects the read and
+  // the observation is created with no location at all.
+  it( "should percent-encode device filenames for Exify", async ( ) => {
+    Exify.read.mockImplementation( async uri => {
+      expect( uri ).toEqual( "file:///galleryPhotos/Screen%20Shot%201.png" );
+      return MOCK_READ_EXIF_RESPONSE;
+    } );
+
+    const unified = await readExifFromMultiplePhotos(
+      ["file:///galleryPhotos/Screen Shot 1.png"],
+    );
+    expect( unified.latitude ).toEqual( EXPECTED_EXIF_LATITUDE );
+    expect( unified.longitude ).toEqual( EXPECTED_EXIF_LONGITUDE );
+  } );
+
   it( "should handle EXIF datetime with a different timezone offset", async ( ) => {
-    Exify.read
-      .mockRejectedValueOnce( new Error( "failed to catch test error" ) )
-      .mockResolvedValueOnce( MOCK_READ_EXIF_RESPONSE_OTHER_TIME_ZONE );
+    Exify.read.mockResolvedValue( MOCK_READ_EXIF_RESPONSE_OTHER_TIME_ZONE );
     const unified = await readExifFromMultiplePhotos( [
       faker.image.url(),
       faker.image.url(),
@@ -72,5 +94,16 @@ describe( "readExifFromMultiplePhotos", ( ) => {
     expect( unified.latitude ).toEqual( EXPECTED_EXIF_LATITUDE );
     expect( unified.longitude ).toEqual( EXPECTED_EXIF_LONGITUDE );
     expect( unified.positional_accuracy ).toEqual( EXPECTED_EXIF_POSITIONAL_ACCURACY );
+  } );
+
+  it( "should stop scanning once all EXIF fields are found", async ( ) => {
+    Exify.read.mockResolvedValue( MOCK_READ_EXIF_RESPONSE );
+
+    await readExifFromMultiplePhotos( Array.from(
+      { length: 30 },
+      ( _, index ) => `file:///photo-${index}.jpg`,
+    ) );
+
+    expect( Exify.read ).toHaveBeenCalledTimes( 1 );
   } );
 } );

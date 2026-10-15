@@ -1,24 +1,10 @@
-import { getUserAgent } from "api/userAgent";
-import { create } from "apisauce";
-// eslint-disable-next-line import/no-cycle
-import { getAnonymousJWT, getJWT } from "components/LoginSignUp/AuthenticationService";
+import Config from "react-native-config";
 import type { transportFunctionType } from "react-native-logs";
-import { EnvConfig } from "sharedHelpers/envConfig";
-import { getInstallID } from "sharedHelpers/installData";
+// The git commit the bundle was built from (see scripts/writeAppCommit.js).
+import APP_COMMIT from "sharedHelpers/appCommit";
 import { isObject, isObjectWithPrimitiveValues } from "sharedHelpers/runtimeTypeUtil";
 
 import { extraSentinelKey } from "./enhanceLoggerWithExtra";
-
-const API_HOST: string
-    = EnvConfig.API_URL || process.env.API_URL || "https://api.inaturalist.org/v2";
-
-const api = create( {
-  baseURL: API_HOST,
-  headers: {
-    "User-Agent": getUserAgent( ),
-    "X-Installation-ID": getInstallID( ),
-  },
-} );
 
 // at least answers: does it look enough like an Error for logging purposes?
 function isError( value: unknown ): value is { message?: string; stack?: string } {
@@ -59,7 +45,6 @@ function extractExtra( rawMsg: unknown ) {
   // make sure our extra is actually valid for the API
   const { [extraSentinelKey]: _sentinel, ...extraCandidate } = extraWrapperCandidate;
   if ( !isObjectWithPrimitiveValues( extraCandidate ) ) {
-    console.warn( "[ERROR log.ts] `extra` must be a non-nested object with primitive values" );
     return nonExtraResult;
   }
   return {
@@ -69,88 +54,123 @@ function extractExtra( rawMsg: unknown ) {
   };
 }
 
-// our transport has no options but this needs to be explicitly `object` for generic typing
-type iNatLogstashTransportOptions = object;
+// The log DB is publicly readable, so strip credentials and coordinates from
+// anything we send. Values are matched in plain text, JSON (incl. escaped
+// JSON inside a message string), and URL query strings.
+const SECRET_KEYS = "api_token|access_token|refresh_token|id_token|authorization|password"
+  + "|jwt|token|secret|api_key|apikey";
+const LOCATION_KEYS = "latitude|longitude|private_latitude|private_longitude|lat|lng|lon"
+  + "|nelat|nelng|swlat|swlng";
+const KEY_PREFIX = "(\\\\?\"?\\b(?:{keys})\\\\?\"?\\s*[:=]\\s*\\\\?\"?)";
+const SECRET_VALUE_RE = new RegExp( `${KEY_PREFIX.replace( "{keys}", SECRET_KEYS )}`
+  + "(?:Bearer\\s+)?[^\"\\\\&,\\s}]+", "gi" );
+const LOCATION_VALUE_RE = new RegExp( `${KEY_PREFIX.replace( "{keys}", LOCATION_KEYS )}`
+  + "-?\\d+(?:\\.\\d+)?", "gi" );
+const JWT_RE = /eyJ[\w-]+\.[\w-]+(?:\.[\w-]+)?/g;
+// "37.1234,-122.5678", e.g. a location param or a formatted coordinate pair
+const COORD_PAIR_RE = /-?\d{1,3}\.\d{3,}\s*(?:,|%2C)\s*-?\d{1,3}\.\d{3,}/gi;
+const SENSITIVE_KEY_RE = new RegExp( `^(?:${SECRET_KEYS}|${LOCATION_KEYS}|location|coords)$`, "i" );
+const REDACTED = "[REDACTED]";
 
-// Custom transport for posting to iNat API logging
-const iNatLogstashTransport: transportFunctionType<iNatLogstashTransportOptions> = async props => {
+export function redact( text: string ): string {
+  return text
+    .replace( JWT_RE, REDACTED )
+    .replace( SECRET_VALUE_RE, `$1${REDACTED}` )
+    .replace( LOCATION_VALUE_RE, `$1${REDACTED}` )
+    .replace( COORD_PAIR_RE, REDACTED );
+}
+
+function redactExtra( extra: Record<string, unknown> ) {
+  return Object.fromEntries( Object.entries( extra ).map( ( [key, value] ) => [
+    key,
+    // eslint-disable-next-line no-nested-ternary
+    SENSITIVE_KEY_RE.test( key )
+      ? REDACTED
+      : typeof value === "string"
+        ? redact( value )
+        : value,
+  ] ) );
+}
+
+// our transport has no options but this needs to be explicitly `object` for generic typing
+type firebaseLogTransportOptions = object;
+
+// Custom transport that appends each log line as a push-ID child of
+// {CROP_LOG_FIREBASE_URL}/app_log. The log DB allows unauthenticated
+// writes, so no auth token is needed (same as the crop/brightness logs).
+const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> = async props => {
   // Don't bother to log from dev builds
   if ( __DEV__ ) return;
 
-  // Note on `console.errors`: we use logging to report errors, so validating input
-  // and making sure we have an auth token are some of a few cases where we really do want
-  // to squelch all errors to avoid recursion
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl ) return;
 
   // pull potential `extra` out of the rest params
   const { messageParams, extra } = extractExtra( props.rawMsg );
 
-  let userToken;
-  try {
-    userToken = await getJWT();
-  } catch ( _getJWTError ) {
-    console.error( "[ERROR log.ts] failed to retrieve user JWT while logging" );
-  }
-  const anonymousToken = getAnonymousJWT();
-  // Can't log w/o auth token
-  if ( !userToken && !anonymousToken ) {
-    console.error( "[ERROR log.ts] failed to retrieve user or anonymous JWT while logging" );
-    return;
-  }
-  // if message is an Error or is an array ending in an error, extract
-  // error_type and backtrace
-  let message;
-  let backtrace;
-  let errorType;
+  // if message is an Error or is an array ending in an error, extract it
+  // so we can report its stack alongside the message
+  let message: string;
+  let error: { message?: string; stack?: string } | undefined;
   if ( typeof ( messageParams ) === "string" ) {
     message = messageParams;
   } else if ( isError( messageParams ) ) {
-    // eslint-disable-next-line prefer-destructuring
-    message = messageParams;
-    errorType = messageParams.constructor?.name;
-    backtrace = messageParams.stack;
+    error = messageParams;
+    message = error.message ?? "Unknown error";
   } else if ( Array.isArray( messageParams ) ) {
-    // specially handle the cases where the last arg is
-    // an error: so we can attach appropriate error metadata
     const last = messageParams.at( -1 );
     if ( isError( last ) ) {
-      // eslint-disable-next-line prefer-destructuring
-      message = last.message;
-      errorType = last.constructor?.name;
-      backtrace = last.stack;
+      error = last;
+      message = [...messageParams.slice( 0, -1 ), error.message ?? "Unknown error"].join( " " );
     } else {
       message = messageParams.join( " " );
     }
   } else {
-    message = messageParams;
+    message = JSON.stringify( messageParams );
   }
-  const formData = {
+
+  const entry = {
+    timestamp: new Date( ).toISOString( ),
     level: props.level.text,
-    message,
-    context: props.extension,
-    extra,
-    timestamp: new Date().toISOString(),
-    error_type: errorType,
-    backtrace,
+    extension: props.extension,
+    // commit lets a log line be traced back to the exact code that produced it
+    commit: APP_COMMIT,
+    message: redact( message ),
+    ...( extra
+      ? redactExtra( extra )
+      : {} ),
+    ...( error?.stack
+      ? { stack: redact( error.stack ) }
+      : {} ),
   };
-  try {
-    await api.post( "/log", formData, {
-      headers: {
-        Authorization: [
-          userToken,
-          anonymousToken,
-        ].flat( ).join( ", " ),
-      },
-    } );
-  } catch ( e ) {
-    const postLogError = e as Error;
-    if ( postLogError.message.match( /Network request failed/ ) ) {
-      // If we're offline, we can't post logs to the server
-      return;
+
+  const body = JSON.stringify( entry );
+  // Errors are the entries we most need to keep, so give them a few retries
+  // rather than dropping them on a transient network failure. Non-errors sync
+  // once to avoid amplifying high-volume info logging.
+  const maxAttempts = props.level.text === "error"
+    ? 3
+    : 1;
+  for ( let attempt = 1; attempt <= maxAttempts; attempt += 1 ) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await fetch( `${baseUrl}/app_log.json`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body,
+      } );
+      if ( r.ok ) return;
+    } catch {
+      // Retry below, or give up once the loop runs out of attempts. Never
+      // rethrow: we log to report errors, so failing to log must stay silent.
     }
-    throw postLogError;
+    if ( attempt < maxAttempts ) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise( resolve => { setTimeout( resolve, 500 * attempt ); } );
+    }
   }
 };
 
 export { default as enhanceLoggerWithExtra } from "./enhanceLoggerWithExtra";
 
-export default iNatLogstashTransport;
+export default firebaseLogTransport;

@@ -1,17 +1,23 @@
+import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import type { ApiPlace, ApiProjectSummary } from "api/types";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
+import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
 import DateFilterSection
   from "components/Explore/ExploreV2/components/DateFilterSection";
+import HotspotSettingsSection
+  from "components/Explore/ExploreV2/components/HotspotSettingsSection";
 import RadioGroupSection
   from "components/Explore/ExploreV2/components/RadioGroupSection";
-import SavedSearches from "components/Explore/ExploreV2/components/SavedSearches";
+import SavedSearches, { SavedSearchSheets }
+  from "components/Explore/ExploreV2/components/SavedSearches";
 import SelectedFilterRow
   from "components/Explore/ExploreV2/components/SelectedFilterRow";
 import {
   getDateObservedValues,
   getDateUploadedValues,
   getEstablishmentValues,
+  getEvidenceTypeValues,
   getMediaValues,
   getMonthValues,
   getPhotoLicenseValues,
@@ -20,19 +26,23 @@ import {
   getTaxonomicRankValues,
   getWildValues,
 } from "components/Explore/ExploreV2/helpers/advancedSearchOptions";
-import type { SubjectTaxon }
-  from "components/Explore/ExploreV2/helpers/advancedSearchReducer";
 import {
   advancedSearchReducer,
   defaultAdvancedSearchDraft,
   draftFromV2State,
+  searchTaxonFilters,
 } from "components/Explore/ExploreV2/helpers/advancedSearchReducer";
+import buildExploreV2QueryParams
+  from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import locationLabel from "components/Explore/ExploreV2/helpers/locationLabel";
 import useApplySavedSearch from "components/Explore/ExploreV2/hooks/useApplySavedSearch";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
+import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import ExploreLocationSearchModal from "components/Explore/Modals/ExploreLocationSearchModal";
 import ExploreProjectSearchModal from "components/Explore/Modals/ExploreProjectSearchModal";
 import ExploreTaxonSearchModal from "components/Explore/Modals/ExploreTaxonSearchModal";
 import ExploreUserSearchModal from "components/Explore/Modals/ExploreUserSearchModal";
+import { SaveOfflineButton } from "components/Explore/OfflineExplore";
 import type { ExploreSearchUser }
   from "components/Explore/SearchScreens/ExploreUserSearch";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
@@ -42,7 +52,6 @@ import {
   Button,
   ButtonBar,
   Checkbox,
-  DisplayTaxon,
   Heading4,
   IconicTaxonChooser,
   INatIcon,
@@ -50,9 +59,7 @@ import {
   RadioButtonSheet,
 } from "components/SharedComponents";
 import SearchHeader from "components/SharedComponents/SearchHeader";
-import BottomSheetV2 from "components/SharedComponents/Sheets/BottomSheetV2";
 import WarningSheet from "components/SharedComponents/Sheets/WarningSheet";
-import Body1 from "components/SharedComponents/Typography/Body1";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { ScrollView, View } from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
@@ -64,20 +71,23 @@ import {
 } from "providers/ExploreContext";
 import {
   EXPLORE_V2_ACTION,
+  EXPLORE_V2_PLACE_MODE,
   useExploreV2,
 } from "providers/ExploreV2Context";
 import React, { useMemo, useReducer, useState } from "react";
-import Taxon from "realmModels/Taxon";
 import { formatObsFieldDate } from "sharedHelpers/dateAndTime";
+import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useIconicTaxa from "sharedHooks/useIconicTaxa";
-import useStore from "stores/useStore";
+import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
+
+// Please don't change these to aliased paths or the e2e mocks will not get used
+import fetchCoarseUserLocation from "../../../../sharedHelpers/fetchCoarseUserLocation";
+import { getLatestTrackedLocation } from "../../../../sharedHelpers/locationHistoryTracker";
 
 type SheetName = "sortBy" | "hrank" | "lrank" | "photoLicense";
 
 type PickerKind = "taxon" | "user" | "project" | "location";
-
-type ExitTarget = "back" | "standardSearch";
 
 const ALL_MONTHS = new Array( 12 ).fill( 0 ).map( ( _, i ) => i + 1 );
 
@@ -89,12 +99,9 @@ const AdvancedSearch = ( ) => {
   const { t } = useTranslation();
   const iconicTaxa = useIconicTaxa();
   const currentUser = useCurrentUser();
+  const { isConnected } = useNetInfo( );
 
   const { state: v2State, dispatch: dispatchV2 } = useExploreV2();
-  const setAdvancedSearchMode = useStore(
-    state => state.exploreV2AdvancedSearch.setAdvancedSearchMode,
-  );
-  const savedSearchCount = useStore( state => state.exploreSavedSearches.searches.length );
   const applySavedSearch = useApplySavedSearch( );
   const [initialDraft] = useState( ( ) => draftFromV2State( v2State ) );
   const [draft, dispatch] = useReducer( advancedSearchReducer, initialDraft );
@@ -112,22 +119,20 @@ const AdvancedSearch = ( ) => {
     [draft],
   );
 
-  const [pendingExit, setPendingExit] = useState<ExitTarget | null>( null );
-  const [showSavedSearches, setShowSavedSearches] = useState( false );
-  const savedSearchesOpen = showSavedSearches && savedSearchCount > 0;
-  const exit = ( target: ExitTarget ) => {
-    if ( target === "standardSearch" ) {
-      navigation.replace( "UniversalSearch" );
-    } else {
-      navigation.goBack( );
-    }
+  const [pendingExit, setPendingExit] = useState( false );
+  const [showSaveSheet, setShowSaveSheet] = useState( false );
+  const [searchToDelete, setSearchToDelete] = useState<SavedSearch | null>( null );
+  const currentSearch = {
+    subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
   };
-  const requestExit = ( target: ExitTarget ) => {
+  // Saved searches also remember the view they were saved from
+  const currentSavedSearch = { ...currentSearch, activeTab: v2State.activeTab };
+  const requestExit = ( ) => {
     if ( differsFromInitial ) {
-      setPendingExit( target );
+      setPendingExit( true );
       return;
     }
-    exit( target );
+    navigation.goBack( );
   };
 
   // Which in-screen search picker (taxon/user/project/location) is open.
@@ -135,9 +140,9 @@ const AdvancedSearch = ( ) => {
   const [openSheet, setOpenSheet] = useState<SheetName | null>( null );
   const closeSheet = ( ) => setOpenSheet( null );
 
-  const updateTaxon = ( taxon: SubjectTaxon | null ) => dispatch( {
-    type: "SET_TAXON",
-    taxon,
+  const updateTaxonFilters = ( taxonFilters: ExploreTaxonFilter[] ) => dispatch( {
+    type: "SET_TAXON_FILTERS",
+    taxonFilters,
   } );
 
   const filterByIconicTaxonUnknown = () => dispatch( {
@@ -149,16 +154,14 @@ const AdvancedSearch = ( ) => {
     user: selectedUser,
   } );
 
-  const updateUnobservedByUser = ( selectedUser: ExploreSearchUser ) => dispatch( {
+  const updateUnobservedByUser = ( selectedUser: ExploreSearchUser | null ) => dispatch( {
     type: "SET_UNOBSERVED_BY_USER",
-    user: {
+    user: selectedUser && {
       id: selectedUser.id,
       login: selectedUser.login,
       icon_url: selectedUser.icon_url,
     },
   } );
-
-  const clearUserFilters = ( ) => dispatch( { type: "SET_USER", user: null } );
 
   const updateProject = ( selectedProject: ApiProjectSummary | null ) => dispatch( {
     type: "SET_PROJECT",
@@ -179,15 +182,28 @@ const AdvancedSearch = ( ) => {
 
   const closePicker = ( ) => setOpenPicker( null );
 
+  const isNearby = location.placeMode === EXPLORE_V2_PLACE_MODE.NEARBY;
+  const nearbyRadiusKm = ( isNearby && location.radius ) || DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM;
+  const setNearby = ( radius = nearbyRadiusKm ) => dispatch( {
+    type: "SET_LOCATION_NEARBY",
+    radius,
+  } );
+
+  // API params for the search as drafted, for saving its results offline
+  const getOfflineQueryParams = async ( ) => {
+    let nearbyCoords;
+    if ( isNearby ) {
+      const coords = await getLatestTrackedLocation( ) ?? await fetchCoarseUserLocation( );
+      if ( typeof coords?.latitude !== "number" ) throw new Error( "No location" );
+      nearbyCoords = { lat: coords.latitude, lng: coords.longitude };
+    }
+    const search = { ...v2State, ...currentSearch };
+    return { ...buildExploreV2QueryParams( search, nearbyCoords, currentUser?.id ) };
+  };
+
   const handleSearch = () => {
-    dispatchV2( {
-      type: EXPLORE_V2_ACTION.APPLY_SEARCH,
-      search: {
-        subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
-      },
-    } );
+    dispatchV2( { type: EXPLORE_V2_ACTION.APPLY_SEARCH, search: currentSearch } );
     dispatchV2( { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB, tab: OBSERVATIONS_TAB } );
-    setAdvancedSearchMode( true );
     navigation.popTo( "ExploreResults" );
   };
 
@@ -201,6 +217,7 @@ const AdvancedSearch = ( ) => {
     dateObserved,
     dateUploaded,
     establishmentMean,
+    evidenceTypes,
     hrank,
     lrank,
     media,
@@ -208,6 +225,7 @@ const AdvancedSearch = ( ) => {
     needsID,
     observed_on: observedOn,
     photoLicense,
+    popular,
     project,
     researchGrade,
     reviewedFilter,
@@ -216,15 +234,14 @@ const AdvancedSearch = ( ) => {
     wildStatus,
   } = filters;
 
-  const taxon = subject?.type === "taxon"
-    ? subject.taxon
-    : null;
+  const taxonFilters = searchTaxonFilters( subject, filters );
   const taxonUnknown = subject?.type === "unknown";
-  const chosenIconicTaxa = ( ) => {
-    if ( taxonUnknown ) { return ["unknown"]; }
-    if ( taxon?.name ) { return [taxon.name.toLowerCase()]; }
-    return [];
-  };
+  const chosenIconicTaxa = taxonUnknown
+    ? ["unknown"]
+    : taxonFilters
+      .filter( filter => !filter.exclude )
+      .map( filter => filter.taxon.name?.toLowerCase( ) )
+      .filter( ( name ): name is string => !!name );
 
   const displayProject = project;
 
@@ -305,84 +322,67 @@ const AdvancedSearch = ( ) => {
   return (
     <SharedStackViewWrapper testID="AdvancedSearch">
       <SearchHeader
-        headerText={t( "ADVANCED-SEARCH" )}
-        onClose={( ) => requestExit( "back" )}
+        headerText={t( "SEARCH" )}
+        onClose={requestExit}
         onReset={() => dispatch( { type: "RESET" } )}
         resetDisabled={resetDisabled}
         testID="AdvancedSearch.back"
       />
 
       <ScrollView className="py-4">
-        <View className="px-4 mb-7">
-          <Button
-            text={t( "RETURN-TO-STANDARD-SEARCH" )}
-            onPress={( ) => requestExit( "standardSearch" )}
-            testID="AdvancedSearch.returnToStandardSearch"
-          />
-        </View>
-        {savedSearchCount > 0 && (
-          <View className="mb-7">
-            <Heading4 className="px-4 mb-5">{t( "SAVED-SEARCHES" )}</Heading4>
-            <View className="px-4">
-              <Button
-                text={t( "CHOOSE-A-SAVED-SEARCH" )}
-                onPress={( ) => setShowSavedSearches( true )}
-                testID="AdvancedSearch.savedSearchesButton"
-              />
-            </View>
-          </View>
-        )}
+        <SavedSearches
+          currentSearch={currentSavedSearch}
+          onDelete={setSearchToDelete}
+          onSave={( ) => setShowSaveSheet( true )}
+          onSelect={applySavedSearch}
+        />
+        <SaveOfflineButton
+          disabled={isConnected === false || hasError}
+          getQueryParams={getOfflineQueryParams}
+        />
 
         {/* Taxon Section */}
+        <ExploreTaxonFiltersSection
+          iconicTaxonNames={taxonUnknown
+            ? ["unknown"]
+            : []}
+          onOpenTaxonSearch={() => setOpenPicker( "taxon" )}
+          taxonFilters={taxonFilters}
+          updateTaxonFilters={updateTaxonFilters}
+        />
         <View className="mb-7">
-          <Heading4 className="px-4 mb-5">{t( "TAXON" )}</Heading4>
-          <View className="px-4 mb-5">
-            {( taxon || taxonUnknown )
-              ? (
-                <SelectedFilterRow
-                  accessibilityLabel={t( "Change-taxon" )}
-                  onEdit={() => setOpenPicker( "taxon" )}
-                  onRemove={() => updateTaxon( null )}
-                  removeAccessibilityLabel={t( "Remove-taxon-filter" )}
-                >
-                  <DisplayTaxon
-                    handlePress={() => setOpenPicker( "taxon" )}
-                    taxon={taxon || "unknown"}
-                  />
-                </SelectedFilterRow>
-              )
-              : (
-                <Button
-                  text={t( "SEARCH-FOR-A-TAXON" )}
-                  onPress={() => {
-                    setOpenPicker( "taxon" );
-                  }}
-                  accessibilityLabel={t( "Search" )}
-                />
-              )}
-          </View>
           <IconicTaxonChooser
             before
-            chosen={chosenIconicTaxa()}
+            chosen={chosenIconicTaxa}
             onTaxonChosen={( taxonName: string ) => {
               if ( taxonName === "unknown" ) {
                 if ( taxonUnknown ) {
-                  updateTaxon( null );
+                  updateTaxonFilters( [] );
                 } else {
                   filterByIconicTaxonUnknown();
                 }
-              } else if ( taxon?.name?.toLowerCase() === taxonName ) {
-                updateTaxon( null );
-              } else {
-                const selectedTaxon = iconicTaxa
-                  ?.filtered( "name ==[c] $0", taxonName );
-                const iconicTaxon = selectedTaxon && selectedTaxon.length > 0
-                  ? Taxon.mapRealmToPojo( selectedTaxon[0] )
-                  : null;
-                updateTaxon( iconicTaxon );
+                return;
+              }
+              const selectedTaxon = iconicTaxa
+                ?.filtered( "name ==[c] $0", taxonName );
+              if ( selectedTaxon && selectedTaxon.length > 0 ) {
+                updateTaxonFilters(
+                  toggleTaxonFilter( taxonFilters, selectedTaxon[0], false ),
+                );
               }
             }}
           />
+          {currentUser && (
+            <View className="px-4 mt-5">
+              <Checkbox
+                text={t( "Unobserved-by-me" )}
+                isChecked={!!unobservedByUser}
+                onPress={() => updateUnobservedByUser( unobservedByUser
+                  ? null
+                  : currentUser )}
+              />
+            </View>
+          )}
         </View>
         <View className="px-4 pb-4">
           {/* Location Section */}
@@ -449,22 +449,12 @@ const AdvancedSearch = ( ) => {
           <View className="mb-7">
             <Heading4 className="mb-5">{t( "USER" )}</Heading4>
             <View className="mb-5">
-              {unobservedByUser && (
-                <SelectedFilterRow
-                  accessibilityLabel={t( "Change-user" )}
-                  onEdit={() => setOpenPicker( "user" )}
-                  onRemove={clearUserFilters}
-                  removeAccessibilityLabel={t( "Remove-user-filter" )}
-                >
-                  <Body1>{t( "Species-I-havent-observed" )}</Body1>
-                </SelectedFilterRow>
-              )}
               {user && (
                 <SelectedFilterRow
                   accessibilityLabel={t( "Change-user" )}
                   justify="justify-around"
                   onEdit={() => setOpenPicker( "user" )}
-                  onRemove={clearUserFilters}
+                  onRemove={() => updateUser( null )}
                   removeAccessibilityLabel={t( "Remove-user-filter" )}
                 >
                   <UserListItem
@@ -474,7 +464,7 @@ const AdvancedSearch = ( ) => {
                   />
                 </SelectedFilterRow>
               )}
-              {!user && !unobservedByUser && (
+              {!user && (
                 <Button
                   text={t( "FILTER-BY-A-USER" )}
                   onPress={() => {
@@ -484,6 +474,11 @@ const AdvancedSearch = ( ) => {
                 />
               )}
             </View>
+            <Checkbox
+              text={t( "Popular-observations-filter" )}
+              isChecked={!!popular}
+              onPress={() => dispatch( { type: "TOGGLE_POPULAR" } )}
+            />
           </View>
 
           {/* Project Section */}
@@ -657,6 +652,20 @@ const AdvancedSearch = ( ) => {
             } )}
           />
 
+          {/* Evidence Type section */}
+          <View className="mb-7">
+            <Heading4 className="mb-5">{t( "EVIDENCE-TYPE" )}</Heading4>
+            {Object.values( getEvidenceTypeValues( t ) ).map( ( { label, value } ) => (
+              <View key={value} className="mb-4">
+                <Checkbox
+                  text={label}
+                  isChecked={!!evidenceTypes?.includes( value )}
+                  onPress={() => dispatch( { type: "TOGGLE_EVIDENCE_TYPE", evidenceType: value } )}
+                />
+              </View>
+            ) )}
+          </View>
+
           {/* Reviewed section */}
           {currentUser && (
             <RadioGroupSection
@@ -683,6 +692,8 @@ const AdvancedSearch = ( ) => {
               accessibilityLabel={t( "View-photo-licensing-info" )}
             />
           </View>
+
+          <HotspotSettingsSection />
         </View>
       </ScrollView>
       <ButtonBar containerClass="bg-white border-t border-lightGray">
@@ -764,11 +775,8 @@ const AdvancedSearch = ( ) => {
         <ExploreTaxonSearchModal
           showModal
           closeModal={closePicker}
-          updateTaxon={realmTaxon => updateTaxon(
-            realmTaxon
-              ? Taxon.mapRealmToPojo( realmTaxon )
-              : null,
-          )}
+          taxonFilters={taxonFilters}
+          updateTaxonFilters={updateTaxonFilters}
         />
       )}
       {openPicker === "user" && (
@@ -776,7 +784,7 @@ const AdvancedSearch = ( ) => {
           showModal
           closeModal={closePicker}
           updateUser={updateUser}
-          onSelectUnobserved={updateUnobservedByUser}
+          defaultToCurrentUser
         />
       )}
       {openPicker === "project" && (
@@ -790,30 +798,34 @@ const AdvancedSearch = ( ) => {
         <ExploreLocationSearchModal
           showModal
           closeModal={closePicker}
-          onSelectNearby={() => dispatch( { type: "SET_LOCATION_NEARBY" } )}
+          nearbyRadius={{
+            selected: isNearby,
+            radiusKm: nearbyRadiusKm,
+            defaultRadiusKm: DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM,
+            onChange: setNearby,
+          }}
+          onSelectNearby={() => setNearby( )}
           updateLocation={updateLocation}
         />
       )}
-      {savedSearchesOpen && (
-        <BottomSheetV2
-          enableSwipeToClose={false}
-          headerText={t( "SAVED-SEARCHES" )}
-          onPressClose={( ) => setShowSavedSearches( false )}
-        >
-          <SavedSearches hideHeader onSelect={applySavedSearch} />
-        </BottomSheetV2>
-      )}
+      <SavedSearchSheets
+        currentSearch={currentSavedSearch}
+        onCloseDelete={( ) => setSearchToDelete( null )}
+        onCloseSave={( ) => setShowSaveSheet( false )}
+        searchToDelete={searchToDelete}
+        showSaveSheet={showSaveSheet}
+      />
       {pendingExit && (
         <WarningSheet
-          onPressClose={( ) => setPendingExit( null )}
+          onPressClose={( ) => setPendingExit( false )}
           confirm={( ) => {
-            setPendingExit( null );
-            exit( pendingExit );
+            setPendingExit( false );
+            navigation.goBack( );
           }}
           headerText={t( "DISCARD-FILTER-CHANGES" )}
           text={t( "You-changed-filters-will-be-discarded" )}
           buttonText={t( "DISCARD-CHANGES" )}
-          handleSecondButtonPress={( ) => setPendingExit( null )}
+          handleSecondButtonPress={( ) => setPendingExit( false )}
           secondButtonText={t( "CANCEL" )}
           loading={false}
         />

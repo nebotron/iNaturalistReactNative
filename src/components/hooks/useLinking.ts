@@ -63,10 +63,14 @@ const useLinking = ( currentUser?: object ) => {
   }, [navigateConfirmedUser, checkAllowedHosts] );
 
   useEffect( ( ) => {
-    Linking.addEventListener( "url", async ( { url } ) => {
+    // Without the removal below this effect stacked another handler onto the
+    // module-level Linking emitter every time handleUrl changed identity, and
+    // they lived for the rest of the process.
+    const subscription = Linking.addEventListener( "url", ( { url } ) => {
       if ( !url ) { return; }
       handleUrl( url );
     } );
+    return ( ) => subscription.remove( );
   }, [handleUrl] );
 
   useEffect( ( ) => {

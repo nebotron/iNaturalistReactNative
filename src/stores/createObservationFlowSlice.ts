@@ -7,6 +7,14 @@ import remove from "lodash/remove";
 import Photo from "realmModels/Photo";
 import Sound from "realmModels/Sound";
 import type { RealmObservation, RealmObservationPojo } from "realmModels/types";
+import {
+  resolveDevicePhotoUriForRemovedObservationPhoto,
+} from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
+import {
+  normalizeDevicePhotoUri,
+  registerImportedPhotoDeviceUriMappings,
+} from "sharedHelpers/getOriginalDevicePhotoUri";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import type { BackupMapping } from "sharedHelpers/rollbackPhotos";
 import type { StateCreator } from "zustand";
 
@@ -16,18 +24,82 @@ interface RollbackSnapshot {
   cameraUris: string[];
   cameraRollUris: string[];
   photoLibraryUris: string[];
+  originalDevicePhotoUris: string[];
+  importedPhotoDeviceUriByLocalUri: Record<string, string>;
+  removedOriginalDevicePhotoUris: string[];
   evidenceToAdd: string[];
   newPhotoUris: string[];
   unsavedChanges: boolean;
 }
 
 export interface GroupedPhoto {
-  photos: {
+  // Absent on a sound-only item, e.g. the audio track of an imported video
+  photos?: {
     image: {
         uri: string;
+        // Set once the photo has been cropped
+        crop?: NormalizedCrop;
     };
-    timestamp: number;
+    timestamp?: number;
+    // Set while the photo is still being copied out of the device library: the
+    // cell drawn for it is a placeholder standing in for a file the import has
+    // not written yet.
+    pending?: boolean;
+    // False for media the crop editor will never open -- a video, or a GIF.
+    // See GroupedMediaPhotoItem in photoLibraryMediaHelpers.
+    croppable?: boolean;
   }[];
+  soundUri?: string;
+  // What a sound-only item is sorted by, since it has no photo to read a
+  // timestamp from
+  timestamp?: number;
+}
+
+// What a placeholder turns into once its media has landed: the photos that
+// take its place (none, if the copy failed), anything else that came out of
+// the same asset, and the device-photo bookkeeping that was waiting on the
+// copied file's uri.
+export interface GroupedPhotoResolution {
+  photos?: GroupedPhoto["photos"];
+  // Only ever the sound a video yielded alongside its GIF
+  extraItems?: { soundUri: string; timestamp?: number }[];
+  originalDevicePhotoUris?: string[];
+  deviceUriMappings?: { localUri: string; deviceUri: string | null | undefined }[];
+}
+
+// Placeholders only resolve in the process that started their copy, so
+// persisting them would restore an import that can never finish (see
+// useResumeGroupPhotos).
+export const dropPendingGroupPhotos = ( groups: GroupedPhoto[] ): GroupedPhoto[] => {
+  if ( !groups?.some( group => group.photos?.some( photo => photo.pending ) ) ) {
+    return groups;
+  }
+  return groups
+    .map( group => ( {
+      ...group,
+      photos: ( group.photos || [] ).filter( photo => !photo.pending ),
+    } ) )
+    .filter( group => group.photos.length > 0 || group.soundUri );
+};
+
+export interface LastLocationPickerState {
+  region: {
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  };
+  accuracy: number;
+  locationName: string;
+}
+
+export interface GroupCropResume {
+  imageUri?: string;
+  pendingImageUris: string[];
+  cropImport: boolean;
+  skipUris: string[];
+  // The unsaved crop the user had framed on imageUri
+  crop?: NormalizedCrop;
 }
 
 interface CameraStateOptions {
@@ -51,12 +123,20 @@ interface ObservationFlowState {
   currentObservationIndex: number;
   evidenceToAdd: string[];
   photoLibraryUris: string[];
+  originalDevicePhotoUris: string[];
+  importedPhotoDeviceUriByLocalUri: Record<string, string>;
+  removedOriginalDevicePhotoUris: string[];
+  pendingGroupPhotoDeletionUris: string[];
   groupedPhotos: GroupedPhoto[];
+  // Where the Group Photos cropper was left with photos still to crop, so
+  // opening it again picks up there
+  groupCropResume: GroupCropResume | null;
   observations: RealmObservationPojo[];
   observationMarkedAsViewedAt: Date | null;
   cameraUris: string[];
   savingPhoto: boolean;
   savedOrUploadedMultiObsFlow: boolean;
+  bulkUploadMode: boolean;
   unsavedChanges: boolean;
   totalSavedObservations: number;
   sentinelFileName: string | null;
@@ -64,21 +144,36 @@ interface ObservationFlowState {
   rollbackSnapshot: RollbackSnapshot | null;
   backupMappings: BackupMapping[];
   firstObservationDefaults?: Partial<RealmObservationPojo>;
+  lastLocationPickerState: LastLocationPickerState | null;
 }
 
 interface ObservationFlowActions {
   deletePhotoFromObservation: ( uri: string ) => void;
   deleteSoundFromObservation: ( uri: string ) => void;
   resetObservationFlowSlice: ( ) => void;
+  setGroupCropResume: ( resume: GroupCropResume | null ) => void;
   addCameraRollUris: ( uris: string[] ) => void;
+  addOriginalDevicePhotoUris: ( uris: string[] ) => void;
+  addImportedPhotoDeviceUriMappings: (
+    mappings: { localUri: string; deviceUri: string | null | undefined }[],
+  ) => void;
+  attachDeviceUrisToObservationPhotos: (
+    mappings: { localUri: string; deviceUri: string | null | undefined }[],
+  ) => void;
   setSavingPhoto: ( saving: boolean ) => void;
   setCameraState: ( options: CameraStateOptions ) => void;
   setCurrentObservationIndex: ( index: number ) => void;
+  removeObservationFromMultiObsFlowAtIndex: ( removedIndex: number ) => void;
   setGroupedPhotos: ( photos: GroupedPhoto[] ) => void;
+  resolveGroupedPhotoPlaceholder: (
+    placeholderUri: string,
+    resolution: GroupedPhotoResolution | null,
+  ) => boolean;
   setObservationMarkedAsViewedAt: ( date: Date | null ) => void;
   setObservations: ( updatedObservations: RealmObservationPojo[] ) => void;
   setPhotoImporterState: ( options: PhotoImporterOptions ) => void;
   setSavedOrUploadedMultiObsFlow: ( ) => void;
+  setBulkUploadMode: ( enabled: boolean ) => void;
   updateObservations: ( updatedObservations: RealmObservationPojo[] ) => void;
   updateObservationKeys: ( keysAndValues: Partial<RealmObservationPojo> ) => void;
   getCurrentObservation: ( ) => RealmObservationPojo | null;
@@ -92,6 +187,8 @@ interface ObservationFlowActions {
   setBackupMappings: ( mappings: BackupMapping[] ) => void;
   clearRollbackSnapshot: ( ) => void;
   setRollbackSnapshot: ( ) => void;
+  setLastLocationPickerState: ( state: LastLocationPickerState | null ) => void;
+  addPendingGroupPhotoDeletionUri: ( uri: string ) => void;
 }
 
 export type ObservationFlowSlice = ObservationFlowState & ObservationFlowActions;
@@ -103,7 +200,12 @@ const DEFAULT_STATE: ObservationFlowState = {
   currentObservationIndex: 0,
   evidenceToAdd: [],
   photoLibraryUris: [],
+  originalDevicePhotoUris: [],
+  importedPhotoDeviceUriByLocalUri: {},
+  removedOriginalDevicePhotoUris: [],
+  pendingGroupPhotoDeletionUris: [],
   groupedPhotos: [],
+  groupCropResume: null,
   observations: [],
   // Track when any obs was last marked as viewed so we know when to update
   // the notifications indicator
@@ -115,12 +217,14 @@ const DEFAULT_STATE: ObservationFlowState = {
   cameraUris: [],
   savingPhoto: false,
   savedOrUploadedMultiObsFlow: false,
+  bulkUploadMode: false,
   unsavedChanges: false,
   totalSavedObservations: 0,
   sentinelFileName: null,
   newPhotoUris: [],
   rollbackSnapshot: null,
   backupMappings: [],
+  lastLocationPickerState: null,
 };
 
 const removeObsSoundFromObservation = (
@@ -150,6 +254,12 @@ const observationToJSON = (
   ? observation.toJSON( ) as unknown as RealmObservationPojo
   : observation );
 
+/** Keeps index in range when the observations array is replaced with a shorter list */
+const clampObservationIndex = ( index: number, length: number ): number => {
+  if ( length <= 0 ) { return 0; }
+  return Math.min( Math.max( index, 0 ), length - 1 );
+};
+
 const keysAndValuesToJSON = (
   keysAndValues: Partial<RealmObservationPojo>,
 ): Partial<RealmObservationPojo> => {
@@ -161,6 +271,28 @@ const keysAndValuesToJSON = (
       : value;
   } );
   return result as Partial<RealmObservationPojo>;
+};
+
+const observationPhotoMatchesUri = (
+  obsPhoto: RealmObservationPojo["observationPhotos"][number],
+  uri: string,
+): boolean => {
+  const photo = obsPhoto?.photo;
+  if ( !photo ) {
+    return false;
+  }
+
+  const candidateUris = new Set(
+    [
+      Photo.getLocalPhotoUri( photo.localFilePath ),
+      photo.url,
+      Photo.displayLocalOrRemoteSquarePhoto( photo ),
+      Photo.displayCropSourcePhoto( photo ),
+      obsPhoto.originalPhotoUri,
+    ].filter( ( candidateUri ): candidateUri is string => !!candidateUri ),
+  );
+
+  return candidateUris.has( uri );
 };
 
 const updateObservationKeysWithState = (
@@ -183,36 +315,84 @@ const updateObservationKeysWithState = (
 
 const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, get ) => ( {
   ...DEFAULT_STATE,
-  deletePhotoFromObservation: ( uri: string ) => set( state => {
-    const newObservations = [...state.observations];
-    let newObservation: RealmObservationPojo | null = null;
-    if ( newObservations.length > 0 ) {
-      newObservation = newObservations[state.currentObservationIndex];
-      const index = newObservation.observationPhotos.findIndex(
-        op => ( Photo.getLocalPhotoUri( op.photo?.localFilePath ) || op.photo?.url ) === uri,
-      );
-      if ( index > -1 ) {
-        newObservation = {
-          ...newObservation,
-          observationPhotos: [
-            ...newObservation.observationPhotos.slice( 0, index ),
-            ...newObservation.observationPhotos.slice( index + 1 ),
-          ],
-        };
-        newObservations[state.currentObservationIndex] = newObservation;
-      }
-    }
+  deletePhotoFromObservation: ( uri: string ) => {
+    let deviceUriToDelete: string | null = null;
 
-    return {
-      cameraUris: [...pull( state.cameraUris, uri )],
-      evidenceToAdd: [...pull( state.evidenceToAdd, uri )],
-      observations: newObservations,
-      currentObservation: newObservation
-        ? observationToJSON( newObservation )
-        : null,
-      unsavedChanges: true,
-    };
-  } ),
+    set( currentState => {
+      const newObservations = [...currentState.observations];
+      let newObservation: RealmObservationPojo | null = null;
+      if ( newObservations.length > 0 ) {
+        newObservation = newObservations[currentState.currentObservationIndex];
+        const index = newObservation.observationPhotos.findIndex(
+          op => observationPhotoMatchesUri( op, uri ),
+        );
+        if ( index > -1 ) {
+          const removedPhoto = newObservation.observationPhotos[index];
+          deviceUriToDelete = normalizeDevicePhotoUri(
+            resolveDevicePhotoUriForRemovedObservationPhoto(
+              removedPhoto,
+              newObservation.observationPhotos,
+              index,
+              currentState.cameraRollUris,
+              currentState.importedPhotoDeviceUriByLocalUri,
+            ),
+          );
+          newObservation = {
+            ...newObservation,
+            observationPhotos: [
+              ...newObservation.observationPhotos.slice( 0, index ),
+              ...newObservation.observationPhotos.slice( index + 1 ),
+            ],
+          };
+          newObservations[currentState.currentObservationIndex] = newObservation;
+        }
+      }
+
+      let { cameraRollUris } = currentState;
+      let { importedPhotoDeviceUriByLocalUri } = currentState;
+      if ( deviceUriToDelete ) {
+        const cameraRollIndex = cameraRollUris.findIndex(
+          rollUri => normalizeDevicePhotoUri( rollUri ) === deviceUriToDelete,
+        );
+        if ( cameraRollIndex > -1 ) {
+          cameraRollUris = [
+            ...cameraRollUris.slice( 0, cameraRollIndex ),
+            ...cameraRollUris.slice( cameraRollIndex + 1 ),
+          ];
+        }
+
+        importedPhotoDeviceUriByLocalUri = Object.fromEntries(
+          Object.entries( currentState.importedPhotoDeviceUriByLocalUri )
+            .filter( ( [_, mappedUri] ) => (
+              normalizeDevicePhotoUri( mappedUri ) !== deviceUriToDelete
+            ) ),
+        );
+      }
+
+      return {
+        cameraUris: [...pull( currentState.cameraUris, uri )],
+        cameraRollUris,
+        evidenceToAdd: [...pull( currentState.evidenceToAdd, uri )],
+        observations: newObservations,
+        currentObservation: newObservation
+          ? observationToJSON( newObservation )
+          : null,
+        importedPhotoDeviceUriByLocalUri,
+        originalDevicePhotoUris: deviceUriToDelete
+          ? currentState.originalDevicePhotoUris.filter(
+            originalUri => normalizeDevicePhotoUri( originalUri ) !== deviceUriToDelete,
+          )
+          : currentState.originalDevicePhotoUris,
+        removedOriginalDevicePhotoUris: deviceUriToDelete
+          ? [...new Set( [
+            ...currentState.removedOriginalDevicePhotoUris,
+            deviceUriToDelete,
+          ] )]
+          : currentState.removedOriginalDevicePhotoUris,
+        unsavedChanges: true,
+      };
+    } );
+  },
   deleteSoundFromObservation: ( uri: string ) => set( state => {
     const newObservations = removeObsSoundFromObservation(
       state.observations[state.currentObservationIndex],
@@ -225,7 +405,16 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
       unsavedChanges: true,
     };
   } ),
-  resetObservationFlowSlice: ( ) => set( DEFAULT_STATE ),
+  resetObservationFlowSlice: ( ) => set( state => ( {
+    ...DEFAULT_STATE,
+    lastLocationPickerState: state.lastLocationPickerState,
+  } ) ),
+  setLastLocationPickerState: ( lastLocationPickerState: LastLocationPickerState | null ) => set( {
+    lastLocationPickerState,
+  } ),
+  addPendingGroupPhotoDeletionUri: ( uri: string ) => set( state => ( {
+    pendingGroupPhotoDeletionUris: [...new Set( [...state.pendingGroupPhotoDeletionUris, uri] )],
+  } ) ),
   addCameraRollUris: ( uris: string[] ) => set( state => {
     const savedUris = state.cameraRollUris;
     // A placeholder uri means we don't know the real URI, probably b/c we
@@ -242,30 +431,232 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
       savingPhoto: false,
     } );
   } ),
+  addOriginalDevicePhotoUris: ( uris: string[] ) => set( state => {
+    const originalDevicePhotoUris = [...state.originalDevicePhotoUris];
+    uris.forEach( uri => {
+      if ( uri && !originalDevicePhotoUris.includes( uri ) ) {
+        originalDevicePhotoUris.push( uri );
+      }
+    } );
+
+    return { originalDevicePhotoUris };
+  } ),
+  addImportedPhotoDeviceUriMappings: (
+    mappings: { localUri: string; deviceUri: string | null | undefined }[],
+  ) => set( state => {
+    const importedPhotoDeviceUriByLocalUri = {
+      ...state.importedPhotoDeviceUriByLocalUri,
+    };
+    mappings.forEach( ( { localUri, deviceUri } ) => {
+      registerImportedPhotoDeviceUriMappings(
+        importedPhotoDeviceUriByLocalUri,
+        localUri,
+        deviceUri,
+      );
+    } );
+    return { importedPhotoDeviceUriByLocalUri };
+  } ),
+  // Persists each device library ph:// URI onto its observation photo (matched
+  // by local URI) so later features like device photo cleanup can find the
+  // original device photo. Camera-captured photos are created before we know
+  // their device library URI, so without this their originalDevicePhotoUri
+  // stays null and they never match.
+  attachDeviceUrisToObservationPhotos: mappings => set( state => {
+    const validMappings = mappings
+      .map( ( { localUri, deviceUri } ) => ( {
+        localUri,
+        deviceUri: normalizeDevicePhotoUri( deviceUri ),
+      } ) )
+      .filter(
+        ( m ): m is { localUri: string; deviceUri: string } => !!( m.localUri && m.deviceUri ),
+      );
+    if ( validMappings.length === 0 ) {
+      return {};
+    }
+
+    // Also record the local -> device URI mapping so other consumers (e.g.
+    // tracked-location updates) can resolve device photos by local URI.
+    const importedPhotoDeviceUriByLocalUri = {
+      ...state.importedPhotoDeviceUriByLocalUri,
+    };
+    validMappings.forEach( ( { localUri, deviceUri } ) => {
+      registerImportedPhotoDeviceUriMappings(
+        importedPhotoDeviceUriByLocalUri,
+        localUri,
+        deviceUri,
+      );
+    } );
+
+    const observations = state.observations.map( observation => {
+      const obsPhotos = observation?.observationPhotos;
+      if ( !obsPhotos || obsPhotos.length === 0 ) {
+        return observation;
+      }
+      obsPhotos.forEach( obsPhoto => {
+        if ( obsPhoto.originalDevicePhotoUri ) {
+          return;
+        }
+        const match = validMappings.find(
+          m => observationPhotoMatchesUri( obsPhoto, m.localUri ),
+        );
+        if ( match ) {
+          obsPhoto.originalDevicePhotoUri = match.deviceUri;
+        }
+      } );
+      return observation;
+    } );
+
+    return {
+      importedPhotoDeviceUriByLocalUri,
+      observations,
+      currentObservation: observations.length > 0
+        ? observations[state.currentObservationIndex]
+        : state.currentObservation,
+    };
+  } ),
   setSavingPhoto: ( saving: boolean ) => set( { savingPhoto: saving } ),
   setCameraState: ( options: CameraStateOptions ) => set( state => ( {
     evidenceToAdd: options?.evidenceToAdd || state.evidenceToAdd,
     cameraUris:
       options?.cameraUris || state.cameraUris,
   } ) ),
-  setCurrentObservationIndex: ( index: number ) => set( state => ( {
-    currentObservationIndex: index,
-    currentObservation: observationToJSON( state.observations[index] ),
-  } ) ),
+  setCurrentObservationIndex: ( index: number ) => set( state => {
+    const currentObservationIndex = clampObservationIndex(
+      index,
+      state.observations.length,
+    );
+    return {
+      currentObservationIndex,
+      currentObservation: state.observations.length > 0
+        ? observationToJSON( state.observations[currentObservationIndex] )
+        : null,
+    };
+  } ),
+  removeObservationFromMultiObsFlowAtIndex: ( removedIndex: number ) => set( state => {
+    if ( removedIndex < 0 || removedIndex >= state.observations.length ) {
+      return {};
+    }
+    const observations = state.observations.filter(
+      ( _obs, index ) => index !== removedIndex,
+    );
+    const wasLast = removedIndex === state.observations.length - 1;
+    let { currentObservationIndex } = state;
+
+    if ( removedIndex < currentObservationIndex ) {
+      currentObservationIndex -= 1;
+    } else if ( removedIndex === currentObservationIndex ) {
+      currentObservationIndex = wasLast
+        ? removedIndex - 1
+        : removedIndex;
+    }
+    currentObservationIndex = clampObservationIndex(
+      currentObservationIndex,
+      observations.length,
+    );
+
+    return {
+      observations,
+      currentObservationIndex,
+      currentObservation: observations.length > 0
+        ? observationToJSON( observations[currentObservationIndex] )
+        : null,
+    };
+  } ),
+  setGroupCropResume: ( resume: GroupCropResume | null ) => set( { groupCropResume: resume } ),
   setGroupedPhotos: ( photos: GroupedPhoto[] ) => set( {
     groupedPhotos: photos,
   } ),
+  // Swaps one placeholder cell for the media it was standing in for, leaving
+  // the rest of the grid exactly where it is: the Group Photos screen is shown
+  // before any photo has been copied, and each cell fills in as its own copy
+  // lands. Returns false if the placeholder is gone (the import was discarded,
+  // or the user removed the cell), which is the signal to stop doing work for
+  // that photo.
+  resolveGroupedPhotoPlaceholder: (
+    placeholderUri: string,
+    resolution: GroupedPhotoResolution | null,
+  ): boolean => {
+    const index = get( ).groupedPhotos.findIndex(
+      group => group.photos?.some(
+        photo => photo.pending && photo.image?.uri === placeholderUri,
+      ),
+    );
+    if ( index < 0 ) { return false; }
+    set( state => {
+      const group = state.groupedPhotos[index];
+      const photos = ( group.photos || [] ).flatMap( photo => (
+        photo.pending && photo.image?.uri === placeholderUri
+          ? resolution?.photos || []
+          : [photo] ) );
+      const groupedPhotos = [...state.groupedPhotos];
+      // A copy that failed, or a video that yielded neither a GIF nor audio,
+      // leaves nothing behind and its cell goes away.
+      const keepGroup = photos.length > 0 || !!group.soundUri;
+      if ( keepGroup ) {
+        groupedPhotos[index] = { ...group, photos };
+      } else {
+        groupedPhotos.splice( index, 1 );
+      }
+      // Inserted next to the item they came from rather than re-sorted, so
+      // nothing already on screen moves under the user mid-import.
+      if ( resolution?.extraItems?.length ) {
+        groupedPhotos.splice(
+          keepGroup
+            ? index + 1
+            : index,
+          0,
+          ...resolution.extraItems,
+        );
+      }
+      const importedPhotoDeviceUriByLocalUri = {
+        ...state.importedPhotoDeviceUriByLocalUri,
+      };
+      ( resolution?.deviceUriMappings || [] ).forEach( ( { localUri, deviceUri } ) => {
+        registerImportedPhotoDeviceUriMappings(
+          importedPhotoDeviceUriByLocalUri,
+          localUri,
+          deviceUri,
+        );
+      } );
+      const originalDevicePhotoUris = [...state.originalDevicePhotoUris];
+      ( resolution?.originalDevicePhotoUris || [] ).forEach( uri => {
+        if ( uri && !originalDevicePhotoUris.includes( uri ) ) {
+          originalDevicePhotoUris.push( uri );
+        }
+      } );
+      return {
+        groupedPhotos,
+        photoLibraryUris: [
+          ...state.photoLibraryUris,
+          ...( resolution?.photos || [] ).map( photo => photo.image?.uri ).filter( Boolean ),
+        ],
+        importedPhotoDeviceUriByLocalUri,
+        originalDevicePhotoUris,
+      };
+    } );
+    return true;
+  },
   setObservationMarkedAsViewedAt: ( date: Date | null ) => set( {
     observationMarkedAsViewedAt: date,
   } ),
   setObservations: (
     updatedObservations: RealmObservationPojo[],
-  ) => set( state => ( {
-    observations: updatedObservations
+  ) => set( state => {
+    const observations = updatedObservations
       .map( observationToJSON )
-      .filter( Boolean ) as RealmObservationPojo[],
-    currentObservation: observationToJSON( updatedObservations[state.currentObservationIndex] ),
-  } ) ),
+      .filter( Boolean ) as RealmObservationPojo[];
+    const currentObservationIndex = clampObservationIndex(
+      state.currentObservationIndex,
+      observations.length,
+    );
+    return {
+      observations,
+      currentObservationIndex,
+      currentObservation: observations.length > 0
+        ? observationToJSON( observations[currentObservationIndex] )
+        : null,
+    };
+  } ),
   setPhotoImporterState: ( options: PhotoImporterOptions ) => set( state => ( {
     photoLibraryUris: options?.photoLibraryUris || state.photoLibraryUris,
     savingPhoto: options?.savingPhoto || state.savingPhoto,
@@ -281,14 +672,27 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
   setSavedOrUploadedMultiObsFlow: ( ) => set( {
     savedOrUploadedMultiObsFlow: true,
   } ),
+  setBulkUploadMode: ( enabled: boolean ) => set( {
+    bulkUploadMode: enabled,
+  } ),
   updateObservations: (
     updatedObservations: RealmObservationPojo[],
-  ) => set( state => ( {
-    observations: updatedObservations
+  ) => set( state => {
+    const observations = updatedObservations
       .map( observationToJSON )
-      .filter( Boolean ) as RealmObservationPojo[],
-    currentObservation: observationToJSON( updatedObservations[state.currentObservationIndex] ),
-  } ) ),
+      .filter( Boolean ) as RealmObservationPojo[];
+    const currentObservationIndex = clampObservationIndex(
+      state.currentObservationIndex,
+      observations.length,
+    );
+    return {
+      observations,
+      currentObservationIndex,
+      currentObservation: observations.length > 0
+        ? observationToJSON( observations[currentObservationIndex] )
+        : null,
+    };
+  } ),
   updateObservationKeys: ( keysAndValues, setUnsavedChanges = true ) => set( state => ( {
     observations: updateObservationKeysWithState( keysAndValues, state ),
     currentObservation:
@@ -339,6 +743,9 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
       cameraUris: snapshot.cameraUris,
       cameraRollUris: snapshot.cameraRollUris,
       photoLibraryUris: snapshot.photoLibraryUris,
+      originalDevicePhotoUris: snapshot.originalDevicePhotoUris,
+      importedPhotoDeviceUriByLocalUri: snapshot.importedPhotoDeviceUriByLocalUri,
+      removedOriginalDevicePhotoUris: snapshot.removedOriginalDevicePhotoUris,
       evidenceToAdd: snapshot.evidenceToAdd,
       newPhotoUris: snapshot.newPhotoUris,
       unsavedChanges: snapshot.unsavedChanges,
@@ -355,6 +762,11 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
       cameraUris: [...state.cameraUris],
       cameraRollUris: [...state.cameraRollUris],
       photoLibraryUris: [...state.photoLibraryUris],
+      originalDevicePhotoUris: [...state.originalDevicePhotoUris],
+      importedPhotoDeviceUriByLocalUri: {
+        ...state.importedPhotoDeviceUriByLocalUri,
+      },
+      removedOriginalDevicePhotoUris: [...state.removedOriginalDevicePhotoUris],
       evidenceToAdd: [...state.evidenceToAdd],
       newPhotoUris: [...state.newPhotoUris],
       unsavedChanges: state.unsavedChanges,

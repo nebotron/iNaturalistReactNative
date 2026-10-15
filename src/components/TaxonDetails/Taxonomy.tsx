@@ -13,9 +13,10 @@ import TaxonomyTaxon from "./TaxonomyTaxon";
 interface Props {
   taxon: object;
   hideNavButtons: boolean;
+  selectableForExplore?: boolean;
 }
 
-const Taxonomy = ( { taxon: currentTaxon, hideNavButtons }: Props ) => {
+const Taxonomy = ( { taxon: currentTaxon, hideNavButtons, selectableForExplore }: Props ) => {
   const [viewChildren, setViewChildren] = useState( false );
   const navigation = useNavigation<
     NoBottomTabStackScreenProps<"TaxonDetails">["navigation"] &
@@ -30,6 +31,7 @@ const Taxonomy = ( { taxon: currentTaxon, hideNavButtons }: Props ) => {
       id: taxonId,
       hideNavButtons,
       usesVision: false,
+      selectableForExplore,
     } )
   );
 

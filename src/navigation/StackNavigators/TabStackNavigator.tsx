@@ -1,10 +1,16 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import About from "components/About";
+import AudioId from "components/AudioId/AudioId";
+import AudioIdClip from "components/AudioId/AudioIdClip";
+import AudioIdHistory from "components/AudioId/AudioIdHistory";
+import AudioIdTaxa from "components/AudioId/AudioIdTaxa";
+import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
 import UiLibrary from "components/Developer/UiLibrary";
 import UiLibraryItem from "components/Developer/UiLibraryItem";
+import DevicePhotoCleanup from "components/DevicePhotoCleanup/DevicePhotoCleanup";
 import Donate from "components/Donate/Donate";
 import ExploreContainer from "components/Explore/ExploreContainer";
 import ExploreV2Container from "components/Explore/ExploreV2/ExploreV2Container";
@@ -12,7 +18,15 @@ import RootExploreContainer from "components/Explore/RootExploreContainer";
 import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
 import PostDetails from "components/Journal/PostDetails";
+import LifeListContainer from "components/LifeList/LifeListContainer";
+import CameraClockCheck from "components/LocationHistory/CameraClockCheck";
+import LocationHistory from "components/LocationHistory/LocationHistory";
+import LocationHistoryDetailMap from "components/LocationHistory/LocationHistoryDetailMap";
+import LocationHistoryPointsMap from "components/LocationHistory/LocationHistoryPointsMap";
+import MaverickIdentificationsContainer
+  from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
+import MyIdentificationsContainer from "components/MyIdentifications/MyIdentificationsContainer";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
 import Notifications from "components/Notifications/Notifications";
 import DQAContainer from "components/ObsDetails/DQAContainer";
@@ -27,6 +41,7 @@ import { Heading4 } from "components/SharedComponents";
 import FollowersList from "components/UserProfile/FollowersList";
 import FollowingList from "components/UserProfile/FollowingList";
 import UserProfile from "components/UserProfile/UserProfile";
+import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
 import { t } from "i18next";
 import ContextHeader from "navigation/ContextHeader";
 import {
@@ -46,6 +61,7 @@ import useFeatureFlag from "sharedHooks/useFeatureFlag";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
 import colors from "styles/tailwindColors";
 
+import PhotoImporterStackScreens from "./PhotoImporterStackScreens";
 import SharedStackScreens from "./SharedStackScreens";
 
 const aboutTitle = () => (
@@ -90,6 +106,25 @@ const postDetailsTitle = () => (
 );
 
 // eslint-disable-next-line i18next/no-literal-string
+const audioIdTitle = () => <Heading4 numberOfLines={1}>AUDIO ID</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const audioIdHistoryTitle = () => <Heading4 numberOfLines={1}>HEARD</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const audioIdClipTitle = () => <Heading4 numberOfLines={1}>CLIP</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const audioIdTaxaTitle = () => <Heading4 numberOfLines={1}>LISTENING FOR</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const cameraClockTitle = () => <Heading4 numberOfLines={1}>CAMERA CLOCK</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>PHOTO CLEANUP</Heading4>;
+const locationHistoryTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "LOCATION-HISTORY" )}
+  </Heading4>
+);
+// eslint-disable-next-line i18next/no-literal-string
 const debugTitle = () => <Heading4 className="text-white">DEBUG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const uiLibTitle = () => <Heading4 className="text-white">UI LIBRARY</Heading4>;
@@ -116,6 +151,11 @@ const FadeInFollowersList = ( ) => fadeInComponent( <FollowersList /> );
 const FadeInFollowingList = ( ) => fadeInComponent( <FollowingList /> );
 const FadeInJournal = ( ) => fadeInComponent( <Journal /> );
 const FadeInPostDetails = ( ) => fadeInComponent( <PostDetails /> );
+const FadeInLifeList = ( ) => fadeInComponent( <LifeListContainer /> );
+const FadeInMaverickIdentifications = (
+  ( ) => fadeInComponent( <MaverickIdentificationsContainer /> )
+);
+const FadeInMyIdentifications = ( ) => fadeInComponent( <MyIdentificationsContainer /> );
 
 const BASE_SCREEN_OPTIONS = {
   headerBackButtonDisplayMode: "minimal",
@@ -214,6 +254,11 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={ExploreScreen}
           />
           <Stack.Screen
+            name="WildlifeHotspots"
+            component={WildlifeHotspotsScreen}
+            options={hideHeader}
+          />
+          <Stack.Screen
             name="ObsDetails"
             component={FadeInObsDetailsScreen}
             options={OBS_DETAILS_OPTIONS}
@@ -235,6 +280,7 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           options={DQA_OPTIONS}
         />
         {SharedStackScreens( )}
+        {PhotoImporterStackScreens( )}
         {/* Project Stack Group */}
         <Stack.Group
           screenOptions={{
@@ -293,6 +339,87 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             name="PostDetails"
             component={FadeInPostDetails}
             options={{ headerTitle: postDetailsTitle }}
+          />
+          <Stack.Screen
+            name="LifeList"
+            component={FadeInLifeList}
+            options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="AudioId"
+            component={AudioId}
+            options={{
+              headerTitle: audioIdTitle,
+            }}
+          />
+          <Stack.Screen
+            name="AudioIdHistory"
+            component={AudioIdHistory}
+            options={{ headerTitle: audioIdHistoryTitle }}
+          />
+          <Stack.Screen
+            name="AudioIdClip"
+            component={AudioIdClip}
+            options={{ headerTitle: audioIdClipTitle }}
+          />
+          <Stack.Screen
+            name="AudioIdTaxa"
+            component={AudioIdTaxa}
+            options={{ headerTitle: audioIdTaxaTitle }}
+          />
+          <Stack.Screen
+            name="CropLogViewer"
+            component={CropLogViewer}
+            options={{
+              headerTitle: cropLogTitle,
+            }}
+          />
+          <Stack.Screen
+            name="DevicePhotoCleanup"
+            component={DevicePhotoCleanup}
+            options={{
+              headerTitle: devicePhotoCleanupTitle,
+            }}
+          />
+          <Stack.Screen
+            name="MaverickIdentifications"
+            component={FadeInMaverickIdentifications}
+            options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="MyIdentifications"
+            component={FadeInMyIdentifications}
+            options={LIST_OPTIONS}
+          />
+          <Stack.Screen
+            name="LocationHistory"
+            component={LocationHistory}
+            options={{
+              headerTitle: locationHistoryTitle,
+            }}
+          />
+          <Stack.Screen
+            name="CameraClockCheck"
+            component={CameraClockCheck}
+            options={{
+              headerTitle: cameraClockTitle,
+            }}
+          />
+          <Stack.Screen
+            name="LocationHistoryPointsMap"
+            component={LocationHistoryPointsMap}
+            options={{
+              headerTitle: locationHistoryTitle,
+            }}
+          />
+          <Stack.Screen
+            name="LocationHistoryDetailMap"
+            component={LocationHistoryDetailMap}
+            options={{
+              // Reuses the LocationPicker interface, which renders its own
+              // header and close button, so hide the native stack header.
+              headerShown: false,
+            }}
           />
         </Stack.Group>
         {/* Developer Stack Group */}

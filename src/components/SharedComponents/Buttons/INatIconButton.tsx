@@ -1,7 +1,6 @@
 import classnames from "classnames";
 import { INatIcon } from "components/SharedComponents";
 import { View } from "components/styledComponents";
-import { getCurrentRoute } from "navigation/navigationUtils";
 import type { PropsWithChildren } from "react";
 import React from "react";
 import type {
@@ -12,11 +11,8 @@ import {
   Platform,
   Pressable,
 } from "react-native";
-import { log } from "sharedHelpers/logger";
 import colors from "styles/tailwindColors";
 import { twMerge } from "tailwind-merge";
-
-const logger = log.extend( "INatIconButton" );
 
 interface Props extends PropsWithChildren {
   accessibilityHint?: string;
@@ -24,11 +20,16 @@ interface Props extends PropsWithChildren {
   className?: string;
   color?: string;
   disabled?: boolean;
+  // Adds a dark shadow behind the icon so light icons stay legible over
+  // light backgrounds, e.g. an overlay on a photo
+  dropShadow?: boolean;
   height?: number;
   icon?: string;
   // Only show the icon with all the same layout, don't make it a button
   iconOnly?: boolean;
   onPress: ( _event: GestureResponderEvent ) => void;
+  onPressIn?: ( _event: GestureResponderEvent ) => void;
+  onPressOut?: ( _event: GestureResponderEvent ) => void;
   // Inserts a white or colored view under the icon so an holes in the shape show as
   // white
   preventTransparency?: boolean;
@@ -66,10 +67,13 @@ const INatIconButton = ( {
   className,
   color,
   disabled = false,
+  dropShadow,
   height,
   icon,
   iconOnly,
   onPress,
+  onPressIn,
+  onPressOut,
   preventTransparency,
   size = 18,
   style,
@@ -170,6 +174,7 @@ const INatIconButton = ( {
             name={icon}
             size={size}
             color={String( color || colors?.darkGray )}
+            dropShadow={dropShadow}
           />
         )
       }
@@ -183,17 +188,6 @@ const INatIconButton = ( {
       </View>
     );
   }
-
-  const handlePressWithTracking = ( event: GestureResponderEvent ) => {
-    if ( testID ) {
-      const currentRoute = getCurrentRoute( );
-      logger.info( `Button tap: ${testID}-${currentRoute?.name || "undefined"}` );
-    }
-
-    if ( onPress ) {
-      onPress( event );
-    }
-  };
 
   return (
     <Pressable
@@ -210,7 +204,9 @@ const INatIconButton = ( {
           : "active:opacity-95",
       )}
       disabled={disabled}
-      onPress={handlePressWithTracking}
+      onPress={onPress}
+      onPressIn={onPressIn}
+      onPressOut={onPressOut}
       style={wrapperStyle}
       testID={testID}
     >

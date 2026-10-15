@@ -1,17 +1,21 @@
 import type {
-  ExploreV2Filters, ExploreV2LocationState, ExploreV2Search,
+  ExploreV2Filters, ExploreV2LocationState, ExploreV2SearchWithTab,
 } from "providers/ExploreV2Context";
 import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
+import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { subjectKey } from "stores/createExploreV2SearchesSlice";
 
-export type SavedSearchIdentity = ExploreV2Search;
+export type SavedSearchIdentity = ExploreV2SearchWithTab;
 
 const locationKey = ( location: ExploreV2LocationState ): string => {
   switch ( location.placeMode ) {
     case EXPLORE_V2_PLACE_MODE.WORLDWIDE:
       return "worldwide";
     case EXPLORE_V2_PLACE_MODE.NEARBY:
-      return "nearby";
+      // Default radius keeps the key that searches saved before radii existed have
+      return !location.radius || location.radius === DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM
+        ? "nearby"
+        : `nearby-${location.radius}`;
     case EXPLORE_V2_PLACE_MODE.PLACE:
       return `place-${location.place.id}`;
     case EXPLORE_V2_PLACE_MODE.MAP_AREA: {
@@ -54,9 +58,18 @@ const filtersKey = ( filters: ExploreV2Filters ): string => {
     wildStatus: filters.wildStatus,
     reviewedFilter: filters.reviewedFilter,
     photoLicense: filters.photoLicense,
+    evidenceTypes: [...( filters.evidenceTypes ?? [] )].sort( ).join( "," ),
+    popular: filters.popular
+      ? "true"
+      : "",
     user: String( filters.user?.id ?? "" ),
     unobservedByUser: String( filters.unobservedByUser?.id ?? "" ),
     project: String( filters.project?.id ?? "" ),
+    taxonFilters: ( filters.taxonFilters || [] )
+      .map( filter => `${filter.exclude
+        ? "-"
+        : ""}${filter.taxon.id}` )
+      .join( "," ),
   };
 
   return ( Object.keys( parts ) as ( keyof ExploreV2Filters )[] )
@@ -74,6 +87,7 @@ const savedSearchKey = ( search: SavedSearchIdentity ): string => {
     sortBy: search.sortBy,
     speciesSortBy: search.speciesSortBy,
     filters: filtersKey( search.filters ),
+    activeTab: search.activeTab ?? "",
   };
 
   return ( Object.keys( parts ) as ( keyof SavedSearchIdentity )[] )

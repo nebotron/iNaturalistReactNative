@@ -1,7 +1,11 @@
+import { searchTaxonFilters } from "components/Explore/ExploreV2/helpers/advancedSearchReducer";
+import { taxonFiltersToApiParams } from "components/Explore/helpers/taxonFilters";
+import withoutObservedSpecies from "components/Explore/helpers/withoutObservedSpecies";
 import type { ExploreV2State } from "providers/ExploreV2Context";
 import {
   EXPLORE_V2_PLACE_MODE,
 } from "providers/ExploreV2Context";
+import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { observationSortToApiParams } from "sharedHelpers/observationsSort";
 import type { ObservationOrderBy, SortDirection } from "types/sorting";
 
@@ -14,7 +18,8 @@ export interface ExploreV2QueryParams extends FilterApiParams {
   per_page: number;
   order_by: ObservationOrderBy;
   order: SortDirection;
-  taxon_id?: number;
+  taxon_id?: number | string;
+  without_taxon_id?: number | string;
   iconic_taxa?: string[];
   lat?: number;
   lng?: number;
@@ -37,7 +42,6 @@ export type ExploreV2BaseQueryParams = Omit<
 export interface NearbyCoords {
   lat: number;
   lng: number;
-  radius: number;
 }
 
 const buildExploreV2QueryParams = (
@@ -52,11 +56,12 @@ const buildExploreV2QueryParams = (
     ...observationSortToApiParams( state.sortBy ),
   };
 
+  Object.assign( params, taxonFiltersToApiParams(
+    searchTaxonFilters( state.subject, state.filters ),
+  ) );
+
   // this might warrant moving into a selector function at some point
   switch ( state.subject?.type ) {
-    case "taxon":
-      params.taxon_id = state.subject.taxon.id;
-      break;
     case "user":
       params.user_id = state.subject.user.id;
       break;
@@ -80,7 +85,7 @@ const buildExploreV2QueryParams = (
       if ( nearbyCoords ) {
         params.lat = nearbyCoords.lat;
         params.lng = nearbyCoords.lng;
-        params.radius = nearbyCoords.radius;
+        params.radius = location.radius ?? DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM;
       }
       break;
     case EXPLORE_V2_PLACE_MODE.PLACE:
@@ -112,6 +117,15 @@ const buildExploreV2QueryParams = (
   // so drop it when the user explicitly asked for captive/casual
   if ( paramsWithFilters.quality_grade?.includes( "casual" ) || paramsWithFilters.captive ) {
     delete paramsWithFilters.verifiable;
+  }
+
+  const unobservedByUserId = paramsWithFilters.unobserved_by_user_id;
+  if ( unobservedByUserId ) {
+    const withoutTaxonId = withoutObservedSpecies(
+      paramsWithFilters.without_taxon_id,
+      unobservedByUserId,
+    );
+    if ( withoutTaxonId !== undefined ) paramsWithFilters.without_taxon_id = withoutTaxonId;
   }
 
   return paramsWithFilters;

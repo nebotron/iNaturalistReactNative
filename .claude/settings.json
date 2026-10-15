@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 scripts/app_log.py)",
+      "Bash(python3 scripts/app_log.py *)",
+      "WebFetch(domain:inaturalist-9001d-default-rtdb.firebaseio.com)"
+    ],
+    "deny": [
+      "Bash(python3 scripts/app_log.py *--clear*)"
+    ]
+  },
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/session-start.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

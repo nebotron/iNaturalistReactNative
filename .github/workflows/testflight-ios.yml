@@ -1,0 +1,313 @@
+##
+# Build the iOS app on a GitHub runner and upload it to TestFlight, so builds
+# can reach a phone without a local Mac.
+#
+# Fork-only: signs with Ben's own Apple team and the com.benhannel.inat.dev
+# bundle IDs, so it never touches iNaturalist's App Store Connect records.
+# Trigger from the Actions tab or with `gh workflow run testflight-ios.yml`.
+#
+# Required repository secrets:
+#   ASC_KEY_ID     App Store Connect API key ID
+#   ASC_ISSUER_ID  App Store Connect API issuer ID
+#   ASC_KEY_BASE64 base64 of the AuthKey_<ASC_KEY_ID>.p8 private key
+#   DOTENV_BASE64  base64 of the production .env
+#   GOOGLE_SERVICE_INFO_PRODUCTION_BASE64
+#                  base64 of ios/GoogleService-Info.production.plist
+#
+# Optional, and strongly recommended: reuse signing certificates.
+#   DIST_CERT_P12_BASE64  base64 of a .p12 holding the Apple Distribution
+#                         certificate + key, ideally also an Apple Development
+#                         one (automatic signing archives with Development and
+#                         re-signs with Distribution on export)
+#   DIST_CERT_PASSWORD    that .p12's password
+# xcodebuild creates any certificate it can't find in the keychain, on every
+# run, and the account soon hits Apple's certificate limit ("Choose a
+# certificate to revoke").
+##
+name: TestFlight iOS
+on:
+  workflow_dispatch:
+    inputs:
+      prebuilt_react_native:
+        description: >-
+          Link React Native's prebuilt XCFrameworks instead of compiling its
+          source. Removes ~45% of the archive's compiles, but swaps statically
+          linked React Native for two dynamic frameworks — experimental.
+        type: boolean
+        default: false
+
+concurrency:
+  group: testflight-ios
+  cancel-in-progress: false
+
+jobs:
+  testflight:
+    runs-on: macos-26
+    # Kill the task if not finished after 120 minutes
+    timeout-minutes: 120
+    env:
+      TEAM_ID: DVURLJZFH6
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      ARCHIVE_PATH: ${{ github.workspace }}/ios/build/iNaturalistReactNative.xcarchive
+      EXPORT_PATH: ${{ github.workspace }}/ios/build/export
+      # Makes react_native_post_install wire every target's CC/CXX/LD through
+      # react-native/scripts/xcode/ccache-clang.sh
+      USE_CCACHE: '1'
+
+    steps:
+    # Fail in seconds rather than an hour into the build
+    - name: Check that every secret is present
+      env:
+        ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
+        DOTENV_BASE64: ${{ secrets.DOTENV_BASE64 }}
+        GOOGLE_SERVICE_INFO_PRODUCTION_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PRODUCTION_BASE64 }}
+      run: |
+        missing=""
+        for secret in ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_BASE64 DOTENV_BASE64 \
+          GOOGLE_SERVICE_INFO_PRODUCTION_BASE64; do
+          [ -n "${!secret}" ] || missing="$missing $secret"
+        done
+        if [ -n "$missing" ]; then
+          echo "Missing repository secrets:$missing" >&2
+          exit 1
+        fi
+
+    - name: Check out Git repository
+      uses: actions/checkout@v6
+
+    - name: Install Node.js and NPM
+      uses: actions/setup-node@v6
+      with:
+        node-version-file: '.nvmrc'
+        cache: 'npm'
+
+    - name: Setup Ruby version according to .ruby-version with cached gems
+      uses: ruby/setup-ruby@v1
+      with:
+        bundler-cache: true
+
+    # Required workaround for Firebase & XCode >26.0.1
+    # https://github.com/actions/runner-images/issues/13135#issuecomment-3397914993
+    - name: Set Xcode Toolchain
+      run: echo "TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault" >> "$GITHUB_ENV"
+
+    # node_modules itself, not just the npm download cache, so an unchanged
+    # lockfile skips the install and the patch-package run entirely. Cached
+    # after postinstall, so the patches are already applied.
+    - name: Restore node_modules
+      id: node-modules
+      uses: actions/cache@v4
+      with:
+        path: node_modules
+        key: node-modules-${{ runner.os }}-${{ hashFiles( '.nvmrc', 'package-lock.json', 'patches/**' ) }}
+
+    - name: Install Dependencies
+      if: steps.node-modules.outputs.cache-hit != 'true'
+      run: npm ci
+
+    - name: Create .env file
+      env:
+        DOTENV_BASE64: ${{ secrets.DOTENV_BASE64 }}
+        EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
+      run: |
+        printf '%s' "$DOTENV_BASE64" | base64 --decode > .env
+        if [ -n "$EBIRD_API_KEY" ]; then printf '\nEBIRD_API_KEY=%s\n' "$EBIRD_API_KEY" >> .env; fi
+
+    - name: Create GoogleService-Info.production.plist
+      env:
+        GOOGLE_SERVICE_INFO_PRODUCTION_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PRODUCTION_BASE64 }}
+      run: |
+        printf '%s' "$GOOGLE_SERVICE_INFO_PRODUCTION_BASE64" | base64 --decode \
+          > ios/GoogleService-Info.production.plist
+
+    # The CV model, geomodel and taxonomy aren't in the repo. Requires .env
+    - name: Download the cv model and taxonomy file into the ios folder
+      run: npm run add-example-model
+
+    # Half the archive's ~1900 compiles are React Native core and its C++
+    # dependencies, which change only when react-native does. ccache turns
+    # those into cache hits across runs.
+    - name: Install ccache
+      run: |
+        command -v ccache >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install ccache
+        echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
+        echo "CCACHE_MAXSIZE=2G" >> "$GITHUB_ENV"
+        # Xcode exports build settings to script phases but not to CompileC,
+        # so the wrapper's $CCACHE_BINARY is empty there and it runs plain
+        # clang, bypassing ccache. Bake the binary and cache dir into it.
+        sed -i '' "s|^exec \$CCACHE_BINARY|exec env CCACHE_DIR=$HOME/.ccache CCACHE_MAXSIZE=2G $( command -v ccache )|" \
+          node_modules/react-native/scripts/xcode/ccache-clang.sh
+        cat node_modules/react-native/scripts/xcode/ccache-clang.sh
+
+    # Saved under a new key every run so the cache keeps up with the code; the
+    # restore-keys fall back to the newest cache built against the same Pods.
+    - name: Restore the ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.ccache
+        key: ccache-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}-${{ github.run_id }}
+        restore-keys: |
+          ccache-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}-
+          ccache-${{ runner.os }}-
+
+    # Metro's transform cache, read by metro.config.js through METRO_CACHE_DIR,
+    # so the bundle phase only re-transforms changed files. react-native-xcode.sh
+    # always bundles with --reset-cache, which would wipe it, so drop the flag.
+    - name: Restore the Metro cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.metro-cache
+        key: metro-${{ runner.os }}-${{ hashFiles( 'package-lock.json' ) }}-${{ github.run_id }}
+        restore-keys: |
+          metro-${{ runner.os }}-${{ hashFiles( 'package-lock.json' ) }}-
+
+    - name: Stop the bundle phase resetting the Metro cache
+      run: |
+        sed -i '' '/^  --reset-cache \\$/d' node_modules/react-native/scripts/react-native-xcode.sh
+        ! grep -q -- --reset-cache node_modules/react-native/scripts/react-native-xcode.sh
+
+    # Downloaded pod tarballs — Firebase, GoogleSignIn, onnxruntime — are the
+    # slow part of a cold pod install and are safe to reuse whatever the
+    # lockfile says, since each is stored under its own version.
+    - name: Restore the CocoaPods download cache
+      uses: actions/cache@v4
+      with:
+        path: ~/Library/Caches/CocoaPods
+        key: cocoapods-downloads-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}
+        restore-keys: |
+          cocoapods-downloads-${{ runner.os }}-
+
+    # No restore-keys: an installed Pods tree is only reusable for the exact
+    # lockfile that produced it. pod install still runs on top of it.
+    - name: Restore the installed Pods
+      uses: actions/cache@v4
+      with:
+        path: ios/Pods
+        key: pods-${{ runner.os }}-${{ inputs.prebuilt_react_native }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}
+
+    # RCT_USE_RN_DEP and RCT_USE_PREBUILT_RNCORE make the React Native podspecs
+    # vend headers only and link Meta's published XCFrameworks instead. Both
+    # check Maven for the artifacts first and fall back to building from source
+    # if they are missing, so neither can fail the install on its own.
+    #
+    # RCT_SYMBOLICATE_PREBUILT_FRAMEWORKS pulls the matching dSYMs. It is worth
+    # its ~350MB because without it every React Native frame in a TestFlight
+    # crash report arrives unsymbolicated.
+    #
+    # Note that pod install rewrites Podfile.lock under these — the prebuilt
+    # pods replace RCT-Folly, boost, glog and fmt — which is why the cache key
+    # above has to know which mode produced the tree.
+    - name: Update Pods
+      run: |
+        if [ "${{ inputs.prebuilt_react_native }}" = "true" ]; then
+          export RCT_USE_RN_DEP=1
+          export RCT_USE_PREBUILT_RNCORE=1
+          export RCT_SYMBOLICATE_PREBUILT_FRAMEWORKS=1
+        fi
+        cd ios && pod install
+
+    # altool and xcodebuild both look for the key in ~/.appstoreconnect
+    - name: Install the App Store Connect API key
+      env:
+        ASC_KEY_BASE64: ${{ secrets.ASC_KEY_BASE64 }}
+      run: |
+        mkdir -p "$HOME/.appstoreconnect/private_keys"
+        printf '%s' "$ASC_KEY_BASE64" | base64 --decode \
+          > "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8"
+
+    # A throwaway keychain holding the reusable certificates, which xcodebuild
+    # then finds instead of creating new ones.
+    - name: Import the signing certificate
+      env:
+        DIST_CERT_P12_BASE64: ${{ secrets.DIST_CERT_P12_BASE64 }}
+        DIST_CERT_PASSWORD: ${{ secrets.DIST_CERT_PASSWORD }}
+      run: |
+        if [ -z "$DIST_CERT_P12_BASE64" ]; then
+          echo "::warning::No DIST_CERT_P12_BASE64 secret; xcodebuild will create a new certificate"
+          exit 0
+        fi
+        KEYCHAIN="$RUNNER_TEMP/signing.keychain-db"
+        KEYCHAIN_PASSWORD="$( uuidgen )"
+        printf '%s' "$DIST_CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+        security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security set-keychain-settings -lut 21600 "$KEYCHAIN"
+        security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security import "$RUNNER_TEMP/dist.p12" -P "$DIST_CERT_PASSWORD" \
+          -A -t cert -f pkcs12 -k "$KEYCHAIN"
+        security set-key-partition-list -S apple-tool:,apple: -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+        security list-keychains -d user -s "$KEYCHAIN" $( security list-keychains -d user | tr -d '"' )
+        rm "$RUNNER_TEMP/dist.p12"
+
+    # CFBundleVersion is a literal in the app's Info.plist but is generated from
+    # CURRENT_PROJECT_VERSION for the share extension, so both need setting. A
+    # UTC timestamp is unique and always increasing, so no bump gets committed.
+    - name: Set the build number
+      run: |
+        BUILD_NUMBER="$( date -u +%Y.%m%d.%H%M%S )"
+        echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+        /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD_NUMBER" \
+          ios/iNaturalistReactNative/Info.plist
+
+    # -allowProvisioningUpdates lets xcodebuild create App Store profiles (and,
+    # without the reusable certificate, certificates) with the API key.
+    #
+    # COMPILER_INDEX_STORE_ENABLE=NO drops the index-while-building work, which
+    # only feeds Xcode's editor; nothing opens this archive in an editor.
+    - name: Archive
+      run: |
+        set -o pipefail
+        ccache --zero-stats
+        xcodebuild archive \
+          -workspace ios/iNaturalistReactNative.xcworkspace \
+          -scheme iNaturalistReactNative \
+          -configuration Release \
+          -destination 'generic/platform=iOS' \
+          -archivePath "$ARCHIVE_PATH" \
+          -allowProvisioningUpdates \
+          -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8" \
+          -authenticationKeyID "$ASC_KEY_ID" \
+          -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
+          COMPILER_INDEX_STORE_ENABLE=NO \
+          METRO_CACHE_DIR="$HOME/.metro-cache" \
+          CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+        {
+          echo '### ccache'
+          echo '```'
+          ccache --show-stats
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+
+    # destination=upload has the export sign the IPA and send it to App Store
+    # Connect itself, saving the separate altool upload's repackaging pass.
+    - name: Export and upload to TestFlight
+      run: |
+        cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>method</key>
+          <string>app-store-connect</string>
+          <key>destination</key>
+          <string>upload</string>
+          <key>teamID</key>
+          <string>$TEAM_ID</string>
+          <key>signingStyle</key>
+          <string>automatic</string>
+          <key>uploadSymbols</key>
+          <true/>
+          <key>manageAppVersionAndBuildNumber</key>
+          <false/>
+        </dict>
+        </plist>
+        PLIST
+        xcodebuild -exportArchive \
+          -archivePath "$ARCHIVE_PATH" \
+          -exportPath "$EXPORT_PATH" \
+          -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+          -allowProvisioningUpdates \
+          -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8" \
+          -authenticationKeyID "$ASC_KEY_ID" \
+          -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+        echo "Uploaded build $BUILD_NUMBER to TestFlight" >> "$GITHUB_STEP_SUMMARY"

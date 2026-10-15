@@ -1,46 +1,45 @@
 // @flow
 
 import { refresh } from "@react-native-community/netinfo";
-import classnames from "classnames";
 import ExploreFiltersModal from "components/Explore/Modals/ExploreFiltersModal";
 import {
   Body2,
   Button,
-  INatIconButton,
   OfflineNotice,
   RadioButtonSheet,
   ViewWrapper,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
-import { PLACE_MODE } from "providers/ExploreContext";
+import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
+import { PLACE_MODE, useExplore } from "providers/ExploreContext";
 import type { Node } from "react";
-import React, { useState } from "react";
-import { Alert } from "react-native";
+import React, { useRef, useState } from "react";
 import {
-  useDebugMode,
   useStoredLayout,
   useTranslation,
 } from "sharedHooks";
-import { getShadow } from "styles/global";
-import colors from "styles/tailwindColors";
 
 import ExploreHeader from "./Header/ExploreHeader";
 import IdentifiersView from "./IdentifiersView";
+import IdentifyView from "./IdentifyView";
+import LifeListView from "./LifeListView";
 import ObservationsView from "./ObservationsView";
 import ObservationsViewBar from "./ObservationsViewBar";
 import ObserversView from "./ObserversView";
+import {
+  OfflineObservationsView,
+  useOfflineExploreResults,
+} from "./OfflineExplore";
 import SpeciesView from "./SpeciesView";
-
-const DROP_SHADOW = getShadow( {
-  offsetHeight: 4,
-  elevation: 6,
-} );
 
 const exploreViewIcon = {
   observations: "binoculars",
+  identify: "id-agree",
   species: "leaf",
+  lifelist: "list",
   observers: "observers",
   identifiers: "identifiers",
+  hotspots: "location",
 };
 
 type Props = {
@@ -64,7 +63,7 @@ type Props = {
   startFetching: Function,
   updateLocation: Function,
   updateProject: Function,
-  updateTaxon: Function,
+  updateTaxonFilters: Function,
   updateUser: Function
 }
 
@@ -89,19 +88,42 @@ const Explore = ( {
   startFetching,
   updateLocation,
   updateProject,
-  updateTaxon,
+  updateTaxonFilters,
   updateUser,
 }: Props ): Node => {
   const { t } = useTranslation( );
+  const { state: exploreState } = useExplore( );
+  const hotspotConfig = {
+    hotspotClusterRadiusKm: exploreState.hotspotClusterRadiusKm,
+    hotspotMaxDetourCandidates: exploreState.hotspotMaxDetourCandidates,
+    hotspotObsPerPage: exploreState.hotspotObsPerPage,
+    hotspotParkingMinutes: exploreState.hotspotParkingMinutes,
+    hotspotBboxPaddingKm: exploreState.hotspotBboxPaddingKm,
+  };
+  // Hold the hotspot search to the applied filters: while the filters modal is
+  // open every edit re-renders this, and each render would start a new search.
+  const hotspotParamsRef = useRef( { ...queryParams, ...hotspotConfig } );
+  if ( !showFiltersModal ) {
+    hotspotParamsRef.current = { ...queryParams, ...hotspotConfig };
+  }
+  // Same for the life list, which pages through every matching observation
+  const lifeListParamsRef = useRef( queryParams );
+  if ( !showFiltersModal ) {
+    lifeListParamsRef.current = queryParams;
+  }
   const [showExploreBottomSheet, setShowExploreBottomSheet] = useState( false );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreObservationsLayout" );
-  const { isDebug } = useDebugMode( );
+  const offlineResults = useOfflineExploreResults( queryParams );
+  const showOfflineResults = isConnected === false && !!offlineResults;
 
   const exploreViewA11yLabel = {
     observations: t( "Observations-View" ),
+    identify: t( "Identify-View" ),
     species: t( "Species-View" ),
+    lifelist: t( "Life-List-View" ),
     observers: t( "Observers-View" ),
     identifiers: t( "Identifiers-View" ),
+    hotspots: t( "Hotspots-View" ),
   };
 
   const icon = exploreViewIcon[currentExploreView];
@@ -113,19 +135,24 @@ const Explore = ( {
       count={headerCount}
       exploreView={currentExploreView}
       exploreViewIcon={icon}
+      exploreViewLabel={a11yLabel}
       hasLocationPermissions={hasLocationPermissions}
       hideBackButton={hideBackButton}
       isFetchingHeaderCount={isFetchingHeaderCount}
       onPressCount={( ) => setShowExploreBottomSheet( true )}
+      onPressChangeView={( ) => setShowExploreBottomSheet( true )}
       openFiltersModal={openFiltersModal}
       renderLocationPermissionsGate={renderLocationPermissionsGate}
       requestLocationPermissions={requestLocationPermissions}
       updateLocation={updateLocation}
-      updateTaxon={updateTaxon}
+      updateTaxonFilters={updateTaxonFilters}
     />
   );
 
   const renderMainContent = ( ) => {
+    if ( showOfflineResults ) {
+      return <OfflineObservationsView layout={layout} queryParams={queryParams} />;
+    }
     if ( isConnected === false ) {
       return (
         <OfflineNotice
@@ -163,11 +190,26 @@ const Explore = ( {
             requestLocationPermissions={requestLocationPermissions}
           />
         )}
+        {currentExploreView === "identify" && (
+          <IdentifyView
+            canFetch={canFetch}
+            queryParams={queryParams}
+            handleUpdateCount={handleUpdateCount}
+          />
+        )}
         {currentExploreView === "species" && (
           <SpeciesView
             canFetch={canFetch}
             isConnected={isConnected}
             queryParams={queryParams}
+            handleUpdateCount={handleUpdateCount}
+          />
+        )}
+        {currentExploreView === "lifelist" && (
+          <LifeListView
+            canFetch={canFetch}
+            isConnected={isConnected}
+            queryParams={lifeListParamsRef.current}
             handleUpdateCount={handleUpdateCount}
           />
         )}
@@ -187,6 +229,13 @@ const Explore = ( {
             handleUpdateCount={handleUpdateCount}
           />
         )}
+        {currentExploreView === "hotspots" && (
+          <WildlifeHotspotsScreen
+            embedded
+            filterParams={hotspotParamsRef.current}
+            exploreState={exploreState}
+          />
+        )}
       </View>
     );
   };
@@ -203,12 +252,26 @@ const Explore = ( {
         text: t( "Organisms-that-are-identified-to-species" ),
         value: "species",
       },
+      lifelist: {
+        buttonText: t( "EXPLORE-LIFE-LIST" ),
+        icon: "list",
+        label: t( "Life-List" ),
+        text: t( "Each-species-with-the-date-it-was-first-observed" ),
+        value: "lifelist",
+      },
       observations: {
         buttonText: t( "EXPLORE-OBSERVATIONS" ),
         icon: "observations",
         label: t( "Observations" ),
         text: t( "Individual-encounters-with-organisms" ),
         value: "observations",
+      },
+      identify: {
+        buttonText: t( "IDENTIFY" ),
+        icon: "id-agree",
+        label: t( "Identify" ),
+        text: t( "Identify-observations-one-at-a-time" ),
+        value: "identify",
       },
       observers: {
         buttonText: t( "EXPLORE-OBSERVERS" ),
@@ -224,10 +287,18 @@ const Explore = ( {
         text: t( "iNaturalist-users-who-have-left-an-identification" ),
         value: "identifiers",
       },
+      hotspots: {
+        buttonText: t( "EXPLORE-HOTSPOTS" ),
+        icon: "location",
+        label: t( "Hotspots" ),
+        text: t( "Clusters-of-observations-along-a-route" ),
+        value: "hotspots",
+      },
     };
 
     return (
       <RadioButtonSheet
+        immediate
         onPressClose={() => setShowExploreBottomSheet( false )}
         headerText={t( "EXPLORE" )}
         hidden={!showExploreBottomSheet}
@@ -243,62 +314,21 @@ const Explore = ( {
     );
   };
 
-  const whiteCircleClass = "bg-white rounded-full h-[55px] w-[55px] border-[1px] border-lightGray";
-
   return (
     <>
       <ViewWrapper testID="Explore" wrapperClassName="overflow-hidden">
         <View className="flex-1 overflow-hidden">
           {renderHeader()}
-          {currentExploreView === "observations" && (
+          {( currentExploreView === "observations" || showOfflineResults ) && (
             <ObservationsViewBar
               layout={layout}
               updateObservationsView={writeLayoutToStorage}
-              viewOptions={["map", "grid", "list"]}
+              viewOptions={showOfflineResults
+                ? ["grid", "list"]
+                : ["map", "grid", "list"]}
             />
           )}
           {renderMainContent()}
-          {isDebug && (
-            <INatIconButton
-              icon="triangle-exclamation"
-              className={classnames(
-                "absolute",
-                "bg-white",
-                "bottom-[100px]",
-                "h-[55px]",
-                "right-5",
-                "rounded-full",
-                "w-[55px]",
-                "z-10",
-              )}
-              color="white"
-              size={27}
-              style={[
-                DROP_SHADOW,
-                // eslint-disable-next-line react-native/no-inline-styles
-                { backgroundColor: "deeppink" },
-              ]}
-              accessibilityLabel="Diagnostics"
-              onPress={() => {
-                Alert.alert(
-                  "Explore Info",
-                  `queryParams: ${JSON.stringify( queryParams )}`,
-                );
-              }}
-            />
-          )}
-          <INatIconButton
-            icon={icon}
-            color={colors.inatGreen}
-            size={27}
-            className={classnames(
-              whiteCircleClass,
-              "absolute bottom-5 z-10 right-5",
-            )}
-            accessibilityLabel={a11yLabel}
-            onPress={() => setShowExploreBottomSheet( true )}
-            style={DROP_SHADOW}
-          />
         </View>
       </ViewWrapper>
       <ExploreFiltersModal
@@ -307,7 +337,7 @@ const Explore = ( {
         filterByIconicTaxonUnknown={filterByIconicTaxonUnknown}
         renderLocationPermissionsGate={renderLocationPermissionsGate}
         requestLocationPermissions={requestLocationPermissions}
-        updateTaxon={updateTaxon}
+        updateTaxonFilters={updateTaxonFilters}
         updateLocation={updateLocation}
         updateUser={updateUser}
         updateProject={updateProject}

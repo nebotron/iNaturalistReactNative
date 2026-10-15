@@ -28,6 +28,7 @@ export interface UseSuggestionsOfflineSuggestion {
     name: string;
     rank_level: number;
     iconic_taxon_name?: string;
+    ancestor_ids?: number[];
   };
 }
 
@@ -41,6 +42,7 @@ export interface UseSuggestionsResult {
     topSuggestionType: TopSuggestionType;
   };
   usingOfflineSuggestions: boolean;
+  tryOfflineSuggestions: boolean;
   urlWillCrashOffline: boolean;
   refetchSuggestions: () => void;
   onlineSuggestionsUpdatedAt: number;
@@ -70,4 +72,5 @@ export interface UseSuggestionsOptions {
   scoreImageParams?: ScoreImageParams;
   queryKey: string[];
   onlineSuggestionsAttempted: boolean;
+  preferOfflineModel?: boolean;
 }
