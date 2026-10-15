@@ -1,5 +1,6 @@
 import { searchTaxonFilters } from "components/Explore/ExploreV2/helpers/advancedSearchReducer";
 import { taxonFiltersToApiParams } from "components/Explore/helpers/taxonFilters";
+import withoutObservedSpecies from "components/Explore/helpers/withoutObservedSpecies";
 import type { ExploreV2State } from "providers/ExploreV2Context";
 import {
   EXPLORE_V2_PLACE_MODE,
@@ -116,6 +117,15 @@ const buildExploreV2QueryParams = (
   // so drop it when the user explicitly asked for captive/casual
   if ( paramsWithFilters.quality_grade?.includes( "casual" ) || paramsWithFilters.captive ) {
     delete paramsWithFilters.verifiable;
+  }
+
+  const unobservedByUserId = paramsWithFilters.unobserved_by_user_id;
+  if ( unobservedByUserId ) {
+    const withoutTaxonId = withoutObservedSpecies(
+      paramsWithFilters.without_taxon_id,
+      unobservedByUserId,
+    );
+    if ( withoutTaxonId !== undefined ) paramsWithFilters.without_taxon_id = withoutTaxonId;
   }
 
   return paramsWithFilters;
