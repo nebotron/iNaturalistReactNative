@@ -3,11 +3,14 @@
 #import <CoreImage/CoreImage.h>
 #import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
+#import <Metal/Metal.h>
+#import <OSLog/OSLog.h>
 #import <Photos/Photos.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <React/RCTBridgeModule.h>
 #import <UIKit/UIKit.h>
 #import <Vision/Vision.h>
+#include <mach/mach.h>
 #include <stdlib.h>
 #include <sys/utsname.h>
 #include "onnxruntime_c_api.h"
@@ -684,22 +687,9 @@ static void updateMetadataForCrop( NSMutableDictionary *metadata, NSInteger widt
 static BOOL     jpegDataIsDecodable( NSData *data );
 static BOOL     jpegDataIsBlack( NSData *data );
 static CGFloat  jpegDataMeanLevel( NSData *data );
-// Below this mean level a decode is checked against the camera's embedded
-// preview of the same frame.
-static const CGFloat kDarkDecodeLevel = 24;
-static BOOL     decodeIsDarkerThanPreview( CGFloat decodedLevel, CGFloat previewLevel );
 static UIImage *rasterizedImage( UIImage *image );
 static UIImage *drawnOverSentinel(
   UIImage *image, size_t width, size_t height, CGRect drawRect );
-// Defined with the thumbnail decode it falls back on.
-static NSData *jpegDataFromDecodablePreviewCrop(
-  NSString *path, NSDictionary *sourceMetadata, CGRect cropRect, CGSize cropSpace );
-
-// Longest side asked of the fallback decode when the full decode drew nothing.
-// Asking at or above a raw's sensor size makes ImageIO attempt the same full
-// demosaic that just failed, instead of serving the embedded preview -- which
-// left both the cropper's display and the crop itself black.
-static const CGFloat kPreviewFallbackMaxPixel = 2048;
 
 // ─── Raw decodes ──────────────────────────────────────────────────────────────
 
@@ -735,8 +725,9 @@ static NSLock *rawDecodeLock( void )
 
 // Runs attempt until it returns YES -- once for anything but a raw, which gets
 // up to kRawDecodeAttempts tries, each holding the raw decode lock. Returns how
-// many tries it took.
-static int withRawDecodeRetries( NSString *path, BOOL ( ^attempt )( void ) )
+// many tries it took; attemptMs, when passed, gets how long each one ran.
+static int withRawDecodeRetries(
+  NSString *path, NSMutableArray<NSNumber *> *attemptMs, BOOL ( ^attempt )( void ) )
 {
   BOOL raw      = isCameraRawFile( path );
   int  attempts = 0;
@@ -745,12 +736,89 @@ static int withRawDecodeRetries( NSString *path, BOOL ( ^attempt )( void ) )
     if ( attempts > 0 ) usleep( kRawDecodeRetryDelayUs );
     attempts += 1;
     if ( raw ) [rawDecodeLock( ) lock];
+    NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
     @autoreleasepool {
       done = attempt( );
     }
+    [attemptMs addObject:@( (int)( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) )];
     if ( raw ) [rawDecodeLock( ) unlock];
   }
   return attempts;
+}
+
+// What the process looked like when a decode drew nothing, to find out why the
+// raw decoder fails in runs: how long each attempt ran (a refusal returns in
+// tens of ms, a demosaic that ran takes on the order of a second), memory and
+// GPU headroom, what ImageIO says about the file, and what ImageIO, CoreImage
+// and Metal logged in this process since the first attempt.
+static NSDictionary *rawDecodeFailureDiagnostics(
+  NSString *path, NSDate *since, NSArray<NSNumber *> *attemptMs )
+{
+  NSMutableDictionary *d = [NSMutableDictionary dictionary];
+  d[@"attemptMs"] = attemptMs ?: @[];
+  d[@"freeMB"]    = @( os_proc_available_memory( ) >> 20 );
+  task_vm_info_data_t    vm;
+  mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
+  if ( task_info( mach_task_self( ), TASK_VM_INFO, (task_info_t)&vm, &count ) == KERN_SUCCESS ) {
+    d[@"footprintMB"] = @( vm.phys_footprint >> 20 );
+  }
+  id<MTLDevice> gpu = MTLCreateSystemDefaultDevice( );
+  if ( gpu ) {
+    d[@"gpuAllocatedMB"] = @( gpu.currentAllocatedSize >> 20 );
+    if ( @available( iOS 16.0, * ) ) {
+      d[@"gpuWorkingSetMB"] = @( gpu.recommendedMaxWorkingSetSize >> 20 );
+    }
+  }
+  d[@"thermalState"] = @( [NSProcessInfo processInfo].thermalState );
+  d[@"lowPower"]     = @( [NSProcessInfo processInfo].isLowPowerModeEnabled );
+
+  CGImageSourceRef src =
+    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
+  if ( src ) {
+    d[@"sourceStatus"] = @( CGImageSourceGetStatus( src ) );
+    d[@"imageStatus"]  = @( CGImageSourceGetStatusAtIndex( src, 0 ) );
+    d[@"imageCount"]   = @( CGImageSourceGetCount( src ) );
+    CFRelease( src );
+  }
+
+  // Persisted (default level and up) entries only; info and debug aren't kept.
+  NSError    *error = nil;
+  OSLogStore *store = [OSLogStore storeWithScope:OSLogStoreCurrentProcessIdentifier error:&error];
+  if ( !store ) {
+    d[@"osLogError"] = error.localizedDescription ?: @"unavailable";
+    return d;
+  }
+  NSEnumerator *entries = [store
+    entriesEnumeratorWithOptions:0
+                        position:[store positionWithDate:since]
+                       predicate:nil
+                           error:&error];
+  NSMutableArray<NSString *> *lines = [NSMutableArray array];
+  for ( OSLogEntry *entry in entries ) {
+    if ( ![entry isKindOfClass:[OSLogEntryLog class]] ) continue;
+    OSLogEntryLog *logEntry = (OSLogEntryLog *)entry;
+    // System frameworks only: the app's own logging (React Native's included)
+    // is already in the app log.
+    if ( ![logEntry.subsystem hasPrefix:@"com.apple."] ) continue;
+    NSString *message = logEntry.composedMessage ?: @"";
+    if ( message.length > 300 ) message = [message substringToIndex:300];
+    [lines addObject:[NSString stringWithFormat:@"%@/%@: %@",
+      logEntry.subsystem, logEntry.category, message]];
+  }
+  // The most recent are nearest the failure.
+  if ( lines.count > 25 ) {
+    d[@"osLogDropped"] = @( lines.count - 25 );
+    [lines removeObjectsInRange:NSMakeRange( 0, lines.count - 25 )];
+  }
+  d[@"osLog"] = lines;
+  if ( error ) d[@"osLogError"] = error.localizedDescription;
+  return d;
+}
+
+static NSError *diagnosticsError( NSDictionary *diagnostics )
+{
+  return [NSError errorWithDomain:@"ImageCropper" code:1
+                         userInfo:@{ @"diagnostics": diagnostics }];
 }
 
 static NSData *encodedJpegWithMetadata( CGImageRef imageRef, NSDictionary *metadata )
@@ -888,12 +956,9 @@ RCT_EXPORT_METHOD( cropImage
                                   [width integerValue],   [height integerValue] );
     __block UIImage  *image        = nil;
     __block NSData   *data         = nil;
-    // Where the written pixels came from, and how bright they and the preview
-    // were, so the app log can say whether a black crop was a dark decode.
-    __block NSString *origin       = @"decode";
-    __block CGFloat   level        = -1;
-    __block CGFloat   previewLevel = -1;
-    int attempts = withRawDecodeRetries( input, ^BOOL {
+    NSDate                     *started   = [NSDate date];
+    NSMutableArray<NSNumber *> *attemptMs = [NSMutableArray array];
+    int attempts = withRawDecodeRetries( input, attemptMs, ^BOOL {
     image = [UIImage imageWithContentsOfFile:input];
     if ( !image ) return YES;
     CGImageRef croppedRef = NULL;
@@ -931,34 +996,6 @@ RCT_EXPORT_METHOD( cropImage
       : nil;
     if ( croppedRef ) CGImageRelease( croppedRef );
 
-    origin       = data ? @"decode" : @"preview";
-    level        = jpegDataMeanLevel( data );
-    previewLevel = -1;
-    if ( data && level >= 0 && level < kDarkDecodeLevel ) {
-      NSData *preview = jpegDataFromDecodablePreviewCrop( input, srcMeta, cropRect, image.size );
-      previewLevel = jpegDataMeanLevel( preview );
-      if ( preview && decodeIsDarkerThanPreview( level, previewLevel ) ) {
-        data   = preview;
-        origin = @"preview_dark_decode";
-      }
-    }
-
-    if ( !data ) {
-      // Everything above rests on a decode of the original that can silently
-      // put no pixels anywhere -- a camera raw iOS reads the header of but
-      // cannot demosaic is the case this file keeps meeting -- and the crop of
-      // an image that isn't there encodes as a file no decoder opens, or as a
-      // frame of solid black. jpegDataFromCroppedImage refuses both, which left
-      // "Could not encode cropped image" and a "Something went wrong" alert as
-      // the whole of the user's crop: the Sep 19 app log has them in pairs,
-      // seconds apart, which is someone framing the same photo twice and losing
-      // it twice. Every other decode in this file already falls back to the
-      // largest image ImageIO will actually produce for the file (for a raw,
-      // the preview the camera embedded) -- and that is the same image
-      // prepareCropSource measured and drew, so it is the frame the user
-      // framed the crop against. Crop that instead of failing.
-      data = jpegDataFromDecodablePreviewCrop( input, srcMeta, cropRect, image.size );
-    }
     return data != nil;
     } );
     if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
@@ -989,7 +1026,8 @@ RCT_EXPORT_METHOD( cropImage
         ( long )orientation,
         cropRect.origin.x, cropRect.origin.y,
         cropRect.size.width, cropRect.size.height, attempts,
-        os_proc_available_memory( ) >> 20], nil );
+        os_proc_available_memory( ) >> 20],
+        diagnosticsError( rawDecodeFailureDiagnostics( input, started, attemptMs ) ) );
       return;
     }
 
@@ -1000,12 +1038,10 @@ RCT_EXPORT_METHOD( cropImage
       reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
     }
     resolve( @{
-      @"path":         output,
-      @"origin":       origin,
-      @"level":        @( level ),
-      @"previewLevel": @( previewLevel ),
-      @"outputLevel":  @( jpegDataMeanLevel( data ) ),
-      @"attempts":     @( attempts ),
+      @"path":        output,
+      @"outputLevel": @( jpegDataMeanLevel( data ) ),
+      @"attempts":    @( attempts ),
+      @"attemptMs":   attemptMs,
     } );
   } );
 }
@@ -1585,148 +1621,6 @@ static UIImage *thumbnailFromImageSource( CGImageSourceRef src, CGFloat maxPixel
   return image;
 }
 
-// ─── Canon CR3 embedded JPEG ─────────────────────────────────────────────────
-//
-// A CR3's first track is a JPEG the camera rendered alongside the raw (full
-// size on some bodies; 3408x2272 from an R6). iOS's raw decoder fails in runs -- the Oct 15 app log has every CR3 in
-// a bulk crop drawing black for minutes, all three retries -- and the thumbnail
-// API can't help there, since FromImageAlways sends it through the same raw
-// decoder. This JPEG decodes with the ordinary JPEG decoder, so it is what the
-// cropper draws and what a failed crop falls back to. ISO BMFF: moov > trak (the first) > mdia > minf > stbl > stsz / co64.
-
-static uint32_t cr3U32( const uint8_t *p )
-{
-  return ( (uint32_t)p[0] << 24 ) | ( (uint32_t)p[1] << 16 ) | ( (uint32_t)p[2] << 8 ) | p[3];
-}
-
-static uint64_t cr3U64( const uint8_t *p )
-{
-  return ( (uint64_t)cr3U32( p ) << 32 ) | cr3U32( p + 4 );
-}
-
-// The payload of the first box of `type` in bytes[start, end).
-static BOOL cr3FindBox(
-  const uint8_t *bytes, size_t start, size_t end, const char *type,
-  size_t *payloadStart, size_t *payloadEnd )
-{
-  size_t pos = start;
-  while ( pos + 8 <= end ) {
-    uint64_t size   = cr3U32( bytes + pos );
-    size_t   header = 8;
-    if ( size == 1 ) {
-      if ( pos + 16 > end ) return NO;
-      size   = cr3U64( bytes + pos + 8 );
-      header = 16;
-    } else if ( size == 0 ) {
-      size = end - pos;
-    }
-    if ( size < header || size > end - pos ) return NO;
-    if ( memcmp( bytes + pos + 4, type, 4 ) == 0 ) {
-      *payloadStart = pos + header;
-      *payloadEnd   = pos + (size_t)size;
-      return YES;
-    }
-    pos += (size_t)size;
-  }
-  return NO;
-}
-
-static NSData *cr3EmbeddedJpegData( NSString *path )
-{
-  NSFileHandle *fh = [NSFileHandle fileHandleForReadingAtPath:path];
-  if ( !fh ) return nil;
-  NSData *jpeg = nil;
-  @try {
-    unsigned long long fileSize = [fh seekToEndOfFile];
-    // Top-level boxes: ftyp (brand "crx "), then moov.
-    unsigned long long pos  = 0;
-    NSData            *moov = nil;
-    BOOL               crx  = NO;
-    while ( !moov && pos + 16 <= fileSize ) {
-      [fh seekToFileOffset:pos];
-      NSData *head = [fh readDataOfLength:16];
-      if ( head.length < 16 ) break;
-      const uint8_t *h      = head.bytes;
-      uint64_t       size   = cr3U32( h );
-      uint64_t       header = 8;
-      if ( size == 1 ) { size = cr3U64( h + 8 ); header = 16; }
-      if ( size < header || size > fileSize - pos ) break;
-      if ( pos == 0 ) {
-        crx = memcmp( h + 4, "ftyp", 4 ) == 0 && memcmp( h + 8, "crx ", 4 ) == 0;
-        if ( !crx ) break;
-      } else if ( memcmp( h + 4, "moov", 4 ) == 0 && size - header < 16 * 1024 * 1024 ) {
-        [fh seekToFileOffset:pos + header];
-        moov = [fh readDataOfLength:(NSUInteger)( size - header )];
-      }
-      pos += size;
-    }
-    if ( !moov ) return nil;
-
-    const uint8_t *m = moov.bytes;
-    size_t s = 0, e = moov.length;
-    const char *chain[] = { "trak", "mdia", "minf", "stbl" };
-    for ( int i = 0; i < 4; i++ ) {
-      if ( !cr3FindBox( m, s, e, chain[i], &s, &e ) ) return nil;
-    }
-    size_t szS, szE, coS, coE;
-    if ( !cr3FindBox( m, s, e, "stsz", &szS, &szE ) || szE - szS < 16 ) return nil;
-    uint64_t length = cr3U32( m + szS + 4 );
-    if ( length == 0 ) length = cr3U32( m + szS + 12 );
-    uint64_t offset = 0;
-    if ( cr3FindBox( m, s, e, "co64", &coS, &coE ) && coE - coS >= 16 ) {
-      offset = cr3U64( m + coS + 8 );
-    } else if ( cr3FindBox( m, s, e, "stco", &coS, &coE ) && coE - coS >= 12 ) {
-      offset = cr3U32( m + coS + 8 );
-    } else {
-      return nil;
-    }
-    if ( length < 4 || length > 64 * 1024 * 1024 || length > fileSize
-      || offset > fileSize - length ) return nil;
-    [fh seekToFileOffset:offset];
-    NSData *data = [fh readDataOfLength:(NSUInteger)length];
-    const uint8_t *d = data.bytes;
-    if ( data.length == length && d[0] == 0xFF && d[1] == 0xD8 ) jpeg = data;
-  } @catch ( NSException *exception ) {
-    jpeg = nil;
-  } @finally {
-    [fh closeFile];
-  }
-  return jpeg;
-}
-
-// The CR3's embedded JPEG at up to maxPixel, drawn (so a no-op decode is nil
-// rather than black), or nil for anything that isn't a CR3.
-static UIImage *cr3EmbeddedJpegImage( NSString *path, CGFloat maxPixel )
-{
-  NSData *jpeg = cr3EmbeddedJpegData( path );
-  if ( !jpeg ) return nil;
-  CGImageSourceRef jsrc = CGImageSourceCreateWithData( (__bridge CFDataRef)jpeg, nil );
-  if ( !jsrc ) return nil;
-  UIImage      *image = thumbnailFromImageSource( jsrc, maxPixel );
-  NSDictionary *props = CFBridgingRelease( CGImageSourceCopyPropertiesAtIndex( jsrc, 0, NULL ) );
-  CFRelease( jsrc );
-  if ( !image.CGImage ) return nil;
-  if ( !props[(__bridge NSString *)kCGImagePropertyOrientation] ) {
-    // The track carries no EXIF of its own; the raw's says which way is up.
-    CGImageSourceRef rsrc =
-      CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
-    if ( rsrc ) {
-      image = [UIImage imageWithCGImage:image.CGImage
-                                  scale:1
-                            orientation:orientationForImageSource( rsrc )];
-      CFRelease( rsrc );
-    }
-  }
-  return rasterizedImage( image );
-}
-
-// The largest image ImageIO will produce without the raw decoder, where it can:
-// a CR3's embedded JPEG, else the thumbnail API.
-static UIImage *previewImageAtPath( NSString *path, CGImageSourceRef src, CGFloat maxPixel )
-{
-  return cr3EmbeddedJpegImage( path, maxPixel ) ?: thumbnailFromImageSource( src, maxPixel );
-}
-
 // failureReason, when the caller passes one, receives a short description of
 // which step produced nothing, and what the file looked like to ImageIO.
 // "Could not load image" was the same message whether the file had no decoder
@@ -1780,21 +1674,12 @@ static UIImage *downscaledImageAtPath(
     UIImage *decoded = image
       ? rasterizedImage( image )
       : nil;
-    // iOS's ImageIO reads a Canon CR3's embedded preview but cannot demosaic
-    // its sensor data, so the full decode above returns NULL (in ~40ms, far too
-    // fast to have been a demosaic) for every RAW original from that camera.
-    // Failing outright meant the caller fell back to displaying the .CR3 file
-    // itself, which swapped a Group Photos cell's working thumbnail for a file
-    // <Image> draws nothing for -- leaving the cell's black backdrop alone on
-    // screen. The embedded preview is the largest image iOS can actually
-    // produce for these, so it beats having none.
-    if ( !decoded ) decoded = previewImageAtPath( path, src, maxPixel );
     CFRelease( src );
     if ( !decoded ) {
       if ( failureReason ) {
         *failureReason = [NSString stringWithFormat:
-          @"neither the full decode nor the embedded preview produced an image "
-           "(type=%@, images=%zu)", sourceType ?: @"unknown", imageCount];
+          @"the full decode produced no image (type=%@, images=%zu)",
+          sourceType ?: @"unknown", imageCount];
       }
       return nil;
     }
@@ -1802,7 +1687,7 @@ static UIImage *downscaledImageAtPath(
     return clampToMaxPixel( decoded, maxPixel );
   }
 
-  UIImage *image = previewImageAtPath( path, src, maxPixel );
+  UIImage *image = thumbnailFromImageSource( src, maxPixel );
   CFRelease( src );
   if ( !image && failureReason ) {
     *failureReason = [NSString stringWithFormat:
@@ -2038,19 +1923,6 @@ static CGFloat jpegDataMeanLevel( NSData *data )
   return jpegDataLevels( data, &mean, NULL ) ? mean : -1;
 }
 
-// Whether a decode came back far darker than the embedded preview of the same
-// frame. A raw decode can fail without failing: it hands back a frame that is
-// nearly but not exactly black -- noise, a sliver of real rows -- which the
-// exact-black check above lets through, and which was then written as the crop
-// and drawn as a black square in Group Photos and in the cropper. A photo that
-// really is dark has a preview just as dark, so it is left alone.
-static BOOL decodeIsDarkerThanPreview( CGFloat decodedLevel, CGFloat previewLevel )
-{
-  return decodedLevel >= 0
-    && decodedLevel < kDarkDecodeLevel
-    && previewLevel > decodedLevel * 3 + 16;
-}
-
 // Longest side a rasterization is allowed to allocate a bitmap for. Well above
 // any camera photo, and four bytes a pixel at this size is already 256MB, so a
 // pathological source (a stitched panorama, say) can't take the app down.
@@ -2159,60 +2031,6 @@ static UIImage *rasterizedImage( UIImage *image )
   return drawnOverSentinel(
     image, (size_t)size.width, (size_t)size.height,
     CGRectMake( 0, 0, (size_t)size.width, (size_t)size.height ) );
-}
-
-// A crop taken from the largest image ImageIO will actually produce pixels for,
-// for callers whose own decode of the file produced none. The thumbnail API is
-// what hands back a raw file's embedded preview, and it applies the file's EXIF
-// transform, so what comes back is already in the display coordinate space a
-// crop rect is expressed in -- just possibly at a different scale, which is why
-// the rect is scaled by what the crop was framed against (cropSpace) rather
-// than used as given. Returns nil when even this decode produces nothing, which
-// is a file with no image in it rather than one this path can't read.
-static NSData *jpegDataFromDecodablePreviewCrop(
-  NSString     *path,
-  NSDictionary *sourceMetadata,
-  CGRect        cropRect,
-  CGSize        cropSpace
-)
-{
-  if ( cropSpace.width < 1 || cropSpace.height < 1 ) return nil;
-
-  CGImageSourceRef src =
-    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
-  if ( !src ) return nil;
-  // A CR3's embedded JPEG keeps more resolution than the 2048px preview, and
-  // doesn't go through the raw decoder that just failed.
-  UIImage *preview = cr3EmbeddedJpegImage( path, kMaxRasterizePixel )
-    ?: thumbnailFromImageSource( src, kPreviewFallbackMaxPixel );
-  CFRelease( src );
-  if ( !preview ) return nil;
-
-  CGSize previewSize = CGSizeMake( preview.size.width, preview.size.height );
-  if ( previewSize.width < 1 || previewSize.height < 1 ) return nil;
-
-  CGFloat scaleX = previewSize.width  / cropSpace.width;
-  CGFloat scaleY = previewSize.height / cropSpace.height;
-  CGRect  scaled = CGRectIntersection(
-    CGRectIntegral( CGRectMake(
-      cropRect.origin.x    * scaleX, cropRect.origin.y    * scaleY,
-      cropRect.size.width  * scaleX, cropRect.size.height * scaleY ) ),
-    CGRectMake( 0, 0, previewSize.width, previewSize.height ) );
-  if ( CGRectIsNull( scaled ) || scaled.size.width < 1 || scaled.size.height < 1 ) return nil;
-
-  UIImage *cropped = drawnOverSentinel(
-    preview,
-    ( size_t )scaled.size.width,
-    ( size_t )scaled.size.height,
-    CGRectMake( -scaled.origin.x, -scaled.origin.y,
-                previewSize.width, previewSize.height ) );
-  if ( !cropped.CGImage ) return nil;
-
-  return jpegDataFromCroppedImage(
-    cropped.CGImage,
-    sourceMetadata,
-    ( NSInteger )CGImageGetWidth( cropped.CGImage ),
-    ( NSInteger )CGImageGetHeight( cropped.CGImage ) );
 }
 
 // JPEG data for a thumbnail, or nil if this image can't be encoded into one a
@@ -2431,7 +2249,7 @@ RCT_EXPORT_METHOD( createThumbnail
     __block NSString *encodeFailure = nil;
     __block UIImage  *image         = nil;
     __block NSData   *data          = nil;
-    int attempts = withRawDecodeRetries( input, ^BOOL {
+    int attempts = withRawDecodeRetries( input, nil, ^BOOL {
       NSString *decodeFailure = nil;
       NSString *encodeError   = nil;
       image = downscaledImageAtPath( input, maxDim, &decodeFailure );
@@ -2489,8 +2307,9 @@ RCT_EXPORT_METHOD( prepareCropSource
     __block UIImage  *display       = nil;
     __block NSData   *data          = nil;
     __block NSString *encodeFailure = nil;
-    __block NSString *decodeFailure = nil;
-    int attempts = withRawDecodeRetries( input, ^BOOL {
+    NSDate                     *started   = [NSDate date];
+    NSMutableArray<NSNumber *> *attemptMs = [NSMutableArray array];
+    int attempts = withRawDecodeRetries( input, attemptMs, ^BOOL {
     // Lazy: this reads the header, and the draw below is what reads the pixels.
     UIImage *image = [UIImage imageWithContentsOfFile:input];
     loaded = image && image.size.width > 0 && image.size.height > 0;
@@ -2500,60 +2319,12 @@ RCT_EXPORT_METHOD( prepareCropSource
 
     // The one decode. What comes out of it is both what gets displayed and
     // what the detector reads, so nothing downstream opens the file again.
-    // A CR3 draws its embedded JPEG: the same frame, without the raw decode
-    // that took seconds and came back black in runs.
-    display = cr3EmbeddedJpegImage( input, [maxPixel floatValue] )
-      ?: clampToMaxPixel( image, [maxPixel floatValue] );
+    display = clampToMaxPixel( image, [maxPixel floatValue] );
     NSString *decodeEncodeFailure = nil;
     data    = display
       ? encodedThumbnailData( display, &decodeEncodeFailure )
       : nil;
     encodeFailure = decodeEncodeFailure;
-    // Why the decode above produced nothing, when it didn't, so the app log can
-    // say how often the preview below is what the cropper draws.
-    decodeFailure = data
-      ? nil
-      : ( display ? encodeFailure : @"Could not draw image" ) ?: @"unknown";
-    CGFloat decodedLevel = jpegDataMeanLevel( data );
-    if ( data && decodedLevel >= 0 && decodedLevel < kDarkDecodeLevel ) {
-      // Nearly black: compare with the preview before trusting it (see
-      // decodeIsDarkerThanPreview).
-      CGImageSourceRef src =
-        CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
-      UIImage *preview = src
-        ? previewImageAtPath( input, src, MIN( [maxPixel floatValue], kPreviewFallbackMaxPixel ) )
-        : nil;
-      if ( src ) CFRelease( src );
-      NSData *previewData  = preview
-        ? encodedThumbnailData( preview, NULL )
-        : nil;
-      CGFloat previewLevel = jpegDataMeanLevel( previewData );
-      if ( previewData && decodeIsDarkerThanPreview( decodedLevel, previewLevel ) ) {
-        display       = preview;
-        data          = previewData;
-        decodeFailure = [NSString stringWithFormat:
-          @"Decode came back dark (level %.1f, preview %.1f)", decodedLevel, previewLevel];
-      }
-    }
-    if ( !data ) {
-      // The lazy decode above can put no pixels anywhere -- a camera raw iOS
-      // reads the header of but cannot demosaic -- and rejecting here left the
-      // editor drawing the raw file itself, which <Image> draws nothing for: a
-      // black screen in the bulk cropper and in Group Photos. Draw the largest
-      // image ImageIO will actually produce instead, as cropImage does; it is
-      // the same frame, so the crop still lands where the user framed it.
-      CGImageSourceRef src =
-        CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
-      display = src
-        ? previewImageAtPath( input, src, MIN( [maxPixel floatValue], kPreviewFallbackMaxPixel ) )
-        : nil;
-      if ( src ) CFRelease( src );
-      NSString *previewFailure = nil;
-      data = display
-        ? encodedThumbnailData( display, &previewFailure )
-        : nil;
-      encodeFailure = previewFailure;
-    }
     return data != nil;
     } );
     if ( !loaded ) {
@@ -2561,10 +2332,9 @@ RCT_EXPORT_METHOD( prepareCropSource
       return;
     }
     if ( !data ) {
-      reject( @"PREPARE_FAILED", [NSString stringWithFormat:
-        @"%@; preview: %@; attempts: %d; freeMB: %zu",
-        decodeFailure, encodeFailure ?: @"no embedded preview", attempts,
-        os_proc_available_memory( ) >> 20], nil );
+      reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; attempts: %d",
+        display ? encodeFailure ?: @"unknown" : @"Could not draw image", attempts],
+        diagnosticsError( rawDecodeFailureDiagnostics( input, started, attemptMs ) ) );
       return;
     }
     [[NSFileManager defaultManager]
@@ -2595,9 +2365,9 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"width":      @( width ),
       @"height":     @( height ),
       @"bounds":     bounds ?: [NSNull null],
-      @"decodeFailure": decodeFailure ?: [NSNull null],
       @"displayLevel":  @( displayLevel ),
       @"attempts":      @( attempts ),
+      @"attemptMs":     attemptMs,
     } );
   } );
 }
