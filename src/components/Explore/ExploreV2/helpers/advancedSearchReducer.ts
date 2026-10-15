@@ -113,6 +113,7 @@ export type AdvancedSearchAction =
   | { type: "SET_REVIEWED"; reviewedFilter: REVIEWED }
   | { type: "SET_PHOTO_LICENSE"; photoLicense: PHOTO_LICENSE }
   | { type: "TOGGLE_EVIDENCE_TYPE"; evidenceType: EVIDENCE_TYPE }
+  | { type: "TOGGLE_POPULAR" }
   | { type: "RESET" };
 
 const withFilters = (
@@ -266,6 +267,12 @@ export const advancedSearchReducer = (
           : null,
       } );
     }
+    case "TOGGLE_POPULAR":
+      return withFilters( draft, {
+        popular: draft.filters.popular
+          ? null
+          : true,
+      } );
     case "RESET":
       return defaultAdvancedSearchDraft;
     default: {

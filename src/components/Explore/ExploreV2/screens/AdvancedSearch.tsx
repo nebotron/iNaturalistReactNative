@@ -202,6 +202,7 @@ const AdvancedSearch = ( ) => {
     needsID,
     observed_on: observedOn,
     photoLicense,
+    popular,
     project,
     researchGrade,
     reviewedFilter,
@@ -446,6 +447,11 @@ const AdvancedSearch = ( ) => {
                 />
               )}
             </View>
+            <Checkbox
+              text={t( "Popular-observations-filter" )}
+              isChecked={!!popular}
+              onPress={() => dispatch( { type: "TOGGLE_POPULAR" } )}
+            />
           </View>
 
           {/* Project Section */}

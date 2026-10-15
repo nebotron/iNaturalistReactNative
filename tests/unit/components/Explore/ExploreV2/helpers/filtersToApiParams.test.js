@@ -225,4 +225,9 @@ describe( "filtersToApiParams", ( ) => {
       expect( params.term_id ).toBeUndefined( );
     } );
   } );
+
+  it( "maps popular to popular=true", ( ) => {
+    expect( filtersToApiParams( makeFilters( { popular: true } ) ).popular ).toBe( true );
+    expect( filtersToApiParams( makeFilters( ) ).popular ).toBeUndefined( );
+  } );
 } );

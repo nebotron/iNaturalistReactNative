@@ -105,6 +105,8 @@ export interface ExploreV2Filters {
   reviewedFilter: REVIEWED;
   photoLicense: PHOTO_LICENSE;
   evidenceTypes?: EVIDENCE_TYPE[] | null;
+  // At least one fave
+  popular?: boolean | null;
   // User / project, in ExploreV2 parlance we always consider taxon to be the "subject"
   user?: ApiUser | null;
   unobservedByUser?: ApiUser | null;

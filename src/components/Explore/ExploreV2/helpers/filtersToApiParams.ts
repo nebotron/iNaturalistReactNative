@@ -33,6 +33,7 @@ export interface FilterApiParams extends EvidenceTypeApiParams {
   user_id?: number;
   unobserved_by_user_id?: number;
   project_id?: number;
+  popular?: boolean;
 }
 
 const PHOTO_LICENSE_PARAMS: Partial<Record<PHOTO_LICENSE, string>> = {
@@ -106,6 +107,8 @@ const filtersToApiParams = (
   }
 
   Object.assign( params, evidenceTypesToApiParams( filters.evidenceTypes ) );
+
+  if ( filters.popular ) { params.popular = true; }
 
   if ( filters.user?.id ) { params.user_id = filters.user.id; }
 
