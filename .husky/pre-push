@@ -1,5 +1,12 @@
 set -e
 
+# Only run when pushing to main
+z=0000000000000000000000000000000000000000
+shas=$(while read -r _ sha ref _; do
+  [ "$ref" = refs/heads/main ] && [ "$sha" != $z ] && echo "$sha"
+done)
+[ -z "$shas" ] && exit 0
+
 # Install dependencies if they're missing (e.g. fresh cloud containers).
 # GitHub deps install via git clone when codeload tarballs are blocked. Drop
 # GIT_INDEX_FILE in case a hook inherits it, since npm's `git checkout` in each
@@ -12,11 +19,8 @@ for attempt in 1 2 3; do
   echo "npm install failed (attempt $attempt), retrying..." >&2
 done
 
-# Only check files touched by commits that aren't on any remote yet
-z=0000000000000000000000000000000000000000
-shas=$(while read -r _ sha _ _; do [ "$sha" != $z ] && echo "$sha"; done)
-[ -z "$shas" ] && exit 0
-changed=$(git log --format= --name-only --diff-filter=ACMR $shas --not --remotes \
+# Only check files touched by commits that aren't on a remote main yet
+changed=$(git log --format= --name-only --diff-filter=ACMR $shas --not --remotes='*/main' \
   | sort -u | while read -r f; do [ -f "$f" ] && echo "$f"; done)
 [ -z "$changed" ] && exit 0
 js=$(echo "$changed" | grep -E '\.(js|jsx|ts|tsx)$' || true)

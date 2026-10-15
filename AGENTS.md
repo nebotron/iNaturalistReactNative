@@ -258,7 +258,7 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 - Arrow functions for React components: `const MyComponent = () => { };`
 - i18next string literal checking enforced - use `t()` for all user-facing text
 - Prefer TypeScript for new files (partial adoption, not required)
-- Husky pre-push hook (`.husky/pre-push`) checks only files changed in unpushed commits: eslint `--fix`, `flow status`, rubocop, and i18n regeneration when `.ftl` files changed. If anything gets rewritten, the push fails so you can commit the changes.
+- Husky pre-push hook (`.husky/pre-push`) runs only when pushing to `main` and checks only files changed in commits not yet on `main`: eslint `--fix`, `flow status`, rubocop, and i18n regeneration when `.ftl` files changed. If anything gets rewritten, the push fails so you can commit the changes.
 
 **Details:** TypeScript conventions (interface-vs-type, Flow coexistence) in `agent-docs/conventions/typescript.md`.
 
