@@ -268,7 +268,8 @@ RCT_EXPORT_METHOD( stop )
 
 // Vibrates for a detection with the system vibration, which plays in the
 // background and with the screen off while the recording session keeps the
-// app running, and ignores the silent switch and Do Not Disturb.
+// app running, but follows the phone's haptics setting, so with "Don't Play in
+// Silent Mode" it does nothing while the phone is silenced.
 RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
                    reject:( RCTPromiseRejectBlock )reject )
 {

@@ -1,5 +1,5 @@
 import { navigationRef } from "navigation/navigationUtils";
-import { NativeEventEmitter, NativeModules } from "react-native";
+import { AppState, NativeEventEmitter, NativeModules } from "react-native";
 import { log } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
 import { create } from "zustand";
@@ -232,7 +232,9 @@ const onScores = ( event: ScoresEvent ) => {
     };
   } );
   if ( alerts.length > 0 ) {
-    vibrate( );
+    // The system vibration is muted by the phone's silent mode haptics
+    // setting, so use Core Haptics whenever it can play
+    vibrate( AppState.currentState === "active" );
     AudioBirdId?.notify(
       `Heard ${alerts.map( sp => sp.commonName ).join( ", " )}`,
       alerts.map( sp => ( seen && !seen.has( sp.taxonId )
