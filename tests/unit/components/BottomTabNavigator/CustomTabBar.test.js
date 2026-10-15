@@ -4,6 +4,7 @@ import {
 import { screen } from "@testing-library/react-native";
 import CustomTabBarContainer from "navigation/BottomTabNavigator/CustomTabBarContainer";
 import React from "react";
+import { AppState } from "react-native";
 import * as useCurrentUser from "sharedHooks/useCurrentUser";
 import useStore from "stores/useStore";
 import factory from "tests/factory";
@@ -87,6 +88,7 @@ describe( "CustomTabBar with advanced user layout", () => {
   beforeEach( ( ) => {
     jest.resetAllMocks();
     useNetInfo.mockImplementation( ( ) => ( { isConnected: true } ) );
+    AppState.addEventListener.mockImplementation( ( ) => ( { remove: jest.fn( ) } ) );
     // Re-establish the safe area context mock after resetAllMocks
     const safeAreaContext = require( "react-native-safe-area-context" );
     safeAreaContext.useSafeAreaInsets.mockImplementation( () => ( {

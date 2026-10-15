@@ -15,7 +15,7 @@ export type AuthenticatedQueryOptions<Response> = Omit<
   allowAnonymousJWT?: boolean;
   enabled?: boolean;
   retry?: boolean;
-  refetchInterval?: number;
+  refetchInterval?: number | false;
   // Keep the query disabled until the user is actually signed in (a token
   // exists). Without this a query can fire with a null JWT — e.g. a stale
   // Realm currentUser but no stored credentials — and 401 on every poll.

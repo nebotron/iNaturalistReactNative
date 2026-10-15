@@ -1,3 +1,4 @@
+import { useAppState } from "@react-native-community/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchUnviewedObservationUpdatesCount } from "api/observations";
 import type { ApiObservationsUpdatesParams, ApiOpts } from "api/types";
@@ -34,6 +35,12 @@ const useUnviewedNotificationsCount = () => {
   // Tracks previous counts so we only prefetch when a background poll
   // reveals *new* unviewed notifications, not on initial mount.
   const prevCounts = useRef<{ owner?: number; following?: number }>( {} );
+  // Stop polling while backgrounded; the app can stay alive there (e.g. for
+  // location tracking). React Query's focusManager isn't used for this because
+  // toggling focus would also refetch on resume and pause failure retries.
+  const refetchInterval = useAppState( ) === "background"
+    ? false
+    : REFETCH_INTERVAL;
 
   const prefetchIfIncreased = useCallback( async ( tab: "owner" | "following", count?: number ) => {
     const prevCount = prevCounts.current[tab];
@@ -68,7 +75,7 @@ const useUnviewedNotificationsCount = () => {
       { observations_by: "owner" },
       optsWithAuth,
     ),
-    { enabled: !!currentUser, refetchInterval: REFETCH_INTERVAL, requireLoggedIn: true },
+    { enabled: !!currentUser, refetchInterval, requireLoggedIn: true },
   );
 
   const { data: followingUnviewedCount, refetch: refetchFollowing } = useAuthenticatedQuery(
@@ -77,7 +84,7 @@ const useUnviewedNotificationsCount = () => {
       { observations_by: "following" },
       optsWithAuth,
     ),
-    { enabled: !!currentUser, refetchInterval: REFETCH_INTERVAL, requireLoggedIn: true },
+    { enabled: !!currentUser, refetchInterval, requireLoggedIn: true },
   );
 
   const refetch = useCallback( ( ) => {
