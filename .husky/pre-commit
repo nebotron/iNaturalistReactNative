@@ -1,13 +1,14 @@
 set -e
 
 # Install dependencies if they're missing (e.g. fresh cloud containers).
-# GitHub deps install via git clone when codeload tarballs are blocked, and a
-# clone cut off mid-transfer can't recover inside npm: its retries reuse the
-# half-written dir ("destination path ... already exists"). Retry the whole
-# install instead, which starts each clone in a fresh dir.
+# GitHub deps install via git clone when codeload tarballs are blocked. Hooks
+# inherit GIT_INDEX_FILE (this commit's index), which npm's `git checkout` in
+# each temp clone would then use, aborting on "local changes" (and surfacing as
+# "destination path ... already exists" once npm retries into the same dir), so
+# drop it for the install. Retry the whole install for real network failures.
 for attempt in 1 2 3; do
   [ -d node_modules ] && break
-  npm install --no-audit --no-fund && break
+  env -u GIT_INDEX_FILE npm install --no-audit --no-fund && break
   [ "$attempt" = 3 ] && exit 1
   echo "npm install failed (attempt $attempt), retrying..." >&2
 done
