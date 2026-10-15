@@ -6,7 +6,6 @@ import {
   PHOTO_LICENSE,
   REVIEWED,
   SORT_BY,
-  TIME_OF_DAY,
   WILD_STATUS,
 } from "providers/ExploreContext";
 
@@ -73,18 +72,6 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
     filteredParams.month = filteredParams.months;
     delete filteredParams.months;
   }
-
-  // The API doesn't support an hour range (h1/h2); it only supports a list
-  // of discrete hours, like month, so expand the selected range into hours.
-  // Wraps around midnight when h1 > h2, e.g. 22 -> 2 becomes [22, 23, 0, 1, 2]
-  if ( params.timeOfDay === TIME_OF_DAY.RANGE && params.h1 != null && params.h2 != null ) {
-    const span = ( ( params.h2 - params.h1 + 24 ) % 24 ) + 1;
-    filteredParams.hour = new Array( span )
-      .fill( 0 )
-      .map( ( _, i ) => ( params.h1 + i ) % 24 );
-  }
-  delete filteredParams.h1;
-  delete filteredParams.h2;
 
   // MEDIA.ALL is the default media filter and for it we don't need to pass any params
   if ( params.media === MEDIA.PHOTOS ) {
@@ -187,7 +174,6 @@ const mapParamsToAPI = ( params: Object, currentUser: Object ): Object => {
   delete filteredParams.casual;
   delete filteredParams.dateObserved;
   delete filteredParams.dateUploaded;
-  delete filteredParams.timeOfDay;
   delete filteredParams.media;
   delete filteredParams.establishmentMean;
   delete filteredParams.wildStatus;
