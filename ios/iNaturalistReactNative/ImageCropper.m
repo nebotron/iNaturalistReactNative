@@ -1585,6 +1585,148 @@ static UIImage *thumbnailFromImageSource( CGImageSourceRef src, CGFloat maxPixel
   return image;
 }
 
+// ─── Canon CR3 embedded JPEG ─────────────────────────────────────────────────
+//
+// A CR3's first track is a JPEG the camera rendered alongside the raw (full
+// size on some bodies; 3408x2272 from an R6). iOS's raw decoder fails in runs -- the Oct 15 app log has every CR3 in
+// a bulk crop drawing black for minutes, all three retries -- and the thumbnail
+// API can't help there, since FromImageAlways sends it through the same raw
+// decoder. This JPEG decodes with the ordinary JPEG decoder, so it is what the
+// cropper draws and what a failed crop falls back to. ISO BMFF: moov > trak (the first) > mdia > minf > stbl > stsz / co64.
+
+static uint32_t cr3U32( const uint8_t *p )
+{
+  return ( (uint32_t)p[0] << 24 ) | ( (uint32_t)p[1] << 16 ) | ( (uint32_t)p[2] << 8 ) | p[3];
+}
+
+static uint64_t cr3U64( const uint8_t *p )
+{
+  return ( (uint64_t)cr3U32( p ) << 32 ) | cr3U32( p + 4 );
+}
+
+// The payload of the first box of `type` in bytes[start, end).
+static BOOL cr3FindBox(
+  const uint8_t *bytes, size_t start, size_t end, const char *type,
+  size_t *payloadStart, size_t *payloadEnd )
+{
+  size_t pos = start;
+  while ( pos + 8 <= end ) {
+    uint64_t size   = cr3U32( bytes + pos );
+    size_t   header = 8;
+    if ( size == 1 ) {
+      if ( pos + 16 > end ) return NO;
+      size   = cr3U64( bytes + pos + 8 );
+      header = 16;
+    } else if ( size == 0 ) {
+      size = end - pos;
+    }
+    if ( size < header || size > end - pos ) return NO;
+    if ( memcmp( bytes + pos + 4, type, 4 ) == 0 ) {
+      *payloadStart = pos + header;
+      *payloadEnd   = pos + (size_t)size;
+      return YES;
+    }
+    pos += (size_t)size;
+  }
+  return NO;
+}
+
+static NSData *cr3EmbeddedJpegData( NSString *path )
+{
+  NSFileHandle *fh = [NSFileHandle fileHandleForReadingAtPath:path];
+  if ( !fh ) return nil;
+  NSData *jpeg = nil;
+  @try {
+    unsigned long long fileSize = [fh seekToEndOfFile];
+    // Top-level boxes: ftyp (brand "crx "), then moov.
+    unsigned long long pos  = 0;
+    NSData            *moov = nil;
+    BOOL               crx  = NO;
+    while ( !moov && pos + 16 <= fileSize ) {
+      [fh seekToFileOffset:pos];
+      NSData *head = [fh readDataOfLength:16];
+      if ( head.length < 16 ) break;
+      const uint8_t *h      = head.bytes;
+      uint64_t       size   = cr3U32( h );
+      uint64_t       header = 8;
+      if ( size == 1 ) { size = cr3U64( h + 8 ); header = 16; }
+      if ( size < header || size > fileSize - pos ) break;
+      if ( pos == 0 ) {
+        crx = memcmp( h + 4, "ftyp", 4 ) == 0 && memcmp( h + 8, "crx ", 4 ) == 0;
+        if ( !crx ) break;
+      } else if ( memcmp( h + 4, "moov", 4 ) == 0 && size - header < 16 * 1024 * 1024 ) {
+        [fh seekToFileOffset:pos + header];
+        moov = [fh readDataOfLength:(NSUInteger)( size - header )];
+      }
+      pos += size;
+    }
+    if ( !moov ) return nil;
+
+    const uint8_t *m = moov.bytes;
+    size_t s = 0, e = moov.length;
+    const char *chain[] = { "trak", "mdia", "minf", "stbl" };
+    for ( int i = 0; i < 4; i++ ) {
+      if ( !cr3FindBox( m, s, e, chain[i], &s, &e ) ) return nil;
+    }
+    size_t szS, szE, coS, coE;
+    if ( !cr3FindBox( m, s, e, "stsz", &szS, &szE ) || szE - szS < 16 ) return nil;
+    uint64_t length = cr3U32( m + szS + 4 );
+    if ( length == 0 ) length = cr3U32( m + szS + 12 );
+    uint64_t offset = 0;
+    if ( cr3FindBox( m, s, e, "co64", &coS, &coE ) && coE - coS >= 16 ) {
+      offset = cr3U64( m + coS + 8 );
+    } else if ( cr3FindBox( m, s, e, "stco", &coS, &coE ) && coE - coS >= 12 ) {
+      offset = cr3U32( m + coS + 8 );
+    } else {
+      return nil;
+    }
+    if ( length < 4 || length > 64 * 1024 * 1024 || length > fileSize
+      || offset > fileSize - length ) return nil;
+    [fh seekToFileOffset:offset];
+    NSData *data = [fh readDataOfLength:(NSUInteger)length];
+    const uint8_t *d = data.bytes;
+    if ( data.length == length && d[0] == 0xFF && d[1] == 0xD8 ) jpeg = data;
+  } @catch ( NSException *exception ) {
+    jpeg = nil;
+  } @finally {
+    [fh closeFile];
+  }
+  return jpeg;
+}
+
+// The CR3's embedded JPEG at up to maxPixel, drawn (so a no-op decode is nil
+// rather than black), or nil for anything that isn't a CR3.
+static UIImage *cr3EmbeddedJpegImage( NSString *path, CGFloat maxPixel )
+{
+  NSData *jpeg = cr3EmbeddedJpegData( path );
+  if ( !jpeg ) return nil;
+  CGImageSourceRef jsrc = CGImageSourceCreateWithData( (__bridge CFDataRef)jpeg, nil );
+  if ( !jsrc ) return nil;
+  UIImage      *image = thumbnailFromImageSource( jsrc, maxPixel );
+  NSDictionary *props = CFBridgingRelease( CGImageSourceCopyPropertiesAtIndex( jsrc, 0, NULL ) );
+  CFRelease( jsrc );
+  if ( !image.CGImage ) return nil;
+  if ( !props[(__bridge NSString *)kCGImagePropertyOrientation] ) {
+    // The track carries no EXIF of its own; the raw's says which way is up.
+    CGImageSourceRef rsrc =
+      CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
+    if ( rsrc ) {
+      image = [UIImage imageWithCGImage:image.CGImage
+                                  scale:1
+                            orientation:orientationForImageSource( rsrc )];
+      CFRelease( rsrc );
+    }
+  }
+  return rasterizedImage( image );
+}
+
+// The largest image ImageIO will produce without the raw decoder, where it can:
+// a CR3's embedded JPEG, else the thumbnail API.
+static UIImage *previewImageAtPath( NSString *path, CGImageSourceRef src, CGFloat maxPixel )
+{
+  return cr3EmbeddedJpegImage( path, maxPixel ) ?: thumbnailFromImageSource( src, maxPixel );
+}
+
 // failureReason, when the caller passes one, receives a short description of
 // which step produced nothing, and what the file looked like to ImageIO.
 // "Could not load image" was the same message whether the file had no decoder
@@ -1646,7 +1788,7 @@ static UIImage *downscaledImageAtPath(
     // <Image> draws nothing for -- leaving the cell's black backdrop alone on
     // screen. The embedded preview is the largest image iOS can actually
     // produce for these, so it beats having none.
-    if ( !decoded ) decoded = thumbnailFromImageSource( src, maxPixel );
+    if ( !decoded ) decoded = previewImageAtPath( path, src, maxPixel );
     CFRelease( src );
     if ( !decoded ) {
       if ( failureReason ) {
@@ -1660,7 +1802,7 @@ static UIImage *downscaledImageAtPath(
     return clampToMaxPixel( decoded, maxPixel );
   }
 
-  UIImage *image = thumbnailFromImageSource( src, maxPixel );
+  UIImage *image = previewImageAtPath( path, src, maxPixel );
   CFRelease( src );
   if ( !image && failureReason ) {
     *failureReason = [NSString stringWithFormat:
@@ -2039,7 +2181,10 @@ static NSData *jpegDataFromDecodablePreviewCrop(
   CGImageSourceRef src =
     CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
   if ( !src ) return nil;
-  UIImage *preview = thumbnailFromImageSource( src, kPreviewFallbackMaxPixel );
+  // A CR3's embedded JPEG keeps more resolution than the 2048px preview, and
+  // doesn't go through the raw decoder that just failed.
+  UIImage *preview = cr3EmbeddedJpegImage( path, kMaxRasterizePixel )
+    ?: thumbnailFromImageSource( src, kPreviewFallbackMaxPixel );
   CFRelease( src );
   if ( !preview ) return nil;
 
@@ -2355,7 +2500,10 @@ RCT_EXPORT_METHOD( prepareCropSource
 
     // The one decode. What comes out of it is both what gets displayed and
     // what the detector reads, so nothing downstream opens the file again.
-    display = clampToMaxPixel( image, [maxPixel floatValue] );
+    // A CR3 draws its embedded JPEG: the same frame, without the raw decode
+    // that took seconds and came back black in runs.
+    display = cr3EmbeddedJpegImage( input, [maxPixel floatValue] )
+      ?: clampToMaxPixel( image, [maxPixel floatValue] );
     NSString *decodeEncodeFailure = nil;
     data    = display
       ? encodedThumbnailData( display, &decodeEncodeFailure )
@@ -2373,7 +2521,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       CGImageSourceRef src =
         CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
       UIImage *preview = src
-        ? thumbnailFromImageSource( src, MIN( [maxPixel floatValue], kPreviewFallbackMaxPixel ) )
+        ? previewImageAtPath( input, src, MIN( [maxPixel floatValue], kPreviewFallbackMaxPixel ) )
         : nil;
       if ( src ) CFRelease( src );
       NSData *previewData  = preview
@@ -2397,7 +2545,7 @@ RCT_EXPORT_METHOD( prepareCropSource
       CGImageSourceRef src =
         CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:input], nil );
       display = src
-        ? thumbnailFromImageSource( src, MIN( [maxPixel floatValue], kPreviewFallbackMaxPixel ) )
+        ? previewImageAtPath( input, src, MIN( [maxPixel floatValue], kPreviewFallbackMaxPixel ) )
         : nil;
       if ( src ) CFRelease( src );
       NSString *previewFailure = nil;
