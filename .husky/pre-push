@@ -4,7 +4,7 @@ set -e
 z=0000000000000000000000000000000000000000
 shas=$(while read -r _ sha ref _; do
   [ "$ref" = refs/heads/main ] && [ "$sha" != $z ] && echo "$sha"
-done)
+done || true)
 [ -z "$shas" ] && exit 0
 
 # Install dependencies if they're missing (e.g. fresh cloud containers).
