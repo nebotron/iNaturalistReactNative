@@ -71,6 +71,13 @@ mergedConfig.transformer.getTransformOptions = async ( ...args ) => {
     : {};
 };
 
+// The TestFlight workflow keeps the transform cache between runs
+if ( process.env.METRO_CACHE_DIR ) {
+  // eslint-disable-next-line import/no-extraneous-dependencies
+  const { FileStore } = require( "metro-cache" );
+  mergedConfig.cacheStores = [new FileStore( { root: process.env.METRO_CACHE_DIR } )];
+}
+
 const configWithRozenite = withRozenite(
   mergedConfig,
   {

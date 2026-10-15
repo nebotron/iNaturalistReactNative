@@ -148,6 +148,16 @@ jobs:
           ccache-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}-
           ccache-${{ runner.os }}-
 
+    # Metro's transform cache, read by metro.config.js through METRO_CACHE_DIR,
+    # so the bundle phase only re-transforms changed files.
+    - name: Restore the Metro cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.metro-cache
+        key: metro-${{ runner.os }}-${{ hashFiles( 'package-lock.json' ) }}-${{ github.run_id }}
+        restore-keys: |
+          metro-${{ runner.os }}-${{ hashFiles( 'package-lock.json' ) }}-
+
     # Downloaded pod tarballs — Firebase, GoogleSignIn, onnxruntime — are the
     # slow part of a cold pod install and are safe to reuse whatever the
     # lockfile says, since each is stored under its own version.
@@ -250,6 +260,7 @@ jobs:
           -authenticationKeyID "$ASC_KEY_ID" \
           -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
           COMPILER_INDEX_STORE_ENABLE=NO \
+          METRO_CACHE_DIR="$HOME/.metro-cache" \
           CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
         {
           echo '### ccache'
