@@ -1,4 +1,5 @@
 import { DocumentDirectoryPath, readFile } from "@dr.pogodin/react-native-fs";
+import { isCurrentUser } from "components/LoginSignUp/AuthenticationService";
 import Config from "react-native-config";
 import { zustandStorage } from "stores/useStore";
 import * as uuid from "uuid";
@@ -11,7 +12,7 @@ import type { AudioIdSpecies } from "./audioIdModel";
 // Every Audio ID detection, kept across sessions with a 5 s clip of the call
 // (saved natively as AAC under CLIPS_PATH). A detection is one call: runs of
 // a species heard less than 3 s apart; its clip is the run it scored best in.
-// Labels the user gives a clip are mirrored to Firebase for checking the model.
+// Labels ben142 gives a clip are mirrored to Firebase for checking the model.
 
 const CLIPS_PATH = `${DocumentDirectoryPath}/audioIdClips`;
 
@@ -48,7 +49,9 @@ interface AudioIdHistoryState {
   endSession: ( id: string ) => void;
   addClip: ( sp: AudioIdSpecies, confidence: number, sessionId?: string ) => AudioIdClip;
   updateClip: ( id: string, changes: Partial<AudioIdClip> ) => void;
-  labelClip: ( id: string, taxonId: number | null | undefined, name: string | null ) => void;
+  labelClip: (
+    id: string, taxonId: number | null | undefined, name: string | null
+  ) => Promise<void>;
   tagClip: ( id: string, correct: boolean ) => void;
 }
 
@@ -82,14 +85,14 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
     const clip = get( ).clips[id];
     if ( clip ) set( { clips: { ...get( ).clips, [id]: { ...clip, ...changes } } } );
   },
-  labelClip: ( id, taxonId, name ) => {
+  labelClip: async ( id, taxonId, name ) => {
     const clip = get( ).clips[id];
     if ( !clip ) return;
     const label = { taxonId, name, labeledAt: Date.now( ) };
     get( ).updateClip( id, { label } );
     const correct = taxonId === clip.sp.taxonId;
     const baseUrl = Config.CROP_LOG_FIREBASE_URL;
-    if ( !baseUrl ) return;
+    if ( !baseUrl || !( await isCurrentUser( "ben142" ) ) ) return;
     fetch( `${baseUrl}/audio_id_labels/${id}.json`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
