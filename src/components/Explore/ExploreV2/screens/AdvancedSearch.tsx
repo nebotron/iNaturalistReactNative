@@ -780,7 +780,7 @@ const AdvancedSearch = ( ) => {
           showModal
           closeModal={closePicker}
           updateUser={updateUser}
-          onSelectUnobserved={updateUnobservedByUser}
+          defaultToCurrentUser
         />
       )}
       {openPicker === "project" && (
