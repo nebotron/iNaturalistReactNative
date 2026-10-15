@@ -1,4 +1,4 @@
-import { DocumentDirectoryPath, unlink } from "@dr.pogodin/react-native-fs";
+import { DocumentDirectoryPath, readFile, unlink } from "@dr.pogodin/react-native-fs";
 import Config from "react-native-config";
 import { zustandStorage } from "stores/useStore";
 import * as uuid from "uuid";
@@ -18,8 +18,9 @@ const CLIPS_PATH = `${DocumentDirectoryPath}/audioIdClips`;
 const MAX_CLIPS_PER_SPECIES = 100;
 
 export interface AudioIdLabel {
-  // null when the user says no organism is in the clip
-  taxonId: number | null;
+  // null when the user says no organism is in the clip; undefined when they
+  // only say the ID is wrong
+  taxonId?: number | null;
   name: string | null;
   labeledAt: number;
 }
@@ -49,8 +50,14 @@ interface AudioIdHistoryState {
   endSession: ( id: string ) => void;
   addClip: ( sp: AudioIdSpecies, confidence: number, sessionId?: string ) => AudioIdClip;
   updateClip: ( id: string, changes: Partial<AudioIdClip> ) => void;
-  labelClip: ( id: string, taxonId: number | null, name: string | null ) => void;
+  labelClip: ( id: string, taxonId: number | null | undefined, name: string | null ) => void;
+  tagClip: ( id: string, correct: boolean ) => void;
 }
+
+// Whether the user tagged the clip's ID right (true) or wrong (false).
+export const isClipCorrect = ( clip: AudioIdClip ) => ( clip.label
+  ? clip.label.taxonId === clip.sp.taxonId
+  : undefined );
 
 const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) => ( {
   clips: {},
@@ -90,6 +97,7 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
     if ( !clip ) return;
     const label = { taxonId, name, labeledAt: Date.now( ) };
     get( ).updateClip( id, { label } );
+    const correct = taxonId === clip.sp.taxonId;
     const baseUrl = Config.CROP_LOG_FIREBASE_URL;
     if ( !baseUrl ) return;
     fetch( `${baseUrl}/audio_id_labels/${id}.json`, {
@@ -100,12 +108,28 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
         predictedName: clip.sp.name,
         confidence: clip.confidence,
         heardAt: new Date( clip.time ).toISOString( ),
-        labelTaxonId: taxonId,
+        correct,
+        labelTaxonId: taxonId ?? null,
         labelName: name,
         noOrganism: taxonId === null,
         labeledAt: new Date( label.labeledAt ).toISOString( ),
       } ),
     } ).catch( ( ) => undefined );
+    // The audio goes in its own path so the labels stay quick to download.
+    readFile( clipPath( id ), "base64" ).then( audio => fetch(
+      `${baseUrl}/audio_id_clips/${id}.json`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify( { format: "m4a", audioBase64: audio } ),
+      },
+    ) ).catch( ( ) => undefined );
+  },
+  tagClip: ( id, correct ) => {
+    const clip = get( ).clips[id];
+    if ( !clip ) return;
+    if ( correct ) get( ).labelClip( id, clip.sp.taxonId, clip.sp.name );
+    else get( ).labelClip( id, undefined, null );
   },
 } ), {
   name: "audio-id-history",

@@ -1,20 +1,23 @@
 /* eslint-disable i18next/no-literal-string */
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
-  Body1, Body3, List2,
+  Body1, Body3, INatIconButton, List2,
 } from "components/SharedComponents";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React from "react";
 
-import useAudioIdHistory from "./audioIdHistory";
+import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
 import ClipPlayButton from "./ClipPlayButton";
 
-export const clipLabelText = ( label?: { taxonId: number | null; name: string | null } ) => {
+export const clipLabelText = ( label?: { taxonId?: number | null; name: string | null } ) => {
   if ( !label ) return null;
+  if ( label.taxonId === undefined ) return "Labeled: wrong ID";
   return label.taxonId === null
     ? "Labeled: no organism"
     : `Labeled: ${label.name}`;
 };
+
+const TAG_SHADES = { true: "rgba(116, 172, 0, 0.2)", false: "rgba(155, 16, 16, 0.15)" };
 
 // Every time Audio ID heard one species, or everything heard in one listening
 // session, newest first.
@@ -23,6 +26,7 @@ const AudioIdHistory = ( ) => {
   const { params } = useRoute( );
   const { taxonId, sessionId } = params as { taxonId?: number; sessionId?: string };
   const clips = useAudioIdHistory( state => state.clips );
+  const tagClip = useAudioIdHistory( state => state.tagClip );
   const session = useAudioIdHistory( state => ( sessionId
     ? state.sessions[sessionId]
     : undefined ) );
@@ -53,7 +57,10 @@ const AudioIdHistory = ( ) => {
           key={clip.id}
           accessibilityRole="button"
           accessibilityHint="Opens the clip's details."
-          className="flex-row items-center py-2 border-b border-lightGray"
+          className="flex-row items-center py-2 px-2 border-b border-lightGray"
+          style={isClipCorrect( clip ) === undefined
+            ? undefined
+            : { backgroundColor: TAG_SHADES[`${isClipCorrect( clip )}`] }}
           onPress={( ) => navigation.navigate( "AudioIdClip", { id: clip.id } )}
         >
           <View className="flex-1">
@@ -66,6 +73,18 @@ const AudioIdHistory = ( ) => {
             <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
             {clip.label && <Body3 className="text-inatGreen">{clipLabelText( clip.label )}</Body3>}
           </View>
+          <INatIconButton
+            icon="check"
+            onPress={( ) => tagClip( clip.id, true )}
+            accessibilityLabel="Right"
+            accessibilityHint="Tags the ID as right."
+          />
+          <INatIconButton
+            icon="close"
+            onPress={( ) => tagClip( clip.id, false )}
+            accessibilityLabel="Wrong"
+            accessibilityHint="Tags the ID as wrong."
+          />
           <ClipPlayButton id={clip.id} />
         </Pressable>
       ) )}
