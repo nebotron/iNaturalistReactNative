@@ -23,6 +23,7 @@ export interface AudioIdSetup {
   outputs: number[];
   species: AudioIdSpecies[]; // one per output, same order
   odds: number[]; // per output, multiplies the model's odds (see fuseScore)
+  occurrence: number[]; // per output, geomodel score at the user's place, or -1
   located: boolean;
 }
 
@@ -40,6 +41,7 @@ export const prepareAudioId = async (
   const outputs: number[] = [];
   const species: AudioIdSpecies[] = [];
   const odds: number[] = [];
+  const occ: number[] = [];
   ( SPECIES as [string, string, number, number, number][] ).forEach(
     ( [name, commonName, taxonId, geoIndex, bird], output ) => {
       if ( occurrence && geoIndex >= 0 && occurrence[geoIndex]
@@ -48,13 +50,16 @@ export const prepareAudioId = async (
           : NON_BIRD_GEO_THRESHOLD ) ) return;
       outputs.push( output );
       species.push( { name, commonName, taxonId } );
+      occ.push( occurrence && geoIndex >= 0
+        ? occurrence[geoIndex]
+        : -1 );
       odds.push( occurrence && geoIndex >= 0 && !bird
         ? ( occurrence[geoIndex] / NON_BIRD_GEO_REF ) ** NON_BIRD_GEO_WEIGHT
         : 1 );
     },
   );
   return {
-    outputs, species, odds, located: !!location,
+    outputs, species, odds, occurrence: occ, located: !!location,
   };
 };
 

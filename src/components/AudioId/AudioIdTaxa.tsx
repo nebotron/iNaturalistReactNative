@@ -13,16 +13,19 @@ import useAudioIdSession from "./audioIdSession";
 // Every taxon Audio ID is currently listening for, searchable by name.
 const AudioIdTaxa = ( ) => {
   const navigation = useNavigation( );
-  const species = useAudioIdSession( state => state.setup?.species );
+  const setup = useAudioIdSession( state => state.setup );
   const [query, setQuery] = useState( "" );
   const filtered = useMemo( ( ) => {
     const q = query.trim( ).toLowerCase( );
-    return [...( species || [] )]
-      .filter( sp => !q
+    // Most likely at the user's place and week first.
+    return ( setup?.species || [] )
+      .map( ( sp, i ) => ( { sp, p: setup?.occurrence?.[i] ?? -1 } ) )
+      .filter( ( { sp } ) => !q
         || sp.commonName.toLowerCase( ).includes( q )
         || sp.name.toLowerCase( ).includes( q ) )
-      .sort( ( a, b ) => a.commonName.localeCompare( b.commonName ) );
-  }, [species, query] );
+      .sort( ( a, b ) => b.p - a.p || a.sp.commonName.localeCompare( b.sp.commonName ) )
+      .map( ( { sp } ) => sp );
+  }, [setup, query] );
 
   const renderItem = ( { item }: { item: AudioIdSpecies } ) => (
     <Pressable
