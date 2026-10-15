@@ -73,7 +73,6 @@ const AudioIdHistory = ( ) => {
                 : formatISOTimestamp( clip.time )}
             </Body1>
             <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
-            {clip.label && <Body3 className="text-inatGreen">{clipLabelText( clip.label )}</Body3>}
           </View>
           <INatIconButton
             icon="check"
