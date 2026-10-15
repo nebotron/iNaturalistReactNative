@@ -469,13 +469,6 @@ const LifeListContainer = ( ) => {
         contentContainerStyle={flashListStyle}
         keyExtractor={( item: Lifer ) => `${item.uuid}`}
         renderItem={renderItem}
-        ListHeaderComponent={isFetching
-          ? (
-            <View className="items-center py-4">
-              <ActivityIndicator />
-            </View>
-          )
-          : null}
         ListEmptyComponent={(
           <View className="self-center mt-5 p-4">
             <Body1 className="align-center text-center">
