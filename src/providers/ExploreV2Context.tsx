@@ -1,6 +1,6 @@
 import type { ApiProjectSummary, ApiTotalBounds, ApiUser } from "api/types";
 import type {
-  HOTSPOTS_TAB, IDENTIFIERS_TAB, LIFELIST_TAB, OBSERVERS_TAB, SPECIES_TAB,
+  HOTSPOTS_TAB, IDENTIFIERS_TAB, IDENTIFY_TAB, LIFELIST_TAB, OBSERVERS_TAB, SPECIES_TAB,
 } from "appConstants/tabs";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import type { ExploreV2EntryParams } from "navigation/types";
@@ -68,7 +68,8 @@ export type ExploreV2Tab =
   | typeof OBSERVERS_TAB
   | typeof IDENTIFIERS_TAB
   | typeof HOTSPOTS_TAB
-  | typeof LIFELIST_TAB;
+  | typeof LIFELIST_TAB
+  | typeof IDENTIFY_TAB;
 
 export type ExploreV2Subject =
   | { type: "taxon"; taxon: Taxon }

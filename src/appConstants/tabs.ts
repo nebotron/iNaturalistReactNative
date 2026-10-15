@@ -4,3 +4,4 @@ export const OBSERVERS_TAB = "observers";
 export const IDENTIFIERS_TAB = "identifiers";
 export const HOTSPOTS_TAB = "hotspots";
 export const LIFELIST_TAB = "lifelist";
+export const IDENTIFY_TAB = "identify";

@@ -4,6 +4,7 @@ import type { ApiTotalBounds } from "api/types";
 import {
   HOTSPOTS_TAB,
   IDENTIFIERS_TAB,
+  IDENTIFY_TAB,
   LIFELIST_TAB,
   OBSERVATIONS_TAB,
   OBSERVERS_TAB,
@@ -29,6 +30,7 @@ import ExploreV2UsersView
   from "components/Explore/ExploreV2/screens/ExploreV2UsersView";
 import useInfiniteExploreScroll
   from "components/Explore/hooks/useInfiniteExploreScroll";
+import IdentifyView from "components/Explore/IdentifyView";
 import LifeListView from "components/Explore/LifeListView";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
@@ -83,6 +85,7 @@ type SaveToast = "added" | "removed" | "limitReached";
 
 const EXPLORE_VIEW_ICONS: Record<ExploreV2Tab, string> = {
   [OBSERVATIONS_TAB]: "binoculars",
+  [IDENTIFY_TAB]: "id-agree",
   [SPECIES_TAB]: "leaf",
   [HOTSPOTS_TAB]: "location",
   [OBSERVERS_TAB]: "observers",
@@ -240,6 +243,13 @@ const ExploreResults = ( ) => {
       text: t( "Individual-encounters-with-organisms" ),
       value: OBSERVATIONS_TAB,
     },
+    [IDENTIFY_TAB]: {
+      buttonText: t( "IDENTIFY" ),
+      icon: "id-agree",
+      label: t( "Identify" ),
+      text: t( "Identify-observations-one-at-a-time" ),
+      value: IDENTIFY_TAB,
+    },
     [SPECIES_TAB]: {
       buttonText: t( "EXPLORE-SPECIES" ),
       icon: "species",
@@ -278,6 +288,7 @@ const ExploreResults = ( ) => {
   };
   const exploreViewA11yLabels: Record<ExploreV2Tab, string> = {
     [OBSERVATIONS_TAB]: t( "Observations-View" ),
+    [IDENTIFY_TAB]: t( "Identify-View" ),
     [SPECIES_TAB]: t( "Species-View" ),
     [HOTSPOTS_TAB]: t( "Hotspots-View" ),
     [OBSERVERS_TAB]: t( "Observers-View" ),
@@ -420,6 +431,14 @@ const ExploreResults = ( ) => {
             filterParams={baseSearchParams}
           />
         );
+      case IDENTIFY_TAB:
+        return (
+          <IdentifyView
+            canFetch={canFetch}
+            queryParams={baseSearchParams}
+            handleUpdateCount={noop}
+          />
+        );
       case LIFELIST_TAB:
         return (
           <LifeListView
@@ -477,34 +496,37 @@ const ExploreResults = ( ) => {
           showBackButton={Boolean( params?.showBackButton )}
         />
         {renderContent( )}
-        {showingResults && state.activeTab !== HOTSPOTS_TAB && (
-          <View
-            className={classnames(
-              "absolute left-5 right-5 z-10 flex-row items-center justify-end",
-              state.activeTab === OBSERVATIONS_TAB && showMap
-                ? "bottom-[140px]"
-                : "bottom-[82px]",
-            )}
-            pointerEvents="box-none"
-          >
-            {saveToast && (
-              <View
-                className="absolute left-0 right-0 items-center"
-                pointerEvents="box-none"
-              >
-                <Toast
-                  onHide={( ) => setSaveToast( null )}
-                  testID="ExploreResults.saveToast"
-                  text={saveToastText( saveToast )}
-                />
-              </View>
-            )}
-            <SaveSearchButton
-              isSaved={isSaved}
-              onPress={handleSavePress}
-            />
-          </View>
-        )}
+        {showingResults
+          && state.activeTab !== HOTSPOTS_TAB
+          && state.activeTab !== IDENTIFY_TAB
+          && (
+            <View
+              className={classnames(
+                "absolute left-5 right-5 z-10 flex-row items-center justify-end",
+                state.activeTab === OBSERVATIONS_TAB && showMap
+                  ? "bottom-[140px]"
+                  : "bottom-[82px]",
+              )}
+              pointerEvents="box-none"
+            >
+              {saveToast && (
+                <View
+                  className="absolute left-0 right-0 items-center"
+                  pointerEvents="box-none"
+                >
+                  <Toast
+                    onHide={( ) => setSaveToast( null )}
+                    testID="ExploreResults.saveToast"
+                    text={saveToastText( saveToast )}
+                  />
+                </View>
+              )}
+              <SaveSearchButton
+                isSaved={isSaved}
+                onPress={handleSavePress}
+              />
+            </View>
+          )}
       </View>
       {showSortSheet && state.activeTab === OBSERVATIONS_TAB && (
         <RadioButtonSheet
