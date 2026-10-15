@@ -1,5 +1,7 @@
 import { navigationRef } from "navigation/navigationUtils";
 import { NativeEventEmitter, NativeModules } from "react-native";
+import type { UserLocation } from "sharedHelpers/fetchCoarseUserLocation";
+import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import { log } from "sharedHelpers/logger";
 import { zustandStorage } from "stores/useStore";
 import { create } from "zustand";
@@ -65,6 +67,8 @@ const callClips = new Map<number, string>( );
 // Pending saves of 15 s centered on each clip's window, by clip ID.
 const contextTimers = new Map<string, ReturnType<typeof setTimeout>>( );
 let sessionId: string | undefined;
+// Where listening started, for clips heard where no fix comes back.
+let sessionLocation: UserLocation | null = null;
 
 // Keeps the 5 s clip of the run a call scored best in.
 const saveCallClip = ( sp: AudioIdSpecies, score: number, isNewCall: boolean ) => {
@@ -77,7 +81,21 @@ const saveCallClip = ( sp: AudioIdSpecies, score: number, isNewCall: boolean ) =
   const id = clip
     ? clip.id
     : history.addClip( sp, score, sessionId ).id;
-  if ( clip ) history.updateClip( id, { confidence: score } );
+  if ( clip ) {
+    history.updateClip( id, { confidence: score } );
+  } else {
+    // Where it was heard, falling back to where listening started.
+    fetchCoarseUserLocation( ).catch( ( ) => null ).then( loc => {
+      const l = loc || sessionLocation;
+      if ( l ) {
+        history.updateClip( id, {
+          location: {
+            latitude: l.latitude, longitude: l.longitude, accuracy: l.positional_accuracy,
+          },
+        } );
+      }
+    } );
+  }
   callClips.set( sp.taxonId, id );
   AudioBirdId?.saveClip( clipPath( id ), 5 )
     .catch( ( e: Error ) => logger.error( `saving clip failed: ${e.message}` ) );
@@ -127,6 +145,7 @@ const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
     try {
       const s = await prepareAudioId( AudioBirdId.geo );
       set( { setup: s } );
+      sessionLocation = s.location;
       const mic = await AudioBirdId.start( s.outputs );
       logger.info( `started, ${s.species.length} species, located ${s.located}, `
         + `mic ${mic.sampleRate} Hz x${mic.channels}` );

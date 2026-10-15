@@ -1,3 +1,4 @@
+import type { UserLocation } from "sharedHelpers/fetchCoarseUserLocation";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 
 import SPECIES from "./audioIdSpecies.json";
@@ -25,6 +26,7 @@ export interface AudioIdSetup {
   odds: number[]; // per output, multiplies the model's odds (see fuseScore)
   occurrence: number[]; // per output, geomodel score at the user's place, or -1
   located: boolean;
+  location: UserLocation | null;
 }
 
 // BirdNET's 48-week year: four weeks per month.
@@ -59,7 +61,7 @@ export const prepareAudioId = async (
     },
   );
   return {
-    outputs, species, odds, occurrence: occ, located: !!location,
+    outputs, species, odds, occurrence: occ, located: !!location, location,
   };
 };
 

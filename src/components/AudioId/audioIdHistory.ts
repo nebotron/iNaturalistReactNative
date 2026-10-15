@@ -30,6 +30,7 @@ export interface AudioIdClip {
   time: number;
   confidence: number;
   label?: AudioIdLabel;
+  location?: { latitude: number; longitude: number; accuracy: number };
 }
 
 // One stretch of listening; endedAt is unset if the app quit while listening.
@@ -104,6 +105,9 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
         predictedName: clip.sp.name,
         confidence: clip.confidence,
         heardAt: new Date( clip.time ).toISOString( ),
+        latitude: clip.location?.latitude ?? null,
+        longitude: clip.location?.longitude ?? null,
+        positionalAccuracy: clip.location?.accuracy ?? null,
         correct,
         labelTaxonId: taxonId ?? null,
         labelName: name,
