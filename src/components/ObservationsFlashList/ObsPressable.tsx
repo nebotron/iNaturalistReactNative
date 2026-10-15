@@ -22,7 +22,6 @@ interface Props {
   isSimpleObsStatus?: boolean;
   hideRGLabel?: boolean;
   apiObservation?: ApiObservation;
-  onExploreObservationAction?: ( ) => void;
   onUploadButtonPress: ( ) => void;
   onItemPress: ( ) => void;
   // only meaningful for layout === "grid"
@@ -49,7 +48,6 @@ const ObsPressable = ( {
   isSimpleObsStatus,
   hideRGLabel,
   apiObservation,
-  onExploreObservationAction,
   onUploadButtonPress,
   onItemPress,
   gridItemStyle,
@@ -83,7 +81,6 @@ const ObsPressable = ( {
         currentUser={currentUser}
         explore={explore}
         hideObsUploadStatus={hideObsUploadStatus}
-        onExploreObservationAction={onExploreObservationAction}
         onUploadButtonPress={onUploadButtonPress}
         observation={observation}
         queued={queued}

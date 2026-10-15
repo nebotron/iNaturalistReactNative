@@ -1,7 +1,6 @@
 // @flow
 
 import FaveButton from "components/ObsDetails/FaveButton";
-import ObsImageActionButtons from "components/ObsDetails/ObsImageActionButtons";
 import { Body2, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
@@ -23,7 +22,6 @@ type Props = {
   height?: string,
   hideObsUploadStatus?: boolean,
   observation: Object,
-  onExploreObservationAction?: Function,
   onUploadButtonPress: Function,
   style?: Object,
   queued: boolean,
@@ -39,7 +37,6 @@ const ObsGridItem = ( {
   height = "h-[200px]",
   hideObsUploadStatus,
   observation,
-  onExploreObservationAction,
   onUploadButtonPress,
   queued,
   style,
@@ -48,8 +45,6 @@ const ObsGridItem = ( {
   width = "w-[200px]",
   squareCorners = false,
 }: Props ): Node => {
-  const showExploreImageActions = explore
-    && currentUser;
   const isOwnObs = !!currentUser && observation?.user?.login === currentUser?.login;
   const displayTaxonName = useMemo( ( ) => (
     <DisplayTaxonName
@@ -103,14 +98,6 @@ const ObsGridItem = ( {
       white
       squareCorners={squareCorners}
     >
-      {showExploreImageActions && (
-        <ObsImageActionButtons
-          observation={observation}
-          currentUser={currentUser}
-          afterAction={onExploreObservationAction}
-          directAgree
-        />
-      )}
       {!explore && currentUser && (
         <FaveButton
           observation={observation}
