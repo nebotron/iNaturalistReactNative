@@ -80,7 +80,6 @@ jobs:
       uses: actions/setup-node@v6
       with:
         node-version-file: '.nvmrc'
-        cache: 'npm'
 
     - name: Setup Ruby version according to .ruby-version with cached gems
       uses: ruby/setup-ruby@v1
@@ -101,6 +100,17 @@ jobs:
       with:
         path: node_modules
         key: node-modules-${{ runner.os }}-${{ hashFiles( '.nvmrc', 'package-lock.json', 'patches/**' ) }}
+
+    # npm's download cache only matters when node_modules has to be rebuilt,
+    # so restoring it on every run (~15s for ~470MB) is wasted otherwise.
+    - name: Restore the npm download cache
+      if: steps.node-modules.outputs.cache-hit != 'true'
+      uses: actions/cache@v4
+      with:
+        path: ~/.npm
+        key: npm-${{ runner.os }}-${{ hashFiles( 'package-lock.json' ) }}
+        restore-keys: |
+          npm-${{ runner.os }}-
 
     - name: Install Dependencies
       if: steps.node-modules.outputs.cache-hit != 'true'
@@ -127,18 +137,27 @@ jobs:
 
     # Half the archive's ~1900 compiles are React Native core and its C++
     # dependencies, which change only when react-native does. ccache turns
-    # those into cache hits across runs.
+    # those into cache hits across runs. The release's universal binary takes
+    # ~1s; brew install took 6-19s fetching manifests and four dependencies.
+    # Keep the version in step with what's in the restored cache.
     - name: Install ccache
       run: |
-        command -v ccache >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install ccache
+        mkdir -p "$HOME/.local/bin"
+        curl -fsSL https://github.com/ccache/ccache/releases/download/v4.14/ccache-4.14-darwin.tar.gz \
+          | tar -xzf - -C "$HOME/.local/bin" --strip-components 1 ccache-4.14-darwin/ccache
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        "$HOME/.local/bin/ccache" --version | head -1
         echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
         echo "CCACHE_MAXSIZE=2G" >> "$GITHUB_ENV"
         # Xcode exports build settings to script phases but not to CompileC,
         # so the wrapper's $CCACHE_BINARY is empty there and it runs plain
-        # clang, bypassing ccache. Bake the binary and cache dir into it.
-        sed -i '' "s|^exec \$CCACHE_BINARY|exec env CCACHE_DIR=$HOME/.ccache CCACHE_MAXSIZE=2G $( command -v ccache )|" \
-          node_modules/react-native/scripts/xcode/ccache-clang.sh
-        cat node_modules/react-native/scripts/xcode/ccache-clang.sh
+        # clang, bypassing ccache. Bake the binary and cache dir into it. The
+        # cached node_modules may already carry an older baked-in line.
+        WRAPPER=node_modules/react-native/scripts/xcode/ccache-clang.sh
+        sed -i '' "s|^exec .* clang \"\$@\"$|exec env CCACHE_DIR=$HOME/.ccache CCACHE_MAXSIZE=2G $HOME/.local/bin/ccache clang \"\$@\"|" \
+          "$WRAPPER"
+        cat "$WRAPPER"
+        grep -q "^exec env .*$HOME/.local/bin/ccache clang" "$WRAPPER"
 
     # Saved under a new key every run so the cache keeps up with the code; the
     # restore-keys fall back to the newest cache built against the same Pods.
@@ -169,11 +188,15 @@ jobs:
 
     # Downloaded pod tarballs — Firebase, GoogleSignIn, onnxruntime — are the
     # slow part of a cold pod install and are safe to reuse whatever the
-    # lockfile says, since each is stored under its own version.
+    # lockfile says, since each is stored under its own version. The trunk
+    # spec repo saves re-fetching every remote podspec from the CDN, which
+    # was most of a warm pod install's ~35s.
     - name: Restore the CocoaPods download cache
       uses: actions/cache@v4
       with:
-        path: ~/Library/Caches/CocoaPods
+        path: |
+          ~/Library/Caches/CocoaPods
+          ~/.cocoapods/repos
         key: cocoapods-downloads-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}
         restore-keys: |
           cocoapods-downloads-${{ runner.os }}-
@@ -277,6 +300,7 @@ jobs:
           ccache --show-stats
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
+        ccache --show-stats --verbose
 
     # destination=upload has the export sign the IPA and send it to App Store
     # Connect itself, saving the separate altool upload's repackaging pass.

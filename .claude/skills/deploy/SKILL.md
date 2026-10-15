@@ -27,7 +27,8 @@ team and the `com.benhannel.inat.dev` bundle IDs.
    (`-f prebuilt_react_native=true`), and treat a link error naming a React or
    folly symbol as that flag's fault rather than the code's.
 
-3. **Wait.** A full run is ~20 minutes with warm caches: pods ~2, archive ~10, export and upload ~3.
+3. **Wait.** A run is ~10 minutes with warm caches: setup ~2, archive ~4-7, export and
+   upload ~2.5. A `package-lock.json` change adds ~5 (npm ci, pod install, recompiles).
    Check the run's status every 5 minutes until it completes (`send_later` with
    `delay_minutes: 5`, or `ScheduleWakeup` / a background wait) rather than polling
    in a tight loop. `list_workflow_jobs` shows which step is running.
