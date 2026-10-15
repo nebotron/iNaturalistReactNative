@@ -69,11 +69,19 @@ Add-stop = Add stop
 ADD-TAXON-FILTER = ADD TAXON FILTER
 Add-to-Projects = Add to Projects
 ADD-TO-PROJECTS = ADD TO PROJECTS
+# Dialog asking to add search results to the ones saved for offline use
+Add-up-to-observations-from-this-search = Add up to { $count } observations from this search to your offline observations? You can filter them further while offline.
 Added-to-X-Projects =
     Added to { $count } { $count ->
         [one] Project
        *[other] Projects
     }
+# Confirmation after saving Explore search results for offline use
+Added-X-offline-observations =
+    Added { $count ->
+        [one] { $count } new observation
+       *[other] { $count } new observations
+    }. { $total } saved for offline use.
 # Hint for a button that adds an identification
 Adds-ID = Adds ID
 # Hint for a button that adds a vote of agreement
@@ -1438,19 +1446,17 @@ SAVE-FOR-LATER = SAVE FOR LATER
 # Button and dialog title to save the current Explore results for offline use
 Save-for-offline-use = Save for offline use
 SAVE-LOCATION = SAVE LOCATION
-Save-up-to-observations-from-this-search = Save up to { $count } observations from this search? You can filter them further while offline.
+# Button on the search screen that saves the search's results for offline use
+SAVE-RESULTS-FOR-OFFLINE-USE = SAVE RESULTS FOR OFFLINE USE
 Saved-filter-already-exists-description = You already have a saved filter with this name. Choose a different name.
 Saved-filter-already-exists-title = Name already in use
 Saved-filter-name-placeholder = e.g. Nearby birds
 Saved-filters = Saved filters
-Saved-for-offline-use =
-    Saved { $count ->
-        [one] { $count } observation
-       *[other] { $count } observations
-    } for offline use
 Saved-Observation = Saved observation, in queue to upload
 # Heading of the saved searches section on the advanced search screen
 SAVED-SEARCHES = SAVED SEARCHES
+# Button text while search results are being saved for offline use
+Saving-X-observations = Saving { $count }…
 # Explore filter option for an observation's evidence of presence annotation
 Scat--evidence = Scat
 Scientific-Name = Scientific Name

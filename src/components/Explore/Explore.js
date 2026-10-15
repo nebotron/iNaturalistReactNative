@@ -28,7 +28,6 @@ import ObservationsViewBar from "./ObservationsViewBar";
 import ObserversView from "./ObserversView";
 import {
   OfflineObservationsView,
-  SaveOfflineButton,
   useOfflineExploreResults,
 } from "./OfflineExplore";
 import SpeciesView from "./SpeciesView";
@@ -114,7 +113,7 @@ const Explore = ( {
   }
   const [showExploreBottomSheet, setShowExploreBottomSheet] = useState( false );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreObservationsLayout" );
-  const offlineResults = useOfflineExploreResults( );
+  const offlineResults = useOfflineExploreResults( queryParams );
   const showOfflineResults = isConnected === false && !!offlineResults;
 
   const exploreViewA11yLabel = {
@@ -328,9 +327,6 @@ const Explore = ( {
                 ? ["grid", "list"]
                 : ["map", "grid", "list"]}
             />
-          )}
-          {currentExploreView === "observations" && isConnected && canFetch && (
-            <SaveOfflineButton queryParams={queryParams} />
           )}
           {renderMainContent()}
         </View>

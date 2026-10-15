@@ -1,3 +1,4 @@
+import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import type { ApiPlace, ApiProjectSummary } from "api/types";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
@@ -29,6 +30,8 @@ import {
   draftFromV2State,
   searchTaxonFilters,
 } from "components/Explore/ExploreV2/helpers/advancedSearchReducer";
+import buildExploreV2QueryParams
+  from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import locationLabel from "components/Explore/ExploreV2/helpers/locationLabel";
 import useApplySavedSearch from "components/Explore/ExploreV2/hooks/useApplySavedSearch";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
@@ -37,6 +40,7 @@ import ExploreLocationSearchModal from "components/Explore/Modals/ExploreLocatio
 import ExploreProjectSearchModal from "components/Explore/Modals/ExploreProjectSearchModal";
 import ExploreTaxonSearchModal from "components/Explore/Modals/ExploreTaxonSearchModal";
 import ExploreUserSearchModal from "components/Explore/Modals/ExploreUserSearchModal";
+import { SaveOfflineButton } from "components/Explore/OfflineExplore";
 import type { ExploreSearchUser }
   from "components/Explore/SearchScreens/ExploreUserSearch";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
@@ -75,6 +79,10 @@ import { useCurrentUser, useTranslation } from "sharedHooks";
 import useIconicTaxa from "sharedHooks/useIconicTaxa";
 import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
 
+// Please don't change these to aliased paths or the e2e mocks will not get used
+import fetchCoarseUserLocation from "../../../../sharedHelpers/fetchCoarseUserLocation";
+import { getLatestTrackedLocation } from "../../../../sharedHelpers/locationHistoryTracker";
+
 type SheetName = "sortBy" | "hrank" | "lrank" | "photoLicense";
 
 type PickerKind = "taxon" | "user" | "project" | "location";
@@ -89,6 +97,7 @@ const AdvancedSearch = ( ) => {
   const { t } = useTranslation();
   const iconicTaxa = useIconicTaxa();
   const currentUser = useCurrentUser();
+  const { isConnected } = useNetInfo( );
 
   const { state: v2State, dispatch: dispatchV2 } = useExploreV2();
   const applySavedSearch = useApplySavedSearch( );
@@ -177,6 +186,18 @@ const AdvancedSearch = ( ) => {
     type: "SET_LOCATION_NEARBY",
     radius,
   } );
+
+  // API params for the search as drafted, for saving its results offline
+  const getOfflineQueryParams = async ( ) => {
+    let nearbyCoords;
+    if ( isNearby ) {
+      const coords = await getLatestTrackedLocation( ) ?? await fetchCoarseUserLocation( );
+      if ( typeof coords?.latitude !== "number" ) throw new Error( "No location" );
+      nearbyCoords = { lat: coords.latitude, lng: coords.longitude };
+    }
+    const search = { ...v2State, ...currentSearch };
+    return { ...buildExploreV2QueryParams( search, nearbyCoords, currentUser?.id ) };
+  };
 
   const handleSearch = () => {
     dispatchV2( { type: EXPLORE_V2_ACTION.APPLY_SEARCH, search: currentSearch } );
@@ -312,6 +333,10 @@ const AdvancedSearch = ( ) => {
           onDelete={setSearchToDelete}
           onSave={( ) => setShowSaveSheet( true )}
           onSelect={applySavedSearch}
+        />
+        <SaveOfflineButton
+          disabled={isConnected === false || hasError}
+          getQueryParams={getOfflineQueryParams}
         />
 
         {/* Taxon Section */}

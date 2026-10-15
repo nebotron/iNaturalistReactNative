@@ -278,7 +278,11 @@ export interface ApiVote {
 }
 
 export interface ApiObservation extends ApiRecord {
+  captive?: boolean;
   comments?: ApiComment[];
+  geojson?: { coordinates?: [number, number] };
+  latitude?: number | null;
+  longitude?: number | null;
   identifications?: ApiIdentification[];
   non_traditional_projects?: { project: ApiProjectSummary }[];
   observation_photos?: ApiObservationPhoto[];
@@ -286,6 +290,8 @@ export interface ApiObservation extends ApiRecord {
   observed_on?: string | null;
   project_observations?: ApiProjectObservation[];
   ofvs?: ApiObservationFieldValue[];
+  place_ids?: number[];
+  project_ids?: number[];
   quality_grade?: string;
   taxon?: ApiTaxon;
   time_observed_at?: string;

@@ -1,10 +1,4 @@
-import {
-  DocumentDirectoryPath,
-  exists,
-  readFile,
-  unlink,
-  writeFile,
-} from "@dr.pogodin/react-native-fs";
+import { DocumentDirectoryPath } from "@dr.pogodin/react-native-fs";
 import { searchObservations } from "api/observations";
 import type { ApiObservation } from "api/types";
 import {
@@ -12,61 +6,198 @@ import {
   getNextPageParamForExplore,
 } from "components/Explore/helpers/exploreParams";
 import { getJWT } from "components/LoginSignUp/AuthenticationService";
+import Realm from "realm";
 import Observation from "realmModels/Observation";
 import ObservationSound from "realmModels/ObservationSound";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "offlineExploreResults" );
 
-// One saved Explore search, kept on disk so its results can be browsed and
-// filtered further with no connection.
-const FILE_PATH = `${DocumentDirectoryPath}/offlineExploreResults.json`;
 const PAGE_SIZE = 200;
+// Per save; each save adds to what's already saved
 export const MAX_OFFLINE_OBSERVATIONS = 5000;
 
 type Params = Record<string, unknown>;
 
-export interface OfflineExploreResults {
-  savedAt: string;
-  params: Params;
-  observations: ApiObservation[];
+// Saved Explore search results, kept in their own indexed Realm so they can be
+// browsed and filtered further with no connection. Each row keeps the API
+// response as JSON for display, plus the columns needed to query it.
+export class OfflineExploreObservation extends Realm.Object {
+  uuid!: string;
+
+  json!: string;
+
+  taxon_lineage!: Realm.List<number>;
+
+  iconic_taxon_name!: string;
+
+  quality_grade!: string;
+
+  observed_day?: number;
+
+  observed_at?: Date;
+
+  month?: number;
+
+  hour?: number;
+
+  created_day!: number;
+
+  created_at!: Date;
+
+  user_id?: number;
+
+  place_ids!: Realm.List<number>;
+
+  project_ids!: Realm.List<number>;
+
+  latitude?: number;
+
+  longitude?: number;
+
+  photos_count!: number;
+
+  sounds_count!: number;
+
+  votes_count!: number;
+
+  captive!: boolean;
+
+  static schema: Realm.ObjectSchema = {
+    name: "OfflineExploreObservation",
+    primaryKey: "uuid",
+    properties: {
+      uuid: "string",
+      json: "string",
+      taxon_lineage: "int[]",
+      iconic_taxon_name: { type: "string", indexed: true },
+      quality_grade: { type: "string", indexed: true },
+      // Days as yyyymmdd ints so date ranges are indexed int comparisons
+      observed_day: { type: "int", optional: true, indexed: true },
+      observed_at: { type: "date", optional: true, indexed: true },
+      month: { type: "int", optional: true, indexed: true },
+      hour: { type: "int", optional: true, indexed: true },
+      created_day: { type: "int", indexed: true },
+      created_at: { type: "date", indexed: true },
+      user_id: { type: "int", optional: true, indexed: true },
+      place_ids: "int[]",
+      project_ids: "int[]",
+      latitude: { type: "double", optional: true },
+      longitude: { type: "double", optional: true },
+      photos_count: "int",
+      sounds_count: "int",
+      votes_count: { type: "int", indexed: true },
+      captive: "bool",
+    },
+  };
 }
 
-let cached: OfflineExploreResults | null | undefined;
+export const offlineExploreRealmConfig: Realm.Configuration = {
+  schema: [OfflineExploreObservation],
+  schemaVersion: 1,
+  path: `${DocumentDirectoryPath}/offlineExplore.realm`,
+};
+
+let realm: Realm | null = null;
+let opening: Promise<Realm | null> | null = null;
+// Bumped on every write so subscribers re-query
+let version = 0;
 const listeners = new Set<( ) => void>( );
-const notify = ( ) => listeners.forEach( l => l( ) );
+const notify = ( ) => {
+  version += 1;
+  listeners.forEach( l => l( ) );
+};
 
 export const subscribeOfflineExploreResults = ( listener: ( ) => void ) => {
   listeners.add( listener );
   return ( ) => { listeners.delete( listener ); };
 };
 
-export const getCachedOfflineExploreResults = ( ) => cached;
+export const getOfflineExploreVersion = ( ) => version;
 
-export const loadOfflineExploreResults = async ( ) => {
-  if ( cached !== undefined ) return cached;
-  try {
-    cached = await exists( FILE_PATH )
-      ? JSON.parse( await readFile( FILE_PATH, "utf8" ) )
-      : null;
-  } catch ( e ) {
-    logger.error( "Failed to read offline explore results", e );
-    cached = null;
-  }
-  notify( );
-  return cached;
+export const getOfflineExploreRealm = ( ) => realm;
+
+export const openOfflineExploreRealm = async ( ) => {
+  if ( realm ) return realm;
+  opening ??= Realm.open( offlineExploreRealmConfig ).then( opened => {
+    realm = opened;
+    notify( );
+    return opened;
+  } ).catch( e => {
+    logger.error( "Failed to open offline explore results", e );
+    opening = null;
+    return null;
+  } );
+  return opening;
 };
 
+const allSaved = ( db: Realm ) => db.objects<OfflineExploreObservation>(
+  "OfflineExploreObservation",
+);
+
+export const countOfflineObservations = ( ) => ( realm
+  ? allSaved( realm ).length
+  : 0 );
+
 export const deleteOfflineExploreResults = async ( ) => {
-  cached = null;
+  const db = await openOfflineExploreRealm( );
+  if ( !db ) return;
+  db.write( ( ) => db.deleteAll( ) );
   notify( );
-  if ( await exists( FILE_PATH ) ) await unlink( FILE_PATH );
+};
+
+const dayInt = ( value?: string | null ) => {
+  const day = value?.slice( 0, 10 ).replace( /-/g, "" );
+  return day && /^\d{8}$/.test( day )
+    ? Number( day )
+    : undefined;
+};
+
+const toRow = ( obs: ApiObservation ) => {
+  const { taxon } = obs;
+  const coords = obs.geojson?.coordinates;
+  const timeObservedAt = obs.time_observed_at;
+  const observedAt = timeObservedAt || obs.observed_on;
+  const hour = timeObservedAt
+    ? Number( timeObservedAt.slice( 11, 13 ) )
+    : undefined;
+  const month = Number( obs.observed_on?.slice( 5, 7 ) );
+  return {
+    uuid: obs.uuid,
+    json: JSON.stringify( obs ),
+    taxon_lineage: taxon?.id
+      ? [...( taxon.ancestor_ids || [] ), taxon.id]
+      : [],
+    iconic_taxon_name: taxon?.iconic_taxon_name || "unknown",
+    quality_grade: obs.quality_grade || "",
+    observed_day: dayInt( obs.observed_on ),
+    observed_at: observedAt
+      ? new Date( observedAt )
+      : undefined,
+    month: month || undefined,
+    hour: Number.isNaN( hour )
+      ? undefined
+      : hour,
+    created_day: dayInt( obs.created_at ) || 0,
+    created_at: new Date( obs.created_at || 0 ),
+    user_id: obs.user?.id,
+    place_ids: obs.place_ids || [],
+    project_ids: obs.project_ids || [],
+    longitude: coords?.[0] ?? obs.longitude ?? undefined,
+    latitude: coords?.[1] ?? obs.latitude ?? undefined,
+    photos_count: obs.observation_photos?.length || 0,
+    sounds_count: obs.observation_sounds?.length || 0,
+    votes_count: obs.votes?.length || 0,
+    captive: !!obs.captive,
+  };
 };
 
 const FIELDS = {
   ...Observation.ADVANCED_MODE_LIST_FIELDS,
   captive: true,
   geojson: true,
+  place_ids: true,
+  project_ids: true,
   observation_sounds: ObservationSound.OBSERVATION_SOUNDS_FIELDS,
   taxon: {
     ...Observation.ADVANCED_MODE_LIST_FIELDS.taxon,
@@ -81,10 +212,15 @@ const FIELDS = {
   },
 };
 
+// Adds this search's results to the saved results. Observations already saved
+// are updated in place, so saving overlapping searches makes no duplicates.
 export const downloadOfflineExploreResults = async (
   queryParams: Params,
   onProgress?: ( count: number ) => void,
 ) => {
+  const db = await openOfflineExploreRealm( );
+  if ( !db ) throw new Error( "Offline explore database unavailable" );
+  const before = allSaved( db ).length;
   const baseParams = {
     ...queryParams,
     per_page: PAGE_SIZE,
@@ -92,35 +228,31 @@ export const downloadOfflineExploreResults = async (
     ttl: -1,
   };
   const apiToken = await getJWT( true );
-  const observations: ApiObservation[] = [];
-  const seen = new Set<string>( );
+  let fetched = 0;
   let pageParam: unknown;
-  while ( observations.length < MAX_OFFLINE_OBSERVATIONS ) {
+  while ( fetched < MAX_OFFLINE_OBSERVATIONS ) {
     // eslint-disable-next-line no-await-in-loop
     const response = await searchObservations(
       addPageParamsForExplore( { ...baseParams, pageParam } ),
       { api_token: apiToken },
     );
-    if ( !response?.results?.length ) break;
-    response.results.forEach( ( obs: ApiObservation ) => {
-      if ( obs.uuid && !seen.has( obs.uuid ) ) {
-        seen.add( obs.uuid );
-        observations.push( obs );
-      }
+    const results: ApiObservation[] = ( response?.results || [] )
+      .filter( ( obs: ApiObservation ) => obs.uuid )
+      .slice( 0, MAX_OFFLINE_OBSERVATIONS - fetched );
+    if ( !results.length ) break;
+    db.write( ( ) => {
+      results.forEach( obs => {
+        db.create( "OfflineExploreObservation", toRow( obs ), Realm.UpdateMode.Modified );
+      } );
     } );
-    onProgress?.( observations.length );
+    fetched += results.length;
+    notify( );
+    onProgress?.( fetched );
     pageParam = getNextPageParamForExplore( response, baseParams );
     if ( pageParam == null || response.results.length < PAGE_SIZE ) break;
   }
-  const results: OfflineExploreResults = {
-    savedAt: new Date( ).toISOString( ),
-    params: queryParams,
-    observations: observations.slice( 0, MAX_OFFLINE_OBSERVATIONS ),
-  };
-  await writeFile( FILE_PATH, JSON.stringify( results ), "utf8" );
-  cached = results;
-  notify( );
-  return results;
+  const total = allSaved( db ).length;
+  return { added: total - before, total };
 };
 
 const toNumbers = ( value: unknown ): number[] => {
@@ -138,95 +270,94 @@ const toStrings = ( value: unknown ): string[] => {
     : String( value ).split( "," );
 };
 
-const taxonLineage = ( obs: ApiObservation ): number[] => {
-  const { taxon } = obs;
-  if ( !taxon?.id ) return [];
-  return [...( taxon.ancestor_ids || [] ), taxon.id];
-};
+const KM_PER_DEGREE = 111.32;
 
-const hasLocation = ( obs: ApiObservation ) => !!obs.geojson?.coordinates
-  || ( obs.latitude != null && obs.longitude != null );
-
-const inRange = ( value: string | undefined, min: unknown, max: unknown ) => {
-  if ( !min && !max ) return true;
-  if ( !value ) return false;
-  const day = value.slice( 0, 10 );
-  if ( min && day < String( min ).slice( 0, 10 ) ) return false;
-  if ( max && day > String( max ).slice( 0, 10 ) ) return false;
-  return true;
-};
-
-// Applies Explore's API params to the saved results on device. Location params
-// are ignored, since the saved search already scoped the results to a place,
-// as are params that need the server (native/introduced, reviewed, ...).
-export const filterOfflineObservations = (
-  observations: ApiObservation[],
-  params: Params,
-): ApiObservation[] => {
-  const taxonIds = toNumbers( params.taxon_id );
-  const withoutTaxonIds = new Set( toNumbers( params.without_taxon_id ) );
-  const iconicTaxa = toStrings( params.iconic_taxa );
-  const qualityGrades = toStrings( params.quality_grade );
-  const months = toNumbers( params.month );
-  const hours = toNumbers( params.hour );
-  const userIds = toNumbers( params.user_id );
-  const excludedUserIds = new Set( toNumbers( params.not_user_id ) );
-
-  const filtered = observations.filter( obs => {
-    const lineage = taxonLineage( obs );
-    if ( taxonIds.length && !taxonIds.some( id => lineage.includes( id ) ) ) return false;
-    if ( lineage.some( id => withoutTaxonIds.has( id ) ) ) return false;
-    if ( iconicTaxa.length ) {
-      const iconic = obs.taxon?.iconic_taxon_name || "unknown";
-      if ( !iconicTaxa.includes( iconic ) ) return false;
-    }
-    if ( qualityGrades.length && !qualityGrades.includes( obs.quality_grade ) ) return false;
-    if ( params.observed_on && obs.observed_on?.slice( 0, 10 ) !== params.observed_on ) {
-      return false;
-    }
-    if ( !inRange( obs.observed_on, params.d1, params.d2 ) ) return false;
-    if ( params.created_on && obs.created_at?.slice( 0, 10 ) !== params.created_on ) {
-      return false;
-    }
-    if ( !inRange( obs.created_at, params.created_d1, params.created_d2 ) ) return false;
-    if ( months.length ) {
-      const month = Number( obs.observed_on?.slice( 5, 7 ) );
-      if ( !months.includes( month ) ) return false;
-    }
-    if ( hours.length ) {
-      // time_observed_at carries the local offset, so this is the local hour
-      const hour = Number( obs.time_observed_at?.slice( 11, 13 ) );
-      if ( !obs.time_observed_at || !hours.includes( hour ) ) return false;
-    }
-    const photoCount = obs.observation_photos?.length || 0;
-    const soundCount = obs.observation_sounds?.length || 0;
-    if ( params.photos === true && !photoCount ) return false;
-    if ( params.photos === false && photoCount ) return false;
-    if ( params.sounds === true && !soundCount ) return false;
-    if ( params.sounds === false && soundCount ) return false;
-    if ( typeof params.captive === "boolean" && !!obs.captive !== params.captive ) return false;
-    if ( params.popular && !obs.votes?.length ) return false;
-    if ( userIds.length && !userIds.includes( obs.user?.id ) ) return false;
-    if ( excludedUserIds.has( obs.user?.id ) ) return false;
-    if ( params.geo === false && hasLocation( obs ) ) return false;
-    return true;
-  } );
-
-  const { order_by: orderBy, order } = params;
-  const sortValue = ( obs: ApiObservation ): string | number => {
-    if ( orderBy === "observed_on" ) return obs.time_observed_at || obs.observed_on || "";
-    if ( orderBy === "votes" ) return obs.votes?.length || 0;
-    return obs.created_at || "";
+// Turns Explore's API params into a Realm query over the saved results. Params
+// that need the server (native/introduced, reviewed, ranks, ...) are ignored.
+export const queryOfflineObservations = ( db: Realm, params: Params ) => {
+  const clauses: string[] = [];
+  const args: unknown[] = [];
+  const add = ( clause: string, ...values: unknown[] ) => {
+    // Number the placeholders so each clause can use its own args
+    clauses.push( clause.replace( /\$(\d+)/g, ( _, i ) => `$${args.length + Number( i )}` ) );
+    args.push( ...values );
   };
-  const direction = order === "asc"
-    ? 1
-    : -1;
-  return filtered.sort( ( a, b ) => {
-    const av = sortValue( a );
-    const bv = sortValue( b );
-    if ( av === bv ) return 0;
-    return ( av > bv
-      ? 1
-      : -1 ) * direction;
-  } );
+
+  const taxonIds = toNumbers( params.taxon_id );
+  if ( taxonIds.length ) add( "ANY taxon_lineage IN $0", taxonIds );
+  const withoutTaxonIds = toNumbers( params.without_taxon_id );
+  if ( withoutTaxonIds.length ) add( "NONE taxon_lineage IN $0", withoutTaxonIds );
+  const iconicTaxa = toStrings( params.iconic_taxa );
+  if ( iconicTaxa.length ) add( "iconic_taxon_name IN $0", iconicTaxa );
+  const qualityGrades = toStrings( params.quality_grade );
+  if ( qualityGrades.length ) add( "quality_grade IN $0", qualityGrades );
+
+  const observedOn = dayInt( params.observed_on as string );
+  if ( observedOn ) add( "observed_day == $0", observedOn );
+  const d1 = dayInt( params.d1 as string );
+  if ( d1 ) add( "observed_day >= $0", d1 );
+  const d2 = dayInt( params.d2 as string );
+  if ( d2 ) add( "observed_day <= $0", d2 );
+  const createdOn = dayInt( params.created_on as string );
+  if ( createdOn ) add( "created_day == $0", createdOn );
+  const createdD1 = dayInt( params.created_d1 as string );
+  if ( createdD1 ) add( "created_day >= $0", createdD1 );
+  const createdD2 = dayInt( params.created_d2 as string );
+  if ( createdD2 ) add( "created_day <= $0", createdD2 );
+  const months = toNumbers( params.month );
+  if ( months.length ) add( "month IN $0", months );
+  const hours = toNumbers( params.hour );
+  if ( hours.length ) add( "hour IN $0", hours );
+
+  if ( params.photos === true ) add( "photos_count > 0" );
+  if ( params.photos === false ) add( "photos_count == 0" );
+  if ( params.sounds === true ) add( "sounds_count > 0" );
+  if ( params.sounds === false ) add( "sounds_count == 0" );
+  if ( typeof params.captive === "boolean" ) add( "captive == $0", params.captive );
+  if ( params.popular ) add( "votes_count > 0" );
+
+  const userIds = toNumbers( params.user_id );
+  if ( userIds.length ) add( "user_id IN $0", userIds );
+  const notUserIds = toNumbers( params.not_user_id );
+  if ( notUserIds.length ) add( "NOT user_id IN $0", notUserIds );
+  const projectIds = toNumbers( params.project_id );
+  if ( projectIds.length ) add( "ANY project_ids IN $0", projectIds );
+
+  if ( params.geo === false ) add( "latitude == nil" );
+  const placeIds = toNumbers( params.place_id );
+  if ( placeIds.length ) add( "ANY place_ids IN $0", placeIds );
+  if ( params.swlat != null ) {
+    add(
+      "latitude BETWEEN {$0, $1}",
+      Number( params.swlat ),
+      Number( params.nelat ),
+    );
+    const swlng = Number( params.swlng );
+    const nelng = Number( params.nelng );
+    if ( swlng <= nelng ) {
+      add( "longitude BETWEEN {$0, $1}", swlng, nelng );
+    } else {
+      // Bounds crossing the antimeridian
+      add( "(longitude >= $0 OR longitude <= $1)", swlng, nelng );
+    }
+  }
+  if ( params.lat != null && params.lng != null ) {
+    // Bounding box around the radius
+    const lat = Number( params.lat );
+    const lng = Number( params.lng );
+    const radiusKm = Number( params.radius ) || 1;
+    const dLat = radiusKm / KM_PER_DEGREE;
+    const dLng = dLat / Math.max( Math.cos( ( lat * Math.PI ) / 180 ), 0.01 );
+    add( "latitude BETWEEN {$0, $1}", lat - dLat, lat + dLat );
+    add( "longitude BETWEEN {$0, $1}", lng - dLng, lng + dLng );
+  }
+
+  let results = allSaved( db );
+  if ( clauses.length ) results = results.filtered( clauses.join( " AND " ), ...args );
+
+  const sortKey = {
+    observed_on: "observed_at",
+    votes: "votes_count",
+  }[params.order_by as string] || "created_at";
+  return results.sorted( sortKey, params.order !== "asc" );
 };

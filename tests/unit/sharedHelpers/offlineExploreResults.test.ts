@@ -1,4 +1,20 @@
-import { filterOfflineObservations } from "sharedHelpers/offlineExploreResults";
+import mockOs from "os";
+import mockPath from "path";
+import {
+  countOfflineObservations,
+  downloadOfflineExploreResults,
+  offlineExploreRealmConfig,
+  openOfflineExploreRealm,
+  queryOfflineObservations,
+} from "sharedHelpers/offlineExploreResults";
+
+const mockSearchObservations = jest.fn( );
+jest.mock( "api/observations", ( ) => ( {
+  searchObservations: ( ...args: unknown[] ) => mockSearchObservations( ...args ),
+} ) );
+jest.mock( "components/LoginSignUp/AuthenticationService", ( ) => ( {
+  getJWT: jest.fn( ( ) => Promise.resolve( null ) ),
+} ) );
 
 const bird = {
   uuid: "a",
@@ -9,6 +25,8 @@ const bird = {
   taxon: { id: 3, ancestor_ids: [1, 2, 3], iconic_taxon_name: "Aves" },
   observation_photos: [{}],
   user: { id: 10 },
+  place_ids: [7],
+  geojson: { coordinates: [-122, 37] },
 };
 const plant = {
   uuid: "b",
@@ -20,29 +38,56 @@ const plant = {
   observation_sounds: [{}],
   user: { id: 11 },
 };
-const observations = [bird, plant];
-const uuids = ( params: Record<string, unknown> ) => filterOfflineObservations(
-  observations as never,
-  params,
-).map( o => o.uuid );
 
-describe( "filterOfflineObservations", ( ) => {
-  it( "filters by taxon and its descendants", ( ) => {
-    expect( uuids( { taxon_id: 2 } ) ).toEqual( ["a"] );
-    expect( uuids( { without_taxon_id: [4] } ) ).toEqual( ["a"] );
+const respond = ( results: unknown[] ) => mockSearchObservations
+  .mockResolvedValueOnce( { results, total_results: results.length } );
+
+const uuids = async ( params: Record<string, unknown> ) => {
+  const db = await openOfflineExploreRealm( );
+  return queryOfflineObservations( db!, params ).map( o => o.uuid );
+};
+
+beforeAll( async ( ) => {
+  offlineExploreRealmConfig.inMemory = true;
+  offlineExploreRealmConfig.path = mockPath.join( mockOs.tmpdir( ), "offlineExplore.realm" );
+  respond( [bird] );
+  await downloadOfflineExploreResults( { taxon_id: 3 } );
+  // A second save adds to the first without duplicating the bird
+  respond( [bird, plant] );
+  const result = await downloadOfflineExploreResults( { } );
+  expect( result ).toEqual( { added: 1, total: 2 } );
+} );
+
+describe( "offline explore results", ( ) => {
+  it( "merges saves without duplicates", ( ) => {
+    expect( countOfflineObservations( ) ).toBe( 2 );
   } );
 
-  it( "filters by quality grade, date, month, hour and media", ( ) => {
-    expect( uuids( { quality_grade: ["needs_id"] } ) ).toEqual( ["b"] );
-    expect( uuids( { d1: "2024-06-01" } ) ).toEqual( ["b"] );
-    expect( uuids( { month: [5] } ) ).toEqual( ["a"] );
-    expect( uuids( { hour: [15] } ) ).toEqual( ["b"] );
-    expect( uuids( { sounds: true } ) ).toEqual( ["b"] );
+  it( "filters by taxon and its descendants", async ( ) => {
+    expect( await uuids( { taxon_id: 2 } ) ).toEqual( ["a"] );
+    expect( await uuids( { without_taxon_id: [4] } ) ).toEqual( ["a"] );
+    expect( await uuids( { iconic_taxa: ["Plantae"] } ) ).toEqual( ["b"] );
   } );
 
-  it( "filters by user and sorts", ( ) => {
-    expect( uuids( { not_user_id: 10 } ) ).toEqual( ["b"] );
-    expect( uuids( { order_by: "created_at", order: "asc" } ) ).toEqual( ["a", "b"] );
-    expect( uuids( { } ) ).toEqual( ["b", "a"] );
+  it( "filters by quality grade, date, month, hour and media", async ( ) => {
+    expect( await uuids( { quality_grade: ["needs_id"] } ) ).toEqual( ["b"] );
+    expect( await uuids( { d1: "2024-06-01" } ) ).toEqual( ["b"] );
+    expect( await uuids( { month: [5] } ) ).toEqual( ["a"] );
+    expect( await uuids( { hour: [15] } ) ).toEqual( ["b"] );
+    expect( await uuids( { sounds: true } ) ).toEqual( ["b"] );
+  } );
+
+  it( "filters by place and area", async ( ) => {
+    expect( await uuids( { place_id: 7 } ) ).toEqual( ["a"] );
+    expect( await uuids( {
+      swlat: 36, swlng: -123, nelat: 38, nelng: -121,
+    } ) ).toEqual( ["a"] );
+    expect( await uuids( { lat: 37, lng: -122, radius: 5 } ) ).toEqual( ["a"] );
+  } );
+
+  it( "filters by user and sorts", async ( ) => {
+    expect( await uuids( { not_user_id: 10 } ) ).toEqual( ["b"] );
+    expect( await uuids( { order_by: "created_at", order: "asc" } ) ).toEqual( ["a", "b"] );
+    expect( await uuids( { } ) ).toEqual( ["b", "a"] );
   } );
 } );

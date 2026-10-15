@@ -30,6 +30,10 @@ import useInfiniteExploreScroll
 import IdentifyView from "components/Explore/IdentifyView";
 import LifeListView from "components/Explore/LifeListView";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
+import {
+  OfflineObservationsView,
+  useOfflineExploreResults,
+} from "components/Explore/OfflineExplore";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import {
   Body2,
@@ -179,6 +183,8 @@ const ExploreResults = ( ) => {
     ( ) => buildExploreV2QueryParams( state, nearbyCoords, currentUserId ),
     [state, nearbyCoords, currentUserId],
   );
+
+  const offlineResults = useOfflineExploreResults( queryParams );
 
   const {
     fetchNextPage,
@@ -420,6 +426,18 @@ const ExploreResults = ( ) => {
   };
 
   const renderContent = ( ) => {
+    if ( isConnected === false && offlineResults && state.activeTab === OBSERVATIONS_TAB ) {
+      return (
+        <>
+          <OfflineObservationsView layout={layout} queryParams={queryParams} />
+          <ObservationsViewBar
+            layout={layout}
+            updateObservationsView={writeLayoutToStorage}
+            viewOptions={["grid", "list"]}
+          />
+        </>
+      );
+    }
     if ( isConnected === false ) {
       return (
         <View className="flex-1">

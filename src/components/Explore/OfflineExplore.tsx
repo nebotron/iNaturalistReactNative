@@ -1,8 +1,8 @@
+import type { ApiObservation } from "api/types";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import {
-  ActivityIndicator,
   Body3,
-  INatIconButton,
+  Button,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, {
@@ -12,44 +12,60 @@ import { Alert } from "react-native";
 import {
   deleteOfflineExploreResults,
   downloadOfflineExploreResults,
-  filterOfflineObservations,
-  getCachedOfflineExploreResults,
-  loadOfflineExploreResults,
+  getOfflineExploreRealm,
+  getOfflineExploreVersion,
   MAX_OFFLINE_OBSERVATIONS,
+  openOfflineExploreRealm,
+  queryOfflineObservations,
   subscribeOfflineExploreResults,
 } from "sharedHelpers/offlineExploreResults";
 import { useTranslation } from "sharedHooks";
 import { getShadow } from "styles/global";
-import colors from "styles/tailwindColors";
 
 const DROP_SHADOW = getShadow( { offsetHeight: 4, elevation: 6 } );
-const ROUND = { borderRadius: 22 };
 const OBS_LIST_CONTAINER_STYLE = { paddingTop: 50 };
+const PAGE_SIZE = 100;
 const noop = ( ) => undefined;
 
-export const useOfflineExploreResults = ( ) => {
-  useEffect( ( ) => { loadOfflineExploreResults( ); }, [] );
-  return useSyncExternalStore(
+type Params = Record<string, unknown>;
+
+// Saved results matching params, re-queried whenever the saved results change
+export const useOfflineExploreResults = ( params: Params ) => {
+  useEffect( ( ) => { openOfflineExploreRealm( ); }, [] );
+  const version = useSyncExternalStore(
     subscribeOfflineExploreResults,
-    getCachedOfflineExploreResults,
+    getOfflineExploreVersion,
   );
+  return useMemo( ( ) => {
+    const db = getOfflineExploreRealm( );
+    if ( !db ) return null;
+    const total = db.objects( "OfflineExploreObservation" ).length;
+    if ( total === 0 ) return null;
+    return { total, results: queryOfflineObservations( db, params ) };
+  // version changes whenever the saved results do
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params, version] );
 };
 
 interface SaveProps {
-  queryParams: Record<string, unknown>;
+  // Resolves the current search's API params when saving
+  getQueryParams: ( ) => Promise<Params>;
+  disabled?: boolean;
 }
 
-// Saves the current search's results so they can be browsed and filtered
-// further with no connection
-export const SaveOfflineButton = ( { queryParams }: SaveProps ) => {
+// Adds the current search's results to the ones saved for offline use
+export const SaveOfflineButton = ( { getQueryParams, disabled }: SaveProps ) => {
   const { t } = useTranslation( );
   const [progress, setProgress] = useState<number | null>( null );
 
   const save = async ( ) => {
     setProgress( 0 );
     try {
-      const { observations } = await downloadOfflineExploreResults( queryParams, setProgress );
-      Alert.alert( t( "Saved-for-offline-use", { count: observations.length } ) );
+      const { added, total } = await downloadOfflineExploreResults(
+        await getQueryParams( ),
+        setProgress,
+      );
+      Alert.alert( t( "Added-X-offline-observations", { count: added, total } ) );
     } catch {
       Alert.alert( t( "Something-went-wrong" ) );
     } finally {
@@ -59,7 +75,7 @@ export const SaveOfflineButton = ( { queryParams }: SaveProps ) => {
 
   const onPress = ( ) => Alert.alert(
     t( "Save-for-offline-use" ),
-    t( "Save-up-to-observations-from-this-search", { count: MAX_OFFLINE_OBSERVATIONS } ),
+    t( "Add-up-to-observations-from-this-search", { count: MAX_OFFLINE_OBSERVATIONS } ),
     [
       { text: t( "Cancel" ), style: "cancel" },
       { text: t( "SAVE" ), onPress: save },
@@ -67,23 +83,16 @@ export const SaveOfflineButton = ( { queryParams }: SaveProps ) => {
   );
 
   return (
-    <View className="absolute bottom-5 right-5 z-10 flex-row items-center">
-      {progress !== null && (
-        <View className="bg-white rounded-full px-3 py-2 mr-2 flex-row" style={DROP_SHADOW}>
-          <ActivityIndicator size={16} />
-          <Body3 className="ml-2">{progress}</Body3>
-        </View>
-      )}
-      <INatIconButton
-        icon="arrow-down-bold-circle-outline"
-        color={colors.darkGray}
-        backgroundColor={colors.white}
-        disabled={progress !== null}
+    <View className="px-4 mb-7">
+      <Button
+        text={progress === null
+          ? t( "SAVE-RESULTS-FOR-OFFLINE-USE" )
+          : t( "Saving-X-observations", { count: progress } )}
+        disabled={disabled || progress !== null}
+        loading={progress !== null}
         onPress={onPress}
-        size={20}
-        width={44}
-        style={[DROP_SHADOW, ROUND]}
         accessibilityLabel={t( "Save-for-offline-use" )}
+        testID="SaveOfflineButton"
       />
     </View>
   );
@@ -91,16 +100,23 @@ export const SaveOfflineButton = ( { queryParams }: SaveProps ) => {
 
 interface ViewProps {
   layout: string | null;
-  queryParams: Record<string, unknown>;
+  queryParams: Params;
 }
 
 // Shows saved results, filtered on device by the current Explore filters
 export const OfflineObservationsView = ( { layout, queryParams }: ViewProps ) => {
   const { t } = useTranslation( );
-  const saved = useOfflineExploreResults( );
+  const saved = useOfflineExploreResults( queryParams );
+  // Paging restarts when the filters change
+  const [paging, setPaging] = useState( { params: queryParams, limit: PAGE_SIZE } );
+  const limit = paging.params === queryParams
+    ? paging.limit
+    : PAGE_SIZE;
+  // Parse only the rows the list has scrolled to
   const observations = useMemo(
-    ( ) => filterOfflineObservations( saved?.observations || [], queryParams ),
-    [saved, queryParams],
+    ( ) => ( saved?.results.slice( 0, limit ) || [] )
+      .map( row => JSON.parse( row.json ) as ApiObservation ),
+    [saved, limit],
   );
   if ( !saved ) return null;
   const listLayout = layout === "list"
@@ -123,8 +139,8 @@ export const OfflineObservationsView = ( { layout, queryParams }: ViewProps ) =>
         isConnected={false}
         layout={listLayout}
         obsListKey="OfflineExploreObservations"
-        onEndReached={noop}
-        showNoResults={observations.length === 0}
+        onEndReached={( ) => setPaging( { params: queryParams, limit: limit + PAGE_SIZE } )}
+        showNoResults={saved.results.length === 0}
         hideObsUploadStatus={listLayout === "grid"}
         fullWidthGrid={listLayout === "grid"}
         testID="OfflineExploreObservations"
@@ -135,8 +151,8 @@ export const OfflineObservationsView = ( { layout, queryParams }: ViewProps ) =>
       >
         <Body3 onPress={onPressDelete}>
           {t( "Offline-X-of-Y-saved-observations", {
-            count: observations.length,
-            total: saved.observations.length,
+            count: saved.results.length,
+            total: saved.total,
           } )}
         </Body3>
       </View>
