@@ -22,6 +22,7 @@ const { AudioBirdId } = NativeModules as {
     start: ( outputs: number[] ) => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
+    vibrateHaptics: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
     saveClip: ( path: string ) => Promise<string>;
@@ -128,6 +129,16 @@ const useAudioIdSession = create<AudioIdState>( ( set, get ) => ( {
   },
 } ) );
 
+export const vibrate = ( haptics = false ) => {
+  ( haptics
+    ? AudioBirdId?.vibrateHaptics( )
+    : AudioBirdId?.vibrate( ) )
+    ?.then( r => {
+      if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${r.error}` );
+    } )
+    .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
+};
+
 let runs: ScoresEvent[] = [];
 
 const onScores = ( event: ScoresEvent ) => {
@@ -188,11 +199,7 @@ const onScores = ( event: ScoresEvent ) => {
     };
   } );
   if ( alerts.length > 0 ) {
-    AudioBirdId?.vibrate( )
-      .then( r => {
-        if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${r.error}` );
-      } )
-      .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
+    vibrate( );
     AudioBirdId?.notify(
       `Heard ${alerts.map( sp => sp.commonName ).join( ", " )}`,
       alerts.map( sp => ( seen && !seen.has( sp.taxonId )
