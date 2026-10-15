@@ -130,6 +130,12 @@ jobs:
         command -v ccache >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install ccache
         echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
         echo "CCACHE_MAXSIZE=2G" >> "$GITHUB_ENV"
+        # Xcode exports build settings to script phases but not to CompileC,
+        # so the wrapper's $CCACHE_BINARY is empty there and it runs plain
+        # clang, bypassing ccache. Bake the binary and cache dir into it.
+        sed -i '' "s|^exec \$CCACHE_BINARY|exec env CCACHE_DIR=$HOME/.ccache CCACHE_MAXSIZE=2G $( command -v ccache )|" \
+          node_modules/react-native/scripts/xcode/ccache-clang.sh
+        cat node_modules/react-native/scripts/xcode/ccache-clang.sh
 
     # Saved under a new key every run so the cache keeps up with the code; the
     # restore-keys fall back to the newest cache built against the same Pods.
