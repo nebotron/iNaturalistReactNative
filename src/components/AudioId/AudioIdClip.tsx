@@ -39,6 +39,13 @@ const AudioIdClip = ( ) => {
       await copyFile( clipPath( id ), copy );
       const observation = await Observation.createObsWithSoundPath( `file://${copy}` );
       observation.observed_on_string = formatISONoTimezone( new Date( clip.time ) );
+      // The user's label wins over the model's ID; "no organism" leaves it blank.
+      const { label, sp } = clip;
+      if ( label?.taxonId ) {
+        observation.taxon = { id: label.taxonId, name: label.name };
+      } else if ( label?.taxonId !== null ) {
+        observation.taxon = { id: sp.taxonId, name: sp.name, preferred_common_name: sp.commonName };
+      }
       setObservations( [observation] );
       navigation.navigate( "ObsEdit" );
     } catch ( e ) {
