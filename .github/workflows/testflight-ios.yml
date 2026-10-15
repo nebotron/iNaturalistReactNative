@@ -269,7 +269,9 @@ jobs:
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
 
-    - name: Export the IPA
+    # destination=upload has the export sign the IPA and send it to App Store
+    # Connect itself, saving the separate altool upload's repackaging pass.
+    - name: Export and upload to TestFlight
       run: |
         cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
         <?xml version="1.0" encoding="UTF-8"?>
@@ -279,7 +281,7 @@ jobs:
           <key>method</key>
           <string>app-store-connect</string>
           <key>destination</key>
-          <string>export</string>
+          <string>upload</string>
           <key>teamID</key>
           <string>$TEAM_ID</string>
           <key>signingStyle</key>
@@ -299,19 +301,4 @@ jobs:
           -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8" \
           -authenticationKeyID "$ASC_KEY_ID" \
           -authenticationKeyIssuerID "$ASC_ISSUER_ID"
-
-    - name: Upload to TestFlight
-      run: |
-        IPA="$( ls "$EXPORT_PATH"/*.ipa | head -1 )"
-        xcrun altool --upload-app --type ios --file "$IPA" \
-          --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
         echo "Uploaded build $BUILD_NUMBER to TestFlight" >> "$GITHUB_STEP_SUMMARY"
-
-    - name: Store the IPA when something goes wrong
-      uses: actions/upload-artifact@v6
-      if: failure()
-      with:
-        name: ipa
-        path: ${{ env.EXPORT_PATH }}
-        retention-days: 5
-        if-no-files-found: ignore

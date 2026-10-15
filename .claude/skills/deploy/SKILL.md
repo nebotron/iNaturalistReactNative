@@ -27,7 +27,7 @@ team and the `com.benhannel.inat.dev` bundle IDs.
    (`-f prebuilt_react_native=true`), and treat a link error naming a React or
    folly symbol as that flag's fault rather than the code's.
 
-3. **Wait.** A full run is ~30 minutes: pods ~3, archive ~20, export ~1, upload ~2.
+3. **Wait.** A full run is ~20 minutes with warm caches: pods ~2, archive ~10, export and upload ~3.
    Check the run's status every 5 minutes until it completes (`send_later` with
    `delay_minutes: 5`, or `ScheduleWakeup` / a background wait) rather than polling
    in a tight loop. `list_workflow_jobs` shows which step is running.
@@ -45,7 +45,7 @@ team and the `com.benhannel.inat.dev` bundle IDs.
    | Compile or linker error in `Archive` | A real build break. Fix the code, commit, push, re-dispatch. |
    | `No profiles for 'com.benhannel.inat.dev...' found` | The App Store Connect key lost provisioning rights, or a new bundle ID (e.g. a new extension) needs a profile. `-allowProvisioningUpdates` should create one; if it can't, the key lacks the role and the user has to fix it in App Store Connect. |
    | `Choose a certificate to revoke. Your account has reached the maximum number of certificates` | Runs without the reusable certificate each create new ones. The user revokes the stale runner certificates at developer.apple.com and adds the `DIST_CERT_P12_BASE64` / `DIST_CERT_PASSWORD` secrets holding both an Apple Distribution and an Apple Development certificate (see the workflow header). Secrets are theirs to add, so tell them and stop. |
-   | `altool` rejects the build (`ITMS-...`) | Read the code. A duplicate build number can't happen with the timestamp scheme; anything else is usually a missing Info.plist key or entitlement. |
+   | The export's upload is rejected (`ITMS-...`) | Read the code. A duplicate build number can't happen with the timestamp scheme; anything else is usually a missing Info.plist key or entitlement. |
    | Runner died / timed out with no error | Re-run the job once (`rerun_failed_jobs`). Twice failing the same way is real. |
 
 6. **After fixing**, push the fix to `main` (step 1), dispatch a new run, and keep
