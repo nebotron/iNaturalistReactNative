@@ -275,7 +275,6 @@ const SuggestionsContainer = ( ) => {
     suggestions,
     usingOfflineSuggestions,
     tryOfflineSuggestions,
-    urlWillCrashOffline,
   } = useSuggestions( selectedPhotoUri, {
     shouldFetchOnlineSuggestions,
     onFetchError,
@@ -483,8 +482,6 @@ const SuggestionsContainer = ( ) => {
     } );
   }, [resetTimeout, preferOfflineModel] );
 
-  const showModelToggle = isConnected && !urlWillCrashOffline;
-
   const hideLocationToggleButton = usingOfflineSuggestions
     || isLoading
     || showImproveWithLocationButton
@@ -671,7 +668,6 @@ const SuggestionsContainer = ( ) => {
         photoUris={photoUris}
         selectedPhotoUri={selectedPhotoUri}
         showImproveWithLocationButton={!!showImproveWithLocationButton}
-        showModelToggle={showModelToggle}
         suggestions={suggestions}
         toggleLocation={toggleLocation}
         toggleSuggestionsModel={toggleSuggestionsModel}

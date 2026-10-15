@@ -1168,7 +1168,6 @@ Observers-View = Observers View
 # Month of October
 October = October
 Offline-DQA-description = The DQA may not be accurate. Check your internet connection and try again.
-Offline-suggestions = Offline
 Offline-suggestions-may-differ-from-online = Offline suggestions may differ from online suggestions, and taxon images and common names may not load.
 # Label shown in Explore when offline, with the count of saved results matching the filters
 Offline-X-of-Y-saved-observations = Offline: { $count } of { $total } saved
@@ -1178,7 +1177,6 @@ OK = OK
 Oldest-to-newest = Oldest to newest
 Once-you-create-and-upload-observations = Once you create & upload observations, other members of our community can add identifications to help your observations reach research grade.
 One-or-more-projects-still-need-required-info = One or more projects still need required info. Leave and only the completed ones will be saved.
-Online-suggestions = Online
 # Adjective, as in geoprivacy
 Open = Open
 OPEN-EMAIL = OPEN EMAIL

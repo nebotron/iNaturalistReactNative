@@ -34,7 +34,6 @@ type Props = {
   photoUris: string[],
   selectedPhotoUri: string,
   showImproveWithLocationButton: boolean,
-  showModelToggle: boolean,
   suggestions: Object,
   toggleLocation: Function,
   toggleSuggestionsModel: Function,
@@ -58,7 +57,6 @@ const Suggestions = ( {
   photoUris,
   selectedPhotoUri,
   showImproveWithLocationButton,
-  showModelToggle,
   suggestions,
   toggleLocation,
   toggleSuggestionsModel,
@@ -128,9 +126,7 @@ const Suggestions = ( {
       photoUris={photoUris}
       selectedPhotoUri={selectedPhotoUri}
       showOfflineModelInfo={showOfflineModelInfo}
-      showModelToggle={showModelToggle}
       toggleSuggestionsModel={toggleSuggestionsModel}
-      useOfflineModel={useOfflineModel}
       improveWithLocationButtonOnPress={improveWithLocationButtonOnPress}
       showImproveWithLocationButton={showImproveWithLocationButton}
     />
@@ -144,9 +140,7 @@ const Suggestions = ( {
     improveWithLocationButtonOnPress,
     showImproveWithLocationButton,
     showOfflineModelInfo,
-    showModelToggle,
     toggleSuggestionsModel,
-    useOfflineModel,
   ] );
 
   const renderSectionHeader = ( { section } ) => {

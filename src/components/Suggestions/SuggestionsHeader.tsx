@@ -8,7 +8,6 @@ import React from "react";
 import { useTranslation } from "sharedHooks";
 
 import ObsPhotoSelectionList from "./ObsPhotoSelectionList";
-import SuggestionsModelToggle from "./SuggestionsModelToggle";
 
 interface Props {
   detectSubject?: boolean;
@@ -18,9 +17,7 @@ interface Props {
   photoUris: string[];
   selectedPhotoUri: string;
   showOfflineModelInfo: boolean;
-  showModelToggle: boolean;
   toggleSuggestionsModel: ( useOfflineModel: boolean ) => void;
-  useOfflineModel: boolean;
   improveWithLocationButtonOnPress: () => void;
   showImproveWithLocationButton: boolean;
 }
@@ -33,9 +30,7 @@ const SuggestionsHeader = ( {
   photoUris,
   selectedPhotoUri,
   showOfflineModelInfo,
-  showModelToggle,
   toggleSuggestionsModel,
-  useOfflineModel,
   improveWithLocationButtonOnPress,
   showImproveWithLocationButton,
 }: Props ) => {
@@ -53,12 +48,6 @@ const SuggestionsHeader = ( {
           onReorderPhotos={onReorderPhotos}
         />
       </View>
-      {showModelToggle && (
-        <SuggestionsModelToggle
-          onModelChange={toggleSuggestionsModel}
-          useOfflineModel={useOfflineModel}
-        />
-      )}
       {showImproveWithLocationButton && (
         <View className="mx-5 mt-5">
           <Button
