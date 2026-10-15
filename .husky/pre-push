@@ -1,0 +1,56 @@
+set -e
+
+# Install dependencies if they're missing (e.g. fresh cloud containers).
+# GitHub deps install via git clone when codeload tarballs are blocked. Drop
+# GIT_INDEX_FILE in case a hook inherits it, since npm's `git checkout` in each
+# temp clone would otherwise abort on "local changes". Retry the whole install
+# for real network failures.
+for attempt in 1 2 3; do
+  [ -d node_modules ] && break
+  env -u GIT_INDEX_FILE npm install --no-audit --no-fund && break
+  [ "$attempt" = 3 ] && exit 1
+  echo "npm install failed (attempt $attempt), retrying..." >&2
+done
+
+# Only check files touched by commits that aren't on any remote yet
+z=0000000000000000000000000000000000000000
+shas=$(while read -r _ sha _ _; do [ "$sha" != $z ] && echo "$sha"; done)
+[ -z "$shas" ] && exit 0
+changed=$(git log --format= --name-only --diff-filter=ACMR $shas --not --remotes \
+  | sort -u | while read -r f; do [ -f "$f" ] && echo "$f"; done)
+[ -z "$changed" ] && exit 0
+js=$(echo "$changed" | grep -E '\.(js|jsx|ts|tsx)$' || true)
+rb=$(echo "$changed" | grep -E '\.rb$' || true)
+i18n=$(echo "$changed" | grep -E '^src/i18n/.*\.ftl$' || true)
+
+snapshot() { { git status --porcelain -uall; git diff; } | cksum; }
+before=$(snapshot)
+
+# Flow's server checks incrementally, so later runs are much faster than
+# `flow check`; run it alongside the other linters
+if [ -n "$js" ]; then
+  npx flow status --quiet > .git/flow.log 2>&1 &
+  flow_pid=$!
+  echo "$js" | xargs npx eslint --cache --cache-location .eslintcache --fix
+fi
+
+if [ -n "$rb" ]; then
+  bundle check > /dev/null 2>&1 || bundle install --quiet
+  # Gem executables (e.g. rubocop) aren't always on PATH
+  export PATH="$(ruby -e 'print Gem.bindir'):$PATH"
+  echo "$rb" | xargs bundle exec rubocop --force-exclusion --parallel
+fi
+
+# Generate translations from strings.ftl
+[ -n "$i18n" ] && npm run translate --silent
+
+if [ -n "$flow_pid" ] && ! wait "$flow_pid"; then
+  cat .git/flow.log
+  exit 1
+fi
+
+if [ "$before" != "$(snapshot)" ]; then
+  echo "pre-push: linters or translations changed files; commit them and push again." >&2
+  git status --short >&2
+  exit 1
+fi

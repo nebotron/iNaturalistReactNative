@@ -258,7 +258,7 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 - Arrow functions for React components: `const MyComponent = () => { };`
 - i18next string literal checking enforced - use `t()` for all user-facing text
 - Prefer TypeScript for new files (partial adoption, not required)
-- Husky pre-commit hook (`.husky/pre-commit`) runs `lint-staged` (eslint `--fix` on staged files), regenerates i18n translations, and runs a GitGuardian (`ggshield`) secrets scan
+- Husky pre-push hook (`.husky/pre-push`) checks only files changed in unpushed commits: eslint `--fix`, `flow status`, rubocop, and i18n regeneration when `.ftl` files changed. If anything gets rewritten, the push fails so you can commit the changes.
 
 **Details:** TypeScript conventions (interface-vs-type, Flow coexistence) in `agent-docs/conventions/typescript.md`.
 
@@ -316,7 +316,7 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 - Branch naming: `mob-{number}-{short-description}` (e.g., `mob-123-fix-upload-crash`)
 - Commit messages: Imperative mood, describe user impact
 - Include `Closes MOB-123` in the commit body to auto-close issues
-- Husky pre-commit hook runs linters automatically
+- Husky pre-push hook runs linters automatically
 - Main branch: `main`
 
 ## Accessibility

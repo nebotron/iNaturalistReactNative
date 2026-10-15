@@ -17,7 +17,6 @@
     "test:memory": "jest --runInBand --logHeapUsage",
     "lint": "npm-run-all --parallel lint:eslint lint:flow lint:rubocop",
     "lint:fix": "npm-run-all lint:eslint:fix lint:flow lint:rubocop:fix",
-    "lint:staged:fix": "npx lint-staged && npm run lint:flow",
     "lint:eslint": "eslint .",
     "lint:eslint:fix": "eslint . --fix",
     "lint:flow": "flow check",
@@ -213,7 +212,6 @@
     "jest-fetch-mock": "github:jefflau/jest-fetch-mock",
     "jest-slow-test-reporter": "^1.0.0",
     "jpeg-js": "^0.4.4",
-    "lint-staged": "^16.4.0",
     "nock": "^13.5.6",
     "node-downloader-helper": "^2.1.10",
     "npm-run-all2": "^8.0.4",
@@ -232,13 +230,5 @@
   },
   "engines": {
     "node": ">=20"
-  },
-  "lint-staged": {
-    "*.{js,jsx,ts,tsx}": [
-      "eslint --cache --fix --cache-location .eslintcache"
-    ],
-    "*.rb": [
-      "bundle exec rubocop --force-exclusion --parallel"
-    ]
   }
 }
