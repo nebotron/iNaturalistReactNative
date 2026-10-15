@@ -331,6 +331,7 @@ const ExploreResults = ( ) => {
                   data={observations}
                   dataCanBeFetched={canFetch}
                   explore
+                  fullWidthGrid={layout !== "list"}
                   handlePullToRefresh={handlePullToRefresh}
                   hideLoadingWheel={!isFetchingNextPage}
                   isFetchingNextPage={isFetchingNextPage}
