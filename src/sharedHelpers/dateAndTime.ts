@@ -14,6 +14,7 @@ import {
   fromUnixTime,
   getUnixTime,
   getYear,
+  isToday,
   isValid as isValidDate,
   parse,
   parseISO,
@@ -235,7 +236,10 @@ function formatISONoTimezone( date: Date | null ): string {
 
 // "2022-12-31 11:59:59 PM"
 function formatISOTimestamp( ms: number ): string {
-  return format( new Date( ms ), "yyyy-MM-dd h:mm:ss a" );
+  const date = new Date( ms );
+  return format( date, isToday( date )
+    ? "h:mm:ss a"
+    : "yyyy-MM-dd h:mm:ss a" );
 }
 
 // two options for observed_on_string in uploader are:
