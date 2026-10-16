@@ -14,6 +14,8 @@ interface Props {
   isConnected: boolean;
   queryParams: Record<string, unknown>;
   handleUpdateCount: ( view: string, count: number ) => void;
+  // Room for the old Explore header that overlays the list
+  paddingTop?: number;
 }
 
 // Every matching observation, grouped by species and keeping the earliest, so
@@ -24,6 +26,7 @@ const LifeListView = ( {
   isConnected,
   queryParams,
   handleUpdateCount,
+  paddingTop = 0,
 }: Props ) => {
   const { flashListStyle, gridItemStyle, numColumns } = useGridLayout( );
   const cacheKey = lifeListCacheKey( queryParams );
@@ -70,8 +73,8 @@ const LifeListView = ( {
 
   const contentContainerStyle = useMemo( ( ) => ( {
     ...flashListStyle,
-    paddingTop: 50,
-  } ), [flashListStyle] );
+    paddingTop,
+  } ), [flashListStyle, paddingTop] );
 
   return (
     <ExploreFlashList

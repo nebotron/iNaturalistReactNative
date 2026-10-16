@@ -211,6 +211,7 @@ const Explore = ( {
             isConnected={isConnected}
             queryParams={lifeListParamsRef.current}
             handleUpdateCount={handleUpdateCount}
+            paddingTop={50}
           />
         )}
         {currentExploreView === "observers" && (
