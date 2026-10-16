@@ -6,6 +6,7 @@ export enum OBSERVATIONS_SORT {
   DATE_UPLOADED_OLDEST = "DATE_UPLOADED_OLDEST",
   DATE_OBSERVED_NEWEST = "DATE_OBSERVED_NEWEST",
   DATE_OBSERVED_OLDEST = "DATE_OBSERVED_OLDEST",
+  MOST_FAVED = "MOST_FAVED",
 }
 
 interface ObservationSortAPIParams {
@@ -23,6 +24,7 @@ const OBSERVATIONS_SORT_TO_API_PARAMS: Record<OBSERVATIONS_SORT, ObservationSort
   [OBSERVATIONS_SORT.DATE_UPLOADED_OLDEST]: { order_by: "created_at", order: "asc" },
   [OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST]: { order_by: "observed_on", order: "desc" },
   [OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST]: { order_by: "observed_on", order: "asc" },
+  [OBSERVATIONS_SORT.MOST_FAVED]: { order_by: "votes", order: "desc" },
 };
 
 export const OBSERVATIONS_SORT_OPTIONS: OBSERVATIONS_SORT[] = [
@@ -30,6 +32,7 @@ export const OBSERVATIONS_SORT_OPTIONS: OBSERVATIONS_SORT[] = [
   OBSERVATIONS_SORT.DATE_UPLOADED_OLDEST,
   OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST,
   OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST,
+  OBSERVATIONS_SORT.MOST_FAVED,
 ];
 
 export function observationSortToApiParams( sort: OBSERVATIONS_SORT ): ObservationSortAPIParams {
@@ -47,6 +50,8 @@ const OBSERVATIONS_SORT_TO_REALM_SORT: Record<OBSERVATIONS_SORT, ObservationReal
   // observed_on_string set, so local sorting needs to use that field instead
   [OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST]: ["observed_on_string", true],
   [OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST]: ["observed_on_string", false],
+  // local-only observations can't have faves, so fall back to the default order
+  [OBSERVATIONS_SORT.MOST_FAVED]: ["_created_at", true],
 };
 
 // For sorting local, unsynced observations directly in a Realm query -- used for logged-out
@@ -73,6 +78,10 @@ export function useObservationsSortLabels( ): Record<OBSERVATIONS_SORT, Observat
     [OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST]: {
       label: t( "Date-Observed-Oldest" ),
       text: t( "Observations-with-the-oldest-date-appear-first" ),
+    },
+    [OBSERVATIONS_SORT.MOST_FAVED]: {
+      label: t( "Most-faved" ),
+      text: t( "Observations-with-the-most-faves-appear-first" ),
     },
   };
 }

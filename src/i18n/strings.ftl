@@ -965,6 +965,8 @@ Most-Observed-Default = Most Observed (Default)
 # Label for the lifers sort order that puts the most recently observed
 # species first, this option is selected by default
 Most-Recent-Default = Most Recent (Default)
+# Description for the most faved observations sort order
+Most-to-least-faved = Most to least faved
 # Title for section in Notifications showing notifications about observations
 # created by the viewer. Should be 16 characters or fewer or it will be ellipsized.
 MY-CONTENT--notifications = MY CONTENT
@@ -1116,6 +1118,8 @@ Observations-added-least-recently-appear-first = Observations added least recent
 Observations-added-recently-appear-first = Observations added recently appear first
 Observations-need-location-date--warning = iNaturalist observations need a location and date to be useful to scientists. Please check observations with this icon before uploading.
 Observations-View = Observations View
+# Description for observations sort order
+Observations-with-the-most-faves-appear-first = Observations with the most faves appear first
 # Description for observations sort order
 Observations-with-the-most-recent-date-appear-first = Observations with the most recent date appear first
 # Description for observations sort order
