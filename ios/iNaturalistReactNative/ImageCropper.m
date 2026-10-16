@@ -380,10 +380,16 @@ static NSDictionary *detectSubjectBoundsSaliency( VNImageRequestHandler *handler
 #define YOLO_INPUT_SIZE  640
 #define YOLO_CONF_THRESH 0.05f   // raw scores from YOLO-World INT8 are pre-sigmoid; 0.05 separates noise from detections
 #define YOLO_IOU_THRESH  0.45f
-// Union: include box if its confidence is at least this fraction of the best box.
-// Cap at this many boxes to prevent noisy low-conf detections from bloating the union.
-#define YOLO_UNION_THRESH 0.60f
-#define YOLO_UNION_MAX_K  3
+#define YOLO_MAX_DETS    16
+// Test-time augmentation: the detector runs on the photo as is, mirrored, and
+// zoomed out (drawn at 1/1.5 scale in the middle of the letterbox), and its
+// boxes are fused. A box found in all three views outranks one found in only
+// one, and averaging the views steadies the box's edges. Mirrored in
+// scripts/cache_detections.py (VIEWS, fuse_views).
+#define YOLO_NUM_VIEWS   3
+#define YOLO_FUSION_IOU  0.40f
+static const BOOL  kYOLOViewFlip[YOLO_NUM_VIEWS] = { NO, YES, NO };
+static const float kYOLOViewZoom[YOLO_NUM_VIEWS] = { 1.0f, 1.0f, 1.5f };
 
 typedef struct { float x1, y1, x2, y2, conf; } YOLOBox;
 
@@ -415,14 +421,15 @@ static void initYOLOSession( void )
   } );
 }
 
-// Returns a [3 × N × N] float32 tensor (CHW, normalized 0-1) from a letterboxed image.
-static float *preprocessForYOLO( UIImage *image,
+// Returns a [3 × N × N] float32 tensor (CHW, normalized 0-1) from a letterboxed
+// image, optionally mirrored and drawn at 1/zoom of its letterbox size.
+static float *preprocessForYOLO( UIImage *image, BOOL flip, float zoom,
                                   float *outPadLeft, float *outPadTop, float *outScale )
 {
   const int N  = YOLO_INPUT_SIZE;
   float     iW = (float)image.size.width;
   float     iH = (float)image.size.height;
-  float     s  = MIN( (float)N / iW, (float)N / iH );
+  float     s  = MIN( (float)N / iW, (float)N / iH ) / zoom;
   float     nW = iW * s, nH = iH * s;
   float     pL = ( N - nW ) / 2.0f;
   float     pT = ( N - nH ) / 2.0f;
@@ -436,6 +443,11 @@ static float *preprocessForYOLO( UIImage *image,
   CGContextRef gc = UIGraphicsGetCurrentContext();
   CGContextSetFillColorWithColor( gc, [UIColor colorWithWhite:127.0 / 255.0 alpha:1.0].CGColor );
   CGContextFillRect( gc, CGRectMake( 0, 0, N, N ) );
+  if ( flip ) {
+    // The image is centred, so mirroring the canvas keeps it in place.
+    CGContextTranslateCTM( gc, N, 0 );
+    CGContextScaleCTM( gc, -1, 1 );
+  }
   [image drawInRect:CGRectMake( pL, pT, nW, nH )];
   UIImage *lb = UIGraphicsGetImageFromCurrentImageContext();
   UIGraphicsEndImageContext();
@@ -480,17 +492,15 @@ static int compareBoxByConf( const void *a, const void *b )
   return ( cb > ca ) ? 1 : ( cb < ca ) ? -1 : 0;
 }
 
-// Returns {x,y,width,height} in top-left normalised coords, or nil if nothing detected.
-static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
+// Runs one view and writes up to YOLO_MAX_DETS post-NMS boxes, best first, in
+// normalised top-left coordinates of the unmirrored image. Returns the count.
+static int detectYOLOView( UIImage *image, BOOL flip, float zoom, YOLOBox *outBoxes )
 {
-  initYOLOSession();
-  if ( s_yoloFailed || !s_ortSession ) return nil;
-
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
   const int     N   = YOLO_INPUT_SIZE;
 
   float padLeft, padTop, scale;
-  float *inputData = preprocessForYOLO( image, &padLeft, &padTop, &scale );
+  float *inputData = preprocessForYOLO( image, flip, zoom, &padLeft, &padTop, &scale );
 
   OrtMemoryInfo *memInfo;
   ort->CreateCpuMemoryInfo( OrtArenaAllocator, OrtMemTypeDefault, &memInfo );
@@ -505,7 +515,7 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   if ( status || !inputTensor ) {
     if ( status ) ort->ReleaseStatus( status );
     free( inputData );
-    return nil;
+    return 0;
   }
 
   const char *inputNames[]  = { "images" };
@@ -520,7 +530,7 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
 
   if ( status || !outputs[0] ) {
     if ( status ) ort->ReleaseStatus( status );
-    return nil;
+    return 0;
   }
 
   OrtValue *outputTensor = outputs[0];
@@ -547,67 +557,84 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   }
   ort->ReleaseValue( outputTensor );
 
-  if ( nDets == 0 ) { free( dets ); return nil; }
-
-  // Greedy NMS — then union kept boxes with conf ≥ 50% of the best box's conf.
-  // Filtering low-confidence outliers avoids an over-large union when a few
-  // spurious detections fall on the background.
+  // Greedy NMS, keeping the best YOLO_MAX_DETS
   qsort( dets, (size_t)nDets, sizeof( YOLOBox ), compareBoxByConf );
-  BOOL *suppressed = (BOOL *)calloc( (size_t)nDets, sizeof( BOOL ) );
-
-  // First pass: NMS to get the kept set and the best (first) box confidence.
-  float bestConf = -1.0f;
-  int   kept     = 0;
-  for ( int i = 0; i < nDets; i++ ) {
+  BOOL *suppressed = (BOOL *)calloc( (size_t)MAX( nDets, 1 ), sizeof( BOOL ) );
+  float imgW = (float)image.size.width;
+  float imgH = (float)image.size.height;
+  int   kept = 0;
+  for ( int i = 0; i < nDets && kept < YOLO_MAX_DETS; i++ ) {
     if ( suppressed[i] ) continue;
-    if ( bestConf < 0.0f ) bestConf = dets[i].conf;
-    kept++;
     for ( int k = i + 1; k < nDets; k++ ) {
       if ( !suppressed[k] && boxIOU( dets[i], dets[k] ) > YOLO_IOU_THRESH )
         suppressed[k] = YES;
     }
-  }
-
-  if ( kept == 0 ) { free( dets ); free( suppressed ); return nil; }
-
-  // No confidence gate: scored by IoU against the crops people choose, even a
-  // weak detection beats the saliency fallback, so saliency only runs when
-  // nothing clears YOLO_CONF_THRESH.
-
-  // Second pass: union top-K boxes at ≥ YOLO_UNION_THRESH of best confidence.
-  float confThreshold = YOLO_UNION_THRESH * bestConf;
-  float uX1 = FLT_MAX, uY1 = FLT_MAX, uX2 = -FLT_MAX, uY2 = -FLT_MAX;
-  int   used = 0;
-  for ( int i = 0; i < nDets; i++ ) {
-    if ( suppressed[i] )                   continue;
-    if ( dets[i].conf < confThreshold )    continue;
-    if ( used >= YOLO_UNION_MAX_K )        break;
-    uX1 = MIN( uX1, dets[i].x1 );
-    uY1 = MIN( uY1, dets[i].y1 );
-    uX2 = MAX( uX2, dets[i].x2 );
-    uY2 = MAX( uY2, dets[i].y2 );
-    used++;
-  }
-  if ( used == 0 ) {  // fallback: use best box
-    uX1 = dets[0].x1; uY1 = dets[0].y1;
-    uX2 = dets[0].x2; uY2 = dets[0].y2;
+    // Map back to normalised image coordinates, trimmed to the image: the
+    // zoomed-out view sees past its edges.
+    float x1 = MAX( 0.0f, MIN( 1.0f, ( dets[i].x1 - padLeft ) / scale / imgW ) );
+    float x2 = MAX( 0.0f, MIN( 1.0f, ( dets[i].x2 - padLeft ) / scale / imgW ) );
+    float y1 = MAX( 0.0f, MIN( 1.0f, ( dets[i].y1 - padTop  ) / scale / imgH ) );
+    float y2 = MAX( 0.0f, MIN( 1.0f, ( dets[i].y2 - padTop  ) / scale / imgH ) );
+    x2 = x1 + MAX( 0.01f, x2 - x1 );
+    y2 = y1 + MAX( 0.01f, y2 - y1 );
+    outBoxes[kept++] = flip
+      ? (YOLOBox){ 1.0f - x2, y1, 1.0f - x1, y2, dets[i].conf }
+      : (YOLOBox){ x1, y1, x2, y2, dets[i].conf };
   }
   free( dets );
   free( suppressed );
+  return kept;
+}
 
-  // Map 640×640 box back to original normalised image coordinates
-  float imgW = (float)image.size.width;
-  float imgH = (float)image.size.height;
+// Returns {x,y,width,height} in top-left normalised coords, or nil if nothing detected.
+static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
+{
+  initYOLOSession();
+  if ( s_yoloFailed || !s_ortSession ) return nil;
 
-  float x = ( uX1 - padLeft ) / scale / imgW;
-  float y = ( uY1 - padTop  ) / scale / imgH;
-  float w = ( uX2 - uX1     ) / scale / imgW;
-  float h = ( uY2 - uY1     ) / scale / imgH;
+  YOLOBox boxes[YOLO_NUM_VIEWS * YOLO_MAX_DETS];
+  int     nBoxes = 0;
+  for ( int v = 0; v < YOLO_NUM_VIEWS; v++ ) {
+    nBoxes += detectYOLOView( image, kYOLOViewFlip[v], kYOLOViewZoom[v], boxes + nBoxes );
+  }
+  if ( nBoxes == 0 ) return nil;
 
-  x = MAX( 0.0f, MIN( 1.0f, x ) );
-  y = MAX( 0.0f, MIN( 1.0f, y ) );
-  w = MAX( 0.01f, MIN( 1.0f - x, w ) );
-  h = MAX( 0.01f, MIN( 1.0f - y, h ) );
+  // Weighted box fusion: in descending confidence, each box joins the first
+  // cluster whose fused box it overlaps by YOLO_FUSION_IOU. A cluster's box is
+  // the confidence-weighted mean of its members; the cluster with the largest
+  // confidence sum is the subject. No confidence gate: scored by IoU against
+  // the crops people choose, even a weak detection beats the saliency
+  // fallback, so saliency only runs when nothing clears YOLO_CONF_THRESH.
+  qsort( boxes, (size_t)nBoxes, sizeof( YOLOBox ), compareBoxByConf );
+  YOLOBox fused[YOLO_NUM_VIEWS * YOLO_MAX_DETS];  // .conf holds the cluster's conf sum
+  YOLOBox sums[YOLO_NUM_VIEWS * YOLO_MAX_DETS];   // conf-weighted coordinate sums
+  int     nClusters = 0;
+  for ( int i = 0; i < nBoxes; i++ ) {
+    YOLOBox b = boxes[i];
+    int     c = 0;
+    while ( c < nClusters && boxIOU( fused[c], b ) < YOLO_FUSION_IOU ) c++;
+    if ( c == nClusters ) {
+      sums[c] = (YOLOBox){ 0, 0, 0, 0, 0 };
+      nClusters++;
+    }
+    sums[c].x1   += b.x1 * b.conf;
+    sums[c].y1   += b.y1 * b.conf;
+    sums[c].x2   += b.x2 * b.conf;
+    sums[c].y2   += b.y2 * b.conf;
+    sums[c].conf += b.conf;
+    fused[c] = (YOLOBox){ sums[c].x1 / sums[c].conf, sums[c].y1 / sums[c].conf,
+                          sums[c].x2 / sums[c].conf, sums[c].y2 / sums[c].conf,
+                          sums[c].conf };
+  }
+  int best = 0;
+  for ( int c = 1; c < nClusters; c++ ) {
+    if ( fused[c].conf > fused[best].conf ) best = c;
+  }
+
+  float x = MAX( 0.0f, MIN( 1.0f, fused[best].x1 ) );
+  float y = MAX( 0.0f, MIN( 1.0f, fused[best].y1 ) );
+  float w = MAX( 0.01f, MIN( 1.0f - x, fused[best].x2 - fused[best].x1 ) );
+  float h = MAX( 0.01f, MIN( 1.0f - y, fused[best].y2 - fused[best].y1 ) );
 
   return @{ @"x": @(x), @"y": @(y), @"width": @(w), @"height": @(h) };
 }

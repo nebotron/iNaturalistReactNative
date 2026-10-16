@@ -35,6 +35,12 @@ YOLO_INPUT_SIZE = int( os.environ.get( "YOLO_INPUT_SIZE", 640 ) )
 YOLO_CONF_THRESH = 0.05
 YOLO_IOU_THRESH = 0.45
 MAX_DETS = 16
+# Test-time augmentation, mirroring ImageCropper.m: the photo as is, mirrored,
+# and zoomed out (drawn at 1/1.5 scale in the middle of the letterbox). Boxes
+# from all three are fused by weighted box fusion, and a box found in only one
+# view ends up with a third of its confidence.
+VIEWS = ( ( False, 1.0 ), ( True, 1.0 ), ( False, 1.5 ) )
+FUSION_IOU = 0.40
 
 _sess = None
 _model_path = None
@@ -48,10 +54,10 @@ def _init( model_path: str ) -> None:
     _model_path = model_path
 
 
-def _letterbox( img_arr: np.ndarray, size: int = YOLO_INPUT_SIZE ):
+def _letterbox( img_arr: np.ndarray, size: int = YOLO_INPUT_SIZE, zoom: float = 1.0 ):
     img = PILImage.fromarray( img_arr )
     w, h = img.size
-    scale = size / max( w, h )
+    scale = size / max( w, h ) / zoom
     nw, nh = int( w * scale ), int( h * scale )
     resized = img.resize( ( nw, nh ), PILImage.BILINEAR )
     pad_left = ( size - nw ) // 2
@@ -93,9 +99,51 @@ def _detect( args ):
     return idx, _detect_array( img_arr, orig_w, orig_h )
 
 
+def _box_iou( a, b ) -> float:
+    ix = max( 0.0, min( a[0] + a[2], b[0] + b[2] ) - max( a[0], b[0] ) )
+    iy = max( 0.0, min( a[1] + a[3], b[1] + b[3] ) - max( a[1], b[1] ) )
+    inter = ix * iy
+    union = a[2] * a[3] + b[2] * b[3] - inter
+    return inter / union if union > 0 else 0.0
+
+
+def fuse_views( views: list ) -> np.ndarray:
+    """Weighted box fusion: boxes taken in descending confidence join the first
+    cluster whose fused box they overlap by FUSION_IOU; a cluster's box is the
+    confidence-weighted mean of its members, its confidence their sum over the
+    number of views. Returns (x, y, w, h, conf) rows, best first."""
+    boxes = sorted( ( b for v in views for b in v ), key=lambda b: -b[4] )
+    clusters = []  # [fused box (4,), weighted sum (4,), conf sum]
+    for b in boxes:
+        for c in clusters:
+            if _box_iou( c[0], b ) >= FUSION_IOU:
+                c[1] += b[:4] * b[4]
+                c[2] += b[4]
+                c[0] = c[1] / c[2]
+                break
+        else:
+            clusters.append( [b[:4].astype( np.float64 ), b[:4] * b[4], float( b[4] )] )
+    rows = [( *c[0], c[2] / len( views ) ) for c in clusters]
+    rows.sort( key=lambda r: r[4], reverse=True )
+    return np.array( rows, dtype=np.float32 ).reshape( -1, 5 )
+
+
 def _detect_array( img_arr: np.ndarray, orig_w: int, orig_h: int ) -> np.ndarray:
+    """Fused boxes over VIEWS (x, y, w, h, conf) normalised to (orig_w, orig_h), best first."""
+    if os.environ.get( "SINGLE_VIEW" ):
+        return _detect_view( img_arr, orig_w, orig_h )
+    views = []
+    for flip, zoom in VIEWS:
+        d = _detect_view( np.ascontiguousarray( img_arr[:, ::-1] ) if flip else img_arr, orig_w, orig_h, zoom )
+        if flip and len( d ):
+            d[:, 0] = 1.0 - d[:, 0] - d[:, 2]
+        views.append( d )
+    return fuse_views( views )
+
+
+def _detect_view( img_arr: np.ndarray, orig_w: int, orig_h: int, zoom: float = 1.0 ) -> np.ndarray:
     """Post-NMS boxes (x, y, w, h, conf) normalised to (orig_w, orig_h), best first."""
-    lb, pad_left, pad_top, scale = _letterbox( img_arr )
+    lb, pad_left, pad_top, scale = _letterbox( img_arr, zoom=zoom )
     x = lb.transpose( 2, 0, 1 )[None]
     out = _sess.run( None, { _sess.get_inputs()[0].name: x } )[0][0]
 
@@ -114,11 +162,10 @@ def _detect_array( img_arr: np.ndarray, orig_w: int, orig_h: int ) -> np.ndarray
 
     rows = []
     for i in kept:
-        xn = max( 0.0, min( 1.0, ( float( boxes[i, 0] ) - pad_left ) / scale / orig_w ) )
-        yn = max( 0.0, min( 1.0, ( float( boxes[i, 1] ) - pad_top ) / scale / orig_h ) )
-        wn = max( 0.01, min( 1.0 - xn, ( float( boxes[i, 2] ) - float( boxes[i, 0] ) ) / scale / orig_w ) )
-        hn = max( 0.01, min( 1.0 - yn, ( float( boxes[i, 3] ) - float( boxes[i, 1] ) ) / scale / orig_h ) )
-        rows.append( ( xn, yn, wn, hn, float( conf_raw[i] ) ) )
+        # Trim to the image: the zoomed-out view sees past its edges.
+        x1, x2 = np.clip( ( boxes[i, [0, 2]] - pad_left ) / scale / orig_w, 0.0, 1.0 )
+        y1, y2 = np.clip( ( boxes[i, [1, 3]] - pad_top ) / scale / orig_h, 0.0, 1.0 )
+        rows.append( ( x1, y1, max( 0.01, x2 - x1 ), max( 0.01, y2 - y1 ), float( conf_raw[i] ) ) )
     rows.sort( key=lambda r: r[4], reverse=True )
     return np.array( rows, dtype=np.float32 ).reshape( -1, 5 )
 
