@@ -12,7 +12,7 @@ import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import colors from "styles/tailwindColors";
 
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
-import AudioIdSoundsLink from "./AudioIdSoundsLink";
+import { openTopSounds } from "./AudioIdSoundsLink";
 import ClipPlayButton from "./ClipPlayButton";
 
 const { useQuery } = RealmContext;
@@ -53,12 +53,27 @@ const AudioIdHistory = ( ) => {
   return (
     <ScrollView className="bg-white h-full px-5 pt-4">
       {sp && (
-        <View className="mb-3">
-          <Body1>{sp.commonName}</Body1>
-          <List2 className="italic">{sp.name}</List2>
+        <View className="flex-row items-center mb-3">
+          <Pressable
+            accessibilityRole="link"
+            accessibilityHint="Opens the species page."
+            className="flex-1"
+            onPress={( ) => navigation.navigate( "TaxonDetails", {
+              id: taxonId, fromAudioId: true,
+            } )}
+          >
+            <Body1 className="color-inatGreen underline">{sp.commonName}</Body1>
+            <List2 className="italic">{sp.name}</List2>
+          </Pressable>
+          <INatIconButton
+            icon="sound-outline"
+            color={colors.inatGreen}
+            onPress={( ) => openTopSounds( taxonId )}
+            accessibilityLabel="Top-faved sounds"
+            accessibilityHint="Opens top-faved sound observations in the browser."
+          />
         </View>
       )}
-      <AudioIdSoundsLink taxonId={taxonId} />
       {ofSpecies.length === 0 && <Body3 className="py-2">No clips saved yet.</Body3>}
       {ofSpecies.map( clip => (
         <Swipeable
