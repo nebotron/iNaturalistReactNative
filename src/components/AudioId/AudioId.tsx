@@ -3,7 +3,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { activateKeepAwake, deactivateKeepAwake } from "@sayem314/react-native-keep-awake";
 import { fetchSpeciesCounts } from "api/observations";
 import {
-  Body1, Body3, Button, Heading4, IconicTaxonIcon, List2,
+  Body1, Body3, Button, IconicTaxonIcon, List2,
 } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
@@ -233,7 +233,7 @@ const AudioId = ( ) => {
         <Body3 className="mt-1">Listening…</Body3>
       )}
 
-      <Heading4 className="mt-6 mb-1">HEARD</Heading4>
+      <View className="h-6" />
       {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
       {heardList.map( h => row(
         h.sp,
