@@ -132,6 +132,7 @@ static void ABSpectrogramPush( const float *frame )
   CFAbsoluteTime    _lastAudio;
   NSInteger         _restartFailures;
   BOOL              _playingClip;
+  CFAbsoluteTime    _muteUntil; // mic audio is zeroed until then, and while a clip plays
   AVAudioEngine    *_clipEngine;
   AVAudioPlayerNode *_clipNode;
   RCTPromiseResolveBlock _clipDone;
@@ -438,6 +439,16 @@ RCT_EXPORT_METHOD( stop )
   } );
 }
 
+// The phone's own vibration and sound playback reach the mic and get
+// identified as birds, so the mic audio is zeroed while they play. Echo
+// cancellation would need iOS voice processing, which also applies speech
+// noise suppression and gain control that distort bird calls.
+- (void)muteFor:(double)seconds
+{
+  CFAbsoluteTime until = CFAbsoluteTimeGetCurrent( ) + seconds;
+  dispatch_async( _bufferQueue, ^{ self->_muteUntil = MAX( self->_muteUntil, until ); } );
+}
+
 // Vibrates for a detection with the system vibration, which plays in the
 // background and with the screen off while the recording session keeps the
 // app running, and ignores the silent switch and Do Not Disturb.
@@ -447,6 +458,7 @@ RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
   dispatch_async( dispatch_get_main_queue(), ^{
     AVAudioSession *session = [AVAudioSession sharedInstance];
     [session setAllowHapticsAndSystemSoundsDuringRecording:YES error:nil];
+    [self muteFor:0.7];
     AudioServicesPlayAlertSound( kSystemSoundID_Vibrate );
     resolve( @{
       @"allowed": @( session.allowHapticsAndSystemSoundsDuringRecording ),
@@ -469,10 +481,12 @@ RCT_EXPORT_METHOD( setBrightness:( double )value )
 }
 
 // Measurement mode plays back far quieter through the speaker, so clips play
-// in the default mode while listening; detections pause during playback anyway.
+// in the default mode while listening; the mic is muted during playback anyway.
 RCT_EXPORT_METHOD( setPlayingClip:( BOOL )playing )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
+    // The tail covers speaker latency and the playback listener reporting the end late.
+    if ( self->_playingClip && !playing ) [self muteFor:1];
     self->_playingClip = playing;
     AVAudioSession *session = [AVAudioSession sharedInstance];
     if ( [session.category isEqualToString:AVAudioSessionCategoryPlayAndRecord] ) {
@@ -510,6 +524,7 @@ RCT_EXPORT_METHOD( vibrateHaptics:( RCTPromiseResolveBlock )resolve
     id<CHHapticPatternPlayer> player = pattern
       ? [self->_haptics createPlayerWithPattern:pattern error:&error]
       : nil;
+    [self muteFor:0.7];
     if ( player && [self->_haptics startAndReturnError:&error] ) {
       [player startAtTime:CHHapticTimeImmediate error:&error];
     }
@@ -733,7 +748,11 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     NSInteger count = MIN( n, (NSInteger)AB_HIST );
     s += n - count;
     memmove( self->_window, self->_window + count, ( AB_HIST - count ) * sizeof( float ) );
-    memcpy( self->_window + AB_HIST - count, s, count * sizeof( float ) );
+    if ( self->_playingClip || CFAbsoluteTimeGetCurrent( ) < self->_muteUntil ) {
+      memset( self->_window + AB_HIST - count, 0, count * sizeof( float ) );
+    } else {
+      memcpy( self->_window + AB_HIST - count, s, count * sizeof( float ) );
+    }
     self->_sinceRun += count;
     self->_frames += n;
     self->_specPending += count;
@@ -755,8 +774,6 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
                                     length:AB_WIN * sizeof( float )];
     float level = self->_level;
     int64_t windowFrame = self->_frames;
-    // When the window's last sample arrived, on the clock JS's Date.now uses.
-    double windowEnd = [[NSDate date] timeIntervalSince1970] * 1000;
     dispatch_async( self->_inferQueue, ^{
       NSString *inferError = nil;
       CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
@@ -778,7 +795,6 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
       [self sendEventWithName:@"AudioBirdIdScores"
                          body:@{ @"scores": scores,
                                  @"level": @( level ),
-                                 @"windowEnd": @( windowEnd ),
                                  @"windowFrame": @( windowFrame ),
                                  @"inferMs": @( ms ),
                                  @"memMB": @( [self footprintMB] ),

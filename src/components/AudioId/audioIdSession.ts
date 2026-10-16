@@ -63,8 +63,6 @@ const LOG_EVERY = 30;
 interface ScoresEvent {
   scores: Scores;
   level: number;
-  // Epoch ms when the window's last sample arrived
-  windowEnd: number;
   // Native sample count at the window's end, for saving its clip
   windowFrame: number;
   inferMs: number;
@@ -250,25 +248,17 @@ const flashScreen = ( ) => {
   }, FLASH_MS );
 };
 
-// Echo cancellation would need iOS voice processing, which also applies
-// speech noise suppression and gain control that distort bird calls, so
-// instead runs (and their clips) are dropped when their 5 s window overlaps
-// any time the app was playing a sound. The tail covers speaker latency and
-// the playback listener reporting the end late.
-const WINDOW_MS = 5000;
-const TAIL_MS = 1000;
+// The native module zeroes the mic audio while the app plays a sound, so
+// playback isn't identified.
 const players = new Set<object>( );
-let lastPlayed = 0;
 export const setPlayingAudio = ( player: object, playing: boolean ) => {
   if ( playing ) {
     players.add( player );
-  } else if ( players.delete( player ) ) {
-    lastPlayed = Date.now( );
+  } else {
+    players.delete( player );
   }
   AudioBirdId?.setPlayingClip( players.size > 0 );
 };
-const overlapsPlayback = ( windowEnd: number ) => players.size > 0
-  || windowEnd - WINDOW_MS < lastPlayed + TAIL_MS;
 
 let runs: ScoresEvent[] = [];
 
@@ -300,10 +290,6 @@ const onScores = ( event: ScoresEvent ) => {
     runs = [];
   }
   const now = Date.now( );
-  if ( overlapsPlayback( event.windowEnd || now ) ) {
-    useAudioIdSession.setState( { level } );
-    return;
-  }
   const isHeard = heardIn( scores );
   // Alert on a species not heard in the last hour, and on every call of a
   // species the user hasn't observed at research grade in the last 30 days.
