@@ -152,9 +152,13 @@ export interface ExploreV2State {
 // Everything that defines a search, as opposed to how the results are being viewed
 export type ExploreV2Search = Omit<ExploreV2State, "activeTab" | "appliedSearchCount">;
 
-// A saved search also remembers the view it was saved from. Optional because searches saved
-// before views were recorded don't have one.
-export type ExploreV2SearchWithTab = ExploreV2Search & { activeTab?: ExploreV2Tab };
+// A saved search also remembers the view it was saved from: the tab and the observations
+// map/grid/list layout. Optional because searches saved before views were recorded don't
+// have one.
+export type ExploreV2SearchWithTab = ExploreV2Search & {
+  activeTab?: ExploreV2Tab;
+  observationsLayout?: string;
+};
 
 export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_SUBJECT; subject: ExploreV2Subject }

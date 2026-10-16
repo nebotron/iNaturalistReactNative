@@ -79,6 +79,7 @@ import { formatObsFieldDate } from "sharedHelpers/dateAndTime";
 import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useIconicTaxa from "sharedHooks/useIconicTaxa";
+import useStoredLayout from "sharedHooks/useStoredLayout";
 import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
 
 // Please don't change these to aliased paths or the e2e mocks will not get used
@@ -119,6 +120,7 @@ const AdvancedSearch = ( ) => {
     [draft],
   );
 
+  const { layout: observationsLayout } = useStoredLayout( "exploreV2ObservationsLayout" );
   const [pendingExit, setPendingExit] = useState( false );
   const [showSaveSheet, setShowSaveSheet] = useState( false );
   const [searchToDelete, setSearchToDelete] = useState<SavedSearch | null>( null );
@@ -126,7 +128,11 @@ const AdvancedSearch = ( ) => {
     subject, location, sortBy, speciesSortBy: v2State.speciesSortBy, filters,
   };
   // Saved searches also remember the view they were saved from
-  const currentSavedSearch = { ...currentSearch, activeTab: v2State.activeTab };
+  const currentSavedSearch = {
+    ...currentSearch,
+    activeTab: v2State.activeTab,
+    observationsLayout: observationsLayout ?? undefined,
+  };
   const requestExit = ( ) => {
     if ( differsFromInitial ) {
       setPendingExit( true );

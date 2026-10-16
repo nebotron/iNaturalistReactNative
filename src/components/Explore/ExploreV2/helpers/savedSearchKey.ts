@@ -88,6 +88,7 @@ const savedSearchKey = ( search: SavedSearchIdentity ): string => {
     speciesSortBy: search.speciesSortBy,
     filters: filtersKey( search.filters ),
     activeTab: search.activeTab ?? "",
+    observationsLayout: search.observationsLayout ?? "",
   };
 
   return ( Object.keys( parts ) as ( keyof SavedSearchIdentity )[] )
