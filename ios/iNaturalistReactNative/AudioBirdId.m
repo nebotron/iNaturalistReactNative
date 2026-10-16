@@ -305,7 +305,7 @@ RCT_EXPORT_METHOD( playClip:( NSString * )path
       [session setCategory:AVAudioSessionCategoryPlayAndRecord
                       mode:AVAudioSessionModeDefault
                    options:AVAudioSessionCategoryOptionDefaultToSpeaker
-                         | AVAudioSessionCategoryOptionAllowBluetooth
+                         | AVAudioSessionCategoryOptionAllowBluetoothA2DP
                      error:nil];
       [session setActive:YES error:nil];
     }
@@ -546,11 +546,14 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   AVAudioSession *session = [AVAudioSession sharedInstance];
   // Measurement mode turns off voice processing and gain control, which
   // would otherwise suppress exactly the quiet, tonal sounds we want.
+  // A2DP plays clips through Bluetooth headphones while the built-in mic
+  // keeps recording; the HFP option would also switch to the headset mic.
   if ( ![session setCategory:AVAudioSessionCategoryPlayAndRecord
                         mode:_playingClip ? AVAudioSessionModeDefault
                                           : AVAudioSessionModeMeasurement
                      options:AVAudioSessionCategoryOptionMixWithOthers
                            | AVAudioSessionCategoryOptionDefaultToSpeaker
+                           | AVAudioSessionCategoryOptionAllowBluetoothA2DP
                        error:error] ) return NO;
   // iOS silences vibration while recording unless we opt in.
   [session setAllowHapticsAndSystemSoundsDuringRecording:YES error:nil];
