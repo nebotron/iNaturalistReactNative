@@ -544,6 +544,10 @@ const WildlifeHotspotsScreen = ( {
   ) => {
     setExploreView( "observations" );
     zustandStorage.setItem( "exploreObservationsLayout", "map" );
+    // Otherwise the map restores the last viewport instead of the hotspot
+    useStore.setState( state => ( {
+      layout: { ...state.layout, lastExploreMapRegion: null },
+    } ) );
     navigation.navigate( "Explore", {
       exploreState,
       ...( species && {

@@ -25,6 +25,7 @@ import { getShadow } from "styles/global";
 
 // ~100km span, i.e. 50km around the current location
 const NEARBY_DELTA = 0.9;
+const KM_PER_DEG_LAT = 111;
 
 const WORLDWIDE_DELTA = 180;
 const WORLDWIDE_LAT_LNG = 0.0;
@@ -89,12 +90,16 @@ const MapView = ( {
 
   const mapRef = useRef<RNMapView | null>( null );
 
+  // Zoom in further for small radii (e.g. a 2km hotspot) so the circle fills the map
+  const nearbyDelta = exploreState.radius
+    ? Math.min( NEARBY_DELTA, ( exploreState.radius * 2.4 ) / KM_PER_DEG_LAT )
+    : NEARBY_DELTA;
   const nearbyRegion = useMemo( () => ( {
     latitude: exploreState.lat,
     longitude: exploreState.lng,
-    latitudeDelta: NEARBY_DELTA,
-    longitudeDelta: NEARBY_DELTA,
-  } ), [exploreState.lat, exploreState.lng] );
+    latitudeDelta: nearbyDelta,
+    longitudeDelta: nearbyDelta,
+  } ), [exploreState.lat, exploreState.lng, nearbyDelta] );
 
   const regionFromCoordinates = useMemo( ( ) => {
     if ( exploreState.place?.point_geojson?.coordinates ) {
