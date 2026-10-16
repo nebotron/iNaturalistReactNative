@@ -14,7 +14,7 @@ const useLocalObservationIds = ( sortBy?: OBSERVATIONS_SORT ) => {
         .filtered( "_deleted_at == nil OR _pending_deletion == false OR _pending_deletion == nil" )
         .sorted( sortBy
           ? [observationSortToRealmSort( sortBy )]
-          : [["needs_sync", true], ["_created_at", true]] ),
+          : [["_created_at", true]] ),
       // widening this beyond uuid means more frequent re-renders for every consumer,
       // so we only do it when we need a local sort applied to the results
       keyPaths: sortBy
