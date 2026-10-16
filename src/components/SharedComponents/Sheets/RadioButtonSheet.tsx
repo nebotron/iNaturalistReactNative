@@ -63,8 +63,15 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
   const isDirty = checkedValue !== selectedValue;
   const confirmBlockedByDirtyCheck = requireSelectionChange && !isDirty;
 
-  const radioButtonRow = ( radioRow: string ) => (
-    <View key={radioRow} className="pb-4">
+  const radioKeys = Object.keys( radioValues );
+  const radioButtonRow = ( radioRow: string, index: number ) => (
+    <View
+      key={radioRow}
+      // No trailing padding when nothing follows the last row
+      className={immediate && index === radioKeys.length - 1
+        ? undefined
+        : "pb-4"}
+    >
       <RadioButtonRow
         classNames={buttonRowClassName}
         value={radioValues[radioRow].value.toString( )}
@@ -107,12 +114,14 @@ const RadioButtonSheet = <ValueT extends RadioSheetPrimitive>( {
       insideModal={insideModal}
       onPressClose={onPressClose}
       testID={testID}
-      scrollEnabled={false}
     >
-      <View className="p-4 pt-2">
+      <View className={immediate
+        ? "px-4 pt-2"
+        : "p-4 pt-2"}
+      >
         {topDescriptionText}
         <View className="p-3">
-          {Object.keys( radioValues ).map( radioRow => radioButtonRow( radioRow ) )}
+          {radioKeys.map( radioButtonRow )}
         </View>
         {bottomComponent}
         {!immediate && (
