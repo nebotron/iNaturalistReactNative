@@ -1,17 +1,20 @@
 /* eslint-disable i18next/no-literal-string */
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { activateKeepAwake, deactivateKeepAwake } from "@sayem314/react-native-keep-awake";
 import { fetchSpeciesCounts } from "api/observations";
 import {
   Body1, Body3, Button, Heading4, IconicTaxonIcon, List2,
 } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
-import React, { useEffect, useMemo } from "react";
+import React, { useCallback, useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
 import { Linking, requireNativeComponent } from "react-native";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { useCurrentUser, useTaxon } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
+import { UPLOAD_IN_PROGRESS } from "stores/createUploadObservationsSlice";
+import useStore from "stores/useStore";
 
 import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
@@ -95,6 +98,14 @@ const Spectrogram = ( ) => (
 
 const AudioId = ( ) => {
   const navigation = useNavigation( );
+  // Keep the display awake while this screen is focused, without cutting off
+  // the keep-awake an in-progress upload holds
+  useFocusEffect( useCallback( ( ) => {
+    activateKeepAwake( );
+    return ( ) => {
+      if ( useStore.getState( ).uploadStatus !== UPLOAD_IN_PROGRESS ) deactivateKeepAwake( );
+    };
+  }, [] ) );
   const {
     listening, error, current, heard, setup, setSeen, start,
     stop,
