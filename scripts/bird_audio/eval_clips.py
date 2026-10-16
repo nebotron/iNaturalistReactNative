@@ -9,10 +9,11 @@ ios/iNaturalistReactNative/audio_id.onnx. Per clip it prints the logged
 confidence and the predicted species' score under each variant below, then how
 many right and wrong detections each variant would still report.
 
-  python3 scripts/bird_audio/eval_clips.py
+  python3 scripts/bird_audio/eval_clips.py [--windows]
 
 Variants (score of the predicted species):
   raw    window at offset 0 (AAC priming shifts it a few ms from the app's)
+With --windows (5x the model runs; none of these has shipped yet):
   mean3  mean over offsets 0, 7, 13 ms
   min3   min over those offsets
   nbr    max of the runs 1 s earlier / later; 15 s clips (newer builds) have
@@ -73,6 +74,8 @@ def load_clip( clip_id, cache ):
 def main( ):
     ap = argparse.ArgumentParser( description=__doc__.split( "\n\n" )[0] )
     ap.add_argument( "--cache", default="/tmp/audio_id_clips" )
+    ap.add_argument( "--windows", action="store_true",
+                     help="also score shifted and neighbouring windows" )
     args = ap.parse_args( )
     os.makedirs( args.cache, exist_ok=True )
 
@@ -99,7 +102,7 @@ def main( ):
         list( pool.map( lambda c: load_clip( c, args.cache ),
                         [c for c in clip_ids if c in labels] ) )
 
-    names = ["raw", "mean3", "min3", "nbr", "both"]
+    names = ["raw", "mean3", "min3", "nbr", "both"] if args.windows else ["raw"]
     print( f"{'clip':8} {'ok':2} {'species':22} {'log':>5} " + " ".join( f"{n:>5}" for n in names )
            + "  dBFS  label" )
     tally = {n: [0, 0] for n in names}  # [right, wrong] still reported
@@ -109,16 +112,23 @@ def main( ):
             continue
         k = index[lab["predictedTaxonId"]]
         x = load_clip( clip_id, args.cache )
+        # All windows' scores, or offset 0's alone; either starts with offset 0.
         scores = os.path.join( args.cache, f"{clip_id}.{model_key}.npy" )
+        if not args.windows and not os.path.exists( scores ):
+            scores = scores.replace( ".npy", ".raw.npy" )
         if not os.path.exists( scores ):
             session = session or ort.InferenceSession( model )
             windows = [x[SR + o:SR + o + WIN] for o in OFFSETS] + [x[:WIN], x[2 * SR:2 * SR + WIN]]
+            if not args.windows:
+                windows = windows[:1]
             np.save( scores, session.run( ["output"], {"input": np.stack( windows )} )[0] )
         s = np.load( scores )[:, k]
-        mean3 = s[:3].mean( )
-        nbr = s[3:].max( )
-        v = {"raw": s[0], "mean3": mean3, "min3": s[:3].min( ), "nbr": nbr,
-             "both": mean3 if nbr >= THRESHOLD else 0}
+        v = {"raw": s[0]}
+        if args.windows:
+            mean3 = s[:3].mean( )
+            nbr = s[3:].max( )
+            v.update( mean3=mean3, min3=s[:3].min( ), nbr=nbr,
+                      both=mean3 if nbr >= THRESHOLD else 0 )
         for n in names:
             if v[n] >= THRESHOLD:
                 tally[n][0 if lab["correct"] else 1] += 1

@@ -6,7 +6,9 @@ description: Download labeled Audio ID clips, evaluate accuracy, and explore way
 Run `python3 scripts/bird_audio/eval_clips.py` (needs `pip install numpy onnxruntime` and
 `ffmpeg`). It downloads every Audio ID label and clip from Firebase, reports the labeled
 precision, re-runs `ios/iNaturalistReactNative/audio_id.onnx` on each clip and shows how many
-right and wrong detections each scoring variant would still report. Report the current
+right and wrong detections it would still report. `--windows` adds the scoring variants
+(offset averaging, neighbouring runs) at 5x the model runs; use it only when exploring
+those, since they haven't helped so far. Report the current
 accuracy, then explore ways to improve it: scoring variants (offset averaging, consecutive
 runs, thresholds, loudness gates), the geomodel weighting in
 `src/components/AudioId/audioIdModel.ts`, and model changes (see
