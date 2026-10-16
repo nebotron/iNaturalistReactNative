@@ -35,7 +35,7 @@ import Carousel from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { useTranslation } from "sharedHooks";
-import useStore from "stores/useStore";
+import useStore, { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import type { Hotspot, HotspotSpecies, RoutePoint } from "./hooks/useRouteHotspots";
@@ -217,6 +217,7 @@ const WildlifeHotspotsScreen = ( {
 }: Props ) => {
   const { t } = useTranslation();
   const navigation = useNavigation();
+  const setExploreView = useStore( state => state.setExploreView );
   const { width: windowWidth } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const { hasBottomTabBar } = useStackHost();
@@ -497,30 +498,39 @@ const WildlifeHotspotsScreen = ( {
     navigation.push( "ObsDetails", { uuid } );
   }, [navigation] );
 
-  const handleSpeciesCountPress = useCallback( ( hotspot: Hotspot, species: HotspotSpecies ) => {
+  // Opens the observations map in Explore with the current filters, zoomed
+  // to the hotspot, and optionally narrowed to one species
+  const openHotspotInExplore = useCallback( (
+    hotspot: Hotspot,
+    species?: HotspotSpecies,
+  ) => {
+    setExploreView( "observations" );
+    zustandStorage.setItem( "exploreObservationsLayout", "map" );
     navigation.navigate( "Explore", {
-      taxon: {
-        id: species.id,
-        name: species.name,
-        preferred_common_name: species.preferred_common_name,
-      },
       exploreState,
+      ...( species && {
+        taxon: {
+          id: species.id,
+          name: species.name,
+          preferred_common_name: species.preferred_common_name,
+        },
+      } ),
       lat: hotspot.centerLatitude,
       lng: hotspot.centerLongitude,
       radius: 2,
       worldwide: false,
     } );
-  }, [navigation, exploreState] );
+  }, [navigation, exploreState, setExploreView] );
 
-  const handleObservationCountPress = useCallback( ( hotspot: Hotspot ) => {
-    navigation.navigate( "Explore", {
-      exploreState,
-      lat: hotspot.centerLatitude,
-      lng: hotspot.centerLongitude,
-      radius: 2,
-      worldwide: false,
-    } );
-  }, [navigation, exploreState] );
+  const handleSpeciesCountPress = useCallback(
+    ( hotspot: Hotspot, species: HotspotSpecies ) => openHotspotInExplore( hotspot, species ),
+    [openHotspotInExplore],
+  );
+
+  const handleObservationCountPress = useCallback(
+    ( hotspot: Hotspot ) => openHotspotInExplore( hotspot ),
+    [openHotspotInExplore],
+  );
 
   const renderStopItem = useCallback( ( {
     item: stop, getIndex, drag, isActive,
