@@ -4,10 +4,10 @@ import {
   Body1, Body3, INatIconButton, List2,
 } from "components/SharedComponents";
 import { Pressable, ScrollView, View } from "components/styledComponents";
-import React from "react";
-import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { RealmContext } from "providers/contexts";
+import React from "react";
 import Observation from "realmModels/Observation";
+import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import colors from "styles/tailwindColors";
 
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
