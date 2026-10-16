@@ -1,5 +1,4 @@
 import { screen, userEvent } from "@testing-library/react-native";
-import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import AdvancedSearch from "components/Explore/ExploreV2/screens/AdvancedSearch";
 import initI18next from "i18n/initI18next";
 import i18next from "i18next";
@@ -413,11 +412,10 @@ describe( "AdvancedSearch screen", ( ) => {
         speciesSortBy: initialExploreV2State.speciesSortBy,
         filters: defaultExploreV2Filters,
       } );
-      // advanced search always lands on the observations tab
-      expect( mockDispatch ).toHaveBeenCalledWith( {
-        type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB,
-        tab: OBSERVATIONS_TAB,
-      } );
+      // advanced search keeps whichever results tab was showing
+      expect( mockDispatch ).not.toHaveBeenCalledWith(
+        expect.objectContaining( { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB } ),
+      );
       expect( mockPopTo ).toHaveBeenCalledWith( "ExploreResults" );
     } );
 

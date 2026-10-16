@@ -1,7 +1,6 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import type { ApiPlace, ApiProjectSummary } from "api/types";
-import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
 import DateFilterSection
   from "components/Explore/ExploreV2/components/DateFilterSection";
@@ -209,7 +208,6 @@ const AdvancedSearch = ( ) => {
 
   const handleSearch = () => {
     dispatchV2( { type: EXPLORE_V2_ACTION.APPLY_SEARCH, search: currentSearch } );
-    dispatchV2( { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB, tab: OBSERVATIONS_TAB } );
     navigation.popTo( "ExploreResults" );
   };
 
