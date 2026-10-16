@@ -615,8 +615,6 @@ EXPLORE-HOTSPOTS = EXPLORE HOTSPOTS
 EXPLORE-IDENTIFICATIONS = EXPLORE IDENTIFICATIONS
 EXPLORE-IDENTIFIERS = EXPLORE IDENTIFIERS
 EXPLORE-LIFE-LIST = EXPLORE LIFE LIST
-# Button text for the Maverick IDs view in Explore
-EXPLORE-MAVERICK-IDS = EXPLORE MAVERICK IDS
 EXPLORE-OBSERVATIONS = EXPLORE OBSERVATIONS
 EXPLORE-OBSERVERS = EXPLORE OBSERVERS
 EXPLORE-SPECIES = EXPLORE SPECIES
@@ -725,8 +723,6 @@ IDENTIFICATION-TIPS = IDENTIFICATION TIPS
 Identifications = Identifications
 # Description of the Identifications view in Explore
 Identifications-people-have-added-to-observations = Identifications people have added to other people's observations
-# Description of the Maverick IDs view in Explore
-Identifications-that-disagree-with-the-community-taxon = Identifications that disagree with the community taxon
 # Accessibility label for the Identifications view in Explore
 Identifications-View = Identifications View
 IDENTIFICATIONS-WITHOUT-NUMBER =
@@ -931,10 +927,8 @@ Mark-photos-as-already-saved = Mark as Saved
 Match-Screen = Match Screen
 # Identification category
 maverick--identification = Maverick
-# Label for the Maverick IDs view in Explore
-Maverick-IDs = Maverick IDs
-# Accessibility label for the Maverick IDs view in Explore
-Maverick-IDs-View = Maverick IDs View
+# Label for a toggle that limits Explore identifications to ones disagreeing with the community taxon
+Maverick-IDs-only = Maverick IDs only
 # Month of May
 May = May
 MEDIA = MEDIA
@@ -981,7 +975,6 @@ Most-to-least-faved = Most to least faved
 MY-CONTENT--notifications = MY CONTENT
 # Label for a menu item and screen title showing identifications the user
 # made that are outliers, disagreeing with the community taxon
-MY-MAVERICK-IDS = MY MAVERICK IDS
 My-Observations = My Observations
 # Label for the bottom tab that shows your observations. Feel free to be
 # flexible in translating this to keep it as short as possible. "My

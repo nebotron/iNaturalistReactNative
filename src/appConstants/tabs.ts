@@ -6,4 +6,3 @@ export const HOTSPOTS_TAB = "hotspots";
 export const LIFELIST_TAB = "lifelist";
 export const IDENTIFY_TAB = "identify";
 export const IDENTIFICATIONS_TAB = "identifications";
-export const MAVERICKS_TAB = "mavericks";

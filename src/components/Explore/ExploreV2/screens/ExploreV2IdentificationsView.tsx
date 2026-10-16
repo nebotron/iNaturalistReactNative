@@ -1,7 +1,6 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { searchIdentifications } from "api/identifications";
 import type { ApiIdentification, ApiObservation } from "api/types";
-import { MAVERICKS_TAB } from "appConstants/tabs";
 import type {
   ExploreV2BaseQueryParams,
 } from "components/Explore/ExploreV2/helpers/buildQueryParams";
@@ -17,11 +16,14 @@ import {
   DisplayTaxonName,
   Divider,
   INatIcon,
+  SwitchRow,
 } from "components/SharedComponents";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
 import { Pressable, View } from "components/styledComponents";
 import flatten from "lodash/flatten";
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, {
+  useCallback, useEffect, useMemo, useState,
+} from "react";
 import type { ListRenderItemInfo } from "react-native";
 import Photo from "realmModels/Photo";
 import { accessibleTaxonName } from "sharedHelpers/taxon";
@@ -167,28 +169,27 @@ const toIdentificationParams = ( params: ExploreV2BaseQueryParams ) => ( {
 interface Props {
   enabled: boolean;
   params: ExploreV2BaseQueryParams;
-  tab: string;
   onCount: ( count: number ) => void;
 }
 
 const ExploreV2IdentificationsView = ( {
   enabled,
   params,
-  tab,
   onCount,
 }: Props ) => {
   const { t } = useTranslation( );
+  const [mavericksOnly, setMavericksOnly] = useState( false );
   const idParams = useMemo( ( ) => ( {
     ...toIdentificationParams( params ),
     current: true,
-    ...( tab === MAVERICKS_TAB
+    ...( mavericksOnly
       ? { category: "maverick" }
       // Identifications on other people's observations only
       : { own_observation: false } ),
     order_by: "created_at",
     order: "desc",
     per_page: PAGE_SIZE,
-  } ), [params, tab] );
+  } ), [params, mavericksOnly] );
 
   const {
     data,
@@ -227,16 +228,30 @@ const ExploreV2IdentificationsView = ( {
     <MyIdentificationItem item={item} />
   ), [] );
 
+  const toggle = (
+    <SwitchRow
+      classNames="mx-[15px] my-2"
+      label={t( "Maverick-IDs-only" )}
+      value={mavericksOnly}
+      onValueChange={setMavericksOnly}
+      testID="ExploreV2IdentificationsView.mavericksToggle"
+    />
+  );
+
   if ( !enabled || isLoading ) {
     return (
-      <View className="mt-5 items-center">
-        <ActivityIndicator size={50} />
+      <View>
+        {toggle}
+        <View className="mt-5 items-center">
+          <ActivityIndicator size={50} />
+        </View>
       </View>
     );
   }
 
   return (
     <CustomFlashList
+      ListHeaderComponent={toggle}
       data={identifications}
       keyExtractor={( item: MyIdentification ) => `${item.uuid}`}
       renderItem={renderItem}
