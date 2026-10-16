@@ -20,6 +20,7 @@ const AudioIdClip = ( ) => {
   const { params } = useRoute( );
   const { id } = params as { id: string };
   const clip = useAudioIdHistory( state => state.clips[id] );
+  const updateClip = useAudioIdHistory( state => state.updateClip );
   const setObservations = useStore( state => state.setObservations );
   const [error, setError] = useState<string | null>( null );
 
@@ -39,6 +40,7 @@ const AudioIdClip = ( ) => {
       } else if ( label?.taxonId !== null ) {
         observation.taxon = { id: sp.taxonId, name: sp.name, preferred_common_name: sp.commonName };
       }
+      updateClip( id, { observationUuid: observation.uuid } );
       setObservations( [observation] );
       navigation.navigate( "ObsEdit" );
     } catch ( e ) {

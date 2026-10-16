@@ -6,6 +6,8 @@ import {
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React from "react";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
+import { RealmContext } from "providers/contexts";
+import Observation from "realmModels/Observation";
 import colors from "styles/tailwindColors";
 
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
@@ -19,7 +21,10 @@ export const clipLabelText = ( label?: { taxonId?: number | null; name: string |
     : `Labeled: ${label.name}`;
 };
 
+const { useQuery } = RealmContext;
+
 const TAG_SHADES = { true: "rgba(116, 172, 0, 0.2)", false: "rgba(155, 16, 16, 0.15)" };
+const OBSERVED_SHADE = "rgba(116, 172, 0, 0.5)";
 
 // Every time Audio ID heard one species, or everything heard in one listening
 // session, newest first.
@@ -38,6 +43,23 @@ const AudioIdHistory = ( ) => {
       : c.sp.taxonId === taxonId ) )
     .sort( ( a, b ) => b.time - a.time );
   const sp = ofSpecies[0]?.sp;
+  // Clips whose observation is still saved on this device
+  const obsUuids = ofSpecies.flatMap( c => ( c.observationUuid
+    ? [c.observationUuid]
+    : [] ) );
+  const savedObs = useQuery( {
+    type: Observation,
+    query: observations => observations.filtered( "uuid IN $0", obsUuids ),
+    keyPaths: ["uuid"],
+  }, [obsUuids.join( )] );
+  const savedUuids = new Set( savedObs.map( o => o.uuid ) );
+  const clipShade = ( clip: typeof ofSpecies[number] ) => {
+    if ( clip.observationUuid && savedUuids.has( clip.observationUuid ) ) return OBSERVED_SHADE;
+    const correct = isClipCorrect( clip );
+    return correct === undefined
+      ? undefined
+      : TAG_SHADES[`${correct}`];
+  };
 
   return (
     <ScrollView className="bg-white h-full px-5 pt-4">
@@ -60,9 +82,7 @@ const AudioIdHistory = ( ) => {
           accessibilityRole="button"
           accessibilityHint="Opens the clip's details."
           className="flex-row items-center py-2 px-2 border-b border-lightGray"
-          style={isClipCorrect( clip ) === undefined
-            ? undefined
-            : { backgroundColor: TAG_SHADES[`${isClipCorrect( clip )}`] }}
+          style={{ backgroundColor: clipShade( clip ) }}
           onPress={( ) => navigation.navigate( "AudioIdClip", { id: clip.id } )}
         >
           <View className="flex-1">

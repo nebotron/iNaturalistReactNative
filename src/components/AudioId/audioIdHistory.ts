@@ -31,6 +31,8 @@ export interface AudioIdClip {
   confidence: number;
   label?: AudioIdLabel;
   location?: { latitude: number; longitude: number; accuracy: number };
+  // the observation last made from this clip
+  observationUuid?: string;
 }
 
 // One stretch of listening; endedAt is unset if the app quit while listening.
