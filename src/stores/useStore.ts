@@ -1,7 +1,6 @@
 import mergeWith from "lodash/mergeWith";
 import { create } from "zustand";
-import type { StateStorage } from "zustand/middleware";
-import { createJSONStorage, persist } from "zustand/middleware";
+import { persist } from "zustand/middleware";
 
 import type { ExploreSlice } from "./createExploreSlice";
 import createExploreSlice from "./createExploreSlice";
@@ -23,6 +22,7 @@ import type { SyncObservationsSlice } from "./createSyncObservationsSlice";
 import createSyncObservationsSlice from "./createSyncObservationsSlice";
 import type { UploadObservationsSlice } from "./createUploadObservationsSlice";
 import createUploadObservationsSlice from "./createUploadObservationsSlice";
+import createFieldStorage from "./fieldPersistStorage";
 import storage from "./zustandMMKVBackingStorage";
 
 type StoreState =
@@ -143,13 +143,7 @@ const useStore = create<StoreState>()( persist(
       rootStoredParams: state.rootStoredParams,
       savedExploreFilters: state.savedExploreFilters,
     } ),
-    // zustandStorage's getItem actually returns string | number | null instead of zustand's
-    // expected string | null. There are some keys in this store (at least `numOfUserObservations`)
-    // which are now fully managed _outside_ of zustand which used to be a mix of both.
-    // Fixing this situation is tracked in MOB-1372.
-    // Casting this here allows for getting most of the useStore typing benefit w/o fixing that
-    // functional change just yet.
-    storage: createJSONStorage( () => zustandStorage as unknown as StateStorage ),
+    storage: createFieldStorage( storage ),
     // We need to deep merge to persist nested objects, like layout
     // https://zustand.docs.pmnd.rs/middlewares/persist#persisting-a-state-with-nested-objects
     // Arrays must be replaced wholesale rather than merged index-by-index:
@@ -163,5 +157,9 @@ const useStore = create<StoreState>()( persist(
     ) ),
   },
 ) );
+
+// A log of crops that nothing ever read, rewritten in full on every crop and
+// photo upload until it was removed
+storage.delete( "cropFeedbackLog" );
 
 export default useStore;

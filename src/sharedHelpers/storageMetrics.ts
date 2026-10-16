@@ -23,6 +23,9 @@ export interface StorageMetrics {
   // log's extra takes only primitives. The app grew to 44GB with nothing in the
   // log saying where.
   largestDirsMB: string;
+  // KB per key of the default MMKV instance, the five largest, as JSON, so a
+  // growing mmkvBytes names what is growing
+  largestMmkvKeysKB: string;
 }
 
 const MIN_REPORTED_BYTES = 50 * 1024 * 1024;
@@ -63,6 +66,13 @@ const largestDirs = async ( ): Promise<string> => {
     .map( ( [name, bytes] ) => [name, Math.round( bytes / 1024 / 1024 )] ) ) );
 };
 
+const largestMmkvKeys = ( ) => JSON.stringify( Object.fromEntries( zustandMMKVBackingStorage
+  .getAllKeys( )
+  .map( key => [key, zustandMMKVBackingStorage.getString( key )?.length ?? 0] as const )
+  .sort( ( a, b ) => b[1] - a[1] )
+  .slice( 0, 5 )
+  .map( ( [key, length] ) => [key, Math.round( length / 1024 )] ) ) );
+
 const getStorageMetrics = async ( realmPath?: string | null ): Promise<StorageMetrics> => {
   const realmBytes = realmPath
     ? ( await stat( realmPath ).catch( () => ( { size: 0 } ) ) ).size
@@ -78,6 +88,7 @@ const getStorageMetrics = async ( realmPath?: string | null ): Promise<StorageMe
     freeDiskBytes,
     totalDiskBytes,
     largestDirsMB,
+    largestMmkvKeysKB: largestMmkvKeys( ),
   };
 };
 

@@ -1,11 +1,9 @@
 import { DocumentDirectoryPath, readFile, unlink } from "@dr.pogodin/react-native-fs";
 import { isCurrentUser } from "components/LoginSignUp/AuthenticationService";
 import Config from "react-native-config";
-import { zustandStorage } from "stores/useStore";
+import createMmkvRecordStore, { AUDIO_ID_CLIPS_MMKV_ID } from "sharedHelpers/mmkvRecordStore";
 import * as uuid from "uuid";
 import { create } from "zustand";
-import type { StateStorage } from "zustand/middleware";
-import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { AudioIdSpecies } from "./audioIdModel";
 
@@ -63,18 +61,26 @@ export const isClipCorrect = ( clip: AudioIdClip ) => ( clip.label
   ? clip.label.taxonId === clip.sp.taxonId
   : undefined );
 
-const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) => ( {
-  clips: {},
+// One key per clip, so a detection writes only its own clip
+const clipStore = createMmkvRecordStore<AudioIdClip>( AUDIO_ID_CLIPS_MMKV_ID );
+clipStore.migrateFrom( "audio-id-history", "clips" );
+
+const useAudioIdHistory = create<AudioIdHistoryState>( )( ( set, get ) => ( {
+  clips: clipStore.loadAll( ),
   addClip: ( sp, confidence ) => {
     const clip = {
       id: uuid.v4( ), sp, time: Date.now( ), confidence,
     };
     set( { clips: { ...get( ).clips, [clip.id]: clip } } );
+    clipStore.put( clip.id, clip );
     return clip;
   },
   updateClip: ( id, changes ) => {
     const clip = get( ).clips[id];
-    if ( clip ) set( { clips: { ...get( ).clips, [id]: { ...clip, ...changes } } } );
+    if ( !clip ) return;
+    const updated = { ...clip, ...changes };
+    set( { clips: { ...get( ).clips, [id]: updated } } );
+    clipStore.put( id, updated );
   },
   labelClip: async ( id, taxonId, name ) => {
     const clip = get( ).clips[id];
@@ -126,13 +132,10 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
   deleteClip: id => {
     const { [id]: _deleted, ...clips } = get( ).clips;
     set( { clips } );
+    clipStore.remove( id );
     unlink( clipPath( id ) ).catch( ( ) => undefined );
     unlink( contextClipPath( id ) ).catch( ( ) => undefined );
   },
-} ), {
-  name: "audio-id-history",
-  storage: createJSONStorage( ( ) => zustandStorage as unknown as StateStorage ),
-  partialize: state => ( { clips: state.clips } ),
 } ) );
 
 export default useAudioIdHistory;

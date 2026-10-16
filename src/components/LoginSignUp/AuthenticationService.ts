@@ -32,6 +32,7 @@ import changeLanguage from "sharedHelpers/changeLanguage";
 import { EnvConfig } from "sharedHelpers/envConfig";
 import { getInstallID } from "sharedHelpers/installData";
 import { log, logFileDirectory } from "sharedHelpers/logger";
+import { clearMmkvUserData } from "sharedHelpers/mmkvRecordStore";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { setFirebaseDataCollectionEnabled } from "sharedHelpers/tracking";
@@ -316,6 +317,7 @@ const signOut = async (
 
   // delete all keys from mmkv
   zustandMMKVBackingStorage.clearAll( );
+  clearMmkvUserData( );
 
   if ( options.clearRealm ) {
     if ( options.realm ) {

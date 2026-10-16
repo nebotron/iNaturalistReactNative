@@ -3,10 +3,8 @@ import { NativeEventEmitter, NativeModules } from "react-native";
 import type { UserLocation } from "sharedHelpers/fetchCoarseUserLocation";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import { log } from "sharedHelpers/logger";
-import { zustandStorage } from "stores/useStore";
+import createMmkvRecordStore, { AUDIO_ID_HEARD_MMKV_ID } from "sharedHelpers/mmkvRecordStore";
 import { create } from "zustand";
-import type { StateStorage } from "zustand/middleware";
-import { createJSONStorage, persist } from "zustand/middleware";
 
 import useAudioIdHistory, { clipPath, contextClipPath } from "./audioIdHistory";
 import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
@@ -143,28 +141,17 @@ interface AudioIdState {
   stop: ( ) => void;
 }
 
-// Persist writes after every set( ), once a second for the live level and
-// scores, though `heard` only changes when a species is heard; skip rewriting
-// an unchanged value.
-let lastSaved: string | undefined;
-const sessionStorage: StateStorage = {
-  getItem: name => zustandStorage.getItem( name ) as string | null,
-  setItem: ( name, value ) => {
-    if ( value === lastSaved ) return;
-    lastSaved = value;
-    zustandStorage.setItem( name, value );
-  },
-  removeItem: name => zustandStorage.removeItem( name ),
-};
+// What was heard is kept across app restarts, one key per species
+const heardStore = createMmkvRecordStore<Heard>( AUDIO_ID_HEARD_MMKV_ID );
+heardStore.migrateFrom( "audio-id-session", "heard" );
 
-// What was heard is kept across app restarts.
-const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
+const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
   listening: false,
   error: null,
   current: null,
   level: 0,
   inferMs: 0,
-  heard: {},
+  heard: heardStore.loadAll( ),
   setup: null,
   seen: null,
   recent: null,
@@ -194,10 +181,6 @@ const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
     AudioBirdId?.stop( );
     set( { listening: false } );
   },
-} ), {
-  name: "audio-id-session",
-  storage: createJSONStorage( ( ) => sessionStorage ),
-  partialize: state => ( { heard: state.heard } ),
 } ) );
 
 export const vibrate = ( haptics = false ) => {
@@ -282,17 +265,18 @@ const onScores = ( event: ScoresEvent ) => {
     ) ) {
       alerts.push( sp );
     }
-    next = {
-      ...next,
-      [sp.taxonId]: {
-        sp,
-        lastHeard: now,
-        best: Math.max( old?.best || 0, s ),
-        count: ( old?.count || 0 ) + ( isNewCall
-          ? 1
-          : 0 ),
-      },
+    const entry = {
+      sp,
+      lastHeard: now,
+      best: Math.max( old?.best || 0, s ),
+      count: ( old?.count || 0 ) + ( isNewCall
+        ? 1
+        : 0 ),
     };
+    next = { ...next, [sp.taxonId]: entry };
+    // lastHeard moves every run of a call; saving it only with a new call or
+    // a better score keeps a call to one or two writes rather than one a second.
+    if ( isNewCall || entry.best > ( old?.best || 0 ) ) heardStore.put( sp.taxonId, entry );
   } );
   if ( alerts.length > 0 ) {
     vibrate( );

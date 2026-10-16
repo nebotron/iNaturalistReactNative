@@ -154,7 +154,7 @@ describe( "savedExploreFilters store", ( ) => {
   const initialStoreState = useStore.getState( );
 
   beforeEach( ( ) => {
-    zustandStorage.removeItem( "persisted-zustand" );
+    useStore.persist.clearStorage( );
     useStore.setState( initialStoreState, true );
   } );
 
@@ -215,11 +215,11 @@ describe( "savedExploreFilters store", ( ) => {
 
     useStore.getState( ).addSavedExploreFilter( "Recent observations", params );
 
-    const persisted = JSON.parse( zustandStorage.getItem( "persisted-zustand" ) );
+    const persisted = field => JSON.parse( zustandStorage.getItem( `persisted-zustand.${field}` ) );
 
-    expect( persisted.state.savedExploreFilters ).toHaveLength( 1 );
-    expect( persisted.state.savedExploreFilters[0].name ).toBe( "Recent observations" );
-    expect( persisted.state.savedExploreFilters[0].params.sortBy ).toBe(
+    expect( persisted( "savedExploreFilters" ) ).toHaveLength( 1 );
+    expect( persisted( "savedExploreFilters" )[0].name ).toBe( "Recent observations" );
+    expect( persisted( "savedExploreFilters" )[0].params.sortBy ).toBe(
       "DATE_OBSERVED_NEWEST",
     );
   } );

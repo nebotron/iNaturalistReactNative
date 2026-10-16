@@ -1,9 +1,11 @@
 import { searchObservations } from "api/observations";
 import type { ApiObservation, ApiTaxon } from "api/types";
+import { MMKV } from "react-native-mmkv";
 import Taxon from "realmModels/Taxon";
 import { log } from "sharedHelpers/logger";
 import { withRequestTimeout } from "sharedHelpers/logging";
-import { zustandStorage } from "stores/useStore";
+import { USER_OBSERVATIONS_MMKV_ID } from "sharedHelpers/mmkvRecordStore";
+import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 
 const logger = log.extend( "userObservationsCache" );
 
@@ -21,13 +23,9 @@ const MAX_PAGES = 500;
 
 export interface CachedObservation {
   uuid: string;
-  // Capture time floored to the whole second, or null with no usable date.
-  observedAtMs: number | null;
   // Favorited by at least one user, i.e. it has a vote with a null scope.
   faved: boolean;
   researchGrade: boolean;
-  taxonId: number | null;
-  rankLevel: number | null;
   // The species this observation records, which is not always the taxon it was
   // identified as. See speciesIdFromTaxon. Null when the identification is
   // coarser than a species.
@@ -58,118 +56,122 @@ export const speciesIdFromTaxon = (
 
 export type UserObservationsCache = Map<string, CachedObservation>;
 
-// v2 added speciesId, which can't be derived from what v1 stored, so a v1
-// cache has to be re-synced rather than migrated.
-const cacheKey = ( userId: number ) => `userObservations-v2-${userId}`;
-const lastSyncKey = ( userId: number ) => `userObservationsLastSync-v2-${userId}`;
+// Kept in its own MMKV instance, split into buckets by uuid, so a sync that
+// changes a few observations rewrites only the buckets they fall in rather than
+// the whole history.
+const store = new MMKV( { id: USER_OBSERVATIONS_MMKV_ID } );
+const BUCKETS = 64;
+const bucketKey = ( userId: number, bucket: number ) => `${userId}:${bucket}`;
+const lastSyncKey = ( userId: number ) => `${userId}:lastSync`;
+
+const bucketOf = ( uuid: string ): number => {
+  let hash = 5381;
+  for ( let i = 0; i < uuid.length; i += 1 ) {
+    // eslint-disable-next-line no-bitwise
+    hash = ( ( ( hash << 5 ) + hash ) ^ uuid.charCodeAt( i ) ) >>> 0;
+  }
+  return hash % BUCKETS;
+};
 
 // Stored as positional tuples rather than objects: a full history is tens of
 // thousands of entries, and the key names would be most of the payload.
-type CachedObservationTuple = [
-  string,
-  number | null,
-  0 | 1,
-  0 | 1,
-  number | null,
-  number | null,
-  number | null,
-];
+type CachedObservationTuple = [string, 0 | 1, 0 | 1, number | null];
 
 const toTuple = ( observation: CachedObservation ): CachedObservationTuple => [
   observation.uuid,
-  observation.observedAtMs,
   observation.faved
     ? 1
     : 0,
   observation.researchGrade
     ? 1
     : 0,
-  observation.taxonId,
-  observation.rankLevel,
   observation.speciesId,
 ];
 
 const fromTuple = ( tuple: CachedObservationTuple ): CachedObservation => ( {
   uuid: tuple[0],
-  observedAtMs: tuple[1],
-  faved: tuple[2] === 1,
-  researchGrade: tuple[3] === 1,
-  taxonId: tuple[4],
-  rankLevel: tuple[5],
-  speciesId: tuple[6] ?? null,
+  faved: tuple[1] === 1,
+  researchGrade: tuple[2] === 1,
+  speciesId: tuple[3],
 } );
+
+// v2 kept the whole history as one blob of 7-field tuples in the default
+// instance; move it here so an upgrade doesn't have to re-sync from scratch.
+const migrateV2 = ( userId: number ) => {
+  const key = `userObservations-v2-${userId}`;
+  const raw = zustandMMKVBackingStorage.getString( key );
+  const lastSync = zustandMMKVBackingStorage.getString( `userObservationsLastSync-v2-${userId}` );
+  zustandMMKVBackingStorage.delete( key );
+  zustandMMKVBackingStorage.delete( `userObservationsLastSync-v2-${userId}` );
+  if ( !raw ) return;
+  try {
+    const tuples: [string, unknown, 0 | 1, 0 | 1, unknown, unknown, number | null][] = JSON
+      .parse( raw );
+    const buckets: CachedObservationTuple[][] = Array.from( { length: BUCKETS }, ( ) => [] );
+    tuples.forEach( t => buckets[bucketOf( t[0] )].push( [t[0], t[2], t[3], t[6] ?? null] ) );
+    buckets.forEach( ( b, i ) => store.set( bucketKey( userId, i ), JSON.stringify( b ) ) );
+    if ( lastSync ) store.set( lastSyncKey( userId ), lastSync );
+  } catch ( error ) {
+    logger.warn( "Discarding an unreadable observation cache", error );
+  }
+};
 
 // Parsing a full history is tens of thousands of entries of JSON, and every
 // screen that uses the cache reads it at least twice — once to draw something
-// immediately, once inside the sync. Keep the last parse, keyed by the exact
-// text it came from, so a repeat read is a string comparison instead. Keying on
-// the text rather than the user means a write from anywhere (or a test clearing
-// storage) invalidates it on its own.
-let parsedCache: { key: string; raw: string; cache: UserObservationsCache } | null = null;
+// immediately, once inside the sync. Keep each bucket's last parse, keyed by the
+// exact text it came from, so a repeat read is string comparisons instead, and
+// a write from anywhere (or a test clearing storage) invalidates it on its own.
+const parsedBuckets = new Map<string, { raw: string; entries: CachedObservation[] }>( );
 
 export const readUserObservationsCache = ( userId: number ): UserObservationsCache => {
-  const key = cacheKey( userId );
-  const raw = zustandStorage.getItem( key );
-  if ( typeof raw !== "string" ) {
-    return new Map( );
+  migrateV2( userId );
+  const cache: UserObservationsCache = new Map( );
+  for ( let i = 0; i < BUCKETS; i += 1 ) {
+    const key = bucketKey( userId, i );
+    const raw = store.getString( key );
+    if ( raw ) {
+      let parsed = parsedBuckets.get( key );
+      if ( parsed?.raw !== raw ) {
+        try {
+          const tuples = JSON.parse( raw ) as CachedObservationTuple[];
+          parsed = { raw, entries: tuples.map( fromTuple ) };
+        } catch ( error ) {
+          logger.warn( "Discarding an unreadable observation cache bucket", error );
+          parsed = { raw, entries: [] };
+        }
+        parsedBuckets.set( key, parsed );
+      }
+      parsed.entries.forEach( entry => cache.set( entry.uuid, entry ) );
+    }
   }
-  if ( parsedCache?.key === key && parsedCache.raw === raw ) {
-    return parsedCache.cache;
-  }
-  try {
-    const tuples: CachedObservationTuple[] = JSON.parse( raw );
-    const cache = new Map( tuples.map( tuple => [tuple[0], fromTuple( tuple )] ) );
-    parsedCache = { key, raw, cache };
-    return cache;
-  } catch ( error ) {
-    logger.warn( "Discarding an unreadable observation cache", error );
-    return new Map( );
-  }
+  return cache;
 };
 
-export const readLastSync = ( userId: number ): string | null => {
-  const lastSync = zustandStorage.getItem( lastSyncKey( userId ) );
-  return typeof lastSync === "string"
-    ? lastSync
-    : null;
-};
+export const clearUserObservationsCache = ( ) => store.clearAll( );
 
+export const readLastSync = ( userId: number ): string | null => store
+  .getString( lastSyncKey( userId ) ) ?? null;
+
+// Rewrites only the buckets holding the observations in `changed`
 const writeUserObservationsCache = (
   userId: number,
   cache: UserObservationsCache,
+  changed: Set<string>,
 ): void => {
-  const raw = JSON.stringify( Array.from( cache.values( ) ).map( toTuple ) );
-  const key = cacheKey( userId );
-  zustandStorage.setItem( key, raw );
-  // The v1 cache, which nothing reads now. A full history is megabytes, so it's
-  // worth reclaiming rather than leaving on disk.
-  zustandStorage.removeItem( `userObservations-v1-${userId}` );
-  zustandStorage.removeItem( `userObservationsLastSync-v1-${userId}` );
-  parsedCache = { key, raw, cache };
-};
-
-const toWholeSecondMs = ( ms: number ): number => Math.floor( ms / 1000 ) * 1000;
-
-const observedAtMsFromApi = ( observation: ApiObservation ): number | null => {
-  const raw = observation.time_observed_at
-    || observation.observed_on
-    || observation.created_at;
-  if ( !raw ) {
-    return null;
-  }
-  const time = new Date( raw ).getTime( );
-  return Number.isNaN( time )
-    ? null
-    : toWholeSecondMs( time );
+  const dirty = new Set( [...changed].map( bucketOf ) );
+  const buckets = new Map<number, CachedObservation[]>( [...dirty].map( b => [b, []] ) );
+  cache.forEach( observation => buckets.get( bucketOf( observation.uuid ) )?.push( observation ) );
+  buckets.forEach( ( entries, bucket ) => {
+    const raw = JSON.stringify( entries.map( toTuple ) );
+    store.set( bucketKey( userId, bucket ), raw );
+    parsedBuckets.set( bucketKey( userId, bucket ), { raw, entries } );
+  } );
 };
 
 const toCachedObservation = ( observation: ApiObservation ): CachedObservation => ( {
   uuid: observation.uuid,
-  observedAtMs: observedAtMsFromApi( observation ),
   faved: ( observation.votes || [] ).some( vote => vote?.vote_scope === null ),
   researchGrade: observation.quality_grade === "research",
-  taxonId: observation.taxon?.id ?? null,
-  rankLevel: observation.taxon?.rank_level ?? null,
   speciesId: speciesIdFromTaxon( observation.taxon ),
 } );
 
@@ -244,14 +246,12 @@ export const syncUserObservations = async (
   let syncedCount = 0;
   let idAbove: number | undefined;
   let hasMorePages = true;
+  // Observations whose cached entry this sync actually changed
+  const changed = new Set<string>( );
   // Anything already merged into the cache is worth keeping even if a later
   // page never arrives, so persist it — without recording the sync, which is
   // what makes the next run re-fetch from the top.
-  const savePartial = ( ) => {
-    if ( syncedCount > 0 ) {
-      writeUserObservationsCache( userId, cache );
-    }
-  };
+  const savePartial = ( ) => writeUserObservationsCache( userId, cache, changed );
   while ( hasMorePages && pages < MAX_PAGES ) {
     pages += 1;
     let response;
@@ -292,7 +292,15 @@ export const syncUserObservations = async (
     }
     const { results }: { results: ApiObservation[] } = response;
     results.forEach( observation => {
-      cache.set( observation.uuid, toCachedObservation( observation ) );
+      const entry = toCachedObservation( observation );
+      const old = cache.get( entry.uuid );
+      if (
+        old?.faved === entry.faved
+        && old.researchGrade === entry.researchGrade
+        && old.speciesId === entry.speciesId
+      ) return;
+      cache.set( entry.uuid, entry );
+      changed.add( entry.uuid );
     } );
     onPage?.( results );
     syncedCount += results.length;
@@ -305,13 +313,7 @@ export const syncUserObservations = async (
     idAbove = lastId;
   }
 
-  if ( syncedCount === 0 && cache.size > 0 ) {
-    // Nothing changed, and re-serializing an entire history to store exactly
-    // what's already there is the slowest part of an up-to-date sync.
-    zustandStorage.setItem( lastSyncKey( userId ), syncStartedAt );
-    return cache;
-  }
-  writeUserObservationsCache( userId, cache );
-  zustandStorage.setItem( lastSyncKey( userId ), syncStartedAt );
+  writeUserObservationsCache( userId, cache, changed );
+  store.set( lastSyncKey( userId ), syncStartedAt );
   return cache;
 };

@@ -37,6 +37,7 @@ import getStorageMetrics from "sharedHelpers/storageMetrics";
 import syncJoinedProjects from "sharedHelpers/syncJoinedProjects";
 import { logThumbnailDiagnostics } from "sharedHelpers/useDeviceImageThumbnail";
 import { useTranslation } from "sharedHooks";
+import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 
 const { useRealm } = RealmContext;
 const logger = log.extend( "useDeferredStartup" );
@@ -137,6 +138,10 @@ const useDeferredStartup = ( ) => {
     const id16 = deferTask( "clearVideoLibrary", clearVideoLibrary );
     const id17 = deferTask( "clearExpiredMediaCaches", clearExpiredMediaCaches );
     const id18 = deferTask( "trimRemoteImageCache", trimRemoteImageCache );
+    // MMKV files never shrink on their own, and data has moved out of this one
+    const idTrim = deferTask( "trimMmkv", async ( ) => {
+      zustandMMKVBackingStorage.trim( );
+    } );
     const id14 = deferTask( "logThumbnailDiagnostics", logThumbnailDiagnostics );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
@@ -157,6 +162,7 @@ const useDeferredStartup = ( ) => {
 
     return ( ) => {
       cancelIdleCallback( id0 );
+      cancelIdleCallback( idTrim );
       cancelIdleCallback( id1 );
       cancelIdleCallback( id2 );
       cancelIdleCallback( id3 );

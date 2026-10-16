@@ -4,7 +4,7 @@ describe( "Explore filter persistence", ( ) => {
   const initialStoreState = useStore.getState( );
 
   beforeEach( ( ) => {
-    zustandStorage.removeItem( "persisted-zustand" );
+    useStore.persist.clearStorage( );
     useStore.setState( initialStoreState, true );
   } );
 
@@ -29,10 +29,10 @@ describe( "Explore filter persistence", ( ) => {
       savedExploreFilters,
     } );
 
-    const persisted = JSON.parse( zustandStorage.getItem( "persisted-zustand" ) );
+    const persisted = field => JSON.parse( zustandStorage.getItem( `persisted-zustand.${field}` ) );
 
-    expect( persisted.state.rootStoredParams ).toEqual( storedParams );
-    expect( persisted.state.rootExploreView ).toBe( "species" );
-    expect( persisted.state.savedExploreFilters ).toEqual( savedExploreFilters );
+    expect( persisted( "rootStoredParams" ) ).toEqual( storedParams );
+    expect( persisted( "rootExploreView" ) ).toBe( "species" );
+    expect( persisted( "savedExploreFilters" ) ).toEqual( savedExploreFilters );
   } );
 } );

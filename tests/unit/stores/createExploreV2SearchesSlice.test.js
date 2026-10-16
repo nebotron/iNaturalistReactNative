@@ -67,9 +67,9 @@ describe( "exploreSavedSearches", ( ) => {
     // let the persist middleware flush
     await Promise.resolve( );
 
-    const persisted = JSON.parse( zustandStorage.getItem( "persisted-zustand" ) );
-    expect( persisted.state.exploreSavedSearches.searches ).toHaveLength( 1 );
-    expect( persisted.state.exploreSavedSearches.searches[0].filters ).toEqual(
+    const persisted = field => JSON.parse( zustandStorage.getItem( `persisted-zustand.${field}` ) );
+    expect( persisted( "exploreSavedSearches" ).searches ).toHaveLength( 1 );
+    expect( persisted( "exploreSavedSearches" ).searches[0].filters ).toEqual(
       defaultExploreV2Filters,
     );
   } );

@@ -1,5 +1,6 @@
 import { searchObservations } from "api/observations";
 import {
+  clearUserObservationsCache,
   readLastSync,
   readUserObservationsCache,
   speciesIdFromTaxon,
@@ -40,12 +41,11 @@ const mockPages = ( ...pages ) => {
 
 beforeEach( ( ) => {
   searchObservations.mockReset( );
-  zustandStorage.removeItem( `userObservations-v2-${USER_ID}` );
-  zustandStorage.removeItem( `userObservationsLastSync-v2-${USER_ID}` );
+  clearUserObservationsCache( );
 } );
 
 describe( "syncUserObservations", ( ) => {
-  it( "caches capture time and fave status for the whole history", async ( ) => {
+  it( "caches fave status for the whole history", async ( ) => {
     mockPages( [
       makeApiObservation( {
         uuid: "faved",
@@ -58,7 +58,6 @@ describe( "syncUserObservations", ( ) => {
     const cache = await syncUserObservations( USER_ID, OPTS );
 
     expect( cache.get( "faved" ).faved ).toBe( true );
-    expect( cache.get( "faved" ).observedAtMs ).toEqual( Date.UTC( 2026, 6, 16, 12, 0, 0 ) );
     expect( cache.get( "unfaved" ).faved ).toBe( false );
   } );
 
@@ -99,6 +98,22 @@ describe( "syncUserObservations", ( ) => {
     expect( cache.size ).toEqual( 1 );
   } );
 
+  it( "keeps unchanged observations when a later sync rewrites what changed", async ( ) => {
+    const history = Array.from( { length: 100 }, ( _, i ) => makeApiObservation( {
+      uuid: `obs-${i}`,
+      observedAt: "2026-07-16T12:00:00Z",
+    } ) );
+    mockPages( history, [{ ...history[0], votes: [FAVE_VOTE] }] );
+
+    await syncUserObservations( USER_ID, OPTS );
+    await syncUserObservations( USER_ID, OPTS );
+    const cache = readUserObservationsCache( USER_ID );
+
+    expect( cache.size ).toEqual( 100 );
+    expect( cache.get( "obs-0" ).faved ).toBe( true );
+    expect( cache.get( "obs-1" ).faved ).toBe( false );
+  } );
+
   it( "survives a restart by reading the cache back from storage", async ( ) => {
     mockPages( [makeApiObservation( {
       uuid: "faved",
@@ -112,13 +127,26 @@ describe( "syncUserObservations", ( ) => {
 
     expect( cache.get( "faved" ) ).toEqual( {
       uuid: "faved",
-      observedAtMs: Date.UTC( 2026, 6, 16, 12, 0, 0 ),
       faved: true,
       researchGrade: true,
-      taxonId: 1,
-      rankLevel: 10,
       speciesId: 1,
     } );
+  } );
+
+  it( "moves a v2 cache out of the default store without re-syncing", ( ) => {
+    zustandStorage.setItem( `userObservations-v2-${USER_ID}`, JSON.stringify( [
+      ["faved", 0, 1, 1, 1, 10, 1],
+    ] ) );
+    zustandStorage.setItem( `userObservationsLastSync-v2-${USER_ID}`, "2026-07-16T12:00:00Z" );
+
+    expect( readUserObservationsCache( USER_ID ).get( "faved" ) ).toEqual( {
+      uuid: "faved",
+      faved: true,
+      researchGrade: true,
+      speciesId: 1,
+    } );
+    expect( readLastSync( USER_ID ) ).toEqual( "2026-07-16T12:00:00Z" );
+    expect( zustandStorage.getItem( `userObservations-v2-${USER_ID}` ) ).toBeNull( );
   } );
 
   // Rock Pigeons on the street are usually identified as the domestic variety,
@@ -139,7 +167,6 @@ describe( "syncUserObservations", ( ) => {
 
     const cache = await syncUserObservations( USER_ID, OPTS );
 
-    expect( cache.get( "feral-pigeon" ).taxonId ).toEqual( 122767 );
     expect( cache.get( "feral-pigeon" ).speciesId ).toEqual( 3017 );
   } );
 
