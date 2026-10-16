@@ -120,11 +120,6 @@ const useStore = create<StoreState>()( persist(
       // Dynamically select all values in the layout slice's namespace
       layout: persistableValues( state.layout ),
 
-      exploreRecentSearches: {
-        subjects: state.exploreRecentSearches.subjects,
-        places: state.exploreRecentSearches.places,
-      },
-
       exploreSavedSearches: {
         searches: state.exploreSavedSearches.searches,
       },

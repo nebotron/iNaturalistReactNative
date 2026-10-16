@@ -144,10 +144,6 @@ const allSaved = ( db: Realm ) => db.objects<OfflineExploreObservation>(
   "OfflineExploreObservation",
 );
 
-export const countOfflineObservations = ( ) => ( realm
-  ? allSaved( realm ).length
-  : 0 );
-
 export const deleteOfflineExploreResults = async ( ) => {
   const db = await openOfflineExploreRealm( );
   if ( !db ) return;

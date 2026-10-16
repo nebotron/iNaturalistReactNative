@@ -3,10 +3,8 @@
 // bundled and attached to every remote log entry, so a log line can be traced
 // back to the exact code that produced it. The generated file is gitignored.
 //
-// This runs from metro.config.js, which no bundle can avoid loading — a stamp
-// that only ran on `npm install` sat 34 commits stale across a redeploy that
-// demonstrably changed behavior, so the logs named code that was not running.
-// A wrong stamp is worse than no stamp, since it is believed.
+// Runs on postinstall (for jest/lint/tsc) and from metro.config.js before every
+// bundle, so the stamp is never stale.
 const { execSync } = require( "child_process" );
 const fs = require( "fs" );
 const path = require( "path" );

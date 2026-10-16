@@ -1,7 +1,7 @@
 import { searchObservations } from "api/observations";
 import type { ApiObservation } from "api/types";
-import type { Lifer } from "components/LifeList/LifeListContainer";
-import { fetchMissingDisplayData, toLifer } from "components/LifeList/LifeListContainer";
+import type { Lifer } from "components/LifeList/LiferGridItem";
+import { fetchMissingDisplayData, toLifer } from "components/LifeList/LiferGridItem";
 import { log } from "sharedHelpers/logger";
 import { withRequestTimeout } from "sharedHelpers/logging";
 import { OBSERVATION_SYNC_FIELDS } from "sharedHelpers/userObservationsCache";

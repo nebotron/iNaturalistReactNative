@@ -39,15 +39,6 @@ export interface GroupedMediaItem {
   timestamp?: number;
 }
 
-export const buildGroupedMediaItems = (
-  photos: GroupedMediaPhotoItem[],
-): GroupedMediaItem[] => photos
-  .map( photo => ( { photos: [photo] } ) )
-  .sort( ( a, b ) => (
-    ( b.photos[0].image.timestamp as number || 0 )
-    - ( a.photos[0].image.timestamp as number || 0 )
-  ) );
-
 export const buildGroupedSoundItem = (
   soundUri: string,
   timestamp?: number,

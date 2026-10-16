@@ -98,21 +98,10 @@ const MAX_CHARGE_PER_TICK_MS = 2 * TIMEOUT_TICK_MS;
 
 // A deadline that counts only the time this process was actually running.
 //
-// Both timeouts here used to be a single setTimeout, i.e. wall clock, and an
-// offload deliberately runs while the app is backgrounded, where iOS ends the
-// background task and freezes the process mid-save. A frozen process runs no
-// code, so the deadline comes due with nothing happening and fires the instant
-// the app resumes: the save is reported as timed out having been given however
-// much of its 30 seconds it was awake for. Three timeouts in a row abandon the
-// run and put the card in a ten-minute cooldown, so a suspension the user never
-// saw can cost them the rest of the import.
-//
-// Whether that is what the seven save failures in the log are is not settled —
-// each says "timed out after 30000ms" against 90s, 409s, once 12 minutes of
-// elapsed time, but that elapsed figure was measured after an unbounded await
-// (fixed below), so it may be reporting the log line's own delay rather than
-// the save's. Either way a deadline that charges a file for time it was frozen
-// is wrong on its face; the appState now recorded on each failure says which.
+// An offload runs while the app is backgrounded, where iOS can freeze the
+// process mid-save. A wall-clock setTimeout would then fire the instant the app
+// resumes and report a save as timed out for time it was frozen; three timeouts
+// in a row abandon the run and put the card in a ten-minute cooldown.
 //
 // Ticking charges elapsed time in bounded steps: a suspension costs one step,
 // however long it lasted, while a save that really is wedged with the app
@@ -563,12 +552,9 @@ const useUsbAutoImport = ( ) => {
         deleteFailures = del?.failed ?? 0;
         progress.setDeleted( deletedFromDevice );
       }
-      // Reported even when nothing saved. This line used to sit inside the
-      // branch above, so the one run that most needed explaining — every file
-      // failing — was the one run that logged no outcome at all, and the Aug 5
-      // log couldn't say whether the offload finished or the app died holding
-      // it. Skipped only when the wedged line above already carries the same
-      // counts.
+      // Reported even when nothing saved, since a run where every file failed
+      // most needs an outcome. Skipped only when the wedged line above already
+      // carries the same counts.
       if ( !abandonReason ) {
         const driveNote = driveGoneOnDelete
           ? "; drive no longer available"

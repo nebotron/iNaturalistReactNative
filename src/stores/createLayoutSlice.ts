@@ -37,7 +37,6 @@ export interface LayoutSlice {
     screenAfterPhotoEvidence: SCREEN_AFTER_PHOTO_EVIDENCE;
     setScreenAfterPhotoEvidence: ( screenAfterPhotoEvidence: SCREEN_AFTER_PHOTO_EVIDENCE ) => void;
     isAllAddObsOptionsMode: boolean;
-    setIsAllAddObsOptionsMode: ( isAllAddObsOptionsMode: boolean ) => void;
     shownOnce: object;
     setShownOnce: ( key: string ) => void;
     resetShownOnce: ( ) => void;
@@ -104,12 +103,6 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       },
     } ) ),
     isAllAddObsOptionsMode: false,
-    setIsAllAddObsOptionsMode: newValue => set( state => ( {
-      layout: {
-        ...state.layout,
-        isAllAddObsOptionsMode: newValue,
-      },
-    } ) ),
     // State to control pivot cards and other onboarding material being shown only once
     shownOnce: {},
     setShownOnce: key => set( state => ( {

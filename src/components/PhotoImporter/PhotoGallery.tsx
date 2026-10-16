@@ -300,13 +300,9 @@ const PhotoGallery = ( {
         setFailedCount( failed );
       } );
       continuesInBackground = !!result?.continuesInBackground;
-      // The tap used to be bracketed by a line on the way in and a line on the
-      // way out, which was 138 of the app log's 889 entries over five days and
-      // every one of them said the same thing: a local batch settles in ~150ms.
-      // A wedge is already covered from both ends — photo_import_stalled below
-      // fires at 30s, and an import the process never returns from is reported
-      // by the next launch's marker — so only a slow import that did finish is
-      // news.
+      // Only a slow import that did finish is logged: a local batch settles in
+      // ~150ms, photo_import_stalled below covers a wedge, and an import the
+      // process never returns from is reported by the next launch's marker.
       const ms = Date.now( ) - startedAt;
       if ( ms > 3000 && !continuesInBackground ) {
         logger.infoWithExtra( "photo_import_slow", {

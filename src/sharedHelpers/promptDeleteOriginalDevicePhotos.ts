@@ -153,15 +153,10 @@ export const enqueuePhotoLibraryWrite = <T, >(
 
 // How long a caller waits on a deletion before we stop holding it there.
 //
-// This used to be a hard timeout that also decided the outcome: at 10s the
-// promise rejected, the caller reported "Something went wrong", and the chain
-// above was released. All three were wrong. The native module gives the same
-// call 150s and has a PHPhotoLibraryChangeObserver fallback that resolves as
-// soon as the assets really vanish, so at 10s the deletion is usually still
-// going to happen: the Aug 8 log has a "failed" delete of 112 photos followed a
-// minute later by a rescan that found 44. Every deletion that did complete came
-// back in 1.3-1.8s, so 15s is well clear of a working one — but past it we stop
-// waiting without either calling it a failure or letting go of the native call.
+// Not a failure timeout: the native module gives the call 150s and resolves as
+// soon as the assets really vanish, so a slow deletion usually still happens.
+// Completed deletions take 1.3-1.8s, so past 15s we stop waiting without
+// calling it a failure or letting go of the native call.
 const UI_WAIT_MS = 15_000;
 
 // A PhotoKit transaction costs ~1.6s whatever it holds: 3 assets took 1752ms,
@@ -325,17 +320,10 @@ const performDeleteOriginalDevicePhotos = async (
   // delete that spans a trip to the background is a different failure from one
   // that hangs while the user is watching it.
   //
-  // This used to count "inactive" as having left the foreground, and that made
-  // the flag useless: the Aug 6 log has three *successful* deletions, and the
-  // native context captured before each one says sceneState=1
-  // (foregroundInactive). These deletes are issued straight after a navigation
-  // or a modal dismissal, so foreground-inactive is the normal state to be in
-  // when one starts, not an anomaly — the old flag was true before the delete
-  // even began. A whole theory ("a consent alert requested by an app that then
-  // leaves the foreground wedges photolibraryd") rested on one hang reporting
-  // it. Only "background" is the user actually leaving; "inactive" is recorded
-  // separately so nothing is lost. Neither reads anything into iOS's "unknown",
-  // which is what it reports early in a launch.
+  // Only "background" counts as leaving: deletes are issued straight after a
+  // navigation or modal dismissal, so "inactive" is the normal state when one
+  // starts. "inactive" is recorded separately; iOS's early-launch "unknown"
+  // counts as neither.
   let backgrounded = AppState.currentState === "background";
   let wentInactive = AppState.currentState === "inactive";
   let appStateChanges = 0;
@@ -404,13 +392,6 @@ const performDeleteOriginalDevicePhotos = async (
         } ),
       ).catch( ( ) => undefined );
     }
-    // Free disk space used to be measured here, on the theory that a deletion
-    // needs room to move assets into Recently Deleted. The log has answered it:
-    // the Sep 4 deletions of 61, 15, 83, 67 and 60 photos all landed with 1.8GB
-    // free, and the Sep 6 delete of 932 hung with 9.1GB. Free space is not what
-    // separates a deletion that works from one that doesn't, so the probe is
-    // gone rather than firing on every hang for an answer already given.
-    //
     // What the photos themselves are. Every property the log has checked so far
     // says these assets are ordinary and deletable, so the next question is
     // what kind of photo they are — and what device and iOS this is, since the
@@ -547,12 +528,10 @@ const performDeleteOriginalDevicePhotos = async (
         // A transaction deletes all of its assets or none of them, so anything
         // above zero means these are gone and no longer worth tracking as ours.
         if ( chunkDeleted > 0 ) cleared.push( ...chunk );
-        // Photos the app is not allowed to delete. They used to go into the
-        // transaction with everything else and take it down with them — a
-        // transaction is all or nothing, and PhotoKit answers a request it
-        // can't carry out with silence rather than an error. Now they're left
-        // out, which makes them the reason a cleanup can't empty, so say so as
-        // its own line.
+        // Photos the app is not allowed to delete are left out of the
+        // transaction (it's all or nothing, and PhotoKit answers a request it
+        // can't carry out with silence). They're why a cleanup can't empty,
+        // so say so as its own line.
         if ( chunkUndeletable > 0 ) {
           logger.warnWithExtra( "photo_delete_undeletable", {
             undeletable: chunkUndeletable,

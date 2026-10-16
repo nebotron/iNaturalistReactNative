@@ -391,9 +391,8 @@ const MyObservationsResults = ( ) => {
       }
     } );
 
-    // Preserve the previous shape and ordering: one entry per leaf taxon, in
-    // leafTaxonIds order. A taxon the query returned nothing for used to throw
-    // on obs[0].taxon, so dropping it is not a behaviour change.
+    // One entry per leaf taxon, in leafTaxonIds order, dropping any taxon the
+    // query returned nothing for.
     return leafTaxonIds
       .map( id => countsByTaxonId.get( id ) )
       .filter( ( entry ): entry is NonNullable<typeof entry> => !!entry );

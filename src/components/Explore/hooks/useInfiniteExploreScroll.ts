@@ -96,13 +96,8 @@ const useInfiniteExploreScroll = (
 
   const pages = data?.pages as ApiObservationsSearchResponse[] | undefined;
 
-  // This used to run in the render body. Every render of the Explore screen —
-  // every scroll tick, every filter touch — flattened every page fetched so
-  // far, allocated a Set, and walked the whole list twice, then handed the
-  // list a *new array identity*, so FlashList re-rendered all of it. Infinite
-  // scroll makes that grow without bound, which is what the app log shows:
-  // RootExplore is 35 of 85 ui_stall lines and the worst single stall on it is
-  // 18.8s, on a screen whose only job while you scroll is to append a page.
+  // Memoized so a render doesn't re-flatten every page fetched so far and hand
+  // FlashList a new array identity, which re-renders the whole list.
   const observations: ApiObservation[] = useMemo( ( ) => {
     const seenKeys = new Set<string | number>( );
     const deduped = ( flatten( pages?.map( r => r.results ) ) || [] ).filter( obs => {

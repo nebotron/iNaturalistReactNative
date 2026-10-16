@@ -1,10 +1,16 @@
 import jpeg from "jpeg-js";
 import {
   alignPixelCropOutwardToJpegBlocks,
-  isPixelCropBlockAligned,
   JPEG_COMPRESSION_BLOCK_SIZE,
   pixelCropFromNormalizedCrop,
 } from "sharedHelpers/jpegCropBounds";
+
+const isPixelCropBlockAligned = ( crop, blockSize = JPEG_COMPRESSION_BLOCK_SIZE ) => (
+  crop.originX % blockSize === 0
+  && crop.originY % blockSize === 0
+  && crop.width % blockSize === 0
+  && crop.height % blockSize === 0
+);
 
 const createTestJpeg = ( width, height, quality = 85 ) => {
   const data = Buffer.alloc( width * height * 4 );

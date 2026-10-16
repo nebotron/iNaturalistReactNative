@@ -9,14 +9,10 @@ const logger = log.extend( "userObservationsCache" );
 
 // One local cache of the signed-in user's observation history, shared by every
 // feature that has to reason about all of it rather than the handful Realm
-// keeps. My Lifers and Photo Cleanup both used to page the API themselves and
-// keep a private cache, so the same history was downloaded twice and opening
-// one screen did nothing for the other. Now whichever screen is opened first
-// pays for the sync and the other one starts warm.
+// keeps, so whichever screen is opened first pays for the sync.
 //
 // Realm isn't the right home for this: it holds only the most recent page of
-// remote observations plus whatever this device created, which is why Photo
-// Cleanup could only ever see fave status for a sliver of the history.
+// remote observations plus whatever this device created.
 
 // Max page size the API allows.
 const PAGE_SIZE = 200;

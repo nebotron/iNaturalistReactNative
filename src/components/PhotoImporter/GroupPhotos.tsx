@@ -161,11 +161,9 @@ const GroupPhotos = ( {
   }, [gridItemWidth, groupedPhotos, onViewableItemsChanged] );
 
   // Pin the thumbnails for the photos on screen (and the ones just outside it)
-  // to the front of the generation queue. A thumbnail a visible cell asked for
-  // used to be dropped as soon as that cell was recycled away, so scrolling
-  // back to a photo found it ungenerated again and the cell fell back to a
-  // placeholder; a prioritized photo is never dropped, so a photo that has been
-  // on screen once stays instantly available.
+  // to the front of the generation queue. A prioritized photo is never dropped
+  // when its cell is recycled, so a photo that has been on screen once stays
+  // instantly available.
   const handleViewableItemsChanged = useCallback( ( info: {
     viewableItems: ViewToken<Item>[];
     changed: ViewToken<Item>[];

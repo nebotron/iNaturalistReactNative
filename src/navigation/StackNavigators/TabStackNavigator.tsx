@@ -18,7 +18,6 @@ import RootExploreContainer from "components/Explore/RootExploreContainer";
 import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
 import PostDetails from "components/Journal/PostDetails";
-import LifeListContainer from "components/LifeList/LifeListContainer";
 import CameraClockCheck from "components/LocationHistory/CameraClockCheck";
 import LocationHistory from "components/LocationHistory/LocationHistory";
 import LocationHistoryDetailMap from "components/LocationHistory/LocationHistoryDetailMap";
@@ -148,7 +147,6 @@ const FadeInFollowersList = ( ) => fadeInComponent( <FollowersList /> );
 const FadeInFollowingList = ( ) => fadeInComponent( <FollowingList /> );
 const FadeInJournal = ( ) => fadeInComponent( <Journal /> );
 const FadeInPostDetails = ( ) => fadeInComponent( <PostDetails /> );
-const FadeInLifeList = ( ) => fadeInComponent( <LifeListContainer /> );
 
 const BASE_SCREEN_OPTIONS = {
   headerBackButtonDisplayMode: "minimal",
@@ -332,11 +330,6 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             name="PostDetails"
             component={FadeInPostDetails}
             options={{ headerTitle: postDetailsTitle }}
-          />
-          <Stack.Screen
-            name="LifeList"
-            component={FadeInLifeList}
-            options={LIST_OPTIONS}
           />
           <Stack.Screen
             name="AudioId"

@@ -29,8 +29,8 @@ interface Props<T extends DevicePhotoGridItem> {
 }
 
 // How far outside the viewport thumbnails are generated ahead of time. Ahead
-// covers the usual downward scroll; behind covers scrolling back up, which is
-// where previews used to appear to have "unloaded".
+// covers the usual downward scroll; behind covers scrolling back up, so
+// previews don't appear to have "unloaded".
 const PREFETCH_AHEAD = 30;
 const PREFETCH_BEHIND = 18;
 

@@ -1,7 +1,6 @@
 import {
   migrateTaxonFilters,
   normalizeTaxonFilters,
-  removeTaxonFilter,
   taxonFiltersToApiParams,
   toExploreTaxonFilterTaxon,
   toggleTaxonFilter,
@@ -123,18 +122,6 @@ describe( "taxonFilters helpers", () => {
         preferredCommonName: "Human",
       }, true );
       expect( filters ).toEqual( [] );
-    } );
-  } );
-
-  describe( "removeTaxonFilter", () => {
-    it( "removes a taxon by id", () => {
-      const filters = [
-        { taxon: homo, exclude: false },
-        { taxon: aves, exclude: true },
-      ];
-      expect( removeTaxonFilter( filters, 1 ) ).toEqual( [
-        { taxon: aves, exclude: true },
-      ] );
     } );
   } );
 } );

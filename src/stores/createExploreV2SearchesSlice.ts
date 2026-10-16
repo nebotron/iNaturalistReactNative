@@ -1,9 +1,5 @@
-import type {
-  ExploreV2SearchWithTab, ExploreV2Subject, Place,
-} from "providers/ExploreV2Context";
+import type { ExploreV2SearchWithTab, ExploreV2Subject } from "providers/ExploreV2Context";
 import type { StateCreator } from "zustand";
-
-export const RECENT_LIMIT = 10;
 
 export const subjectKey = ( subject: ExploreV2Subject ): string => {
   switch ( subject.type ) {
@@ -24,20 +20,6 @@ export const subjectKey = ( subject: ExploreV2Subject ): string => {
   }
 };
 
-export const placeKey = ( place: Place ): string => `place-${place.id}`;
-
-// Newest first, unique by key, capped at 10. Recording something already in the list
-// bumps it to the front instead of duplicating it.
-export const addRecent = <T>(
-  items: T[],
-  item: T,
-  keyFn: ( _item: T ) => string,
-  cap: number = RECENT_LIMIT,
-): T[] => [
-    item,
-    ...items.filter( existing => keyFn( existing ) !== keyFn( item ) ),
-  ].slice( 0, cap );
-
 // A named search plus a unique id and when it was saved. Searches saved before names
 // existed have no name.
 export type SavedSearch = {
@@ -49,13 +31,6 @@ export type SavedSearch = {
 export type SavedSearchInput = Omit<SavedSearch, "savedAt">;
 
 export interface ExploreV2SearchesSlice {
-  exploreRecentSearches: {
-    subjects: ExploreV2Subject[];
-    places: Place[];
-    recordSubject: ( _subject: ExploreV2Subject ) => void;
-    recordPlace: ( _place: Place ) => void;
-    clearRecents: ( ) => void;
-  };
   exploreSavedSearches: {
     searches: SavedSearch[];
     saveSearch: ( _search: SavedSearchInput ) => void;
@@ -69,37 +44,6 @@ export interface ExploreV2SearchesSlice {
 }
 
 const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set => ( {
-  exploreRecentSearches: {
-    subjects: [],
-    places: [],
-    recordSubject: subject => set( state => ( {
-      exploreRecentSearches: {
-        ...state.exploreRecentSearches,
-        subjects: addRecent(
-          state.exploreRecentSearches.subjects,
-          subject,
-          subjectKey,
-        ),
-      },
-    } ) ),
-    recordPlace: place => set( state => ( {
-      exploreRecentSearches: {
-        ...state.exploreRecentSearches,
-        places: addRecent(
-          state.exploreRecentSearches.places,
-          place,
-          placeKey,
-        ),
-      },
-    } ) ),
-    clearRecents: ( ) => set( state => ( {
-      exploreRecentSearches: {
-        ...state.exploreRecentSearches,
-        subjects: [],
-        places: [],
-      },
-    } ) ),
-  },
   exploreSavedSearches: {
     searches: [],
     saveSearch: search => set( state => ( {

@@ -1,7 +1,6 @@
 import mockOs from "os";
 import mockPath from "path";
 import {
-  countOfflineObservations,
   downloadOfflineExploreResults,
   offlineExploreRealmConfig,
   openOfflineExploreRealm,
@@ -59,8 +58,8 @@ beforeAll( async ( ) => {
 } );
 
 describe( "offline explore results", ( ) => {
-  it( "merges saves without duplicates", ( ) => {
-    expect( countOfflineObservations( ) ).toBe( 2 );
+  it( "merges saves without duplicates", async ( ) => {
+    expect( await uuids( { } ) ).toHaveLength( 2 );
   } );
 
   it( "filters by taxon and its descendants", async ( ) => {

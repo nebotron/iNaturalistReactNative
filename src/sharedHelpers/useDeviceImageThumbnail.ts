@@ -165,8 +165,7 @@ const GENERATION_TIMEOUT_MS = 15000;
 const HIGH_QUALITY_GENERATION_TIMEOUT_MS = 120000;
 
 // Distinguishes a timeout from a genuine result so the caller can log which
-// one happened -- both used to just come back as null, which made a timed-out
-// high-quality decode indistinguishable from one that legitimately failed.
+// one happened.
 const raceWithTimeout = (
   promise: Promise<string>,
   maxPixel: number,

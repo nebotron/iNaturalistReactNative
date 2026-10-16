@@ -14,14 +14,6 @@ import colors from "styles/tailwindColors";
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
 import ClipPlayButton from "./ClipPlayButton";
 
-export const clipLabelText = ( label?: { taxonId?: number | null; name: string | null } ) => {
-  if ( !label ) return null;
-  if ( label.taxonId === undefined ) return "Labeled: wrong ID";
-  return label.taxonId === null
-    ? "Labeled: no organism"
-    : `Labeled: ${label.name}`;
-};
-
 const { useQuery } = RealmContext;
 
 const TAG_SHADES = { true: "rgba(116, 172, 0, 0.2)", false: "rgba(155, 16, 16, 0.15)" };

@@ -924,9 +924,6 @@ MAP = MAP
 Map-Area = Map Area
 # Month of March
 March = March
-# Title for section of observation filters for controls over whether you have
-# Button to mark an observation as reviewed by the current user
-Mark-as-reviewed = Mark as reviewed
 # Button that marks the selected photos as already saved, so they get hidden by
 # the "Hide Saved" toggle in the photo picker
 Mark-photos-as-already-saved = Mark as Saved
@@ -977,17 +974,11 @@ MOST-FAVED = MOST FAVED
 Most-faved = Most faved
 # Label for species sort order, this option is selected by default
 Most-Observed-Default = Most Observed (Default)
-# Label for the lifers sort order that puts the most recently observed
-# species first, this option is selected by default
-Most-Recent-Default = Most Recent (Default)
 # Description for the most faved observations sort order
 Most-to-least-faved = Most to least faved
 # Title for section in Notifications showing notifications about observations
 # created by the viewer. Should be 16 characters or fewer or it will be ellipsized.
 MY-CONTENT--notifications = MY CONTENT
-# Label for a menu item and screen title showing the first time the user
-# observed each species they've seen, newest to oldest
-MY-LIFERS = MY LIFERS
 # Label for a menu item and screen title showing identifications the user
 # made that are outliers, disagreeing with the community taxon
 MY-MAVERICK-IDS = MY MAVERICK IDS
@@ -1344,9 +1335,6 @@ Ranks-ZOOSECTION = ZOOSECTION
 Ranks-Zoosection = Zoosection
 Ranks-ZOOSUBSECTION = ZOOSUBSECTION
 Ranks-Zoosubsection = Zoosubsection
-# Label for the lifers sort order that puts the species with the fewest
-# observations on iNaturalist first
-Rarest = Rarest
 Read-more-on-Wikipedia = Read more on Wikipedia
 # Help text for the button that opens the sound recorder
 Record-a-sound = Record a sound
@@ -1556,9 +1544,7 @@ sound-recorder-help-Try-to-isolate = Try to isolate the sound of a single organi
 Sounds = Sounds
 Source-List = <0>(Source List: </0><1>{ $source }</1><0>)</0>
 Species = Species
-Species-I-havent-observed = Species I haven't observed
 Species-View = Species View
-Species-with-the-fewest-observations-on-iNaturalist-appear-first = Species with the fewest observations on iNaturalist appear first
 Species-with-the-least-observations-appear-first = Species with the least observations appear first
 Species-with-the-most-observations-appear-first = Species with the most observations appear first
 SPECIES-WITHOUT-NUMBER =
@@ -1566,7 +1552,6 @@ SPECIES-WITHOUT-NUMBER =
         [one] SPECIES
        *[other] SPECIES
     }
-Species-you-observed-most-recently-appear-first = Species you observed most recently appear first
 # Label for the standard map type
 Standard--map-type = Standard
 # Placeholder text for the start location input in the Wildlife Hotspots tool
@@ -1682,8 +1667,6 @@ Unknown--user = Unknown
 # Generic error message
 Unknown-error = Unknown error
 Unknown-organism = Unknown organism
-# Button to remove reviewed status from an observation
-Unmark-as-reviewed = Unmark as reviewed
 # Header title for the Explore context showing species the user has not observed
 Unobserved = Unobserved
 Unobserved-by-me = Unobserved by me

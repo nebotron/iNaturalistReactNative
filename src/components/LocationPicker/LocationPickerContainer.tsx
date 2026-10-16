@@ -110,7 +110,7 @@ const reducer = ( state, action ) => {
     case "HANDLE_REGION_CHANGE":
       return {
         ...state,
-        // The name we have describes wherever the crosshair used to be, so it
+        // The name we have describes where the crosshair was before, so it
         // can't stay on screen - or be saved - alongside the new coordinates.
         // UPDATE_PLACE_NAME fills it back in when the geocoder answers.
         locationName: "",
@@ -243,10 +243,8 @@ const LocationPickerContainer = ( {
 
     // Commit the coordinates before geocoding. Reverse geocoding is a network
     // call that can take up to its 2.5s timeout, and until this dispatch runs
-    // there is nothing for Save to write: a tap in that window used to save the
-    // region the user had already panned away from, or - on an observation that
-    // had no coordinates yet - save nothing at all and just close the screen,
-    // which is what makes the button look unresponsive.
+    // there is nothing for Save to write, so a tap in that window would save
+    // the region the user had already panned away from, or nothing at all.
     regionChangeIdRef.current += 1;
     const regionChangeId = regionChangeIdRef.current;
     dispatch( {

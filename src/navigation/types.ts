@@ -428,7 +428,6 @@ export type BaseTabStackParamList = {
     published_at: string;
     title: string;
   };
-  LifeList: undefined;
   // From UserProfile: { userId }
   WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   AudioId: undefined;

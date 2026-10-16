@@ -89,9 +89,8 @@ const PhotoSharing = ( ) => {
         ? "Match"
         : screenAfterPhotoEvidence );
     } catch ( e ) {
-      // Until now a failed share left no trace at all: the alert is gone as
-      // soon as it is dismissed, and nothing reached the app log to say which
-      // share it was or how far it got.
+      // The alert is gone once dismissed, so this is the only record of which
+      // share failed and how far it got.
       logger.error( "Failed to create an observation from a shared photo", e );
       Alert.alert(
         "Photo sharing failed: couldn't create new observation:",

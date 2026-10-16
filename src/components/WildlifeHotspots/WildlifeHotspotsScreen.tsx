@@ -253,14 +253,10 @@ const WildlifeHotspotsScreen = ( {
   // Index the carousel was scrolled to programmatically (by tapping a map
   // marker), so the resulting snap doesn't redo the selection work.
   const programmaticScrollIndexRef = useRef<number | null>( null );
-  // Memoized so the reference is stable across renders. When no params are
-  // supplied this previously fell through to a fresh `{}` every render, which
-  // — as a dependency of the findHotspots effect below — re-triggered the
-  // effect on each render. That effect also calls setState (setHotspotRouteCoords),
-  // so once both stops were confirmed it looped indefinitely ("Maximum update
-  // depth exceeded"), breaking the screen right after addresses were entered.
-  // Keyed on content, since the embedded Explore view passes a new object
-  // every render.
+  // Memoized on content so the reference is stable across renders (the
+  // embedded Explore view passes a new object every render). It's a dependency
+  // of the findHotspots effect below, which sets state, so a new reference each
+  // render would loop ("Maximum update depth exceeded").
   const rawFilterParams = filterParamsProp ?? route?.params?.filterParams;
   const filterParamsKey = JSON.stringify( rawFilterParams ?? {} );
   const filterParams = useMemo(

@@ -1,6 +1,5 @@
 import {
   appendPhotosToObservation,
-  buildGroupedMediaItems,
   createObservationFromGroupedMedia,
 } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
 import Observation from "realmModels/Observation";
@@ -28,16 +27,6 @@ jest.mock( "realmModels/ObservationPhoto", ( ) => ( {
 describe( "photoLibraryMediaHelpers", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
-  } );
-
-  describe( "buildGroupedMediaItems", ( ) => {
-    it( "should create one group per photo", ( ) => {
-      expect( buildGroupedMediaItems(
-        [{ image: { uri: "file://photo.jpg", type: "image/jpeg" } }],
-      ) ).toEqual( [
-        { photos: [{ image: { uri: "file://photo.jpg", type: "image/jpeg" } }] },
-      ] );
-    } );
   } );
 
   describe( "createObservationFromGroupedMedia", ( ) => {

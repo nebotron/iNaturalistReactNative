@@ -420,7 +420,7 @@ export const useGestures = ( {
   // the fingers move and spread, so zooming follows the fingers and a
   // two-finger drag pans. Folding pan into the pinch (rather than running a
   // separate averageTouches pan gesture alongside it) avoids the double-counted
-  // translation that previously caused jitter, and it is exact at any scale so
+  // translation that causes jitter, and it is exact at any scale so
   // the point under the fingers does not drift even at high maxScale.
   const pinchGesture = Gesture.Pinch()
     .enabled( isPinchEnabled )

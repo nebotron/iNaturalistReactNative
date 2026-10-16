@@ -1,5 +1,5 @@
-import type { Lifer } from "components/LifeList/LifeListContainer";
-import { LiferGridItem } from "components/LifeList/LifeListContainer";
+import type { Lifer } from "components/LifeList/LiferGridItem";
+import { LiferGridItem } from "components/LifeList/LiferGridItem";
 import React, {
   useEffect, useMemo, useRef, useState,
 } from "react";

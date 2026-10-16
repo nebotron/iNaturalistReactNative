@@ -64,11 +64,6 @@ async function logRawImportMetadata(
 ): Promise<Cr3Summary | null> {
   const source = sourceUris.find( uri => isCanonRawUri( uri ) );
   if ( !source ) {
-    // This used to log what the import carried instead, because four imports of
-    // camera raws on Aug 20 produced no line here at all. Ninety-nine lines
-    // later the answer has not varied once — every uri is a file:// jpg, the
-    // library's own export of the raw — so the question is answered and the
-    // line is only volume.
     return null;
   }
   const derived = derivedUris.find( Boolean );

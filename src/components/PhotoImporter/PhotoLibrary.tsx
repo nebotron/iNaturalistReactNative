@@ -286,8 +286,7 @@ const PhotoLibrary = ( ) => {
 
     // A single flaky asset (e.g. an iCloud photo whose bytes fail to download,
     // surfaced as the opaque "PHPhotosErrorDomain error -1") must not abort
-    // the whole batch — that previously rejected the entire import and threw
-    // the user out of the observation flow even when most photos copied fine.
+    // the whole batch and throw the user out of the observation flow.
     const copyNodeOrNull = async ( node: PhotoNode ) => {
       try {
         const copied = await copyNode( node );
@@ -348,9 +347,8 @@ const PhotoLibrary = ( ) => {
       [...photoNodes, ...videoNodes].map( node => node.image.fileSize ),
     );
     // An import the app never comes back from — see photoImportMarker.ts. The
-    // marker is reported by the next launch, not here. The picker used to own
-    // this, but it now hands the import off and returns, so the wait that can
-    // wedge is this one.
+    // marker is reported by the next launch, not here. The picker hands the
+    // import off and returns, so the wait that can wedge is this one.
     markPhotoImportStarted( total );
     let settled = 0;
     let failed = 0;

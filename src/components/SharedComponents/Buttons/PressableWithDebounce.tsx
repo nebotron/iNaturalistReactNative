@@ -54,10 +54,9 @@ const PressableWithDebounce = ( {
 
     setIsProcessing( true );
 
-    // Scheduled before the handler runs: see the same fix in Button.tsx. A
-    // handler that throws used to skip this and leave isProcessing latched on,
-    // which the guard above then turns into a Pressable that ignores every
-    // later tap for as long as the screen stays mounted.
+    // Scheduled before the handler runs, as in Button.tsx, so a handler that
+    // throws can't leave isProcessing latched on and the Pressable ignoring
+    // every later tap.
     resetTimer.current = setTimeout( ( ) => {
       resetTimer.current = null;
       setIsProcessing( false );

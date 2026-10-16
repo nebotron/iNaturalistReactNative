@@ -134,10 +134,3 @@ export function toggleTaxonFilter(
 
   return [...taxonFilters, { taxon: normalizedTaxon, exclude }];
 }
-
-export function removeTaxonFilter(
-  taxonFilters: ExploreTaxonFilter[],
-  taxonId: number,
-): ExploreTaxonFilter[] {
-  return taxonFilters.filter( filter => filter.taxon.id !== taxonId );
-}

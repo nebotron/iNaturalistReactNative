@@ -6,13 +6,7 @@ import { MMKV } from "react-native-mmkv";
 // PhotoKit offers no way to ask, after the fact, whether a given asset was
 // ours — PHAsset.sourceType only separates the user library from shared and
 // synced albums — so the identifier has to be recorded at creation time and
-// kept here.
-//
-// This used to decide how a deletion was split: our assets in a consent-free
-// transaction, everything else in a prompted one. Deletions are a single
-// transaction now (see deletePhotoAssets in ImageCropper.m), so what is left
-// is the record itself — what the app put in the library, pruned as those
-// assets are deleted.
+// kept here, pruned as those assets are deleted.
 
 const store = new MMKV( { id: "app-created-photo-assets" } );
 

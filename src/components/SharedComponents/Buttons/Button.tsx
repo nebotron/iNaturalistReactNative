@@ -218,13 +218,10 @@ const Button = ( {
     }
 
     setIsProcessing( true );
-    // Schedule the re-enable *before* running the handler, not after. A handler
-    // that throws — reading a Realm object the write behind it just
-    // invalidated, say — used to skip this line entirely and leave the button
-    // disabled for as long as its screen stayed mounted, which for a screen
-    // sitting in the navigation stack means until the app is restarted. React
-    // error boundaries don't see throws from event handlers, so nothing on
-    // screen said why the button had stopped answering taps.
+    // Schedule the re-enable *before* running the handler, so a handler that
+    // throws (e.g. reading a Realm object the write behind it just invalidated)
+    // can't leave the button disabled while its screen stays mounted. Error
+    // boundaries don't see throws from event handlers.
     resetTimer.current = setTimeout( ( ) => {
       resetTimer.current = null;
       setIsProcessing( false );

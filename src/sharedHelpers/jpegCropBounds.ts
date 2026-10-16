@@ -7,16 +7,6 @@ export interface PixelCrop {
   height: number;
 }
 
-export function isPixelCropBlockAligned(
-  crop: PixelCrop,
-  blockSize = JPEG_COMPRESSION_BLOCK_SIZE,
-): boolean {
-  return crop.originX % blockSize === 0
-    && crop.originY % blockSize === 0
-    && crop.width % blockSize === 0
-    && crop.height % blockSize === 0;
-}
-
 export function alignPixelCropOutwardToJpegBlocks(
   crop: PixelCrop,
   imageWidth: number,

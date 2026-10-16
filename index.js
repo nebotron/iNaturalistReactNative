@@ -49,10 +49,6 @@ this.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true;
 // traces
 if (
   !__DEV__
-  // The parens used to wrap the whole comparison, so this was
-  // `typeof ( ... === "function" )` — always the string "boolean", i.e. always
-  // truthy. The guard only worked because RN always runs Hermes; on any engine
-  // without the tracker it would have thrown at startup.
   // $FlowIgnore
   && typeof HermesInternal?.enablePromiseRejectionTracker === "function"
 ) {

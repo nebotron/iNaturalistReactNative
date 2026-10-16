@@ -46,23 +46,13 @@ const config = {
 
 const mergedConfig = mergeConfig( getDefaultConfig( __dirname ), config );
 
-// Stamp the git commit once here, at config load, so the module exists before
-// Metro resolves anything. The per-build hook below cannot do this job alone:
-// it runs after dependency resolution, so it can refresh a stale stamp but not
-// create a missing one, and the file is gitignored. Until now it was written by
-// `postinstall`, which meant a build that skipped `npm ci` never had it — the
-// Sep 23 TestFlight archive failed outright on `Unable to resolve module
-// sharedHelpers/appCommit` the first time the CI node_modules cache hit.
+// Stamp the git commit at config load, so the gitignored module exists before
+// Metro resolves anything (e.g. a CI build that skipped `npm ci`).
 writeAppCommit( );
 
-// And again before every bundle build, for freshness. Stamping only at config
-// load would cover just the bundle built by that Metro process: a dev server
-// started before a rebase keeps serving newly pulled code under the commit it
-// happened to start on, which is the failure this is here to prevent. Metro
-// calls this at the start of each graph build, so `start`, `run-ios`,
-// `run-android` and `react-native bundle` are all covered. writeAppCommit only
-// touches the file when the commit actually changes, so the module Metro
-// watches is invalidated once per checkout rather than once per reload.
+// And again at the start of every graph build, so a long-running dev server
+// picks up a new commit after a rebase. writeAppCommit only touches the file
+// when the commit changes.
 const { getTransformOptions } = mergedConfig.transformer;
 mergedConfig.transformer.getTransformOptions = async ( ...args ) => {
   writeAppCommit( );
