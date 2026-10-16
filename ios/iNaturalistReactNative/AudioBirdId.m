@@ -257,7 +257,16 @@ RCT_EXPORT_METHOD( saveClip:( NSString * )path
       AVAudioPCMBuffer *buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
                                                               frameCapacity:frames];
       buffer.frameLength = frames;
-      if ( buffer ) memcpy( buffer.floatChannelData[0], window.bytes, window.length );
+      if ( buffer ) {
+        // Measurement mode records without gain control, so clips are quiet;
+        // normalize the peak to -1 dBFS, with at most 24 dB of gain.
+        float *samples = buffer.floatChannelData[0];
+        memcpy( samples, window.bytes, window.length );
+        float peak = 0;
+        vDSP_maxmgv( samples, 1, &peak, frames );
+        float gain = peak > 0 ? MIN( 0.89f / peak, 16.0f ) : 1;
+        vDSP_vsmul( samples, 1, &gain, samples, 1, frames );
+      }
       BOOL ok = file && buffer && [file writeFromBuffer:buffer error:&error];
       file = nil; // closes the file
       if ( ok ) resolve( path ); else reject( @"clip", error.localizedDescription ?: @"Could not save the clip", error );
