@@ -455,6 +455,19 @@ RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
   } );
 }
 
+RCT_EXPORT_METHOD( getBrightness:( RCTPromiseResolveBlock )resolve
+                   reject:( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    resolve( @( UIScreen.mainScreen.brightness ) );
+  } );
+}
+
+RCT_EXPORT_METHOD( setBrightness:( double )value )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{ UIScreen.mainScreen.brightness = value; } );
+}
+
 // Measurement mode plays back far quieter through the speaker, so clips play
 // in the default mode while listening; detections pause during playback anyway.
 RCT_EXPORT_METHOD( setPlayingClip:( BOOL )playing )

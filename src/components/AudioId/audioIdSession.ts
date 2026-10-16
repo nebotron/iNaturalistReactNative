@@ -30,6 +30,8 @@ export const { AudioBirdId } = NativeModules as {
     setPlayingClip: ( playing: boolean ) => void;
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     vibrateHaptics: ( ) => Promise<{ allowed: boolean; error: string | null }>;
+    getBrightness: ( ) => Promise<number>;
+    setBrightness: ( value: number ) => void;
     notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
     saveClip: ( path: string, seconds: number, endFrame: number ) => Promise<string>;
@@ -193,6 +195,61 @@ export const vibrate = ( haptics = false ) => {
     .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
 };
 
+// While the screen is focused it dims after DIM_AFTER_MS without a touch, and
+// an alert brightens it fully for FLASH_MS.
+const DIM_AFTER_MS = 30000;
+const FLASH_MS = 3000;
+const DIM = 0.05;
+let userBrightness: number | null = null; // null while the screen isn't focused
+let dimmed = false;
+let flashing = false;
+let dimTimer: ReturnType<typeof setTimeout> | undefined;
+let flashTimer: ReturnType<typeof setTimeout> | undefined;
+const applyBrightness = ( ) => {
+  if ( userBrightness === null ) return;
+  let value = dimmed
+    ? DIM
+    : userBrightness;
+  if ( flashing ) value = 1;
+  AudioBirdId?.setBrightness( value );
+};
+export const noteActivity = ( ) => {
+  if ( userBrightness === null ) return;
+  clearTimeout( dimTimer );
+  dimTimer = setTimeout( ( ) => {
+    dimmed = true;
+    applyBrightness( );
+  }, DIM_AFTER_MS );
+  if ( dimmed ) {
+    dimmed = false;
+    applyBrightness( );
+  }
+};
+export const startDimming = async ( ) => {
+  const b = await AudioBirdId?.getBrightness( ).catch( ( ) => null );
+  if ( b == null ) return;
+  userBrightness = b;
+  dimmed = false;
+  noteActivity( );
+};
+export const stopDimming = ( ) => {
+  clearTimeout( dimTimer );
+  clearTimeout( flashTimer );
+  dimmed = false;
+  flashing = false;
+  applyBrightness( );
+  userBrightness = null;
+};
+const flashScreen = ( ) => {
+  flashing = true;
+  applyBrightness( );
+  clearTimeout( flashTimer );
+  flashTimer = setTimeout( ( ) => {
+    flashing = false;
+    applyBrightness( );
+  }, FLASH_MS );
+};
+
 // Echo cancellation would need iOS voice processing, which also applies
 // speech noise suppression and gain control that distort bird calls, so
 // instead runs (and their clips) are dropped when their 5 s window overlaps
@@ -280,6 +337,7 @@ const onScores = ( event: ScoresEvent ) => {
   } );
   if ( alerts.length > 0 ) {
     vibrate( );
+    flashScreen( );
     AudioBirdId?.notify(
       `Heard ${alerts.map( sp => sp.commonName ).join( ", " )}`,
       alerts.map( sp => ( seen && !seen.has( sp.taxonId )

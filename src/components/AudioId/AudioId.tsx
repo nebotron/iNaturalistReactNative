@@ -19,7 +19,9 @@ import useStore from "stores/useStore";
 import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import type { Heard } from "./audioIdSession";
-import useAudioIdSession, { heardIn, vibrate } from "./audioIdSession";
+import useAudioIdSession, {
+  heardIn, noteActivity, startDimming, stopDimming, vibrate,
+} from "./audioIdSession";
 
 // Animal classes the model covers, for asking which of them the user has seen.
 const SEEN_TAXON_IDS = [
@@ -108,7 +110,9 @@ const AudioId = ( ) => {
   // the keep-awake an in-progress upload holds
   useFocusEffect( useCallback( ( ) => {
     activateKeepAwake( );
+    startDimming( );
     return ( ) => {
+      stopDimming( );
       if ( useStore.getState( ).uploadStatus !== UPLOAD_IN_PROGRESS ) deactivateKeepAwake( );
     };
   }, [] ) );
@@ -193,7 +197,7 @@ const AudioId = ( ) => {
   );
 
   return (
-    <ScrollView className="bg-white h-full px-5 pt-4">
+    <ScrollView className="bg-white h-full px-5 pt-4" onTouchStart={noteActivity}>
       <Body3 className="mb-3">
         {"Identifies "}
         {setup
