@@ -18,19 +18,12 @@ import useStore from "stores/useStore";
 
 import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
+import { SOUND_TAXON_IDS } from "./audioIdModel";
 import type { Heard } from "./audioIdSession";
 import useAudioIdSession, {
   heardIn, noteActivity, startDimming, stopDimming, vibrate,
 } from "./audioIdSession";
 
-// Animal classes the model covers, for asking which of them the user has seen.
-const SEEN_TAXON_IDS = [
-  3, // birds
-  20978, // amphibians
-  47158, // insects
-  40151, // mammals
-  26036, // reptiles
-].join( "," );
 const SEEN_MAX_PAGES = 10;
 
 // Taxon IDs the user has research-grade observations of, including the
@@ -50,7 +43,7 @@ const useSeenTaxonIds = (
         const p = await fetchSpeciesCounts( {
           user_id: userId,
           quality_grade: "research",
-          taxon_id: SEEN_TAXON_IDS,
+          taxon_id: SOUND_TAXON_IDS,
           d1,
           per_page: 500,
           page,

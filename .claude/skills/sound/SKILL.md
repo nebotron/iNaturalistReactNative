@@ -80,3 +80,31 @@ notes of what did and did not work at the end of this skill.
   74 wrong for recall 0.706; 0.7 leaves 3.
 - To sweep thresholds offline, dump per-window scores and geomodel values for the
   `eval_regions.py` recordings once (~45 min on 4 CPUs), then rescore from the dump.
+
+### Session 4 (184 labels: 75 right, 109 wrong; 24 now carry location, all Seattle)
+
+- Since the 0.5 threshold (34ec957): 22 right, 2 wrong (Clark's Nutcracker, Red Fox).
+  With logged ≥ 0.5 over all labels: 70 right, 38 wrong.
+- **Shipped**: iNaturalist nearby filter (`fetchNearbyTaxa`, applied to scores in
+  `onScores`). Species need ≥ 2e-5 × the area's verifiable observations within 25 km;
+  areas under 100k aren't filtered (rural Wyoming has 2 species with ≥ 20). The geomodel
+  passes Blue Jay (0.056), Nutcracker (0.055), Red Fox (0.099) at Seattle; iNat has 0–5
+  observations within 25 km. Field (≥ 0.5): 70/38 → 70/24. Recall on the 700
+  `eval_regions.py` recordings (counts with `id_below` the recording): 99.3% keep the
+  true species; a fixed count of 20 kept only 89% (insects, eastern Australia).
+  Unlocated labels were assumed to be Seattle (the located ones all are).
+- Speech is the main noise source: YAMNet's top class was Speech on 59 of 97 wrong clips
+  vs 8 of 71 right; Harbor Seal / Red Fox detections are mostly people talking. A gate on
+  mean YAMNet speech (classes 0–4) < 0.4 over the clip: 62/35 → 62/27 (logged ≥ 0.5,
+  clips only); < 0.3 → 60/21 (loses 2 crows talked over). With the nearby filter: 70/20.
+  Not shipped: needs YAMNet in the app (4 MB tflite; app runs ONNX), and many seal/fox
+  clips predate 3d4ee64 so they lag the scored window. Worth doing if wrong seals persist.
+- BirdNET v3 has no noise / human classes (unlike v2.4); its "Animalia" class is always 0.
+- Retraining: a linear speech probe on BirdNET's 1280-d embeddings (full model's second
+  output), YAMNet as teacher, 1,559 windows of 599 iNat recordings: held-out AUC 0.78,
+  0.82 on field clips; every cutoff dropped right detections. Not useful at this data
+  size; would need a real speech set (e.g. LibriSpeech) mixed with outdoor audio.
+- The fp16 model returns NaN on clipped input (−1 to 0 dBFS; e.g. 18 of 1,777 windows,
+  the two Trumpeter Swan clips), so such windows report nothing.
+- Repro scripts were ad hoc (scratchpad); the recall check is
+  `observations?verifiable=true&taxon_id=T&lat&lng&radius=25&id_below=<obs id>`.

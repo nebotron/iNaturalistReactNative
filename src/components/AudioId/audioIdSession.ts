@@ -8,7 +8,7 @@ import { create } from "zustand";
 
 import useAudioIdHistory, { clipPath, contextClipPath } from "./audioIdHistory";
 import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
-import { prepareAudioId } from "./audioIdModel";
+import { fetchNearbyTaxa, prepareAudioId } from "./audioIdModel";
 
 // The Audio ID listening session, kept outside the screen so it carries on
 // while the user is elsewhere in the app or the app is in the background. The
@@ -133,6 +133,8 @@ interface AudioIdState {
   inferMs: number;
   heard: Record<number, Heard>; // by taxon ID
   setup: AudioIdSetup | null;
+  // Taxa observed enough near where listening started; null to not filter
+  nearby: Set<number> | null;
   seen: Set<number> | null; // null when signed out
   // Seen at research grade in the last 30 days
   recent: Set<number> | null;
@@ -153,6 +155,7 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
   inferMs: 0,
   heard: heardStore.loadAll( ),
   setup: null,
+  nearby: null,
   seen: null,
   recent: null,
   setSeen: ( seen, recent ) => set( { seen, recent } ),
@@ -166,8 +169,16 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
     callClips.clear( );
     try {
       const s = await prepareAudioId( AudioBirdId.geo );
-      set( { setup: s } );
+      set( { setup: s, nearby: null } );
       sessionLocation = s.location;
+      if ( s.location ) {
+        fetchNearbyTaxa( s.location ).then( nearby => {
+          logger.info( `nearby taxa: ${nearby
+            ? nearby.size
+            : "not filtering"}` );
+          useAudioIdSession.setState( { nearby } );
+        } ).catch( ( e: Error ) => logger.error( `nearby taxa failed: ${e.message}` ) );
+      }
       const mic = await AudioBirdId.start( s.outputs, THRESHOLD );
       logger.info( `started, ${s.species.length} species, located ${s.located}, `
         + `mic ${mic.sampleRate} Hz x${mic.channels}` );
@@ -265,10 +276,13 @@ let runs: ScoresEvent[] = [];
 const onScores = ( event: ScoresEvent ) => {
   const { level } = event;
   const {
-    setup, seen, recent, heard,
+    setup, nearby, seen, recent, heard,
   } = useAudioIdSession.getState( );
-  const { scores } = event;
   const sps = setup?.species || [];
+  const scores = nearby
+    ? Object.fromEntries( Object.entries( event.scores )
+      .filter( ( [i] ) => nearby.has( sps[Number( i )]?.taxonId ) ) )
+    : event.scores;
   runs.push( event );
   if ( runs.length >= LOG_EVERY ) {
     const best = runs.reduce( ( b, r ) => Object.entries( r.scores ).reduce(

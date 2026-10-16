@@ -69,3 +69,13 @@ Seal odds by about 3 near Puget Sound, and all 74 non-bird detections users
 labeled were wrong (46 Harbor Seal, 25 Red Fox). Without it, 28 of the 74 would
 still have been reported; on the 700 recordings non-bird recall went from
 0.777 to 0.754.
+
+Species rarely observed on iNaturalist near the user are also left out when
+the network is available (October 2026, `fetchNearbyTaxa` in
+`audioIdModel.ts`): a species needs at least 2e-5 of the verifiable
+observations within 25 km (20 around Seattle), and areas with under 100,000
+are not filtered. On these 700 recordings, counting only observations made
+before each one, it kept the true species for 99.3% (every bird set 100%). It
+dropped 38 of the 109 wrong detections users labeled (all Red Fox,
+Clay-colored Sparrow, Blue Jay, Rock Wren, Clark's Nutcracker and others the
+geomodel passes) and no right ones.
