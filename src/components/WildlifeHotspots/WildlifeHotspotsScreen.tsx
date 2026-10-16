@@ -54,7 +54,7 @@ const INITIAL_REGION: Region = {
   longitudeDelta: 100,
 };
 // Number of recently entered addresses to offer before the user types.
-const RECENT_ADDRESS_COUNT = 4;
+const RECENT_ADDRESS_COUNT = 10;
 
 function toMapCoord( pt: RoutePoint ): LatLng {
   return { latitude: pt.latitude, longitude: pt.longitude };
