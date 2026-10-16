@@ -233,9 +233,9 @@ function formatISONoTimezone( date: Date | null ): string {
   return formattedISODate.substring( 0, 19 );
 }
 
-// "2022-12-31 23:59:59", as shown in the photo picker
+// "2022-12-31 11:59:59 PM"
 function formatISOTimestamp( ms: number ): string {
-  return formatISONoTimezone( new Date( ms ) ).replace( "T", " " );
+  return format( new Date( ms ), "yyyy-MM-dd h:mm:ss a" );
 }
 
 // two options for observed_on_string in uploader are:
