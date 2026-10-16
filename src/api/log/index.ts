@@ -1,3 +1,4 @@
+import { AppState } from "react-native";
 import Config from "react-native-config";
 import type { transportFunctionType } from "react-native-logs";
 // The git commit the bundle was built from (see scripts/writeAppCommit.js).
@@ -95,10 +96,73 @@ function redactExtra( extra: Record<string, unknown> ) {
 // our transport has no options but this needs to be explicitly `object` for generic typing
 type firebaseLogTransportOptions = object;
 
-// Custom transport that appends each log line as a push-ID child of
+// Lines are sent in batches, one PATCH of push-ID children per batch, rather
+// than one POST per line.
+const FLUSH_MS = 10000;
+const MAX_BATCH = 20;
+let queue: Record<string, { level: string }> = {};
+let queued = 0;
+let flushTimer: ReturnType<typeof setTimeout> | undefined;
+
+// Client-side Firebase push IDs: a timestamp prefix, so app_log.py's $key
+// ordering stays chronological, and random characters to keep them unique.
+const PUSH_CHARS = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+const pushId = ( ) => {
+  let time = Date.now( );
+  let id = "";
+  for ( let i = 0; i < 8; i += 1 ) {
+    id = PUSH_CHARS.charAt( time % 64 ) + id;
+    time = Math.floor( time / 64 );
+  }
+  for ( let i = 0; i < 12; i += 1 ) {
+    id += PUSH_CHARS.charAt( Math.floor( Math.random( ) * 64 ) );
+  }
+  return id;
+};
+
+export const flushLogs = async ( ) => {
+  clearTimeout( flushTimer );
+  flushTimer = undefined;
+  if ( queued === 0 ) return;
+  const batch = queue;
+  queue = {};
+  queued = 0;
+  const body = JSON.stringify( batch );
+  // A batch holding an error gets a few retries rather than being dropped on a
+  // transient network failure. Others sync once to avoid amplifying
+  // high-volume info logging.
+  const maxAttempts = Object.values( batch ).some( e => e.level === "error" )
+    ? 3
+    : 1;
+  for ( let attempt = 1; attempt <= maxAttempts; attempt += 1 ) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await fetch( `${Config.CROP_LOG_FIREBASE_URL}/app_log.json`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body,
+      } );
+      if ( r.ok ) return;
+    } catch {
+      // Retry below, or give up once the loop runs out of attempts. Never
+      // rethrow: we log to report errors, so failing to log must stay silent.
+    }
+    if ( attempt < maxAttempts ) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise( resolve => { setTimeout( resolve, 500 * attempt ); } );
+    }
+  }
+};
+
+// iOS may suspend or kill the app once it's backgrounded.
+AppState.addEventListener( "change", state => {
+  if ( state === "background" ) flushLogs( );
+} );
+
+// Custom transport that queues each log line as a push-ID child of
 // {CROP_LOG_FIREBASE_URL}/app_log. The log DB allows unauthenticated
 // writes, so no auth token is needed (same as the crop/brightness logs).
-const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> = async props => {
+const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> = props => {
   // Don't bother to log from dev builds
   if ( __DEV__ ) return;
 
@@ -144,30 +208,14 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
       : {} ),
   };
 
-  const body = JSON.stringify( entry );
-  // Errors are the entries we most need to keep, so give them a few retries
-  // rather than dropping them on a transient network failure. Non-errors sync
-  // once to avoid amplifying high-volume info logging.
-  const maxAttempts = props.level.text === "error"
-    ? 3
-    : 1;
-  for ( let attempt = 1; attempt <= maxAttempts; attempt += 1 ) {
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      const r = await fetch( `${baseUrl}/app_log.json`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body,
-      } );
-      if ( r.ok ) return;
-    } catch {
-      // Retry below, or give up once the loop runs out of attempts. Never
-      // rethrow: we log to report errors, so failing to log must stay silent.
-    }
-    if ( attempt < maxAttempts ) {
-      // eslint-disable-next-line no-await-in-loop
-      await new Promise( resolve => { setTimeout( resolve, 500 * attempt ); } );
-    }
+  queue[pushId( )] = entry;
+  queued += 1;
+  // Errors go out at once, with whatever is queued: they're the entries we
+  // most need, and the one before a crash would otherwise die in the queue.
+  if ( props.level.text === "error" || queued >= MAX_BATCH ) {
+    flushLogs( );
+  } else {
+    flushTimer ??= setTimeout( flushLogs, FLUSH_MS );
   }
 };
 
