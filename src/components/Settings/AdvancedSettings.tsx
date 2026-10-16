@@ -20,33 +20,31 @@ const AdvancedSettings = ( ) => {
   } = useLayoutPrefs();
 
   return (
-    <>
-      <View className="mt-[20px]">
-        <Body2>{ t( "After-capturing-or-importing-photos-show" ) }</Body2>
-        <RadioButtonRow
-          classNames="ml-[6px] mt-[15px]"
-          testID="suggestions-flow-mode"
-          smallLabel
-          checked={screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.SUGGESTIONS}
-          onPress={() => setScreenAfterPhotoEvidence( SCREEN_AFTER_PHOTO_EVIDENCE.SUGGESTIONS )}
-          label={t( "ID-Suggestions" )}
-        />
-        <RadioButtonRow
-          classNames="ml-[6px] mt-[15px]"
-          smallLabel
-          checked={screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.OBS_EDIT}
-          onPress={() => setScreenAfterPhotoEvidence( SCREEN_AFTER_PHOTO_EVIDENCE.OBS_EDIT )}
-          label={t( "Edit-Observation" )}
-        />
-        <RadioButtonRow
-          classNames="ml-[6px] mt-[15px]"
-          smallLabel
-          checked={screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.MATCH}
-          onPress={() => setScreenAfterPhotoEvidence( SCREEN_AFTER_PHOTO_EVIDENCE.MATCH )}
-          label={t( "Match-Screen" )}
-        />
-      </View>
-    </>
+    <View className="mt-[20px]">
+      <Body2>{ t( "After-capturing-or-importing-photos-show" ) }</Body2>
+      <RadioButtonRow
+        classNames="ml-[6px] mt-[15px]"
+        testID="suggestions-flow-mode"
+        smallLabel
+        checked={screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.SUGGESTIONS}
+        onPress={() => setScreenAfterPhotoEvidence( SCREEN_AFTER_PHOTO_EVIDENCE.SUGGESTIONS )}
+        label={t( "ID-Suggestions" )}
+      />
+      <RadioButtonRow
+        classNames="ml-[6px] mt-[15px]"
+        smallLabel
+        checked={screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.OBS_EDIT}
+        onPress={() => setScreenAfterPhotoEvidence( SCREEN_AFTER_PHOTO_EVIDENCE.OBS_EDIT )}
+        label={t( "Edit-Observation" )}
+      />
+      <RadioButtonRow
+        classNames="ml-[6px] mt-[15px]"
+        smallLabel
+        checked={screenAfterPhotoEvidence === SCREEN_AFTER_PHOTO_EVIDENCE.MATCH}
+        onPress={() => setScreenAfterPhotoEvidence( SCREEN_AFTER_PHOTO_EVIDENCE.MATCH )}
+        label={t( "Match-Screen" )}
+      />
+    </View>
   );
 };
 
