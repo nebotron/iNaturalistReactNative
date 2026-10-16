@@ -9,7 +9,7 @@ import {
   Button,
 } from "components/SharedComponents";
 import { getMapRegion } from "components/SharedComponents/Map/helpers/mapHelpers";
-import Map from "components/SharedComponents/Map/Map";
+import MapComponent from "components/SharedComponents/Map/Map";
 import { View } from "components/styledComponents";
 import LocationIndicatorIcon from "images/svg/location_indicator.svg";
 import React, {
@@ -210,7 +210,7 @@ export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
 
   return (
     <View className="flex-1 overflow-hidden h-full">
-      <Map
+      <MapComponent
         initialRegion={region}
         isLoading={false}
         onRegionChangeComplete={( _region, bounds ) => bounds && onBoundsChange?.( bounds )}
