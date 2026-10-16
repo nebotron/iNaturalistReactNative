@@ -12,6 +12,7 @@ import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import colors from "styles/tailwindColors";
 
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
+import AudioIdSoundsLink from "./AudioIdSoundsLink";
 import ClipPlayButton from "./ClipPlayButton";
 
 const { useQuery } = RealmContext;
@@ -57,6 +58,7 @@ const AudioIdHistory = ( ) => {
           <List2 className="italic">{sp.name}</List2>
         </View>
       )}
+      <AudioIdSoundsLink taxonId={taxonId} />
       {ofSpecies.length === 0 && <Body3 className="py-2">No clips saved yet.</Body3>}
       {ofSpecies.map( clip => (
         <Swipeable
