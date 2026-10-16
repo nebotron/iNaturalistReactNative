@@ -11,6 +11,7 @@ import {
 import { getMapRegion } from "components/SharedComponents/Map/helpers/mapHelpers";
 import Map from "components/SharedComponents/Map/Map";
 import { View } from "components/styledComponents";
+import LocationIndicatorIcon from "images/svg/location_indicator.svg";
 import React, {
   useEffect, useMemo, useState, useSyncExternalStore,
 } from "react";
@@ -232,7 +233,9 @@ export const OfflineMapView = ( { queryParams }: { queryParams: Params } ) => {
                 coordinate={coordinate}
                 tracksViewChanges={false}
                 onPress={( ) => navigation.navigate( "ObsDetails", { uuid } )}
-              />
+              >
+                <LocationIndicatorIcon width={25} height={32} />
+              </Marker>
             ) )}
           </>
         )}
