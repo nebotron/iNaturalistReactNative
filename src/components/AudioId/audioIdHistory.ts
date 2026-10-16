@@ -1,4 +1,4 @@
-import { DocumentDirectoryPath, readFile } from "@dr.pogodin/react-native-fs";
+import { DocumentDirectoryPath, readFile, unlink } from "@dr.pogodin/react-native-fs";
 import { isCurrentUser } from "components/LoginSignUp/AuthenticationService";
 import Config from "react-native-config";
 import { zustandStorage } from "stores/useStore";
@@ -59,6 +59,7 @@ interface AudioIdHistoryState {
   ) => Promise<void>;
   unlabelClip: ( id: string ) => void;
   tagClip: ( id: string, correct: boolean ) => void;
+  deleteClip: ( id: string ) => void;
 }
 
 // Whether the user tagged the clip's ID right (true) or wrong (false).
@@ -137,6 +138,12 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
     if ( isClipCorrect( clip ) === correct ) get( ).unlabelClip( id );
     else if ( correct ) get( ).labelClip( id, clip.sp.taxonId, clip.sp.name );
     else get( ).labelClip( id, undefined, null );
+  },
+  deleteClip: id => {
+    const { [id]: _deleted, ...clips } = get( ).clips;
+    set( { clips } );
+    unlink( clipPath( id ) ).catch( ( ) => undefined );
+    unlink( contextClipPath( id ) ).catch( ( ) => undefined );
   },
 } ), {
   name: "audio-id-history",

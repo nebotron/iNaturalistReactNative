@@ -1,11 +1,12 @@
 /* eslint-disable i18next/no-literal-string */
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
-  Body1, Body3, INatIconButton, List2,
+  Body1, Body3, INatIcon, INatIconButton, List2,
 } from "components/SharedComponents";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React from "react";
+import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Observation from "realmModels/Observation";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import colors from "styles/tailwindColors";
@@ -34,6 +35,7 @@ const AudioIdHistory = ( ) => {
   const { taxonId, sessionId } = params as { taxonId?: number; sessionId?: string };
   const clips = useAudioIdHistory( state => state.clips );
   const tagClip = useAudioIdHistory( state => state.tagClip );
+  const deleteClip = useAudioIdHistory( state => state.deleteClip );
   const session = useAudioIdHistory( state => ( sessionId
     ? state.sessions[sessionId]
     : undefined ) );
@@ -77,39 +79,50 @@ const AudioIdHistory = ( ) => {
       )}
       {ofSpecies.length === 0 && <Body3 className="py-2">No clips saved yet.</Body3>}
       {ofSpecies.map( clip => (
-        <Pressable
+        <Swipeable
           key={clip.id}
-          accessibilityRole="button"
-          accessibilityHint="Opens the clip's details."
-          className="flex-row items-center py-2 px-2 border-b border-lightGray"
-          style={{ backgroundColor: clipShade( clip ) }}
-          onPress={( ) => navigation.navigate( "AudioIdClip", { id: clip.id } )}
+          rightThreshold={40}
+          onSwipeableOpen={( ) => deleteClip( clip.id )}
+          renderRightActions={( ) => (
+            <View className="bg-warningRed justify-center items-end px-5 w-full">
+              <INatIcon name="trash-outline" color={colors.white} size={22} />
+            </View>
+          )}
+          childrenContainerStyle={{ backgroundColor: colors.white }}
         >
-          <View className="flex-1">
-            {session && <Body1>{clip.sp.commonName}</Body1>}
-            <Body1>
-              {session
-                ? formatISOTimestamp( clip.time ).slice( 11 )
-                : formatISOTimestamp( clip.time )}
-            </Body1>
-            <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
-          </View>
-          <INatIconButton
-            icon="check"
-            color={colors.inatGreen}
-            onPress={( ) => tagClip( clip.id, true )}
-            accessibilityLabel="Right"
-            accessibilityHint="Tags the ID as right."
-          />
-          <INatIconButton
-            icon="close"
-            color={colors.warningRed}
-            onPress={( ) => tagClip( clip.id, false )}
-            accessibilityLabel="Wrong"
-            accessibilityHint="Tags the ID as wrong."
-          />
-          <ClipPlayButton id={clip.id} />
-        </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityHint="Opens the clip's details."
+            className="flex-row items-center py-2 px-2 border-b border-lightGray"
+            style={{ backgroundColor: clipShade( clip ) }}
+            onPress={( ) => navigation.navigate( "AudioIdClip", { id: clip.id } )}
+          >
+            <View className="flex-1">
+              {session && <Body1>{clip.sp.commonName}</Body1>}
+              <Body1>
+                {session
+                  ? formatISOTimestamp( clip.time ).slice( 11 )
+                  : formatISOTimestamp( clip.time )}
+              </Body1>
+              <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
+            </View>
+            <INatIconButton
+              icon="check"
+              color={colors.inatGreen}
+              onPress={( ) => tagClip( clip.id, true )}
+              accessibilityLabel="Right"
+              accessibilityHint="Tags the ID as right."
+            />
+            <INatIconButton
+              icon="close"
+              color={colors.warningRed}
+              onPress={( ) => tagClip( clip.id, false )}
+              accessibilityLabel="Wrong"
+              accessibilityHint="Tags the ID as wrong."
+            />
+            <ClipPlayButton id={clip.id} />
+          </Pressable>
+        </Swipeable>
       ) )}
       <View className="h-20" />
     </ScrollView>
