@@ -65,6 +65,46 @@ export const isClipCorrect = ( clip: AudioIdClip ) => ( clip.label
 const clipStore = createMmkvRecordStore<AudioIdClip>( AUDIO_ID_CLIPS_MMKV_ID );
 clipStore.migrateFrom( "audio-id-history", "clips" );
 
+// Uploads still reading a clip's audio, so deleting the clip can wait for them.
+const pendingUploads: Record<string, Promise<void>> = {};
+
+// Mirrors ben142's labels, with the audio, to Firebase.
+const uploadLabel = async ( id: string, clip: AudioIdClip, label: AudioIdLabel ) => {
+  const { taxonId, name } = label;
+  const correct = taxonId === clip.sp.taxonId;
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl || !( await isCurrentUser( "ben142" ) ) ) return;
+  fetch( `${baseUrl}/audio_id_labels/${id}.json`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify( {
+      predictedTaxonId: clip.sp.taxonId,
+      predictedName: clip.sp.name,
+      confidence: clip.confidence,
+      heardAt: new Date( clip.time ).toISOString( ),
+      latitude: clip.location?.latitude ?? null,
+      longitude: clip.location?.longitude ?? null,
+      positionalAccuracy: clip.location?.accuracy ?? null,
+      correct,
+      labelTaxonId: taxonId ?? null,
+      labelName: name,
+      noOrganism: taxonId === null,
+      labeledAt: new Date( label.labeledAt ).toISOString( ),
+    } ),
+  } ).catch( ( ) => undefined );
+  // The audio goes in its own path so the labels stay quick to download.
+  // Clips from before 15 s ones were saved fall back to the 5 s clip.
+  await readFile( contextClipPath( id ), "base64" )
+    .catch( ( ) => readFile( clipPath( id ), "base64" ) ).then( audio => fetch(
+      `${baseUrl}/audio_id_clips/${id}.json`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify( { format: "m4a", audioBase64: audio } ),
+      },
+    ) ).catch( ( ) => undefined );
+};
+
 const useAudioIdHistory = create<AudioIdHistoryState>( )( ( set, get ) => ( {
   clips: clipStore.loadAll( ),
   addClip: ( sp, confidence ) => {
@@ -87,38 +127,10 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( ( set, get ) => ( {
     if ( !clip ) return;
     const label = { taxonId, name, labeledAt: Date.now( ) };
     get( ).updateClip( id, { label } );
-    const correct = taxonId === clip.sp.taxonId;
-    const baseUrl = Config.CROP_LOG_FIREBASE_URL;
-    if ( !baseUrl || !( await isCurrentUser( "ben142" ) ) ) return;
-    fetch( `${baseUrl}/audio_id_labels/${id}.json`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify( {
-        predictedTaxonId: clip.sp.taxonId,
-        predictedName: clip.sp.name,
-        confidence: clip.confidence,
-        heardAt: new Date( clip.time ).toISOString( ),
-        latitude: clip.location?.latitude ?? null,
-        longitude: clip.location?.longitude ?? null,
-        positionalAccuracy: clip.location?.accuracy ?? null,
-        correct,
-        labelTaxonId: taxonId ?? null,
-        labelName: name,
-        noOrganism: taxonId === null,
-        labeledAt: new Date( label.labeledAt ).toISOString( ),
-      } ),
-    } ).catch( ( ) => undefined );
-    // The audio goes in its own path so the labels stay quick to download.
-    // Clips from before 15 s ones were saved fall back to the 5 s clip.
-    readFile( contextClipPath( id ), "base64" )
-      .catch( ( ) => readFile( clipPath( id ), "base64" ) ).then( audio => fetch(
-        `${baseUrl}/audio_id_clips/${id}.json`,
-        {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify( { format: "m4a", audioBase64: audio } ),
-        },
-      ) ).catch( ( ) => undefined );
+    const upload = uploadLabel( id, clip, label );
+    pendingUploads[id] = upload;
+    await upload;
+    if ( pendingUploads[id] === upload ) delete pendingUploads[id];
   },
   unlabelClip: id => get( ).updateClip( id, { label: undefined } ),
   tagClip: ( id, correct ) => {
@@ -133,8 +145,12 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( ( set, get ) => ( {
     const { [id]: _deleted, ...clips } = get( ).clips;
     set( { clips } );
     clipStore.remove( id );
-    unlink( clipPath( id ) ).catch( ( ) => undefined );
-    unlink( contextClipPath( id ) ).catch( ( ) => undefined );
+    // Deleting only removes the clip from the device; a label upload still
+    // reading its audio finishes first.
+    Promise.resolve( pendingUploads[id] ).finally( ( ) => {
+      unlink( clipPath( id ) ).catch( ( ) => undefined );
+      unlink( contextClipPath( id ) ).catch( ( ) => undefined );
+    } );
   },
 } ) );
 
