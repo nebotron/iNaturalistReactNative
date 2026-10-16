@@ -34,6 +34,7 @@ import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import Carousel from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
+import { distanceInKm } from "sharedHelpers/geoDistance";
 import { useTranslation } from "sharedHooks";
 import useStore, { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -64,6 +65,20 @@ interface Stop {
   id: string;
   text: string;
   point: LatLng | null;
+  // Set when the stop was added from a hotspot card
+  fromHotspot?: boolean;
+}
+
+// A hotspot within this distance of a hotspot stop counts as already on the route
+const HOTSPOT_STOP_MATCH_KM = 1;
+
+function isNearPoint( hotspot: Hotspot, point: LatLng ): boolean {
+  return distanceInKm(
+    hotspot.centerLatitude,
+    hotspot.centerLongitude,
+    point.latitude,
+    point.longitude,
+  ) < HOTSPOT_STOP_MATCH_KM;
 }
 
 let stopIdCounter = 0;
@@ -461,12 +476,25 @@ const WildlifeHotspotsScreen = ( {
     if ( confirmedStopPoints.length < 2 ) return;
     const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
     const insertIdx = findBestInsertion( confirmedStopPoints, via );
-    const newStop: Stop = { id: makeStopId(), text: t( "Hotspot" ), point: via };
+    const newStop: Stop = {
+      id: makeStopId(), text: t( "Hotspot" ), point: via, fromHotspot: true,
+    };
     setStops( prev => [...prev.slice( 0, insertIdx ), newStop, ...prev.slice( insertIdx )] );
     setSelectedHotspotId( null );
     setHotspotRouteCoords( [] );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops, t] );
+
+  const hotspotStopPoints = useMemo(
+    () => stops.flatMap( s => ( s.fromHotspot && s.point
+      ? [s.point]
+      : [] ) ),
+    [stops],
+  );
+  const isHotspotOnRoute = useCallback(
+    ( hotspot: Hotspot ) => hotspotStopPoints.some( pt => isNearPoint( hotspot, pt ) ),
+    [hotspotStopPoints],
+  );
 
   const handleHotspotSwipe = useCallback( ( index: number ) => {
     if ( programmaticScrollIndexRef.current === index ) {
@@ -680,14 +708,22 @@ const WildlifeHotspotsScreen = ( {
           showsUserLocation
           mapChildren={(
             <>
-              {stops.map( ( stop, index ) => stop.point && (
-                <Marker
-                  key={stop.id}
-                  coordinate={stop.point}
-                  pinColor={stopDotColor( index, stops.length )}
-                  title={stop.text || `${t( "Stop-noun" )} ${index + 1}`}
-                />
-              ) )}
+              {stops.map( ( stop, index ) => {
+                const { point } = stop;
+                if ( !point ) return null;
+                // Hotspot stops are shown by the numbered hotspot pin instead
+                if ( stop.fromHotspot && hotspots.some( h => isNearPoint( h, point ) ) ) {
+                  return null;
+                }
+                return (
+                  <Marker
+                    key={stop.id}
+                    coordinate={point}
+                    pinColor={stopDotColor( index, stops.length )}
+                    title={stop.text || `${t( "Stop-noun" )} ${index + 1}`}
+                  />
+                );
+              } )}
               {routeCoords.length > 1 && (
                 <Polyline
                   coordinates={routeCoords.map( toMapCoord )}
@@ -821,7 +857,9 @@ const WildlifeHotspotsScreen = ( {
                       selected={selectedHotspotId === hotspot.id}
                       onPress={() => handleHotspotPress( hotspot )}
                       onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
-                      onAddToRoute={() => handleAddHotspotToRoute( hotspot )}
+                      onAddToRoute={isHotspotOnRoute( hotspot )
+                        ? undefined
+                        : () => handleAddHotspotToRoute( hotspot )}
                       onSpeciesCountPress={species => handleSpeciesCountPress( hotspot, species )}
                       onObservationCountPress={() => handleObservationCountPress( hotspot )}
                     />
