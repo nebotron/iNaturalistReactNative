@@ -11,19 +11,19 @@ import {
 import React, { useEffect } from "react";
 import useStore from "stores/useStore";
 
-// Remembers the Explore tab's search so it survives an app relaunch
+// Remembers the Explore tab's search and view so they survive a tab switch or relaunch
 const LastSearchPersister = ( ) => {
   const { state } = useExploreV2( );
   const setLastExploreSearch = useStore( s => s.setLastExploreSearch );
   const {
-    subject, location, sortBy, speciesSortBy, filters,
+    subject, location, sortBy, speciesSortBy, filters, activeTab,
   } = state;
 
   useEffect( ( ) => {
     setLastExploreSearch( {
-      subject, location, sortBy, speciesSortBy, filters,
+      subject, location, sortBy, speciesSortBy, filters, activeTab,
     } );
-  }, [setLastExploreSearch, subject, location, sortBy, speciesSortBy, filters] );
+  }, [setLastExploreSearch, subject, location, sortBy, speciesSortBy, filters, activeTab] );
 
   return null;
 };
@@ -39,7 +39,7 @@ const ExploreV2Container = ( ) => {
         ...initialExploreV2State,
         ...lastSearch,
         filters: { ...initialExploreV2State.filters, ...lastSearch.filters },
-        activeTab: params?.activeTab || initialExploreV2State.activeTab,
+        activeTab: params?.activeTab || lastSearch.activeTab || initialExploreV2State.activeTab,
       };
     }
     return initialStateFromEntryParams( params );

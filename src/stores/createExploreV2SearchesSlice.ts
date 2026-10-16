@@ -1,5 +1,5 @@
 import type {
-  ExploreV2Search, ExploreV2SearchWithTab, ExploreV2Subject, Place,
+  ExploreV2SearchWithTab, ExploreV2Subject, Place,
 } from "providers/ExploreV2Context";
 import type { StateCreator } from "zustand";
 
@@ -64,8 +64,8 @@ export interface ExploreV2SearchesSlice {
     clearSavedSearches: ( ) => void;
   };
   // The Explore tab's most recent search, restored when the app relaunches
-  lastExploreSearch: ExploreV2Search | null;
-  setLastExploreSearch: ( _search: ExploreV2Search ) => void;
+  lastExploreSearch: ExploreV2SearchWithTab | null;
+  setLastExploreSearch: ( _search: ExploreV2SearchWithTab ) => void;
 }
 
 const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set => ( {
