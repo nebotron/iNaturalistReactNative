@@ -110,6 +110,11 @@ const ExploreResults = ( ) => {
   const { t } = useTranslation( );
   const [showSortSheet, setShowSortSheet] = useState( false );
   const [showViewSheet, setShowViewSheet] = useState( false );
+  const [lifeListCount, setLifeListCount] = useState<number | null>( null );
+  const handleLifeListCount = useCallback(
+    ( _view: string, count: number ) => setLifeListCount( count ),
+    [],
+  );
   const observationsSortLabels = useObservationsSortLabels( );
   const speciesSortLabels = useSpeciesSortLabels( );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreV2ObservationsLayout" );
@@ -431,7 +436,7 @@ const ExploreResults = ( ) => {
             canFetch={canFetch}
             isConnected={Boolean( isConnected )}
             queryParams={baseSearchParams}
-            handleUpdateCount={noop}
+            handleUpdateCount={handleLifeListCount}
           />
         );
       case OBSERVERS_TAB:
@@ -512,6 +517,8 @@ const ExploreResults = ( ) => {
         && t( "X-Observations", { count: totalResults } ),
       [SPECIES_TAB]: typeof speciesCount === "number"
         && t( "X-Species", { count: speciesCount } ),
+      [LIFELIST_TAB]: typeof lifeListCount === "number"
+        && t( "X-Species", { count: lifeListCount } ),
     }[state.activeTab as string];
     return (
       <>
