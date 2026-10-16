@@ -38,7 +38,7 @@ from firebase_auth import firebase_auth_query, firebase_base_url  # noqa: E402
 
 SR = 32000
 WIN = 5 * SR
-THRESHOLD = 0.3  # audioIdSession.ts
+THRESHOLD = 0.5  # audioIdSession.ts
 OFFSETS = ( 0, 213, 427 )
 
 

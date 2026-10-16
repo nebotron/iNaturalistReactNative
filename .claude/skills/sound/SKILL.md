@@ -29,7 +29,7 @@ notes of what did and did not work at the end of this skill.
   so offset-0 scores differ from the logged confidence; one offset within 0–704 samples
   reproduces it (checked on 2 clips to ±0.01).
 - Bird scores are the raw model output (`fuseScore` odds are 1 for birds). The app reports a
-  species at ≥ 0.3 (`THRESHOLD` in `audioIdSession.ts`).
+  species at ≥ 0.5 (`THRESHOLD` in `audioIdSession.ts`; 0.3 before session 3).
 
 ### Session 1 (7 clips with audio, all wrong)
 
@@ -72,7 +72,7 @@ notes of what did and did not work at the end of this skill.
   ((geo / 0.037) ^ 0.4) tripled seal odds near Puget Sound. **Shipped** (1084833): no boost.
   Undoing it on the logged scores (Seattle geomodel, week 39) leaves 28 of 74; on the 700
   `eval_regions.py` recordings non-bird recall 0.777 → 0.754.
-- Not shipped, for the user to decide: bird threshold 0.5. Field: right 20 → 18, wrong 23 → 8.
+- **Shipped** at the user's call: threshold 0.5 (birds and non-birds). Field: right 20 → 18, wrong 23 → 8.
   Recordings: bird recall 0.949 → 0.937, wrong birds per recording 0.74 → 0.57 (0.4: 0.943,
   0.65; field drops 1 right, 5 wrong). A non-bird threshold of 0.5 (no boost) would leave 10 of
   74 wrong for recall 0.706; 0.7 leaves 3.

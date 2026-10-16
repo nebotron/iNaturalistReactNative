@@ -37,7 +37,9 @@ export const { AudioBirdId } = NativeModules as {
   };
 };
 
-const THRESHOLD = 0.3;
+// Up from 0.3: on users' labeled detections it cut wrong birds from 23 to 8
+// and lost 2 of 20 right ones; on held-out recordings, bird recall fell 1.2 points.
+const THRESHOLD = 0.5;
 const ALSO_HEARD = 0.7;
 // Only vibrate/notify for calls above this confidence
 const ALERT = 0.6;
