@@ -40,10 +40,22 @@ const useInfiniteExploreScroll = (
 
   const baseParams = useMemo( () => ( {
     ...newInputParams,
+    // Only what Explore's list, grid and Identify views draw. ObsDetails gets
+    // these as its preloaded observation and fetches the rest itself.
     fields: {
-      // the most data we display in the UI on any Observations view in Explore
-      // is the same amount of data we show for the Advanced list mode in MyObservations
-      ...Observation.ADVANCED_MODE_LIST_FIELDS,
+      ...Observation.DEFAULT_MODE_LIST_FIELDS,
+      // ObsStatus's identification and comment counts
+      identifications: Observation.ADVANCED_MODE_LIST_FIELDS.identifications,
+      comments: { uuid: true },
+      // ObsListItem's location and date
+      geoprivacy: true,
+      obscured: true,
+      observed_on: true,
+      observed_time_zone: true,
+      place_guess: true,
+      private_place_guess: true,
+      private_geojson: true,
+      taxon_geoprivacy: true,
       // geojson is the reliable coordinate source on API observations (top-level
       // latitude/longitude are often absent); the Identify auto-CV reads it to
       // score with location, matching the Suggest ID screen.
