@@ -34,7 +34,6 @@ import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import Carousel from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
-import { distanceInKm } from "sharedHelpers/geoDistance";
 import { useTranslation } from "sharedHooks";
 import useStore, { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -69,16 +68,9 @@ interface Stop {
   fromHotspot?: boolean;
 }
 
-// A hotspot within this distance of a hotspot stop counts as already on the route
-const HOTSPOT_STOP_MATCH_KM = 1;
-
-function isNearPoint( hotspot: Hotspot, point: LatLng ): boolean {
-  return distanceInKm(
-    hotspot.centerLatitude,
-    hotspot.centerLongitude,
-    point.latitude,
-    point.longitude,
-  ) < HOTSPOT_STOP_MATCH_KM;
+function isAtPoint( hotspot: Hotspot, point: LatLng ): boolean {
+  return hotspot.centerLatitude === point.latitude
+    && hotspot.centerLongitude === point.longitude;
 }
 
 let stopIdCounter = 0;
@@ -492,7 +484,7 @@ const WildlifeHotspotsScreen = ( {
     [stops],
   );
   const isHotspotOnRoute = useCallback(
-    ( hotspot: Hotspot ) => hotspotStopPoints.some( pt => isNearPoint( hotspot, pt ) ),
+    ( hotspot: Hotspot ) => hotspotStopPoints.some( pt => isAtPoint( hotspot, pt ) ),
     [hotspotStopPoints],
   );
 
@@ -712,7 +704,7 @@ const WildlifeHotspotsScreen = ( {
                 const { point } = stop;
                 if ( !point ) return null;
                 // Hotspot stops are shown by the numbered hotspot pin instead
-                if ( stop.fromHotspot && hotspots.some( h => isNearPoint( h, point ) ) ) {
+                if ( stop.fromHotspot && hotspots.some( h => isAtPoint( h, point ) ) ) {
                   return null;
                 }
                 return (
