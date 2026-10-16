@@ -34,6 +34,7 @@ import type { ICarouselInstance } from "react-native-reanimated-carousel";
 import Carousel from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
+import { getLatestTrackedLocation } from "sharedHelpers/locationHistoryTracker";
 import { useTranslation } from "sharedHooks";
 import useStore, { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -314,7 +315,9 @@ const WildlifeHotspotsScreen = ( {
 
   useEffect( () => {
     const initializeLocation = async () => {
-      const loc = await fetchAccurateUserLocation();
+      // A recent tracked fix is available instantly; a fresh accurate fix can
+      // take seconds
+      const loc = await getLatestTrackedLocation() ?? await fetchAccurateUserLocation();
       if ( loc ) {
         const latLng = { latitude: loc.latitude, longitude: loc.longitude };
         setUserLocation( latLng );
