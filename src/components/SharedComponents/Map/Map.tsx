@@ -147,6 +147,11 @@ const Map = ( {
       : 0
   );
   const [scaleRegion, setScaleRegion] = useState<Region | null>( null );
+  const setLiveScaleRegion = useRef<( r: Region ) => void>( null );
+  const handleRegionChange = useCallback(
+    ( r: Region ) => setLiveScaleRegion.current?.( r ),
+    [],
+  );
   const navigation = useNavigation( );
   const { hasPermissions, renderPermissionsGate, requestPermissions } = useLocationPermission( );
   const [userLocation, setUserLocation] = useState<{
@@ -549,6 +554,9 @@ const Map = ( {
         onMapReady={handleMapReady}
         onPanDrag={handlePanDrag}
         onPress={handleMapPress}
+        onRegionChange={showScaleBar
+          ? handleRegionChange
+          : undefined}
         onRegionChangeComplete={handleRegionChangeComplete}
         onUserLocationChange={handleUserLocationChange}
         pitchEnabled={false}
@@ -605,6 +613,7 @@ const Map = ( {
         <ScaleBar
           region={scaleRegion || mapRegion || initialRegion}
           mapWidth={screenWidth}
+          liveRegionRef={setLiveScaleRegion}
         />
       )}
       <SwitchMapTypeButton

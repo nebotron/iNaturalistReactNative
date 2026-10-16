@@ -1,7 +1,8 @@
 import { fontBold } from "appConstants/fontFamilies";
 import { Body4 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
-import React from "react";
+import type { Ref } from "react";
+import React, { useImperativeHandle, useState } from "react";
 import { usesMetricSystem } from "react-native-localize";
 import type { Region } from "react-native-maps";
 
@@ -36,9 +37,16 @@ interface Props {
   region?: Region | null;
   mapWidth: number;
   className?: string;
+  // Lets the map push regions mid-gesture without re-rendering itself
+  liveRegionRef?: Ref<( r: Region ) => void>;
 }
 
-const ScaleBar = ( { region, mapWidth, className = "absolute left-3 top-12" }: Props ) => {
+const ScaleBar = ( {
+  region: committedRegion, mapWidth, className = "absolute left-3 top-12", liveRegionRef,
+}: Props ) => {
+  const [liveRegion, setLiveRegion] = useState<Region | null>( null );
+  useImperativeHandle( liveRegionRef, ( ) => setLiveRegion, [] );
+  const region = liveRegion || committedRegion;
   if ( !region?.longitudeDelta || !mapWidth ) return null;
   const metersPerPixel = ( region.longitudeDelta * METERS_PER_DEGREE
     * Math.cos( ( region.latitude * Math.PI ) / 180 ) ) / mapWidth;
