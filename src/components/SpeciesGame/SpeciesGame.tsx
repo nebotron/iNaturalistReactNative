@@ -5,6 +5,7 @@ import {
   IdentifyPhoto,
   ZoomBrightnessSliders,
 } from "components/MediaViewer/IdentifyPhoto";
+import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import {
   ActivityIndicator,
   Body1,
@@ -48,6 +49,7 @@ import { zustandStorage } from "stores/useStore";
 
 type ObservationType = "egg" | "juvenile" | "adult";
 type SexType = "male" | "female";
+type MediaType = "photo" | "sound";
 
 // iNaturalist filters annotations by controlled-term / value IDs, not by the
 // life_stage/sex string params (which the observations endpoint silently ignores).
@@ -169,6 +171,10 @@ const OBSERVATION_TYPES: { label: string; value: ObservationType }[] = [
   { label: "Juvenile", value: "juvenile" },
   { label: "Adult", value: "adult" },
 ];
+const MEDIA_TYPES: { label: string; value: MediaType }[] = [
+  { label: "Photos", value: "photo" },
+  { label: "Sounds", value: "sound" },
+];
 const SEX_TYPES: { label: string; value: SexType }[] = [
   { label: "Male", value: "male" },
   { label: "Female", value: "female" },
@@ -192,6 +198,7 @@ interface TaxonInfo {
   preferredCommonName?: string;
 }
 
+// A photo URL or a sound file URL, per the game's media type.
 interface PhotoEntry {
   url: string;
   observationUuid: string;
@@ -246,6 +253,7 @@ const SpeciesGame = ( ) => {
   const [selectedObsTypes, setSelectedObsTypes] = useState<ObservationType[]>( [] );
   const [selectedSexes, setSelectedSexes] = useState<SexType[]>( [] );
   const [showFilterModal, setShowFilterModal] = useState( false );
+  const [mediaType, setMediaType] = useState<MediaType>( "photo" );
 
   const targetPoolRef = useRef<PhotoEntry[]>( [] );
   const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
@@ -297,7 +305,7 @@ const SpeciesGame = ( ) => {
     return cs[cs.length - 1];
   }, [] );
 
-  const fetchPhotoPool = useCallback( async (
+  const fetchMediaPool = useCallback( async (
     id: number,
     filters?: ObservationType[],
     sexes?: SexType[],
@@ -306,11 +314,14 @@ const SpeciesGame = ( ) => {
     const url = new URL( `${INATURALIST_API}/observations` );
     url.searchParams.append( "taxon_id", String( id ) );
     url.searchParams.append( "quality_grade", "research" );
-    url.searchParams.append( "photos", "true" );
-    url.searchParams.append( "sounds", "false" );
+    const isSound = mediaType === "sound";
+    url.searchParams.append( "photos", String( !isSound ) );
+    url.searchParams.append( "sounds", String( isSound ) );
     url.searchParams.append( "per_page", String( POOL_SIZE ) );
     url.searchParams.append( "page", String( page ) );
-    url.searchParams.append( "fields", "uuid,observation_photos" );
+    url.searchParams.append( "fields", isSound
+      ? "uuid,sounds"
+      : "uuid,observation_photos" );
 
     // Annotation filters are ANDed across terms by pairing each term_id with the
     // matching term_value_id (comma-joined value IDs are ORed within a term).
@@ -329,6 +340,12 @@ const SpeciesGame = ( ) => {
     const data = await res.json( );
     const entries: PhotoEntry[] = [];
     for ( const obs of data.results ?? [] ) {
+      if ( isSound ) {
+        const soundUrl: string | undefined = ( obs.sounds ?? [] )[0]?.file_url;
+        if ( soundUrl && obs.uuid ) entries.push( { url: soundUrl, observationUuid: obs.uuid } );
+        // eslint-disable-next-line no-continue
+        continue;
+      }
       const first = ( obs.observation_photos ?? [] )[0];
       const raw: string | undefined = first?.photo?.url;
       if ( raw && obs.uuid ) {
@@ -339,7 +356,7 @@ const SpeciesGame = ( ) => {
       }
     }
     return entries;
-  }, [] );
+  }, [mediaType] );
 
   const unusedIn = useCallback(
     ( pool: PhotoEntry[] ) => pool.filter( e => !usedUuidsRef.current.has( e.observationUuid ) ),
@@ -358,7 +375,7 @@ const SpeciesGame = ( ) => {
     poolPagesRef.current[id] = page;
     let more: PhotoEntry[] = [];
     try {
-      more = await fetchPhotoPool(
+      more = await fetchMediaPool(
         id,
         selectedObsTypes.length > 0
           ? selectedObsTypes
@@ -380,7 +397,7 @@ const SpeciesGame = ( ) => {
       }
     }
     return addedAny;
-  }, [fetchPhotoPool, selectedObsTypes, selectedSexes] );
+  }, [fetchMediaPool, selectedObsTypes, selectedSexes] );
 
   // Returns unused photos in a pool, fetching more pages from the API until at least one
   // fresh photo is available or the taxon's observations are exhausted.
@@ -423,7 +440,7 @@ const SpeciesGame = ( ) => {
     // image renders already cropped to the subject instead of snapping into place
     // after a visible delay. This is normally instant, since the photo was already
     // preloaded while the previous round was being played.
-    if ( entry ) await resolveSubjectDetectionForUri( entry.url );
+    if ( entry && mediaType === "photo" ) await resolveSubjectDetectionForUri( entry.url );
 
     // Only now update the displayed lookalike, so the "How to ID X vs Y" button on the
     // previous round's reveal screen doesn't spoil the upcoming species while this
@@ -431,7 +448,7 @@ const SpeciesGame = ( ) => {
     if ( nextLookalike ) setLookalike( nextLookalike );
     setIsTargetShown( chosen.id === taxonId );
     setCurrentPhotoUrl( entry?.url ?? null );
-    setImageLoading( !!entry?.url );
+    setImageLoading( !!entry?.url && mediaType === "photo" );
     setCurrentObservationUuid( entry?.observationUuid ?? null );
     setGuessedTarget( null );
     setPhase( "playing" );
@@ -439,6 +456,7 @@ const SpeciesGame = ( ) => {
     // Preload the next 5 images and their subject detection for each pool so that
     // when those images are shown they appear instantly, already cropped to the
     // subject, with no delay or shift.
+    if ( mediaType !== "photo" ) return;
     const PRELOAD_COUNT = 5;
     const upcoming = [
       ...unusedIn( targetPool ).slice( 0, PRELOAD_COUNT ),
@@ -446,7 +464,7 @@ const SpeciesGame = ( ) => {
     ];
     prefetch( upcoming.map( e => e.url ) );
     upcoming.forEach( e => preloadSubjectDetectionForUri( e.url ) );
-  }, [taxonId, unusedIn, unusedWithRefill] );
+  }, [mediaType, taxonId, unusedIn, unusedWithRefill] );
 
   // Scans up to 2000 random observations of taxonId near the user's location and returns all
   // species-level taxa that appeared as alternate identifications, sorted by frequency.
@@ -567,7 +585,7 @@ const SpeciesGame = ( ) => {
             if ( !await isFoundNear( id, location ) ) return null;
             const [info, pool] = await Promise.all( [
               fetchTaxonInfo( id ),
-              fetchPhotoPool(
+              fetchMediaPool(
                 id,
                 selectedObsTypes.length > 0
                   ? selectedObsTypes
@@ -620,7 +638,7 @@ const SpeciesGame = ( ) => {
     obsScannedCount,
     lookalikesData,
     fetchTaxonInfo,
-    fetchPhotoPool,
+    fetchMediaPool,
     selectedObsTypes,
     selectedSexes,
   ] );
@@ -670,7 +688,7 @@ const SpeciesGame = ( ) => {
           return;
         }
 
-        const targetPool = await fetchPhotoPool(
+        const targetPool = await fetchMediaPool(
           taxonId,
           selectedObsTypes.length > 0
             ? selectedObsTypes
@@ -681,7 +699,7 @@ const SpeciesGame = ( ) => {
         );
         if ( cancelled ) return;
         if ( targetPool.length === 0 ) {
-          if ( !cancelled ) setLoadError( "Not enough photos found for this species." );
+          if ( !cancelled ) setLoadError( `Not enough ${mediaType}s found for this species.` );
           return;
         }
 
@@ -695,7 +713,7 @@ const SpeciesGame = ( ) => {
           // eslint-disable-next-line no-await-in-loop
           const [info, pool] = await Promise.all( [
             fetchTaxonInfo( candidateId ),
-            fetchPhotoPool(
+            fetchMediaPool(
               candidateId,
               selectedObsTypes.length > 0
                 ? selectedObsTypes
@@ -715,7 +733,9 @@ const SpeciesGame = ( ) => {
         if ( cancelled ) return;
 
         if ( !firstLookalike ) {
-          if ( !cancelled ) setLoadError( "Not enough photos found for this species pair." );
+          if ( !cancelled ) {
+            setLoadError( `Not enough ${mediaType}s found for this species pair.` );
+          }
           return;
         }
 
@@ -764,7 +784,7 @@ const SpeciesGame = ( ) => {
           remainingCandidates.map( async ( { id, weight } ) => {
             const [info, pool] = await Promise.all( [
               fetchTaxonInfo( id ),
-              fetchPhotoPool(
+              fetchMediaPool(
                 id,
                 selectedObsTypes.length > 0
                   ? selectedObsTypes
@@ -797,12 +817,13 @@ const SpeciesGame = ( ) => {
     return ( ) => { cancelled = true; };
   }, [
     taxonId,
-    fetchPhotoPool,
+    fetchMediaPool,
     fetchTaxonInfo,
     findMisidentifiedLookalikes,
     startRound,
     selectedObsTypes,
     selectedSexes,
+    mediaType,
   ] );
 
   const handleGuess = useCallback( ( guessIsTarget: boolean ) => {
@@ -879,6 +900,25 @@ const SpeciesGame = ( ) => {
       </Body1>
 
       <ScrollView className="px-4" style={gameStyles.modalScrollView}>
+        <View className="flex-row gap-2 pb-3">
+          {MEDIA_TYPES.map( m => (
+            <View key={m.value} className="flex-1">
+              <Button
+                className="w-full"
+                text={m.label}
+                level={mediaType === m.value
+                  ? "focus"
+                  : undefined}
+                onPress={() => {
+                  if ( m.value === mediaType ) return;
+                  setLoadError( null );
+                  setCurrentPhotoUrl( null );
+                  setMediaType( m.value );
+                }}
+              />
+            </View>
+          ) )}
+        </View>
         {/* eslint-disable-next-line i18next/no-literal-string */}
         <Body2 className="text-center text-darkGray pb-3">
           Select one or more life stages to filter observations:
@@ -1127,7 +1167,24 @@ const SpeciesGame = ( ) => {
         style={{ width: windowWidth, height: windowWidth }}
         className="overflow-hidden"
       >
-        {currentPhotoUrl
+        {mediaType === "sound" && ( currentPhotoUrl
+          ? (
+            <View className="flex-1 bg-black justify-center">
+              <SoundContainer
+                key={currentPhotoUrl}
+                sizeClass="w-full"
+                sound={{ file_url: currentPhotoUrl }}
+                isVisible
+                autoPlay
+              />
+            </View>
+          )
+          : (
+            <View className="flex-1 bg-lightGray items-center justify-center">
+              <ActivityIndicator />
+            </View>
+          ) )}
+        {mediaType === "photo" && ( currentPhotoUrl
           ? (
             <>
               <IdentifyPhoto
@@ -1155,22 +1212,24 @@ const SpeciesGame = ( ) => {
             <View className="flex-1 bg-lightGray items-center justify-center">
               <ActivityIndicator />
             </View>
-          )}
+          ) )}
       </View>
 
       {/* Zoom + brightness sliders (below the image, not covering it) */}
-      <ZoomBrightnessSliders
-        zoomScale={zoomScale}
-        brightnessStops={brightnessStops}
-        exposureStopsMin={EXPOSURE_STOPS_MIN}
-        exposureStopsMax={EXPOSURE_STOPS_MAX}
-        onZoomChange={handleZoomChange}
-        onZoomComplete={( ) => photoRef.current?.saveCrop( )}
-        onBrightnessChange={handleBrightnessChange}
-        onBrightnessComplete={handleBrightnessComplete}
-        zoomAccessibilityLabel={t( "Adjust-zoom" )}
-        brightnessAccessibilityLabel={t( "Adjust-brightness" )}
-      />
+      {mediaType === "photo" && (
+        <ZoomBrightnessSliders
+          zoomScale={zoomScale}
+          brightnessStops={brightnessStops}
+          exposureStopsMin={EXPOSURE_STOPS_MIN}
+          exposureStopsMax={EXPOSURE_STOPS_MAX}
+          onZoomChange={handleZoomChange}
+          onZoomComplete={( ) => photoRef.current?.saveCrop( )}
+          onBrightnessChange={handleBrightnessChange}
+          onBrightnessComplete={handleBrightnessComplete}
+          zoomAccessibilityLabel={t( "Adjust-zoom" )}
+          brightnessAccessibilityLabel={t( "Adjust-brightness" )}
+        />
+      )}
 
       {/* Bottom panel */}
       <View className="bg-white px-4 pt-2" style={bottomPanelStyle}>
