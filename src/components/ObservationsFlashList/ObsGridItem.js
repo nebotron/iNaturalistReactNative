@@ -1,5 +1,6 @@
 // @flow
 
+import AudioIdClipBadge from "components/AudioId/AudioIdClipBadge";
 import FaveButton from "components/ObsDetails/FaveButton";
 import { Body2, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
@@ -105,6 +106,9 @@ const ObsGridItem = ( {
           observation={observation}
           currentUser={currentUser}
         />
+      )}
+      {!explore && (
+        <AudioIdClipBadge className="top-14 right-[22px]" observation={observation} />
       )}
       <View
         // Use explicit per-side padding when reserving space for the photo

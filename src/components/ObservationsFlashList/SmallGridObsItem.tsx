@@ -1,3 +1,4 @@
+import AudioIdClipBadge from "components/AudioId/AudioIdClipBadge";
 import { Body3, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React from "react";
@@ -47,6 +48,7 @@ const SmallGridObsItem = ( {
       useShortGradient
       white
     >
+      <AudioIdClipBadge className="top-1 right-1" observation={observation} />
       <View className="absolute bottom-0 items-start p-2">
         <ObsUploadStatus
           classNameMargin="mb-1"
