@@ -17,7 +17,7 @@ import React, {
 } from "react";
 import { Alert } from "react-native";
 import type { BoundingBox } from "react-native-maps";
-import { LocalTile, Marker, UrlTile } from "react-native-maps";
+import { Marker, UrlTile } from "react-native-maps";
 import {
   deleteOfflineExploreResults,
   downloadOfflineExploreResults,
@@ -225,7 +225,8 @@ export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
           <>
             {/* Past a spot's most detailed saved tiles, magnify them instead of showing
               grey. One layer per saved zoom, most detailed on top, so each spot uses
-              its own deepest level. Native tiles go on top. */}
+              its own deepest level. Native tiles go on top, as a UrlTile rather than a
+              LocalTile so they get the patched renderer that paints every tile on iOS. */}
             {OVERZOOM_LEVELS.map( z => (
               <UrlTile
                 key={z}
@@ -235,7 +236,11 @@ export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
                 tileSize={256}
               />
             ) )}
-            <LocalTile pathTemplate={`${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`} tileSize={256} />
+            <UrlTile
+              urlTemplate={`file://${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`}
+              shouldReplaceMapContent
+              tileSize={256}
+            />
             {pins.map( ( { uuid, json, coordinate } ) => (
               <Marker
                 key={uuid}
