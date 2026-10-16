@@ -48,6 +48,7 @@ const THRESHOLD = 0.5;
 const ALSO_HEARD = 0.7;
 // Only vibrate/notify for calls above this confidence
 const ALERT = 0.6;
+const HOUR_MS = 3600000;
 // Scores by output index, as the native module sends them
 export type Scores = Record<number, number>;
 export const heardIn = ( scores: Scores ) => {
@@ -74,7 +75,8 @@ export interface Heard {
   sp: AudioIdSpecies; lastHeard: number; best: number; count: number;
 }
 
-const heardTaxa = new Set<number>( );
+// Species whose current call came after an hour unheard, until alerted on.
+const quietTaxa = new Set<number>( );
 // The clip of each species' current call, by taxon ID.
 const callClips = new Map<number, string>( );
 // Pending saves of 15 s centered on each clip's window, by clip ID.
@@ -134,7 +136,9 @@ interface AudioIdState {
   heard: Record<number, Heard>; // by taxon ID
   setup: AudioIdSetup | null;
   seen: Set<number> | null; // null when signed out
-  setSeen: ( seen: Set<number> | null ) => void;
+  // Seen at research grade in the last 30 days
+  recent: Set<number> | null;
+  setSeen: ( seen: Set<number> | null, recent: Set<number> | null ) => void;
   start: ( ) => Promise<void>;
   stop: ( ) => void;
 }
@@ -163,7 +167,8 @@ const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
   heard: {},
   setup: null,
   seen: null,
-  setSeen: seen => set( { seen } ),
+  recent: null,
+  setSeen: ( seen, recent ) => set( { seen, recent } ),
   start: async ( ) => {
     if ( !AudioBirdId ) {
       set( { error: "Audio ID is only available on iOS." } );
@@ -171,7 +176,6 @@ const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
     }
     if ( get( ).listening ) return;
     set( { error: null } );
-    heardTaxa.clear( );
     callClips.clear( );
     try {
       const s = await prepareAudioId( AudioBirdId.geo );
@@ -231,7 +235,7 @@ let runs: ScoresEvent[] = [];
 const onScores = ( event: ScoresEvent ) => {
   const { level } = event;
   const {
-    setup, seen, heard,
+    setup, seen, recent, heard,
   } = useAudioIdSession.getState( );
   const { scores } = event;
   const sps = setup?.species || [];
@@ -261,8 +265,8 @@ const onScores = ( event: ScoresEvent ) => {
     return;
   }
   const isHeard = heardIn( scores );
-  // Alert on the first call of each species this session, and on every call
-  // of a species the user hasn't observed at research grade.
+  // Alert on a species not heard in the last hour, and on every call of a
+  // species the user hasn't observed at research grade in the last 30 days.
   const alerts: AudioIdSpecies[] = [];
   let next = heard;
   Object.entries( scores ).forEach( ( [i, s] ) => {
@@ -271,11 +275,12 @@ const onScores = ( event: ScoresEvent ) => {
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;
     saveCallClip( sp, s, isNewCall, event.windowFrame );
-    if ( s > ALERT ) {
-      if ( !heardTaxa.has( sp.taxonId ) || ( isNewCall && seen && !seen.has( sp.taxonId ) ) ) {
-        alerts.push( sp );
-      }
-      heardTaxa.add( sp.taxonId );
+    if ( !old || now - old.lastHeard > HOUR_MS ) quietTaxa.add( sp.taxonId );
+    if ( s > ALERT && (
+      quietTaxa.delete( sp.taxonId )
+      || ( isNewCall && recent && !recent.has( sp.taxonId ) )
+    ) ) {
+      alerts.push( sp );
     }
     next = {
       ...next,

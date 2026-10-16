@@ -32,11 +32,15 @@ const SEEN_TAXON_IDS = [
 const SEEN_MAX_PAGES = 10;
 
 // Taxon IDs the user has research-grade observations of, including the
-// ancestors of any subspecies-level observations. Needs the network; without
-// it (or until it loads) nothing is marked as not yet seen.
-const useSeenTaxonIds = ( userId: number | undefined ): Set<number> | null => {
+// ancestors of any subspecies-level observations, observed on or after d1 if
+// given. Needs the network; without it (or until it loads) nothing is marked
+// as not yet seen.
+const useSeenTaxonIds = (
+  userId: number | undefined,
+  d1?: string,
+): Set<number> | null => {
   const { data } = useAuthenticatedQuery(
-    ["audioIdSeenTaxa", userId],
+    ["audioIdSeenTaxa", userId, d1],
     async optsWithAuth => {
       const pages = [];
       for ( let page = 1; page <= SEEN_MAX_PAGES; page += 1 ) {
@@ -45,6 +49,7 @@ const useSeenTaxonIds = ( userId: number | undefined ): Set<number> | null => {
           user_id: userId,
           quality_grade: "research",
           taxon_id: SEEN_TAXON_IDS,
+          d1,
           per_page: 500,
           page,
         }, optsWithAuth );
@@ -114,9 +119,16 @@ const AudioId = ( ) => {
   const species = useMemo( ( ) => setup?.species || [], [setup] );
   const currentUser = useCurrentUser( );
   const seen = useSeenTaxonIds( currentUser?.id );
-  useEffect( ( ) => setSeen( currentUser
-    ? seen
-    : null ), [currentUser, seen, setSeen] );
+  const monthAgo = new Date( Date.now( ) - 30 * 86400000 ).toISOString( ).slice( 0, 10 );
+  const recent = useSeenTaxonIds( currentUser?.id, monthAgo );
+  useEffect( ( ) => setSeen(
+    currentUser
+      ? seen
+      : null,
+    currentUser
+      ? recent
+      : null,
+  ), [currentUser, seen, recent, setSeen] );
 
   const outputOf = useMemo(
     ( ) => new Map( species.map( ( sp, i ) => [sp.taxonId, i] ) ),
