@@ -26,7 +26,7 @@ SAL_CACHE = Path( "/tmp/inat_saliency_cache.npz" )
 
 DEFAULT_GATE = 0.0
 DEFAULT_UNION_THRESH = 0.60
-DEFAULT_UNION_K = 3
+DEFAULT_UNION_K = 1
 
 
 def _sal( path ):

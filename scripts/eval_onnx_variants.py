@@ -30,6 +30,7 @@ from evaluate_subject_detector import (
     _spectral_saliency_bounds, intersection_area,
     resolve_image, get_image_size,
 )
+import cache_detections
 
 REPO_ROOT = Path(__file__).parent.parent
 CACHE_DIR = Path("/tmp/inat_eval_cache")
@@ -37,52 +38,15 @@ CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 PADDINGS = [0.00, 0.03, 0.05, 0.08, 0.10, 0.12, 0.15, 0.18, 0.20, 0.25, 0.30]
 
-# YOLO inference constants (matching ImageCropper.m)
-YOLO_INPUT_SIZE = 640
-YOLO_CONF_THRESH = 0.05
-YOLO_IOU_THRESH = 0.45
+# Post-processing constants (matching ImageCropper.m); inference and fusion
+# live in cache_detections.py
 YOLO_GATE_CONF = 0.0
 YOLO_UNION_THRESH = 0.60
-YOLO_UNION_MAX_K = 3
+YOLO_UNION_MAX_K = 1
 
 MODELS = {
     "yolov8n_current":   REPO_ROOT / "ios/iNaturalistReactNative/yolov8n.onnx",
 }
-
-
-def _letterbox(img_arr: np.ndarray, size: int = 640):
-    img = PILImage.fromarray(img_arr)
-    w, h = img.size
-    scale = size / max(w, h)
-    nw, nh = int(w * scale), int(h * scale)
-    resized = img.resize((nw, nh), PILImage.BILINEAR)
-    pad_left = (size - nw) // 2
-    pad_top = (size - nh) // 2
-    canvas = PILImage.new("RGB", (size, size), (114, 114, 114))
-    canvas.paste(resized, (pad_left, pad_top))
-    return np.array(canvas).astype(np.float32) / 255.0, pad_left, pad_top, scale
-
-
-def _nms(boxes_xyxy: np.ndarray, scores: np.ndarray, iou_thresh: float):
-    order = np.argsort(scores)[::-1]
-    kept = []
-    while len(order) > 0:
-        i = order[0]
-        kept.append(i)
-        if len(order) == 1:
-            break
-        x1 = np.maximum(boxes_xyxy[i, 0], boxes_xyxy[order[1:], 0])
-        y1 = np.maximum(boxes_xyxy[i, 1], boxes_xyxy[order[1:], 1])
-        x2 = np.minimum(boxes_xyxy[i, 2], boxes_xyxy[order[1:], 2])
-        y2 = np.minimum(boxes_xyxy[i, 3], boxes_xyxy[order[1:], 3])
-        inter = np.maximum(0, x2 - x1) * np.maximum(0, y2 - y1)
-        area_i = (boxes_xyxy[i, 2] - boxes_xyxy[i, 0]) * (boxes_xyxy[i, 3] - boxes_xyxy[i, 1])
-        area_r = (boxes_xyxy[order[1:], 2] - boxes_xyxy[order[1:], 0]) * \
-                 (boxes_xyxy[order[1:], 3] - boxes_xyxy[order[1:], 1])
-        union = area_i + area_r - inter
-        iou_arr = np.where(union > 0, inter / union, 0)
-        order = order[1:][iou_arr <= iou_thresh]
-    return kept
 
 
 _sessions: dict[str, ort.InferenceSession] = {}
@@ -109,54 +73,18 @@ def _raw_detections(image_path: str, model_path: Path) -> list[tuple[float, floa
 
 
 def _raw_detections_uncached(image_path: str, model_path: Path) -> list[tuple[float, float, float, float, float]]:
+    """The app's detections: three views fused (see cache_detections.VIEWS)."""
     try:
         img = PILImage.open(image_path).convert("RGB")
         orig_w, orig_h = img.size
         img_arr = np.array(img)
     except Exception:
         return []
-
-    lb, pad_left, pad_top, scale = _letterbox(img_arr)
-    x = lb.transpose(2, 0, 1)[None]
-
-    sess = _get_session(model_path)
-    input_name = sess.get_inputs()[0].name
-    out = sess.run(None, {input_name: x})[0][0]  # [C, 8400] or [5, 8400]
-
-    # Handle both single-class (5 rows) and multi-class (4+N rows) outputs
-    if out.shape[0] == 5:
-        # Single-class: cx, cy, w, h, conf
-        cx, cy, w, h, conf_raw = out[0], out[1], out[2], out[3], out[4]
-    else:
-        # Multi-class: cx, cy, w, h, cls0, cls1, ...
-        cx, cy, w, h = out[0], out[1], out[2], out[3]
-        conf_raw = out[4:].max(axis=0)  # best class score
-
-    mask = conf_raw >= YOLO_CONF_THRESH
-    if not mask.any():
+    cache_detections._sess = _get_session(model_path)
+    dets = cache_detections._detect_array(img_arr, orig_w, orig_h)
+    if not len(dets) or dets[0, 4] < YOLO_GATE_CONF:
         return []
-
-    cx, cy, w, h, conf_raw = cx[mask], cy[mask], w[mask], h[mask], conf_raw[mask]
-    x1 = cx - w / 2; y1 = cy - h / 2; x2 = cx + w / 2; y2 = cy + h / 2
-    boxes = np.stack([x1, y1, x2, y2], axis=1)
-    kept_idxs = _nms(boxes, conf_raw, YOLO_IOU_THRESH)
-
-    if not kept_idxs:
-        return []
-
-    best_conf = conf_raw[kept_idxs[0]]
-    if best_conf < YOLO_GATE_CONF:
-        return []
-
-    result = []
-    for i in kept_idxs:
-        xn = max(0.0, min(1.0, (float(boxes[i, 0]) - pad_left) / scale / orig_w))
-        yn = max(0.0, min(1.0, (float(boxes[i, 1]) - pad_top) / scale / orig_h))
-        wn = max(0.01, min(1.0 - xn, (float(boxes[i, 2]) - float(boxes[i, 0])) / scale / orig_w))
-        hn = max(0.01, min(1.0 - yn, (float(boxes[i, 3]) - float(boxes[i, 1])) / scale / orig_h))
-        result.append((xn, yn, wn, hn, float(conf_raw[i])))
-
-    return sorted(result, key=lambda b: b[4], reverse=True)
+    return [tuple(map(float, d)) for d in dets]
 
 
 def algo_union(dets, image_path):
