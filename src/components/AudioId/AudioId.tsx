@@ -81,7 +81,7 @@ const TaxonThumb = ( { taxonId, onPress }: { taxonId: number; onPress: ( ) => vo
     <Pressable
       accessibilityRole="button"
       accessibilityHint="Opens the species page."
-      className="mr-3 self-stretch aspect-square min-h-[56px]"
+      className="w-[80px] h-[80px]"
       onPress={onPress}
     >
       {url
@@ -165,27 +165,31 @@ const AudioId = ( ) => {
       key={sp.taxonId}
       accessibilityRole="button"
       accessibilityHint="Opens the history of when this species was heard."
-      className={`flex-row items-center pr-2 border-b border-lightGray ${
+      className={`flex-row items-center -ml-5 h-[80px] ${
         hearingNow( sp.taxonId )
           ? "bg-yellow"
           : ""}`}
       onPress={( ) => navigation.navigate( "AudioIdHistory", { taxonId: sp.taxonId } )}
     >
       <TaxonThumb taxonId={sp.taxonId} onPress={( ) => openTaxon( sp.taxonId )} />
-      <View className="flex-1 py-2">
-        <View className="flex-row items-center">
-          <Body1>{sp.commonName}</Body1>
-          {hasUnlabeled.has( sp.taxonId ) && (
-            <View className="h-[8px] w-[8px] ml-2 rounded-full bg-inatGreen" />
+      <View
+        className="flex-1 flex-row items-center self-stretch ml-3 pr-2 border-b border-lightGray"
+      >
+        <View className="flex-1">
+          <View className="flex-row items-center">
+            <Body1>{sp.commonName}</Body1>
+            {hasUnlabeled.has( sp.taxonId ) && (
+              <View className="h-[8px] w-[8px] ml-2 rounded-full bg-inatGreen" />
+            )}
+          </View>
+          <List2 className="italic">{sp.name}</List2>
+          {detail && <Body3>{detail}</Body3>}
+          {currentUser && seen && !seen.has( sp.taxonId ) && (
+            <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
           )}
         </View>
-        <List2 className="italic">{sp.name}</List2>
-        {detail && <Body3>{detail}</Body3>}
-        {currentUser && seen && !seen.has( sp.taxonId ) && (
-          <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
-        )}
+        <Body1>{`${Math.round( score * 100 )}%`}</Body1>
       </View>
-      <Body1>{`${Math.round( score * 100 )}%`}</Body1>
     </Pressable>
   );
 
