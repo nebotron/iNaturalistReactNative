@@ -160,7 +160,7 @@ const AudioId = ( ) => {
   } );
 
   // Species being heard right now are highlighted in yellow.
-  const row = ( sp: AudioIdSpecies, score: number, detail?: string ) => (
+  const row = ( sp: AudioIdSpecies, detail?: string ) => (
     <Pressable
       key={sp.taxonId}
       accessibilityRole="button"
@@ -188,7 +188,6 @@ const AudioId = ( ) => {
             <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
           )}
         </View>
-        <Body1>{`${Math.round( score * 100 )}%`}</Body1>
       </View>
     </Pressable>
   );
@@ -253,9 +252,6 @@ const AudioId = ( ) => {
       {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
       {heardList.map( h => row(
         h.sp,
-        hearingNow( h.sp.taxonId )
-          ? scoreNow( h.sp.taxonId )
-          : h.best,
         `${h.count} ${h.count === 1
           ? "time"
           : "times"}, last ${formatISOTimestamp( h.lastHeard )}`,
