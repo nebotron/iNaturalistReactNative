@@ -71,6 +71,8 @@ def main() -> None:
                              "subjects are a minority of the log and the detector is least "
                              "confident on them.")
     parser.add_argument("--small-frac", type=float, default=0.15)
+    parser.add_argument("--cls", type=float, default=0.5,
+                        help="Classification loss gain (ultralytics default 0.5)")
     args = parser.parse_args()
 
     json_path = Path(args.json)
@@ -202,6 +204,7 @@ def main() -> None:
         # Every crop-log image has exactly one subject; mosaic composites four
         # of them and shifts the scale statistics away from what runs on device.
         mosaic=0.0,
+        cls=args.cls,
         patience=args.patience,
         seed=SEED,
         verbose=True,

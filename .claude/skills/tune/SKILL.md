@@ -13,9 +13,9 @@ There is a script scripts/eval_onnx_variants.py for evaluating crop quality. Rep
 
 - Model: `ios/iNaturalistReactNative/yolov8n.onnx` — single-class YOLOv8n, output `[1, 5, 8400]`
 - **Metric (since the IoU session): score = IoU of the predicted square crop with the human's crop.** It replaced `(4·recall + 1·precision) / 5`, which hid the small-subject problem. Every score in the sessions below that one is on the old metric and is not comparable.
-- Post-processing: NMS (IoU=0.45, conf=0.05) → union top-K boxes (no confidence gate; Vision saliency only when nothing clears 0.05) → square crop circumscribing the box. There is no widening (`SIDE_CALIBRATION_EXPONENT` was removed) and no padding. The eval scripts mirror this; change both together.
+- Post-processing (since the TTA session): the detector runs on 3 views — as is, mirrored, zoomed out 1.5× — each NMS'd (IoU=0.45, conf=0.05, top 16), then the views' boxes are merged by weighted box fusion (IoU 0.40, conf = sum / 3) and the top fused box is the subject (no confidence gate; Vision saliency only when nothing clears 0.05) → square crop circumscribing the box. No widening, no padding. `cache_detections.py` (`VIEWS`, `fuse_views`) mirrors `ImageCropper.m`; change both together. `SINGLE_VIEW=1` caches the old one-view detections.
 - **The squaring is TypeScript, not ObjC.** `ImageCropper.m` returns *bounds*; `src/sharedHelpers/subjectBoundsToNormalizedCrop.ts` turns them into the crop (padding 0, set in `detectSubjectInImage.ts`). Geometry changes belong there — cross-platform, unit-testable, and they apply to the saliency fallback too. `scripts/evaluate_subject_detector.py:bounds_to_crop` mirrors it; a 4-case node-vs-python diff keeps them honest.
-- Eval: `scripts/cache_detections.py MODEL.onnx OUT.npz` (~5 min, 4 procs) then
+- Eval: `scripts/cache_detections.py MODEL.onnx OUT.npz` (~15 min for 8.5k images with 3 views, 4 procs) then
   `scripts/sweep_crop.py OUT.npz [--full]` (seconds). Inference is the only slow
   part, so cache the raw post-NMS boxes once and every gate/union/padding
   variant after that is arithmetic. `sweep_crop` is verified to reproduce
@@ -150,3 +150,18 @@ The IoU-optimal gate is 0: every detection that clears the 0.05 NMS threshold be
 **Where small subjects fail now:** 34% of crops on truths under 0.10 have IoU < 0.1 (wrong object), 20% are 0.1–0.5, 46% are ≥ 0.5. The misses are a detection/ranking problem, not geometry.
 
 **Tooling:** `cache_detections.py` takes `YOLO_INPUT_SIZE` from the environment to test other input sizes.
+
+### Session: test-time augmentation — held-out 0.5587 → 0.5808, small subjects 0.383 → 0.44
+
+**Log:** 10,853 entries / **8,562** evaluable. Held-out = last 1,500 (the shipped weights trained on everything before the last ~1,608). Baseline (deployed weights, one view): **0.6624** whole log, **0.5587** held-out.
+
+**What shipped: 3-view TTA with weighted box fusion** (`ImageCropper.m`, mirrored by `cache_detections.py`). Run the detector on the photo, its mirror, and a 1.5× zoomed-out copy (photo drawn at 1/1.5 scale in the centre of the letterbox); NMS each; fuse all boxes by WBF (IoU 0.40, conf = sum / 3); take the top fused box. Held-out **0.5808** (+0.022, bootstrap CI excludes 0), whole log **0.6812**. Every size bucket gains; truths <0.10 gain most (0.383 → 0.445 in the exploratory run). Cost: 3 inferences instead of 1.
+- Why it works: averaging steadies box edges, and a box found in all three views outranks a one-view false positive. It is the ranking fix the IoU session was looking for: a learned linear re-ranker on top of the fused boxes adds only +0.001 (CV), where on single-view boxes it added +0.004 and a GBM +0.008.
+- After fusion, take **top-1**, not the union: union K=3 at 0.6 loses 0.012. Padding 0 and no gate remain optimal.
+- View choice (held-out, WBF 0.4, top1): o+h 0.572, o+zoom1.5 0.572, **o+h+zoom1.5 0.584**, o+h+zoom2.0 0.575, o+h+zoom1.5+h·zoom1.5 0.581, six views 0.578. Three views is the sweet spot; mirrored-zoomed views add nothing.
+- WBF IoU 0.25–0.55 and union settings after fusion: flat (CV of the best of 200 configs 0.5829 vs 0.5837 default).
+- The C fusion loop was diffed against `fuse_views` on 1,991 random box sets (max 5e-6). Implementing the zoom in the letterbox vs padding the image first moves the score by 0.003 — resampling noise, so don't chase sub-0.005 differences between eval variants.
+
+**What did not work**
+- **Bigger / newer architectures on CPU.** yolo11s trains at ~34 s/batch here (≈5 h/epoch) — infeasible. yolo11n from COCO (same [1,5,8400] head, so a drop-in) scored 0.398 / 0.429 after epochs 1 / 2 vs 0.58 for the warm-started v8n lineage; stopped. The years of warm-started fine-tuning are worth more than a better backbone.
+- **Re-rankers** (see above) and **post-fusion padding/union** sweeps.

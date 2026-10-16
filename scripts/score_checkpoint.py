@@ -9,7 +9,7 @@ checkpoint, runs it over a slice of the log, and reports the real score at each
 gate, so checkpoint choice is made on the metric that ships.
 
 Usage:
-    python3 scripts/score_checkpoint.py WEIGHTS.pt [--slice -1000:] [--keep OUT.onnx]
+    python3 scripts/score_checkpoint.py WEIGHTS.pt [--slice -1500:] [--keep OUT.onnx]
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ def verify_export( weights: Path, onnx_path: Path ) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument( "weights" )
-    ap.add_argument( "--slice", default="-1000:" )
+    ap.add_argument( "--slice", default="-1500:" )
     ap.add_argument( "--keep", default=None, help="where to keep the exported ONNX" )
     ap.add_argument( "--npz", default=None, help="where to keep the detection cache" )
     args = ap.parse_args()
@@ -84,7 +84,7 @@ def main() -> None:
     sal = saliency_for( paths )
     print( f"\n{weights}  ({len(dets)} images)" )
     best = ( -1.0, None )
-    for g in [0.30, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70]:
+    for g in [0.0, 0.30, 0.40, 0.50, 0.60]:
         s, r, p, ok = score( bounds_array( dets, sal, g ), truths, sizes, 0.0 )
         print( f"  gate={g:.2f}  recall={r.mean():.4f}  prec={p.mean():.4f}  score={s.mean():.4f}" )
         if s.mean() > best[0]:
