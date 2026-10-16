@@ -2,8 +2,9 @@
 import { CachesDirectoryPath, copyFile } from "@dr.pogodin/react-native-fs";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
-  Body1, Body3, Button, List2,
+  Body1, Body3, Button, List2, Map,
 } from "components/SharedComponents";
+import LocationIndicator from "components/SharedComponents/Map/LocationIndicator";
 import { ScrollView, View } from "components/styledComponents";
 import React, { useState } from "react";
 import Observation from "realmModels/Observation";
@@ -59,6 +60,29 @@ const AudioIdClip = ( ) => {
         </View>
         <ClipPlayButton id={id} />
       </View>
+
+      {clip.location
+        ? (
+          <View className="mt-4 rounded-lg overflow-hidden">
+            <Map
+              mapHeight={250}
+              initialRegion={{
+                latitude: clip.location.latitude,
+                longitude: clip.location.longitude,
+                latitudeDelta: 0.02,
+                longitudeDelta: 0.02,
+              }}
+              mapChildren={(
+                <LocationIndicator
+                  latitude={clip.location.latitude}
+                  longitude={clip.location.longitude}
+                  positionalAccuracy={clip.location.accuracy}
+                />
+              )}
+            />
+          </View>
+        )
+        : <Body3 className="mt-4">No location was recorded for this clip.</Body3>}
 
       <Button
         className="mt-4"
