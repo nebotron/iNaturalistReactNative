@@ -15,13 +15,14 @@ import React, {
   useEffect, useMemo, useState, useSyncExternalStore,
 } from "react";
 import { Alert } from "react-native";
-import { LocalTile, Marker } from "react-native-maps";
+import { LocalTile, Marker, UrlTile } from "react-native-maps";
 import {
   deleteOfflineExploreResults,
   downloadOfflineExploreResults,
   getOfflineExploreRealm,
   getOfflineExploreVersion,
   MAX_OFFLINE_OBSERVATIONS,
+  MAX_TILE_ZOOM,
   OFFLINE_TILES_PATH,
   openOfflineExploreRealm,
   queryOfflineObservations,
@@ -38,6 +39,11 @@ const noop = ( ) => undefined;
 // Pins are native views, so cap them to keep the map responsive
 const MAX_MAP_PINS = 1000;
 const SPECIES_RANK_LEVEL = 10;
+// Saved zooms to magnify past; wider areas are too coarse to be worth it
+const OVERZOOM_LEVELS = Array.from(
+  { length: MAX_TILE_ZOOM - 9 },
+  ( _, i ) => i + 10,
+);
 
 type Params = Record<string, unknown>;
 
@@ -207,6 +213,18 @@ export const OfflineMapView = ( { queryParams }: { queryParams: Params } ) => {
         switchMapTypeButtonClassName="right-5 bottom-20"
         mapChildren={(
           <>
+            {/* Past a spot's most detailed saved tiles, magnify them instead of showing
+              grey. One layer per saved zoom, most detailed on top, so each spot uses
+              its own deepest level. Native tiles go on top. */}
+            {OVERZOOM_LEVELS.map( z => (
+              <UrlTile
+                key={z}
+                urlTemplate={`file://${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`}
+                minimumZ={z + 1}
+                maximumNativeZ={z}
+                tileSize={256}
+              />
+            ) )}
             <LocalTile pathTemplate={`${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`} tileSize={256} />
             {pins.map( ( { uuid, coordinate } ) => (
               <Marker

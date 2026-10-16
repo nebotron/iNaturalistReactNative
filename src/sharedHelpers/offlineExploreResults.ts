@@ -24,7 +24,7 @@ export const OFFLINE_TILES_PATH = `${DocumentDirectoryPath}/offlineExploreTiles`
 const TILE_URL = "https://tile.openstreetmap.org";
 // Per save, from the lowest zoom up, so a wide area gets fewer zoom levels
 const MAX_TILES = 1000;
-const MAX_TILE_ZOOM = 16;
+export const MAX_TILE_ZOOM = 16;
 
 type Params = Record<string, unknown>;
 
