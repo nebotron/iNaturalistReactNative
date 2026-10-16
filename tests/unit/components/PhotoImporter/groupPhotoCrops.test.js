@@ -14,7 +14,6 @@ jest.mock( "sharedHelpers/cropPhotoMetadata", ( ) => ( {
 } ) );
 
 jest.mock( "sharedHelpers/animalCropLog", ( ) => ( { saveAnimalCrop: jest.fn( ) } ) );
-jest.mock( "sharedHelpers/cropFeedbackLog", ( ) => ( { recordCropFeedback: jest.fn( ) } ) );
 
 const crop = {
   x: 0.1, y: 0.2, w: 0.3, h: 0.4,

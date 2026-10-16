@@ -1,5 +1,4 @@
 import type { Realm } from "@realm/react";
-import { linkCropFeedbackUploadedUrlForPhoto } from "sharedHelpers/cropFeedbackLog";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 
 // Realm.Objects expose isValid(); the plain objects we sometimes get here
@@ -86,7 +85,6 @@ function updateRecordWithServerId(
     record._synced_at = new Date( );
     if ( type === "Photo" && responseResult?.url ) {
       record.url = responseResult.url;
-      linkCropFeedbackUploadedUrlForPhoto( record, responseResult.url );
     }
     if ( type === "Observation" ) {
       record.needs_sync = false;

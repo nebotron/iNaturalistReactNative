@@ -1,7 +1,6 @@
 import findGroupedPhotoByDisplayUri
   from "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
-import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -55,7 +54,6 @@ async function cropGroupPhotoFile(
   const cropOriginalPath = await preserveCropOriginalPath( sourceUri, existingCropOriginalUri );
   const cropOriginalUri = cropOriginalUriFromPath( cropOriginalPath ) || sourceUri;
   saveAnimalCrop( displayUri, crop );
-  recordCropFeedback( cropOriginalUri, { crop, kept: true } );
   return {
     uri: croppedUri, cropOriginalUri, crop,
   };

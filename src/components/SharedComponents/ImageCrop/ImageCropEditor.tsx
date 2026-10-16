@@ -29,9 +29,7 @@ import {
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
 import { getAnimalCrop, saveAnimalCrop } from "sharedHelpers/animalCropLog";
-import { recordCropFeedback } from "sharedHelpers/cropFeedbackLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
-import { cropOriginalUriFromPath } from "sharedHelpers/cropPhotoMetadata";
 import {
   resolveDevicePhotoUriFromGroupedPhoto,
 } from "sharedHelpers/deleteDevicePhotosDuringObservationPrep";
@@ -256,32 +254,6 @@ const ImageCropEditor = ( ) => {
       prepareMs: timing?.prepareMs ?? null,
     } );
   }, [imageUri] );
-
-  const getCropFeedbackSourceKey = useCallback( ( ) => {
-    if ( context === "groupPhotos" && imageUri ) {
-      const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
-      return groupedPhoto?.image.cropOriginalUri || localImageUri || imageUri;
-    }
-
-    if ( context === "observationEdit" && observationPhotoUuid && currentObservation ) {
-      const obsPhoto = currentObservation.observationPhotos?.find(
-        op => op.uuid === observationPhotoUuid,
-      );
-      return cropOriginalUriFromPath( obsPhoto?.photo?.cropOriginalLocalFilePath )
-        || localImageUri
-        || imageUri
-        || null;
-    }
-
-    return localImageUri || imageUri || null;
-  }, [
-    context,
-    currentObservation,
-    groupedPhotos,
-    imageUri,
-    localImageUri,
-    observationPhotoUuid,
-  ] );
 
   useEffect( ( ) => {
     navigation.setOptions( { headerShown: false } );
@@ -522,11 +494,6 @@ const ImageCropEditor = ( ) => {
   ] );
 
   const handleDelete = useCallback( ( ) => {
-    const sourceKey = getCropFeedbackSourceKey( );
-    if ( sourceKey ) {
-      recordCropFeedback( sourceKey, { crop: null, kept: false } );
-    }
-
     if ( context === "groupPhotos" && imageUri ) {
       const groupedPhoto = findGroupedPhotoByDisplayUri( groupedPhotos, imageUri );
       if ( groupedPhoto ) {
@@ -581,7 +548,6 @@ const ImageCropEditor = ( ) => {
     currentObservation,
     deletePhotoFromObservation,
     finishOrAdvance,
-    getCropFeedbackSourceKey,
     groupedPhotos,
     imageUri,
     localImageUri,
@@ -645,8 +611,6 @@ const ImageCropEditor = ( ) => {
         brightness,
       );
 
-      let feedbackSourceKey = getCropFeedbackSourceKey( );
-
       if ( context === "observationEdit" && observationPhotoUuid ) {
         const obs = cloneDeep( currentObservation );
         const idx = obs?.observationPhotos?.findIndex(
@@ -658,8 +622,6 @@ const ImageCropEditor = ( ) => {
             localImageUri,
             existingPhoto,
           );
-          feedbackSourceKey = cropOriginalUriFromPath( cropOriginalLocalFilePath )
-            || feedbackSourceKey;
           const resizedPath = await Photo.resizeImageForUpload( croppedUri );
           obs.observationPhotos = [...obs.observationPhotos];
           obs.observationPhotos[idx] = {
@@ -682,10 +644,6 @@ const ImageCropEditor = ( ) => {
         }
       }
 
-      if ( feedbackSourceKey ) {
-        recordCropFeedback( feedbackSourceKey, { crop, kept: true } );
-      }
-
       finishOrAdvance( );
     } )( ).catch( ( ) => {
       Alert.alert( t( "Something-went-wrong" ) );
@@ -695,7 +653,6 @@ const ImageCropEditor = ( ) => {
     currentObservation,
     cvOnly,
     finishOrAdvance,
-    getCropFeedbackSourceKey,
     imageSize,
     imageUri,
     localImageUri,
