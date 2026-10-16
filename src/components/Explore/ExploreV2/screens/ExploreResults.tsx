@@ -51,6 +51,7 @@ import type { ExploreStackScreenProps } from "navigation/types";
 import type { ExploreV2Tab } from "providers/ExploreV2Context";
 import { EXPLORE_V2_ACTION, EXPLORE_V2_PLACE_MODE, useExploreV2 } from "providers/ExploreV2Context";
 import React, { useCallback, useMemo, useState } from "react";
+import type { BoundingBox } from "react-native-maps";
 import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import {
   OBSERVATIONS_SORT_OPTIONS,
@@ -188,6 +189,23 @@ const ExploreResults = ( ) => {
   );
 
   const offlineResults = useOfflineExploreResults( queryParams );
+  // Offline map bounds narrow the offline list; they reset when the filters change
+  const [offlineMapArea, setOfflineMapArea] = useState<{
+    params: typeof queryParams;
+    bounds: BoundingBox;
+  }>( );
+  const offlineListParams = useMemo( ( ) => {
+    if ( offlineMapArea?.params !== queryParams ) return queryParams;
+    const { southWest, northEast } = offlineMapArea.bounds;
+    return {
+      ...queryParams,
+      swlat: southWest.latitude,
+      swlng: southWest.longitude,
+      nelat: northEast.latitude,
+      nelng: northEast.longitude,
+    };
+  }, [offlineMapArea, queryParams] );
+  const offlineListResults = useOfflineExploreResults( offlineListParams );
 
   const {
     fetchNextPage,
@@ -444,8 +462,22 @@ const ExploreResults = ( ) => {
       return (
         <>
           {showMap
-            ? <OfflineMapView queryParams={queryParams} />
-            : <OfflineObservationsView layout={offlineLayout} queryParams={queryParams} />}
+            ? (
+              <OfflineMapView
+                queryParams={queryParams}
+                onBoundsChange={bounds => setOfflineMapArea( { params: queryParams, bounds } )}
+              />
+            )
+            : (
+              <>
+                {offlineListResults && (
+                  <Body2 className="px-5 pb-2" testID="ExploreResults.offlineCount">
+                    {t( "X-Observations", { count: offlineListResults.results.length } )}
+                  </Body2>
+                )}
+                <OfflineObservationsView layout={offlineLayout} queryParams={offlineListParams} />
+              </>
+            )}
           <ObservationsViewBar
             layout={offlineLayout}
             updateObservationsView={writeLayoutToStorage}

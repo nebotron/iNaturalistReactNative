@@ -16,6 +16,7 @@ import React, {
   useEffect, useMemo, useState, useSyncExternalStore,
 } from "react";
 import { Alert } from "react-native";
+import type { BoundingBox } from "react-native-maps";
 import { LocalTile, Marker, UrlTile } from "react-native-maps";
 import {
   deleteOfflineExploreResults,
@@ -180,7 +181,12 @@ export const OfflineObservationsView = ( { layout, queryParams }: ViewProps ) =>
 };
 
 // Saved results as pins, since the observation tiles need the server
-export const OfflineMapView = ( { queryParams }: { queryParams: Params } ) => {
+interface MapProps {
+  queryParams: Params;
+  onBoundsChange?: ( bounds: BoundingBox ) => void;
+}
+
+export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
   const { t } = useTranslation( );
   const navigation = useNavigation( );
   const saved = useOfflineExploreResults( queryParams );
@@ -205,6 +211,7 @@ export const OfflineMapView = ( { queryParams }: { queryParams: Params } ) => {
       <Map
         initialRegion={region}
         isLoading={false}
+        onRegionChangeComplete={( _region, bounds ) => bounds && onBoundsChange?.( bounds )}
         regionToAnimate={region}
         showCurrentLocationButton
         showsCompass={false}
