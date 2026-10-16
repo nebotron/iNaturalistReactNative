@@ -33,6 +33,8 @@ export const { AudioBirdId } = NativeModules as {
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
     saveClip: ( path: string, seconds: number, endFrame: number ) => Promise<string>;
     playClip: ( path: string ) => Promise<void>;
+    playClipRange: ( path: string, from: number, to: number ) => Promise<void>;
+    trimClip: ( path: string, from: number, to: number, outPath: string ) => Promise<string>;
     stopClip: ( ) => void;
   };
 };

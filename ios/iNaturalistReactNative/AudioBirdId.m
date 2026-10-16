@@ -37,6 +37,26 @@
 #define AB_SPEC_H   376     // bins shown, up to 12 kHz
 #define AB_SPEC_W   800     // columns shown, 10 s
 
+// Writes mono samples as AAC at `path`, replacing any file there.
+static BOOL ABWriteClip( NSString *path, const float *samples, AVAudioFrameCount frames,
+                         NSError **error )
+{
+  NSFileManager *fm = [NSFileManager defaultManager];
+  [fm createDirectoryAtPath:[path stringByDeletingLastPathComponent]
+withIntermediateDirectories:YES attributes:nil error:nil];
+  [fm removeItemAtPath:path error:nil];
+  AVAudioFile *file = [[AVAudioFile alloc]
+    initForWriting:[NSURL fileURLWithPath:path]
+          settings:@{ AVFormatIDKey: @( kAudioFormatMPEG4AAC ), AVSampleRateKey: @( AB_SR ),
+                      AVNumberOfChannelsKey: @1, AVEncoderBitRateKey: @64000 }
+      commonFormat:AVAudioPCMFormatFloat32 interleaved:NO error:error];
+  AVAudioPCMBuffer *buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                                          frameCapacity:frames];
+  buffer.frameLength = frames;
+  if ( buffer ) memcpy( buffer.floatChannelData[0], samples, frames * sizeof( float ) );
+  return file && buffer && [file writeFromBuffer:buffer error:error];
+}
+
 // The live spectrogram, shared between the module, which adds a column for
 // every AB_SPEC_HOP new samples, and AudioSpectrogram views, which draw it.
 // Intensities are kept in a ring of columns.
@@ -247,24 +267,41 @@ RCT_EXPORT_METHOD( saveClip:( NSString * )path
     NSData *window = [NSData dataWithBytes:self->_window + AB_HIST - back - frames
                                     length:frames * sizeof( float )];
     dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
-      NSFileManager *fm = [NSFileManager defaultManager];
-      [fm createDirectoryAtPath:[path stringByDeletingLastPathComponent]
-    withIntermediateDirectories:YES attributes:nil error:nil];
-      [fm removeItemAtPath:path error:nil];
       NSError *error = nil;
-      AVAudioFile *file = [[AVAudioFile alloc]
-        initForWriting:[NSURL fileURLWithPath:path]
-              settings:@{ AVFormatIDKey: @( kAudioFormatMPEG4AAC ), AVSampleRateKey: @( AB_SR ),
-                          AVNumberOfChannelsKey: @1, AVEncoderBitRateKey: @64000 }
-          commonFormat:AVAudioPCMFormatFloat32 interleaved:NO error:&error];
-      AVAudioPCMBuffer *buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
-                                                              frameCapacity:frames];
-      buffer.frameLength = frames;
-      if ( buffer ) memcpy( buffer.floatChannelData[0], window.bytes, window.length );
-      BOOL ok = file && buffer && [file writeFromBuffer:buffer error:&error];
-      file = nil; // closes the file
-      if ( ok ) resolve( path ); else reject( @"clip", error.localizedDescription ?: @"Could not save the clip", error );
+      if ( ABWriteClip( path, (const float *)window.bytes, frames, &error ) ) resolve( path );
+      else reject( @"clip", error.localizedDescription ?: @"Could not save the clip", error );
     } );
+  } );
+}
+
+// Saves `from` to `to` seconds of the clip at `path` as a new clip at `outPath`.
+RCT_EXPORT_METHOD( trimClip:( NSString * )path
+                   from:( double )from
+                   to:( double )to
+                   outPath:( NSString * )outPath
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
+    NSError *error = nil;
+    AVAudioFile *file = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:path]
+                                                      error:&error];
+    AVAudioPCMBuffer *buffer = file
+      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                      frameCapacity:(AVAudioFrameCount)file.length]
+      : nil;
+    if ( !buffer || ![file readIntoBuffer:buffer error:&error] ) {
+      reject( @"clip", error.localizedDescription ?: @"Could not read the clip", error );
+      return;
+    }
+    AVAudioFramePosition f0 = MIN( (AVAudioFramePosition)MAX( from * AB_SR, 0 ), buffer.frameLength );
+    AVAudioFramePosition f1 = MAX( MIN( (AVAudioFramePosition)( to * AB_SR ), buffer.frameLength ), f0 );
+    if ( f1 > f0 && ABWriteClip( outPath, buffer.floatChannelData[0] + f0,
+                                 (AVAudioFrameCount)( f1 - f0 ), &error ) ) {
+      resolve( outPath );
+    } else {
+      reject( @"clip", error.localizedDescription ?: @"Could not trim the clip", error );
+    }
   } );
 }
 
@@ -274,6 +311,22 @@ RCT_EXPORT_METHOD( saveClip:( NSString * )path
 RCT_EXPORT_METHOD( playClip:( NSString * )path
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
+{
+  [self playClip:path from:0 to:-1 resolve:resolve reject:reject];
+}
+
+// Plays the clip from `from` to `to` seconds in; a negative `to` plays to the end.
+RCT_EXPORT_METHOD( playClipRange:( NSString * )path
+                   from:( double )from
+                   to:( double )to
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  [self playClip:path from:from to:to resolve:resolve reject:reject];
+}
+
+- (void)playClip:(NSString *)path from:(double)from to:(double)to
+         resolve:(RCTPromiseResolveBlock)resolve reject:(RCTPromiseRejectBlock)reject
 {
   dispatch_async( dispatch_get_main_queue(), ^{
     [self stopClipPlayback];
@@ -299,6 +352,21 @@ RCT_EXPORT_METHOD( playClip:( NSString * )path
     for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
       vDSP_vsmul( buffer.floatChannelData[c], 1, &gain, buffer.floatChannelData[c], 1,
                   buffer.frameLength );
+    }
+    double rate = buffer.format.sampleRate;
+    AVAudioFramePosition f0 = MIN( (AVAudioFramePosition)MAX( from * rate, 0 ), buffer.frameLength );
+    AVAudioFramePosition f1 = to < 0
+      ? buffer.frameLength
+      : MAX( MIN( (AVAudioFramePosition)( to * rate ), buffer.frameLength ), f0 );
+    if ( f0 > 0 || f1 < buffer.frameLength ) {
+      AVAudioPCMBuffer *range = [[AVAudioPCMBuffer alloc]
+        initWithPCMFormat:buffer.format frameCapacity:(AVAudioFrameCount)MAX( f1 - f0, 1 )];
+      range.frameLength = (AVAudioFrameCount)( f1 - f0 );
+      for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
+        memcpy( range.floatChannelData[c], buffer.floatChannelData[c] + f0,
+                ( f1 - f0 ) * sizeof( float ) );
+      }
+      buffer = range;
     }
     AVAudioSession *session = [AVAudioSession sharedInstance];
     // Outside a listening session, a leftover record category (from an earlier

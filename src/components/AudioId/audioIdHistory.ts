@@ -47,6 +47,13 @@ export const clipPath = ( id: string ) => `${CLIPS_PATH}/${id}.m4a`;
 // 15 s centered on the clip, uploaded with labels.
 export const contextClipPath = ( id: string ) => `${CLIPS_PATH}/${id}-15s.m4a`;
 
+// The clip heard closest to `time`, if any was within AROUND_MS of it.
+export const AROUND_MS = 10000;
+export const clipAround = ( clips: Record<string, AudioIdClip>, time: number ) => Object
+  .values( clips )
+  .filter( clip => Math.abs( clip.time - time ) <= AROUND_MS )
+  .sort( ( a, b ) => Math.abs( a.time - time ) - Math.abs( b.time - time ) )[0];
+
 interface AudioIdHistoryState {
   clips: Record<string, AudioIdClip>;
   sessions: Record<string, ListeningSession>;
