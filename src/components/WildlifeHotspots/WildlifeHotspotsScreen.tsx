@@ -260,6 +260,9 @@ const WildlifeHotspotsScreen = ( {
     suggestions: PlaceResult[];
   } | null>( null );
   const [hotspotCardHeight, setHotspotCardHeight] = useState<number | null>( null );
+  // Stops the user has focused or typed in, which the late-arriving initial
+  // location fix must not overwrite.
+  const editedStopIdsRef = useRef( new Set<string>() );
 
   const addressHistory = useStore( state => state.layout.hotspotAddressHistory );
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
@@ -295,11 +298,9 @@ const WildlifeHotspotsScreen = ( {
       if ( loc ) {
         const latLng = { latitude: loc.latitude, longitude: loc.longitude };
         setUserLocation( latLng );
-        setStops( prev => prev.map( s => ( {
-          ...s,
-          point: latLng,
-          text: t( "Current-location" ),
-        } ) ) );
+        setStops( prev => prev.map( s => ( editedStopIdsRef.current.has( s.id )
+          ? s
+          : { ...s, point: latLng, text: t( "Current-location" ) } ) ) );
       }
     };
     initializeLocation();
@@ -321,6 +322,7 @@ const WildlifeHotspotsScreen = ( {
   }, [routeCoords, hotspots] );
 
   const handleStopTextChange = useCallback( ( id: string, text: string ) => {
+    editedStopIdsRef.current.add( id );
     setStops( prev => prev.map( s => ( s.id === id
       ? { ...s, text, point: null }
       : s ) ) );
