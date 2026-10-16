@@ -61,3 +61,20 @@ notes of what did and did not work at the end of this skill.
   (checked on a synthetic 15 s clip: center scores match the 5 s clip). Re-run once those
   arrive; nbr on real neighbours is the next thing to measure.
 - Geomodel weighting couldn't be checked: labels carry no location.
+
+### Session 3 (117 labels: 20 right, all birds)
+
+- Use the logged `confidence` in the labels for threshold work: it is the app's real score.
+  Clips saved before 3d4ee64 were the newest audio when JS asked, so they lagged the scored
+  window by inference + bridge time and often scored far lower (seals: 0.02–0.25 on the clip,
+  0.31–0.75 logged). From 3d4ee64 on, clips are the exact window (15 s ones centered on it).
+- Non-birds: all 74 labeled were wrong (46 Harbor Seal, 25 Red Fox). The geomodel odds boost
+  ((geo / 0.037) ^ 0.4) tripled seal odds near Puget Sound. **Shipped** (1084833): no boost.
+  Undoing it on the logged scores (Seattle geomodel, week 39) leaves 28 of 74; on the 700
+  `eval_regions.py` recordings non-bird recall 0.777 → 0.754.
+- Not shipped, for the user to decide: bird threshold 0.5. Field: right 20 → 18, wrong 23 → 8.
+  Recordings: bird recall 0.949 → 0.937, wrong birds per recording 0.74 → 0.57 (0.4: 0.943,
+  0.65; field drops 1 right, 5 wrong). A non-bird threshold of 0.5 (no boost) would leave 10 of
+  74 wrong for recall 0.706; 0.7 leaves 3.
+- To sweep thresholds offline, dump per-window scores and geomodel values for the
+  `eval_regions.py` recordings once (~45 min on 4 CPUs), then rescore from the dump.
