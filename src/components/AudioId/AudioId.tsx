@@ -128,6 +128,8 @@ const AudioId = ( ) => {
       .sort( ( a, b ) => b.startedAt - a.startedAt )
       .map( s => ( { ...s, speciesCount: species.get( s.id )?.size || 0 } ) );
   }, [clips, sessions] );
+  const hasUnlabeled = useMemo( ( ) => new Set( Object.values( clips )
+    .filter( c => !c.label ).map( c => c.sp.taxonId ) ), [clips] );
 
   const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", {
     id: taxonId, fromAudioId: true,
@@ -147,7 +149,12 @@ const AudioId = ( ) => {
     >
       <TaxonThumb taxonId={sp.taxonId} onPress={( ) => openTaxon( sp.taxonId )} />
       <View className="flex-1">
-        <Body1>{sp.commonName}</Body1>
+        <View className="flex-row items-center">
+          <Body1>{sp.commonName}</Body1>
+          {hasUnlabeled.has( sp.taxonId ) && (
+            <View className="h-[8px] w-[8px] ml-2 rounded-full bg-inatGreen" />
+          )}
+        </View>
         <List2 className="italic">{sp.name}</List2>
         {detail && <Body3>{detail}</Body3>}
         {currentUser && seen && !seen.has( sp.taxonId ) && (
