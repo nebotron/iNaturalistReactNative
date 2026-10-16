@@ -19,22 +19,16 @@ const { useQuery } = RealmContext;
 const TAG_SHADES = { true: "rgba(116, 172, 0, 0.2)", false: "rgba(155, 16, 16, 0.15)" };
 const OBSERVED_SHADE = "rgba(116, 172, 0, 0.5)";
 
-// Every time Audio ID heard one species, or everything heard in one listening
-// session, newest first.
+// Every time Audio ID heard one species, newest first.
 const AudioIdHistory = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute( );
-  const { taxonId, sessionId } = params as { taxonId?: number; sessionId?: string };
+  const { taxonId } = params as { taxonId: number };
   const clips = useAudioIdHistory( state => state.clips );
   const tagClip = useAudioIdHistory( state => state.tagClip );
   const deleteClip = useAudioIdHistory( state => state.deleteClip );
-  const session = useAudioIdHistory( state => ( sessionId
-    ? state.sessions[sessionId]
-    : undefined ) );
   const ofSpecies = Object.values( clips )
-    .filter( c => ( sessionId
-      ? c.sessionId === sessionId
-      : c.sp.taxonId === taxonId ) )
+    .filter( c => c.sp.taxonId === taxonId )
     .sort( ( a, b ) => b.time - a.time );
   const sp = ofSpecies[0]?.sp;
   // Clips whose observation is still saved on this device
@@ -57,13 +51,7 @@ const AudioIdHistory = ( ) => {
 
   return (
     <ScrollView className="bg-white h-full px-5 pt-4">
-      {session && (
-        <View className="mb-3">
-          <Body1>{`Session ${formatISOTimestamp( session.startedAt )}`}</Body1>
-          <List2>{`${new Set( ofSpecies.map( c => c.sp.taxonId ) ).size} species`}</List2>
-        </View>
-      )}
-      {!session && sp && (
+      {sp && (
         <View className="mb-3">
           <Body1>{sp.commonName}</Body1>
           <List2 className="italic">{sp.name}</List2>
@@ -90,12 +78,7 @@ const AudioIdHistory = ( ) => {
             onPress={( ) => navigation.navigate( "AudioIdClip", { id: clip.id } )}
           >
             <View className="flex-1">
-              {session && <Body1>{clip.sp.commonName}</Body1>}
-              <Body1>
-                {session
-                  ? formatISOTimestamp( clip.time ).slice( 11 )
-                  : formatISOTimestamp( clip.time )}
-              </Body1>
+              <Body1>{formatISOTimestamp( clip.time )}</Body1>
               <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
             </View>
             <INatIconButton

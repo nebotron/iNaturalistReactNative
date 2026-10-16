@@ -18,6 +18,7 @@ import useStore from "stores/useStore";
 
 import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
+import type { Heard } from "./audioIdSession";
 import useAudioIdSession, { heardIn, vibrate } from "./audioIdSession";
 
 // Animal classes the model covers, for asking which of them the user has seen.
@@ -107,7 +108,7 @@ const AudioId = ( ) => {
     };
   }, [] ) );
   const {
-    listening, error, current, heard, setup, setSeen, start,
+    listening, error, current, setup, setSeen, start,
     stop,
   } = useAudioIdSession( );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
@@ -124,21 +125,21 @@ const AudioId = ( ) => {
   const scoreNow = ( taxonId: number ) => current?.[outputOf.get( taxonId ) ?? -1] || 0;
   const isHeardNow = useMemo( ( ) => heardIn( current || {} ), [current] );
   const hearingNow = ( taxonId: number ) => listening && isHeardNow( scoreNow( taxonId ) );
-  const heardList = Object.values( heard ).sort( ( a, b ) => b.lastHeard - a.lastHeard );
   const clips = useAudioIdHistory( state => state.clips );
-  const sessions = useAudioIdHistory( state => state.sessions );
-  const pastSessions = useMemo( ( ) => {
-    const species = new Map<string, Set<number>>( );
+  // Every species ever heard, most recently heard first.
+  const heardList = useMemo( ( ) => {
+    const bySpecies = new Map<number, Heard>( );
     Object.values( clips ).forEach( c => {
-      if ( !c.sessionId ) return;
-      if ( !species.has( c.sessionId ) ) species.set( c.sessionId, new Set( ) );
-      species.get( c.sessionId )?.add( c.sp.taxonId );
+      const h = bySpecies.get( c.sp.taxonId );
+      bySpecies.set( c.sp.taxonId, {
+        sp: c.sp,
+        lastHeard: Math.max( h?.lastHeard || 0, c.time ),
+        best: Math.max( h?.best || 0, c.confidence ),
+        count: ( h?.count || 0 ) + 1,
+      } );
     } );
-    return Object.values( sessions )
-      .filter( s => species.has( s.id ) )
-      .sort( ( a, b ) => b.startedAt - a.startedAt )
-      .map( s => ( { ...s, speciesCount: species.get( s.id )?.size || 0 } ) );
-  }, [clips, sessions] );
+    return [...bySpecies.values( )].sort( ( a, b ) => b.lastHeard - a.lastHeard );
+  }, [clips] );
   const hasUnlabeled = useMemo( ( ) => new Set( Object.values( clips )
     .filter( c => !c.label ).map( c => c.sp.taxonId ) ), [clips] );
 
@@ -232,7 +233,7 @@ const AudioId = ( ) => {
         <Body3 className="mt-1">Listening…</Body3>
       )}
 
-      <Heading4 className="mt-6 mb-1">HEARD THIS SESSION</Heading4>
+      <Heading4 className="mt-6 mb-1">HEARD</Heading4>
       {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
       {heardList.map( h => row(
         h.sp,
@@ -241,27 +242,9 @@ const AudioId = ( ) => {
           : h.best,
         `${h.count} ${h.count === 1
           ? "time"
-          : "times"}, last at ${formatISOTimestamp( h.lastHeard ).slice( 11 )}`,
+          : "times"}, last ${formatISOTimestamp( h.lastHeard )}`,
       ) )}
 
-      <Heading4 className="mt-6 mb-1">PAST SESSIONS</Heading4>
-      {pastSessions.length === 0 && <Body3 className="py-2">None yet.</Body3>}
-      {pastSessions.map( s => (
-        <Pressable
-          key={s.id}
-          accessibilityRole="button"
-          accessibilityHint="Opens everything heard in this session."
-          className="py-2 px-2 border-b border-lightGray"
-          onPress={( ) => navigation.navigate( "AudioIdHistory", { sessionId: s.id } )}
-        >
-          <Body1>{formatISOTimestamp( s.startedAt )}</Body1>
-          <Body3>
-            {`${s.speciesCount} species${s.endedAt
-              ? `, ${Math.max( 1, Math.round( ( s.endedAt - s.startedAt ) / 60000 ) )} min`
-              : ""}`}
-          </Body3>
-        </Pressable>
-      ) )}
       <View className="h-20" />
     </ScrollView>
   );

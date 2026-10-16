@@ -9,7 +9,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import type { AudioIdSpecies } from "./audioIdModel";
 
-// Every Audio ID detection, kept across sessions with a 5 s clip of the call
+// Every Audio ID detection, kept with a 5 s clip of the call
 // (saved natively as AAC under CLIPS_PATH). A detection is one call: runs of
 // a species heard less than 3 s apart; its clip is the run it scored best in.
 // Labels ben142 gives a clip are mirrored to Firebase for checking the model.
@@ -25,7 +25,6 @@ export interface AudioIdLabel {
 }
 export interface AudioIdClip {
   id: string;
-  sessionId?: string;
   sp: AudioIdSpecies;
   time: number;
   confidence: number;
@@ -33,13 +32,6 @@ export interface AudioIdClip {
   location?: { latitude: number; longitude: number; accuracy: number };
   // the observation last made from this clip
   observationUuid?: string;
-}
-
-// One stretch of listening; endedAt is unset if the app quit while listening.
-export interface ListeningSession {
-  id: string;
-  startedAt: number;
-  endedAt?: number;
 }
 
 // The app container's path changes across installs, so only ids are stored.
@@ -56,10 +48,7 @@ export const clipAround = ( clips: Record<string, AudioIdClip>, time: number ) =
 
 interface AudioIdHistoryState {
   clips: Record<string, AudioIdClip>;
-  sessions: Record<string, ListeningSession>;
-  startSession: ( ) => string;
-  endSession: ( id: string ) => void;
-  addClip: ( sp: AudioIdSpecies, confidence: number, sessionId?: string ) => AudioIdClip;
+  addClip: ( sp: AudioIdSpecies, confidence: number ) => AudioIdClip;
   updateClip: ( id: string, changes: Partial<AudioIdClip> ) => void;
   labelClip: (
     id: string, taxonId: number | null | undefined, name: string | null
@@ -76,21 +65,9 @@ export const isClipCorrect = ( clip: AudioIdClip ) => ( clip.label
 
 const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) => ( {
   clips: {},
-  sessions: {},
-  startSession: ( ) => {
-    const id = uuid.v4( );
-    set( { sessions: { ...get( ).sessions, [id]: { id, startedAt: Date.now( ) } } } );
-    return id;
-  },
-  endSession: id => {
-    const session = get( ).sessions[id];
-    if ( session ) {
-      set( { sessions: { ...get( ).sessions, [id]: { ...session, endedAt: Date.now( ) } } } );
-    }
-  },
-  addClip: ( sp, confidence, sessionId ) => {
+  addClip: ( sp, confidence ) => {
     const clip = {
-      id: uuid.v4( ), sessionId, sp, time: Date.now( ), confidence,
+      id: uuid.v4( ), sp, time: Date.now( ), confidence,
     };
     set( { clips: { ...get( ).clips, [clip.id]: clip } } );
     return clip;
@@ -155,7 +132,7 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( persist( ( set, get ) 
 } ), {
   name: "audio-id-history",
   storage: createJSONStorage( ( ) => zustandStorage as unknown as StateStorage ),
-  partialize: state => ( { clips: state.clips, sessions: state.sessions } ),
+  partialize: state => ( { clips: state.clips } ),
 } ) );
 
 export default useAudioIdHistory;

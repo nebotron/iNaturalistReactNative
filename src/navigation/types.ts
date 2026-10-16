@@ -431,7 +431,7 @@ export type BaseTabStackParamList = {
   // From UserProfile: { userId }
   WildlifeHotspots: { filterParams?: Record<string, unknown> } | undefined;
   AudioId: undefined;
-  AudioIdHistory: { taxonId: number } | { sessionId: string };
+  AudioIdHistory: { taxonId: number };
   AudioIdClip: { id: string };
   AudioIdTaxa: undefined;
   CropLogViewer: undefined;

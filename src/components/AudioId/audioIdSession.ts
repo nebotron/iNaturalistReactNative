@@ -79,7 +79,6 @@ const heardTaxa = new Set<number>( );
 const callClips = new Map<number, string>( );
 // Pending saves of 15 s centered on each clip's window, by clip ID.
 const contextTimers = new Map<string, ReturnType<typeof setTimeout>>( );
-let sessionId: string | undefined;
 // Where listening started, for clips heard where no fix comes back.
 let sessionLocation: UserLocation | null = null;
 
@@ -98,7 +97,7 @@ const saveCallClip = (
   if ( clip && score <= clip.confidence ) return;
   const id = clip
     ? clip.id
-    : history.addClip( sp, score, sessionId ).id;
+    : history.addClip( sp, score ).id;
   if ( clip ) {
     history.updateClip( id, { confidence: score } );
   } else {
@@ -181,7 +180,6 @@ const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
       const mic = await AudioBirdId.start( s.outputs, THRESHOLD );
       logger.info( `started, ${s.species.length} species, located ${s.located}, `
         + `mic ${mic.sampleRate} Hz x${mic.channels}` );
-      sessionId = useAudioIdHistory.getState( ).startSession( );
       set( { listening: true } );
     } catch ( e ) {
       logger.error( `start failed: ${( e as Error ).message}` );
@@ -190,8 +188,6 @@ const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
   },
   stop: ( ) => {
     AudioBirdId?.stop( );
-    if ( sessionId ) useAudioIdHistory.getState( ).endSession( sessionId );
-    sessionId = undefined;
     set( { listening: false } );
   },
 } ), {
