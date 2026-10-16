@@ -614,8 +614,12 @@ Explore = Explore
 EXPLORE = EXPLORE
 Explore-Filters = Explore Filters
 EXPLORE-HOTSPOTS = EXPLORE HOTSPOTS
+# Button text for the Identifications view in Explore
+EXPLORE-IDENTIFICATIONS = EXPLORE IDENTIFICATIONS
 EXPLORE-IDENTIFIERS = EXPLORE IDENTIFIERS
 EXPLORE-LIFE-LIST = EXPLORE LIFE LIST
+# Button text for the Maverick IDs view in Explore
+EXPLORE-MAVERICK-IDS = EXPLORE MAVERICK IDS
 EXPLORE-OBSERVATIONS = EXPLORE OBSERVATIONS
 EXPLORE-OBSERVERS = EXPLORE OBSERVERS
 EXPLORE-SPECIES = EXPLORE SPECIES
@@ -720,6 +724,14 @@ IDENTIFICATION = IDENTIFICATION
 # Accessibility label for a button that shows options for an identification
 Identification-options = Identification options
 IDENTIFICATION-TIPS = IDENTIFICATION TIPS
+# Label for the Identifications view in Explore
+Identifications = Identifications
+# Description of the Identifications view in Explore
+Identifications-people-have-added-to-observations = Identifications people have added to other people's observations
+# Description of the Maverick IDs view in Explore
+Identifications-that-disagree-with-the-community-taxon = Identifications that disagree with the community taxon
+# Accessibility label for the Identifications view in Explore
+Identifications-View = Identifications View
 IDENTIFICATIONS-WITHOUT-NUMBER =
     { $count ->
         [one] IDENTIFICATION
@@ -926,6 +938,10 @@ Mark-photos-as-already-saved = Mark as Saved
 Match-Screen = Match Screen
 # Identification category
 maverick--identification = Maverick
+# Label for the Maverick IDs view in Explore
+Maverick-IDs = Maverick IDs
+# Accessibility label for the Maverick IDs view in Explore
+Maverick-IDs-View = Maverick IDs View
 # Month of May
 May = May
 MEDIA = MEDIA
@@ -970,9 +986,6 @@ Most-to-least-faved = Most to least faved
 # Title for section in Notifications showing notifications about observations
 # created by the viewer. Should be 16 characters or fewer or it will be ellipsized.
 MY-CONTENT--notifications = MY CONTENT
-# Label for a menu item and screen title showing the identifications the
-# user has added to other people's observations, newest first
-MY-IDS = MY IDS
 # Label for a menu item and screen title showing the first time the user
 # observed each species they've seen, newest to oldest
 MY-LIFERS = MY LIFERS
@@ -1970,14 +1983,9 @@ You-can-still-share-the-file = You can still share the file with another app. If
 You-can-upload-this-observation-to-our-community = You can upload this observation to our community to get an identification from a real person, and help our AI improve its identifications in the future
 You-cant-add-or-remove-observations-from-collection-and-umbrella-projects = You can’t add or remove observations from collection and umbrella projects.
 You-changed-filters-will-be-discarded = You changed filters, but they were not applied to your explore search results.
-# Empty state for the screen listing the user's maverick identifications
-You-dont-have-any-maverick-identifications = You don't have any maverick identifications.
 You-have-no-notifications-get-started-by-creating-your-own-observations = You have no notifications! Get started by creating your own observations.
 You-have-no-notifications-you-will-see-updates-to-obs-you-have-left-IDs-or-comments-on = You have no notifications! You will see updates to observations you have left IDs or comments on here.
 You-have-opted-out-of-the-Community-Taxon = You have opted out of the Community Taxon
-# Empty state for the screen listing the identifications the user has added
-# to other people's observations
-You-havent-identified-any-observations-yet = You haven't identified any observations yet.
 You-havent-joined-any-projects-yet = You haven’t joined any projects yet!
 You-havent-joined-any-Traditional-Projects-yet = You haven’t joined any Traditional Projects yet!
 You-havent-observed-any-species-yet = You haven't observed any species yet.

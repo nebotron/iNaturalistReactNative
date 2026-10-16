@@ -3,9 +3,11 @@ import { useFocusEffect, useRoute } from "@react-navigation/native";
 import type { ApiTotalBounds } from "api/types";
 import {
   HOTSPOTS_TAB,
+  IDENTIFICATIONS_TAB,
   IDENTIFIERS_TAB,
   IDENTIFY_TAB,
   LIFELIST_TAB,
+  MAVERICKS_TAB,
   OBSERVATIONS_TAB,
   OBSERVERS_TAB,
   SPECIES_TAB,
@@ -21,6 +23,8 @@ import type { NearbyCoords }
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
 import buildExploreV2QueryParams
   from "components/Explore/ExploreV2/helpers/buildQueryParams";
+import ExploreV2IdentificationsView
+  from "components/Explore/ExploreV2/screens/ExploreV2IdentificationsView";
 import ExploreV2SpeciesView
   from "components/Explore/ExploreV2/screens/ExploreV2SpeciesView";
 import ExploreV2UsersView
@@ -91,6 +95,8 @@ const EXPLORE_VIEW_ICONS: Record<ExploreV2Tab, string> = {
   [OBSERVERS_TAB]: "observers",
   [IDENTIFIERS_TAB]: "identifiers",
   [LIFELIST_TAB]: "list",
+  [IDENTIFICATIONS_TAB]: "id-agree",
+  [MAVERICKS_TAB]: "flag",
 };
 
 const noop = ( ) => undefined;
@@ -115,6 +121,7 @@ const ExploreResults = ( ) => {
     ( _view: string, count: number ) => setLifeListCount( count ),
     [],
   );
+  const [identificationsCount, setIdentificationsCount] = useState<number | null>( null );
   const observationsSortLabels = useObservationsSortLabels( );
   const speciesSortLabels = useSpeciesSortLabels( );
   const { layout, writeLayoutToStorage } = useStoredLayout( "exploreV2ObservationsLayout" );
@@ -310,6 +317,20 @@ const ExploreResults = ( ) => {
       text: t( "Each-species-with-the-date-it-was-first-observed" ),
       value: LIFELIST_TAB,
     },
+    [IDENTIFICATIONS_TAB]: {
+      buttonText: t( "EXPLORE-IDENTIFICATIONS" ),
+      icon: "id-agree",
+      label: t( "Identifications" ),
+      text: t( "Identifications-people-have-added-to-observations" ),
+      value: IDENTIFICATIONS_TAB,
+    },
+    [MAVERICKS_TAB]: {
+      buttonText: t( "EXPLORE-MAVERICK-IDS" ),
+      icon: "flag",
+      label: t( "Maverick-IDs" ),
+      text: t( "Identifications-that-disagree-with-the-community-taxon" ),
+      value: MAVERICKS_TAB,
+    },
   };
   const exploreViewA11yLabels: Record<ExploreV2Tab, string> = {
     [OBSERVATIONS_TAB]: t( "Observations-View" ),
@@ -319,6 +340,8 @@ const ExploreResults = ( ) => {
     [OBSERVERS_TAB]: t( "Observers-View" ),
     [IDENTIFIERS_TAB]: t( "Identifiers-View" ),
     [LIFELIST_TAB]: t( "Life-List-View" ),
+    [IDENTIFICATIONS_TAB]: t( "Identifications-View" ),
+    [MAVERICKS_TAB]: t( "Maverick-IDs-View" ),
   };
 
   const renderPermissionPrompt = ( ) => (
@@ -450,6 +473,16 @@ const ExploreResults = ( ) => {
             tab={state.activeTab}
           />
         );
+      case IDENTIFICATIONS_TAB:
+      case MAVERICKS_TAB:
+        return (
+          <ExploreV2IdentificationsView
+            enabled={canFetch}
+            params={baseSearchParams}
+            tab={state.activeTab}
+            onCount={setIdentificationsCount}
+          />
+        );
       default: {
         // Exhaustiveness check: ts fails if a new tab is added without a case.
         const _exhaustive: never = state.activeTab;
@@ -519,6 +552,10 @@ const ExploreResults = ( ) => {
         && t( "X-Species", { count: speciesCount } ),
       [LIFELIST_TAB]: typeof lifeListCount === "number"
         && t( "X-Species", { count: lifeListCount } ),
+      [IDENTIFICATIONS_TAB]: typeof identificationsCount === "number"
+        && t( "X-Identifications", { count: identificationsCount } ),
+      [MAVERICKS_TAB]: typeof identificationsCount === "number"
+        && t( "X-Identifications", { count: identificationsCount } ),
     }[state.activeTab as string];
     return (
       <>

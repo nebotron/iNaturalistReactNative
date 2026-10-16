@@ -1,6 +1,12 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { searchIdentifications } from "api/identifications";
 import type { ApiIdentification, ApiObservation } from "api/types";
+import { MAVERICKS_TAB } from "appConstants/tabs";
+import type {
+  ExploreV2BaseQueryParams,
+} from "components/Explore/ExploreV2/helpers/buildQueryParams";
+import identificationOutcome
+  from "components/Explore/ExploreV2/helpers/identificationOutcome";
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
 import { soundUriFromObservation } from "components/ObservationsFlashList/util";
 import {
@@ -13,10 +19,8 @@ import {
   INatIcon,
 } from "components/SharedComponents";
 import CustomFlashList from "components/SharedComponents/FlashList/CustomFlashList";
-import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { Pressable, View } from "components/styledComponents";
 import flatten from "lodash/flatten";
-import type { TabStackScreenProps } from "navigation/types";
 import React, { useCallback, useEffect, useMemo } from "react";
 import type { ListRenderItemInfo } from "react-native";
 import Photo from "realmModels/Photo";
@@ -27,8 +31,6 @@ import {
   useTranslation,
 } from "sharedHooks";
 import colors from "styles/tailwindColors";
-
-import identificationOutcome from "./identificationOutcome";
 
 const PAGE_SIZE = 20;
 
@@ -150,37 +152,56 @@ const MyIdentificationItem = ( { item }: MyIdentificationItemProps ) => {
   );
 };
 
-const MyIdentificationsContainer = ( ) => {
-  const navigation = useNavigation<
-    TabStackScreenProps<"MyIdentifications">["navigation"]
-  >( );
-  const { params } = useRoute<TabStackScreenProps<"MyIdentifications">["route"]>( );
-  const currentUser = useCurrentUser( );
+// The identifications search only honors some of Explore's filters. A user
+// subject means the identifier here rather than the observer, and nearby or map
+// area locations aren't supported, so those are ignored.
+const toIdentificationParams = ( params: ExploreV2BaseQueryParams ) => ( {
+  user_id: params.user_id,
+  taxon_id: params.taxon_id,
+  without_taxon_id: params.without_taxon_id,
+  place_id: params.place_id,
+  project_id: params.project_id,
+  quality_grade: params.quality_grade,
+} );
+
+interface Props {
+  enabled: boolean;
+  params: ExploreV2BaseQueryParams;
+  tab: string;
+  onCount: ( count: number ) => void;
+}
+
+const ExploreV2IdentificationsView = ( {
+  enabled,
+  params,
+  tab,
+  onCount,
+}: Props ) => {
   const { t } = useTranslation( );
-  const userId = params?.userId ?? currentUser?.id;
-  const isOtherUser = userId !== currentUser?.id;
+  const idParams = useMemo( ( ) => ( {
+    ...toIdentificationParams( params ),
+    current: true,
+    ...( tab === MAVERICKS_TAB
+      ? { category: "maverick" }
+      // Identifications on other people's observations only
+      : { own_observation: false } ),
+    order_by: "created_at",
+    order: "desc",
+    per_page: PAGE_SIZE,
+  } ), [params, tab] );
 
   const {
     data,
     isLoading,
     fetchNextPage,
   } = useAuthenticatedInfiniteQuery(
-    ["fetchMyIdentifications", userId],
+    ["exploreV2Identifications", JSON.stringify( idParams )],
     ( { pageParam }: { pageParam?: number }, optsWithAuth: object ) => searchIdentifications(
-      {
-        user_id: userId,
-        // Identifications on other people's observations only
-        own_observation: false,
-        current: true,
-        order_by: "created_at",
-        order: "desc",
-        per_page: PAGE_SIZE,
-        page: pageParam ?? 1,
-      },
+      { ...idParams, page: pageParam ?? 1 },
       optsWithAuth,
     ),
     {
-      enabled: !!userId,
+      enabled,
       initialPageParam: 1,
       getNextPageParam: ( lastPage: { page?: number; total_results?: number } | null ) => (
         lastPage?.page && lastPage.page * PAGE_SIZE < ( lastPage.total_results ?? 0 )
@@ -197,47 +218,39 @@ const MyIdentificationsContainer = ( ) => {
     [data?.pages],
   );
 
+  const totalResults = data?.pages?.[0]?.total_results;
   useEffect( ( ) => {
-    navigation.setOptions( {
-      headerTitle: isOtherUser
-        ? t( "IDENTIFICATIONS-WITHOUT-NUMBER", { count: 2 } )
-        : t( "MY-IDS" ),
-    } );
-  }, [isOtherUser, navigation, t] );
+    if ( typeof totalResults === "number" ) onCount( totalResults );
+  }, [totalResults, onCount] );
 
   const renderItem = useCallback( ( { item }: ListRenderItemInfo<MyIdentification> ) => (
     <MyIdentificationItem item={item} />
   ), [] );
 
-  if ( isLoading ) {
+  if ( !enabled || isLoading ) {
     return (
-      <ScreenShell>
+      <View className="mt-5 items-center">
         <ActivityIndicator size={50} />
-      </ScreenShell>
+      </View>
     );
   }
 
   return (
-    <ScreenShell>
-      <View className="border-b border-lightGray mt-5" />
-      <CustomFlashList
-        data={identifications}
-        keyExtractor={( item: MyIdentification ) => `${item.uuid}`}
-        renderItem={renderItem}
-        onEndReached={( ) => fetchNextPage( )}
-        onEndReachedThreshold={0.5}
-        ListEmptyComponent={(
-          <View className="self-center mt-5 p-4">
-            <Body1 className="align-center text-center">
-              {isOtherUser
-                ? t( "No-results-found" )
-                : t( "You-havent-identified-any-observations-yet" )}
-            </Body1>
-          </View>
-        )}
-      />
-    </ScreenShell>
+    <CustomFlashList
+      data={identifications}
+      keyExtractor={( item: MyIdentification ) => `${item.uuid}`}
+      renderItem={renderItem}
+      onEndReached={( ) => fetchNextPage( )}
+      onEndReachedThreshold={0.5}
+      ListEmptyComponent={(
+        <View className="self-center mt-5 p-4">
+          <Body1 className="align-center text-center">
+            {t( "No-results-found" )}
+          </Body1>
+        </View>
+      )}
+    />
   );
 };
 
-export default MyIdentificationsContainer;
+export default ExploreV2IdentificationsView;

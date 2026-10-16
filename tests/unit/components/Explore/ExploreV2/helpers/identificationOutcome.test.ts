@@ -1,4 +1,4 @@
-import identificationOutcome from "components/MyIdentifications/identificationOutcome";
+import identificationOutcome from "components/Explore/ExploreV2/helpers/identificationOutcome";
 
 // The user's identification of a genus, made in the middle of the day
 const mine = {

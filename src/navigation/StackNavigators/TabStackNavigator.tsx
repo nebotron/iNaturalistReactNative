@@ -23,10 +23,7 @@ import CameraClockCheck from "components/LocationHistory/CameraClockCheck";
 import LocationHistory from "components/LocationHistory/LocationHistory";
 import LocationHistoryDetailMap from "components/LocationHistory/LocationHistoryDetailMap";
 import LocationHistoryPointsMap from "components/LocationHistory/LocationHistoryPointsMap";
-import MaverickIdentificationsContainer
-  from "components/MaverickIdentifications/MaverickIdentificationsContainer";
 import Menu from "components/Menu/Menu";
-import MyIdentificationsContainer from "components/MyIdentifications/MyIdentificationsContainer";
 import MyObservationsContainer from "components/MyObservations/MyObservationsContainer";
 import Notifications from "components/Notifications/Notifications";
 import DQAContainer from "components/ObsDetails/DQAContainer";
@@ -152,10 +149,6 @@ const FadeInFollowingList = ( ) => fadeInComponent( <FollowingList /> );
 const FadeInJournal = ( ) => fadeInComponent( <Journal /> );
 const FadeInPostDetails = ( ) => fadeInComponent( <PostDetails /> );
 const FadeInLifeList = ( ) => fadeInComponent( <LifeListContainer /> );
-const FadeInMaverickIdentifications = (
-  ( ) => fadeInComponent( <MaverickIdentificationsContainer /> )
-);
-const FadeInMyIdentifications = ( ) => fadeInComponent( <MyIdentificationsContainer /> );
 
 const BASE_SCREEN_OPTIONS = {
   headerBackButtonDisplayMode: "minimal",
@@ -380,16 +373,6 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             options={{
               headerTitle: devicePhotoCleanupTitle,
             }}
-          />
-          <Stack.Screen
-            name="MaverickIdentifications"
-            component={FadeInMaverickIdentifications}
-            options={LIST_OPTIONS}
-          />
-          <Stack.Screen
-            name="MyIdentifications"
-            component={FadeInMyIdentifications}
-            options={LIST_OPTIONS}
           />
           <Stack.Screen
             name="LocationHistory"

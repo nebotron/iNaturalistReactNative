@@ -1,6 +1,7 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import { useQueryClient } from "@tanstack/react-query";
+import { MAVERICKS_TAB } from "appConstants/tabs";
 import {
   signOut,
 } from "components/LoginSignUp/AuthenticationService";
@@ -26,6 +27,7 @@ import {
   useCurrentUser, useDebugMode, useFeatureFlag,
   useLayoutPrefs, useTranslation,
 } from "sharedHooks";
+import useNavigateToExplore from "sharedHooks/useNavigateToExplore";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
 import colors from "styles/tailwindColors";
 
@@ -102,6 +104,7 @@ const Menu = ( ) => {
   const navigation = useNavigation( );
   const queryClient = useQueryClient( );
   const currentUser = useCurrentUser( );
+  const navigateToExplore = useNavigateToExplore( );
   const { t } = useTranslation( );
   const { bottom, top } = useSafeAreaInsets( );
   const { isConnected } = useNetInfo( );
@@ -132,7 +135,7 @@ const Menu = ( ) => {
         },
         mavericks: {
           label: t( "MY-MAVERICK-IDS" ),
-          navigation: "MaverickIdentifications",
+          onPress: ( ) => navigateToExplore( { user: currentUser, tab: MAVERICKS_TAB } ),
           icon: "flag",
         },
       }

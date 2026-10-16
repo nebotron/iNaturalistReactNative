@@ -1,6 +1,7 @@
 import type { ApiProjectSummary, ApiTotalBounds, ApiUser } from "api/types";
 import type {
-  HOTSPOTS_TAB, IDENTIFIERS_TAB, IDENTIFY_TAB, LIFELIST_TAB, OBSERVERS_TAB, SPECIES_TAB,
+  HOTSPOTS_TAB, IDENTIFICATIONS_TAB, IDENTIFIERS_TAB, IDENTIFY_TAB, LIFELIST_TAB,
+  MAVERICKS_TAB, OBSERVERS_TAB, SPECIES_TAB,
 } from "appConstants/tabs";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
@@ -70,7 +71,9 @@ export type ExploreV2Tab =
   | typeof IDENTIFIERS_TAB
   | typeof HOTSPOTS_TAB
   | typeof LIFELIST_TAB
-  | typeof IDENTIFY_TAB;
+  | typeof IDENTIFY_TAB
+  | typeof IDENTIFICATIONS_TAB
+  | typeof MAVERICKS_TAB;
 
 export type ExploreV2Subject =
   | { type: "taxon"; taxon: Taxon }

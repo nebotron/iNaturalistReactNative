@@ -3,7 +3,7 @@ import type { ErrorWithResponse, INatApiError } from "api/error";
 import { fetchRelationships } from "api/relationships";
 import type { ApiRelationship, ApiUser } from "api/types";
 import { fetchRemoteUser } from "api/users";
-import { OBSERVATIONS_TAB, SPECIES_TAB } from "appConstants/tabs";
+import { IDENTIFICATIONS_TAB, OBSERVATIONS_TAB, SPECIES_TAB } from "appConstants/tabs";
 import LoginSheet from "components/MyObservations/LoginSheet";
 import {
   Body2,
@@ -138,9 +138,7 @@ const UserProfile = ( ) => {
 
   const onSpeciesPressed = ( ) => exploreUser( SPECIES_TAB );
 
-  const onIdentificationsPressed = ( ) => {
-    navigation.navigate( "MyIdentifications", { userId: user?.id } );
-  };
+  const onIdentificationsPressed = ( ) => exploreUser( IDENTIFICATIONS_TAB );
 
   const onJournalPostsPressed = ( ) => {
     navigation.navigate( "Journal", {
