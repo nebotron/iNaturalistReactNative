@@ -17,4 +17,6 @@ export const saveBrightness = ( photoUrl: string, brightness: number ): Promise<
 
 export const deleteBrightness = ( photoUrl: string ) => brightnessLog.remove( photoUrl );
 
+export const maintainBrightnessLog = ( ) => brightnessLog.maintain( );
+
 export const getBrightness = ( url: string ): number | null => brightnessLog.get( url );

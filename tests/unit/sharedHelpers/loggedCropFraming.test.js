@@ -2,7 +2,6 @@ import { Image } from "react-native";
 import { getAnimalCrop, saveAnimalCrop } from "sharedHelpers/animalCropLog";
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import { resolveSubjectDetectionForUri } from "sharedHelpers/useSubjectDetectionForUri";
-import { zustandStorage } from "stores/useStore";
 
 jest.mock( "sharedHelpers/detectSubjectInImage", ( ) => ( {
   __esModule: true,
@@ -23,7 +22,6 @@ const CROP = {
 describe( "framing a photo by hand", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
-    zustandStorage.removeItem( "animalCropLog" );
     global.fetch = jest.fn( ( ) => Promise.resolve( { ok: true } ) );
     jest.spyOn( Image, "getSize" ).mockImplementation( ( _uri, onSuccess ) => {
       onSuccess( 2000, 1000 );

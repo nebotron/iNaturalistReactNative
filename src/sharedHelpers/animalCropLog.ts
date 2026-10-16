@@ -43,6 +43,8 @@ export const saveAnimalCrop = ( photoUrl: string, crop: NormalizedCrop ) => {
 
 export const deleteAnimalCrop = ( photoUrl: string ) => animalCropLog.remove( photoUrl );
 
+export const maintainAnimalCropLog = ( ) => animalCropLog.maintain( );
+
 export const getAnimalCrop = ( url: string ): NormalizedCrop | null => animalCropLog.get( url );
 
 // Notified whenever any crop is saved or removed, so screens showing a framed

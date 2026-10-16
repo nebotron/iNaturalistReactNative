@@ -15,6 +15,8 @@ import { navigationRef } from "navigation/navigationUtils";
 import { RealmContext } from "providers/contexts";
 import { useEffect } from "react";
 import User from "realmModels/User";
+import { maintainAnimalCropLog } from "sharedHelpers/animalCropLog";
+import { maintainBrightnessLog } from "sharedHelpers/brightnessLog";
 import {
   clearComputerVisionPhotos,
   clearExpiredCropSources,
@@ -139,6 +141,9 @@ const useDeferredStartup = ( ) => {
     const id17 = deferTask( "clearExpiredMediaCaches", clearExpiredMediaCaches );
     const id18 = deferTask( "trimRemoteImageCache", trimRemoteImageCache );
     // MMKV files never shrink on their own, and data has moved out of this one
+    const idLogs = deferTask( "maintainFirebaseLogs", async ( ) => {
+      await Promise.all( [maintainAnimalCropLog( ), maintainBrightnessLog( )] );
+    } );
     const idTrim = deferTask( "trimMmkv", async ( ) => {
       zustandMMKVBackingStorage.trim( );
     } );
@@ -163,6 +168,7 @@ const useDeferredStartup = ( ) => {
     return ( ) => {
       cancelIdleCallback( id0 );
       cancelIdleCallback( idTrim );
+      cancelIdleCallback( idLogs );
       cancelIdleCallback( id1 );
       cancelIdleCallback( id2 );
       cancelIdleCallback( id3 );

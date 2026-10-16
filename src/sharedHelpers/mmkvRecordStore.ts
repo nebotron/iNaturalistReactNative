@@ -5,8 +5,15 @@ export const USER_OBSERVATIONS_MMKV_ID = "user-observations";
 export const AUDIO_ID_CLIPS_MMKV_ID = "audio-id-clips";
 export const AUDIO_ID_HEARD_MMKV_ID = "audio-id-heard";
 // Instances holding user data outside the default one, which sign-out clears
-// along with it, as it did when this data lived there
-const instanceIds = [USER_OBSERVATIONS_MMKV_ID, AUDIO_ID_CLIPS_MMKV_ID, AUDIO_ID_HEARD_MMKV_ID];
+// along with it, as it did when this data lived there. The last two are the
+// local copies of the Firebase crop and brightness logs (urlKeyedFirebaseLog).
+const instanceIds = [
+  USER_OBSERVATIONS_MMKV_ID,
+  AUDIO_ID_CLIPS_MMKV_ID,
+  AUDIO_ID_HEARD_MMKV_ID,
+  "animalCropLog",
+  "brightnessLog",
+];
 export const clearMmkvUserData = ( ) => instanceIds
   .forEach( id => new MMKV( { id } ).clearAll( ) );
 
