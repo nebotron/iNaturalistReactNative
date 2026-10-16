@@ -79,7 +79,8 @@ const LifeListView = ( {
       contentContainerStyle={contentContainerStyle}
       data={lifers}
       fetchNextPage={( ) => undefined}
-      hideLoadingWheel={!isFetching}
+      // The empty list already shows a spinner, so skip the footer one
+      hideLoadingWheel={!isFetching || lifers.length === 0}
       isFetchingNextPage={isFetching}
       isConnected={isConnected}
       keyExtractor={( item: Lifer ) => item.uuid}
