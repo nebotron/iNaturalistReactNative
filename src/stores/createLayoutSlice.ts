@@ -228,7 +228,7 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
           ...state.layout.hotspotAddressHistory.filter(
             a => a.display_name !== address.display_name,
           ),
-        ].slice( 0, 10 ),
+        ].slice( 0, 1000 ),
       },
     } ) ),
     // Last viewport seen by the user in the Explore map

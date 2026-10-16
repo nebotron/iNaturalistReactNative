@@ -100,6 +100,9 @@ interface AddressInputProps {
   // Shown in the dropdown before the user types (recent addresses + current
   // location), so the field can be filled without searching.
   presetSuggestions: PlaceResult[];
+  // Previously entered addresses, most-recent first; those containing the typed
+  // text are listed ahead of search results.
+  addressHistory: PlaceResult[];
 }
 
 // Suggestions are reported up to the parent, which renders the dropdown as a
@@ -114,6 +117,7 @@ const AddressInput = ( {
   nearbyLatLng,
   onEmptyBlur,
   presetSuggestions,
+  addressHistory,
 }: AddressInputProps ) => {
   const [searching, setSearching] = useState( false );
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>( null );
@@ -126,21 +130,30 @@ const AddressInput = ( {
     if ( debounceRef.current ) clearTimeout( debounceRef.current );
     requestIdRef.current += 1;
     const requestId = requestIdRef.current;
-    if ( text.trim().length < 3 ) {
-      // Before anything is typed, offer recent addresses and current location.
-      onSuggestionsChange( text.trim().length === 0
-        ? presetSuggestions
-        : [] );
+    const query = text.trim();
+    // Before anything is typed, offer recent addresses and current location.
+    if ( query.length === 0 ) {
+      onSuggestionsChange( presetSuggestions );
       return;
     }
+    const lowerQuery = query.toLowerCase();
+    const historyMatches = addressHistory
+      .filter( a => a.display_name.toLowerCase().includes( lowerQuery ) )
+      .slice( 0, RECENT_ADDRESS_COUNT );
+    onSuggestionsChange( historyMatches );
+    if ( query.length < 3 ) return;
     debounceRef.current = setTimeout( async () => {
       setSearching( true );
-      const results = await searchPlaces( text.trim(), nearbyLatLng );
+      const results = await searchPlaces( query, nearbyLatLng );
       setSearching( false );
       if ( requestIdRef.current !== requestId ) return;
-      onSuggestionsChange( results );
+      const matchedNames = new Set( historyMatches.map( a => a.display_name ) );
+      onSuggestionsChange( [
+        ...historyMatches,
+        ...results.filter( r => !matchedNames.has( r.display_name ) ),
+      ] );
     }, 200 );
-  }, [onChangeText, nearbyLatLng, onSuggestionsChange, presetSuggestions] );
+  }, [onChangeText, nearbyLatLng, onSuggestionsChange, presetSuggestions, addressHistory] );
 
   const handleClear = useCallback( () => {
     handleChange( "" );
@@ -569,6 +582,7 @@ const WildlifeHotspotsScreen = ( {
             nearbyLatLng={stops[index - 1]?.point ?? userLocation ?? undefined}
             onEmptyBlur={() => handleStopEmptyBlur( stop.id )}
             presetSuggestions={presetSuggestions}
+            addressHistory={addressHistory}
           />
           {index > 0 && index < stops.length - 1 && (
             <TouchableOpacity
@@ -596,6 +610,7 @@ const WildlifeHotspotsScreen = ( {
     userLocation,
     t,
     presetSuggestions,
+    addressHistory,
     handleStopTextChange,
     handleStopSuggestionsChange,
     handleStopEmptyBlur,
