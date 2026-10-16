@@ -20,8 +20,11 @@ const pad = ( n: number ) => String( n ).padStart( 2, "0" );
 const dayKeyForDate = ( date: Date ) => `${date.getFullYear()}-${
   pad( date.getMonth() + 1 )}-${pad( date.getDate() )}`;
 
-// 24-hour "HH:mm" label in the device's local time.
-const timeLabelForDate = ( date: Date ) => `${pad( date.getHours() )}:${pad( date.getMinutes() )}`;
+// 12-hour "h:mm AM" label in the device's local time.
+const timeLabelForDate = ( date: Date ) => `${date.getHours( ) % 12 || 12}:${
+  pad( date.getMinutes() )} ${date.getHours( ) < 12
+  ? "AM"
+  : "PM"}`;
 
 interface Day {
   key: string;

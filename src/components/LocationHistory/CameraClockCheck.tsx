@@ -35,8 +35,10 @@ const pad = ( n: number, width = 2 ) => String( n ).padStart( width, "0" );
 
 const formatClock = ( ms: number ) => {
   const d = new Date( ms );
-  return `${pad( d.getHours( ) )}:${pad( d.getMinutes( ) )}:${pad( d.getSeconds( ) )}`
-    + `.${Math.floor( d.getMilliseconds( ) / 100 )}`;
+  return `${d.getHours( ) % 12 || 12}:${pad( d.getMinutes( ) )}:${pad( d.getSeconds( ) )}`
+    + `.${Math.floor( d.getMilliseconds( ) / 100 )} ${d.getHours( ) < 12
+      ? "AM"
+      : "PM"}`;
 };
 
 const formatDuration = ( ms: number ) => {
