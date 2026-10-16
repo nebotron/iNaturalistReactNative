@@ -194,8 +194,10 @@ export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
     const located = saved?.results.filtered( "latitude != nil AND longitude != nil" );
     if ( !located?.length ) return { pins: [], region: undefined };
     return {
-      pins: located.slice( 0, MAX_MAP_PINS ).map( ( { uuid, latitude, longitude } ) => (
-        { uuid, coordinate: { latitude: Number( latitude ), longitude: Number( longitude ) } }
+      pins: located.slice( 0, MAX_MAP_PINS ).map( ( {
+        uuid, latitude, longitude, json,
+      } ) => (
+        { uuid, json, coordinate: { latitude: Number( latitude ), longitude: Number( longitude ) } }
       ) ),
       region: getMapRegion( {
         swlat: Number( located.min( "latitude" ) ),
@@ -234,12 +236,16 @@ export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
               />
             ) )}
             <LocalTile pathTemplate={`${OFFLINE_TILES_PATH}/{z}/{x}/{y}.png`} tileSize={256} />
-            {pins.map( ( { uuid, coordinate } ) => (
+            {pins.map( ( { uuid, json, coordinate } ) => (
               <Marker
                 key={uuid}
                 coordinate={coordinate}
                 tracksViewChanges={false}
-                onPress={( ) => navigation.navigate( "ObsDetails", { uuid } )}
+                // Offline, ObsDetails can only show the saved observation
+                onPress={( ) => navigation.navigate( "ObsDetails", {
+                  uuid,
+                  preloadedObservation: JSON.parse( json ),
+                } )}
               >
                 <LocationIndicatorIcon width={25} height={32} />
               </Marker>
