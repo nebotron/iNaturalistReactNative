@@ -220,8 +220,9 @@ type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
 
 // Used only until the hidden measurement view below reports the real height.
 const FALLBACK_HOTSPOT_CARD_HEIGHT = 200;
-// Guards against the measured height being clipped by sub-pixel rounding.
-const HOTSPOT_CARD_HEIGHT_BUFFER = 6;
+// Guards against the measured height being clipped by sub-pixel rounding and
+// the panel's top border.
+const HOTSPOT_CARD_HEIGHT_BUFFER = 12;
 
 const styles = StyleSheet.create( {
   stopInputsContainer: {
