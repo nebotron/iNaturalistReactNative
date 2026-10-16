@@ -15,16 +15,19 @@ import { prepareAudioId } from "./audioIdModel";
 // The Audio ID listening session, kept outside the screen so it carries on
 // while the user is elsewhere in the app or the app is in the background. The
 // AudioBirdId native module runs BirdNET on the last 5 s of microphone audio
-// every second and emits one probability per species likely at the user's
-// place and week (see audioIdModel.ts). A species counts as heard when its
-// score clears THRESHOLD and it is either the top species in that run or
-// scores at least ALSO_HEARD: on held-out recordings this cut wrong species by
-// about a quarter for under half a point of recall, while still showing
-// confident overlapping callers.
+// every second and emits probabilities for the species likely at the user's
+// place and week (see audioIdModel.ts): the top one, and any that clear
+// THRESHOLD. A species counts as heard when its score clears THRESHOLD and it
+// is either the top species in that run or scores at least ALSO_HEARD: on
+// held-out recordings this cut wrong species by about a quarter for under half
+// a point of recall, while still showing confident overlapping callers.
 
 export const { AudioBirdId } = NativeModules as {
   AudioBirdId?: {
-    start: ( outputs: number[] ) => Promise<{ sampleRate: number; channels: number }>;
+    start: (
+      outputs: number[],
+      minScore: number,
+    ) => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
     setPlayingClip: ( playing: boolean ) => void;
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
@@ -45,8 +48,10 @@ const THRESHOLD = 0.5;
 const ALSO_HEARD = 0.7;
 // Only vibrate/notify for calls above this confidence
 const ALERT = 0.6;
-export const heardIn = ( scores: number[] ) => {
-  const top = Math.max( ...scores, 0 );
+// Scores by output index, as the native module sends them
+export type Scores = Record<number, number>;
+export const heardIn = ( scores: Scores ) => {
+  const top = Math.max( ...Object.values( scores ), 0 );
   return ( s: number ) => s >= THRESHOLD && ( s >= top || s >= ALSO_HEARD );
 };
 
@@ -55,7 +60,7 @@ const logger = log.extend( "AudioId" );
 const LOG_EVERY = 30;
 
 interface ScoresEvent {
-  scores: number[];
+  scores: Scores;
   level: number;
   // Epoch ms when the window's last sample arrived
   windowEnd: number;
@@ -124,7 +129,7 @@ const saveCallClip = (
 interface AudioIdState {
   listening: boolean;
   error: string | null;
-  current: number[];
+  current: Scores | null; // null until the first run
   level: number;
   inferMs: number;
   heard: Record<number, Heard>; // by taxon ID
@@ -135,11 +140,25 @@ interface AudioIdState {
   stop: ( ) => void;
 }
 
+// Persist writes after every set( ), once a second for the live level and
+// scores, though `heard` only changes when a species is heard; skip rewriting
+// an unchanged value.
+let lastSaved: string | undefined;
+const sessionStorage: StateStorage = {
+  getItem: name => zustandStorage.getItem( name ) as string | null,
+  setItem: ( name, value ) => {
+    if ( value === lastSaved ) return;
+    lastSaved = value;
+    zustandStorage.setItem( name, value );
+  },
+  removeItem: name => zustandStorage.removeItem( name ),
+};
+
 // What was heard is kept across app restarts.
 const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
   listening: false,
   error: null,
-  current: [],
+  current: null,
   level: 0,
   inferMs: 0,
   heard: {},
@@ -159,7 +178,7 @@ const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
       const s = await prepareAudioId( AudioBirdId.geo );
       set( { setup: s } );
       sessionLocation = s.location;
-      const mic = await AudioBirdId.start( s.outputs );
+      const mic = await AudioBirdId.start( s.outputs, THRESHOLD );
       logger.info( `started, ${s.species.length} species, located ${s.located}, `
         + `mic ${mic.sampleRate} Hz x${mic.channels}` );
       sessionId = useAudioIdHistory.getState( ).startSession( );
@@ -177,7 +196,7 @@ const useAudioIdSession = create<AudioIdState>( )( persist( ( set, get ) => ( {
   },
 } ), {
   name: "audio-id-session",
-  storage: createJSONStorage( ( ) => zustandStorage as unknown as StateStorage ),
+  storage: createJSONStorage( ( ) => sessionStorage ),
   partialize: state => ( { heard: state.heard } ),
 } ) );
 
@@ -222,12 +241,12 @@ const onScores = ( event: ScoresEvent ) => {
   const sps = setup?.species || [];
   runs.push( event );
   if ( runs.length >= LOG_EVERY ) {
-    const best = runs.reduce( ( b, r ) => {
-      const top = Math.max( ...r.scores, 0 );
-      return top > b.score
-        ? { score: top, index: r.scores.indexOf( top ) }
-        : b;
-    }, { score: 0, index: -1 } );
+    const best = runs.reduce( ( b, r ) => Object.entries( r.scores ).reduce(
+      ( rb, [i, s] ) => ( s > rb.score
+        ? { score: s, index: Number( i ) }
+        : rb ),
+      b,
+    ), { score: 0, index: -1 } );
     const mean = ( f: ( r: ScoresEvent ) => number ) => runs
       .reduce( ( sum, r ) => sum + f( r ), 0 ) / runs.length;
     logger.info( `${runs.length} runs: level ${
@@ -250,8 +269,8 @@ const onScores = ( event: ScoresEvent ) => {
   // of a species the user hasn't observed at research grade.
   const alerts: AudioIdSpecies[] = [];
   let next = heard;
-  scores.forEach( ( s, i ) => {
-    const sp = sps[i];
+  Object.entries( scores ).forEach( ( [i, s] ) => {
+    const sp = sps[Number( i )];
     if ( !isHeard( s ) || !sp ) return;
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;

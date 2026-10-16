@@ -110,8 +110,8 @@ const AudioId = ( ) => {
     ( ) => new Map( species.map( ( sp, i ) => [sp.taxonId, i] ) ),
     [species],
   );
-  const scoreNow = ( taxonId: number ) => current[outputOf.get( taxonId ) ?? -1] || 0;
-  const isHeardNow = useMemo( ( ) => heardIn( current ), [current] );
+  const scoreNow = ( taxonId: number ) => current?.[outputOf.get( taxonId ) ?? -1] || 0;
+  const isHeardNow = useMemo( ( ) => heardIn( current || {} ), [current] );
   const hearingNow = ( taxonId: number ) => listening && isHeardNow( scoreNow( taxonId ) );
   const heardList = Object.values( heard ).sort( ( a, b ) => b.lastHeard - a.lastHeard );
   const clips = useAudioIdHistory( state => state.clips );
@@ -217,7 +217,7 @@ const AudioId = ( ) => {
       </View>
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
       {listening && <Spectrogram />}
-      {listening && current.length === 0 && (
+      {listening && !current && (
         <Body3 className="mt-1">Listening…</Body3>
       )}
 

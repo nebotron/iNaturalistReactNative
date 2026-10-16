@@ -16,7 +16,8 @@
 // runs the bundled audio_id.onnx on it: BirdNET v3.0 (CC BY-SA 4.0, "Powered
 // by BirdNET") cut down to the species iNaturalist has sound observations of,
 // with its weights in audio_id.data<N> (scripts/bird_audio/birdnet/
-// build_model.py). Scores go out only for the outputs JS asks for. Everything
+// build_model.py). Scores go out only for the outputs JS asks for, and of
+// those only the top one and any at or above JS's minimum score. Everything
 // runs offline. The model contains its own
 // spectrogram frontend, so the window goes in as raw samples and one
 // probability per species comes out (multi-label: several birds can score
@@ -123,6 +124,7 @@ static void ABSpectrogramPush( const float *frame )
   OrtEnv           *_env;
   OrtSession       *_session;
   NSArray<NSNumber *> *_outputs;
+  float             _minScore;
   OrtSession       *_geoSession;
   BOOL              _wantListening;
   dispatch_source_t _watchdog;
@@ -145,8 +147,12 @@ RCT_EXPORT_MODULE( );
 {
   if ( ( self = [super init] ) ) {
     _window      = (float *)calloc( AB_HIST, sizeof( float ) );
-    _bufferQueue = dispatch_queue_create( "org.inat.audiobirdid.buffer", DISPATCH_QUEUE_SERIAL );
-    _inferQueue  = dispatch_queue_create( "org.inat.audiobirdid.infer", DISPATCH_QUEUE_SERIAL );
+    // Both queues stay busy while listening, so their threads never idle long
+    // enough to drain an autorelease pool; drain one per block instead.
+    dispatch_queue_attr_t serial = dispatch_queue_attr_make_with_autorelease_frequency(
+      DISPATCH_QUEUE_SERIAL, DISPATCH_AUTORELEASE_FREQUENCY_WORK_ITEM );
+    _bufferQueue = dispatch_queue_create( "org.inat.audiobirdid.buffer", serial );
+    _inferQueue  = dispatch_queue_create( "org.inat.audiobirdid.infer", serial );
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
     [nc addObserver:self selector:@selector( audioInterrupted: )
                name:AVAudioSessionInterruptionNotification object:nil];
@@ -210,10 +216,13 @@ RCT_EXPORT_METHOD( geo:( double )lat lng:( double )lng week:( double )week
     }
     float pos[3] = { (float)lat, (float)lng, (float)week };
     NSString *error = nil;
-    NSArray *out = self->_geoSession
+    NSData *probs = self->_geoSession
       ? [self run:self->_geoSession input:pos length:3 inputName:"input" outputName:"probabilities"
           outputs:nil error:&error]
       : nil;
+    NSMutableArray *out = probs ? [NSMutableArray array] : nil;
+    const float *p = (const float *)probs.bytes;
+    for ( NSUInteger i = 0; i < probs.length / sizeof( float ); i++ ) [out addObject:@( p[i] )];
     // Used once per start; free its memory until the next.
     const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
     if ( self->_geoSession ) ort->ReleaseSession( self->_geoSession );
@@ -223,10 +232,14 @@ RCT_EXPORT_METHOD( geo:( double )lat lng:( double )lng week:( double )week
 }
 
 RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
+                   minScore:( double )minScore
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
-  dispatch_sync( _inferQueue, ^{ self->_outputs = [outputs copy]; } );
+  dispatch_sync( _inferQueue, ^{
+    self->_outputs = [outputs copy];
+    self->_minScore = (float)minScore;
+  } );
   ABSpectrogramReset( );
   if ( ![self loadModel] ) {
     reject( @"model", @"Could not load the audio model", nil );
@@ -649,7 +662,10 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   __weak AudioBirdId *weakSelf = self;
   [input installTapOnBus:0 bufferSize:4096 format:inFormat
                    block:^( AVAudioPCMBuffer *buffer, AVAudioTime *when ) {
-    [weakSelf handleBuffer:buffer inRate:inFormat.sampleRate];
+    // The tap's thread has no autorelease pool that drains while listening.
+    @autoreleasepool {
+      [weakSelf handleBuffer:buffer inRate:inFormat.sampleRate];
+    }
   }];
   [_engine prepare];
   if ( ![_engine startAndReturnError:error] ) {
@@ -731,13 +747,23 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     dispatch_async( self->_inferQueue, ^{
       NSString *inferError = nil;
       CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
-      NSArray *scores = [self run:self->_session input:(const float *)window.bytes length:AB_WIN
-                        inputName:"input" outputName:"output" outputs:self->_outputs
-                            error:&inferError];
+      NSData *probs = [self run:self->_session input:(const float *)window.bytes length:AB_WIN
+                      inputName:"input" outputName:"output" outputs:self->_outputs
+                          error:&inferError];
       double ms = ( CFAbsoluteTimeGetCurrent( ) - t0 ) * 1000;
       dispatch_async( self->_bufferQueue, ^{ self->_busy = NO; } );
+      // By output index. Scores below the minimum can't count as heard, so
+      // only the top one goes along with them, rather than one per species.
+      const float *p = (const float *)probs.bytes;
+      NSUInteger n = probs.length / sizeof( float ), top = 0;
+      NSMutableDictionary<NSString *, NSNumber *> *scores = [NSMutableDictionary dictionary];
+      for ( NSUInteger i = 0; i < n; i++ ) {
+        if ( p[i] > p[top] ) top = i;
+        if ( p[i] >= self->_minScore ) scores[[@( i ) stringValue]] = @( p[i] );
+      }
+      if ( n > 0 ) scores[[@( top ) stringValue]] = @( p[top] );
       [self sendEventWithName:@"AudioBirdIdScores"
-                         body:@{ @"scores": scores ?: @[],
+                         body:@{ @"scores": scores,
                                  @"level": @( level ),
                                  @"windowEnd": @( windowEnd ),
                                  @"windowFrame": @( windowFrame ),
@@ -760,11 +786,11 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 }
 
 // One run of a [1, length] -> [1, n] model; returns the outputs listed in
-// `outputs`, in that order, or all of them when it is nil.
-- (NSArray<NSNumber *> *)run:(OrtSession *)session input:(const float *)samples
-                      length:(int64_t)length inputName:(const char *)inputName
-                  outputName:(const char *)outputName outputs:(NSArray<NSNumber *> *)outputs
-                       error:(NSString **)errorMessage
+// `outputs`, in that order, or all of them when it is nil, as floats.
+- (NSData *)run:(OrtSession *)session input:(const float *)samples
+         length:(int64_t)length inputName:(const char *)inputName
+     outputName:(const char *)outputName outputs:(NSArray<NSNumber *> *)outputs
+          error:(NSString **)errorMessage
 {
   if ( !session ) return nil;
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
@@ -803,14 +829,16 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   ort->ReleaseTensorTypeAndShapeInfo( info );
   float *probs;
   ort->GetTensorMutableData( output, (void **)&probs );
-  NSMutableArray *scores = [NSMutableArray arrayWithCapacity:outputs ? outputs.count : count];
+  NSMutableData *scores = [NSMutableData dataWithLength:( outputs ? outputs.count : count )
+                                                        * sizeof( float )];
+  float *dst = (float *)scores.mutableBytes;
   if ( outputs ) {
     for ( NSNumber *i in outputs ) {
       size_t k = i.unsignedIntegerValue;
-      [scores addObject:@( k < count ? probs[k] : 0 )];
+      *dst++ = k < count ? probs[k] : 0;
     }
   } else {
-    for ( size_t i = 0; i < count; i++ ) [scores addObject:@( probs[i] )];
+    memcpy( dst, probs, count * sizeof( float ) );
   }
   ort->ReleaseValue( output );
   return scores;
