@@ -10,6 +10,7 @@ import {
 
 export const OWNER_TAB = "owner";
 export const OTHER_TAB = "other";
+export const MESSAGES_TAB = "messages";
 export const NOTIFICATIONS_REFRESHED = "notifications-refreshed";
 
 const NotificationsTab = ( { id, text }: TabComponentProps ) => {
@@ -18,9 +19,10 @@ const NotificationsTab = ( { id, text }: TabComponentProps ) => {
   const {
     ownerUnviewedCount, followingUnviewedCount, refetch,
   } = useUnviewedNotificationsCount( );
-  const numUnviewed = id === OWNER_TAB
-    ? ownerUnviewedCount
-    : followingUnviewedCount;
+  const numUnviewed = {
+    [OWNER_TAB]: ownerUnviewedCount,
+    [OTHER_TAB]: followingUnviewedCount,
+  }[id];
 
   useEffect( ( ) => {
     const listener = EventRegister.addEventListener(

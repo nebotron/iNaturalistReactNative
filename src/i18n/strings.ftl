@@ -955,6 +955,9 @@ MEMBERS-WITHOUT-NUMBER =
 Membership-in-this-project-is-by-invitation-only = Membership in this project is by invitation only. If you'd like to join, please contact one of the curators and request an invitation.
 # Accessibility label for a button that opens a menu of options
 Menu = Menu
+# Tab on notifications showing the user's message inbox. Should be 16
+# characters or fewer or it will be ellipsized.
+MESSAGES--notifications = MESSAGES
 # Distance between a photo's EXIF location and the tracked location history
 Meters-Away = { $meters } m away
 Missing-Date = Missing Date
@@ -1182,6 +1185,8 @@ Opens-edit-comment-form = Opens edit comment form.
 # Accessibility hint for the button in the Explore header that picks what Explore shows
 Opens-explore-view-options = Opens Explore view options.
 Opens-location-permission-prompt = Opens location permission prompt
+# Accessibility hint for a message in the inbox
+Opens-message-on-iNaturalist-website = Opens the message on the iNaturalist website.
 # Accessibility hint for search button in Explore header that navigates to the search interface
 Opens-search-interface = Opens search interface.
 # Attribution for OpenStreetMap map tiles shown on the offline map
@@ -1983,6 +1988,8 @@ You-can-still-share-the-file = You can still share the file with another app. If
 You-can-upload-this-observation-to-our-community = You can upload this observation to our community to get an identification from a real person, and help our AI improve its identifications in the future
 You-cant-add-or-remove-observations-from-collection-and-umbrella-projects = You can’t add or remove observations from collection and umbrella projects.
 You-changed-filters-will-be-discarded = You changed filters, but they were not applied to your explore search results.
+# Shown when the user's message inbox is empty
+You-have-no-messages = You have no messages
 You-have-no-notifications-get-started-by-creating-your-own-observations = You have no notifications! Get started by creating your own observations.
 You-have-no-notifications-you-will-see-updates-to-obs-you-have-left-IDs-or-comments-on = You have no notifications! You will see updates to observations you have left IDs or comments on here.
 You-have-opted-out-of-the-Community-Taxon = You have opted out of the Community Taxon

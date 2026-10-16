@@ -11,8 +11,10 @@ import {
   useCurrentUser, useLayoutPrefs, useTranslation, useUnviewedNotificationsCount,
 } from "sharedHooks";
 
+import MessagesList from "./MessagesList";
 import NotificationsContainer from "./NotificationsContainer";
 import NotificationsTab, {
+  MESSAGES_TAB,
   NOTIFICATIONS_REFRESHED,
   OTHER_TAB,
   OWNER_TAB,
@@ -24,7 +26,9 @@ const OWNER_TAB_PARAMS = { observations_by: "owner" } as const;
 const FOLLOWING_TAB_PARAMS = { observations_by: "following" } as const;
 
 const Notifications = ( ) => {
-  const [activeTab, setActiveTab] = useState<typeof OWNER_TAB | typeof OTHER_TAB | null>( null );
+  const [activeTab, setActiveTab] = useState<
+    typeof OWNER_TAB | typeof OTHER_TAB | typeof MESSAGES_TAB | null
+  >( null );
   const hasAutoSelectedTab = useRef( false );
   const { t } = useTranslation();
   const { isDefaultMode } = useLayoutPrefs( );
@@ -75,6 +79,11 @@ const Notifications = ( ) => {
               text: t( "OTHERS--notifications" ),
               onPress: () => setActiveTab( OTHER_TAB ),
             },
+            {
+              id: MESSAGES_TAB,
+              text: t( "MESSAGES--notifications" ),
+              onPress: () => setActiveTab( MESSAGES_TAB ),
+            },
           ]}
           activeId={activeTab}
           TabComponent={NotificationsTab}
@@ -94,6 +103,7 @@ const Notifications = ( ) => {
           onRefresh={( ) => EventRegister.emit( NOTIFICATIONS_REFRESHED, OTHER_TAB )}
         />
       )}
+      {activeTab === MESSAGES_TAB && <MessagesList />}
       <NotificationOnboarding
         triggerCondition={
           isDefaultMode && !!currentUser && localObservationCount < 10
