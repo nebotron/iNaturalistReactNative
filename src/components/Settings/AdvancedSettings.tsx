@@ -15,32 +15,12 @@ import { SCREEN_AFTER_PHOTO_EVIDENCE } from "stores/createLayoutSlice";
 const AdvancedSettings = ( ) => {
   const { t } = useTranslation();
   const {
-    isAllAddObsOptionsMode,
-    setIsAllAddObsOptionsMode,
     screenAfterPhotoEvidence,
     setScreenAfterPhotoEvidence,
   } = useLayoutPrefs();
 
   return (
     <>
-      <View className="mt-[20px]">
-        <Body2>{ t( "When-tapping-the-green-observation-button" ) }</Body2>
-        <RadioButtonRow
-          classNames="ml-[6px] mt-[15px]"
-          testID="all-observation-options"
-          smallLabel
-          checked={isAllAddObsOptionsMode}
-          onPress={() => setIsAllAddObsOptionsMode( true )}
-          label={t( "All-observation-options--list" )}
-        />
-        <RadioButtonRow
-          classNames="ml-[6px] mt-[15px]"
-          smallLabel
-          checked={!isAllAddObsOptionsMode}
-          onPress={() => setIsAllAddObsOptionsMode( false )}
-          label={t( "iNaturalist-AI-Camera" )}
-        />
-      </View>
       <View className="mt-[20px]">
         <Body2>{ t( "After-capturing-or-importing-photos-show" ) }</Body2>
         <RadioButtonRow

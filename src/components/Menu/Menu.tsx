@@ -128,11 +128,6 @@ const Menu = ( ) => {
     },
     ...( currentUser
       ? {
-        lifeList: {
-          label: t( "MY-LIFERS" ),
-          navigation: "LifeList",
-          icon: "star",
-        },
         mavericks: {
           label: t( "MY-MAVERICK-IDS" ),
           onPress: ( ) => navigateToExplore( { user: currentUser, tab: MAVERICKS_TAB } ),
