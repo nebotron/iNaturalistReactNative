@@ -10,7 +10,6 @@ import type {
 import flatten from "lodash/flatten";
 import { useCallback, useMemo } from "react";
 import Observation from "realmModels/Observation";
-import ObservationSound from "realmModels/ObservationSound";
 import { useAuthenticatedInfiniteQuery } from "sharedHooks";
 
 import {
@@ -49,9 +48,6 @@ const useInfiniteExploreScroll = (
       // latitude/longitude are often absent); the Identify auto-CV reads it to
       // score with location, matching the Suggest ID screen.
       geojson: true,
-      // ADVANCED_MODE_LIST_FIELDS only asks for the sound uuid, but the Identify
-      // view plays the sounds of observations that have no photos.
-      observation_sounds: ObservationSound.OBSERVATION_SOUNDS_FIELDS,
       // login is needed so ObsListItem can tell whether an observation belongs
       // to the current user (geoprivacy/obscured handling differs in that case)
       user: {

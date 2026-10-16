@@ -2,6 +2,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { searchIdentifications } from "api/identifications";
 import type { ApiIdentification, ApiObservation } from "api/types";
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
+import { soundUriFromObservation } from "components/ObservationsFlashList/util";
 import {
   ActivityIndicator,
   Body1,
@@ -36,6 +37,7 @@ interface MyIdentification extends ApiIdentification {
     uuid?: string;
     identifications?: ApiIdentification[];
     observation_photos?: ApiObservation["observation_photos"];
+    observation_sounds?: ApiObservation["observation_sounds"];
   };
 }
 
@@ -100,6 +102,7 @@ const MyIdentificationItem = ( { item }: MyIdentificationItemProps ) => {
             autoDetectSubject={!!photoUri}
             isSmall
             hidePhotoCount
+            soundUri={soundUriFromObservation( item.observation )}
             iconicTaxonName={taxon?.iconic_taxon_name}
             testID="MyIdentificationItem.image"
           />

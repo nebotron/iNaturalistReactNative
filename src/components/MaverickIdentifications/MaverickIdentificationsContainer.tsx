@@ -3,6 +3,7 @@ import { searchIdentifications } from "api/identifications";
 import { fetchTaxon } from "api/taxa";
 import type { ApiIdentification, ApiObservation, ApiTaxon } from "api/types";
 import ObsImagePreview from "components/ObservationsFlashList/ObsImagePreview";
+import { soundUriFromObservation } from "components/ObservationsFlashList/util";
 import {
   ActivityIndicator,
   Body1,
@@ -35,6 +36,7 @@ interface MaverickIdentification extends ApiIdentification {
   observation?: {
     uuid?: string;
     observation_photos?: ApiObservation["observation_photos"];
+    observation_sounds?: ApiObservation["observation_sounds"];
   };
 }
 
@@ -111,6 +113,11 @@ async function fetchMaverickIdentifications(
                 url: true,
               },
             },
+            observation_sounds: {
+              sound: {
+                file_url: true,
+              },
+            },
           },
         },
       },
@@ -172,6 +179,7 @@ const MaverickIdentificationItem = ( { item }: MaverickIdentificationItemProps )
             autoDetectSubject={!!photoUri}
             isSmall
             hidePhotoCount
+            soundUri={soundUriFromObservation( item.observation )}
             iconicTaxonName={item.taxon?.iconic_taxon_name}
             testID="MaverickIdentificationItem.image"
           />

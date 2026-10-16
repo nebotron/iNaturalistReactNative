@@ -14,6 +14,7 @@ import {
   photoCountFromObservation,
   photoFromObservation,
   photosFromObservation,
+  soundUriFromObservation,
 } from "./util";
 
 type Props = {
@@ -91,6 +92,7 @@ const ObsGridItem = ( {
       style={style}
       obsPhotosCount={photoCountFromObservation( observation )}
       hasSound={observationHasSound( observation )}
+      soundUri={soundUriFromObservation( observation )}
       isMultiplePhotosTop={explore}
       testID={testID || `MyObservations.obsGridItem.${observation.uuid}`}
       useShortGradient={!explore}

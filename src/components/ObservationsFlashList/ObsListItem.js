@@ -25,6 +25,7 @@ import {
   photoCountFromObservation,
   photoFromObservation,
   photosFromObservation,
+  soundUriFromObservation,
 } from "./util";
 
 type Props = {
@@ -115,6 +116,7 @@ const ObsListItem = ( {
           obsPhotosCount={photoCountFromObservation( observation )}
           hidePhotoCount={missingBasics}
           hasSound={observationHasSound( observation )}
+          soundUri={soundUriFromObservation( observation )}
           opaque={!!currentUser && unsynced}
           isSmall
           iconicTaxonName={observation.taxon?.iconic_taxon_name}

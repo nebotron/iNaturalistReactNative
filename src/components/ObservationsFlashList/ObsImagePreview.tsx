@@ -1,6 +1,7 @@
 import type { ArgumentArray } from "classnames";
 import classNames from "classnames";
 import { INatIcon, PhotoCount } from "components/SharedComponents";
+import SoundPlayButton from "components/SharedComponents/SoundPlayButton";
 import { LinearGradient, View } from "components/styledComponents";
 import type { PropsWithChildren } from "react";
 import React, {
@@ -42,6 +43,8 @@ interface Props extends PropsWithChildren {
   photos?: ( { uri: string } | null )[];
   selectable?: boolean;
   selected?: boolean;
+  // Shows a play button for this sound in place of the sound icon
+  soundUri?: string;
   source?: {
     uri: string;
   };
@@ -83,6 +86,7 @@ const ObsImagePreview = ( {
   photos,
   selectable = false,
   selected = false,
+  soundUri,
   source,
   style,
   testID,
@@ -273,6 +277,24 @@ const ObsImagePreview = ( {
   }, [isSmall, useShortGradient, hideGradientOverlay] );
 
   const renderSoundIcon = useCallback( ( ) => {
+    if ( soundUri ) {
+      return (
+        <View
+          className={classNames( "absolute left-0", isSmall
+            ? "bottom-0"
+            : "top-0" )}
+        >
+          <SoundPlayButton
+            uri={soundUri}
+            color={colors.white}
+            size={isSmall
+              ? 16
+              : 20}
+            dropShadow
+          />
+        </View>
+      );
+    }
     if ( !hasSound ) return null;
 
     if ( isSmall ) {
@@ -297,7 +319,7 @@ const ObsImagePreview = ( {
         <INatIcon name="sound" color={colors.white} size={18} />
       </View>
     );
-  }, [hasSound, isSmall] );
+  }, [hasSound, isSmall, soundUri] );
 
   let content;
 
@@ -346,7 +368,9 @@ const ObsImagePreview = ( {
     ],
   );
 
-  if ( isSmall && obsPhotosCount === 0 && hasSound ) {
+  if ( isSmall && obsPhotosCount === 0 && !source?.uri && soundUri ) {
+    content = <SoundPlayButton uri={soundUri} color={colors.darkGray} size={24} />;
+  } else if ( isSmall && obsPhotosCount === 0 && hasSound ) {
     content = <INatIcon name="sound" color={colors.darkGray} size={24} />;
   } else if ( useCarousel ) {
     content = (

@@ -1,10 +1,12 @@
 import type { ApiObservation } from "api/types";
 import { THUMBNAIL_CLASS } from "appConstants/classNames";
 import classnames from "classnames";
+import { soundUriFromObservation } from "components/ObservationsFlashList/util";
 import {
   CachedImage,
   INatIcon,
 } from "components/SharedComponents";
+import SoundPlayButton from "components/SharedComponents/SoundPlayButton";
 import { View } from "components/styledComponents";
 import * as React from "react";
 import colors from "styles/tailwindColors";
@@ -17,8 +19,8 @@ const ObservationIcon = ( {
   observation,
 }: Props ) => {
   const photoUri = observation?.observation_photos?.[0]?.photo?.url;
-  const hasSound = ( observation?.observation_sounds?.length || 0 ) > 0;
-  if ( !photoUri && !hasSound ) {
+  const soundUri = soundUriFromObservation( observation );
+  if ( !photoUri && !soundUri ) {
     return (
       <View
         className={classnames(
@@ -38,7 +40,7 @@ const ObservationIcon = ( {
     );
   }
 
-  if ( !photoUri && hasSound ) {
+  if ( !photoUri && soundUri ) {
     return (
       <View
         className={classnames(
@@ -49,22 +51,25 @@ const ObservationIcon = ( {
           "items-center",
         )}
       >
-        <INatIcon
-          name="sound"
-          size={24}
-          color={String( colors?.darkGray )}
-        />
+        <SoundPlayButton uri={soundUri} size={24} color={String( colors?.darkGray )} />
       </View>
     );
   }
 
   return (
-    <CachedImage
-      testID="ObservationIcon.photo"
-      className={THUMBNAIL_CLASS}
-      source={{ uri: photoUri }}
-      accessibilityRole="image"
-    />
+    <View>
+      <CachedImage
+        testID="ObservationIcon.photo"
+        className={THUMBNAIL_CLASS}
+        source={{ uri: photoUri }}
+        accessibilityRole="image"
+      />
+      { soundUri && (
+        <View className="absolute left-0 bottom-0">
+          <SoundPlayButton uri={soundUri} size={16} color={colors.white} dropShadow />
+        </View>
+      ) }
+    </View>
   );
 };
 

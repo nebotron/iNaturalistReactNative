@@ -124,9 +124,8 @@ class Observation extends Realm.Object {
       },
       uuid: true,
     },
-    observation_sounds: {
-      uuid: true,
-    },
+    // file_url lets list thumbnails play the sound
+    observation_sounds: ObservationSound.OBSERVATION_SOUNDS_FIELDS,
     quality_grade: true,
     taxon: {
       id: true,
