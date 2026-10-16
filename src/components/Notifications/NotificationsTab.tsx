@@ -39,8 +39,10 @@ const NotificationsTab = ( { id, text }: TabComponentProps ) => {
   }, [currentUser, id, refetch] );
 
   return (
-    <View className="flex-row px-3 pt-4 pb-3 justify-center items-center">
+    <View className="flex-row px-1 pt-4 pb-3 justify-center items-center">
       <Heading4
+        className="shrink"
+        adjustsFontSizeToFit
         maxFontSizeMultiplier={1.5}
         numberOfLines={1}
       >
