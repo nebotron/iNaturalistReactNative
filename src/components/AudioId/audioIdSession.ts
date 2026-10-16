@@ -48,7 +48,7 @@ const THRESHOLD = 0.5;
 const ALSO_HEARD = 0.7;
 // Only vibrate/notify for calls above this confidence
 const ALERT = 0.6;
-const HOUR_MS = 3600000;
+const DAY_MS = 86400000;
 // Scores by output index, as the native module sends them
 export type Scores = Record<number, number>;
 export const heardIn = ( scores: Scores ) => {
@@ -73,7 +73,7 @@ export interface Heard {
   sp: AudioIdSpecies; lastHeard: number; best: number; count: number;
 }
 
-// Species whose current call came after an hour unheard, until alerted on.
+// Species whose current call came after a day unheard, until alerted on.
 const quietTaxa = new Set<number>( );
 // The clip of each species' current call, by taxon ID.
 const callClips = new Map<number, string>( );
@@ -291,7 +291,7 @@ const onScores = ( event: ScoresEvent ) => {
   }
   const now = Date.now( );
   const isHeard = heardIn( scores );
-  // Alert on a species not heard in the last hour, and on every call of a
+  // Alert on a species not heard in the last 24 hours, and on every call of a
   // species the user hasn't observed at research grade in the last 30 days.
   const alerts: AudioIdSpecies[] = [];
   let next = heard;
@@ -301,7 +301,7 @@ const onScores = ( event: ScoresEvent ) => {
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;
     saveCallClip( sp, s, isNewCall, event.windowFrame );
-    if ( !old || now - old.lastHeard > HOUR_MS ) quietTaxa.add( sp.taxonId );
+    if ( !old || now - old.lastHeard > DAY_MS ) quietTaxa.add( sp.taxonId );
     if ( s > ALERT && (
       quietTaxa.delete( sp.taxonId )
       || ( isNewCall && recent && !recent.has( sp.taxonId ) )
