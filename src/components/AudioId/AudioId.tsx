@@ -75,12 +75,12 @@ const TaxonThumb = ( { taxonId, onPress }: { taxonId: number; onPress: ( ) => vo
     <Pressable
       accessibilityRole="button"
       accessibilityHint="Opens the species page."
-      className="mr-3"
+      className="mr-3 self-stretch aspect-square min-h-[56px]"
       onPress={onPress}
     >
       {url
-        ? <CachedImage source={{ uri: url }} className="w-10 h-10 rounded-lg" />
-        : <IconicTaxonIcon imageClassName="w-10 h-10 rounded-lg" iconicTaxonName="Aves" />}
+        ? <CachedImage source={{ uri: url }} className="w-full h-full" />
+        : <IconicTaxonIcon imageClassName="w-full h-full" iconicTaxonName="Aves" />}
     </Pressable>
   );
 };
@@ -152,14 +152,14 @@ const AudioId = ( ) => {
       key={sp.taxonId}
       accessibilityRole="button"
       accessibilityHint="Opens the history of when this species was heard."
-      className={`flex-row items-center py-2 px-2 border-b border-lightGray ${
+      className={`flex-row items-center pr-2 border-b border-lightGray ${
         hearingNow( sp.taxonId )
           ? "bg-yellow"
           : ""}`}
       onPress={( ) => navigation.navigate( "AudioIdHistory", { taxonId: sp.taxonId } )}
     >
       <TaxonThumb taxonId={sp.taxonId} onPress={( ) => openTaxon( sp.taxonId )} />
-      <View className="flex-1">
+      <View className="flex-1 py-2">
         <View className="flex-row items-center">
           <Body1>{sp.commonName}</Body1>
           {hasUnlabeled.has( sp.taxonId ) && (
