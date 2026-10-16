@@ -301,12 +301,10 @@ RCT_EXPORT_METHOD( playClip:( NSString * )path
                   buffer.frameLength );
     }
     AVAudioSession *session = [AVAudioSession sharedInstance];
-    if ( ![session.category isEqualToString:AVAudioSessionCategoryPlayAndRecord] ) {
-      [session setCategory:AVAudioSessionCategoryPlayAndRecord
-                      mode:AVAudioSessionModeDefault
-                   options:AVAudioSessionCategoryOptionDefaultToSpeaker
-                         | AVAudioSessionCategoryOptionAllowBluetoothA2DP
-                     error:nil];
+    // Outside a listening session, a leftover record category (from an earlier
+    // session, the camera or the sound recorder) would force the speaker.
+    if ( !self->_engine ) {
+      [session setCategory:AVAudioSessionCategoryPlayback error:nil];
       [session setActive:YES error:nil];
     }
     AVAudioEngine *engine = [AVAudioEngine new];
