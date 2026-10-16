@@ -19,15 +19,18 @@ Variants (score of the predicted species):
          the real audio around the centered window, 5 s ones pad with
          silence, so there it reads low
   both   mean3 if nbr also clears the threshold, else 0
-Non-bird scores are not geomodel-weighted here, as they are in the app.
+Scores are cached in --cache per clip and model, so reruns only score new clips.
 """
 import argparse
 import base64
+import glob
+import hashlib
 import json
 import os
 import subprocess
 import sys
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import onnxruntime as ort
@@ -83,9 +86,18 @@ def main( ):
 
     species = json.load( open( os.path.join( ROOT, "src/components/AudioId/audioIdSpecies.json" ) ) )
     index = {sp[2]: i for i, sp in enumerate( species )}
-    session = ort.InferenceSession( os.path.join( ROOT, "ios/iNaturalistReactNative/audio_id.onnx" ) )
+    model = os.path.join( ROOT, "ios/iNaturalistReactNative/audio_id.onnx" )
+    h = hashlib.sha1( repr( OFFSETS ).encode( ) )
+    for f in sorted( glob.glob( model[:-len( ".onnx" )] + ".*" ) ):
+        with open( f, "rb" ) as fh:
+            h.update( fh.read( ) )
+    model_key = h.hexdigest( )[:12]
+    session = None
     clip_ids = sorted( get( "audio_id_clips", shallow=True ) )
     print( f"{len( clip_ids )} have audio\n" )
+    with ThreadPoolExecutor( 8 ) as pool:
+        list( pool.map( lambda c: load_clip( c, args.cache ),
+                        [c for c in clip_ids if c in labels] ) )
 
     names = ["raw", "mean3", "min3", "nbr", "both"]
     print( f"{'clip':8} {'ok':2} {'species':22} {'log':>5} " + " ".join( f"{n:>5}" for n in names )
@@ -97,8 +109,12 @@ def main( ):
             continue
         k = index[lab["predictedTaxonId"]]
         x = load_clip( clip_id, args.cache )
-        windows = [x[SR + o:SR + o + WIN] for o in OFFSETS] + [x[:WIN], x[2 * SR:2 * SR + WIN]]
-        s = session.run( ["output"], {"input": np.stack( windows )} )[0][:, k]
+        scores = os.path.join( args.cache, f"{clip_id}.{model_key}.npy" )
+        if not os.path.exists( scores ):
+            session = session or ort.InferenceSession( model )
+            windows = [x[SR + o:SR + o + WIN] for o in OFFSETS] + [x[:WIN], x[2 * SR:2 * SR + WIN]]
+            np.save( scores, session.run( ["output"], {"input": np.stack( windows )} )[0] )
+        s = np.load( scores )[:, k]
         mean3 = s[:3].mean( )
         nbr = s[3:].max( )
         v = {"raw": s[0], "mean3": mean3, "min3": s[:3].min( ), "nbr": nbr,
