@@ -1,4 +1,4 @@
-import { Heading4 } from "components/SharedComponents";
+import { Heading5 } from "components/SharedComponents";
 import type { TabComponentProps } from "components/SharedComponents/Tabs/Tabs";
 import { View } from "components/styledComponents";
 import React, { useEffect } from "react";
@@ -40,14 +40,12 @@ const NotificationsTab = ( { id, text }: TabComponentProps ) => {
 
   return (
     <View className="flex-row px-1 pt-4 pb-3 justify-center items-center">
-      <Heading4
-        className="shrink"
-        adjustsFontSizeToFit
+      <Heading5
         maxFontSizeMultiplier={1.5}
         numberOfLines={1}
       >
         { text }
-      </Heading4>
+      </Heading5>
       { ( numUnviewed ?? 0 ) > 0 && (
         <View className="h-[6px] w-[6px] ml-1 rounded-full bg-inatGreen" />
       ) }
