@@ -28,7 +28,7 @@
 
 #define AB_SR       32000
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
-#define AB_HIST     480000  // 15 s kept, for clips with context around the window
+#define AB_HIST     512000  // 16 s kept, for 15 s clips around a window saved up to 1 s late
 #define AB_STEP     32000   // run every 1 s of new audio
 #define AB_SPEC_HOP 400     // spectrogram columns, 80 per second
 #define AB_SPEC_LOG2N 10
@@ -94,6 +94,7 @@ static void ABSpectrogramPush( const float *frame )
   AVAudioFormat    *_outFormat;
   float            *_window;
   NSInteger         _sinceRun;
+  int64_t           _frames; // total samples received, to locate a run's window later
   NSInteger         _specPending;
   float             _level;
   BOOL              _busy;
@@ -228,17 +229,19 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
   }];
 }
 
-// Saves the last `seconds` (up to 15) of audio as AAC at `path` (replacing
-// any file there), for Audio ID's history of detections; 5 s is the window of
-// the latest run.
+// Saves `seconds` (up to 16) of audio ending at sample `endFrame` (a run's
+// windowFrame) as AAC at `path` (replacing any file there), for Audio ID's
+// history of detections; 5 s ending at a run's windowFrame is its window.
 RCT_EXPORT_METHOD( saveClip:( NSString * )path
                    seconds:( double )seconds
+                   endFrame:( double )endFrame
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( _bufferQueue, ^{
-    AVAudioFrameCount frames = (AVAudioFrameCount)MIN( MAX( seconds, 0 ) * AB_SR, AB_HIST );
-    NSData *window = [NSData dataWithBytes:self->_window + AB_HIST - frames
+    NSInteger back = (NSInteger)MIN( MAX( self->_frames - (int64_t)endFrame, 0 ), AB_HIST );
+    AVAudioFrameCount frames = (AVAudioFrameCount)MIN( MAX( seconds, 0 ) * AB_SR, AB_HIST - back );
+    NSData *window = [NSData dataWithBytes:self->_window + AB_HIST - back - frames
                                     length:frames * sizeof( float )];
     dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
       NSFileManager *fm = [NSFileManager defaultManager];
@@ -550,6 +553,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     memmove( self->_window, self->_window + count, ( AB_HIST - count ) * sizeof( float ) );
     memcpy( self->_window + AB_HIST - count, s, count * sizeof( float ) );
     self->_sinceRun += count;
+    self->_frames += n;
     self->_specPending += count;
     while ( self->_specPending >= AB_SPEC_HOP ) {
       self->_specPending -= AB_SPEC_HOP;
@@ -568,6 +572,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     NSData *window = [NSData dataWithBytes:self->_window + AB_HIST - AB_WIN
                                     length:AB_WIN * sizeof( float )];
     float level = self->_level;
+    int64_t windowFrame = self->_frames;
     // When the window's last sample arrived, on the clock JS's Date.now uses.
     double windowEnd = [[NSDate date] timeIntervalSince1970] * 1000;
     dispatch_async( self->_inferQueue, ^{
@@ -582,6 +587,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
                          body:@{ @"scores": scores ?: @[],
                                  @"level": @( level ),
                                  @"windowEnd": @( windowEnd ),
+                                 @"windowFrame": @( windowFrame ),
                                  @"inferMs": @( ms ),
                                  @"memMB": @( [self footprintMB] ),
                                  @"error": inferError ?: [NSNull null] }];

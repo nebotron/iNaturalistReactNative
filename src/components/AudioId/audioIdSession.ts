@@ -31,7 +31,7 @@ const { AudioBirdId } = NativeModules as {
     vibrateHaptics: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
-    saveClip: ( path: string, seconds: number ) => Promise<string>;
+    saveClip: ( path: string, seconds: number, endFrame: number ) => Promise<string>;
   };
 };
 
@@ -53,6 +53,8 @@ interface ScoresEvent {
   level: number;
   // Epoch ms when the window's last sample arrived
   windowEnd: number;
+  // Native sample count at the window's end, for saving its clip
+  windowFrame: number;
   inferMs: number;
   memMB: number;
   error: string | null;
@@ -71,7 +73,12 @@ let sessionId: string | undefined;
 let sessionLocation: UserLocation | null = null;
 
 // Keeps the 5 s clip of the run a call scored best in.
-const saveCallClip = ( sp: AudioIdSpecies, score: number, isNewCall: boolean ) => {
+const saveCallClip = (
+  sp: AudioIdSpecies,
+  score: number,
+  isNewCall: boolean,
+  windowFrame: number,
+) => {
   const history = useAudioIdHistory.getState( );
   const existing = callClips.get( sp.taxonId );
   const clip = !isNewCall && existing
@@ -97,13 +104,13 @@ const saveCallClip = ( sp: AudioIdSpecies, score: number, isNewCall: boolean ) =
     } );
   }
   callClips.set( sp.taxonId, id );
-  AudioBirdId?.saveClip( clipPath( id ), 5 )
+  AudioBirdId?.saveClip( clipPath( id ), 5, windowFrame )
     .catch( ( e: Error ) => logger.error( `saving clip failed: ${e.message}` ) );
-  // 5 s on, the last 15 s are centered on this window.
+  // 5 s on, 15 s centered on this window can be saved.
   clearTimeout( contextTimers.get( id ) );
   contextTimers.set( id, setTimeout( ( ) => {
     contextTimers.delete( id );
-    AudioBirdId?.saveClip( contextClipPath( id ), 15 )
+    AudioBirdId?.saveClip( contextClipPath( id ), 15, windowFrame + 5 * 32000 )
       .catch( ( e: Error ) => logger.error( `saving context clip failed: ${e.message}` ) );
   }, 5000 ) );
 };
@@ -242,7 +249,7 @@ const onScores = ( event: ScoresEvent ) => {
     if ( !isHeard( s ) || !sp ) return;
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;
-    saveCallClip( sp, s, isNewCall );
+    saveCallClip( sp, s, isNewCall, event.windowFrame );
     if ( s > ALERT ) {
       if ( !heardTaxa.has( sp.taxonId ) || ( isNewCall && seen && !seen.has( sp.taxonId ) ) ) {
         alerts.push( sp );
