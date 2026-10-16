@@ -1,5 +1,5 @@
 /* eslint-disable i18next/no-literal-string */
-import { CachesDirectoryPath, copyFile } from "@dr.pogodin/react-native-fs";
+import { CachesDirectoryPath } from "@dr.pogodin/react-native-fs";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
   Body1, Body3, Button, List2, Map,
@@ -12,10 +12,11 @@ import { formatISONoTimezone, formatISOTimestamp } from "sharedHelpers/dateAndTi
 import useStore from "stores/useStore";
 import * as uuid from "uuid";
 
-import useAudioIdHistory, { clipPath } from "./audioIdHistory";
-import ClipPlayButton from "./ClipPlayButton";
+import useAudioIdHistory from "./audioIdHistory";
+import { AudioBirdId } from "./audioIdSession";
+import ClipTrimmer, { useClipSpan } from "./ClipTrimmer";
 
-// One Audio ID clip: play it or make it an observation.
+// One Audio ID clip: trim it and make it an observation.
 const AudioIdClip = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute( );
@@ -24,15 +25,17 @@ const AudioIdClip = ( ) => {
   const updateClip = useAudioIdHistory( state => state.updateClip );
   const setObservations = useStore( state => state.setObservations );
   const [error, setError] = useState<string | null>( null );
+  const { span, trim, setTrim } = useClipSpan( id, clip?.time, false );
 
   if ( !clip ) return <Body3 className="p-5">This clip is no longer saved.</Body3>;
 
   const createObservation = async ( ) => {
+    if ( !span || !AudioBirdId ) return;
     try {
       // Sound.new moves the file, so hand it a copy to keep the clip here.
-      const copy = `${CachesDirectoryPath}/${uuid.v4( )}.m4a`;
-      await copyFile( clipPath( id ), copy );
-      const observation = await Observation.createObsWithSoundPath( `file://${copy}` );
+      const out = `${CachesDirectoryPath}/${uuid.v4( )}.m4a`;
+      await AudioBirdId.trimClip( span.path, trim[0], trim[1], out );
+      const observation = await Observation.createObsWithSoundPath( `file://${out}` );
       observation.observed_on_string = formatISONoTimezone( new Date( clip.time ) );
       // The user's label wins over the model's ID; "no organism" leaves it blank.
       const { label, sp } = clip;
@@ -51,15 +54,11 @@ const AudioIdClip = ( ) => {
 
   return (
     <ScrollView className="bg-white h-full px-5 pt-4">
-      <View className="flex-row items-center">
-        <View className="flex-1">
-          <Body1>{clip.sp.commonName}</Body1>
-          <List2 className="italic">{clip.sp.name}</List2>
-          <Body3>{formatISOTimestamp( clip.time )}</Body3>
-          <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
-        </View>
-        <ClipPlayButton id={id} />
-      </View>
+      <Body1>{clip.sp.commonName}</Body1>
+      <List2 className="italic">{clip.sp.name}</List2>
+      <Body3>{formatISOTimestamp( clip.time )}</Body3>
+      <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
+      {span && <ClipTrimmer span={span} trim={trim} onTrimChange={setTrim} />}
 
       {clip.location
         ? (

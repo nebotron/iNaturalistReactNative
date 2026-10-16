@@ -75,35 +75,61 @@ static void ABSpectrogramReset( void )
 
 // One column from the AB_SPEC_N samples at `frame`: power of a Hann-windowed
 // FFT, mapped from -100..-20 dB to 0..1, with faint noise dropped and contrast
-// boosted as in Merlin.
-static void ABSpectrogramPush( const float *frame )
+// boosted as in Merlin. Safe to call from any thread.
+static void ABSpectrogramColumn( const float *frame, uint8_t *col )
 {
   static FFTSetup fft;
   static float hann[AB_SPEC_N];
-  static float re[AB_SPEC_N / 2], im[AB_SPEC_N / 2], power[AB_SPEC_N / 2];
   static dispatch_once_t once;
   dispatch_once( &once, ^{
     fft = vDSP_create_fftsetup( AB_SPEC_LOG2N, kFFTRadix2 );
     vDSP_hann_window( hann, AB_SPEC_N, vDSP_HANN_DENORM );
   } );
+  float re[AB_SPEC_N / 2], im[AB_SPEC_N / 2], power[AB_SPEC_N / 2];
   float windowed[AB_SPEC_N];
   vDSP_vmul( frame, 1, hann, 1, windowed, 1, AB_SPEC_N );
   DSPSplitComplex split = { re, im };
   vDSP_ctoz( (const DSPComplex *)windowed, 2, &split, 1, AB_SPEC_N / 2 );
   vDSP_fft_zrip( fft, &split, 1, AB_SPEC_LOG2N, FFT_FORWARD );
   vDSP_zvmags( &split, 1, power, 1, AB_SPEC_N / 2 );
-  uint8_t col[AB_SPEC_H];
   for ( int b = 0; b < AB_SPEC_H; b++ ) {
     // zrip doubles the DFT, so this matches a sine's amplitude^2 / 4.
     float db = 10 * log10f( power[AB_SPEC_LO + b] / ( AB_SPEC_N * AB_SPEC_N ) + 1e-12f );
     float v = ( db + 100 ) / 80;
     col[b] = v > 0.1f ? (uint8_t)( 255 * powf( MIN( 1, ( v - 0.1f ) / 0.9f ), 1.5f ) ) : 0;
   }
+}
+
+static void ABSpectrogramPush( const float *frame )
+{
+  uint8_t col[AB_SPEC_H];
+  ABSpectrogramColumn( frame, col );
   os_unfair_lock_lock( &abSpecLock );
   NSInteger x = abSpecCount % AB_SPEC_W;
   memcpy( abSpecLevel[x], col, AB_SPEC_H );
   abSpecCount++;
   os_unfair_lock_unlock( &abSpecLock );
+}
+
+// Grayscale image of `width` columns of levels, low frequencies at the bottom.
+static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
+{
+  uint32_t *pixels = malloc( AB_SPEC_H * width * sizeof( uint32_t ) );
+  for ( NSInteger x = 0; x < width; x++ ) {
+    for ( int y = 0; y < AB_SPEC_H; y++ ) {
+      uint32_t g = 255 - ( levels ? levels[x * AB_SPEC_H + y] : 0 );
+      // Little-endian RGBX, top row first.
+      pixels[( AB_SPEC_H - 1 - y ) * width + x] = g | g << 8 | g << 16 | 0xff000000u;
+    }
+  }
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB( );
+  CGContextRef ctx = CGBitmapContextCreate( pixels, width, AB_SPEC_H, 8, width * 4, space,
+                                            kCGImageAlphaNoneSkipLast | kCGBitmapByteOrder32Big );
+  CGImageRef image = CGBitmapContextCreateImage( ctx );
+  CGContextRelease( ctx );
+  CGColorSpaceRelease( space );
+  free( pixels );
+  return image;
 }
 
 @interface AudioBirdId : RCTEventEmitter <RCTBridgeModule, UNUserNotificationCenterDelegate>
@@ -900,7 +926,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 
 - (void)tick
 {
-  static uint32_t pixels[AB_SPEC_H * AB_SPEC_W];
+  static uint8_t levels[AB_SPEC_W * AB_SPEC_H];
   os_unfair_lock_lock( &abSpecLock );
   if ( abSpecCount == _drawnCount ) {
     os_unfair_lock_unlock( &abSpecLock );
@@ -910,22 +936,13 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   for ( NSInteger x = 0; x < AB_SPEC_W; x++ ) {
     // Oldest column on the left; columns not yet heard stay blank.
     NSInteger c = abSpecCount - AB_SPEC_W + x;
-    const uint8_t *levels = c >= 0 ? abSpecLevel[c % AB_SPEC_W] : NULL;
-    for ( int y = 0; y < AB_SPEC_H; y++ ) {
-      uint32_t g = 255 - ( levels ? levels[y] : 0 );
-      // Little-endian RGBX, top row first.
-      pixels[( AB_SPEC_H - 1 - y ) * AB_SPEC_W + x] = g | g << 8 | g << 16 | 0xff000000u;
-    }
+    if ( c >= 0 ) memcpy( levels + x * AB_SPEC_H, abSpecLevel[c % AB_SPEC_W], AB_SPEC_H );
+    else memset( levels + x * AB_SPEC_H, 0, AB_SPEC_H );
   }
   os_unfair_lock_unlock( &abSpecLock );
-  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB( );
-  CGContextRef ctx = CGBitmapContextCreate( pixels, AB_SPEC_W, AB_SPEC_H, 8, AB_SPEC_W * 4, space,
-                                            kCGImageAlphaNoneSkipLast | kCGBitmapByteOrder32Big );
-  CGImageRef image = CGBitmapContextCreateImage( ctx );
+  CGImageRef image = ABSpectrogramImage( levels, AB_SPEC_W );
   self.layer.contents = (__bridge id)image;
   CGImageRelease( image );
-  CGContextRelease( ctx );
-  CGColorSpaceRelease( space );
 }
 
 @end
@@ -938,5 +955,58 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 RCT_EXPORT_MODULE( )
 
 - (UIView *)view { return [AudioSpectrogramView new]; }
+
+@end
+
+// Draws the whole of the clip at `path` (32 kHz mono, as Audio ID saves them)
+// as a spectrogram stretched to the view's width.
+@interface AudioClipSpectrogramView : UIView
+@property ( nonatomic, copy ) NSString *path;
+@end
+
+@implementation AudioClipSpectrogramView
+
+- (void)setPath:(NSString *)path
+{
+  if ( [path isEqualToString:_path] ) return;
+  _path = [path copy];
+  self.layer.magnificationFilter = kCAFilterLinear;
+  self.layer.contents = nil;
+  __weak AudioClipSpectrogramView *weakSelf = self;
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+    AVAudioFile *file = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:path] error:nil];
+    AVAudioPCMBuffer *buffer = file
+      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                      frameCapacity:(AVAudioFrameCount)file.length]
+      : nil;
+    if ( !buffer || ![file readIntoBuffer:buffer error:nil]
+         || buffer.frameLength < AB_SPEC_N ) return;
+    NSInteger width = ( buffer.frameLength - AB_SPEC_N ) / AB_SPEC_HOP + 1;
+    uint8_t *levels = malloc( width * AB_SPEC_H );
+    for ( NSInteger x = 0; x < width; x++ ) {
+      ABSpectrogramColumn( buffer.floatChannelData[0] + x * AB_SPEC_HOP, levels + x * AB_SPEC_H );
+    }
+    CGImageRef image = ABSpectrogramImage( levels, width );
+    free( levels );
+    dispatch_async( dispatch_get_main_queue( ), ^{
+      AudioClipSpectrogramView *view = weakSelf;
+      if ( view && [view.path isEqualToString:path] ) view.layer.contents = (__bridge id)image;
+      CGImageRelease( image );
+    } );
+  } );
+}
+
+@end
+
+@interface AudioClipSpectrogramManager : RCTViewManager
+@end
+
+@implementation AudioClipSpectrogramManager
+
+RCT_EXPORT_MODULE( )
+
+RCT_EXPORT_VIEW_PROPERTY( path, NSString )
+
+- (UIView *)view { return [AudioClipSpectrogramView new]; }
 
 @end
