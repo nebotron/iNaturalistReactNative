@@ -33,6 +33,7 @@ export interface Hotspot {
   centerLongitude: number;
   observationCount: number;
   detourMinutes: number;
+  speciesCount: number;
   topSpecies: HotspotSpecies[];
   observations: HotspotObservation[];
 }
@@ -465,6 +466,7 @@ export function useRouteHotspots() {
           centerLat: number;
           centerLng: number;
           count: number;
+          speciesCount: number;
           topSpecies: HotspotSpecies[];
           observations: HotspotObservation[];
         }[] = [];
@@ -472,7 +474,7 @@ export function useRouteHotspots() {
         cells.forEach( ( cell, key ) => {
           const topSpecies: HotspotSpecies[] = [...cell.taxa.values()]
             .sort( ( a, b ) => b.count - a.count )
-            .slice( 0, 5 )
+            .slice( 0, 4 )
             .map( ( {
               timeSinSum, timeCosSum, timeCount, ...species
             } ) => ( {
@@ -487,6 +489,7 @@ export function useRouteHotspots() {
             centerLat: cell.centerLat,
             centerLng: cell.centerLng,
             count: cell.count,
+            speciesCount: cell.taxa.size,
             topSpecies,
             observations: cell.observations,
           } );
@@ -517,6 +520,7 @@ export function useRouteHotspots() {
               centerLongitude: candidate.centerLng,
               observationCount: candidate.count,
               detourMinutes,
+              speciesCount: candidate.speciesCount,
               topSpecies: candidate.topSpecies,
               observations: candidate.observations,
             };

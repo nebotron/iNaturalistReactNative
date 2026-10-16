@@ -67,7 +67,7 @@ const HotspotListItem = ( {
               >
                 {hotspot.observationCount.toLocaleString()}
               </Body2>
-              {" observations"}
+              {` observations, ${hotspot.speciesCount.toLocaleString()} species`}
             </Body2>
           </View>
           <View className="flex-row items-center">
