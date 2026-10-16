@@ -63,3 +63,9 @@ table (from September 2025), it raised non-bird recall from 0.751 to 0.774 and
 cut their wrong species per recording from 0.46 to 0.45; bird recordings were
 unchanged (0.77 to 0.78 wrong species). The same weighting for birds did no
 better than raising their threshold.
+
+That weighting was removed (October 2026): in the field it multiplied Harbor
+Seal odds by about 3 near Puget Sound, and all 74 non-bird detections users
+labeled were wrong (46 Harbor Seal, 25 Red Fox). Without it, 28 of the 74 would
+still have been reported; on the 700 recordings non-bird recall went from
+0.777 to 0.754.

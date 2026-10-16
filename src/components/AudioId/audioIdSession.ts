@@ -10,7 +10,7 @@ import { createJSONStorage, persist } from "zustand/middleware";
 
 import useAudioIdHistory, { clipPath, contextClipPath } from "./audioIdHistory";
 import type { AudioIdSetup, AudioIdSpecies } from "./audioIdModel";
-import { fuseScore, prepareAudioId } from "./audioIdModel";
+import { prepareAudioId } from "./audioIdModel";
 
 // The Audio ID listening session, kept outside the screen so it carries on
 // while the user is elsewhere in the app or the app is in the background. The
@@ -212,7 +212,7 @@ const onScores = ( event: ScoresEvent ) => {
   const {
     setup, seen, heard,
   } = useAudioIdSession.getState( );
-  const scores = event.scores.map( ( s, i ) => fuseScore( s, setup?.odds[i] ?? 1 ) );
+  const { scores } = event;
   const sps = setup?.species || [];
   runs.push( event );
   if ( runs.length >= LOG_EVERY ) {

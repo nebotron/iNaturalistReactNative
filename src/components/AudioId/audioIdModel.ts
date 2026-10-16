@@ -9,21 +9,18 @@ import SPECIES from "./audioIdSpecies.json";
 // geomodel index or -1, 1 if a bird]. When the user's location is known,
 // species the BirdNET geomodel puts below a threshold at their place and week
 // are left out. Other taxa score lower than birds, so they get a much lower
-// threshold that only drops species from the wrong region, and their audio
-// odds are then weighted by (geomodel score / NON_BIRD_GEO_REF) ^ NON_BIRD_GEO_WEIGHT,
-// which raised their recall about 2.5 points for the same wrong species; it
-// didn't help birds (see scripts/bird_audio/birdnet/README.md). All of it runs offline.
+// threshold that only drops species from the wrong region. Their scores are
+// not weighted by the geomodel: that tripled Harbor Seal odds near Puget Sound,
+// and every non-bird users labeled was wrong (see
+// scripts/bird_audio/birdnet/README.md). All of it runs offline.
 
 const GEO_THRESHOLD = 0.03;
 const NON_BIRD_GEO_THRESHOLD = 0.0003;
-const NON_BIRD_GEO_REF = 0.037;
-const NON_BIRD_GEO_WEIGHT = 0.4;
 
 export interface AudioIdSpecies { name: string; commonName: string; taxonId: number }
 export interface AudioIdSetup {
   outputs: number[];
   species: AudioIdSpecies[]; // one per output, same order
-  odds: number[]; // per output, multiplies the model's odds (see fuseScore)
   occurrence: number[]; // per output, geomodel score at the user's place, or -1
   located: boolean;
   location: UserLocation | null;
@@ -42,7 +39,6 @@ export const prepareAudioId = async (
     : null;
   const outputs: number[] = [];
   const species: AudioIdSpecies[] = [];
-  const odds: number[] = [];
   const occ: number[] = [];
   ( SPECIES as [string, string, number, number, number][] ).forEach(
     ( [name, commonName, taxonId, geoIndex, bird], output ) => {
@@ -55,15 +51,9 @@ export const prepareAudioId = async (
       occ.push( occurrence && geoIndex >= 0
         ? occurrence[geoIndex]
         : -1 );
-      odds.push( occurrence && geoIndex >= 0 && !bird
-        ? ( occurrence[geoIndex] / NON_BIRD_GEO_REF ) ** NON_BIRD_GEO_WEIGHT
-        : 1 );
     },
   );
   return {
-    outputs, species, odds, occurrence: occ, located: !!location, location,
+    outputs, species, occurrence: occ, located: !!location, location,
   };
 };
-
-// The model's probability with its odds multiplied by k.
-export const fuseScore = ( s: number, k: number ) => ( s * k ) / ( 1 + s * ( k - 1 ) );
