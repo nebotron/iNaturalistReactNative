@@ -1,13 +1,12 @@
 import { INatIconButton } from "components/SharedComponents";
-import React, { useEffect, useState } from "react";
-import AudioRecorderPlayer from "react-native-audio-recorder-player";
+import React, { useEffect, useRef, useState } from "react";
 
 import { clipPath } from "./audioIdHistory";
-import { setPlayingAudio } from "./audioIdSession";
+import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
 
-// Plays or stops one Audio ID clip.
+// Plays or stops one Audio ID clip. Starting another clip stops this one.
 const ClipPlayButton = ( { id }: { id: string } ) => {
-  const [player] = useState( ( ) => new AudioRecorderPlayer( ) );
+  const [player] = useState( ( ) => ( {} ) );
   const [playing, setPlaying] = useState( false );
 
   useEffect( ( ) => {
@@ -15,27 +14,19 @@ const ClipPlayButton = ( { id }: { id: string } ) => {
     return ( ) => setPlayingAudio( player, false );
   }, [player, playing] );
 
+  const playingRef = useRef( false );
   useEffect( ( ) => ( ) => {
-    player.removePlayBackListener( );
-    player.stopPlayer( ).catch( ( ) => undefined );
-  }, [player] );
+    if ( playingRef.current ) AudioBirdId?.stopClip( );
+  }, [] );
 
-  const stop = async ( ) => {
-    setPlaying( false );
-    player.removePlayBackListener( );
-    await player.stopPlayer( ).catch( ( ) => undefined );
-  };
+  const stop = ( ) => AudioBirdId?.stopClip( );
 
   const play = async ( ) => {
     setPlaying( true );
-    try {
-      await player.startPlayer( `file://${clipPath( id )}` );
-      player.addPlayBackListener( e => {
-        if ( e.duration > 0 && e.currentPosition >= e.duration ) stop( );
-      } );
-    } catch {
-      setPlaying( false );
-    }
+    playingRef.current = true;
+    await AudioBirdId?.playClip( clipPath( id ) ).catch( ( ) => undefined );
+    playingRef.current = false;
+    setPlaying( false );
   };
 
   return (

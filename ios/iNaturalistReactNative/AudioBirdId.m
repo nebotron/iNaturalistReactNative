@@ -110,6 +110,9 @@ static void ABSpectrogramPush( const float *frame )
   CFAbsoluteTime    _lastAudio;
   NSInteger         _restartFailures;
   BOOL              _playingClip;
+  AVAudioEngine    *_clipEngine;
+  AVAudioPlayerNode *_clipNode;
+  RCTPromiseResolveBlock _clipDone;
 }
 
 RCT_EXPORT_MODULE( );
@@ -257,21 +260,93 @@ RCT_EXPORT_METHOD( saveClip:( NSString * )path
       AVAudioPCMBuffer *buffer = [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
                                                               frameCapacity:frames];
       buffer.frameLength = frames;
-      if ( buffer ) {
-        // Measurement mode records without gain control, so clips are quiet;
-        // normalize the peak to -1 dBFS, with at most 24 dB of gain.
-        float *samples = buffer.floatChannelData[0];
-        memcpy( samples, window.bytes, window.length );
-        float peak = 0;
-        vDSP_maxmgv( samples, 1, &peak, frames );
-        float gain = peak > 0 ? MIN( 0.89f / peak, 16.0f ) : 1;
-        vDSP_vsmul( samples, 1, &gain, samples, 1, frames );
-      }
+      if ( buffer ) memcpy( buffer.floatChannelData[0], window.bytes, window.length );
       BOOL ok = file && buffer && [file writeFromBuffer:buffer error:&error];
       file = nil; // closes the file
       if ( ok ) resolve( path ); else reject( @"clip", error.localizedDescription ?: @"Could not save the clip", error );
     } );
   } );
+}
+
+// Plays a clip, resolving when it ends or is stopped. Measurement mode records
+// without gain control, so clips are quiet; this normalizes the peak to
+// -1 dBFS (at most 24 dB of gain) in memory, leaving the file untouched.
+RCT_EXPORT_METHOD( playClip:( NSString * )path
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    [self stopClipPlayback];
+    NSError *error = nil;
+    AVAudioFile *file = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:path]
+                                                      error:&error];
+    AVAudioPCMBuffer *buffer = file
+      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                      frameCapacity:(AVAudioFrameCount)file.length]
+      : nil;
+    if ( !buffer || ![file readIntoBuffer:buffer error:&error] ) {
+      reject( @"clip", error.localizedDescription ?: @"Could not read the clip", error );
+      return;
+    }
+    AVAudioChannelCount channels = buffer.format.channelCount;
+    float peak = 0;
+    for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
+      float p = 0;
+      vDSP_maxmgv( buffer.floatChannelData[c], 1, &p, buffer.frameLength );
+      peak = MAX( peak, p );
+    }
+    float gain = peak > 0 ? MIN( 0.89f / peak, 16.0f ) : 1;
+    for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
+      vDSP_vsmul( buffer.floatChannelData[c], 1, &gain, buffer.floatChannelData[c], 1,
+                  buffer.frameLength );
+    }
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    if ( ![session.category isEqualToString:AVAudioSessionCategoryPlayAndRecord] ) {
+      [session setCategory:AVAudioSessionCategoryPlayAndRecord
+                      mode:AVAudioSessionModeDefault
+                   options:AVAudioSessionCategoryOptionDefaultToSpeaker
+                         | AVAudioSessionCategoryOptionAllowBluetooth
+                     error:nil];
+      [session setActive:YES error:nil];
+    }
+    AVAudioEngine *engine = [AVAudioEngine new];
+    AVAudioPlayerNode *node = [AVAudioPlayerNode new];
+    [engine attachNode:node];
+    [engine connect:node to:engine.mainMixerNode format:buffer.format];
+    if ( ![engine startAndReturnError:&error] ) {
+      reject( @"clip", error.localizedDescription ?: @"Could not play the clip", error );
+      return;
+    }
+    self->_clipEngine = engine;
+    self->_clipNode = node;
+    self->_clipDone = resolve;
+    [node scheduleBuffer:buffer atTime:nil options:0
+      completionCallbackType:AVAudioPlayerNodeCompletionDataPlayedBack
+           completionHandler:^( AVAudioPlayerNodeCompletionCallbackType type ) {
+      dispatch_async( dispatch_get_main_queue(), ^{
+        if ( self->_clipNode == node ) [self stopClipPlayback];
+      } );
+    }];
+    [node play];
+  } );
+}
+
+RCT_EXPORT_METHOD( stopClip )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{ [self stopClipPlayback]; } );
+}
+
+- ( void )stopClipPlayback
+{
+  AVAudioPlayerNode *node = _clipNode;
+  AVAudioEngine *engine = _clipEngine;
+  RCTPromiseResolveBlock done = _clipDone;
+  _clipNode = nil;
+  _clipEngine = nil;
+  _clipDone = nil;
+  [node stop];
+  [engine stop];
+  if ( done ) done( nil );
 }
 
 RCT_EXPORT_METHOD( stop )

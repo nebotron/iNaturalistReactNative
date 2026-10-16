@@ -22,7 +22,7 @@ import { prepareAudioId } from "./audioIdModel";
 // about a quarter for under half a point of recall, while still showing
 // confident overlapping callers.
 
-const { AudioBirdId } = NativeModules as {
+export const { AudioBirdId } = NativeModules as {
   AudioBirdId?: {
     start: ( outputs: number[] ) => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
@@ -32,6 +32,8 @@ const { AudioBirdId } = NativeModules as {
     notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
     saveClip: ( path: string, seconds: number, endFrame: number ) => Promise<string>;
+    playClip: ( path: string ) => Promise<void>;
+    stopClip: ( ) => void;
   };
 };
 
