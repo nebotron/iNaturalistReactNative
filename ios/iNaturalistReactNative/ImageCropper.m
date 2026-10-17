@@ -3,7 +3,6 @@
 #import <CoreImage/CoreImage.h>
 #import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
-#import <Metal/Metal.h>
 #import <Photos/Photos.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <React/RCTBridgeModule.h>
@@ -754,6 +753,33 @@ static BOOL isCameraRawFile( NSString *path )
 static const int        kRawDecodeAttempts     = 3;
 static const useconds_t kRawDecodeRetryDelayUs = 300 * 1000;
 
+// The decoder refuses outright -- no pixels, in tens of ms -- when the process
+// is short of memory: the failed raw decodes of an Oct 17 bulk crop came with
+// a 1.5-2.6GB footprint against a 3.4GB limit, while Audio ID ran alongside, and three tries 300ms apart all landed in the same trough.
+// The app was then killed at the limit. Before each try, give memory a few
+// seconds to come back rather than starting a full-resolution demosaic with
+// no room for it.
+static const uint64_t   kRawDecodeMinFreeBytes = 1536ull << 20;
+static const useconds_t kRawDecodeWaitStepUs   = 250 * 1000;
+static const int        kRawDecodeMaxWaitSteps = 12;
+
+static uint64_t freeMB( void )
+{
+  return os_proc_available_memory( ) >> 20;
+}
+
+// Waits, up to kRawDecodeMaxWaitSteps, for headroom; returns how long it waited.
+static int waitForRawDecodeHeadroom( void )
+{
+  int steps = 0;
+  while ( os_proc_available_memory( ) < kRawDecodeMinFreeBytes
+          && steps < kRawDecodeMaxWaitSteps ) {
+    usleep( kRawDecodeWaitStepUs );
+    steps += 1;
+  }
+  return steps * (int)( kRawDecodeWaitStepUs / 1000 );
+}
+
 static NSLock *rawDecodeLock( void )
 {
   static NSLock         *lock;
@@ -764,9 +790,13 @@ static NSLock *rawDecodeLock( void )
 
 // Runs attempt until it returns YES -- once for anything but a raw, which gets
 // up to kRawDecodeAttempts tries, each holding the raw decode lock. Returns how
-// many tries it took; attemptMs, when passed, gets how long each one ran.
+// many tries it took. When passed, attemptMs gets how long each one ran, and
+// attemptFreeMB and attemptWaitMs the memory it started with and how long it
+// waited for that memory.
 static int withRawDecodeRetries(
-  NSString *path, NSMutableArray<NSNumber *> *attemptMs, BOOL ( ^attempt )( void ) )
+  NSString *path, NSMutableArray<NSNumber *> *attemptMs,
+  NSMutableArray<NSNumber *> *attemptFreeMB, NSMutableArray<NSNumber *> *attemptWaitMs,
+  BOOL ( ^attempt )( void ) )
 {
   BOOL raw      = isCameraRawFile( path );
   int  attempts = 0;
@@ -774,7 +804,11 @@ static int withRawDecodeRetries(
   while ( !done && attempts < ( raw ? kRawDecodeAttempts : 1 ) ) {
     if ( attempts > 0 ) usleep( kRawDecodeRetryDelayUs );
     attempts += 1;
-    if ( raw ) [rawDecodeLock( ) lock];
+    if ( raw ) {
+      [rawDecodeLock( ) lock];
+      [attemptWaitMs addObject:@( waitForRawDecodeHeadroom( ) )];
+      [attemptFreeMB addObject:@( freeMB( ) )];
+    }
     NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
     @autoreleasepool {
       done = attempt( );
@@ -785,40 +819,25 @@ static int withRawDecodeRetries(
   return attempts;
 }
 
-// What the process looked like when a decode drew nothing, to find out why the
-// raw decoder fails in runs: how long each attempt ran (a refusal returns in
-// tens of ms, a demosaic that ran takes on the order of a second), memory and
-// GPU headroom, and what ImageIO says about the file. This used to also scan
-// the process's OSLogStore, which enumerates the whole process log; it ran on
-// two queues at once right before the app died on Oct 16 and 17, so it's gone.
+// What the process looked like when a decode drew nothing: how long each
+// attempt ran (a refusal returns in tens of ms, a demosaic that ran takes on
+// the order of a second), the memory each started with, and the footprint now
+// and at its peak. GPU, thermal, low-power and ImageIO status were dropped
+// after the Oct 17 failures showed the same values every time.
 static NSDictionary *rawDecodeFailureDiagnostics(
-  NSString *path, NSArray<NSNumber *> *attemptMs )
+  NSArray<NSNumber *> *attemptMs, NSArray<NSNumber *> *attemptFreeMB,
+  NSArray<NSNumber *> *attemptWaitMs )
 {
   NSMutableDictionary *d = [NSMutableDictionary dictionary];
-  d[@"attemptMs"] = attemptMs ?: @[];
-  d[@"freeMB"]    = @( os_proc_available_memory( ) >> 20 );
+  d[@"attemptMs"]     = attemptMs ?: @[];
+  d[@"attemptFreeMB"] = attemptFreeMB ?: @[];
+  d[@"attemptWaitMs"] = attemptWaitMs ?: @[];
+  d[@"freeMB"]        = @( freeMB( ) );
   task_vm_info_data_t    vm;
   mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
   if ( task_info( mach_task_self( ), TASK_VM_INFO, (task_info_t)&vm, &count ) == KERN_SUCCESS ) {
-    d[@"footprintMB"] = @( vm.phys_footprint >> 20 );
-  }
-  id<MTLDevice> gpu = MTLCreateSystemDefaultDevice( );
-  if ( gpu ) {
-    d[@"gpuAllocatedMB"] = @( gpu.currentAllocatedSize >> 20 );
-    if ( @available( iOS 16.0, * ) ) {
-      d[@"gpuWorkingSetMB"] = @( gpu.recommendedMaxWorkingSetSize >> 20 );
-    }
-  }
-  d[@"thermalState"] = @( [NSProcessInfo processInfo].thermalState );
-  d[@"lowPower"]     = @( [NSProcessInfo processInfo].isLowPowerModeEnabled );
-
-  CGImageSourceRef src =
-    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
-  if ( src ) {
-    d[@"sourceStatus"] = @( CGImageSourceGetStatus( src ) );
-    d[@"imageStatus"]  = @( CGImageSourceGetStatusAtIndex( src, 0 ) );
-    d[@"imageCount"]   = @( CGImageSourceGetCount( src ) );
-    CFRelease( src );
+    d[@"footprintMB"]     = @( vm.phys_footprint >> 20 );
+    d[@"footprintPeakMB"] = @( vm.ledger_phys_footprint_peak >> 20 );
   }
   return d;
 }
@@ -964,8 +983,11 @@ RCT_EXPORT_METHOD( cropImage
                                   [width integerValue],   [height integerValue] );
     __block UIImage  *image        = nil;
     __block NSData   *data         = nil;
-    NSMutableArray<NSNumber *> *attemptMs = [NSMutableArray array];
-    int attempts = withRawDecodeRetries( input, attemptMs, ^BOOL {
+    NSMutableArray<NSNumber *> *attemptMs     = [NSMutableArray array];
+    NSMutableArray<NSNumber *> *attemptFreeMB = [NSMutableArray array];
+    NSMutableArray<NSNumber *> *attemptWaitMs = [NSMutableArray array];
+    int attempts = withRawDecodeRetries(
+      input, attemptMs, attemptFreeMB, attemptWaitMs, ^BOOL {
     image = [UIImage imageWithContentsOfFile:input];
     if ( !image ) return YES;
     CGImageRef croppedRef = NULL;
@@ -1034,7 +1056,8 @@ RCT_EXPORT_METHOD( cropImage
         cropRect.origin.x, cropRect.origin.y,
         cropRect.size.width, cropRect.size.height, attempts,
         os_proc_available_memory( ) >> 20],
-        diagnosticsError( rawDecodeFailureDiagnostics( input, attemptMs ) ) );
+        diagnosticsError(
+          rawDecodeFailureDiagnostics( attemptMs, attemptFreeMB, attemptWaitMs ) ) );
       return;
     }
 
@@ -1045,10 +1068,12 @@ RCT_EXPORT_METHOD( cropImage
       reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
     }
     resolve( @{
-      @"path":        output,
-      @"outputLevel": @( jpegDataMeanLevel( data ) ),
-      @"attempts":    @( attempts ),
-      @"attemptMs":   attemptMs,
+      @"path":          output,
+      @"outputLevel":   @( jpegDataMeanLevel( data ) ),
+      @"attempts":      @( attempts ),
+      @"attemptMs":     attemptMs,
+      @"attemptFreeMB": attemptFreeMB,
+      @"attemptWaitMs": attemptWaitMs,
     } );
   } );
 }
@@ -2256,7 +2281,7 @@ RCT_EXPORT_METHOD( createThumbnail
     __block NSString *encodeFailure = nil;
     __block UIImage  *image         = nil;
     __block NSData   *data          = nil;
-    int attempts = withRawDecodeRetries( input, nil, ^BOOL {
+    int attempts = withRawDecodeRetries( input, nil, nil, nil, ^BOOL {
       NSString *decodeFailure = nil;
       NSString *encodeError   = nil;
       image = downscaledImageAtPath( input, maxDim, &decodeFailure );
@@ -2314,8 +2339,11 @@ RCT_EXPORT_METHOD( prepareCropSource
     __block UIImage  *display       = nil;
     __block NSData   *data          = nil;
     __block NSString *encodeFailure = nil;
-    NSMutableArray<NSNumber *> *attemptMs = [NSMutableArray array];
-    int attempts = withRawDecodeRetries( input, attemptMs, ^BOOL {
+    NSMutableArray<NSNumber *> *attemptMs     = [NSMutableArray array];
+    NSMutableArray<NSNumber *> *attemptFreeMB = [NSMutableArray array];
+    NSMutableArray<NSNumber *> *attemptWaitMs = [NSMutableArray array];
+    int attempts = withRawDecodeRetries(
+      input, attemptMs, attemptFreeMB, attemptWaitMs, ^BOOL {
     // Lazy: this reads the header, and the draw below is what reads the pixels.
     UIImage *image = [UIImage imageWithContentsOfFile:input];
     loaded = image && image.size.width > 0 && image.size.height > 0;
@@ -2343,7 +2371,8 @@ RCT_EXPORT_METHOD( prepareCropSource
     if ( !data ) {
       reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; attempts: %d",
         encodeFailure ?: @"unknown", attempts],
-        diagnosticsError( rawDecodeFailureDiagnostics( input, attemptMs ) ) );
+        diagnosticsError(
+          rawDecodeFailureDiagnostics( attemptMs, attemptFreeMB, attemptWaitMs ) ) );
       return;
     }
     [[NSFileManager defaultManager]
@@ -2377,6 +2406,8 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"displayLevel":  @( displayLevel ),
       @"attempts":      @( attempts ),
       @"attemptMs":     attemptMs,
+      @"attemptFreeMB": attemptFreeMB,
+      @"attemptWaitMs": attemptWaitMs,
     } );
   } );
 }

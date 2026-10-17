@@ -20,6 +20,9 @@ interface CropResult {
   // Decodes it took, and how long each ran; a raw that failed is tried again.
   attempts: number;
   attemptMs: number[];
+  // A raw's free memory at each try, and how long it waited for it.
+  attemptFreeMB?: number[];
+  attemptWaitMs?: number[];
 }
 
 interface ImageCropperModule {
@@ -75,12 +78,18 @@ const cropImageFile = async (
     );
     const croppedPath = result.path;
     // A crop that turned out black reached the grid with no error behind it.
-    if ( result.outputLevel < DARK_OUTPUT_LEVEL || result.attempts > 1 ) {
+    if (
+      result.outputLevel < DARK_OUTPUT_LEVEL
+      || result.attempts > 1
+      || result.attemptWaitMs?.some( ms => ms > 0 )
+    ) {
       logger.warnWithExtra( "crop_output_check", {
         source: imageUri,
         outputLevel: result.outputLevel,
         attempts: result.attempts,
         attemptMs: result.attemptMs,
+        attemptFreeMB: result.attemptFreeMB,
+        attemptWaitMs: result.attemptWaitMs,
       } );
     }
     // Native ImageCropper copies EXIF/metadata from the source image into the
