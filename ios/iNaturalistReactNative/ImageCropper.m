@@ -4,7 +4,6 @@
 #import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
 #import <Metal/Metal.h>
-#import <OSLog/OSLog.h>
 #import <Photos/Photos.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <React/RCTBridgeModule.h>
@@ -789,10 +788,11 @@ static int withRawDecodeRetries(
 // What the process looked like when a decode drew nothing, to find out why the
 // raw decoder fails in runs: how long each attempt ran (a refusal returns in
 // tens of ms, a demosaic that ran takes on the order of a second), memory and
-// GPU headroom, what ImageIO says about the file, and what ImageIO, CoreImage
-// and Metal logged in this process since the first attempt.
+// GPU headroom, and what ImageIO says about the file. This used to also scan
+// the process's OSLogStore, which enumerates the whole process log; it ran on
+// two queues at once right before the app died on Oct 16 and 17, so it's gone.
 static NSDictionary *rawDecodeFailureDiagnostics(
-  NSString *path, NSDate *since, NSArray<NSNumber *> *attemptMs )
+  NSString *path, NSArray<NSNumber *> *attemptMs )
 {
   NSMutableDictionary *d = [NSMutableDictionary dictionary];
   d[@"attemptMs"] = attemptMs ?: @[];
@@ -820,38 +820,6 @@ static NSDictionary *rawDecodeFailureDiagnostics(
     d[@"imageCount"]   = @( CGImageSourceGetCount( src ) );
     CFRelease( src );
   }
-
-  // Persisted (default level and up) entries only; info and debug aren't kept.
-  NSError    *error = nil;
-  OSLogStore *store = [OSLogStore storeWithScope:OSLogStoreCurrentProcessIdentifier error:&error];
-  if ( !store ) {
-    d[@"osLogError"] = error.localizedDescription ?: @"unavailable";
-    return d;
-  }
-  NSEnumerator *entries = [store
-    entriesEnumeratorWithOptions:0
-                        position:[store positionWithDate:since]
-                       predicate:nil
-                           error:&error];
-  NSMutableArray<NSString *> *lines = [NSMutableArray array];
-  for ( OSLogEntry *entry in entries ) {
-    if ( ![entry isKindOfClass:[OSLogEntryLog class]] ) continue;
-    OSLogEntryLog *logEntry = (OSLogEntryLog *)entry;
-    // System frameworks only: the app's own logging (React Native's included)
-    // is already in the app log.
-    if ( ![logEntry.subsystem hasPrefix:@"com.apple."] ) continue;
-    NSString *message = logEntry.composedMessage ?: @"";
-    if ( message.length > 300 ) message = [message substringToIndex:300];
-    [lines addObject:[NSString stringWithFormat:@"%@/%@: %@",
-      logEntry.subsystem, logEntry.category, message]];
-  }
-  // The most recent are nearest the failure.
-  if ( lines.count > 25 ) {
-    d[@"osLogDropped"] = @( lines.count - 25 );
-    [lines removeObjectsInRange:NSMakeRange( 0, lines.count - 25 )];
-  }
-  d[@"osLog"] = lines;
-  if ( error ) d[@"osLogError"] = error.localizedDescription;
   return d;
 }
 
@@ -996,7 +964,6 @@ RCT_EXPORT_METHOD( cropImage
                                   [width integerValue],   [height integerValue] );
     __block UIImage  *image        = nil;
     __block NSData   *data         = nil;
-    NSDate                     *started   = [NSDate date];
     NSMutableArray<NSNumber *> *attemptMs = [NSMutableArray array];
     int attempts = withRawDecodeRetries( input, attemptMs, ^BOOL {
     image = [UIImage imageWithContentsOfFile:input];
@@ -1067,7 +1034,7 @@ RCT_EXPORT_METHOD( cropImage
         cropRect.origin.x, cropRect.origin.y,
         cropRect.size.width, cropRect.size.height, attempts,
         os_proc_available_memory( ) >> 20],
-        diagnosticsError( rawDecodeFailureDiagnostics( input, started, attemptMs ) ) );
+        diagnosticsError( rawDecodeFailureDiagnostics( input, attemptMs ) ) );
       return;
     }
 
@@ -2347,7 +2314,6 @@ RCT_EXPORT_METHOD( prepareCropSource
     __block UIImage  *display       = nil;
     __block NSData   *data          = nil;
     __block NSString *encodeFailure = nil;
-    NSDate                     *started   = [NSDate date];
     NSMutableArray<NSNumber *> *attemptMs = [NSMutableArray array];
     int attempts = withRawDecodeRetries( input, attemptMs, ^BOOL {
     // Lazy: this reads the header, and the draw below is what reads the pixels.
@@ -2377,7 +2343,7 @@ RCT_EXPORT_METHOD( prepareCropSource
     if ( !data ) {
       reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; attempts: %d",
         encodeFailure ?: @"unknown", attempts],
-        diagnosticsError( rawDecodeFailureDiagnostics( input, started, attemptMs ) ) );
+        diagnosticsError( rawDecodeFailureDiagnostics( input, attemptMs ) ) );
       return;
     }
     [[NSFileManager defaultManager]
