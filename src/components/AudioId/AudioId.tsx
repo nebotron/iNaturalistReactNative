@@ -2,6 +2,7 @@
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { activateKeepAwake, deactivateKeepAwake } from "@sayem314/react-native-keep-awake";
 import { fetchSpeciesCounts } from "api/observations";
+import { fetchTaxaDefaultPhotos } from "api/taxa";
 import {
   Body1, Body3, Button, IconicTaxonIcon, List2,
 } from "components/SharedComponents";
@@ -11,7 +12,7 @@ import React, { useCallback, useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
 import { Linking, requireNativeComponent } from "react-native";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
-import { useCurrentUser, useTaxon } from "sharedHooks";
+import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import { UPLOAD_IN_PROGRESS } from "stores/createUploadObservationsSlice";
 import useStore from "stores/useStore";
@@ -76,22 +77,45 @@ const useSeenTaxonIds = (
   }, [data] );
 };
 
-const TaxonThumb = ( { taxonId, onPress }: { taxonId: number; onPress: ( ) => void } ) => {
-  const { taxon } = useTaxon( { id: taxonId } );
-  const url = taxon?.default_photo?.url;
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityHint="Opens the species page."
-      className="w-[80px] h-[80px]"
-      onPress={onPress}
-    >
-      {url
-        ? <CachedImage source={{ uri: url }} className="w-full h-full" />
-        : <IconicTaxonIcon imageClassName="w-full h-full" iconicTaxonName="Aves" />}
-    </Pressable>
+// Photo URLs by taxon ID, fetched in batches: a long heard list mounting a
+// useTaxon per row fired dozens of full taxon fetches at once and got 429s
+const PHOTO_BATCH_SIZE = 30;
+const useTaxonPhotoUrls = ( taxonIds: number[] ): Map<number, string> | undefined => {
+  const ids = [...taxonIds].sort( ( a, b ) => a - b );
+  const { data } = useAuthenticatedQuery(
+    ["audioIdTaxonPhotos", ids.join( "," )],
+    async optsWithAuth => {
+      const urls = new Map<number, string>( );
+      for ( let i = 0; i < ids.length; i += PHOTO_BATCH_SIZE ) {
+        // eslint-disable-next-line no-await-in-loop
+        const results = await fetchTaxaDefaultPhotos(
+          ids.slice( i, i + PHOTO_BATCH_SIZE ),
+          optsWithAuth,
+        );
+        ( results || [] ).forEach( ( t: { id: number; default_photo?: { url?: string } } ) => {
+          if ( t.default_photo?.url ) urls.set( t.id, t.default_photo.url );
+        } );
+      }
+      return urls;
+    },
+    // Keep showing the photos already loaded while a newly heard species refetches
+    { enabled: ids.length > 0, staleTime: Infinity, placeholderData: previous => previous },
   );
+  return data;
 };
+
+const TaxonThumb = ( { url, onPress }: { url?: string; onPress: ( ) => void } ) => (
+  <Pressable
+    accessibilityRole="button"
+    accessibilityHint="Opens the species page."
+    className="w-[80px] h-[80px]"
+    onPress={onPress}
+  >
+    {url
+      ? <CachedImage source={{ uri: url }} className="w-full h-full" />
+      : <IconicTaxonIcon imageClassName="w-full h-full" iconicTaxonName="Aves" />}
+  </Pressable>
+);
 
 // The last 10 s of sound, Merlin-style: dark marks on a full-width white
 // strip, low frequencies at the bottom. Drawn natively from the microphone
@@ -156,6 +180,10 @@ const AudioId = ( ) => {
     } );
     return [...bySpecies.values( )].sort( ( a, b ) => b.lastHeard - a.lastHeard );
   }, [clips] );
+  const photoUrls = useTaxonPhotoUrls( useMemo(
+    ( ) => heardList.map( h => h.sp.taxonId ),
+    [heardList],
+  ) );
   const hasUnlabeled = useMemo( ( ) => new Set( Object.values( clips )
     .filter( c => !c.label ).map( c => c.sp.taxonId ) ), [clips] );
 
@@ -175,7 +203,10 @@ const AudioId = ( ) => {
           : ""}`}
       onPress={( ) => navigation.navigate( "AudioIdHistory", { taxonId: sp.taxonId } )}
     >
-      <TaxonThumb taxonId={sp.taxonId} onPress={( ) => openTaxon( sp.taxonId )} />
+      <TaxonThumb
+        url={photoUrls?.get( sp.taxonId )}
+        onPress={( ) => openTaxon( sp.taxonId )}
+      />
       <View
         className="flex-1 flex-row items-center self-stretch ml-3 pr-2 border-b border-lightGray"
       >
