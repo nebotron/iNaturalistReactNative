@@ -7,10 +7,50 @@
 #import <RNShareMenu/ShareMenuManager.h>
 #import <React/RCTLinkingManager.h>
 #import <QuartzCore/QuartzCore.h>
+#import <MetricKit/MetricKit.h>
 #import <objc/runtime.h>
+#if __has_include(<react_native_config/RNCConfig.h>)
+#import <react_native_config/RNCConfig.h>
+#else
+#import "RNCConfig.h"
+#endif
 
-@interface AppDelegate ()
+@interface AppDelegate () <MXMetricManagerSubscriber>
 @end
+
+// iOS's own reports of the crashes and hangs the JS handlers can't see: signals
+// (EXC_BAD_ACCESS and the like), watchdog kills, and main-thread hangs. MetricKit
+// hands over the previous launches' reports at the next launch, and they go
+// straight to the app log from here, so a launch that dies before JS logs
+// anything is still on the record.
+static void postDiagnostic( NSString *message, NSDictionary *fields, MXCallStackTree *stack )
+{
+  NSString *base = [RNCConfig envFor:@"CROP_LOG_FIREBASE_URL"];
+  if ( base.length == 0 ) return;
+  NSMutableDictionary *entry = [fields mutableCopy];
+  NSISO8601DateFormatter *iso = [NSISO8601DateFormatter new];
+  iso.formatOptions |= NSISO8601DateFormatWithFractionalSeconds;
+  entry[@"timestamp"] = [iso stringFromDate:[NSDate date]];
+  entry[@"level"] = @"error";
+  entry[@"extension"] = @"MetricKit";
+  entry[@"commit"] = [NSString stringWithFormat:@"build-%@",
+    [NSBundle mainBundle].infoDictionary[@"CFBundleVersion"]];
+  entry[@"message"] = message;
+  NSString *stackJson = [[NSString alloc] initWithData:[stack JSONRepresentation]
+                                              encoding:NSUTF8StringEncoding];
+  if ( stackJson.length > 30000 ) stackJson = [stackJson substringToIndex:30000];
+  if ( stackJson ) entry[@"stack"] = stackJson;
+  NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:
+    [NSURL URLWithString:[base stringByAppendingString:@"/app_log.json"]]];
+  request.HTTPMethod = @"POST";
+  request.HTTPBody = [NSJSONSerialization dataWithJSONObject:entry options:0 error:nil];
+  [[[NSURLSession sharedSession] dataTaskWithRequest:request] resume];
+}
+
+static NSString *describe( id value )
+{
+  return value ? [NSString stringWithFormat:@"%@", value] : @"";
+}
 
 // React Native's Image component (both legacy and Fabric) renders by setting
 // CALayer.contents directly to a CGImage rather than going through
@@ -94,7 +134,35 @@
     [[INatLocationMonitor shared] start];
   }
 
+  [[MXMetricManager sharedManager] addSubscriber:self];
+
   return YES;
+}
+
+- (void)didReceiveDiagnosticPayloads:(NSArray<MXDiagnosticPayload *> *)payloads
+{
+  for ( MXDiagnosticPayload *payload in payloads ) {
+    for ( MXCrashDiagnostic *crash in payload.crashDiagnostics ) {
+      postDiagnostic( @"metrickit_crash", @{
+        @"appBuild": describe( crash.metaData.applicationBuildVersion ),
+        @"exceptionType": describe( crash.exceptionType ),
+        @"exceptionCode": describe( crash.exceptionCode ),
+        @"signal": describe( crash.signal ),
+        @"terminationReason": describe( crash.terminationReason ),
+        @"vmRegion": describe( crash.virtualMemoryRegionInfo ),
+        @"from": describe( payload.timeStampBegin ),
+        @"to": describe( payload.timeStampEnd ),
+      }, crash.callStackTree );
+    }
+    for ( MXHangDiagnostic *hang in payload.hangDiagnostics ) {
+      postDiagnostic( @"metrickit_hang", @{
+        @"appBuild": describe( hang.metaData.applicationBuildVersion ),
+        @"hangDuration": describe( hang.hangDuration ),
+        @"from": describe( payload.timeStampBegin ),
+        @"to": describe( payload.timeStampEnd ),
+      }, hang.callStackTree );
+    }
+  }
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge

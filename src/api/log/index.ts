@@ -1,6 +1,7 @@
 import { AppState } from "react-native";
 import Config from "react-native-config";
 import type { transportFunctionType } from "react-native-logs";
+import { MMKV } from "react-native-mmkv";
 // The git commit the bundle was built from (see scripts/writeAppCommit.js).
 import APP_COMMIT from "sharedHelpers/appCommit";
 import { isObject, isObjectWithPrimitiveValues } from "sharedHelpers/runtimeTypeUtil";
@@ -103,6 +104,10 @@ const MAX_BATCH = 20;
 let queue: Record<string, { level: string }> = {};
 let queued = 0;
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
+// Each queued line is also kept here until its batch is sent, so a launch that
+// crashes or hangs before its first flush is reported by the next launch
+// instead of vanishing.
+const pending = new MMKV( { id: "app-log-pending" } );
 
 // Client-side Firebase push IDs: a timestamp prefix, so app_log.py's $key
 // ordering stays chronological, and random characters to keep them unique.
@@ -142,7 +147,7 @@ export const flushLogs = async ( ) => {
         headers: { "Content-Type": "application/json" },
         body,
       } );
-      if ( r.ok ) return;
+      if ( r.ok ) break;
     } catch {
       // Retry below, or give up once the loop runs out of attempts. Never
       // rethrow: we log to report errors, so failing to log must stay silent.
@@ -152,7 +157,21 @@ export const flushLogs = async ( ) => {
       await new Promise( resolve => { setTimeout( resolve, 500 * attempt ); } );
     }
   }
+  Object.keys( batch ).forEach( key => pending.delete( key ) );
 };
+
+// Send what a previous launch queued but never got out
+if ( !__DEV__ ) {
+  pending.getAllKeys( ).forEach( key => {
+    try {
+      queue[key] = JSON.parse( pending.getString( key ) || "" );
+      queued += 1;
+    } catch {
+      pending.delete( key );
+    }
+  } );
+  flushLogs( );
+}
 
 // iOS may suspend or kill the app once it's backgrounded.
 AppState.addEventListener( "change", state => {
@@ -208,8 +227,10 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
       : {} ),
   };
 
-  queue[pushId( )] = entry;
+  const id = pushId( );
+  queue[id] = entry;
   queued += 1;
+  pending.set( id, JSON.stringify( entry ) );
   // Errors go out at once, with whatever is queued: they're the entries we
   // most need, and the one before a crash would otherwise die in the queue.
   if ( props.level.text === "error" || queued >= MAX_BATCH ) {

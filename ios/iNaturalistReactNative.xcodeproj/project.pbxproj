@@ -694,6 +694,8 @@
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
+					"-framework",
+					MetricKit,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.benhannel.inat.dev;
 				PRODUCT_NAME = iNaturalistReactNative;
@@ -818,6 +820,8 @@
 					"$(inherited)",
 					"-ObjC",
 					"-lc++",
+					"-framework",
+					MetricKit,
 				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.benhannel.inat.dev;
 				PRODUCT_NAME = iNaturalistReactNative;
