@@ -47,12 +47,12 @@ const UserProfile = ( ) => {
   const navigation = useNavigation <TabStackScreenProps<"UserProfile">["navigation"]>( );
   const currentUser = useCurrentUser( );
   const { params } = useRoute<TabStackScreenProps<"UserProfile">["route"]>();
-  const { userId, login } = params;
+  const { userId: paramUserId, login } = params;
   const [showLoginSheet, setShowLoginSheet] = useState( false );
   const [showUnfollowSheet, setShowUnfollowSheet] = useState( false );
   const { t, i18n } = useTranslation( );
 
-  const fetchId = userId || login;
+  const fetchId = paramUserId || login;
   const {
     data: remoteUser, isError, error, refetch: refetchUser,
   }: {
@@ -69,6 +69,8 @@ const UserProfile = ( ) => {
   );
 
   const user = remoteUser || null;
+  // Profiles opened by login (e.g. @mentions) have no userId param
+  const userId = user?.id ?? paramUserId;
 
   const relationshipsQueryKey = ["fetchRelationships", user?.login];
 
