@@ -4,7 +4,7 @@ import type { transportFunctionType } from "react-native-logs";
 import { MMKV } from "react-native-mmkv";
 // The git commit the bundle was built from (see scripts/writeAppCommit.js).
 import APP_COMMIT from "sharedHelpers/appCommit";
-import { isObject, isObjectWithPrimitiveValues } from "sharedHelpers/runtimeTypeUtil";
+import { isObject, isPrimitive } from "sharedHelpers/runtimeTypeUtil";
 
 import { extraSentinelKey } from "./enhanceLoggerWithExtra";
 
@@ -44,15 +44,19 @@ function extractExtra( rawMsg: unknown ) {
   ) {
     return nonExtraResult;
   }
-  // make sure our extra is actually valid for the API
+  // Serialize nested values (e.g. arrays of timings) rather than dropping the
+  // whole extra, which logged it as "[object Object]"
   const { [extraSentinelKey]: _sentinel, ...extraCandidate } = extraWrapperCandidate;
-  if ( !isObjectWithPrimitiveValues( extraCandidate ) ) {
-    return nonExtraResult;
-  }
+  const extra = Object.fromEntries( Object.entries( extraCandidate ).map( ( [key, value] ) => [
+    key,
+    isPrimitive( value )
+      ? value
+      : JSON.stringify( value ),
+  ] ) );
   return {
     // the rest of the log handling should act as if extra was separate from the rest params
     messageParams: rawMsg.slice( 0, -1 ),
-    extra: extraCandidate,
+    extra,
   };
 }
 
@@ -213,15 +217,16 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
   }
 
   const entry = {
+    // First, so an extra key like `level` can't overwrite the entry's own
+    ...( extra
+      ? redactExtra( extra )
+      : {} ),
     timestamp: new Date( ).toISOString( ),
     level: props.level.text,
     extension: props.extension,
     // commit lets a log line be traced back to the exact code that produced it
     commit: APP_COMMIT,
     message: redact( message ),
-    ...( extra
-      ? redactExtra( extra )
-      : {} ),
     ...( error?.stack
       ? { stack: redact( error.stack ) }
       : {} ),

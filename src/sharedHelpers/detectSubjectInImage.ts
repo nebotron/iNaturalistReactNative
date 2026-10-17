@@ -23,14 +23,37 @@ interface ImageCropperModule {
   detectSubjectBounds: ( inputPath: string ) => Promise<DetectedBounds | null>;
 }
 
+// Detection runs for every tile of a photo grid, so timings are summarized
+// every TIMING_BATCH detections rather than logged one by one
+const TIMING_BATCH = 20;
+let timings: DetectedBounds[] = [];
+
+const mean = ( values: number[] ) => Math.round(
+  values.reduce( ( sum, v ) => sum + v, 0 ) / Math.max( values.length, 1 ),
+);
+
 export const logSubjectDetectionTiming = ( bounds: DetectedBounds | null ) => {
   if ( bounds?.detectMs === undefined ) {
     return;
   }
+  timings.push( bounds );
+  if ( timings.length < TIMING_BATCH ) {
+    return;
+  }
+  const batch = timings;
+  timings = [];
+  const detectMs = batch.map( b => b.detectMs as number );
+  const views = Math.max( ...batch.map( b => b.viewMs?.length || 0 ) );
   logger.infoWithExtra( "subject_detection_timing", {
-    detectMs: bounds.detectMs,
-    viewMs: bounds.viewMs,
-    saliency: bounds.saliency,
+    count: batch.length,
+    meanMs: mean( detectMs ),
+    maxMs: Math.max( ...detectMs ),
+    meanViewMs: Array.from( { length: views }, ( _, i ) => mean(
+      batch.flatMap( b => ( b.viewMs?.[i] === undefined
+        ? []
+        : [b.viewMs[i]] ) ),
+    ) ),
+    saliency: batch.filter( b => b.saliency ).length,
   } );
 };
 
