@@ -47,6 +47,9 @@ interface ImageCropperModule {
     attempts: number;
     attemptMs: number[];
     stageMs?: Record<string, number>;
+    // A raw's free memory at each try, and how long it waited for it.
+    attemptFreeMB?: number[];
+    attemptWaitMs?: number[];
   }>;
 }
 
@@ -91,14 +94,20 @@ const prepareCropSource = async (
       } );
       return null;
     } );
-    if ( prepared && ( prepared.displayLevel < 24 || prepared.attempts > 1 ) ) {
+    if ( prepared && (
+      prepared.displayLevel < 24
+      || prepared.attempts > 1
+      || prepared.attemptWaitMs?.some( ms => ms > 0 )
+    ) ) {
       // The cropper is about to draw a near-black frame, or a raw needed
-      // another decode to come out at all.
+      // another decode, or a wait for memory, to come out at all.
       logger.warnWithExtra( "crop_source_dark", {
         source: sourceUri,
         displayLevel: prepared.displayLevel,
         attempts: prepared.attempts,
         attemptMs: prepared.attemptMs,
+        attemptFreeMB: prepared.attemptFreeMB,
+        attemptWaitMs: prepared.attemptWaitMs,
       } );
     }
     if ( !prepared || prepared.width <= 0 || prepared.height <= 0 ) {
