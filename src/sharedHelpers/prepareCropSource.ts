@@ -25,6 +25,9 @@ interface PreparedSource {
   // the crop is expressed in.
   size: { w: number; h: number };
   crop: NormalizedCrop;
+  // Native stage durations (queue and lock waits, decode, encode, write,
+  // detection), for telling a slow prepare's waiting from its work.
+  stageMs?: Record<string, number>;
 }
 
 interface ImageCropperModule {
@@ -43,6 +46,7 @@ interface ImageCropperModule {
     // Decodes it took, and how long each ran; a raw that failed is tried again.
     attempts: number;
     attemptMs: number[];
+    stageMs?: Record<string, number>;
   }>;
 }
 
@@ -106,6 +110,10 @@ const prepareCropSource = async (
       displayUri: prepared.displayUri,
       size,
       crop: knownCrop ?? subjectCropFromBounds( prepared.bounds, size.w, size.h ),
+      stageMs: prepared.stageMs && {
+        ...prepared.stageMs,
+        ...( prepared.bounds?.detectMs !== undefined && { detect: prepared.bounds.detectMs } ),
+      },
     };
   }
 

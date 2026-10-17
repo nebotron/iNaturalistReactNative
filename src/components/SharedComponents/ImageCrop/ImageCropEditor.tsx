@@ -252,8 +252,12 @@ const ImageCropEditor = ( ) => {
         : null,
       exportMs: timing?.exportMs ?? null,
       prepareMs: timing?.prepareMs ?? null,
+      // Native split of prepareMs: waits (queue, lock) versus work
+      stageMs: timing?.stageMs ?? null,
+      // Only groupPhotos preloads ahead
+      context: context ?? null,
     } );
-  }, [imageUri] );
+  }, [context, imageUri] );
 
   useEffect( ( ) => {
     navigation.setOptions( { headerShown: false } );

@@ -10,6 +10,7 @@ export interface PreloadTiming {
   exportMs: number;
   prepareMs: number;
   finishedAt: number;
+  stageMs?: Record<string, number>;
 }
 
 export interface PreloadResult {
@@ -52,6 +53,7 @@ async function loadImageData(
       exportMs: exportedAt - startedAt,
       prepareMs: finishedAt - exportedAt,
       finishedAt,
+      stageMs: prepared.stageMs,
     },
   };
 }

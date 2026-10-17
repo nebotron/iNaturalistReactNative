@@ -2304,10 +2304,17 @@ RCT_EXPORT_METHOD( prepareCropSource
                   : ( RCTPromiseResolveBlock )resolve rejecter
                   : ( RCTPromiseRejectBlock )reject )
 {
+  // Where a slow prepare's time went: waiting for the queue, waiting for the
+  // raw decode lock, or the decode, encode and write themselves.
+  NSTimeInterval calledAt = [NSDate timeIntervalSinceReferenceDate];
   dispatch_async( subjectDetectionQueue( ), ^{
+    NSTimeInterval startedAt = [NSDate timeIntervalSinceReferenceDate];
     NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
     NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
 
+    __block NSTimeInterval lockedAt = 0;
+    __block int       drawMs        = 0;
+    __block int       encodeMs      = 0;
     __block BOOL      loaded        = NO;
     __block CGFloat   width         = 0;
     __block CGFloat   height        = 0;
@@ -2316,6 +2323,7 @@ RCT_EXPORT_METHOD( prepareCropSource
     __block NSString *encodeFailure = nil;
     NSMutableArray<NSNumber *> *attemptMs = [NSMutableArray array];
     int attempts = withRawDecodeRetries( input, attemptMs, ^BOOL {
+    if ( !lockedAt ) lockedAt = [NSDate timeIntervalSinceReferenceDate];
     // Lazy: this reads the header, and the draw below is what reads the pixels.
     UIImage *image = [UIImage imageWithContentsOfFile:input];
     loaded = image && image.size.width > 0 && image.size.height > 0;
@@ -2328,11 +2336,15 @@ RCT_EXPORT_METHOD( prepareCropSource
     // instead left it undecoded, so detection's downscale below decoded the
     // raw a second time -- outside the raw decode lock, alongside the previous
     // photo's crop.
+    NSTimeInterval drawStarted = [NSDate timeIntervalSinceReferenceDate];
     display = rasterizedImage( clampToMaxPixel( image, [maxPixel floatValue] ) );
+    NSTimeInterval encodeStarted = [NSDate timeIntervalSinceReferenceDate];
+    drawMs  = (int)( ( encodeStarted - drawStarted ) * 1000 );
     NSString *decodeEncodeFailure = nil;
     data    = display
       ? encodedThumbnailData( display, &decodeEncodeFailure )
       : nil;
+    encodeMs = (int)( ( [NSDate timeIntervalSinceReferenceDate] - encodeStarted ) * 1000 );
     encodeFailure = display ? decodeEncodeFailure : @"Decode drew no pixels";
     return data != nil;
     } );
@@ -2349,10 +2361,12 @@ RCT_EXPORT_METHOD( prepareCropSource
     [[NSFileManager defaultManager]
       createDirectoryAtPath:[output stringByDeletingLastPathComponent]
       withIntermediateDirectories:YES attributes:nil error:nil];
+    NSTimeInterval writeStarted = [NSDate timeIntervalSinceReferenceDate];
     if ( ![data writeToFile:output atomically:YES] ) {
       reject( @"PREPARE_FAILED", @"Could not write display image", nil );
       return;
     }
+    int writeMs = (int)( ( [NSDate timeIntervalSinceReferenceDate] - writeStarted ) * 1000 );
 
     // Free the full-resolution pixels and their JPEG as soon as they're on disk,
     // keeping only what detection needs, so the next raw decode has room.
@@ -2377,6 +2391,13 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"displayLevel":  @( displayLevel ),
       @"attempts":      @( attempts ),
       @"attemptMs":     attemptMs,
+      @"stageMs": @{
+        @"queue":  @( (int)( ( startedAt - calledAt ) * 1000 ) ),
+        @"lock":   @( (int)( ( lockedAt - startedAt ) * 1000 ) ),
+        @"draw":   @( drawMs ),
+        @"encode": @( encodeMs ),
+        @"write":  @( writeMs ),
+      },
     } );
   } );
 }
