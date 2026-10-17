@@ -586,8 +586,9 @@ static int detectYOLOView( UIImage *image, BOOL flip, float zoom, YOLOBox *outBo
   return kept;
 }
 
-// Returns {x,y,width,height} in top-left normalised coords, or nil if nothing detected.
-static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
+// Returns {x,y,width,height} in top-left normalised coords, or nil if nothing
+// detected. viewMs gets how long each view took, preprocessing included.
+static NSDictionary *detectSubjectBoundsYOLO( UIImage *image, NSMutableArray<NSNumber *> *viewMs )
 {
   initYOLOSession();
   if ( s_yoloFailed || !s_ortSession ) return nil;
@@ -595,7 +596,9 @@ static NSDictionary *detectSubjectBoundsYOLO( UIImage *image )
   YOLOBox boxes[YOLO_NUM_VIEWS * YOLO_MAX_DETS];
   int     nBoxes = 0;
   for ( int v = 0; v < YOLO_NUM_VIEWS; v++ ) {
+    NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
     nBoxes += detectYOLOView( image, kYOLOViewFlip[v], kYOLOViewZoom[v], boxes + nBoxes );
+    [viewMs addObject:@( (int)( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) )];
   }
   if ( nBoxes == 0 ) return nil;
 
@@ -670,11 +673,16 @@ static void applyBrightnessMultiplyBuffer( unsigned char *raw, int pixelCount, f
 static const CGFloat kSubjectDetectionMaxPixel = 1024;
 
 // Try YOLO; fall back to Vision attention saliency when nothing is detected.
+// The bounds carry how long detection took (detectMs, viewMs, saliency) for
+// JS to log; nothing found means no timing.
 static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
 {
   if ( image.CGImage == NULL ) return nil;
 
-  NSDictionary *bounds = detectSubjectBoundsYOLO( image );
+  NSTimeInterval            started = [NSDate timeIntervalSinceReferenceDate];
+  NSMutableArray<NSNumber *> *viewMs = [NSMutableArray array];
+  NSDictionary *bounds = detectSubjectBoundsYOLO( image, viewMs );
+  BOOL          saliency = !bounds;
 
   if ( !bounds ) {
     CGImagePropertyOrientation orientation = orientationFromUIImage( image );
@@ -684,8 +692,13 @@ static NSDictionary *detectSubjectBoundsForImage( UIImage *image )
                                              options:@{}];
     bounds = detectSubjectBoundsSaliency( handler );
   }
+  if ( !bounds ) return nil;
 
-  return bounds;
+  NSMutableDictionary *timed = [bounds mutableCopy];
+  timed[@"detectMs"] = @( (int)( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) );
+  timed[@"viewMs"]   = viewMs;
+  timed[@"saliency"] = @( saliency );
+  return timed;
 }
 
 // ─── Image metadata helpers ──────────────────────────────────────────────────

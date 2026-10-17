@@ -11,9 +11,28 @@ const logger = log.extend( "detectSubjectInImage" );
 // No extra padding: the detector's bounds are already framed as we want them.
 const SUBJECT_DETECTION_PADDING = 0;
 
-interface ImageCropperModule {
-  detectSubjectBounds: ( inputPath: string ) => Promise<NormalizedBounds | null>;
+// Bounds as the native detector returns them, with how long it took: in all,
+// per detector view (preprocessing included), and whether saliency stood in.
+export interface DetectedBounds extends NormalizedBounds {
+  detectMs?: number;
+  viewMs?: number[];
+  saliency?: boolean;
 }
+
+interface ImageCropperModule {
+  detectSubjectBounds: ( inputPath: string ) => Promise<DetectedBounds | null>;
+}
+
+export const logSubjectDetectionTiming = ( bounds: DetectedBounds | null ) => {
+  if ( bounds?.detectMs === undefined ) {
+    return;
+  }
+  logger.infoWithExtra( "subject_detection_timing", {
+    detectMs: bounds.detectMs,
+    viewMs: bounds.viewMs,
+    saliency: bounds.saliency,
+  } );
+};
 
 // The crop the detector's bounds describe, or the default framing when it
 // found nothing. Shared with prepareCropSource, which gets its bounds from the
@@ -38,6 +57,7 @@ const detectSubjectInImage = async (
 
   try {
     const bounds = await imageCropper.detectSubjectBounds( stripFilePrefix( imageUri ) );
+    logSubjectDetectionTiming( bounds );
     return subjectCropFromBounds( bounds, imageWidth, imageHeight );
   } catch ( error ) {
     logger.warn( "Subject detection failed, using default crop", error );

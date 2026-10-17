@@ -1,12 +1,15 @@
 import { cropSourcesPath } from "appConstants/paths";
 import { NativeModules } from "react-native";
 import { getAnimalCrop } from "sharedHelpers/animalCropLog";
-import { subjectCropFromBounds } from "sharedHelpers/detectSubjectInImage";
+import type { DetectedBounds } from "sharedHelpers/detectSubjectInImage";
+import {
+  logSubjectDetectionTiming,
+  subjectCropFromBounds,
+} from "sharedHelpers/detectSubjectInImage";
 import getCropForUri from "sharedHelpers/getCropForUri";
 import imageFileSize from "sharedHelpers/imageFileSize";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import type { NormalizedBounds } from "sharedHelpers/subjectBoundsToNormalizedCrop";
 
 const logger = log.extend( "prepareCropSource" );
 
@@ -34,7 +37,7 @@ interface ImageCropperModule {
     displayUri: string;
     width: number;
     height: number;
-    bounds: NormalizedBounds | null;
+    bounds: DetectedBounds | null;
     // Mean level (0-255) of the display file.
     displayLevel: number;
     // Decodes it took, and how long each ran; a raw that failed is tried again.
@@ -97,6 +100,7 @@ const prepareCropSource = async (
     if ( !prepared || prepared.width <= 0 || prepared.height <= 0 ) {
       return null;
     }
+    logSubjectDetectionTiming( prepared.bounds );
     const size = { w: prepared.width, h: prepared.height };
     return {
       displayUri: prepared.displayUri,
