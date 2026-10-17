@@ -411,7 +411,7 @@ const TaxonDetails = ( ): Node => {
 
     return (
       <View className="mx-3">
-        {fromAudioId && <AudioIdSoundsLink taxonId={taxon.id} />}
+        {fromAudioId && <AudioIdSoundsLink taxon={taxon} />}
         <EstablishmentMeans taxon={taxon} />
         <Wikipedia taxon={taxon} />
         <Taxonomy

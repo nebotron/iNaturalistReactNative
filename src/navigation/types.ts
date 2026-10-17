@@ -11,16 +11,20 @@ import type {
 } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type {
+  ExploreV2Filters,
   ExploreV2LocationState,
   ExploreV2Subject,
   ExploreV2Tab,
 } from "providers/ExploreV2Context";
+import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import type { SharedData } from "sharedHooks/useShare";
 
 export interface ExploreV2EntryParams {
   subject?: ExploreV2Subject | null;
   location?: ExploreV2LocationState;
   activeTab?: ExploreV2Tab;
+  filters?: Partial<ExploreV2Filters>;
+  sortBy?: OBSERVATIONS_SORT;
 }
 
 // Params sent to ExploreV1, read in components/Explore/hooks/useParams.js

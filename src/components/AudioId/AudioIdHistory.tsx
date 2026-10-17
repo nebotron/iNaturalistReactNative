@@ -12,7 +12,7 @@ import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import colors from "styles/tailwindColors";
 
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
-import { openTopSounds } from "./AudioIdSoundsLink";
+import { useOpenTopSounds } from "./AudioIdSoundsLink";
 import ClipPlayButton from "./ClipPlayButton";
 
 const { useQuery } = RealmContext;
@@ -28,6 +28,7 @@ const AudioIdHistory = ( ) => {
   const clips = useAudioIdHistory( state => state.clips );
   const tagClip = useAudioIdHistory( state => state.tagClip );
   const deleteClip = useAudioIdHistory( state => state.deleteClip );
+  const openTopSounds = useOpenTopSounds( );
   const ofSpecies = Object.values( clips )
     .filter( c => c.sp.taxonId === taxonId )
     .sort( ( a, b ) => b.time - a.time );
@@ -68,9 +69,11 @@ const AudioIdHistory = ( ) => {
           <INatIconButton
             icon="sound-outline"
             color={colors.inatGreen}
-            onPress={( ) => openTopSounds( taxonId )}
+            onPress={( ) => openTopSounds( {
+              id: taxonId, name: sp.name, preferred_common_name: sp.commonName,
+            } )}
             accessibilityLabel="Top-faved sounds"
-            accessibilityHint="Opens top-faved sound observations in the browser."
+            accessibilityHint="Opens top-faved sound observations in Explore."
           />
         </View>
       )}

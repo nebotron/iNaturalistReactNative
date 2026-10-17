@@ -200,6 +200,8 @@ export function initialStateFromEntryParams(
     subject: params?.subject || initialExploreV2State.subject,
     location: params?.location || initialExploreV2State.location,
     activeTab: params?.activeTab || initialExploreV2State.activeTab,
+    filters: { ...initialExploreV2State.filters, ...params?.filters },
+    sortBy: params?.sortBy || initialExploreV2State.sortBy,
   };
 }
 
