@@ -554,11 +554,11 @@ const WildlifeHotspotsScreen = ( {
           preferred_common_name: species.preferred_common_name,
         },
       } ),
-      lat: hotspot.centerLatitude,
-      lng: hotspot.centerLongitude,
+      lat: hotspot.area.lat,
+      lng: hotspot.area.lng,
       // Rounded up (with a floor for single-point clusters) so the circle
       // still contains the cluster's farthest observation
-      radius: Math.max( 0.1, Math.ceil( hotspot.radiusKm * 100 ) / 100 ),
+      radius: Math.max( 0.1, Math.ceil( hotspot.area.radiusKm * 100 ) / 100 ),
       worldwide: false,
     } );
   }, [navigation, exploreState, setExploreView] );

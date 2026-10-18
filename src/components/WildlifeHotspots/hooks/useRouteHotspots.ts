@@ -27,12 +27,14 @@ export interface HotspotObservation {
   longitude: number;
 }
 
+export interface Circle { lat: number; lng: number; radiusKm: number }
+
 export interface Hotspot {
   id: string;
   centerLatitude: number;
   centerLongitude: number;
-  // Distance from the center to the farthest observation in the cluster
-  radiusKm: number;
+  // Smallest circle containing every observation in the cluster
+  area: Circle;
   observationCount: number;
   detourMinutes: number;
   speciesCount: number;
@@ -276,11 +278,60 @@ function splitToRadiusConstraint(
   } );
 }
 
+// Smallest circle containing all points (Welzl's incremental algorithm), on a
+// local flat projection, which is accurate at hotspot scale
+function enclosingCircle( points: LatLng[] ): Circle {
+  const lat0 = points[0].lat;
+  const kmPerDegLat = ( Math.PI * EARTH_RADIUS_KM ) / 180;
+  const kmPerDegLng = kmPerDegLat * Math.cos( ( lat0 * Math.PI ) / 180 );
+  const pts = points.map( p => ( { x: p.lng * kmPerDegLng, y: p.lat * kmPerDegLat } ) );
+  interface C { x: number; y: number; r: number }
+  const contains = ( c: C, p: { x: number; y: number } ) => (
+    Math.hypot( p.x - c.x, p.y - c.y ) <= c.r * ( 1 + 1e-9 ) + 1e-9
+  );
+  const fromTwo = ( a: typeof pts[0], b: typeof pts[0] ): C => ( {
+    x: ( a.x + b.x ) / 2,
+    y: ( a.y + b.y ) / 2,
+    r: Math.hypot( a.x - b.x, a.y - b.y ) / 2,
+  } );
+  const fromThree = ( a: typeof pts[0], b: typeof pts[0], c: typeof pts[0] ): C => {
+    const d = 2 * ( a.x * ( b.y - c.y ) + b.x * ( c.y - a.y ) + c.x * ( a.y - b.y ) );
+    // Collinear: the two farthest-apart points define the circle
+    if ( d === 0 ) {
+      return [fromTwo( a, b ), fromTwo( a, c ), fromTwo( b, c )]
+        .reduce( ( m, cand ) => ( cand.r > m.r
+          ? cand
+          : m ) );
+    }
+    const a2 = a.x * a.x + a.y * a.y;
+    const b2 = b.x * b.x + b.y * b.y;
+    const c2 = c.x * c.x + c.y * c.y;
+    const x = ( a2 * ( b.y - c.y ) + b2 * ( c.y - a.y ) + c2 * ( a.y - b.y ) ) / d;
+    const y = ( a2 * ( c.x - b.x ) + b2 * ( a.x - c.x ) + c2 * ( b.x - a.x ) ) / d;
+    return { x, y, r: Math.hypot( a.x - x, a.y - y ) };
+  };
+  let c: C = { ...pts[0], r: 0 };
+  for ( let i = 1; i < pts.length; i += 1 ) {
+    if ( !contains( c, pts[i] ) ) {
+      c = { ...pts[i], r: 0 };
+      for ( let j = 0; j < i; j += 1 ) {
+        if ( !contains( c, pts[j] ) ) {
+          c = fromTwo( pts[i], pts[j] );
+          for ( let k = 0; k < j; k += 1 ) {
+            if ( !contains( c, pts[k] ) ) c = fromThree( pts[i], pts[j], pts[k] );
+          }
+        }
+      }
+    }
+  }
+  return { lat: c.y / kmPerDegLat, lng: c.x / kmPerDegLng, radiusKm: c.r };
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_KM ): Map<string, {
   centerLat: number;
   centerLng: number;
-  radiusKm: number;
+  area: Circle;
   count: number;
   taxa: Map<number, HotspotSpeciesBuilder>;
   observations: HotspotObservation[];
@@ -301,7 +352,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
   const cells = new Map<string, {
     centerLat: number;
     centerLng: number;
-    radiusKm: number;
+    area: Circle;
     count: number;
     taxa: Map<number, HotspotSpeciesBuilder>;
     observations: HotspotObservation[];
@@ -314,12 +365,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
     // Observations of the same species on the same day count once
     const seenSpeciesDays = new Set<string>();
     let count = 0;
-    let radiusKm = 0;
     for ( const i of memberIndices ) {
-      radiusKm = Math.max(
-        radiusKm,
-        distanceInKm( points[i].lat, points[i].lng, centroid.lat, centroid.lng ),
-      );
       const obs = obsForPoint[i];
       const { taxon } = obs;
       const day = obs.observed_on ?? obs.time_observed_at?.slice( 0, 10 );
@@ -373,7 +419,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
     cells.set( key, {
       centerLat: centroid.lat,
       centerLng: centroid.lng,
-      radiusKm,
+      area: enclosingCircle( memberIndices.map( i => points[i] ) ),
       count,
       taxa,
       observations: cellObservations,
@@ -475,7 +521,7 @@ export function useRouteHotspots() {
           id: string;
           centerLat: number;
           centerLng: number;
-          radiusKm: number;
+          area: Circle;
           count: number;
           speciesCount: number;
           topSpecies: HotspotSpecies[];
@@ -499,7 +545,7 @@ export function useRouteHotspots() {
             id: `hotspot-${key}`,
             centerLat: cell.centerLat,
             centerLng: cell.centerLng,
-            radiusKm: cell.radiusKm,
+            area: cell.area,
             count: cell.count,
             speciesCount: cell.taxa.size,
             topSpecies,
@@ -530,7 +576,7 @@ export function useRouteHotspots() {
               id: candidate.id,
               centerLatitude: candidate.centerLat,
               centerLongitude: candidate.centerLng,
-              radiusKm: candidate.radiusKm,
+              area: candidate.area,
               observationCount: candidate.count,
               detourMinutes,
               speciesCount: candidate.speciesCount,
