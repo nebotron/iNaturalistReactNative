@@ -31,6 +31,8 @@ export interface Hotspot {
   id: string;
   centerLatitude: number;
   centerLongitude: number;
+  // Distance from the center to the farthest observation in the cluster
+  radiusKm: number;
   observationCount: number;
   detourMinutes: number;
   speciesCount: number;
@@ -278,6 +280,7 @@ function splitToRadiusConstraint(
 function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_KM ): Map<string, {
   centerLat: number;
   centerLng: number;
+  radiusKm: number;
   count: number;
   taxa: Map<number, HotspotSpeciesBuilder>;
   observations: HotspotObservation[];
@@ -298,6 +301,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
   const cells = new Map<string, {
     centerLat: number;
     centerLng: number;
+    radiusKm: number;
     count: number;
     taxa: Map<number, HotspotSpeciesBuilder>;
     observations: HotspotObservation[];
@@ -310,7 +314,12 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
     // Observations of the same species on the same day count once
     const seenSpeciesDays = new Set<string>();
     let count = 0;
+    let radiusKm = 0;
     for ( const i of memberIndices ) {
+      radiusKm = Math.max(
+        radiusKm,
+        distanceInKm( points[i].lat, points[i].lng, centroid.lat, centroid.lng ),
+      );
       const obs = obsForPoint[i];
       const { taxon } = obs;
       const day = obs.observed_on ?? obs.time_observed_at?.slice( 0, 10 );
@@ -364,6 +373,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
     cells.set( key, {
       centerLat: centroid.lat,
       centerLng: centroid.lng,
+      radiusKm,
       count,
       taxa,
       observations: cellObservations,
@@ -465,6 +475,7 @@ export function useRouteHotspots() {
           id: string;
           centerLat: number;
           centerLng: number;
+          radiusKm: number;
           count: number;
           speciesCount: number;
           topSpecies: HotspotSpecies[];
@@ -488,6 +499,7 @@ export function useRouteHotspots() {
             id: `hotspot-${key}`,
             centerLat: cell.centerLat,
             centerLng: cell.centerLng,
+            radiusKm: cell.radiusKm,
             count: cell.count,
             speciesCount: cell.taxa.size,
             topSpecies,
@@ -518,6 +530,7 @@ export function useRouteHotspots() {
               id: candidate.id,
               centerLatitude: candidate.centerLat,
               centerLongitude: candidate.centerLng,
+              radiusKm: candidate.radiusKm,
               observationCount: candidate.count,
               detourMinutes,
               speciesCount: candidate.speciesCount,
