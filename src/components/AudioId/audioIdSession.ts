@@ -67,6 +67,8 @@ interface ScoresEvent {
   windowFrame: number;
   inferMs: number;
   memMB: number;
+  // Live spectrogram views on screen when it ran.
+  spectrogramViews?: number;
   error: string | null;
 }
 export interface Heard {
@@ -282,7 +284,8 @@ const onScores = ( event: ScoresEvent ) => {
     logger.info( `${runs.length} runs: level ${
       ( 20 * Math.log10( mean( r => r.level ) + 1e-9 ) ).toFixed( 0 )} dBFS, `
       + `infer ${mean( r => r.inferMs ).toFixed( 0 )} ms, `
-      + `mem ${Math.round( runs[runs.length - 1].memMB )} MB, best ${
+      + `mem ${Math.round( runs[runs.length - 1].memMB )} MB, `
+      + `spectrogram ${runs[runs.length - 1].spectrogramViews ?? "?"}, best ${
         best.index >= 0
           ? sps[best.index]?.commonName
           : "none"} ${best.score.toFixed( 2 )}, errors ${

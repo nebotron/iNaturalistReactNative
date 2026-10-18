@@ -64,6 +64,8 @@ withIntermediateDirectories:YES attributes:nil error:nil];
 static os_unfair_lock abSpecLock = OS_UNFAIR_LOCK_INIT;
 static uint8_t  abSpecLevel[AB_SPEC_W][AB_SPEC_H]; // 0..255, low frequencies first
 static NSInteger abSpecCount;                      // columns added so far
+// Live spectrogram views on screen, logged with the memory footprint.
+static _Atomic int abSpecViews;
 
 static void ABSpectrogramReset( void )
 {
@@ -112,19 +114,22 @@ static void ABSpectrogramPush( const float *frame )
 }
 
 // Grayscale image of `width` columns of levels, low frequencies at the bottom.
+// One byte a pixel: the live view makes one of these each frame, and at four
+// bytes (1.2MB an image, up to 60 a second) the footprint climbed to the
+// 3.4GB limit within half an hour of listening, which is what killed the app.
 static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
 {
-  uint32_t *pixels = malloc( AB_SPEC_H * width * sizeof( uint32_t ) );
+  uint8_t *pixels = malloc( AB_SPEC_H * width );
   for ( NSInteger x = 0; x < width; x++ ) {
     for ( int y = 0; y < AB_SPEC_H; y++ ) {
-      uint32_t g = 255 - ( levels ? levels[x * AB_SPEC_H + y] : 0 );
-      // Little-endian RGBX, top row first.
-      pixels[( AB_SPEC_H - 1 - y ) * width + x] = g | g << 8 | g << 16 | 0xff000000u;
+      // Top row first.
+      pixels[( AB_SPEC_H - 1 - y ) * width + x] =
+        255 - ( levels ? levels[x * AB_SPEC_H + y] : 0 );
     }
   }
-  CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB( );
-  CGContextRef ctx = CGBitmapContextCreate( pixels, width, AB_SPEC_H, 8, width * 4, space,
-                                            kCGImageAlphaNoneSkipLast | kCGBitmapByteOrder32Big );
+  CGColorSpaceRef space = CGColorSpaceCreateDeviceGray( );
+  CGContextRef ctx = CGBitmapContextCreate( pixels, width, AB_SPEC_H, 8, width, space,
+                                            kCGImageAlphaNone );
   CGImageRef image = CGBitmapContextCreateImage( ctx );
   CGContextRelease( ctx );
   CGColorSpaceRelease( space );
@@ -824,6 +829,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
                                  @"windowFrame": @( windowFrame ),
                                  @"inferMs": @( ms ),
                                  @"memMB": @( [self footprintMB] ),
+                                 @"spectrogramViews": @( abSpecViews ),
                                  @"error": inferError ?: [NSNull null] }];
     } );
   } );
@@ -914,18 +920,23 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 - (void)didMoveToWindow
 {
   [super didMoveToWindow];
+  if ( _link ) abSpecViews -= 1;
   [_link invalidate];
   _link = nil;
   if ( !self.window ) return;
   self.layer.magnificationFilter = kCAFilterLinear;
   _drawnCount = -1;
   _link = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick )];
-  _link.preferredFrameRateRange = CAFrameRateRangeMake( 30, 60, 60 );
+  // 30 fps scrolls smoothly enough at 80 columns a second, and halves the
+  // images made against 60.
+  _link.preferredFrameRateRange = CAFrameRateRangeMake( 15, 30, 30 );
+  abSpecViews += 1;
   [_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
 
 - (void)tick
 {
+  @autoreleasepool {
   static uint8_t levels[AB_SPEC_W * AB_SPEC_H];
   os_unfair_lock_lock( &abSpecLock );
   if ( abSpecCount == _drawnCount ) {
@@ -943,6 +954,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   CGImageRef image = ABSpectrogramImage( levels, AB_SPEC_W );
   self.layer.contents = (__bridge id)image;
   CGImageRelease( image );
+  }
 }
 
 @end
