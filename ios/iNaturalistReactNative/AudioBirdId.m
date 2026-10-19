@@ -913,7 +913,8 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   CADisplayLink *_link;
   NSInteger      _drawnCount; // columns drawn into strips, -1 for none
   NSInteger      _base;       // the column at x = 0 in _strips
-  CALayer       *_strips;     // one sublayer per batch of new columns
+  CALayer       *_strips;     // one sublayer per batch of new columns, oldest first
+  NSMutableArray<CALayer *> *_spare; // strips that scrolled off, for reuse
   CGSize         _stripSize;  // the bounds the strips were laid out for
 }
 
@@ -929,6 +930,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     self.clipsToBounds = YES;
     _strips = [CALayer layer];
     [self.layer addSublayer:_strips];
+    _spare = [NSMutableArray array];
     _drawnCount = -1;
   }
   return self;
@@ -945,8 +947,17 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 // Drops every strip, so the next tick redraws the last 10 s from the ring.
 - (void)restart
 {
-  _strips.sublayers = nil;
+  while ( _strips.sublayers.count ) [self recycle:_strips.sublayers.firstObject];
   _drawnCount = -1;
+}
+
+// Takes a strip off screen and keeps it, without its image, for the next
+// batch of columns, so a long session reuses the same few dozen layers.
+- (void)recycle:(CALayer *)strip
+{
+  [strip removeFromSuperlayer];
+  strip.contents = nil;
+  [_spare addObject:strip];
 }
 
 - (void)didMoveToWindow
@@ -991,16 +1002,6 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 
   [CATransaction begin];
   [CATransaction setDisableActions:YES];
-  if ( levels ) {
-    CGImageRef image = ABSpectrogramImage( levels, width );
-    free( levels );
-    CALayer *strip = [CALayer layer];
-    strip.magnificationFilter = kCAFilterLinear;
-    strip.contents = (__bridge id)image;
-    strip.frame = CGRectMake( ( first - _base ) * colW, 0, width * colW, h );
-    CGImageRelease( image );
-    [_strips addSublayer:strip];
-  }
   // Keep coordinates small over a long session.
   NSInteger shift = count - AB_SPEC_W - _base;
   if ( shift > AB_SPEC_W * 10 ) {
@@ -1009,10 +1010,23 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     }
     _base += shift;
   }
-  // Newest column at the right edge; strips that scrolled off are dropped.
+  // Newest column at the right edge; strips that scrolled off the left are
+  // recycled, oldest first, to draw the new columns at the right.
   CGFloat left = ( count - AB_SPEC_W - _base ) * colW;
-  for ( CALayer *strip in [_strips.sublayers copy] ) {
-    if ( CGRectGetMaxX( strip.frame ) <= left ) [strip removeFromSuperlayer];
+  while ( _strips.sublayers.count
+          && CGRectGetMaxX( _strips.sublayers.firstObject.frame ) <= left ) {
+    [self recycle:_strips.sublayers.firstObject];
+  }
+  if ( levels ) {
+    CGImageRef image = ABSpectrogramImage( levels, width );
+    free( levels );
+    CALayer *strip = _spare.lastObject ?: [CALayer layer];
+    [_spare removeLastObject];
+    strip.magnificationFilter = kCAFilterLinear;
+    strip.contents = (__bridge id)image;
+    strip.frame = CGRectMake( ( first - _base ) * colW, 0, width * colW, h );
+    CGImageRelease( image );
+    [_strips addSublayer:strip];
   }
   _strips.frame = CGRectMake( -left, 0, left + _stripSize.width, h );
   [CATransaction commit];
