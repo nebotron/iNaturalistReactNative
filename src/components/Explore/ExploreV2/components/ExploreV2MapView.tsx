@@ -1,4 +1,5 @@
 import type { ApiTotalBounds } from "api/types";
+import EbirdMapMarkers from "components/Explore/EbirdMapMarkers";
 import type {
   ExploreV2QueryParams,
   NearbyCoords,
@@ -190,6 +191,7 @@ const ExploreV2MapView = ( {
         ref={mapRef}
         initialRegion={initialRegion}
         isLoading={isLoading}
+        mapChildren={<EbirdMapMarkers params={queryParams} />}
         onCurrentLocationPress={onCurrentLocationPress}
         onPanDrag={handlePanDrag}
         regionToAnimate={targetRegion}

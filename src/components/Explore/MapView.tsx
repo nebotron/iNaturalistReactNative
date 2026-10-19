@@ -1,3 +1,4 @@
+import EbirdMapMarkers from "components/Explore/EbirdMapMarkers";
 import {
   ActivityIndicator,
   Button,
@@ -235,6 +236,7 @@ const MapView = ( {
         onPanDrag={handlePanDrag}
         onRegionChangeComplete={handleRegionChangeComplete}
         initialRegion={initialRegion}
+        mapChildren={<EbirdMapMarkers params={queryParams} />}
         regionToAnimate={regionToAnimate}
         showCurrentLocationButton
         showSwitchMapTypeButton
