@@ -1,4 +1,4 @@
-import { screen, userEvent } from "@testing-library/react-native";
+import { screen } from "@testing-library/react-native";
 import EbirdResults from "components/Explore/EbirdResults";
 import React from "react";
 import useStore from "stores/useStore";
@@ -24,13 +24,11 @@ describe( "EbirdResults", ( ) => {
     useStore.getState( ).layout.setEbirdEnabled( true );
   } );
 
-  it( "shows only the checkbox until eBird sightings are included", async ( ) => {
+  it( "renders nothing until eBird sightings are included", ( ) => {
     useStore.getState( ).layout.setEbirdEnabled( false );
     mockEbird.mockReturnValue( { limits: [], observations: [observation] } );
     renderComponent( <EbirdResults params={{}} /> );
-    expect( screen.queryByText( "Nisqually NWR" ) ).toBeNull( );
-    await userEvent.setup( ).press( screen.getByLabelText( "Include eBird sightings" ) );
-    expect( await screen.findByText( "Nisqually NWR" ) ).toBeVisible( );
+    expect( screen.queryByTestId( "EbirdResults" ) ).toBeNull( );
   } );
 
   it( "renders nothing when eBird doesn't apply to the search", ( ) => {

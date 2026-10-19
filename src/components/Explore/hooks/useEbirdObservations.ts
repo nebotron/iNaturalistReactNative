@@ -1,17 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
+import type { EbirdTaxonFilter } from "api/ebird";
 import {
-  AVES_ID,
   EBIRD_EXCLUSIVE_PARAMS,
   EBIRD_MAX_DIST_KM,
   EBIRD_MAX_RESULTS,
   EbirdRateLimitError,
   fetchEbirdObservations,
   isEbirdEnabled,
+  resolveEbirdTaxonFilter,
 } from "api/ebird";
 import fetchPlace from "api/places";
-import { useTaxon } from "sharedHooks";
 
-const STALE_TIME_MS = 15 * 60 * 1000;
+const STALE_TIME_MS = 24 * 60 * 60 * 1000;
 const DATE_PARAMS = ["d1", "d2", "observed_on", "month", "year", "created_d1", "created_d2"];
 
 export type EbirdLimit = "area" | "dates" | "results" | "rate" | "noLocation";
@@ -51,14 +51,20 @@ const fetchPlaceArea = async ( placeId: number ): Promise<Area | null> => {
 const round = ( n: number ) => Math.round( n * 100 ) / 100;
 
 const useEbirdObservations = ( params: Record<string, unknown>, enabled = true ) => {
-  const taxonId = Number( params.taxon_id );
-  const { taxon } = useTaxon( { id: taxonId }, !!taxonId );
-  const isBirdSpecies = taxon?.rank === "species"
-    && Array.from( taxon?.ancestor_ids || [] ).includes( AVES_ID );
-  const isAllBirds = taxonId === AVES_ID;
-  const applies = isEbirdEnabled( )
-    && ( isBirdSpecies || isAllBirds )
-    && !EBIRD_EXCLUSIVE_PARAMS.some( key => params[key] );
+  // Only the params that decide which birds eBird results include
+  const taxonParams = Object.fromEntries( [
+    "taxon_id",
+    "without_taxon_id",
+    "iconic_taxa",
+    ...EBIRD_EXCLUSIVE_PARAMS,
+  ].map( key => [key, params[key]] ) );
+  const { data: taxonFilter } = useQuery( {
+    queryKey: ["ebirdTaxonFilter", taxonParams],
+    queryFn: ( ) => resolveEbirdTaxonFilter( taxonParams ),
+    enabled: enabled && isEbirdEnabled( ),
+    staleTime: STALE_TIME_MS,
+  } );
+  const applies = isEbirdEnabled( ) && !!taxonFilter;
 
   const placeId = Number( params.place_id ) || null;
   const { data: placeArea } = useQuery( {
@@ -82,16 +88,13 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
     area = placeArea;
   }
 
-  const sciName = isAllBirds
-    ? undefined
-    : taxon?.name;
   const lat = area && round( area.lat );
   const lng = area && round( area.lng );
   const distKm = area && Math.min( Math.ceil( area.distKm ), EBIRD_MAX_DIST_KM );
   const { data: observations, error, isLoading } = useQuery( {
-    queryKey: ["ebirdObservations", sciName, lat, lng, distKm],
+    queryKey: ["ebirdObservations", taxonFilter, lat, lng, distKm],
     queryFn: ( ) => fetchEbirdObservations( {
-      sciName,
+      taxonFilter: taxonFilter as EbirdTaxonFilter,
       lat: lat as number,
       lng: lng as number,
       distKm: distKm as number,

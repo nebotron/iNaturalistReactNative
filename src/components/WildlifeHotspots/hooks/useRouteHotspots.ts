@@ -1,12 +1,10 @@
 import {
-  AVES_ID,
-  EBIRD_EXCLUSIVE_PARAMS,
   EBIRD_MAX_DIST_KM,
   fetchEbirdObservations,
   isEbirdEnabled,
+  resolveEbirdTaxonFilter,
 } from "api/ebird";
 import { searchObservations } from "api/observations";
-import { fetchTaxon } from "api/taxa";
 import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
 import useStore from "stores/useStore";
@@ -470,28 +468,18 @@ function ebirdSearchPoints( route: RoutePoint[] ): RoutePoint[] {
 
 // eBird sightings along the route, shaped like iNaturalist observations and
 // matched to iNaturalist taxa by scientific name. Empty when the filters
-// aren't for birds or can't apply to eBird.
+// allow no birds or can't apply to eBird.
 async function fetchEbirdRouteObservations(
   route: RoutePoint[],
   filterParams: Record<string, unknown>,
   inatObservations: { taxon?: { id: number; name?: string } }[],
 ) {
-  if ( EBIRD_EXCLUSIVE_PARAMS.some( key => filterParams[key] ) ) return [];
-  const taxonId = Number( filterParams.taxon_id ) || null;
-  let sciName: string | undefined;
-  if ( taxonId && taxonId !== AVES_ID ) {
-    const taxon = await fetchTaxon( taxonId );
-    const isBirdSpecies = taxon?.rank === "species"
-      && Array.from( taxon?.ancestor_ids || [] ).includes( AVES_ID );
-    if ( !isBirdSpecies ) return [];
-    sciName = taxon.name;
-  } else if ( !taxonId && filterParams.iconic_taxa ) {
-    return [];
-  }
+  const taxonFilter = await resolveEbirdTaxonFilter( filterParams );
+  if ( !taxonFilter ) return [];
 
   const results = await Promise.allSettled( ebirdSearchPoints( route ).map(
     point => fetchEbirdObservations( {
-      sciName,
+      taxonFilter,
       lat: Math.round( point.latitude * 100 ) / 100,
       lng: Math.round( point.longitude * 100 ) / 100,
       distKm: EBIRD_MAX_DIST_KM,
