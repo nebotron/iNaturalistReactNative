@@ -350,7 +350,7 @@ const SpeciesGame = ( ) => {
       const raw: string | undefined = first?.photo?.url;
       if ( raw && obs.uuid ) {
         entries.push( {
-          url: raw.replace( /square\.(jpe?g|png|gif|webp)$/i, "medium.$1" ),
+          url: raw.replace( /square\.(jpe?g|png|gif|webp)$/i, "original.$1" ),
           observationUuid: obs.uuid,
         } );
       }
