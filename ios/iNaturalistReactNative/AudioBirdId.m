@@ -114,9 +114,6 @@ static void ABSpectrogramPush( const float *frame )
 }
 
 // Grayscale image of `width` columns of levels, low frequencies at the bottom.
-// One byte a pixel: the live view makes one of these each frame, and at four
-// bytes (1.2MB an image, up to 60 a second) the footprint climbed to the
-// 3.4GB limit within half an hour of listening, which is what killed the app.
 static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
 {
   uint8_t *pixels = malloc( AB_SPEC_H * width );
@@ -914,7 +911,42 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
 
 @implementation AudioSpectrogramView {
   CADisplayLink *_link;
-  NSInteger      _drawnCount;
+  NSInteger      _drawnCount; // columns drawn into strips, -1 for none
+  NSInteger      _base;       // the column at x = 0 in _strips
+  CALayer       *_strips;     // one sublayer per batch of new columns
+  CGSize         _stripSize;  // the bounds the strips were laid out for
+}
+
+// Each batch of new columns is drawn once, into a strip a few columns wide,
+// and the strips scroll left until they leave the view. This used to redraw
+// the whole 10 s into a new full-size image on every frame, and the app's
+// footprint climbed in a sawtooth to the 3.4GB limit within half an hour of
+// listening -- seven times on Oct 15-17 -- and the app was killed there.
+- (instancetype)initWithFrame:(CGRect)frame
+{
+  if ( ( self = [super initWithFrame:frame] ) ) {
+    self.backgroundColor = UIColor.whiteColor;
+    self.clipsToBounds = YES;
+    _strips = [CALayer layer];
+    [self.layer addSublayer:_strips];
+    _drawnCount = -1;
+  }
+  return self;
+}
+
+- (void)layoutSubviews
+{
+  [super layoutSubviews];
+  if ( CGSizeEqualToSize( self.bounds.size, _stripSize ) ) return;
+  _stripSize = self.bounds.size;
+  [self restart];
+}
+
+// Drops every strip, so the next tick redraws the last 10 s from the ring.
+- (void)restart
+{
+  _strips.sublayers = nil;
+  _drawnCount = -1;
 }
 
 - (void)didMoveToWindow
@@ -924,37 +956,66 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   [_link invalidate];
   _link = nil;
   if ( !self.window ) return;
-  self.layer.magnificationFilter = kCAFilterLinear;
-  _drawnCount = -1;
+  [self restart];
   _link = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick )];
-  // 30 fps scrolls smoothly enough at 80 columns a second, and halves the
-  // images made against 60.
-  _link.preferredFrameRateRange = CAFrameRateRangeMake( 15, 30, 30 );
+  _link.preferredFrameRateRange = CAFrameRateRangeMake( 30, 60, 60 );
   abSpecViews += 1;
   [_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
 
 - (void)tick
 {
-  @autoreleasepool {
-  static uint8_t levels[AB_SPEC_W * AB_SPEC_H];
+  CGFloat colW = _stripSize.width / AB_SPEC_W;
+  CGFloat h    = _stripSize.height;
+  if ( colW <= 0 || h <= 0 ) return;
+
   os_unfair_lock_lock( &abSpecLock );
-  if ( abSpecCount == _drawnCount ) {
+  NSInteger count = abSpecCount;
+  // Listening restarted, and the ring with it.
+  if ( count < _drawnCount ) [self restart];
+  if ( count == _drawnCount ) {
     os_unfair_lock_unlock( &abSpecLock );
     return;
   }
-  _drawnCount = abSpecCount;
-  for ( NSInteger x = 0; x < AB_SPEC_W; x++ ) {
-    // Oldest column on the left; columns not yet heard stay blank.
-    NSInteger c = abSpecCount - AB_SPEC_W + x;
-    if ( c >= 0 ) memcpy( levels + x * AB_SPEC_H, abSpecLevel[c % AB_SPEC_W], AB_SPEC_H );
-    else memset( levels + x * AB_SPEC_H, 0, AB_SPEC_H );
+  if ( _drawnCount < 0 ) _base = count - AB_SPEC_W;
+  // From one column before the new ones, so neighbouring strips overlap
+  // rather than leave a hairline gap where their edges round to pixels.
+  NSInteger first = MAX( MAX( _drawnCount - 1, count - AB_SPEC_W ), 0 );
+  NSInteger width = count - first;
+  uint8_t  *levels = width > 0 ? malloc( width * AB_SPEC_H ) : NULL;
+  for ( NSInteger x = 0; x < width; x++ ) {
+    memcpy( levels + x * AB_SPEC_H, abSpecLevel[( first + x ) % AB_SPEC_W], AB_SPEC_H );
   }
   os_unfair_lock_unlock( &abSpecLock );
-  CGImageRef image = ABSpectrogramImage( levels, AB_SPEC_W );
-  self.layer.contents = (__bridge id)image;
-  CGImageRelease( image );
+  _drawnCount = count;
+
+  [CATransaction begin];
+  [CATransaction setDisableActions:YES];
+  if ( levels ) {
+    CGImageRef image = ABSpectrogramImage( levels, width );
+    free( levels );
+    CALayer *strip = [CALayer layer];
+    strip.magnificationFilter = kCAFilterLinear;
+    strip.contents = (__bridge id)image;
+    strip.frame = CGRectMake( ( first - _base ) * colW, 0, width * colW, h );
+    CGImageRelease( image );
+    [_strips addSublayer:strip];
   }
+  // Keep coordinates small over a long session.
+  NSInteger shift = count - AB_SPEC_W - _base;
+  if ( shift > AB_SPEC_W * 10 ) {
+    for ( CALayer *strip in _strips.sublayers ) {
+      strip.frame = CGRectOffset( strip.frame, -shift * colW, 0 );
+    }
+    _base += shift;
+  }
+  // Newest column at the right edge; strips that scrolled off are dropped.
+  CGFloat left = ( count - AB_SPEC_W - _base ) * colW;
+  for ( CALayer *strip in [_strips.sublayers copy] ) {
+    if ( CGRectGetMaxX( strip.frame ) <= left ) [strip removeFromSuperlayer];
+  }
+  _strips.frame = CGRectMake( -left, 0, left + _stripSize.width, h );
+  [CATransaction commit];
 }
 
 @end
