@@ -1,6 +1,15 @@
+import {
+  AVES_ID,
+  EBIRD_EXCLUSIVE_PARAMS,
+  EBIRD_MAX_DIST_KM,
+  fetchEbirdObservations,
+  isEbirdEnabled,
+} from "api/ebird";
 import { searchObservations } from "api/observations";
+import { fetchTaxon } from "api/taxa";
 import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
+import useStore from "stores/useStore";
 
 export interface RoutePoint {
   latitude: number;
@@ -8,7 +17,8 @@ export interface RoutePoint {
 }
 
 export interface HotspotSpecies {
-  id: number;
+  // Missing for eBird-only species with no matching iNaturalist observation
+  id?: number;
   name: string;
   preferred_common_name?: string;
   count: number;
@@ -51,6 +61,10 @@ const MAX_DETOUR_CANDIDATES = 50;
 const PARKING_MINUTES = 5;
 // Bbox padding around route to look for observations
 const BBOX_PADDING_KM = 80;
+// eBird searches are circles, so search at points this far apart along the
+// route, capped to keep traffic to eBird low
+const EBIRD_SPACING_KM = 80;
+const MAX_EBIRD_SEARCHES = 8;
 
 const HOTSPOT_PARAM_KEYS = [
   "hotspotClusterRadiusKm",
@@ -333,7 +347,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
   centerLng: number;
   area: Circle;
   count: number;
-  taxa: Map<number, HotspotSpeciesBuilder>;
+  taxa: Map<number | string, HotspotSpeciesBuilder>;
   observations: HotspotObservation[];
 }> {
   // Extract valid positions paired with their original observation
@@ -354,13 +368,13 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
     centerLng: number;
     area: Circle;
     count: number;
-    taxa: Map<number, HotspotSpeciesBuilder>;
+    taxa: Map<number | string, HotspotSpeciesBuilder>;
     observations: HotspotObservation[];
   }>();
 
   for ( const { centroid, memberIndices } of clusters ) {
     const key = `${centroid.lat.toFixed( 5 )},${centroid.lng.toFixed( 5 )}`;
-    const taxa = new Map<number, HotspotSpeciesBuilder>();
+    const taxa = new Map<number | string, HotspotSpeciesBuilder>();
     const cellObservations: HotspotObservation[] = [];
     // Observations of the same species on the same day count once
     const seenSpeciesDays = new Set<string>();
@@ -368,15 +382,17 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
     for ( const i of memberIndices ) {
       const obs = obsForPoint[i];
       const { taxon } = obs;
+      // eBird species with no iNaturalist match have only a name
+      const taxonKey: number | string | undefined = taxon?.id ?? taxon?.name;
       const day = obs.observed_on ?? obs.time_observed_at?.slice( 0, 10 );
-      const speciesDayKey = taxon?.id && day
-        ? `${taxon.id}|${day}`
+      const speciesDayKey = taxonKey && day
+        ? `${taxonKey}|${day}`
         : null;
       const isDuplicate = speciesDayKey !== null && seenSpeciesDays.has( speciesDayKey );
       if ( speciesDayKey ) seenSpeciesDays.add( speciesDayKey );
       if ( !isDuplicate ) count += 1;
-      if ( taxon?.id && !isDuplicate ) {
-        const prev = taxa.get( taxon.id );
+      if ( taxonKey && !isDuplicate ) {
+        const prev = taxa.get( taxonKey );
         const timeMinutes = obs.time_observed_at
           ? parseTimeToMinutes( obs.time_observed_at )
           : null;
@@ -395,7 +411,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
           const timeCosSum = timeMinutes !== null
             ? Math.cos( ( timeMinutes / 1440 ) * 2 * Math.PI )
             : 0;
-          taxa.set( taxon.id, {
+          taxa.set( taxonKey, {
             id: taxon.id,
             name: taxon.name ?? "",
             preferred_common_name: taxon.preferred_common_name,
@@ -429,7 +445,86 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
   return cells;
 }
 
+// Points along the route at most EBIRD_SPACING_KM apart (wider for long routes)
+function ebirdSearchPoints( route: RoutePoint[] ): RoutePoint[] {
+  const legs = route.slice( 1 ).map( ( p, i ) => distanceInKm(
+    route[i].latitude,
+    route[i].longitude,
+    p.latitude,
+    p.longitude,
+  ) );
+  const total = legs.reduce( ( sum, d ) => sum + d, 0 );
+  const spacing = Math.max( EBIRD_SPACING_KM, total / ( MAX_EBIRD_SEARCHES - 1 ) );
+  const points = [route[0]];
+  let sinceLast = 0;
+  legs.forEach( ( d, i ) => {
+    sinceLast += d;
+    if ( sinceLast >= spacing ) {
+      points.push( route[i + 1] );
+      sinceLast = 0;
+    }
+  } );
+  if ( sinceLast > 0 ) points.push( route[route.length - 1] );
+  return points.slice( 0, MAX_EBIRD_SEARCHES );
+}
+
+// eBird sightings along the route, shaped like iNaturalist observations and
+// matched to iNaturalist taxa by scientific name. Empty when the filters
+// aren't for birds or can't apply to eBird.
+async function fetchEbirdRouteObservations(
+  route: RoutePoint[],
+  filterParams: Record<string, unknown>,
+  inatObservations: { taxon?: { id: number; name?: string } }[],
+) {
+  if ( EBIRD_EXCLUSIVE_PARAMS.some( key => filterParams[key] ) ) return [];
+  const taxonId = Number( filterParams.taxon_id ) || null;
+  let sciName: string | undefined;
+  if ( taxonId && taxonId !== AVES_ID ) {
+    const taxon = await fetchTaxon( taxonId );
+    const isBirdSpecies = taxon?.rank === "species"
+      && Array.from( taxon?.ancestor_ids || [] ).includes( AVES_ID );
+    if ( !isBirdSpecies ) return [];
+    sciName = taxon.name;
+  } else if ( !taxonId && filterParams.iconic_taxa ) {
+    return [];
+  }
+
+  const results = await Promise.allSettled( ebirdSearchPoints( route ).map(
+    point => fetchEbirdObservations( {
+      sciName,
+      lat: Math.round( point.latitude * 100 ) / 100,
+      lng: Math.round( point.longitude * 100 ) / 100,
+      distKm: EBIRD_MAX_DIST_KM,
+    } ),
+  ) );
+  const taxonIdsByName = new Map( inatObservations
+    .filter( obs => obs.taxon?.name )
+    .map( obs => [obs.taxon?.name, obs.taxon?.id] ) );
+  const seen = new Set<string>( );
+  return results.flatMap( result => ( result.status === "fulfilled"
+    ? result.value
+    : [] ) ).filter( obs => {
+    const key = `${obs.subId}|${obs.speciesCode}`;
+    if ( seen.has( key ) ) return false;
+    seen.add( key );
+    return true;
+  } ).map( obs => ( {
+    geojson: { coordinates: [obs.lng, obs.lat] },
+    observed_on: obs.obsDt.slice( 0, 10 ),
+    // obsDt is "YYYY-MM-DD HH:mm", or just the date when no time was recorded
+    time_observed_at: obs.obsDt.length > 10
+      ? obs.obsDt.replace( " ", "T" )
+      : undefined,
+    taxon: {
+      id: taxonIdsByName.get( obs.sciName ),
+      name: obs.sciName,
+      preferred_common_name: obs.comName,
+    },
+  } ) );
+}
+
 export function useRouteHotspots() {
+  const ebirdEnabled = useStore( state => state.layout.ebirdEnabled );
   const [hotspots, setHotspots] = useState<Hotspot[]>( [] );
   const [routeCoords, setRouteCoords] = useState<RoutePoint[]>( [] );
   const [loading, setLoading] = useState( false );
@@ -511,7 +606,12 @@ export function useRouteHotspots() {
           Array.from( { length: numPages }, ( _, i ) => fetchPage( i + 1 ) ),
         );
 
-        const observations = pages.flatMap( p => p?.results ?? [] ).slice( 0, totalObs );
+        const inatObservations = pages.flatMap( p => p?.results ?? [] ).slice( 0, totalObs );
+        const ebirdObservations = ebirdEnabled && isEbirdEnabled( )
+          ? await fetchEbirdRouteObservations( routePoints, filterParams, inatObservations )
+          : [];
+        if ( isStale() ) return;
+        const observations = [...inatObservations, ...ebirdObservations];
 
         // 3. Cluster observations with k-means (diameter ≤ 2× clusterRadiusKm per cluster)
         const cells = clusterByKMeans( observations, clusterRadiusKm );
@@ -604,7 +704,7 @@ export function useRouteHotspots() {
         if ( !isStale() ) setLoading( false );
       }
     },
-    [],
+    [ebirdEnabled],
   );
 
   return {

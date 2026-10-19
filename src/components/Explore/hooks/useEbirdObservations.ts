@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  AVES_ID,
+  EBIRD_EXCLUSIVE_PARAMS,
   EBIRD_MAX_DIST_KM,
   EBIRD_MAX_RESULTS,
   EbirdRateLimitError,
@@ -9,12 +11,8 @@ import {
 import fetchPlace from "api/places";
 import { useTaxon } from "sharedHooks";
 
-const AVES_ID = 3;
 const STALE_TIME_MS = 15 * 60 * 1000;
 const DATE_PARAMS = ["d1", "d2", "observed_on", "month", "year", "created_d1", "created_d2"];
-// eBird results can't be filtered by these, so skip eBird rather than show
-// results that ignore them
-const EXCLUSIVE_PARAMS = ["user_id", "project_id", "ident_user_id"];
 
 export type EbirdLimit = "area" | "dates" | "results" | "rate" | "noLocation";
 
@@ -60,7 +58,7 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
   const isAllBirds = taxonId === AVES_ID;
   const applies = isEbirdEnabled( )
     && ( isBirdSpecies || isAllBirds )
-    && !EXCLUSIVE_PARAMS.some( key => params[key] );
+    && !EBIRD_EXCLUSIVE_PARAMS.some( key => params[key] );
 
   const placeId = Number( params.place_id ) || null;
   const { data: placeArea } = useQuery( {

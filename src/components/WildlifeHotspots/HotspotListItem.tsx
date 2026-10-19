@@ -80,7 +80,7 @@ const HotspotListItem = ( {
           <View className="mt-1">
             {hotspot.topSpecies.map( species => (
               <View
-                key={String( species.id )}
+                key={species.id ?? species.name}
                 className="flex-row items-center mb-0.5"
               >
                 <INatIcon name="leaf" size={10} color={colors.inatGreen} />
@@ -90,17 +90,22 @@ const HotspotListItem = ( {
                 >
                   {species.preferred_common_name || species.name}
                   {"  ·  "}
-                  <Body3
-                    className="text-inatGreen underline"
-                    onPress={() => onSpeciesCountPress?.( species )}
-                    accessibilityRole="button"
-                    accessibilityLabel={
-                      `View ${species.count} observations of `
-                      + `${species.preferred_common_name || species.name} in Explore`
-                    }
-                  >
-                    {species.count}
-                  </Body3>
+                  {/* eBird-only species have no iNaturalist taxon to open */}
+                  {species.id
+                    ? (
+                      <Body3
+                        className="text-inatGreen underline"
+                        onPress={() => onSpeciesCountPress?.( species )}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          `View ${species.count} observations of `
+                          + `${species.preferred_common_name || species.name} in Explore`
+                        }
+                      >
+                        {species.count}
+                      </Body3>
+                    )
+                    : species.count}
                   {species.meanTimeOfDay
                     ? `  ·  ${species.meanTimeOfDay}`
                     : ""}

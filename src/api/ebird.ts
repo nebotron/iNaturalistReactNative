@@ -10,6 +10,11 @@ export const EBIRD_MAX_RESULTS = 100;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 20;
 
+export const AVES_ID = 3;
+// eBird results can't be filtered by these, so skip eBird rather than show
+// results that ignore them
+export const EBIRD_EXCLUSIVE_PARAMS = ["user_id", "project_id", "ident_user_id"];
+
 export interface EbirdObservation {
   comName: string;
   howMany?: number;

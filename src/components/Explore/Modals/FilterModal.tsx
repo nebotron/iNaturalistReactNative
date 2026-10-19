@@ -1,5 +1,6 @@
 import type { ApiPlace, ApiProject } from "api/types";
 import classNames from "classnames";
+import EbirdCheckbox from "components/Explore/EbirdCheckbox";
 import ExploreSavedFilterSheets from "components/Explore/ExploreSavedFilterSheets";
 import ExploreSavedFiltersSection from "components/Explore/ExploreSavedFiltersSection";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
@@ -1313,6 +1314,7 @@ const FilterModal = ( {
             />
           </View>
 
+          <EbirdCheckbox />
           {/* Hotspot settings section */}
           <View>
             <Heading4 className="mb-5">{t( "HOTSPOT-SETTINGS" )}</Heading4>

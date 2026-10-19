@@ -1,7 +1,7 @@
 import type { EbirdLimit } from "components/Explore/hooks/useEbirdObservations";
 import useEbirdObservations from "components/Explore/hooks/useEbirdObservations";
 import {
-  ActivityIndicator, Body3, Body4, Checkbox, Heading4,
+  ActivityIndicator, Body3, Body4, Heading4,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import React, { useState } from "react";
@@ -21,7 +21,6 @@ const EbirdResults = ( { enabled = true, params }: Props ) => {
   const { t, i18n } = useTranslation( );
   const [expanded, setExpanded] = useState( false );
   const ebirdEnabled = useStore( state => state.layout.ebirdEnabled );
-  const setEbirdEnabled = useStore( state => state.layout.setEbirdEnabled );
   const ebird = useEbirdObservations( params, enabled && ebirdEnabled );
   const limitTexts: Record<EbirdLimit, string> = {
     area: t( "eBird-limit-area" ),
@@ -30,16 +29,7 @@ const EbirdResults = ( { enabled = true, params }: Props ) => {
     rate: t( "eBird-limit-rate" ),
     results: t( "eBird-limit-results" ),
   };
-  if ( !ebird ) return null;
-  const checkbox = (
-    <Checkbox
-      accessibilityLabel={t( "Include-eBird-sightings" )}
-      text={t( "Include-eBird-sightings" )}
-      isChecked={ebirdEnabled}
-      onPress={( ) => setEbirdEnabled( !ebirdEnabled )}
-    />
-  );
-  if ( !ebirdEnabled ) return <View className="mx-4 my-3">{checkbox}</View>;
+  if ( !ebirdEnabled || !ebird ) return null;
   const {
     error, isLoading, limits, observations,
   } = ebird;
@@ -49,8 +39,7 @@ const EbirdResults = ( { enabled = true, params }: Props ) => {
 
   return (
     <View className="mx-4 my-3 p-3 rounded-lg border border-lightGray" testID="EbirdResults">
-      {checkbox}
-      <Heading4 className="mt-3">
+      <Heading4>
         {t( "eBird-recent-sightings", { count: observations.length } )}
       </Heading4>
       {isLoading && <ActivityIndicator size={20} />}

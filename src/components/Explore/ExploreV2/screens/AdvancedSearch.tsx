@@ -1,6 +1,7 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import type { ApiPlace, ApiProjectSummary } from "api/types";
+import EbirdCheckbox from "components/Explore/EbirdCheckbox";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
 import DateFilterSection
   from "components/Explore/ExploreV2/components/DateFilterSection";
@@ -697,6 +698,7 @@ const AdvancedSearch = ( ) => {
             />
           </View>
 
+          <EbirdCheckbox />
           <HotspotSettingsSection />
         </View>
       </ScrollView>
