@@ -753,31 +753,37 @@ static BOOL isCameraRawFile( NSString *path )
 static const int        kRawDecodeAttempts     = 3;
 static const useconds_t kRawDecodeRetryDelayUs = 300 * 1000;
 
-// The decoder refuses outright -- no pixels, in tens of ms -- when the process
-// is short of memory: the failed raw decodes of an Oct 17 bulk crop came with
-// a 1.5-2.6GB footprint against a 3.4GB limit, while Audio ID ran alongside, and three tries 300ms apart all landed in the same trough.
-// The app was then killed at the limit. Before each try, give memory a few
-// seconds to come back rather than starting a full-resolution demosaic with
-// no room for it.
-static const uint64_t   kRawDecodeMinFreeBytes = 1536ull << 20;
-static const useconds_t kRawDecodeWaitStepUs   = 250 * 1000;
-static const int        kRawDecodeMaxWaitSteps = 12;
-
+// Waiting for memory before each try didn't help: on Oct 22 a decode refused
+// with 2.4GB free, while others succeeded with 600MB, and the wait added 3s to
+// every raw decode, held under the lock below.
 static uint64_t freeMB( void )
 {
   return os_proc_available_memory( ) >> 20;
 }
 
-// Waits, up to kRawDecodeMaxWaitSteps, for headroom; returns how long it waited.
-static int waitForRawDecodeHeadroom( void )
+// Free space on the volume the app writes to. When it runs out every write
+// fails, and a bulk import of 50MB raws can take the last of it.
+static uint64_t freeDiskMB( void )
 {
-  int steps = 0;
-  while ( os_proc_available_memory( ) < kRawDecodeMinFreeBytes
-          && steps < kRawDecodeMaxWaitSteps ) {
-    usleep( kRawDecodeWaitStepUs );
-    steps += 1;
-  }
-  return steps * (int)( kRawDecodeWaitStepUs / 1000 );
+  NSDictionary *attrs = [[NSFileManager defaultManager]
+    attributesOfFileSystemForPath:NSHomeDirectory( ) error:nil];
+  return [attrs[NSFileSystemFreeSize] unsignedLongLongValue] >> 20;
+}
+
+static UIImage *thumbnailFromImageSource( CGImageSourceRef src, CGFloat maxPixel );
+
+// The camera's own JPEG of a raw, upright and as close to longestSide as it
+// has, for when the raw decode draws nothing. That refusal is intermittent and
+// unrelated to free memory, and all three tries usually land in it; the
+// embedded JPEG goes through a different decoder.
+static UIImage *embeddedPreviewImage( NSString *path, CGFloat longestSide )
+{
+  CGImageSourceRef src =
+    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
+  if ( !src ) return nil;
+  UIImage *preview = thumbnailFromImageSource( src, longestSide );
+  CFRelease( src );
+  return preview;
 }
 
 static NSLock *rawDecodeLock( void )
@@ -791,12 +797,10 @@ static NSLock *rawDecodeLock( void )
 // Runs attempt until it returns YES -- once for anything but a raw, which gets
 // up to kRawDecodeAttempts tries, each holding the raw decode lock. Returns how
 // many tries it took. When passed, attemptMs gets how long each one ran, and
-// attemptFreeMB and attemptWaitMs the memory it started with and how long it
-// waited for that memory.
+// attemptFreeMB the memory it started with.
 static int withRawDecodeRetries(
   NSString *path, NSMutableArray<NSNumber *> *attemptMs,
-  NSMutableArray<NSNumber *> *attemptFreeMB, NSMutableArray<NSNumber *> *attemptWaitMs,
-  BOOL ( ^attempt )( void ) )
+  NSMutableArray<NSNumber *> *attemptFreeMB, BOOL ( ^attempt )( void ) )
 {
   BOOL raw      = isCameraRawFile( path );
   int  attempts = 0;
@@ -806,7 +810,6 @@ static int withRawDecodeRetries(
     attempts += 1;
     if ( raw ) {
       [rawDecodeLock( ) lock];
-      [attemptWaitMs addObject:@( waitForRawDecodeHeadroom( ) )];
       [attemptFreeMB addObject:@( freeMB( ) )];
     }
     NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
@@ -825,13 +828,11 @@ static int withRawDecodeRetries(
 // and at its peak. GPU, thermal, low-power and ImageIO status were dropped
 // after the Oct 17 failures showed the same values every time.
 static NSDictionary *rawDecodeFailureDiagnostics(
-  NSArray<NSNumber *> *attemptMs, NSArray<NSNumber *> *attemptFreeMB,
-  NSArray<NSNumber *> *attemptWaitMs )
+  NSArray<NSNumber *> *attemptMs, NSArray<NSNumber *> *attemptFreeMB )
 {
   NSMutableDictionary *d = [NSMutableDictionary dictionary];
   d[@"attemptMs"]     = attemptMs ?: @[];
   d[@"attemptFreeMB"] = attemptFreeMB ?: @[];
-  d[@"attemptWaitMs"] = attemptWaitMs ?: @[];
   d[@"freeMB"]        = @( freeMB( ) );
   task_vm_info_data_t    vm;
   mach_msg_type_number_t count = TASK_VM_INFO_COUNT;
@@ -901,6 +902,46 @@ static NSData *jpegDataFromCroppedImage(
   // Still black once really drawn: a raw decode that drew black pixels rather
   // than none, which the sentinel can't catch. Not the photo either.
   return jpegDataIsDecodable( data ) && !jpegDataIsBlack( data ) ? data : nil;
+}
+
+// JPEG of cropRect (display coordinates) of image, with the source's
+// metadata, or nil if the decode put no pixels there.
+static NSData *croppedJpegData( UIImage *image, CGRect cropRect, NSDictionary *srcMeta )
+{
+  CGImageRef croppedRef = NULL;
+  if ( image.imageOrientation == UIImageOrientationUp ) {
+    // A sub-image of a CGImage that still only promises its pixels promises
+    // them too: nothing here forces the decode, so a decode that turns into a
+    // no-op is only discovered by the encoder below.
+    croppedRef = CGImageCreateWithImageInRect( image.CGImage, cropRect );
+  } else {
+    // The crop rect is in the display (EXIF-oriented) coordinate space, but
+    // image.CGImage is stored in the raw sensor orientation, so cropping it
+    // directly would take the wrong region. Rather than redraw the entire
+    // full-resolution image just to normalize orientation and then crop out a
+    // small region — a large transient allocation on every image — draw only
+    // the crop-sized region: drawInRect applies the orientation, and offsetting
+    // the full image by -origin lands the wanted region in the small context.
+    // Integer offsets at 1:1 scale, so the pixels match a full redraw + crop.
+    // Over the sentinel colour, so a decode that put no pixels there comes
+    // back nil and this crop is refused rather than written as a black frame.
+    UIImage *croppedImage = drawnOverSentinel(
+      image,
+      (size_t)cropRect.size.width,
+      (size_t)cropRect.size.height,
+      CGRectMake( -cropRect.origin.x, -cropRect.origin.y,
+                  image.size.width, image.size.height ) );
+    if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
+  }
+
+  NSData *data = croppedRef
+    ? jpegDataFromCroppedImage( croppedRef,
+                                srcMeta,
+                                (NSInteger)cropRect.size.width,
+                                (NSInteger)cropRect.size.height )
+    : nil;
+  if ( croppedRef ) CGImageRelease( croppedRef );
+  return data;
 }
 
 // ─── Queues for the heavy image methods ──────────────────────────────────
@@ -985,46 +1026,11 @@ RCT_EXPORT_METHOD( cropImage
     __block NSData   *data         = nil;
     NSMutableArray<NSNumber *> *attemptMs     = [NSMutableArray array];
     NSMutableArray<NSNumber *> *attemptFreeMB = [NSMutableArray array];
-    NSMutableArray<NSNumber *> *attemptWaitMs = [NSMutableArray array];
     int attempts = withRawDecodeRetries(
-      input, attemptMs, attemptFreeMB, attemptWaitMs, ^BOOL {
+      input, attemptMs, attemptFreeMB, ^BOOL {
     image = [UIImage imageWithContentsOfFile:input];
     if ( !image ) return YES;
-    CGImageRef croppedRef = NULL;
-
-    if ( image.imageOrientation == UIImageOrientationUp ) {
-      // A sub-image of a CGImage that still only promises its pixels promises
-      // them too: nothing here forces the decode, so a decode that turns into a
-      // no-op is only discovered by the encoder below.
-      croppedRef = CGImageCreateWithImageInRect( image.CGImage, cropRect );
-    } else {
-      // The crop rect is in the display (EXIF-oriented) coordinate space, but
-      // image.CGImage is stored in the raw sensor orientation, so cropping it
-      // directly would take the wrong region. Rather than redraw the entire
-      // full-resolution image just to normalize orientation and then crop out a
-      // small region — a large transient allocation on every image — draw only
-      // the crop-sized region: drawInRect applies the orientation, and offsetting
-      // the full image by -origin lands the wanted region in the small context.
-      // Integer offsets at 1:1 scale, so the pixels match a full redraw + crop.
-      // Over the sentinel colour, so a decode that put no pixels there comes
-      // back nil and this crop is refused rather than written as a black frame.
-      UIImage *croppedImage = drawnOverSentinel(
-        image,
-        (size_t)cropRect.size.width,
-        (size_t)cropRect.size.height,
-        CGRectMake( -cropRect.origin.x, -cropRect.origin.y,
-                    image.size.width, image.size.height ) );
-      if ( croppedImage.CGImage ) croppedRef = CGImageRetain( croppedImage.CGImage );
-    }
-
-    data = croppedRef
-      ? jpegDataFromCroppedImage( croppedRef,
-                                  srcMeta,
-                                  [width integerValue],
-                                  [height integerValue] )
-      : nil;
-    if ( croppedRef ) CGImageRelease( croppedRef );
-
+    data = croppedJpegData( image, cropRect, srcMeta );
     return data != nil;
     } );
     if ( !image ) { reject( @"CROP_FAILED", @"Could not load image", nil ); return; }
@@ -1034,6 +1040,21 @@ RCT_EXPORT_METHOD( cropImage
       image.size.width * image.scale, image.size.height * image.scale );
     UIImageOrientation orientation = image.imageOrientation;
     image = nil;
+
+    // The crop rect is in the decoded image's pixels; the preview can be
+    // smaller, so scale the rect to it.
+    BOOL usedPreview = NO;
+    if ( !data && decodedSize.width > 0 ) {
+      UIImage *preview = embeddedPreviewImage(
+        input, MAX( decodedSize.width, decodedSize.height ) );
+      if ( preview ) {
+        CGFloat k = preview.size.width * preview.scale / decodedSize.width;
+        data = croppedJpegData( preview, CGRectIntegral( CGRectMake(
+          cropRect.origin.x * k, cropRect.origin.y * k,
+          cropRect.size.width * k, cropRect.size.height * k ) ), srcMeta );
+        usedPreview = data != nil;
+      }
+    }
 
     if ( !data ) {
       CGImageSourceRef reread = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
@@ -1057,7 +1078,7 @@ RCT_EXPORT_METHOD( cropImage
         cropRect.size.width, cropRect.size.height, attempts,
         os_proc_available_memory( ) >> 20],
         diagnosticsError(
-          rawDecodeFailureDiagnostics( attemptMs, attemptFreeMB, attemptWaitMs ) ) );
+          rawDecodeFailureDiagnostics( attemptMs, attemptFreeMB ) ) );
       return;
     }
 
@@ -1065,15 +1086,17 @@ RCT_EXPORT_METHOD( cropImage
       createDirectoryAtPath:[output stringByDeletingLastPathComponent]
       withIntermediateDirectories:YES attributes:nil error:nil];
     if ( ![data writeToFile:output atomically:YES] ) {
-      reject( @"CROP_FAILED", @"Could not write cropped image", nil ); return;
+      reject( @"CROP_FAILED", [NSString stringWithFormat:
+        @"Could not write cropped image (freeDiskMB=%llu)", freeDiskMB( )], nil );
+      return;
     }
     resolve( @{
       @"path":          output,
+      @"usedPreview":   @( usedPreview ),
       @"outputLevel":   @( jpegDataMeanLevel( data ) ),
       @"attempts":      @( attempts ),
       @"attemptMs":     attemptMs,
       @"attemptFreeMB": attemptFreeMB,
-      @"attemptWaitMs": attemptWaitMs,
     } );
   } );
 }
@@ -2348,9 +2371,8 @@ RCT_EXPORT_METHOD( prepareCropSource
     __block NSString *encodeFailure = nil;
     NSMutableArray<NSNumber *> *attemptMs     = [NSMutableArray array];
     NSMutableArray<NSNumber *> *attemptFreeMB = [NSMutableArray array];
-    NSMutableArray<NSNumber *> *attemptWaitMs = [NSMutableArray array];
     int attempts = withRawDecodeRetries(
-      input, attemptMs, attemptFreeMB, attemptWaitMs, ^BOOL {
+      input, attemptMs, attemptFreeMB, ^BOOL {
     if ( !lockedAt ) lockedAt = [NSDate timeIntervalSinceReferenceDate];
     // Lazy: this reads the header, and the draw below is what reads the pixels.
     UIImage *image = [UIImage imageWithContentsOfFile:input];
@@ -2380,11 +2402,18 @@ RCT_EXPORT_METHOD( prepareCropSource
       reject( @"PREPARE_FAILED", @"Could not load image", nil );
       return;
     }
+    BOOL usedPreview = NO;
+    if ( !data ) {
+      display = embeddedPreviewImage(
+        input, MIN( [maxPixel floatValue], MAX( width, height ) ) );
+      data = display ? encodedThumbnailData( display, nil ) : nil;
+      usedPreview = data != nil;
+    }
     if ( !data ) {
       reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; attempts: %d",
         encodeFailure ?: @"unknown", attempts],
         diagnosticsError(
-          rawDecodeFailureDiagnostics( attemptMs, attemptFreeMB, attemptWaitMs ) ) );
+          rawDecodeFailureDiagnostics( attemptMs, attemptFreeMB ) ) );
       return;
     }
     [[NSFileManager defaultManager]
@@ -2392,7 +2421,8 @@ RCT_EXPORT_METHOD( prepareCropSource
       withIntermediateDirectories:YES attributes:nil error:nil];
     NSTimeInterval writeStarted = [NSDate timeIntervalSinceReferenceDate];
     if ( ![data writeToFile:output atomically:YES] ) {
-      reject( @"PREPARE_FAILED", @"Could not write display image", nil );
+      reject( @"PREPARE_FAILED", [NSString stringWithFormat:
+        @"Could not write display image (freeDiskMB=%llu)", freeDiskMB( )], nil );
       return;
     }
     int writeMs = (int)( ( [NSDate timeIntervalSinceReferenceDate] - writeStarted ) * 1000 );
@@ -2418,10 +2448,10 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"height":     @( height ),
       @"bounds":     bounds ?: [NSNull null],
       @"displayLevel":  @( displayLevel ),
+      @"usedPreview":   @( usedPreview ),
       @"attempts":      @( attempts ),
       @"attemptMs":     attemptMs,
       @"attemptFreeMB": attemptFreeMB,
-      @"attemptWaitMs": attemptWaitMs,
       @"stageMs": @{
         @"queue":  @( (int)( ( startedAt - calledAt ) * 1000 ) ),
         @"lock":   @( (int)( ( lockedAt - startedAt ) * 1000 ) ),
