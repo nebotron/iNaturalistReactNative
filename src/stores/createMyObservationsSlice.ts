@@ -24,6 +24,9 @@ export interface MyObservationsState {
   observationsSort: OBSERVATIONS_SORT;
   speciesSort: SPECIES_SORT;
   searchedTaxon: MyObservationsTaxon | null;
+  // Set when a species card opened the current search, so the banner's back
+  // button can restore the search that was active before it
+  previousTaxonSearch: { taxon: MyObservationsTaxon | null } | null;
 }
 
 const NONE_CLOSED: Set<ICONIC_TAXA_GROUP> = new Set( );
@@ -32,6 +35,7 @@ export const initialMyObservationsState: MyObservationsState = {
   observationsSort: OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST,
   speciesSort: SPECIES_SORT.COUNT_DESC,
   searchedTaxon: null,
+  previousTaxonSearch: null,
 };
 
 export interface MyObservationsSlice {

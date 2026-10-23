@@ -17,6 +17,7 @@ export enum MY_OBSERVATIONS_ACTION {
   SET_SPECIES_SORT = "SET_SPECIES_SORT",
   SET_TAXON_SEARCH = "SET_TAXON_SEARCH",
   CLEAR_TAXON_SEARCH = "CLEAR_TAXON_SEARCH",
+  RESTORE_PREVIOUS_TAXON_SEARCH = "RESTORE_PREVIOUS_TAXON_SEARCH",
 }
 
 export type MyObservationsAction =
@@ -31,8 +32,10 @@ export type MyObservationsAction =
   | {
     type: MY_OBSERVATIONS_ACTION.SET_TAXON_SEARCH;
     searchTaxon: MyObservationsTaxon;
+    rememberPrevious?: boolean;
   }
-  | { type: MY_OBSERVATIONS_ACTION.CLEAR_TAXON_SEARCH };
+  | { type: MY_OBSERVATIONS_ACTION.CLEAR_TAXON_SEARCH }
+  | { type: MY_OBSERVATIONS_ACTION.RESTORE_PREVIOUS_TAXON_SEARCH };
 
 export function myObservationsReducer(
   state: MyObservationsState,
@@ -44,9 +47,21 @@ export function myObservationsReducer(
     case MY_OBSERVATIONS_ACTION.SET_SPECIES_SORT:
       return { ...state, speciesSort: action.speciesSort };
     case MY_OBSERVATIONS_ACTION.SET_TAXON_SEARCH:
-      return { ...state, searchedTaxon: action.searchTaxon };
+      return {
+        ...state,
+        searchedTaxon: action.searchTaxon,
+        previousTaxonSearch: action.rememberPrevious
+          ? { taxon: state.searchedTaxon }
+          : null,
+      };
     case MY_OBSERVATIONS_ACTION.CLEAR_TAXON_SEARCH:
-      return { ...state, searchedTaxon: null };
+      return { ...state, searchedTaxon: null, previousTaxonSearch: null };
+    case MY_OBSERVATIONS_ACTION.RESTORE_PREVIOUS_TAXON_SEARCH:
+      return {
+        ...state,
+        searchedTaxon: state.previousTaxonSearch?.taxon ?? null,
+        previousTaxonSearch: null,
+      };
     default: {
       // https://www.typescriptlang.org/docs/handbook/2/narrowing.html#exhaustiveness-checking
       const _exhaustive: never = action;

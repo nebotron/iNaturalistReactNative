@@ -262,6 +262,7 @@ const MyObservationsSimple = ( {
           iconUri: photo?.url,
           iconicTaxonName: taxon.iconic_taxon_name,
         },
+        rememberPrevious: true,
       } );
       setActiveTab( OBSERVATIONS_TAB );
     };
@@ -596,7 +597,7 @@ const MyObservationsSimple = ( {
           handleSyncButtonPress={handleSyncButtonPress}
         />
         { !listShowsTabs && tabsHeader }
-        <SearchedTaxonBanner />
+        <SearchedTaxonBanner onBack={( ) => setActiveTab( TAXA_TAB )} />
         { activeTab === OBSERVATIONS_TAB && renderObservationsTabContent( ) }
         { ( activeTab === TAXA_TAB && taxa.length > 0 ) && (
           <>

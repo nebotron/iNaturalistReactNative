@@ -109,6 +109,16 @@ describe( "MyObservationsSimple species tab", ( ) => {
       expect( within( banner ).getByText( "Sanderling" ) ).toBeTruthy( );
     } );
 
+    it( "goes back to the previous filter from the species search banner", async ( ) => {
+      renderSpeciesTab( { currentUser: mockCurrentUser } );
+
+      await actor.press( screen.getByTestId( "SimpleTaxonGridItem" ) );
+      await actor.press( screen.getByLabelText( "Go back" ) );
+
+      expect( mockSetActiveTab ).toHaveBeenLastCalledWith( TAXA_TAB );
+      expect( screen.queryByTestId( "SearchedTaxonBanner" ) ).toBeNull( );
+    } );
+
     it( "navigates to taxon details without searching when the info icon is "
       + "pressed", async ( ) => {
       renderSpeciesTab( { currentUser: mockCurrentUser } );
