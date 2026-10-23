@@ -15,6 +15,7 @@ import { formatISONoTimezone, formatISOTimestamp } from "sharedHelpers/dateAndTi
 import {
   filterUsableTrackedPoints,
   interpolateFromUsablePoints,
+  MAX_MATCH_GAP_MS,
 } from "sharedHelpers/interpolateTrackedLocation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -46,14 +47,17 @@ const AudioIdClip = ( ) => {
       query: points => points
         .filtered(
           "recordedAt >= $0 && recordedAt <= $1",
-          new Date( time - TRACK_WINDOW_MS ),
-          new Date( time + TRACK_WINDOW_MS ),
+          // Tracking only logs a fix after moving, so look as far as it matches.
+          new Date( time - MAX_MATCH_GAP_MS ),
+          new Date( time + MAX_MATCH_GAP_MS ),
         )
         .sorted( "recordedAt" ),
     },
     [time],
   );
   const usablePoints = useMemo( ( ) => filterUsableTrackedPoints( trackPoints ), [trackPoints] );
+  const pathPoints = usablePoints
+    .filter( p => Math.abs( p.recordedAt.getTime( ) - time ) <= TRACK_WINDOW_MS );
   // Where location tracking put us when the clip was heard, else the fix taken then.
   const tracked = interpolateFromUsablePoints( usablePoints, time );
   const location = tracked || clip?.location;
@@ -109,9 +113,9 @@ const AudioIdClip = ( ) => {
               }}
               mapChildren={(
                 <>
-                  {usablePoints.length > 1 && (
+                  {pathPoints.length > 1 && (
                     <Polyline
-                      coordinates={usablePoints.map( p => ( {
+                      coordinates={pathPoints.map( p => ( {
                         latitude: p.latitude, longitude: p.longitude,
                       } ) )}
                       strokeColor={colors.inatGreen}
