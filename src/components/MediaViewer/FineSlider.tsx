@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { StyleSheet, Text } from "react-native";
+import { StyleSheet } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import colors from "styles/tailwindColors";
 
@@ -14,18 +14,6 @@ const THUMB_SIZE = 20;
 const TRACK_HEIGHT = 4;
 const ROW_HEIGHT = 36;
 const TICK_HEIGHT = 12;
-
-// Drag gain as a function of how far the finger has strayed from the track,
-// mirroring iOS scrubbing: the slider keeps its full 0..1 range, but pulling
-// away from the track spends more finger travel on less of that range, so the
-// same span can be dialled in at up to 25x the resolution.
-const PRECISION_TIERS = [
-  { minDy: 150, factor: 0.04, label: "1/25" },
-  { minDy: 80, factor: 0.1, label: "1/10" },
-  { minDy: 32, factor: 0.25, label: "1/4" },
-];
-
-const tierForDy = ( dy: number ) => PRECISION_TIERS.find( tier => Math.abs( dy ) >= tier.minDy );
 
 const clamp01 = ( value: number ) => Math.min( 1, Math.max( 0, value ) );
 
@@ -36,12 +24,6 @@ const styles = StyleSheet.create( {
     height: TRACK_HEIGHT,
     left: 0,
     position: "absolute",
-  },
-  precision: {
-    color: colors.white,
-    fontSize: 10,
-    position: "absolute",
-    top: 0,
   },
   row: {
     flex: 1,
@@ -87,9 +69,8 @@ interface Props {
   snapThreshold?: number;
 }
 
-// A slider with variable-precision dragging. Tapping seeks, as with the
-// stock slider; dragging away from the track vertically slows the thumb down
-// so fine adjustments are possible without shrinking the slider's range.
+// A drag-only slider: the thumb moves by the finger's horizontal travel from
+// wherever the drag starts, and tapping never changes the value.
 const FineSlider = ( {
   value,
   onChange,
@@ -103,7 +84,6 @@ const FineSlider = ( {
 }: Props ) => {
   const [trackWidth, setTrackWidth] = useState( 0 );
   const [dragging, setDragging] = useState( false );
-  const [precisionLabel, setPrecisionLabel] = useState<string | null>( null );
 
   // The thumb is tracked as a 0..1 position along the track and converted to
   // the caller's value range only at the edges.
@@ -150,20 +130,15 @@ const FineSlider = ( {
     .runOnJS( true )
     .onStart( event => {
       setDragging( true );
-      setPrecisionLabel( null );
       lastXRef.current = event.x;
-      emit( ( event.x - THUMB_SIZE / 2 ) / trackWidth );
     } )
     .onUpdate( event => {
       const dx = event.x - lastXRef.current;
       lastXRef.current = event.x;
-      const tier = tierForDy( event.translationY );
-      setPrecisionLabel( tier?.label ?? null );
-      emit( posRef.current + ( dx / trackWidth ) * ( tier?.factor ?? 1 ) );
+      emit( posRef.current + dx / trackWidth );
     } )
     .onFinalize( ( ) => {
       setDragging( false );
-      setPrecisionLabel( null );
       onComplete( toValue( posRef.current ) );
     } ), [disabled, emit, onComplete, toValue, trackWidth] );
 
@@ -199,11 +174,6 @@ const FineSlider = ( {
           <View style={[styles.tick, { left: toPos( snapValue ) * trackWidth - 1 }]} />
         )}
         <View style={[styles.thumb, { left: thumbLeft }]} />
-        {precisionLabel && (
-          <Text style={[styles.precision, { left: thumbLeft }]}>
-            {precisionLabel}
-          </Text>
-        )}
       </View>
     </GestureDetector>
   );

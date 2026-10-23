@@ -1,4 +1,3 @@
-import Slider from "@react-native-community/slider";
 import FineSlider from "components/MediaViewer/FineSlider";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
@@ -39,7 +38,6 @@ const IDENTITY_TRANSFORM: ImageZoomTransform = {
 
 const styles = StyleSheet.create( {
   image: { flex: 1 },
-  slider: { flex: 1, height: 36, marginLeft: 8 },
 } );
 
 // Convert a normalized subject-detection crop into an image-zoom transform that
@@ -218,10 +216,6 @@ interface ZoomBrightnessSlidersProps {
   // Nothing to zoom or brighten (e.g. a sound-only observation), so the sliders
   // stay in the layout but don't respond.
   disabled?: boolean;
-  // Use the variable-precision sliders (same ranges, but dragging off the
-  // track slows the thumb down). For screens like the crop editor where small
-  // adjustments matter. Applies to both sliders so they look and behave alike.
-  fineSliders?: boolean;
 }
 
 // The zoom + brightness sliders shown below a photo (not covering it).
@@ -238,70 +232,31 @@ export const ZoomBrightnessSliders = ( {
   brightnessAccessibilityLabel,
   iconColor = colors.darkGray,
   disabled = false,
-  fineSliders = false,
 }: ZoomBrightnessSlidersProps ) => (
   <View className="px-4 pt-1">
     <View className="flex-row items-center">
       <INatIcon name="magnifying-glass" size={18} color={iconColor} />
-      {fineSliders
-        ? (
-          <FineSlider
-            disabled={disabled}
-            value={zoomScaleToPos( zoomScale )}
-            onChange={onZoomChange}
-            onComplete={onZoomComplete}
-            accessibilityLabel={zoomAccessibilityLabel}
-          />
-        )
-        : (
-          <Slider
-            disabled={disabled}
-            style={styles.slider}
-            minimumValue={0}
-            maximumValue={1}
-            minimumTrackTintColor={colors.inatGreen}
-            maximumTrackTintColor={colors.lightGray}
-            thumbTintColor={colors.inatGreen}
-            value={zoomScaleToPos( zoomScale )}
-            onValueChange={onZoomChange}
-            onSlidingComplete={onZoomComplete}
-            tapToSeek
-            accessibilityLabel={zoomAccessibilityLabel}
-          />
-        )}
+      <FineSlider
+        disabled={disabled}
+        value={zoomScaleToPos( zoomScale )}
+        onChange={onZoomChange}
+        onComplete={onZoomComplete}
+        accessibilityLabel={zoomAccessibilityLabel}
+      />
     </View>
     <View className="flex-row items-center">
       <INatIcon name="sun" size={18} color={iconColor} />
-      {fineSliders
-        ? (
-          <FineSlider
-            disabled={disabled}
-            minimumValue={exposureStopsMin}
-            maximumValue={exposureStopsMax}
-            value={brightnessStops}
-            snapValue={EXPOSURE_STOPS_DEFAULT}
-            snapThreshold={0.2}
-            onChange={onBrightnessChange}
-            onComplete={onBrightnessComplete}
-            accessibilityLabel={brightnessAccessibilityLabel}
-          />
-        )
-        : (
-          <Slider
-            disabled={disabled}
-            style={styles.slider}
-            minimumValue={exposureStopsMin}
-            maximumValue={exposureStopsMax}
-            minimumTrackTintColor={colors.inatGreen}
-            maximumTrackTintColor={colors.lightGray}
-            thumbTintColor={colors.inatGreen}
-            value={brightnessStops}
-            onValueChange={onBrightnessChange}
-            onSlidingComplete={onBrightnessComplete}
-            tapToSeek
-            accessibilityLabel={brightnessAccessibilityLabel}
-          />
-        )}
+      <FineSlider
+        disabled={disabled}
+        minimumValue={exposureStopsMin}
+        maximumValue={exposureStopsMax}
+        value={brightnessStops}
+        snapValue={EXPOSURE_STOPS_DEFAULT}
+        snapThreshold={0.2}
+        onChange={onBrightnessChange}
+        onComplete={onBrightnessComplete}
+        accessibilityLabel={brightnessAccessibilityLabel}
+      />
     </View>
   </View>
 );
