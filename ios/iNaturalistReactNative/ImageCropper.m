@@ -2372,7 +2372,7 @@ RCT_EXPORT_METHOD( createThumbnail
     __block NSString *encodeFailure = nil;
     __block UIImage  *image         = nil;
     __block NSData   *data          = nil;
-    int attempts = withRawDecodeRetries( input, nil, nil, nil, ^BOOL {
+    int attempts = withRawDecodeRetries( input, nil, nil, ^BOOL {
       NSString *decodeFailure = nil;
       NSString *encodeError   = nil;
       image = downscaledImageAtPath( input, maxDim, &decodeFailure );
