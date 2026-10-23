@@ -639,7 +639,7 @@ export function useRouteHotspots() {
         cells.forEach( ( cell, key ) => {
           const topSpecies: HotspotSpecies[] = [...cell.taxa.values()]
             .sort( ( a, b ) => b.count - a.count )
-            .slice( 0, 4 )
+            .slice( 0, 3 )
             .map( ( {
               timeSinSum, timeCosSum, timeCount, ...species
             } ) => ( {

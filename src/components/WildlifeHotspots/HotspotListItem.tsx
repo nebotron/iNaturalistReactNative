@@ -2,11 +2,13 @@ import {
   Body2,
   Body3,
   Body4,
-  Button,
   INatIcon,
+  INatIconButton,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import React from "react";
+import type { LayoutChangeEvent } from "react-native";
+import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
 import type { Hotspot, HotspotSpecies } from "./hooks/useRouteHotspots";
@@ -20,6 +22,8 @@ interface Props {
   onAddToRoute?: () => void;
   onSpeciesCountPress?: ( species: HotspotSpecies ) => void;
   onObservationCountPress?: () => void;
+  // Reports the header row's layout, which is all the collapsed sheet shows
+  onHeaderLayout?: ( event: LayoutChangeEvent ) => void;
 }
 
 const HotspotListItem = ( {
@@ -31,7 +35,9 @@ const HotspotListItem = ( {
   onAddToRoute,
   onSpeciesCountPress,
   onObservationCountPress,
+  onHeaderLayout,
 }: Props ) => {
+  const { t } = useTranslation();
   const detourText = hotspot.detourMinutes < 1
     ? "On route"
     : `+${hotspot.detourMinutes} min detour`;
@@ -44,7 +50,7 @@ const HotspotListItem = ( {
       accessibilityLabel={`Hotspot ${rank}, ${hotspot.observationCount} observations`}
     >
       <View className="flex-1 p-2 bg-white border border-lightGray">
-        <View className="flex-row items-center">
+        <View className="flex-row items-center" onLayout={onHeaderLayout}>
           <View
             className="w-6 h-6 rounded-full items-center justify-center mr-2 border border-white"
             style={{
@@ -74,6 +80,28 @@ const HotspotListItem = ( {
             <INatIcon name="location" size={12} color={colors.darkGray} />
             <Body3 className="ml-1 text-darkGray">{detourText}</Body3>
           </View>
+          {onAddToRoute && (
+            <INatIconButton
+              className="w-8 h-8 ml-1"
+              icon="plus"
+              size={18}
+              color={colors.inatGreen}
+              onPress={onAddToRoute}
+              accessibilityLabel={t( "Add-hotspot-to-route" )}
+              testID="HotspotListItem.addToRoute"
+            />
+          )}
+          {onOpenInGoogleMaps && (
+            <INatIconButton
+              className="w-8 h-8"
+              icon="map"
+              size={18}
+              color={colors.darkGray}
+              onPress={onOpenInGoogleMaps}
+              accessibilityLabel={t( "Open-route-in-Google-Maps" )}
+              testID="HotspotListItem.openInGoogleMaps"
+            />
+          )}
         </View>
 
         {hotspot.topSpecies.length > 0 && (
@@ -112,28 +140,6 @@ const HotspotListItem = ( {
                 </Body3>
               </View>
             ) )}
-          </View>
-        )}
-        {( onAddToRoute || onOpenInGoogleMaps ) && (
-          <View className="flex-row mt-1 gap-2">
-            {onAddToRoute && (
-              <Button
-                className="flex-1"
-                text="Add to Route"
-                level="focus"
-                onPress={onAddToRoute}
-                testID="HotspotListItem.addToRoute"
-              />
-            )}
-            {onOpenInGoogleMaps && (
-              <Button
-                className="flex-1"
-                text="Open Map"
-                level="neutral"
-                onPress={onOpenInGoogleMaps}
-                testID="HotspotListItem.openInGoogleMaps"
-              />
-            )}
           </View>
         )}
       </View>

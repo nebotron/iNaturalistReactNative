@@ -56,6 +56,8 @@ ADD-EVIDENCE = ADD EVIDENCE
 # photo library, sound, etc
 Add-evidence = Add evidence
 Add-favorite = Add favorite
+# Accessibility label for the button on a hotspot card that adds the hotspot to the route
+Add-hotspot-to-route = Add hotspot to route
 Add-Location = Add Location
 ADD-LOCATION-FOR-BETTER-IDS = ADD LOCATION FOR BETTER IDS
 # Accessibility hint for adding a location to a new obseration in the Match screen new user flow
@@ -238,6 +240,8 @@ CHANGE-START-DATE = CHANGE START DATE
 Change-start-date = Change start date
 # Button that changes the taxon filter on Explore
 Change-taxon-filter = Change taxon filter
+# Accessibility label for the chip that shows the hotspot route time limit and opens its controls
+Change-time-limit = Change time limit
 Change-user = Change user
 # Label for a button that cycles through zoom levels for the camera
 Change-zoom = Change zoom
@@ -273,6 +277,8 @@ Clusters-of-observations-along-a-route = Clusters of observations along a route 
 # Heading for a section that describes people and organizations that
 # collaborate with iNaturalist
 COLLABORATORS = COLLABORATORS
+# Accessibility label for the button that collapses the list of route stops on the Wildlife Hotspots screen
+Collapse-stops = Collapse stops
 Collection-and-Umbrella-Projects = Collection & Umbrella Projects
 Collection-Project = Collection Project
 # Button that combines selected observations into a single observation
@@ -537,6 +543,12 @@ Drive-time-limit =
         [0] { $minutes } min
        *[other] { $hours } h { $minutes } min
     }
+# Compact form of the maximum total driving time for a wildlife hotspots route, shown in a chip
+Drive-time-limit-short =
+    { $hours ->
+        [0] { $minutes } min
+       *[other] { $hours } h { $minutes } min
+    }
 Duplicate-photo-indicator = Previously uploaded photo
 Duplicate-Photos = Duplicate Photos
 During-app-start-no-model-found = During app start there was no computer vision model found. There will be no AI camera.
@@ -578,6 +590,8 @@ EDIT-LOCATION = EDIT LOCATION
 # Label for interactive element that takes you to a location choosing screen
 Edit-location = Edit location
 Edit-Observation = Edit Observation
+# Accessibility label for the collapsed one-line summary of route stops, which expands them for editing
+Edit-route-stops = Edit route stops
 Edit-your-profile-change-your-settings = Edit your profile, change your notifications settings, and manage all other parts of your account.
 # Accessibility hint for button that edits an observation's taxon
 Edits-this-observations-taxon = Edits this observation's taxon
@@ -1183,6 +1197,8 @@ One-or-more-projects-still-need-required-info = One or more projects still need 
 Open = Open
 OPEN-EMAIL = OPEN EMAIL
 Open-menu = Open menu.
+# Accessibility label for the button on a hotspot card that opens the route through it in Google Maps
+Open-route-in-Google-Maps = Open route in Google Maps
 # Text for a button that opens the operating system Settings app
 OPEN-SETTINGS = OPEN SETTINGS
 # Accessibility hint for a button that opens a form for adding a comment
@@ -1440,6 +1456,12 @@ Reviewed = Reviewed
 Reviewed-observations-only = Reviewed observations only
 # Shown when the route without any hotspots already takes longer to drive than the chosen time limit
 Route-is-longer-than-time-limit = The route without hotspots is longer than the time limit
+# Number of stops on a route, shown after the start and end in the collapsed route summary
+Route-stop-count =
+    { $count ->
+        [one] { $count } stop
+       *[other] { $count } stops
+    }
 # Label for the satellite map type
 Satellite--map-type = Satellite
 # Label for a button that persists something
