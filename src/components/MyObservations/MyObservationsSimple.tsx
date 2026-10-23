@@ -53,6 +53,7 @@ import { FeatureFlag } from "stores/createFeatureFlagSlice";
 import colors from "styles/tailwindColors";
 import type { SpeciesCount } from "types/sorting";
 
+import CombineObservationsBar from "./CombineObservationsBar";
 import LoginSheet from "./LoginSheet";
 import MyObservationsGroupedByIconicTaxaView from "./MyObservationsGroupedByIconicTaxaView";
 import MyObservationsMapView from "./MyObservationsMapView";
@@ -497,6 +498,7 @@ const MyObservationsSimple = ( {
         onLayout={onListLayout}
         onScroll={onScroll}
         ref={listRef}
+        selectable
         showNoResults={showNoResults}
         testID="MyObservationsAnimatedList"
         listHeaderContent={observationsHeader}
@@ -525,6 +527,7 @@ const MyObservationsSimple = ( {
             accessibilityLabel={t( "Change-observations-sort-order" )}
           />
         )}
+        <CombineObservationsBar />
       </>
     );
   };

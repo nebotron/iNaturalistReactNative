@@ -67,6 +67,10 @@ export interface MyObservationsSlice {
   // MMKV in MyObservationsResults, AddObsButton, and SimpleUploadBannerContainer.
   // Kept here as the destination for MOB-1374, which moves that direct MMKV
   // access into the store.
+  // uuids of observations selected to combine; null when not selecting
+  combineSelection: string[] | null;
+  setCombineSelection: ( _uuids: string[] | null ) => void;
+
   numOfUserObservations: number;
   setNumOfUserObservations: ( _newNum: number ) => void;
   numOfUserSpecies: number;
@@ -102,6 +106,9 @@ const createMyObservationsSlice: StateCreator<MyObservationsSlice> = ( set, get 
   myObsOffsetToRestore: 0,
   setMyObsOffsetToRestore: ( ) => set( { myObsOffsetToRestore: get( ).myObsOffset } ),
   resetMyObsOffsetToRestore: ( ) => set( { myObsOffsetToRestore: 0 } ),
+
+  combineSelection: null,
+  setCombineSelection: uuids => set( { combineSelection: uuids } ),
 
   numOfUserObservations: 0,
   setNumOfUserObservations: newNum => set( { numOfUserObservations: newNum } ),

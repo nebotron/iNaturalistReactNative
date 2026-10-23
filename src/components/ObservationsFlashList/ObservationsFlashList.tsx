@@ -70,6 +70,7 @@ interface Props {
   listHeaderContent?: React.ReactElement | null;
   showNoResults?: boolean;
   fullWidthGrid?: boolean;
+  selectable?: boolean;
   testID: string;
 }
 
@@ -97,6 +98,7 @@ const ObservationsFlashList = ( {
   listHeaderContent,
   showNoResults,
   fullWidthGrid = false,
+  selectable = false,
   testID,
 }: Props ) => {
   const {
@@ -205,6 +207,7 @@ const ObservationsFlashList = ( {
         unsynced={obsNeedsSync}
         uploadProgress={uploadProgress}
         squareCorners={squareCorners}
+        selectable={selectable}
       />
     );
   }, [
@@ -227,6 +230,7 @@ const ObservationsFlashList = ( {
     uploadQueue,
     squareCorners,
     fullWidthGrid,
+    selectable,
   ] );
 
   const itemSeparatorComponent = useMemo( ( ) => {

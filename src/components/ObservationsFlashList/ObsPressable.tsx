@@ -1,10 +1,13 @@
 import type { ApiObservation } from "api/types";
-import { Pressable } from "components/styledComponents";
+import { INatIcon } from "components/SharedComponents";
+import { Pressable, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, { useMemo } from "react";
 import RealmObservation from "realmModels/Observation";
 import type { UserPojo } from "realmModels/User";
 import { useLayoutPrefs, useTranslation } from "sharedHooks";
+import useStore from "stores/useStore";
+import colors from "styles/tailwindColors";
 
 import ObsGridItem from "./ObsGridItem";
 import ObsListItem from "./ObsListItem";
@@ -36,6 +39,8 @@ interface Props {
   uploadProgress?: number;
   unsynced: boolean;
   squareCorners?: boolean;
+  // Long press starts selecting observations to combine
+  selectable?: boolean;
 }
 
 const ObsPressable = ( {
@@ -58,6 +63,7 @@ const ObsPressable = ( {
   uploadProgress,
   unsynced,
   squareCorners = false,
+  selectable = false,
 }: Props ) => {
   const { t } = useTranslation( );
   const { isDefaultMode } = useLayoutPrefs( );
@@ -70,6 +76,10 @@ const ObsPressable = ( {
       ? RealmObservation.mapObservationForMyObsDefaultMode( rawRealmObs )
       : RealmObservation.mapObservationForMyObsAdvancedMode( rawRealmObs );
   }, [rawRealmObs, isDefaultMode] );
+
+  const selecting = useStore( state => selectable && state.combineSelection !== null );
+  const selected = useStore( state => !!state.combineSelection?.includes( uuid ) );
+  const setCombineSelection = useStore( state => state.setCombineSelection );
 
   const observation = apiObservation || mappedRealmObs;
   if ( !observation ) return null;
@@ -128,14 +138,32 @@ const ObsPressable = ( {
   return (
     <Pressable
       testID={`ObsPressable.${uuid}`}
-      onPress={onItemPress}
+      onPress={selecting
+        ? ( ) => {
+          const selection = useStore.getState( ).combineSelection || [];
+          setCombineSelection( selected
+            ? selection.filter( u => u !== uuid )
+            : [...selection, uuid] );
+        }
+        : onItemPress}
+      onLongPress={selectable && !selecting
+        ? ( ) => setCombineSelection( [uuid] )
+        : undefined}
       accessibilityRole="link"
+      accessibilityState={selecting
+        ? { selected }
+        : undefined}
       accessibilityHint={unsynced
         ? t( "Navigates-to-observation-edit-screen" )
         : t( "Navigates-to-observation-details" )}
       disabled={queued}
     >
       {content}
+      {selected && (
+        <View className="absolute inset-0 border-4 border-inatGreen items-end p-1">
+          <INatIcon name="checkmark-circle" size={22} color={String( colors.inatGreen )} />
+        </View>
+      )}
     </Pressable>
   );
 };
