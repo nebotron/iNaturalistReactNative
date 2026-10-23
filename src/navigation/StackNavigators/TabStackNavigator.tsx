@@ -346,7 +346,7 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
           <Stack.Screen
             name="AudioIdClip"
             component={AudioIdClip}
-            options={{ headerTitle: audioIdClipTitle }}
+            options={{ headerTitle: audioIdClipTitle, ...preventSwipeToGoBack }}
           />
           <Stack.Screen
             name="AudioIdTaxa"
