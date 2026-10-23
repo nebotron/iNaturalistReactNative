@@ -25,7 +25,15 @@ export function getAvailableEnvironments(): string[] {
   ) );
 }
 
-function resolveEnvValue( key: RuntimeEnvKey ): string | undefined {
+// .env files written before the per-platform OAuth split only define these
+const LEGACY_ENV_KEYS: Partial<Record<RuntimeEnvKey, string>> = {
+  IOS_OAUTH_CLIENT_ID: "OAUTH_CLIENT_ID",
+  IOS_OAUTH_CLIENT_SECRET: "OAUTH_CLIENT_SECRET",
+  ANDROID_OAUTH_CLIENT_ID: "OAUTH_CLIENT_ID",
+  ANDROID_OAUTH_CLIENT_SECRET: "OAUTH_CLIENT_SECRET",
+};
+
+function resolveEnvValue( key: string ): string | undefined {
   const environmentOverridePrefix = getEnvironmentOverride();
   if ( !environmentOverridePrefix ) return Config[key];
   return Config[`${environmentOverridePrefix}_${key}`] || Config[key];
@@ -35,6 +43,7 @@ function resolveEnvValue( key: RuntimeEnvKey ): string | undefined {
 // RNRestart.restart(), which re-evaluates this module, so it's safe to
 // resolve these once here rather than read them dynamically everywhere.
 export const EnvConfig = RUNTIME_ENV_KEYS.reduce( ( acc, key ) => {
-  acc[key] = resolveEnvValue( key );
+  const legacyKey = LEGACY_ENV_KEYS[key];
+  acc[key] = resolveEnvValue( key ) || ( legacyKey && resolveEnvValue( legacyKey ) );
   return acc;
 }, {} as Record<RuntimeEnvKey, string | undefined> );
