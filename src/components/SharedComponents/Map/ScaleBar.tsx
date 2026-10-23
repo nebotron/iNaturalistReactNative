@@ -42,7 +42,7 @@ interface Props {
 }
 
 const ScaleBar = ( {
-  region: committedRegion, mapWidth, className = "absolute left-3 top-12", liveRegionRef,
+  region: committedRegion, mapWidth, className = "absolute left-2 top-2", liveRegionRef,
 }: Props ) => {
   const [liveRegion, setLiveRegion] = useState<Region | null>( null );
   useImperativeHandle( liveRegionRef, ( ) => setLiveRegion, [] );
