@@ -1,4 +1,3 @@
-import { BottomSheetModal } from "@gorhom/bottom-sheet";
 import { screen, userEvent } from "@testing-library/react-native";
 import AddObsButton from "components/AddObsBottomSheet/AddObsButton";
 import i18next from "i18next";
@@ -100,9 +99,16 @@ describe( "with advanced user layout", ( ) => {
     useStore.setState( { groupedPhotos: [] } );
   } );
 
+  it( "opens AddObsBottomSheet on a regular press", async ( ) => {
+    renderComponent( <AddObsButton /> );
+    await regularPress( );
+    showNoEvidenceOption( );
+  } );
+
   it( "navigates user to the photo importer", async ( ) => {
     renderComponent( <AddObsButton /> );
     await regularPress( );
+    await actor.press( screen.getByTestId( "import-media-button" ) );
 
     expectNavigationToImporter( "PhotoLibrary", { previousScreen: null } );
   } );
@@ -111,6 +117,7 @@ describe( "with advanced user layout", ( ) => {
     useStore.setState( { groupedPhotos: [{ photos: [{ image: { uri: "file:///a.jpg" } }] }] } );
     renderComponent( <AddObsButton /> );
     await regularPress( );
+    await actor.press( screen.getByTestId( "import-media-button" ) );
 
     expectNavigationToImporter( "GroupPhotos", { previousScreen: null } );
   } );
@@ -131,15 +138,6 @@ describe( "with advanced user layout", ( ) => {
     expect( mockDispatch ).toHaveBeenCalledWith(
       resetNavigation( "ObsEdit", { previousScreen: null } ),
     );
-  } );
-
-  it( "does not open model on a regular press", async ( ) => {
-    const presentSpy = jest.spyOn( BottomSheetModal.prototype, "present" );
-    renderComponent( <AddObsButton /> );
-    await regularPress( );
-
-    expect( presentSpy ).not.toHaveBeenCalled( );
-    presentSpy.mockRestore( );
   } );
 
   describe( "with advanced AICamera-only setting", ( ) => {

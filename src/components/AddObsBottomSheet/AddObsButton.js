@@ -216,7 +216,6 @@ const AddObsButton = ( ): React.Node => {
     closeBottomSheet( );
   };
   const navToARCamera = ( ) => { navAndCloseBottomSheet( "Camera", { camera: "AI" } ); };
-  const navToPhotoLibrary = ( ) => { navAndCloseBottomSheet( "PhotoLibrary" ); };
 
   // #endregion
 
@@ -250,7 +249,7 @@ const AddObsButton = ( ): React.Node => {
         }}
         onPress={() => {
           if ( isAllAddObsOptionsMode ) {
-            navToPhotoLibrary();
+            openBottomSheet();
           } else {
             navToARCamera();
           }
@@ -258,7 +257,7 @@ const AddObsButton = ( ): React.Node => {
         accessibilityLabel={t( "Add-observations" )}
         accessibilityHint={
           isAllAddObsOptionsMode
-            ? t( "Navigates-to-photo-importer" )
+            ? t( "Shows-observation-creation-options" )
             : t( "Opens-AI-camera" )
         }
         iconName={isAllAddObsOptionsMode && "plus"}
