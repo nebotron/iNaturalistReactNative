@@ -1,3 +1,6 @@
+import { useAppState } from "@react-native-community/hooks";
+import { useFocusEffect } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import searchMessages from "api/messages";
 import classnames from "classnames";
 import {
@@ -11,7 +14,7 @@ import {
   UserIcon,
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { formatDifferenceForHumans } from "sharedHelpers/dateAndTime";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import { useAuthenticatedQuery, useTranslation } from "sharedHooks";
@@ -38,6 +41,19 @@ const MessagesList = ( ) => {
     { requireLoggedIn: true },
   );
   const messages = ( data || [] ) as Message[];
+  const appState = useAppState( );
+  const queryClient = useQueryClient( );
+
+  // Messages are read on the website, so refetch whenever the user comes
+  // back to this list to pick up read state and new messages. Invalidating
+  // (unlike refetch) skips the query while it's disabled awaiting auth.
+  const reload = useCallback( ( ) => {
+    queryClient.invalidateQueries( { queryKey: ["searchMessages"] } );
+  }, [queryClient] );
+  useFocusEffect( reload );
+  useEffect( ( ) => {
+    if ( appState === "active" ) reload( );
+  }, [appState, reload] );
 
   const onRefresh = async ( ) => {
     setRefreshing( true );
