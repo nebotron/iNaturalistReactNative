@@ -334,5 +334,24 @@ describe( "exploreV2Reducer", ( ) => {
       const back = exploreV2Reducer( searched, { type: EXPLORE_V2_ACTION.GO_BACK } );
       expect( back ).toEqual( state );
     } );
+
+    it( "replaces the other searched taxa with the species, keeping exclusions", ( ) => {
+      const species = { type: "taxon", taxon: { id: 2 } };
+      const included = { taxon: { id: 3 }, exclude: false };
+      const excluded = { taxon: { id: 4 }, exclude: true };
+      const state = {
+        ...initialExploreV2State,
+        subject: { type: "taxon", taxon: { id: 1 } },
+        filters: { ...initialExploreV2State.filters, taxonFilters: [included, excluded] },
+      };
+      const searched = exploreV2Reducer( state, {
+        type: EXPLORE_V2_ACTION.SEARCH_SPECIES,
+        subject: species,
+      } );
+      expect( searched.filters.taxonFilters ).toEqual( [excluded] );
+
+      const back = exploreV2Reducer( searched, { type: EXPLORE_V2_ACTION.GO_BACK } );
+      expect( back ).toEqual( state );
+    } );
   } );
 } );

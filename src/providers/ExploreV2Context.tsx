@@ -152,8 +152,13 @@ export interface ExploreV2State {
   // saved search. Lets a view tell "the search moved out from under me" apart from
   // "the same search re-rendered", which the search fields alone can't when they're equal.
   appliedSearchCount: number;
-  // Subjects and tabs to return to, pushed when a species card opens a search for it
-  backStack: { subject: ExploreV2Subject | null; activeTab: ExploreV2Tab }[];
+  // Subjects, tabs and taxon filters to return to, pushed when a species card opens a
+  // search for it
+  backStack: {
+    subject: ExploreV2Subject | null;
+    activeTab: ExploreV2Tab;
+    taxonFilters?: ExploreTaxonFilter[] | null;
+  }[];
 }
 
 // Everything that defines a search, as opposed to how the results are being viewed
@@ -276,16 +281,29 @@ export function exploreV2Reducer(
         backStack: [],
       };
     }
-    case EXPLORE_V2_ACTION.SEARCH_SPECIES:
+    case EXPLORE_V2_ACTION.SEARCH_SPECIES: {
+      // The species replaces the searched taxa rather than joining them; exclusions stay
+      const excluded = ( state.filters.taxonFilters || [] ).filter( filter => filter.exclude );
       return {
         ...state,
         subject: action.subject,
+        filters: {
+          ...state.filters,
+          taxonFilters: excluded.length > 0
+            ? excluded
+            : null,
+        },
         activeTab: OBSERVATIONS_TAB,
         backStack: [
           ...state.backStack,
-          { subject: state.subject, activeTab: state.activeTab },
+          {
+            subject: state.subject,
+            activeTab: state.activeTab,
+            taxonFilters: state.filters.taxonFilters,
+          },
         ],
       };
+    }
     case EXPLORE_V2_ACTION.GO_BACK: {
       const previous = state.backStack[state.backStack.length - 1];
       if ( !previous ) return state;
@@ -293,6 +311,7 @@ export function exploreV2Reducer(
         ...state,
         subject: previous.subject,
         activeTab: previous.activeTab,
+        filters: { ...state.filters, taxonFilters: previous.taxonFilters },
         backStack: state.backStack.slice( 0, -1 ),
       };
     }
