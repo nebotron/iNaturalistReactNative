@@ -19,6 +19,7 @@ import {
   blankHeaderTitle,
   fadeInComponent,
   hideHeader,
+  preventSwipeToGoBack,
   showHeader,
   showSimpleCustomHeader,
 } from "navigation/navigationOptions";
@@ -153,7 +154,8 @@ const SharedStackScreens = ( ) => (
       <Stack.Screen
         name="AudioIdRecording"
         component={AudioIdRecording}
-        options={{ headerTitle: audioIdRecordingTitle }}
+        // The clip trimmer's drags would otherwise trigger the back gesture
+        options={{ headerTitle: audioIdRecordingTitle, ...preventSwipeToGoBack }}
       />
       <Stack.Screen
         name="ImageCropEditor"
