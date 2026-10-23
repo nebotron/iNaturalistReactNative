@@ -19,6 +19,7 @@ import React, {
 } from "react";
 import {
   Image,
+  Linking,
   PixelRatio,
   Pressable,
   StyleSheet,
@@ -52,6 +53,17 @@ const styles = StyleSheet.create( {
     paddingBottom: 100,
   },
 } );
+
+// iOS has no public link to a specific album, so this opens Photos, which
+// returns to where the user last was in it (usually the album, after the first
+// visit).
+const openPhotosApp = ( ) => {
+  Linking.openURL( "photos-redirect://" ).catch(
+    error => logger.warn( "Could not open Photos", error ),
+  );
+};
+
+const openAlbumButtonText = "OPEN ALBUM IN PHOTOS";
 
 // One cell of the virtualized grid: a single photo. This is the same shape the
 // photo picker feeds DevicePhotoGrid, so both screens get identical
@@ -212,6 +224,9 @@ const DevicePhotoCleanup = ( ) => {
                 + `"${IMPORTED_ALBUM_TITLE}" album in Photos.`}
             </Body2>
           )}
+          {undeletableCount > 0 && (
+            <Button className="mt-4" text={openAlbumButtonText} onPress={openPhotosApp} />
+          )}
         </View>
       </ViewWrapper>
     );
@@ -269,6 +284,7 @@ const DevicePhotoCleanup = ( ) => {
         />
       </View>
       <View className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-lightGray">
+        <Button className="mb-3" text={openAlbumButtonText} onPress={openPhotosApp} />
         <Button
           level="warning"
           text={`DELETE ${allUris.length} PHOTO${allUris.length === 1
