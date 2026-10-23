@@ -1,12 +1,17 @@
 // @flow
 
+import classNames from "classnames";
 import AudioIdClipBadge from "components/AudioId/AudioIdClipBadge";
 import FaveButton from "components/ObsDetails/FaveButton";
-import { Body2, DisplayTaxonName } from "components/SharedComponents";
+import {
+  Body2, Body4, DateDisplay, DisplayTaxonName, INatIcon,
+} from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import type { Node } from "react";
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import Photo from "realmModels/Photo";
+import useStore from "stores/useStore";
+import colors from "styles/tailwindColors";
 
 import ObsImagePreview from "./ObsImagePreview";
 import ObsUploadStatus from "./ObsUploadStatus";
@@ -33,6 +38,12 @@ type Props = {
   squareCorners?: boolean,
 };
 
+const WhiteBody4 = ( { className, children } ) => (
+  <Body4 className={classNames( "text-white", className )} numberOfLines={1}>
+    {children}
+  </Body4>
+);
+
 const ObsGridItem = ( {
   currentUser,
   explore,
@@ -48,29 +59,55 @@ const ObsGridItem = ( {
   squareCorners = false,
 }: Props ): Node => {
   const isOwnObs = !!currentUser && observation?.user?.login === currentUser?.login;
-  const displayTaxonName = useMemo( ( ) => (
-    <DisplayTaxonName
-      bottomTextComponent={Body2}
-      color="text-white"
-      ellipsizeCommonName
-      keyBase={observation?.uuid}
-      layout="vertical"
-      prefersCommonNames={currentUser?.prefers_common_names}
-      scientificNameFirst={currentUser?.prefers_scientific_name_first}
-      showOneNameOnly
-      taxon={observation?.taxon}
-    />
-  ), [
+  const exploreOverlays = useStore( state => state.layout.exploreGridOverlays );
+  const overlays = explore
+    ? exploreOverlays
+    : null;
+  const showCommon = !overlays || overlays.commonName;
+  const showScientific = !overlays || overlays.scientificName;
+  const showFaveButton = ( !explore || overlays?.faveButton ) && !!currentUser;
+  const faves = observation?.votes?.filter( v => v?.vote_scope === null ) || [];
+  const initiallyFaved = faves.some( v => v.user_id === currentUser?.id );
+  // Fave state after toggling here, so the count updates without a refetch
+  const [faved, setFaved] = useState( initiallyFaved );
+  const faveCount = faves.length + Number( faved ) - Number( initiallyFaved );
+  const displayTaxonName = useMemo( ( ) => {
+    if ( !showCommon && !showScientific ) return null;
+    // Outside Explore, show one name per the user's preference
+    const bothNames = !!overlays && showCommon && showScientific;
+    return (
+      <DisplayTaxonName
+        bottomTextComponent={Body2}
+        color="text-white"
+        ellipsizeCommonName
+        keyBase={observation?.uuid}
+        layout="vertical"
+        prefersCommonNames={overlays
+          ? showCommon
+          : currentUser?.prefers_common_names}
+        scientificNameFirst={( !overlays || bothNames )
+          && currentUser?.prefers_scientific_name_first}
+        showOneNameOnly={!bothNames}
+        taxon={observation?.taxon}
+      />
+    );
+  }, [
     currentUser?.prefers_common_names,
     currentUser?.prefers_scientific_name_first,
     observation?.taxon,
     observation?.uuid,
+    overlays,
+    showCommon,
+    showScientific,
   ] );
 
+  const placeGuess = observation.private_place_guess || observation.place_guess;
   const photo = photoFromObservation( observation );
-  // On the Me page ( non-explore ) the photo count renders at the bottom-right,
-  // so reserve space to keep a long species name from overlapping it.
-  const reservePhotoCountSpace = !explore
+  // The photo count renders at the bottom-right unless the top-right is free
+  // (Explore without the fave star), so reserve space to keep a long species
+  // name from overlapping it.
+  const photoCountTop = explore && !showFaveButton;
+  const reservePhotoCountSpace = !photoCountTop
     && photoCountFromObservation( observation ) > 1;
   const allPhotos = useMemo( ( ) => photosFromObservation( observation ).map(
     p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
@@ -94,17 +131,18 @@ const ObsGridItem = ( {
       obsPhotosCount={photoCountFromObservation( observation )}
       hasSound={observationHasSound( observation )}
       soundUri={soundUriFromObservation( observation )}
-      isMultiplePhotosTop={explore}
+      isMultiplePhotosTop={photoCountTop}
       testID={testID || `MyObservations.obsGridItem.${observation.uuid}`}
       useShortGradient={!explore}
       iconicTaxonName={observation.taxon?.iconic_taxon_name}
       white
       squareCorners={squareCorners}
     >
-      {!explore && currentUser && (
+      {showFaveButton && (
         <FaveButton
           observation={observation}
           currentUser={currentUser}
+          afterToggleFave={setFaved}
         />
       )}
       {!explore && (
@@ -133,6 +171,28 @@ const ObsGridItem = ( {
           />
         )}
         {displayTaxonName}
+        {overlays?.location && !!placeGuess && (
+          <WhiteBody4 className="mt-1">{placeGuess}</WhiteBody4>
+        )}
+        {overlays?.dateTime && (
+          <DateDisplay
+            dateString={observation.time_observed_at || observation.observed_on}
+            classNameMargin="mt-1"
+            geoprivacy={observation.geoprivacy}
+            taxonGeoprivacy={observation.taxon_geoprivacy}
+            timeZone={observation.observed_time_zone}
+            belongsToCurrentUser={isOwnObs}
+            literalTime={!observation.observed_time_zone}
+            hideIcon
+            textComponent={WhiteBody4}
+          />
+        )}
+        {overlays?.faveCount && (
+          <View className="flex-row items-center mt-1">
+            <INatIcon name="star" color={colors.white} size={12} />
+            <WhiteBody4 className="ml-1">{faveCount}</WhiteBody4>
+          </View>
+        )}
       </View>
     </ObsImagePreview>
   );

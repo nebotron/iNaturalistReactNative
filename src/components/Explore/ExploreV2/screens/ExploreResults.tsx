@@ -16,6 +16,8 @@ import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2MapView
   from "components/Explore/ExploreV2/components/ExploreV2MapView";
+import GridOverlaysSheet
+  from "components/Explore/ExploreV2/components/GridOverlaysSheet";
 import ExploreV2DebugSheet
   from "components/Explore/ExploreV2/ExploreV2DebugSheet";
 import type { NearbyCoords }
@@ -47,6 +49,7 @@ import {
   RadioButtonSheet,
   ViewWrapper,
 } from "components/SharedComponents";
+import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
 import SortButton from "components/SharedComponents/Buttons/SortButton";
 import { View } from "components/styledComponents";
 import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspotsScreen";
@@ -72,6 +75,7 @@ import useLocationPermission from "sharedHooks/useLocationPermission";
 import useSpeciesCount from "sharedHooks/useSpeciesCount";
 import useStoredLayout from "sharedHooks/useStoredLayout";
 import useStore from "stores/useStore";
+import { getShadow } from "styles/global";
 
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
@@ -99,6 +103,11 @@ const EXPLORE_VIEW_ICONS: Record<ExploreV2Tab, string> = {
 
 const noop = ( ) => undefined;
 
+const DROP_SHADOW = getShadow( {
+  offsetHeight: 4,
+  elevation: 6,
+} );
+
 const ExploreResults = ( ) => {
   const { dispatch, state } = useExploreV2( );
   const { params } = useRoute<ExploreStackScreenProps<"ExploreResults">["route"]>( );
@@ -114,6 +123,7 @@ const ExploreResults = ( ) => {
   const { t } = useTranslation( );
   const [showSortSheet, setShowSortSheet] = useState( false );
   const [showViewSheet, setShowViewSheet] = useState( false );
+  const [showGridOverlaysSheet, setShowGridOverlaysSheet] = useState( false );
   const [lifeListCount, setLifeListCount] = useState<number | null>( null );
   const handleLifeListCount = useCallback(
     ( _view: string, count: number ) => setLifeListCount( count ),
@@ -406,6 +416,17 @@ const ExploreResults = ( ) => {
                 accessibilityLabel={t( "Change-observations-sort-order" )}
               />
             )}
+            {layout === "grid" && !hasNoResults && (
+              <INatIconButton
+                icon="layers"
+                size={22}
+                className="bg-white rounded-full h-[46px] w-[46px] border-[1px] border-lightGray
+                  absolute bottom-[76px] z-10 right-5"
+                accessibilityLabel={t( "Change-grid-overlays" )}
+                onPress={() => setShowGridOverlaysSheet( true )}
+                style={DROP_SHADOW}
+              />
+            )}
           </>
         );
       }
@@ -597,6 +618,9 @@ const ExploreResults = ( ) => {
           }}
           onPressClose={() => setShowSortSheet( false )}
         />
+      )}
+      {showGridOverlaysSheet && (
+        <GridOverlaysSheet onPressClose={() => setShowGridOverlaysSheet( false )} />
       )}
       {showViewSheet && (
         <RadioButtonSheet

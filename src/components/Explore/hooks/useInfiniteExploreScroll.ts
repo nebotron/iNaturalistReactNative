@@ -10,6 +10,7 @@ import type {
 import flatten from "lodash/flatten";
 import { useCallback, useMemo } from "react";
 import Observation from "realmModels/Observation";
+import Vote from "realmModels/Vote";
 import { useAuthenticatedInfiniteQuery } from "sharedHooks";
 
 import {
@@ -56,6 +57,8 @@ const useInfiniteExploreScroll = (
       private_place_guess: true,
       private_geojson: true,
       taxon_geoprivacy: true,
+      // ObsGridItem's fave star and fave count
+      votes: Vote.VOTE_FIELDS,
       // geojson is the reliable coordinate source on API observations (top-level
       // latitude/longitude are often absent); the Identify auto-CV reads it to
       // score with location, matching the Suggest ID screen.

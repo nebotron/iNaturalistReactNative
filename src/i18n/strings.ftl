@@ -225,6 +225,8 @@ Change-date = Change date
 CHANGE-END-DATE = CHANGE END DATE
 # Label for a button that changes a selected end date
 Change-end-date = Change end date
+# Accessibility label for a button that opens a menu of info to show on Explore grid photos
+Change-grid-overlays = Change info shown on photos
 # Accessibility label for a button that allows users to sort observations
 Change-observations-sort-order = Change observations sort order
 Change-project = Change project
@@ -279,6 +281,8 @@ Combine-Photos = Combine Photos
 COMMENT = COMMENT
 # Label for a button that shows options for a comment
 Comment-options = Comment options
+# Option for showing an observation's common name on its photo
+Common-name = Common name
 # Label for a setting that shows the common name first
 Common-Name-Scientific-Name = Common Name (Scientific Name)
 # Label for section of ObsDetails with community comments and ids
@@ -372,6 +376,8 @@ Date = Date
 Date-Added-Newest-Default = Date Added: Newest (Default)
 # Label for observations sort order
 Date-Added-Oldest = Date Added: Oldest
+# Option for showing when an observation was made on its photo
+Date-and-time = Date and time
 # Date formatting using date-fns
 # Used for things like User Profile join date
 # See complete list of formatting styles: https://date-fns.org/v3.6.0/docs/format
@@ -622,6 +628,8 @@ EXPLORE-SPECIES = EXPLORE SPECIES
 Failed-to-delete-sound = Failed to delete sound
 # Error message with log in fails
 Failed-to-log-in = Failed to log in
+# Option for showing a star button to fave or unfave an observation on its photo
+Fave-star = Fave/unfave star
 # Heading for the list of users who favorited an observation
 FAVORITES = FAVORITES
 # Heading for the list of users who favorited an observation
@@ -681,6 +689,8 @@ Google-Play-Services-Not-Installed = Google Play Services Not Installed
 GRANT-PERMISSION = GRANT PERMISSION
 # Title of a screen asking for permission
 Grant-Permission-title = Grant Permission
+# Header for a menu of info to show on Explore grid photos
+GRID-OVERLAYS = SHOW ON PHOTOS
 # Explore filter option for an observation's evidence of presence annotation
 Hair--evidence = Hair
 HELP = HELP
@@ -1091,6 +1101,8 @@ notifications-user1-added-comment-to-observation-by-user2 = <0>{ $user1 }</0> ad
 notifications-user1-added-identification-to-observation-by-user2 = <0>{ $user1 }</0> added an identification to an observation by { $user2 }
 # Month of November
 November = November
+# Option for showing how many people faved an observation on its photo
+Number-of-favorites = Number of favorites
 Obervations-must-be-manually-added = Observations must be manually added to a traditional project, either during the upload stage or after the observation has been shared to iNaturalist. A user must also join a traditional project in order to add their observations to it.
 Obscured = Obscured
 Observation = Observation
@@ -1425,6 +1437,8 @@ Saving-X-observations = Saving { $count }…
 # Explore filter option for an observation's evidence of presence annotation
 Scat--evidence = Scat
 Scientific-Name = Scientific Name
+# Option for showing an observation's scientific name on its photo
+Scientific-name = Scientific name
 Scientific-Name-Common-Name = Scientific Name (Common Name)
 # Title for a search interface
 SEARCH = SEARCH

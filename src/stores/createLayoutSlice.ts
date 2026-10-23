@@ -24,6 +24,15 @@ export interface HotspotSettings {
   hotspotBboxPaddingKm: number;
 }
 
+export interface ExploreGridOverlays {
+  commonName: boolean;
+  scientificName: boolean;
+  location: boolean;
+  dateTime: boolean;
+  faveButton: boolean;
+  faveCount: boolean;
+}
+
 export interface LayoutSlice {
   isAdvancedUser: boolean;
   obsDetailsTab: OBS_DETAILS_TAB;
@@ -57,6 +66,8 @@ export interface LayoutSlice {
     setEbirdEnabled: ( ebirdEnabled: boolean ) => void;
     hotspotSettings: HotspotSettings;
     setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
+    exploreGridOverlays: ExploreGridOverlays;
+    setExploreGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
   };
 }
 
@@ -198,6 +209,21 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         hotspotSettings: { ...state.layout.hotspotSettings, [key]: value },
+      },
+    } ) ),
+    // Info overlaid on each photo in the Explore observations grid
+    exploreGridOverlays: {
+      commonName: true,
+      scientificName: false,
+      location: false,
+      dateTime: false,
+      faveButton: false,
+      faveCount: false,
+    },
+    setExploreGridOverlay: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        exploreGridOverlays: { ...state.layout.exploreGridOverlays, [key]: value },
       },
     } ) ),
     // Recently entered addresses in the Wildlife Hotspots address search,
