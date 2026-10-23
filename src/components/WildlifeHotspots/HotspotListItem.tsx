@@ -17,7 +17,6 @@ interface Props {
   rank: number;
   selected: boolean;
   onPress: () => void;
-  onOpenInGoogleMaps?: () => void;
   onAddToRoute?: () => void;
   onSpeciesCountPress?: ( species: HotspotSpecies ) => void;
   onObservationCountPress?: () => void;
@@ -28,7 +27,6 @@ const HotspotListItem = ( {
   rank,
   selected,
   onPress,
-  onOpenInGoogleMaps,
   onAddToRoute,
   onSpeciesCountPress,
   onObservationCountPress,
@@ -85,17 +83,6 @@ const HotspotListItem = ( {
               onPress={onAddToRoute}
               accessibilityLabel={t( "Add-hotspot-to-route" )}
               testID="HotspotListItem.addToRoute"
-            />
-          )}
-          {onOpenInGoogleMaps && (
-            <INatIconButton
-              className="w-8 h-8"
-              icon="map"
-              size={18}
-              color={colors.darkGray}
-              onPress={onOpenInGoogleMaps}
-              accessibilityLabel={t( "Open-route-in-Google-Maps" )}
-              testID="HotspotListItem.openInGoogleMaps"
             />
           )}
         </View>

@@ -800,21 +800,20 @@ const WildlifeHotspotsScreen = ( {
     handleAddStopAfter,
   ] );
 
-  const handleOpenInGoogleMaps = useCallback( ( hotspot: Hotspot ) => {
-    if ( confirmedStopPoints.length < 2 ) return;
-    const first = confirmedStopPoints[0];
-    const last = confirmedStopPoints[confirmedStopPoints.length - 1];
-    const origin = `${first.latitude},${first.longitude}`;
-    const destination = `${last.latitude},${last.longitude}`;
-    const waypointPoints = [
-      ...confirmedStopPoints.slice( 1, -1 ),
-      { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude },
-    ];
-    const waypoints = waypointPoints.map( p => `${p.latitude},${p.longitude}` ).join( "|" );
-    const url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&waypoints=${waypoints}&travelmode=driving`;
+  const handleOpenRouteInGoogleMaps = useCallback( () => {
+    const routeStops = stops.filter( s => s.point );
+    if ( routeStops.length < 2 ) return;
+    const toParam = ( s: Stop ) => `${s.point?.latitude},${s.point?.longitude}`;
+    // Omitting the origin makes Google Maps start from the device's live location
+    const origin = routeStops[0].text === t( "Current-location" )
+      ? ""
+      : `&origin=${toParam( routeStops[0] )}`;
+    const destination = toParam( routeStops[routeStops.length - 1] );
+    const waypoints = routeStops.slice( 1, -1 ).map( toParam ).join( "|" );
+    const url = `https://www.google.com/maps/dir/?api=1${origin}&destination=${destination}`
+      + `${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=driving`;
     Linking.openURL( url );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stops] );
+  }, [stops, t] );
 
   // Driving time of the route currently drawn: through the selected hotspot if
   // one is selected, otherwise the plain route. Parking time is excluded.
@@ -834,21 +833,33 @@ const WildlifeHotspotsScreen = ( {
   const firstStop = stops[0];
   const lastStop = stops[stops.length - 1];
   const timeLimitChip = limitMinutes !== null && (
-    <TouchableOpacity
-      onPress={() => setTimeLimitPopoverOpen( open => !open )}
-      className="flex-row items-center ml-2 px-2 py-1 border border-lightGray rounded-full"
-      accessibilityRole="button"
-      accessibilityLabel={t( "Change-time-limit" )}
-      testID="WildlifeHotspotsScreen.timeLimitChip"
-    >
-      <INatIcon name="clock-outline" size={14} color={colors.darkGray} />
-      <Body4 className="ml-1 font-bold">
-        {t( "Drive-time-limit-short", {
-          hours: Math.floor( limitMinutes / 60 ),
-          minutes: limitMinutes % 60,
-        } )}
-      </Body4>
-    </TouchableOpacity>
+    <>
+      <TouchableOpacity
+        onPress={() => setTimeLimitPopoverOpen( open => !open )}
+        className="flex-row items-center ml-2 px-2 py-1 border border-lightGray rounded-full"
+        accessibilityRole="button"
+        accessibilityLabel={t( "Change-time-limit" )}
+        testID="WildlifeHotspotsScreen.timeLimitChip"
+      >
+        <INatIcon name="clock-outline" size={14} color={colors.darkGray} />
+        <Body4 className="ml-1 font-bold">
+          {t( "Drive-time-limit-short", {
+            hours: Math.floor( limitMinutes / 60 ),
+            minutes: limitMinutes % 60,
+          } )}
+        </Body4>
+      </TouchableOpacity>
+      <INatIconButton
+        className="w-8 h-8"
+        icon="map"
+        size={18}
+        color={colors.darkGray}
+        onPress={handleOpenRouteInGoogleMaps}
+        disabled={confirmedStopPoints.length < 2}
+        accessibilityLabel={t( "Open-route-in-Google-Maps" )}
+        testID="WildlifeHotspotsScreen.openInGoogleMaps"
+      />
+    </>
   );
 
   const content = (
@@ -1114,7 +1125,6 @@ const WildlifeHotspotsScreen = ( {
             rank={1}
             selected={false}
             onPress={() => null}
-            onOpenInGoogleMaps={() => null}
             onAddToRoute={() => null}
           />
         </View>
@@ -1155,7 +1165,6 @@ const WildlifeHotspotsScreen = ( {
                       rank={index + 1}
                       selected={selectedHotspotId === hotspot.id}
                       onPress={() => handleHotspotPress( hotspot )}
-                      onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
                       onAddToRoute={isHotspotOnRoute( hotspot )
                         ? undefined
                         : () => handleAddHotspotToRoute( hotspot )}
