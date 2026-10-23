@@ -11,10 +11,12 @@ interface Props {
     uuid: string;
     observed_on_string?: string | null;
     time_observed_at?: string | null;
+    taxon?: { id: number } | null;
   };
 }
 
-// Marks a grid tile whose observation has an Audio ID clip it could add.
+// Marks a grid tile whose observation has an Audio ID clip of the same
+// species it could add.
 const AudioIdClipBadge = ( { className, observation }: Props ) => {
   const observed = observation.observed_on_string || observation.time_observed_at;
   const time = observed
@@ -23,7 +25,8 @@ const AudioIdClipBadge = ( { className, observation }: Props ) => {
   const eligible = useAudioIdHistory( state => {
     if ( Number.isNaN( time ) ) return false;
     const clip = clipAround( state.clips, time );
-    return !!clip && clip.observationUuid !== observation.uuid;
+    return !!clip && clip.observationUuid !== observation.uuid
+      && clip.sp.taxonId === observation.taxon?.id;
   } );
 
   if ( !eligible ) return null;
