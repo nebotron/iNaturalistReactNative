@@ -51,6 +51,7 @@ export interface Hotspot {
 }
 
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
+const OSRM_TABLE_BASE = "https://router.project-osrm.org/table/v1/driving";
 // Max radius for each k-means cluster (2 km diameter)
 const MAX_CLUSTER_RADIUS_KM = 1.5;
 // Evaluate detour times for this many top-by-obs candidates
@@ -131,6 +132,19 @@ async function fetchOSRMDuration( waypoints: RoutePoint[] ): Promise<number> {
   } catch {
     return Infinity;
   }
+}
+
+// Driving times in seconds between every pair of points, Infinity where unroutable
+export async function fetchOSRMDurationMatrix( points: RoutePoint[] ): Promise<number[][]> {
+  const wStr = points.map( w => `${w.longitude},${w.latitude}` ).join( ";" );
+  const response = await fetch( `${OSRM_TABLE_BASE}/${wStr}?annotations=duration` );
+  if ( !response.ok ) {
+    throw new Error( `Routing service error: ${response.status}` );
+  }
+  const data = await response.json();
+  if ( !data.durations ) throw new Error( "No travel times found between these locations" );
+  return ( data.durations as ( number | null )[][] )
+    .map( row => row.map( d => d ?? Infinity ) );
 }
 
 // Extra distance (km) incurred by visiting `candidate` between stops[idx] and stops[idx + 1]
@@ -514,6 +528,8 @@ async function fetchEbirdRouteObservations(
 export function useRouteHotspots() {
   const ebirdEnabled = useStore( state => state.layout.ebirdEnabled );
   const [hotspots, setHotspots] = useState<Hotspot[]>( [] );
+  // Every hotspot whose detour was evaluated, for route planning
+  const [candidates, setCandidates] = useState<Hotspot[]>( [] );
   const [routeCoords, setRouteCoords] = useState<RoutePoint[]>( [] );
   const [routeDurationSec, setRouteDurationSec] = useState<number | null>( null );
   const [loading, setLoading] = useState( false );
@@ -534,6 +550,7 @@ export function useRouteHotspots() {
       setLoading( true );
       setError( null );
       setHotspots( [] );
+      setCandidates( [] );
       setRouteCoords( [] );
       setRouteDurationSec( null );
 
@@ -686,6 +703,7 @@ export function useRouteHotspots() {
 
         if ( isStale() ) return;
         setHotspots( withDetours.slice( 0, 10 ) );
+        setCandidates( withDetours );
       } catch ( err ) {
         if ( isStale() ) return;
         setError( err instanceof Error
@@ -700,6 +718,7 @@ export function useRouteHotspots() {
 
   return {
     hotspots,
+    candidates,
     routeCoords,
     routeDurationSec,
     loading,
