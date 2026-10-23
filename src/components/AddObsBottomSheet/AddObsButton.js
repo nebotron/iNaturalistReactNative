@@ -4,6 +4,7 @@ import { CommonActions, useNavigation } from "@react-navigation/native";
 import AddObsBottomSheet from "components/AddObsBottomSheet/AddObsBottomSheet";
 import AddObsTooltip from "components/AddObsBottomSheet/AddObsTooltip";
 import GradientButton from "components/SharedComponents/Buttons/GradientButton";
+import { groupCropResumeParams } from "components/SharedComponents/ImageCrop/groupCropResume";
 import { navigationRef } from "navigation/navigationUtils";
 import * as React from "react";
 import { log } from "sharedHelpers/logger";
@@ -142,6 +143,43 @@ const AddObsButton = ( ): React.Node => {
     // (rather than resetting the root) leaves the tab navigator mounted, which
     // is what lets the import survive the trip.
     if ( screen === "PhotoLibrary" || screen === "GroupPhotos" ) {
+      // A crop left part way reopens the cropper on the photo it was left on,
+      // on top of Group Photos, leaving the other tabs' stacks as they are
+      const { groupCropResume, groupedPhotos } = useStore.getState( );
+      const crop = screen === "GroupPhotos"
+        && groupCropResumeParams( groupCropResume, groupedPhotos );
+      if ( crop ) {
+        const tabState = navigationRef.getRootState( )?.routes
+          .find( route => route.name === "TabNavigator" )?.state;
+        const observationsTab = {
+          name: "ObservationsTab",
+          state: {
+            index: 2,
+            routes: [
+              { name: "ObsList" },
+              { name: "GroupPhotos", params: { ...params, previousScreen: currentRoute } },
+              { name: "ImageCropEditor", params: crop.params },
+            ],
+          },
+        };
+        const tabRoutes = tabState?.routes?.length
+          ? tabState.routes.map( route => ( route.name === "ObservationsTab"
+            ? observationsTab
+            : route ) )
+          : [observationsTab];
+        navigation.dispatch( CommonActions.reset( {
+          index: 0,
+          routes: [{
+            name: "TabNavigator",
+            state: {
+              index: tabRoutes.findIndex( route => route.name === "ObservationsTab" ),
+              routes: tabRoutes,
+            },
+          }],
+        } ) );
+        closeBottomSheet( );
+        return;
+      }
       navigation.navigate( "TabNavigator", {
         screen: "ObservationsTab",
         params: {
