@@ -348,8 +348,9 @@ RCT_EXPORT_METHOD( trimClip:( NSString * )path
 }
 
 // Plays a clip, resolving when it ends or is stopped. Measurement mode records
-// without gain control, so clips are quiet; this normalizes the peak to
-// -1 dBFS (at most 24 dB of gain) in memory, leaving the file untouched.
+// without gain control, so clips are quiet; this raises them in memory, leaving
+// the file untouched, to a loud RMS level (at most 30 dB of gain) and soft-limits
+// the peaks that this pushes past full scale.
 RCT_EXPORT_METHOD( playClip:( NSString * )path
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
@@ -384,16 +385,23 @@ RCT_EXPORT_METHOD( playClipRange:( NSString * )path
       return;
     }
     AVAudioChannelCount channels = buffer.format.channelCount;
-    float peak = 0;
+    float peak = 0, rms = 0;
     for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
-      float p = 0;
+      float p = 0, r = 0;
       vDSP_maxmgv( buffer.floatChannelData[c], 1, &p, buffer.frameLength );
+      vDSP_rmsqv( buffer.floatChannelData[c], 1, &r, buffer.frameLength );
       peak = MAX( peak, p );
+      rms = MAX( rms, r );
     }
-    float gain = peak > 0 ? MIN( 0.89f / peak, 16.0f ) : 1;
+    // 0.95 * tanh( x / 0.95 ): unchanged when quiet, never past full scale.
+    const float ceiling = 0.95f;
+    float gain = peak > 0 ? MIN( MAX( 0.89f / peak, 0.2f / rms ), 32.0f ) / ceiling : 1;
+    int n = (int)buffer.frameLength;
     for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
-      vDSP_vsmul( buffer.floatChannelData[c], 1, &gain, buffer.floatChannelData[c], 1,
-                  buffer.frameLength );
+      float *d = buffer.floatChannelData[c];
+      vDSP_vsmul( d, 1, &gain, d, 1, buffer.frameLength );
+      vvtanhf( d, d, &n );
+      vDSP_vsmul( d, 1, &ceiling, d, 1, buffer.frameLength );
     }
     double rate = buffer.format.sampleRate;
     AVAudioFramePosition f0 = MIN( (AVAudioFramePosition)MAX( from * rate, 0 ), buffer.frameLength );
