@@ -11,7 +11,6 @@ import {
 import { getMapRegion } from "components/SharedComponents/Map/helpers/mapHelpers";
 import MapComponent from "components/SharedComponents/Map/Map";
 import { View } from "components/styledComponents";
-import LocationIndicatorIcon from "images/svg/location_indicator.svg";
 import React, {
   useEffect, useMemo, useState, useSyncExternalStore,
 } from "react";
@@ -41,6 +40,7 @@ const noop = ( ) => undefined;
 // Pins are native views, so cap them to keep the map responsive
 const MAX_MAP_PINS = 1000;
 const SPECIES_RANK_LEVEL = 10;
+const DOT_ANCHOR = { x: 0.5, y: 0.5 };
 // Saved zooms to magnify past; wider areas are too coarse to be worth it
 const OVERZOOM_LEVELS = Array.from(
   { length: MAX_TILE_ZOOM - 9 },
@@ -180,7 +180,7 @@ export const OfflineObservationsView = ( { layout, queryParams }: ViewProps ) =>
   );
 };
 
-// Saved results as pins, since the observation tiles need the server
+// Saved results as dots like the online point tiles, since those need the server
 interface MapProps {
   queryParams: Params;
   onBoundsChange?: ( bounds: BoundingBox ) => void;
@@ -245,6 +245,7 @@ export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
               <Marker
                 key={uuid}
                 coordinate={coordinate}
+                anchor={DOT_ANCHOR}
                 tracksViewChanges={false}
                 // Offline, ObsDetails can only show the saved observation
                 onPress={( ) => navigation.navigate( "ObsDetails", {
@@ -252,7 +253,12 @@ export const OfflineMapView = ( { queryParams, onBoundsChange }: MapProps ) => {
                   preloadedObservation: JSON.parse( json ),
                 } )}
               >
-                <LocationIndicatorIcon width={25} height={32} />
+                {/* Padding widens the tap target past the dot */}
+                <View className="p-2">
+                  <View
+                    className="w-[10px] h-[10px] rounded-full bg-inatGreen border border-white"
+                  />
+                </View>
               </Marker>
             ) )}
           </>

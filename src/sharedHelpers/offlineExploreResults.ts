@@ -23,8 +23,10 @@ export const MAX_OFFLINE_OBSERVATIONS = 5000;
 export const OFFLINE_TILES_PATH = `${DocumentDirectoryPath}/offlineExploreTiles`;
 const TILE_URL = "https://tile.openstreetmap.org";
 // Per save, from the lowest zoom up, so a wide area gets fewer zoom levels
-const MAX_TILES = 1000;
-export const MAX_TILE_ZOOM = 16;
+const MAX_AREA_TILES = 1000;
+// Past the whole area, deeper tiles just around the results, up to this total
+const MAX_TILES = 4000;
+export const MAX_TILE_ZOOM = 18;
 
 type Params = Record<string, unknown>;
 
@@ -170,18 +172,29 @@ const tileY = ( lat: number, z: number ) => {
   return Math.min( Math.floor( y * 2 ** z ), 2 ** z - 1 );
 };
 
-// Saves the base map tiles covering bounds, skipping ones already saved
+// Saves the base map tiles covering bounds, then deeper ones around each
+// point, skipping ones already saved
 const downloadOfflineTiles = async ( {
   swlat, swlng, nelat, nelng,
-}: Bounds ) => {
+}: Bounds, points: { latitude: number; longitude: number }[] ) => {
   const tiles: { z: number; x: number; y: number }[] = [];
-  for ( let z = 0; z <= MAX_TILE_ZOOM; z += 1 ) {
+  let z = 0;
+  for ( ; z <= MAX_TILE_ZOOM; z += 1 ) {
     const [x1, x2] = [tileX( swlng, z ), tileX( nelng, z )];
     const [y1, y2] = [tileY( nelat, z ), tileY( swlat, z )];
-    if ( tiles.length + ( x2 - x1 + 1 ) * ( y2 - y1 + 1 ) > MAX_TILES ) break;
+    if ( tiles.length + ( x2 - x1 + 1 ) * ( y2 - y1 + 1 ) > MAX_AREA_TILES ) break;
     for ( let x = x1; x <= x2; x += 1 ) {
       for ( let y = y1; y <= y2; y += 1 ) tiles.push( { z, x, y } );
     }
+  }
+  for ( ; z <= MAX_TILE_ZOOM; z += 1 ) {
+    const level = new Map<string, { z: number; x: number; y: number }>( );
+    for ( let i = 0; i < points.length; i += 1 ) {
+      const tile = { z, x: tileX( points[i].longitude, z ), y: tileY( points[i].latitude, z ) };
+      level.set( `${tile.x}/${tile.y}`, tile );
+    }
+    if ( tiles.length + level.size > MAX_TILES ) break;
+    tiles.push( ...level.values( ) );
   }
   const headers = { "User-Agent": getUserAgent( ) };
   for ( let i = 0; i < tiles.length; i += 1 ) {
@@ -247,17 +260,6 @@ const toRow = ( obs: ApiObservation ) => {
   };
 };
 
-const extendBounds = ( bounds: Bounds | undefined, obs: ApiObservation ) => {
-  const { latitude, longitude } = toRow( obs );
-  if ( latitude == null || longitude == null ) return bounds;
-  return {
-    swlat: Math.min( bounds?.swlat ?? latitude, latitude ),
-    swlng: Math.min( bounds?.swlng ?? longitude, longitude ),
-    nelat: Math.max( bounds?.nelat ?? latitude, latitude ),
-    nelng: Math.max( bounds?.nelng ?? longitude, longitude ),
-  };
-};
-
 const FIELDS = {
   ...Observation.ADVANCED_MODE_LIST_FIELDS,
   captive: true,
@@ -296,7 +298,7 @@ export const downloadOfflineExploreResults = async (
   const apiToken = await getJWT( true );
   let fetched = 0;
   let pageParam: unknown;
-  let bounds: Bounds | undefined;
+  const points: { latitude: number; longitude: number }[] = [];
   while ( fetched < MAX_OFFLINE_OBSERVATIONS ) {
     // eslint-disable-next-line no-await-in-loop
     const response = await searchObservations(
@@ -312,16 +314,27 @@ export const downloadOfflineExploreResults = async (
         db.create( "OfflineExploreObservation", toRow( obs ), Realm.UpdateMode.Modified );
       } );
     } );
-    bounds = results.reduce( extendBounds, bounds );
+    results.forEach( obs => {
+      const { latitude, longitude } = toRow( obs );
+      if ( latitude != null && longitude != null ) points.push( { latitude, longitude } );
+    } );
     fetched += results.length;
     notify( );
     onProgress?.( fetched );
     pageParam = getNextPageParamForExplore( response, baseParams );
     if ( pageParam == null || response.results.length < PAGE_SIZE ) break;
   }
-  if ( bounds ) {
+  if ( points.length ) {
+    const lats = points.map( p => p.latitude );
+    const lngs = points.map( p => p.longitude );
+    const bounds = {
+      swlat: Math.min( ...lats ),
+      swlng: Math.min( ...lngs ),
+      nelat: Math.max( ...lats ),
+      nelng: Math.max( ...lngs ),
+    };
     // The results are saved even if the map can't be
-    await downloadOfflineTiles( bounds ).catch( e => {
+    await downloadOfflineTiles( bounds, points ).catch( e => {
       logger.error( "Failed to save offline map tiles", e );
     } );
   }
