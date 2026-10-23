@@ -811,7 +811,9 @@ const WildlifeHotspotsScreen = ( {
     const destination = toParam( routeStops[routeStops.length - 1] );
     const waypoints = routeStops.slice( 1, -1 ).map( toParam ).join( "|" );
     const url = `https://www.google.com/maps/dir/?api=1${origin}&destination=${destination}`
-      + `${waypoints ? `&waypoints=${waypoints}` : ""}&travelmode=driving`;
+      + `${waypoints
+        ? `&waypoints=${waypoints}`
+        : ""}&travelmode=driving`;
     Linking.openURL( url );
   }, [stops, t] );
 
