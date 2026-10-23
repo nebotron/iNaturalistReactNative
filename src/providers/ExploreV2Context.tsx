@@ -32,6 +32,8 @@ export enum EXPLORE_V2_ACTION {
   SET_FILTERS = "SET_FILTERS",
   SET_ACTIVE_TAB = "SET_ACTIVE_TAB",
   APPLY_SEARCH = "APPLY_SEARCH",
+  SEARCH_SPECIES = "SEARCH_SPECIES",
+  GO_BACK = "GO_BACK",
   RESET = "RESET"
 }
 
@@ -149,10 +151,15 @@ export interface ExploreV2State {
   // saved search. Lets a view tell "the search moved out from under me" apart from
   // "the same search re-rendered", which the search fields alone can't when they're equal.
   appliedSearchCount: number;
+  // Subjects and tabs to return to, pushed when a species card opens a search for it
+  backStack: { subject: ExploreV2Subject | null; activeTab: ExploreV2Tab }[];
 }
 
 // Everything that defines a search, as opposed to how the results are being viewed
-export type ExploreV2Search = Omit<ExploreV2State, "activeTab" | "appliedSearchCount">;
+export type ExploreV2Search = Omit<
+  ExploreV2State,
+  "activeTab" | "appliedSearchCount" | "backStack"
+>;
 
 // A saved search also remembers the view it was saved from: the tab and the observations
 // map/grid/list layout. Optional because searches saved before views were recorded don't
@@ -180,6 +187,8 @@ export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_FILTERS; filters: ExploreV2Filters }
   | { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB; tab: ExploreV2Tab }
   | { type: EXPLORE_V2_ACTION.APPLY_SEARCH; search: ExploreV2SearchWithTab }
+  | { type: EXPLORE_V2_ACTION.SEARCH_SPECIES; subject: ExploreV2Subject }
+  | { type: EXPLORE_V2_ACTION.GO_BACK }
   | { type: EXPLORE_V2_ACTION.RESET };
 
 export const initialExploreV2State: ExploreV2State = {
@@ -190,6 +199,7 @@ export const initialExploreV2State: ExploreV2State = {
   filters: defaultExploreV2Filters,
   activeTab: OBSERVATIONS_TAB,
   appliedSearchCount: 0,
+  backStack: [],
 };
 
 export function initialStateFromEntryParams(
@@ -211,9 +221,9 @@ export function exploreV2Reducer(
 ): ExploreV2State {
   switch ( action.type ) {
     case EXPLORE_V2_ACTION.SET_SUBJECT:
-      return { ...state, subject: action.subject };
+      return { ...state, subject: action.subject, backStack: [] };
     case EXPLORE_V2_ACTION.CLEAR_SUBJECT:
-      return { ...state, subject: null };
+      return { ...state, subject: null, backStack: [] };
     case EXPLORE_V2_ACTION.SET_LOCATION_NEARBY:
       return {
         ...state,
@@ -261,6 +271,27 @@ export function exploreV2Reducer(
         filters,
         activeTab: action.search.activeTab ?? state.activeTab,
         appliedSearchCount: state.appliedSearchCount + 1,
+        backStack: [],
+      };
+    }
+    case EXPLORE_V2_ACTION.SEARCH_SPECIES:
+      return {
+        ...state,
+        subject: action.subject,
+        activeTab: OBSERVATIONS_TAB,
+        backStack: [
+          ...state.backStack,
+          { subject: state.subject, activeTab: state.activeTab },
+        ],
+      };
+    case EXPLORE_V2_ACTION.GO_BACK: {
+      const previous = state.backStack[state.backStack.length - 1];
+      if ( !previous ) return state;
+      return {
+        ...state,
+        subject: previous.subject,
+        activeTab: previous.activeTab,
+        backStack: state.backStack.slice( 0, -1 ),
       };
     }
     case EXPLORE_V2_ACTION.RESET:

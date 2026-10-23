@@ -18,7 +18,7 @@ import DisplayTaxonName from "components/SharedComponents/DisplayTaxonName";
 import { Pressable, View } from "components/styledComponents";
 import type { ExploreStackScreenProps } from "navigation/types";
 import type { ExploreV2Subject } from "providers/ExploreV2Context";
-import { useExploreV2 } from "providers/ExploreV2Context";
+import { EXPLORE_V2_ACTION, useExploreV2 } from "providers/ExploreV2Context";
 import React from "react";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
@@ -94,7 +94,7 @@ const ExploreV2Header = ( {
   showBackButton,
 }: Props ) => {
   const { t } = useTranslation( );
-  const { state } = useExploreV2( );
+  const { state, dispatch } = useExploreV2( );
   const currentUser = useCurrentUser( );
   const navigation = useNavigation<ExploreStackScreenProps<"ExploreResults">["navigation"]>( );
   const filterCount = countFilters( state.filters );
@@ -135,7 +135,9 @@ const ExploreV2Header = ( {
         onPress={() => navigation.navigate( "AdvancedSearch" )}
         testID="ExploreV2Header.pressable"
       >
-        {showBackButton && <BackButton />}
+        {state.backStack.length > 0
+          ? <BackButton onPress={( ) => dispatch( { type: EXPLORE_V2_ACTION.GO_BACK } )} />
+          : showBackButton && <BackButton />}
         {headerContent}
         <View className="mr-2">
           <ContainedSquareButton

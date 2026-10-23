@@ -1,4 +1,4 @@
-import { SPECIES_TAB } from "appConstants/tabs";
+import { OBSERVATIONS_TAB, SPECIES_TAB } from "appConstants/tabs";
 import {
   defaultExploreV2Filters,
   EXPLORE_V2_ACTION,
@@ -316,6 +316,23 @@ describe( "exploreV2Reducer", ( ) => {
       };
       const next = exploreV2Reducer( state, { type: EXPLORE_V2_ACTION.RESET } );
       expect( next ).toEqual( initialExploreV2State );
+    } );
+  } );
+
+  describe( EXPLORE_V2_ACTION.GO_BACK, ( ) => {
+    it( "returns to the subject and tab a species card was tapped from", ( ) => {
+      const genus = { type: "taxon", taxon: { id: 1 } };
+      const species = { type: "taxon", taxon: { id: 2 } };
+      const state = { ...initialExploreV2State, subject: genus, activeTab: SPECIES_TAB };
+      const searched = exploreV2Reducer( state, {
+        type: EXPLORE_V2_ACTION.SEARCH_SPECIES,
+        subject: species,
+      } );
+      expect( searched.subject ).toBe( species );
+      expect( searched.activeTab ).toBe( OBSERVATIONS_TAB );
+
+      const back = exploreV2Reducer( searched, { type: EXPLORE_V2_ACTION.GO_BACK } );
+      expect( back ).toEqual( state );
     } );
   } );
 } );

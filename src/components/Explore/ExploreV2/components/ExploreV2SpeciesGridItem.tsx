@@ -1,6 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
 import type { ApiTaxon } from "api/types";
-import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import ExploreTaxonGridItem from "components/Explore/ExploreTaxonGridItem";
 import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
 import type { ExploreStackScreenProps } from "navigation/types";
@@ -37,10 +36,9 @@ const ExploreV2SpeciesGridItem = ( {
   // switches to the observations tab.
   const onPress = useCallback( ( ) => {
     dispatch( {
-      type: EXPLORE_V2_ACTION.SET_SUBJECT,
+      type: EXPLORE_V2_ACTION.SEARCH_SPECIES,
       subject: resultToSubject( { type: "taxon", taxon } ),
     } );
-    dispatch( { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB, tab: OBSERVATIONS_TAB } );
   }, [dispatch, taxon] );
 
   return (

@@ -1,7 +1,11 @@
 import { screen, userEvent } from "@testing-library/react-native";
 import ExploreV2Header from "components/Explore/ExploreV2/components/ExploreV2Header";
 import { MEDIA } from "providers/ExploreContext";
-import { defaultExploreV2Filters, EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
+import {
+  defaultExploreV2Filters,
+  EXPLORE_V2_ACTION,
+  EXPLORE_V2_PLACE_MODE,
+} from "providers/ExploreV2Context";
 import React from "react";
 import { renderComponent } from "tests/helpers/render";
 
@@ -44,14 +48,23 @@ const PLACE_LOCATION = {
   place: { id: 1, display_name: "California" },
 };
 
-const setState = ( subject, location = PLACE_LOCATION, filters = defaultExploreV2Filters ) => {
+const mockDispatch = jest.fn( );
+
+const setState = (
+  subject,
+  location = PLACE_LOCATION,
+  filters = defaultExploreV2Filters,
+  backStack = [],
+) => {
   useExploreV2.mockReturnValue( {
     state: {
       subject,
       location,
       sortBy: "created_at",
       filters,
+      backStack,
     },
+    dispatch: mockDispatch,
   } );
 };
 
@@ -281,6 +294,16 @@ describe( "ExploreV2Header", () => {
     renderComponent( <ExploreV2Header {...viewProps} showBackButton /> );
 
     expect( screen.getByTestId( "BackButton" ) ).toBeVisible();
+  } );
+
+  it( "goes back to the previous search after a species card was tapped", async () => {
+    const actor = userEvent.setup();
+    setState( null, PLACE_LOCATION, defaultExploreV2Filters, [{ subject: null }] );
+    renderComponent( <ExploreV2Header {...viewProps} showBackButton={false} /> );
+
+    await actor.press( screen.getByTestId( "BackButton" ) );
+
+    expect( mockDispatch ).toHaveBeenCalledWith( { type: EXPLORE_V2_ACTION.GO_BACK } );
   } );
 
   it( "badges the filters button with the number of filters applied", () => {
