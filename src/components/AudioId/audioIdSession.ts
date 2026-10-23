@@ -213,17 +213,18 @@ const applyBrightness = ( ) => {
   if ( flashing ) value = 1;
   AudioBirdId?.setBrightness( value );
 };
+// Returns whether the screen was dimmed, so the touch only wakes it
 export const noteActivity = ( ) => {
-  if ( userBrightness === null ) return;
+  if ( userBrightness === null ) return false;
   clearTimeout( dimTimer );
   dimTimer = setTimeout( ( ) => {
     dimmed = true;
     applyBrightness( );
   }, DIM_AFTER_MS );
-  if ( dimmed ) {
-    dimmed = false;
-    applyBrightness( );
-  }
+  if ( !dimmed ) return false;
+  dimmed = false;
+  applyBrightness( );
+  return true;
 };
 export const startDimming = async ( ) => {
   const b = await AudioBirdId?.getBrightness( ).catch( ( ) => null );

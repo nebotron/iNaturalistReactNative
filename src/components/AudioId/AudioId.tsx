@@ -228,72 +228,75 @@ const AudioId = ( ) => {
   );
 
   return (
-    <ScrollView className="bg-white h-full px-5 pt-4" onTouchStart={noteActivity}>
-      <Body3 className="mb-3">
-        {"Identifies "}
-        {setup
-          ? (
-            <Body3
-              accessibilityRole="link"
-              accessibilityHint="Opens a searchable list of the species it listens for."
-              className="underline"
-              onPress={( ) => navigation.navigate( "AudioIdTaxa" )}
-            >
-              {`${species.length} animals`}
-            </Body3>
-          )
-          : "animals"}
-        {" by sound, using "}
-        <Body3
-          accessibilityRole="link"
-          accessibilityHint="Opens the BirdNET website."
-          className="underline"
-          onPress={( ) => Linking.openURL( "https://birdnet.cornell.edu" )}
-        >
-          BirdNET
+    // Claiming the touch when dimmed keeps it from also pressing anything
+    <View className="flex-1" onStartShouldSetResponderCapture={noteActivity}>
+      <ScrollView className="bg-white h-full px-5 pt-4">
+        <Body3 className="mb-3">
+          {"Identifies "}
+          {setup
+            ? (
+              <Body3
+                accessibilityRole="link"
+                accessibilityHint="Opens a searchable list of the species it listens for."
+                className="underline"
+                onPress={( ) => navigation.navigate( "AudioIdTaxa" )}
+              >
+                {`${species.length} animals`}
+              </Body3>
+            )
+            : "animals"}
+          {" by sound, using "}
+          <Body3
+            accessibilityRole="link"
+            accessibilityHint="Opens the BirdNET website."
+            className="underline"
+            onPress={( ) => Linking.openURL( "https://birdnet.cornell.edu" )}
+          >
+            BirdNET
+          </Body3>
+          .
         </Body3>
-        .
-      </Body3>
-      <Button
-        level={listening
-          ? "warning"
-          : "focus"}
-        text={listening
-          ? "STOP LISTENING"
-          : "START LISTENING"}
-        onPress={listening
-          ? stop
-          : start}
-      />
-      <View className="flex-row mt-2">
         <Button
-          className="flex-1 mr-1"
-          text="TEST VIBRATION"
-          onPress={( ) => vibrate( )}
+          level={listening
+            ? "warning"
+            : "focus"}
+          text={listening
+            ? "STOP LISTENING"
+            : "START LISTENING"}
+          onPress={listening
+            ? stop
+            : start}
         />
-        <Button
-          className="flex-1 ml-1"
-          text="TEST HAPTICS"
-          onPress={( ) => vibrate( true )}
-        />
-      </View>
-      {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
-      {listening && <Spectrogram />}
-      {listening && !current && (
-        <Body3 className="mt-1">Listening…</Body3>
-      )}
+        <View className="flex-row mt-2">
+          <Button
+            className="flex-1 mr-1"
+            text="TEST VIBRATION"
+            onPress={( ) => vibrate( )}
+          />
+          <Button
+            className="flex-1 ml-1"
+            text="TEST HAPTICS"
+            onPress={( ) => vibrate( true )}
+          />
+        </View>
+        {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
+        {listening && <Spectrogram />}
+        {listening && !current && (
+          <Body3 className="mt-1">Listening…</Body3>
+        )}
 
-      <View className="h-6" />
-      {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
-      {heardList.map( h => row(
-        h.sp,
-        `${h.count} ${h.count === 1
-          ? "time"
-          : "times"}, last ${formatISOTimestamp( h.lastHeard )}`,
-      ) )}
+        <View className="h-6" />
+        {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
+        {heardList.map( h => row(
+          h.sp,
+          `${h.count} ${h.count === 1
+            ? "time"
+            : "times"}, last ${formatISOTimestamp( h.lastHeard )}`,
+        ) )}
 
-      <View className="h-20" />
-    </ScrollView>
+        <View className="h-20" />
+      </ScrollView>
+    </View>
   );
 };
 
