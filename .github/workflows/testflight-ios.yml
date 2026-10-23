@@ -113,6 +113,19 @@ jobs:
       run: |
         printf '%s' "$DOTENV_BASE64" | base64 --decode > .env
         if [ -n "$EBIRD_API_KEY" ]; then printf '\nEBIRD_API_KEY=%s\n' "$EBIRD_API_KEY" >> .env; fi
+        # DOTENV_BASE64 predates the per-platform OAuth rename
+        sed -i '' -e 's/\r$//' -e 's/^OAUTH_CLIENT_/IOS_OAUTH_CLIENT_/' .env
+        missing=""
+        for key in API_URL OAUTH_API_URL JWT_ANONYMOUS_API_SECRET \
+          IOS_OAUTH_CLIENT_ID IOS_OAUTH_CLIENT_SECRET \
+          IOS_MODEL_FILE_NAME IOS_TAXONOMY_FILE_NAME IOS_GEOMODEL_FILE_NAME \
+          CV_MODEL_VERSION GOOGLE_WEB_CLIENT_ID GOOGLE_IOS_CLIENT_ID CROP_LOG_FIREBASE_URL; do
+          grep -qE "^${key}=.+" .env || missing="$missing $key"
+        done
+        if [ -n "$missing" ]; then
+          echo "::error::.env from DOTENV_BASE64 is missing or empty:$missing"
+          exit 1
+        fi
 
     - name: Create GoogleService-Info.production.plist
       env:
