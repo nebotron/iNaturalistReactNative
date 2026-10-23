@@ -273,8 +273,14 @@ Clusters-of-observations-along-a-route = Clusters of observations along a route 
 COLLABORATORS = COLLABORATORS
 Collection-and-Umbrella-Projects = Collection & Umbrella Projects
 Collection-Project = Collection Project
+# Button that combines selected observations into a single observation
+Combine-Observations = Combine Observations
+# Message of an alert confirming that selected observations should be combined
+Combine-observations-explanation = Their photos and sounds will be moved into one observation, and the others will be deleted, including any identifications and comments on them.
 # Button that combines multiple photos into a single observation
 Combine-Photos = Combine Photos
+# Title of an alert confirming that selected observations should be combined
+Combine-x-observations = Combine { $count } observations?
 # Title for a form that let's you enter a comment
 COMMENT = COMMENT
 # Label for a button that shows options for a comment
@@ -320,6 +326,8 @@ Could-not-import-selected-photos = None of the selected photos could be imported
 Could-not-import-your-photos-nothing-was-saved = Your photos could not be imported, so nothing was saved. Please try again.
 # Error message when the photo the crop editor was opened for cannot be read
 Could-not-open-this-photo-to-crop-it = This photo could not be opened, so there is nothing to crop.
+# Title of an alert shown when combining observations fails
+Couldnt-combine-observations = Couldn't combine observations
 Couldnt-create-comment = Couldn't create comment
 Couldnt-create-identification-error = Couldn't create identification { $error }
 Couldnt-create-identification-unknown-error = Couldn't create identification, unknown error.
@@ -1910,6 +1918,8 @@ x-saved =
         [one] { $count } saved
        *[other] { $count } saved
     }
+# Number of observations selected to combine
+X-selected = { $count } selected
 # Displays number of sounds attached to an observation in the Media Viewer
 X-SOUNDS =
     { $count ->

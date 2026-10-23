@@ -3,6 +3,7 @@ import inatjs from "inaturalistjs";
 import type Realm from "realm";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import Photo from "realmModels/Photo";
+import Sound from "realmModels/Sound";
 import type {
   RealmObservation,
   RealmObservationPhoto,
@@ -253,7 +254,11 @@ const filterMediaForUpload = ( observation: RealmObservation ): {
       }
       return null;
     }
-  } ).filter( Boolean ).flat() as RealmSound[];
+  } ).filter(
+    // Sounds already on the server with no local file (e.g. moved over from another
+    // observation) only need attaching
+    sound => sound && Sound.getLocalSoundUri( sound.file_url ) != null,
+  ).flat() as RealmSound[];
 
   return {
     unsyncedPhotos,
