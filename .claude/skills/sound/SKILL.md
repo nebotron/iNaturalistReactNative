@@ -80,3 +80,12 @@ notes of what did and did not work at the end of this skill.
   74 wrong for recall 0.706; 0.7 leaves 3.
 - To sweep thresholds offline, dump per-window scores and geomodel values for the
   `eval_regions.py` recordings once (~45 min on 4 CPUs), then rescore from the dump.
+
+### Call localization
+
+- `audio_id.onnx` also outputs `frames`: the second attention block's per-frame logits,
+  [batch, species, 15] per 5 s window (1/3 s each; checked by planting a call at known
+  offsets). `AudioBirdId.timeline` averages them over the last 16 runs into 1/3 s bins, and
+  `findCall` (`audioIdSession.ts`) picks the call's span, saved as the clip's `call`. On the 62
+  labeled 15 s clips it found a span in all 42 right ones, 2 s at the median (vs the 5 s
+  window). No ground truth for spans yet: user trims before making an observation would be one.

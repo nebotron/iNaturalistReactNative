@@ -115,7 +115,7 @@ const AudioIdHistory = ( ) => {
               accessibilityLabel="Wrong"
               accessibilityHint="Tags the ID as wrong."
             />
-            <ClipPlayButton id={clip.id} />
+            <ClipPlayButton clip={clip} />
           </Pressable>
         </Swipeable>
       ) )}

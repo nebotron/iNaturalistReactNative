@@ -39,7 +39,7 @@ const AudioIdClip = ( ) => {
   const updateClip = useAudioIdHistory( state => state.updateClip );
   const setObservations = useStore( state => state.setObservations );
   const [error, setError] = useState<string | null>( null );
-  const { span, trim, setTrim } = useClipSpan( id, clip?.time, false );
+  const { span, trim, setTrim } = useClipSpan( id, clip?.time, false, clip?.call );
   const time = clip?.time ?? 0;
   const trackPoints = useQuery(
     {

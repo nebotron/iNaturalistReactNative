@@ -23,11 +23,17 @@ const MIN_CLIP = 0.2;
 const SPECTROGRAM_STYLE = { height: 140 };
 
 // The audio around a clip, with the trim it starts with: the 15 s context
-// clip, trimmed to the whole of it or to the 5 s window the call was heard in
-// (the context clip ends 5 s after the window, which ends about when the clip
-// was heard). Clips from before context clips were saved fall back to the
-// 5 s window.
-export const useClipSpan = ( id: string, heardAt: number | undefined, whole: boolean ) => {
+// clip, trimmed to the whole of it, to the call found in it, or else to the
+// 5 s window the call was heard in (the context clip ends 5 s after the
+// window, which ends about when the clip was heard). Clips from before
+// context clips were saved fall back to the 5 s window.
+export const useClipSpan = (
+  id: string,
+  heardAt: number | undefined,
+  whole: boolean,
+  call?: [number, number],
+) => {
+  const [callStart, callEnd] = call || [5, 10];
   const [span, setSpan] = useState<Span | null>( null );
   const [trim, setTrim] = useState<[number, number]>( [0, 0] );
   useEffect( ( ) => {
@@ -40,9 +46,9 @@ export const useClipSpan = ( id: string, heardAt: number | undefined, whole: boo
       setSpan( s );
       setTrim( whole || !hasContext
         ? [0, duration]
-        : [5, 10] );
+        : [callStart, callEnd] );
     } );
-  }, [id, heardAt, whole] );
+  }, [id, heardAt, whole, callStart, callEnd] );
   return { span, trim, setTrim };
 };
 

@@ -41,6 +41,7 @@ export const { AudioBirdId } = NativeModules as {
     playClip: ( path: string ) => Promise<void>;
     playClipRange: ( path: string, from: number, to: number ) => Promise<void>;
     trimClip: ( path: string, from: number, to: number, outPath: string ) => Promise<string>;
+    timeline: ( index: number, endFrame: number, seconds: number ) => Promise<( number | null )[]>;
     stopClip: ( ) => void;
   };
 };
@@ -87,9 +88,46 @@ const contextTimers = new Map<string, ReturnType<typeof setTimeout>>( );
 // Where listening started, for clips heard where no fix comes back.
 let sessionLocation: UserLocation | null = null;
 
+// Where in a 15 s context clip the call is, in seconds from its start, from
+// the model's per-frame logits in 1/3 s bins: of the stretches of bins at 0 or
+// more (or within 2 of the peak, when it is weaker), joined across gaps of up
+// to 2/3 s, the strongest one in the 5 s window the call was heard in, padded
+// by a bin each side to at least 1 s. On the 42 15 s clips labeled right it
+// found a call in every one, 2 s long at the median.
+const BINS_PER_S = 3;
+const CONTEXT_S = 15;
+const WINDOW_BINS = [5 * BINS_PER_S, 10 * BINS_PER_S - 1];
+export const findCall = ( timeline: ( number | null )[] ): [number, number] | null => {
+  const bins = timeline.map( b => b ?? -Infinity );
+  const peak = Math.max( ...bins.slice( WINDOW_BINS[0], WINDOW_BINS[1] + 1 ) );
+  if ( !Number.isFinite( peak ) ) return null;
+  const on = Math.min( 0, peak - 2 );
+  const stretches: [number, number][] = [];
+  bins.forEach( ( b, i ) => {
+    if ( b < on ) return;
+    const last = stretches[stretches.length - 1];
+    if ( last && i - last[1] <= 3 ) last[1] = i;
+    else stretches.push( [i, i] );
+  } );
+  const best = ( [a, b]: [number, number] ) => Math.max( ...bins.slice( a, b + 1 ) );
+  const call = stretches
+    .filter( ( [a, b] ) => b >= WINDOW_BINS[0] && a <= WINDOW_BINS[1] )
+    .sort( ( x, y ) => best( y ) - best( x ) )[0];
+  if ( !call ) return null;
+  let start = Math.max( 0, ( call[0] - 1 ) / BINS_PER_S );
+  let end = Math.min( CONTEXT_S, ( call[1] + 2 ) / BINS_PER_S );
+  if ( end - start < 1 ) {
+    const mid = Math.min( Math.max( ( start + end ) / 2, 0.5 ), CONTEXT_S - 0.5 );
+    start = mid - 0.5;
+    end = mid + 0.5;
+  }
+  return [start, end];
+};
+
 // Keeps the 5 s clip of the run a call scored best in.
 const saveCallClip = (
   sp: AudioIdSpecies,
+  output: number,
   score: number,
   isNewCall: boolean,
   windowFrame: number,
@@ -121,11 +159,17 @@ const saveCallClip = (
   callClips.set( sp.taxonId, id );
   AudioBirdId?.saveClip( clipPath( id ), 5, windowFrame )
     .catch( ( e: Error ) => logger.error( `saving clip failed: ${e.message}` ) );
-  // 5 s on, 15 s centered on this window can be saved.
+  // 5 s on, 15 s centered on this window can be saved, with where the call is in it.
   clearTimeout( contextTimers.get( id ) );
   contextTimers.set( id, setTimeout( ( ) => {
     contextTimers.delete( id );
-    AudioBirdId?.saveClip( contextClipPath( id ), 15, windowFrame + 5 * 32000 )
+    const endFrame = windowFrame + 5 * 32000;
+    AudioBirdId?.saveClip( contextClipPath( id ), CONTEXT_S, endFrame )
+      .then( ( ) => AudioBirdId?.timeline( output, endFrame, CONTEXT_S ) )
+      .then( timeline => {
+        const call = timeline && findCall( timeline );
+        if ( call ) history.updateClip( id, { call } );
+      } )
       .catch( ( e: Error ) => logger.error( `saving context clip failed: ${e.message}` ) );
   }, 5000 ) );
 };
@@ -309,7 +353,7 @@ const onScores = ( event: ScoresEvent ) => {
     if ( !isHeard( s ) || !sp ) return;
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;
-    saveCallClip( sp, s, isNewCall, event.windowFrame );
+    saveCallClip( sp, Number( i ), s, isNewCall, event.windowFrame );
     if ( !old || now - old.lastHeard > DAY_MS ) quietTaxa.add( sp.taxonId );
     if ( s > ALERT && (
       quietTaxa.delete( sp.taxonId )

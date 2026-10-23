@@ -55,6 +55,12 @@ for i, t in enumerate(g.initializer):  # per-class tensors: attention/classifica
 del g.value_info[:]
 g.output[0].type.tensor_type.shape.dim[1].dim_value = len(idx)
 for o in list(g.output[1:]): g.output.remove(o)
+# Per-frame logits of the second attention block, [batch, species, 15] per 5 s
+# window, for finding when in a clip the species calls (AudioBirdId timeline).
+g.node.append(onnx.helper.make_node("Cast", ["/cla_1/Conv_output_0"], ["frames"], to=onnx.TensorProto.FLOAT))
+frames = onnx.helper.make_tensor_value_info("frames", onnx.TensorProto.FLOAT, [None, len(idx), None])
+frames.type.tensor_type.shape.dim[0].CopyFrom(g.output[0].type.tensor_type.shape.dim[0])
+g.output.append(frames)
 for f in glob.glob(f"{ios}/audio_id.data*"): os.remove(f)
 n, f, off = 0, None, 0
 for t in g.initializer:

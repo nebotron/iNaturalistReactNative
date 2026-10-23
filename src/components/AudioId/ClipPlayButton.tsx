@@ -1,11 +1,13 @@
 import { INatIconButton } from "components/SharedComponents";
 import React, { useEffect, useRef, useState } from "react";
 
-import { clipPath } from "./audioIdHistory";
+import type { AudioIdClip } from "./audioIdHistory";
+import { clipPath, contextClipPath } from "./audioIdHistory";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
 
-// Plays or stops one Audio ID clip. Starting another clip stops this one.
-const ClipPlayButton = ( { id }: { id: string } ) => {
+// Plays or stops one Audio ID clip: the call found in it, else its 5 s
+// window. Starting another clip stops this one.
+const ClipPlayButton = ( { clip }: { clip: AudioIdClip } ) => {
   const [player] = useState( ( ) => ( {} ) );
   const [playing, setPlaying] = useState( false );
 
@@ -24,7 +26,9 @@ const ClipPlayButton = ( { id }: { id: string } ) => {
   const play = async ( ) => {
     setPlaying( true );
     playingRef.current = true;
-    await AudioBirdId?.playClip( clipPath( id ) ).catch( ( ) => undefined );
+    await ( clip.call
+      ? AudioBirdId?.playClipRange( contextClipPath( clip.id ), clip.call[0], clip.call[1] )
+      : AudioBirdId?.playClip( clipPath( clip.id ) ) )?.catch( ( ) => undefined );
     playingRef.current = false;
     setPlaying( false );
   };

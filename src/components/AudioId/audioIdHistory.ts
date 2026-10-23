@@ -28,6 +28,8 @@ export interface AudioIdClip {
   confidence: number;
   label?: AudioIdLabel;
   location?: { latitude: number; longitude: number; accuracy: number };
+  // Seconds into the 15 s context clip the call fills, when found
+  call?: [number, number];
   // the observation last made from this clip
   observationUuid?: string;
 }

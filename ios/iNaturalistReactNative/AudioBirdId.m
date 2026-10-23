@@ -31,6 +31,7 @@
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
 #define AB_HIST     512000  // 16 s kept, for 15 s clips around a window saved up to 1 s late
 #define AB_STEP     32000   // run every 1 s of new audio
+#define AB_FRAME_RUNS 16 // runs' frame logits kept, covering a 15 s context clip
 #define AB_SPEC_HOP 400     // spectrogram columns, 80 per second
 #define AB_SPEC_LOG2N 10
 #define AB_SPEC_N   ( 1 << AB_SPEC_LOG2N ) // samples per FFT, 31.25 Hz bins
@@ -152,6 +153,9 @@ static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
   OrtEnv           *_env;
   OrtSession       *_session;
   NSArray<NSNumber *> *_outputs;
+  // The last AB_FRAME_RUNS runs' per-frame logits, for finding a call's span:
+  // @[windowFrame, float data (outputs x frames), frames per output]
+  NSMutableArray<NSArray *> *_frameRuns;
   float             _minScore;
   OrtSession       *_geoSession;
   BOOL              _wantListening;
@@ -267,6 +271,7 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
 {
   dispatch_sync( _inferQueue, ^{
     self->_outputs = [outputs copy];
+    self->_frameRuns = [NSMutableArray array];
     self->_minScore = (float)minScore;
   } );
   ABSpectrogramReset( );
@@ -313,6 +318,47 @@ RCT_EXPORT_METHOD( saveClip:( NSString * )path
       if ( ABWriteClip( path, (const float *)window.bytes, frames, &error ) ) resolve( path );
       else reject( @"clip", error.localizedDescription ?: @"Could not save the clip", error );
     } );
+  } );
+}
+
+// The mean per-frame logit of output `index` (its position in start's
+// outputs) in each 1/3 s of the `seconds` before sample `endFrame`, over the
+// recent runs whose windows cover it, or null where none do. The model scores
+// 15 frames per 5 s window, so a call shows as a few bins above 0.
+RCT_EXPORT_METHOD( timeline:( double )index
+                   endFrame:( double )endFrame
+                   seconds:( double )seconds
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( _inferQueue, ^{
+    NSInteger bins = MAX( (NSInteger)lround( seconds * 3 ), 1 );
+    double binLen = AB_SR / 3.0, start = endFrame - bins * binLen;
+    double *sum = (double *)calloc( bins, sizeof( double ) );
+    int *count = (int *)calloc( bins, sizeof( int ) );
+    for ( NSArray *r in self->_frameRuns ) {
+      double end = [r[0] doubleValue];
+      NSData *data = r[1];
+      NSInteger t = [r[2] integerValue];
+      if ( t <= 0 || ( (NSInteger)index + 1 ) * t * (NSInteger)sizeof( float ) > (NSInteger)data.length ) {
+        continue;
+      }
+      const float *f = (const float *)data.bytes + (NSInteger)index * t;
+      for ( NSInteger i = 0; i < t; i++ ) {
+        double center = end - AB_WIN + ( i + 0.5 ) * AB_WIN / t;
+        NSInteger b = (NSInteger)floor( ( center - start ) / binLen );
+        if ( b < 0 || b >= bins ) continue;
+        sum[b] += f[i];
+        count[b]++;
+      }
+    }
+    NSMutableArray *out = [NSMutableArray arrayWithCapacity:bins];
+    for ( NSInteger b = 0; b < bins; b++ ) {
+      [out addObject:count[b] ? @( sum[b] / count[b] ) : [NSNull null]];
+    }
+    free( sum );
+    free( count );
+    resolve( out );
   } );
 }
 
@@ -823,10 +869,16 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     int64_t windowFrame = self->_frames;
     dispatch_async( self->_inferQueue, ^{
       NSString *inferError = nil;
+      NSData *frames = nil;
+      NSInteger frameCount = 0;
       CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
       NSData *probs = [self run:self->_session input:(const float *)window.bytes length:AB_WIN
                       inputName:"input" outputName:"output" outputs:self->_outputs
-                          error:&inferError];
+                         frames:&frames frameCount:&frameCount error:&inferError];
+      if ( frames ) {
+        [self->_frameRuns addObject:@[@( windowFrame ), frames, @( frameCount )]];
+        if ( self->_frameRuns.count > AB_FRAME_RUNS ) [self->_frameRuns removeObjectAtIndex:0];
+      }
       double ms = ( CFAbsoluteTimeGetCurrent( ) - t0 ) * 1000;
       dispatch_async( self->_bufferQueue, ^{ self->_busy = NO; } );
       // By output index. Scores below the minimum can't count as heard, so
@@ -862,11 +914,23 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   return info.phys_footprint / 1048576.0;
 }
 
-// One run of a [1, length] -> [1, n] model; returns the outputs listed in
-// `outputs`, in that order, or all of them when it is nil, as floats.
 - (NSData *)run:(OrtSession *)session input:(const float *)samples
          length:(int64_t)length inputName:(const char *)inputName
      outputName:(const char *)outputName outputs:(NSArray<NSNumber *> *)outputs
+          error:(NSString **)errorMessage
+{
+  return [self run:session input:samples length:length inputName:inputName
+        outputName:outputName outputs:outputs frames:NULL frameCount:NULL error:errorMessage];
+}
+
+// One run of a [1, length] -> [1, n] model; returns the outputs listed in
+// `outputs`, in that order, or all of them when it is nil, as floats. With
+// `frames`, also sets it to those outputs' rows of the model's [1, n, T]
+// "frames" output, and `frameCount` to T.
+- (NSData *)run:(OrtSession *)session input:(const float *)samples
+         length:(int64_t)length inputName:(const char *)inputName
+     outputName:(const char *)outputName outputs:(NSArray<NSNumber *> *)outputs
+         frames:(NSData **)frames frameCount:(NSInteger *)frameCount
           error:(NSString **)errorMessage
 {
   if ( !session ) return nil;
@@ -886,17 +950,42 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   }
 
   const char *inputNames[]  = { inputName };
-  const char *outputNames[] = { outputName };
-  OrtValue *output = NULL;
+  const char *outputNames[] = { outputName, "frames" };
+  OrtValue *values[2] = { NULL, NULL };
   status = ort->Run( session, NULL, inputNames, (const OrtValue *const *)&input, 1,
-                     outputNames, 1, &output );
+                     outputNames, frames ? 2 : 1, values );
   ort->ReleaseValue( input );
+  OrtValue *output = values[0];
   if ( status || !output ) {
     if ( status ) {
       *errorMessage = @( ort->GetErrorMessage( status ) );
       ort->ReleaseStatus( status );
     }
+    if ( output ) ort->ReleaseValue( output );
+    if ( values[1] ) ort->ReleaseValue( values[1] );
     return nil;
+  }
+  if ( values[1] ) {
+    OrtTensorTypeAndShapeInfo *frameInfo;
+    ort->GetTensorTypeAndShape( values[1], &frameInfo );
+    int64_t dims[3] = { 0, 0, 0 };
+    size_t ndims = 0;
+    ort->GetDimensionsCount( frameInfo, &ndims );
+    if ( ndims == 3 ) ort->GetDimensions( frameInfo, dims, 3 );
+    ort->ReleaseTensorTypeAndShapeInfo( frameInfo );
+    float *f;
+    ort->GetTensorMutableData( values[1], (void **)&f );
+    int64_t n = dims[1], t = dims[2];
+    NSUInteger rows = outputs ? outputs.count : (NSUInteger)n;
+    NSMutableData *rowsData = [NSMutableData dataWithLength:rows * t * sizeof( float )];
+    float *dst = (float *)rowsData.mutableBytes;
+    for ( NSUInteger r = 0; r < rows; r++ ) {
+      int64_t k = outputs ? outputs[r].longLongValue : (int64_t)r;
+      if ( k < n ) memcpy( dst + r * t, f + k * t, t * sizeof( float ) );
+    }
+    *frames = rowsData;
+    *frameCount = (NSInteger)t;
+    ort->ReleaseValue( values[1] );
   }
 
   OrtTensorTypeAndShapeInfo *info;
