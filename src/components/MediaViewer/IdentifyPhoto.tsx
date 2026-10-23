@@ -18,7 +18,10 @@ import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTrans
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
-import { EXPOSURE_STOPS_DEFAULT } from "sharedHooks/useIdentifyPhotoBrightness";
+import {
+  EXPOSURE_SNAP_THRESHOLD,
+  EXPOSURE_STOPS_DEFAULT,
+} from "sharedHooks/useIdentifyPhotoBrightness";
 import colors from "styles/tailwindColors";
 
 // Zoom slider: exponential mapping so equal slider travel is equal zoom ratio.
@@ -252,7 +255,7 @@ export const ZoomBrightnessSliders = ( {
         maximumValue={exposureStopsMax}
         value={brightnessStops}
         snapValue={EXPOSURE_STOPS_DEFAULT}
-        snapThreshold={0.2}
+        snapThreshold={EXPOSURE_SNAP_THRESHOLD}
         onChange={onBrightnessChange}
         onComplete={onBrightnessComplete}
         accessibilityLabel={brightnessAccessibilityLabel}

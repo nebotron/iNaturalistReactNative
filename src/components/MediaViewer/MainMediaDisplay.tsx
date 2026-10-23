@@ -24,6 +24,7 @@ import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTrans
 import useLiveToneMappedBrightnessUri from "sharedHelpers/useLiveToneMappedBrightnessUri";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
+import { snapExposureStops } from "sharedHooks/useIdentifyPhotoBrightness";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
@@ -314,8 +315,10 @@ const MainMediaDisplay = ( {
                     maximumTrackTintColor={colors.white}
                     thumbTintColor={colors.white}
                     value={brightnessStops}
-                    onValueChange={setBrightnessStops}
-                    onSlidingComplete={handleBrightnessComplete}
+                    onValueChange={value => setBrightnessStops( snapExposureStops( value ) )}
+                    onSlidingComplete={value => handleBrightnessComplete(
+                      snapExposureStops( value ),
+                    )}
                     tapToSeek
                     accessibilityLabel={t( "Adjust-brightness" )}
                   />

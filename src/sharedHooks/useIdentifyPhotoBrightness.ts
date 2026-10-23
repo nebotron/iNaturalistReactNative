@@ -5,6 +5,13 @@ import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 export const EXPOSURE_STOPS_MIN = -1;
 export const EXPOSURE_STOPS_MAX = 4;
 export const EXPOSURE_STOPS_DEFAULT = 0;
+// Slider values this close to the default snap to it.
+export const EXPOSURE_SNAP_THRESHOLD = 0.2;
+export const snapExposureStops = ( stops: number ) => (
+  Math.abs( stops - EXPOSURE_STOPS_DEFAULT ) < EXPOSURE_SNAP_THRESHOLD
+    ? EXPOSURE_STOPS_DEFAULT
+    : stops
+);
 export const stopsToGain = ( stops: number ) => 2 ** stops;
 export const gainToStops = ( gain: number ) => Math.min(
   EXPOSURE_STOPS_MAX,
