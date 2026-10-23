@@ -73,6 +73,10 @@ const PhotoThumbnail = ( { uri, detectSubject }: { uri: string; detectSubject?: 
           <CachedImage
             source={{ uri: displayUri }}
             className="w-full h-full"
+            // Own photos fit inside the square rather than being cropped to it
+            resizeMode={detectSubject
+              ? "cover"
+              : "contain"}
           />
         )}
     </View>
