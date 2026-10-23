@@ -240,6 +240,7 @@
   "Delete-saved-filter": "Delete saved filter",
   "Delete-saved-filter-description": "{ $name } will be removed from your saved filters.",
   "Delete-saved-filter-title": "DELETE SAVED FILTER?",
+  "Delete-selected-photos": "Delete selected photos",
   "Delete-sound": "Delete sound",
   "Deleting-x-of-y--observations": "Deleting { $currentDeleteCount } { $total ->\n  [one] of { $total }\n *[other] of { $total } observations\n}",
   "Deleting-x-of-y-observations-2": "Deleting { $currentDeleteCount } { $total ->\n  [one] observation\n *[other] of { $total } observations\n}",

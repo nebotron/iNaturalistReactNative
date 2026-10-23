@@ -452,6 +452,7 @@ Delete-photo = Delete photo
 Delete-saved-filter = Delete saved filter
 Delete-saved-filter-description = { $name } will be removed from your saved filters.
 Delete-saved-filter-title = DELETE SAVED FILTER?
+Delete-selected-photos = Delete selected photos
 Delete-sound = Delete sound
 # Shows the progress of deletions for X of Y observations, but omits the
 # word "observations" so the message won't get cut off on small screens

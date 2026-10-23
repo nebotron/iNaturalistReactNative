@@ -46,7 +46,10 @@ import {
   markPhotoImportStarted,
   updatePhotoImportProgress,
 } from "sharedHelpers/photoImportMarker";
-import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
+import {
+  addRemovedGroupPhotoUris,
+  getRemovedGroupPhotoUris,
+} from "sharedHelpers/removedGroupPhotoUris";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -110,6 +113,8 @@ const PhotoGallery = ( {
   const [selectedUris, setSelectedUris] = useState<Set<string>>( new Set( ) );
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
   const [hideImported, setHideImported] = useState( true );
+  // Photos queued for deletion from this screen; always hidden.
+  const [deletedUris, setDeletedUris] = useState<Set<string>>( new Set( ) );
   const [importingCount, setImportingCount] = useState( 0 );
   const [importedCount, setImportedCount] = useState( 0 );
   const [failedCount, setFailedCount] = useState( 0 );
@@ -338,6 +343,18 @@ const PhotoGallery = ( {
     setSelectedUris( new Set( ) );
   }, [photos, realm, selectedUris] );
 
+  // Queue the selected photos for deletion in Photo Cleanup (see
+  // removedGroupPhotoUris.ts) and hide them from the picker.
+  const deleteSelected = useCallback( ( ) => {
+    const deviceUris = photos
+      .filter( node => selectedUris.has( getSelectionKey( node ) ) )
+      .map( getDeviceUriFromNode )
+      .filter( ( uri ): uri is string => !!uri );
+    addRemovedGroupPhotoUris( deviceUris );
+    setDeletedUris( prev => new Set( [...prev, ...deviceUris] ) );
+    setSelectedUris( new Set( ) );
+  }, [photos, selectedUris] );
+
   const isImported = useCallback( ( node: PhotoNode ): boolean => {
     const uri = getDeviceUriFromNode( node );
     if ( !uri ) {
@@ -349,10 +366,12 @@ const PhotoGallery = ( {
   const hasImportedPhotos = importedUris.size > 0;
 
   const visiblePhotos = useMemo(
-    ( ) => ( hideImported
-      ? photos.filter( node => !isImported( node ) )
-      : photos ),
-    [photos, hideImported, isImported],
+    ( ) => photos.filter( node => {
+      const uri = getDeviceUriFromNode( node );
+      if ( uri && deletedUris.has( uri ) ) return false;
+      return !hideImported || !isImported( node );
+    } ),
+    [photos, hideImported, isImported, deletedUris],
   );
 
   const galleryItems = useMemo(
@@ -481,6 +500,15 @@ const PhotoGallery = ( {
           </View>
         )}
         <View className="flex-1" />
+        <INatIconButton
+          icon="trash-outline"
+          onPress={deleteSelected}
+          accessibilityLabel={t( "Delete-selected-photos" )}
+          disabled={selectedCount === 0 || importing}
+          size={22}
+          color={colors.darkGray}
+          testID="PhotoGallery.delete"
+        />
         <INatIconButton
           icon="checkmark-circle"
           onPress={markSelectedAsSaved}
