@@ -391,12 +391,22 @@ const WildlifeHotspotsScreen = ( {
       : s ) ) );
   }, [userLocation, t] );
 
+  // With only two stops left, removing one resets it to current location
+  // instead, so the route always keeps a start and an end.
   const handleRemoveStop = useCallback( ( id: string ) => {
     setStops( prev => ( prev.length > 2
       ? prev.filter( s => s.id !== id )
-      : prev ) );
+      : prev.map( s => ( s.id === id
+        ? {
+          ...s,
+          text: userLocation
+            ? t( "Current-location" )
+            : "",
+          point: userLocation,
+        }
+        : s ) ) ) );
     setActiveSuggestions( null );
-  }, [] );
+  }, [userLocation, t] );
 
   const handleAddStopAfter = useCallback( ( id: string ) => {
     setStops( prev => {
@@ -612,7 +622,7 @@ const WildlifeHotspotsScreen = ( {
             presetSuggestions={presetSuggestions}
             addressHistory={addressHistory}
           />
-          {index > 0 && index < stops.length - 1 && (
+          {( stops.length > 2 || stop.text !== t( "Current-location" ) ) && (
             <TouchableOpacity
               onPress={() => handleRemoveStop( stop.id )}
               className="ml-2 p-1"
