@@ -1,4 +1,5 @@
 import { useNavigation } from "@react-navigation/native";
+import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import {
   ActivityIndicator,
   Body2,
@@ -11,6 +12,8 @@ import Map from "components/SharedComponents/Map/Map";
 import { TextInput, View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
 import type { TabStackScreenProps } from "navigation/types";
+import type { ExploreV2State } from "providers/ExploreV2Context";
+import { EXPLORE_V2_PLACE_MODE } from "providers/ExploreV2Context";
 import React, {
   useCallback,
   useEffect,
@@ -216,6 +219,8 @@ type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
   // Explore filters the observation-count links carry over, with the location
   // replaced by the hotspot
   exploreState?: object;
+  // Same, for Explore V2
+  exploreV2State?: ExploreV2State;
 };
 
 // Used only until the hidden measurement view below reports the real height.
@@ -235,7 +240,7 @@ const styles = StyleSheet.create( {
 } );
 
 const WildlifeHotspotsScreen = ( {
-  route, embedded, filterParams: filterParamsProp, exploreState,
+  route, embedded, filterParams: filterParamsProp, exploreState, exploreV2State,
 }: Props ) => {
   const { t } = useTranslation();
   const navigation = useNavigation();
@@ -559,15 +564,50 @@ const WildlifeHotspotsScreen = ( {
     useStore.setState( state => ( {
       layout: { ...state.layout, lastExploreMapRegion: null },
     } ) );
+    zustandStorage.setItem( "exploreV2ObservationsLayout", "map" );
+    const taxon = species && {
+      id: species.id,
+      name: species.name,
+      preferred_common_name: species.preferred_common_name,
+    };
+    // Explore V2 has no circle location, so use the circle's bounding box
+    const { lat, lng, radiusKm } = hotspot.area;
+    const dLat = radiusKm / 111.32;
+    const dLng = dLat / Math.cos( ( lat * Math.PI ) / 180 );
+    const subject = exploreV2State?.subject;
+    // A species narrows a taxon subject; otherwise it's added as a taxon filter
+    const replaceSubject = taxon && ( !subject || subject.type === "taxon" );
+    const v2Filters = exploreV2State?.filters;
     navigation.navigate( "Explore", {
       exploreState,
-      ...( species && {
-        taxon: {
-          id: species.id,
-          name: species.name,
-          preferred_common_name: species.preferred_common_name,
-        },
+      ...( exploreV2State && {
+        subject: replaceSubject
+          ? { type: "taxon", taxon }
+          : subject,
+        sortBy: exploreV2State.sortBy,
+        filters: taxon
+          ? {
+            ...v2Filters,
+            taxonFilters: [
+              ...( v2Filters?.taxonFilters || [] ).filter( f => f.exclude ),
+              ...( replaceSubject
+                ? []
+                : [{ taxon, exclude: false }] ),
+            ],
+          }
+          : v2Filters,
       } ),
+      location: {
+        placeMode: EXPLORE_V2_PLACE_MODE.MAP_AREA,
+        bounds: {
+          swlat: lat - dLat,
+          swlng: lng - dLng,
+          nelat: lat + dLat,
+          nelng: lng + dLng,
+        },
+      },
+      activeTab: OBSERVATIONS_TAB,
+      ...( taxon && { taxon } ),
       lat: hotspot.area.lat,
       lng: hotspot.area.lng,
       // Rounded up (with a floor for single-point clusters) so the circle
@@ -575,7 +615,7 @@ const WildlifeHotspotsScreen = ( {
       radius: Math.max( 0.1, Math.ceil( hotspot.area.radiusKm * 100 ) / 100 ),
       worldwide: false,
     } );
-  }, [navigation, exploreState, setExploreView] );
+  }, [navigation, exploreState, exploreV2State, setExploreView] );
 
   const handleSpeciesCountPress = useCallback(
     ( hotspot: Hotspot, species: HotspotSpecies ) => openHotspotInExplore( hotspot, species ),

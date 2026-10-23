@@ -433,6 +433,7 @@ const ExploreResults = ( ) => {
           <WildlifeHotspotsScreen
             embedded
             filterParams={hotspotParams}
+            exploreV2State={state}
           />
         );
       case IDENTIFY_TAB:
