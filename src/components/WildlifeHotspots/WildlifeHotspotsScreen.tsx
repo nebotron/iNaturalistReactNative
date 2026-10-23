@@ -90,14 +90,6 @@ function isAtPoint( hotspot: Hotspot, point: LatLng ): boolean {
     && hotspot.centerLongitude === point.longitude;
 }
 
-// Names a hotspot stop after its most observed species, to tell stops apart
-function hotspotStopName( hotspot: Hotspot, t: ( key: string, opts?: object ) => string ) {
-  const top = hotspot.topSpecies[0];
-  return top
-    ? t( "Species-hotspot", { name: top.preferred_common_name || top.name } )
-    : t( "Hotspot" );
-}
-
 let stopIdCounter = 0;
 function makeStopId(): string {
   stopIdCounter += 1;
@@ -538,7 +530,7 @@ const WildlifeHotspotsScreen = ( {
     const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
     const insertIdx = findBestInsertion( confirmedStopPoints, via );
     const newStop: Stop = {
-      id: makeStopId(), text: hotspotStopName( hotspot, t ), point: via, fromHotspot: true,
+      id: makeStopId(), text: t( "Hotspot" ), point: via, fromHotspot: true,
     };
     setStops( prev => [...prev.slice( 0, insertIdx ), newStop, ...prev.slice( insertIdx )] );
     setSelectedHotspotId( null );
@@ -586,10 +578,7 @@ const WildlifeHotspotsScreen = ( {
       const newStops = plan.sequence.map( node => ( node < fixedStops.length
         ? fixedStops[node]
         : {
-          id: makeStopId(),
-          text: hotspotStopName( pool[node - fixedStops.length], t ),
-          point: points[node],
-          fromHotspot: true,
+          id: makeStopId(), text: t( "Hotspot" ), point: points[node], fromHotspot: true,
         } ) );
       setPlanStatus( {
         stops: newStops,
@@ -755,6 +744,17 @@ const WildlifeHotspotsScreen = ( {
     [openHotspotInExplore],
   );
 
+  // Hotspot stops are named by the number of their pin on the map
+  const stopLabel = useCallback( ( stop: Stop ) => {
+    const { point } = stop;
+    const idx = stop.fromHotspot && point
+      ? hotspots.findIndex( h => isAtPoint( h, point ) )
+      : -1;
+    return idx >= 0
+      ? t( "Hotspot-number", { number: idx + 1 } )
+      : stop.text;
+  }, [hotspots, t] );
+
   const renderStopItem = useCallback( ( {
     item: stop, getIndex, drag, isActive,
   }: RenderItemParams<Stop> ) => {
@@ -784,7 +784,7 @@ const WildlifeHotspotsScreen = ( {
           </TouchableOpacity>
           <AddressInput
             placeholder={stopPlaceholder( index, stops.length, t )}
-            value={stop.text}
+            value={stopLabel( stop )}
             onChangeText={text => handleStopTextChange( stop.id, text )}
             onSuggestionsChange={suggestions => handleStopSuggestionsChange( stop.id, suggestions )}
             confirmed={!!stop.point}
@@ -817,6 +817,7 @@ const WildlifeHotspotsScreen = ( {
     );
   }, [
     stops,
+    stopLabel,
     userLocation,
     t,
     presetSuggestions,
@@ -1012,6 +1013,10 @@ const WildlifeHotspotsScreen = ( {
                     longitude: hotspot.centerLongitude,
                   }}
                   anchor={{ x: 0.5, y: 0.5 }}
+                  // Above the selected hotspot's observation dots, so its number stays visible
+                  zIndex={selectedHotspotId === hotspot.id
+                    ? 2
+                    : 1}
                   onPress={() => handleHotspotMarkerPress( hotspot, idx )}
                 >
                   <View

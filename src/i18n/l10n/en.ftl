@@ -741,6 +741,8 @@ Hotspot-bbox-padding-km = Search area padding (km)
 Hotspot-cluster-radius-km = Cluster radius (km)
 # Label for the max detour candidates setting in the hotspot finder filter
 Hotspot-max-detour-candidates = Max detour candidates
+# Label for a route stop at a wildlife hotspot, named by the hotspot's number on the map
+Hotspot-number = Hotspot { $number }
 # Label for the observations per page setting in the hotspot finder filter
 Hotspot-obs-per-page = Total observations to fetch
 # Label for the parking time estimate setting in the hotspot finder filter
@@ -1607,8 +1609,6 @@ sound-recorder-help-Try-to-isolate = Try to isolate the sound of a single organi
 Sounds = Sounds
 Source-List = <0>(Source List: </0><1>{ $source }</1><0>)</0>
 Species = Species
-# Label for a route stop added from a wildlife hotspot, named after its most observed species
-Species-hotspot = { $name } hotspot
 Species-View = Species View
 Species-with-the-least-observations-appear-first = Species with the least observations appear first
 Species-with-the-most-observations-appear-first = Species with the most observations appear first
