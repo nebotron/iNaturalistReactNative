@@ -21,7 +21,7 @@ import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import type { Heard } from "./audioIdSession";
 import useAudioIdSession, {
-  heardIn, noteActivity, startDimming, stopDimming,
+  heardIn, noteActivity, startDimming, stopDimming, vibrate,
 } from "./audioIdSession";
 
 // Animal classes the model covers, for asking which of them the user has seen.
@@ -267,6 +267,18 @@ const AudioId = ( ) => {
             ? stop
             : start}
         />
+        <View className="flex-row mt-2">
+          <Button
+            className="flex-1 mr-1"
+            text="TEST VIBRATION"
+            onPress={( ) => vibrate( "system" )}
+          />
+          <Button
+            className="flex-1 ml-1"
+            text="TEST HAPTICS"
+            onPress={( ) => vibrate( "core" )}
+          />
+        </View>
         {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
         {listening && <Spectrogram />}
         {listening && !current && (

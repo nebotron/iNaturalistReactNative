@@ -514,43 +514,72 @@ RCT_EXPORT_METHOD( setPlayingClip:( BOOL )playing )
   } );
 }
 
-// Vibrates for a detection with Core Haptics, which ignores the silent switch.
-// iOS stops Core Haptics once the app leaves the foreground.
-RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
+// Vibrates for a detection. Core Haptics ignores the silent switch but iOS
+// stops it once the app leaves the foreground, so the background uses the
+// system vibration, which plays with the screen off while recording keeps the
+// app running. Mode "core" or "system" forces one, anything else picks by app state.
+RCT_EXPORT_METHOD( vibrate:( NSString * )mode
+                   resolve:( RCTPromiseResolveBlock )resolve
                    reject:( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
     AVAudioSession *session = [AVAudioSession sharedInstance];
     NSError *error = nil;
     [session setAllowHapticsAndSystemSoundsDuringRecording:YES error:nil];
-    if ( !self->_haptics ) {
-      self->_haptics = [[CHHapticEngine alloc] initWithAudioSession:session error:&error];
-      self->_haptics.playsHapticsOnly = YES;
-      self->_haptics.autoShutdownEnabled = YES;
-      self->_haptics.resetHandler = ^{ self->_haptics = nil; };
-    }
-    CHHapticEvent *buzz = [[CHHapticEvent alloc]
-      initWithEventType:CHHapticEventTypeHapticContinuous
-             parameters:@[
-               [[CHHapticEventParameter alloc]
-                 initWithParameterID:CHHapticEventParameterIDHapticIntensity value:1]
-             ]
-           relativeTime:0
-               duration:0.4];
-    CHHapticPattern *pattern = [[CHHapticPattern alloc]
-      initWithEvents:@[buzz] parameters:@[] error:&error];
-    id<CHHapticPatternPlayer> player = pattern
-      ? [self->_haptics createPlayerWithPattern:pattern error:&error]
-      : nil;
+    UIApplicationState state = UIApplication.sharedApplication.applicationState;
+    BOOL core = [mode isEqualToString:@"core"]
+      || ( ![mode isEqualToString:@"system"] && state == UIApplicationStateActive );
     [self muteFor:0.7];
-    if ( player && [self->_haptics startAndReturnError:&error] ) {
-      [player startAtTime:CHHapticTimeImmediate error:&error];
+    if ( core ) {
+      [self playCoreHaptics:session error:&error];
+    } else {
+      AudioServicesPlayAlertSound( kSystemSoundID_Vibrate );
     }
     resolve( @{
       @"allowed": @( session.allowHapticsAndSystemSoundsDuringRecording ),
       @"error": error ? error.localizedDescription : [NSNull null],
+      @"method": core ? @"core" : @"system",
+      @"appState": @( state ),
     } );
   } );
+}
+
+- (void)playCoreHaptics:(AVAudioSession *)session error:(NSError **)error
+{
+  if ( !_haptics ) {
+    _haptics = [[CHHapticEngine alloc] initWithAudioSession:session error:error];
+    if ( !_haptics ) return;
+    _haptics.playsHapticsOnly = YES;
+    _haptics.autoShutdownEnabled = YES;
+    __weak AudioBirdId *weakSelf = self;
+    _haptics.resetHandler = ^{
+      AudioBirdId *me = weakSelf;
+      if ( me ) me->_haptics = nil;
+    };
+    _haptics.stoppedHandler = ^( CHHapticEngineStoppedReason reason ) {
+      // Idle auto shutdown is routine; anything else explains a missed buzz.
+      if ( reason != CHHapticEngineStoppedReasonIdleTimeout ) {
+        [weakSelf status:[NSString stringWithFormat:@"haptics stopped, reason %ld",
+                          (long)reason]];
+      }
+    };
+  }
+  CHHapticEvent *buzz = [[CHHapticEvent alloc]
+    initWithEventType:CHHapticEventTypeHapticContinuous
+           parameters:@[
+             [[CHHapticEventParameter alloc]
+               initWithParameterID:CHHapticEventParameterIDHapticIntensity value:1]
+           ]
+         relativeTime:0
+             duration:0.4];
+  CHHapticPattern *pattern = [[CHHapticPattern alloc]
+    initWithEvents:@[buzz] parameters:@[] error:error];
+  id<CHHapticPatternPlayer> player = pattern
+    ? [_haptics createPlayerWithPattern:pattern error:error]
+    : nil;
+  if ( player && [_haptics startAndReturnError:error] ) {
+    [player startAtTime:CHHapticTimeImmediate error:error];
+  }
 }
 
 // Posts a local notification for a detection, shown as a banner even with the

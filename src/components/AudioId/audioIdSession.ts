@@ -20,6 +20,8 @@ import { prepareAudioId } from "./audioIdModel";
 // held-out recordings this cut wrong species by about a quarter for under half
 // a point of recall, while still showing confident overlapping callers.
 
+type VibrateMode = "auto" | "core" | "system";
+
 export const { AudioBirdId } = NativeModules as {
   AudioBirdId?: {
     start: (
@@ -28,7 +30,9 @@ export const { AudioBirdId } = NativeModules as {
     ) => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
     setPlayingClip: ( playing: boolean ) => void;
-    vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
+    vibrate: ( mode: VibrateMode ) => Promise<{
+      allowed: boolean; error: string | null; method: string; appState: number;
+    }>;
     getBrightness: ( ) => Promise<number>;
     setBrightness: ( value: number ) => void;
     notify: ( title: string, body: string ) => void;
@@ -184,10 +188,14 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
   },
 } ) );
 
-export const vibrate = ( ) => {
-  AudioBirdId?.vibrate( )
+// "auto" uses Core Haptics in the foreground and the system vibration in the background
+export const vibrate = ( mode: VibrateMode = "auto" ) => {
+  AudioBirdId?.vibrate( mode )
     ?.then( r => {
-      if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${r.error}` );
+      const detail = `${r.method}, mode ${mode}, app state ${r.appState}, `
+        + `allowed ${r.allowed}: ${r.error}`;
+      if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${detail}` );
+      else logger.info( `vibrated: ${detail}` );
     } )
     .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
 };
