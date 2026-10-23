@@ -33,6 +33,7 @@ import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrop
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
+import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
 import logRawImportMetadata, {
   localFileUrisForObservations,
 } from "sharedHelpers/rawImportMetadataLog";
@@ -341,6 +342,7 @@ const GroupPhotosContainer = ( ) => {
       .filter( ( uri ): uri is string => !!uri );
     deviceUrisToDelete.forEach( uri => addPendingGroupPhotoDeletionUri( uri ) );
     addRemovedGroupPhotoUris( deviceUrisToDelete );
+    requestQueuedDeletionAlbumSync( );
 
     // No line here: this fires on every photo the user removes (317 times in
     // five days, usually "staged 1"), and what was staged is reported again by

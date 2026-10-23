@@ -16,6 +16,10 @@ const { ImageCropper } = NativeModules as {
       inAlbum?: number;
       ms?: number;
     }>;
+    removeAssetsFromAlbum?: ( phUris: string[], album: string ) => Promise<{
+      removed: number;
+      requested: number;
+    }>;
   };
 };
 
@@ -29,8 +33,9 @@ const { ImageCropper } = NativeModules as {
 // and delete themselves. Adding to an album this app created asks the user for
 // nothing, which is why it still goes through when the deletion doesn't.
 //
-// A cleanup files everything it is about to delete, and a deleted asset leaves
-// every album it is in, so the album ends up holding only what is left behind.
+// queuedDeletionAlbum.ts keeps it in step with what Photo Cleanup would
+// delete as observations are created, faved and edited, and a deleted asset
+// leaves every album it is in, so the album holds only what is left behind.
 export const IMPORTED_ALBUM_TITLE = "Imported to iNaturalist";
 
 // Files photos into the album. Never throws: this runs alongside a deletion
@@ -65,6 +70,27 @@ const addPhotosToImportedAlbum = async (
       error: String( ( error as { message?: string } )?.message ?? error ),
     } );
     return null;
+  }
+};
+
+// Takes photos that are no longer queued for deletion (their observation was
+// faved) back out of the album. Never throws; resolves false on failure.
+export const removePhotosFromImportedAlbum = async ( photoUris: string[] ): Promise<boolean> => {
+  if ( Platform.OS !== "ios" || !ImageCropper?.removeAssetsFromAlbum ) return false;
+  const uris = [...new Set( photoUris.filter( uri => uri?.startsWith( "ph://" ) ) )];
+  if ( uris.length === 0 ) return true;
+  try {
+    const result = await ImageCropper.removeAssetsFromAlbum( uris, IMPORTED_ALBUM_TITLE );
+    if ( result.removed > 0 ) {
+      logger.infoWithExtra( "imported_album_unfiled", { ...result } );
+    }
+    return true;
+  } catch ( error ) {
+    logger.warnWithExtra( "imported_album_remove_failed", {
+      requested: uris.length,
+      error: String( ( error as { message?: string } )?.message ?? error ),
+    } );
+    return false;
   }
 };
 

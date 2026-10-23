@@ -24,14 +24,14 @@ const isFavorited = ( observation: FavoritableObservation ): boolean => {
   return votes.filter( vote => vote?.vote_scope === null ).length > 0;
 };
 
-// Finds every device photo library URI stored on an observation the current
-// user has NOT favorited, plus photos already removed via Group Photos. Matching
-// is by stored URI only. A photo also stored on a favorited observation is
-// protected. URIs that no longer resolve to a library asset are dropped.
-const findUnfavoritedDevicePhotoUris = async (
+// Splits the device photo URIs stored on observations into those on an
+// observation the current user has NOT favorited, plus photos already removed
+// via Group Photos, and those on a favorited one. Matching is by stored URI
+// only. A photo also stored on a favorited observation is protected.
+export const classifyDevicePhotoUris = (
   realm: Realm,
   observationsCache?: UserObservationsCache,
-): Promise<string[]> => {
+): { unfavorited: string[]; favorited: string[] } => {
   const unfavoritedUris = new Set<string>( );
   const favoritedUris = new Set<string>( );
 
@@ -52,9 +52,19 @@ const findUnfavoritedDevicePhotoUris = async (
   favoritedUris.forEach( uri => unfavoritedUris.delete( uri ) );
   // Photos the user already chose to remove via Group Photos, whose device
   // deletion may have silently failed (see removedGroupPhotoUris.ts).
-  getRemovedGroupPhotoUris( ).forEach( uri => unfavoritedUris.add( uri ) );
+  getRemovedGroupPhotoUris( ).forEach( uri => {
+    unfavoritedUris.add( uri );
+    favoritedUris.delete( uri );
+  } );
+  return { unfavorited: [...unfavoritedUris], favorited: [...favoritedUris] };
+};
 
-  const allUris = [...unfavoritedUris];
+// The unfavorited photos that still resolve to a library asset.
+const findUnfavoritedDevicePhotoUris = async (
+  realm: Realm,
+  observationsCache?: UserObservationsCache,
+): Promise<string[]> => {
+  const allUris = classifyDevicePhotoUris( realm, observationsCache ).unfavorited;
   const existing = await filterExistingDevicePhotoUris( allUris );
   const existingSet = new Set( existing );
   const vanished = allUris.filter( uri => !existingSet.has( uri ) );

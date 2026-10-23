@@ -13,6 +13,7 @@ import type { Node } from "react";
 import React, { useCallback, useMemo, useState } from "react";
 import { Alert } from "react-native";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import { setCachedFave } from "sharedHelpers/userObservationsCache";
 import {
   useAuthenticatedMutation,
   useTranslation,
@@ -100,6 +101,9 @@ const FaveButton = ( {
     const realmObservation = realm.objectForPrimaryKey( "Observation", uuid );
     if ( !realmObservation || !realmObservation.isValid( ) ) return;
     const userId = currentUser?.id || 0;
+    // The deletion album reads faves from the cache first, so it has to agree
+    // before the Realm write below wakes the album sync.
+    setCachedFave( currentUser?.id, uuid, faved );
     safeRealmWrite( realm, ( ) => {
       const otherVotes = ( realmObservation.votes || [] )
         // Drop this user's fave; other users' faves and scoped votes stay put.

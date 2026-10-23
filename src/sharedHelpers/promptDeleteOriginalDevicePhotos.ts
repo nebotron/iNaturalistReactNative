@@ -45,7 +45,7 @@ const { ImageCropper } = NativeModules as {
 
 interface DeleteOriginalDevicePhotosOptions {
   userInitiated?: boolean;
-  // Photo Cleanup files into the album with its own button.
+  // Photo Cleanup's photos are already in the album (queuedDeletionAlbum.ts).
   skipAlbum?: boolean;
 }
 
@@ -667,13 +667,6 @@ export const deleteOriginalDevicePhotos = (
   options: DeleteOriginalDevicePhotosOptions = {},
 ): Promise<DeleteOriginalDevicePhotosResult> => enqueuePhotoLibraryWrite(
   holdChainUntil => performDeleteOriginalDevicePhotos( photoUris, options, holdChainUntil ),
-);
-
-// Queued behind any deletion, so it never stacks on an open transaction.
-export const addDevicePhotosToImportedAlbum = (
-  photoUris: string[],
-) => enqueuePhotoLibraryWrite(
-  ( ) => addPhotosToImportedAlbum( filterDeletableDevicePhotoUris( photoUris ) ),
 );
 
 // Callers hold the user on the current screen until onComplete fires so the

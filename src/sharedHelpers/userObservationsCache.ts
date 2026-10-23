@@ -168,6 +168,21 @@ const writeUserObservationsCache = (
   } );
 };
 
+// Applies a fave toggled in the app now, rather than at the next sync, so
+// anything reading the cache (the deletion album) sees it straight away.
+export const setCachedFave = (
+  userId: number | undefined | null,
+  uuid: string,
+  faved: boolean,
+) => {
+  if ( !userId ) return;
+  const cache = readUserObservationsCache( userId );
+  const entry = cache.get( uuid );
+  if ( !entry || entry.faved === faved ) return;
+  cache.set( uuid, { ...entry, faved } );
+  writeUserObservationsCache( userId, cache, new Set( [uuid] ) );
+};
+
 const toCachedObservation = ( observation: ApiObservation ): CachedObservation => ( {
   uuid: observation.uuid,
   faved: ( observation.votes || [] ).some( vote => vote?.vote_scope === null ),

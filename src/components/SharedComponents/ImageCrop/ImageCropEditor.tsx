@@ -42,6 +42,7 @@ import {
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { trackGroupPhotoCrop } from "sharedHelpers/pendingGroupPhotoCrops";
+import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
 import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
@@ -508,6 +509,7 @@ const ImageCropEditor = ( ) => {
           // deleting it, so the photo stays hidden from the photo picker and
           // can be deleted later from Photo Cleanup (removedGroupPhotoUris.ts).
           addRemovedGroupPhotoUris( [deviceUri] );
+          requestQueuedDeletionAlbumSync( );
         }
       }
       setGroupedPhotos(

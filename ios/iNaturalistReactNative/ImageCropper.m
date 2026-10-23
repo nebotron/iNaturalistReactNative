@@ -1570,6 +1570,74 @@ RCT_EXPORT_METHOD( addAssetsToAlbum
   } );
 }
 
+// Takes photos back out of every album with this title, e.g. once the
+// observation they're on is faved. Asks for nothing, like addAssetsToAlbum,
+// and skips the write entirely when none of them are in it.
+RCT_EXPORT_METHOD( removeAssetsFromAlbum
+                  : ( NSArray<NSString *> * )phUris album
+                  : ( NSString * )title resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    inatWhenClearToWrite( ^( NSString *busy ) {
+    if ( busy ) {
+      reject( @"PHOTOS_LIBRARY_BUSY", busy, nil );
+      return;
+    }
+
+    NSMutableSet<NSString *> *ids = [NSMutableSet set];
+    for ( NSString *u in ( phUris ?: @[] ) ) {
+      [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
+    }
+    PHFetchOptions *byTitle = [[PHFetchOptions alloc] init];
+    byTitle.predicate = [NSPredicate predicateWithFormat:@"localizedTitle = %@", title];
+    PHFetchResult<PHAssetCollection *> *albums = ids.count > 0
+      ? [PHAssetCollection fetchAssetCollectionsWithType:PHAssetCollectionTypeAlbum
+                                                 subtype:PHAssetCollectionSubtypeAlbumRegular
+                                                 options:byTitle]
+      : nil;
+
+    NSMutableArray<PHAssetCollection *> *targets = [NSMutableArray array];
+    NSMutableArray<NSArray<PHAsset *> *> *present = [NSMutableArray array];
+    NSUInteger removeCount = 0;
+    for ( PHAssetCollection *album in albums ) {
+      NSMutableArray<PHAsset *> *inAlbum = [NSMutableArray array];
+      for ( PHAsset *asset in [PHAsset fetchAssetsInAssetCollection:album options:nil] ) {
+        if ( [ids containsObject:asset.localIdentifier] ) { [inAlbum addObject:asset]; }
+      }
+      if ( inAlbum.count == 0 ) { continue; }
+      [targets addObject:album];
+      [present addObject:inAlbum];
+      removeCount = MAX( removeCount, inAlbum.count );
+    }
+    if ( targets.count == 0 ) {
+      resolve( @{ @"removed": @0, @"requested": @( ids.count ) } );
+      return;
+    }
+
+    NSUInteger writeToken = inatPhotoWriteBegan(
+      [NSString stringWithFormat:@"removeAssetsFromAlbum(%lu)", ( unsigned long )removeCount] );
+    [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+      [targets enumerateObjectsUsingBlock:^( PHAssetCollection *album, NSUInteger idx, BOOL *stop ) {
+        [[PHAssetCollectionChangeRequest changeRequestForAssetCollection:album]
+          removeAssets:present[idx]];
+      }];
+    } completionHandler:^( BOOL success, NSError *error ) {
+      inatPhotoWriteEnded( writeToken );
+      if ( success ) {
+        resolve( @{ @"removed": @( removeCount ), @"requested": @( ids.count ) } );
+      } else {
+        reject( @"ALBUM_REMOVE_FAILED",
+          [NSString stringWithFormat:@"removing %lu asset(s) from \"%@\" failed: %@",
+            ( unsigned long )removeCount, title, error.localizedDescription ?: @"unknown"],
+          error );
+      }
+    }];
+    } );
+  } );
+}
+
 // Matches the ph:// branch's highQualityDecode threshold in createThumbnail:
 // below this, a request is a grid tile that wants speed; at or above it, only
 // the Group Photos crop overlay is asking, and it wants real detail.

@@ -18,7 +18,6 @@ import React, {
   useState,
 } from "react";
 import {
-  Alert,
   Image,
   PixelRatio,
   Pressable,
@@ -27,10 +26,8 @@ import {
 } from "react-native";
 import { IMPORTED_ALBUM_TITLE } from "sharedHelpers/importedPhotoAlbum";
 import { log } from "sharedHelpers/logger";
-import {
-  addDevicePhotosToImportedAlbum,
-  deleteOriginalDevicePhotos,
-} from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import { deleteOriginalDevicePhotos } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
 import findUnfavoritedDevicePhotoUris from "sharedHelpers/unfavoritedDevicePhotos";
 import useDeviceImageThumbnail from "sharedHelpers/useDeviceImageThumbnail";
 import type { UserObservationsCache } from "sharedHelpers/userObservationsCache";
@@ -90,7 +87,6 @@ const DevicePhotoCleanup = ( ) => {
   const [loading, setLoading] = useState( true );
   const [syncingFaves, setSyncingFaves] = useState( true );
   const [deleting, setDeleting] = useState( false );
-  const [filing, setFiling] = useState( false );
   const [deletedCount, setDeletedCount] = useState<number | null>( null );
   const [undeletableCount, setUndeletableCount] = useState( 0 );
   const [fullScreenUri, setFullScreenUri] = useState<string | null>( null );
@@ -111,6 +107,8 @@ const DevicePhotoCleanup = ( ) => {
           setSyncingFaves( false );
         }
         syncedAt = Date.now( );
+        // The sync may have brought faves from the website the album hasn't seen.
+        requestQueuedDeletionAlbumSync( );
         return findUnfavoritedDevicePhotoUris( realm, cache );
       } )
       .then( result => {
@@ -191,22 +189,6 @@ const DevicePhotoCleanup = ( ) => {
     setAllUris( [] );
   }, [allUris] );
 
-  const addToAlbum = useCallback( async ( ) => {
-    setFiling( true );
-    const result = await addDevicePhotosToImportedAlbum( allUris );
-    setFiling( false );
-    Alert.alert(
-      result
-        ? `Added ${result.added} photo${result.added === 1
-          ? ""
-          : "s"} to "${IMPORTED_ALBUM_TITLE}"`
-        : "Could not add photos to the album",
-      result
-        ? `${result.alreadyIn} were already in it.`
-        : "iOS isn't accepting changes to Photos right now. Restarting the phone may help.",
-    );
-  }, [allUris] );
-
   if ( deletedCount !== null ) {
     return (
       <ViewWrapper>
@@ -226,8 +208,8 @@ const DevicePhotoCleanup = ( ) => {
           )}
           {undeletableCount > 0 && (
             <Body2 className="mt-4 text-center">
-              {"To delete the photos that are still here in Photos, reopen Photo Cleanup "
-                + `and add them to the "${IMPORTED_ALBUM_TITLE}" album.`}
+              {"To delete the photos that are still here, select them all in the "
+                + `"${IMPORTED_ALBUM_TITLE}" album in Photos.`}
             </Body2>
           )}
         </View>
@@ -269,9 +251,9 @@ const DevicePhotoCleanup = ( ) => {
         <View className="px-5 pt-4 pb-2">
           <Body2>
             The last delete hasn&apos;t come back from iOS yet. These are what is still
-            in your library — it may finish on its own. Add them to the
+            in your library — it may finish on its own. They are all in the
             {` "${IMPORTED_ALBUM_TITLE}" `}
-            album to select and delete them all at once in Photos.
+            album, to select and delete at once in Photos.
           </Body2>
         </View>
       )}
@@ -288,20 +270,13 @@ const DevicePhotoCleanup = ( ) => {
       </View>
       <View className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t border-lightGray">
         <Button
-          className="mb-3"
-          text={`ADD ${allUris.length} TO ALBUM`}
-          onPress={addToAlbum}
-          loading={filing}
-          disabled={filing || deleting}
-        />
-        <Button
           level="warning"
           text={`DELETE ${allUris.length} PHOTO${allUris.length === 1
             ? ""
             : "S"}`}
           onPress={deletePhotos}
           loading={deleting}
-          disabled={deleting || filing}
+          disabled={deleting}
         />
         {deleting && (
           <Body2 className="mt-2 text-center">

@@ -12,6 +12,7 @@ import AppStateListener from "./AppStateListener";
 import EnvironmentNotice from "./EnvironmentNotice";
 import useDeferredStartup from "./hooks/useDeferredStartup";
 import useLinking from "./hooks/useLinking";
+import useQueuedDeletionAlbum from "./hooks/useQueuedDeletionAlbum";
 import useResumeGroupPhotos from "./hooks/useResumeGroupPhotos";
 import useUsbAutoImport from "./hooks/useUsbAutoImport";
 import NetworkService from "./NetworkService";
@@ -58,6 +59,7 @@ const App = ( { children }: PropsWithChildren ) => {
   useDeferredStartup( );
   useResumeGroupPhotos( );
   useUsbAutoImport( );
+  useQueuedDeletionAlbum( currentUser?.id );
 
   // this children prop is here for the sake of testing with jest
   // normally we would never do this in code
