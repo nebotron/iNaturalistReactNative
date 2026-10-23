@@ -29,7 +29,6 @@ export const { AudioBirdId } = NativeModules as {
     stop: ( ) => void;
     setPlayingClip: ( playing: boolean ) => void;
     vibrate: ( ) => Promise<{ allowed: boolean; error: string | null }>;
-    vibrateHaptics: ( ) => Promise<{ allowed: boolean; error: string | null }>;
     getBrightness: ( ) => Promise<number>;
     setBrightness: ( value: number ) => void;
     notify: ( title: string, body: string ) => void;
@@ -185,10 +184,8 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
   },
 } ) );
 
-export const vibrate = ( haptics = false ) => {
-  ( haptics
-    ? AudioBirdId?.vibrateHaptics( )
-    : AudioBirdId?.vibrate( ) )
+export const vibrate = ( ) => {
+  AudioBirdId?.vibrate( )
     ?.then( r => {
       if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${r.error}` );
     } )

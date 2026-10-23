@@ -477,24 +477,6 @@ RCT_EXPORT_METHOD( stop )
   dispatch_async( _bufferQueue, ^{ self->_muteUntil = MAX( self->_muteUntil, until ); } );
 }
 
-// Vibrates for a detection with the system vibration, which plays in the
-// background and with the screen off while the recording session keeps the
-// app running, and ignores the silent switch and Do Not Disturb.
-RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
-                   reject:( RCTPromiseRejectBlock )reject )
-{
-  dispatch_async( dispatch_get_main_queue(), ^{
-    AVAudioSession *session = [AVAudioSession sharedInstance];
-    [session setAllowHapticsAndSystemSoundsDuringRecording:YES error:nil];
-    [self muteFor:0.7];
-    AudioServicesPlayAlertSound( kSystemSoundID_Vibrate );
-    resolve( @{
-      @"allowed": @( session.allowHapticsAndSystemSoundsDuringRecording ),
-      @"error": [NSNull null],
-    } );
-  } );
-}
-
 RCT_EXPORT_METHOD( getBrightness:( RCTPromiseResolveBlock )resolve
                    reject:( RCTPromiseRejectBlock )reject )
 {
@@ -524,9 +506,9 @@ RCT_EXPORT_METHOD( setPlayingClip:( BOOL )playing )
   } );
 }
 
-// Vibrates with Core Haptics, for comparing against the system vibration.
+// Vibrates for a detection with Core Haptics, which ignores the silent switch.
 // iOS stops Core Haptics once the app leaves the foreground.
-RCT_EXPORT_METHOD( vibrateHaptics:( RCTPromiseResolveBlock )resolve
+RCT_EXPORT_METHOD( vibrate:( RCTPromiseResolveBlock )resolve
                    reject:( RCTPromiseRejectBlock )reject )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
