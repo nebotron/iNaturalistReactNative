@@ -1,4 +1,3 @@
-import BottomSheet, { BottomSheetView } from "@gorhom/bottom-sheet";
 import { useNavigation } from "@react-navigation/native";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import {
@@ -24,7 +23,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import type { LayoutChangeEvent } from "react-native";
 import {
   Keyboard,
   Linking,
@@ -238,9 +236,6 @@ type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
 
 // Used only until the hidden measurement view below reports the real height.
 const FALLBACK_HOTSPOT_CARD_HEIGHT = 200;
-const FALLBACK_HOTSPOT_HEADER_HEIGHT = 48;
-// Height of @gorhom/bottom-sheet's default handle (10pt padding around a 4pt bar)
-const SHEET_HANDLE_HEIGHT = 24;
 // Guards against the measured height being clipped by sub-pixel rounding and
 // the panel's top border.
 const HOTSPOT_CARD_HEIGHT_BUFFER = 12;
@@ -248,9 +243,6 @@ const HOTSPOT_CARD_HEIGHT_BUFFER = 12;
 const styles = StyleSheet.create( {
   stopInputsContainer: {
     zIndex: 10,
-  },
-  sheetBackground: {
-    backgroundColor: colors.lightGray,
   },
   hiddenHotspotMeasure: {
     position: "absolute",
@@ -312,19 +304,9 @@ const WildlifeHotspotsScreen = ( {
   // user has entered a destination; collapses only after an explicit action.
   const [stopsExpanded, setStopsExpanded] = useState( true );
   const [timeLimitPopoverOpen, setTimeLimitPopoverOpen] = useState( false );
-  // Bottom of the hotspot card's header row, which the collapsed sheet shows
-  const [hotspotHeaderHeight, setHotspotHeaderHeight] = useState<number | null>( null );
   // Stops the user has focused or typed in, which the late-arriving initial
   // location fix must not overwrite.
   const editedStopIdsRef = useRef( new Set<string>() );
-
-  const sheetPeekHeight = ( hotspotHeaderHeight ?? FALLBACK_HOTSPOT_HEADER_HEIGHT )
-    + SHEET_HANDLE_HEIGHT + bottomInset;
-  // Read by the map-fitting calls without making them refit when it changes
-  const sheetPeekHeightRef = useRef( sheetPeekHeight );
-  useEffect( () => {
-    sheetPeekHeightRef.current = sheetPeekHeight;
-  }, [sheetPeekHeight] );
 
   const addressHistory = useStore( state => state.layout.hotspotAddressHistory );
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
@@ -379,7 +361,7 @@ const WildlifeHotspotsScreen = ( {
     } ) );
     mapRef.current.fitToCoordinates( coords, {
       edgePadding: {
-        top: 60, right: 40, bottom: Math.max( 60, sheetPeekHeightRef.current ), left: 40,
+        top: 60, right: 40, bottom: 60, left: 40,
       },
       animated: true,
     } );
@@ -512,7 +494,7 @@ const WildlifeHotspotsScreen = ( {
       if ( mapRef.current ) {
         mapRef.current.fitToCoordinates( coords.map( toMapCoord ), {
           edgePadding: {
-            top: 60, right: 40, bottom: Math.max( 60, sheetPeekHeightRef.current ), left: 40,
+            top: 60, right: 40, bottom: 60, left: 40,
           },
           animated: true,
         } );
@@ -627,24 +609,23 @@ const WildlifeHotspotsScreen = ( {
   // Tapping a hotspot marker slides the card carousel to that hotspot's pane.
   const handleHotspotMarkerPress = useCallback( ( hotspot: Hotspot, index: number ) => {
     if ( selectedHotspotId !== hotspot.id ) {
-      programmaticScrollIndexRef.current = index;
-      carouselRef.current?.scrollTo( { index, animated: true } );
+      // With nothing selected the carousel isn't mounted; it opens at the
+      // selected index instead
+      if ( carouselRef.current ) {
+        programmaticScrollIndexRef.current = index;
+        carouselRef.current.scrollTo( { index, animated: true } );
+      }
     }
     handleHotspotPress( hotspot );
   }, [selectedHotspotId, handleHotspotPress] );
 
   useEffect( () => {
     setHotspotCardHeight( null );
-    setHotspotHeaderHeight( null );
-    if ( hotspots.length > 0 ) {
-      handleHotspotPress( hotspots[0] );
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hotspots] );
 
   // Card height is driven by the number of top-species rows, so the hotspot
   // with the most rows is the tallest. Measuring that one (rather than the
-  // visible one) keeps the expanded sheet a fixed height as the user swipes.
+  // visible one) keeps the bottom panel a fixed height as the user swipes.
   const tallestHotspot = useMemo( () => hotspots.reduce(
     ( tallest, hotspot ) => ( hotspot.topSpecies.length > tallest.topSpecies.length
       ? hotspot
@@ -652,18 +633,8 @@ const WildlifeHotspotsScreen = ( {
     hotspots[0],
   ), [hotspots] );
 
-  // Never shrink within a result set, same as the card height
-  const handleHotspotHeaderLayout = useCallback( ( { nativeEvent }: LayoutChangeEvent ) => {
-    const measured = Math.ceil( nativeEvent.layout.y + nativeEvent.layout.height )
-      + HOTSPOT_CARD_HEIGHT_BUFFER;
-    setHotspotHeaderHeight( prev => Math.max( prev ?? 0, measured ) );
-  }, [] );
-
-  const hotspotSheetHeight = ( hotspotCardHeight ?? FALLBACK_HOTSPOT_CARD_HEIGHT );
-  const sheetSnapPoints = useMemo( () => [
-    sheetPeekHeight,
-    Math.max( sheetPeekHeight, hotspotSheetHeight + SHEET_HANDLE_HEIGHT + bottomInset ),
-  ], [sheetPeekHeight, hotspotSheetHeight, bottomInset] );
+  // The card panel is shown only while a hotspot is selected
+  const selectedHotspotIndex = hotspots.findIndex( h => h.id === selectedHotspotId );
 
   const handleObservationPress = useCallback( ( uuid: string ) => {
     navigation.push( "ObsDetails", { uuid } );
@@ -1122,11 +1093,8 @@ const WildlifeHotspotsScreen = ( {
         )}
       </View>
 
-      {/* Keeps the map's bottom-corner buttons clear of the collapsed sheet */}
-      {( hotspots.length > 0 || error ) && <View style={{ height: sheetPeekHeight }} />}
-
       {/* Hidden copy of the tallest hotspot card, used only to measure the
-          height the expanded sheet should hold for every card in the set. */}
+          height the section below should hold for every card in the set. */}
       {tallestHotspot && (
         <View
           style={[styles.hiddenHotspotMeasure, { width: windowWidth }]}
@@ -1137,7 +1105,7 @@ const WildlifeHotspotsScreen = ( {
           onLayout={( { nativeEvent } ) => {
             const measured = Math.ceil( nativeEvent.layout.height ) + HOTSPOT_CARD_HEIGHT_BUFFER;
             // Never shrink within a result set, so a late or slightly smaller
-            // measurement can't nudge the sheet up and down.
+            // measurement can't nudge the panel up and down.
             setHotspotCardHeight( prev => Math.max( prev ?? 0, measured ) );
           }}
         >
@@ -1148,63 +1116,57 @@ const WildlifeHotspotsScreen = ( {
             onPress={() => null}
             onOpenInGoogleMaps={() => null}
             onAddToRoute={() => null}
-            onHeaderLayout={handleHotspotHeaderLayout}
           />
         </View>
       )}
 
-      {/* Hotspot cards: peeks at the card headers, drags up to cover the map */}
-      {( hotspots.length > 0 || error ) && (
-        <BottomSheet
-          index={0}
-          snapPoints={sheetSnapPoints}
-          enableDynamicSizing={false}
-          // Vertical drags move the sheet; horizontal swipes go to the carousel
-          activeOffsetY={[-10, 10]}
-          failOffsetX={[-10, 10]}
-          backgroundStyle={styles.sheetBackground}
+      {/* Hotspot cards, swiped horizontally to change the selected hotspot */}
+      {( selectedHotspotIndex !== -1 || error ) && (
+        <View
+          className="bg-lightGray border-t border-lightGray"
+          // Add the bottom safe-area inset so the card's action buttons clear
+          // the home indicator. When a bottom tab bar is present it already
+          // covers that area, so the inset is zero.
+          style={{
+            height: ( hotspotCardHeight ?? FALLBACK_HOTSPOT_CARD_HEIGHT ) + bottomInset,
+            paddingBottom: bottomInset,
+          }}
         >
-          <BottomSheetView style={{ paddingBottom: bottomInset }}>
-            {error
-              ? (
-                <View className="p-4 items-center">
-                  <Body2 className="text-darkGray text-center">{error}</Body2>
-                </View>
-              )
-              : (
-                <Carousel
-                  ref={carouselRef}
-                  key={`WildlifeHotspotsCarousel-${windowWidth}-${hotspots.length}`}
-                  testID="WildlifeHotspotsScreen.carousel"
-                  data={hotspots}
-                  width={windowWidth}
-                  height={hotspotSheetHeight}
-                  loop={false}
-                  onSnapToItem={handleHotspotSwipe}
-                  onConfigurePanGesture={g => {
-                    g.activeOffsetX( [-10, 10] ).failOffsetY( [-10, 10] );
-                  }}
-                  renderItem={( { item: hotspot, index } ) => (
-                    <View className="flex-1">
-                      <HotspotListItem
-                        hotspot={hotspot}
-                        rank={index + 1}
-                        selected={selectedHotspotId === hotspot.id}
-                        onPress={() => handleHotspotPress( hotspot )}
-                        onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
-                        onAddToRoute={isHotspotOnRoute( hotspot )
-                          ? undefined
-                          : () => handleAddHotspotToRoute( hotspot )}
-                        onSpeciesCountPress={species => handleSpeciesCountPress( hotspot, species )}
-                        onObservationCountPress={() => handleObservationCountPress( hotspot )}
-                        onHeaderLayout={handleHotspotHeaderLayout}
-                      />
-                    </View>
-                  )}
-                />
-              )}
-          </BottomSheetView>
-        </BottomSheet>
+          {error
+            ? (
+              <View className="p-4 items-center">
+                <Body2 className="text-darkGray text-center">{error}</Body2>
+              </View>
+            )
+            : (
+              <Carousel
+                ref={carouselRef}
+                key={`WildlifeHotspotsCarousel-${windowWidth}-${hotspots.length}`}
+                testID="WildlifeHotspotsScreen.carousel"
+                data={hotspots}
+                width={windowWidth}
+                defaultIndex={selectedHotspotIndex}
+                loop={false}
+                onSnapToItem={handleHotspotSwipe}
+                renderItem={( { item: hotspot, index } ) => (
+                  <View className="flex-1">
+                    <HotspotListItem
+                      hotspot={hotspot}
+                      rank={index + 1}
+                      selected={selectedHotspotId === hotspot.id}
+                      onPress={() => handleHotspotPress( hotspot )}
+                      onOpenInGoogleMaps={() => handleOpenInGoogleMaps( hotspot )}
+                      onAddToRoute={isHotspotOnRoute( hotspot )
+                        ? undefined
+                        : () => handleAddHotspotToRoute( hotspot )}
+                      onSpeciesCountPress={species => handleSpeciesCountPress( hotspot, species )}
+                      onObservationCountPress={() => handleObservationCountPress( hotspot )}
+                    />
+                  </View>
+                )}
+              />
+            )}
+        </View>
       )}
     </>
   );

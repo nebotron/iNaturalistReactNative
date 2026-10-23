@@ -7,7 +7,6 @@ import {
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import React from "react";
-import type { LayoutChangeEvent } from "react-native";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -22,8 +21,6 @@ interface Props {
   onAddToRoute?: () => void;
   onSpeciesCountPress?: ( species: HotspotSpecies ) => void;
   onObservationCountPress?: () => void;
-  // Reports the header row's layout, which is all the collapsed sheet shows
-  onHeaderLayout?: ( event: LayoutChangeEvent ) => void;
 }
 
 const HotspotListItem = ( {
@@ -35,7 +32,6 @@ const HotspotListItem = ( {
   onAddToRoute,
   onSpeciesCountPress,
   onObservationCountPress,
-  onHeaderLayout,
 }: Props ) => {
   const { t } = useTranslation();
   const detourText = hotspot.detourMinutes < 1
@@ -50,7 +46,7 @@ const HotspotListItem = ( {
       accessibilityLabel={`Hotspot ${rank}, ${hotspot.observationCount} observations`}
     >
       <View className="flex-1 p-2 bg-white border border-lightGray">
-        <View className="flex-row items-center" onLayout={onHeaderLayout}>
+        <View className="flex-row items-center">
           <View
             className="w-6 h-6 rounded-full items-center justify-center mr-2 border border-white"
             style={{
