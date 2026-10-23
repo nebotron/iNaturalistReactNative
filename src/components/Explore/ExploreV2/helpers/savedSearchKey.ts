@@ -89,6 +89,13 @@ const savedSearchKey = ( search: SavedSearchIdentity ): string => {
     filters: filtersKey( search.filters ),
     activeTab: search.activeTab ?? "",
     observationsLayout: search.observationsLayout ?? "",
+    gridOverlays: search.gridOverlays
+      ? Object.entries( search.gridOverlays )
+        .filter( ( [, shown] ) => shown )
+        .map( ( [overlay] ) => overlay )
+        .sort( )
+        .join( "," )
+      : "",
   };
 
   return ( Object.keys( parts ) as ( keyof SavedSearchIdentity )[] )

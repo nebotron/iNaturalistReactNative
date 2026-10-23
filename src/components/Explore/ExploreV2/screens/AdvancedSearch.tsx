@@ -81,6 +81,7 @@ import { useCurrentUser, useTranslation } from "sharedHooks";
 import useIconicTaxa from "sharedHooks/useIconicTaxa";
 import useStoredLayout from "sharedHooks/useStoredLayout";
 import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
+import useStore from "stores/useStore";
 
 // Please don't change these to aliased paths or the e2e mocks will not get used
 import fetchCoarseUserLocation from "../../../../sharedHelpers/fetchCoarseUserLocation";
@@ -121,6 +122,7 @@ const AdvancedSearch = ( ) => {
   );
 
   const { layout: observationsLayout } = useStoredLayout( "exploreV2ObservationsLayout" );
+  const gridOverlays = useStore( state => state.layout.exploreGridOverlays );
   const [pendingExit, setPendingExit] = useState( false );
   const [showSaveSheet, setShowSaveSheet] = useState( false );
   const [searchToDelete, setSearchToDelete] = useState<SavedSearch | null>( null );
@@ -132,6 +134,7 @@ const AdvancedSearch = ( ) => {
     ...currentSearch,
     activeTab: v2State.activeTab,
     observationsLayout: observationsLayout ?? undefined,
+    gridOverlays,
   };
   const requestExit = ( ) => {
     if ( differsFromInitial ) {

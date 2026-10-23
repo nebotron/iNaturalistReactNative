@@ -19,6 +19,7 @@ import {
 import * as React from "react";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import { SPECIES_SORT } from "sharedHelpers/speciesSort";
+import type { ExploreGridOverlays } from "stores/createLayoutSlice";
 
 export enum EXPLORE_V2_ACTION {
   SET_SUBJECT = "SET_SUBJECT",
@@ -161,12 +162,13 @@ export type ExploreV2Search = Omit<
   "activeTab" | "appliedSearchCount" | "backStack"
 >;
 
-// A saved search also remembers the view it was saved from: the tab and the observations
-// map/grid/list layout. Optional because searches saved before views were recorded don't
-// have one.
+// A saved search also remembers the view it was saved from: the tab, the observations
+// map/grid/list layout, and the info overlaid on grid photos. Optional because searches
+// saved before views were recorded don't have one.
 export type ExploreV2SearchWithTab = ExploreV2Search & {
   activeTab?: ExploreV2Tab;
   observationsLayout?: string;
+  gridOverlays?: ExploreGridOverlays;
 };
 
 export type ExploreV2Action =
