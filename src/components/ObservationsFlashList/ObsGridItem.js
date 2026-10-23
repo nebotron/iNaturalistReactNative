@@ -117,6 +117,7 @@ const ObsGridItem = ( {
     <ObsImagePreview
       key={observation.uuid}
       autoDetectSubject={explore && !isOwnObs}
+      fitImage={!explore || isOwnObs}
       source={{
         uri: Photo.displayLocalOrRemoteOriginalPhoto( photo ),
       }}

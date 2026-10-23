@@ -12,6 +12,8 @@ import ObsImageZoomable from "./ObsImageZoomable";
 
 interface Props {
   autoDetectSubject?: boolean;
+  // Shrink a non-square photo to fit the square instead of cropping it
+  fitImage?: boolean;
   iconicTaxonIconSize?: number;
   iconicTaxonName?: string;
   imageClassName?: string;
@@ -32,6 +34,7 @@ const CLASS_NAMES = [
 
 const ObsImage = ( {
   autoDetectSubject = false,
+  fitImage = false,
   iconicTaxonName,
   imageClassName,
   initialContainerSize,
@@ -96,6 +99,9 @@ const ObsImage = ( {
           testID="ObsList.photo"
           source={{ uri: displayUri }}
           onError={onError}
+          resizeMode={fitImage
+            ? "contain"
+            : "cover"}
         />
       ) }
       { showZoomable && detection && displayUri && containerSize && (

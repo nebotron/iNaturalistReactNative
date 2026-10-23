@@ -27,6 +27,7 @@ const ICON_DROP_SHADOW = getShadow( {
 
 interface Props extends PropsWithChildren {
   autoDetectSubject?: boolean;
+  fitImage?: boolean;
   className?: string;
   hasSound?: boolean;
   height?: string;
@@ -73,6 +74,7 @@ const ObsImagePreview = ( {
   autoDetectSubject = false,
   children,
   className,
+  fitImage = false,
   hasSound = false,
   height = "h-[62px]",
   hidePhotoCount,
@@ -344,6 +346,7 @@ const ObsImagePreview = ( {
       <View style={carouselWidthStyle} className="h-full">
         <ObsImage
           autoDetectSubject={autoDetectSubject}
+          fitImage={fitImage}
           initialContainerSize={containerWidth ?? undefined}
           uri={info.item ?? undefined}
           opaque={opaque}
@@ -360,6 +363,7 @@ const ObsImagePreview = ( {
       autoDetectSubject,
       carouselWidthStyle,
       containerWidth,
+      fitImage,
       iconicTaxonName,
       isBackground,
       isSmall,
@@ -403,6 +407,7 @@ const ObsImagePreview = ( {
       <>
         <ObsImage
           autoDetectSubject={autoDetectSubject}
+          fitImage={fitImage}
           uri={source}
           onError={onError}
           opaque={opaque}

@@ -39,6 +39,7 @@ const SmallGridObsItem = ( {
     <ObsImagePreview
       iconicTaxonName={taxon?.iconic_taxon_name}
       className="rounded-none"
+      fitImage
       source={photoUri
         ? { uri: photoUri }
         : undefined}
