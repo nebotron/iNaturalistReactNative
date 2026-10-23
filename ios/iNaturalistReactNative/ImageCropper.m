@@ -1085,9 +1085,11 @@ RCT_EXPORT_METHOD( cropImage
     [[NSFileManager defaultManager]
       createDirectoryAtPath:[output stringByDeletingLastPathComponent]
       withIntermediateDirectories:YES attributes:nil error:nil];
-    if ( ![data writeToFile:output atomically:YES] ) {
+    NSError *writeError = nil;
+    if ( ![data writeToFile:output options:NSDataWritingAtomic error:&writeError] ) {
       reject( @"CROP_FAILED", [NSString stringWithFormat:
-        @"Could not write cropped image (freeDiskMB=%llu)", freeDiskMB( )], nil );
+        @"Could not write cropped image (freeDiskMB=%llu): %@", freeDiskMB( ),
+        writeError.localizedDescription], nil );
       return;
     }
     resolve( @{
@@ -2467,7 +2469,13 @@ RCT_EXPORT_METHOD( prepareCropSource
     return data != nil;
     } );
     if ( !loaded ) {
-      reject( @"PREPARE_FAILED", @"Could not load image", nil );
+      // A missing file, a partial copy, and a whole one with no decoder are
+      // three different bugs.
+      NSDictionary *attrs = [[NSFileManager defaultManager]
+        attributesOfItemAtPath:input error:nil];
+      reject( @"PREPARE_FAILED", attrs
+        ? [NSString stringWithFormat:@"Could not load image, %llu bytes", [attrs fileSize]]
+        : @"Could not load image, file missing", nil );
       return;
     }
     BOOL usedPreview = NO;
@@ -2488,9 +2496,11 @@ RCT_EXPORT_METHOD( prepareCropSource
       createDirectoryAtPath:[output stringByDeletingLastPathComponent]
       withIntermediateDirectories:YES attributes:nil error:nil];
     NSTimeInterval writeStarted = [NSDate timeIntervalSinceReferenceDate];
-    if ( ![data writeToFile:output atomically:YES] ) {
+    NSError *writeError = nil;
+    if ( ![data writeToFile:output options:NSDataWritingAtomic error:&writeError] ) {
       reject( @"PREPARE_FAILED", [NSString stringWithFormat:
-        @"Could not write display image (freeDiskMB=%llu)", freeDiskMB( )], nil );
+        @"Could not write display image (freeDiskMB=%llu): %@", freeDiskMB( ),
+        writeError.localizedDescription], nil );
       return;
     }
     int writeMs = (int)( ( [NSDate timeIntervalSinceReferenceDate] - writeStarted ) * 1000 );

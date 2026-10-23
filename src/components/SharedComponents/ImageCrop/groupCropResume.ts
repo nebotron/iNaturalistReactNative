@@ -26,17 +26,23 @@ export const groupCropResumeParams = (
       && !photo.image.crop
       && ( photo.image.uri === resume.imageUri || !skip.has( photo.image.uri ) ) );
     if ( !left.length ) return null;
+    const remainingUris = left.filter( photo => !photo.pending ).map( photo => photo.image.uri );
+    // The photo it was left on may since have been cropped or removed from the
+    // grid, and reopening on it then draws a file that is no longer there.
+    const imageUri = left.some( photo => photo.image.uri === resume.imageUri )
+      ? resume.imageUri
+      : remainingUris[0] ?? left[0].image.uri;
     return {
       params: {
         context: "groupPhotos",
         cropImport: true,
-        imageUri: resume.imageUri,
+        imageUri,
         skipUris: [
           ...resume.skipUris,
           ...photos.filter( photo => photo.image.crop ).map( photo => photo.image.uri ),
         ],
       },
-      remainingUris: left.filter( photo => !photo.pending ).map( photo => photo.image.uri ),
+      remainingUris,
     };
   }
   const landed = new Set( photos
