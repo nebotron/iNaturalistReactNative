@@ -1636,6 +1636,12 @@ Toggle-map-type = Toggle map type
 # Accessibility hint for tapping a collapsible section header
 Toggles-the-section-open-or-closed = Toggles the section open or closed.
 TOP-ID-SUGGESTION = TOP ID SUGGESTION
+# Total driving time (without parking) for the selected route on the Wildlife Hotspots screen
+Total-drive-time =
+    Total drive: { $hours ->
+        [0] { $minutes } min
+       *[other] { $hours } h { $minutes } min
+    }
 # Explore filter option for an observation's evidence of presence annotation
 Track--evidence = Track
 # Switch label for enabling continuous background location tracking

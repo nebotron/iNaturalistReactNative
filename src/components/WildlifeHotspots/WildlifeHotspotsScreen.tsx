@@ -272,6 +272,7 @@ const WildlifeHotspotsScreen = ( {
   const [userLocation, setUserLocation] = useState<LatLng | null>( null );
   const [selectedHotspotId, setSelectedHotspotId] = useState<string | null>( null );
   const [hotspotRouteCoords, setHotspotRouteCoords] = useState<RoutePoint[]>( [] );
+  const [hotspotRouteDurationSec, setHotspotRouteDurationSec] = useState<number | null>( null );
   const [hotspotRouteLoading, setHotspotRouteLoading] = useState( false );
   const [activeSuggestions, setActiveSuggestions] = useState<{
     stopId: string;
@@ -286,7 +287,7 @@ const WildlifeHotspotsScreen = ( {
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
 
   const {
-    hotspots, routeCoords, loading, error, findHotspots,
+    hotspots, routeCoords, routeDurationSec, loading, error, findHotspots,
   } = useRouteHotspots();
 
   // Rows shown in the dropdown before the user types: current location first,
@@ -438,6 +439,7 @@ const WildlifeHotspotsScreen = ( {
       : hotspot.id );
     if ( isDeselecting ) {
       setHotspotRouteCoords( [] );
+      setHotspotRouteDurationSec( null );
       return;
     }
     if ( mapRef.current ) {
@@ -449,6 +451,7 @@ const WildlifeHotspotsScreen = ( {
       }, 400 );
     }
     if ( confirmedStopPoints.length < 2 ) return;
+    setHotspotRouteDurationSec( null );
     setHotspotRouteLoading( true );
     try {
       const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
@@ -458,8 +461,9 @@ const WildlifeHotspotsScreen = ( {
         via,
         ...confirmedStopPoints.slice( insertIdx ),
       ];
-      const { coords } = await fetchOSRMRoute( withVia );
+      const { coords, durationSec } = await fetchOSRMRoute( withVia );
       setHotspotRouteCoords( coords );
+      setHotspotRouteDurationSec( durationSec );
       if ( mapRef.current ) {
         mapRef.current.fitToCoordinates( coords.map( toMapCoord ), {
           edgePadding: {
@@ -672,6 +676,15 @@ const WildlifeHotspotsScreen = ( {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops] );
 
+  // Driving time of the route currently drawn: through the selected hotspot if
+  // one is selected, otherwise the plain route. Parking time is excluded.
+  const selectedDurationSec = selectedHotspotId
+    ? hotspotRouteDurationSec
+    : routeDurationSec;
+  const totalDriveMinutes = selectedDurationSec === null
+    ? null
+    : Math.round( selectedDurationSec / 60 );
+
   const content = (
     <>
       {/* Stop inputs */}
@@ -788,6 +801,20 @@ const WildlifeHotspotsScreen = ( {
             </>
           )}
         />
+
+        {!loading && totalDriveMinutes !== null && (
+          <View
+            className="absolute top-2 self-center bg-white rounded-full px-3 py-1"
+            pointerEvents="none"
+          >
+            <Body3 className="font-bold">
+              {t( "Total-drive-time", {
+                hours: Math.floor( totalDriveMinutes / 60 ),
+                minutes: totalDriveMinutes % 60,
+              } )}
+            </Body3>
+          </View>
+        )}
 
         {( loading || hotspotRouteLoading ) && (
           <View

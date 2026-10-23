@@ -1007,6 +1007,7 @@
   "Toggle-map-type": "Toggle map type",
   "Toggles-the-section-open-or-closed": "Toggles the section open or closed.",
   "TOP-ID-SUGGESTION": "TOP ID SUGGESTION",
+  "Total-drive-time": "Total drive: { $hours ->\n  [0] { $minutes } min\n *[other] { $hours } h { $minutes } min\n}",
   "Track--evidence": "Track",
   "Track-location-in-the-background": "Track location in the background",
   "Tracked-location": "Tracked location",

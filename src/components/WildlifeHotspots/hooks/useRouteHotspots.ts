@@ -515,6 +515,7 @@ export function useRouteHotspots() {
   const ebirdEnabled = useStore( state => state.layout.ebirdEnabled );
   const [hotspots, setHotspots] = useState<Hotspot[]>( [] );
   const [routeCoords, setRouteCoords] = useState<RoutePoint[]>( [] );
+  const [routeDurationSec, setRouteDurationSec] = useState<number | null>( null );
   const [loading, setLoading] = useState( false );
   const [error, setError] = useState<string | null>( null );
   // Only the latest search may set results, so a slow earlier one run with
@@ -534,6 +535,7 @@ export function useRouteHotspots() {
       setError( null );
       setHotspots( [] );
       setRouteCoords( [] );
+      setRouteDurationSec( null );
 
       try {
         // 1. Get the actual road route (through every stop, in order) and baseline travel time
@@ -543,6 +545,7 @@ export function useRouteHotspots() {
         } = await fetchOSRMRoute( stops );
         if ( isStale() ) return;
         setRouteCoords( routePoints );
+        setRouteDurationSec( directDurationSec );
 
         // Read algorithm constants from filterParams (with fallbacks to module defaults)
         const clusterRadiusKm = ( filterParams.hotspotClusterRadiusKm as number | undefined )
@@ -698,6 +701,7 @@ export function useRouteHotspots() {
   return {
     hotspots,
     routeCoords,
+    routeDurationSec,
     loading,
     error,
     findHotspots,
