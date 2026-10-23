@@ -834,6 +834,14 @@ const WildlifeHotspotsScreen = ( {
 
   const firstStop = stops[0];
   const lastStop = stops[stops.length - 1];
+  const totalDriveTime = !loading && totalDriveMinutes !== null && (
+    <Body4 className="ml-2 font-bold">
+      {t( "Total-drive-time", {
+        hours: Math.floor( totalDriveMinutes / 60 ),
+        minutes: totalDriveMinutes % 60,
+      } )}
+    </Body4>
+  );
   const timeLimitChip = limitMinutes !== null && (
     <>
       <TouchableOpacity
@@ -901,6 +909,7 @@ const WildlifeHotspotsScreen = ( {
                 </View>
               )}
               <View className="flex-row items-center mt-1">
+                {totalDriveTime}
                 {timeLimitChip}
                 <INatIconButton
                   className="w-8 h-8 ml-auto"
@@ -933,6 +942,7 @@ const WildlifeHotspotsScreen = ( {
                   {stops.length > 2 && `  ·  ${t( "Route-stop-count", { count: stops.length } )}`}
                 </Body3>
               </TouchableOpacity>
+              {totalDriveTime}
               {timeLimitChip}
               <INatIconButton
                 className="w-8 h-8"
@@ -1033,20 +1043,6 @@ const WildlifeHotspotsScreen = ( {
             </>
           )}
         />
-
-        {!loading && totalDriveMinutes !== null && (
-          <View
-            className="absolute top-2 self-center bg-white rounded-full px-3 py-1"
-            pointerEvents="none"
-          >
-            <Body3 className="font-bold">
-              {t( "Total-drive-time", {
-                hours: Math.floor( totalDriveMinutes / 60 ),
-                minutes: totalDriveMinutes % 60,
-              } )}
-            </Body3>
-          </View>
-        )}
 
         {( loading || hotspotRouteLoading ) && (
           <View
