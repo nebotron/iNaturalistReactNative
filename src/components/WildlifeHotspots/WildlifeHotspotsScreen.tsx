@@ -4,6 +4,7 @@ import {
   Body2,
   Body3,
   Body4,
+  Button,
   INatIcon,
   ViewWrapper,
 } from "components/SharedComponents";
@@ -40,10 +41,16 @@ import useStore, { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import type { Hotspot, HotspotSpecies, RoutePoint } from "./hooks/useRouteHotspots";
-import { fetchOSRMRoute, findBestInsertion, useRouteHotspots } from "./hooks/useRouteHotspots";
+import {
+  fetchOSRMDurationMatrix,
+  fetchOSRMRoute,
+  findBestInsertion,
+  useRouteHotspots,
+} from "./hooks/useRouteHotspots";
 import HotspotListItem from "./HotspotListItem";
 import type { PlaceResult } from "./placeSearch";
 import { searchPlaces } from "./placeSearch";
+import planHotspotRoute from "./planHotspotRoute";
 
 // Synthetic place_id marking the "current location" row in the dropdown, which
 // resolves to the device location rather than a searched address.
@@ -56,6 +63,9 @@ const INITIAL_REGION: Region = {
 };
 // Number of recently entered addresses to offer before the user types.
 const RECENT_ADDRESS_COUNT = 10;
+const TIME_LIMIT_STEP_MINUTES = 15;
+// Most hotspots, by observation count, considered when planning a route
+const MAX_PLAN_CANDIDATES = 40;
 
 function toMapCoord( pt: RoutePoint ): LatLng {
   return { latitude: pt.latitude, longitude: pt.longitude };
@@ -279,6 +289,11 @@ const WildlifeHotspotsScreen = ( {
     suggestions: PlaceResult[];
   } | null>( null );
   const [hotspotCardHeight, setHotspotCardHeight] = useState<number | null>( null );
+  const [timeLimitMinutes, setTimeLimitMinutes] = useState<number | null>( null );
+  const [planning, setPlanning] = useState( false );
+  // Outcome of the last plan, shown only while the stops are still the ones it
+  // was made for
+  const [planStatus, setPlanStatus] = useState<{ stops: Stop[]; text: string } | null>( null );
   // Stops the user has focused or typed in, which the late-arriving initial
   // location fix must not overwrite.
   const editedStopIdsRef = useRef( new Set<string>() );
@@ -287,7 +302,7 @@ const WildlifeHotspotsScreen = ( {
   const addHotspotAddress = useStore( state => state.layout.addHotspotAddress );
 
   const {
-    hotspots, routeCoords, routeDurationSec, loading, error, findHotspots,
+    hotspots, candidates, routeCoords, routeDurationSec, loading, error, findHotspots,
   } = useRouteHotspots();
 
   // Rows shown in the dropdown before the user types: current location first,
@@ -492,6 +507,68 @@ const WildlifeHotspotsScreen = ( {
     setHotspotRouteCoords( [] );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stops, t] );
+
+  // Until the user picks a limit, offer an hour on top of the current route
+  const limitMinutes = timeLimitMinutes ?? ( routeDurationSec === null
+    ? null
+    : Math.ceil( ( routeDurationSec / 60 + 60 ) / TIME_LIMIT_STEP_MINUTES )
+      * TIME_LIMIT_STEP_MINUTES );
+
+  const handleChangeTimeLimit = useCallback( ( deltaMinutes: number ) => {
+    if ( limitMinutes === null ) return;
+    setTimeLimitMinutes( Math.max( TIME_LIMIT_STEP_MINUTES, limitMinutes + deltaMinutes ) );
+  }, [limitMinutes] );
+
+  // Replaces the route's hotspot stops with the set that fits in the time limit
+  // and has the most observations
+  const handlePlanRoute = useCallback( async () => {
+    const fixedStops = stops.filter( s => !s.fromHotspot );
+    if ( limitMinutes === null || fixedStops.some( s => !s.point ) ) return;
+    const limitSec = limitMinutes * 60;
+    const pool = candidates
+      .filter( h => h.detourMinutes * 60 <= limitSec )
+      .sort( ( a, b ) => b.observationCount - a.observationCount )
+      .slice( 0, MAX_PLAN_CANDIDATES );
+    const points: LatLng[] = [
+      ...fixedStops.map( s => s.point as LatLng ),
+      ...pool.map( h => ( { latitude: h.centerLatitude, longitude: h.centerLongitude } ) ),
+    ];
+    setPlanning( true );
+    try {
+      const plan = planHotspotRoute(
+        await fetchOSRMDurationMatrix( points ),
+        fixedStops.length,
+        pool.map( h => h.observationCount ),
+        limitSec,
+      );
+      if ( !plan ) {
+        setPlanStatus( { stops, text: t( "Route-is-longer-than-time-limit" ) } );
+        return;
+      }
+      const newStops = plan.sequence.map( node => ( node < fixedStops.length
+        ? fixedStops[node]
+        : {
+          id: makeStopId(), text: t( "Hotspot" ), point: points[node], fromHotspot: true,
+        } ) );
+      setPlanStatus( {
+        stops: newStops,
+        text: t( "Planned-hotspots-summary", {
+          count: newStops.length - fixedStops.length,
+          observations: plan.score,
+        } ),
+      } );
+      setStops( newStops );
+    } catch ( planError ) {
+      setPlanStatus( {
+        stops,
+        text: planError instanceof Error
+          ? planError.message
+          : t( "Could-not-plan-route" ),
+      } );
+    } finally {
+      setPlanning( false );
+    }
+  }, [stops, limitMinutes, candidates, t] );
 
   const hotspotStopPoints = useMemo(
     () => stops.flatMap( s => ( s.fromHotspot && s.point
@@ -717,6 +794,45 @@ const WildlifeHotspotsScreen = ( {
               </TouchableOpacity>
             ) )}
           </View>
+        )}
+        {limitMinutes !== null && (
+          <View className="flex-row items-center mt-2">
+            <INatIcon name="clock-outline" size={16} color={colors.darkGray} />
+            <TouchableOpacity
+              onPress={() => handleChangeTimeLimit( -TIME_LIMIT_STEP_MINUTES )}
+              className="ml-2 px-3 py-1 border border-lightGray rounded-lg"
+              accessibilityRole="button"
+              accessibilityLabel={t( "Shorten-time-limit" )}
+            >
+              <Body2>-</Body2>
+            </TouchableOpacity>
+            <Body3 className="mx-2 font-bold">
+              {t( "Drive-time-limit", {
+                hours: Math.floor( limitMinutes / 60 ),
+                minutes: limitMinutes % 60,
+              } )}
+            </Body3>
+            <TouchableOpacity
+              onPress={() => handleChangeTimeLimit( TIME_LIMIT_STEP_MINUTES )}
+              className="px-3 py-1 border border-lightGray rounded-lg"
+              accessibilityRole="button"
+              accessibilityLabel={t( "Lengthen-time-limit" )}
+            >
+              <Body2>+</Body2>
+            </TouchableOpacity>
+            <Button
+              className="ml-auto"
+              text={t( "Plan-route" )}
+              level="focus"
+              onPress={handlePlanRoute}
+              loading={planning}
+              disabled={loading || planning || candidates.length === 0}
+              testID="WildlifeHotspotsScreen.planRoute"
+            />
+          </View>
+        )}
+        {planStatus?.stops === stops && (
+          <Body4 className="mt-1 text-darkGray">{planStatus.text}</Body4>
         )}
       </View>
 

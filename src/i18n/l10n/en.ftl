@@ -320,6 +320,8 @@ Could-not-import-selected-photos = None of the selected photos could be imported
 Could-not-import-your-photos-nothing-was-saved = Your photos could not be imported, so nothing was saved. Please try again.
 # Error message when the photo the crop editor was opened for cannot be read
 Could-not-open-this-photo-to-crop-it = This photo could not be opened, so there is nothing to crop.
+# Error shown when planning a hotspot route within a time limit fails
+Could-not-plan-route = Could not plan a route
 Couldnt-create-comment = Couldn't create comment
 Couldnt-create-identification-error = Couldn't create identification { $error }
 Couldnt-create-identification-unknown-error = Couldn't create identification, unknown error.
@@ -515,6 +517,12 @@ DONATE-TO-INATURALIST = DONATE TO INATURALIST
 # Label for a button the user taps when a task is complete
 DONE = DONE
 Dont-have-an-account = <0>Don't have an account? </0><1>Sign up</1>
+# Maximum total driving time chosen for planning a route through wildlife hotspots
+Drive-time-limit =
+    Max drive: { $hours ->
+        [0] { $minutes } min
+       *[other] { $hours } h { $minutes } min
+    }
 Duplicate-photo-indicator = Previously uploaded photo
 Duplicate-Photos = Duplicate Photos
 During-app-start-no-model-found = During app start there was no computer vision model found. There will be no AI camera.
@@ -877,6 +885,8 @@ LEAVE-US-A-REVIEW = LEAVE US A REVIEW!
 Leave-your-observations-in-this-project = Leave your observations in this project
 # Traditional project leave: keep observations but revoke hidden coordinate access
 Leave-your-observations-revoke-hidden-coordinates = Leave your observations in this project but prevent curators from viewing their hidden coordinates
+# Accessibility label for the button that increases the hotspot route time limit
+Lengthen-time-limit = Lengthen time limit
 Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
 Life-List = Life List
@@ -1198,6 +1208,17 @@ Photos = Photos
 # Error message when the iOS Photos library has stopped answering write requests, so nothing was deleted
 Photos-stopped-responding-restart-the-app = Photos stopped responding on this device, so nothing was deleted. Close and reopen the app, then try again.
 Photos-you-take-will-appear-here = Photos you take will appear here
+# Button that adds the hotspots with the most observations that fit within the time limit to the route
+Plan-route = Plan route
+# Result of planning a hotspot route within a time limit
+Planned-hotspots-summary =
+    Added { $count ->
+        [one] 1 hotspot
+       *[other] { $count } hotspots
+    } with { $observations ->
+        [one] 1 observation
+       *[other] { $observations } observations
+    }
 # Display name for the iconic taxa category for plantae
 Plants = Plants
 # Title of screen asking for permission to access the camera when access was denied
@@ -1397,6 +1418,8 @@ REVIEWED = REVIEWED
 # Label for a button that marks an observation as reviewed
 Reviewed = Reviewed
 Reviewed-observations-only = Reviewed observations only
+# Shown when the route without any hotspots already takes longer to drive than the chosen time limit
+Route-is-longer-than-time-limit = The route without hotspots is longer than the time limit
 # Label for the satellite map type
 Satellite--map-type = Satellite
 # Label for a button that persists something
@@ -1480,6 +1503,8 @@ Share-map = Share map
 # Preceded by the fragment # Preceded by the fragment, "By uploading your observation to iNaturalist, you can:"
 Share-your-observation-where-it-can-help-scientists = Share your observation, where it can help scientists across the world better understand biodiversity.
 SHOP-INATURALIST-MERCH = SHOP INATURALIST MERCH
+# Accessibility label for the button that decreases the hotspot route time limit
+Shorten-time-limit = Shorten time limit
 # Button to expand the list of eBird sightings in Explore results
 Show-all-eBird-sightings = Show all eBird sightings
 # Button to collapse the list of eBird sightings in Explore results
