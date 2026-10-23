@@ -1,5 +1,5 @@
 ---
-name: diff
+name: changes
 description: List the differences between this fork's main and upstream iNaturalist main
 ---
 
