@@ -48,11 +48,9 @@ export const { AudioBirdId } = NativeModules as {
 
 // Up from 0.3: on users' labeled detections it cut wrong birds from 23 to 8
 // and lost 2 of 20 right ones; on held-out recordings, bird recall fell 1.2 points.
-const THRESHOLD = 0.5;
+// Raised to 0.6 so everything listed as heard is also confident enough to alert on.
+const THRESHOLD = 0.6;
 const ALSO_HEARD = 0.7;
-// Only vibrate/notify for repeat calls of unobserved species above this
-// confidence; a species new in 24 hours alerts once it counts as heard.
-const ALERT = 0.6;
 const DAY_MS = 86400000;
 // Scores by output index, as the native module sends them
 export type Scores = Record<number, number>;
@@ -353,9 +351,8 @@ const onScores = ( event: ScoresEvent ) => {
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;
     saveCallClip( sp, Number( i ), s, isNewCall, event.windowFrame );
-    if ( !old || now - old.lastHeard > DAY_MS || (
-      s > ALERT && isNewCall && recent && !recent.has( sp.taxonId )
-    ) ) {
+    if ( !old || now - old.lastHeard > DAY_MS
+      || ( isNewCall && recent && !recent.has( sp.taxonId ) ) ) {
       alerts.push( sp );
     }
     const entry = {
