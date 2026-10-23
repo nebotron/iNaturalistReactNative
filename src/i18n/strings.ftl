@@ -1607,6 +1607,8 @@ sound-recorder-help-Try-to-isolate = Try to isolate the sound of a single organi
 Sounds = Sounds
 Source-List = <0>(Source List: </0><1>{ $source }</1><0>)</0>
 Species = Species
+# Label for a route stop added from a wildlife hotspot, named after its most observed species
+Species-hotspot = { $name } hotspot
 Species-View = Species View
 Species-with-the-least-observations-appear-first = Species with the least observations appear first
 Species-with-the-most-observations-appear-first = Species with the most observations appear first

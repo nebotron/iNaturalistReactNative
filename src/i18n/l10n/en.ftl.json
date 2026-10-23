@@ -959,6 +959,7 @@
   "Sounds": "Sounds",
   "Source-List": "<0>(Source List: </0><1>{ $source }</1><0>)</0>",
   "Species": "Species",
+  "Species-hotspot": "{ $name } hotspot",
   "Species-View": "Species View",
   "Species-with-the-least-observations-appear-first": "Species with the least observations appear first",
   "Species-with-the-most-observations-appear-first": "Species with the most observations appear first",

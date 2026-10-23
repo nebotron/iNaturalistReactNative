@@ -90,6 +90,14 @@ function isAtPoint( hotspot: Hotspot, point: LatLng ): boolean {
     && hotspot.centerLongitude === point.longitude;
 }
 
+// Names a hotspot stop after its most observed species, to tell stops apart
+function hotspotStopName( hotspot: Hotspot, t: ( key: string, opts?: object ) => string ) {
+  const top = hotspot.topSpecies[0];
+  return top
+    ? t( "Species-hotspot", { name: top.preferred_common_name || top.name } )
+    : t( "Hotspot" );
+}
+
 let stopIdCounter = 0;
 function makeStopId(): string {
   stopIdCounter += 1;
@@ -530,7 +538,7 @@ const WildlifeHotspotsScreen = ( {
     const via = { latitude: hotspot.centerLatitude, longitude: hotspot.centerLongitude };
     const insertIdx = findBestInsertion( confirmedStopPoints, via );
     const newStop: Stop = {
-      id: makeStopId(), text: t( "Hotspot" ), point: via, fromHotspot: true,
+      id: makeStopId(), text: hotspotStopName( hotspot, t ), point: via, fromHotspot: true,
     };
     setStops( prev => [...prev.slice( 0, insertIdx ), newStop, ...prev.slice( insertIdx )] );
     setSelectedHotspotId( null );
@@ -578,7 +586,10 @@ const WildlifeHotspotsScreen = ( {
       const newStops = plan.sequence.map( node => ( node < fixedStops.length
         ? fixedStops[node]
         : {
-          id: makeStopId(), text: t( "Hotspot" ), point: points[node], fromHotspot: true,
+          id: makeStopId(),
+          text: hotspotStopName( pool[node - fixedStops.length], t ),
+          point: points[node],
+          fromHotspot: true,
         } ) );
       setPlanStatus( {
         stops: newStops,
