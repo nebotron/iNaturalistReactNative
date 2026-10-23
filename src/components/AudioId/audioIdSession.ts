@@ -50,7 +50,8 @@ export const { AudioBirdId } = NativeModules as {
 // and lost 2 of 20 right ones; on held-out recordings, bird recall fell 1.2 points.
 const THRESHOLD = 0.5;
 const ALSO_HEARD = 0.7;
-// Only vibrate/notify for calls above this confidence
+// Only vibrate/notify for repeat calls of unobserved species above this
+// confidence; a species new in 24 hours alerts once it counts as heard.
 const ALERT = 0.6;
 const DAY_MS = 86400000;
 // Scores by output index, as the native module sends them
@@ -79,8 +80,6 @@ export interface Heard {
   sp: AudioIdSpecies; lastHeard: number; best: number; count: number;
 }
 
-// Species whose current call came after a day unheard, until alerted on.
-const quietTaxa = new Set<number>( );
 // The clip of each species' current call, by taxon ID.
 const callClips = new Map<number, string>( );
 // Pending saves of 15 s centered on each clip's window, by clip ID.
@@ -354,10 +353,8 @@ const onScores = ( event: ScoresEvent ) => {
     const old = next[sp.taxonId];
     const isNewCall = !old || now - old.lastHeard > 3000;
     saveCallClip( sp, Number( i ), s, isNewCall, event.windowFrame );
-    if ( !old || now - old.lastHeard > DAY_MS ) quietTaxa.add( sp.taxonId );
-    if ( s > ALERT && (
-      quietTaxa.delete( sp.taxonId )
-      || ( isNewCall && recent && !recent.has( sp.taxonId ) )
+    if ( !old || now - old.lastHeard > DAY_MS || (
+      s > ALERT && isNewCall && recent && !recent.has( sp.taxonId )
     ) ) {
       alerts.push( sp );
     }
@@ -375,6 +372,7 @@ const onScores = ( event: ScoresEvent ) => {
     if ( isNewCall || entry.best > ( old?.best || 0 ) ) heardStore.put( sp.taxonId, entry );
   } );
   if ( alerts.length > 0 ) {
+    logger.info( `alert: ${alerts.map( sp => sp.commonName ).join( ", " )}` );
     vibrate( );
     flashScreen( );
     AudioBirdId?.notify(
