@@ -503,12 +503,15 @@ const ExploreResults = ( ) => {
 
   const renderContent = ( ) => {
     if ( isConnected === false && offlineResults && state.activeTab === OBSERVATIONS_TAB ) {
-      // Grid is unavailable offline; show the list in its place
-      const offlineLayout = showMap
-        ? "map"
-        : "list";
+      // Same views as online; the map counts the whole search, the list its map area
+      const offlineCount = ( showMap
+        ? offlineResults
+        : offlineListResults )?.results.length || 0;
       return (
         <>
+          <Body2 className="px-5 pb-2" testID="ExploreResults.offlineCount">
+            {t( "X-Observations", { count: offlineCount } )}
+          </Body2>
           {showMap
             ? (
               <OfflineMapView
@@ -516,21 +519,18 @@ const ExploreResults = ( ) => {
                 onBoundsChange={bounds => setOfflineMapArea( { params: queryParams, bounds } )}
               />
             )
-            : (
-              <>
-                {offlineListResults && (
-                  <Body2 className="px-5 pb-2" testID="ExploreResults.offlineCount">
-                    {t( "X-Observations", { count: offlineListResults.results.length } )}
-                  </Body2>
-                )}
-                <OfflineObservationsView layout={offlineLayout} queryParams={offlineListParams} />
-              </>
-            )}
+            : <OfflineObservationsView layout={layout} queryParams={offlineListParams} />}
           <ObservationsViewBar
-            layout={offlineLayout}
+            layout={layout}
             updateObservationsView={writeLayoutToStorage}
-            viewOptions={["map", "list"]}
+            viewOptions={["map", "grid", "list"]}
           />
+          {!showMap && offlineCount > 0 && (
+            <SortButton
+              onPress={() => setShowSortSheet( true )}
+              accessibilityLabel={t( "Change-observations-sort-order" )}
+            />
+          )}
         </>
       );
     }

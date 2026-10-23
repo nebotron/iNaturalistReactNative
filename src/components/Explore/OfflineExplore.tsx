@@ -5,6 +5,7 @@ import ExploreV2SpeciesGridItem
   from "components/Explore/ExploreV2/components/ExploreV2SpeciesGridItem";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
 import {
+  Body2,
   Body3,
   Button,
 } from "components/SharedComponents";
@@ -278,6 +279,7 @@ interface SpeciesCount {
 
 // Species counts of the saved results, like the server's species_counts
 export const OfflineSpeciesView = ( { queryParams }: { queryParams: Params } ) => {
+  const { t } = useTranslation( );
   const { flashListStyle, gridItemStyle, numColumns } = useGridLayout( );
   const saved = useOfflineExploreResults( queryParams );
   const species = useMemo( ( ) => {
@@ -311,22 +313,27 @@ export const OfflineSpeciesView = ( { queryParams }: { queryParams: Params } ) =
   }, [saved, queryParams.order] );
 
   return (
-    <ExploreFlashList
-      contentContainerStyle={flashListStyle}
-      data={species}
-      fetchNextPage={noop}
-      hideLoadingWheel
-      isFetchingNextPage={false}
-      isConnected={false}
-      keyExtractor={( item: SpeciesCount ) => String( item.taxon.id )}
-      layout="grid"
-      numColumns={numColumns}
-      // eslint-disable-next-line react/no-unused-prop-types
-      renderItem={( { item }: { item: SpeciesCount } ) => (
-        <ExploreV2SpeciesGridItem count={item.count} style={gridItemStyle} taxon={item.taxon} />
-      )}
-      totalResults={species.length}
-      testID="OfflineExploreSpecies"
-    />
+    <>
+      <Body2 className="px-5 pb-2" testID="OfflineExploreSpecies.count">
+        {t( "X-Species", { count: species.length } )}
+      </Body2>
+      <ExploreFlashList
+        contentContainerStyle={flashListStyle}
+        data={species}
+        fetchNextPage={noop}
+        hideLoadingWheel
+        isFetchingNextPage={false}
+        isConnected={false}
+        keyExtractor={( item: SpeciesCount ) => String( item.taxon.id )}
+        layout="grid"
+        numColumns={numColumns}
+        // eslint-disable-next-line react/no-unused-prop-types
+        renderItem={( { item }: { item: SpeciesCount } ) => (
+          <ExploreV2SpeciesGridItem count={item.count} style={gridItemStyle} taxon={item.taxon} />
+        )}
+        totalResults={species.length}
+        testID="OfflineExploreSpecies"
+      />
+    </>
   );
 };
