@@ -102,7 +102,6 @@ const AudioIdClip = ( ) => {
 
       {location
         ? (
-          {/* Map fills its parent (flex-1), so the parent needs a height */}
           <View className="mt-4 h-[250px] rounded-lg overflow-hidden">
             <Map
               mapHeight={250}
