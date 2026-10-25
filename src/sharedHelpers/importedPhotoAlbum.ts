@@ -50,9 +50,9 @@ const addPhotosToImportedAlbum = async (
   if ( uris.length === 0 ) return { added: 0, alreadyIn: 0 };
   try {
     const result = await ImageCropper.addAssetsToAlbum( uris, IMPORTED_ALBUM_TITLE );
-    // Only worth a line when something was actually filed: a cleanup the user
-    // opens twice would otherwise log a no-op every time.
-    if ( result.added > 0 ) {
+    // Only worth a line when it's unusual: routine filing was 400 log lines in
+    // four days that said nothing a working album doesn't.
+    if ( result.added > 0 && ( result.createdAlbum || ( result.ms ?? 0 ) > 2000 ) ) {
       logger.infoWithExtra( "imported_album_filed", {
         added: result.added,
         requested: result.requested,
