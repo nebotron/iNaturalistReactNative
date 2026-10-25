@@ -974,6 +974,21 @@ static dispatch_queue_t subjectDetectionQueue( void )
   return queue;
 }
 
+// The crop editor's prepare gets a queue of its own rather than the detection
+// one: the Group Photos grid detects subjects for a page of thumbnails at a
+// time (20 at ~115ms), and the photo the user just opened waited 2-4s behind
+// them. Detection decodes downscaled, so overlapping it with a prepare adds no
+// second full-resolution decode.
+static dispatch_queue_t cropPrepareQueue( void )
+{
+  static dispatch_queue_t queue;
+  static dispatch_once_t  once;
+  dispatch_once( &once, ^{
+    queue = heavyImageQueue( "org.inaturalist.imagecropper.prepare" );
+  } );
+  return queue;
+}
+
 static dispatch_queue_t cropWriteQueue( void )
 {
   static dispatch_queue_t queue;
@@ -2425,7 +2440,7 @@ RCT_EXPORT_METHOD( prepareCropSource
   // Where a slow prepare's time went: waiting for the queue, waiting for the
   // raw decode lock, or the decode, encode and write themselves.
   NSTimeInterval calledAt = [NSDate timeIntervalSinceReferenceDate];
-  dispatch_async( subjectDetectionQueue( ), ^{
+  dispatch_async( cropPrepareQueue( ), ^{
     NSTimeInterval startedAt = [NSDate timeIntervalSinceReferenceDate];
     NSString *input  = [inputPath  stringByReplacingOccurrencesOfString:@"file://" withString:@""];
     NSString *output = [outputPath stringByReplacingOccurrencesOfString:@"file://" withString:@""];
