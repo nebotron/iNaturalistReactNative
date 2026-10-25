@@ -9,6 +9,8 @@
 #import <QuartzCore/QuartzCore.h>
 #import <MetricKit/MetricKit.h>
 #import <objc/runtime.h>
+#import <dlfcn.h>
+#import <mach-o/dyld.h>
 #if __has_include(<react_native_config/RNCConfig.h>)
 #import <react_native_config/RNCConfig.h>
 #else
@@ -17,6 +19,76 @@
 
 @interface AppDelegate () <MXMetricManagerSubscriber>
 @end
+
+// MetricKit's stack JSON names frames only by binary UUID and nests one level per
+// frame, so the raw JSON cut to the log's size limit never reached the leaf
+// frames. Flatten each thread to leaf-first lines, naming the binary and the
+// nearest symbol dladdr finds for frames in images loaded in this process.
+static NSDictionary<NSString *, NSValue *> *loadedImagesByUUID( void )
+{
+  NSMutableDictionary *images = [NSMutableDictionary new];
+  for ( uint32_t i = 0; i < _dyld_image_count(); i++ ) {
+    const struct mach_header_64 *header =
+      (const struct mach_header_64 *) _dyld_get_image_header( i );
+    const struct load_command *cmd = (const struct load_command *) ( header + 1 );
+    for ( uint32_t c = 0; c < header->ncmds; c++ ) {
+      if ( cmd->cmd == LC_UUID ) {
+        NSUUID *uuid = [[NSUUID alloc]
+          initWithUUIDBytes:( (const struct uuid_command *) cmd )->uuid];
+        images[uuid.UUIDString] = [NSValue valueWithPointer:header];
+        break;
+      }
+      cmd = (const struct load_command *) ( (const char *) cmd + cmd->cmdsize );
+    }
+  }
+  return images;
+}
+
+static NSString *describeStack( MXCallStackTree *stack )
+{
+  NSDictionary *tree = [NSJSONSerialization JSONObjectWithData:[stack JSONRepresentation]
+                                                       options:0 error:nil];
+  if ( ![tree isKindOfClass:[NSDictionary class]] ) return nil;
+  NSDictionary *images = loadedImagesByUUID();
+  NSMutableString *out = [NSMutableString new];
+  NSInteger threadIndex = 0;
+  for ( NSDictionary *thread in tree[@"callStacks"] ) {
+    NSMutableArray *frames = [NSMutableArray new];
+    NSDictionary *frame = [thread[@"callStackRootFrames"] firstObject];
+    while ( frame ) {
+      [frames addObject:frame];
+      // Follow the most-sampled branch, which for a crash is the only one
+      NSDictionary *next = nil;
+      for ( NSDictionary *sub in frame[@"subFrames"] ) {
+        if ( !next || [sub[@"sampleCount"] integerValue] > [next[@"sampleCount"] integerValue] ) {
+          next = sub;
+        }
+      }
+      frame = next;
+    }
+    [out appendFormat:@"thread %ld%@:\n", (long) threadIndex++,
+      [thread[@"threadAttributed"] boolValue] ? @" (attributed)" : @""];
+    NSInteger shown = 0;
+    for ( NSDictionary *f in frames.reverseObjectEnumerator ) {
+      if ( shown++ >= 40 ) break;
+      NSString *uuid = f[@"binaryUUID"];
+      uint64_t offset = [f[@"offsetIntoBinaryTextSegment"] unsignedLongLongValue];
+      const char *address = (const char *) [images[uuid] pointerValue];
+      NSString *where = [NSString stringWithFormat:@"%@+0x%llx",
+        f[@"binaryName"] ?: [uuid substringToIndex:MIN( uuid.length, 8 )], offset];
+      Dl_info info;
+      if ( address && dladdr( address + offset, &info ) ) {
+        NSString *image = [@( info.dli_fname ?: "" ) lastPathComponent];
+        where = info.dli_sname
+          ? [NSString stringWithFormat:@"%@ %s+%ld", image, info.dli_sname,
+              (long) ( address + offset - (const char *) info.dli_saddr )]
+          : [NSString stringWithFormat:@"%@+0x%llx", image, offset];
+      }
+      [out appendFormat:@"  %@\n", where];
+    }
+  }
+  return out;
+}
 
 // iOS's own reports of the crashes and hangs the JS handlers can't see: signals
 // (EXC_BAD_ACCESS and the like), watchdog kills, and main-thread hangs. MetricKit
@@ -36,10 +108,9 @@ static void postDiagnostic( NSString *message, NSDictionary *fields, MXCallStack
   entry[@"commit"] = [NSString stringWithFormat:@"build-%@",
     [NSBundle mainBundle].infoDictionary[@"CFBundleVersion"]];
   entry[@"message"] = message;
-  NSString *stackJson = [[NSString alloc] initWithData:[stack JSONRepresentation]
-                                              encoding:NSUTF8StringEncoding];
-  if ( stackJson.length > 30000 ) stackJson = [stackJson substringToIndex:30000];
-  if ( stackJson ) entry[@"stack"] = stackJson;
+  NSString *stackText = describeStack( stack );
+  if ( stackText.length > 30000 ) stackText = [stackText substringToIndex:30000];
+  if ( stackText ) entry[@"stack"] = stackText;
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:
     [NSURL URLWithString:[base stringByAppendingString:@"/app_log.json"]]];
   request.HTTPMethod = @"POST";
