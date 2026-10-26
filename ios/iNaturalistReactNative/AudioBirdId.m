@@ -64,6 +64,7 @@ withIntermediateDirectories:YES attributes:nil error:nil];
 // Intensities are kept in a ring of columns.
 static os_unfair_lock abSpecLock = OS_UNFAIR_LOCK_INIT;
 static uint8_t  abSpecLevel[AB_SPEC_W][AB_SPEC_H]; // 0..255, low frequencies first
+static float    abSpecNoise[AB_SPEC_H];            // noise floor per bin, see ABSpectrogramColumn
 static NSInteger abSpecCount;                      // columns added so far
 // Live spectrogram views on screen, logged with the memory footprint.
 static _Atomic int abSpecViews;
@@ -72,14 +73,20 @@ static void ABSpectrogramReset( void )
 {
   os_unfair_lock_lock( &abSpecLock );
   memset( abSpecLevel, 0, sizeof( abSpecLevel ) );
+  for ( int b = 0; b < AB_SPEC_H; b++ ) abSpecNoise[b] = NAN;
   abSpecCount = 0;
   os_unfair_lock_unlock( &abSpecLock );
 }
 
 // One column from the AB_SPEC_N samples at `frame`: power of a Hann-windowed
-// FFT, mapped from -100..-20 dB to 0..1, with faint noise dropped and contrast
-// boosted as in Merlin. Safe to call from any thread.
-static void ABSpectrogramColumn( const float *frame, uint8_t *col )
+// FFT in dB, shaded by how far it stands above the background noise at that
+// frequency, so calls stand out on white whatever the mic's level, and steady
+// hiss, hum and low rumble drop out. `noise` tracks each bin's noise floor
+// across calls (NAN until the first): it falls quickly and rises over a few
+// seconds, so it follows the quieter moments rather than brief calls. Levels
+// up to 10 dB above it are white, 45 dB above is black. Safe to call from any
+// thread with its own `noise`.
+static void ABSpectrogramColumn( const float *frame, float *noise, uint8_t *col )
 {
   static FFTSetup fft;
   static float hann[AB_SPEC_N];
@@ -98,16 +105,20 @@ static void ABSpectrogramColumn( const float *frame, uint8_t *col )
   for ( int b = 0; b < AB_SPEC_H; b++ ) {
     // zrip doubles the DFT, so this matches a sine's amplitude^2 / 4.
     float db = 10 * log10f( power[AB_SPEC_LO + b] / ( AB_SPEC_N * AB_SPEC_N ) + 1e-12f );
-    float v = ( db + 100 ) / 80;
-    col[b] = v > 0.1f ? (uint8_t)( 255 * powf( MIN( 1, ( v - 0.1f ) / 0.9f ), 1.5f ) ) : 0;
+    // Digital silence (the mic muted during playback) leaves the floor alone.
+    if ( isnan( noise[b] ) ) noise[b] = db;
+    else if ( db > -110 ) noise[b] += ( db > noise[b] ? 0.004f : 0.05f ) * ( db - noise[b] );
+    noise[b] = MAX( noise[b], -100 );
+    float v = ( db - noise[b] - 10 ) / 35;
+    col[b] = v > 0 ? (uint8_t)( 255 * powf( MIN( 1, v ), 0.8f ) ) : 0;
   }
 }
 
 static void ABSpectrogramPush( const float *frame )
 {
   uint8_t col[AB_SPEC_H];
-  ABSpectrogramColumn( frame, col );
   os_unfair_lock_lock( &abSpecLock );
+  ABSpectrogramColumn( frame, abSpecNoise, col );
   NSInteger x = abSpecCount % AB_SPEC_W;
   memcpy( abSpecLevel[x], col, AB_SPEC_H );
   abSpecCount++;
@@ -1178,8 +1189,14 @@ RCT_EXPORT_MODULE( )
          || buffer.frameLength < AB_SPEC_N ) return;
     NSInteger width = ( buffer.frameLength - AB_SPEC_N ) / AB_SPEC_HOP + 1;
     uint8_t *levels = malloc( width * AB_SPEC_H );
-    for ( NSInteger x = 0; x < width; x++ ) {
-      ABSpectrogramColumn( buffer.floatChannelData[0] + x * AB_SPEC_HOP, levels + x * AB_SPEC_H );
+    float noise[AB_SPEC_H];
+    for ( int b = 0; b < AB_SPEC_H; b++ ) noise[b] = NAN;
+    // Twice through, so the noise floor has settled from the first column.
+    for ( int pass = 0; pass < 2; pass++ ) {
+      for ( NSInteger x = 0; x < width; x++ ) {
+        ABSpectrogramColumn( buffer.floatChannelData[0] + x * AB_SPEC_HOP, noise,
+                             levels + x * AB_SPEC_H );
+      }
     }
     CGImageRef image = ABSpectrogramImage( levels, width );
     free( levels );
