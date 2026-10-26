@@ -49,6 +49,7 @@ interface Props {
   detectUri?: string;
   cropPanContext?: CropPanContext;
   brightness?: number;
+  fullResolution?: boolean;
   onLongPress?: () => void;
   onInteractionEnd?: () => void;
   onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
@@ -74,6 +75,7 @@ const CustomImageZoom = ( {
   detectUri,
   cropPanContext,
   brightness = 1,
+  fullResolution,
   onLongPress,
   onInteractionEnd,
   onImageDimensionsChange,
@@ -176,6 +178,7 @@ const CustomImageZoom = ( {
       cropPanContext={cropPanContext}
       onSwipeToClose={onSwipeToClose}
       brightness={brightness}
+      fullResolution={fullResolution}
       onLongPress={onLongPress}
       onImageDimensionsChange={onImageDimensionsChange}
       onLoad={onLoad}

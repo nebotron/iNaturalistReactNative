@@ -36,6 +36,7 @@ const styles = StyleSheet.create( {
 
 type SharedZoomableImageProps = ImageZoomProps & {
   brightness?: number;
+  fullResolution?: boolean;
   onLongPress?: () => void;
   onScaleChange?: ( scale: number ) => void;
   onImageDimensionsChange?: ( dims: { width: number; height: number } ) => void;
@@ -80,6 +81,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
     onSwipeToClose,
     allowLetterboxPan,
     brightness = 1,
+    fullResolution,
     onLongPress,
     onScaleChange,
     onImageDimensionsChange,
@@ -238,6 +240,7 @@ const SharedZoomableImage: ForwardRefRenderFunction<
                 testID={testID}
                 className="w-full h-full"
                 source={{ uri }}
+                fullResolution={fullResolution}
                 resizeMode="contain"
                 onLoad={( { width, height } ) => {
                   setImageSize( prev => (

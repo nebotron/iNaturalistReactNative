@@ -2,6 +2,7 @@ import CustomImageZoom from "components/MediaViewer/CustomImageZoom";
 import { ZoomBrightnessSliders } from "components/MediaViewer/IdentifyPhoto";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import { INatIconButton } from "components/SharedComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
 import { View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
 import React, {
@@ -14,7 +15,6 @@ import React, {
 import type { ViewStyle } from "react-native";
 import {
   ActivityIndicator,
-  Image,
   StyleSheet,
   useWindowDimensions,
 } from "react-native";
@@ -105,14 +105,11 @@ interface Props {
   // re-crop starts from the brightness last applied to this photo.
   brightnessLogKey?: string | null;
   // Local file URIs of the photos coming up next in a bulk crop. They are
-  // mounted invisibly at exactly the size and resize mode the real image uses,
-  // so React Native reads and decodes them into its image cache while the user
-  // is still cropping the current photo. Having the file on disk (what the
-  // preload cache holds) isn't enough on its own: decoding a full-size photo is
-  // what the spinner between photos is waiting on, and that only happens once
-  // an <Image> asks for it. Matching the frame size matters -- the cache is
-  // keyed by url + size + scale + resize mode, so a warm-up at a different size
-  // would be decoded all over again.
+  // mounted invisibly the same way the real image is, so they are decoded into
+  // the image cache while the user is still cropping the current photo. Having
+  // the file on disk (what the preload cache holds) isn't enough on its own:
+  // decoding a full-size photo is what the spinner between photos is waiting
+  // on, and that only happens once an image view asks for it.
   warmUris?: string[];
   // How long this photo's file took to decode and paint, reported once it has.
   // Part of what a bulk crop waits on between photos, and the only part that
@@ -490,16 +487,14 @@ const ImageCropView = ( {
         {/* Rendered under everything else, invisible and untouchable: these
             exist only to make React Native decode the next photos. */}
         {cropAreaHeight > 0 && warmUris?.map( warmUri => (
-          <Image
-            key={warmUri}
-            accessible={false}
-            accessibilityIgnoresInvertColors
-            fadeDuration={0}
-            pointerEvents="none"
-            resizeMode="contain"
-            source={{ uri: warmUri }}
-            style={[styles.zoomLayer, styles.hidden]}
-          />
+          <View key={warmUri} pointerEvents="none" style={[styles.zoomLayer, styles.hidden]}>
+            <CachedImage
+              className="w-full h-full"
+              fullResolution
+              resizeMode="contain"
+              source={{ uri: warmUri }}
+            />
+          </View>
         ) )}
 
         {cropAreaHeight > 0 && (
@@ -513,6 +508,7 @@ const ImageCropView = ( {
               autoReset={!initialCrop}
               cropPanContext={cropPanContext}
               brightness={brightness}
+              fullResolution
               testID={`ImageCropView.${sourceUri}`}
               onInteractionEnd={updateDownsizeStatus}
               onLoad={handleImageLoad}

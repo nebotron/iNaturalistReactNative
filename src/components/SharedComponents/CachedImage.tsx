@@ -29,6 +29,9 @@ interface Props {
   accessibilityRole?: "image";
   children?: React.ReactNode;
   className?: string;
+  // Decode a local file at full resolution, rather than at the view's size as
+  // <Image> does, so it stays sharp when zoomed in.
+  fullResolution?: boolean;
   onError?: ( ) => void;
   onLoad?: ( dimensions: { width: number; height: number } ) => void;
   // React Native's <Image> defaults to "cover" while FasterImageView defaults
@@ -110,6 +113,7 @@ const CachedImage = ( {
   accessibilityRole,
   children,
   className,
+  fullResolution = false,
   onError,
   onLoad,
   resizeMode = "cover",
@@ -119,6 +123,12 @@ const CachedImage = ( {
   transitionDuration = 0,
 }: Props ) => {
   const remoteUri = remoteUriFor( source );
+  const sourceUri = ( source as { uri?: string | null } | null )?.uri;
+  const fullResolutionUri = fullResolution && typeof sourceUri === "string"
+    && sourceUri.startsWith( "file://" )
+    ? sourceUri
+    : null;
+  const fasterUri = remoteUri ?? fullResolutionUri;
   const placeholderUri = useCachedPlaceholder( remoteUri );
   const [loadedUri, setLoadedUri] = useState<string | null>( null );
 
@@ -158,18 +168,21 @@ const CachedImage = ( {
           }}
         />
       )}
-      {remoteUri
+      {fasterUri
         ? (
           <FasterImageView
             // Without a key the native view keeps showing the previous image
             // until the new one resolves, which shows the wrong photo in
             // recycled list cells.
-            key={remoteUri}
+            key={fasterUri}
             style={StyleSheet.absoluteFill}
             accessibilityIgnoresInvertColors={accessibilityIgnoresInvertColors}
             source={{
-              url: remoteUri,
-              cachePolicy: IMMUTABLE_CACHE_POLICY,
+              url: fasterUri,
+              // A local file is already on disk.
+              cachePolicy: remoteUri
+                ? IMMUTABLE_CACHE_POLICY
+                : "memory",
               resizeMode,
               transitionDuration,
             }}
