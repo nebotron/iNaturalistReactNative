@@ -759,6 +759,7 @@ const ImageCropEditor = ( ) => {
         ? handleCropChange
         : undefined}
       onDelete={handleDelete}
+      onBack={( ) => navigation.goBack( )}
     />
   );
 };

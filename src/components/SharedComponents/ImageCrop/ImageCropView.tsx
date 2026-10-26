@@ -1,7 +1,7 @@
 import CustomImageZoom from "components/MediaViewer/CustomImageZoom";
 import { ZoomBrightnessSliders } from "components/MediaViewer/IdentifyPhoto";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
-import { INatIconButton } from "components/SharedComponents";
+import { BackButton, INatIconButton } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
@@ -119,6 +119,7 @@ interface Props {
   onConfirm: ( crop: NormalizedCrop, brightness: number ) => void | Promise<void>;
   onCropChange?: ( crop: NormalizedCrop ) => void;
   onDelete?: () => void;
+  onBack?: () => void;
 }
 
 const ImageCropView = ( {
@@ -133,6 +134,7 @@ const ImageCropView = ( {
   onConfirm,
   onCropChange,
   onDelete,
+  onBack,
 }: Props ) => {
   const { t } = useTranslation( );
   const insets = useSafeAreaInsets( );
@@ -539,6 +541,12 @@ const ImageCropView = ( {
               ]}
             />
           </>
+        )}
+
+        {onBack && (
+          <View className="absolute top-8 left-0">
+            <BackButton color={colors.white} onPress={onBack} />
+          </View>
         )}
       </View>
 
