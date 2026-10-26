@@ -33,8 +33,6 @@ export const { AudioBirdId } = NativeModules as {
     vibrate: ( mode: VibrateMode ) => Promise<{
       allowed: boolean; error: string | null; method: string; appState: number;
     }>;
-    getBrightness: ( ) => Promise<number>;
-    setBrightness: ( value: number ) => void;
     notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
     saveClip: ( path: string, seconds: number, endFrame: number ) => Promise<string>;
@@ -242,26 +240,22 @@ export const vibrate = ( mode: VibrateMode = "auto" ) => {
 };
 
 // While the screen is focused it dims after DIM_AFTER_MS without a touch, and
-// an alert brightens it fully for FLASH_MS.
+// an alert lifts the dimming for FLASH_MS. Dimming is an overlay on the screen,
+// leaving the device brightness alone.
 const DIM_AFTER_MS = 30000;
 const FLASH_MS = 3000;
-const DIM = 0.05;
-let userBrightness: number | null = null; // null while the screen isn't focused
+let focused = false;
 let dimmed = false;
 let flashing = false;
 let dimTimer: ReturnType<typeof setTimeout> | undefined;
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
+export const useScreenDimmed = create<boolean>( ( ) => false );
 const applyBrightness = ( ) => {
-  if ( userBrightness === null ) return;
-  let value = dimmed
-    ? DIM
-    : userBrightness;
-  if ( flashing ) value = 1;
-  AudioBirdId?.setBrightness( value );
+  useScreenDimmed.setState( focused && dimmed && !flashing, true );
 };
 // Returns whether the screen was dimmed, so the touch only wakes it
 export const noteActivity = ( ) => {
-  if ( userBrightness === null ) return false;
+  if ( !focused ) return false;
   clearTimeout( dimTimer );
   dimTimer = setTimeout( ( ) => {
     dimmed = true;
@@ -272,20 +266,18 @@ export const noteActivity = ( ) => {
   applyBrightness( );
   return true;
 };
-export const startDimming = async ( ) => {
-  const b = await AudioBirdId?.getBrightness( ).catch( ( ) => null );
-  if ( b == null ) return;
-  userBrightness = b;
+export const startDimming = ( ) => {
+  focused = true;
   dimmed = false;
   noteActivity( );
 };
 export const stopDimming = ( ) => {
   clearTimeout( dimTimer );
   clearTimeout( flashTimer );
+  focused = false;
   dimmed = false;
   flashing = false;
   applyBrightness( );
-  userBrightness = null;
 };
 const flashScreen = ( ) => {
   flashing = true;

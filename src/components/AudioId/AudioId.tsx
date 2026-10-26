@@ -10,7 +10,7 @@ import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import React, { useCallback, useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
-import { Linking, requireNativeComponent } from "react-native";
+import { Linking, Modal, requireNativeComponent } from "react-native";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
@@ -21,7 +21,7 @@ import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import type { Heard } from "./audioIdSession";
 import useAudioIdSession, {
-  heardIn, noteActivity, startDimming, stopDimming, vibrate,
+  heardIn, noteActivity, startDimming, stopDimming, useScreenDimmed, vibrate,
 } from "./audioIdSession";
 
 // Animal classes the model covers, for asking which of them the user has seen.
@@ -144,6 +144,7 @@ const AudioId = ( ) => {
     listening, error, current, setup, setSeen, start,
     stop,
   } = useAudioIdSession( );
+  const dimmed = useScreenDimmed( );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
   const currentUser = useCurrentUser( );
   const seen = useSeenTaxonIds( currentUser?.id );
@@ -296,6 +297,15 @@ const AudioId = ( ) => {
 
         <View className="h-20" />
       </ScrollView>
+      {/* Covers the header and tab bar too; a touch only wakes it */}
+      <Modal transparent visible={dimmed} animationType="fade">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityHint="Brightens the screen."
+          className="flex-1 bg-black/95"
+          onPress={noteActivity}
+        />
+      </Modal>
     </View>
   );
 };
