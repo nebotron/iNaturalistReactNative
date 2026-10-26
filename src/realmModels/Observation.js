@@ -147,6 +147,7 @@ class Observation extends Realm.Object {
     ...Observation.DEFAULT_MODE_LIST_FIELDS,
     identifications: {
       uuid: true,
+      created_at: true,
       current: true,
       taxon: {
         id: true,
@@ -159,6 +160,7 @@ class Observation extends Realm.Object {
     reviewed_by: true,
     comments: {
       uuid: true,
+      created_at: true,
     },
     geoprivacy: true,
     id: true,
