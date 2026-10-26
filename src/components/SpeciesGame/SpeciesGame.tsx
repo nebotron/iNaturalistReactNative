@@ -26,7 +26,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Dimensions, Linking, StyleSheet } from "react-native";
+import { Dimensions, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import {
@@ -442,9 +442,9 @@ const SpeciesGame = ( ) => {
     // preloaded while the previous round was being played.
     if ( entry && mediaType === "photo" ) await resolveSubjectDetectionForUri( entry.url );
 
-    // Only now update the displayed lookalike, so the "How to ID X vs Y" button on the
-    // previous round's reveal screen doesn't spoil the upcoming species while this
-    // round's photo was still being fetched above.
+    // Only now update the displayed lookalike, so the previous round's reveal screen
+    // doesn't spoil the upcoming species while this round's photo was still being
+    // fetched above.
     if ( nextLookalike ) setLookalike( nextLookalike );
     setIsTargetShown( chosen.id === taxonId );
     setCurrentPhotoUrl( entry?.url ?? null );
@@ -1274,19 +1274,6 @@ const SpeciesGame = ( ) => {
                 level="focus"
                 onPress={handleNext}
               />
-              {target && lookalike && (
-                <Button
-                  className="w-full mb-2"
-                  // eslint-disable-next-line i18next/no-literal-string
-                  text={`How to ID ${taxonLabel( target )} vs ${taxonLabel( lookalike )}`}
-                  onPress={() => {
-                    const query = encodeURIComponent(
-                      `how to id ${taxonLabel( target! )} vs ${taxonLabel( lookalike! )}`,
-                    );
-                    Linking.openURL( `https://www.google.com/search?q=${query}` );
-                  }}
-                />
-              )}
               {currentObservationUuid && (
                 <Pressable
                   accessibilityRole="button"
