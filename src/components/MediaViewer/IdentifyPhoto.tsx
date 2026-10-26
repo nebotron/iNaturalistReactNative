@@ -21,6 +21,8 @@ import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import {
   EXPOSURE_SNAP_THRESHOLD,
   EXPOSURE_STOPS_DEFAULT,
+  EXPOSURE_STOPS_MAX,
+  EXPOSURE_STOPS_MIN,
 } from "sharedHooks/useIdentifyPhotoBrightness";
 import colors from "styles/tailwindColors";
 
@@ -204,6 +206,44 @@ export const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhoto
 
 IdentifyPhoto.displayName = "IdentifyPhoto";
 
+interface BrightnessSliderProps {
+  value: number;
+  onChange: ( value: number ) => void;
+  onComplete: ( value: number ) => void;
+  accessibilityLabel: string;
+  minimumValue?: number;
+  maximumValue?: number;
+  iconColor?: string;
+  disabled?: boolean;
+}
+
+// The sun icon + exposure slider (in stops) used for every brightness control.
+export const BrightnessSlider = ( {
+  value,
+  onChange,
+  onComplete,
+  accessibilityLabel,
+  minimumValue = EXPOSURE_STOPS_MIN,
+  maximumValue = EXPOSURE_STOPS_MAX,
+  iconColor = colors.darkGray,
+  disabled = false,
+}: BrightnessSliderProps ) => (
+  <View className="flex-row items-center">
+    <INatIcon name="sun" size={18} color={iconColor} />
+    <FineSlider
+      disabled={disabled}
+      minimumValue={minimumValue}
+      maximumValue={maximumValue}
+      value={value}
+      snapValue={EXPOSURE_STOPS_DEFAULT}
+      snapThreshold={EXPOSURE_SNAP_THRESHOLD}
+      onChange={onChange}
+      onComplete={onComplete}
+      accessibilityLabel={accessibilityLabel}
+    />
+  </View>
+);
+
 interface ZoomBrightnessSlidersProps {
   zoomScale: number;
   brightnessStops: number;
@@ -247,19 +287,15 @@ export const ZoomBrightnessSliders = ( {
         accessibilityLabel={zoomAccessibilityLabel}
       />
     </View>
-    <View className="flex-row items-center">
-      <INatIcon name="sun" size={18} color={iconColor} />
-      <FineSlider
-        disabled={disabled}
-        minimumValue={exposureStopsMin}
-        maximumValue={exposureStopsMax}
-        value={brightnessStops}
-        snapValue={EXPOSURE_STOPS_DEFAULT}
-        snapThreshold={EXPOSURE_SNAP_THRESHOLD}
-        onChange={onBrightnessChange}
-        onComplete={onBrightnessComplete}
-        accessibilityLabel={brightnessAccessibilityLabel}
-      />
-    </View>
+    <BrightnessSlider
+      disabled={disabled}
+      minimumValue={exposureStopsMin}
+      maximumValue={exposureStopsMax}
+      value={brightnessStops}
+      onChange={onBrightnessChange}
+      onComplete={onBrightnessComplete}
+      accessibilityLabel={brightnessAccessibilityLabel}
+      iconColor={iconColor}
+    />
   </View>
 );

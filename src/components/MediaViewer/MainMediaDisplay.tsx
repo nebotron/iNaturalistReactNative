@@ -1,10 +1,9 @@
-import Slider from "@react-native-community/slider";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import {
   INatIconButton,
   TransparentCircleButton,
 } from "components/SharedComponents";
-import { Text, View } from "components/styledComponents";
+import { View } from "components/styledComponents";
 import React, {
   useCallback, useMemo, useRef, useState,
 } from "react";
@@ -24,12 +23,16 @@ import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTrans
 import useLiveToneMappedBrightnessUri from "sharedHelpers/useLiveToneMappedBrightnessUri";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
-import { snapExposureStops } from "sharedHooks/useIdentifyPhotoBrightness";
+import {
+  EXPOSURE_STOPS_DEFAULT,
+  stopsToGain,
+} from "sharedHooks/useIdentifyPhotoBrightness";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
 import AttributionButton from "./AttributionButton";
 import CustomImageZoom, { SUBJECT_CROP_FRAME_FRACTION } from "./CustomImageZoom";
+import { BrightnessSlider } from "./IdentifyPhoto";
 import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 
 interface PhotoItem {
@@ -47,26 +50,11 @@ interface SoundItem {
   type: "sound";
 }
 
-// Exposure slider: values are in stops (EV). Each +1 stop doubles the
-// scene-referred light, so the gain applied to the image is 2^stops, not
-// stops itself — the exponential curve is the whole point of measuring in
-// stops rather than a plain 0-5x multiplier.
-const EXPOSURE_STOPS_MIN = -1;
-const EXPOSURE_STOPS_MAX = 4;
-const EXPOSURE_STOPS_DEFAULT = 0;
-const EXPOSURE_TICK_STOPS = [-1, 0, 1, 2, 3, 4];
 const BRIGHTNESS_DEFAULT = 1.0;
-const stopsToGain = ( stops: number ) => 2 ** stops;
-const formatStop = ( stop: number ) => ( stop > 0
-  ? `+${stop}`
-  : `${stop}` );
 const styles = StyleSheet.create( {
   gestureHandlerRoot: { flex: 1 },
 } );
-const sliderStyle = { flex: 1, height: 40 };
 const iconBtnClass = "bg-black/50 items-center justify-center rounded-full h-[40px] w-[40px]";
-const tickRowStyle = { justifyContent: "space-between" as const, bottom: 2 };
-const labelRowStyle = { justifyContent: "space-between" as const };
 
 interface Props {
   autoPlaySound?: boolean; // automatically start playing a sound when it is visible
@@ -306,39 +294,13 @@ const MainMediaDisplay = ( {
           <View className="absolute bottom-16 left-0 right-0 px-4 py-2">
             <View className="bg-black/60 rounded-xl px-3 py-2 flex-row items-center">
               <View className="flex-1">
-                <View className="justify-center">
-                  <Slider
-                    style={sliderStyle}
-                    minimumValue={EXPOSURE_STOPS_MIN}
-                    maximumValue={EXPOSURE_STOPS_MAX}
-                    minimumTrackTintColor={colors.inatGreen}
-                    maximumTrackTintColor={colors.white}
-                    thumbTintColor={colors.white}
-                    value={brightnessStops}
-                    onValueChange={value => setBrightnessStops( snapExposureStops( value ) )}
-                    onSlidingComplete={value => handleBrightnessComplete(
-                      snapExposureStops( value ),
-                    )}
-                    tapToSeek
-                    accessibilityLabel={t( "Adjust-brightness" )}
-                  />
-                  <View
-                    className="absolute left-0 right-0 flex-row px-1"
-                    style={tickRowStyle}
-                    pointerEvents="none"
-                  >
-                    { EXPOSURE_TICK_STOPS.map( stop => (
-                      <View key={stop} className="w-px h-2 bg-white/70" />
-                    ) ) }
-                  </View>
-                </View>
-                <View className="flex-row px-1" style={labelRowStyle}>
-                  { EXPOSURE_TICK_STOPS.map( stop => (
-                    <Text key={stop} className="text-white/70 text-[10px]">
-                      { formatStop( stop ) }
-                    </Text>
-                  ) ) }
-                </View>
+                <BrightnessSlider
+                  value={brightnessStops}
+                  onChange={setBrightnessStops}
+                  onComplete={handleBrightnessComplete}
+                  accessibilityLabel={t( "Adjust-brightness" )}
+                  iconColor={colors.white}
+                />
               </View>
               { brightness !== BRIGHTNESS_DEFAULT && (
                 <TransparentCircleButton
