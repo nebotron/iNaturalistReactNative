@@ -291,31 +291,14 @@ const MainMediaDisplay = ( {
           ) }
         </View>
         { showBrightnessSlider && (
-          <View className="absolute bottom-16 left-0 right-0 px-4 py-2">
-            <View className="bg-black/60 rounded-xl px-3 py-2 flex-row items-center">
-              <View className="flex-1">
-                <BrightnessSlider
-                  value={brightnessStops}
-                  onChange={setBrightnessStops}
-                  onComplete={handleBrightnessComplete}
-                  accessibilityLabel={t( "Adjust-brightness" )}
-                  iconColor={colors.white}
-                />
-              </View>
-              { brightness !== BRIGHTNESS_DEFAULT && (
-                <TransparentCircleButton
-                  onPress={( ) => {
-                    setBrightnessStops( EXPOSURE_STOPS_DEFAULT );
-                    if ( photo?.url ) deleteBrightness( photo.url );
-                  }}
-                  icon="close"
-                  color={colors.white}
-                  accessibilityLabel={t( "Reset-brightness" )}
-                  testID="MediaViewer.resetBrightnessButton"
-                  optionalClasses="ml-2"
-                />
-              ) }
-            </View>
+          <View className="absolute bottom-16 left-0 right-0 bg-[#1c1c1c] px-4 py-1">
+            <BrightnessSlider
+              value={brightnessStops}
+              onChange={setBrightnessStops}
+              onComplete={handleBrightnessComplete}
+              accessibilityLabel={t( "Adjust-brightness" )}
+              iconColor={colors.white}
+            />
           </View>
         ) }
       </View>
