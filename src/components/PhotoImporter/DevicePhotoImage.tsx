@@ -26,6 +26,8 @@ interface Props {
   // prefetches its photos at a particular size (Group Photos) draws the same
   // thumbnail file it warmed instead of generating a second one.
   thumbnailMaxPixel?: number;
+  // Shrinks non-square photos to fit the cell instead of cropping to fill it
+  fitImage?: boolean;
   style?: ViewStyle;
   selectable?: boolean;
   selected?: boolean;
@@ -47,6 +49,7 @@ const DevicePhotoImage = ( {
   fallbackUri,
   cellWidth,
   thumbnailMaxPixel,
+  fitImage,
   style,
   selectable = false,
   selected = false,
@@ -97,6 +100,7 @@ const DevicePhotoImage = ( {
       <ObsImagePreview
         source={source}
         onError={handleError}
+        fitImage={fitImage}
         selected={selected}
         selectable={selectable}
         obsPhotosCount={obsPhotosCount}
