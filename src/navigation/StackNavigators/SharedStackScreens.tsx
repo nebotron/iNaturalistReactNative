@@ -162,6 +162,7 @@ const SharedStackScreens = ( ) => (
         component={FadeInImageCropEditor}
         options={{
           ...hideHeader,
+          ...preventSwipeToGoBack,
           headerTitleAlign: "center",
           headerBackButtonDisplayMode: "minimal",
           contentStyle: {
