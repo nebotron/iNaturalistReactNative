@@ -8,7 +8,6 @@ import LocationIndicator from "components/SharedComponents/Map/LocationIndicator
 import { ScrollView, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, { useMemo, useState } from "react";
-import { Polyline } from "react-native-maps";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
 import Observation from "realmModels/Observation";
 import { formatISONoTimezone, formatISOTimestamp } from "sharedHelpers/dateAndTime";
@@ -18,7 +17,6 @@ import {
   MAX_MATCH_GAP_MS,
 } from "sharedHelpers/interpolateTrackedLocation";
 import useStore from "stores/useStore";
-import colors from "styles/tailwindColors";
 import * as uuid from "uuid";
 
 import useAudioIdHistory from "./audioIdHistory";
@@ -26,9 +24,6 @@ import { AudioBirdId } from "./audioIdSession";
 import ClipTrimmer, { useClipSpan } from "./ClipTrimmer";
 
 const { useQuery } = RealmContext;
-
-// How much of the tracked path around the clip to draw.
-const TRACK_WINDOW_MS = 15 * 60 * 1000;
 
 // One Audio ID clip: trim it and make it an observation.
 const AudioIdClip = ( ) => {
@@ -56,8 +51,6 @@ const AudioIdClip = ( ) => {
     [time],
   );
   const usablePoints = useMemo( ( ) => filterUsableTrackedPoints( trackPoints ), [trackPoints] );
-  const pathPoints = usablePoints
-    .filter( p => Math.abs( p.recordedAt.getTime( ) - time ) <= TRACK_WINDOW_MS );
   // Where location tracking put us when the clip was heard, else the fix taken then.
   const tracked = interpolateFromUsablePoints( usablePoints, time );
   const location = tracked || clip?.location;
@@ -112,22 +105,11 @@ const AudioIdClip = ( ) => {
                 longitudeDelta: 0.02,
               }}
               mapChildren={(
-                <>
-                  {pathPoints.length > 1 && (
-                    <Polyline
-                      coordinates={pathPoints.map( p => ( {
-                        latitude: p.latitude, longitude: p.longitude,
-                      } ) )}
-                      strokeColor={colors.inatGreen}
-                      strokeWidth={3}
-                    />
-                  )}
-                  <LocationIndicator
-                    latitude={location.latitude}
-                    longitude={location.longitude}
-                    positionalAccuracy={location.accuracy ?? undefined}
-                  />
-                </>
+                <LocationIndicator
+                  latitude={location.latitude}
+                  longitude={location.longitude}
+                  positionalAccuracy={location.accuracy ?? undefined}
+                />
               )}
             />
           </View>
