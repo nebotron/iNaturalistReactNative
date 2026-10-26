@@ -157,6 +157,7 @@ const GroupPhotoImage = ( {
       thumbnailMaxPixel={cellWidth > 0
         ? groupPhotoThumbnailMaxPixel( cellWidth )
         : undefined}
+      fitImage
       style={style}
       selectable
       selected={isSelected}
@@ -193,6 +194,7 @@ const GroupPhotoImage = ( {
           thumbnailMaxPixel={cellWidth > 0
             ? groupPhotoThumbnailMaxPixel( cellWidth )
             : undefined}
+          fitImage
           style={style}
           testID={`GroupPhotos.pending.${mediaUri}`}
         />
