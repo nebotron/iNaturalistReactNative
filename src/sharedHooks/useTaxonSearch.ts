@@ -47,20 +47,29 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     try {
       const { cleanedQuery } = validateRealmSearch( searchString );
       const lowerQuery = cleanedQuery.toLowerCase();
-      const matches: { taxon: RealmTaxon; isExact: boolean }[] = [];
+      const exact: RealmTaxon[] = [];
+      const partial: RealmTaxon[] = [];
       const allTaxa = realm.objects( "Taxon" );
-      for ( let i = 0; i < allTaxa.length && matches.length < 50; i += 1 ) {
+      // Keep scanning past the partial-match cap so an exact match (e.g. a
+      // bird code) cached late in the collection is never missed.
+      for ( let i = 0; i < allTaxa.length; i += 1 ) {
         const taxon = allTaxa[i];
         const searchableName = Taxon.compileSearchableName( taxon ).toLowerCase( );
         if ( searchableName.includes( lowerQuery ) ) {
-          const isExact = searchableName.split( ";" ).includes( lowerQuery );
-          matches.push( { taxon, isExact } );
+          if ( searchableName.split( ";" ).includes( lowerQuery ) ) {
+            exact.push( taxon );
+          } else if ( partial.length < 50 ) {
+            partial.push( taxon );
+          }
         }
       }
-      // Exact name matches (scientific or common name equal to the query)
-      // should appear before partial/substring matches.
-      matches.sort( ( a, b ) => Number( b.isExact ) - Number( a.isExact ) );
-      return matches.map( match => match.taxon );
+      // Exact name matches (scientific name, common name, or bird code equal
+      // to the query) appear before partial/substring matches, with a bird
+      // code match first of all.
+      const code = lowerQuery.toUpperCase( );
+      exact.sort( ( a, b ) => Number( Taxon.abaCode( b ) === code )
+        - Number( Taxon.abaCode( a ) === code ) );
+      return [...exact, ...partial];
     } catch ( error ) {
       throw new Error( `Search failed: ${error.message}` );
     }
@@ -142,9 +151,19 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     }
 
     // Show local results until online results arrive, then replace them
-    const taxa = remoteResult?.query === taxonQuery
+    const unorderedTaxa = remoteResult?.query === taxonQuery
       ? remoteResult.taxa
       : localTaxa || [];
+    // An exact 4-letter bird code match always comes first, even when the
+    // API ranks it lower or omits it.
+    const code = taxonQuery.replace( /[^a-zA-Z]/g, "" ).toUpperCase( );
+    const codeMatches = new Map( ( localTaxa || [] ).concat( unorderedTaxa )
+      .filter( taxon => Taxon.abaCode( taxon ) === code )
+      .map( taxon => [taxon.id, taxon] ) );
+    const taxa = [
+      ...codeMatches.values( ),
+      ...unorderedTaxa.filter( taxon => !codeMatches.has( taxon.id ) ),
+    ];
     if ( taxa.length > 0 ) {
       return {
         taxa,
