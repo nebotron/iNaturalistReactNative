@@ -63,12 +63,6 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
           }
         }
       }
-      // Exact name matches (scientific name, common name, or bird code equal
-      // to the query) appear before partial/substring matches, with a bird
-      // code match first of all.
-      const code = lowerQuery.toUpperCase( );
-      exact.sort( ( a, b ) => Number( Taxon.abaCode( b ) === code )
-        - Number( Taxon.abaCode( a ) === code ) );
       return [...exact, ...partial];
     } catch ( error ) {
       throw new Error( `Search failed: ${error.message}` );
@@ -154,16 +148,22 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     const unorderedTaxa = remoteResult?.query === taxonQuery
       ? remoteResult.taxa
       : localTaxa || [];
-    // An exact 4-letter bird code match always comes first, even when the
-    // API ranks it lower or omits it.
-    const code = taxonQuery.replace( /[^a-zA-Z]/g, "" ).toUpperCase( );
-    const codeMatches = new Map( ( localTaxa || [] ).concat( unorderedTaxa )
-      .filter( taxon => Taxon.abaCode( taxon ) === code )
+    // Exact matches come first: a 4-letter bird code, then a scientific or
+    // common name equal to the query. Local code matches are included even
+    // when the API ranks them lower or omits them.
+    const cleanedQuery = taxonQuery.replace( /[^a-zA-Z0-9]/g, "" ).toLowerCase( );
+    const rank = ( taxon: RealmTaxon ) => {
+      if ( Taxon.abaCode( taxon )?.toLowerCase( ) === cleanedQuery ) return 2;
+      return Taxon.compileSearchableName( taxon ).toLowerCase( ).split( ";" )
+        .includes( cleanedQuery )
+        ? 1
+        : 0;
+    };
+    const byId = new Map( ( localTaxa || [] )
+      .filter( taxon => rank( taxon ) === 2 )
+      .concat( unorderedTaxa )
       .map( taxon => [taxon.id, taxon] ) );
-    const taxa = [
-      ...codeMatches.values( ),
-      ...unorderedTaxa.filter( taxon => !codeMatches.has( taxon.id ) ),
-    ];
+    const taxa = [...byId.values( )].sort( ( a, b ) => rank( b ) - rank( a ) );
     if ( taxa.length > 0 ) {
       return {
         taxa,
