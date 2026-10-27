@@ -1,4 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
+import type { InfiniteData } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { markObservationUpdatesViewed } from "api/observations";
 import classnames from "classnames";
 import ObsNotification from "components/Notifications/ObsNotification";
@@ -16,6 +18,7 @@ interface Props {
 const NotificationsListItem = ( { notification }: Props ) => {
   const { setObsDetailsTab } = useLayoutPrefs( );
   const navigation = useNavigation( );
+  const queryClient = useQueryClient( );
   const [localViewed, setLocalViewed] = useState( notification.viewed );
 
   useEffect( ( ) => {
@@ -51,6 +54,19 @@ const NotificationsListItem = ( { notification }: Props ) => {
       )}
       onPress={( ) => {
         setLocalViewed( true );
+        // The server marks every update on the observation viewed, so clear
+        // them all here too, in every notifications list
+        queryClient.setQueriesData<InfiniteData<Notification[]>>(
+          { queryKey: ["useInfiniteNotificationsScroll"] },
+          data => data && {
+            ...data,
+            pages: data.pages.map( page => page.map( n => (
+              n.resource_uuid === notification.resource_uuid
+                ? { ...n, viewed: true }
+                : n
+            ) ) ),
+          },
+        );
         setObservationMarkedAsViewedAt( new Date( ) );
         if ( !notification.viewed ) {
           markViewed( { id: notification.resource_uuid } );
