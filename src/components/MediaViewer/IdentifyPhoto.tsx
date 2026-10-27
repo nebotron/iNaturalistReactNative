@@ -71,6 +71,39 @@ const cropToZoomTransform = (
   };
 };
 
+// Rescale the image while keeping whatever is currently at the viewport centre
+// fixed there (rather than snapping back to the image centre). Derived directly
+// from the current transform (not by round-tripping through a normalized crop),
+// since the crop rectangle gets clamped to the image bounds whenever the view is
+// letterboxed -- e.g. by aspect ratio, or by panning past the image edge --
+// which would otherwise throw off the fixed point and make the image drift as
+// the slider moves.
+export const zoomAroundCentre = (
+  img: SharedZoomableImageRef,
+  scale: number,
+  centreX: number,
+  centreY: number,
+) => {
+  const current = img.readTransform( );
+  if ( current.scale <= 0 ) {
+    img.applyTransform( {
+      scale, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
+    } );
+    return;
+  }
+  const totalTx = current.translateX + current.focalX;
+  const totalTy = current.translateY + current.focalY;
+  const localX = centreX - totalTx / current.scale;
+  const localY = centreY - totalTy / current.scale;
+  img.applyTransform( {
+    scale,
+    translateX: 0,
+    translateY: 0,
+    focalX: ( centreX - localX ) * scale,
+    focalY: ( centreY - localY ) * scale,
+  } );
+};
+
 export interface IdentifyPhotoHandle {
   applyZoom: ( scale: number ) => void;
   saveCrop: ( ) => void;
@@ -122,36 +155,11 @@ export const IdentifyPhoto = memo( forwardRef<IdentifyPhotoHandle, IdentifyPhoto
     saveAnimalCrop( uri, crop );
   }, [size, uri] );
 
-  // Rescale the image while keeping whatever is currently at the viewport
-  // centre fixed there (rather than snapping back to the image centre).
-  // Derived directly from the current transform (not by round-tripping
-  // through a normalized crop), since the crop rectangle gets clamped to the
-  // image bounds whenever the view is letterboxed -- e.g. by aspect ratio, or
-  // by panning past the image edge -- which would otherwise throw off the
-  // fixed point and make the image drift as the slider moves.
   const applyZoom = useCallback( ( scale: number ) => {
     const img = imageRef.current;
     if ( !img ) return;
     appliedRef.current = true;
-    const current = img.readTransform( );
-    if ( current.scale <= 0 ) {
-      img.applyTransform( {
-        scale, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
-      } );
-      return;
-    }
-    const centre = size / 2;
-    const totalTx = current.translateX + current.focalX;
-    const totalTy = current.translateY + current.focalY;
-    const localX = centre - totalTx / current.scale;
-    const localY = centre - totalTy / current.scale;
-    img.applyTransform( {
-      scale,
-      translateX: 0,
-      translateY: 0,
-      focalX: ( centre - localX ) * scale,
-      focalY: ( centre - localY ) * scale,
-    } );
+    zoomAroundCentre( img, scale, size / 2, size / 2 );
   }, [size] );
 
   useImperativeHandle(

@@ -183,7 +183,7 @@ const clearExpiredTempFiles = ( ) => clearExpiredFilesByTtl(
   true,
 );
 
-// Brightness-adjusted previews (useLiveToneMappedBrightnessUri) and audio
+// Brightness-adjusted images and audio
 // extracted from imported videos are regenerated or moved on use.
 const clearExpiredMediaCaches = async ( ) => {
   await clearExpiredFilesByTtl( brightnessAdjustedPath );

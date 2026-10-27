@@ -5,9 +5,9 @@ import {
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, {
-  useCallback, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
-import { PixelRatio, StyleSheet } from "react-native";
+import { StyleSheet } from "react-native";
 import type { PanGesture } from "react-native-gesture-handler";
 import {
   Gesture,
@@ -18,21 +18,20 @@ import type { CarouselRenderItem, ICarouselInstance } from "react-native-reanima
 import Carousel from "react-native-reanimated-carousel";
 import Photo from "realmModels/Photo";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
-import { deleteBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
-import useLiveToneMappedBrightnessUri from "sharedHelpers/useLiveToneMappedBrightnessUri";
 import { openExternalWebBrowser } from "sharedHelpers/util";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import {
-  EXPOSURE_STOPS_DEFAULT,
-  stopsToGain,
+  EXPOSURE_STOPS_MAX,
+  EXPOSURE_STOPS_MIN,
 } from "sharedHooks/useIdentifyPhotoBrightness";
+import useIdentifyPhotoControls from "sharedHooks/useIdentifyPhotoControls";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
 
 import AttributionButton from "./AttributionButton";
 import CustomImageZoom, { SUBJECT_CROP_FRAME_FRACTION } from "./CustomImageZoom";
-import { BrightnessSlider } from "./IdentifyPhoto";
+import { zoomAroundCentre, ZoomBrightnessSliders } from "./IdentifyPhoto";
 import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 
 interface PhotoItem {
@@ -94,9 +93,6 @@ const MainMediaDisplay = ( {
   const { t } = useTranslation( );
   const { screenWidth, screenHeight } = useDeviceOrientation( );
   const [zooming, setZooming] = useState( false );
-  const [brightnessStops, setBrightnessStops] = useState( EXPOSURE_STOPS_DEFAULT );
-  const brightness = stopsToGain( brightnessStops );
-  const [showBrightnessSlider, setShowBrightnessSlider] = useState( false );
   const imageDimensionsRef = useRef<{ width: number; height: number } | null>( null );
   const currentZoomRefRef = useRef<SharedZoomableImageRef | null>( null );
   const items = useMemo( ( ) => ( [
@@ -104,28 +100,33 @@ const MainMediaDisplay = ( {
     ...sounds.map( sound => ( { ...sound, type: "sound" as const } ) ),
   ] ), [photos, sounds] );
 
-  // Live preview for whichever photo the brightness slider is currently
-  // editing, using the debounced exposure adjustment (the same one that gets
-  // saved — see adjustImageBrightness) so the preview matches the final look
-  // exactly.
   const selectedPhoto = photos[selectedMediaIndex];
-  const selectedPhotoUri = selectedPhoto
-    ? Photo.displayLocalOrRemoteLargePhoto( selectedPhoto )
-    : undefined;
-  // Capped to screen resolution (not fully uncapped) since this reprocesses
-  // on every settled slider tick — full-resolution processing is too slow
-  // to keep up with interactive dragging.
-  const liveBrightnessMaxDimension = Math.round(
-    Math.max( screenWidth, screenHeight ) * PixelRatio.get( ),
-  );
-  const liveBrightnessUri = useLiveToneMappedBrightnessUri(
-    selectedPhotoUri,
+
+  // The same zoom + exposure sliders as the crop editor: brightness drives the
+  // CSS filter live and is recorded to the brightness log on release.
+  const {
     brightness,
-    liveBrightnessMaxDimension,
-  );
-  const liveBrightnessReady = Boolean(
-    liveBrightnessUri && liveBrightnessUri !== selectedPhotoUri,
-  );
+    brightnessStops,
+    handleBrightnessChange,
+    handleBrightnessComplete,
+    handleScaleChange,
+    handleZoomChange,
+    zoomScale,
+  } = useIdentifyPhotoControls( {
+    brightnessKey: selectedPhoto?.url,
+    applyZoom: scale => {
+      const img = currentZoomRefRef.current;
+      if ( img ) zoomAroundCentre( img, scale, screenWidth / 2, screenHeight / 2 );
+    },
+    // Each photo keeps its own framing, so sync the slider to it on paging
+    // instead of resetting.
+    skipZoomReset: true,
+  } );
+
+  useEffect( ( ) => {
+    const img = currentZoomRefRef.current;
+    if ( img ) handleScaleChange( img.readTransform( ).scale );
+  }, [handleScaleChange, selectedMediaIndex] );
 
   // On the render right after a photo is removed, selectedMediaIndex can still
   // point at the deleted index
@@ -141,19 +142,6 @@ const MainMediaDisplay = ( {
   const handleImageDimensionsChange = useCallback( ( dims: { width: number; height: number } ) => {
     imageDimensionsRef.current = dims;
   }, [] );
-
-  // Save the adjustment to Firebase automatically when the user finishes
-  // dragging the slider (matching the Identify page), rather than requiring a
-  // separate save tap.
-  const handleBrightnessComplete = useCallback( ( value: number ) => {
-    const photo = photos[selectedMediaIndex];
-    if ( !photo?.url ) return;
-    if ( value === EXPOSURE_STOPS_DEFAULT ) {
-      deleteBrightness( photo.url );
-    } else {
-      saveBrightness( photo.url, stopsToGain( value ) );
-    }
-  }, [photos, selectedMediaIndex] );
 
   const handleInteractionEnd = useCallback( ( ) => {
     const currentIndex = selectedMediaIndex;
@@ -188,19 +176,10 @@ const MainMediaDisplay = ( {
     const uri = Photo.displayLocalOrRemoteOriginalPhoto( photo );
     const hasAttribution = photo?.attribution;
     const isSelected = photoIndex === selectedMediaIndex;
-    const isEditingBrightness = isSelected && brightness !== BRIGHTNESS_DEFAULT;
-    // Only ever show the exposure-based adjustment (power->linear->power, see
-    // adjustImageBrightness). Until the debounced processing finishes we show
-    // the unadjusted image rather than a CSS brightness filter, which uses a
-    // different (gamma-encoded multiply) computation and made the preview
-    // flash between the two as processing completed and restarted per tick.
-    const displayUri = isEditingBrightness && liveBrightnessReady
-      ? liveBrightnessUri
-      : uri;
     return (
       <View className="flex-1">
         <CustomImageZoom
-          uri={displayUri}
+          uri={uri}
           resetKey={uri}
           setZooming={setZooming}
           selectedMediaIndex={selectedMediaIndex}
@@ -209,7 +188,9 @@ const MainMediaDisplay = ( {
           // photo shows it framed the way the user left it.
           restoreFramedCrop
           detectUri={uri}
-          brightness={BRIGHTNESS_DEFAULT}
+          brightness={isSelected
+            ? brightness
+            : BRIGHTNESS_DEFAULT}
           zoomRef={( ref: SharedZoomableImageRef | null ) => {
             if ( photoIndex === selectedMediaIndex ) {
               currentZoomRefRef.current = ref;
@@ -218,6 +199,9 @@ const MainMediaDisplay = ( {
           onSwipeToClose={onClose}
           onImageDimensionsChange={handleImageDimensionsChange}
           onInteractionEnd={handleInteractionEnd}
+          onScaleChange={isSelected
+            ? handleScaleChange
+            : undefined}
         />
         {
           editable
@@ -266,38 +250,16 @@ const MainMediaDisplay = ( {
               </View>
             )
         }
-        <View className="absolute bottom-4 left-4 flex-row items-center">
-          <INatIconButton
-            onPress={( ) => setShowBrightnessSlider( prev => !prev )}
-            icon="sun"
-            color={showBrightnessSlider || brightness !== BRIGHTNESS_DEFAULT
-              ? colors.inatGreen
-              : colors.white}
-            className={iconBtnClass}
-            accessibilityLabel={t( "Adjust-brightness" )}
-            testID="MediaViewer.brightnessButton"
-            size={20}
-          />
-          { onSharePhoto && (
+        { onSharePhoto && (
+          <View className="absolute bottom-4 left-4">
             <INatIconButton
               onPress={( ) => onSharePhoto( uri )}
               icon="share"
               color={colors.white}
-              className={`${iconBtnClass} ml-2`}
+              className={iconBtnClass}
               accessibilityLabel={t( "Share" )}
               testID="MediaViewer.shareButton"
               size={20}
-            />
-          ) }
-        </View>
-        { showBrightnessSlider && (
-          <View className="absolute bottom-16 left-0 right-0 bg-[#1c1c1c] px-4 py-1">
-            <BrightnessSlider
-              value={brightnessStops}
-              onChange={setBrightnessStops}
-              onComplete={handleBrightnessComplete}
-              accessibilityLabel={t( "Adjust-brightness" )}
-              iconColor={colors.white}
             />
           </View>
         ) }
@@ -385,6 +347,23 @@ const MainMediaDisplay = ( {
           onConfigurePanGesture={onConfigurePanGesture}
         />
       </GestureHandlerRootView>
+      {/* Zoom + brightness sliders below the photo, matching the crop editor */}
+      <View className="bg-[#1c1c1c] py-1">
+        <ZoomBrightnessSliders
+          disabled={!selectedPhoto}
+          zoomScale={zoomScale}
+          brightnessStops={brightnessStops}
+          exposureStopsMin={EXPOSURE_STOPS_MIN}
+          exposureStopsMax={EXPOSURE_STOPS_MAX}
+          onZoomChange={handleZoomChange}
+          onZoomComplete={handleInteractionEnd}
+          onBrightnessChange={handleBrightnessChange}
+          onBrightnessComplete={handleBrightnessComplete}
+          zoomAccessibilityLabel={t( "Adjust-zoom" )}
+          brightnessAccessibilityLabel={t( "Adjust-brightness" )}
+          iconColor={colors.white}
+        />
+      </View>
     </View>
   );
 };

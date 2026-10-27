@@ -1,5 +1,5 @@
 import CustomImageZoom from "components/MediaViewer/CustomImageZoom";
-import { ZoomBrightnessSliders } from "components/MediaViewer/IdentifyPhoto";
+import { zoomAroundCentre, ZoomBrightnessSliders } from "components/MediaViewer/IdentifyPhoto";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import { BackButton, INatIconButton } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
@@ -260,26 +260,7 @@ const ImageCropView = ( {
     if ( !img || windowWidth <= 0 || cropAreaHeight <= 0 ) {
       return;
     }
-    const centreX = windowWidth / 2;
-    const centreY = cropAreaHeight / 2;
-    const current = img.readTransform( );
-    if ( current.scale <= 0 ) {
-      img.applyTransform( {
-        scale, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
-      } );
-      return;
-    }
-    const totalTx = current.translateX + current.focalX;
-    const totalTy = current.translateY + current.focalY;
-    const localX = centreX - totalTx / current.scale;
-    const localY = centreY - totalTy / current.scale;
-    img.applyTransform( {
-      scale,
-      translateX: 0,
-      translateY: 0,
-      focalX: ( centreX - localX ) * scale,
-      focalY: ( centreY - localY ) * scale,
-    } );
+    zoomAroundCentre( img, scale, windowWidth / 2, cropAreaHeight / 2 );
   }, [cropAreaHeight, windowWidth] );
 
   // Zoom slider plus exposure. Brightness drives the CSS filter live, is
