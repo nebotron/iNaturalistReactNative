@@ -2,6 +2,7 @@
 #import "LocationRelaunch.h"
 
 #import <Firebase.h>
+#import <React/RCTBridge.h>
 #import <React/RCTBundleURLProvider.h>
 #import <ReactAppDependencyProvider/RCTAppDependencyProvider.h>
 #import <RNShareMenu/ShareMenuManager.h>
@@ -11,11 +12,25 @@
 #import <objc/runtime.h>
 #import <dlfcn.h>
 #import <mach-o/dyld.h>
+#import <react/featureflags/ReactNativeFeatureFlags.h>
+#import <react/featureflags/ReactNativeFeatureFlagsOverridesOSSStable.h>
 #if __has_include(<react_native_config/RNCConfig.h>)
 #import <react_native_config/RNCConfig.h>
 #else
 #import "RNCConfig.h"
 #endif
+
+RCT_EXTERN NSArray<Class> *RCTGetModuleClasses( void );
+
+// RN creates a main-queue-setup native module lazily on whichever thread first
+// asks for it, by dispatch_sync'ing to the main queue. If the main thread asks
+// for the same module meanwhile, it waits on the creating thread and both
+// block for good: the watchdog kills behind every metrickit_crash. Creating
+// all of those modules on the main queue before JS runs removes the race.
+class INatFeatureFlags : public facebook::react::ReactNativeFeatureFlagsOverridesOSSStable {
+ public:
+  bool enableEagerMainQueueModulesOnIOS() override { return true; }
+};
 
 @interface AppDelegate () <MXMetricManagerSubscriber>
 @end
@@ -80,8 +95,8 @@ static NSString *describeStack( MXCallStackTree *stack )
       if ( address && dladdr( address + offset, &info ) ) {
         NSString *image = [@( info.dli_fname ?: "" ) lastPathComponent];
         where = info.dli_sname
-          ? [NSString stringWithFormat:@"%@ %s+%ld", image, info.dli_sname,
-              (long) ( address + offset - (const char *) info.dli_saddr )]
+          ? [NSString stringWithFormat:@"%@ %s+%ld (+0x%llx)", image, info.dli_sname,
+              (long) ( address + offset - (const char *) info.dli_saddr ), offset]
           : [NSString stringWithFormat:@"%@+0x%llx", image, offset];
       }
       [out appendFormat:@"  %@\n", where];
@@ -185,6 +200,8 @@ static NSString *describe( id value )
     NSLog(@"Skipping Firebase configuration due to invalid local GoogleService-Info.plist: %@", exception.reason);
   }
   self.reactNativeFactory = [[RCTReactNativeFactory alloc] initWithDelegate:self];
+  facebook::react::ReactNativeFeatureFlags::dangerouslyForceOverride(
+    std::make_unique<INatFeatureFlags>() );
   self.dependencyProvider = [RCTAppDependencyProvider new];
 
   self.window = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
@@ -234,6 +251,22 @@ static NSString *describe( id value )
       }, hang.callStackTree );
     }
   }
+}
+
+// Mirrors RCTTurboModuleManager's _requiresMainQueueSetup:, so every module RN
+// would set up on the main queue is created there eagerly (see INatFeatureFlags).
+- (NSArray<NSString *> *)unstableModulesRequiringMainQueueSetup
+{
+  NSMutableArray<NSString *> *names = [[super unstableModulesRequiringMainQueueSetup] mutableCopy];
+  IMP objectInit = [NSObject instanceMethodForSelector:@selector( init )];
+  for ( Class moduleClass in RCTGetModuleClasses() ) {
+    BOOL requiresMainQueue = [moduleClass respondsToSelector:@selector( requiresMainQueueSetup )]
+      ? [moduleClass requiresMainQueueSetup]
+      : [moduleClass instancesRespondToSelector:@selector( constantsToExport )]
+        || [moduleClass instanceMethodForSelector:@selector( init )] != objectInit;
+    if ( requiresMainQueue ) [names addObject:RCTBridgeModuleNameForClass( moduleClass )];
+  }
+  return names;
 }
 
 - (NSURL *)sourceURLForBridge:(RCTBridge *)bridge
