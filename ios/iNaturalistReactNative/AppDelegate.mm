@@ -84,7 +84,9 @@ static NSString *describeStack( MXCallStackTree *stack )
     [out appendFormat:@"thread %ld%@:\n", (long) threadIndex++,
       [thread[@"threadAttributed"] boolValue] ? @" (attributed)" : @""];
     NSInteger shown = 0;
-    for ( NSDictionary *f in frames.reverseObjectEnumerator ) {
+    // MetricKit's root frame is the leaf, so this order is leaf-first and the cap
+    // drops the outermost frames instead of the ones that show where it stopped
+    for ( NSDictionary *f in frames ) {
       if ( shown++ >= 40 ) break;
       NSString *uuid = f[@"binaryUUID"];
       uint64_t offset = [f[@"offsetIntoBinaryTextSegment"] unsignedLongLongValue];

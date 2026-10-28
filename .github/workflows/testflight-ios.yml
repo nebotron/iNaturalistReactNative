@@ -267,6 +267,8 @@ jobs:
     #
     # COMPILER_INDEX_STORE_ENABLE=NO drops the index-while-building work, which
     # only feeds Xcode's editor; nothing opens this archive in an editor.
+    # STRIP_STYLE=debugging keeps local symbols (ObjC methods, static C++) so the
+    # MetricKit stacks AppDelegate logs name real functions via dladdr.
     - name: Archive
       run: |
         set -o pipefail
@@ -282,6 +284,7 @@ jobs:
           -authenticationKeyID "$ASC_KEY_ID" \
           -authenticationKeyIssuerID "$ASC_ISSUER_ID" \
           COMPILER_INDEX_STORE_ENABLE=NO \
+          STRIP_STYLE=debugging \
           METRO_CACHE_DIR="$HOME/.metro-cache" \
           CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
         {
