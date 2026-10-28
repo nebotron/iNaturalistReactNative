@@ -55,3 +55,37 @@ index 9b04cad..b2b2762 100644
        } else {
          // Failback to system font.
          font = RCTDefaultFontWithFontProperties(fontProperties);
+diff --git a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModuleManager.mm b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModuleManager.mm
+index 0000000..0000000 100644
+--- a/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModuleManager.mm
++++ b/node_modules/react-native/ReactCommon/react/nativemodule/core/platform/ios/ReactCommon/RCTTurboModuleManager.mm
+@@ -583,6 +583,29 @@
+                             shouldPerfLog:(BOOL)shouldPerfLog
+                            moduleProvider:(id<RCTModuleProvider>)moduleProvider
+ {
++  // A module needing main queue setup is created by whichever thread asks first, which then
++  // dispatch_syncs its setup to main. If the main thread asks for it meanwhile, it waits on that
++  // thread, and both block until the watchdog kills the app. Create such modules only on main.
++  if (!RCTIsMainQueue()) {
++    Class moduleClass = moduleProvider ? [moduleProvider class] : [self _getModuleClassFromName:moduleName];
++    if ([self _shouldCreateObjCModule:moduleClass] && [self _requiresMainQueueSetup:moduleClass]) {
++      {
++        std::lock_guard<std::mutex> guard(moduleHolder->mutex());
++        if (moduleHolder->isDoneCreatingModule()) {
++          return moduleHolder->getModule();
++        }
++      }
++      __block id<RCTBridgeModule> module = nil;
++      RCTUnsafeExecuteOnMainQueueSync(^{
++        module = [self _provideObjCModule:moduleName
++                             moduleHolder:moduleHolder
++                            shouldPerfLog:shouldPerfLog
++                           moduleProvider:moduleProvider];
++      });
++      return module;
++    }
++  }
++
+   bool shouldCreateModule = false;
+ 
+   {
