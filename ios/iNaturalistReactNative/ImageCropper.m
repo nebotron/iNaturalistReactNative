@@ -771,6 +771,7 @@ static uint64_t freeDiskMB( void )
 }
 
 static UIImage *thumbnailFromImageSource( CGImageSourceRef src, CGFloat maxPixel );
+static size_t   primaryImageIndex( CGImageSourceRef src );
 
 // The camera's own JPEG of a raw, upright and as close to longestSide as it
 // has, for when the raw decode draws nothing. That refusal is intermittent and
@@ -781,8 +782,20 @@ static UIImage *embeddedPreviewImage( NSString *path, CGFloat longestSide )
   CGImageSourceRef src =
     CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
   if ( !src ) return nil;
-  UIImage *preview = thumbnailFromImageSource( src, longestSide );
+  // IfAbsent, not thumbnailFromImageSource's Always: Always builds the
+  // thumbnail from the raw itself, so it was refused by the same decoder that
+  // just failed, and this fallback never once produced an image.
+  NSDictionary *opts = @{
+    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageIfAbsent: @YES,
+    (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform:     @YES,
+    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:            @( longestSide ),
+  };
+  CGImageRef cg = CGImageSourceCreateThumbnailAtIndex(
+    src, primaryImageIndex( src ), (__bridge CFDictionaryRef)opts );
   CFRelease( src );
+  if ( !cg ) return nil;
+  UIImage *preview = [UIImage imageWithCGImage:cg];
+  CGImageRelease( cg );
   return preview;
 }
 
