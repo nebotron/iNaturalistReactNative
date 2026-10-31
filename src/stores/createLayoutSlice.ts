@@ -49,6 +49,8 @@ export interface LayoutSlice {
     setScreenAfterPhotoEvidence: ( screenAfterPhotoEvidence: SCREEN_AFTER_PHOTO_EVIDENCE ) => void;
     isAllAddObsOptionsMode: boolean;
     setIsAllAddObsOptionsMode: ( isAllAddObsOptionsMode: boolean ) => void;
+    isPhotoLibraryAddObsMode: boolean;
+    setIsPhotoLibraryAddObsMode: ( ) => void;
     shownOnce: object;
     setShownOnce: ( key: string ) => void;
     resetShownOnce: ( ) => void;
@@ -97,6 +99,7 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
         // reset to AICamera mode if default mode is toggled on
         // and otherwise, advanced mode default is all options
         isAllAddObsOptionsMode: newValue !== true,
+        isPhotoLibraryAddObsMode: false,
         // reset to Match screen if default mode is toggled on
         // and otherwise, advanced mode default is Suggestions
         screenAfterPhotoEvidence: newValue === true
@@ -123,6 +126,16 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         isAllAddObsOptionsMode: newValue,
+        isPhotoLibraryAddObsMode: false,
+      },
+    } ) ),
+    // Green button goes straight to the photo importer
+    isPhotoLibraryAddObsMode: false,
+    setIsPhotoLibraryAddObsMode: ( ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        isAllAddObsOptionsMode: false,
+        isPhotoLibraryAddObsMode: true,
       },
     } ) ),
     // State to control pivot cards and other onboarding material being shown only once

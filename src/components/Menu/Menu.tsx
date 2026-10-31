@@ -245,6 +245,7 @@ const Menu = ( ) => {
     const {
       isDefaultMode,
       isAllAddObsOptionsMode,
+      isPhotoLibraryAddObsMode,
       screenAfterPhotoEvidence,
     } = layoutPrefs;
     const modeContext = ( isDefaultMode
@@ -255,9 +256,9 @@ const Menu = ( ) => {
       }
       : {
         mode: "advanced",
-        observationButtonMode: isAllAddObsOptionsMode
-          ? "Obs Sheet"
-          : "AI Camera",
+        observationButtonMode: ( isAllAddObsOptionsMode && "Obs Sheet" )
+          || ( isPhotoLibraryAddObsMode && "Photo Library" )
+          || "AI Camera",
         screenAfterPhotoEvidence,
       } );
     const loggedInContext = currentUser

@@ -26,7 +26,7 @@ const AddObsButton = ( ): React.Node => {
   const openBottomSheet = React.useCallback( () => setShowBottomSheet( true ), [] );
   const closeBottomSheet = React.useCallback( () => setShowBottomSheet( false ), [] );
 
-  const { isAllAddObsOptionsMode } = useLayoutPrefs( );
+  const { isAllAddObsOptionsMode, isPhotoLibraryAddObsMode } = useLayoutPrefs( );
   const currentUser = useCurrentUser( );
 
   // #region Tooltip logic
@@ -51,7 +51,7 @@ const AddObsButton = ( ): React.Node => {
       // Only show the tooltip if the user has the AI camera as the default button option.
       // Only show the tooltip on MyObservations screen.
       const isOnMyObservationsResults = currentRoute?.name === "MyObservationsResults";
-      const onlyAiCamera = !isAllAddObsOptionsMode;
+      const onlyAiCamera = !isAllAddObsOptionsMode && !isPhotoLibraryAddObsMode;
 
       let triggerCondition = isOnMyObservationsResults && onlyAiCamera;
 
@@ -97,6 +97,7 @@ const AddObsButton = ( ): React.Node => {
     justFinishedSignup,
     currentUser,
     isAllAddObsOptionsMode,
+    isPhotoLibraryAddObsMode,
     shownOnce,
   ] );
 
@@ -270,15 +271,17 @@ const AddObsButton = ( ): React.Node => {
         onPress={() => {
           if ( isAllAddObsOptionsMode ) {
             openBottomSheet();
+          } else if ( isPhotoLibraryAddObsMode ) {
+            navAndCloseBottomSheet( "PhotoLibrary" );
           } else {
             navToARCamera();
           }
         }}
         accessibilityLabel={t( "Add-observations" )}
         accessibilityHint={
-          isAllAddObsOptionsMode
-            ? t( "Shows-observation-creation-options" )
-            : t( "Opens-AI-camera" )
+          ( isAllAddObsOptionsMode && t( "Shows-observation-creation-options" ) )
+          || ( isPhotoLibraryAddObsMode && t( "Navigates-to-photo-importer" ) )
+          || t( "Opens-AI-camera" )
         }
         iconName={isAllAddObsOptionsMode && "plus"}
         iconSize={isAllAddObsOptionsMode && 31}

@@ -17,6 +17,8 @@ const AdvancedSettings = ( ) => {
   const {
     isAllAddObsOptionsMode,
     setIsAllAddObsOptionsMode,
+    isPhotoLibraryAddObsMode,
+    setIsPhotoLibraryAddObsMode,
     screenAfterPhotoEvidence,
     setScreenAfterPhotoEvidence,
   } = useLayoutPrefs();
@@ -36,9 +38,16 @@ const AdvancedSettings = ( ) => {
         <RadioButtonRow
           classNames="ml-[6px] mt-[15px]"
           smallLabel
-          checked={!isAllAddObsOptionsMode}
+          checked={!isAllAddObsOptionsMode && !isPhotoLibraryAddObsMode}
           onPress={() => setIsAllAddObsOptionsMode( false )}
           label={t( "iNaturalist-AI-Camera" )}
+        />
+        <RadioButtonRow
+          classNames="ml-[6px] mt-[15px]"
+          smallLabel
+          checked={isPhotoLibraryAddObsMode}
+          onPress={setIsPhotoLibraryAddObsMode}
+          label={t( "Upload-photos" )}
         />
       </View>
       <View className="mt-[20px]">
