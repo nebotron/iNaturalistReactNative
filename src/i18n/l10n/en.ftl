@@ -1437,9 +1437,6 @@ Required = Required
 Research-Grade--quality-grade = Research Grade
 RESEARCH-GRADE--quality-grade = RESEARCH GRADE
 Research-Grade-Status = Research Grade Status
-# Label for a button that resets the state of an interface, e.g. a button that
-# resets the sound recorder to its original state
-Reset-brightness = Reset brightness
 # Reset password button
 RESET-PASSWORD = RESET PASSWORD
 # Label for a button that resets a sound recording
