@@ -6,9 +6,16 @@ import {
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import React from "react";
+import type { ViewProps } from "react-native";
+import { requireNativeComponent } from "react-native";
 import { useTranslation } from "sharedHooks";
 
 import ObsPhotoSelectionList from "./ObsPhotoSelectionList";
+
+const AudioClipSpectrogram = requireNativeComponent<ViewProps & { path: string }>(
+  "AudioClipSpectrogram",
+);
+const SPECTROGRAM_STYLE = { height: 140 };
 
 interface Props {
   detectSubject?: boolean;
@@ -43,7 +50,19 @@ const SuggestionsHeader = ( {
     <>
       <View className="mx-5">
         {soundUri
-          ? <SoundContainer sizeClass="w-full h-[188px]" sound={{ file_url: soundUri }} isVisible />
+          ? (
+            <View className="bg-black rounded-lg overflow-hidden">
+              <AudioClipSpectrogram
+                path={soundUri.replace( /^file:\/\//, "" )}
+                style={SPECTROGRAM_STYLE}
+              />
+              <SoundContainer
+                sizeClass="w-full h-[188px]"
+                sound={{ file_url: soundUri }}
+                isVisible
+              />
+            </View>
+          )
           : (
             <ObsPhotoSelectionList
               detectSubject={detectSubject}
