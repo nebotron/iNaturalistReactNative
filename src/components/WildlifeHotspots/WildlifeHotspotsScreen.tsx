@@ -532,14 +532,14 @@ const WildlifeHotspotsScreen = ( {
   }, [limitMinutes] );
 
   // Replaces the route's hotspot stops with the set that fits in the time limit
-  // and has the most observations, drawn from the densest hotspots
+  // and has the most observations
   const handlePlanRoute = useCallback( async () => {
     const fixedStops = stops.filter( s => !s.fromHotspot );
     if ( limitMinutes === null || fixedStops.some( s => !s.point ) ) return;
     const limitSec = limitMinutes * 60;
     const pool = candidates
       .filter( h => h.detourMinutes * 60 <= limitSec )
-      .sort( ( a, b ) => b.density - a.density )
+      .sort( ( a, b ) => b.observationCount - a.observationCount )
       .slice( 0, MAX_PLAN_CANDIDATES );
     const points: LatLng[] = [
       ...fixedStops.map( s => s.point as LatLng ),

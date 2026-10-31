@@ -44,9 +44,6 @@ export interface Hotspot {
   // Smallest circle containing every observation in the cluster
   area: Circle;
   observationCount: number;
-  // Smoothed share of all iNaturalist observations here that match the
-  // filters, so busy areas don't rank higher just for having more observers
-  density: number;
   detourMinutes: number;
   speciesCount: number;
   topSpecies: HotspotSpecies[];
@@ -67,18 +64,6 @@ const BBOX_PADDING_KM = 80;
 // route, capped to keep traffic to eBird low
 const EBIRD_SPACING_KM = 80;
 const MAX_EBIRD_SEARCHES = 8;
-// Clusters (top by observation count) whose density is looked up
-const MAX_DENSITY_CANDIDATES = 100;
-const DENSITY_REQUEST_CONCURRENCY = 10;
-// Pseudo-observations at the regional rate added to each cluster, so a cluster
-// with only a few observations isn't ranked on them alone
-const DENSITY_PRIOR_WEIGHT = 20;
-const MIN_DENSITY_RADIUS_KM = 0.2;
-// Filters that select the organism, dropped to count all observations as effort
-const TAXON_PARAM_KEYS = [
-  "taxon_id", "taxon_ids", "taxon_name", "iconic_taxa", "without_taxon_id",
-  "hrank", "lrank", "rank", "endemic", "native", "introduced", "threatened",
-];
 
 const HOTSPOT_PARAM_KEYS = [
   "hotspotClusterRadiusKm",
@@ -540,19 +525,6 @@ async function fetchEbirdRouteObservations(
   } ) );
 }
 
-async function mapInBatches<T, R>(
-  items: T[],
-  size: number,
-  fn: ( item: T ) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = [];
-  for ( let i = 0; i < items.length; i += size ) {
-    // eslint-disable-next-line no-await-in-loop
-    results.push( ...await Promise.all( items.slice( i, i + size ).map( fn ) ) );
-  }
-  return results;
-}
-
 export function useRouteHotspots() {
   const ebirdEnabled = useStore( state => state.layout.ebirdEnabled );
   const [hotspots, setHotspots] = useState<Hotspot[]>( [] );
@@ -690,67 +662,9 @@ export function useRouteHotspots() {
         } );
 
         candidates.sort( ( a, b ) => b.count - a.count );
+        const topCandidates = candidates.slice( 0, maxDetourCandidates );
 
-        // 5. Normalize by survey effort: rate = target / all observations in the
-        // same circle and date window, shrunk toward the regional rate.
-        // The sample holds every match back to its oldest day, so when it was
-        // truncated, background counts start there too.
-        const inatPoints = inatObservations
-          .map( getObsCoords )
-          .filter( ( c ): c is LatLng => c !== null );
-        const oldestDay = inatObservations.reduce(
-          ( min: string | null, obs: { observed_on?: string } ) => (
-            obs.observed_on && ( !min || obs.observed_on < min )
-              ? obs.observed_on
-              : min ),
-          null,
-        );
-        const backgroundParams = {
-          ...Object.fromEntries( Object.entries( nonLocationParams )
-            .filter( ( [key] ) => !TAXON_PARAM_KEYS.includes( key ) ) ),
-          ...( inatObservations.length >= totalObs && oldestDay
-            ? { d1: oldestDay }
-            : {} ),
-          verifiable: true,
-          per_page: 0,
-        };
-        const countObservations = async (
-          location: Record<string, number>,
-        ): Promise<number | null> => {
-          try {
-            const response = await searchObservations( { ...backgroundParams, ...location } );
-            return response?.total_results ?? null;
-          } catch {
-            return null;
-          }
-        };
-        const regionTotal = await countObservations( bbox );
-        const regionRate = regionTotal
-          ? Math.min( 1, inatPoints.length / regionTotal )
-          : 0;
-        const densityCandidates = candidates
-          .slice( 0, Math.max( MAX_DENSITY_CANDIDATES, maxDetourCandidates ) );
-        const densities = await mapInBatches(
-          densityCandidates,
-          DENSITY_REQUEST_CONCURRENCY,
-          async ( { area } ) => {
-            const radius = Math.max( area.radiusKm, MIN_DENSITY_RADIUS_KM );
-            const total = await countObservations( { lat: area.lat, lng: area.lng, radius } );
-            if ( total === null ) return regionRate;
-            const target = inatPoints.filter(
-              p => distanceInKm( p.lat, p.lng, area.lat, area.lng ) <= radius,
-            ).length;
-            return ( target + DENSITY_PRIOR_WEIGHT * regionRate )
-              / ( Math.max( total, target ) + DENSITY_PRIOR_WEIGHT );
-          },
-        );
-        if ( isStale() ) return;
-        const topCandidates = densityCandidates
-          .map( ( candidate, i ) => ( { ...candidate, density: densities[i] } ) )
-          .sort( ( a, b ) => b.density - a.density )
-          .slice( 0, maxDetourCandidates );
-
-        // 6. Compute actual travel time in parallel for each candidate, inserted at
+        // 5. Compute actual travel time in parallel for each candidate, inserted at
         // whichever point along the current stops minimizes the added distance
         const withDetours = await Promise.all(
           topCandidates.map( async candidate => {
@@ -772,7 +686,6 @@ export function useRouteHotspots() {
               centerLongitude: candidate.centerLng,
               area: candidate.area,
               observationCount: candidate.count,
-              density: candidate.density,
               detourMinutes,
               speciesCount: candidate.speciesCount,
               topSpecies: candidate.topSpecies,
@@ -781,10 +694,10 @@ export function useRouteHotspots() {
           } ),
         );
 
-        // 7. Rank by ratio of added travel time to density (lower = better)
+        // 6. Rank by ratio of added travel time to observations (lower = better)
         withDetours.sort( ( a, b ) => {
-          const ratioA = ( a.detourMinutes + parkingMinutes ) / Math.max( a.density, 1e-9 );
-          const ratioB = ( b.detourMinutes + parkingMinutes ) / Math.max( b.density, 1e-9 );
+          const ratioA = ( a.detourMinutes + parkingMinutes ) / a.observationCount;
+          const ratioB = ( b.detourMinutes + parkingMinutes ) / b.observationCount;
           return ratioA - ratioB;
         } );
 
