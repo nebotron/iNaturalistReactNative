@@ -83,7 +83,7 @@ let sessionLocation: UserLocation | null = null;
 // Where in a 15 s context clip the call is, in seconds from its start, from
 // the model's per-frame logits in 1/3 s bins: of the stretches of bins at 0 or
 // more (or within 2 of the peak, when it is weaker), joined across gaps of up
-// to 2/3 s, the strongest one in the 5 s window the call was heard in, padded
+// to 2 s, the strongest one in the 5 s window the call was heard in, padded
 // by a bin each side to at least 1 s. On the 42 15 s clips labeled right it
 // found a call in every one, 2 s long at the median.
 const BINS_PER_S = 3;
@@ -98,7 +98,7 @@ const findCall = ( timeline: ( number | null )[] ): [number, number] | null => {
   bins.forEach( ( b, i ) => {
     if ( b < on ) return;
     const last = stretches[stretches.length - 1];
-    if ( last && i - last[1] <= 3 ) last[1] = i;
+    if ( last && i - last[1] <= 2 * BINS_PER_S + 1 ) last[1] = i;
     else stretches.push( [i, i] );
   } );
   const best = ( [a, b]: [number, number] ) => Math.max( ...bins.slice( a, b + 1 ) );
