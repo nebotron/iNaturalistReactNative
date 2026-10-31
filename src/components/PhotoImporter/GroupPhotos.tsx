@@ -5,7 +5,6 @@ import type {
 import {
   ActivityIndicator,
   Body2,
-  Button,
   CustomFlashList,
   INatIconButton,
 } from "components/SharedComponents";
@@ -251,39 +250,6 @@ const GroupPhotos = ( {
     separateItem,
   ] );
 
-  // The import/discard buttons scroll with the list so they're only
-  // reachable once the user has scrolled to the end of their photos.
-  const footerComponent = useMemo( ( ) => (
-    <View className="items-center px-2 pt-4">
-      <View className="flex-row w-full max-w-[500px] gap-2">
-        <Button
-          level="neutral"
-          text={t( "DISCARD" )}
-          onPress={discardImport}
-          testID="GroupPhotos.discard"
-        />
-        <Button
-          className="flex-1"
-          level="focus"
-          text={t( "IMPORT-X-OBSERVATIONS", { count: groupedPhotos.length } )}
-          onPress={navBasedOnUserSettings}
-          testID="GroupPhotos.next"
-          loading={isCreatingObservations}
-          // Importing now would build observations around photos whose files
-          // don't exist yet
-          disabled={pendingCount > 0}
-        />
-      </View>
-    </View>
-  ), [
-    discardImport,
-    groupedPhotos.length,
-    isCreatingObservations,
-    navBasedOnUserSettings,
-    pendingCount,
-    t,
-  ] );
-
   // The grid opens on placeholder cells while the photos are copied off the
   // device, so say what the cells that haven't filled in yet are waiting for.
   const headerComponent = useMemo( ( ) => ( pendingCount > 0
@@ -299,7 +265,7 @@ const GroupPhotos = ( {
     selectedObservations,
   };
 
-  // Leave room under the footer buttons for the floating toolbar
+  // Leave room for the floating toolbar
   const listStyle = useMemo( ( ) => ( {
     ...flashListStyle,
     paddingBottom: groupedPhotos.length > 0
@@ -310,7 +276,6 @@ const GroupPhotos = ( {
   return (
     <SharedStackViewWrapper>
       <CustomFlashList
-        ListFooterComponent={footerComponent}
         ListHeaderComponent={headerComponent}
         contentContainerStyle={listStyle}
         data={groupedPhotos}
@@ -330,6 +295,20 @@ const GroupPhotos = ( {
           style={DROP_SHADOW}
         >
           <View className="flex-row w-full gap-2">
+            <View className="flex-1 items-center">
+              <INatIconButton
+                icon="trash-outline"
+                mode="contained"
+                size={26}
+                width={58}
+                height={58}
+                color={colors.white}
+                backgroundColor={colors.darkGray}
+                accessibilityLabel={t( "DISCARD" )}
+                onPress={discardImport}
+                testID="GroupPhotos.discard"
+              />
+            </View>
             <View className="flex-1 items-center">
               <INatIconButton
                 icon="check"
@@ -375,6 +354,29 @@ const GroupPhotos = ( {
                 onPress={combinePhotos}
                 testID="GroupPhotos.combine"
               />
+            </View>
+            <View className="flex-1 items-center">
+              {isCreatingObservations
+                ? <ActivityIndicator size={58} />
+                : (
+                  <INatIconButton
+                    icon="arrow-up-circle-dots"
+                    mode="contained"
+                    size={26}
+                    width={58}
+                    height={58}
+                    color={colors.white}
+                    backgroundColor={colors.inatGreen}
+                    accessibilityLabel={t( "IMPORT-X-OBSERVATIONS", {
+                      count: groupedPhotos.length,
+                    } )}
+                    // Importing now would build observations around photos whose
+                    // files don't exist yet
+                    disabled={pendingCount > 0}
+                    onPress={navBasedOnUserSettings}
+                    testID="GroupPhotos.next"
+                  />
+                )}
             </View>
           </View>
         </View>
