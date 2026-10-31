@@ -33,7 +33,7 @@ const SearchMyObservationsTaxon = ( ) => {
   ) );
 
   const {
-    taxa, isLoading,
+    taxa, isLoading, addRecentTaxon,
   } = useTaxonSearch( taxonQuery );
 
   const closeScreen = useCallback( ( ) => navigation.goBack( ), [navigation] );
@@ -47,6 +47,7 @@ const SearchMyObservationsTaxon = ( ) => {
         );
         return;
       }
+      addRecentTaxon( newTaxon );
       // useTaxonSearch can return either ApiTaxon-shaped or RealmTaxon-shaped
       // taxa depending on the source, so we have to check for both here.
       // TODO: normalize taxa at ingest.
@@ -69,7 +70,7 @@ const SearchMyObservationsTaxon = ( ) => {
       dispatch( { type: MY_OBSERVATIONS_ACTION.CLEAR_TAXON_SEARCH } );
     }
     closeScreen( );
-  }, [closeScreen, currentUser, dispatch, isConnected, t] );
+  }, [addRecentTaxon, closeScreen, currentUser, dispatch, isConnected, t] );
 
   const resetSearch = useCallback( ( ) => {
     setTaxonQuery( "" );

@@ -33,6 +33,8 @@ export interface ExploreGridOverlays {
   faveCount: boolean;
 }
 
+const MAX_RECENT_TAXA = 10;
+
 export interface LayoutSlice {
   isAdvancedUser: boolean;
   obsDetailsTab: OBS_DETAILS_TAB;
@@ -69,6 +71,8 @@ export interface LayoutSlice {
     setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
     exploreGridOverlays: ExploreGridOverlays;
     setExploreGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
+    recentTaxonIds: number[];
+    addRecentTaxonId: ( taxonId: number ) => void;
   };
 }
 
@@ -194,6 +198,17 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         ebirdEnabled: newValue,
+      },
+    } ) ),
+    // Most recently selected taxa in taxon search, newest first
+    recentTaxonIds: [],
+    addRecentTaxonId: taxonId => set( state => ( {
+      layout: {
+        ...state.layout,
+        recentTaxonIds: [
+          taxonId,
+          ...state.layout.recentTaxonIds.filter( id => id !== taxonId ),
+        ].slice( 0, MAX_RECENT_TAXA ),
       },
     } ) ),
     // Last selected map layers type for react-native-maps MapView ("standard" or "hybrid")

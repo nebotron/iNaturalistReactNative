@@ -12,6 +12,7 @@ import type { RealmTaxon } from "realmModels/types";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import validateRealmSearch from "sharedHelpers/validateRealmSearch";
 import { useIconicTaxa } from "sharedHooks";
+import useStore from "stores/useStore";
 
 const { useRealm } = RealmContext;
 
@@ -34,6 +35,8 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     exactIds: Set<number>;
   } | null>( null );
   const { isConnected } = useNetInfo( );
+  const recentTaxonIds = useStore( state => state.layout.recentTaxonIds );
+  const addRecentTaxonId = useStore( state => state.layout.addRecentTaxonId );
 
   // Do the substring match in JS rather than via Realm's query language.
   // Realm's CONTAINS operator on this property was unreliable in
@@ -147,10 +150,17 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
   ] );
 
   const searchResult = useMemo( () => {
-    // Show iconic taxa by default (empty query)
+    // Show recently selected taxa, then iconic taxa, by default (empty query)
     if ( taxonQuery.length === 0 ) {
+      const recentTaxa = recentTaxonIds
+        .map( id => realm.objectForPrimaryKey<RealmTaxon>( "Taxon", id ) )
+        .filter( ( taxon ): taxon is RealmTaxon => !!taxon?.isValid( ) );
+      const recentIds = new Set( recentTaxa.map( taxon => taxon.id ) );
       return {
-        taxa: iconicTaxa,
+        taxa: [
+          ...recentTaxa,
+          ...Array.from( iconicTaxa ).filter( taxon => !recentIds.has( taxon.id ) ),
+        ],
         refetch: () => undefined,
         isLoading: false,
       };
@@ -193,9 +203,22 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       refetch: () => undefined,
       isLoading: isUpdatingLocalDb,
     };
-  }, [taxonQuery, localTaxa, remoteResult, iconicTaxa, isUpdatingLocalDb] );
+  }, [
+    taxonQuery,
+    localTaxa,
+    remoteResult,
+    iconicTaxa,
+    isUpdatingLocalDb,
+    recentTaxonIds,
+    realm,
+  ] );
 
-  return searchResult;
+  const addRecentTaxon = useCallback(
+    ( taxon: { id: number } ) => addRecentTaxonId( taxon.id ),
+    [addRecentTaxonId],
+  );
+
+  return { ...searchResult, addRecentTaxon };
 };
 
 export default useTaxonSearch;

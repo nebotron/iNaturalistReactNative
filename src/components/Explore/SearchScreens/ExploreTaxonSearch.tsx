@@ -44,9 +44,11 @@ const ExploreTaxonSearch = ( {
   const {
     taxa,
     isLoading,
+    addRecentTaxon,
   } = useTaxonSearch( taxonQuery );
 
   const onTaxonSelected = useCallback( ( taxon: RealmTaxon ) => {
+    addRecentTaxon( taxon );
     if ( updateTaxon ) {
       updateTaxon( taxon );
       closeModal( );
@@ -60,7 +62,7 @@ const ExploreTaxonSearch = ( {
       ] ) );
     }
     closeModal( );
-  }, [closeModal, taxonFilters, updateTaxon, updateTaxonFilters] );
+  }, [addRecentTaxon, closeModal, taxonFilters, updateTaxon, updateTaxonFilters] );
 
   const resetTaxon = useCallback( ( ) => {
     updateTaxon?.( null );

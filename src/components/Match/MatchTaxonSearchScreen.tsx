@@ -21,7 +21,7 @@ const MatchTaxonSearchScreen = ( ) => {
   const [taxonQuery, setTaxonQuery] = useState( "" );
   const [selectedTaxon, setSelectedTaxon] = useState<ApiTaxon | null>( null );
   const {
-    taxa, isLoading,
+    taxa, isLoading, addRecentTaxon,
   } = useTaxonSearch( taxonQuery );
   const { t } = useTranslation( );
   const realm = useRealm( );
@@ -69,13 +69,16 @@ const MatchTaxonSearchScreen = ( ) => {
         accessibilityHint={t( "Chooses-taxon" )}
         fetchRemote={false}
         first={index === 0}
-        handleTaxonOrEditPress={() => setSelectedTaxon( taxon )}
+        handleTaxonOrEditPress={() => {
+          addRecentTaxon( taxon );
+          setSelectedTaxon( taxon );
+        }}
         hideNavButtons
         taxon={taxon}
         testID={`Search.taxa.${taxon.id}`}
       />
     ),
-    [setSelectedTaxon, t],
+    [addRecentTaxon, setSelectedTaxon, t],
   );
 
   return (

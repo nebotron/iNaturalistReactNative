@@ -13,7 +13,7 @@ import useNavigateWithTaxonSelected from "./hooks/useNavigateWithTaxonSelected";
 const SuggestionsTaxonSearch = ( ) => {
   const [taxonQuery, setTaxonQuery] = useState( "" );
   const {
-    taxa, isLoading,
+    taxa, isLoading, addRecentTaxon,
   } = useTaxonSearch( taxonQuery );
   const { t } = useTranslation( );
 
@@ -24,12 +24,15 @@ const SuggestionsTaxonSearch = ( ) => {
       accessibilityHint={t( "Chooses-taxon" )}
       fetchRemote={false}
       first={index === 0}
-      handleTaxonOrEditPress={() => navigateWithTaxonSelected( taxon )}
+      handleTaxonOrEditPress={() => {
+        addRecentTaxon( taxon );
+        navigateWithTaxonSelected( taxon );
+      }}
       hideNavButtons
       taxon={taxon}
       testID={`Search.taxa.${taxon.id}`}
     />
-  ), [navigateWithTaxonSelected, t] );
+  ), [addRecentTaxon, navigateWithTaxonSelected, t] );
 
   return (
     <TaxonSearch
