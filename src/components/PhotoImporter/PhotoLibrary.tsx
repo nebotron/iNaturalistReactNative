@@ -24,6 +24,7 @@ import {
 } from "components/PhotoImporter/helpers/videoImportHelpers";
 import PhotoGallery from "components/PhotoImporter/PhotoGallery";
 import { ViewWrapper } from "components/SharedComponents";
+import { isCroppable } from "components/SharedComponents/ImageCrop/groupCropResume";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
 import { RealmContext } from "providers/contexts";
 import React, {
@@ -39,6 +40,7 @@ import {
   markDuplicatePhotosFromLibrary,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
+import { preloadImage } from "sharedHelpers/imageCropPreload";
 import {
   fileExtension,
   summarizeTypes,
@@ -69,6 +71,9 @@ interface CopiedPhoto {
 }
 
 const logger = log.extend( "PhotoLibrary" );
+
+// How long the rest of an import waits on its first photo's copy (leadFirst).
+const LEAD_COPY_MAX_WAIT_MS = 3000;
 
 const { useRealm } = RealmContext;
 
@@ -201,6 +206,7 @@ const PhotoLibrary = ( ) => {
   const copyImagesFromCameraRoll = useCallback( async (
     nodes: PhotoNode[],
     onPhotoCopied?: ( node: PhotoNode, copied: CopiedPhoto | null ) => void,
+    leadFirst = false,
   ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
@@ -315,10 +321,26 @@ const PhotoLibrary = ( ) => {
     // it decides which photo leads an observation (appendPhotosToObservation)
     // and how the Group Photos screen lays the import out.
     const MAX_COPIES_IN_FLIGHT = 10;
+    // leadFirst: the first photo is the one the cropper opens on, so it copies
+    // alone and onPhotoCopied can start its crop prepare before nine other
+    // copies contend with it. Capped so an iCloud-offloaded first photo doesn't
+    // hold the rest of the batch behind its download.
+    const leadCopy = leadFirst
+      ? copyNodeOrNull( uniqueNodes[0] )
+      : null;
+    const leadCopyOrTimeout = leadCopy && Promise.race( [
+      leadCopy,
+      new Promise( resolve => { setTimeout( resolve, LEAD_COPY_MAX_WAIT_MS ); } ),
+    ] );
     const results = ( await mapWithConcurrency(
       uniqueNodes,
       MAX_COPIES_IN_FLIGHT,
-      copyNodeOrNull,
+      async ( node, index ) => {
+        if ( !leadCopy ) return copyNodeOrNull( node );
+        if ( index === 0 ) return leadCopy;
+        await leadCopyOrTimeout;
+        return copyNodeOrNull( node );
+      },
     ) ).filter( ( r ): r is NonNullable<typeof r> => r !== null );
     if ( results.length < uniqueNodes.length ) {
       logger.warnWithExtra( "camera_roll_copy_incomplete", {
@@ -395,6 +417,11 @@ const PhotoLibrary = ( ) => {
           copied.sourceAsset,
         );
         importedUris.push( photo.image.uri );
+        // The photo the cropper opens on: start its prepare now rather than
+        // when the cropper gets around to it (see leadFirst).
+        if ( node === photoNodes[0] && isCroppable( photo ) ) {
+          preloadImage( photo.image.uri, photo.image.uri, null );
+        }
         settle( node, {
           photos: [photo],
           originalDevicePhotoUris: getOriginalDevicePhotoUrisFromAssets( [copied.sourceAsset] ),
@@ -403,7 +430,7 @@ const PhotoLibrary = ( ) => {
             deviceUri: photo.originalDevicePhotoUri,
           }],
         } );
-      } );
+      }, true );
     };
 
     // Transcoding videos and copying photos go through unrelated subsystems —
