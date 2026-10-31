@@ -1,9 +1,12 @@
-import { exists, mkdir, stat } from "@dr.pogodin/react-native-fs";
+import {
+  exists, mkdir, moveFile, stat,
+} from "@dr.pogodin/react-native-fs";
 import { deviceThumbnailsPath } from "appConstants/paths";
 import { useEffect, useState } from "react";
 import { NativeModules } from "react-native";
 import { fileExtension, isAnimatedImageUri } from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
+import resizeImage from "sharedHelpers/resizeImage";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { unlink } from "sharedHelpers/util";
 
@@ -26,6 +29,21 @@ interface ImageCropperModule {
 }
 
 const { ImageCropper } = NativeModules as { ImageCropper?: ImageCropperModule };
+
+// Falls back to the cross-platform resizer where the native module is missing (Android)
+const createThumbnail = ImageCropper?.createThumbnail ?? ( async (
+  inputPath: string,
+  maxPixel: number,
+  outputPath: string,
+) => {
+  const uri = await resizeImage( inputPath, {
+    width: maxPixel,
+    outputPath: deviceThumbnailsPath,
+    imageOptions: { mode: "contain", onlyScaleDown: true },
+  } );
+  await moveFile( stripFilePrefix( uri ), outputPath );
+  return `file://${outputPath}`;
+} );
 
 // Bump when the native decode changes, so thumbnails already on disk under the
 // old key are treated as misses and regenerated rather than reused stale (this
@@ -225,7 +243,7 @@ const runJob = async ( job: Job ) => {
       result = `file://${outputPath}`;
     } else {
       const { value, timedOut } = await raceWithTimeout(
-        ImageCropper!.createThumbnail( job.uri, job.maxPixel, outputPath ),
+        createThumbnail( job.uri, job.maxPixel, outputPath ),
         job.maxPixel,
       );
       if ( timedOut && highQuality ) {
@@ -357,7 +375,6 @@ export const prioritizeDeviceImageThumbnails = (
   uris: string[],
   maxPixel: number,
 ): void => {
-  if ( !ImageCropper?.createThumbnail ) return;
   // Pushed in reverse so the topmost visible photo is the first one popped.
   for ( let i = uris.length - 1; i >= 0; i -= 1 ) {
     if ( !isAnimatedImageUri( uris[i] ) && !memoryCache.has( cacheKey( uris[i], maxPixel ) ) ) {
@@ -373,15 +390,13 @@ export const prefetchDeviceImageThumbnails = (
   uris: string[],
   maxPixel: number,
 ): void => {
-  if ( ImageCropper?.createThumbnail ) {
-    uris.forEach( uri => {
-      // Prefetches keep their waiter forever: nothing "unmounts" a prefetch,
-      // and a warmed cache is exactly what makes scrolling back instant.
-      if ( !isAnimatedImageUri( uri ) && !memoryCache.has( cacheKey( uri, maxPixel ) ) ) {
-        scheduleJob( uri, maxPixel, false );
-      }
-    } );
-  }
+  uris.forEach( uri => {
+    // Prefetches keep their waiter forever: nothing "unmounts" a prefetch,
+    // and a warmed cache is exactly what makes scrolling back instant.
+    if ( !isAnimatedImageUri( uri ) && !memoryCache.has( cacheKey( uri, maxPixel ) ) ) {
+      scheduleJob( uri, maxPixel, false );
+    }
+  } );
 };
 
 // Thumbnails already thrown away once (see invalidateDeviceImageThumbnail).
@@ -472,17 +487,15 @@ export const logThumbnailDiagnostics = async ( ): Promise<void> => {
 
 // Returns a small cached thumbnail uri for a device photo, generated off the
 // UI thread so photo grids scroll without decoding full-resolution originals.
-// Falls back to the original uri where the native generator isn't available
-// (e.g. Android), and yields undefined until the thumbnail is ready so the
+// Yields undefined until the thumbnail is ready so the
 // caller can show a placeholder rather than the full-resolution image.
 const useDeviceImageThumbnail = (
   uri: string | undefined,
   maxPixel: number,
 ): string | undefined => {
-  const available = Boolean( ImageCropper?.createThumbnail );
   // An animated image is served as itself: a generated thumbnail is a single
   // still frame, so a GIF behind one never plays.
-  const key = uri && available && !isAnimatedImageUri( uri )
+  const key = uri && !isAnimatedImageUri( uri )
     ? cacheKey( uri, maxPixel )
     : null;
   const [resolved, setResolved] = useState<
