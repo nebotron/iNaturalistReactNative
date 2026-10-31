@@ -24,6 +24,8 @@ interface UseInfiniteExploreScrollParams {
 }
 
 interface UseInfiniteExploreScrollReturn {
+  error: unknown;
+  fetchStatus: string;
   fetchNextPage: ( ) => void;
   isLoading: boolean;
   isFetchingNextPage: boolean;
@@ -92,6 +94,8 @@ const useInfiniteExploreScroll = (
     refetch,
     isRefetching,
     status,
+    error,
+    fetchStatus,
   } = useAuthenticatedInfiniteQuery(
     queryKey,
     async ( params, optsWithAuth ) => searchObservations(
@@ -130,6 +134,8 @@ const useInfiniteExploreScroll = (
   }
 
   return {
+    error,
+    fetchStatus,
     fetchNextPage,
     isLoading,
     isFetchingNextPage: isFetchingNextPage || isRefetching,

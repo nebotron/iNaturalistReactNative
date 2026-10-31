@@ -58,9 +58,10 @@ import type { ExploreStackScreenProps } from "navigation/types";
 import type { ExploreV2Tab } from "providers/ExploreV2Context";
 import { EXPLORE_V2_ACTION, EXPLORE_V2_PLACE_MODE, useExploreV2 } from "providers/ExploreV2Context";
 import React, {
-  useCallback, useMemo, useRef, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import type { BoundingBox } from "react-native-maps";
+import { log } from "sharedHelpers/logger";
 import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import {
   OBSERVATIONS_SORT_OPTIONS,
@@ -105,6 +106,11 @@ const EXPLORE_VIEW_ICONS: Record<ExploreV2Tab, string> = {
 };
 
 const noop = ( ) => undefined;
+
+const logger = log.extend( "ExploreResults" );
+
+// How long the observations tab may sit empty after a view switch before we log it
+const EMPTY_AFTER_SWITCH_MS = 8000;
 
 const DROP_SHADOW = getShadow( {
   offsetHeight: 4,
@@ -239,14 +245,64 @@ const ExploreResults = ( ) => {
   const offlineListResults = useOfflineExploreResults( offlineListParams );
 
   const {
+    error: observationsError,
     fetchNextPage,
+    fetchStatus: observationsFetchStatus,
     isFetchingNextPage,
     isLoading,
     handlePullToRefresh,
     observations,
+    status: observationsStatus,
     totalBounds,
     totalResults,
   } = useInfiniteExploreScroll( { params: queryParams, enabled: canFetch } );
+
+  // Diagnostics: observations sometimes show nothing after switching from
+  // another view (e.g. Hotspots) or opening a hotspot in Explore, until a reload
+  const diagnosticsRef = useRef<Record<string, unknown>>( {} );
+  const errorStatus = ( observationsError as { status?: number } | null )?.status;
+  diagnosticsRef.current = {
+    activeTab: state.activeTab,
+    layout,
+    canFetch,
+    needsPermission,
+    isNearby,
+    hasNearbyCoords: !!nearbyCoords,
+    isConnected,
+    status: observationsStatus,
+    fetchStatus: observationsFetchStatus,
+    isLoading,
+    error: observationsError
+      ? `${errorStatus ?? ""} ${( observationsError as Error ).message ?? observationsError}`
+      : null,
+    observationCount: observations.length,
+    totalResults,
+    hasTotalBounds: !!totalBounds,
+    queryParams,
+  };
+  // null on mount, so opening Explore on the observations tab is checked too
+  const previousTabRef = useRef<ExploreV2Tab | null>( null );
+  useEffect( ( ) => {
+    const fromTab = previousTabRef.current;
+    previousTabRef.current = state.activeTab;
+    if ( state.activeTab !== OBSERVATIONS_TAB || fromTab === OBSERVATIONS_TAB ) return undefined;
+    logger.info( "explore_tab_switch", JSON.stringify( { fromTab, ...diagnosticsRef.current } ) );
+    const timer = setTimeout( ( ) => {
+      const diagnostics = diagnosticsRef.current;
+      if ( diagnostics.activeTab !== OBSERVATIONS_TAB ) return;
+      if ( ( diagnostics.observationCount as number ) > 0 ) return;
+      logger.error(
+        "explore_empty_after_tab_switch",
+        JSON.stringify( { fromTab, ...diagnostics } ),
+      );
+    }, EMPTY_AFTER_SWITCH_MS );
+    return ( ) => clearTimeout( timer );
+  }, [state.activeTab] );
+
+  useEffect( ( ) => {
+    if ( observationsStatus !== "error" ) return;
+    logger.error( "explore_observations_query_error", JSON.stringify( diagnosticsRef.current ) );
+  }, [observationsStatus] );
 
   const reload = useCallback( async ( ) => {
     // only refresh results if we're now connected
