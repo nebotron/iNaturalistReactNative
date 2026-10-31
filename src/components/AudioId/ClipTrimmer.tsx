@@ -10,6 +10,7 @@ import { PanResponder, requireNativeComponent } from "react-native";
 
 import { clipPath, contextClipPath } from "./audioIdHistory";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
+import PlaybackFilterButton from "./PlaybackFilterButton";
 
 export interface Span { path: string; startMs: number; endMs: number }
 
@@ -211,20 +212,23 @@ const ClipTrimmer = ( {
       </View>
       <View className="flex-row items-center justify-between">
         <Body3>{label( position )}</Body3>
-        <INatIconButton
-          icon={playing
-            ? "stop"
-            : "play"}
-          onPress={playing
-            ? stop
-            : ( ) => play( position )}
-          accessibilityLabel={playing
-            ? "Stop"
-            : "Play"}
-          accessibilityHint={playing
-            ? "Stops the recording."
-            : "Plays the trimmed clip from the playhead."}
-        />
+        <View className="flex-row">
+          <PlaybackFilterButton />
+          <INatIconButton
+            icon={playing
+              ? "stop"
+              : "play"}
+            onPress={playing
+              ? stop
+              : ( ) => play( position )}
+            accessibilityLabel={playing
+              ? "Stop"
+              : "Play"}
+            accessibilityHint={playing
+              ? "Stops the recording."
+              : "Plays the trimmed clip from the playhead."}
+          />
+        </View>
         <Body3>{`Clip ${( trim[1] - trim[0] ).toFixed( 1 )} s`}</Body3>
       </View>
     </View>

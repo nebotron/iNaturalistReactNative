@@ -4,6 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import type { AudioIdClip } from "./audioIdHistory";
 import { clipPath, contextClipPath } from "./audioIdHistory";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
+import PlaybackFilterButton from "./PlaybackFilterButton";
 
 // Plays or stops one Audio ID clip: the call found in it, else its 5 s
 // window. Starting another clip stops this one.
@@ -37,20 +38,23 @@ const ClipPlayButton = ( { clip }: { clip: AudioIdClip } ) => {
   };
 
   return (
-    <INatIconButton
-      icon={playing
-        ? "stop"
-        : "play"}
-      onPress={playing
-        ? stop
-        : play}
-      accessibilityLabel={playing
-        ? "Stop"
-        : "Play"}
-      accessibilityHint={playing
-        ? "Stops the clip."
-        : "Plays the clip."}
-    />
+    <>
+      <PlaybackFilterButton />
+      <INatIconButton
+        icon={playing
+          ? "stop"
+          : "play"}
+        onPress={playing
+          ? stop
+          : play}
+        accessibilityLabel={playing
+          ? "Stop"
+          : "Play"}
+        accessibilityHint={playing
+          ? "Stops the clip."
+          : "Plays the clip."}
+      />
+    </>
   );
 };
 

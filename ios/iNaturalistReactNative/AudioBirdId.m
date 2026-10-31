@@ -59,6 +59,98 @@ withIntermediateDirectories:YES attributes:nil error:nil];
   return file && buffer && [file writeFromBuffer:buffer error:error];
 }
 
+// Background noise reduction for clip playback, a spectral gate. Each
+// frequency's noise floor is its 20th-percentile level over the clip (calls
+// are brief, so most frames are background). Bins within 3 dB of it are cut
+// by 20 dB, rising to full level 12 dB above it, with the gain averaged over
+// neighboring bins and frames so the background doesn't warble. Below 150 Hz
+// (wind, traffic, handling noise) is cut entirely.
+#define AB_DN_LOG2N 10
+#define AB_DN_N     ( 1 << AB_DN_LOG2N )
+#define AB_DN_HOP   ( AB_DN_N / 4 )
+static void ABDenoise( float *d, int n, double rate )
+{
+  const int N = AB_DN_N, H = AB_DN_HOP, B = N / 2 + 1;
+  if ( n <= 0 ) return;
+  int padded = n + 2 * N;
+  int frames = ( padded - N ) / H + 1;
+  float *x = (float *)calloc( padded + N, sizeof( float ) );
+  float *y = (float *)calloc( padded + N, sizeof( float ) );
+  float *wsum = (float *)calloc( padded + N, sizeof( float ) );
+  memcpy( x + N, d, n * sizeof( float ) );
+  float *win = (float *)malloc( N * sizeof( float ) );
+  float *win2 = (float *)malloc( N * sizeof( float ) );
+  vDSP_hann_window( win, N, vDSP_HANN_DENORM );
+  vDSP_vsq( win, 1, win2, 1, N );
+  float *buf = (float *)malloc( N * sizeof( float ) );
+  float *re = (float *)malloc( N / 2 * sizeof( float ) );
+  float *im = (float *)malloc( N / 2 * sizeof( float ) );
+  DSPSplitComplex split = { re, im };
+  FFTSetup fft = vDSP_create_fftsetup( AB_DN_LOG2N, kFFTRadix2 );
+  float *mag = (float *)malloc( (size_t)frames * B * sizeof( float ) );
+  float *gain = (float *)malloc( (size_t)frames * B * sizeof( float ) );
+  float *col = (float *)malloc( frames * sizeof( float ) );
+  float *noise = (float *)malloc( B * sizeof( float ) );
+
+  for ( int f = 0; f < frames; f++ ) {
+    vDSP_vmul( x + f * H, 1, win, 1, buf, 1, N );
+    vDSP_ctoz( (DSPComplex *)buf, 2, &split, 1, N / 2 );
+    vDSP_fft_zrip( fft, &split, 1, AB_DN_LOG2N, FFT_FORWARD );
+    float *m = mag + (size_t)f * B;
+    m[0] = fabsf( re[0] );
+    m[N / 2] = fabsf( im[0] );
+    for ( int k = 1; k < N / 2; k++ ) m[k] = hypotf( re[k], im[k] );
+  }
+  for ( int k = 0; k < B; k++ ) {
+    for ( int f = 0; f < frames; f++ ) col[f] = mag[(size_t)f * B + k];
+    vDSP_vsort( col, frames, 1 );
+    noise[k] = col[( frames - 1 ) / 5] + 1e-9f;
+  }
+  int lo = (int)ceil( 150.0 * N / rate );
+  for ( size_t i = 0; i < (size_t)frames * B; i++ ) {
+    int k = (int)( i % B );
+    float db = 20 * log10f( mag[i] / noise[k] + 1e-9f );
+    mag[i] = k < lo ? 0 : 0.1f + 0.9f * fminf( fmaxf( ( db - 3 ) / 9, 0 ), 1 );
+  }
+  for ( int f = 0; f < frames; f++ ) {
+    for ( int k = 0; k < B; k++ ) {
+      float sum = 0;
+      int count = 0;
+      for ( int t = MAX( f - 2, 0 ); t <= MIN( f + 2, frames - 1 ); t++ ) {
+        for ( int j = MAX( k - 1, 0 ); j <= MIN( k + 1, B - 1 ); j++ ) {
+          sum += mag[(size_t)t * B + j];
+          count++;
+        }
+      }
+      gain[(size_t)f * B + k] = k < lo ? 0 : sum / count;
+    }
+  }
+  const float scale = 1.0f / ( 2 * N );
+  for ( int f = 0; f < frames; f++ ) {
+    vDSP_vmul( x + f * H, 1, win, 1, buf, 1, N );
+    vDSP_ctoz( (DSPComplex *)buf, 2, &split, 1, N / 2 );
+    vDSP_fft_zrip( fft, &split, 1, AB_DN_LOG2N, FFT_FORWARD );
+    const float *g = gain + (size_t)f * B;
+    re[0] *= g[0];
+    im[0] *= g[N / 2];
+    for ( int k = 1; k < N / 2; k++ ) {
+      re[k] *= g[k];
+      im[k] *= g[k];
+    }
+    vDSP_fft_zrip( fft, &split, 1, AB_DN_LOG2N, FFT_INVERSE );
+    vDSP_ztoc( &split, 1, (DSPComplex *)buf, 2, N / 2 );
+    vDSP_vmul( buf, 1, win, 1, buf, 1, N );
+    vDSP_vsmul( buf, 1, &scale, buf, 1, N );
+    vDSP_vadd( y + f * H, 1, buf, 1, y + f * H, 1, N );
+    vDSP_vadd( wsum + f * H, 1, win2, 1, wsum + f * H, 1, N );
+  }
+  for ( int i = 0; i < n; i++ ) d[i] = y[i + N] / fmaxf( wsum[i + N], 1e-6f );
+
+  vDSP_destroy_fftsetup( fft );
+  free( x ); free( y ); free( wsum ); free( win ); free( win2 ); free( buf );
+  free( re ); free( im ); free( mag ); free( gain ); free( col ); free( noise );
+}
+
 // The live spectrogram, shared between the module, which adds a column for
 // every AB_SPEC_HOP new samples, and AudioSpectrogram views, which draw it.
 // Intensities are kept in a ring of columns.
@@ -180,6 +272,7 @@ static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
   AVAudioEngine    *_clipEngine;
   AVAudioPlayerNode *_clipNode;
   RCTPromiseResolveBlock _clipDone;
+  BOOL              _filterPlayback;
 }
 
 RCT_EXPORT_MODULE( );
@@ -445,6 +538,11 @@ RCT_EXPORT_METHOD( playClipRange:( NSString * )path
       return;
     }
     AVAudioChannelCount channels = buffer.format.channelCount;
+    if ( self->_filterPlayback ) {
+      for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
+        ABDenoise( buffer.floatChannelData[c], (int)buffer.frameLength, buffer.format.sampleRate );
+      }
+    }
     float peak = 0, rms = 0;
     for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
       float p = 0, r = 0;
@@ -505,6 +603,13 @@ RCT_EXPORT_METHOD( playClipRange:( NSString * )path
     }];
     [node play];
   } );
+}
+
+// Whether clips play with background noise filtered out (see ABDenoise); the
+// files stay as recorded.
+RCT_EXPORT_METHOD( setPlaybackFilter:( BOOL )filtered )
+{
+  dispatch_async( dispatch_get_main_queue(), ^{ self->_filterPlayback = filtered; } );
 }
 
 RCT_EXPORT_METHOD( stopClip )
