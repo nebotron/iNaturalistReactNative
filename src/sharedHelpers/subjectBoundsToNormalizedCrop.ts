@@ -1,4 +1,5 @@
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 export interface NormalizedBounds {
   x: number;
@@ -7,7 +8,7 @@ export interface NormalizedBounds {
   height: number;
 }
 
-const DEFAULT_PADDING_FRACTION = 0.1;
+const DEFAULT_PADDING_FRACTION = getTunable( "subjectCropPadding" );
 
 export function subjectBoundsToNormalizedCrop(
   bounds: NormalizedBounds,

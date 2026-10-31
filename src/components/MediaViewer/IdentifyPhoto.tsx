@@ -17,6 +17,7 @@ import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop"
 import { imageZoomTransformToNormalizedCrop } from "sharedHelpers/imageZoomTransformToCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect } from "sharedHelpers/normalizedCropTypes";
+import { getTunable } from "sharedHelpers/tunableParams";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import {
   EXPOSURE_SNAP_THRESHOLD,
@@ -29,7 +30,7 @@ import colors from "styles/tailwindColors";
 // Zoom slider: exponential mapping so equal slider travel is equal zoom ratio.
 // Slider position runs 0..1; scale runs MIN_ZOOM..MAX_ZOOM as MIN * (MAX/MIN)^pos.
 export const MIN_ZOOM = 1;
-export const MAX_ZOOM = 20;
+export const MAX_ZOOM = getTunable( "maxPhotoInspectZoom" );
 export const clampZoom = ( scale: number ) => Math.min( MAX_ZOOM, Math.max( MIN_ZOOM, scale ) );
 export const zoomPosToScale = ( pos: number ) => MIN_ZOOM * ( MAX_ZOOM / MIN_ZOOM ) ** pos;
 export const zoomScaleToPos = ( scale: number ) => Math.min(

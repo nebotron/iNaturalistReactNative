@@ -30,6 +30,7 @@ import {
   queryOfflineObservations,
   subscribeOfflineExploreResults,
 } from "sharedHelpers/offlineExploreResults";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useTranslation } from "sharedHooks";
 import useGridLayout from "sharedHooks/useGridLayout";
 import { getShadow } from "styles/global";
@@ -39,7 +40,7 @@ const OBS_LIST_CONTAINER_STYLE = { paddingTop: 50 };
 const PAGE_SIZE = 100;
 const noop = ( ) => undefined;
 // Pins are native views, so cap them to keep the map responsive
-const MAX_MAP_PINS = 1000;
+const MAX_MAP_PINS = getTunable( "offlineMaxMapPins" );
 const SPECIES_RANK_LEVEL = 10;
 const DOT_ANCHOR = { x: 0.5, y: 0.5 };
 // Saved zooms to magnify past; wider areas are too coarse to be worth it

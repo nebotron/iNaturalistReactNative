@@ -2,11 +2,12 @@ import classnames from "classnames";
 import { INatIcon } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React from "react";
+import { getTunable } from "sharedHelpers/tunableParams";
 import colors from "styles/tailwindColors";
 
 import WarningText from "./WarningText";
 
-export const DESIRED_LOCATION_ACCURACY = 100;
+export const DESIRED_LOCATION_ACCURACY = getTunable( "desiredLocationAccuracyM" );
 export const REQUIRED_LOCATION_ACCURACY = 500_000;
 
 const checkAccuracy = ( accuracy: number ) => {

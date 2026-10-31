@@ -6,6 +6,7 @@ import {
   Alert,
 } from "react-native";
 import DeviceInfo from "react-native-device-info";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useTranslation } from "sharedHooks";
 
 // 200MB - number in bytes
@@ -13,7 +14,7 @@ import { useTranslation } from "sharedHooks";
 // ~200MB was the amount of space left on my device when the
 // native device camera gave a storage full alert -angie093024
 
-const MIN_DEVICE_STORAGE = 200_000_000;
+const MIN_DEVICE_STORAGE = getTunable( "minFreeStorageMb" ) * 1_000_000;
 
 const useDeviceStorageFull = ( ) => {
   const { t } = useTranslation();

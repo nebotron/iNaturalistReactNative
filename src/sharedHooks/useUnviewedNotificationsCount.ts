@@ -7,6 +7,7 @@ import { RealmContext } from "providers/contexts";
 import {
   useCallback, useEffect, useRef,
 } from "react";
+import { getTunable } from "sharedHelpers/tunableParams";
 import useStore from "stores/useStore";
 
 import useAuthenticatedQuery from "./useAuthenticatedQuery";
@@ -20,7 +21,7 @@ const { useRealm } = RealmContext;
 
 // Poll infrequently in the background; callers can force an immediate
 // refetch (e.g. on focusing the Notifications tab) via the returned refetch.
-const REFETCH_INTERVAL = 300_000;
+const REFETCH_INTERVAL = getTunable( "notificationsRefreshMinutes" ) * 60_000;
 
 const TAB_PARAMS: Record<"owner" | "following", ApiObservationsUpdatesParams> = {
   owner: { observations_by: "owner" },

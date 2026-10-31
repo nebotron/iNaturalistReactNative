@@ -7,10 +7,11 @@ import { Pressable, View } from "components/styledComponents";
 import React, { useState } from "react";
 import { Linking } from "react-native";
 import { formatDifferenceForHumans } from "sharedHelpers/dateAndTime";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 
-const COLLAPSED_COUNT = 3;
+const COLLAPSED_COUNT = getTunable( "ebirdCollapsedCount" );
 
 interface Props {
   enabled?: boolean;

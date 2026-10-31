@@ -3,10 +3,11 @@ import {
   useCallback,
 } from "react";
 import Observation from "realmModels/Observation";
+import { getTunable } from "sharedHelpers/tunableParams";
 import useStore from "stores/useStore";
 
 export const MS_BEFORE_TOOLBAR_RESET = 5_000;
-export const MS_BEFORE_UPLOAD_TIMES_OUT = 60_000 * 5;
+export const MS_BEFORE_UPLOAD_TIMES_OUT = 60_000 * getTunable( "uploadTimeoutMinutes" );
 
 const { useRealm } = RealmContext;
 

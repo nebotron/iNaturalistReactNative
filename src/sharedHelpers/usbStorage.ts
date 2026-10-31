@@ -1,6 +1,7 @@
 import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import { recordAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 // JS side of the UsbStorage native module (iOS): the user grants access to a
 // folder once (e.g. a USB drive mounted in Files), then the offload flow lists
@@ -101,7 +102,7 @@ const usbStorage = Platform.OS === "ios"
 // How many images to offload per scan. We no longer bulk-copy up front, so this
 // can be generous; anything beyond it is handled by the next scan (the batch
 // just processed is deleted from the card first).
-const MAX_PHOTOS_PER_SCAN = 500;
+const MAX_PHOTOS_PER_SCAN = getTunable( "usbMaxPhotosPerScan" );
 const IMPORTED_NAMES_KEY = "importedNames";
 
 // Files saved into Photos that have not yet been deleted from the card.

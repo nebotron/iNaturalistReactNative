@@ -9,6 +9,7 @@ import type { StyleProp, ViewStyle } from "react-native";
 import type { CropPanContext } from "sharedHelpers/cropPanTranslateLimits";
 import { normalizedCropToImageZoomTransform }
   from "sharedHelpers/normalizedCropToImageZoomTransform";
+import { getTunable } from "sharedHelpers/tunableParams";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 
@@ -21,7 +22,7 @@ export const IMAGE_ZOOM_MAX_SCALE = 100;
 // Fraction of the smaller viewport dimension the detected subject is framed to
 // fill. Shared with MediaViewer's crop read-back so a freshly framed subject
 // round-trips back to (almost) the same normalized crop when logged.
-export const SUBJECT_CROP_FRAME_FRACTION = 0.8;
+export const SUBJECT_CROP_FRAME_FRACTION = getTunable( "subjectCropFrameFraction" );
 
 interface Props {
   uri: string;

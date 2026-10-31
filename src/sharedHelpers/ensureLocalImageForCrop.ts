@@ -5,8 +5,9 @@ import {
 import { cropSourcesPath } from "appConstants/paths";
 import { Platform } from "react-native";
 import resizeImage from "sharedHelpers/resizeImage";
+import { getTunable } from "sharedHelpers/tunableParams";
 
-const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
+const CROP_CACHE_TTL_MS = getTunable( "cropCacheDays" ) * 24 * 60 * 60 * 1000;
 
 // djb2 hash → stable hex filename for a given URL
 function urlToFilename( url: string ): string {

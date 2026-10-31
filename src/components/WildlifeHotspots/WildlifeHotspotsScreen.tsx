@@ -40,6 +40,7 @@ import Carousel from "react-native-reanimated-carousel";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { getLatestTrackedLocation } from "sharedHelpers/locationHistoryTracker";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useTranslation } from "sharedHooks";
 import useStore, { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -66,10 +67,10 @@ const INITIAL_REGION: Region = {
   longitudeDelta: 100,
 };
 // Number of recently entered addresses to offer before the user types.
-const RECENT_ADDRESS_COUNT = 10;
-const TIME_LIMIT_STEP_MINUTES = 15;
+const RECENT_ADDRESS_COUNT = getTunable( "hotspotRecentAddresses" );
+const TIME_LIMIT_STEP_MINUTES = getTunable( "hotspotTimeStepMinutes" );
 // Most hotspots, by observation count, considered when planning a route
-const MAX_PLAN_CANDIDATES = 40;
+const MAX_PLAN_CANDIDATES = getTunable( "hotspotMaxPlanCandidates" );
 
 function toMapCoord( pt: RoutePoint ): LatLng {
   return { latitude: pt.latitude, longitude: pt.longitude };

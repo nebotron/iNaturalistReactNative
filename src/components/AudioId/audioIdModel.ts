@@ -1,5 +1,6 @@
 import type { UserLocation } from "sharedHelpers/fetchCoarseUserLocation";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 import SPECIES from "./audioIdSpecies.json";
 
@@ -14,8 +15,8 @@ import SPECIES from "./audioIdSpecies.json";
 // and every non-bird users labeled was wrong (see
 // scripts/bird_audio/birdnet/README.md). All of it runs offline.
 
-const GEO_THRESHOLD = 0.03;
-const NON_BIRD_GEO_THRESHOLD = 0.0003;
+const GEO_THRESHOLD = getTunable( "audioIdBirdGeoThreshold" );
+const NON_BIRD_GEO_THRESHOLD = getTunable( "audioIdNonBirdGeoThreshold" );
 
 export interface AudioIdSpecies { name: string; commonName: string; taxonId: number }
 export interface AudioIdSetup {

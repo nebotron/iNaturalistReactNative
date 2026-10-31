@@ -1,7 +1,10 @@
+import { useNavigation } from "@react-navigation/native";
 import {
+  Button,
   Heading4,
   ScrollViewWrapper,
 } from "components/SharedComponents";
+import type { TabStackScreenProps } from "navigation/types";
 import React from "react";
 import {
   View,
@@ -20,6 +23,7 @@ import UsbImportSetting from "./UsbImportSetting";
 const Settings = ( ) => {
   const { t } = useTranslation();
   const currentUser = useCurrentUser( );
+  const navigation = useNavigation<TabStackScreenProps<"Settings">["navigation"]>( );
   return (
     <ScrollViewWrapper>
       <View className="p-4">
@@ -33,6 +37,12 @@ const Settings = ( ) => {
             </View>
           )}
         <UsbImportSetting />
+        <Button
+          className="mt-[30px]"
+          level="neutral"
+          text={t( "TUNABLE-PARAMETERS" )}
+          onPress={( ) => navigation.navigate( "TunableParams" )}
+        />
       </View>
     </ScrollViewWrapper>
   );

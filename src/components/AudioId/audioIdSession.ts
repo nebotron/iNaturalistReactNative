@@ -4,6 +4,7 @@ import type { UserLocation } from "sharedHelpers/fetchCoarseUserLocation";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import { log } from "sharedHelpers/logger";
 import createMmkvRecordStore, { AUDIO_ID_HEARD_MMKV_ID } from "sharedHelpers/mmkvRecordStore";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { create } from "zustand";
 
 import useAudioIdHistory, { clipPath, contextClipPath } from "./audioIdHistory";
@@ -48,8 +49,8 @@ export const { AudioBirdId } = NativeModules as {
 // Up from 0.3: on users' labeled detections it cut wrong birds from 23 to 8
 // and lost 2 of 20 right ones; on held-out recordings, bird recall fell 1.2 points.
 // Raised to 0.6 so everything listed as heard is also confident enough to alert on.
-const THRESHOLD = 0.6;
-const ALSO_HEARD = 0.7;
+const THRESHOLD = getTunable( "audioIdThreshold" );
+const ALSO_HEARD = getTunable( "audioIdAlsoHeard" );
 const DAY_MS = 86400000;
 // Scores by output index, as the native module sends them
 export type Scores = Record<number, number>;
@@ -243,8 +244,8 @@ export const vibrate = ( mode: VibrateMode = "auto" ) => {
 // While the screen is focused it dims after DIM_AFTER_MS without a touch, and
 // an alert lifts the dimming for FLASH_MS. Dimming is an overlay on the screen,
 // leaving the device brightness alone.
-const DIM_AFTER_MS = 30000;
-const FLASH_MS = 3000;
+const DIM_AFTER_MS = getTunable( "audioIdDimAfterSeconds" ) * 1000;
+const FLASH_MS = getTunable( "audioIdFlashSeconds" ) * 1000;
 let focused = false;
 let dimmed = false;
 let flashing = false;

@@ -1,6 +1,7 @@
 import { getUserAgent } from "api/userAgent";
 import type { LatLng } from "react-native-maps";
 import { log } from "sharedHelpers/logger";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 const logger = log.extend( "placeSearch" );
 
@@ -20,7 +21,7 @@ export interface PlaceResult {
 // Nominatim covers the queries Photon comes up empty on.
 const PHOTON_URL = "https://photon.komoot.io/api";
 const NOMINATIM_URL = "https://nominatim.openstreetmap.org/search";
-const MAX_SUGGESTIONS = 5;
+const MAX_SUGGESTIONS = getTunable( "placeSearchMaxSuggestions" );
 // Photon expresses its location bias as a map zoom level rather than a
 // distance. Measured against the live API (median distance of the top results
 // from the bias point), zoom 10 keeps results within ~27 miles and zoom 8

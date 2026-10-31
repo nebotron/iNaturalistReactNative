@@ -1,14 +1,15 @@
 import { searchTaxa } from "api/taxa";
 import Config from "react-native-config";
 import { MMKV } from "react-native-mmkv";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 const EBIRD_API_URL = "https://api.ebird.org/v2";
 
 // eBird's own caps on geo searches
-export const EBIRD_MAX_DIST_KM = 50;
-export const EBIRD_BACK_DAYS = 30;
+export const EBIRD_MAX_DIST_KM = getTunable( "ebirdMaxDistKm" );
+export const EBIRD_BACK_DAYS = getTunable( "ebirdBackDays" );
 // Our caps, to keep traffic to eBird low
-export const EBIRD_MAX_RESULTS = 100;
+export const EBIRD_MAX_RESULTS = getTunable( "ebirdMaxResults" );
 // Fetched before filtering by taxon on the client. A search without a
 // species returns one sighting per species, so this is rarely reached.
 const EBIRD_MAX_FETCHED = 1000;

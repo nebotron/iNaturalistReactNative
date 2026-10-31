@@ -9,6 +9,7 @@ import {
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import { getTunable } from "sharedHelpers/tunableParams";
 import {
   addPendingUsbDeletes,
   availableMemoryMb,
@@ -35,7 +36,7 @@ import useUsbImportProgress from "stores/usbImportProgress";
 const logger = log.extend( "useUsbAutoImport" );
 
 // How often to re-check the watched folder while the app is foregrounded.
-const SCAN_INTERVAL_MS = 10_000;
+const SCAN_INTERVAL_MS = getTunable( "usbScanIntervalSeconds" ) * 1000;
 
 // Whether this process has already said the user never picked a folder.
 let loggedNoFolderBookmark = false;

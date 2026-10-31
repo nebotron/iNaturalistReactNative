@@ -13,12 +13,13 @@ import Realm from "realm";
 import Observation from "realmModels/Observation";
 import ObservationSound from "realmModels/ObservationSound";
 import { log } from "sharedHelpers/logger";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 const logger = log.extend( "offlineExploreResults" );
 
 const PAGE_SIZE = 200;
 // Per save; each save adds to what's already saved
-export const MAX_OFFLINE_OBSERVATIONS = 5000;
+export const MAX_OFFLINE_OBSERVATIONS = getTunable( "maxOfflineObservations" );
 // Base map tiles saved alongside the results, stored as {z}/{x}/{y}.png
 export const OFFLINE_TILES_PATH = `${DocumentDirectoryPath}/offlineExploreTiles`;
 const TILE_URL = "https://tile.openstreetmap.org";
@@ -26,7 +27,7 @@ const TILE_URL = "https://tile.openstreetmap.org";
 const MAX_AREA_TILES = 1000;
 // Past the whole area, deeper tiles just around the results, up to this total
 const MAX_TILES = 4000;
-export const MAX_TILE_ZOOM = 18;
+export const MAX_TILE_ZOOM = getTunable( "offlineMaxTileZoom" );
 
 type Params = Record<string, unknown>;
 

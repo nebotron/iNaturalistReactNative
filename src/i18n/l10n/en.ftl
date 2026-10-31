@@ -1437,6 +1437,8 @@ Required = Required
 Research-Grade--quality-grade = Research Grade
 RESEARCH-GRADE--quality-grade = RESEARCH GRADE
 Research-Grade-Status = Research Grade Status
+# Button that resets all tunable parameters to their defaults
+RESET-ALL-TO-DEFAULTS = RESET ALL TO DEFAULTS
 # Reset password button
 RESET-PASSWORD = RESET PASSWORD
 # Label for a button that resets a sound recording
@@ -1725,6 +1727,288 @@ Tracked-location = Tracked location
 Tracking-your-location = Tracking your location
 Traditional-Project = Traditional Project
 Traditional-Projects = Traditional Projects
+# Label for a tunable parameter in settings
+Tunable-advancedModeOnboardingObservations = Advanced mode prompt observations
+# Description of a tunable parameter in settings
+Tunable-advancedModeOnboardingObservations-description = Number of observations after which you are offered advanced mode.
+# Label for a tunable parameter in settings
+Tunable-aiCameraConfidenceThreshold = AI Camera confidence threshold
+# Description of a tunable parameter in settings
+Tunable-aiCameraConfidenceThreshold-description = Minimum confidence (0-100) before the AI Camera shows a prediction.
+# Label for a tunable parameter in settings
+Tunable-aiCameraCropRatio = AI Camera crop ratio
+# Description of a tunable parameter in settings
+Tunable-aiCameraCropRatio-description = Fraction of the camera frame (0.1-1) sent to the model. Lower values focus on the center.
+# Label for a tunable parameter in settings
+Tunable-aiCameraFps = AI Camera frames per second
+# Description of a tunable parameter in settings
+Tunable-aiCameraFps-description = How many camera frames per second the AI Camera analyzes. Higher values react faster but use more battery.
+# Label for a tunable parameter in settings
+Tunable-aiCameraStoredResults = AI Camera smoothing frames
+# Description of a tunable parameter in settings
+Tunable-aiCameraStoredResults-description = Number of recent frames the AI Camera averages to steady its prediction.
+# Label for a tunable parameter in settings
+Tunable-audioIdAlsoHeard = Audio ID also-heard threshold
+# Description of a tunable parameter in settings
+Tunable-audioIdAlsoHeard-description = Score (0-1) a species other than the top one needs to also count as heard.
+# Label for a tunable parameter in settings
+Tunable-audioIdBirdGeoThreshold = Audio ID bird range threshold
+# Description of a tunable parameter in settings
+Tunable-audioIdBirdGeoThreshold-description = Minimum expected local occurrence (0-1) for a bird to be included in Audio ID results.
+# Label for a tunable parameter in settings
+Tunable-audioIdDimAfterSeconds = Audio ID dim after (seconds)
+# Description of a tunable parameter in settings
+Tunable-audioIdDimAfterSeconds-description = Seconds without a touch before the Audio ID screen dims.
+# Label for a tunable parameter in settings
+Tunable-audioIdFlashSeconds = Audio ID alert duration (seconds)
+# Description of a tunable parameter in settings
+Tunable-audioIdFlashSeconds-description = Seconds the screen brightens when a new species is heard.
+# Label for a tunable parameter in settings
+Tunable-audioIdNonBirdGeoThreshold = Audio ID non-bird range threshold
+# Description of a tunable parameter in settings
+Tunable-audioIdNonBirdGeoThreshold-description = Minimum expected local occurrence (0-1) for a non-bird to be included in Audio ID results.
+# Label for a tunable parameter in settings
+Tunable-audioIdThreshold = Audio ID detection threshold
+# Description of a tunable parameter in settings
+Tunable-audioIdThreshold-description = Minimum score (0-1) for a species to count as heard.
+# Label for a tunable parameter in settings
+Tunable-autoAdvancedModeObservations = Auto advanced mode observations
+# Description of a tunable parameter in settings
+Tunable-autoAdvancedModeObservations-description = Users with at least this many observations start in advanced mode when signing in.
+# Label for a tunable parameter in settings
+Tunable-cropCacheDays = Crop cache lifetime (days)
+# Description of a tunable parameter in settings
+Tunable-cropCacheDays-description = How long downloaded images for cropping are kept.
+# Label for a tunable parameter in settings
+Tunable-cropSourcesCacheMb = Crop source cache size (MB)
+# Description of a tunable parameter in settings
+Tunable-cropSourcesCacheMb-description = Maximum size of the cache of full-size photos prepared for cropping.
+# Shows the default value of a tunable parameter and its allowed range
+Tunable-default-and-range = Default { $default } · Range { $min }–{ $max }
+# Label for a tunable parameter in settings
+Tunable-defaultObsLocationAccuracyM = Default location accuracy (m)
+# Description of a tunable parameter in settings
+Tunable-defaultObsLocationAccuracyM-description = Accuracy assumed for observations whose location has no accuracy.
+# Label for a tunable parameter in settings
+Tunable-desiredLocationAccuracyM = Location picker accuracy (m)
+# Description of a tunable parameter in settings
+Tunable-desiredLocationAccuracyM-description = Accuracy below which the location picker shows the location as precise.
+# Label for a tunable parameter in settings
+Tunable-ebirdBackDays = eBird days back
+# Description of a tunable parameter in settings
+Tunable-ebirdBackDays-description = How many days of recent eBird sightings to show. eBird allows at most 30.
+# Label for a tunable parameter in settings
+Tunable-ebirdCollapsedCount = eBird collapsed rows
+# Description of a tunable parameter in settings
+Tunable-ebirdCollapsedCount-description = Number of eBird sightings shown before expanding the list.
+# Label for a tunable parameter in settings
+Tunable-ebirdMaxDistKm = eBird search radius (km)
+# Description of a tunable parameter in settings
+Tunable-ebirdMaxDistKm-description = Radius for nearby eBird sightings. eBird allows at most 50 km.
+# Label for a tunable parameter in settings
+Tunable-ebirdMaxResults = eBird max results
+# Description of a tunable parameter in settings
+Tunable-ebirdMaxResults-description = Maximum number of eBird sightings shown.
+# Label for a tunable parameter in settings
+Tunable-gameLocationRadiusKm = Species game local radius (km)
+# Description of a tunable parameter in settings
+Tunable-gameLocationRadiusKm-description = Radius used to decide whether a species occurs near you in the species game.
+# Label for a tunable parameter in settings
+Tunable-gameLookalikeRadiusKm = Species game lookalike radius (km)
+# Description of a tunable parameter in settings
+Tunable-gameLookalikeRadiusKm-description = Radius in which lookalike species are chosen in the species game.
+# Label for a tunable parameter in settings
+Tunable-gamePoolSize = Species game photos per round
+# Description of a tunable parameter in settings
+Tunable-gamePoolSize-description = Number of photos fetched for each round of the species game.
+# Label for a tunable parameter in settings
+Tunable-hotspotClusterRadiusKm = Hotspot cluster radius (km)
+# Description of a tunable parameter in settings
+Tunable-hotspotClusterRadiusKm-description = Maximum radius of a group of observations treated as one hotspot.
+# Label for a tunable parameter in settings
+Tunable-hotspotMaxPlanCandidates = Hotspot plan candidates
+# Description of a tunable parameter in settings
+Tunable-hotspotMaxPlanCandidates-description = Maximum number of hotspots considered when planning a trip.
+# Label for a tunable parameter in settings
+Tunable-hotspotParkingMinutes = Hotspot stop time (minutes)
+# Description of a tunable parameter in settings
+Tunable-hotspotParkingMinutes-description = Extra minutes added to a route for each hotspot stop.
+# Label for a tunable parameter in settings
+Tunable-hotspotRecentAddresses = Recent addresses
+# Description of a tunable parameter in settings
+Tunable-hotspotRecentAddresses-description = Number of recent addresses remembered in Wildlife Hotspots.
+# Label for a tunable parameter in settings
+Tunable-hotspotRoutePaddingKm = Hotspot route search padding (km)
+# Description of a tunable parameter in settings
+Tunable-hotspotRoutePaddingKm-description = How far around a route to search for hotspots.
+# Label for a tunable parameter in settings
+Tunable-hotspotTimeStepMinutes = Trip time step (minutes)
+# Description of a tunable parameter in settings
+Tunable-hotspotTimeStepMinutes-description = How much the trip time limit changes with each tap.
+# Label for a tunable parameter in settings
+Tunable-importMaxSectionSize = Photo import max section size
+# Description of a tunable parameter in settings
+Tunable-importMaxSectionSize-description = Sections with more photos than this are split up.
+# Label for a tunable parameter in settings
+Tunable-importSectionGapMinutes = Photo import grouping gap (minutes)
+# Description of a tunable parameter in settings
+Tunable-importSectionGapMinutes-description = Time between photos that starts a new section in the photo importer.
+# Label for a tunable parameter in settings
+Tunable-locationAccuracyDeadlineSeconds = Location accuracy wait (seconds)
+# Description of a tunable parameter in settings
+Tunable-locationAccuracyDeadlineSeconds-description = How long to wait for an accurate location before using the best fix so far.
+# Label for a tunable parameter in settings
+Tunable-locationHistoryDistanceM = Location history distance (m)
+# Description of a tunable parameter in settings
+Tunable-locationHistoryDistanceM-description = Minimum movement before a new point is recorded in location history.
+# Label for a tunable parameter in settings
+Tunable-locationHistoryIntervalMinutes = Location history interval (minutes)
+# Description of a tunable parameter in settings
+Tunable-locationHistoryIntervalMinutes-description = Minimum time between recorded location history points.
+# Label for a tunable parameter in settings
+Tunable-locationHistoryMaxAccuracyM = Location history max error (m)
+# Description of a tunable parameter in settings
+Tunable-locationHistoryMaxAccuracyM-description = Location history points less accurate than this are ignored.
+# Label for a tunable parameter in settings
+Tunable-locationMatchMaxGapHours = Location match max gap (hours)
+# Description of a tunable parameter in settings
+Tunable-locationMatchMaxGapHours-description = Maximum time between a photo and a location history point for the point to be used.
+# Label for a tunable parameter in settings
+Tunable-matchHighConfidence = Match high confidence
+# Description of a tunable parameter in settings
+Tunable-matchHighConfidence-description = Confidence (0-100) at or above which the match screen says you observed a taxon.
+# Label for a tunable parameter in settings
+Tunable-matchLikelyConfidence = Match likely confidence
+# Description of a tunable parameter in settings
+Tunable-matchLikelyConfidence-description = Confidence (0-100) at or above which the match screen says you likely observed a taxon.
+# Label for a tunable parameter in settings
+Tunable-maxCameraZoom = Max camera zoom
+# Description of a tunable parameter in settings
+Tunable-maxCameraZoom-description = Maximum zoom factor allowed when pinching in the camera.
+# Label for a tunable parameter in settings
+Tunable-maxConcurrentUploads = Concurrent uploads
+# Description of a tunable parameter in settings
+Tunable-maxConcurrentUploads-description = Number of observations uploaded at the same time.
+# Label for a tunable parameter in settings
+Tunable-maxOfflineObservations = Max offline observations
+# Description of a tunable parameter in settings
+Tunable-maxOfflineObservations-description = Maximum number of observations downloaded for offline Explore.
+# Label for a tunable parameter in settings
+Tunable-maxPhotoInspectZoom = Max photo inspection zoom
+# Description of a tunable parameter in settings
+Tunable-maxPhotoInspectZoom-description = Maximum zoom when inspecting a photo during identification.
+# Label for a tunable parameter in settings
+Tunable-maxPhotosPerObservation = Max photos per observation
+# Description of a tunable parameter in settings
+Tunable-maxPhotosPerObservation-description = Maximum number of photos an observation can have.
+# Label for a tunable parameter in settings
+Tunable-maxSoundsPerObservation = Max sounds per observation
+# Description of a tunable parameter in settings
+Tunable-maxSoundsPerObservation-description = Maximum number of sounds an observation can have.
+# Label for a tunable parameter in settings
+Tunable-minFreeStorageMb = Minimum free storage (MB)
+# Description of a tunable parameter in settings
+Tunable-minFreeStorageMb-description = Free device storage below which the camera warns that storage is full.
+# Label for a tunable parameter in settings
+Tunable-minSmallGridColumns = Small grid columns
+# Description of a tunable parameter in settings
+Tunable-minSmallGridColumns-description = Minimum number of columns in small photo grids.
+# Label for a tunable parameter in settings
+Tunable-notificationsRefreshMinutes = Notifications refresh (minutes)
+# Description of a tunable parameter in settings
+Tunable-notificationsRefreshMinutes-description = How often to check for new notifications.
+# Label for a tunable parameter in settings
+Tunable-offlineMaxMapPins = Offline map max pins
+# Description of a tunable parameter in settings
+Tunable-offlineMaxMapPins-description = Maximum number of pins shown on the offline Explore map.
+# Label for a tunable parameter in settings
+Tunable-offlineMaxTileZoom = Offline map max zoom
+# Description of a tunable parameter in settings
+Tunable-offlineMaxTileZoom-description = Highest map zoom level downloaded for offline Explore.
+# Label for a tunable parameter in settings
+Tunable-onlineSuggestionsTimeoutSeconds = Online suggestions timeout (seconds)
+# Description of a tunable parameter in settings
+Tunable-onlineSuggestionsTimeoutSeconds-description = How long to wait for online ID suggestions before falling back to offline ones.
+# Settings button and screen title for adjusting hard-coded app parameters
+TUNABLE-PARAMETERS = TUNABLE PARAMETERS
+# Note at the top of the tunable parameters settings screen
+Tunable-parameters-restart-note = Changes take effect after restarting the app. Values outside the allowed range are clamped.
+# Label for a tunable parameter in settings
+Tunable-placeSearchMaxSuggestions = Place search suggestions
+# Description of a tunable parameter in settings
+Tunable-placeSearchMaxSuggestions-description = Maximum number of address suggestions shown.
+# Label for a tunable parameter in settings
+Tunable-remoteImageCacheMb = Image cache size (MB)
+# Description of a tunable parameter in settings
+Tunable-remoteImageCacheMb-description = Maximum size of the cache of downloaded images.
+# Section header on the tunable parameters settings screen
+Tunable-section-ai = AI AND SUGGESTIONS
+# Section header on the tunable parameters settings screen
+Tunable-section-audio = AUDIO ID
+# Section header on the tunable parameters settings screen
+Tunable-section-camera = CAMERA AND MEDIA
+# Section header on the tunable parameters settings screen
+Tunable-section-explore = EXPLORE AND HOTSPOTS
+# Section header on the tunable parameters settings screen
+Tunable-section-game = SPECIES GAME
+# Section header on the tunable parameters settings screen
+Tunable-section-interface = INTERFACE
+# Section header on the tunable parameters settings screen
+Tunable-section-location = LOCATION
+# Section header on the tunable parameters settings screen
+Tunable-section-storage = STORAGE AND OFFLINE
+# Section header on the tunable parameters settings screen
+Tunable-section-uploads = UPLOADS AND IMPORT
+# Section header on the tunable parameters settings screen
+Tunable-section-usb = USB IMPORT
+# Label for a tunable parameter in settings
+Tunable-subjectCropFrameFraction = Subject framing size
+# Description of a tunable parameter in settings
+Tunable-subjectCropFrameFraction-description = Fraction of the screen a detected subject is zoomed to fill.
+# Label for a tunable parameter in settings
+Tunable-subjectCropPadding = Subject crop padding
+# Description of a tunable parameter in settings
+Tunable-subjectCropPadding-description = Extra margin added around an automatically detected subject, as a fraction of its size.
+# Label for a tunable parameter in settings
+Tunable-syncedPhotoFolderMaxGb = Uploaded photo folder size (GB)
+# Description of a tunable parameter in settings
+Tunable-syncedPhotoFolderMaxGb-description = Maximum size of locally kept photos that have already been uploaded.
+# Label for a tunable parameter in settings
+Tunable-targetLocationAccuracyM = Target location accuracy (m)
+# Description of a tunable parameter in settings
+Tunable-targetLocationAccuracyM-description = Accuracy at which a location fix is considered good enough to stop refining.
+# Label for a tunable parameter in settings
+Tunable-toastDurationSeconds = Toast duration (seconds)
+# Description of a tunable parameter in settings
+Tunable-toastDurationSeconds-description = How long brief notifications stay on screen.
+# Label for a tunable parameter in settings
+Tunable-topSuggestionScoreThreshold = Top suggestion score threshold
+# Description of a tunable parameter in settings
+Tunable-topSuggestionScoreThreshold-description = Minimum combined score (0-100) for a suggestion to be shown as the top ID.
+# Label for a tunable parameter in settings
+Tunable-uploadMaxDimension = Upload photo size (px)
+# Description of a tunable parameter in settings
+Tunable-uploadMaxDimension-description = Longest side of photos when uploaded. Large values may be rejected by the server.
+# Label for a tunable parameter in settings
+Tunable-uploadMaxMb = Upload photo max size (MB)
+# Description of a tunable parameter in settings
+Tunable-uploadMaxMb-description = Photos larger than this are resized again before upload.
+# Label for a tunable parameter in settings
+Tunable-uploadMaxRetries = Upload retries
+# Description of a tunable parameter in settings
+Tunable-uploadMaxRetries-description = How many times a failed upload request is retried.
+# Label for a tunable parameter in settings
+Tunable-uploadTimeoutMinutes = Upload timeout (minutes)
+# Description of a tunable parameter in settings
+Tunable-uploadTimeoutMinutes-description = How long an observation can keep trying to upload before it is marked as failed.
+# Label for a tunable parameter in settings
+Tunable-usbMaxPhotosPerScan = USB photos per scan
+# Description of a tunable parameter in settings
+Tunable-usbMaxPhotosPerScan-description = Maximum number of new photos imported from USB in one scan.
+# Label for a tunable parameter in settings
+Tunable-usbScanIntervalSeconds = USB scan interval (seconds)
+# Description of a tunable parameter in settings
+Tunable-usbScanIntervalSeconds-description = How often the USB folder is checked for new photos.
 Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?

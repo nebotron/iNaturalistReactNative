@@ -17,13 +17,14 @@ import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import resizeImage from "sharedHelpers/resizeImage";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { unlink } from "sharedHelpers/util";
 
 const logger = log.extend( "Photo" );
 
 // The largest dimension we allow for uploaded photos. Kept well under the
 // API's payload limit so POST /v2/photos doesn't reject uploads with HTTP 413.
-const UPLOAD_MAX_DIMENSION = 2048;
+const UPLOAD_MAX_DIMENSION = getTunable( "uploadMaxDimension" );
 
 // One line per outcome per session: whether iOS can decode this camera's raws
 // decides what every imported photo is made of, and it does not change from
@@ -39,7 +40,7 @@ const reportRawDecode = ( outcome: string ) => {
 // Photos whose upload file is larger than this get re-resized before upload.
 // Normal resized uploads are a couple of MB; anything much larger is a
 // full-resolution original left behind by an older code path and will 413.
-const UPLOAD_MAX_BYTES = 5 * 1024 * 1024;
+const UPLOAD_MAX_BYTES = getTunable( "uploadMaxMb" ) * 1024 * 1024;
 
 class Photo extends Realm.Object {
   static PHOTO_FIELDS = {

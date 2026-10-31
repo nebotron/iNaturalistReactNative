@@ -15,6 +15,7 @@ import {
   onlineSuggestionsCacheKey,
   setCachedSuggestions,
 } from "sharedHelpers/suggestionsCache";
+import { getTunable } from "sharedHelpers/tunableParams";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
@@ -25,7 +26,7 @@ import { startOfflineExperimentInBackground } from "./suggestionComparisonExperi
 import type { ScoreImageParams, UseSuggestionsOnlineSuggestion } from "./types";
 import { predictOffline } from "./useOfflineSuggestions";
 
-const SCORE_IMAGE_TIMEOUT = 5_000;
+const SCORE_IMAGE_TIMEOUT = getTunable( "onlineSuggestionsTimeoutSeconds" ) * 1000;
 
 const { useRealm } = RealmContext;
 

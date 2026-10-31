@@ -25,6 +25,7 @@ import { StatusBar } from "react-native";
 import AudioRecorderPlayer from "react-native-audio-recorder-player";
 import Observation from "realmModels/Observation";
 import ObservationSound from "realmModels/ObservationSound";
+import { getTunable } from "sharedHelpers/tunableParams";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -39,7 +40,7 @@ const NOT_STARTED = "notStarted";
 const RECORDING = "recording";
 const STOPPED = "stopped";
 
-export const MAX_SOUNDS_ALLOWED = 20;
+export const MAX_SOUNDS_ALLOWED = getTunable( "maxSoundsPerObservation" );
 
 const SoundRecorder = (): Node => {
   const audioRecorderPlayerRef = useRef( new AudioRecorderPlayer( ) );

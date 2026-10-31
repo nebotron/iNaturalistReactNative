@@ -8,6 +8,7 @@ import { searchObservations } from "api/observations";
 import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
 import populationWithin10Km from "sharedHelpers/populationDensity";
+import { getTunable } from "sharedHelpers/tunableParams";
 import useStore from "stores/useStore";
 
 export interface RoutePoint {
@@ -57,13 +58,13 @@ export interface Hotspot {
 const OSRM_BASE = "https://router.project-osrm.org/route/v1/driving";
 const OSRM_TABLE_BASE = "https://router.project-osrm.org/table/v1/driving";
 // Max radius for each k-means cluster (2 km diameter)
-const MAX_CLUSTER_RADIUS_KM = 1.5;
+const MAX_CLUSTER_RADIUS_KM = getTunable( "hotspotClusterRadiusKm" );
 // Evaluate detour times for this many top-by-obs candidates
 const MAX_DETOUR_CANDIDATES = 50;
 // Extra minutes added to travel time to account for parking when ranking hotspots
-const PARKING_MINUTES = 5;
+const PARKING_MINUTES = getTunable( "hotspotParkingMinutes" );
 // Bbox padding around route to look for observations
-const BBOX_PADDING_KM = 80;
+const BBOX_PADDING_KM = getTunable( "hotspotRoutePaddingKm" );
 // eBird searches are circles, so search at points this far apart along the
 // route, capped to keep traffic to eBird low
 const EBIRD_SPACING_KM = 80;

@@ -22,6 +22,7 @@ import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { log } from "sharedHelpers/logger";
 import { hasWriteMediaPermission } from "sharedHelpers/permissions";
 import { completeSentinelFile, createSentinelFile, logStage } from "sharedHelpers/sentinelFiles";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useTranslation } from "sharedHooks";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import { FIREBASE_TRACE_ATTRIBUTES, FIREBASE_TRACES } from "stores/createFirebaseTraceSlice";
@@ -54,7 +55,7 @@ export interface SavePhotoOptions {
   visionResult?: StoredResult | null;
 }
 
-export const MAX_PHOTOS_ALLOWED = 20;
+export const MAX_PHOTOS_ALLOWED = getTunable( "maxPhotosPerObservation" );
 
 const logger = log.extend( "CameraContainer" );
 

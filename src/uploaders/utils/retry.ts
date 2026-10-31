@@ -1,8 +1,9 @@
 import { INatApiError } from "api/error";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 const RETRY_DELAY_MS = 5000;
 const RETRY_JITTER_MS = 2000;
-const MAX_RETRIES = 3;
+const MAX_RETRIES = getTunable( "uploadMaxRetries" );
 
 interface RetryOptions {
   // Statuses that are normally fatal but are worth one more try in a specific

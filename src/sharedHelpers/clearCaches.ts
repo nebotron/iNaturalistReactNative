@@ -16,14 +16,15 @@ import {
 } from "appConstants/paths";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import removeSyncedFilesFromDirectory from "sharedHelpers/removeSyncedFilesFromDirectory";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { unlink } from "sharedHelpers/util";
 import useStore from "stores/useStore";
 
-const CROP_CACHE_TTL_MS = 2 * 24 * 60 * 60 * 1000; // 2 days
-const REMOTE_IMAGE_CACHE_MAX_BYTES = 500 * 1024 * 1024;
+const CROP_CACHE_TTL_MS = getTunable( "cropCacheDays" ) * 24 * 60 * 60 * 1000;
+const REMOTE_IMAGE_CACHE_MAX_BYTES = getTunable( "remoteImageCacheMb" ) * 1024 * 1024;
 // Full-size exports of USB raws are ~50MB each, so the TTL alone let this reach
 // 5.8GB on device while crops failed for want of disk space.
-const CROP_SOURCES_MAX_BYTES = 1024 * 1024 * 1024;
+const CROP_SOURCES_MAX_BYTES = getTunable( "cropSourcesCacheMb" ) * 1024 * 1024;
 // Anything still in tmp after an hour belongs to work that died with an earlier
 // run (e.g. a USB raw copied for a Photos save that never completed).
 const TEMP_FILE_TTL_MS = 60 * 60 * 1000;

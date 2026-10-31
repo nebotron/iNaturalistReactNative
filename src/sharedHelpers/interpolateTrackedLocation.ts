@@ -1,3 +1,5 @@
+import { getTunable } from "sharedHelpers/tunableParams";
+
 // Interpolation phase for tracked-location geotagging.
 //
 // The location history tracker stores every raw GPS fix it receives (no
@@ -6,13 +8,13 @@
 
 // Photo location and tracked location are considered comparable only if
 // they're within this many milliseconds of each other
-export const MAX_MATCH_GAP_MS = 12 * 60 * 60 * 1000;
+export const MAX_MATCH_GAP_MS = getTunable( "locationMatchMaxGapHours" ) * 60 * 60 * 1000;
 
 // A fix whose reported accuracy radius (in meters) is worse than this is
 // treated as unreliable and filtered out before interpolating, as long as
 // better fixes remain. This keeps a noisy outlier from dragging an
 // interpolated location off course.
-export const MAX_USABLE_ACCURACY_M = 100;
+export const MAX_USABLE_ACCURACY_M = getTunable( "locationHistoryMaxAccuracyM" );
 
 export interface TrackedPoint {
   latitude: number;

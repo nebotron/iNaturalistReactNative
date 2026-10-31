@@ -12,10 +12,11 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
+import { getTunable } from "sharedHelpers/tunableParams";
 import colors from "styles/tailwindColors";
 
 const FADE_IN_DURATION = 200;
-const VISIBLE_DURATION = 2000;
+const VISIBLE_DURATION = getTunable( "toastDurationSeconds" ) * 1000;
 const FADE_OUT_DURATION = 200;
 
 interface Props {

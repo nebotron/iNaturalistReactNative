@@ -1,6 +1,7 @@
 import { activateKeepAwake, deactivateKeepAwake } from "@sayem314/react-native-keep-awake";
 import remove from "lodash/remove";
 import type { RealmObservation } from "realmModels/types";
+import { getTunable } from "sharedHelpers/tunableParams";
 import filterDirtyPos from "uploaders/dataTransformation/filterDirtyPos";
 import type { StateCreator } from "zustand";
 
@@ -9,7 +10,7 @@ export const UPLOAD_PENDING = "pending";
 export const UPLOAD_COMPLETE = "complete";
 export const UPLOAD_IN_PROGRESS = "in-progress";
 
-export const MAX_CONCURRENT_UPLOADS = 3;
+export const MAX_CONCURRENT_UPLOADS = getTunable( "maxConcurrentUploads" );
 
 type UploadStatus = typeof UPLOAD_PENDING
   | typeof UPLOAD_IN_PROGRESS

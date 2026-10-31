@@ -3,6 +3,7 @@ import type {
   GeolocationResponse,
 } from "@react-native-community/geolocation";
 import { log } from "sharedHelpers/logger";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 // Please don't change this to an aliased path or the e2e mock will not get
 // used in our e2e tests on Github Actions
@@ -19,7 +20,7 @@ export interface UserLocation {
 }
 
 // Accuracy, in meters, that's good enough to stop burning the GPS radio on
-export const TARGET_POSITIONAL_ACCURACY = 10;
+export const TARGET_POSITIONAL_ACCURACY = getTunable( "targetLocationAccuracyM" );
 // The OS hands a brand new client its last known fix straight away, and that
 // can be an old one from somewhere else entirely, so ignore the stale ones.
 const MAX_POSITION_AGE_MS = 60_000;
@@ -32,7 +33,7 @@ const FRESH_FIX_MAX_AGE_MS = 5_000;
 // How long to keep waiting for an accurate fix before settling for the best
 // one we've seen. Kept under the 10s one-shot timeout this replaced so we
 // never make the caller wait longer than it used to.
-const ACCURACY_DEADLINE_MS = 6_000;
+const ACCURACY_DEADLINE_MS = getTunable( "locationAccuracyDeadlineSeconds" ) * 1000;
 
 const geolocationOptions = {
   distanceFilter: 0,

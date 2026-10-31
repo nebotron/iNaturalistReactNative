@@ -35,6 +35,7 @@ import {
   getUsedUuids,
   recordGuess,
 } from "sharedHelpers/speciesGameStats";
+import { getTunable } from "sharedHelpers/tunableParams";
 import {
   preloadSubjectDetectionForUri,
   resolveSubjectDetectionForUri,
@@ -69,12 +70,12 @@ const SEX_VALUE_IDS: Record<SexType, number> = {
 };
 
 const INATURALIST_API = "https://api.inaturalist.org/v1";
-const POOL_SIZE = 20;
+const POOL_SIZE = getTunable( "gamePoolSize" );
 // Max pages of observations we'll page through per taxon to keep supplying fresh,
 // never-before-seen images (POOL_SIZE * MAX_POOL_PAGES photos per taxon).
 const MAX_POOL_PAGES = 25;
-const LOOKALIKE_RADIUS_KM = 500;
-const LOCATION_FILTER_RADIUS_KM = 200;
+const LOOKALIKE_RADIUS_KM = getTunable( "gameLookalikeRadiusKm" );
+const LOCATION_FILTER_RADIUS_KM = getTunable( "gameLocationRadiusKm" );
 const LOOKALIKE_CACHE_KEY = "speciesGameLookalikes";
 const MAX_LOOKALIKE_OBS = 1000;
 const FETCH_MORE_OBS_COUNT = 400;

@@ -457,6 +457,7 @@ export type BaseTabStackParamList = {
   UiLibraryItem: undefined;
   Log: undefined;
   Settings: undefined;
+  TunableParams: undefined;
   About: undefined;
   Donate: undefined;
   Help: undefined;

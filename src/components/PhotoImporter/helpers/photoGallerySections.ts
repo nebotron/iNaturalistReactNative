@@ -1,9 +1,10 @@
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 type PhotoNode = PhotoIdentifier["node"];
 
-const SECTION_GAP_SECONDS = 5 * 60;
-const MAX_SECTION_SIZE = 100;
+const SECTION_GAP_SECONDS = getTunable( "importSectionGapMinutes" ) * 60;
+const MAX_SECTION_SIZE = getTunable( "importMaxSectionSize" );
 
 export interface PhotoSectionHeaderItem {
   type: "header";

@@ -18,6 +18,7 @@ import {
   LOCATION_PERMISSIONS,
 } from "sharedHelpers/permissions";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { sleep } from "sharedHelpers/util";
 
 const logger = log.extend( "locationHistoryTracker" );
@@ -27,9 +28,9 @@ const BACKGROUND_TASK_NAME = "location-history-tracking";
 // The OS only delivers a new fix once the user has moved this far (the watch's
 // distanceFilter), which keeps background tracking power-efficient. Every fix
 // it does deliver is stored; accuracy filtering happens at interpolation time.
-const MIN_DISTANCE_METERS = 50;
+const MIN_DISTANCE_METERS = getTunable( "locationHistoryDistanceM" );
 // Requested update interval for the Android background watch
-const MIN_INTERVAL_MS = 2 * 60 * 1000;
+const MIN_INTERVAL_MS = getTunable( "locationHistoryIntervalMinutes" ) * 60 * 1000;
 const POLL_MS = 1000;
 // How often JS pulls the fixes the iOS native monitor has buffered into Realm
 const DRAIN_INTERVAL_MS = 60 * 1000;

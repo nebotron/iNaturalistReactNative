@@ -26,6 +26,7 @@ import {
 } from "sharedHelpers/normalizedCropToImageZoomTransform";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { computeContainRect, square2048Crop } from "sharedHelpers/normalizedCropTypes";
+import { getTunable } from "sharedHelpers/tunableParams";
 import {
   EXPOSURE_STOPS_MAX,
   EXPOSURE_STOPS_MIN,
@@ -40,7 +41,7 @@ const DIM_COLOR = "rgba(0, 0, 0, 0.55)";
 const TOOLBAR_HEIGHT = 104;
 const CROP_BUTTON_SIZE = 88;
 const CROP_ICON_SIZE = 36;
-const UPLOAD_MAX_SIDE = 2048;
+const UPLOAD_MAX_SIDE = getTunable( "uploadMaxDimension" );
 // Two-finger panning is implemented as a pinch with a scale ratio that stays
 // near 1, so ordinary hand tremor makes the live scale (and thus the cropped
 // side length) drift by a few pixels even when the user isn't deliberately

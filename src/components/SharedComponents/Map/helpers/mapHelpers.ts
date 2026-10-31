@@ -4,6 +4,7 @@ import createUTFPosition from "sharedHelpers/createUTFPosition";
 import { EnvConfig } from "sharedHelpers/envConfig";
 import getDataForPixel from "sharedHelpers/fetchUTFGridData";
 import distanceInMeters from "sharedHelpers/geoDistance";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 export const OBSCURATION_CELL_SIZE = 0.2;
 const API_URL = EnvConfig.API_URL || process.env.API_URL || "https://api.inaturalist.org/v2";
@@ -155,7 +156,9 @@ export function accuracyToEncompassBounds(
   );
 }
 
-export const DEFAULT_OBSERVATION_LOCATION_ACCURACY_METERS = 1000;
+export const DEFAULT_OBSERVATION_LOCATION_ACCURACY_METERS = getTunable(
+  "defaultObsLocationAccuracyM",
+);
 
 export function hasValidMapCoordinates(
   latitude?: number | null,

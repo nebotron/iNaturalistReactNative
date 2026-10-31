@@ -21,6 +21,7 @@ import type { CameraDevice, TakePhotoOptions } from "react-native-vision-camera"
 import { VolumeManager } from "react-native-volume-manager";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import { BREAKPOINTS } from "sharedHelpers/breakpoint";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useDeviceOrientation } from "sharedHooks";
 import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import useStore from "stores/useStore";
@@ -40,7 +41,7 @@ import PhotoPreview from "./PhotoPreview";
 
 const isTablet = DeviceInfo.isTablet( );
 
-export const MAX_PHOTOS_ALLOWED = 20;
+export const MAX_PHOTOS_ALLOWED = getTunable( "maxPhotosPerObservation" );
 
 interface Props {
   camera: RefObject<Camera | null>;

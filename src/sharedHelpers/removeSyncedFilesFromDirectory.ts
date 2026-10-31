@@ -1,12 +1,13 @@
 import {
   exists, readDir, stat,
 } from "@dr.pogodin/react-native-fs";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { unlink } from "sharedHelpers/util";
 
 // 60s is enough to cover any Realm write race; filesToKeep already protects unsynced photos
 const TRASHABLE_VINTAGE_MS = 60 * 1000;
 
-const MAX_FOLDER_SIZE = 5 * 1024 * 1024 * 1024; // 5GB in bytes
+const MAX_FOLDER_SIZE = getTunable( "syncedPhotoFolderMaxGb" ) * 1024 * 1024 * 1024;
 const TOO_NEW_THRESHOLD = 24 * 60 * 60 * 1000; // Files modified in the last 1 day (in milliseconds)
 
 interface FileDetails {
