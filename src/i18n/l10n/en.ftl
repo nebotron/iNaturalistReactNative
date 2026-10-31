@@ -1250,6 +1250,8 @@ Photos = Photos
 # Error message when the iOS Photos library has stopped answering write requests, so nothing was deleted
 Photos-stopped-responding-restart-the-app = Photos stopped responding on this device, so nothing was deleted. Close and reopen the app, then try again.
 Photos-you-take-will-appear-here = Photos you take will appear here
+# Settings option: the green observation button opens the photo picker
+Pick-photos = Pick photos
 # Button that adds the hotspots with the most observations that fit within the time limit to the route
 Plan-route = Plan route
 # Result of planning a hotspot route within a time limit

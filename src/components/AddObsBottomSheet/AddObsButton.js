@@ -283,8 +283,8 @@ const AddObsButton = ( ): React.Node => {
           || ( isPhotoLibraryAddObsMode && t( "Navigates-to-photo-importer" ) )
           || t( "Opens-AI-camera" )
         }
-        iconName={isAllAddObsOptionsMode && "plus"}
-        iconSize={isAllAddObsOptionsMode && 31}
+        iconName={( isAllAddObsOptionsMode || isPhotoLibraryAddObsMode ) && "plus"}
+        iconSize={( isAllAddObsOptionsMode || isPhotoLibraryAddObsMode ) && 31}
       />
     </>
   );

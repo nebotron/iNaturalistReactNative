@@ -707,6 +707,7 @@
   "Photos": "Photos",
   "Photos-stopped-responding-restart-the-app": "Photos stopped responding on this device, so nothing was deleted. Close and reopen the app, then try again.",
   "Photos-you-take-will-appear-here": "Photos you take will appear here",
+  "Pick-photos": "Pick photos",
   "Plan-route": "Plan route",
   "Planned-hotspots-summary": "Added { $count ->\n  [one] 1 hotspot\n *[other] { $count } hotspots\n} with { $observations ->\n  [one] 1 observation\n *[other] { $observations } observations\n}",
   "Plants": "Plants",

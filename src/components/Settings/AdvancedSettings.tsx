@@ -47,7 +47,7 @@ const AdvancedSettings = ( ) => {
           smallLabel
           checked={isPhotoLibraryAddObsMode}
           onPress={setIsPhotoLibraryAddObsMode}
-          label={t( "Upload-photos" )}
+          label={t( "Pick-photos" )}
         />
       </View>
       <View className="mt-[20px]">
