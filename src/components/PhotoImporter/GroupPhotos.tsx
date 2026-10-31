@@ -297,7 +297,7 @@ const GroupPhotos = ( {
           <View className="flex-row w-full gap-2">
             <View className="flex-1 items-center">
               <INatIconButton
-                icon="trash-outline"
+                icon="close"
                 mode="contained"
                 size={26}
                 width={58}
@@ -360,7 +360,7 @@ const GroupPhotos = ( {
                 ? <ActivityIndicator size={58} />
                 : (
                   <INatIconButton
-                    icon="arrow-up-circle-dots"
+                    icon="plus-bold"
                     mode="contained"
                     size={26}
                     width={58}
