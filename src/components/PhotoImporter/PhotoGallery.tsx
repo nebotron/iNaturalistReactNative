@@ -113,7 +113,7 @@ const PhotoGallery = ( {
   const [selectedUris, setSelectedUris] = useState<Set<string>>( new Set( ) );
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
   const [hideImported, setHideImported] = useState( true );
-  // Photos queued for deletion from this screen; always hidden.
+  // Photos queued for deletion from this screen; hidden unless Hide Saved is off.
   const [deletedUris, setDeletedUris] = useState<Set<string>>( new Set( ) );
   const [importingCount, setImportingCount] = useState( 0 );
   const [importedCount, setImportedCount] = useState( 0 );
@@ -363,13 +363,15 @@ const PhotoGallery = ( {
     return importedUris.has( uri ) || removedGroupPhotoUrisRef.current.has( uri );
   }, [importedUris] );
 
-  const hasImportedPhotos = importedUris.size > 0;
+  const hasHiddenPhotos = importedUris.size > 0
+    || deletedUris.size > 0
+    || removedGroupPhotoUrisRef.current.size > 0;
 
   const visiblePhotos = useMemo(
     ( ) => photos.filter( node => {
+      if ( !hideImported ) return true;
       const uri = getDeviceUriFromNode( node );
-      if ( uri && deletedUris.has( uri ) ) return false;
-      return !hideImported || !isImported( node );
+      return !( uri && deletedUris.has( uri ) ) && !isImported( node );
     } ),
     [photos, hideImported, isImported, deletedUris],
   );
@@ -485,7 +487,7 @@ const PhotoGallery = ( {
           size={22}
           color={colors.darkGray}
         />
-        {hasImportedPhotos && (
+        {hasHiddenPhotos && (
           <View className="flex-row items-center gap-2 px-2">
             { /* eslint-disable-next-line react-native/no-inline-styles */ }
             <Text style={{ fontSize: 12, color: colors.darkGray }}>
