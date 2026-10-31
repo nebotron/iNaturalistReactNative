@@ -49,8 +49,6 @@ interface ImageCropperModule {
     stageMs?: Record<string, number>;
     // A raw's free memory at each try.
     attemptFreeMB?: number[];
-    // The raw decode drew nothing, so this came from the camera's embedded JPEG.
-    usedPreview?: boolean;
   }>;
 }
 
@@ -98,17 +96,15 @@ const prepareCropSource = async (
     if ( prepared && (
       prepared.displayLevel < 24
       || prepared.attempts > 1
-      || prepared.usedPreview
     ) ) {
       // The cropper is about to draw a near-black frame, or a raw needed
-      // another decode, or its embedded JPEG, to come out at all.
+      // another decode to come out at all.
       logger.warnWithExtra( "crop_source_dark", {
         source: sourceUri,
         displayLevel: prepared.displayLevel,
         attempts: prepared.attempts,
         attemptMs: prepared.attemptMs,
         attemptFreeMB: prepared.attemptFreeMB,
-        usedPreview: prepared.usedPreview,
       } );
     }
     if ( !prepared || prepared.width <= 0 || prepared.height <= 0 ) {

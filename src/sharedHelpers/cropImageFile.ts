@@ -22,8 +22,6 @@ interface CropResult {
   attemptMs: number[];
   // A raw's free memory at each try.
   attemptFreeMB?: number[];
-  // The raw decode drew nothing, so this came from the camera's embedded JPEG.
-  usedPreview?: boolean;
 }
 
 interface ImageCropperModule {
@@ -82,7 +80,6 @@ const cropImageFile = async (
     if (
       result.outputLevel < DARK_OUTPUT_LEVEL
       || result.attempts > 1
-      || result.usedPreview
     ) {
       logger.warnWithExtra( "crop_output_check", {
         source: imageUri,
@@ -90,7 +87,6 @@ const cropImageFile = async (
         attempts: result.attempts,
         attemptMs: result.attemptMs,
         attemptFreeMB: result.attemptFreeMB,
-        usedPreview: result.usedPreview,
       } );
     }
     // Native ImageCropper copies EXIF/metadata from the source image into the

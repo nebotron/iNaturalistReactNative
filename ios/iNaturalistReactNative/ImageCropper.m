@@ -3,6 +3,8 @@
 #import <CoreImage/CoreImage.h>
 #import <CoreLocation/CoreLocation.h>
 #import <ImageIO/ImageIO.h>
+#import <Metal/Metal.h>
+#import <OSLog/OSLog.h>
 #import <Photos/Photos.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <React/RCTBridgeModule.h>
@@ -770,35 +772,6 @@ static uint64_t freeDiskMB( void )
   return [attrs[NSFileSystemFreeSize] unsignedLongLongValue] >> 20;
 }
 
-static UIImage *thumbnailFromImageSource( CGImageSourceRef src, CGFloat maxPixel );
-static size_t   primaryImageIndex( CGImageSourceRef src );
-
-// The camera's own JPEG of a raw, upright and as close to longestSide as it
-// has, for when the raw decode draws nothing. That refusal is intermittent and
-// unrelated to free memory, and all three tries usually land in it; the
-// embedded JPEG goes through a different decoder.
-static UIImage *embeddedPreviewImage( NSString *path, CGFloat longestSide )
-{
-  CGImageSourceRef src =
-    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
-  if ( !src ) return nil;
-  // IfAbsent, not thumbnailFromImageSource's Always: Always builds the
-  // thumbnail from the raw itself, so it was refused by the same decoder that
-  // just failed, and this fallback never once produced an image.
-  NSDictionary *opts = @{
-    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageIfAbsent: @YES,
-    (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform:     @YES,
-    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize:            @( longestSide ),
-  };
-  CGImageRef cg = CGImageSourceCreateThumbnailAtIndex(
-    src, primaryImageIndex( src ), (__bridge CFDictionaryRef)opts );
-  CFRelease( src );
-  if ( !cg ) return nil;
-  UIImage *preview = [UIImage imageWithCGImage:cg];
-  CGImageRelease( cg );
-  return preview;
-}
-
 static NSLock *rawDecodeLock( void )
 {
   static NSLock         *lock;
@@ -835,12 +808,98 @@ static int withRawDecodeRetries(
   return attempts;
 }
 
+static size_t primaryImageIndex( CGImageSourceRef src );
+
+// Messages iOS's own image frameworks logged in this process since `since`.
+// The raw decoder refuses without returning an error, so whatever it logged
+// on the way out is the only account of why.
+static NSArray<NSString *> *imageFrameworkLogSince( NSDate *since )
+{
+  NSError    *error = nil;
+  OSLogStore *store = [OSLogStore storeWithScope:OSLogStoreCurrentProcessIdentifier error:&error];
+  if ( !store ) return @[[NSString stringWithFormat:@"no log store: %@", error.localizedDescription]];
+  OSLogEnumerator *entries = [store entriesEnumeratorWithOptions:0
+                                                        position:[store positionWithDate:since]
+                                                       predicate:nil
+                                                           error:&error];
+  if ( !entries ) return @[[NSString stringWithFormat:@"no log entries: %@", error.localizedDescription]];
+  NSRegularExpression *frameworks = [NSRegularExpression
+    regularExpressionWithPattern:@"ImageIO|RawCamera|CoreImage|JPEG|Metal|AGX|IOSurface|CoreGraphics|CMPhoto|VideoToolbox"
+                         options:NSRegularExpressionCaseInsensitive error:nil];
+  NSMutableArray<NSString *> *lines = [NSMutableArray array];
+  for ( OSLogEntry *entry in entries ) {
+    if ( ![entry isKindOfClass:[OSLogEntryLog class]] ) continue;
+    OSLogEntryLog *log = (OSLogEntryLog *)entry;
+    NSString *who = [NSString stringWithFormat:@"%@ %@ %@",
+      log.sender ?: @"", log.subsystem ?: @"", log.category ?: @""];
+    if ( ![frameworks firstMatchInString:who options:0 range:NSMakeRange( 0, who.length )] ) continue;
+    NSString *line = [NSString stringWithFormat:@"%@/%@: %@",
+      log.sender, log.category, log.composedMessage];
+    [lines addObject:line.length > 300 ? [line substringToIndex:300] : line];
+    if ( lines.count > 40 ) [lines removeObjectAtIndex:0];
+  }
+  return lines;
+}
+
+// The same file decoded straight through ImageIO, without UIImage: "null" is
+// ImageIO refusing to create the image at all, "blank" an image that came back
+// and drew nothing.
+static NSDictionary *imageIOProbe( NSString *path )
+{
+  NSTimeInterval   started = [NSDate timeIntervalSinceReferenceDate];
+  CGImageSourceRef src     =
+    CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
+  if ( !src ) return @{ @"result": @"no source" };
+  CGImageRef cg = CGImageSourceCreateImageAtIndex( src, primaryImageIndex( src ),
+    (__bridge CFDictionaryRef)@{ (__bridge NSString *)kCGImageSourceShouldCacheImmediately: @YES } );
+  NSString *result = @"null";
+  if ( cg ) {
+    result = drawnOverSentinel( [UIImage imageWithCGImage:cg], 256, 256, CGRectMake( 0, 0, 256, 256 ) )
+      ? @"drew"
+      : @"blank";
+    CGImageRelease( cg );
+  }
+  CFRelease( src );
+  return @{
+    @"result": result,
+    @"ms":     @( (int)( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
+  };
+}
+
+// The same file through Core Image's raw pipeline, small. If this draws while
+// ImageIO refuses, the refusal is ImageIO's; if it fails too, it is the raw
+// engine underneath both.
+static NSDictionary *coreImageRawProbe( NSString *path )
+{
+  NSTimeInterval started = [NSDate timeIntervalSinceReferenceDate];
+  CIRAWFilter   *raw     = [CIRAWFilter filterWithImageURL:[NSURL fileURLWithPath:path]];
+  NSString      *result  = @"no filter";
+  if ( raw ) {
+    raw.scaleFactor = 0.1;
+    CIImage *image = raw.outputImage;
+    result = @"no output";
+    if ( image && !CGRectIsEmpty( image.extent ) ) {
+      CGImageRef cg = [[CIContext contextWithOptions:nil] createCGImage:image fromRect:image.extent];
+      result = cg ? @"drew" : @"render failed";
+      if ( cg ) CGImageRelease( cg );
+    }
+  }
+  return @{
+    @"result": result,
+    @"ms":     @( (int)( ( [NSDate timeIntervalSinceReferenceDate] - started ) * 1000 ) ),
+  };
+}
+
 // What the process looked like when a decode drew nothing: how long each
 // attempt ran (a refusal returns in tens of ms, a demosaic that ran takes on
 // the order of a second), the memory each started with, and the footprint now
 // and at its peak. GPU, thermal, low-power and ImageIO status were dropped
-// after the Oct 17 failures showed the same values every time.
+// after the Oct 17 failures showed the same values every time. Then, under the
+// raw decode lock while the refusal is likely still in effect, the file again
+// through ImageIO directly and through Core Image, the GPU memory this process
+// holds, and what the image frameworks logged since the first attempt.
 static NSDictionary *rawDecodeFailureDiagnostics(
+  NSString *path, NSDate *since,
   NSArray<NSNumber *> *attemptMs, NSArray<NSNumber *> *attemptFreeMB )
 {
   NSMutableDictionary *d = [NSMutableDictionary dictionary];
@@ -853,6 +912,16 @@ static NSDictionary *rawDecodeFailureDiagnostics(
     d[@"footprintMB"]     = @( vm.phys_footprint >> 20 );
     d[@"footprintPeakMB"] = @( vm.ledger_phys_footprint_peak >> 20 );
   }
+  if ( !isCameraRawFile( path ) ) return d;
+  [rawDecodeLock( ) lock];
+  @autoreleasepool {
+    d[@"imageIO"]   = imageIOProbe( path );
+    d[@"coreImage"] = coreImageRawProbe( path );
+    id<MTLDevice> gpu = MTLCreateSystemDefaultDevice( );
+    d[@"gpuAllocatedMB"] = @( gpu.currentAllocatedSize >> 20 );
+    d[@"frameworkLog"]   = imageFrameworkLogSince( since );
+  }
+  [rawDecodeLock( ) unlock];
   return d;
 }
 
@@ -1054,6 +1123,7 @@ RCT_EXPORT_METHOD( cropImage
     __block NSData   *data         = nil;
     NSMutableArray<NSNumber *> *attemptMs     = [NSMutableArray array];
     NSMutableArray<NSNumber *> *attemptFreeMB = [NSMutableArray array];
+    NSDate *decodeStarted = [NSDate date];
     int attempts = withRawDecodeRetries(
       input, attemptMs, attemptFreeMB, ^BOOL {
     image = [UIImage imageWithContentsOfFile:input];
@@ -1068,21 +1138,6 @@ RCT_EXPORT_METHOD( cropImage
       image.size.width * image.scale, image.size.height * image.scale );
     UIImageOrientation orientation = image.imageOrientation;
     image = nil;
-
-    // The crop rect is in the decoded image's pixels; the preview can be
-    // smaller, so scale the rect to it.
-    BOOL usedPreview = NO;
-    if ( !data && decodedSize.width > 0 ) {
-      UIImage *preview = embeddedPreviewImage(
-        input, MAX( decodedSize.width, decodedSize.height ) );
-      if ( preview ) {
-        CGFloat k = preview.size.width * preview.scale / decodedSize.width;
-        data = croppedJpegData( preview, CGRectIntegral( CGRectMake(
-          cropRect.origin.x * k, cropRect.origin.y * k,
-          cropRect.size.width * k, cropRect.size.height * k ) ), srcMeta );
-        usedPreview = data != nil;
-      }
-    }
 
     if ( !data ) {
       CGImageSourceRef reread = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
@@ -1106,7 +1161,7 @@ RCT_EXPORT_METHOD( cropImage
         cropRect.size.width, cropRect.size.height, attempts,
         os_proc_available_memory( ) >> 20],
         diagnosticsError(
-          rawDecodeFailureDiagnostics( attemptMs, attemptFreeMB ) ) );
+          rawDecodeFailureDiagnostics( input, decodeStarted, attemptMs, attemptFreeMB ) ) );
       return;
     }
 
@@ -1122,7 +1177,6 @@ RCT_EXPORT_METHOD( cropImage
     }
     resolve( @{
       @"path":          output,
-      @"usedPreview":   @( usedPreview ),
       @"outputLevel":   @( jpegDataMeanLevel( data ) ),
       @"attempts":      @( attempts ),
       @"attemptMs":     attemptMs,
@@ -2469,6 +2523,7 @@ RCT_EXPORT_METHOD( prepareCropSource
     __block NSString *encodeFailure = nil;
     NSMutableArray<NSNumber *> *attemptMs     = [NSMutableArray array];
     NSMutableArray<NSNumber *> *attemptFreeMB = [NSMutableArray array];
+    NSDate *decodeStarted = [NSDate date];
     int attempts = withRawDecodeRetries(
       input, attemptMs, attemptFreeMB, ^BOOL {
     if ( !lockedAt ) lockedAt = [NSDate timeIntervalSinceReferenceDate];
@@ -2506,18 +2561,11 @@ RCT_EXPORT_METHOD( prepareCropSource
         : @"Could not load image, file missing", nil );
       return;
     }
-    BOOL usedPreview = NO;
-    if ( !data ) {
-      display = embeddedPreviewImage(
-        input, MIN( [maxPixel floatValue], MAX( width, height ) ) );
-      data = display ? encodedThumbnailData( display, nil ) : nil;
-      usedPreview = data != nil;
-    }
     if ( !data ) {
       reject( @"PREPARE_FAILED", [NSString stringWithFormat:@"%@; attempts: %d",
         encodeFailure ?: @"unknown", attempts],
         diagnosticsError(
-          rawDecodeFailureDiagnostics( attemptMs, attemptFreeMB ) ) );
+          rawDecodeFailureDiagnostics( input, decodeStarted, attemptMs, attemptFreeMB ) ) );
       return;
     }
     [[NSFileManager defaultManager]
@@ -2554,7 +2602,6 @@ RCT_EXPORT_METHOD( prepareCropSource
       @"height":     @( height ),
       @"bounds":     bounds ?: [NSNull null],
       @"displayLevel":  @( displayLevel ),
-      @"usedPreview":   @( usedPreview ),
       @"attempts":      @( attempts ),
       @"attemptMs":     attemptMs,
       @"attemptFreeMB": attemptFreeMB,
