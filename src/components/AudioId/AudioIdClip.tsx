@@ -88,7 +88,8 @@ const AudioIdClip = ( ) => {
 
   if ( !clip ) return <Body3 className="p-5">This clip is no longer saved.</Body3>;
 
-  const createObservation = async ( ) => {
+  // With `identify`, the observation gets no taxon and Suggestions opens to identify its sound.
+  const createObservation = async ( identify = false ) => {
     if ( !span || !AudioBirdId ) return;
     try {
       // Sound.new moves the file, so hand it a copy to keep the clip here.
@@ -103,14 +104,18 @@ const AudioIdClip = ( ) => {
       }
       // The user's label wins over the model's ID; "no organism" leaves it blank.
       const { label, sp } = clip;
-      if ( label?.taxonId ) {
+      if ( identify ) {
+        // The taxon is chosen on Suggestions
+      } else if ( label?.taxonId ) {
         observation.taxon = { id: label.taxonId, name: label.name };
       } else if ( label?.taxonId !== null ) {
         observation.taxon = { id: sp.taxonId, name: sp.name, preferred_common_name: sp.commonName };
       }
       updateClip( id, { observationUuid: observation.uuid } );
       setObservations( [observation] );
-      navigation.navigate( "ObsEdit" );
+      navigation.navigate( identify
+        ? "Suggestions"
+        : "ObsEdit" );
     } catch ( e ) {
       setError( `Couldn't create the observation: ${( e as Error ).message}` );
     }
@@ -168,7 +173,13 @@ const AudioIdClip = ( ) => {
         className="mt-4"
         level="focus"
         text="CREATE OBSERVATION"
-        onPress={createObservation}
+        onPress={( ) => createObservation( )}
+      />
+      <Button
+        className="mt-4"
+        level="neutral"
+        text="IDENTIFY"
+        onPress={( ) => createObservation( true )}
       />
       {nearbyObs.length > 0 && (
         <Body1 className="mt-6">Add to observation</Body1>
