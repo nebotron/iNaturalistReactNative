@@ -1752,10 +1752,6 @@ Tunable-aiCameraStoredResults = AI Camera smoothing frames
 # Description of a tunable parameter in settings
 Tunable-aiCameraStoredResults-description = Number of recent frames the AI Camera averages to steady its prediction.
 # Label for a tunable parameter in settings
-Tunable-audioIdAlsoHeard = Audio ID also-heard threshold
-# Description of a tunable parameter in settings
-Tunable-audioIdAlsoHeard-description = Score (0-1) a species other than the top one needs to also count as heard.
-# Label for a tunable parameter in settings
 Tunable-audioIdBirdGeoThreshold = Audio ID bird range threshold
 # Description of a tunable parameter in settings
 Tunable-audioIdBirdGeoThreshold-description = Minimum expected local occurrence (0-1) for a bird to be included in Audio ID results.

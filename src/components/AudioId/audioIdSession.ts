@@ -16,10 +16,7 @@ import { prepareAudioId } from "./audioIdModel";
 // AudioBirdId native module runs BirdNET on the last 5 s of microphone audio
 // every second and emits probabilities for the species likely at the user's
 // place and week (see audioIdModel.ts): the top one, and any that clear
-// THRESHOLD. A species counts as heard when its score clears THRESHOLD and it
-// is either the top species in that run or scores at least ALSO_HEARD: on
-// held-out recordings this cut wrong species by about a quarter for under half
-// a point of recall, while still showing confident overlapping callers.
+// THRESHOLD. A species counts as heard when its score clears THRESHOLD.
 
 type VibrateMode = "auto" | "core" | "system";
 
@@ -50,15 +47,11 @@ export const { AudioBirdId } = NativeModules as {
 // and lost 2 of 20 right ones; on held-out recordings, bird recall fell 1.2 points.
 // Raised to 0.6 so everything listed as heard is also confident enough to alert on.
 const THRESHOLD = getTunable( "audioIdThreshold" );
-const ALSO_HEARD = getTunable( "audioIdAlsoHeard" );
 const NEW_CALL_GAP_MS = getTunable( "audioIdNewCallGapSeconds" ) * 1000;
 const REALERT_MS = getTunable( "audioIdRealertHours" ) * 3600000;
 // Scores by output index, as the native module sends them
 export type Scores = Record<number, number>;
-export const heardIn = ( scores: Scores ) => {
-  const top = Math.max( ...Object.values( scores ), 0 );
-  return ( s: number ) => s >= THRESHOLD && ( s >= top || s >= ALSO_HEARD );
-};
+export const isHeard = ( s: number ) => s >= THRESHOLD;
 
 const logger = log.extend( "AudioId" );
 // Runs summarized per log line, so field problems show up in the app log.
@@ -362,7 +355,6 @@ const onScores = ( event: ScoresEvent ) => {
     runs = [];
   }
   const now = Date.now( );
-  const isHeard = heardIn( scores );
   // Alert on a species not heard in the last REALERT_MS, and on every call of a
   // species the user hasn't observed at research grade recently.
   const alerts: AudioIdSpecies[] = [];

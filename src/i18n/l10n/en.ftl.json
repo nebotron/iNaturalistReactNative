@@ -1056,8 +1056,6 @@
   "Tunable-aiCameraFps-description": "How many camera frames per second the AI Camera analyzes. Higher values react faster but use more battery.",
   "Tunable-aiCameraStoredResults": "AI Camera smoothing frames",
   "Tunable-aiCameraStoredResults-description": "Number of recent frames the AI Camera averages to steady its prediction.",
-  "Tunable-audioIdAlsoHeard": "Audio ID also-heard threshold",
-  "Tunable-audioIdAlsoHeard-description": "Score (0-1) a species other than the top one needs to also count as heard.",
   "Tunable-audioIdBirdGeoThreshold": "Audio ID bird range threshold",
   "Tunable-audioIdBirdGeoThreshold-description": "Minimum expected local occurrence (0-1) for a bird to be included in Audio ID results.",
   "Tunable-audioIdDimAfterSeconds": "Audio ID dim after (seconds)",

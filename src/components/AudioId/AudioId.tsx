@@ -20,7 +20,7 @@ import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import type { Heard } from "./audioIdSession";
 import useAudioIdSession, {
-  heardIn, noteActivity, startDimming, stopDimming, useScreenDimmed,
+  isHeard, noteActivity, startDimming, stopDimming, useScreenDimmed,
 } from "./audioIdSession";
 
 // Animal classes the model covers, for asking which of them the user has seen.
@@ -164,8 +164,7 @@ const AudioId = ( ) => {
     [species],
   );
   const scoreNow = ( taxonId: number ) => current?.[outputOf.get( taxonId ) ?? -1] || 0;
-  const isHeardNow = useMemo( ( ) => heardIn( current || {} ), [current] );
-  const hearingNow = ( taxonId: number ) => listening && isHeardNow( scoreNow( taxonId ) );
+  const hearingNow = ( taxonId: number ) => listening && isHeard( scoreNow( taxonId ) );
   const clips = useAudioIdHistory( state => state.clips );
   // Every species ever heard, most recently heard first.
   const heardList = useMemo( ( ) => {
