@@ -245,12 +245,21 @@ const MainMediaDisplay = ( {
                     icon="globe-outline"
                     color={colors.white}
                     accessibilityLabel={t( "View-in-browser" )}
+                    optionalClasses="mr-2"
+                  />
+                ) }
+                { onSharePhoto && (
+                  <TransparentCircleButton
+                    onPress={( ) => onSharePhoto( uri )}
+                    icon="share"
+                    accessibilityLabel={t( "Share" )}
+                    testID="MediaViewer.shareButton"
                   />
                 ) }
               </View>
             )
         }
-        { onSharePhoto && (
+        { editable && onSharePhoto && (
           <View className="absolute bottom-4 left-4">
             <INatIconButton
               onPress={( ) => onSharePhoto( uri )}
