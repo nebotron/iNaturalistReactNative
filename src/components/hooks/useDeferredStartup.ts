@@ -32,6 +32,7 @@ import {
 } from "sharedHelpers/clearCaches";
 import { formatApiDatetime } from "sharedHelpers/dateAndTime";
 import { LAST_CRASH_DATA, store as installDataMMKVStorage } from "sharedHelpers/installData";
+import loadBirdCodes from "sharedHelpers/loadBirdCodes";
 import { log } from "sharedHelpers/logger";
 import { takeUnfinishedPhotoImport } from "sharedHelpers/photoImportMarker";
 import { logSentinelFiles } from "sharedHelpers/sentinelFiles";
@@ -148,6 +149,7 @@ const useDeferredStartup = ( ) => {
       zustandMMKVBackingStorage.trim( );
     } );
     const id14 = deferTask( "logThumbnailDiagnostics", logThumbnailDiagnostics );
+    const idBirdCodes = deferTask( "loadBirdCodes", async ( ) => loadBirdCodes( realm ), 30000 );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
     const id10 = deferTask( "warmIntlCache", () => {
@@ -188,6 +190,7 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id17 );
       cancelIdleCallback( id18 );
       cancelIdleCallback( idImport );
+      cancelIdleCallback( idBirdCodes );
     };
   }, [i18n, realm] );
 };

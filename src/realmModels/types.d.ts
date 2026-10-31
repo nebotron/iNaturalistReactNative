@@ -163,6 +163,7 @@ export interface RealmTaxon extends RealmObject {
   isIconic?: boolean;
   iconic_taxon_name?: string;
   ancestor_ids?: number[];
+  birdCodes?: string[];
   _synced_at?: Date;
   taxonPhotos?: RealmTaxonPhoto[];
 }

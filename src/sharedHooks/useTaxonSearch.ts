@@ -160,14 +160,15 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     const unorderedTaxa = remoteResult?.query === taxonQuery
       ? remoteResult.taxa
       : localTaxa || [];
-    // Exact matches come first: a 4-letter bird code (official, per the API,
-    // or derived from the common name offline), then a scientific or common
-    // name equal to the query. Local code matches are included even when the
-    // API ranks them lower or omits them.
+    // Exact matches come first: the API's exact match or a 4-letter bird
+    // code, then a scientific or common name equal to the query. Local code
+    // matches are included even when the API ranks them lower or omits them.
     const cleanedQuery = normalize( taxonQuery );
     const rank = ( taxon: RealmTaxon ) => {
       if ( remoteResult?.query === taxonQuery && remoteResult.exactIds.has( taxon.id ) ) return 3;
-      if ( normalize( Taxon.abaCode( taxon ) ) === cleanedQuery ) return 2;
+      if ( Array.from( taxon.birdCodes || [] ).map( normalize ).includes( cleanedQuery ) ) {
+        return 2;
+      }
       return Taxon.compileSearchableName( taxon ).toLowerCase( ).split( ";" )
         .includes( cleanedQuery )
         ? 1
