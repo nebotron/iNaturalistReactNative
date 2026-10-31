@@ -17,16 +17,21 @@ const { useRealm } = RealmContext;
 
 const ONLINE_SEARCH_DEBOUNCE_MS = 250;
 
+const normalize = ( name?: string | null ) => ( name || "" ).replace( /[^a-zA-Z0-9]/g, "" )
+  .toLowerCase( );
+
 const useTaxonSearch = ( taxonQueryArg = "" ) => {
   const realm = useRealm( );
   const iconicTaxa = useIconicTaxa( { reload: false } );
   const taxonQuery = taxonQueryArg.trim();
   const [localTaxa, setLocalTaxa] = useState<RealmTaxon[] | null>( null );
   const [isUpdatingLocalDb, setIsUpdatingLocalDb] = useState( false );
-  // Online results, keyed by the query they answer so stale ones are ignored
+  // Online results, keyed by the query they answer so stale ones are ignored,
+  // with the ids of taxa whose matched name equals the query
   const [remoteResult, setRemoteResult] = useState<{
     query: string;
     taxa: RealmTaxon[];
+    exactIds: Set<number>;
   } | null>( null );
   const { isConnected } = useNetInfo( );
 
@@ -81,8 +86,15 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
         const apiToken = await getJWT( );
         const remoteTaxa = await searchTaxa( { q: taxonQuery }, { api_token: apiToken } );
         if ( !isSubscribed || !remoteTaxa || remoteTaxa.length === 0 ) return;
+        // The API knows official bird codes, which can differ from the one
+        // derived from the common name (e.g. "CANG" for Canada Goose)
+        const exactIds = new Set<number>( remoteTaxa
+          .filter( ( remoteTaxon: ApiTaxon ) => normalize( remoteTaxon.matched_term )
+            === normalize( taxonQuery ) )
+          .map( ( remoteTaxon: ApiTaxon ) => remoteTaxon.id ) );
         const mappedTaxa = remoteTaxa.map(
-          ( remoteTaxon: ApiTaxon ) => Taxon.mapApiToRealm( remoteTaxon, realm ),
+          ( { matched_term: _matchedTerm, ...remoteTaxon }: ApiTaxon ) => Taxon
+            .mapApiToRealm( remoteTaxon, realm ),
         );
         safeRealmWrite( realm, ( ) => {
           mappedTaxa.forEach( mappedTaxon => {
@@ -92,7 +104,7 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
         const taxa = mappedTaxa
           .map( mappedTaxon => realm.objectForPrimaryKey<RealmTaxon>( "Taxon", mappedTaxon.id ) )
           .filter( ( taxon ): taxon is RealmTaxon => !!taxon );
-        if ( isSubscribed ) setRemoteResult( { query: taxonQuery, taxa } );
+        if ( isSubscribed ) setRemoteResult( { query: taxonQuery, taxa, exactIds } );
       } catch ( error ) {
         console.error( "Online taxon search failed:", error );
       } finally {
@@ -148,12 +160,14 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     const unorderedTaxa = remoteResult?.query === taxonQuery
       ? remoteResult.taxa
       : localTaxa || [];
-    // Exact matches come first: a 4-letter bird code, then a scientific or
-    // common name equal to the query. Local code matches are included even
-    // when the API ranks them lower or omits them.
-    const cleanedQuery = taxonQuery.replace( /[^a-zA-Z0-9]/g, "" ).toLowerCase( );
+    // Exact matches come first: a 4-letter bird code (official, per the API,
+    // or derived from the common name offline), then a scientific or common
+    // name equal to the query. Local code matches are included even when the
+    // API ranks them lower or omits them.
+    const cleanedQuery = normalize( taxonQuery );
     const rank = ( taxon: RealmTaxon ) => {
-      if ( Taxon.abaCode( taxon )?.toLowerCase( ) === cleanedQuery ) return 2;
+      if ( remoteResult?.query === taxonQuery && remoteResult.exactIds.has( taxon.id ) ) return 3;
+      if ( normalize( Taxon.abaCode( taxon ) ) === cleanedQuery ) return 2;
       return Taxon.compileSearchableName( taxon ).toLowerCase( ).split( ";" )
         .includes( cleanedQuery )
         ? 1

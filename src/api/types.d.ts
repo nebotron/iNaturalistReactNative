@@ -144,6 +144,8 @@ export interface ApiTaxon {
   representative_photo?: ApiPhoto;
   iconic_taxon_name?: string;
   id?: number;
+  // The name a search query matched, e.g. "CANG" for Canada Goose
+  matched_term?: string;
   name?: string;
   observations_count?: number;
   preferred_common_name?: string;

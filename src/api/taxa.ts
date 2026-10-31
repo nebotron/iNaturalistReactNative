@@ -145,7 +145,8 @@ async function fetchTaxaDefaultPhotos(
 
 async function searchTaxa( params: ApiUntypedParams = {}, opts: ApiOpts = {} ) {
   try {
-    const searchParams = { ...PARAMS, ...params };
+    // matched_term says which name the query hit, e.g. a 4-letter bird code
+    const searchParams = { fields: { ...FIELDS, matched_term: true }, ...params };
     const { results } = await inatjs.taxa.search( searchParams, opts );
     return results;
   } catch ( e ) {
