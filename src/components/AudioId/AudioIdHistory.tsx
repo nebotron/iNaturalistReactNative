@@ -3,9 +3,10 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import {
   Body1, Body3, INatIcon, INatIconButton, List2,
 } from "components/SharedComponents";
-import { Pressable, ScrollView, View } from "components/styledComponents";
+import { Pressable, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React from "react";
+import { FlatList } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Observation from "realmModels/Observation";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
@@ -51,36 +52,43 @@ const AudioIdHistory = ( ) => {
       : TAG_SHADES[`${correct}`];
   };
 
+  const header = sp && (
+    <View className="flex-row items-center mb-3">
+      <Pressable
+        accessibilityRole="link"
+        accessibilityHint="Opens the species page."
+        className="flex-1"
+        onPress={( ) => navigation.navigate( "TaxonDetails", {
+          id: taxonId, fromAudioId: true,
+        } )}
+      >
+        <Body1 className="color-inatGreen underline">{sp.commonName}</Body1>
+        <List2 className="italic">{sp.name}</List2>
+      </Pressable>
+      <INatIconButton
+        icon="sound-outline"
+        color={colors.inatGreen}
+        onPress={( ) => openTopSounds( {
+          id: taxonId, name: sp.name, preferred_common_name: sp.commonName,
+        } )}
+        accessibilityLabel="Top-faved sounds"
+        accessibilityHint="Opens top-faved sound observations in Explore."
+      />
+    </View>
+  );
+
+  // Virtualized: rendering every clip row up front held the tap on the Audio ID
+  // list ~600 ms before this screen appeared (slow_screen_transition).
   return (
-    <ScrollView className="bg-white h-full px-5 pt-4">
-      {sp && (
-        <View className="flex-row items-center mb-3">
-          <Pressable
-            accessibilityRole="link"
-            accessibilityHint="Opens the species page."
-            className="flex-1"
-            onPress={( ) => navigation.navigate( "TaxonDetails", {
-              id: taxonId, fromAudioId: true,
-            } )}
-          >
-            <Body1 className="color-inatGreen underline">{sp.commonName}</Body1>
-            <List2 className="italic">{sp.name}</List2>
-          </Pressable>
-          <INatIconButton
-            icon="sound-outline"
-            color={colors.inatGreen}
-            onPress={( ) => openTopSounds( {
-              id: taxonId, name: sp.name, preferred_common_name: sp.commonName,
-            } )}
-            accessibilityLabel="Top-faved sounds"
-            accessibilityHint="Opens top-faved sound observations in Explore."
-          />
-        </View>
-      )}
-      {ofSpecies.length === 0 && <Body3 className="py-2">No clips saved yet.</Body3>}
-      {ofSpecies.map( clip => (
+    <FlatList
+      className="bg-white h-full"
+      contentContainerClassName="px-5 pt-4 pb-20"
+      data={ofSpecies}
+      keyExtractor={clip => clip.id}
+      ListHeaderComponent={header}
+      ListEmptyComponent={<Body3 className="py-2">No clips saved yet.</Body3>}
+      renderItem={( { item: clip } ) => (
         <Swipeable
-          key={clip.id}
           rightThreshold={40}
           onSwipeableOpen={( ) => deleteClip( clip.id )}
           renderRightActions={( ) => (
@@ -118,9 +126,8 @@ const AudioIdHistory = ( ) => {
             <ClipPlayButton clip={clip} />
           </Pressable>
         </Swipeable>
-      ) )}
-      <View className="h-20" />
-    </ScrollView>
+      )}
+    />
   );
 };
 
