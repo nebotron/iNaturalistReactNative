@@ -32,7 +32,6 @@
 #define AB_WIN      160000  // 5 s, BirdNET v3.0's input
 #define AB_HIST     512000  // 16 s kept, for 15 s clips around a window saved up to 1 s late
 #define AB_STEP     32000   // run every 1 s of new audio
-#define AB_SILENT_PEAK 0.001f // -60 dBFS: a window peaking below this isn't identified
 #define AB_FRAME_RUNS 16 // runs' frame logits kept, covering a 15 s context clip
 #define AB_SPEC_HOP 400     // spectrogram columns, 80 per second
 #define AB_SPEC_LOG2N 10
@@ -1064,22 +1063,6 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     // running.
     if ( self->_sinceRun < AB_STEP || self->_busy ) return;
     self->_sinceRun = 0;
-    // A near-silent window (zeroed while muted, or a very quiet night) holds
-    // nothing to identify: report the level without running the model.
-    float peak = 0;
-    vDSP_maxmgv( self->_modelWindow, 1, &peak, AB_WIN );
-    if ( peak < AB_SILENT_PEAK ) {
-      [self sendEventWithName:@"AudioBirdIdScores"
-                         body:@{ @"scores": @{},
-                                 @"level": @( self->_level ),
-                                 @"windowFrame": @( self->_frames ),
-                                 @"inferMs": @0,
-                                 @"skipped": @YES,
-                                 @"memMB": @( [self footprintMB] ),
-                                 @"spectrogramViews": @( abSpecViews ),
-                                 @"error": [NSNull null] }];
-      return;
-    }
     self->_busy = YES;
     NSData *window = [NSData dataWithBytes:self->_modelWindow
                                     length:AB_WIN * sizeof( float )];

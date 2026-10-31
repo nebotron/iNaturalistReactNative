@@ -110,7 +110,8 @@ static NSString *describeStack( MXCallStackTree *stack )
 // hands over the previous launches' reports at the next launch, and they go
 // straight to the app log from here, so a launch that dies before JS logs
 // anything is still on the record.
-static void postDiagnostic( NSString *message, NSDictionary *fields, MXCallStackTree *stack )
+static void postDiagnostic( NSString *message, NSDictionary *fields, MXCallStackTree *stack,
+                            NSString *level = @"error" )
 {
   NSString *base = [RNCConfig envFor:@"CROP_LOG_FIREBASE_URL"];
   if ( base.length == 0 ) return;
@@ -118,12 +119,12 @@ static void postDiagnostic( NSString *message, NSDictionary *fields, MXCallStack
   NSISO8601DateFormatter *iso = [NSISO8601DateFormatter new];
   iso.formatOptions |= NSISO8601DateFormatWithFractionalSeconds;
   entry[@"timestamp"] = [iso stringFromDate:[NSDate date]];
-  entry[@"level"] = @"error";
+  entry[@"level"] = level;
   entry[@"extension"] = @"MetricKit";
   entry[@"commit"] = [NSString stringWithFormat:@"build-%@",
     [NSBundle mainBundle].infoDictionary[@"CFBundleVersion"]];
   entry[@"message"] = message;
-  NSString *stackText = describeStack( stack );
+  NSString *stackText = stack ? describeStack( stack ) : nil;
   if ( stackText.length > 30000 ) stackText = [stackText substringToIndex:30000];
   if ( stackText ) entry[@"stack"] = stackText;
   NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:
@@ -136,6 +137,13 @@ static void postDiagnostic( NSString *message, NSDictionary *fields, MXCallStack
 static NSString *describe( id value )
 {
   return value ? [NSString stringWithFormat:@"%@", value] : @"";
+}
+
+// A MetricKit measurement as a plain number in `unit`, or -1 when absent.
+static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
+{
+  return value ? @( round( [value measurementByConvertingToUnit:unit].doubleValue * 10 ) / 10 )
+               : @( -1 );
 }
 
 // React Native's Image component (both legacy and Fabric) renders by setting
@@ -250,6 +258,56 @@ static NSString *describe( id value )
         @"to": describe( payload.timeStampEnd ),
       }, hang.callStackTree );
     }
+    // iOS reports these when the app burns more CPU than it allows over a
+    // window (~80% for a minute); the stack shows where it went.
+    for ( MXCPUExceptionDiagnostic *cpu in payload.cpuExceptionDiagnostics ) {
+      postDiagnostic( @"metrickit_cpu_exception", @{
+        @"appBuild": describe( cpu.metaData.applicationBuildVersion ),
+        @"cpuSeconds": measure( cpu.totalCPUTime, NSUnitDuration.seconds ),
+        @"sampledSeconds": measure( cpu.totalSampledTime, NSUnitDuration.seconds ),
+        @"from": describe( payload.timeStampBegin ),
+        @"to": describe( payload.timeStampEnd ),
+      }, cpu.callStackTree, @"warn" );
+    }
+  }
+}
+
+// One a day per device: what the app spent on the things that drain the
+// battery, so a change's effect on power can be compared across builds from the
+// app log. Seconds and megabytes, -1 where iOS reported nothing.
+- (void)didReceiveMetricPayloads:(NSArray<MXMetricPayload *> *)payloads
+{
+  NSUnitDuration *sec = NSUnitDuration.seconds;
+  NSUnitInformationStorage *mb = NSUnitInformationStorage.megabytes;
+  for ( MXMetricPayload *p in payloads ) {
+    MXLocationActivityMetric *loc = p.locationActivityMetrics;
+    MXNetworkTransferMetric *net = p.networkTransferMetrics;
+    MXAppRunTimeMetric *run = p.applicationTimeMetrics;
+    postDiagnostic( @"metrickit_daily", @{
+      @"appBuild": describe( p.metaData.applicationBuildVersion ),
+      @"multipleVersions": @( p.includesMultipleApplicationVersions ),
+      @"from": describe( p.timeStampBegin ),
+      @"to": describe( p.timeStampEnd ),
+      @"cpuSeconds": measure( p.cpuMetrics.cumulativeCPUTime, sec ),
+      @"gpuSeconds": measure( p.gpuMetrics.cumulativeGPUTime, sec ),
+      @"foregroundSeconds": measure( run.cumulativeForegroundTime, sec ),
+      @"backgroundSeconds": measure( run.cumulativeBackgroundTime, sec ),
+      @"backgroundAudioSeconds": measure( run.cumulativeBackgroundAudioTime, sec ),
+      @"backgroundLocationSeconds": measure( run.cumulativeBackgroundLocationTime, sec ),
+      @"locationBestSeconds": measure( loc.cumulativeBestAccuracyTime, sec ),
+      @"locationNavigationSeconds": measure( loc.cumulativeBestAccuracyForNavigationTime, sec ),
+      @"location10mSeconds": measure( loc.cumulativeNearestTenMetersAccuracyTime, sec ),
+      @"location100mSeconds": measure( loc.cumulativeHundredMetersAccuracyTime, sec ),
+      @"location1kmSeconds": measure( loc.cumulativeKilometerAccuracyTime, sec ),
+      @"location3kmSeconds": measure( loc.cumulativeThreeKilometersAccuracyTime, sec ),
+      @"wifiUpMB": measure( net.cumulativeWifiUpload, mb ),
+      @"wifiDownMB": measure( net.cumulativeWifiDownload, mb ),
+      @"cellUpMB": measure( net.cumulativeCellularUpload, mb ),
+      @"cellDownMB": measure( net.cumulativeCellularDownload, mb ),
+      @"diskWritesMB": measure( p.diskIOMetrics.cumulativeLogicalWrites, mb ),
+      @"displayLuminanceAPL": measure( p.displayMetrics.averagePixelLuminance.averageMeasurement,
+                                       MXUnitAveragePixelLuminance.apl ),
+    }, nil, @"info" );
   }
 }
 
