@@ -12,17 +12,9 @@ import DuplicateUploadBadge from
 import { Pressable, View } from "components/styledComponents";
 import React, { useCallback, useState } from "react";
 import type { ViewStyle } from "react-native";
-import { StyleSheet } from "react-native";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import useTranslation from "sharedHooks/useTranslation";
 import colors from "styles/tailwindColors";
-
-const styles = StyleSheet.create( {
-  selectedBorder: {
-    borderWidth: 4,
-    borderColor: colors.inatGreen,
-  },
-} );
 
 interface PhotoItem {
   image: {
@@ -135,6 +127,16 @@ const GroupPhotoImage = ( {
     </View>
   );
 
+  // Same selection treatment as combining observations in My Observations
+  const selectedOverlay = isSelected && (
+    <View
+      pointerEvents="none"
+      className="absolute inset-0 border-4 border-inatGreen items-end p-1 z-10"
+    >
+      <INatIcon name="checkmark-circle" size={22} color={String( colors.inatGreen )} />
+    </View>
+  );
+
   const cellWidth = typeof style?.width === "number"
     ? style.width
     : 0;
@@ -159,8 +161,6 @@ const GroupPhotoImage = ( {
         : undefined}
       fitImage
       style={style}
-      selectable
-      selected={isSelected}
       obsPhotosCount={mediaCount}
       onPress={handlePress}
       testID={`GroupPhotos.${photo.image.uri}`}
@@ -174,7 +174,7 @@ const GroupPhotoImage = ( {
         />
       )}
     </DevicePhotoImage>
-  ), [cellWidth, handlePress, isSelected, mediaCount, style, t] );
+  ), [cellWidth, handlePress, mediaCount, style, t] );
 
   const renderCarouselItem = useCallback(
     ( { item: photo }: { item: object } ) => renderPhoto( photo as PhotoItem ),
@@ -215,11 +215,12 @@ const GroupPhotoImage = ( {
         >
           <View
             className="items-center justify-center bg-lightGray"
-            style={[style, isSelected && styles.selectedBorder]}
+            style={style}
           >
             <INatIcon name="sound" size={32} color={colors.darkGray} />
           </View>
         </Pressable>
+        {selectedOverlay}
         {actionButtons}
       </View>
     );
@@ -254,6 +255,7 @@ const GroupPhotoImage = ( {
           </>
         )
         : firstPhoto && renderPhoto( firstPhoto )}
+      {selectedOverlay}
       {actionButtons}
     </View>
   );
