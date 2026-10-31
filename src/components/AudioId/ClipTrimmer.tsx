@@ -77,7 +77,11 @@ const ClipTrimmer = ( {
   const width = useRef( 1 );
 
   useEffect( ( ) => {
-    setPlayingAudio( player, playing );
+    setPlayingAudio( player, playing, ( ) => {
+      clearInterval( timer.current );
+      playingRef.current = false;
+      setPlaying( false );
+    } );
     return ( ) => setPlayingAudio( player, false );
   }, [player, playing] );
 

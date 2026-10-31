@@ -151,7 +151,12 @@ const SoundContainer = ( {
   ] );
 
   useEffect( ( ) => {
-    setPlayingAudio( player, playing );
+    setPlayingAudio( player, playing, ( ) => {
+      player.removePlayBackListener( );
+      setPlaying( false );
+      // Resuming has to re-init the player, as after a swipe
+      setSwipedAway( true );
+    } );
     return ( ) => setPlayingAudio( player, false );
   }, [player, playing] );
 

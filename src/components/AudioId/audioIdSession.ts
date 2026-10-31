@@ -289,11 +289,20 @@ const flashScreen = ( ) => {
 };
 
 // The native module zeroes the mic audio while the app plays a sound, so
-// playback isn't identified.
-const players = new Set<object>( );
-export const setPlayingAudio = ( player: object, playing: boolean ) => {
+// playback isn't identified. Starting one player calls the others'
+// onStopped, since only one sound plays at a time.
+const players = new Map<object, ( ) => void>( );
+export const setPlayingAudio = (
+  player: object,
+  playing: boolean,
+  onStopped: ( ) => void = ( ) => undefined,
+) => {
   if ( playing ) {
-    players.add( player );
+    players.forEach( ( stopped, other ) => {
+      if ( other !== player ) stopped( );
+    } );
+    players.clear( );
+    players.set( player, onStopped );
   } else {
     players.delete( player );
   }

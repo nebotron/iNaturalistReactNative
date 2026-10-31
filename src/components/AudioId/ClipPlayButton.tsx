@@ -11,12 +11,15 @@ const ClipPlayButton = ( { clip }: { clip: AudioIdClip } ) => {
   const [player] = useState( ( ) => ( {} ) );
   const [playing, setPlaying] = useState( false );
 
+  const playingRef = useRef( false );
   useEffect( ( ) => {
-    setPlayingAudio( player, playing );
+    setPlayingAudio( player, playing, ( ) => {
+      playingRef.current = false;
+      setPlaying( false );
+    } );
     return ( ) => setPlayingAudio( player, false );
   }, [player, playing] );
 
-  const playingRef = useRef( false );
   useEffect( ( ) => ( ) => {
     if ( playingRef.current ) AudioBirdId?.stopClip( );
   }, [] );

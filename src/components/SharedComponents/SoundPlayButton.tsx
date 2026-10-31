@@ -26,7 +26,10 @@ const SoundPlayButton = ( {
   const [playing, setPlaying] = useState( false );
 
   useEffect( ( ) => {
-    setPlayingAudio( player, playing );
+    setPlayingAudio( player, playing, ( ) => {
+      player.removePlayBackListener( );
+      setPlaying( false );
+    } );
     return ( ) => setPlayingAudio( player, false );
   }, [player, playing] );
 
