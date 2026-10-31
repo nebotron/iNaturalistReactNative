@@ -5,11 +5,12 @@ import {
   Body1, Body3, Button, List2, Map,
 } from "components/SharedComponents";
 import LocationIndicator from "components/SharedComponents/Map/LocationIndicator";
-import { ScrollView, View } from "components/styledComponents";
+import { Pressable, ScrollView, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, { useMemo, useState } from "react";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
 import Observation from "realmModels/Observation";
+import ObservationSound from "realmModels/ObservationSound";
 import { formatISONoTimezone, formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import {
   filterUsableTrackedPoints,
@@ -25,6 +26,11 @@ import ClipTrimmer, { useClipSpan } from "./ClipTrimmer";
 
 const { useQuery } = RealmContext;
 
+// Observations within this long of the clip are offered to add it to.
+const NEARBY_MS = 30 * 60 * 1000;
+const obsTime = ( obs: Observation ) => Date
+  .parse( obs.time_observed_at || obs.observed_on_string );
+
 // One Audio ID clip: trim it and make it an observation.
 const AudioIdClip = ( ) => {
   const navigation = useNavigation( );
@@ -33,6 +39,8 @@ const AudioIdClip = ( ) => {
   const clip = useAudioIdHistory( state => state.clips[id] );
   const updateClip = useAudioIdHistory( state => state.updateClip );
   const setObservations = useStore( state => state.setObservations );
+  const prepareObsEdit = useStore( state => state.prepareObsEdit );
+  const updateObservations = useStore( state => state.updateObservations );
   const [error, setError] = useState<string | null>( null );
   const { span, trim, setTrim } = useClipSpan( id, clip?.time, false, clip?.call );
   const time = clip?.time ?? 0;
@@ -54,6 +62,17 @@ const AudioIdClip = ( ) => {
   // Where location tracking put us when the clip was heard, else the fix taken then.
   const tracked = interpolateFromUsablePoints( usablePoints, time );
   const location = tracked || clip?.location;
+  const day = formatISONoTimezone( new Date( time ) ).slice( 0, 10 );
+  const sameDayObs = useQuery( {
+    type: Observation,
+    query: observations => observations.filtered(
+      "observed_on_string BEGINSWITH $0 || time_observed_at BEGINSWITH $0 || observed_on == $0",
+      day,
+    ),
+  }, [day] );
+  const nearbyObs = sameDayObs
+    .filter( obs => Math.abs( obsTime( obs ) - time ) <= NEARBY_MS )
+    .sort( ( a, b ) => Math.abs( obsTime( a ) - time ) - Math.abs( obsTime( b ) - time ) );
 
   if ( !clip ) return <Body3 className="p-5">This clip is no longer saved.</Body3>;
 
@@ -82,6 +101,23 @@ const AudioIdClip = ( ) => {
       navigation.navigate( "ObsEdit" );
     } catch ( e ) {
       setError( `Couldn't create the observation: ${( e as Error ).message}` );
+    }
+  };
+
+  const addToObservation = async ( obs: Observation ) => {
+    if ( !span || !AudioBirdId ) return;
+    try {
+      // Sound.new moves the file, so hand it a copy to keep the clip here.
+      const out = `${CachesDirectoryPath}/${uuid.v4( )}.m4a`;
+      await AudioBirdId.trimClip( span.path, trim[0], trim[1], out );
+      const obsSound = await ObservationSound.new( `file://${out}` );
+      prepareObsEdit( obs );
+      const { currentObservation } = useStore.getState( );
+      updateObservations( [Observation.appendObsSounds( [obsSound], currentObservation )] );
+      updateClip( id, { observationUuid: obs.uuid } );
+      navigation.navigate( "ObsEdit" );
+    } catch ( e ) {
+      setError( `Couldn't add the sound: ${( e as Error ).message}` );
     }
   };
 
@@ -122,6 +158,21 @@ const AudioIdClip = ( ) => {
         text="CREATE OBSERVATION"
         onPress={createObservation}
       />
+      {nearbyObs.length > 0 && <Body1 className="mt-6">Add to an observation from then</Body1>}
+      {nearbyObs.map( obs => (
+        <Pressable
+          key={obs.uuid}
+          accessibilityRole="button"
+          accessibilityHint="Adds the clip to this observation."
+          className="py-2 border-b border-lightGray"
+          onPress={( ) => addToObservation( obs )}
+        >
+          <Body1>
+            {obs.taxon?.preferred_common_name || obs.taxon?.name || "Unknown"}
+          </Body1>
+          <Body3>{formatISOTimestamp( obsTime( obs ) )}</Body3>
+        </Pressable>
+      ) )}
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
 
       <View className="h-20" />
