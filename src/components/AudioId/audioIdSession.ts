@@ -51,7 +51,8 @@ export const { AudioBirdId } = NativeModules as {
 // Raised to 0.6 so everything listed as heard is also confident enough to alert on.
 const THRESHOLD = getTunable( "audioIdThreshold" );
 const ALSO_HEARD = getTunable( "audioIdAlsoHeard" );
-const DAY_MS = 86400000;
+const NEW_CALL_GAP_MS = getTunable( "audioIdNewCallGapSeconds" ) * 1000;
+const REALERT_MS = getTunable( "audioIdRealertHours" ) * 3600000;
 // Scores by output index, as the native module sends them
 export type Scores = Record<number, number>;
 export const heardIn = ( scores: Scores ) => {
@@ -362,17 +363,17 @@ const onScores = ( event: ScoresEvent ) => {
   }
   const now = Date.now( );
   const isHeard = heardIn( scores );
-  // Alert on a species not heard in the last 24 hours, and on every call of a
-  // species the user hasn't observed at research grade in the last 30 days.
+  // Alert on a species not heard in the last REALERT_MS, and on every call of a
+  // species the user hasn't observed at research grade recently.
   const alerts: AudioIdSpecies[] = [];
   let next = heard;
   Object.entries( scores ).forEach( ( [i, s] ) => {
     const sp = sps[Number( i )];
     if ( !isHeard( s ) || !sp ) return;
     const old = next[sp.taxonId];
-    const isNewCall = !old || now - old.lastHeard > 3000;
+    const isNewCall = !old || now - old.lastHeard > NEW_CALL_GAP_MS;
     saveCallClip( sp, Number( i ), s, isNewCall, event.windowFrame );
-    if ( !old || now - old.lastHeard > DAY_MS
+    if ( !old || now - old.lastHeard > REALERT_MS
       || ( isNewCall && recent && !recent.has( sp.taxonId ) ) ) {
       alerts.push( sp );
     }

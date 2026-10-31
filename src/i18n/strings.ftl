@@ -1768,9 +1768,21 @@ Tunable-audioIdFlashSeconds = Audio ID alert duration (seconds)
 # Description of a tunable parameter in settings
 Tunable-audioIdFlashSeconds-description = Seconds the screen brightens when a new species is heard.
 # Label for a tunable parameter in settings
+Tunable-audioIdNewCallGapSeconds = Audio ID new call gap (seconds)
+# Description of a tunable parameter in settings
+Tunable-audioIdNewCallGapSeconds-description = Seconds of silence after which a species heard again counts as a new call.
+# Label for a tunable parameter in settings
 Tunable-audioIdNonBirdGeoThreshold = Audio ID non-bird range threshold
 # Description of a tunable parameter in settings
 Tunable-audioIdNonBirdGeoThreshold-description = Minimum expected local occurrence (0-1) for a non-bird to be included in Audio ID results.
+# Label for a tunable parameter in settings
+Tunable-audioIdRealertHours = Audio ID re-alert after (hours)
+# Description of a tunable parameter in settings
+Tunable-audioIdRealertHours-description = Hours after a species was last heard before hearing it again vibrates.
+# Label for a tunable parameter in settings
+Tunable-audioIdRecentObsDays = Audio ID recent observation window (days)
+# Description of a tunable parameter in settings
+Tunable-audioIdRecentObsDays-description = Every call vibrates for species you haven't observed at research grade within this many days.
 # Label for a tunable parameter in settings
 Tunable-audioIdThreshold = Audio ID detection threshold
 # Description of a tunable parameter in settings

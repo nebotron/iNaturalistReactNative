@@ -90,6 +90,18 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-audioIdFlashSeconds" ),
     t( "Tunable-audioIdFlashSeconds-description" ),
   ],
+  audioIdNewCallGapSeconds: [
+    t( "Tunable-audioIdNewCallGapSeconds" ),
+    t( "Tunable-audioIdNewCallGapSeconds-description" ),
+  ],
+  audioIdRealertHours: [
+    t( "Tunable-audioIdRealertHours" ),
+    t( "Tunable-audioIdRealertHours-description" ),
+  ],
+  audioIdRecentObsDays: [
+    t( "Tunable-audioIdRecentObsDays" ),
+    t( "Tunable-audioIdRecentObsDays-description" ),
+  ],
   audioIdBirdGeoThreshold: [
     t( "Tunable-audioIdBirdGeoThreshold" ),
     t( "Tunable-audioIdBirdGeoThreshold-description" ),

@@ -12,6 +12,7 @@ import type { ViewProps } from "react-native";
 import { Linking, Modal, requireNativeComponent } from "react-native";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 
@@ -31,6 +32,7 @@ const SEEN_TAXON_IDS = [
   26036, // reptiles
 ].join( "," );
 const SEEN_MAX_PAGES = 10;
+const RECENT_OBS_DAYS = getTunable( "audioIdRecentObsDays" );
 
 // Taxon IDs the user has research-grade observations of, including the
 // ancestors of any subspecies-level observations, observed on or after d1 if
@@ -145,8 +147,9 @@ const AudioId = ( ) => {
   const species = useMemo( ( ) => setup?.species || [], [setup] );
   const currentUser = useCurrentUser( );
   const seen = useSeenTaxonIds( currentUser?.id );
-  const monthAgo = new Date( Date.now( ) - 30 * 86400000 ).toISOString( ).slice( 0, 10 );
-  const recent = useSeenTaxonIds( currentUser?.id, monthAgo );
+  const recentSince = new Date( Date.now( ) - RECENT_OBS_DAYS * 86400000 )
+    .toISOString( ).slice( 0, 10 );
+  const recent = useSeenTaxonIds( currentUser?.id, recentSince );
   useEffect( ( ) => setSeen(
     currentUser
       ? seen

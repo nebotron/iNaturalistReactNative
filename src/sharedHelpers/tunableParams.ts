@@ -51,6 +51,9 @@ export const TUNABLE_PARAMS = {
   audioIdAlsoHeard: def( "audio", 0.7, 0, 1, false ),
   audioIdDimAfterSeconds: def( "audio", 30, 1, 600 ),
   audioIdFlashSeconds: def( "audio", 3, 1, 60 ),
+  audioIdNewCallGapSeconds: def( "audio", 3, 0.5, 60, false ),
+  audioIdRealertHours: def( "audio", 24, 0.1, 720, false ),
+  audioIdRecentObsDays: def( "audio", 30, 0, 365 ),
   audioIdBirdGeoThreshold: def( "audio", 0.03, 0, 1, false ),
   audioIdNonBirdGeoThreshold: def( "audio", 0.0003, 0, 1, false ),
 
