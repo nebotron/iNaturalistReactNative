@@ -37,6 +37,7 @@ export const { AudioBirdId } = NativeModules as {
     saveClip: ( path: string, seconds: number, endFrame: number ) => Promise<string>;
     playClip: ( path: string ) => Promise<void>;
     playClipRange: ( path: string, from: number, to: number ) => Promise<void>;
+    normalizeSound: ( uri: string ) => Promise<string>;
     trimClip: ( path: string, from: number, to: number, outPath: string ) => Promise<string>;
     timeline: ( index: number, endFrame: number, seconds: number ) => Promise<( number | null )[]>;
     stopClip: ( ) => void;
@@ -287,6 +288,23 @@ const flashScreen = ( ) => {
     flashing = false;
     applyBrightness( );
   }, FLASH_MS );
+};
+
+// A copy of the sound at `uri` at the same level Audio ID clips play at, or
+// `uri` itself when it can't be made (e.g. a format iOS can't decode).
+const normalizedSounds = new Map<string, Promise<string>>( );
+export const normalizedSoundUri = ( uri: string ): Promise<string> => {
+  if ( !AudioBirdId ) return Promise.resolve( uri );
+  let normalized = normalizedSounds.get( uri );
+  if ( !normalized ) {
+    normalized = AudioBirdId.normalizeSound( uri ).catch( ( e: Error ) => {
+      logger.error( `normalizing sound failed: ${e.message}` );
+      normalizedSounds.delete( uri );
+      return uri;
+    } );
+    normalizedSounds.set( uri, normalized );
+  }
+  return normalized;
 };
 
 // The native module zeroes the mic audio while the app plays a sound, so

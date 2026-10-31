@@ -1,5 +1,6 @@
 #import <Accelerate/Accelerate.h>
 #import <AVFoundation/AVFoundation.h>
+#import <CommonCrypto/CommonDigest.h>
 #import <AudioToolbox/AudioToolbox.h>
 #import <CoreHaptics/CoreHaptics.h>
 #import <mach/mach.h>
@@ -57,6 +58,32 @@ withIntermediateDirectories:YES attributes:nil error:nil];
   buffer.frameLength = frames;
   if ( buffer ) memcpy( buffer.floatChannelData[0], samples, frames * sizeof( float ) );
   return file && buffer && [file writeFromBuffer:buffer error:error];
+}
+
+// Raises every sound the app plays, Audio ID clips and observation sounds
+// alike, to the same loud RMS level (at most 40 dB of gain), and soft-limits
+// the peaks this pushes past full scale with 0.95 * tanh( x / 0.95 ):
+// unchanged when quiet, never past full scale.
+static void ABNormalize( AVAudioPCMBuffer *buffer )
+{
+  AVAudioChannelCount channels = buffer.format.channelCount;
+  float peak = 0, rms = 0;
+  for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
+    float p = 0, r = 0;
+    vDSP_maxmgv( buffer.floatChannelData[c], 1, &p, buffer.frameLength );
+    vDSP_rmsqv( buffer.floatChannelData[c], 1, &r, buffer.frameLength );
+    peak = MAX( peak, p );
+    rms = MAX( rms, r );
+  }
+  const float ceiling = 0.95f;
+  float gain = peak > 0 ? MIN( MAX( 0.89f / peak, 0.6f / rms ), 100.0f ) / ceiling : 1;
+  int n = (int)buffer.frameLength;
+  for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
+    float *d = buffer.floatChannelData[c];
+    vDSP_vsmul( d, 1, &gain, d, 1, buffer.frameLength );
+    vvtanhf( d, d, &n );
+    vDSP_vsmul( d, 1, &ceiling, d, 1, buffer.frameLength );
+  }
 }
 
 // Background noise reduction for clip playback, a spectral gate. Each
@@ -500,10 +527,90 @@ RCT_EXPORT_METHOD( trimClip:( NSString * )path
   } );
 }
 
+// Writes a copy of the sound at `uri` (a file path or URL, downloaded if
+// remote), normalized by ABNormalize, to the caches directory and resolves its
+// path, so other players play at the same level as clips. Copies are reused.
+RCT_EXPORT_METHOD( normalizeSound:( NSString * )uri
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  NSData *key = [uri dataUsingEncoding:NSUTF8StringEncoding];
+  unsigned char digest[CC_SHA1_DIGEST_LENGTH];
+  CC_SHA1( key.bytes, (CC_LONG)key.length, digest );
+  NSMutableString *name = [NSMutableString string];
+  for ( int i = 0; i < CC_SHA1_DIGEST_LENGTH; i++ ) [name appendFormat:@"%02x", digest[i]];
+  NSString *dir = [NSSearchPathForDirectoriesInDomains( NSCachesDirectory, NSUserDomainMask, YES )
+                     .firstObject stringByAppendingPathComponent:@"normalized-sounds"];
+  NSString *outPath = [[dir stringByAppendingPathComponent:name]
+                         stringByAppendingPathExtension:@"caf"];
+  NSFileManager *fm = [NSFileManager defaultManager];
+  if ( [fm fileExistsAtPath:outPath] ) {
+    resolve( [NSURL fileURLWithPath:outPath].absoluteString );
+    return;
+  }
+  void ( ^normalize )( NSURL * ) = ^( NSURL *source ) {
+    NSError *error = nil;
+    AVAudioFile *file = [[AVAudioFile alloc] initForReading:source error:&error];
+    AVAudioPCMBuffer *buffer = file
+      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                      frameCapacity:(AVAudioFrameCount)file.length]
+      : nil;
+    if ( !buffer || ![file readIntoBuffer:buffer error:&error] ) {
+      reject( @"sound", error.localizedDescription ?: @"Could not read the sound", error );
+      return;
+    }
+    ABNormalize( buffer );
+    [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    NSString *tmpPath = [outPath stringByAppendingString:@".tmp"];
+    [fm removeItemAtPath:tmpPath error:nil];
+    AVAudioFile *out = [[AVAudioFile alloc]
+      initForWriting:[NSURL fileURLWithPath:tmpPath]
+            settings:@{ AVFormatIDKey: @( kAudioFormatLinearPCM ),
+                        AVSampleRateKey: @( buffer.format.sampleRate ),
+                        AVNumberOfChannelsKey: @( buffer.format.channelCount ),
+                        AVLinearPCMBitDepthKey: @16, AVLinearPCMIsFloatKey: @NO }
+        commonFormat:AVAudioPCMFormatFloat32 interleaved:NO error:&error];
+    BOOL written = out && [out writeFromBuffer:buffer error:&error];
+    out = nil; // closes the file
+    if ( !written || ![fm moveItemAtPath:tmpPath toPath:outPath error:&error] ) {
+      [fm removeItemAtPath:tmpPath error:nil];
+      reject( @"sound", error.localizedDescription ?: @"Could not write the sound", error );
+      return;
+    }
+    resolve( [NSURL fileURLWithPath:outPath].absoluteString );
+  };
+  NSURL *url = [uri hasPrefix:@"/"] ? [NSURL fileURLWithPath:uri] : [NSURL URLWithString:uri];
+  if ( !url ) {
+    reject( @"sound", @"Invalid sound URI", nil );
+  } else if ( url.isFileURL ) {
+    dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+      normalize( url );
+    } );
+  } else {
+    [[[NSURLSession sharedSession] downloadTaskWithURL:url
+      completionHandler:^( NSURL *location, NSURLResponse *response, NSError *error ) {
+      if ( !location ) {
+        reject( @"sound", error.localizedDescription ?: @"Could not download the sound", error );
+        return;
+      }
+      // The download is deleted when this returns, and AVAudioFile reads by extension
+      NSString *ext = url.pathExtension.length > 0 ? url.pathExtension : @"m4a";
+      NSURL *local = [NSURL fileURLWithPath:[NSTemporaryDirectory( )
+        stringByAppendingPathComponent:[name stringByAppendingPathExtension:ext]]];
+      [fm removeItemAtURL:local error:nil];
+      if ( ![fm moveItemAtURL:location toURL:local error:&error] ) {
+        reject( @"sound", error.localizedDescription ?: @"Could not save the sound", error );
+        return;
+      }
+      normalize( local );
+      [fm removeItemAtURL:local error:nil];
+    }] resume];
+  }
+}
+
 // Plays a clip, resolving when it ends or is stopped. Measurement mode records
-// without gain control, so clips are quiet; this raises them in memory, leaving
-// the file untouched, to a loud RMS level (at most 30 dB of gain) and soft-limits
-// the peaks that this pushes past full scale.
+// without gain control, so clips are quiet; this raises them in memory with
+// ABNormalize, leaving the file untouched.
 RCT_EXPORT_METHOD( playClip:( NSString * )path
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
@@ -543,24 +650,7 @@ RCT_EXPORT_METHOD( playClipRange:( NSString * )path
         ABDenoise( buffer.floatChannelData[c], (int)buffer.frameLength, buffer.format.sampleRate );
       }
     }
-    float peak = 0, rms = 0;
-    for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
-      float p = 0, r = 0;
-      vDSP_maxmgv( buffer.floatChannelData[c], 1, &p, buffer.frameLength );
-      vDSP_rmsqv( buffer.floatChannelData[c], 1, &r, buffer.frameLength );
-      peak = MAX( peak, p );
-      rms = MAX( rms, r );
-    }
-    // 0.95 * tanh( x / 0.95 ): unchanged when quiet, never past full scale.
-    const float ceiling = 0.95f;
-    float gain = peak > 0 ? MIN( MAX( 0.89f / peak, 0.2f / rms ), 32.0f ) / ceiling : 1;
-    int n = (int)buffer.frameLength;
-    for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
-      float *d = buffer.floatChannelData[c];
-      vDSP_vsmul( d, 1, &gain, d, 1, buffer.frameLength );
-      vvtanhf( d, d, &n );
-      vDSP_vsmul( d, 1, &ceiling, d, 1, buffer.frameLength );
-    }
+    ABNormalize( buffer );
     double rate = buffer.format.sampleRate;
     AVAudioFramePosition f0 = MIN( (AVAudioFramePosition)MAX( from * rate, 0 ), buffer.frameLength );
     AVAudioFramePosition f1 = to < 0
