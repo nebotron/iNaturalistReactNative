@@ -25,7 +25,7 @@ interface ImageCropperModule {
 
 // Detection runs for every tile of a photo grid, so timings are summarized
 // every TIMING_BATCH detections rather than logged one by one
-const TIMING_BATCH = 20;
+const TIMING_BATCH = 100;
 let timings: DetectedBounds[] = [];
 
 const mean = ( values: number[] ) => Math.round(

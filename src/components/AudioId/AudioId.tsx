@@ -1,6 +1,5 @@
 /* eslint-disable i18next/no-literal-string */
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
-import { activateKeepAwake, deactivateKeepAwake } from "@sayem314/react-native-keep-awake";
 import { fetchSpeciesCounts } from "api/observations";
 import { fetchTaxaDefaultPhotos } from "api/taxa";
 import {
@@ -12,10 +11,9 @@ import React, { useCallback, useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
 import { Linking, Modal, requireNativeComponent } from "react-native";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
+import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
 import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
-import { UPLOAD_IN_PROGRESS } from "stores/createUploadObservationsSlice";
-import useStore from "stores/useStore";
 
 import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
@@ -130,14 +128,13 @@ const Spectrogram = ( ) => (
 
 const AudioId = ( ) => {
   const navigation = useNavigation( );
-  // Keep the display awake while this screen is focused, without cutting off
-  // the keep-awake an in-progress upload holds
+  // Keep the display awake while this screen is focused
   useFocusEffect( useCallback( ( ) => {
-    activateKeepAwake( );
+    holdKeepAwake( "audioId" );
     startDimming( );
     return ( ) => {
       stopDimming( );
-      if ( useStore.getState( ).uploadStatus !== UPLOAD_IN_PROGRESS ) deactivateKeepAwake( );
+      releaseKeepAwake( "audioId" );
     };
   }, [] ) );
   const {

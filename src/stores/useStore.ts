@@ -1,4 +1,5 @@
 import mergeWith from "lodash/mergeWith";
+import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -21,7 +22,7 @@ import createRootExploreSlice from "./createRootExploreSlice";
 import type { SyncObservationsSlice } from "./createSyncObservationsSlice";
 import createSyncObservationsSlice from "./createSyncObservationsSlice";
 import type { UploadObservationsSlice } from "./createUploadObservationsSlice";
-import createUploadObservationsSlice from "./createUploadObservationsSlice";
+import createUploadObservationsSlice, { UPLOAD_IN_PROGRESS } from "./createUploadObservationsSlice";
 import createFieldStorage from "./fieldPersistStorage";
 import storage from "./zustandMMKVBackingStorage";
 
@@ -157,6 +158,14 @@ const useStore = create<StoreState>()( persist(
     ) ),
   },
 ) );
+
+// Hold the screen awake for exactly as long as an upload is in progress, however
+// the status leaves that state (complete, cancelled, reset, or set directly).
+useStore.subscribe( ( state, prev ) => {
+  if ( state.uploadStatus === prev.uploadStatus ) return;
+  if ( state.uploadStatus === UPLOAD_IN_PROGRESS ) holdKeepAwake( "upload" );
+  else releaseKeepAwake( "upload" );
+} );
 
 // A log of crops that nothing ever read, rewritten in full on every crop and
 // photo upload until it was removed

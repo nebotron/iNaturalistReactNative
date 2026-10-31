@@ -74,7 +74,7 @@ const isBetterThanBestFix = ( location: UserLocation ) => {
 // fix a watch delivers, with a ceiling: the camera holds a watch open for as
 // long as it's on screen, and iOS delivers about one fix a second, so an
 // uncapped log would be a POST per second for the whole session.
-const MAX_LOGGED_FIXES = 25;
+const MAX_LOGGED_FIXES = 10;
 let watchStartedAt = 0;
 let loggedFixes = 0;
 

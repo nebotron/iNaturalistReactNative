@@ -69,6 +69,8 @@ interface ScoresEvent {
   // Native sample count at the window's end, for saving its clip
   windowFrame: number;
   inferMs: number;
+  // The window was near-silent, so the model didn't run
+  skipped?: boolean;
   memMB: number;
   // Live spectrogram views on screen when it ran.
   spectrogramViews?: number;
@@ -236,7 +238,7 @@ export const vibrate = ( mode: VibrateMode = "auto" ) => {
       const detail = `${r.method}, mode ${mode}, app state ${r.appState}, `
         + `allowed ${r.allowed}: ${r.error}`;
       if ( !r.allowed || r.error ) logger.error( `vibrate blocked: ${detail}` );
-      else logger.info( `vibrated: ${detail}` );
+      else logger.debug( `vibrated: ${detail}` );
     } )
     .catch( ( e: Error ) => logger.error( `vibrate failed: ${e.message}` ) );
 };
@@ -352,6 +354,7 @@ const onScores = ( event: ScoresEvent ) => {
     logger.info( `${runs.length} runs: level ${
       ( 20 * Math.log10( mean( r => r.level ) + 1e-9 ) ).toFixed( 0 )} dBFS, `
       + `infer ${mean( r => r.inferMs ).toFixed( 0 )} ms, `
+      + `skipped ${runs.filter( r => r.skipped ).length}, `
       + `mem ${Math.round( runs[runs.length - 1].memMB )} MB, `
       + `spectrogram ${runs[runs.length - 1].spectrogramViews ?? "?"}, best ${
         best.index >= 0
