@@ -57,7 +57,9 @@ import WildlifeHotspotsScreen from "components/WildlifeHotspots/WildlifeHotspots
 import type { ExploreStackScreenProps } from "navigation/types";
 import type { ExploreV2Tab } from "providers/ExploreV2Context";
 import { EXPLORE_V2_ACTION, EXPLORE_V2_PLACE_MODE, useExploreV2 } from "providers/ExploreV2Context";
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+  useCallback, useMemo, useRef, useState,
+} from "react";
 import type { BoundingBox } from "react-native-maps";
 import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import {
@@ -165,18 +167,24 @@ const ExploreResults = ( ) => {
 
   const isNearby = state.location.placeMode === EXPLORE_V2_PLACE_MODE.NEARBY;
   const [nearbyCoords, setNearbyCoords] = useState<NearbyCoords | undefined>( undefined );
+  // Applying a saved search re-resolves Nearby against the latest location
+  const { appliedSearchCount } = state;
+  const coordsSearchCountRef = useRef( appliedSearchCount );
 
   useFocusEffect( useCallback( ( ) => {
     let cancelled = false;
+    const coordsStale = nearbyCoords === undefined
+      || coordsSearchCountRef.current !== appliedSearchCount;
     if ( isNearby && hasBlockedPermissions ) {
       // perms blocked: fall back to worldwide
       dispatch( { type: EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE } );
-    } else if ( isNearby && hasPermissions === true && nearbyCoords === undefined ) {
+    } else if ( isNearby && hasPermissions === true && coordsStale ) {
       getLatestTrackedLocation( ).then(
         tracked => tracked ?? fetchCoarseUserLocation( ),
       ).then( location => {
         if ( cancelled ) return;
         if ( typeof location?.latitude === "number" ) {
+          coordsSearchCountRef.current = appliedSearchCount;
           setNearbyCoords( { lat: location.latitude, lng: location.longitude } );
         } else {
           // Perms granted but no fix — fall back to worldwide.
@@ -185,7 +193,9 @@ const ExploreResults = ( ) => {
       } );
     }
     return ( ) => { cancelled = true; };
-  }, [isNearby, hasPermissions, hasBlockedPermissions, nearbyCoords, dispatch] ) );
+  }, [
+    isNearby, hasPermissions, hasBlockedPermissions, nearbyCoords, appliedSearchCount, dispatch,
+  ] ) );
 
   const handleCurrentLocationPress = useCallback(
     ( ) => dispatch( { type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY } ),

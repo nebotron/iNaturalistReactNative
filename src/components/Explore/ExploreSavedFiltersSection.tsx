@@ -16,6 +16,7 @@ import {
 import { Pressable, View } from "components/styledComponents";
 import {
   EXPLORE_ACTION,
+  PLACE_MODE,
   useExplore,
 } from "providers/ExploreContext";
 import React, { useMemo } from "react";
@@ -37,7 +38,7 @@ const ExploreSavedFiltersSection = ( {
   onOpenSaveSheet,
 }: Props ) => {
   const { t } = useTranslation( );
-  const { dispatch, state } = useExplore( );
+  const { dispatch, state, defaultExploreLocation } = useExplore( );
   const savedExploreFilters = useStore( storeState => storeState.savedExploreFilters );
   const updateSavedExploreFilter = useStore(
     storeState => storeState.updateSavedExploreFilter,
@@ -80,6 +81,18 @@ const ExploreSavedFiltersSection = ( {
         },
       ),
     } );
+
+    // Nearby filters store the coordinates from when they were saved; re-center
+    // on the user's latest location instead
+    if ( savedFilter.params.placeMode === PLACE_MODE.NEARBY ) {
+      const { radius } = savedFilter.params;
+      defaultExploreLocation( ).then( exploreLocation => dispatch( {
+        type: EXPLORE_ACTION.SET_EXPLORE_LOCATION,
+        exploreLocation: exploreLocation.placeMode === PLACE_MODE.NEARBY
+          ? { ...exploreLocation, radius: radius ?? exploreLocation.radius }
+          : exploreLocation,
+      } ) );
+    }
 
     if ( savedFilter.observationsLayout ) {
       zustandStorage.setItem( "exploreObservationsLayout", savedFilter.observationsLayout );
