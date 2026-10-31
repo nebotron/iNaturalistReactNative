@@ -1,6 +1,7 @@
 import { copyFile, mkdir } from "@dr.pogodin/react-native-fs";
 import { photoLibraryPhotosPath, photoUploadPath } from "appConstants/paths";
 import { Platform } from "react-native";
+import { getBrightness, saveBrightness } from "sharedHelpers/brightnessLog";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import * as uuid from "uuid";
 
@@ -44,6 +45,8 @@ export const duplicateGroupedPhotoItem = async (
   photo: GroupedMediaPhotoItem,
 ): Promise<GroupedMediaPhotoItem> => {
   const newUri = await copyMediaFile( photo.image.uri );
+  const brightness = getBrightness( photo.image.uri );
+  if ( brightness !== null ) await saveBrightness( newUri, brightness );
   let { cropOriginalUri } = photo.image;
   if ( cropOriginalUri ) {
     cropOriginalUri = await copyMediaFile( cropOriginalUri );

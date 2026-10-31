@@ -1,6 +1,7 @@
 import findGroupedPhotoByDisplayUri
   from "components/SharedComponents/ImageCrop/findGroupedPhotoByDisplayUri";
 import { saveAnimalCrop } from "sharedHelpers/animalCropLog";
+import { saveBrightness } from "sharedHelpers/brightnessLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -87,6 +88,9 @@ export async function applyGroupPhotosCrop(
     brightness,
   );
   if ( update.uri ) {
+    // The slider reads brightness by uri, so a re-crop of the cropped file
+    // starts from the brightness just baked in.
+    if ( brightness !== 1 ) await saveBrightness( update.uri, brightness );
     onCropped?.( update.uri );
   }
   updateGroupedPhotoImages( new Map( [[displayUri, update]] ) );
