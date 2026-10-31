@@ -832,6 +832,7 @@ iNaturalist-can-use-your-location-to-give-you-better-identification-suggestions 
 INATURALIST-COMMUNITY = INATURALIST COMMUNITY
 INATURALIST-FORUM = INATURALIST FORUM
 iNaturalist-has-no-ID-suggestions-for-this-photo = iNaturalist has no ID suggestions for this photo.
+iNaturalist-has-no-ID-suggestions-for-this-sound = iNaturalist has no ID suggestions for this sound.
 INATURALIST-HELP-PAGE = INATURALIST HELP PAGE
 iNaturalist-helps-you-identify = iNaturalist helps you identify the plants and animals around you while generating data for science and conservation. Get connected with a community of millions scientists and naturalists who can help you learn more about nature!
 iNaturalist-identification-suggestions-are-based-on = iNaturalist's identification suggestions are based on observations and identifications made by the iNaturalist community, including { $user1 }, { $user2 }, { $user3 }, and many others.

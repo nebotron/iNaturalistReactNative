@@ -27,6 +27,7 @@ export const { AudioBirdId } = NativeModules as {
       minScore: number,
     ) => Promise<{ sampleRate: number; channels: number }>;
     stop: ( ) => void;
+    scoreSound: ( uri: string, outputs: number[] ) => Promise<number[]>;
     setPlayingClip: ( playing: boolean ) => void;
     vibrate: ( mode: VibrateMode ) => Promise<{
       allowed: boolean; error: string | null; method: string; appState: number;

@@ -1,3 +1,4 @@
+import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import {
   Body2,
   Body3,
@@ -16,6 +17,7 @@ interface Props {
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
   photoUris: string[];
   selectedPhotoUri: string;
+  soundUri?: string;
   showOfflineModelInfo: boolean;
   toggleSuggestionsModel: ( useOfflineModel: boolean ) => void;
   improveWithLocationButtonOnPress: () => void;
@@ -29,6 +31,7 @@ const SuggestionsHeader = ( {
   onReorderPhotos,
   photoUris,
   selectedPhotoUri,
+  soundUri,
   showOfflineModelInfo,
   toggleSuggestionsModel,
   improveWithLocationButtonOnPress,
@@ -39,14 +42,18 @@ const SuggestionsHeader = ( {
   return (
     <>
       <View className="mx-5">
-        <ObsPhotoSelectionList
-          detectSubject={detectSubject}
-          onCropPhoto={onCropPhoto}
-          photoUris={photoUris}
-          selectedPhotoUri={selectedPhotoUri}
-          onPressPhoto={onPressPhoto}
-          onReorderPhotos={onReorderPhotos}
-        />
+        {soundUri
+          ? <SoundContainer sizeClass="w-full h-[188px]" sound={{ file_url: soundUri }} isVisible />
+          : (
+            <ObsPhotoSelectionList
+              detectSubject={detectSubject}
+              onCropPhoto={onCropPhoto}
+              photoUris={photoUris}
+              selectedPhotoUri={selectedPhotoUri}
+              onPressPhoto={onPressPhoto}
+              onReorderPhotos={onReorderPhotos}
+            />
+          )}
       </View>
       {showImproveWithLocationButton && (
         <View className="mx-5 mt-5">

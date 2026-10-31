@@ -38,6 +38,7 @@ import fetchCoarseUserLocation from "../../sharedHelpers/fetchCoarseUserLocation
 import flattenUploadParams from "./helpers/flattenUploadParams";
 import useNavigateWithTaxonSelected from "./hooks/useNavigateWithTaxonSelected";
 import usePreloadNextObservationSuggestions from "./hooks/usePreloadNextObservationSuggestions";
+import SoundSuggestionsContainer from "./SoundSuggestionsContainer";
 import Suggestions from "./Suggestions";
 import TaxonSearchButton from "./TaxonSearchButton";
 
@@ -693,4 +694,14 @@ const SuggestionsContainer = ( ) => {
   );
 };
 
-export default SuggestionsContainer;
+// Observations with sounds but no photos get suggestions from Audio ID
+const SuggestionsScreen = ( ) => {
+  const currentObservation = useStore( state => state.currentObservation );
+  return ObservationPhoto.mapObsPhotoUris( currentObservation ).length === 0
+    && ( currentObservation?.observationSounds?.length
+      || currentObservation?.observation_sounds?.length )
+    ? <SoundSuggestionsContainer />
+    : <SuggestionsContainer />;
+};
+
+export default SuggestionsScreen;

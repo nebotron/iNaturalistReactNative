@@ -18,25 +18,35 @@ import SPECIES from "./audioIdSpecies.json";
 const GEO_THRESHOLD = getTunable( "audioIdBirdGeoThreshold" );
 const NON_BIRD_GEO_THRESHOLD = getTunable( "audioIdNonBirdGeoThreshold" );
 
-export interface AudioIdSpecies { name: string; commonName: string; taxonId: number }
+export interface AudioIdSpecies {
+  name: string; commonName: string; taxonId: number; bird?: boolean;
+}
 export interface AudioIdSetup {
   outputs: number[];
   species: AudioIdSpecies[]; // one per output, same order
   occurrence: number[]; // per output, geomodel score at the user's place, or -1
   located: boolean;
-  location: UserLocation | null;
+  location: UserLocation | null; // the user's, when no place was given
 }
 
 // BirdNET's 48-week year: four weeks per month.
 const birdnetWeek = ( d: Date ) => d.getMonth( ) * 4
   + Math.min( 4, Math.floor( ( d.getDate( ) - 1 ) / 7 ) + 1 );
 
+// For the user's place now, or a given place (null if unknown) and date.
 export const prepareAudioId = async (
   geo: ( lat: number, lng: number, week: number ) => Promise<number[]>,
+  place?: { latitude: number; longitude: number } | null,
+  date = new Date( ),
 ): Promise<AudioIdSetup> => {
-  const location = await fetchCoarseUserLocation( );
+  const userLocation = place === undefined
+    ? await fetchCoarseUserLocation( )
+    : null;
+  const location = place === undefined
+    ? userLocation
+    : place;
   const occurrence = location
-    ? await geo( location.latitude, location.longitude, birdnetWeek( new Date( ) ) )
+    ? await geo( location.latitude, location.longitude, birdnetWeek( date ) )
     : null;
   const outputs: number[] = [];
   const species: AudioIdSpecies[] = [];
@@ -48,13 +58,15 @@ export const prepareAudioId = async (
           ? GEO_THRESHOLD
           : NON_BIRD_GEO_THRESHOLD ) ) return;
       outputs.push( output );
-      species.push( { name, commonName, taxonId } );
+      species.push( {
+        name, commonName, taxonId, bird: !!bird,
+      } );
       occ.push( occurrence && geoIndex >= 0
         ? occurrence[geoIndex]
         : -1 );
     },
   );
   return {
-    outputs, species, occurrence: occ, located: !!location, location,
+    outputs, species, occurrence: occ, located: !!location, location: userLocation,
   };
 };

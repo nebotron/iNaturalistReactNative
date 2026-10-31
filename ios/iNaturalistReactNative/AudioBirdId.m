@@ -548,8 +548,11 @@ RCT_EXPORT_METHOD( normalizeSound:( NSString * )uri
     resolve( [NSURL fileURLWithPath:outPath].absoluteString );
     return;
   }
-  void ( ^normalize )( NSURL * ) = ^( NSURL *source ) {
-    NSError *error = nil;
+  [self withLocalSound:uri name:name done:^( NSURL *source, NSError *error ) {
+    if ( !source ) {
+      reject( @"sound", error.localizedDescription ?: @"Could not load the sound", error );
+      return;
+    }
     AVAudioFile *file = [[AVAudioFile alloc] initForReading:source error:&error];
     AVAudioPCMBuffer *buffer = file
       ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
@@ -578,19 +581,29 @@ RCT_EXPORT_METHOD( normalizeSound:( NSString * )uri
       return;
     }
     resolve( [NSURL fileURLWithPath:outPath].absoluteString );
-  };
+  }];
+}
+
+// Calls `done` off the main thread with a local file URL for the sound at `uri`
+// (a file path or URL, downloaded to a temporary file named `name` if remote,
+// deleted when `done` returns), or nil and an error.
+- (void)withLocalSound:(NSString *)uri name:(NSString *)name
+                  done:(void ( ^ )( NSURL *, NSError * ))done
+{
+  NSFileManager *fm = [NSFileManager defaultManager];
   NSURL *url = [uri hasPrefix:@"/"] ? [NSURL fileURLWithPath:uri] : [NSURL URLWithString:uri];
   if ( !url ) {
-    reject( @"sound", @"Invalid sound URI", nil );
+    done( nil, [NSError errorWithDomain:@"AudioBirdId" code:0
+                               userInfo:@{ NSLocalizedDescriptionKey: @"Invalid sound URI" }] );
   } else if ( url.isFileURL ) {
     dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
-      normalize( url );
+      done( url, nil );
     } );
   } else {
     [[[NSURLSession sharedSession] downloadTaskWithURL:url
       completionHandler:^( NSURL *location, NSURLResponse *response, NSError *error ) {
       if ( !location ) {
-        reject( @"sound", error.localizedDescription ?: @"Could not download the sound", error );
+        done( nil, error );
         return;
       }
       // The download is deleted when this returns, and AVAudioFile reads by extension
@@ -599,13 +612,90 @@ RCT_EXPORT_METHOD( normalizeSound:( NSString * )uri
         stringByAppendingPathComponent:[name stringByAppendingPathExtension:ext]]];
       [fm removeItemAtURL:local error:nil];
       if ( ![fm moveItemAtURL:location toURL:local error:&error] ) {
-        reject( @"sound", error.localizedDescription ?: @"Could not save the sound", error );
+        done( nil, error );
         return;
       }
-      normalize( local );
+      done( local, nil );
       [fm removeItemAtURL:local error:nil];
     }] resume];
   }
+}
+
+// Scores a recorded sound (as normalizeSound takes it) with the Audio ID model
+// for `outputs` (as start takes them): each output's best score over 5 s
+// windows every 2.5 s, the last ending at the sound's end, and a sound shorter
+// than a window padded with silence.
+RCT_EXPORT_METHOD( scoreSound:( NSString * )uri
+                   outputs:( NSArray<NSNumber *> * )outputs
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  if ( ![self loadModel] ) {
+    reject( @"model", @"Could not load the audio model", nil );
+    return;
+  }
+  NSString *name = [NSUUID UUID].UUIDString;
+  [self withLocalSound:uri name:name done:^( NSURL *source, NSError *error ) {
+    AVAudioFile *file = source ? [[AVAudioFile alloc] initForReading:source error:&error] : nil;
+    AVAudioPCMBuffer *buffer = file
+      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                      frameCapacity:(AVAudioFrameCount)file.length]
+      : nil;
+    if ( !buffer || ![file readIntoBuffer:buffer error:&error] ) {
+      reject( @"sound", error.localizedDescription ?: @"Could not read the sound", error );
+      return;
+    }
+    AVAudioFormat *mono = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatFloat32
+                                                           sampleRate:AB_SR channels:1
+                                                          interleaved:NO];
+    AVAudioConverter *converter = [[AVAudioConverter alloc] initFromFormat:buffer.format
+                                                                  toFormat:mono];
+    converter.downmix = YES;
+    AVAudioPCMBuffer *out = [[AVAudioPCMBuffer alloc] initWithPCMFormat:mono
+      frameCapacity:(AVAudioFrameCount)ceil( buffer.frameLength * AB_SR
+                                             / buffer.format.sampleRate ) + 32];
+    __block BOOL fed = NO;
+    [converter convertToBuffer:out error:&error
+            withInputFromBlock:^AVAudioBuffer *( AVAudioPacketCount n,
+                                                 AVAudioConverterInputStatus *status ) {
+      *status = fed ? AVAudioConverterInputStatus_EndOfStream
+                    : AVAudioConverterInputStatus_HaveData;
+      if ( fed ) return nil;
+      fed = YES;
+      return buffer;
+    }];
+    NSInteger n = out.frameLength;
+    if ( error || n == 0 ) {
+      reject( @"sound", error.localizedDescription ?: @"Could not convert the sound", error );
+      return;
+    }
+    NSInteger length = MAX( n, (NSInteger)AB_WIN );
+    float *samples = (float *)calloc( length, sizeof( float ) );
+    memcpy( samples, out.floatChannelData[0], n * sizeof( float ) );
+    float *best = (float *)calloc( outputs.count, sizeof( float ) );
+    NSString *inferError = nil;
+    BOOL ran = NO;
+    for ( NSInteger start = 0; ; start += AB_WIN / 2 ) {
+      BOOL last = start + AB_WIN >= length;
+      if ( last ) start = length - AB_WIN;
+      // ONNX Runtime sessions can run on several threads at once, so live
+      // listening carries on meanwhile.
+      NSData *probs = [self run:self->_session input:samples + start length:AB_WIN
+                      inputName:"input" outputName:"output" outputs:outputs
+                          error:&inferError];
+      if ( !probs ) break;
+      ran = YES;
+      const float *p = (const float *)probs.bytes;
+      for ( NSUInteger i = 0; i < outputs.count; i++ ) best[i] = MAX( best[i], p[i] );
+      if ( last ) break;
+    }
+    NSMutableArray *scores = [NSMutableArray arrayWithCapacity:outputs.count];
+    for ( NSUInteger i = 0; i < outputs.count; i++ ) [scores addObject:@( best[i] )];
+    free( samples );
+    free( best );
+    if ( ran && !inferError ) resolve( scores );
+    else reject( @"model", inferError ?: @"Could not score the sound", nil );
+  }];
 }
 
 // Plays a clip, resolving when it ends or is stopped. Measurement mode records

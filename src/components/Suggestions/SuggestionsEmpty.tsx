@@ -6,12 +6,14 @@ import { useTranslation } from "sharedHooks";
 import SuggestionsLoading from "./SuggestionsLoading";
 
 interface Props {
+  forSound?: boolean;
   hasTopSuggestion?: boolean;
   isLoading: boolean;
   onTaxonChosen: ( ) => void;
 }
 
 const SuggestionsEmpty = ( {
+  forSound = false,
   hasTopSuggestion = false,
   isLoading,
   onTaxonChosen,
@@ -37,7 +39,9 @@ const SuggestionsEmpty = ( {
     return (
       <>
         <Body1 className={textClass}>
-          {t( "iNaturalist-has-no-ID-suggestions-for-this-photo" )}
+          {forSound
+            ? t( "iNaturalist-has-no-ID-suggestions-for-this-sound" )
+            : t( "iNaturalist-has-no-ID-suggestions-for-this-photo" )}
         </Body1>
         {lastScreen === "CameraWithDevice" && (
           <Body1 className={textClass}>

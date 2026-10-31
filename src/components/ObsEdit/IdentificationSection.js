@@ -43,7 +43,9 @@ const IdentificationSection = ( {
   const realm = useRealm( );
 
   const identTaxon = currentObservation?.taxon;
-  const hasPhotos = currentObservation?.observationPhotos?.length > 0;
+  // Sounds get suggestions from Audio ID
+  const hasMedia = currentObservation?.observationPhotos?.length > 0
+    || currentObservation?.observationSounds?.length > 0;
 
   const hasIdentification = identTaxon && identTaxon.rank_level !== 100;
 
@@ -55,7 +57,7 @@ const IdentificationSection = ( {
   }, [updateObservationKeys] );
 
   const doNavToSuggestions = useCallback( ( ) => {
-    if ( hasPhotos ) {
+    if ( hasMedia ) {
       navigation.push( "Suggestions", {
         entryScreen: "ObsEdit",
         lastScreen: "ObsEdit",
@@ -70,7 +72,7 @@ const IdentificationSection = ( {
     }
   }, [
     hasIdentification,
-    hasPhotos,
+    hasMedia,
     navigation,
   ] );
 
@@ -111,7 +113,7 @@ const IdentificationSection = ( {
       <IconicTaxonChooser
         before={(
           <View className="flex-row ml-6">
-            {hasPhotos
+            {hasMedia
               ? (
                 <Button
                   level={identTaxon

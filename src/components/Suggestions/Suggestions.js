@@ -19,6 +19,7 @@ import SuggestionsHeader from "./SuggestionsHeader";
 
 type Props = {
   detectSubject?: boolean,
+  fetchRemoteTaxa?: boolean,
   genusEligibleTaxonIds?: Set<number>,
   handleSkip: Function,
   hideLocationToggleButton: boolean,
@@ -34,6 +35,7 @@ type Props = {
   photoUris: string[],
   selectedPhotoUri: string,
   showImproveWithLocationButton: boolean,
+  soundUri?: string,
   suggestions: Object,
   toggleLocation: Function,
   toggleSuggestionsModel: Function,
@@ -42,6 +44,7 @@ type Props = {
 
 const Suggestions = ( {
   detectSubject,
+  fetchRemoteTaxa,
   genusEligibleTaxonIds,
   handleSkip,
   hideLocationToggleButton,
@@ -57,6 +60,7 @@ const Suggestions = ( {
   photoUris,
   selectedPhotoUri,
   showImproveWithLocationButton,
+  soundUri,
   suggestions,
   toggleLocation,
   toggleSuggestionsModel,
@@ -82,6 +86,7 @@ const Suggestions = ( {
     return (
       <Suggestion
         accessibilityHint={t( "Chooses-taxon" )}
+        fetchRemote={fetchRemoteTaxa}
         suggestion={suggestion}
         onTaxonChosen={onTaxonChosen}
         onSelectGenus={showGenusButton
@@ -89,15 +94,16 @@ const Suggestions = ( {
           : undefined}
       />
     );
-  }, [genusEligibleTaxonIds, onSelectGenus, onTaxonChosen, t] );
+  }, [fetchRemoteTaxa, genusEligibleTaxonIds, onSelectGenus, onTaxonChosen, t] );
 
   const renderEmptyList = useMemo( ( ) => (
     <SuggestionsEmpty
+      forSound={!!soundUri}
       hasTopSuggestion={!!topSuggestion}
       isLoading={isLoading}
       onTaxonChosen={onTaxonChosen}
     />
-  ), [isLoading, topSuggestion, onTaxonChosen] );
+  ), [isLoading, soundUri, topSuggestion, onTaxonChosen] );
 
   const renderFooter = useMemo( ( ) => (
     <SuggestionsFooter
@@ -125,6 +131,7 @@ const Suggestions = ( {
       onReorderPhotos={onReorderPhotos}
       photoUris={photoUris}
       selectedPhotoUri={selectedPhotoUri}
+      soundUri={soundUri}
       showOfflineModelInfo={showOfflineModelInfo}
       toggleSuggestionsModel={toggleSuggestionsModel}
       improveWithLocationButtonOnPress={improveWithLocationButtonOnPress}
@@ -137,6 +144,7 @@ const Suggestions = ( {
     onReorderPhotos,
     photoUris,
     selectedPhotoUri,
+    soundUri,
     improveWithLocationButtonOnPress,
     showImproveWithLocationButton,
     showOfflineModelInfo,
@@ -166,6 +174,7 @@ const Suggestions = ( {
       <View className="bg-inatGreen/[.13]">
         <Suggestion
           accessibilityHint={t( "Chooses-top-taxon" )}
+          fetchRemote={fetchRemoteTaxa}
           suggestion={item}
           onTaxonChosen={onTaxonChosen}
           onSelectGenus={showGenusButton

@@ -5,6 +5,7 @@ import React from "react";
 
 interface Props {
   accessibilityHint: string;
+  fetchRemote?: boolean;
   onSelectGenus?: ( ) => void;
   onTaxonChosen: ( taxon: object ) => void;
   suggestion: {
@@ -21,6 +22,7 @@ interface Props {
 
 const Suggestion = ( {
   accessibilityHint,
+  fetchRemote = false,
   onSelectGenus,
   suggestion,
   onTaxonChosen,
@@ -31,7 +33,7 @@ const Suggestion = ( {
       activeColor="bg-inatGreen"
       confidencePercentage={calculateConfidence( suggestion )}
       confidencePosition="text"
-      fetchRemote={false}
+      fetchRemote={fetchRemote}
       first
       handleTaxonOrEditPress={onTaxonChosen}
       hideNavButtons
