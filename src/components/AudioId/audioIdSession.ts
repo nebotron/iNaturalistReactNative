@@ -33,7 +33,6 @@ export const { AudioBirdId } = NativeModules as {
     vibrate: ( mode: VibrateMode ) => Promise<{
       allowed: boolean; error: string | null; method: string; appState: number;
     }>;
-    notify: ( title: string, body: string ) => void;
     geo: ( lat: number, lng: number, week: number ) => Promise<number[]>;
     saveClip: ( path: string, seconds: number, endFrame: number ) => Promise<string>;
     playClip: ( path: string ) => Promise<void>;
@@ -306,7 +305,7 @@ let runs: ScoresEvent[] = [];
 const onScores = ( event: ScoresEvent ) => {
   const { level } = event;
   const {
-    setup, seen, recent, heard,
+    setup, recent, heard,
   } = useAudioIdSession.getState( );
   const { scores } = event;
   const sps = setup?.species || [];
@@ -364,12 +363,6 @@ const onScores = ( event: ScoresEvent ) => {
     logger.info( `alert: ${alerts.map( sp => sp.commonName ).join( ", " )}` );
     vibrate( );
     flashScreen( );
-    AudioBirdId?.notify(
-      `Heard ${alerts.map( sp => sp.commonName ).join( ", " )}`,
-      alerts.map( sp => ( seen && !seen.has( sp.taxonId )
-        ? `${sp.commonName}: not yet seen at research grade`
-        : sp.commonName ) ).join( "\n" ),
-    );
   }
   useAudioIdSession.setState( {
     current: scores,
