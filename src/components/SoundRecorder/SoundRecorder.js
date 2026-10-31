@@ -40,7 +40,7 @@ const NOT_STARTED = "notStarted";
 const RECORDING = "recording";
 const STOPPED = "stopped";
 
-export const MAX_SOUNDS_ALLOWED = getTunable( "maxSoundsPerObservation" );
+export const MAX_SOUNDS_ALLOWED: number = getTunable( "maxSoundsPerObservation" );
 
 const SoundRecorder = (): Node => {
   const audioRecorderPlayerRef = useRef( new AudioRecorderPlayer( ) );
