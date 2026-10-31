@@ -45,8 +45,6 @@ const { ImageCropper } = NativeModules as {
 
 interface DeleteOriginalDevicePhotosOptions {
   userInitiated?: boolean;
-  // Photo Cleanup's photos are already in the album (queuedDeletionAlbum.ts).
-  skipAlbum?: boolean;
 }
 
 // What the OS actually did, so callers can tell the user the truth instead of
@@ -298,7 +296,7 @@ const performDeleteOriginalDevicePhotos = async (
   // and the album never filled. Filing first always gets through. Photos that
   // then delete cleanly leave the album with them, so it ends up holding only
   // what is still in the library.
-  if ( !options.skipAlbum ) await addPhotosToImportedAlbum( uniqueUris );
+  await addPhotosToImportedAlbum( uniqueUris );
 
   const hasPermission = await ensureDeletePhotosPermission( requested );
   if ( !hasPermission ) {

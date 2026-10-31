@@ -31,8 +31,7 @@
 // window it still considers busy — which leaves performChanges' completion
 // handler hanging with no dialog on screen, the failure mode this whole file
 // keeps chasing. Give the window a beat to settle before asking Photos for a
-// transaction. DevicePhotoCleanup.tsx already does this on the JS side for the
-// sheet it dismisses itself; this covers the modals dismissed down here.
+// transaction.
 static const NSTimeInterval kInatDismissalSettleSeconds = 0.35;
 
 static void inatAfterDismissalSettles( void ( ^work )( void ) )

@@ -3,11 +3,11 @@ import addPhotosToImportedAlbum, {
   removePhotosFromImportedAlbum,
 } from "sharedHelpers/importedPhotoAlbum";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
-import { classifyDevicePhotoUris } from "sharedHelpers/unfavoritedDevicePhotos";
+import classifyDevicePhotoUris from "sharedHelpers/unfavoritedDevicePhotos";
 import { readUserObservationsCache } from "sharedHelpers/userObservationsCache";
 
-// Keeps the "Imported to iNaturalist" album holding what Photo Cleanup would
-// delete, as the user creates, edits, faves and removes photos, instead of
+// Keeps the "Imported to iNaturalist" album holding the photos on unfavorited
+// observations, as the user creates, edits, faves and removes photos, instead of
 // waiting for them to press a button. Photos on a faved observation are taken
 // back out. Nothing else is removed: Realm holds only part of the history, so
 // a photo missing from it isn't evidence it should leave the album.

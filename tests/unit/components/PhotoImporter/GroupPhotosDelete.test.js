@@ -62,7 +62,7 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
   } );
 
   // Removing a photo is a decision about the photo, not about the import, so
-  // abandoning the import leaves it recorded for Photo Cleanup.
+  // abandoning the import leaves it recorded for the imported album.
   it( "keeps the removed photo's device URI after discarding the import", async ( ) => {
     useStore.setState( {
       groupedPhotos: [
@@ -92,7 +92,7 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
 
   // Discarding saves nothing, so the photos still in the batch are left
   // exactly as they were: still offered by the picker, and not staged for
-  // Photo Cleanup either, since nothing was deleted.
+  // the imported album either, since nothing was deleted.
   it( "leaves a discarded batch neither saved nor staged for cleanup", async ( ) => {
     useStore.setState( {
       groupedPhotos: [{

@@ -91,7 +91,7 @@ const FaveButton = ( {
   // Mirrors the fave state onto the local Realm record. This has to happen for
   // uploaded observations too, not just unuploaded ones: nothing else refreshes
   // votes when faving from a list (e.g. the MyObservations grid), so without it
-  // Realm keeps a stale fave and features that read it — Photo Cleanup — never
+  // Realm keeps a stale fave and features that read it — the imported album — never
   // see the change.
   const writeLocalFave = useCallback( faved => {
     if ( realm.isClosed || !uuid ) return;

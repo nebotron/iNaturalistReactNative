@@ -1,9 +1,14 @@
+import { getJWT } from "components/LoginSignUp/AuthenticationService";
 import { RealmContext } from "providers/contexts";
 import { useEffect } from "react";
+import { log } from "sharedHelpers/logger";
 import {
   requestQueuedDeletionAlbumSync,
   setQueuedDeletionAlbumSource,
 } from "sharedHelpers/queuedDeletionAlbum";
+import { syncUserObservations } from "sharedHelpers/userObservationsCache";
+
+const logger = log.extend( "useQueuedDeletionAlbum" );
 
 const { useRealm } = RealmContext;
 
@@ -22,6 +27,16 @@ const useQueuedDeletionAlbum = ( userId?: number ) => {
       setQueuedDeletionAlbumSource( null );
     };
   }, [realm, userId] );
+
+  // Faves made on another device or the website reach the album only through
+  // the shared observation cache, so bring it up to date at launch.
+  useEffect( ( ) => {
+    if ( !userId ) return;
+    getJWT( )
+      .then( apiToken => syncUserObservations( userId, { api_token: apiToken } ) )
+      .then( requestQueuedDeletionAlbumSync )
+      .catch( error => logger.warn( "Could not sync observations", error ) );
+  }, [userId] );
 };
 
 export default useQueuedDeletionAlbum;

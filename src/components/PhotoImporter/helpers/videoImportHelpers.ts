@@ -31,7 +31,7 @@ function videoUriFromNode( node: PhotoNode ): string {
 }
 
 // The device library asset a video came from, in the same ph:// form the photo
-// picker and Photo Cleanup use. A GIF is a file the app wrote, so without this
+// picker and the imported album use. A GIF is a file the app wrote, so without this
 // the video it came from has no device URI attached to it, and removing the GIF
 // from Group Photos staged nothing for deletion (see removedGroupPhotoUris.ts).
 export function deviceVideoUriFromNode( node: PhotoNode ): string | null {

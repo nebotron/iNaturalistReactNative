@@ -10,7 +10,6 @@ import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
 import UiLibrary from "components/Developer/UiLibrary";
 import UiLibraryItem from "components/Developer/UiLibraryItem";
-import DevicePhotoCleanup from "components/DevicePhotoCleanup/DevicePhotoCleanup";
 import Donate from "components/Donate/Donate";
 import ExploreContainer from "components/Explore/ExploreContainer";
 import ExploreV2Container from "components/Explore/ExploreV2/ExploreV2Container";
@@ -119,8 +118,6 @@ const audioIdTaxaTitle = () => <Heading4 numberOfLines={1}>LISTENING FOR</Headin
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const cameraClockTitle = () => <Heading4 numberOfLines={1}>CAMERA CLOCK</Heading4>;
-// eslint-disable-next-line i18next/no-literal-string
-const devicePhotoCleanupTitle = () => <Heading4 numberOfLines={1}>PHOTO CLEANUP</Heading4>;
 const locationHistoryTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "LOCATION-HISTORY" )}
@@ -365,13 +362,6 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={CropLogViewer}
             options={{
               headerTitle: cropLogTitle,
-            }}
-          />
-          <Stack.Screen
-            name="DevicePhotoCleanup"
-            component={DevicePhotoCleanup}
-            options={{
-              headerTitle: devicePhotoCleanupTitle,
             }}
           />
           <Stack.Screen

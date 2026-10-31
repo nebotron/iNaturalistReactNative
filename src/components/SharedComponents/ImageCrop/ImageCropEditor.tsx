@@ -513,7 +513,7 @@ const ImageCropEditor = ( ) => {
           addPendingGroupPhotoDeletionUri( deviceUri );
           // Same as removing from the Group Photos grid: record it rather than
           // deleting it, so the photo stays hidden from the photo picker and
-          // can be deleted later from Photo Cleanup (removedGroupPhotoUris.ts).
+          // lands in the imported album (removedGroupPhotoUris.ts).
           addRemovedGroupPhotoUris( [deviceUri] );
           requestQueuedDeletionAlbumSync( );
         }

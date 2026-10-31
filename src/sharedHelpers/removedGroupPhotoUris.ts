@@ -26,7 +26,7 @@ const save = ( uris: string[] ): void => {
 // mean a PHPhotoLibrary confirmation per import, which iOS 26 can silently
 // wedge (see promptDeleteOriginalDevicePhotos.ts). Instead they're recorded
 // here at the moment of removal and treated as "gone": hidden from the photo
-// picker (PhotoGallery.tsx), and offered for deletion in Photo Cleanup
+// picker (PhotoGallery.tsx), and filed in the imported album
 // (unfavoritedDevicePhotos.ts).
 export const getRemovedGroupPhotoUris = ( ): string[] => load( );
 

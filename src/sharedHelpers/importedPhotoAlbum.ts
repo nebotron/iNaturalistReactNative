@@ -33,8 +33,8 @@ const { ImageCropper } = NativeModules as {
 // and delete themselves. Adding to an album this app created asks the user for
 // nothing, which is why it still goes through when the deletion doesn't.
 //
-// queuedDeletionAlbum.ts keeps it in step with what Photo Cleanup would
-// delete as observations are created, faved and edited, and a deleted asset
+// queuedDeletionAlbum.ts keeps it in step with the unfavorited photos
+// as observations are created, faved and edited, and a deleted asset
 // leaves every album it is in, so the album holds only what is left behind.
 export const IMPORTED_ALBUM_TITLE = "Imported to iNaturalist";
 

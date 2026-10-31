@@ -1,11 +1,7 @@
 import type Realm from "realm";
 import type { RealmObservation } from "realmModels/types";
 import { getDevicePhotoUrisFromObservation } from "sharedHelpers/duplicateUploadedDevicePhotos";
-import filterExistingDevicePhotoUris from "sharedHelpers/existingDevicePhotoUris";
-import {
-  clearRemovedGroupPhotoUris,
-  getRemovedGroupPhotoUris,
-} from "sharedHelpers/removedGroupPhotoUris";
+import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import type { UserObservationsCache } from "sharedHelpers/userObservationsCache";
 
 // RealmObservation's type doesn't surface votes/faves, but both exist at
@@ -28,7 +24,7 @@ const isFavorited = ( observation: FavoritableObservation ): boolean => {
 // observation the current user has NOT favorited, plus photos already removed
 // via Group Photos, and those on a favorited one. Matching is by stored URI
 // only. A photo also stored on a favorited observation is protected.
-export const classifyDevicePhotoUris = (
+const classifyDevicePhotoUris = (
   realm: Realm,
   observationsCache?: UserObservationsCache,
 ): { unfavorited: string[]; favorited: string[] } => {
@@ -59,19 +55,4 @@ export const classifyDevicePhotoUris = (
   return { unfavorited: [...unfavoritedUris], favorited: [...favoritedUris] };
 };
 
-// The unfavorited photos that still resolve to a library asset.
-const findUnfavoritedDevicePhotoUris = async (
-  realm: Realm,
-  observationsCache?: UserObservationsCache,
-): Promise<string[]> => {
-  const allUris = classifyDevicePhotoUris( realm, observationsCache ).unfavorited;
-  const existing = await filterExistingDevicePhotoUris( allUris );
-  const existingSet = new Set( existing );
-  const vanished = allUris.filter( uri => !existingSet.has( uri ) );
-  if ( vanished.length > 0 ) {
-    clearRemovedGroupPhotoUris( vanished );
-  }
-  return existing;
-};
-
-export default findUnfavoritedDevicePhotoUris;
+export default classifyDevicePhotoUris;

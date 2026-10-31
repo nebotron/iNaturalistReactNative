@@ -439,7 +439,6 @@ export type BaseTabStackParamList = {
   AudioIdClip: { id: string };
   AudioIdTaxa: undefined;
   CropLogViewer: undefined;
-  DevicePhotoCleanup: undefined;
   LocationHistory: undefined;
   CameraClockCheck: undefined;
   LocationHistoryPointsMap: undefined;

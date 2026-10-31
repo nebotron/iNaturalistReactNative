@@ -341,7 +341,7 @@ const PhotoGallery = ( {
     setSelectedUris( new Set( ) );
   }, [photos, realm, selectedUris] );
 
-  // Queue the selected photos for deletion in Photo Cleanup (see
+  // Queue the selected photos for the imported album (see
   // removedGroupPhotoUris.ts) and hide them from the picker.
   const deleteSelected = useCallback( ( ) => {
     const deviceUris = photos

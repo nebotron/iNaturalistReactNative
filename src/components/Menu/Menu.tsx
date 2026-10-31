@@ -111,12 +111,6 @@ const Menu = ( ) => {
   const [modalState, setModalState] = useState<MenuModalState | null>( null );
 
   const menuItems: Record<string, MenuOption> = {
-    devicePhotoCleanup: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "PHOTO CLEANUP",
-      navigation: "DevicePhotoCleanup",
-      icon: "trash-outline",
-    },
     audioId: {
       // eslint-disable-next-line i18next/no-literal-string
       label: "AUDIO ID",

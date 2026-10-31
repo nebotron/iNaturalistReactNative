@@ -336,7 +336,7 @@ const GroupPhotosContainer = ( ) => {
     // PHPhotoLibrary confirmation iOS can silently wedge, and doing that on
     // each import was both intrusive and unreliable. The URIs are saved
     // (see removedGroupPhotoUris.ts) so these stay hidden from the photo
-    // picker and can be deleted in one pass later from Photo Cleanup.
+    // picker and can be deleted in one pass from the imported album.
     const deviceUrisToDelete = orderedPhotos
       .map( photo => resolveDevicePhotoUriFromGroupedPhoto( photo ) )
       .filter( ( uri ): uri is string => !!uri );
