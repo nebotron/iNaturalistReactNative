@@ -10,7 +10,6 @@ import {
   TAXONOMIC_RANK,
   WILD_STATUS,
 } from "providers/ExploreContext";
-import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 
 export interface FilterOption<ValueT> {
   label: string;
@@ -20,41 +19,6 @@ const option = <ValueT extends string | number>(
   value: ValueT,
   label: string,
 ): [ValueT, FilterOption<ValueT>] => [value, { label, value }];
-
-// `label` / `text` are the two lines of each row in the sort sheet; `labelCaps`
-// is the single-line, all-caps version in the dropdown button
-export const getSortByValues = ( t: TFunction ) => ( {
-  [OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST]: {
-    label: t( "Date-uploaded" ),
-    labelCaps: t( "DATE-UPLOADED-NEWEST" ),
-    text: t( "Newest-to-oldest" ),
-    value: OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST,
-  },
-  [OBSERVATIONS_SORT.DATE_UPLOADED_OLDEST]: {
-    label: t( "Date-uploaded" ),
-    labelCaps: t( "DATE-UPLOADED-OLDEST" ),
-    text: t( "Oldest-to-newest" ),
-    value: OBSERVATIONS_SORT.DATE_UPLOADED_OLDEST,
-  },
-  [OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST]: {
-    label: t( "Date-observed" ),
-    labelCaps: t( "DATE-OBSERVED-NEWEST" ),
-    text: t( "Newest-to-oldest" ),
-    value: OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST,
-  },
-  [OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST]: {
-    label: t( "Date-observed" ),
-    labelCaps: t( "DATE-OBSERVED-OLDEST" ),
-    text: t( "Oldest-to-newest" ),
-    value: OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST,
-  },
-  [OBSERVATIONS_SORT.MOST_FAVED]: {
-    label: t( "Most-faved" ),
-    labelCaps: t( "MOST-FAVED" ),
-    text: t( "Most-to-least-faved" ),
-    value: OBSERVATIONS_SORT.MOST_FAVED,
-  },
-} );
 
 export const getTaxonomicRankValues = ( t: TFunction ) => Object.fromEntries( [
   option( TAXONOMIC_RANK.none, t( "NONE--ranks" ) ),

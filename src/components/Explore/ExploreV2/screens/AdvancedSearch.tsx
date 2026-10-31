@@ -1,12 +1,9 @@
 import { useNetInfo } from "@react-native-community/netinfo";
 import { useNavigation } from "@react-navigation/native";
 import type { ApiPlace, ApiProjectSummary } from "api/types";
-import EbirdCheckbox from "components/Explore/EbirdCheckbox";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
 import DateFilterSection
   from "components/Explore/ExploreV2/components/DateFilterSection";
-import HotspotSettingsSection
-  from "components/Explore/ExploreV2/components/HotspotSettingsSection";
 import RadioGroupSection
   from "components/Explore/ExploreV2/components/RadioGroupSection";
 import SavedSearches, { SavedSearchSheets }
@@ -22,7 +19,6 @@ import {
   getMonthValues,
   getPhotoLicenseValues,
   getReviewedValues,
-  getSortByValues,
   getTaxonomicRankValues,
   getWildValues,
 } from "components/Explore/ExploreV2/helpers/advancedSearchOptions";
@@ -87,7 +83,7 @@ import useStore from "stores/useStore";
 import fetchCoarseUserLocation from "../../../../sharedHelpers/fetchCoarseUserLocation";
 import { getLatestTrackedLocation } from "../../../../sharedHelpers/locationHistoryTracker";
 
-type SheetName = "sortBy" | "hrank" | "lrank" | "photoLicense";
+type SheetName = "hrank" | "lrank" | "photoLicense";
 
 type PickerKind = "taxon" | "user" | "project" | "location";
 
@@ -253,7 +249,6 @@ const AdvancedSearch = ( ) => {
 
   const displayProject = project;
 
-  const sortByValues = getSortByValues( t );
   const taxonomicRankValues = getTaxonomicRankValues( t );
   const dateObservedValues = getDateObservedValues( t );
   const dateUploadedValues = getDateUploadedValues( t );
@@ -410,22 +405,6 @@ const AdvancedSearch = ( ) => {
                   accessibilityLabel={t( "Edit" )}
                 />
               </View>
-            </View>
-          </View>
-
-          {/* Sort-By Section */}
-          <View className="mb-7">
-            <Heading4 className="mb-5">{t( "SORT-BY" )}</Heading4>
-            <View className="mb-5">
-              <Button
-                text={sortByValues[sortBy]?.labelCaps}
-                className="shrink"
-                dropdown
-                onPress={() => {
-                  setOpenSheet( "sortBy" );
-                }}
-                accessibilityLabel={t( "Sort-by" )}
-              />
             </View>
           </View>
 
@@ -701,8 +680,6 @@ const AdvancedSearch = ( ) => {
             />
           </View>
 
-          <EbirdCheckbox />
-          <HotspotSettingsSection />
         </View>
       </ScrollView>
       <ButtonBar containerClass="bg-white border-t border-lightGray">
@@ -720,21 +697,6 @@ const AdvancedSearch = ( ) => {
       </ButtonBar>
 
       {/* BottomSheets */}
-      {openSheet === "sortBy" && (
-        <RadioButtonSheet
-          headerText={t( "SORT-BY" )}
-          confirm={newSortBy => {
-            dispatch( {
-              type: "SET_SORT",
-              sortBy: newSortBy,
-            } );
-            closeSheet();
-          }}
-          onPressClose={closeSheet}
-          radioValues={sortByValues}
-          selectedValue={sortBy}
-        />
-      )}
       {openSheet === "hrank" && (
         <PickerSheet
           headerText={t( "HIGHEST-RANK" )}

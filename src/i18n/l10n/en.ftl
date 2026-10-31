@@ -228,8 +228,8 @@ Change-date = Change date
 CHANGE-END-DATE = CHANGE END DATE
 # Label for a button that changes a selected end date
 Change-end-date = Change end date
-# Accessibility label for a button that opens a menu of info to show on Explore grid photos
-Change-grid-overlays = Change info shown on photos
+# Accessibility label for a button that opens settings for the Explore hotspots view
+Change-hotspot-settings = Change hotspot settings
 # Accessibility label for a button that allows users to sort observations
 Change-observations-sort-order = Change observations sort order
 Change-project = Change project
@@ -244,6 +244,8 @@ Change-taxon-filter = Change taxon filter
 # Accessibility label for the chip that shows the hotspot route time limit and opens its controls
 Change-time-limit = Change time limit
 Change-user = Change user
+# Accessibility label for a button that opens options for the Explore observations view
+Change-view-options = Change view options
 # Label for a button that cycles through zoom levels for the camera
 Change-zoom = Change zoom
 # Notification that appears after pressing the reset password button
@@ -1017,8 +1019,6 @@ MOST-FAVED = MOST FAVED
 Most-faved = Most faved
 # Label for species sort order, this option is selected by default
 Most-Observed-Default = Most Observed (Default)
-# Description for the most faved observations sort order
-Most-to-least-faved = Most to least faved
 # Title for section in Notifications showing notifications about observations
 # created by the viewer. Should be 16 characters or fewer or it will be ellipsized.
 MY-CONTENT--notifications = MY CONTENT
@@ -2092,6 +2092,8 @@ VIEW-FOLLOWING = VIEW FOLLOWING
 View-in-browser = View in browser
 VIEW-IN-EXPLORE = VIEW IN EXPLORE
 VIEW-INATURALIST-HELP = VIEW INATURALIST HELP
+# Header for a sheet of options for the current Explore view
+VIEW-OPTIONS = VIEW OPTIONS
 # Accessibility label for tapping an image to open the full observation
 # Button or accessibility label for an element that lets the user view a
 # photo

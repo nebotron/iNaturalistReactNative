@@ -151,7 +151,6 @@ describe( "AdvancedSearch screen", ( ) => {
     [
       "TAXON",
       "LOCATION",
-      "SORT-BY",
       "QUALITY-GRADE",
       "USER",
       "PROJECT",
@@ -210,17 +209,15 @@ describe( "AdvancedSearch screen", ( ) => {
   } );
 
   describe( "seeding from the current explore search", ( ) => {
-    it( "shows the taxon subject, place, and sort order already in effect", ( ) => {
+    it( "shows the taxon subject and place already in effect", ( ) => {
       setExploreState( {
         subject: { type: "taxon", taxon: TAXON },
         location: { placeMode: EXPLORE_V2_PLACE_MODE.PLACE, place: PLACE },
-        sortBy: OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST,
       } );
       renderComponent( <AdvancedSearch /> );
 
       expect( screen.getByText( "Cup Plant" ) ).toBeVisible( );
       expect( screen.getByText( PLACE.display_name ) ).toBeVisible( );
-      expect( screen.getByText( t( "DATE-OBSERVED-OLDEST" ) ) ).toBeVisible( );
       expect( screen.queryByText( t( "SEARCH-FOR-A-TAXON" ) ) ).toBeNull( );
     } );
 

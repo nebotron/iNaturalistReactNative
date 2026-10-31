@@ -91,7 +91,6 @@ export type AdvancedSearchAction =
   | { type: "SET_LOCATION_PLACE"; place: { id: number; display_name?: string } }
   | { type: "SET_LOCATION_NEARBY"; radius?: number }
   | { type: "SET_LOCATION_WORLDWIDE" }
-  | { type: "SET_SORT"; sortBy: OBSERVATIONS_SORT }
   | { type: "SET_USER"; user: ApiUser | null }
   | { type: "SET_UNOBSERVED_BY_USER"; user: ApiUser | null }
   | { type: "SET_PROJECT"; project: ApiProjectSummary | null }
@@ -165,8 +164,6 @@ export const advancedSearchReducer = (
         ...draft,
         location: { placeMode: EXPLORE_V2_PLACE_MODE.WORLDWIDE },
       };
-    case "SET_SORT":
-      return { ...draft, sortBy: action.sortBy };
     case "SET_USER":
       return withFilters( draft, { user: action.user } );
     case "SET_UNOBSERVED_BY_USER":

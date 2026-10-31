@@ -1,5 +1,7 @@
 import { useNavigation } from "@react-navigation/native";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
+import HotspotSettingsSheet
+  from "components/Explore/ExploreV2/components/HotspotSettingsSheet";
 import {
   ActivityIndicator,
   Body2,
@@ -305,6 +307,7 @@ const WildlifeHotspotsScreen = ( {
   // user has entered a destination; collapses only after an explicit action.
   const [stopsExpanded, setStopsExpanded] = useState( true );
   const [timeLimitPopoverOpen, setTimeLimitPopoverOpen] = useState( false );
+  const [showSettingsSheet, setShowSettingsSheet] = useState( false );
   // Stops the user has focused or typed in, which the late-arriving initial
   // location fix must not overwrite.
   const editedStopIdsRef = useRef( new Set<string>() );
@@ -1045,6 +1048,16 @@ const WildlifeHotspotsScreen = ( {
           )}
         />
 
+        <INatIconButton
+          className="absolute top-2 right-2 bg-white rounded-full w-10 h-10"
+          icon="gear"
+          size={20}
+          color={colors.darkGray}
+          onPress={() => setShowSettingsSheet( true )}
+          accessibilityLabel={t( "Change-hotspot-settings" )}
+          testID="WildlifeHotspotsScreen.settings"
+        />
+
         {( loading || hotspotRouteLoading ) && (
           <View
             className={"absolute top-0 left-0 right-0 bottom-0 "
@@ -1179,10 +1192,15 @@ const WildlifeHotspotsScreen = ( {
     </>
   );
 
+  const settingsSheet = showSettingsSheet && (
+    <HotspotSettingsSheet onPressClose={() => setShowSettingsSheet( false )} />
+  );
+
   if ( embedded ) {
     return (
       <View className="flex-1" testID="WildlifeHotspotsScreen">
         {content}
+        {settingsSheet}
       </View>
     );
   }
@@ -1190,6 +1208,7 @@ const WildlifeHotspotsScreen = ( {
   return (
     <ViewWrapper testID="WildlifeHotspotsScreen">
       {content}
+      {settingsSheet}
     </ViewWrapper>
   );
 };

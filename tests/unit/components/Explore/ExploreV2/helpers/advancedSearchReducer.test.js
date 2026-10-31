@@ -152,15 +152,6 @@ describe( "advancedSearchReducer", ( ) => {
     } );
   } );
 
-  it( "sets the sort order", ( ) => {
-    const newDraft = advancedSearchReducer( makeDraft( ), {
-      type: "SET_SORT",
-      sortBy: OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST,
-    } );
-
-    expect( newDraft.sortBy ).toEqual( OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST );
-  } );
-
   describe( "user filter", ( ) => {
     it( "sets a user and keeps an unobserved-by user", ( ) => {
       const draft = makeDraft( { filters: { unobservedByUser: OTHER_USER } } );
