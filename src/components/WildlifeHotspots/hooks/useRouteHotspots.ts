@@ -7,7 +7,6 @@ import {
 import { searchObservations } from "api/observations";
 import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
-import populationWithin10Km from "sharedHelpers/populationDensity";
 import { getTunable } from "sharedHelpers/tunableParams";
 import useStore from "stores/useStore";
 
@@ -46,9 +45,6 @@ export interface Hotspot {
   // Smallest circle containing every observation in the cluster
   area: Circle;
   observationCount: number;
-  // Observations per resident within 10 km, so busy areas don't rank higher
-  // just for having more observers
-  density: number;
   detourMinutes: number;
   speciesCount: number;
   topSpecies: HotspotSpecies[];
@@ -69,9 +65,6 @@ const BBOX_PADDING_KM = getTunable( "hotspotRoutePaddingKm" );
 // route, capped to keep traffic to eBird low
 const EBIRD_SPACING_KM = 80;
 const MAX_EBIRD_SEARCHES = 8;
-// Added to each hotspot's population so a few observations in empty
-// wilderness don't outrank everything
-const POPULATION_FLOOR = 1000;
 
 const HOTSPOT_PARAM_KEYS = [
   "hotspotClusterRadiusKm",
@@ -669,21 +662,10 @@ export function useRouteHotspots() {
           } );
         } );
 
-        // 5. Normalize by the population within 10 km; falls back to raw counts
-        // when the population grid can't be loaded
-        const populations = await populationWithin10Km(
-          candidates.map( c => ( { lat: c.centerLat, lng: c.centerLng } ) ),
-        );
-        if ( isStale() ) return;
-        const topCandidates = candidates
-          .map( ( candidate, i ) => ( {
-            ...candidate,
-            density: candidate.count / ( ( populations?.[i] ?? 0 ) + POPULATION_FLOOR ),
-          } ) )
-          .sort( ( a, b ) => b.density - a.density )
-          .slice( 0, maxDetourCandidates );
+        candidates.sort( ( a, b ) => b.count - a.count );
+        const topCandidates = candidates.slice( 0, maxDetourCandidates );
 
-        // 6. Compute actual travel time in parallel for each candidate, inserted at
+        // 5. Compute actual travel time in parallel for each candidate, inserted at
         // whichever point along the current stops minimizes the added distance
         const withDetours = await Promise.all(
           topCandidates.map( async candidate => {
@@ -705,7 +687,6 @@ export function useRouteHotspots() {
               centerLongitude: candidate.centerLng,
               area: candidate.area,
               observationCount: candidate.count,
-              density: candidate.density,
               detourMinutes,
               speciesCount: candidate.speciesCount,
               topSpecies: candidate.topSpecies,
@@ -714,10 +695,10 @@ export function useRouteHotspots() {
           } ),
         );
 
-        // 7. Rank by ratio of added travel time to density (lower = better)
+        // 6. Rank by ratio of added travel time to observations (lower = better)
         withDetours.sort( ( a, b ) => {
-          const ratioA = ( a.detourMinutes + parkingMinutes ) / a.density;
-          const ratioB = ( b.detourMinutes + parkingMinutes ) / b.density;
+          const ratioA = ( a.detourMinutes + parkingMinutes ) / a.observationCount;
+          const ratioB = ( b.detourMinutes + parkingMinutes ) / b.observationCount;
           return ratioA - ratioB;
         } );
 
