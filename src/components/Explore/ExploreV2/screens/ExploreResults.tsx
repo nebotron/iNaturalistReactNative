@@ -261,7 +261,7 @@ const ExploreResults = ( ) => {
   // another view (e.g. Hotspots) or opening a hotspot in Explore, until a reload
   const diagnosticsRef = useRef<Record<string, unknown>>( {} );
   const errorStatus = ( observationsError as { status?: number } | null )?.status;
-  diagnosticsRef.current = {
+  const diagnostics = {
     activeTab: state.activeTab,
     layout,
     canFetch,
@@ -280,22 +280,25 @@ const ExploreResults = ( ) => {
     hasTotalBounds: !!totalBounds,
     queryParams,
   };
+  useEffect( ( ) => {
+    diagnosticsRef.current = diagnostics;
+  } );
   // null on mount, so opening Explore on the observations tab is checked too
   const previousTabRef = useRef<ExploreV2Tab | null>( null );
   useEffect( ( ) => {
     const fromTab = previousTabRef.current;
     previousTabRef.current = state.activeTab;
-    if ( state.activeTab !== OBSERVATIONS_TAB || fromTab === OBSERVATIONS_TAB ) return undefined;
-    logger.info( "explore_tab_switch", JSON.stringify( { fromTab, ...diagnosticsRef.current } ) );
-    const timer = setTimeout( ( ) => {
-      const diagnostics = diagnosticsRef.current;
-      if ( diagnostics.activeTab !== OBSERVATIONS_TAB ) return;
-      if ( ( diagnostics.observationCount as number ) > 0 ) return;
-      logger.error(
-        "explore_empty_after_tab_switch",
-        JSON.stringify( { fromTab, ...diagnostics } ),
-      );
-    }, EMPTY_AFTER_SWITCH_MS );
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    if ( state.activeTab === OBSERVATIONS_TAB && fromTab !== OBSERVATIONS_TAB ) {
+      logger.info( "explore_tab_switch", JSON.stringify( { fromTab, ...diagnosticsRef.current } ) );
+      timer = setTimeout( ( ) => {
+        const latest = diagnosticsRef.current;
+        if ( latest.activeTab === OBSERVATIONS_TAB && latest.observationCount === 0 ) {
+          const details = JSON.stringify( { fromTab, ...latest } );
+          logger.error( "explore_empty_after_tab_switch", details );
+        }
+      }, EMPTY_AFTER_SWITCH_MS );
+    }
     return ( ) => clearTimeout( timer );
   }, [state.activeTab] );
 
