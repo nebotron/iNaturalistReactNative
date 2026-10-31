@@ -1,5 +1,7 @@
 import { NavigationContext } from "@react-navigation/native";
-import { normalizedSoundUri, setPlayingAudio } from "components/AudioId/audioIdSession";
+import {
+  normalizedSoundUri, playerStarted, setPlayingAudio,
+} from "components/AudioId/audioIdSession";
 import INatIconButton from "components/SharedComponents/Buttons/INatIconButton";
 import React, {
   useCallback, useContext, useEffect, useState,
@@ -49,6 +51,7 @@ const SoundPlayButton = ( {
     setPlaying( true );
     try {
       await player.startPlayer( await normalizedSoundUri( uri ) );
+      playerStarted( );
       player.addPlayBackListener( e => {
         if ( e.duration > 0 && e.currentPosition >= e.duration ) stop( );
       } );

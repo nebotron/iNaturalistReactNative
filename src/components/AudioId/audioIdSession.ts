@@ -325,6 +325,10 @@ export const setPlayingAudio = (
   AudioBirdId?.setPlayingClip( players.size > 0 );
 };
 
+// Call once a player has started: its library sets the audio session itself,
+// which would make it play at a different level than clips.
+export const playerStarted = ( ) => AudioBirdId?.setPlayingClip( players.size > 0 );
+
 let runs: ScoresEvent[] = [];
 
 const onScores = ( event: ScoresEvent ) => {

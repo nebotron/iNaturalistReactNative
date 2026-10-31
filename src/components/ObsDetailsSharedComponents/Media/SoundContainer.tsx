@@ -4,7 +4,9 @@ import {
 } from "@react-native-community/netinfo";
 import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
-import { normalizedSoundUri, setPlayingAudio } from "components/AudioId/audioIdSession";
+import {
+  normalizedSoundUri, playerStarted, setPlayingAudio,
+} from "components/AudioId/audioIdSession";
 import {
   Body1,
   Body2,
@@ -98,6 +100,7 @@ const SoundContainer = ( {
   const playSound = useCallback( ( position?: number ) => {
     async function playSoundAsync( ) {
       await player.startPlayer( await normalizedSoundUri( sound.file_url ) );
+      playerStarted( );
       if ( position ) {
         try {
           await player.seekToPlayer( position );

@@ -832,6 +832,8 @@ RCT_EXPORT_METHOD( stop )
 
 // Measurement mode plays back far quieter through the speaker, so clips play
 // in the default mode while listening; the model ignores the mic during playback anyway.
+// Outside a listening session, other players (whose library sets PlayAndRecord
+// when starting) play in the Playback category, like clips, at the same level.
 RCT_EXPORT_METHOD( setPlayingClip:( BOOL )playing )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
@@ -839,7 +841,9 @@ RCT_EXPORT_METHOD( setPlayingClip:( BOOL )playing )
     if ( self->_playingClip && !playing ) [self muteFor:1];
     self->_playingClip = playing;
     AVAudioSession *session = [AVAudioSession sharedInstance];
-    if ( [session.category isEqualToString:AVAudioSessionCategoryPlayAndRecord] ) {
+    if ( playing && !self->_engine ) {
+      [session setCategory:AVAudioSessionCategoryPlayback error:nil];
+    } else if ( [session.category isEqualToString:AVAudioSessionCategoryPlayAndRecord] ) {
       [session setMode:playing ? AVAudioSessionModeDefault : AVAudioSessionModeMeasurement
                  error:nil];
     }
