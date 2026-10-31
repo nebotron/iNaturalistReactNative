@@ -26,8 +26,8 @@ import ClipTrimmer, { useClipSpan } from "./ClipTrimmer";
 
 const { useQuery } = RealmContext;
 
-// Observations within this long of the clip are offered to add it to.
-const NEARBY_MS = 30 * 60 * 1000;
+// Observations of the same species within this long of the clip are offered to add it to.
+const NEARBY_MS = 60 * 1000;
 const obsTime = ( obs: Observation ) => Date
   .parse( obs.time_observed_at || obs.observed_on_string );
 
@@ -70,8 +70,12 @@ const AudioIdClip = ( ) => {
       day,
     ),
   }, [day] );
+  // The user's label wins over the model's ID; "no organism" matches nothing.
+  const taxonId = clip?.label?.taxonId
+    || ( clip?.label?.taxonId === null ? null : clip?.sp.taxonId );
   const nearbyObs = sameDayObs
-    .filter( obs => Math.abs( obsTime( obs ) - time ) <= NEARBY_MS )
+    .filter( obs => taxonId && obs.taxon?.id === taxonId
+      && Math.abs( obsTime( obs ) - time ) <= NEARBY_MS )
     .sort( ( a, b ) => Math.abs( obsTime( a ) - time ) - Math.abs( obsTime( b ) - time ) );
 
   if ( !clip ) return <Body3 className="p-5">This clip is no longer saved.</Body3>;
@@ -158,7 +162,9 @@ const AudioIdClip = ( ) => {
         text="CREATE OBSERVATION"
         onPress={createObservation}
       />
-      {nearbyObs.length > 0 && <Body1 className="mt-6">Add to an observation from then</Body1>}
+      {nearbyObs.length > 0 && (
+        <Body1 className="mt-6">Add to an observation of this species from then</Body1>
+      )}
       {nearbyObs.map( obs => (
         <Pressable
           key={obs.uuid}
