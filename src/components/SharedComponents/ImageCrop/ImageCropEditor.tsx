@@ -43,6 +43,7 @@ import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { trackGroupPhotoCrop } from "sharedHelpers/pendingGroupPhotoCrops";
 import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
 import { addRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
+import useExitObservationFlow from "sharedHooks/useExitObservationFlow";
 import useTranslation from "sharedHooks/useTranslation";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -71,6 +72,7 @@ const ImageCropEditor = ( ) => {
   const navigation = useNavigation( );
   const { params } = useRoute<Route>( );
   const { t } = useTranslation( );
+  const exitObservationFlow = useExitObservationFlow( );
   const currentObservation = useStore( state => state.currentObservation );
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
@@ -518,24 +520,31 @@ const ImageCropEditor = ( ) => {
           requestQueuedDeletionAlbumSync( );
         }
       }
-      setGroupedPhotos(
-        groupedPhotos
-          .map( group => {
-            const photos = group.photos?.filter(
-              photo => photo.image.uri !== imageUri,
-            );
-            if ( !photos?.length ) {
-              // If the group had a sound, keep it as a sound-only item
-              return group.soundUri
-                ? { soundUri: group.soundUri, timestamp: group.timestamp }
-                : null;
-            }
-            return photos
-              ? { ...group, photos }
-              : group;
-          } )
-          .filter( Boolean ) as typeof groupedPhotos,
-      );
+      const remainingGroups = groupedPhotos
+        .map( group => {
+          const photos = group.photos?.filter(
+            photo => photo.image.uri !== imageUri,
+          );
+          if ( !photos?.length ) {
+            // If the group had a sound, keep it as a sound-only item
+            return group.soundUri
+              ? { soundUri: group.soundUri, timestamp: group.timestamp }
+              : null;
+          }
+          return photos
+            ? { ...group, photos }
+            : group;
+        } )
+        .filter( Boolean ) as typeof groupedPhotos;
+      // Deleting every photo leaves nothing to import: discard the import, the
+      // same as backing out of Group Photos, and go to the Me tab.
+      if ( remainingGroups.length === 0 ) {
+        doneRef.current = true;
+        setGroupCropResume( null );
+        exitObservationFlow( );
+        return;
+      }
+      setGroupedPhotos( remainingGroups );
       finishOrAdvance( );
       return;
     }
@@ -559,6 +568,7 @@ const ImageCropEditor = ( ) => {
     context,
     currentObservation,
     deletePhotoFromObservation,
+    exitObservationFlow,
     finishOrAdvance,
     groupedPhotos,
     imageUri,
@@ -566,6 +576,7 @@ const ImageCropEditor = ( ) => {
     navigation,
     observationPhotoUuid,
     onCropSaved,
+    setGroupCropResume,
     setGroupedPhotos,
   ] );
 
