@@ -40,7 +40,7 @@ import {
   markDuplicatePhotosFromLibrary,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
-import { preloadImage } from "sharedHelpers/imageCropPreload";
+import { enqueuePreload } from "sharedHelpers/imageCropPreload";
 import {
   fileExtension,
   summarizeTypes,
@@ -71,9 +71,6 @@ interface CopiedPhoto {
 }
 
 const logger = log.extend( "PhotoLibrary" );
-
-// How long the rest of an import waits on its first photo's copy (leadFirst).
-const LEAD_COPY_MAX_WAIT_MS = 3000;
 
 const { useRealm } = RealmContext;
 
@@ -206,7 +203,6 @@ const PhotoLibrary = ( ) => {
   const copyImagesFromCameraRoll = useCallback( async (
     nodes: PhotoNode[],
     onPhotoCopied?: ( node: PhotoNode, copied: CopiedPhoto | null ) => void,
-    leadFirst = false,
   ) => {
     const path = photoLibraryPhotosPath;
     await mkdir( path );
@@ -310,37 +306,18 @@ const PhotoLibrary = ( ) => {
       }
     };
 
-    // Ten copies in flight, each slot refilled the moment it frees. This used
-    // to await Promise.all over fixed slices of ten, which made every slice as
-    // slow as its slowest photo: one iCloud-offloaded asset retrying its
-    // download with backoff (2/4/8/16s, then a 60s no-progress watchdog) held
-    // the other nine slots idle until it settled, so a few offloaded photos
-    // scattered through a selection charged that wait once per slice they
-    // landed in. A straggler now costs its own wait and no one else's.
-    // mapWithConcurrency keeps the results in selection order, which matters:
-    // it decides which photo leads an observation (appendPhotosToObservation)
-    // and how the Group Photos screen lays the import out.
-    const MAX_COPIES_IN_FLIGHT = 10;
-    // leadFirst: the first photo is the one the cropper opens on, so it copies
-    // alone and onPhotoCopied can start its crop prepare before nine other
-    // copies contend with it. Capped so an iCloud-offloaded first photo doesn't
-    // hold the rest of the batch behind its download.
-    const leadCopy = leadFirst
-      ? copyNodeOrNull( uniqueNodes[0] )
-      : null;
-    const leadCopyOrTimeout = leadCopy && Promise.race( [
-      leadCopy,
-      new Promise( resolve => { setTimeout( resolve, LEAD_COPY_MAX_WAIT_MS ); } ),
-    ] );
+    // One copy at a time, so photos land in selection order (newest first, the
+    // order the cropper shows and prepares them in) and the photo the cropper
+    // is waiting on never shares the device with copies of later ones. The
+    // cost is that an iCloud-offloaded photo (download retries with backoff,
+    // then a 60s no-progress watchdog) holds up every photo after it. Results
+    // stay in selection order, which decides which photo leads an observation
+    // (appendPhotosToObservation) and how Group Photos lays the import out.
+    const MAX_COPIES_IN_FLIGHT = 1;
     const results = ( await mapWithConcurrency(
       uniqueNodes,
       MAX_COPIES_IN_FLIGHT,
-      async ( node, index ) => {
-        if ( !leadCopy ) return copyNodeOrNull( node );
-        if ( index === 0 ) return leadCopy;
-        await leadCopyOrTimeout;
-        return copyNodeOrNull( node );
-      },
+      copyNodeOrNull,
     ) ).filter( ( r ): r is NonNullable<typeof r> => r !== null );
     if ( results.length < uniqueNodes.length ) {
       logger.warnWithExtra( "camera_roll_copy_incomplete", {
@@ -418,9 +395,9 @@ const PhotoLibrary = ( ) => {
         );
         importedUris.push( photo.image.uri );
         // The photo the cropper opens on: start its prepare now rather than
-        // when the cropper gets around to it (see leadFirst).
+        // when the cropper gets around to it.
         if ( node === photoNodes[0] && isCroppable( photo ) ) {
-          preloadImage( photo.image.uri, photo.image.uri, null );
+          enqueuePreload( photo.image.uri, photo.image.uri, null );
         }
         settle( node, {
           photos: [photo],
@@ -430,7 +407,7 @@ const PhotoLibrary = ( ) => {
             deviceUri: photo.originalDevicePhotoUri,
           }],
         } );
-      }, true );
+      } );
     };
 
     // Transcoding videos and copying photos go through unrelated subsystems —

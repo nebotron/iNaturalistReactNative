@@ -61,7 +61,7 @@ async function loadImageData(
 // Returns a promise resolving to the preload result. Reuses the module-level
 // cache and dedupes concurrent loads for the same imageUri so the same
 // expensive asset export + subject detection never runs twice at once.
-export function preloadImage(
+function preloadImage(
   imageUri: string,
   cropSourceUri: string,
   existingSavedCrop: NormalizedCrop | null,
@@ -96,11 +96,12 @@ interface PreloadRequest {
   resolve: ( result: PreloadResult | null ) => void;
 }
 
-// Each preload runs a heavy native asset export + subject detection. Kicking
-// off a whole batch at once saturates the device and stalls rendering (e.g.
-// the first crop image appearing). Cap how many run concurrently and process
-// the rest from a queue in order, so the nearest-needed images load first.
-const PRELOAD_CONCURRENCY = 2;
+// Each preload runs a heavy native asset export + subject detection, and the
+// native prepare runs them one at a time in the order they arrive. Every load,
+// the photo on screen included, goes through this queue one at a time and in
+// the order it was asked for: a second one in flight only sat in the native
+// queue, where the photo on screen then waited behind it.
+const PRELOAD_CONCURRENCY = 1;
 const preloadQueue: PreloadRequest[] = [];
 const preloadQueued = new Map<string, Promise<PreloadResult | null>>( );
 let activePreloadCount = 0;

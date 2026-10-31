@@ -37,7 +37,6 @@ import type { PreloadResult } from "sharedHelpers/imageCropPreload";
 import {
   enqueuePreload,
   preloadCache,
-  preloadImage,
 } from "sharedHelpers/imageCropPreload";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -109,11 +108,17 @@ const ImageCropEditor = ( ) => {
   const markVisited = useCallback( ( uri: string ) => setVisitedUris( uris => ( uris.has( uri )
     ? uris
     : new Set( uris ).add( uri ) ) ), [] );
-  const importedUris = useMemo( ( ) => ( cropImport
-    ? groupedPhotos.flatMap( group => ( group.photos ?? [] )
-      .filter( photo => !photo.pending && isCroppable( photo ) )
-      .map( photo => photo.image.uri ) )
-    : [] ), [cropImport, groupedPhotos] );
+  // Landed photos in grid order, up to the first one still copying, so photos
+  // are preloaded in the order they're shown (newest first) rather than in
+  // whatever order their copies land.
+  const importedUris = useMemo( ( ) => {
+    if ( !cropImport ) return [];
+    const croppable = groupedPhotos.flatMap( group => group.photos ?? [] ).filter( isCroppable );
+    const firstPending = croppable.findIndex( photo => photo.pending );
+    return ( firstPending === -1
+      ? croppable
+      : croppable.slice( 0, firstPending ) ).map( photo => photo.image.uri );
+  }, [cropImport, groupedPhotos] );
   // Only media this editor would actually open counts as something to wait
   // for. A video transcoding into a GIF is not: waiting on it left the bulk
   // crop of an import sitting on a black spinner for the length of the
@@ -333,7 +338,7 @@ const ImageCropEditor = ( ) => {
 
     const { cropSourceUri, existingSavedCrop } = resolveCropContext( );
 
-    // Always go through preloadImage, even for a URI the cache already holds
+    // Always go through enqueuePreload, even for a URI the cache already holds
     // (it resolves from the cache without reloading anything). Bailing out on
     // a cache hit assumed the render-time seed had applied it, but this effect
     // re-runs on any store write — resolveCropContext reads the store — and a
@@ -344,9 +349,9 @@ const ImageCropEditor = ( ) => {
 
     ( async ( ) => {
       try {
-        // Reuse an in-flight preload for this URI (kicked off before navigation)
-        // instead of starting a second, contending load of the same image.
-        const result = await preloadImage( imageUri, cropSourceUri, existingSavedCrop );
+        // Reuse an in-flight or queued preload for this URI (kicked off before
+        // navigation) instead of starting a second, contending load of it.
+        const result = await enqueuePreload( imageUri, cropSourceUri, existingSavedCrop );
         if ( cancelled ) {
           return;
         }
@@ -380,7 +385,7 @@ const ImageCropEditor = ( ) => {
   }, [applyPreloadResult, imageUri, resolveCropContext] );
 
   // Preload only the next couple of pending images (local file export +
-  // subject detection, via enqueuePreload/preloadImage) as soon as this
+  // subject detection, via enqueuePreload) as soon as this
   // screen mounts, rather than the whole remaining batch — a bulk crop can
   // span dozens of photos, and preloading them all wastes work on photos the
   // user may delete or never reach. Advancing drops one uri from the queue and

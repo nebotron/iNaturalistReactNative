@@ -15,7 +15,7 @@ import { View } from "components/styledComponents";
 import React, {
   useCallback, useEffect, useMemo, useRef,
 } from "react";
-import { preloadImage } from "sharedHelpers/imageCropPreload";
+import { enqueuePreload } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import {
   prefetchDeviceImageThumbnails,
@@ -143,13 +143,13 @@ const GroupPhotos = ( {
   // Preload the first selected image as soon as it's selected so its data is
   // usually ready by the time the user taps crop. The remaining images are
   // preloaded in the background by ImageCropEditor once the first is ready,
-  // so their loads don't contend with the first image's. preloadImage caches
+  // so their loads don't contend with the first image's. enqueuePreload caches
   // and dedupes, so re-running on selection changes is cheap.
   useEffect( ( ) => {
     const [firstPhoto] = selectedPhotos;
     if ( firstPhoto ) {
       const { uri, cropOriginalUri, crop } = firstPhoto.image;
-      preloadImage( uri, cropOriginalUri || uri, crop ?? null );
+      enqueuePreload( uri, cropOriginalUri || uri, crop ?? null );
     }
   }, [selectedPhotos] );
 

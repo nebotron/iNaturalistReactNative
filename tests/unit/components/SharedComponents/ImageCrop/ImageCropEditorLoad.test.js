@@ -24,8 +24,7 @@ jest.mock( "sharedHelpers/imageCropPreload", ( ) => {
   const cache = new Map( );
   return {
     preloadCache: cache,
-    enqueuePreload: jest.fn( ( ) => Promise.resolve( null ) ),
-    preloadImage: jest.fn( uri => {
+    enqueuePreload: jest.fn( uri => {
       const cached = cache.get( uri );
       if ( cached ) return Promise.resolve( cached );
       // A photo whose file holds no readable image: the real loader resolves
