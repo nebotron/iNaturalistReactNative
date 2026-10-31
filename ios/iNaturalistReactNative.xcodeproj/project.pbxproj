@@ -44,6 +44,7 @@
 		AB4BF6B4234567890ABCDEF0 /* audio_id.data1 in Resources */ = {isa = PBXBuildFile; fileRef = AB4BF6A4234567890ABCDEF0 /* audio_id.data1 */; };
 		AB4BF6B5234567890ABCDEF0 /* audio_id.data2 in Resources */ = {isa = PBXBuildFile; fileRef = AB4BF6A5234567890ABCDEF0 /* audio_id.data2 */; };
 		AB4BF6B2234567890ABCDEF0 /* audio_geo.onnx in Resources */ = {isa = PBXBuildFile; fileRef = AB4BF6A2234567890ABCDEF0 /* audio_geo.onnx */; };
+		PO4BF6B1234567890ABCDEF0 /* population_10km.bin in Resources */ = {isa = PBXBuildFile; fileRef = PO4BF6A1234567890ABCDEF0 /* population_10km.bin */; };
 		YO4BF6B1234567890ABCDEF0 /* yolov8n.onnx in Resources */ = {isa = PBXBuildFile; fileRef = YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */; };
 /* End PBXBuildFile section */
 
@@ -121,6 +122,7 @@
 		AB4BF6A4234567890ABCDEF0 /* audio_id.data1 */ = {isa = PBXFileReference; lastKnownFileType = file; name = audio_id.data1; path = iNaturalistReactNative/audio_id.data1; sourceTree = "<group>"; };
 		AB4BF6A5234567890ABCDEF0 /* audio_id.data2 */ = {isa = PBXFileReference; lastKnownFileType = file; name = audio_id.data2; path = iNaturalistReactNative/audio_id.data2; sourceTree = "<group>"; };
 		AB4BF6A2234567890ABCDEF0 /* audio_geo.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = audio_geo.onnx; path = iNaturalistReactNative/audio_geo.onnx; sourceTree = "<group>"; };
+		PO4BF6A1234567890ABCDEF0 /* population_10km.bin */ = {isa = PBXFileReference; lastKnownFileType = file; name = population_10km.bin; path = iNaturalistReactNative/population_10km.bin; sourceTree = "<group>"; };
 		YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = yolov8n.onnx; path = iNaturalistReactNative/yolov8n.onnx; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -172,6 +174,7 @@
 				LR1B2C3D4E5F60718293A4B7 /* LocationRelaunch.h */,
 				LR1B2C3D4E5F60718293A4B6 /* LocationRelaunch.m */,
 				YO4BF6A1234567890ABCDEF0 /* yolov8n.onnx */,
+				PO4BF6A1234567890ABCDEF0 /* population_10km.bin */,
 			);
 			name = iNaturalistReactNative;
 			sourceTree = "<group>";
@@ -373,6 +376,7 @@
 				716F7BDCD8B943479083CFAC /* Settings.bundle in Resources */,
 				C237572DBA1C4CA0B77F898C /* INatIcon.ttf in Resources */,
 				YO4BF6B1234567890ABCDEF0 /* yolov8n.onnx in Resources */,
+				PO4BF6B1234567890ABCDEF0 /* population_10km.bin in Resources */,
 				AB4BF6B1234567890ABCDEF0 /* audio_id.onnx in Resources */,
 				AB4BF6B3234567890ABCDEF0 /* audio_id.data0 in Resources */,
 				AB4BF6B4234567890ABCDEF0 /* audio_id.data1 in Resources */,

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Builds data/population_10km.bin, the population within 10 km of every point.
+"""Builds ios/iNaturalistReactNative/population_10km.bin (bundled in the app), the population within 10 km of every point.
 
 Source: GPW v4 rev 11 2020 population density at 30 arc-seconds (census based),
 https://geodata.ucdavis.edu/geodata/pop/gpw_v4_population_density_rev11_2020_30s.tif
@@ -10,7 +10,8 @@ population = (1 + MAX_POPULATION) ** (q / 255) - 1. Keep these constants in sync
 with src/sharedHelpers/populationDensity.ts.
 
 Usage: pip install numpy tifffile imagecodecs
-       python3 scripts/build_population_grid.py gpw.tif data/population_10km.bin
+       python3 scripts/build_population_grid.py gpw.tif \
+       ios/iNaturalistReactNative/population_10km.bin
 """
 import math
 import sys
