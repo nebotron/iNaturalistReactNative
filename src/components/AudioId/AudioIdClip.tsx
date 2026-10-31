@@ -1,6 +1,7 @@
 /* eslint-disable i18next/no-literal-string */
 import { CachesDirectoryPath } from "@dr.pogodin/react-native-fs";
 import { useNavigation, useRoute } from "@react-navigation/native";
+import ObsListItem from "components/ObservationsFlashList/ObsListItem";
 import {
   Body1, Body3, Button, List2, Map,
 } from "components/SharedComponents";
@@ -17,6 +18,7 @@ import {
   interpolateFromUsablePoints,
   MAX_MATCH_GAP_MS,
 } from "sharedHelpers/interpolateTrackedLocation";
+import { useCurrentUser } from "sharedHooks";
 import useStore from "stores/useStore";
 import * as uuid from "uuid";
 
@@ -41,6 +43,7 @@ const AudioIdClip = ( ) => {
   const setObservations = useStore( state => state.setObservations );
   const prepareObsEdit = useStore( state => state.prepareObsEdit );
   const updateObservations = useStore( state => state.updateObservations );
+  const currentUser = useCurrentUser( );
   const [error, setError] = useState<string | null>( null );
   const { span, trim, setTrim } = useClipSpan( id, clip?.time, false, clip?.call );
   const time = clip?.time ?? 0;
@@ -163,20 +166,21 @@ const AudioIdClip = ( ) => {
         onPress={createObservation}
       />
       {nearbyObs.length > 0 && (
-        <Body1 className="mt-6">Add to an observation of this species from then</Body1>
+        <Body1 className="mt-6">Add to observation</Body1>
       )}
       {nearbyObs.map( obs => (
         <Pressable
           key={obs.uuid}
           accessibilityRole="button"
           accessibilityHint="Adds the clip to this observation."
-          className="py-2 border-b border-lightGray"
+          className="-mx-5 justify-center"
           onPress={( ) => addToObservation( obs )}
         >
-          <Body1>
-            {obs.taxon?.preferred_common_name || obs.taxon?.name || "Unknown"}
-          </Body1>
-          <Body3>{formatISOTimestamp( obsTime( obs ) )}</Body3>
+          <ObsListItem observation={obs} currentUser={currentUser} hideObsUploadStatus />
+          <Body3 className="absolute right-5">
+            {`${obsTime( obs ) >= time ? "+" : "-"}${
+              Math.round( Math.abs( obsTime( obs ) - time ) / 1000 )}s`}
+          </Body3>
         </Pressable>
       ) )}
       {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
