@@ -95,22 +95,24 @@ const useNavigateWithTaxonSelected = (
         await saveAndAdvance( bulkUploadMode
           ? UPLOAD
           : "save" );
-      } finally {
+      } catch ( error ) {
         savingRef.current = false;
+        throw error;
       }
       if ( numObservations > 1 ) {
         if ( routeName === "SuggestionsTaxonSearch" ) {
-          // Explicitly navigate back to Suggestions (now showing the next
-          // observation in the bulk flow) rather than relying on goBack,
-          // which can silently no-op if there's no history to pop to.
-          if ( navigation.canGoBack( ) ) {
-            navigation.goBack( );
-          } else {
-            navigation.navigate( "Suggestions", { entryScreen, lastScreen } );
-          }
+          // Keep ignoring taps: this screen stays visible while it pops, and
+          // another tap would ID the next observation and go back again,
+          // popping Suggestions too and leaving the bulk ID flow. Pop to
+          // Suggestions (now showing the next observation) rather than going
+          // back, so a repeat can't pop past it.
+          navigation.dispatch(
+            StackActions.popTo( "Suggestions", { entryScreen, lastScreen }, { merge: true } ),
+          );
+          return;
         }
-        return;
       }
+      savingRef.current = false;
       return;
     }
 

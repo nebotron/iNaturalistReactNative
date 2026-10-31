@@ -8,6 +8,7 @@ const mockNavigate = jest.fn( );
 const mockDispatch = jest.fn( );
 const mockSaveAndAdvance = jest.fn( async ( ) => true );
 
+let mockRouteName = "Suggestions";
 let mockRouteParams = {
   entryScreen: "ObsEdit",
   lastScreen: "ObsEdit",
@@ -20,6 +21,7 @@ jest.mock( "@react-navigation/native", ( ) => ( {
     dispatch: mockDispatch,
   } ),
   useRoute: ( ) => ( {
+    name: mockRouteName,
     params: mockRouteParams,
   } ),
 } ) );
@@ -39,6 +41,7 @@ describe( "useNavigateWithTaxonSelected", ( ) => {
 
   beforeEach( ( ) => {
     jest.clearAllMocks( );
+    mockRouteName = "Suggestions";
     mockRouteParams = {
       entryScreen: "ObsEdit",
       lastScreen: "ObsEdit",
@@ -112,5 +115,22 @@ describe( "useNavigateWithTaxonSelected", ( ) => {
     expect( mockSaveAndAdvance ).not.toHaveBeenCalled( );
     expect( mockDispatch ).toHaveBeenCalled( );
     expect( mockDispatch.mock.calls[0][0]?.payload?.name ).toEqual( "ObsDetails" );
+  } );
+
+  it( "ignores a repeat tap while taxon search pops back in the bulk ID flow", async ( ) => {
+    mockRouteName = "SuggestionsTaxonSearch";
+    useStore.setState( { bulkUploadMode: true } );
+    const taxon = factory( "RemoteTaxon", { id: 123, rank_level: 10 } );
+    const { result } = renderHook( () => useNavigateWithTaxonSelected( { vision: false } ) );
+
+    await result.current( taxon );
+    await result.current( taxon );
+
+    expect( mockSaveAndAdvance ).toHaveBeenCalledTimes( 1 );
+    expect( mockDispatch ).toHaveBeenCalledTimes( 1 );
+    expect( mockDispatch.mock.calls[0][0] ).toMatchObject( {
+      type: "POP_TO",
+      payload: { name: "Suggestions" },
+    } );
   } );
 } );
