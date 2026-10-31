@@ -32,6 +32,9 @@ const { useQuery } = RealmContext;
 const NEARBY_MS = 60 * 1000;
 const obsTime = ( obs: Observation ) => Date
   .parse( obs.time_observed_at || obs.observed_on_string );
+const formatDelta = ( ms: number ) => `${ms < 0
+  ? "-"
+  : "+"}${Math.round( Math.abs( ms ) / 1000 )}s`;
 
 // One Audio ID clip: trim it and make it an observation.
 const AudioIdClip = ( ) => {
@@ -75,7 +78,9 @@ const AudioIdClip = ( ) => {
   }, [day] );
   // The user's label wins over the model's ID; "no organism" matches nothing.
   const taxonId = clip?.label?.taxonId
-    || ( clip?.label?.taxonId === null ? null : clip?.sp.taxonId );
+    || ( clip?.label?.taxonId === null
+      ? null
+      : clip?.sp.taxonId );
   const nearbyObs = sameDayObs
     .filter( obs => taxonId && obs.taxon?.id === taxonId
       && Math.abs( obsTime( obs ) - time ) <= NEARBY_MS )
@@ -178,8 +183,7 @@ const AudioIdClip = ( ) => {
         >
           <ObsListItem observation={obs} currentUser={currentUser} hideObsUploadStatus />
           <Body3 className="absolute right-5">
-            {`${obsTime( obs ) >= time ? "+" : "-"}${
-              Math.round( Math.abs( obsTime( obs ) - time ) / 1000 )}s`}
+            {formatDelta( obsTime( obs ) - time )}
           </Body3>
         </Pressable>
       ) )}
