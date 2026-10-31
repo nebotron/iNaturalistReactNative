@@ -88,7 +88,7 @@ let sessionLocation: UserLocation | null = null;
 const BINS_PER_S = 3;
 const CONTEXT_S = 15;
 const WINDOW_BINS = [5 * BINS_PER_S, 10 * BINS_PER_S - 1];
-export const findCall = ( timeline: ( number | null )[] ): [number, number] | null => {
+const findCall = ( timeline: ( number | null )[] ): [number, number] | null => {
   const bins = timeline.map( b => b ?? -Infinity );
   const peak = Math.max( ...bins.slice( WINDOW_BINS[0], WINDOW_BINS[1] + 1 ) );
   if ( !Number.isFinite( peak ) ) return null;
@@ -224,7 +224,7 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
 } ) );
 
 // "auto" uses Core Haptics in the foreground and the system vibration in the background
-export const vibrate = ( mode: VibrateMode = "auto" ) => {
+const vibrate = ( mode: VibrateMode = "auto" ) => {
   AudioBirdId?.vibrate( mode )
     ?.then( r => {
       const detail = `${r.method}, mode ${mode}, app state ${r.appState}, `

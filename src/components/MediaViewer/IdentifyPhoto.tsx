@@ -30,10 +30,10 @@ import colors from "styles/tailwindColors";
 // Zoom slider: exponential mapping so equal slider travel is equal zoom ratio.
 // Slider position runs 0..1; scale runs MIN_ZOOM..MAX_ZOOM as MIN * (MAX/MIN)^pos.
 export const MIN_ZOOM = 1;
-export const MAX_ZOOM = getTunable( "maxPhotoInspectZoom" );
+const MAX_ZOOM = getTunable( "maxPhotoInspectZoom" );
 export const clampZoom = ( scale: number ) => Math.min( MAX_ZOOM, Math.max( MIN_ZOOM, scale ) );
 export const zoomPosToScale = ( pos: number ) => MIN_ZOOM * ( MAX_ZOOM / MIN_ZOOM ) ** pos;
-export const zoomScaleToPos = ( scale: number ) => Math.min(
+const zoomScaleToPos = ( scale: number ) => Math.min(
   1,
   Math.max( 0, Math.log( clampZoom( scale ) / MIN_ZOOM ) / Math.log( MAX_ZOOM / MIN_ZOOM ) ),
 );
@@ -227,7 +227,7 @@ interface BrightnessSliderProps {
 }
 
 // The sun icon + exposure slider (in stops) used for every brightness control.
-export const BrightnessSlider = ( {
+const BrightnessSlider = ( {
   value,
   onChange,
   onComplete,

@@ -7,7 +7,7 @@ const EBIRD_API_URL = "https://api.ebird.org/v2";
 
 // eBird's own caps on geo searches
 export const EBIRD_MAX_DIST_KM = getTunable( "ebirdMaxDistKm" );
-export const EBIRD_BACK_DAYS = getTunable( "ebirdBackDays" );
+const EBIRD_BACK_DAYS = getTunable( "ebirdBackDays" );
 // Our caps, to keep traffic to eBird low
 export const EBIRD_MAX_RESULTS = getTunable( "ebirdMaxResults" );
 // Fetched before filtering by taxon on the client. A search without a
@@ -19,7 +19,7 @@ const MAX_TAXA_PAGES = 10;
 const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 20;
 
-export const AVES_ID = 3;
+const AVES_ID = 3;
 // eBird results can't be filtered by these, so skip eBird rather than show
 // results that ignore them
 export const EBIRD_EXCLUSIVE_PARAMS = ["user_id", "project_id", "ident_user_id"];
@@ -123,7 +123,7 @@ const inNames = ( names: string[], sciName: string ) => {
   return names.includes( genus ) || names.includes( `${genus} ${epithet}` );
 };
 
-export const matchesEbirdTaxonFilter = ( filter: EbirdTaxonFilter, sciName: string ) => (
+const matchesEbirdTaxonFilter = ( filter: EbirdTaxonFilter, sciName: string ) => (
   !filter.include || inNames( filter.include, sciName )
 ) && !inNames( filter.exclude, sciName );
 

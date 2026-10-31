@@ -14,7 +14,7 @@ import useDeferredStartup from "./hooks/useDeferredStartup";
 import useLinking from "./hooks/useLinking";
 import useQueuedDeletionAlbum from "./hooks/useQueuedDeletionAlbum";
 import useResumeGroupPhotos from "./hooks/useResumeGroupPhotos";
-import useUsbAutoImport from "./hooks/useUsbAutoImport";
+import useUsbImport from "./hooks/useUsbImport";
 import NetworkService from "./NetworkService";
 import StartupService from "./StartupService";
 import UploadService from "./UploadService";
@@ -58,7 +58,7 @@ const App = ( { children }: PropsWithChildren ) => {
   useShare( onShare );
   useDeferredStartup( );
   useResumeGroupPhotos( );
-  useUsbAutoImport( );
+  useUsbImport( );
   useQueuedDeletionAlbum( currentUser?.id );
 
   // this children prop is here for the sake of testing with jest

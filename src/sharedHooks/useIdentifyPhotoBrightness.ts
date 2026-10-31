@@ -7,13 +7,8 @@ export const EXPOSURE_STOPS_MAX = 4;
 export const EXPOSURE_STOPS_DEFAULT = 0;
 // Slider values this close to the default snap to it.
 export const EXPOSURE_SNAP_THRESHOLD = 0.2;
-export const snapExposureStops = ( stops: number ) => (
-  Math.abs( stops - EXPOSURE_STOPS_DEFAULT ) < EXPOSURE_SNAP_THRESHOLD
-    ? EXPOSURE_STOPS_DEFAULT
-    : stops
-);
-export const stopsToGain = ( stops: number ) => 2 ** stops;
-export const gainToStops = ( gain: number ) => Math.min(
+const stopsToGain = ( stops: number ) => 2 ** stops;
+const gainToStops = ( gain: number ) => Math.min(
   EXPOSURE_STOPS_MAX,
   Math.max( EXPOSURE_STOPS_MIN, Math.log2( gain ) ),
 );

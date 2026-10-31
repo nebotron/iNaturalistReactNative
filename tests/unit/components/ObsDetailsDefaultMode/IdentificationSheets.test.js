@@ -66,7 +66,7 @@ describe( "IdentificationSheets", () => {
     showAgreeWithIdSheet: false,
   };
 
-  describe( "SuggestIDSheet", () => {
+  describe( "suggesting an ID", () => {
     it( "auto-submits identification when identTaxonId is provided via route params", async () => {
       useRoute.mockReturnValue( {
         params: {
@@ -170,7 +170,7 @@ describe( "IdentificationSheets", () => {
       } );
     } );
 
-    it( "hides the SuggestIDSheet when showing the potential disagreement sheet", () => {
+    it( "hides the suggest-ID sheet when showing the potential disagreement sheet", () => {
       const stateWithSuggestSheet = {
         ...initialState,
         showSuggestIdSheet: true,

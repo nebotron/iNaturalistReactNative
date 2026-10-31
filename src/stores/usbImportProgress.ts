@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-// Transient UI state for the USB → Photos offload, driven by useUsbAutoImport
+// Transient UI state for the USB → Photos offload, driven by useUsbImport
 // and rendered by UsbImportProgress. Not persisted: it only reflects an
 // in-progress offload and is cleared shortly after one finishes.
 export type UsbImportPhase = "saving" | "waitingForSpace" | "deleting" | "done" | "error";
@@ -15,7 +15,7 @@ interface UsbImportProgressState {
   // Why the run ended the way it did, when the counts alone don't say — e.g. a
   // full device, where "0 of 157 failed" reads as a bug in the app.
   note: string;
-  // Starts an import; registered by useUsbAutoImport, which App keeps mounted.
+  // Starts an import; registered by useUsbImport, which App keeps mounted.
   // Resolves true when it found new photos.
   startImport?: ( ) => Promise<boolean>;
   start: ( total: number ) => void;

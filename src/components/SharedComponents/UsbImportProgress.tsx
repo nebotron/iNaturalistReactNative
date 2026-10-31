@@ -3,7 +3,7 @@ import React from "react";
 import { StyleSheet, View } from "react-native";
 import useUsbImportProgress from "stores/usbImportProgress";
 
-// Non-blocking status banner shown while useUsbAutoImport offloads photos from
+// Non-blocking status banner shown while useUsbImport offloads photos from
 // a USB device into the Photos library and clears them from the device. It sits
 // above the tab bar and uses pointerEvents="none" so the rest of the app stays
 // fully usable during the import. Text is intentionally simple/English here as

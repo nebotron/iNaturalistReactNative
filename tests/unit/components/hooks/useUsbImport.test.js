@@ -1,5 +1,5 @@
 import { renderHook } from "@testing-library/react-native";
-import useUsbAutoImport from "components/hooks/useUsbAutoImport";
+import useUsbImport from "components/hooks/useUsbImport";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import useUsbImportProgress from "stores/usbImportProgress";
 
@@ -79,7 +79,7 @@ jest.mock( "sharedHelpers/logger", ( ) => ( {
 
 // Mounts the hook as App does, then presses Import From USB.
 const startImport = ( ) => {
-  const { result } = renderHook( ( ) => useUsbAutoImport( ) );
+  const { result } = renderHook( ( ) => useUsbImport( ) );
   result.current( );
   return result;
 };
@@ -89,7 +89,7 @@ const images = n => Array.from(
   ( _unused, i ) => ( { relativePath: `IMG_${i}.CR3` } ),
 );
 
-describe( "useUsbAutoImport", ( ) => {
+describe( "useUsbImport", ( ) => {
   beforeEach( ( ) => {
     jest.clearAllMocks( );
     jest.useFakeTimers( );
@@ -469,7 +469,7 @@ describe( "useUsbAutoImport", ( ) => {
 
   // Nothing scans on its own: an idle app must never wake for a drive.
   it( "does not scan until Import is pressed", async ( ) => {
-    renderHook( ( ) => useUsbAutoImport( ) );
+    renderHook( ( ) => useUsbImport( ) );
     await jest.advanceTimersByTimeAsync( 60_000 );
 
     expect( mockListNewUsbImages ).not.toHaveBeenCalled( );

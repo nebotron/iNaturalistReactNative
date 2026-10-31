@@ -31,7 +31,7 @@ import {
 } from "sharedHelpers/usbStorage";
 import useUsbImportProgress from "stores/usbImportProgress";
 
-const logger = log.extend( "useUsbAutoImport" );
+const logger = log.extend( "useUsbImport" );
 
 // Whether this process has already reported that the watched folder is one the
 // camera will abandon (see isCameraSubfolder). Once per process: it's a fact
@@ -140,7 +140,7 @@ const deletePendingFromDevice = async ( ) => {
 // progress overlay (UsbImportProgress) reflects the run. Mounted once in App
 // so a run outlives the Settings screen that started it; the run is published
 // to that screen through the progress store.
-const useUsbAutoImport = ( ) => {
+const useUsbImport = ( ) => {
   const [onboardingShown] = useOnboardingShown( );
   const offloading = useRef( false );
   const savesFailingUntil = useRef( 0 );
@@ -582,4 +582,4 @@ const useUsbAutoImport = ( ) => {
   return offload;
 };
 
-export default useUsbAutoImport;
+export default useUsbImport;
