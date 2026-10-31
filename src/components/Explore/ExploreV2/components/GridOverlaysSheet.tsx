@@ -1,4 +1,5 @@
-import { BottomSheet, Checkbox } from "components/SharedComponents";
+import EbirdCheckbox from "components/Explore/EbirdCheckbox";
+import { BottomSheet, Checkbox, Heading4 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React from "react";
 import { useTranslation } from "sharedHooks";
@@ -7,9 +8,11 @@ import useStore from "stores/useStore";
 
 interface Props {
   onPressClose: ( ) => void;
+  showGridOverlays: boolean;
 }
 
-const GridOverlaysSheet = ( { onPressClose }: Props ) => {
+// Options that only affect the Observations view
+const GridOverlaysSheet = ( { onPressClose, showGridOverlays }: Props ) => {
   const { t } = useTranslation( );
   const overlays = useStore( state => state.layout.exploreGridOverlays );
   const setOverlay = useStore( state => state.layout.setExploreGridOverlay );
@@ -23,9 +26,11 @@ const GridOverlaysSheet = ( { onPressClose }: Props ) => {
   ];
 
   return (
-    <BottomSheet headerText={t( "GRID-OVERLAYS" )} onPressClose={onPressClose}>
+    <BottomSheet headerText={t( "VIEW-OPTIONS" )} onPressClose={onPressClose}>
       <View className="p-7 pt-2 gap-y-4">
-        {options.map( ( { key, label } ) => (
+        <EbirdCheckbox />
+        {showGridOverlays && <Heading4>{t( "GRID-OVERLAYS" )}</Heading4>}
+        {showGridOverlays && options.map( ( { key, label } ) => (
           <Checkbox
             key={key}
             accessibilityLabel={label}

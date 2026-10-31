@@ -1,4 +1,5 @@
-import { Body2, Heading4 } from "components/SharedComponents";
+import EbirdCheckbox from "components/Explore/EbirdCheckbox";
+import { Body2, BottomSheet } from "components/SharedComponents";
 import { TextInput, View } from "components/styledComponents";
 import React, { useState } from "react";
 import { useTranslation } from "sharedHooks";
@@ -59,14 +60,24 @@ const HotspotSettingField = ( { field }: FieldProps ) => {
   );
 };
 
-const HotspotSettingsSection = ( ) => {
+interface Props {
+  onPressClose: ( ) => void;
+}
+
+const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
   const { t } = useTranslation( );
   return (
-    <View>
-      <Heading4 className="mb-5">{t( "HOTSPOT-SETTINGS" )}</Heading4>
-      {FIELDS.map( field => <HotspotSettingField key={field.key} field={field} /> )}
-    </View>
+    <BottomSheet
+      headerText={t( "HOTSPOT-SETTINGS" )}
+      keyboardShouldPersistTaps="handled"
+      onPressClose={onPressClose}
+    >
+      <View className="p-7 pt-2">
+        <EbirdCheckbox />
+        {FIELDS.map( field => <HotspotSettingField key={field.key} field={field} /> )}
+      </View>
+    </BottomSheet>
   );
 };
 
-export default HotspotSettingsSection;
+export default HotspotSettingsSheet;

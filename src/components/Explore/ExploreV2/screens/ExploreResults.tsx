@@ -1,5 +1,6 @@
 import { refresh, useNetInfo } from "@react-native-community/netinfo";
 import { useFocusEffect, useRoute } from "@react-navigation/native";
+import { isEbirdEnabled } from "api/ebird";
 import type { ApiTotalBounds } from "api/types";
 import {
   HOTSPOTS_TAB,
@@ -416,13 +417,13 @@ const ExploreResults = ( ) => {
                 accessibilityLabel={t( "Change-observations-sort-order" )}
               />
             )}
-            {layout === "grid" && !hasNoResults && (
+            {!showMap && ( isEbirdEnabled( ) || ( layout === "grid" && !hasNoResults ) ) && (
               <INatIconButton
                 icon="layers"
                 size={22}
                 className="bg-white rounded-full h-[46px] w-[46px] border-[1px] border-lightGray
                   absolute bottom-[76px] z-10 right-5"
-                accessibilityLabel={t( "Change-grid-overlays" )}
+                accessibilityLabel={t( "Change-view-options" )}
                 onPress={() => setShowGridOverlaysSheet( true )}
                 style={DROP_SHADOW}
               />
@@ -620,7 +621,10 @@ const ExploreResults = ( ) => {
         />
       )}
       {showGridOverlaysSheet && (
-        <GridOverlaysSheet onPressClose={() => setShowGridOverlaysSheet( false )} />
+        <GridOverlaysSheet
+          onPressClose={() => setShowGridOverlaysSheet( false )}
+          showGridOverlays={layout === "grid"}
+        />
       )}
       {showViewSheet && (
         <RadioButtonSheet
