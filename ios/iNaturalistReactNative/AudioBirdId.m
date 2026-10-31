@@ -105,7 +105,7 @@ static void ABSpectrogramColumn( const float *frame, float *noise, uint8_t *col 
   for ( int b = 0; b < AB_SPEC_H; b++ ) {
     // zrip doubles the DFT, so this matches a sine's amplitude^2 / 4.
     float db = 10 * log10f( power[AB_SPEC_LO + b] / ( AB_SPEC_N * AB_SPEC_N ) + 1e-12f );
-    // Digital silence (the mic muted during playback) leaves the floor alone.
+    // Digital silence leaves the floor alone.
     if ( isnan( noise[b] ) ) noise[b] = db;
     else if ( db > -110 ) noise[b] += ( db > noise[b] ? 0.004f : 0.05f ) * ( db - noise[b] );
     noise[b] = MAX( noise[b], -100 );
@@ -154,6 +154,7 @@ static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
   AVAudioConverter *_converter;
   AVAudioFormat    *_outFormat;
   float            *_window;
+  float            *_modelWindow; // the last AB_WIN of _window, zeroed while muted
   NSInteger         _sinceRun;
   int64_t           _frames; // total samples received, to locate a run's window later
   NSInteger         _specPending;
@@ -175,7 +176,7 @@ static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
   CFAbsoluteTime    _lastAudio;
   NSInteger         _restartFailures;
   BOOL              _playingClip;
-  CFAbsoluteTime    _muteUntil; // mic audio is zeroed until then, and while a clip plays
+  CFAbsoluteTime    _muteUntil; // model input is zeroed until then, and while a clip plays
   AVAudioEngine    *_clipEngine;
   AVAudioPlayerNode *_clipNode;
   RCTPromiseResolveBlock _clipDone;
@@ -191,6 +192,7 @@ RCT_EXPORT_MODULE( );
 {
   if ( ( self = [super init] ) ) {
     _window      = (float *)calloc( AB_HIST, sizeof( float ) );
+    _modelWindow = (float *)calloc( AB_WIN, sizeof( float ) );
     // Both queues stay busy while listening, so their threads never idle long
     // enough to drain an autorelease pool; drain one per block instead.
     dispatch_queue_attr_t serial = dispatch_queue_attr_make_with_autorelease_frequency(
@@ -215,6 +217,7 @@ RCT_EXPORT_MODULE( );
   if ( _geoSession ) ort->ReleaseSession( _geoSession );
   if ( _env ) ort->ReleaseEnv( _env );
   free( _window );
+  free( _modelWindow );
 }
 
 - (OrtSession *)openSession:(NSString *)path
@@ -533,7 +536,7 @@ RCT_EXPORT_METHOD( stop )
 }
 
 // The phone's own vibration and sound playback reach the mic and get
-// identified as birds, so the mic audio is zeroed while they play. Echo
+// identified as birds, so the model's input is zeroed while they play. Echo
 // cancellation would need iOS voice processing, which also applies speech
 // noise suppression and gain control that distort bird calls.
 - (void)muteFor:(double)seconds
@@ -543,7 +546,7 @@ RCT_EXPORT_METHOD( stop )
 }
 
 // Measurement mode plays back far quieter through the speaker, so clips play
-// in the default mode while listening; the mic is muted during playback anyway.
+// in the default mode while listening; the model ignores the mic during playback anyway.
 RCT_EXPORT_METHOD( setPlayingClip:( BOOL )playing )
 {
   dispatch_async( dispatch_get_main_queue(), ^{
@@ -769,6 +772,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     // Start with silence so the first run happens right away, before 5 s of
     // audio have arrived.
     memset( self->_window, 0, AB_HIST * sizeof( float ) );
+    memset( self->_modelWindow, 0, AB_WIN * sizeof( float ) );
     self->_sinceRun = AB_STEP;
     self->_specPending = 0;
   } );
@@ -839,10 +843,14 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     NSInteger count = MIN( n, (NSInteger)AB_HIST );
     s += n - count;
     memmove( self->_window, self->_window + count, ( AB_HIST - count ) * sizeof( float ) );
+    memcpy( self->_window + AB_HIST - count, s, count * sizeof( float ) );
+    // Muted audio is kept for clips and the spectrogram, but not identified.
+    NSInteger m = MIN( count, (NSInteger)AB_WIN );
+    memmove( self->_modelWindow, self->_modelWindow + m, ( AB_WIN - m ) * sizeof( float ) );
     if ( self->_playingClip || CFAbsoluteTimeGetCurrent( ) < self->_muteUntil ) {
-      memset( self->_window + AB_HIST - count, 0, count * sizeof( float ) );
+      memset( self->_modelWindow + AB_WIN - m, 0, m * sizeof( float ) );
     } else {
-      memcpy( self->_window + AB_HIST - count, s, count * sizeof( float ) );
+      memcpy( self->_modelWindow + AB_WIN - m, s + count - m, m * sizeof( float ) );
     }
     self->_sinceRun += count;
     self->_frames += n;
@@ -861,7 +869,7 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
     if ( self->_sinceRun < AB_STEP || self->_busy ) return;
     self->_sinceRun = 0;
     self->_busy = YES;
-    NSData *window = [NSData dataWithBytes:self->_window + AB_HIST - AB_WIN
+    NSData *window = [NSData dataWithBytes:self->_modelWindow
                                     length:AB_WIN * sizeof( float )];
     float level = self->_level;
     int64_t windowFrame = self->_frames;
