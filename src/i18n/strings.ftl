@@ -254,7 +254,7 @@ Choose-a-time = Choose a time
 # Label for a text input field during sign up to choose a username
 CHOOSE-A-USERNAME = CHOOSE A USERNAME
 Choose-photos = Choose Photos
-# Label for button that chooses a folder on a USB drive for automatic photo import
+# Label for button that chooses a folder on a USB drive for photo import
 CHOOSE-USB-FOLDER = CHOOSE USB FOLDER
 # Accessibility hint for a button that chooses a taxon
 Chooses-taxon = Chooses taxon
@@ -698,7 +698,7 @@ FOLLOWING-X-PEOPLE =
        *[other] FOLLOWING { $count } PEOPLE
     }
 For-most-other-projects-observations-will-automatically-be-included = For most other projects, observations that meet project requirements will automatically be included in projects.
-# Label for button that stops automatic photo import from a USB drive folder
+# Label for button that stops photo import from a USB drive folder
 FORGET-USB-FOLDER = FORGET USB FOLDER
 # Forgot password link
 Forgot-Password = Forgot Password
@@ -800,6 +800,8 @@ IGNORE-LOCATION = IGNORE LOCATION
 # Button to stop recieving notifications about observation
 Ignore-notifications = Ignore notifications
 Ignoring-location = Ignoring location
+# Label for button that imports new photos from the chosen USB drive folder
+IMPORT-FROM-USB = IMPORT FROM USB
 # Shows the number of observations a user is about to import
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
@@ -1914,10 +1916,6 @@ Tunable-minSmallGridColumns = Small grid columns
 # Description of a tunable parameter in settings
 Tunable-minSmallGridColumns-description = Minimum number of columns in small photo grids.
 # Label for a tunable parameter in settings
-Tunable-notificationsRefreshMinutes = Notifications refresh (minutes)
-# Description of a tunable parameter in settings
-Tunable-notificationsRefreshMinutes-description = How often to check for new notifications.
-# Label for a tunable parameter in settings
 Tunable-offlineMaxMapPins = Offline map max pins
 # Description of a tunable parameter in settings
 Tunable-offlineMaxMapPins-description = Maximum number of pins shown on the offline Explore map.
@@ -2005,10 +2003,6 @@ Tunable-uploadTimeoutMinutes-description = How long an observation can keep tryi
 Tunable-usbMaxPhotosPerScan = USB photos per scan
 # Description of a tunable parameter in settings
 Tunable-usbMaxPhotosPerScan-description = Maximum number of new photos imported from USB in one scan.
-# Label for a tunable parameter in settings
-Tunable-usbScanIntervalSeconds = USB scan interval (seconds)
-# Description of a tunable parameter in settings
-Tunable-usbScanIntervalSeconds-description = How often the USB folder is checked for new photos.
 Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?
@@ -2051,17 +2045,19 @@ Uploading-x-of-y-observations =
         [one] Uploading { $currentUploadCount } observation
        *[other] Uploading { $currentUploadCount } of { $total } observations
     }
-# Describes automatic USB photo import before a folder has been chosen
-USB-import-description = Choose a folder on a USB drive or in Files. New photos in that folder will be imported automatically when you open the app.
+# Describes USB photo import before a folder has been chosen
+USB-import-choose-folder = Choose a folder on a USB drive or in Files, then tap Import From USB to save new photos in it to your photo library.
+# Describes USB photo import once a folder has been chosen
+USB-import-folder-chosen = Tap Import From USB to save new photos in "{ $folder }" to your photo library.
+# Describes USB photo import when a folder has been chosen but the drive
+# holding it is not currently connected
+USB-import-folder-chosen-drive-not-connected = Connect this drive, then tap Import From USB to save its new photos to your photo library.
 # Warns that the chosen folder is one folder created by a camera on a memory
 # card, which the camera stops adding to when the card is formatted or replaced
 USB-import-folder-is-a-camera-subfolder = "{ $folder }" is one folder created by your camera. When you format the card or use another one, your camera starts a new folder, and photos in it will not be imported. Choose the DCIM folder or the whole drive instead.
-# Describes automatic USB photo import once a folder has been chosen
-USB-import-watching-folder = New photos in "{ $folder }" will be imported automatically when you open the app.
-# Describes automatic USB photo import when a folder has been chosen but the
-# drive holding it is not currently connected
-USB-import-watching-folder-drive-not-connected = New photos will be imported automatically the next time this drive is connected.
-# Section header in settings for automatic photo import from a USB drive
+# Shown after tapping Import From USB when the chosen folder has no new photos
+USB-import-no-new-photos = No new photos in "{ $folder }".
+# Section header in settings for photo import from a USB drive
 USB-PHOTO-IMPORT = USB PHOTO IMPORT
 Use-iNaturalist-to-identify-any-living-thing = Use iNaturalist to identify any living thing
 # Text for a button prompting the user to grant access to location

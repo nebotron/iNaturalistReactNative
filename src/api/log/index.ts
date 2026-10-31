@@ -102,9 +102,10 @@ function redactExtra( extra: Record<string, unknown> ) {
 type firebaseLogTransportOptions = object;
 
 // Lines are sent in batches, one PATCH of push-ID children per batch, rather
-// than one POST per line.
-const FLUSH_MS = 10000;
-const MAX_BATCH = 20;
+// than one POST per line. Long and large, so the radio wakes rarely; anything
+// still queued when the app dies goes out with the next launch (see `pending`).
+const FLUSH_MS = 60_000;
+const MAX_BATCH = 50;
 let queue: Record<string, { level: string }> = {};
 let queued = 0;
 let flushTimer: ReturnType<typeof setTimeout> | undefined;
@@ -178,8 +179,11 @@ if ( !__DEV__ ) {
 }
 
 // iOS may suspend or kill the app once it's backgrounded.
+// Lines logged while backgrounded wait for a full batch, an error, or the next
+// foreground, rather than waking the radio on a timer.
 AppState.addEventListener( "change", state => {
   if ( state === "background" ) flushLogs( );
+  if ( state === "active" && queued > 0 ) flushTimer ??= setTimeout( flushLogs, FLUSH_MS );
 } );
 
 // Custom transport that queues each log line as a push-ID child of
@@ -240,7 +244,7 @@ const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> =
   // most need, and the one before a crash would otherwise die in the queue.
   if ( props.level.text === "error" || queued >= MAX_BATCH ) {
     flushLogs( );
-  } else {
+  } else if ( AppState.currentState !== "background" ) {
     flushTimer ??= setTimeout( flushLogs, FLUSH_MS );
   }
 };

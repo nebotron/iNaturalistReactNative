@@ -15,6 +15,9 @@ interface UsbImportProgressState {
   // Why the run ended the way it did, when the counts alone don't say — e.g. a
   // full device, where "0 of 157 failed" reads as a bug in the app.
   note: string;
+  // Starts an import; registered by useUsbAutoImport, which App keeps mounted.
+  // Resolves true when it found new photos.
+  startImport?: ( ) => Promise<boolean>;
   start: ( total: number ) => void;
   setCounts: ( saved: number, failed: number ) => void;
   setPhase: ( phase: UsbImportPhase ) => void;

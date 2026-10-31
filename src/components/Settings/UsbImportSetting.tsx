@@ -14,6 +14,7 @@ import {
   pickUsbFolder,
 } from "sharedHelpers/usbStorage";
 import { useTranslation } from "sharedHooks";
+import useUsbImportProgress from "stores/usbImportProgress";
 
 const UsbImportSetting = ( ) => {
   const { t } = useTranslation( );
@@ -22,6 +23,9 @@ const UsbImportSetting = ( ) => {
   // "choose a folder" to someone who already chose one invites them to choose
   // another. bookmarkPresent says whether the feature is set up at all.
   const [folder, setFolder] = useState<UsbFolderDiagnostics | null>( null );
+  const [noNewPhotos, setNoNewPhotos] = useState( false );
+  const startImport = useUsbImportProgress( state => state.startImport );
+  const importing = useUsbImportProgress( state => state.active );
 
   const refresh = useCallback( async ( ) => {
     setFolder( await getUsbFolderDiagnostics( ) );
@@ -41,6 +45,13 @@ const UsbImportSetting = ( ) => {
     await refresh( );
   }, [refresh] );
 
+  const importPhotos = useCallback( async ( ) => {
+    setNoNewPhotos( false );
+    const started = await startImport?.( );
+    await refresh( );
+    setNoNewPhotos( !started );
+  }, [startImport, refresh] );
+
   if ( !isUsbImportSupported( ) ) return null;
 
   const configured = !!folder?.bookmarkPresent;
@@ -51,11 +62,12 @@ const UsbImportSetting = ( ) => {
   const cameraSubfolder = isCameraSubfolder( folder );
 
   const description = ( ) => {
-    if ( !configured ) return t( "USB-import-description" );
+    if ( !configured ) return t( "USB-import-choose-folder" );
     if ( folder?.name ) {
-      return t( "USB-import-watching-folder", { folder: folder.name } );
+      if ( noNewPhotos ) return t( "USB-import-no-new-photos", { folder: folder.name } );
+      return t( "USB-import-folder-chosen", { folder: folder.name } );
     }
-    return t( "USB-import-watching-folder-drive-not-connected" );
+    return t( "USB-import-folder-chosen-drive-not-connected" );
   };
 
   return (
@@ -66,6 +78,15 @@ const UsbImportSetting = ( ) => {
         <Body3 className="mb-[15px] color-warningRed">
           {t( "USB-import-folder-is-a-camera-subfolder", { folder: folder?.name } )}
         </Body3>
+      )}
+      {configured && (
+        <Button
+          className="mb-[15px]"
+          level="primary"
+          text={t( "IMPORT-FROM-USB" )}
+          disabled={importing}
+          onPress={importPhotos}
+        />
       )}
       {configured && cameraSubfolder && (
         <Button

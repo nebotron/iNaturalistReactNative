@@ -1,4 +1,3 @@
-import { useAppState } from "@react-native-community/hooks";
 import { useQueryClient } from "@tanstack/react-query";
 import { fetchUnviewedObservationUpdatesCount } from "api/observations";
 import type { ApiObservationsUpdatesParams, ApiOpts } from "api/types";
@@ -7,7 +6,7 @@ import { RealmContext } from "providers/contexts";
 import {
   useCallback, useEffect, useRef,
 } from "react";
-import { getTunable } from "sharedHelpers/tunableParams";
+import { AppState } from "react-native";
 import useStore from "stores/useStore";
 
 import useAuthenticatedQuery from "./useAuthenticatedQuery";
@@ -19,10 +18,6 @@ import {
 
 const { useRealm } = RealmContext;
 
-// Poll infrequently in the background; callers can force an immediate
-// refetch (e.g. on focusing the Notifications tab) via the returned refetch.
-const REFETCH_INTERVAL = getTunable( "notificationsRefreshMinutes" ) * 60_000;
-
 const TAB_PARAMS: Record<"owner" | "following", ApiObservationsUpdatesParams> = {
   owner: { observations_by: "owner" },
   following: { observations_by: "following" },
@@ -33,16 +28,9 @@ const useUnviewedNotificationsCount = () => {
   const realm = useRealm( );
   const queryClient = useQueryClient( );
   const observationMarkedAsViewedAt = useStore( state => state.observationMarkedAsViewedAt );
-  // Tracks previous counts so we only prefetch when a background poll
-  // reveals *new* unviewed notifications, not on initial mount.
+  // Tracks previous counts so we only prefetch when a refetch reveals *new*
+  // unviewed notifications, not on initial mount.
   const prevCounts = useRef<{ owner?: number; following?: number }>( {} );
-  // Stop polling while backgrounded; the app can stay alive there (e.g. for
-  // location tracking). React Query's focusManager isn't used for this because
-  // toggling focus would also refetch on resume and pause failure retries.
-  const refetchInterval = useAppState( ) === "background"
-    ? false
-    : REFETCH_INTERVAL;
-
   const prefetchIfIncreased = useCallback( async ( tab: "owner" | "following", count?: number ) => {
     const prevCount = prevCounts.current[tab];
     prevCounts.current[tab] = count;
@@ -76,7 +64,7 @@ const useUnviewedNotificationsCount = () => {
       { observations_by: "owner" },
       optsWithAuth,
     ),
-    { enabled: !!currentUser, refetchInterval, requireLoggedIn: true },
+    { enabled: !!currentUser, requireLoggedIn: true },
   );
 
   const { data: followingUnviewedCount, refetch: refetchFollowing } = useAuthenticatedQuery(
@@ -85,7 +73,7 @@ const useUnviewedNotificationsCount = () => {
       { observations_by: "following" },
       optsWithAuth,
     ),
-    { enabled: !!currentUser, refetchInterval, requireLoggedIn: true },
+    { enabled: !!currentUser, requireLoggedIn: true },
   );
 
   const refetch = useCallback( ( ) => {
@@ -96,6 +84,15 @@ const useUnviewedNotificationsCount = () => {
   useEffect( ( ) => {
     if ( currentUser ) refetch( );
   }, [observationMarkedAsViewedAt, currentUser, refetch] );
+
+  // No polling: the counts refresh when the app comes back to the foreground,
+  // and callers refetch on focusing the Notifications tab.
+  useEffect( ( ) => {
+    const subscription = AppState.addEventListener( "change", state => {
+      if ( state === "active" && currentUser ) refetch( );
+    } );
+    return ( ) => subscription.remove( );
+  }, [currentUser, refetch] );
 
   useEffect( ( ) => {
     prefetchIfIncreased( "owner", ownerUnviewedCount as number | undefined );

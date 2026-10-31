@@ -1,6 +1,5 @@
 import { renderHook } from "@testing-library/react-native";
 import useUsbAutoImport from "components/hooks/useUsbAutoImport";
-import { AppState } from "react-native";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import useUsbImportProgress from "stores/usbImportProgress";
 
@@ -78,6 +77,13 @@ jest.mock( "sharedHelpers/logger", ( ) => ( {
   },
 } ) );
 
+// Mounts the hook as App does, then presses Import From USB.
+const startImport = ( ) => {
+  const { result } = renderHook( ( ) => useUsbAutoImport( ) );
+  result.current( );
+  return result;
+};
+
 const images = n => Array.from(
   { length: n },
   ( _unused, i ) => ( { relativePath: `IMG_${i}.CR3` } ),
@@ -108,7 +114,7 @@ describe( "useUsbAutoImport", ( ) => {
   it( "abandons the run after a run of Photos-library save timeouts", async ( ) => {
     mockSaveUsbImageToPhotos.mockImplementation( ( ) => new Promise( ( ) => {} ) );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     // Three 30s save timeouts, then the fourth file is never attempted.
     await jest.advanceTimersByTimeAsync( 4 * 30_000 );
 
@@ -129,7 +135,7 @@ describe( "useUsbAutoImport", ( ) => {
     enqueuePhotoLibraryWrite( ( ) => new Promise( resolve => { releaseChain = resolve; } ) );
     mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "asset" } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     // Three files that never get their turn, at 200s each.
     await jest.advanceTimersByTimeAsync( 3 * 200_000 );
 
@@ -163,7 +169,7 @@ describe( "useUsbAutoImport", ( ) => {
     } );
     mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     // Where it stopped and what the app was doing there: a native call that
@@ -188,7 +194,7 @@ describe( "useUsbAutoImport", ( ) => {
   it( "says nothing when the previous offload finished", async ( ) => {
     mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     expect( mockMarkUsbOffloadStarted ).toHaveBeenCalledWith( 40 );
@@ -198,15 +204,16 @@ describe( "useUsbAutoImport", ( ) => {
     );
   } );
 
-  it( "does not pick the same card up again on the next scan", async ( ) => {
+  it( "does not retry a wedged library on the next press", async ( ) => {
     mockSaveUsbImageToPhotos.mockImplementation( ( ) => new Promise( ( ) => {} ) );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    const result = startImport( );
     await jest.advanceTimersByTimeAsync( 4 * 30_000 );
     expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 3 );
 
-    // Several more 10s scan intervals: nothing recovers a wedged library on
-    // that timescale, so retrying just repeats the same three timeouts.
+    // Pressing Import again a minute later: nothing recovers a wedged library
+    // on that timescale, so retrying just repeats the same three timeouts.
+    result.current( );
     await jest.advanceTimersByTimeAsync( 60_000 );
     expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 3 );
   } );
@@ -218,7 +225,7 @@ describe( "useUsbAutoImport", ( ) => {
   it( "reports the outcome of a run where nothing saved", async ( ) => {
     mockSaveUsbImageToPhotos.mockRejectedValue( new Error( "unreadable file" ) );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     expect( mockDeleteUsbSourceImages ).not.toHaveBeenCalled( );
@@ -239,7 +246,7 @@ describe( "useUsbAutoImport", ( ) => {
     } );
     mockSaveUsbImageToPhotos.mockRejectedValue( new Error( "USB folder is not available" ) );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    const result = startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     expect( mockLogger.warnWithExtra ).toHaveBeenCalledWith(
@@ -247,13 +254,14 @@ describe( "useUsbAutoImport", ( ) => {
       expect.objectContaining( { abandoned: 37, retryDelayMs: 0 } ),
     );
 
-    // The card is back, so the very next scan reads it rather than skipping.
+    // The card is back, so the very next press reads it rather than skipping.
     mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
     mockGetUsbFolderDiagnostics.mockResolvedValue( {
       bookmarkPresent: true, resolved: true, stale: false, reachable: true,
     } );
     mockSaveUsbImageToPhotos.mockClear( );
-    await jest.advanceTimersByTimeAsync( 30_000 );
+    result.current( );
+    await jest.advanceTimersByTimeAsync( 0 );
     expect( mockSaveUsbImageToPhotos ).toHaveBeenCalled( );
   } );
 
@@ -268,7 +276,7 @@ describe( "useUsbAutoImport", ( ) => {
       return { localIdentifier: relativePath };
     } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
     expect( useUsbImportProgress.getState( ).phase ).toBe( "waitingForSpace" );
 
@@ -296,7 +304,7 @@ describe( "useUsbAutoImport", ( ) => {
       return { localIdentifier: relativePath };
     } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     // 20 of the 40 failed, alternating so no three are consecutive and the run
@@ -310,91 +318,13 @@ describe( "useUsbAutoImport", ( ) => {
     );
   } );
 
-  // iOS gives no attach notification, and a drive is normally plugged in with
-  // the app already open — a moment that fires neither a launch nor a
-  // foreground event, which is the whole reason this hook polls. But the saved
-  // folder does not resolve while the drive is unplugged, and a null folder
-  // name used to skip setting up the interval at all: the scan only ever ran if
-  // the drive happened to already be mounted at launch or at the last
-  // foreground, so the one case polling exists for was the one it never
-  // noticed.
-  it( "picks up a drive attached while the app is already open", async ( ) => {
-    mockGetUsbFolderName.mockResolvedValue( null );
-    mockListNewUsbImages.mockResolvedValue( {
-      available: false,
-      reason: "drive-disconnected",
-      images: [],
-    } );
-    mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "x" } );
-
-    renderHook( ( ) => useUsbAutoImport( ) );
-    await jest.advanceTimersByTimeAsync( 0 );
-    expect( mockSaveUsbImageToPhotos ).not.toHaveBeenCalled( );
-
-    // The drive goes in. Nothing else happens: no relaunch, no foregrounding,
-    // just the next scan.
-    mockListNewUsbImages.mockResolvedValue( {
-      available: true,
-      images: images( 2 ),
-      imageFileCount: 2,
-      alreadyImportedCount: 0,
-      knownCount: 0,
-      regularFileCount: 2,
-      extensions: { cr3: 2 },
-    } );
-    await jest.advanceTimersByTimeAsync( 10_000 );
-
-    expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 2 );
-  } );
-
-  // The other cause of a null folder name: nothing to watch, so don't wake the
-  // JS thread every ten seconds for the many users who never picked a folder.
-  it( "does not poll when no folder was ever picked", async ( ) => {
-    mockGetUsbFolderName.mockResolvedValue( null );
-    mockGetUsbFolderDiagnostics.mockResolvedValue( { bookmarkPresent: false } );
-
-    renderHook( ( ) => useUsbAutoImport( ) );
-    await jest.advanceTimersByTimeAsync( 60_000 );
-
-    expect( mockListNewUsbImages ).not.toHaveBeenCalled( );
-  } );
-
-  // startPolling awaits the folder lookup before installing its interval, so a
-  // foreground arriving while startup is still in that await used to leave two
-  // pollers running and only the second one's handle recorded. The first
-  // scanned every ten seconds for the rest of the process, unstoppable, and
-  // another was stranded on every foreground after that.
-  it( "leaves no poller behind when a foreground races startup", async ( ) => {
-    const appStateHandlers = [];
-    jest.spyOn( AppState, "addEventListener" ).mockImplementation( ( _event, handler ) => {
-      appStateHandlers.push( handler );
-      return { remove: ( ) => undefined };
-    } );
-    const folderResolvers = [];
-    mockGetUsbFolderName.mockImplementation( ( ) => new Promise( resolve => {
-      folderResolvers.push( resolve );
-    } ) );
-
-    const { unmount } = renderHook( ( ) => useUsbAutoImport( ) );
-    // Startup is parked in the folder lookup; foregrounding starts a second run.
-    await Promise.all( appStateHandlers.map( handler => handler( "active" ) ) );
-    folderResolvers.forEach( resolve => resolve( "101EOSR7" ) );
-    await jest.advanceTimersByTimeAsync( 0 );
-
-    unmount( );
-    mockListNewUsbImages.mockClear( );
-    await jest.advanceTimersByTimeAsync( 30_000 );
-
-    expect( mockListNewUsbImages ).not.toHaveBeenCalled( );
-  } );
-
   it( "carries on past an ordinary failure that is not a timeout", async ( ) => {
     mockSaveUsbImageToPhotos.mockImplementation( async relativePath => {
       if ( relativePath === "IMG_0.CR3" ) throw new Error( "unreadable file" );
       return { localIdentifier: relativePath };
     } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     expect( mockSaveUsbImageToPhotos ).toHaveBeenCalledTimes( 40 );
@@ -414,7 +344,7 @@ describe( "useUsbAutoImport", ( ) => {
   it( "does not count a suspension against a save's deadline", async ( ) => {
     mockSaveUsbImageToPhotos.mockImplementation( ( ) => new Promise( ( ) => {} ) );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 5_000 );
 
     // iOS freezes the app for ten minutes: the clock moves, no timer fires.
@@ -457,7 +387,7 @@ describe( "useUsbAutoImport", ( ) => {
       parentName: "DCIM",
     } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
@@ -474,7 +404,7 @@ describe( "useUsbAutoImport", ( ) => {
   it( "holds background time from the moment the offload starts", async ( ) => {
     mockSaveUsbImageToPhotos.mockResolvedValue( { localIdentifier: "asset" } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     // The run has begun, and the app never left the foreground — so the only
@@ -503,7 +433,7 @@ describe( "useUsbAutoImport", ( ) => {
     } );
     mockDeleteUsbSourceImages.mockResolvedValue( { deleted: 1, failed: 0 } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     expect( mockDeleteUsbSourceImages ).toHaveBeenCalledWith( ["IMG_LEFTOVER.CR3"] );
@@ -531,28 +461,18 @@ describe( "useUsbAutoImport", ( ) => {
       available: false,
     } );
 
-    renderHook( ( ) => useUsbAutoImport( ) );
+    startImport( );
     await jest.advanceTimersByTimeAsync( 0 );
 
     expect( mockPendingDeletes ).toEqual( ["IMG_LEFTOVER.CR3"] );
   } );
 
-  // Nothing to scan for means nothing to stay awake for, and the window iOS
-  // grants is the whole app's to share with uploads.
-  it( "takes no background time when no folder was ever picked", async ( ) => {
-    mockGetUsbFolderName.mockResolvedValue( null );
-    mockGetUsbFolderDiagnostics.mockResolvedValue( { bookmarkPresent: false } );
-
-    const appStateHandlers = [];
-    jest.spyOn( AppState, "addEventListener" ).mockImplementation( ( _event, handler ) => {
-      appStateHandlers.push( handler );
-      return { remove: ( ) => undefined };
-    } );
-
+  // Nothing scans on its own: an idle app must never wake for a drive.
+  it( "does not scan until Import is pressed", async ( ) => {
     renderHook( ( ) => useUsbAutoImport( ) );
-    await jest.advanceTimersByTimeAsync( 0 );
-    await Promise.all( appStateHandlers.map( handler => handler( "background" ) ) );
+    await jest.advanceTimersByTimeAsync( 60_000 );
 
-    expect( mockBeginBackgroundTask ).not.toHaveBeenCalled( );
+    expect( mockListNewUsbImages ).not.toHaveBeenCalled( );
+    expect( useUsbImportProgress.getState( ).startImport ).toBeDefined( );
   } );
 } );

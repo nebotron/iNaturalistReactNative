@@ -9,7 +9,6 @@ import {
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
-import { getTunable } from "sharedHelpers/tunableParams";
 import {
   addPendingUsbDeletes,
   availableMemoryMb,
@@ -18,7 +17,6 @@ import {
   deleteUsbSourceImages,
   getPendingUsbDeletes,
   getUsbFolderDiagnostics,
-  getUsbFolderName,
   isCameraSubfolder,
   isUsbImportSupported,
   listNewUsbImages,
@@ -34,12 +32,6 @@ import {
 import useUsbImportProgress from "stores/usbImportProgress";
 
 const logger = log.extend( "useUsbAutoImport" );
-
-// How often to re-check the watched folder while the app is foregrounded.
-const SCAN_INTERVAL_MS = getTunable( "usbScanIntervalSeconds" ) * 1000;
-
-// Whether this process has already said the user never picked a folder.
-let loggedNoFolderBookmark = false;
 
 // Whether this process has already reported that the watched folder is one the
 // camera will abandon (see isCameraSubfolder). Once per process: it's a fact
@@ -81,8 +73,8 @@ const waitForSpaceInterval = ( ) => new Promise( resolve => {
   setTimeout( resolve, WAIT_FOR_SPACE_INTERVAL_MS );
 } );
 
-// Abandoned files stay unimported, so the next scan — SCAN_INTERVAL_MS later —
-// would pick the same card up and grind through the same failures again.
+// Abandoned files stay unimported, so pressing Import again right away would
+// pick the same card up and grind through the same failures again.
 // Neither a wedged Photos library nor a full disk recovers on that timescale,
 // so wait before trying the card again.
 const SAVE_FAILING_RETRY_DELAY_MS = 10 * 60 * 1000;
@@ -141,30 +133,19 @@ const deletePendingFromDevice = async ( ) => {
   return { ...del, attempted: paths.length };
 };
 
-// Watches the user's chosen USB folder (see UsbImportSetting) on launch and
-// on a short interval. iOS offers no attach notification, and a drive is
-// commonly plugged in *after* the app is already open — a moment that fires
-// neither a launch nor a foreground event — so polling is the only way to
-// notice it. Polling also keeps running for a while after the app
-// backgrounds (via a background task, same mechanism as observation upload)
-// so a card inserted right as the app leaves the foreground still gets
-// caught, rather than requiring the user to return to the app first. When new
-// images are found they are offloaded: each is saved into the Photos
-// library, then — once the whole batch is safely saved — deleted from the
-// source device. A progress overlay (UsbImportProgress) reflects the run.
+// Imports from the user's chosen USB folder (see UsbImportSetting) when they
+// press Import there; nothing scans on its own, so an idle app never wakes for
+// it. New images are offloaded: each is saved into the Photos library, then —
+// once the whole batch is safely saved — deleted from the source device. A
+// progress overlay (UsbImportProgress) reflects the run. Mounted once in App
+// so a run outlives the Settings screen that started it; the run is published
+// to that screen through the progress store.
 const useUsbAutoImport = ( ) => {
   const [onboardingShown] = useOnboardingShown( );
   const offloading = useRef( false );
   const savesFailingUntil = useRef( 0 );
-  const backgroundTaskActive = useRef( false );
-  // Whether a folder is actually being watched. Without one there is nothing to
-  // scan for, and holding background time on every trip out of the app — for
-  // the many users who never picked a folder — takes a share of the window iOS
-  // grants the whole app away from the features that do have work to do.
-  const watchingFolder = useRef( false );
-  // The scan runs every SCAN_INTERVAL_MS while foregrounded, and each remote
-  // log line is a network POST, so logging every tick would flood the log.
-  // Only emit a diagnostic when its text changes from the last one.
+  // Each remote log line is a network POST, so repeated runs shouldn't repeat
+  // the same diagnostics. Only emit one when its text changes from the last.
   // Remembered per kind of message, not as one last-seen string: a scan emits
   // "polling…" and then "list ok…", so two unchanging diagnostics alternate and
   // a single slot never matches either of them. Nine of the 92 lines in the
@@ -178,14 +159,17 @@ const useUsbAutoImport = ( ) => {
     logger[level]( `[diag] ${msg}` );
   }, [] );
 
-  const offload = useCallback( async ( ) => {
-    if ( !isUsbImportSupported( ) ) { logDiag( "skip: not supported on this platform" ); return; }
-    // An offload already in flight is normal overlap on the poll, not an error.
-    if ( offloading.current ) return;
-    if ( !onboardingShown ) { logDiag( "skip: onboarding not shown yet" ); return; }
+  // Resolves true when it found new photos and started a run.
+  const offload = useCallback( async ( ): Promise<boolean> => {
+    if ( !isUsbImportSupported( ) ) {
+      logDiag( "skip: not supported on this platform" );
+      return false;
+    }
+    if ( offloading.current ) return false;
+    if ( !onboardingShown ) { logDiag( "skip: onboarding not shown yet" ); return false; }
     if ( Date.now( ) < savesFailingUntil.current ) {
       logDiag( "skip: waiting out a run of failed saves to the Photos library" );
-      return;
+      return false;
     }
     offloading.current = true;
     // Whether this scan found anything and put the banner on screen. A scan
@@ -263,7 +247,7 @@ const useUsbAutoImport = ( ) => {
             );
           }
         }
-        return;
+        return false;
       }
 
       // Get Photos permission before showing progress or touching any file, so
@@ -273,7 +257,7 @@ const useUsbAutoImport = ( ) => {
       logDiag( `photos permission: ${permission}` );
       if ( permission !== "authorized" && permission !== "limited" ) {
         logger.error( `USB offload: Photos permission ${permission}; not importing` );
-        return;
+        return false;
       }
 
       logger.info( `USB offload: saving ${images.length} photos to Photos library` );
@@ -281,15 +265,14 @@ const useUsbAutoImport = ( ) => {
       progress.start( images.length );
       markUsbOffloadStarted( images.length );
       // Ask for background execution time now, while the app is still
-      // foregrounded, rather than waiting for the AppState listener to ask for
-      // it as the app is going away. iOS grants the grace period to a task that
-      // is already registered when the app leaves the foreground; a
+      // foregrounded, rather than waiting until it is going away. iOS grants
+      // the grace period to a task that is already registered when the app
+      // leaves the foreground; a
       // beginBackgroundTask that only starts once "inactive" has fired is
       // racing the suspension it exists to survive, and loses often enough to
       // matter — the Sep 5 run saved 9 of 141 and stopped 6.7 seconds in with
       // appState "inactive", a fraction of the window it should have had.
-      // Reference-counted, so this nests harmlessly inside any hold the
-      // listener has already taken.
+      // Reference-counted, so this nests harmlessly inside other holds.
       heldBackgroundTask = await beginBackgroundUsbImportTask( );
 
       // Save each image to Photos, one at a time so memory stays flat and the
@@ -588,117 +571,15 @@ const useUsbAutoImport = ( ) => {
         setTimeout( ( ) => useUsbImportProgress.getState( ).finish( ), 4000 );
       }
     }
+    return started;
   }, [onboardingShown, logDiag] );
 
   useEffect( ( ) => {
-    // Report why the hook doesn't engage, in the cases (native module missing,
-    // onboarding not finished) that otherwise leave the feature completely
-    // silent. The supported-and-onboarded case needs no line: the polling
-    // diagnostics below already show the hook running.
-    const supported = isUsbImportSupported( );
-    if ( !supported || !onboardingShown ) {
-      logDiag( `not engaging: supported=${supported}, onboardingShown=${onboardingShown}` );
-      return ( ) => {};
-    }
+    useUsbImportProgress.setState( { startImport: offload } );
+    return ( ) => useUsbImportProgress.setState( { startImport: undefined } );
+  }, [offload] );
 
-    let interval: ReturnType<typeof setInterval> | undefined;
-    // startPolling awaits native calls before it installs its interval, so two
-    // overlapping runs — mount racing the first foreground, or two AppState
-    // "active" events in quick succession, which is what dismissing a system
-    // prompt produces — both saw `interval` still undefined in stopPolling and
-    // then both assigned it. The second assignment dropped the first timer's
-    // handle, leaving a scan running every SCAN_INTERVAL_MS that nothing could
-    // ever clear. They accumulate one per foreground for the life of the
-    // process, so the JS thread gets slower to answer a tap until the app is
-    // restarted. Stamping each run lets a superseded one bow out.
-    let pollGeneration = 0;
-    const stopPolling = ( ) => {
-      pollGeneration += 1;
-      if ( interval ) clearInterval( interval );
-      interval = undefined;
-      watchingFolder.current = false;
-    };
-    const startPolling = async ( ) => {
-      stopPolling( );
-      const generation = pollGeneration;
-      try {
-        // Nothing to watch until the user has chosen a folder; don't wake the JS
-        // thread on an interval for the many users who never set one up.
-        const folder = await getUsbFolderName( );
-        if ( generation !== pollGeneration ) return;
-        if ( !folder ) {
-          // A null name has two very different causes, and they call for
-          // opposite things: with no bookmark there is nothing to watch, but an
-          // unresolvable one is exactly what a saved folder looks like with the
-          // drive unplugged — which is the state the app is in every time the
-          // user is about to plug one in. Bailing out of polling here meant the
-          // interval only ever started if the drive happened to already be
-          // mounted at launch or at the last foreground, so the case this hook
-          // exists for — plugging a card reader into a phone with the app open,
-          // which fires no launch and no foreground event — was the one case it
-          // never noticed. Keep polling and let each scan re-resolve.
-          const d = await getUsbFolderDiagnostics( );
-          if ( !d.bookmarkPresent ) {
-            if ( !loggedNoFolderBookmark ) {
-              // Once per process. It explains a feature that is silently doing
-              // nothing, which is worth saying — but it fires on every
-              // foreground, and thirty identical copies say nothing the first
-              // one didn't.
-              loggedNoFolderBookmark = true;
-              logDiag( "not polling: no folder bookmark saved (folder never picked in Settings)" );
-            }
-            return;
-          }
-          // Nine of these in the Aug 4 log, one per foreground, none of them a
-          // bug. Keep it at debug (out of release builds) rather than reporting
-          // "no camera attached" to the shared log all day.
-          logDiag(
-            "polling for the drive: folder bookmark saved but did not resolve "
-              + `(resolved=${d.resolved}, reachable=${d.reachable}, stale=${d.stale})`,
-            "debug",
-          );
-        } else {
-          logDiag( `polling USB folder "${folder}" every ${SCAN_INTERVAL_MS}ms` );
-          offload( );
-        }
-        // Scan on the interval either way: offload re-resolves the folder each
-        // time and returns in one cheap native call while the drive is absent.
-        if ( generation !== pollGeneration ) return;
-        watchingFolder.current = true;
-        interval = setInterval( offload, SCAN_INTERVAL_MS );
-      } catch ( error ) {
-        // A rejected native call would otherwise be an unhandled promise
-        // rejection with no trace of why polling never started.
-        logger.error( "USB polling failed to start", error );
-      }
-    };
-
-    startPolling( );
-    const subscription = AppState.addEventListener( "change", async nextAppState => {
-      if ( nextAppState === "active" ) {
-        if ( backgroundTaskActive.current ) {
-          await endBackgroundUsbImportTask( );
-          backgroundTaskActive.current = false;
-        }
-        startPolling( );
-        return;
-      }
-      // Don't stop polling on background/inactive: hold a background task so
-      // iOS keeps the JS thread alive for a while, and let the interval keep
-      // checking the folder during that window.
-      if ( watchingFolder.current && !backgroundTaskActive.current ) {
-        backgroundTaskActive.current = await beginBackgroundUsbImportTask( );
-      }
-    } );
-    return ( ) => {
-      stopPolling( );
-      subscription.remove( );
-      if ( backgroundTaskActive.current ) {
-        endBackgroundUsbImportTask( );
-        backgroundTaskActive.current = false;
-      }
-    };
-  }, [offload, onboardingShown, logDiag] );
+  return offload;
 };
 
 export default useUsbAutoImport;

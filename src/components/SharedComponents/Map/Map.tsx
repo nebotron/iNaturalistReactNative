@@ -1,4 +1,4 @@
-import { useNavigation } from "@react-navigation/native";
+import { useIsFocused, useNavigation } from "@react-navigation/native";
 import classnames from "classnames";
 import { Body1 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
@@ -162,6 +162,9 @@ const Map = ( {
   const mapViewRef = useRef<MapView>( undefined );
   const mapType: MAP_TYPES = useStore( state => state.layout.mapType );
   const [showsUserLocation, setShowsUserLocation] = useState( showsUserLocationProp );
+  // A map on a screen that's covered or on another tab stays mounted; stop its
+  // location updates until it's visible again.
+  const isFocused = useIsFocused( );
 
   let defaultInitialRegion = null;
 
@@ -568,7 +571,7 @@ const Map = ( {
         showsCompass={showsCompass}
         showsMyLocationButton={false}
         showsScale={!showScaleBar}
-        showsUserLocation={showsUserLocation && hasPermissions}
+        showsUserLocation={showsUserLocation && hasPermissions && isFocused}
         style={style}
         testID={testID || "Map.MapView"}
         zoomEnabled={zoomEnabled}

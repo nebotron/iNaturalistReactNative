@@ -206,10 +206,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-offlineMaxMapPins" ),
     t( "Tunable-offlineMaxMapPins-description" ),
   ],
-  usbScanIntervalSeconds: [
-    t( "Tunable-usbScanIntervalSeconds" ),
-    t( "Tunable-usbScanIntervalSeconds-description" ),
-  ],
   usbMaxPhotosPerScan: [
     t( "Tunable-usbMaxPhotosPerScan" ),
     t( "Tunable-usbMaxPhotosPerScan-description" ),
@@ -277,10 +273,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
   minSmallGridColumns: [
     t( "Tunable-minSmallGridColumns" ),
     t( "Tunable-minSmallGridColumns-description" ),
-  ],
-  notificationsRefreshMinutes: [
-    t( "Tunable-notificationsRefreshMinutes" ),
-    t( "Tunable-notificationsRefreshMinutes-description" ),
   ],
   advancedModeOnboardingObservations: [
     t( "Tunable-advancedModeOnboardingObservations" ),

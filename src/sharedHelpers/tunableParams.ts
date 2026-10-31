@@ -85,7 +85,6 @@ export const TUNABLE_PARAMS = {
   offlineMaxTileZoom: def( "storage", 18, 1, 21 ),
   offlineMaxMapPins: def( "storage", 1000, 10, 10000 ),
 
-  usbScanIntervalSeconds: def( "usb", 10, 1, 600 ),
   usbMaxPhotosPerScan: def( "usb", 500, 1, 5000 ),
 
   ebirdMaxDistKm: def( "explore", 50, 1, 50 ),
@@ -106,7 +105,6 @@ export const TUNABLE_PARAMS = {
 
   toastDurationSeconds: def( "interface", 2, 0.5, 30, false ),
   minSmallGridColumns: def( "interface", 3, 1, 10 ),
-  notificationsRefreshMinutes: def( "interface", 5, 1, 120 ),
   advancedModeOnboardingObservations: def( "interface", 100, 0, 100000 ),
   autoAdvancedModeObservations: def( "interface", 100, 0, 100000 ),
 } satisfies Record<string, TunableDefinition>;
