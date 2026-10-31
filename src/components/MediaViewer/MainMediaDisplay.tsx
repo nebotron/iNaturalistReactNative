@@ -357,7 +357,7 @@ const MainMediaDisplay = ( {
         />
       </GestureHandlerRootView>
       {/* Zoom + brightness sliders below the photo, matching the crop editor */}
-      <View className="bg-[#1c1c1c] py-1">
+      <View className="py-1">
         <ZoomBrightnessSliders
           disabled={!selectedPhoto}
           zoomScale={zoomScale}
