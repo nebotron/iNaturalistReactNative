@@ -1,18 +1,22 @@
 /* eslint-disable i18next/no-literal-string */
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
-import { fetchTaxaDefaultPhotos } from "api/taxa";
+import { fetchTaxaBasics } from "api/taxa";
 import {
   Body1, Body3, Button, IconicTaxonIcon, List2,
 } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
+import { RealmContext } from "providers/contexts";
 import React, { useCallback, useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
 import { Linking, Modal, requireNativeComponent } from "react-native";
+import { UpdateMode } from "realm";
+import Taxon from "realmModels/Taxon";
+import type { RealmTaxon } from "realmModels/types";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
-import createMmkvRecordStore from "sharedHelpers/mmkvRecordStore";
+import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { getTunable } from "sharedHelpers/tunableParams";
 import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
@@ -23,6 +27,8 @@ import type { Heard } from "./audioIdSession";
 import useAudioIdSession, {
   isHeard, noteActivity, startDimming, stopDimming, useScreenDimmed,
 } from "./audioIdSession";
+
+const { useRealm } = RealmContext;
 
 // Animal classes the model covers, for asking which of them the user has seen.
 const SEEN_TAXON_IDS = [
@@ -78,43 +84,37 @@ const useSeenTaxonIds = (
   }, [data] );
 };
 
-// Photo URLs by taxon ID, fetched in batches: a long heard list mounting a
-// useTaxon per row fired dozens of full taxon fetches at once and got 429s.
-// Kept in MMKV so reopening Audio ID shows them at once and only newly heard
-// species are fetched; "" marks a taxon with no default photo.
+// Photo URLs by taxon ID from Realm. Taxa not there yet are fetched in
+// batches and saved: a long heard list mounting a useTaxon per row fired
+// dozens of full taxon fetches at once and got 429s.
 const PHOTO_BATCH_SIZE = 30;
-const photoUrlStore = createMmkvRecordStore<string>( "audio-id-taxon-photos" );
-let photoUrls: Map<number, string> | null = null;
-const loadPhotoUrls = ( ) => {
-  photoUrls ??= new Map( Object.entries( photoUrlStore.loadAll( ) )
-    .map( ( [id, url] ) => [Number( id ), url] ) );
-  return photoUrls;
-};
 const useTaxonPhotoUrls = ( taxonIds: number[] ): Map<number, string> => {
-  const stored = loadPhotoUrls( );
-  const missing = taxonIds.filter( id => !stored.has( id ) ).sort( ( a, b ) => a - b );
+  const realm = useRealm( );
+  const local = new Map( taxonIds.map( id => [
+    id, realm.objectForPrimaryKey<RealmTaxon>( "Taxon", id ),
+  ] ) );
+  const missing = taxonIds.filter( id => !local.get( id )?.name ).sort( ( a, b ) => a - b );
   useAuthenticatedQuery(
-    ["audioIdTaxonPhotos", missing.join( "," )],
+    ["audioIdTaxa", missing.join( "," )],
     async optsWithAuth => {
       for ( let i = 0; i < missing.length; i += PHOTO_BATCH_SIZE ) {
-        const batch = missing.slice( i, i + PHOTO_BATCH_SIZE );
         // eslint-disable-next-line no-await-in-loop
-        const results = await fetchTaxaDefaultPhotos( batch, optsWithAuth );
-        if ( !Array.isArray( results ) ) return false;
-        type Result = { id: number; default_photo?: { url?: string } };
-        const urls = new Map<number, string>( results.map(
-          ( t: Result ) => [t.id, t.default_photo?.url || ""],
-        ) );
-        batch.forEach( id => {
-          stored.set( id, urls.get( id ) || "" );
-          photoUrlStore.put( id, stored.get( id ) || "" );
-        } );
+        const results = await fetchTaxaBasics(
+          missing.slice( i, i + PHOTO_BATCH_SIZE ),
+          optsWithAuth,
+        );
+        safeRealmWrite( realm, ( ) => ( results || [] ).forEach( ( t: Record<string, unknown> ) => {
+          realm.create( "Taxon", Taxon.forUpdate( Taxon.mapApiToRealm( t ) ), UpdateMode.Modified );
+        } ), "saving Audio ID taxa" );
       }
       return true;
     },
     { enabled: missing.length > 0, staleTime: Infinity },
   );
-  return stored;
+  return new Map( taxonIds.flatMap( id => {
+    const url = local.get( id )?.defaultPhoto?.url;
+    return url ? [[id, url]] : [];
+  } ) );
 };
 
 const TaxonThumb = ( { url, onPress }: { url?: string; onPress: ( ) => void } ) => (
@@ -217,7 +217,7 @@ const AudioId = ( ) => {
       onPress={( ) => navigation.navigate( "AudioIdHistory", { taxonId: sp.taxonId } )}
     >
       <TaxonThumb
-        url={photoUrls.get( sp.taxonId ) || undefined}
+        url={photoUrls.get( sp.taxonId )}
         onPress={( ) => openTaxon( sp.taxonId )}
       />
       <View

@@ -127,18 +127,27 @@ async function fetchTaxaObservationsCounts(
 
 // Default photos for a batch of taxa, for lists that would otherwise fetch
 // each taxon in full at once and get rate limited
-async function fetchTaxaDefaultPhotos(
+async function fetchTaxaBasics(
   ids: number[],
   opts: ApiOpts = {},
 ) {
   try {
     const response = await inatjs.taxa.fetch( ids, {
-      fields: { id: true, default_photo: { url: true } },
+      fields: {
+        id: true,
+        ancestor_ids: true,
+        default_photo: { id: true, url: true },
+        iconic_taxon_name: true,
+        name: true,
+        preferred_common_name: true,
+        rank: true,
+        rank_level: true,
+      },
     }, opts );
     return response?.results || [];
   } catch ( e ) {
     return handleError( e as ErrorWithResponse, {
-      context: { functionName: "fetchTaxaDefaultPhotos", ids, opts },
+      context: { functionName: "fetchTaxaBasics", ids, opts },
     } );
   }
 }
@@ -155,7 +164,7 @@ async function searchTaxa( params: ApiUntypedParams = {}, opts: ApiOpts = {} ) {
 }
 
 export {
-  fetchTaxaDefaultPhotos,
+  fetchTaxaBasics,
   fetchTaxaObservationsCounts,
   fetchTaxon,
   searchTaxa,
