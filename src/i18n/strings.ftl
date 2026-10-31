@@ -730,8 +730,8 @@ Help-create-Research-Grade-data-used-in-science-and-conservation = Help create R
 Help-protect-species = Help protect species
 Help-us-translate-the-app = Help us translate the app!
 Hide = Hide
-# Label for a toggle that hides photos already saved as observations
-Hide-already-saved-photos = Hide Saved
+# Accessibility label for the photo picker button that hides photos already saved or deleted
+Hide-saved-photos = Hide saved photos
 Highest = Highest
 HIGHEST-RANK = HIGHEST RANK
 # Label used for a stop added to a route from a wildlife hotspot
@@ -968,7 +968,7 @@ Map-Area = Map Area
 # Month of March
 March = March
 # Button that marks the selected photos as already saved, so they get hidden by
-# the "Hide Saved" toggle in the photo picker
+# the hide saved photos button in the photo picker
 Mark-photos-as-already-saved = Mark as Saved
 # Radio button option for navigation flows in Settings
 Match-Screen = Match Screen
@@ -1555,6 +1555,8 @@ SHOP-INATURALIST-MERCH = SHOP INATURALIST MERCH
 Shorten-time-limit = Shorten time limit
 # Button to expand the list of eBird sightings in Explore results
 Show-all-eBird-sightings = Show all eBird sightings
+# Accessibility label for the photo picker button that shows photos already saved or deleted
+Show-all-photos = Show all photos
 # Button to collapse the list of eBird sightings in Explore results
 Show-fewer-eBird-sightings = Show fewer eBird sightings
 Show-observation-options = Show observation options.

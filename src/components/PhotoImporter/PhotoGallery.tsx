@@ -23,9 +23,7 @@ import React, {
 import {
   ActivityIndicator,
   Platform,
-  Text,
 } from "react-native";
-import { Switch } from "react-native-paper";
 import type Realm from "realm";
 import type { RealmObservation } from "realmModels/types";
 import { formatDateStringFromTimestamp } from "sharedHelpers/dateAndTime";
@@ -113,7 +111,7 @@ const PhotoGallery = ( {
   const [selectedUris, setSelectedUris] = useState<Set<string>>( new Set( ) );
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
   const [hideImported, setHideImported] = useState( true );
-  // Photos queued for deletion from this screen; hidden unless Hide Saved is off.
+  // Photos queued for deletion from this screen; hidden unless showing all photos.
   const [deletedUris, setDeletedUris] = useState<Set<string>>( new Set( ) );
   const [importingCount, setImportingCount] = useState( 0 );
   const [importedCount, setImportedCount] = useState( 0 );
@@ -123,7 +121,7 @@ const PhotoGallery = ( {
   // Photos the user removed from a Group Photos import previously (see
   // removedGroupPhotoUris.ts) — the device deletion may have silently failed
   // (iOS 26's PHPhotoLibrary confirmation bug), so they count as saved and are
-  // hidden along with them unless the user unchecks Hide Saved.
+  // hidden along with them unless the user taps Show all photos.
   const removedGroupPhotoUrisRef = useRef<Set<string>>( new Set( getRemovedGroupPhotoUris( ) ) );
 
   // Kept up to date while the screen is open rather than read once on mount:
@@ -331,7 +329,7 @@ const PhotoGallery = ( {
   }, [photos, selectedUris, onDone] );
 
   // Record the selected photos as already saved without importing them, so the
-  // "Hide Saved" toggle hides them from now on. Useful for photos the user has
+  // hide saved photos button hides them from now on. Useful for photos the user has
   // already uploaded some other way, or never wants offered for import again.
   const markSelectedAsSaved = useCallback( ( ) => {
     const deviceUris = photos
@@ -488,18 +486,20 @@ const PhotoGallery = ( {
           color={colors.darkGray}
         />
         {hasHiddenPhotos && (
-          <View className="flex-row items-center gap-2 px-2">
-            { /* eslint-disable-next-line react-native/no-inline-styles */ }
-            <Text style={{ fontSize: 12, color: colors.darkGray }}>
-              {t( "Hide-already-saved-photos" )}
-            </Text>
-            <Switch
-              value={hideImported}
-              onValueChange={setHideImported}
-              color={colors.inatGreen}
-              testID="PhotoGallery.hideImported"
-            />
-          </View>
+          <INatIconButton
+            icon={hideImported
+              ? "eye-off"
+              : "eye"}
+            onPress={( ) => setHideImported( prev => !prev )}
+            accessibilityLabel={hideImported
+              ? t( "Show-all-photos" )
+              : t( "Hide-saved-photos" )}
+            size={22}
+            color={hideImported
+              ? colors.darkGray
+              : colors.inatGreen}
+            testID="PhotoGallery.hideImported"
+          />
         )}
         <View className="flex-1" />
         <INatIconButton

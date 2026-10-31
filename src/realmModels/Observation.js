@@ -465,7 +465,7 @@ class Observation extends Realm.Object {
     }, "saving local observation for upload in Observation" );
     const savedObservation = realm.objectForPrimaryKey( "Observation", obs.uuid );
     // Saving is what makes the device photos "saved" as far as the photo
-    // gallery's Hide Saved toggle is concerned, so index them now rather than
+    // gallery's hide saved photos button is concerned, so index them now rather than
     // waiting for upload. The index outlives the observation, so the photos
     // stay hidden even if it's later deleted.
     if ( savedObservation ) {
