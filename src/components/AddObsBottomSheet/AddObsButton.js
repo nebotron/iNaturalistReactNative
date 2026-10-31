@@ -129,6 +129,26 @@ const AddObsButton = ( ): React.Node => {
     // An import the user stepped away from is worth returning to rather than
     // silently discarding, so pick it up where they left off
     const importInProgress = useStore.getState( ).groupedPhotos?.length > 0;
+
+    // An import still open in the My Observations tab -- the gallery, Group
+    // Photos, or whatever it has pushed on top -- is resumed by switching back
+    // to that tab with its stack untouched, so every screen, scroll position
+    // and selection is exactly as the user left it
+    if ( requestedScreen === "PhotoLibrary" ) {
+      const obsTabRoutes = navigationRef.getRootState( )?.routes
+        .find( route => route.name === "TabNavigator" )?.state?.routes
+        ?.find( route => route.name === "ObservationsTab" )?.state?.routes || [];
+      const importerIndex = obsTabRoutes.findIndex(
+        route => route.name === "PhotoLibrary" || route.name === "GroupPhotos",
+      );
+      const onImporter = importerIndex === obsTabRoutes.length - 1;
+      if ( importerIndex >= 0 && ( importInProgress || onImporter ) ) {
+        navigation.navigate( "TabNavigator", { screen: "ObservationsTab" } );
+        closeBottomSheet( );
+        return;
+      }
+    }
+
     const screen = requestedScreen === "PhotoLibrary" && importInProgress
       ? "GroupPhotos"
       : requestedScreen;
