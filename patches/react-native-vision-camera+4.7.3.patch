@@ -1,3 +1,48 @@
+diff --git a/node_modules/react-native-vision-camera/ios/Core/CameraConfiguration.swift b/node_modules/react-native-vision-camera/ios/Core/CameraConfiguration.swift
+index a4b94dd..165e9d1 100644
+--- a/node_modules/react-native-vision-camera/ios/Core/CameraConfiguration.swift
++++ b/node_modules/react-native-vision-camera/ios/Core/CameraConfiguration.swift
+@@ -39,6 +39,7 @@ final class CameraConfiguration {
+   var minFps: Int32?
+   var maxFps: Int32?
+   var enableLowLightBoost = false
++  var lockFocusToMinimum = false
+   var torch: Torch = .off
+ 
+   // Zoom
+@@ -68,6 +69,7 @@ final class CameraConfiguration {
+       minFps = other.minFps
+       maxFps = other.maxFps
+       enableLowLightBoost = other.enableLowLightBoost
++      lockFocusToMinimum = other.lockFocusToMinimum
+       torch = other.torch
+       zoom = other.zoom
+       exposure = other.exposure
+@@ -132,6 +134,7 @@ final class CameraConfiguration {
+       formatChanged = inputChanged || left?.format != right.format
+       // side-props (depends on format)
+       sidePropsChanged = formatChanged || left?.minFps != right.minFps || left?.maxFps != right.maxFps || left?.enableLowLightBoost != right.enableLowLightBoost
++        || left?.lockFocusToMinimum != right.lockFocusToMinimum
+       // torch (depends on isActive)
+       let wasInactiveAndNeedsToEnableTorchAgain = left?.isActive == false && right.isActive == true && right.torch == .on
+       torchChanged = inputChanged || wasInactiveAndNeedsToEnableTorchAgain || left?.torch != right.torch
+diff --git a/node_modules/react-native-vision-camera/ios/Core/CameraSession+Configuration.swift b/node_modules/react-native-vision-camera/ios/Core/CameraSession+Configuration.swift
+index ecd2a94..5fab195 100644
+--- a/node_modules/react-native-vision-camera/ios/Core/CameraSession+Configuration.swift
++++ b/node_modules/react-native-vision-camera/ios/Core/CameraSession+Configuration.swift
+@@ -274,8 +274,10 @@ extension CameraSession {
+       device.automaticallyEnablesLowLightBoostWhenAvailable = configuration.enableLowLightBoost
+     }
+ 
+-    // Configure auto-focus
+-    if device.isFocusModeSupported(.continuousAutoFocus) {
++    // Configure auto-focus, or lock the lens at its closest focus distance (macro)
++    if configuration.lockFocusToMinimum && device.isLockingFocusWithCustomLensPositionSupported {
++      device.setFocusModeLocked(lensPosition: 0, completionHandler: nil)
++    } else if device.isFocusModeSupported(.continuousAutoFocus) {
+       if device.isFocusPointOfInterestSupported {
+         device.focusPointOfInterest = CGPoint(x: 0.5, y: 0.5)
+       }
 diff --git a/node_modules/react-native-vision-camera/ios/Core/MetadataProvider.swift b/node_modules/react-native-vision-camera/ios/Core/MetadataProvider.swift
 index 4855d31..ece8024 100644
 --- a/node_modules/react-native-vision-camera/ios/Core/MetadataProvider.swift
@@ -43,3 +88,65 @@ index 4855d31..ece8024 100644
    private func createLocationMetadataItem(location: CLLocation) -> AVMetadataItem {
      let metadataItem = AVMutableMetadataItem()
      metadataItem.keySpace = .quickTimeMetadata
+diff --git a/node_modules/react-native-vision-camera/ios/React/CameraView.swift b/node_modules/react-native-vision-camera/ios/React/CameraView.swift
+index c773975..cefb39e 100644
+--- a/node_modules/react-native-vision-camera/ios/React/CameraView.swift
++++ b/node_modules/react-native-vision-camera/ios/React/CameraView.swift
+@@ -52,6 +52,7 @@ public final class CameraView: UIView, CameraSessionDelegate, PreviewViewDelegat
+   @objc var photoHdr = false
+   @objc var photoQualityBalance: NSString?
+   @objc var lowLightBoost = false
++  @objc var lockFocusToMinimum = false
+   @objc var outputOrientation: NSString?
+   @objc var videoBitRateOverride: NSNumber?
+   @objc var videoBitRateMultiplier: NSNumber?
+@@ -262,6 +263,7 @@ public final class CameraView: UIView, CameraSessionDelegate, PreviewViewDelegat
+       config.minFps = minFps?.int32Value
+       config.maxFps = maxFps?.int32Value
+       config.enableLowLightBoost = lowLightBoost
++      config.lockFocusToMinimum = lockFocusToMinimum
+       config.torch = try Torch(jsValue: torch)
+ 
+       // Zoom
+diff --git a/node_modules/react-native-vision-camera/ios/React/CameraViewManager.m b/node_modules/react-native-vision-camera/ios/React/CameraViewManager.m
+index 527c9bc..bc67af4 100644
+--- a/node_modules/react-native-vision-camera/ios/React/CameraViewManager.m
++++ b/node_modules/react-native-vision-camera/ios/React/CameraViewManager.m
+@@ -45,6 +45,7 @@ RCT_EXPORT_VIEW_PROPERTY(videoHdr, BOOL);
+ RCT_EXPORT_VIEW_PROPERTY(photoHdr, BOOL);
+ RCT_EXPORT_VIEW_PROPERTY(photoQualityBalance, NSString);
+ RCT_EXPORT_VIEW_PROPERTY(lowLightBoost, BOOL);
++RCT_EXPORT_VIEW_PROPERTY(lockFocusToMinimum, BOOL);
+ RCT_EXPORT_VIEW_PROPERTY(videoStabilizationMode, NSString);
+ RCT_EXPORT_VIEW_PROPERTY(pixelFormat, NSString);
+ RCT_EXPORT_VIEW_PROPERTY(videoBitRateOverride, NSNumber);
+diff --git a/node_modules/react-native-vision-camera/lib/typescript/types/CameraProps.d.ts b/node_modules/react-native-vision-camera/lib/typescript/types/CameraProps.d.ts
+index 03473ea..1acdc35 100644
+--- a/node_modules/react-native-vision-camera/lib/typescript/types/CameraProps.d.ts
++++ b/node_modules/react-native-vision-camera/lib/typescript/types/CameraProps.d.ts
+@@ -249,6 +249,10 @@ export interface CameraProps extends ViewProps {
+      * Make sure the given {@linkcode device} supports low-light-boost (see {@linkcode CameraDevice.supportsLowLightBoost device.supportsLowLightBoost}).
+      */
+     lowLightBoost?: boolean;
++    /**
++     * (iOS) Disables auto-focus and locks the lens at its closest focus distance.
++     */
++    lockFocusToMinimum?: boolean;
+     /**
+      * Specifies the video stabilization mode to use.
+      *
+diff --git a/node_modules/react-native-vision-camera/src/types/CameraProps.ts b/node_modules/react-native-vision-camera/src/types/CameraProps.ts
+index 18bfc9b..6bc1084 100644
+--- a/node_modules/react-native-vision-camera/src/types/CameraProps.ts
++++ b/node_modules/react-native-vision-camera/src/types/CameraProps.ts
+@@ -267,6 +267,10 @@ export interface CameraProps extends ViewProps {
+    * Make sure the given {@linkcode device} supports low-light-boost (see {@linkcode CameraDevice.supportsLowLightBoost device.supportsLowLightBoost}).
+    */
+   lowLightBoost?: boolean
++  /**
++   * (iOS) Disables auto-focus and locks the lens at its closest focus distance.
++   */
++  lockFocusToMinimum?: boolean
+   /**
+    * Specifies the video stabilization mode to use.
+    *

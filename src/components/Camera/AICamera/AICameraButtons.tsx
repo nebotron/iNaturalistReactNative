@@ -2,6 +2,7 @@ import CameraFlip from "components/Camera/Buttons/CameraFlip";
 import Close from "components/Camera/Buttons/Close";
 import Flash from "components/Camera/Buttons/Flash";
 import Location from "components/Camera/Buttons/Location";
+import Macro from "components/Camera/Buttons/Macro";
 import PhotoLibraryIcon from "components/Camera/Buttons/PhotoLibraryIcon";
 import TakePhoto from "components/Camera/Buttons/TakePhoto";
 import Zoom from "components/Camera/Buttons/Zoom";
@@ -32,6 +33,8 @@ interface Props {
   zoomTextValue: string;
   useLocation: boolean;
   toggleLocation: ( ) => void;
+  macroMode: boolean;
+  toggleMacro: ( ) => void;
   completeSentinelFile: ( ) => Promise<void>;
 }
 
@@ -51,6 +54,8 @@ const AICameraButtons = ( {
   zoomTextValue,
   useLocation,
   toggleLocation,
+  macroMode,
+  toggleMacro,
   completeSentinelFile,
 }: Props ) => {
   const { bottom } = useSafeAreaInsets( );
@@ -112,6 +117,13 @@ const AICameraButtons = ( {
             />
           </View>
         )}
+        <View>
+          <Macro
+            toggleMacro={toggleMacro}
+            macroMode={macroMode}
+            rotatableAnimatedStyle={rotatableAnimatedStyle}
+          />
+        </View>
         {showZoomButton && (
           <View>
             <Zoom

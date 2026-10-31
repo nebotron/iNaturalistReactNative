@@ -2,6 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import classnames from "classnames";
 import FadeInOutView from "components/Camera/FadeInOutView";
 import type { Camera } from "components/Camera/helpers/visionCameraWrapper";
+import { useCameraDevices } from "components/Camera/helpers/visionCameraWrapper";
 import useRotation from "components/Camera/hooks/useRotation";
 import useZoom from "components/Camera/hooks/useZoom";
 import { Body1, INatIcon, TaxonResult } from "components/SharedComponents";
@@ -77,9 +78,14 @@ interface Props {
   requestLocationPermissions: () => void;
 }
 
+// The single physical camera on this side that can focus closest
+const getMacroDevice = ( devices: CameraDevice[], position: CameraDevice["position"] ) => devices
+  .filter( d => d.position === position && d.physicalDevices.length === 1 )
+  .sort( ( a, b ) => a.minFocusDistance - b.minFocusDistance )[0];
+
 const AICamera = ( {
   camera,
-  device,
+  device: defaultDevice,
   flipCamera,
   isLandscapeMode,
   toggleFlash,
@@ -93,6 +99,13 @@ const AICamera = ( {
   const navigation = useNavigation<NoBottomTabStackScreenProps<"Camera">["navigation"]>( );
   const sentinelFileName = useStore( state => state.sentinelFileName );
   const setAICameraSuggestion = useStore( state => state.setAICameraSuggestion );
+
+  const [macroMode, setMacroMode] = useState( false );
+  const devices = useCameraDevices( );
+  const macroDevice = macroMode
+    ? getMacroDevice( devices, defaultDevice?.position )
+    : undefined;
+  const device = macroDevice || defaultDevice;
 
   const hasFlash = device?.hasFlash;
   const { isDebug } = useDebugMode( );
@@ -148,6 +161,11 @@ const AICamera = ( {
   const showPrediction = ( result && result?.taxon?.rank_level <= 40 ) || false;
 
   const insets = useSafeAreaInsets( );
+
+  const toggleMacro = ( ) => {
+    resetZoom( );
+    setMacroMode( prev => !prev );
+  };
 
   const onFlipCamera = () => {
     resetZoom( );
@@ -244,6 +262,7 @@ const AICamera = ( {
             resetCameraOnFocus={resetCameraOnFocus}
             userLocation={userLocation}
             useLocation={useLocation}
+            macroMode={macroMode}
           />
         </View>
       )}
@@ -331,6 +350,8 @@ const AICamera = ( {
         zoomTextValue={zoomTextValue}
         useLocation={useLocation}
         toggleLocation={toggleLocation}
+        macroMode={macroMode}
+        toggleMacro={toggleMacro}
         completeSentinelFile={() => completeSentinelFile( sentinelFileName )}
       />
     </>

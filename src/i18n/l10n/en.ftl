@@ -505,6 +505,8 @@ Device-storage-full-description = iNaturalist may not be able to save your photo
 Disable-flash = Disable flash
 # Button that disables the camera to use location for suggestions
 Disable-location = Disable location
+# Button that turns off close-up focus in the camera
+Disable-macro-mode = Disable macro mode
 # Disagreement notice with an identificaiton, <0/> will get replaced by a
 # taxon name
 Disagreement = *@{ $username } disagrees this is <0/>
@@ -610,6 +612,8 @@ Enable-location = Enable location
 Enable-location-access-to-track-your-location-in-the-background =
     Enable location access, including background access, to track your
     location and compare it to your photos.
+# Button that locks the camera focus at its closest distance for close-up photos
+Enable-macro-mode = Enable macro mode
 # Button that subscribes the user to notifications for an observation
 Enable-notifications = Enable notifications
 # Placeholder text for the end location input in the Wildlife Hotspots tool
@@ -966,6 +970,7 @@ Looks-like-you-havent-observed-this-yet-time-to-keep-exploring =
 Lowest = Lowest
 LOWEST-RANK = LOWEST RANK
 # Display name for the iconic taxa category for mammalia
+Macro-mode = Macro mode
 Mammals = Mammals
 MAP = MAP
 Map-Area = Map Area

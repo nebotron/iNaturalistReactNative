@@ -54,6 +54,7 @@ interface Props {
   resetCameraOnFocus: () => void;
   userLocation?: UserLocation | null;
   useLocation: boolean;
+  macroMode?: boolean;
 }
 
 const FPS = getTunable( "aiCameraFps" );
@@ -78,6 +79,7 @@ const FrameProcessorCamera = ( {
   resetCameraOnFocus,
   userLocation,
   useLocation,
+  macroMode,
 }: Props ) => {
   const sentinelFileName = useStore( state => state.sentinelFileName );
   const { isDefaultMode } = useLayoutPrefs( );
@@ -211,6 +213,7 @@ const FrameProcessorCamera = ( {
       cameraRef={cameraRef}
       cameraScreen="ai"
       device={device}
+      macroMode={macroMode}
       frameProcessor={frameProcessor}
       onCameraError={async error => {
         onCameraError( error );
