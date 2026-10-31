@@ -12,6 +12,7 @@ import type { ViewProps } from "react-native";
 import { Linking, Modal, requireNativeComponent } from "react-native";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
+import createMmkvRecordStore from "sharedHelpers/mmkvRecordStore";
 import { getTunable } from "sharedHelpers/tunableParams";
 import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
@@ -78,30 +79,42 @@ const useSeenTaxonIds = (
 };
 
 // Photo URLs by taxon ID, fetched in batches: a long heard list mounting a
-// useTaxon per row fired dozens of full taxon fetches at once and got 429s
+// useTaxon per row fired dozens of full taxon fetches at once and got 429s.
+// Kept in MMKV so reopening Audio ID shows them at once and only newly heard
+// species are fetched; "" marks a taxon with no default photo.
 const PHOTO_BATCH_SIZE = 30;
-const useTaxonPhotoUrls = ( taxonIds: number[] ): Map<number, string> | undefined => {
-  const ids = [...taxonIds].sort( ( a, b ) => a - b );
-  const { data } = useAuthenticatedQuery(
-    ["audioIdTaxonPhotos", ids.join( "," )],
+const photoUrlStore = createMmkvRecordStore<string>( "audio-id-taxon-photos" );
+let photoUrls: Map<number, string> | null = null;
+const loadPhotoUrls = ( ) => {
+  photoUrls ??= new Map( Object.entries( photoUrlStore.loadAll( ) )
+    .map( ( [id, url] ) => [Number( id ), url] ) );
+  return photoUrls;
+};
+const useTaxonPhotoUrls = ( taxonIds: number[] ): Map<number, string> => {
+  const stored = loadPhotoUrls( );
+  const missing = taxonIds.filter( id => !stored.has( id ) ).sort( ( a, b ) => a - b );
+  useAuthenticatedQuery(
+    ["audioIdTaxonPhotos", missing.join( "," )],
     async optsWithAuth => {
-      const urls = new Map<number, string>( );
-      for ( let i = 0; i < ids.length; i += PHOTO_BATCH_SIZE ) {
+      for ( let i = 0; i < missing.length; i += PHOTO_BATCH_SIZE ) {
+        const batch = missing.slice( i, i + PHOTO_BATCH_SIZE );
         // eslint-disable-next-line no-await-in-loop
-        const results = await fetchTaxaDefaultPhotos(
-          ids.slice( i, i + PHOTO_BATCH_SIZE ),
-          optsWithAuth,
-        );
-        ( results || [] ).forEach( ( t: { id: number; default_photo?: { url?: string } } ) => {
-          if ( t.default_photo?.url ) urls.set( t.id, t.default_photo.url );
+        const results = await fetchTaxaDefaultPhotos( batch, optsWithAuth );
+        if ( !Array.isArray( results ) ) return false;
+        type Result = { id: number; default_photo?: { url?: string } };
+        const urls = new Map<number, string>( results.map(
+          ( t: Result ) => [t.id, t.default_photo?.url || ""],
+        ) );
+        batch.forEach( id => {
+          stored.set( id, urls.get( id ) || "" );
+          photoUrlStore.put( id, stored.get( id ) || "" );
         } );
       }
-      return urls;
+      return true;
     },
-    // Keep showing the photos already loaded while a newly heard species refetches
-    { enabled: ids.length > 0, staleTime: Infinity, placeholderData: previous => previous },
+    { enabled: missing.length > 0, staleTime: Infinity },
   );
-  return data;
+  return stored;
 };
 
 const TaxonThumb = ( { url, onPress }: { url?: string; onPress: ( ) => void } ) => (
@@ -204,7 +217,7 @@ const AudioId = ( ) => {
       onPress={( ) => navigation.navigate( "AudioIdHistory", { taxonId: sp.taxonId } )}
     >
       <TaxonThumb
-        url={photoUrls?.get( sp.taxonId )}
+        url={photoUrls.get( sp.taxonId ) || undefined}
         onPress={( ) => openTaxon( sp.taxonId )}
       />
       <View
