@@ -130,10 +130,12 @@ async function fetchTaxaObservationsCounts(
 async function fetchTaxaDefaultPhotos(
   ids: number[],
   opts: ApiOpts = {},
+  params: ApiUntypedParams = {},
 ) {
   try {
     const response = await inatjs.taxa.fetch( ids, {
-      fields: { id: true, default_photo: { url: true } },
+      fields: { id: true, preferred_common_name: true, default_photo: { url: true } },
+      ...params,
     }, opts );
     return response?.results || [];
   } catch ( e ) {

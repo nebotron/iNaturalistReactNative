@@ -3,10 +3,11 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
 import { fetchTaxaDefaultPhotos } from "api/taxa";
 import {
-  Body1, Body3, Button, IconicTaxonIcon, List2,
+  Body3, Button, DisplayTaxonName, IconicTaxonIcon,
 } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
+import i18n from "i18next";
 import React, { useCallback, useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
 import { Linking, Modal, requireNativeComponent } from "react-native";
@@ -77,23 +78,35 @@ const useSeenTaxonIds = (
   }, [data] );
 };
 
-// Photo URLs by taxon ID, fetched in batches: a long heard list mounting a
-// useTaxon per row fired dozens of full taxon fetches at once and got 429s
+interface TaxonExtras { url?: string; commonName?: string }
+
+// Photo URLs and localized common names by taxon ID, fetched in batches: a long
+// heard list mounting a useTaxon per row fired dozens of full taxon fetches at once and got 429s
 const PHOTO_BATCH_SIZE = 30;
-const useTaxonPhotoUrls = ( taxonIds: number[] ): Map<number, string> | undefined => {
+const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> | undefined => {
   const ids = [...taxonIds].sort( ( a, b ) => a - b );
+  const currentUser = useCurrentUser( );
+  // Signed-in users get names per their account settings; otherwise use the app locale
+  const locale = currentUser
+    ? undefined
+    : i18n?.language ?? "en";
   const { data } = useAuthenticatedQuery(
-    ["audioIdTaxonPhotos", ids.join( "," )],
+    ["audioIdTaxonPhotos", ids.join( "," ), locale],
     async optsWithAuth => {
-      const urls = new Map<number, string>( );
+      const urls = new Map<number, TaxonExtras>( );
       for ( let i = 0; i < ids.length; i += PHOTO_BATCH_SIZE ) {
         // eslint-disable-next-line no-await-in-loop
         const results = await fetchTaxaDefaultPhotos(
           ids.slice( i, i + PHOTO_BATCH_SIZE ),
           optsWithAuth,
+          locale
+            ? { locale }
+            : {},
         );
-        ( results || [] ).forEach( ( t: { id: number; default_photo?: { url?: string } } ) => {
-          if ( t.default_photo?.url ) urls.set( t.id, t.default_photo.url );
+        ( results || [] ).forEach( ( t: {
+          id: number; preferred_common_name?: string; default_photo?: { url?: string };
+        } ) => {
+          urls.set( t.id, { url: t.default_photo?.url, commonName: t.preferred_common_name } );
         } );
       }
       return urls;
@@ -180,7 +193,7 @@ const AudioId = ( ) => {
     } );
     return [...bySpecies.values( )].sort( ( a, b ) => b.lastHeard - a.lastHeard );
   }, [clips] );
-  const photoUrls = useTaxonPhotoUrls( useMemo(
+  const taxonExtras = useTaxonExtras( useMemo(
     ( ) => heardList.map( h => h.sp.taxonId ),
     [heardList],
   ) );
@@ -204,7 +217,7 @@ const AudioId = ( ) => {
       onPress={( ) => navigation.navigate( "AudioIdHistory", { taxonId: sp.taxonId } )}
     >
       <TaxonThumb
-        url={photoUrls?.get( sp.taxonId )}
+        url={taxonExtras?.get( sp.taxonId )?.url}
         onPress={( ) => openTaxon( sp.taxonId )}
       />
       <View
@@ -212,12 +225,25 @@ const AudioId = ( ) => {
       >
         <View className="flex-1">
           <View className="flex-row items-center">
-            <Body1>{sp.commonName}</Body1>
+            <View className="shrink">
+              <DisplayTaxonName
+                taxon={{
+                  id: sp.taxonId,
+                  name: sp.name,
+                  rank_level: 10,
+                  // The model's English name until the localized one loads
+                  preferred_common_name: taxonExtras?.has( sp.taxonId )
+                    ? taxonExtras.get( sp.taxonId )?.commonName
+                    : sp.commonName,
+                }}
+                prefersCommonNames={currentUser?.prefers_common_names ?? true}
+                scientificNameFirst={currentUser?.prefers_scientific_name_first}
+              />
+            </View>
             {hasUnlabeled.has( sp.taxonId ) && (
               <View className="h-[8px] w-[8px] ml-2 rounded-full bg-inatGreen" />
             )}
           </View>
-          <List2 className="italic">{sp.name}</List2>
           {detail && <Body3>{detail}</Body3>}
           {currentUser && seen && !seen.has( sp.taxonId ) && (
             <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
