@@ -265,12 +265,13 @@ const GroupPhotos = ( {
     selectedObservations,
   };
 
-  // Leave room for the floating toolbar
+  // Leave exactly enough room for the floating toolbar, so the last photo
+  // ends at the toolbar's top edge instead of above a blank gap
   const listStyle = useMemo( ( ) => ( {
     ...flashListStyle,
     paddingBottom: groupedPhotos.length > 0
-      ? TOOLBAR_HEIGHT + 20
-      : 20,
+      ? TOOLBAR_HEIGHT
+      : 0,
   } ), [flashListStyle, groupedPhotos.length] );
 
   return (
