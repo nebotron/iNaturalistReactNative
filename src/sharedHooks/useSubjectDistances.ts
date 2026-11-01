@@ -26,11 +26,11 @@ export const sortBySubjectDistance = <T extends { uuid: string }>(
   items: T[],
   distances: Map<string, number>,
 ): T[] => items
-  .map( item => ( { item, distance: distances.get( item.uuid ) ?? Infinity } ) )
-  .sort( ( a, b ) => ( a.distance === b.distance
-    ? 0
-    : a.distance - b.distance ) )
-  .map( ( { item } ) => item );
+    .map( item => ( { item, distance: distances.get( item.uuid ) ?? Infinity } ) )
+    .sort( ( a, b ) => ( a.distance === b.distance
+      ? 0
+      : a.distance - b.distance ) )
+    .map( ( { item } ) => item );
 
 // Index of uuid → distance to subject for the user's local observations.
 // Camera info is cached in Realm, and backfilled from library originals when
