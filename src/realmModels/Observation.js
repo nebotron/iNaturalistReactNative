@@ -625,10 +625,16 @@ class Observation extends Realm.Object {
   // Type of photos is
   // Passed in from PhotoSharing:
   // { image: { uri: string }[]
-  static createObservationWithPhotos = async photos => {
+  // timings, when passed, accumulates the time spent reading metadata and
+  // resizing photos
+  static createObservationWithPhotos = async ( photos, timings = null ) => {
+    let startedAt = Date.now( );
     const newLocalObs = await Observation.createObservationFromGalleryPhotos( photos );
+    if ( timings ) timings.exifMs += Date.now( ) - startedAt;
+    startedAt = Date.now( );
     newLocalObs.observationPhotos = await ObservationPhoto
       .createObsPhotosWithPosition( photos, { position: 0 } );
+    if ( timings ) timings.resizeMs += Date.now( ) - startedAt;
     return newLocalObs;
   };
 

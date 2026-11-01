@@ -15,7 +15,7 @@ import React, {
 } from "react";
 import type { NativeScrollEvent, NativeSyntheticEvent, ViewToken } from "react-native";
 import { Alert } from "react-native";
-import type { RealmObservationPojo } from "realmModels/types";
+import type { RealmObservation, RealmObservationPojo } from "realmModels/types";
 import {
   beginLocationWriteBatch,
   endLocationWriteBatch,
@@ -30,6 +30,7 @@ import {
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { log } from "sharedHelpers/logger";
 import { awaitPendingGroupPhotoCrops } from "sharedHelpers/pendingGroupPhotoCrops";
+import type { PrefetchTimings } from "sharedHelpers/prefetchObservationSuggestions";
 import {
   prefetchSuggestionsForObservations,
 } from "sharedHelpers/prefetchObservationSuggestions";
@@ -407,11 +408,22 @@ const GroupPhotosContainer = ( ) => {
     // around files that don't exist yet.
     if ( pendingCount > 0 ) { return; }
     setIsCreatingObservations( true );
+    const startedAt = Date.now( );
+    let stepStartedAt = startedAt;
+    // Milliseconds spent in each step, logged once when the import finishes
+    // and again when its suggestions have all been fetched.
+    const stepMs: Record<string, number> = {};
+    const endStep = ( step: string ) => {
+      const now = Date.now( );
+      stepMs[step] = ( stepMs[step] || 0 ) + now - stepStartedAt;
+      stepStartedAt = now;
+    };
     // Crops confirmed in the bulk cropper finish writing in the background so
     // the cropper can advance to the next photo instantly. Let them land in
     // the store first, or we'd import the uncropped photos. Normally a no-op:
     // they finish while the user is still cropping.
     await awaitPendingGroupPhotoCrops( );
+    endStep( "awaitCropsMs" );
 
     // Capture everything we need before navigating away, since exiting the
     // flow resets the store slice (groupedPhotos, pending deletion uris, etc.)
@@ -429,6 +441,7 @@ const GroupPhotosContainer = ( ) => {
       photos: movedGroups[index].photos,
     } ) );
     setGroupedPhotos( groupsToImport );
+    endStep( "moveSharedMs" );
 
     // Index these device photos as saved now, not when their observations
     // finish saving below. The user is sent to My Observations on the next
@@ -462,10 +475,11 @@ const GroupPhotosContainer = ( ) => {
     // photo had been resized and saved — by which time the user was already
     // looking at Suggestions.
     const BATCH_SIZE = 10;
-    // Prefetches are chained rather than fired per batch so they still run one
-    // observation at a time, instead of every batch's CV work piling up
-    // concurrently.
-    let prefetchChain: Promise<void> = Promise.resolve( );
+    // Prefetches go through shared queues (on-device one at a time, online
+    // three at a time), so every batch's CV work can be handed off as it lands.
+    const prefetches: Promise<PrefetchTimings>[] = [];
+    let firstSavedMs: number | null = null;
+    const createTimings = { exifMs: 0, resizeMs: 0 };
     // Photos whose metadata could not be read are left out rather than imported
     // without it, and reported once at the end: a location silently missing
     // from an observation is invisible until long after the photo is gone.
@@ -486,8 +500,9 @@ const GroupPhotosContainer = ( ) => {
         const batch = groupsToImport.slice( i, i + BATCH_SIZE );
         // eslint-disable-next-line no-await-in-loop
         const batchResults = await Promise.allSettled(
-          batch.map( createObservationFromGroupedMedia ),
+          batch.map( group => createObservationFromGroupedMedia( group, createTimings ) ),
         );
+        endStep( "createMs" );
         const observationsToSave: RealmObservationPojo[] = [];
         for ( const [resultIndex, result] of batchResults.entries( ) ) {
           if ( result.status === "rejected" ) {
@@ -528,6 +543,7 @@ const GroupPhotosContainer = ( ) => {
             logger.error( "Failed to report raw import metadata", error );
             return null;
           } );
+          endStep( "rawMetadataMs" );
         }
 
         // Save each observation and auto-fill tracked location for any that
@@ -542,6 +558,15 @@ const GroupPhotosContainer = ( ) => {
           observationsToSave,
           realm,
         );
+        endStep( "saveAndLocateMs" );
+        firstSavedMs ??= Date.now( ) - startedAt;
+
+        // A bulk ID flow opened while this import is still running picks up
+        // the new observations as they're saved, rather than only the ones
+        // that existed when it opened.
+        useStore.getState( ).appendBulkIdObservations( observationsToSave
+          .map( obs => realm.objectForPrimaryKey<RealmObservation>( "Observation", obs.uuid ) )
+          .filter( ( obs ): obs is RealmObservation => !!obs?.isValid( ) && !obs.taxon ) );
 
         // Mirror any auto-filled locations back onto the in-memory
         // observations so the CV prefetch (and its cache key) reflects the
@@ -563,20 +588,48 @@ const GroupPhotosContainer = ( ) => {
         // observation's photo (offline + online), caching both so the
         // Suggestions screen loads instantly and no photo is ever scored
         // twice. Fire-and-forget so import isn't blocked on CV.
-        prefetchChain = prefetchChain
-          .then( ( ) => prefetchSuggestionsForObservations(
-            queryClient,
-            locatedObservations,
-            realm,
-          ) )
-          .catch( error => logger.error(
-            "Failed to prefetch group photo suggestions",
-            error,
-          ) );
+        prefetches.push( prefetchSuggestionsForObservations(
+          queryClient,
+          locatedObservations,
+          realm,
+        ) );
       }
     } finally {
       await endLocationWriteBatch( );
+      endStep( "locationWritesMs" );
     }
+
+    const importedCount = groupsToImport.length - failedCount;
+    logger.infoWithExtra( "group_import_timing", {
+      groups: groupsToImport.length,
+      photos: groupsToImport.reduce( ( n, group ) => n + ( group.photos?.length || 0 ), 0 ),
+      failed: failedCount,
+      totalMs: Date.now( ) - startedAt,
+      firstSavedMs,
+      ...stepMs,
+      // Summed per photo across concurrent work, unlike the wall times above
+      sumExifMs: createTimings.exifMs,
+      sumResizeMs: createTimings.resizeMs,
+    } );
+    Promise.all( prefetches ).then( results => {
+      const sum = results.reduce( ( total, r ) => ( {
+        count: total.count + r.count,
+        offlineMs: total.offlineMs + r.offlineMs,
+        onlineMs: total.onlineMs + r.onlineMs,
+      } ), { count: 0, offlineMs: 0, onlineMs: 0 } );
+      logger.infoWithExtra( "group_import_cv_timing", {
+        observations: importedCount,
+        scored: sum.count,
+        // From the tap to the last suggestion cached
+        totalMs: Date.now( ) - startedAt,
+        avgOfflineMs: sum.count
+          ? Math.round( sum.offlineMs / sum.count )
+          : 0,
+        avgOnlineMs: sum.count
+          ? Math.round( sum.onlineMs / sum.count )
+          : 0,
+      } );
+    } ).catch( error => logger.error( "Failed to prefetch group photo suggestions", error ) );
 
     if ( failedCount > 0 ) {
       forgetUploadedDevicePhotoUris( realm, failedDevicePhotoUris );

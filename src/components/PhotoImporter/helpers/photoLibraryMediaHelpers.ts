@@ -44,18 +44,26 @@ export const buildGroupedSoundItem = (
   timestamp?: number,
 ): GroupedMediaItem & { soundUri: string } => ( { soundUri, timestamp } );
 
+// Time spent reading metadata and resizing photos, summed over every group
+// passed the same object (so concurrent groups add up past wall time).
+export interface CreateObservationTimings {
+  exifMs: number;
+  resizeMs: number;
+}
+
 export const createObservationFromGroupedMedia = async (
   group: GroupedMediaItem,
+  timings?: CreateObservationTimings,
 ): Promise<RealmObservationPojo> => {
   if ( group.photos && group.photos.length > 0 && group.soundUri ) {
-    const obs = await Observation.createObservationWithPhotos( group.photos );
+    const obs = await Observation.createObservationWithPhotos( group.photos, timings );
     const sound = await ObservationSound.new( group.soundUri );
     return Observation.appendObsSounds( [sound], obs );
   }
   if ( group.soundUri ) {
     return Observation.createObsWithSoundPath( group.soundUri );
   }
-  return Observation.createObservationWithPhotos( group.photos || [] );
+  return Observation.createObservationWithPhotos( group.photos || [], timings );
 };
 
 export const appendPhotosToObservation = async (

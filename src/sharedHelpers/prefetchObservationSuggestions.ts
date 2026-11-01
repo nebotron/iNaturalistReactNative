@@ -176,20 +176,69 @@ const prefetchObservationSuggestions = async (
   ] );
 };
 
-// Prefetch suggestions for several observations one at a time, so importing a
-// large batch of grouped photos doesn't fire dozens of concurrent CV requests
-// and on-device inferences at once. Fire-and-forget: individual failures are
-// logged by the caller, not thrown.
+// Runs tasks with at most `limit` in flight, starting queued ones in order as
+// slots free. Shared by every bulk prefetch, so imports that arrive while an
+// earlier one is still scoring join the same queue instead of adding their own
+// requests on top.
+const createLimiter = ( limit: number ) => {
+  let active = 0;
+  const queue: ( ( ) => void )[] = [];
+  return async <T>( task: ( ) => Promise<T> ): Promise<T> => {
+    if ( active >= limit ) {
+      await new Promise<void>( resolve => { queue.push( resolve ); } );
+    }
+    active += 1;
+    try {
+      return await task( );
+    } finally {
+      active -= 1;
+      queue.shift( )?.( );
+    }
+  };
+};
+
+// On-device inference is CPU bound, so it runs one at a time; the online
+// requests are network bound and run three at a time.
+const offlineLimiter = createLimiter( 1 );
+const onlineLimiter = createLimiter( 3 );
+
+export interface PrefetchTimings {
+  count: number;
+  offlineMs: number;
+  onlineMs: number;
+}
+
+const timed = async ( task: ( ) => Promise<unknown> ): Promise<number> => {
+  const startedAt = Date.now( );
+  await task( ).catch( ( ) => undefined );
+  return Date.now( ) - startedAt;
+};
+
+// Prefetch suggestions for several observations through the shared queues
+// above, so importing a large batch of grouped photos doesn't fire dozens of
+// concurrent CV requests and on-device inferences at once. Never rejects;
+// resolves with the time spent in each model, summed over the observations.
 export const prefetchSuggestionsForObservations = async (
   queryClient: QueryClient,
   observations: RealmObservationPojo[],
   realm: Realm,
-): Promise<void> => {
-  for ( const observation of observations ) {
-    // eslint-disable-next-line no-await-in-loop
-    await prefetchObservationSuggestions( queryClient, observation, realm )
-      .catch( ( ) => undefined );
-  }
+): Promise<PrefetchTimings> => {
+  const timings = await Promise.all( observations.map( async observation => {
+    const [offlineMs, onlineMs] = await Promise.all( [
+      offlineLimiter( ( ) => timed(
+        ( ) => prefetchOfflineSuggestions( observation, realm ),
+      ) ),
+      onlineLimiter( ( ) => timed(
+        ( ) => prefetchOnlineSuggestions( queryClient, observation, realm ),
+      ) ),
+    ] );
+    return { offlineMs, onlineMs };
+  } ) );
+  return timings.reduce( ( sum, t ) => ( {
+    count: sum.count + 1,
+    offlineMs: sum.offlineMs + t.offlineMs,
+    onlineMs: sum.onlineMs + t.onlineMs,
+  } ), { count: 0, offlineMs: 0, onlineMs: 0 } );
 };
 
 export default prefetchObservationSuggestions;

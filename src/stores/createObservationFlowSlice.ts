@@ -174,6 +174,7 @@ interface ObservationFlowActions {
   setPhotoImporterState: ( options: PhotoImporterOptions ) => void;
   setSavedOrUploadedMultiObsFlow: ( ) => void;
   setBulkUploadMode: ( enabled: boolean ) => void;
+  appendBulkIdObservations: ( newObservations: RealmObservationPojo[] ) => void;
   updateObservations: ( updatedObservations: RealmObservationPojo[] ) => void;
   updateObservationKeys: ( keysAndValues: Partial<RealmObservationPojo> ) => void;
   getCurrentObservation: ( ) => RealmObservationPojo | null;
@@ -674,6 +675,17 @@ const createObservationFlowSlice: StateCreator<ObservationFlowSlice> = ( set, ge
   } ),
   setBulkUploadMode: ( enabled: boolean ) => set( {
     bulkUploadMode: enabled,
+  } ),
+  // Observations saved by an import still running in the background join a
+  // bulk ID flow that's already open, at the end of its queue.
+  appendBulkIdObservations: newObservations => set( state => {
+    if ( !state.bulkUploadMode ) return {};
+    const uuids = new Set( state.observations.map( obs => obs.uuid ) );
+    const additions = newObservations
+      .map( observationToJSON )
+      .filter( ( obs ): obs is RealmObservationPojo => !!obs && !uuids.has( obs.uuid ) );
+    if ( additions.length === 0 ) return {};
+    return { observations: [...state.observations, ...additions] };
   } ),
   updateObservations: (
     updatedObservations: RealmObservationPojo[],
