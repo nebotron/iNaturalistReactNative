@@ -31,6 +31,13 @@ export interface ExploreGridOverlays {
   dateTime: boolean;
   faveButton: boolean;
   faveCount: boolean;
+  camera?: boolean;
+  lens?: boolean;
+  focalLength?: boolean;
+  aperture?: boolean;
+  shutterSpeed?: boolean;
+  iso?: boolean;
+  focusDistance?: boolean;
 }
 
 export interface AICameraSettings {
@@ -279,6 +286,13 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       dateTime: false,
       faveButton: false,
       faveCount: false,
+      camera: false,
+      lens: false,
+      focalLength: false,
+      aperture: false,
+      shutterSpeed: false,
+      iso: false,
+      focusDistance: false,
     },
     setExploreGridOverlay: ( key, value ) => set( state => ( {
       layout: {

@@ -15,6 +15,7 @@ import colors from "styles/tailwindColors";
 
 import ObsImagePreview from "./ObsImagePreview";
 import ObsUploadStatus from "./ObsUploadStatus";
+import useObsCameraInfo from "./useObsCameraInfo";
 import {
   observationHasSound,
   photoCountFromObservation,
@@ -44,6 +45,12 @@ const WhiteBody4 = ( { className, children } ) => (
   </Body4>
 );
 
+// Camera settings overlays, grouped into lines
+const CAMERA_INFO_LINES = [
+  ["camera", "lens"],
+  ["focalLength", "aperture", "shutterSpeed", "iso", "focusDistance"],
+];
+
 const ObsGridItem = ( {
   currentUser,
   explore,
@@ -65,6 +72,16 @@ const ObsGridItem = ( {
     : null;
   const showCommon = !overlays || overlays.commonName;
   const showScientific = !overlays || overlays.scientificName;
+  const showCameraInfo = !!overlays && CAMERA_INFO_LINES.flat( ).some( key => overlays[key] );
+  const cameraInfo = useObsCameraInfo( observation?.uuid, showCameraInfo );
+  const cameraInfoLines = cameraInfo
+    ? CAMERA_INFO_LINES.map( keys => keys
+      .filter( key => overlays?.[key] && cameraInfo[key] )
+      .map( key => ( key === "iso"
+        ? `ISO ${cameraInfo.iso}`
+        : cameraInfo[key] ) )
+      .join( " · " ) ).filter( Boolean )
+    : [];
   const showFaveButton = ( !explore || overlays?.faveButton ) && !!currentUser;
   const faves = observation?.votes?.filter( v => v?.vote_scope === null ) || [];
   const initiallyFaved = faves.some( v => v.user_id === currentUser?.id );
@@ -194,6 +211,9 @@ const ObsGridItem = ( {
             <WhiteBody4 className="ml-1">{faveCount}</WhiteBody4>
           </View>
         )}
+        {cameraInfoLines.map( line => (
+          <WhiteBody4 key={line} className="mt-1">{line}</WhiteBody4>
+        ) )}
       </View>
     </ObsImagePreview>
   );

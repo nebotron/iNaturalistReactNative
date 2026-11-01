@@ -23,6 +23,14 @@ const GridOverlaysSheet = ( { onPressClose, showGridOverlays }: Props ) => {
     { key: "dateTime", label: t( "Date-and-time" ) },
     { key: "faveButton", label: t( "Fave-star" ) },
     { key: "faveCount", label: t( "Number-of-favorites" ) },
+    // Only your own observations carry camera settings
+    { key: "camera", label: t( "Camera" ) },
+    { key: "lens", label: t( "Lens" ) },
+    { key: "focalLength", label: t( "Focal-length" ) },
+    { key: "aperture", label: t( "Aperture" ) },
+    { key: "shutterSpeed", label: t( "Shutter-speed" ) },
+    { key: "iso", label: t( "ISO" ) },
+    { key: "focusDistance", label: t( "Focus-distance" ) },
   ];
 
   return (
@@ -34,7 +42,7 @@ const GridOverlaysSheet = ( { onPressClose, showGridOverlays }: Props ) => {
           <Checkbox
             key={key}
             accessibilityLabel={label}
-            isChecked={overlays[key]}
+            isChecked={!!overlays[key]}
             onPress={( ) => setOverlay( key, !overlays[key] )}
             text={label}
           />
