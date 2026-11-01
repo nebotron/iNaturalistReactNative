@@ -130,13 +130,22 @@ const deletePendingFromDevice = async ( ) => {
 // Settings, never the middle of an observation.
 const IDLE_ROUTES = new Set( ["ObsList", "RootExplore", "Menu", "Notifications", "Settings"] );
 
+// Whether staged photos may be waiting to be offered. An import that finishes
+// while the user is mid-observation can't open Group Photos then, so it is
+// retried the next time navigation settles on an idle route (and at launch).
+let stagedOfferPending = true;
+let openingStaged = false;
+
 // Opens staged photos not yet offered (this run's, or ones an interrupted run
 // left behind) in Group Photos, straight into the bulk cropper.
 const openStagedInGroupPhotos = async ( ) => {
+  if ( !stagedOfferPending || openingStaged ) return;
   if ( useStore.getState( ).groupedPhotos.length > 0 ) return;
   const route = getCurrentRoute( )?.name;
   if ( !route || !IDLE_ROUTES.has( route ) ) return;
-  const groups = await takeUnofferedStagedGroups( );
+  openingStaged = true;
+  const groups = await takeUnofferedStagedGroups( ).finally( ( ) => { openingStaged = false; } );
+  stagedOfferPending = false;
   if ( groups.length === 0 ) return;
   useStore.getState( ).setGroupedPhotos( groups );
   navigationRef.dispatch( CommonActions.reset( {
@@ -583,6 +592,7 @@ const useUsbImport = ( ) => {
 
   const run = useCallback( async ( ) => {
     const started = await offload( );
+    stagedOfferPending = true;
     await openStagedInGroupPhotos( ).catch( error => {
       logger.error( "Could not open staged USB photos", error );
     } );
@@ -594,6 +604,18 @@ const useUsbImport = ( ) => {
     useUsbImportProgress.setState( { startImport: run } );
     return ( ) => useUsbImportProgress.setState( { startImport: undefined } );
   }, [run] );
+
+  // Offer staged photos an earlier attempt couldn't, once the user is idle.
+  useEffect( ( ) => {
+    if ( !onboardingShown ) return ( ) => undefined;
+    const tryOpen = ( ) => {
+      openStagedInGroupPhotos( ).catch( error => {
+        logger.error( "Could not open staged USB photos", error );
+      } );
+    };
+    tryOpen( );
+    return navigationRef.addListener( "state", tryOpen );
+  }, [onboardingShown] );
 
   // A card swapped while the app was away re-enables the import button. Also
   // sweeps staging, whose expiry runs on the clock.
