@@ -239,9 +239,8 @@ type Props = Partial<TabStackScreenProps<"WildlifeHotspots">> & {
 
 // Used only until the hidden measurement view below reports the real height.
 const FALLBACK_HOTSPOT_CARD_HEIGHT = 200;
-// Guards against the measured height being clipped by sub-pixel rounding and
-// the panel's top border.
-const HOTSPOT_CARD_HEIGHT_BUFFER = 12;
+// Room for the panel's top border.
+const HOTSPOT_CARD_HEIGHT_BUFFER = 1;
 
 const styles = StyleSheet.create( {
   stopInputsContainer: {
@@ -610,10 +609,6 @@ const WildlifeHotspotsScreen = ( {
     handleHotspotPress( hotspot );
   }, [selectedHotspotId, handleHotspotPress] );
 
-  useEffect( () => {
-    setHotspotCardHeight( null );
-  }, [hotspots] );
-
   // Card height is driven by the number of top-species rows, so the hotspot
   // with the most rows is the tallest. Measuring that one (rather than the
   // visible one) keeps the bottom panel a fixed height as the user swipes.
@@ -867,7 +862,10 @@ const WildlifeHotspotsScreen = ( {
     <>
       {/* Stop inputs */}
       <View
-        className="bg-white px-3 py-2 border-b border-lightGray"
+        // Embedded under the Explore header, which already pads its bottom
+        className={`bg-white px-3 pb-2 border-b border-lightGray ${embedded
+          ? ""
+          : "pt-2"}`}
         style={styles.stopInputsContainer}
       >
         {stopsExpanded
@@ -1120,10 +1118,11 @@ const WildlifeHotspotsScreen = ( {
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           onLayout={( { nativeEvent } ) => {
-            const measured = Math.ceil( nativeEvent.layout.height ) + HOTSPOT_CARD_HEIGHT_BUFFER;
-            // Never shrink within a result set, so a late or slightly smaller
-            // measurement can't nudge the panel up and down.
-            setHotspotCardHeight( prev => Math.max( prev ?? 0, measured ) );
+            // Not reset per result set: onLayout only fires when the size
+            // changes, so a reset would leave the fallback height in place.
+            setHotspotCardHeight(
+              Math.ceil( nativeEvent.layout.height ) + HOTSPOT_CARD_HEIGHT_BUFFER,
+            );
           }}
         >
           <HotspotListItem
