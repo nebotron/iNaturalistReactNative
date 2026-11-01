@@ -1,6 +1,7 @@
 export { default as useAuthenticatedInfiniteQuery } from "./useAuthenticatedInfiniteQuery";
 export { default as useAuthenticatedMutation } from "./useAuthenticatedMutation";
 export { default as useAuthenticatedQuery } from "./useAuthenticatedQuery";
+export { default as useBackfillCameraInfo } from "./useBackfillCameraInfo";
 export { default as useCurrentUser } from "./useCurrentUser";
 export { default as useDebugMode } from "./useDebugMode";
 export { default as useDeviceOrientation } from "./useDeviceOrientation";

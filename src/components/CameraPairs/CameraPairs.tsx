@@ -9,6 +9,7 @@ import { FlatList } from "react-native";
 import Photo from "realmModels/Photo";
 import type { RealmObservation, RealmPhoto } from "realmModels/types";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
+import { useBackfillCameraInfo } from "sharedHooks";
 
 const { useQuery } = RealmContext;
 
@@ -86,6 +87,7 @@ const PairPhoto = ( { entry, onPress }: { entry: Entry; onPress: ( ) => void } )
 const CameraPairs = ( ) => {
   const navigation = useNavigation( );
   const observations = useQuery<RealmObservation>( "Observation" );
+  useBackfillCameraInfo( observations );
   const [tolerance, setTolerance] = useState( 0.2 );
 
   const allPairs = useMemo( ( ) => {

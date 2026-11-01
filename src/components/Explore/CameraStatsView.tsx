@@ -6,7 +6,7 @@ import { RealmContext } from "providers/contexts";
 import React, { useMemo } from "react";
 import type { RealmObservation } from "realmModels/types";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
-import { useTranslation } from "sharedHooks";
+import { useBackfillCameraInfo, useTranslation } from "sharedHooks";
 
 const { useQuery } = RealmContext;
 
@@ -47,6 +47,7 @@ const CameraStatsView = ( { queryParams }: Props ) => {
   const { t } = useTranslation( );
   const observations = useQuery<RealmObservation>( "Observation" );
   const taxonIds = useMemo( ( ) => toIds( queryParams.taxon_id ), [queryParams.taxon_id] );
+  useBackfillCameraInfo( observations );
 
   const { photoCount, distributions } = useMemo( ( ) => {
     const counts: Record<Field, Map<string, number>> = {
