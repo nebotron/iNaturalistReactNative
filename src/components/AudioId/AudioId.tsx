@@ -1,18 +1,23 @@
 /* eslint-disable i18next/no-literal-string */
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
-import { fetchTaxaDefaultPhotos } from "api/taxa";
+import { fetchTaxaBasics } from "api/taxa";
 import {
   Body3, Button, DisplayTaxonName, IconicTaxonIcon,
 } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import i18n from "i18next";
+import { RealmContext } from "providers/contexts";
 import React, { useCallback, useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
 import { Linking, Modal, requireNativeComponent } from "react-native";
+import { UpdateMode } from "realm";
+import Taxon from "realmModels/Taxon";
+import type { RealmTaxon } from "realmModels/types";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
+import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { getTunable } from "sharedHelpers/tunableParams";
 import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
@@ -23,6 +28,8 @@ import type { Heard } from "./audioIdSession";
 import useAudioIdSession, {
   isHeard, noteActivity, startDimming, stopDimming, useScreenDimmed,
 } from "./audioIdSession";
+
+const { useRealm } = RealmContext;
 
 // Animal classes the model covers, for asking which of them the user has seen.
 const SEEN_TAXON_IDS = [
@@ -80,41 +87,47 @@ const useSeenTaxonIds = (
 
 interface TaxonExtras { url?: string; commonName?: string }
 
-// Photo URLs and localized common names by taxon ID, fetched in batches: a long
-// heard list mounting a useTaxon per row fired dozens of full taxon fetches at once and got 429s
+// Photo URLs and localized common names by taxon ID, from Realm. Taxa not
+// there yet are fetched in batches and saved: a long heard list mounting a
+// useTaxon per row fired dozens of full taxon fetches at once and got 429s
 const PHOTO_BATCH_SIZE = 30;
-const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> | undefined => {
-  const ids = [...taxonIds].sort( ( a, b ) => a - b );
+const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
+  const realm = useRealm( );
+  const local = new Map( taxonIds.map( id => [
+    id, realm.objectForPrimaryKey<RealmTaxon>( "Taxon", id ),
+  ] ) );
+  const missing = taxonIds.filter( id => !local.get( id )?.name ).sort( ( a, b ) => a - b );
   const currentUser = useCurrentUser( );
   // Signed-in users get names per their account settings; otherwise use the app locale
   const locale = currentUser
     ? undefined
     : i18n?.language ?? "en";
-  const { data } = useAuthenticatedQuery(
-    ["audioIdTaxonPhotos", ids.join( "," ), locale],
+  useAuthenticatedQuery(
+    ["audioIdTaxa", missing.join( "," ), locale],
     async optsWithAuth => {
-      const urls = new Map<number, TaxonExtras>( );
-      for ( let i = 0; i < ids.length; i += PHOTO_BATCH_SIZE ) {
+      for ( let i = 0; i < missing.length; i += PHOTO_BATCH_SIZE ) {
         // eslint-disable-next-line no-await-in-loop
-        const results = await fetchTaxaDefaultPhotos(
-          ids.slice( i, i + PHOTO_BATCH_SIZE ),
+        const results = await fetchTaxaBasics(
+          missing.slice( i, i + PHOTO_BATCH_SIZE ),
           optsWithAuth,
           locale
             ? { locale }
             : {},
         );
-        ( results || [] ).forEach( ( t: {
-          id: number; preferred_common_name?: string; default_photo?: { url?: string };
-        } ) => {
-          urls.set( t.id, { url: t.default_photo?.url, commonName: t.preferred_common_name } );
-        } );
+        safeRealmWrite( realm, ( ) => ( results || [] ).forEach( ( t: Record<string, unknown> ) => {
+          realm.create( "Taxon", Taxon.forUpdate( Taxon.mapApiToRealm( t ) ), UpdateMode.Modified );
+        } ), "saving Audio ID taxa" );
       }
-      return urls;
+      return true;
     },
-    // Keep showing the photos already loaded while a newly heard species refetches
-    { enabled: ids.length > 0, staleTime: Infinity, placeholderData: previous => previous },
+    { enabled: missing.length > 0, staleTime: Infinity },
   );
-  return data;
+  return new Map( taxonIds.flatMap( id => {
+    const taxon = local.get( id );
+    return taxon?.name
+      ? [[id, { url: taxon.defaultPhoto?.url, commonName: taxon.preferredCommonName }]]
+      : [];
+  } ) );
 };
 
 const TaxonThumb = ( { url, onPress }: { url?: string; onPress: ( ) => void } ) => (
@@ -217,7 +230,7 @@ const AudioId = ( ) => {
       onPress={( ) => navigation.navigate( "AudioIdHistory", { taxonId: sp.taxonId } )}
     >
       <TaxonThumb
-        url={taxonExtras?.get( sp.taxonId )?.url}
+        url={taxonExtras.get( sp.taxonId )?.url}
         onPress={( ) => openTaxon( sp.taxonId )}
       />
       <View
@@ -232,7 +245,7 @@ const AudioId = ( ) => {
                   name: sp.name,
                   rank_level: 10,
                   // The model's English name until the localized one loads
-                  preferred_common_name: taxonExtras?.has( sp.taxonId )
+                  preferred_common_name: taxonExtras.has( sp.taxonId )
                     ? taxonExtras.get( sp.taxonId )?.commonName
                     : sp.commonName,
                 }}
