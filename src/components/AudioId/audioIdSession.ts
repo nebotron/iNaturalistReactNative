@@ -81,24 +81,29 @@ const contextTimers = new Map<string, ReturnType<typeof setTimeout>>( );
 let sessionLocation: UserLocation | null = null;
 
 // Where in a 15 s context clip the call is, in seconds from its start, from
-// the model's per-frame logits in 1/3 s bins: of the stretches of bins at 0 or
-// more (or within 2 of the peak, when it is weaker), joined across gaps of up
-// to 2 s, the strongest one in the 5 s window the call was heard in, padded
-// by a bin each side to at least 1 s. On the 42 15 s clips labeled right it
-// found a call in every one, 2 s long at the median.
+// the model's per-frame logits in 1/3 s bins: of the stretches of bins at the
+// call logit or more (or within the peak range of the peak, when it is
+// weaker), joined across gaps of up to the call gap, the strongest one in the
+// 5 s window the call was heard in, padded by some bins each side to at least
+// the minimum length.
 const BINS_PER_S = 3;
 const CONTEXT_S = 15;
 const WINDOW_BINS = [5 * BINS_PER_S, 10 * BINS_PER_S - 1];
+const CALL_LOGIT = getTunable( "audioIdCallLogit" );
+const CALL_PEAK_RANGE = getTunable( "audioIdCallPeakRange" );
+const CALL_GAP_BINS = Math.round( getTunable( "audioIdCallGapSeconds" ) * BINS_PER_S );
+const CALL_PADDING_BINS = getTunable( "audioIdCallPaddingBins" );
+const MIN_CALL_S = Math.min( getTunable( "audioIdMinCallSeconds" ), CONTEXT_S );
 const findCall = ( timeline: ( number | null )[] ): [number, number] | null => {
   const bins = timeline.map( b => b ?? -Infinity );
   const peak = Math.max( ...bins.slice( WINDOW_BINS[0], WINDOW_BINS[1] + 1 ) );
   if ( !Number.isFinite( peak ) ) return null;
-  const on = Math.min( 0, peak - 2 );
+  const on = Math.min( CALL_LOGIT, peak - CALL_PEAK_RANGE );
   const stretches: [number, number][] = [];
   bins.forEach( ( b, i ) => {
     if ( b < on ) return;
     const last = stretches[stretches.length - 1];
-    if ( last && i - last[1] <= 2 * BINS_PER_S + 1 ) last[1] = i;
+    if ( last && i - last[1] <= CALL_GAP_BINS + 1 ) last[1] = i;
     else stretches.push( [i, i] );
   } );
   const best = ( [a, b]: [number, number] ) => Math.max( ...bins.slice( a, b + 1 ) );
@@ -106,12 +111,13 @@ const findCall = ( timeline: ( number | null )[] ): [number, number] | null => {
     .filter( ( [a, b] ) => b >= WINDOW_BINS[0] && a <= WINDOW_BINS[1] )
     .sort( ( x, y ) => best( y ) - best( x ) )[0];
   if ( !call ) return null;
-  let start = Math.max( 0, ( call[0] - 1 ) / BINS_PER_S );
-  let end = Math.min( CONTEXT_S, ( call[1] + 2 ) / BINS_PER_S );
-  if ( end - start < 1 ) {
-    const mid = Math.min( Math.max( ( start + end ) / 2, 0.5 ), CONTEXT_S - 0.5 );
-    start = mid - 0.5;
-    end = mid + 0.5;
+  let start = Math.max( 0, ( call[0] - CALL_PADDING_BINS ) / BINS_PER_S );
+  let end = Math.min( CONTEXT_S, ( call[1] + 1 + CALL_PADDING_BINS ) / BINS_PER_S );
+  if ( end - start < MIN_CALL_S ) {
+    const half = MIN_CALL_S / 2;
+    const mid = Math.min( Math.max( ( start + end ) / 2, half ), CONTEXT_S - half );
+    start = mid - half;
+    end = mid + half;
   }
   return [start, end];
 };

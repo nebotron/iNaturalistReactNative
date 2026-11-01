@@ -106,6 +106,26 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-audioIdNonBirdGeoThreshold" ),
     t( "Tunable-audioIdNonBirdGeoThreshold-description" ),
   ],
+  audioIdCallLogit: [
+    t( "Tunable-audioIdCallLogit" ),
+    t( "Tunable-audioIdCallLogit-description" ),
+  ],
+  audioIdCallPeakRange: [
+    t( "Tunable-audioIdCallPeakRange" ),
+    t( "Tunable-audioIdCallPeakRange-description" ),
+  ],
+  audioIdCallGapSeconds: [
+    t( "Tunable-audioIdCallGapSeconds" ),
+    t( "Tunable-audioIdCallGapSeconds-description" ),
+  ],
+  audioIdCallPaddingBins: [
+    t( "Tunable-audioIdCallPaddingBins" ),
+    t( "Tunable-audioIdCallPaddingBins-description" ),
+  ],
+  audioIdMinCallSeconds: [
+    t( "Tunable-audioIdMinCallSeconds" ),
+    t( "Tunable-audioIdMinCallSeconds-description" ),
+  ],
   maxPhotosPerObservation: [
     t( "Tunable-maxPhotosPerObservation" ),
     t( "Tunable-maxPhotosPerObservation-description" ),

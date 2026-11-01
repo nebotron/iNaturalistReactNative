@@ -1762,6 +1762,22 @@ Tunable-audioIdBirdGeoThreshold = Audio ID bird range threshold
 # Description of a tunable parameter in settings
 Tunable-audioIdBirdGeoThreshold-description = Minimum expected local occurrence (0-1) for a bird to be included in Audio ID results.
 # Label for a tunable parameter in settings
+Tunable-audioIdCallGapSeconds = Audio ID call gap (seconds)
+# Description of a tunable parameter in settings
+Tunable-audioIdCallGapSeconds-description = Longest gap in seconds between parts of a call that are joined into one call.
+# Label for a tunable parameter in settings
+Tunable-audioIdCallLogit = Audio ID call logit
+# Description of a tunable parameter in settings
+Tunable-audioIdCallLogit-description = Minimum model logit for a moment to count as part of a call when finding where a call is in a clip.
+# Label for a tunable parameter in settings
+Tunable-audioIdCallPaddingBins = Audio ID call padding (1/3 s steps)
+# Description of a tunable parameter in settings
+Tunable-audioIdCallPaddingBins-description = Steps of 1/3 s added before and after a found call.
+# Label for a tunable parameter in settings
+Tunable-audioIdCallPeakRange = Audio ID call peak range
+# Description of a tunable parameter in settings
+Tunable-audioIdCallPeakRange-description = When a call's peak is below the call logit, how far below its peak a moment can be and still count as part of it.
+# Label for a tunable parameter in settings
 Tunable-audioIdDimAfterSeconds = Audio ID dim after (seconds)
 # Description of a tunable parameter in settings
 Tunable-audioIdDimAfterSeconds-description = Seconds without a touch before the Audio ID screen dims.
@@ -1769,6 +1785,10 @@ Tunable-audioIdDimAfterSeconds-description = Seconds without a touch before the 
 Tunable-audioIdFlashSeconds = Audio ID alert duration (seconds)
 # Description of a tunable parameter in settings
 Tunable-audioIdFlashSeconds-description = Seconds the screen brightens when a new species is heard.
+# Label for a tunable parameter in settings
+Tunable-audioIdMinCallSeconds = Audio ID minimum call length (seconds)
+# Description of a tunable parameter in settings
+Tunable-audioIdMinCallSeconds-description = Shortest a found call is trimmed to, in seconds.
 # Label for a tunable parameter in settings
 Tunable-audioIdNewCallGapSeconds = Audio ID new call gap (seconds)
 # Description of a tunable parameter in settings
