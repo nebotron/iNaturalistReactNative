@@ -263,6 +263,8 @@ Choose-photos = Choose Photos
 # Label for button that chooses a folder on a USB drive for photo import
 CHOOSE-USB-FOLDER = CHOOSE USB FOLDER
 # Accessibility hint for a button that chooses a taxon
+# Accessibility hint for the My Observations button before a USB import folder is chosen
+Chooses-a-USB-folder-to-import-photos-from = Chooses a folder on a USB drive to import photos from.
 Chooses-taxon = Chooses taxon
 # Accessibility hint for button that chooses the best suggestion among a list of suggested
 # taxa for an identification

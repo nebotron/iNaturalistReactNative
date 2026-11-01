@@ -28,6 +28,8 @@ interface Props extends PropsWithChildren {
   // Only show the icon with all the same layout, don't make it a button
   iconOnly?: boolean;
   onPress: ( _event: GestureResponderEvent ) => void;
+  // Still fires while disabled, so a disabled button can offer a secondary action
+  onLongPress?: ( _event: GestureResponderEvent ) => void;
   onPressIn?: ( _event: GestureResponderEvent ) => void;
   onPressOut?: ( _event: GestureResponderEvent ) => void;
   // Inserts a white or colored view under the icon so an holes in the shape show as
@@ -72,6 +74,7 @@ const INatIconButton = ( {
   icon,
   iconOnly,
   onPress,
+  onLongPress,
   onPressIn,
   onPressOut,
   preventTransparency,
@@ -203,8 +206,11 @@ const INatIconButton = ( {
           ? "opacity-50"
           : "active:opacity-95",
       )}
-      disabled={disabled}
-      onPress={onPress}
+      disabled={disabled && !onLongPress}
+      onPress={disabled
+        ? undefined
+        : onPress}
+      onLongPress={onLongPress}
       onPressIn={onPressIn}
       onPressOut={onPressOut}
       style={wrapperStyle}
