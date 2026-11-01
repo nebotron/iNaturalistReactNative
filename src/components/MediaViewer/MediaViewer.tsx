@@ -27,6 +27,7 @@ import useTranslation from "sharedHooks/useTranslation";
 import MainMediaDisplay from "./MainMediaDisplay";
 import MediaSelector from "./MediaSelector";
 import MediaViewerHeader from "./MediaViewerHeader";
+import PhotoCameraInfo from "./PhotoCameraInfo";
 
 interface MediaToDelete {
   type: "sound" | "photo";
@@ -293,6 +294,7 @@ const MediaViewer = ( {
         onDeleteSound={soundUri => setMediaToDelete( { type: "sound", uri: soundUri } )}
         onSharePhoto={handleSharePhoto}
       />
+      <PhotoCameraInfo uri={Photo.getLocalPhotoUri( currentPhoto?.localFilePath )} />
       <MediaSelector
         editable={editable}
         photos={photos}
