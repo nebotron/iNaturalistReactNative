@@ -37,6 +37,7 @@ import type { PreloadResult } from "sharedHelpers/imageCropPreload";
 import {
   enqueuePreload,
   preloadCache,
+  releaseCropSource,
 } from "sharedHelpers/imageCropPreload";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -586,8 +587,10 @@ const ImageCropEditor = ( ) => {
     }
 
     // Only reframes what computer vision scores; the photo itself is untouched.
+    const sourceUris = [localImageUri, displayImageUri];
     if ( cvOnly ) {
       saveAnimalCrop( imageUri, crop );
+      releaseCropSource( imageUri, sourceUris );
       finishOrAdvance( );
       return Promise.resolve( );
     }
@@ -617,6 +620,7 @@ const ImageCropEditor = ( ) => {
           markVisited,
           brightness,
         );
+        releaseCropSource( displayUri, sourceUris );
       } )( ).catch( ( ) => {
         Alert.alert( t( "Something-went-wrong" ) );
       } ) );
@@ -667,6 +671,7 @@ const ImageCropEditor = ( ) => {
         }
       }
 
+      releaseCropSource( imageUri, sourceUris );
       finishOrAdvance( );
     } )( ).catch( ( ) => {
       Alert.alert( t( "Something-went-wrong" ) );
@@ -675,6 +680,7 @@ const ImageCropEditor = ( ) => {
     context,
     currentObservation,
     cvOnly,
+    displayImageUri,
     finishOrAdvance,
     imageSize,
     imageUri,

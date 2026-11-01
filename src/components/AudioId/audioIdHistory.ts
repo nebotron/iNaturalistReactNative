@@ -156,4 +156,14 @@ const useAudioIdHistory = create<AudioIdHistoryState>( )( ( set, get ) => ( {
   },
 } ) );
 
+// Clips, and their audio, are kept for three days.
+const CLIP_TTL_MS = 3 * 24 * 60 * 60 * 1000;
+export const expireOldClips = ( ) => {
+  const { clips, deleteClip } = useAudioIdHistory.getState( );
+  const cutoff = Date.now( ) - CLIP_TTL_MS;
+  Object.values( clips )
+    .filter( clip => clip.time < cutoff )
+    .forEach( clip => deleteClip( clip.id ) );
+};
+
 export default useAudioIdHistory;

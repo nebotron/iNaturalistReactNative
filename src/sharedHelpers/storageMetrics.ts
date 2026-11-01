@@ -2,10 +2,13 @@ import {
   CachesDirectoryPath,
   DocumentDirectoryPath,
   LibraryDirectoryPath,
+  MainBundlePath,
+  pathForGroup,
   readDir,
   stat,
   TemporaryDirectoryPath,
 } from "@dr.pogodin/react-native-fs";
+import { Platform } from "react-native";
 import DeviceInfo from "react-native-device-info";
 import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 
@@ -23,6 +26,9 @@ export interface StorageMetrics {
   // log's extra takes only primitives. The app grew to 44GB with nothing in the
   // log saying where.
   largestDirsMB: string;
+  // MB in all of each root, the app bundle and the App Group container, as
+  // JSON, so the folders above can be held against what iOS Settings reports
+  totalsMB: string;
   // KB per key of the default MMKV instance, the five largest, as JSON, so a
   // growing mmkvBytes names what is growing
   largestMmkvKeysKB: string;
@@ -38,14 +44,25 @@ const directoryBytes = async ( path: string ): Promise<number> => {
   return sizes.reduce( ( sum, size ) => sum + size, 0 );
 };
 
-const largestDirs = async ( ): Promise<string> => {
-  const roots = {
+const MB = 1024 * 1024;
+
+const largestDirs = async ( ): Promise<{ largestDirsMB: string; totalsMB: string }> => {
+  const roots: Record<string, string> = {
     Documents: DocumentDirectoryPath,
     Caches: CachesDirectoryPath,
     tmp: TemporaryDirectoryPath,
     Library: LibraryDirectoryPath,
   };
   const sizes: [string, number][] = [];
+  const totals: Record<string, number> = {};
+  const extraRoots: Record<string, string> = { Bundle: MainBundlePath };
+  if ( Platform.OS === "ios" ) {
+    extraRoots.AppGroup = await pathForGroup( "group.org.inaturalist.iNaturalistMobile" )
+      .catch( ( ) => "" );
+  }
+  await Promise.all( Object.entries( extraRoots ).map( async ( [name, root] ) => {
+    if ( root ) totals[name] = Math.round( ( await directoryBytes( root ) ) / MB );
+  } ) );
   await Promise.all( Object.entries( roots ).map( async ( [rootName, root] ) => {
     const entries = await readDir( root ).catch( ( ) => [] );
     let looseBytes = 0;
@@ -59,11 +76,17 @@ const largestDirs = async ( ): Promise<string> => {
       }
     } ) );
     sizes.push( [`${rootName}/*files`, looseBytes] );
+    totals[rootName] = Math.round( sizes
+      .filter( ( [name] ) => name.startsWith( `${rootName}/` ) )
+      .reduce( ( sum, [, bytes] ) => sum + bytes, 0 ) / MB );
   } ) );
-  return JSON.stringify( Object.fromEntries( sizes
-    .filter( ( [, bytes] ) => bytes >= MIN_REPORTED_BYTES )
-    .sort( ( a, b ) => b[1] - a[1] )
-    .map( ( [name, bytes] ) => [name, Math.round( bytes / 1024 / 1024 )] ) ) );
+  return {
+    largestDirsMB: JSON.stringify( Object.fromEntries( sizes
+      .filter( ( [, bytes] ) => bytes >= MIN_REPORTED_BYTES )
+      .sort( ( a, b ) => b[1] - a[1] )
+      .map( ( [name, bytes] ) => [name, Math.round( bytes / MB )] ) ) ),
+    totalsMB: JSON.stringify( totals ),
+  };
 };
 
 const largestMmkvKeys = ( ) => JSON.stringify( Object.fromEntries( zustandMMKVBackingStorage
@@ -77,10 +100,12 @@ const getStorageMetrics = async ( realmPath?: string | null ): Promise<StorageMe
   const realmBytes = realmPath
     ? ( await stat( realmPath ).catch( () => ( { size: 0 } ) ) ).size
     : "NA";
-  const [freeDiskBytes, totalDiskBytes, largestDirsMB] = await Promise.all( [
+  const [freeDiskBytes, totalDiskBytes, { largestDirsMB, totalsMB }] = await Promise.all( [
     DeviceInfo.getFreeDiskStorage( ).catch( ( ) => -1 ),
     DeviceInfo.getTotalDiskCapacity( ).catch( ( ) => -1 ),
-    largestDirs( ).catch( error => `failed: ${error}` ),
+    largestDirs( ).catch( error => ( {
+      largestDirsMB: `failed: ${error}`, totalsMB: `failed: ${error}`,
+    } ) ),
   ] );
   return {
     realmDbBytes: realmBytes,
@@ -88,6 +113,7 @@ const getStorageMetrics = async ( realmPath?: string | null ): Promise<StorageMe
     freeDiskBytes,
     totalDiskBytes,
     largestDirsMB,
+    totalsMB,
     largestMmkvKeysKB: largestMmkvKeys( ),
   };
 };

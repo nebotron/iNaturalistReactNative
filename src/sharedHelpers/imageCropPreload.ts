@@ -1,6 +1,9 @@
+import { cropSourcesPath } from "appConstants/paths";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import prepareCropSource from "sharedHelpers/prepareCropSource";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
+import { unlink } from "sharedHelpers/util";
 
 // What each stage of a preload cost, and when it finished. The wait between
 // photos in a bulk crop is whatever is left of this when the user advances, so
@@ -171,4 +174,15 @@ export function enqueuePreload(
   } );
   pumpPreloadQueue( );
   return promise;
+}
+
+// Once a photo is cropped, the export and display file it was cropped from
+// have served their purpose (the original is copied to photoUploads), so drop
+// them instead of leaving full-size copies in cropSourcesPath.
+export function releaseCropSource( imageUri: string, uris: ( string | null )[] ) {
+  preloadCache.delete( imageUri );
+  uris
+    .map( uri => uri && stripFilePrefix( uri ) )
+    .filter( path => path?.startsWith( `${cropSourcesPath}/` ) )
+    .forEach( path => { unlink( path ).catch( ( ) => {} ); } );
 }

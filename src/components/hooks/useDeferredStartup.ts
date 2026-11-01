@@ -9,11 +9,13 @@
  * Uses requestIdleCallback to schedule each task in its own callback so the
  * runtime can interleave user interactions between them.
  */
+import { expireOldClips } from "components/AudioId/audioIdHistory";
 import { cleanupLogFiles } from "components/Developer/logManagementHelpers";
 import { isLoggedIn } from "components/LoginSignUp/AuthenticationService";
 import { navigationRef } from "navigation/navigationUtils";
 import { RealmContext } from "providers/contexts";
 import { useEffect } from "react";
+import { AppState } from "react-native";
 import User from "realmModels/User";
 import { maintainAnimalCropLog } from "sharedHelpers/animalCropLog";
 import { maintainBrightnessLog } from "sharedHelpers/brightnessLog";
@@ -141,6 +143,7 @@ const useDeferredStartup = ( ) => {
     const id16 = deferTask( "clearVideoLibrary", clearVideoLibrary );
     const id17 = deferTask( "clearExpiredMediaCaches", clearExpiredMediaCaches );
     const id18 = deferTask( "trimRemoteImageCache", trimRemoteImageCache );
+    const idClips = deferTask( "expireOldAudioIdClips", async ( ) => expireOldClips( ) );
     // MMKV files never shrink on their own, and data has moved out of this one
     const idLogs = deferTask( "maintainFirebaseLogs", async ( ) => {
       await Promise.all( [maintainAnimalCropLog( ), maintainBrightnessLog( )] );
@@ -189,10 +192,19 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id16 );
       cancelIdleCallback( id17 );
       cancelIdleCallback( id18 );
+      cancelIdleCallback( idClips );
       cancelIdleCallback( idImport );
       cancelIdleCallback( idBirdCodes );
     };
   }, [i18n, realm] );
+
+  // Crop sources expire after an hour, which a session can outlast.
+  useEffect( ( ) => {
+    const subscription = AppState.addEventListener( "change", state => {
+      if ( state === "background" ) clearExpiredCropSources( );
+    } );
+    return ( ) => subscription.remove( );
+  }, [] );
 };
 
 export default useDeferredStartup;

@@ -14,6 +14,7 @@ import {
   soundUploadPath,
   videoLibraryPath,
 } from "appConstants/paths";
+import { CROP_SOURCE_TTL_MS } from "sharedHelpers/ensureLocalImageForCrop";
 import removeAllFilesFromDirectory from "sharedHelpers/removeAllFilesFromDirectory";
 import removeSyncedFilesFromDirectory from "sharedHelpers/removeSyncedFilesFromDirectory";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -218,7 +219,7 @@ const trimDirectoryToSize = async ( dir: string, maxBytes: number ) => {
 };
 
 const clearExpiredCropSources = async ( ) => {
-  await clearExpiredFilesByTtl( cropSourcesPath );
+  await clearExpiredFilesByTtl( cropSourcesPath, CROP_SOURCE_TTL_MS );
   await trimDirectoryToSize( cropSourcesPath, CROP_SOURCES_MAX_BYTES );
 };
 

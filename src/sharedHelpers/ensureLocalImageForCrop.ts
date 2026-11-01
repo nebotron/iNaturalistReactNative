@@ -5,9 +5,10 @@ import {
 import { cropSourcesPath } from "appConstants/paths";
 import { Platform } from "react-native";
 import resizeImage from "sharedHelpers/resizeImage";
-import { getTunable } from "sharedHelpers/tunableParams";
 
-const CROP_CACHE_TTL_MS = getTunable( "cropCacheDays" ) * 24 * 60 * 60 * 1000;
+// A source is released once its crop is done (releaseCropSource); one never
+// cropped is swept an hour after it was last written.
+export const CROP_SOURCE_TTL_MS = 60 * 60 * 1000;
 
 // djb2 hash → stable hex filename for a given URL
 function urlToFilename( url: string ): string {
@@ -25,7 +26,7 @@ async function getCachedOrNull( filePath: string ): Promise<string | null> {
   if ( !( await exists( filePath ) ) ) return null;
   const info = await stat( filePath );
   const age = Date.now() - new Date( info.mtime ).getTime();
-  if ( age > CROP_CACHE_TTL_MS ) {
+  if ( age > CROP_SOURCE_TTL_MS ) {
     await unlink( filePath );
     return null;
   }
