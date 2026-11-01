@@ -48,7 +48,7 @@ import {
   addRemovedGroupPhotoUris,
   getRemovedGroupPhotoUris,
 } from "sharedHelpers/removedGroupPhotoUris";
-import { listStagedPhotoNodes } from "sharedHelpers/usbStaging";
+import { devicePhotoKey, listStagedPhotoNodes } from "sharedHelpers/usbStaging";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -139,7 +139,9 @@ const PhotoGallery = ( {
   // removedGroupPhotoUris.ts) — the device deletion may have silently failed
   // (iOS 26's PHPhotoLibrary confirmation bug), so they count as saved and are
   // hidden along with them unless the user taps Show all photos.
-  const removedGroupPhotoUrisRef = useRef<Set<string>>( new Set( getRemovedGroupPhotoUris( ) ) );
+  const removedGroupPhotoUrisRef = useRef<Set<string>>(
+    new Set( getRemovedGroupPhotoUris( ).map( devicePhotoKey ) ),
+  );
 
   // Kept up to date while the screen is open rather than read once on mount:
   // an import saves its observations in the background after the user is
@@ -149,10 +151,12 @@ const PhotoGallery = ( {
   // at a time, since recomputing the whole set means walking every saved
   // observation.
   useEffect( ( ) => {
-    setImportedUris( getPreviouslyUploadedDevicePhotoUrisSet( realm ) );
+    setImportedUris( new Set(
+      [...getPreviouslyUploadedDevicePhotoUrisSet( realm )].map( devicePhotoKey ),
+    ) );
 
     const addUris = ( uris: ( string | null )[] ) => {
-      const newUris = uris.filter( ( uri ): uri is string => !!uri );
+      const newUris = uris.filter( ( uri ): uri is string => !!uri ).map( devicePhotoKey );
       if ( newUris.length === 0 ) return;
       setImportedUris( prev => {
         if ( newUris.every( uri => prev.has( uri ) ) ) return prev;
@@ -354,7 +358,7 @@ const PhotoGallery = ( {
       .map( getDeviceUriFromNode )
       .filter( ( uri ): uri is string => !!uri );
     recordUploadedDevicePhotoUris( realm, deviceUris );
-    setImportedUris( prev => new Set( [...prev, ...deviceUris] ) );
+    setImportedUris( prev => new Set( [...prev, ...deviceUris.map( devicePhotoKey )] ) );
     setSelectedUris( new Set( ) );
   }, [photos, realm, selectedUris] );
 
@@ -366,7 +370,7 @@ const PhotoGallery = ( {
       .map( getDeviceUriFromNode )
       .filter( ( uri ): uri is string => !!uri );
     addRemovedGroupPhotoUris( deviceUris );
-    setDeletedUris( prev => new Set( [...prev, ...deviceUris] ) );
+    setDeletedUris( prev => new Set( [...prev, ...deviceUris.map( devicePhotoKey )] ) );
     setSelectedUris( new Set( ) );
   }, [photos, selectedUris] );
 
@@ -375,7 +379,8 @@ const PhotoGallery = ( {
     if ( !uri ) {
       return false;
     }
-    return importedUris.has( uri ) || removedGroupPhotoUrisRef.current.has( uri );
+    const key = devicePhotoKey( uri );
+    return importedUris.has( key ) || removedGroupPhotoUrisRef.current.has( key );
   }, [importedUris] );
 
   const hasHiddenPhotos = importedUris.size > 0
@@ -386,7 +391,7 @@ const PhotoGallery = ( {
     ( ) => photos.filter( node => {
       if ( !hideImported ) return true;
       const uri = getDeviceUriFromNode( node );
-      return !( uri && deletedUris.has( uri ) ) && !isImported( node );
+      return !( uri && deletedUris.has( devicePhotoKey( uri ) ) ) && !isImported( node );
     } ),
     [photos, hideImported, isImported, deletedUris],
   );

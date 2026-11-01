@@ -39,10 +39,19 @@ export const stagedPathFor = ( relativePath: string ) => (
   `${usbStagingPath}/${Date.now( )}_${relativePath.split( "/" ).pop( )}`
 );
 
-const stagedNameFromUri = ( uri: string ) => uri.match( /\/usbStaging\/([^/]+)$/ )?.[1];
+export const stagedNameFromUri = ( uri: string ) => uri.match( /\/usbStaging\/([^/]+)$/ )?.[1];
 
 const readStaged = async ( ) => ( await readDir( usbStagingPath ).catch( ( ) => [] ) )
   .filter( item => item.isFile( ) && !item.name.endsWith( ".partial" ) );
+
+// Identifies a device photo URI across app updates, which move the app
+// container and so every staged photo's absolute path.
+export const devicePhotoKey = ( uri: string ) => {
+  const name = stagedNameFromUri( uri );
+  return name
+    ? `usbStaging/${name}`
+    : uri;
+};
 
 // Staged photos as photo picker nodes, newest first, so the picker can offer
 // them alongside the Photos library (which they are never saved to).

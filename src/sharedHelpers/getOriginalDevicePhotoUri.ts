@@ -34,6 +34,10 @@ export const getGalleryAssetDevicePhotoUri = ( asset: Asset ): string | null => 
     return null;
   }
   const normalizedUri = normalizeDevicePhotoUri( uri );
+  // A staged SD card photo (see usbStaging.ts) is its own device original
+  if ( normalizedUri?.includes( "/usbStaging/" ) ) {
+    return normalizedUri;
+  }
   if (
     normalizedUri.startsWith( "file://" )
     || ( Platform.OS === "ios" && !normalizedUri.startsWith( "ph://" ) )
