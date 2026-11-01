@@ -294,7 +294,10 @@ const MediaViewer = ( {
         onDeleteSound={soundUri => setMediaToDelete( { type: "sound", uri: soundUri } )}
         onSharePhoto={handleSharePhoto}
       />
-      <PhotoCameraInfo uri={Photo.getLocalPhotoUri( currentPhoto?.localFilePath )} />
+      <PhotoCameraInfo
+        uri={Photo.getLocalPhotoUri( currentPhoto?.localFilePath )}
+        url={currentPhoto?.url}
+      />
       <MediaSelector
         editable={editable}
         photos={photos}
