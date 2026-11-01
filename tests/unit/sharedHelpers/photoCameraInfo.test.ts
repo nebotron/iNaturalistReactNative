@@ -10,10 +10,15 @@ describe( "formatCameraInfo", ( ) => {
       FNumber: 9.5,
       ExposureTime: 0.001,
       ISOSpeedRatings: [800],
+      SubjectDistance: 12.345,
     } ) ).toEqual( {
       camera: "Canon EOS R7",
       lens: "RF200-800mm F6.3-9 IS USM",
-      settings: "800 mm · f/9.5 · 1/1000 s · ISO 800",
+      focalLength: "800 mm",
+      aperture: "f/9.5",
+      shutterSpeed: "1/1000 s",
+      iso: "800",
+      focusDistance: "12.35 m",
     } );
   } );
 

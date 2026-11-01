@@ -144,6 +144,8 @@ Any--quality-grade = Any
 Any--user = Any
 #  Geoprivacy sheet descriptions
 Anyone-using-iNaturalist-can-see = Anyone using iNaturalist can see where this species was observed, and scientists can most easily use it for research.
+# Label for a photo's aperture (f-number) in its camera settings
+Aperture = Aperture
 APP-LANGUAGE = APP LANGUAGE
 # Combine pieces of a person's name provided by Apple. See
 # https://developer.apple.com/documentation/foundation/nspersonnamecomponents
@@ -199,6 +201,8 @@ BY-ME = BY ME
 # Lead in to a list including "Get your identifcation verified..." and "Share your observation..."
 By-uploading-your-observation-to-iNaturalist-you-can = By uploading your observation to iNaturalist, you can:
 Camera = Camera
+# Header of the table of a photo's camera metadata
+Camera-settings = Camera settings
 CANCEL = CANCEL
 Cancel = Cancel
 Captive-Cultivated = Captive/Cultivated
@@ -696,6 +700,10 @@ Flagged = Flagged
 Flash = Flash
 # Label for a button that toggles between the front and back cameras
 Flip-camera = Flip camera
+# Label for a photo's lens focal length in its camera settings
+Focal-length = Focal length
+# Label for the distance the camera was focused at when a photo was taken
+Focus-distance = Focus distance
 FOLLOW = FOLLOW
 # Subtitle for a screen showing the list of people a user is following
 FOLLOWING-X-PEOPLE =
@@ -870,6 +878,8 @@ Internet-Connection-Required = Internet Connection Required
 Intl-number = { $val }
 Introduced = Introduced
 Introduced-to-place = Introduced to { $place }
+# Label for a photo's ISO sensitivity in its camera settings
+ISO = ISO
 It-can-now-be-shared-for-use-in-research = It can now be shared for use in research
 It-may-take-up-to-an-hour-to-remove-content = It may take up to an hour to completely delete all associated content
 # Label for suggested list of organisms from computer vision in the Match screen new user flow
@@ -936,6 +946,8 @@ Leave-your-observations-in-this-project = Leave your observations in this projec
 Leave-your-observations-revoke-hidden-coordinates = Leave your observations in this project but prevent curators from viewing their hidden coordinates
 # Accessibility label for the button that increases the hotspot route time limit
 Lengthen-time-limit = Lengthen time limit
+# Label for the lens a photo was taken with
+Lens = Lens
 Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
 Life-List = Life List
@@ -1609,6 +1621,10 @@ Shows-identification-suggestions = Shows identification suggestions
 Shows-information-about-new-community-members = Shows information about new community members
 # Accessibility hint for button that shows observation creation options
 Shows-observation-creation-options = Shows observation creation options
+# Accessibility hint for the camera summary under a photo
+Shows-the-camera-settings-of-this-photo = Shows the camera settings of this photo.
+# Label for a photo's exposure time in its camera settings
+Shutter-speed = Shutter speed
 # Accessibility label for a button that allows user to sign in with their Apple account
 Sign-in-with-Apple = Sign in with Apple
 # Title of an error alert when Sign in with Apple fails
