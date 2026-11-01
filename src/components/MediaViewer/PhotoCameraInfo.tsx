@@ -4,6 +4,7 @@ import {
 import { Pressable, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, { useEffect, useMemo, useState } from "react";
+import { useWindowDimensions } from "react-native";
 import type { RealmObservation } from "realmModels/types";
 import type { PhotoCameraInfo as Info } from "sharedHelpers/photoCameraInfo";
 import { readCameraInfo } from "sharedHelpers/photoCameraInfo";
@@ -23,6 +24,7 @@ interface Props {
 // value in a table.
 const PhotoCameraInfo = ( { uri, url }: Props ) => {
   const { t } = useTranslation( );
+  const { height: windowHeight } = useWindowDimensions( );
   const realm = useRealm( );
   const [read, setRead] = useState<{ key: string; info: Info | null } | null>( null );
   const [showTable, setShowTable] = useState( false );
@@ -122,6 +124,7 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
             onPressClose={( ) => setShowTable( false )}
             insideModal
             scrollEnabled
+            maxHeight={windowHeight * 0.6}
           >
             <View className="p-5">
               {rows.map( ( [label, value] ) => (
