@@ -128,13 +128,13 @@ export class Bytes {
   }
 }
 
-interface Box {
+export interface Box {
   type: string;
   start: number; // payload start
   end: number; // box end
 }
 
-function boxes( bytes: Bytes, start: number, end: number ): Box[] {
+export function boxes( bytes: Bytes, start: number, end: number ): Box[] {
   const out: Box[] = [];
   let pos = start;
   while ( pos + 8 <= end ) {

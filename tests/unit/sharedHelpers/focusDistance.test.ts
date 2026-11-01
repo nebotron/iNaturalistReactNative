@@ -1,9 +1,9 @@
 import { readJpegFocusDistance } from "sharedHelpers/focusDistance";
 
 /* eslint-disable no-bitwise -- building binary fixture bytes */
-// A minimal little-endian Canon JPEG: SOI, then APP1 holding IFD0 -> Exif IFD
-// -> MakerNote -> ShotInfo, with the focus distance range at indexes 19/20.
-const canonJpeg = ( upper: number, lower: number ): string => {
+// A minimal little-endian Canon TIFF block: IFD0 -> Exif IFD -> MakerNote ->
+// ShotInfo, with the focus distance range at indexes 19/20.
+const canonTiff = ( upper: number, lower: number ): number[] => {
   const tiff: number[] = [];
   const u16 = ( v: number ) => tiff.push( v & 0xff, ( v >> 8 ) & 0xff );
   const u32 = ( v: number ) => { u16( v & 0xffff ); u16( v >>> 16 ); };
@@ -20,10 +20,42 @@ const canonJpeg = ( upper: number, lower: number ): string => {
     if ( i === 20 ) value = lower;
     u16( value );
   }
-  const app1 = [..."Exif\0\0"].map( c => c.charCodeAt( 0 ) ).concat( tiff );
+  return tiff;
+};
+
+const ascii = ( text: string ) => [...text].map( c => c.charCodeAt( 0 ) );
+
+// SOI, then APP1 holding the TIFF block.
+const canonJpeg = ( upper: number, lower: number ): string => {
+  const app1 = ascii( "Exif\0\0" ).concat( canonTiff( upper, lower ) );
   const length = app1.length + 2;
   const bytes = [0xff, 0xd8, 0xff, 0xe1, length >> 8, length & 0xff, ...app1, 0xff, 0xda];
   return String.fromCharCode( ...bytes );
+};
+
+// A minimal HEIF: ftyp, then a meta box whose iinf and iloc place an Exif item
+// right after it.
+const canonHeif = ( upper: number, lower: number ): string => {
+  const be = ( v: number, size: number ) => Array.from(
+    { length: size },
+    ( _, i ) => ( v >>> ( 8 * ( size - 1 - i ) ) ) & 0xff,
+  );
+  const box = ( type: string, payload: number[] ) => [
+    ...be( payload.length + 8, 4 ), ...ascii( type ), ...payload,
+  ];
+  const ftyp = box( "ftyp", ascii( "heix\0\0\0\0mif1heix" ) );
+  const infe = box( "infe", [2, 0, 0, 0, ...be( 1, 2 ), 0, 0, ...ascii( "Exif" )] );
+  const iinf = box( "iinf", [0, 0, 0, 0, ...be( 1, 2 ), ...infe] );
+  const exif = [...be( 6, 4 ), ...ascii( "Exif\0\0" ), ...canonTiff( upper, lower )];
+  const ilocSize = 8 + 4 + 2 + 2 + 2 + 2 + 2 + 4 + 4;
+  const metaSize = 8 + 4 + iinf.length + ilocSize;
+  const offset = ftyp.length + metaSize;
+  const iloc = box( "iloc", [
+    0, 0, 0, 0, 0x44, 0x00, ...be( 1, 2 ), ...be( 1, 2 ), 0, 0, ...be( 1, 2 ),
+    ...be( offset, 4 ), ...be( exif.length, 4 ),
+  ] );
+  const meta = box( "meta", [0, 0, 0, 0, ...iinf, ...iloc] );
+  return String.fromCharCode( ...ftyp, ...meta, ...exif );
 };
 
 const reader = ( data: string ) => async ( length: number, position: number ) => (
@@ -41,5 +73,10 @@ describe( "readJpegFocusDistance", ( ) => {
     expect( await readJpegFocusDistance( reader( infinite ), infinite.length ) ).toBeNull( );
     const unknown = canonJpeg( 0, 0 );
     expect( await readJpegFocusDistance( reader( unknown ), unknown.length ) ).toBeNull( );
+  } );
+
+  it( "reads the distance from a Canon HEIF's Exif item", async ( ) => {
+    const data = canonHeif( 664, 742 );
+    expect( await readJpegFocusDistance( reader( data ), data.length ) ).toBeCloseTo( 7.03 );
   } );
 } );
