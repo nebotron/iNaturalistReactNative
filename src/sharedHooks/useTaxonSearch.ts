@@ -6,6 +6,7 @@ import { RealmContext } from "providers/contexts";
 import {
   useCallback, useEffect, useMemo, useState,
 } from "react";
+import type Realm from "realm";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import type { RealmTaxon } from "realmModels/types";
@@ -21,12 +22,41 @@ const ONLINE_SEARCH_DEBOUNCE_MS = 250;
 const normalize = ( name?: string | null ) => ( name || "" ).replace( /[^a-zA-Z0-9]/g, "" )
   .toLowerCase( );
 
+// Normalized names of every cached taxon, so offline search scans plain
+// strings instead of reading Realm properties for every taxon on each
+// keystroke. Rebuilt lazily after any Taxon write.
+let searchIndex: { id: number; name: string }[] | null = null;
+let indexedRealm: Realm | null = null;
+const getSearchIndex = ( realm: Realm ) => {
+  if ( indexedRealm !== realm ) {
+    indexedRealm = realm;
+    searchIndex = null;
+    realm.objects( "Taxon" ).addListener( ( _taxa, changes ) => {
+      if ( changes.insertions.length + changes.newModifications.length
+        + changes.deletions.length > 0 ) {
+        searchIndex = null;
+      }
+    } );
+  }
+  if ( !searchIndex ) {
+    searchIndex = Array.from( realm.objects<RealmTaxon>( "Taxon" ), taxon => ( {
+      id: taxon.id,
+      name: Taxon.compileSearchableName( taxon ).toLowerCase( ),
+    } ) );
+  }
+  return searchIndex;
+};
+
 const useTaxonSearch = ( taxonQueryArg = "" ) => {
   const realm = useRealm( );
   const iconicTaxa = useIconicTaxa( { reload: false } );
   const taxonQuery = taxonQueryArg.trim();
-  const [localTaxa, setLocalTaxa] = useState<RealmTaxon[] | null>( null );
-  const [isUpdatingLocalDb, setIsUpdatingLocalDb] = useState( false );
+  const [localResult, setLocalResult] = useState<{
+    query: string;
+    taxa: RealmTaxon[];
+  } | null>( null );
+  // The last query whose online search finished, whatever its outcome
+  const [remoteDoneQuery, setRemoteDoneQuery] = useState<string | null>( null );
   // Online results, keyed by the query they answer so stale ones are ignored,
   // with the ids of taxa whose matched name equals the query
   const [remoteResult, setRemoteResult] = useState<{
@@ -55,23 +85,22 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     try {
       const { cleanedQuery } = validateRealmSearch( searchString );
       const lowerQuery = cleanedQuery.toLowerCase();
-      const exact: RealmTaxon[] = [];
-      const partial: RealmTaxon[] = [];
-      const allTaxa = realm.objects( "Taxon" );
+      const exact: number[] = [];
+      const partial: number[] = [];
       // Keep scanning past the partial-match cap so an exact match (e.g. a
       // bird code) cached late in the collection is never missed.
-      for ( let i = 0; i < allTaxa.length; i += 1 ) {
-        const taxon = allTaxa[i];
-        const searchableName = Taxon.compileSearchableName( taxon ).toLowerCase( );
-        if ( searchableName.includes( lowerQuery ) ) {
-          if ( searchableName.split( ";" ).includes( lowerQuery ) ) {
-            exact.push( taxon );
+      getSearchIndex( realm ).forEach( ( { id, name } ) => {
+        if ( name.includes( lowerQuery ) ) {
+          if ( name.split( ";" ).includes( lowerQuery ) ) {
+            exact.push( id );
           } else if ( partial.length < 50 ) {
-            partial.push( taxon );
+            partial.push( id );
           }
         }
-      }
-      return [...exact, ...partial];
+      } );
+      return [...exact, ...partial]
+        .map( id => realm.objectForPrimaryKey<RealmTaxon>( "Taxon", id ) )
+        .filter( ( taxon ): taxon is RealmTaxon => !!taxon?.isValid( ) );
     } catch ( error ) {
       throw new Error( `Search failed: ${error.message}` );
     }
@@ -84,7 +113,6 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     if ( taxonQuery.length === 0 || !isConnected ) return ( ) => undefined;
     let isSubscribed = true;
     const timer = setTimeout( async ( ) => {
-      setIsUpdatingLocalDb( true );
       try {
         const apiToken = await getJWT( );
         const remoteTaxa = await searchTaxa( { q: taxonQuery }, { api_token: apiToken } );
@@ -111,13 +139,12 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       } catch ( error ) {
         console.error( "Online taxon search failed:", error );
       } finally {
-        if ( isSubscribed ) setIsUpdatingLocalDb( false );
+        if ( isSubscribed ) setRemoteDoneQuery( taxonQuery );
       }
     }, ONLINE_SEARCH_DEBOUNCE_MS );
     return ( ) => {
       isSubscribed = false;
       clearTimeout( timer );
-      setIsUpdatingLocalDb( false );
     };
   }, [taxonQuery, isConnected, realm] );
 
@@ -125,16 +152,16 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
     let isSubscribed = true;
     const searchLocalTaxa = async ( ) => {
       if ( taxonQuery.length === 0 ) {
-        if ( isSubscribed ) setLocalTaxa( null );
+        if ( isSubscribed ) setLocalResult( null );
         return;
       }
 
       try {
         const results = await safeRealmSearch( taxonQuery );
-        if ( isSubscribed ) setLocalTaxa( results );
+        if ( isSubscribed ) setLocalResult( { query: taxonQuery, taxa: results } );
       } catch ( error ) {
         console.error( "Local search failed:", error );
-        if ( isSubscribed ) setLocalTaxa( [] );
+        if ( isSubscribed ) setLocalResult( { query: taxonQuery, taxa: [] } );
       }
     };
 
@@ -166,6 +193,9 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       };
     }
 
+    const localTaxa = localResult?.query === taxonQuery
+      ? localResult.taxa
+      : null;
     // Show local results until online results arrive, then replace them
     const unorderedTaxa = remoteResult?.query === taxonQuery
       ? remoteResult.taxa
@@ -198,18 +228,19 @@ const useTaxonSearch = ( taxonQueryArg = "" ) => {
       };
     }
 
-    // No results (loading or empty)
+    // No results yet: keep loading until both searches have finished
     return {
       taxa: [],
       refetch: () => undefined,
-      isLoading: isUpdatingLocalDb,
+      isLoading: !localTaxa || ( !!isConnected && remoteDoneQuery !== taxonQuery ),
     };
   }, [
     taxonQuery,
-    localTaxa,
+    localResult,
     remoteResult,
     iconicTaxa,
-    isUpdatingLocalDb,
+    isConnected,
+    remoteDoneQuery,
     recentTaxonIds,
     realm,
   ] );
