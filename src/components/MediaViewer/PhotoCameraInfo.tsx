@@ -52,21 +52,36 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
     };
   }, [realm, uri, url] );
   const key = `${uri}|${deviceUri}`;
+  // Saved before the full tag list was, so read the photo again where it can be.
+  const complete = stored?.metadata
+    ? stored
+    : null;
 
   useEffect( ( ) => {
-    if ( stored || ( !uri && !deviceUri ) ) return;
+    if ( complete || ( !uri && !deviceUri ) ) return;
     ( async ( ) => {
-      const info = ( uri && await readCameraInfo( uri ) )
-        || ( deviceUri && await readCameraInfo( deviceUri ) )
-        || null;
-      setRead( { key, info } );
+      // The library original fills in what the local copy lost, like a Canon
+      // focus distance when the photo was imported from the library.
+      const local = uri
+        ? await readCameraInfo( uri )
+        : null;
+      const original = deviceUri && ( !local || !local.focusDistance )
+        ? await readCameraInfo( deviceUri )
+        : null;
+      setRead( {
+        key,
+        info: local || original
+          ? {
+            ...original,
+            ...Object.fromEntries( Object.entries( local ?? {} ).filter( ( [, value] ) => value ) ),
+          }
+          : null,
+      } );
     } )( );
-  }, [stored, uri, deviceUri, key] );
+  }, [complete, uri, deviceUri, key] );
 
   // Only the current photo's info, never the previous one's while it loads.
-  const info = stored || ( read?.key === key
-    ? read.info
-    : null );
+  const info = complete || ( read?.key === key && read.info ) || stored;
   if ( !info ) return null;
   const lines = [
     [info.camera, info.lens].filter( Boolean ).join( " · " ),
@@ -81,6 +96,7 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
     [t( "Shutter-speed" ), info.shutterSpeed],
     [t( "ISO" ), info.iso],
     [t( "Focus-distance" ), info.focusDistance],
+    ...( info.metadata ?? [] ),
   ].filter( ( [, value] ) => value );
 
   return (
@@ -105,6 +121,7 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
             headerText={t( "Camera-settings" )}
             onPressClose={( ) => setShowTable( false )}
             insideModal
+            scrollEnabled
           >
             <View className="p-5">
               {rows.map( ( [label, value] ) => (

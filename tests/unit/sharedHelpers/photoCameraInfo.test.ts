@@ -22,6 +22,17 @@ describe( "formatCameraInfo", ( ) => {
     } );
   } );
 
+  it( "lists every other tag for the table", ( ) => {
+    expect( formatCameraInfo( {
+      Model: "iPhone 15",
+      ExposureBiasValue: 0.333333,
+      SubjectArea: [2000, 1500, 2200, 1300],
+    } )?.metadata ).toEqual( [
+      ["ExposureBiasValue", "0.3333"],
+      ["SubjectArea", "2000, 1500, 2200, 1300"],
+    ] );
+  } );
+
   it( "prefixes the make when the model leaves it out", ( ) => {
     expect( formatCameraInfo( { Make: "NIKON CORPORATION", Model: "Z 6" } )?.camera )
       .toBe( "NIKON CORPORATION Z 6" );

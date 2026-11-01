@@ -1,6 +1,8 @@
 import type { ExifTags } from "@lodev09/react-native-exify";
 import * as Exify from "@lodev09/react-native-exify";
+import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import exifUri from "sharedHelpers/exifUri";
+import { readFocusDistanceFromFile } from "sharedHelpers/focusDistance";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "photoCameraInfo" );
@@ -13,7 +15,15 @@ export interface PhotoCameraInfo {
   shutterSpeed?: string;
   iso?: string;
   focusDistance?: string;
+  // Every other tag, by name, for the full table.
+  metadata?: [string, string][];
 }
+
+// Tags already shown, formatted, in the fields above.
+const FORMATTED_TAGS = new Set( [
+  "Make", "Model", "LensModel", "FocalLength", "FocalLenIn35mmFilm", "FNumber",
+  "ExposureTime", "ISOSpeedRatings", "SubjectDistance",
+] );
 
 const round = ( value: number, places = 1 ) => String(
   Math.round( value * ( 10 ** places ) ) / ( 10 ** places ),
@@ -23,6 +33,13 @@ const exposure = ( seconds: number ) => ( seconds >= 1
   ? `${round( seconds )} s`
   : `1/${Math.round( 1 / seconds )} s` );
 
+const formatValue = ( value: unknown ): string => {
+  if ( typeof value === "number" ) return round( value, 4 );
+  if ( Array.isArray( value ) ) return value.map( formatValue ).join( ", " );
+  if ( value && typeof value === "object" ) return JSON.stringify( value );
+  return String( value ?? "" ).trim( );
+};
+
 const positive = ( value: unknown ): number | null => {
   const number = Number( value );
   return Number.isFinite( number ) && number > 0
@@ -30,7 +47,7 @@ const positive = ( value: unknown ): number | null => {
     : null;
 };
 
-// Camera, lens, exposure and focus distance from the tags ImageIO reads out of a photo
+// Camera, lens, exposure, focus distance and every other tag ImageIO reads out of a photo
 // (Make/Model from the TIFF dictionary, the rest from the Exif one).
 export const formatCameraInfo = ( tags?: ExifTags | null ): PhotoCameraInfo | null => {
   if ( !tags ) return null;
@@ -78,9 +95,32 @@ export const formatCameraInfo = ( tags?: ExifTags | null ): PhotoCameraInfo | nu
       ? `${round( distance, 2 )} m`
       : undefined,
   };
-  return Object.values( info ).some( Boolean )
-    ? info
-    : null;
+  if ( !Object.values( info ).some( Boolean ) ) return null;
+  const metadata = Object.keys( tags ).sort( )
+    .filter( tag => !FORMATTED_TAGS.has( tag ) )
+    .map( ( tag ): [string, string] => [tag, formatValue( tags[tag] )] )
+    .filter( ( [, value] ) => value );
+  return metadata.length > 0
+    ? { ...info, metadata }
+    : info;
+};
+
+// Canon keeps the focus distance in its MakerNote, which Exify doesn't read,
+// so read it from the file: the local copy when copyFocusDistance couldn't
+// (photos imported from ph:// uris), or the library original behind one.
+const readCanonFocusDistance = async ( uri: string ): Promise<number | null> => {
+  try {
+    const path = uri.startsWith( "ph://" )
+      ? ( await CameraRoll.iosGetImageDataById( uri.slice( "ph://".length ) ) )
+        .node.image.filepath
+      : uri;
+    return path
+      ? await readFocusDistanceFromFile( path )
+      : null;
+  } catch ( error ) {
+    logger.warn( "photo_focus_distance_unreadable", error );
+    return null;
+  }
 };
 
 const cache = new Map<string, PhotoCameraInfo | null>( );
@@ -93,6 +133,10 @@ export const readCameraInfo = async ( uri: string ): Promise<PhotoCameraInfo | n
   } catch ( error ) {
     logger.warn( "photo_camera_info_unreadable", error );
     return null;
+  }
+  if ( tags && !tags.SubjectDistance && /canon/i.test( String( tags.Make ?? "" ) ) ) {
+    const distance = await readCanonFocusDistance( uri );
+    if ( distance ) tags = { ...tags, SubjectDistance: distance };
   }
   const info = formatCameraInfo( tags );
   if ( !info ) {
