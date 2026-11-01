@@ -203,6 +203,14 @@ By-uploading-your-observation-to-iNaturalist-you-can = By uploading your observa
 Camera = Camera
 # Header of the table of a photo's camera metadata
 Camera-settings = Camera settings
+# Header of the Explore view showing how often each camera setting appears
+Camera-settings-of-X-photos-added-on-this-device =
+    Camera settings of { $count ->
+        [one] { $count } photo
+       *[other] { $count } photos
+    } added on this device
+# Accessibility label for the Explore view showing camera setting distributions
+Camera-Settings-View = Camera Settings View
 CANCEL = CANCEL
 Cancel = Cancel
 Captive-Cultivated = Captive/Cultivated
@@ -659,6 +667,7 @@ EXPAND-MAP = EXPAND MAP
 Experts-help-verify-and-improve-IDs = Experts help verify and improve IDs
 Explore = Explore
 EXPLORE = EXPLORE
+EXPLORE-CAMERA-SETTINGS = EXPLORE CAMERA SETTINGS
 Explore-Filters = Explore Filters
 EXPLORE-HOTSPOTS = EXPLORE HOTSPOTS
 # Button text for the Identifications view in Explore
@@ -769,6 +778,8 @@ HOTSPOT-SETTINGS = HOTSPOT SETTINGS
 Hotspots = Hotspots
 # Accessibility label for the wildlife hotspots explore view
 Hotspots-View = Hotspots View
+# Description of the Explore view showing camera setting distributions
+How-often-each-camera-lens-and-setting-appears = How often each camera, lens, and setting appears in your photos
 I-agree-to-the-Terms-of-Use = <0>I agree to the Terms of Use and Privacy Policy, and I have reviewed the Community Guidelines (</0><1>required</1><0>).</0>
 Iconic-taxon-name = Iconic taxon name: { $iconicTaxon }
 ID-in-Camera = ID in Camera
@@ -1129,6 +1140,9 @@ Next-slide = Next slide
 No = No
 # Error message when no camera can be found
 No-Camera-Available = No Camera Available
+# Shown when a list or view has no matching results
+# Shown when no matching photos have saved camera settings
+No-camera-settings-for-these-photos = No camera settings found for photos added on this device
 # Alert dialog title when attempting to send email but no email is installed
 No-email-app-installed = No email app installed
 No-email-app-installed-body = If you have another way of sending email, the address is { $address }
@@ -1140,7 +1154,6 @@ No-Media = No Media
 No-model-found = No model found
 No-photos-with-location-data-yet = No photos with location data yet
 No-projects-match-that-search = No projects match that search
-# Shown when a list or view has no matching results
 No-results-found = No results found
 # Used for explore screen when search params lead to a search with no data
 No-results-found-for-that-search = No results found for that search.

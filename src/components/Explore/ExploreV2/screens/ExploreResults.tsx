@@ -3,6 +3,7 @@ import { useFocusEffect, useRoute } from "@react-navigation/native";
 import { isEbirdEnabled } from "api/ebird";
 import type { ApiTotalBounds } from "api/types";
 import {
+  CAMERA_STATS_TAB,
   HOTSPOTS_TAB,
   IDENTIFICATIONS_TAB,
   IDENTIFIERS_TAB,
@@ -12,6 +13,7 @@ import {
   OBSERVERS_TAB,
   SPECIES_TAB,
 } from "appConstants/tabs";
+import CameraStatsView from "components/Explore/CameraStatsView";
 import EbirdResults from "components/Explore/EbirdResults";
 import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
@@ -101,6 +103,7 @@ const EXPLORE_VIEW_ICONS: Record<ExploreV2Tab, string> = {
   [IDENTIFIERS_TAB]: "identifiers",
   [LIFELIST_TAB]: "list",
   [IDENTIFICATIONS_TAB]: "id-agree",
+  [CAMERA_STATS_TAB]: "camera",
 };
 
 const noop = ( ) => undefined;
@@ -400,6 +403,13 @@ const ExploreResults = ( ) => {
       text: t( "Identifications-people-have-added-to-observations" ),
       value: IDENTIFICATIONS_TAB,
     },
+    [CAMERA_STATS_TAB]: {
+      buttonText: t( "EXPLORE-CAMERA-SETTINGS" ),
+      icon: "camera",
+      label: t( "Camera-settings" ),
+      text: t( "How-often-each-camera-lens-and-setting-appears" ),
+      value: CAMERA_STATS_TAB,
+    },
   };
   const exploreViewA11yLabels: Record<ExploreV2Tab, string> = {
     [OBSERVATIONS_TAB]: t( "Observations-View" ),
@@ -410,6 +420,7 @@ const ExploreResults = ( ) => {
     [IDENTIFIERS_TAB]: t( "Identifiers-View" ),
     [LIFELIST_TAB]: t( "Life-List-View" ),
     [IDENTIFICATIONS_TAB]: t( "Identifications-View" ),
+    [CAMERA_STATS_TAB]: t( "Camera-Settings-View" ),
   };
 
   const renderPermissionPrompt = ( ) => (
@@ -561,6 +572,8 @@ const ExploreResults = ( ) => {
             onCount={setIdentificationsCount}
           />
         );
+      case CAMERA_STATS_TAB:
+        return <CameraStatsView queryParams={baseSearchParams} />;
       default: {
         // Exhaustiveness check: ts fails if a new tab is added without a case.
         const _exhaustive: never = state.activeTab;

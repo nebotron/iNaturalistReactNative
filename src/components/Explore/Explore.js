@@ -19,6 +19,7 @@ import {
   useTranslation,
 } from "sharedHooks";
 
+import CameraStatsView from "./CameraStatsView";
 import ExploreHeader from "./Header/ExploreHeader";
 import IdentifiersView from "./IdentifiersView";
 import IdentifyView from "./IdentifyView";
@@ -40,6 +41,7 @@ const exploreViewIcon = {
   observers: "observers",
   identifiers: "identifiers",
   hotspots: "location",
+  cameraStats: "camera",
 };
 
 type Props = {
@@ -124,6 +126,7 @@ const Explore = ( {
     observers: t( "Observers-View" ),
     identifiers: t( "Identifiers-View" ),
     hotspots: t( "Hotspots-View" ),
+    cameraStats: t( "Camera-Settings-View" ),
   };
 
   const icon = exploreViewIcon[currentExploreView];
@@ -230,6 +233,11 @@ const Explore = ( {
             handleUpdateCount={handleUpdateCount}
           />
         )}
+        {currentExploreView === "cameraStats" && (
+          <View className="flex-1 pt-[50px]">
+            <CameraStatsView queryParams={queryParams} />
+          </View>
+        )}
         {currentExploreView === "hotspots" && (
           <WildlifeHotspotsScreen
             embedded
@@ -294,6 +302,13 @@ const Explore = ( {
         label: t( "Hotspots" ),
         text: t( "Clusters-of-observations-along-a-route" ),
         value: "hotspots",
+      },
+      cameraStats: {
+        buttonText: t( "EXPLORE-CAMERA-SETTINGS" ),
+        icon: "camera",
+        label: t( "Camera-settings" ),
+        text: t( "How-often-each-camera-lens-and-setting-appears" ),
+        value: "cameraStats",
       },
     };
 
