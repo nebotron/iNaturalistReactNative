@@ -42,6 +42,7 @@ interface Props {
   pinchToZoom: PinchGesture;
   resizeMode?: "cover" | "contain";
   inactive?: boolean;
+  macroMode?: boolean;
 }
 
 // A container for the Camera component
@@ -60,12 +61,13 @@ const CameraView = ( {
   pinchToZoom,
   resizeMode,
   inactive,
+  macroMode = false,
 }: Props ) => {
   const {
     animatedStyle,
     tapToFocus,
     tappedCoordinates,
-  } = useFocusTap( cameraRef, device.supportsFocus );
+  } = useFocusTap( cameraRef, device.supportsFocus && !macroMode );
 
   // check if camera page is active
   const isFocused = useIsFocused( );
@@ -172,6 +174,7 @@ const CameraView = ( {
           format={format}
           frameProcessor={frameProcessor}
           isActive={isActive}
+          lockFocusToMinimum={macroMode}
           onError={onError}
           outputOrientation="device"
           photo

@@ -14,6 +14,7 @@ import {
   fromUnixTime,
   getUnixTime,
   getYear,
+  isToday,
   isValid as isValidDate,
   parse,
   parseISO,
@@ -231,6 +232,14 @@ function formatISONoTimezone( date: Date | null ): string {
   // Always take the first part of the time/date string,
   // without any extra timezone, etc (just "2022-12-31T23:59:59")
   return formattedISODate.substring( 0, 19 );
+}
+
+// "2022-12-31 11:59:59 PM"
+function formatISOTimestamp( ms: number ): string {
+  const date = new Date( ms );
+  return format( date, isToday( date )
+    ? "h:mm:ss a"
+    : "yyyy-MM-dd h:mm:ss a" );
 }
 
 // two options for observed_on_string in uploader are:
@@ -546,6 +555,7 @@ export {
   formatDifferenceForHumans,
   formatISONoSeconds,
   formatISONoTimezone,
+  formatISOTimestamp,
   formatLongDate,
   formatLongDatetime,
   formatMonthYearDate,

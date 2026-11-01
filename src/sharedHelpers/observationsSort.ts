@@ -9,8 +9,7 @@ export enum OBSERVATIONS_SORT {
   MOST_FAVED = "MOST_FAVED",
 }
 
-// Most faved is only offered in Explore
-export type MyObservationsSort = Exclude<OBSERVATIONS_SORT, OBSERVATIONS_SORT.MOST_FAVED>;
+export type MyObservationsSort = OBSERVATIONS_SORT;
 
 interface ObservationSortAPIParams {
   order_by: ObservationOrderBy;
@@ -35,6 +34,7 @@ export const MY_OBSERVATIONS_SORT_OPTIONS: MyObservationsSort[] = [
   OBSERVATIONS_SORT.DATE_UPLOADED_OLDEST,
   OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST,
   OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST,
+  OBSERVATIONS_SORT.MOST_FAVED,
 ];
 
 export const EXPLORE_OBSERVATIONS_SORT_OPTIONS: OBSERVATIONS_SORT[] = [
@@ -42,10 +42,6 @@ export const EXPLORE_OBSERVATIONS_SORT_OPTIONS: OBSERVATIONS_SORT[] = [
   OBSERVATIONS_SORT.DATE_UPLOADED_OLDEST,
   OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST,
   OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST,
-];
-
-export const ADVANCED_SEARCH_OBSERVATIONS_SORT_OPTIONS: OBSERVATIONS_SORT[] = [
-  ...EXPLORE_OBSERVATIONS_SORT_OPTIONS,
   OBSERVATIONS_SORT.MOST_FAVED,
 ];
 
@@ -64,6 +60,8 @@ const OBSERVATIONS_SORT_TO_REALM_SORT: Record<MyObservationsSort, ObservationRea
   // observed_on_string set, so local sorting needs to use that field instead
   [OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST]: ["observed_on_string", true],
   [OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST]: ["observed_on_string", false],
+  // local-only observations can't have faves, so fall back to the default order
+  [OBSERVATIONS_SORT.MOST_FAVED]: ["_created_at", true],
 };
 
 // For sorting local, unsynced observations directly in a Realm query -- used for logged-out

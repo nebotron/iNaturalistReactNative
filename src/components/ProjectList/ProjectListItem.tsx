@@ -7,7 +7,8 @@ import {
   INatIcon,
   List2,
 } from "components/SharedComponents";
-import { FasterImageView, View } from "components/styledComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
+import { View } from "components/styledComponents";
 import React from "react";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
@@ -61,17 +62,12 @@ const ProjectListItem = ( { item, isHeader = false }: Props ) => {
       );
     }
     return (
-      <FasterImageView
+      <CachedImage
         className={
           classnames( iconClassName )
         }
-        source={{
-          url: productionIcon,
-          cachePolicy: "discWithCacheControl",
-          resizeMode: "cover",
-        }}
+        source={{ uri: productionIcon }}
         testID={`Project.${( item as Project ).id}.photo`}
-        accessibilityIgnoresInvertColors
       />
     );
   };

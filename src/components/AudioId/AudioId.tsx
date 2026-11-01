@@ -1,0 +1,339 @@
+/* eslint-disable i18next/no-literal-string */
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
+import { fetchSpeciesCounts } from "api/observations";
+import { fetchTaxaBasics } from "api/taxa";
+import {
+  Body3, Button, DisplayTaxonName, IconicTaxonIcon,
+} from "components/SharedComponents";
+import CachedImage from "components/SharedComponents/CachedImage";
+import { Pressable, ScrollView, View } from "components/styledComponents";
+import i18n from "i18next";
+import { RealmContext } from "providers/contexts";
+import React, { useCallback, useEffect, useMemo } from "react";
+import type { ViewProps } from "react-native";
+import { Linking, Modal, requireNativeComponent } from "react-native";
+import { UpdateMode } from "realm";
+import Taxon from "realmModels/Taxon";
+import type { RealmTaxon } from "realmModels/types";
+import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
+import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
+import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import { getTunable } from "sharedHelpers/tunableParams";
+import { useCurrentUser } from "sharedHooks";
+import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
+
+import useAudioIdHistory from "./audioIdHistory";
+import type { AudioIdSpecies } from "./audioIdModel";
+import type { Heard } from "./audioIdSession";
+import useAudioIdSession, {
+  isHeard, noteActivity, startDimming, stopDimming, useScreenDimmed,
+} from "./audioIdSession";
+
+const { useRealm } = RealmContext;
+
+// Animal classes the model covers, for asking which of them the user has seen.
+const SEEN_TAXON_IDS = [
+  3, // birds
+  20978, // amphibians
+  47158, // insects
+  40151, // mammals
+  26036, // reptiles
+].join( "," );
+const SEEN_MAX_PAGES = 10;
+const RECENT_OBS_DAYS = getTunable( "audioIdRecentObsDays" );
+
+// Taxon IDs the user has research-grade observations of, including the
+// ancestors of any subspecies-level observations, observed on or after d1 if
+// given. Needs the network; without it (or until it loads) nothing is marked
+// as not yet seen.
+const useSeenTaxonIds = (
+  userId: number | undefined,
+  d1?: string,
+): Set<number> | null => {
+  const { data } = useAuthenticatedQuery(
+    ["audioIdSeenTaxa", userId, d1],
+    async optsWithAuth => {
+      const pages = [];
+      for ( let page = 1; page <= SEEN_MAX_PAGES; page += 1 ) {
+        // eslint-disable-next-line no-await-in-loop
+        const p = await fetchSpeciesCounts( {
+          user_id: userId,
+          quality_grade: "research",
+          taxon_id: SEEN_TAXON_IDS,
+          d1,
+          per_page: 500,
+          page,
+        }, optsWithAuth );
+        if ( !p?.results ) throw new Error( "Couldn't fetch seen taxa" );
+        pages.push( p );
+        if ( p.results.length < 500 ) break;
+      }
+      return pages;
+    },
+    { enabled: !!userId },
+  );
+  return useMemo( ( ) => {
+    if ( !data ) return null;
+    const ids = new Set<number>( );
+    data.forEach( page => ( page?.results || [] ).forEach(
+      ( r: { taxon: { id: number; ancestor_ids?: number[] } } ) => {
+        ids.add( r.taxon.id );
+        r.taxon.ancestor_ids?.forEach( id => ids.add( id ) );
+      },
+    ) );
+    return ids;
+  }, [data] );
+};
+
+interface TaxonExtras { url?: string; commonName?: string }
+
+// Photo URLs and localized common names by taxon ID, from Realm. Taxa not
+// there yet are fetched in batches and saved: a long heard list mounting a
+// useTaxon per row fired dozens of full taxon fetches at once and got 429s
+const PHOTO_BATCH_SIZE = 30;
+const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
+  const realm = useRealm( );
+  const local = new Map( taxonIds.map( id => [
+    id, realm.objectForPrimaryKey<RealmTaxon>( "Taxon", id ),
+  ] ) );
+  const missing = taxonIds.filter( id => !local.get( id )?.name ).sort( ( a, b ) => a - b );
+  const currentUser = useCurrentUser( );
+  // Signed-in users get names per their account settings; otherwise use the app locale
+  const locale = currentUser
+    ? undefined
+    : i18n?.language ?? "en";
+  useAuthenticatedQuery(
+    ["audioIdTaxa", missing.join( "," ), locale],
+    async optsWithAuth => {
+      for ( let i = 0; i < missing.length; i += PHOTO_BATCH_SIZE ) {
+        // eslint-disable-next-line no-await-in-loop
+        const results = await fetchTaxaBasics(
+          missing.slice( i, i + PHOTO_BATCH_SIZE ),
+          optsWithAuth,
+          locale
+            ? { locale }
+            : {},
+        );
+        safeRealmWrite( realm, ( ) => ( results || [] ).forEach( ( t: Record<string, unknown> ) => {
+          realm.create( "Taxon", Taxon.forUpdate( Taxon.mapApiToRealm( t ) ), UpdateMode.Modified );
+        } ), "saving Audio ID taxa" );
+      }
+      return true;
+    },
+    { enabled: missing.length > 0, staleTime: Infinity },
+  );
+  return new Map( taxonIds.flatMap( id => {
+    const taxon = local.get( id );
+    return taxon?.name
+      ? [[id, { url: taxon.defaultPhoto?.url, commonName: taxon.preferredCommonName }]]
+      : [];
+  } ) );
+};
+
+const TaxonThumb = ( { url, onPress }: { url?: string; onPress: ( ) => void } ) => (
+  <Pressable
+    accessibilityRole="button"
+    accessibilityHint="Opens the species page."
+    className="w-[80px] h-[80px]"
+    onPress={onPress}
+  >
+    {url
+      ? <CachedImage source={{ uri: url }} className="w-full h-full" />
+      : <IconicTaxonIcon imageClassName="w-full h-full" iconicTaxonName="Aves" />}
+  </Pressable>
+);
+
+// The last 10 s of sound, Merlin-style: dark marks on a full-width white
+// strip, low frequencies at the bottom. Drawn natively from the microphone
+// audio.
+const AudioSpectrogram = requireNativeComponent<ViewProps>( "AudioSpectrogram" );
+const SPECTROGRAM_STYLE = { height: 140 };
+const Spectrogram = ( ) => (
+  <View className="mt-4 -mx-5 border-y border-lightGray">
+    <AudioSpectrogram style={SPECTROGRAM_STYLE} />
+  </View>
+);
+
+const AudioId = ( ) => {
+  const navigation = useNavigation( );
+  // Keep the display awake while this screen is focused
+  useFocusEffect( useCallback( ( ) => {
+    holdKeepAwake( "audioId" );
+    startDimming( );
+    return ( ) => {
+      stopDimming( );
+      releaseKeepAwake( "audioId" );
+    };
+  }, [] ) );
+  const {
+    listening, error, current, setup, setSeen, start,
+    stop,
+  } = useAudioIdSession( );
+  const dimmed = useScreenDimmed( );
+  const species = useMemo( ( ) => setup?.species || [], [setup] );
+  const currentUser = useCurrentUser( );
+  const seen = useSeenTaxonIds( currentUser?.id );
+  const recentSince = new Date( Date.now( ) - RECENT_OBS_DAYS * 86400000 )
+    .toISOString( ).slice( 0, 10 );
+  const recent = useSeenTaxonIds( currentUser?.id, recentSince );
+  useEffect( ( ) => setSeen(
+    currentUser
+      ? seen
+      : null,
+    currentUser
+      ? recent
+      : null,
+  ), [currentUser, seen, recent, setSeen] );
+
+  const outputOf = useMemo(
+    ( ) => new Map( species.map( ( sp, i ) => [sp.taxonId, i] ) ),
+    [species],
+  );
+  const scoreNow = ( taxonId: number ) => current?.[outputOf.get( taxonId ) ?? -1] || 0;
+  const hearingNow = ( taxonId: number ) => listening && isHeard( scoreNow( taxonId ) );
+  const clips = useAudioIdHistory( state => state.clips );
+  // Every species ever heard, most recently heard first.
+  const heardList = useMemo( ( ) => {
+    const bySpecies = new Map<number, Heard>( );
+    Object.values( clips ).forEach( c => {
+      const h = bySpecies.get( c.sp.taxonId );
+      bySpecies.set( c.sp.taxonId, {
+        sp: c.sp,
+        lastHeard: Math.max( h?.lastHeard || 0, c.time ),
+        best: Math.max( h?.best || 0, c.confidence ),
+        count: ( h?.count || 0 ) + 1,
+      } );
+    } );
+    return [...bySpecies.values( )].sort( ( a, b ) => b.lastHeard - a.lastHeard );
+  }, [clips] );
+  const taxonExtras = useTaxonExtras( useMemo(
+    ( ) => heardList.map( h => h.sp.taxonId ),
+    [heardList],
+  ) );
+  const hasUnlabeled = useMemo( ( ) => new Set( Object.values( clips )
+    .filter( c => !c.label ).map( c => c.sp.taxonId ) ), [clips] );
+
+  const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", {
+    id: taxonId, fromAudioId: true,
+  } );
+
+  // Species being heard right now are highlighted in yellow.
+  const row = ( sp: AudioIdSpecies, detail?: string ) => (
+    <Pressable
+      key={sp.taxonId}
+      accessibilityRole="button"
+      accessibilityHint="Opens the history of when this species was heard."
+      className={`flex-row items-center -ml-5 h-[80px] ${
+        hearingNow( sp.taxonId )
+          ? "bg-yellow"
+          : ""}`}
+      onPress={( ) => navigation.navigate( "AudioIdHistory", { taxonId: sp.taxonId } )}
+    >
+      <TaxonThumb
+        url={taxonExtras.get( sp.taxonId )?.url}
+        onPress={( ) => openTaxon( sp.taxonId )}
+      />
+      <View
+        className="flex-1 flex-row items-center self-stretch ml-3 pr-2 border-b border-lightGray"
+      >
+        <View className="flex-1">
+          <View className="flex-row items-center">
+            <View className="shrink">
+              <DisplayTaxonName
+                taxon={{
+                  id: sp.taxonId,
+                  name: sp.name,
+                  rank_level: 10,
+                  // The model's English name until the localized one loads
+                  preferred_common_name: taxonExtras.has( sp.taxonId )
+                    ? taxonExtras.get( sp.taxonId )?.commonName
+                    : sp.commonName,
+                }}
+                prefersCommonNames={currentUser?.prefers_common_names ?? true}
+                scientificNameFirst={currentUser?.prefers_scientific_name_first}
+              />
+            </View>
+            {hasUnlabeled.has( sp.taxonId ) && (
+              <View className="h-[8px] w-[8px] ml-2 rounded-full bg-inatGreen" />
+            )}
+          </View>
+          {detail && <Body3>{detail}</Body3>}
+          {currentUser && seen && !seen.has( sp.taxonId ) && (
+            <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
+          )}
+        </View>
+      </View>
+    </Pressable>
+  );
+
+  return (
+    // Claiming the touch when dimmed keeps it from also pressing anything
+    <View className="flex-1" onStartShouldSetResponderCapture={noteActivity}>
+      <ScrollView className="bg-white h-full px-5 pt-4">
+        <Body3 className="mb-3">
+          {"Identifies "}
+          {setup
+            ? (
+              <Body3
+                accessibilityRole="link"
+                accessibilityHint="Opens a searchable list of the species it listens for."
+                className="underline"
+                onPress={( ) => navigation.navigate( "AudioIdTaxa" )}
+              >
+                {`${species.length} animals`}
+              </Body3>
+            )
+            : "animals"}
+          {" by sound, using "}
+          <Body3
+            accessibilityRole="link"
+            accessibilityHint="Opens the BirdNET website."
+            className="underline"
+            onPress={( ) => Linking.openURL( "https://birdnet.cornell.edu" )}
+          >
+            BirdNET
+          </Body3>
+          .
+        </Body3>
+        <Button
+          level={listening
+            ? "warning"
+            : "focus"}
+          text={listening
+            ? "STOP LISTENING"
+            : "START LISTENING"}
+          onPress={listening
+            ? stop
+            : start}
+        />
+        {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
+        {listening && <Spectrogram />}
+        {listening && !current && (
+          <Body3 className="mt-1">Listening…</Body3>
+        )}
+
+        <View className="h-6" />
+        {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
+        {heardList.map( h => row(
+          h.sp,
+          `${h.count} ${h.count === 1
+            ? "time"
+            : "times"}, last ${formatISOTimestamp( h.lastHeard )}`,
+        ) )}
+
+        <View className="h-20" />
+      </ScrollView>
+      {/* Covers the header and tab bar too; a touch only wakes it */}
+      <Modal transparent visible={dimmed} animationType="fade">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityHint="Brightens the screen."
+          className="flex-1 bg-black/95"
+          onPress={noteActivity}
+        />
+      </Modal>
+    </View>
+  );
+};
+
+export default AudioId;

@@ -4,6 +4,9 @@ import User from "realmModels/User";
 import handleError from "./error";
 
 const MESSAGE_FIELDS = {
+  id: true,
+  created_at: true,
+  read_at: true,
   subject: true,
   body: true,
   from_user: User.FIELDS,

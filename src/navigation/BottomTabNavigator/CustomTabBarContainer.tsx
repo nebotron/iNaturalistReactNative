@@ -1,6 +1,7 @@
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import type { NavigationRoute, ParamListBase } from "@react-navigation/native";
 import { CommonActions } from "@react-navigation/native";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   SCREEN_NAME_MENU,
   SCREEN_NAME_NOTIFICATIONS,
@@ -53,6 +54,7 @@ const getActiveTab = ( activeTabName: TabName ): ScreenName => {
 const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
   const { t } = useTranslation( );
   const currentUser = useCurrentUser( );
+  const queryClient = useQueryClient( );
 
   const activeTabIndex = state?.index;
   const activeTabName = state?.routes[activeTabIndex]?.name as TabName;
@@ -81,8 +83,13 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
       }
     }
 
-    // If pressing the currently active tab, reset its stack
-    if ( targetTabName === activeTabName ) {
+    if ( targetTabName === "ExploreTab" ) {
+      queryClient.removeQueries( { queryKey: ["useInfiniteExploreScroll"] } );
+    }
+
+    // If pressing the currently active tab, reset its stack. The Me tab always
+    // opens the observation list; an import left in its stack resumes from +
+    if ( targetTabName === activeTabName || targetTabName === "ObservationsTab" ) {
       const idx = newStacks.findIndex( r => r.name === targetTabName );
       newStacks.splice( idx, 1, {
         name: targetTabName,
@@ -110,7 +117,7 @@ const CustomTabBarContainer: React.FC<Props> = ( { navigation, state } ) => {
     } else {
       navigation.navigate( targetTabName );
     }
-  }, [navigation, activeTabName] );
+  }, [navigation, activeTabName, queryClient] );
 
   const tabs: TabConfig[] = useMemo( ( ) => ( [
     {

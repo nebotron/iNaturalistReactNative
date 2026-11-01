@@ -1,4 +1,5 @@
 import flatten from "lodash/flatten";
+import { useMemo } from "react";
 import { useAuthenticatedInfiniteQuery } from "sharedHooks";
 
 const useInfiniteUserScroll = (
@@ -44,9 +45,12 @@ const useInfiniteUserScroll = (
   );
 
   const pages = data?.pages;
-  const allResults = pages?.map( page => page?.results );
-
-  const flattenedData = flatten( allResults );
+  // Memoised for the same reason as useInfiniteExploreScroll: a fresh array on
+  // every render re-renders the whole list.
+  const flattenedData = useMemo(
+    ( ) => flatten( pages?.map( page => page?.results ) ),
+    [pages],
+  );
 
   return {
     data: flattenedData,

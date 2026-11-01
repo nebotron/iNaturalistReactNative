@@ -10,6 +10,7 @@ import Orientation from "react-native-orientation-locker";
 import Realm from "realm";
 import { EnvConfig } from "sharedHelpers/envConfig";
 import { IS_FRESH_INSTALL, store } from "sharedHelpers/installData";
+import { resumeLocationHistoryTrackingIfEnabled } from "sharedHelpers/locationHistoryTracker";
 import { log } from "sharedHelpers/logger";
 import { addARCameraFiles } from "sharedHelpers/mlModel";
 
@@ -53,11 +54,14 @@ const StartupService = ( ) => {
           }
         }
       };
-      // don't remove this logger.info statement: it's used for internal metrics
-      logger.info( "pickup" );
-      logger.info(
-        `App version: ${DeviceInfo.getVersion()}, build: ${DeviceInfo.getBuildNumber()}`,
-      );
+      // don't remove this "pickup" message: it's used for internal metrics.
+      // The version rode along as a second line, i.e. a second remote write per
+      // launch, to say something every log entry's commit hash already pins
+      // down. Same message, same metric, one POST.
+      logger.infoWithExtra( "pickup", {
+        appVersion: DeviceInfo.getVersion( ),
+        build: DeviceInfo.getBuildNumber( ),
+      } );
 
       try {
         await checkForSignedInUser( );
@@ -79,6 +83,8 @@ const StartupService = ( ) => {
         // skipping location permissions here since we're manually showing
         // permission gates and don't want to pop up the native notification
         Geolocation.setRNConfiguration( geolocationConfig );
+
+        await resumeLocationHistoryTrackingIfEnabled( );
 
         if ( !isTablet ) {
           Orientation.lockToPortrait( );

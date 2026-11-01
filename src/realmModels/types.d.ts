@@ -21,6 +21,11 @@ export interface RealmPhoto extends RealmObject {
   licenseCode?: License;
   url?: string;
   localFilePath?: string;
+  cropOriginalLocalFilePath?: string;
+  cropX?: number;
+  cropY?: number;
+  cropW?: number;
+  cropH?: number;
 }
 
 export interface RealmSound extends RealmObject {
@@ -37,6 +42,7 @@ export interface RealmObservationPhotoPojo extends RealmObject {
   uuid: string;
   id?: number;
   originalPhotoUri?: string;
+  originalDevicePhotoUri?: string;
   photo: RealmPhoto;
   position?: number;
 }
@@ -158,11 +164,14 @@ export interface RealmTaxon extends RealmObject {
   isIconic?: boolean;
   iconic_taxon_name?: string;
   ancestor_ids?: number[];
+  birdCodes?: string[];
   _synced_at?: Date;
   taxonPhotos?: RealmTaxonPhoto[];
 }
 
 export interface RealmUser extends RealmObject {
+  createdAt?: string;
+  iconUrl?: string;
   id: number;
   identifications_count?: number;
   icon_url?: string;

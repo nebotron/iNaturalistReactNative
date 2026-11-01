@@ -1,0 +1,462 @@
+import { renderHook } from "@testing-library/react-native";
+import useUsbImport from "components/hooks/useUsbImport";
+import useUsbImportProgress from "stores/usbImportProgress";
+
+const mockListNewUsbImages = jest.fn( );
+const mockCopyUsbImageToFile = jest.fn( );
+const mockMarkUsbImagesImported = jest.fn( );
+const mockDeleteUsbSourceImages = jest.fn( async ( ) => ( { deleted: 0, failed: 0 } ) );
+const mockClearUsbOffloadMarker = jest.fn( );
+const mockMarkUsbOffloadStarted = jest.fn( );
+const mockTakeUnfinishedUsbOffload = jest.fn( ( ) => null );
+const mockUpdateUsbOffloadProgress = jest.fn( );
+const mockGetUsbFolderName = jest.fn( );
+const mockGetUsbFolderDiagnostics = jest.fn( );
+const mockRefreshUsbCardState = jest.fn( async ( ) => undefined );
+
+let mockPendingDeletes = [];
+const mockBeginBackgroundTask = jest.fn( ( ) => true );
+const mockEndBackgroundTask = jest.fn( ( ) => undefined );
+
+jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
+  availableMemoryMb: ( ) => 512,
+  refreshAvailableMemory: ( ) => undefined,
+  clearUsbOffloadMarker: ( ) => mockClearUsbOffloadMarker( ),
+  deleteUsbSourceImages: ( ...args ) => mockDeleteUsbSourceImages( ...args ),
+  getUsbFolderDiagnostics: ( ) => mockGetUsbFolderDiagnostics( ),
+  getUsbFolderName: ( ) => mockGetUsbFolderName( ),
+  isCameraSubfolder: folder => folder?.parentName?.toUpperCase( ) === "DCIM",
+  isUsbImportSupported: ( ) => true,
+  listNewUsbImages: ( ...args ) => mockListNewUsbImages( ...args ),
+  markUsbImagesImported: ( ...args ) => mockMarkUsbImagesImported( ...args ),
+  markUsbOffloadStarted: ( ...args ) => mockMarkUsbOffloadStarted( ...args ),
+  reconcileSavedUsbImages: async ( ) => 0,
+  // The real pending-delete list is MMKV-backed and outlives the run; an
+  // in-memory array behaves the same way within a test, and the tests that
+  // care about it reset it in beforeEach.
+  addPendingUsbDeletes: paths => mockPendingDeletes.push( ...paths ),
+  getPendingUsbDeletes: ( ) => [...mockPendingDeletes],
+  clearPendingUsbDeletes: paths => {
+    const done = new Set( paths );
+    mockPendingDeletes = mockPendingDeletes.filter( path => !done.has( path ) );
+  },
+  copyUsbImageToFile: ( ...args ) => mockCopyUsbImageToFile( ...args ),
+  refreshUsbCardState: ( ) => mockRefreshUsbCardState( ),
+  takeUnfinishedUsbOffload: ( ) => mockTakeUnfinishedUsbOffload( ),
+  updateUsbOffloadProgress: ( ...args ) => mockUpdateUsbOffloadProgress( ...args ),
+} ) );
+
+jest.mock( "sharedHelpers/usbStaging", ( ) => ( {
+  stagedPathFor: relativePath => `/staging/${relativePath}`,
+  takeUnofferedStagedGroups: async ( ) => [],
+} ) );
+
+jest.mock( "sharedHelpers/queuedDeletionAlbum", ( ) => ( {
+  requestQueuedDeletionAlbumSync: jest.fn( ),
+} ) );
+
+jest.mock( "sharedHelpers/installData", ( ) => ( {
+  useOnboardingShown: ( ) => [true],
+} ) );
+
+jest.mock( "sharedHelpers/backgroundExecution", ( ) => ( {
+  beginBackgroundUsbImportTask: async ( ) => mockBeginBackgroundTask( ),
+  endBackgroundUsbImportTask: async ( ) => mockEndBackgroundTask( ),
+} ) );
+
+const mockLogger = {
+  info: jest.fn( ),
+  debug: jest.fn( ),
+  warn: jest.fn( ),
+  warnWithExtra: jest.fn( ),
+  error: jest.fn( ),
+  errorWithExtra: jest.fn( ),
+};
+jest.mock( "sharedHelpers/logger", ( ) => ( {
+  log: {
+    extend: ( ) => ( {
+      info: ( ...args ) => mockLogger.info( ...args ),
+      // eslint-disable-next-line testing-library/no-debugging-utils
+      debug: ( ...args ) => mockLogger.debug( ...args ),
+      warn: ( ...args ) => mockLogger.warn( ...args ),
+      warnWithExtra: ( ...args ) => mockLogger.warnWithExtra( ...args ),
+      error: ( ...args ) => mockLogger.error( ...args ),
+      errorWithExtra: ( ...args ) => mockLogger.errorWithExtra( ...args ),
+    } ),
+  },
+} ) );
+
+// Mounts the hook as App does, then presses Import From USB.
+const startImport = ( ) => {
+  const { result } = renderHook( ( ) => useUsbImport( ) );
+  result.current( );
+  return result;
+};
+
+const images = n => Array.from(
+  { length: n },
+  ( _unused, i ) => ( { relativePath: `IMG_${i}.CR3` } ),
+);
+
+describe( "useUsbImport", ( ) => {
+  beforeEach( ( ) => {
+    jest.clearAllMocks( );
+    jest.useFakeTimers( );
+    mockPendingDeletes = [];
+    mockGetUsbFolderName.mockResolvedValue( "101EOSR7" );
+    mockGetUsbFolderDiagnostics.mockResolvedValue( { bookmarkPresent: true } );
+    mockListNewUsbImages.mockResolvedValue( {
+      available: true,
+      images: images( 40 ),
+      imageFileCount: 40,
+      alreadyImportedCount: 0,
+      knownCount: 0,
+      regularFileCount: 40,
+      extensions: { cr3: 40 },
+    } );
+  } );
+  afterEach( ( ) => jest.useRealTimers( ) );
+
+  // A wedged Photos library makes every save burn the full 30s timeout in
+  // turn. Left to run, a 122-photo card is an hour of grinding to save
+  // nothing, plus an error line per file in the remote log.
+  it( "abandons the run after a run of Photos-library save timeouts", async ( ) => {
+    mockCopyUsbImageToFile.mockImplementation( ( ) => new Promise( ( ) => {} ) );
+
+    startImport( );
+    // Three 30s save timeouts, then the fourth file is never attempted.
+    await jest.advanceTimersByTimeAsync( 4 * 30_000 );
+
+    expect( mockCopyUsbImageToFile ).toHaveBeenCalledTimes( 3 );
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_library_wedged",
+      expect.objectContaining( { abandoned: 37, saved: 0, failed: 3 } ),
+    );
+  } );
+
+  // Every log line is a network POST, so a run the app dies inside takes its
+  // last lines with it. The Aug 5 19:08–20:22 log has two offloads of the same
+  // 80 files, each followed within a minute by a cold pickup and neither by an
+  // outcome line, and nothing said how far either got. The marker is MMKV, so
+  // it survives the death it is measuring.
+  it( "reports an offload the app never came back from", async ( ) => {
+    mockTakeUnfinishedUsbOffload.mockReturnValueOnce( {
+      total: 80,
+      saved: 12,
+      failed: 1,
+      startedAt: Date.now( ) - 44_000,
+      lastProgressAt: Date.now( ) - 30_000,
+      phase: "saving 13/80",
+      appState: "background",
+      availableMemoryMb: 96,
+    } );
+    mockCopyUsbImageToFile.mockResolvedValue( { localIdentifier: "x" } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    // Where it stopped and what the app was doing there: a native call that
+    // wedges leaves the app active, iOS suspending the process does not.
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_never_finished",
+      expect.objectContaining( {
+        total: 80,
+        saved: 12,
+        failed: 1,
+        msSinceProgress: 30_000,
+        phase: "saving 13/80",
+        appStateAtLastProgress: "background",
+        availableMemoryMbAtLastProgress: 96,
+      } ),
+    );
+    // The run that did finish clears its own marker rather than leaving one
+    // for the next scan to report.
+    expect( mockClearUsbOffloadMarker ).toHaveBeenCalled( );
+  } );
+
+  it( "says nothing when the previous offload finished", async ( ) => {
+    mockCopyUsbImageToFile.mockResolvedValue( { localIdentifier: "x" } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockMarkUsbOffloadStarted ).toHaveBeenCalledWith( 40 );
+    expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+      "usb_offload_never_finished",
+      expect.anything( ),
+    );
+  } );
+
+  it( "does not retry a wedged library on the next press", async ( ) => {
+    mockCopyUsbImageToFile.mockImplementation( ( ) => new Promise( ( ) => {} ) );
+
+    const result = startImport( );
+    await jest.advanceTimersByTimeAsync( 4 * 30_000 );
+    expect( mockCopyUsbImageToFile ).toHaveBeenCalledTimes( 3 );
+
+    // Pressing Import again a minute later: nothing recovers a wedged library
+    // on that timescale, so retrying just repeats the same three timeouts.
+    result.current( );
+    await jest.advanceTimersByTimeAsync( 60_000 );
+    expect( mockCopyUsbImageToFile ).toHaveBeenCalledTimes( 3 );
+  } );
+
+  // This is the run that most needs explaining, and it was the one run that
+  // logged no outcome at all: the summary used to sit inside "if anything
+  // saved", so the Aug 5 log couldn't say whether the offload finished or the
+  // app died holding it.
+  it( "reports the outcome of a run where nothing saved", async ( ) => {
+    mockCopyUsbImageToFile.mockRejectedValue( new Error( "unreadable file" ) );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockDeleteUsbSourceImages ).not.toHaveBeenCalled( );
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_saves_failing",
+      expect.objectContaining( { saved: 0, failed: 3, abandoned: 37 } ),
+    );
+  } );
+
+  // The Sep 18 log: the card came out mid-run, every remaining copy failed
+  // instantly with "USB folder is not available", and the run was charged the
+  // ten-minute cooldown meant for a wedged library — so the card, back in a
+  // minute later, sat unread for nine more while the log said the app was
+  // "waiting out a run of failed saves to the Photos library".
+  it( "does not make a card wait out a cooldown for having been unplugged", async ( ) => {
+    mockGetUsbFolderDiagnostics.mockResolvedValue( {
+      bookmarkPresent: true, resolved: false, stale: false, reachable: false,
+    } );
+    mockCopyUsbImageToFile.mockRejectedValue( new Error( "USB folder is not available" ) );
+
+    const result = startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockLogger.warnWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_drive_gone",
+      expect.objectContaining( { abandoned: 37, retryDelayMs: 0 } ),
+    );
+
+    // The card is back, so the very next press reads it rather than skipping.
+    mockCopyUsbImageToFile.mockResolvedValue( { localIdentifier: "x" } );
+    mockGetUsbFolderDiagnostics.mockResolvedValue( {
+      bookmarkPresent: true, resolved: true, stale: false, reachable: true,
+    } );
+    mockCopyUsbImageToFile.mockClear( );
+    result.current( );
+    await jest.advanceTimersByTimeAsync( 0 );
+    expect( mockCopyUsbImageToFile ).toHaveBeenCalled( );
+  } );
+
+  it( "waits for space and retries when a save runs out of room", async ( ) => {
+    let full = true;
+    mockCopyUsbImageToFile.mockImplementation( async relativePath => {
+      if ( full ) {
+        const err = new Error( "“IMG.CR3” couldn’t be copied to “tmp”" );
+        err.code = "out-of-space";
+        throw err;
+      }
+      return { localIdentifier: relativePath };
+    } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+    expect( useUsbImportProgress.getState( ).phase ).toBe( "waitingForSpace" );
+
+    full = false;
+    await jest.advanceTimersByTimeAsync( 1_000 );
+    expect( mockCopyUsbImageToFile ).toHaveBeenCalledTimes( 41 );
+    expect( mockLogger.errorWithExtra ).not.toHaveBeenCalled( );
+    expect( mockLogger.warnWithExtra ).toHaveBeenCalledTimes( 1 );
+    expect( mockLogger.warnWithExtra ).toHaveBeenCalledWith(
+      "usb_offload_waiting_for_space",
+      expect.objectContaining( { reason: "save-out-of-space", position: "1/40" } ),
+    );
+    expect( mockLogger.info ).toHaveBeenCalledWith(
+      expect.stringContaining( "resumed after waiting" ),
+    );
+  } );
+
+  // Every log line is a network POST. A run that fails file after file used to
+  // send one per file; the abandon line above carries the totals.
+  it( "logs the first few save failures, not one per file", async ( ) => {
+    mockCopyUsbImageToFile.mockImplementation( async relativePath => {
+      if ( Number( relativePath.match( /\d+/ )[0] ) % 2 === 0 ) {
+        throw new Error( "unreadable file" );
+      }
+      return { localIdentifier: relativePath };
+    } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    // 20 of the 40 failed, alternating so no three are consecutive and the run
+    // is never abandoned.
+    expect( mockCopyUsbImageToFile ).toHaveBeenCalledTimes( 40 );
+    expect( mockLogger.errorWithExtra.mock.calls.filter(
+      ( [msg] ) => typeof msg === "string" && msg.startsWith( "USB offload: failed to save" ),
+    ) ).toHaveLength( 3 );
+    expect( mockLogger.info ).toHaveBeenCalledWith(
+      expect.stringContaining( "USB offload: saved 20, failed 20" ),
+    );
+  } );
+
+  it( "carries on past an ordinary failure that is not a timeout", async ( ) => {
+    mockCopyUsbImageToFile.mockImplementation( async relativePath => {
+      if ( relativePath === "IMG_0.CR3" ) throw new Error( "unreadable file" );
+      return { localIdentifier: relativePath };
+    } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockCopyUsbImageToFile ).toHaveBeenCalledTimes( 40 );
+    expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+      "usb_offload_library_wedged",
+      expect.anything( ),
+    );
+  } );
+
+  // What a resumed process sees: the clock has moved by ten minutes and the
+  // deadline's ticker gets one wake-up to notice it. Charging that whole gap
+  // would fail the file for time it spent frozen — three of those in a row
+  // abandon the run and hold the card off for ten minutes. Fake timers can't
+  // reproduce the suspension itself (they decouple the clock from when timers
+  // fire, which is the coupling that causes this), so this pins the bounded
+  // charge rather than the wall-clock deadline it replaced.
+  it( "does not count a suspension against a save's deadline", async ( ) => {
+    mockCopyUsbImageToFile.mockImplementation( ( ) => new Promise( ( ) => {} ) );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 5_000 );
+
+    // iOS freezes the app for ten minutes: the clock moves, no timer fires.
+    jest.setSystemTime( Date.now( ) + 10 * 60_000 );
+    await jest.advanceTimersByTimeAsync( 1_000 );
+
+    expect( mockLogger.errorWithExtra ).not.toHaveBeenCalledWith(
+      "USB offload: failed to save IMG_0.CR3",
+      expect.anything( ),
+    );
+
+    // The save really is wedged, though, so the deadline still arrives once the
+    // app has been running for its full length.
+    await jest.advanceTimersByTimeAsync( 30_000 );
+
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "USB offload: failed to save IMG_0.CR3",
+      expect.objectContaining( { timedOut: true } ),
+    );
+  } );
+
+  // The Sep 9 log: the bookmarked folder resolves and is reachable, and holds
+  // nothing at all — no files, no subfolders. The camera has moved on to a
+  // sibling of it that the bookmark grants no access to, and every scan since
+  // Sep 5 has come back clean, which reads in the log exactly like a drive with
+  // nothing new on it. The one test in this file whose listing sits under DCIM:
+  // the marker is logged once per process.
+  it( "reports a watched folder the camera has moved on from", async ( ) => {
+    mockListNewUsbImages.mockResolvedValue( {
+      available: true,
+      reason: "ok",
+      images: [],
+      imageFileCount: 0,
+      alreadyImportedCount: 0,
+      knownCount: 2623,
+      regularFileCount: 0,
+      directoryCount: 0,
+      extensions: {},
+      name: "101EOSR7",
+      parentName: "DCIM",
+    } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockLogger.errorWithExtra ).toHaveBeenCalledWith(
+      "usb_watching_camera_subfolder",
+      expect.objectContaining( { folder: "101EOSR7", imageFiles: 0, directories: 0 } ),
+    );
+  } );
+  // iOS grants the background grace period to a task that is already registered
+  // when the app leaves the foreground. Asking for one from the AppState
+  // listener, as the app is going away, is a bridge call racing the suspension
+  // it exists to survive: the Sep 5 run saved 9 of 141 and stopped 6.7s in with
+  // appState "inactive", a fraction of the window it should have had. So the
+  // run takes it up front, while the app is still frontmost.
+  it( "holds background time from the moment the offload starts", async ( ) => {
+    mockCopyUsbImageToFile.mockResolvedValue( { localIdentifier: "asset" } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    // The run has begun, and the app never left the foreground — so the only
+    // thing that can have asked for background time is the run itself.
+    expect( mockMarkUsbOffloadStarted ).toHaveBeenCalled( );
+    expect( mockBeginBackgroundTask ).toHaveBeenCalled( );
+  } );
+
+  // Each file is marked imported the moment it saves, so no later scan lists it
+  // again — but deletion only happens once the whole batch is saved. A run iOS
+  // suspends in between leaves those photos on the card for good: invisible to
+  // the scan, and never deleted by anyone.
+  it( "deletes what a suspended run saved but never removed", async ( ) => {
+    mockPendingDeletes.push( "IMG_LEFTOVER.CR3" );
+    // The scan finds nothing new, exactly as it would once the dead run's files
+    // are all marked imported.
+    mockListNewUsbImages.mockResolvedValue( {
+      available: true,
+      reason: "ok",
+      images: [],
+      imageFileCount: 1,
+      alreadyImportedCount: 1,
+      knownCount: 1,
+      regularFileCount: 1,
+      extensions: { cr3: 1 },
+    } );
+    mockDeleteUsbSourceImages.mockResolvedValue( { deleted: 1, failed: 0 } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockDeleteUsbSourceImages ).toHaveBeenCalledWith( ["IMG_LEFTOVER.CR3"] );
+    // And forgotten, so the next scan doesn't ask the card to delete it again.
+    expect( mockPendingDeletes ).toEqual( [] );
+  } );
+
+  // The drive being gone is the one delete failure worth retrying — it is the
+  // unplugged-mid-run case, and the card still holds the files.
+  it( "keeps leftovers pending when the drive is gone", async ( ) => {
+    mockPendingDeletes.push( "IMG_LEFTOVER.CR3" );
+    mockListNewUsbImages.mockResolvedValue( {
+      available: true,
+      reason: "ok",
+      images: [],
+      imageFileCount: 0,
+      alreadyImportedCount: 1,
+      knownCount: 1,
+      regularFileCount: 0,
+      extensions: {},
+    } );
+    mockDeleteUsbSourceImages.mockResolvedValue( {
+      deleted: 0,
+      failed: 1,
+      available: false,
+    } );
+
+    startImport( );
+    await jest.advanceTimersByTimeAsync( 0 );
+
+    expect( mockPendingDeletes ).toEqual( ["IMG_LEFTOVER.CR3"] );
+  } );
+
+  // Importing waits for the button; mounting only checks the card for it.
+  it( "does not import until the button is pressed", async ( ) => {
+    renderHook( ( ) => useUsbImport( ) );
+    await jest.advanceTimersByTimeAsync( 60_000 );
+
+    expect( mockListNewUsbImages ).not.toHaveBeenCalled( );
+    expect( mockRefreshUsbCardState ).toHaveBeenCalledTimes( 1 );
+    expect( useUsbImportProgress.getState( ).startImport ).toBeDefined( );
+  } );
+} );

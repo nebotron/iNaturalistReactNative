@@ -8,6 +8,11 @@ import type Realm from "realm";
 import type { RealmTaxon } from "realmModels/types";
 import { log } from "sharedHelpers/logger";
 import { predictImage } from "sharedHelpers/mlModel";
+import {
+  getCachedSuggestions,
+  offlineSuggestionsCacheKey,
+  setCachedSuggestions,
+} from "sharedHelpers/suggestionsCache";
 import type { Prediction } from "vision-camera-plugin-inatvision";
 
 import type { UseSuggestionsOfflineSuggestion } from "./types";
@@ -61,7 +66,7 @@ export const predictOffline = async ( {
   const formatPrediction = ( prediction: Prediction ): UseSuggestionsOfflineSuggestion => {
     // The "lowest" ancestor_id that matches an iconic taxon
     // is the iconic taxon of this prediction.
-    const iconicTaxonId = prediction.ancestor_ids
+    const iconicTaxonId = [...prediction.ancestor_ids]
     // Need to reverse so we find the most specific iconic taxon first as an ancestor_ids is
     // a list of ancestor ids from tip to root of taxonomy
     // e.g. Aves is included in Animalia
@@ -78,6 +83,7 @@ export const predictOffline = async ( {
         iconic_taxon_name: iconicTaxonId !== undefined
           ? iconicTaxaLookup[iconicTaxonId]
           : undefined,
+        ancestor_ids: prediction.ancestor_ids,
       },
     };
   };
@@ -126,6 +132,15 @@ const useOfflineSuggestions = (
 
   const fetchOfflineSuggestions = useCallback( async () => {
     if ( !photoUri ) return;
+    const cacheKey = offlineSuggestionsCacheKey( photoUri, latitude, longitude );
+    // Running the on-device model is expensive, so avoid re-running it for a
+    // photo (+ location) we've already scanned, even across app restarts.
+    const cachedSuggestions = getCachedSuggestions<OfflineSuggestionsResponse>( cacheKey );
+    if ( cachedSuggestions ) {
+      setOfflineSuggestions( cachedSuggestions );
+      onFetched( { isOnline: false } );
+      return;
+    }
     try {
       const suggestions = await predictOffline( {
         latitude,
@@ -136,6 +151,7 @@ const useOfflineSuggestions = (
       if ( !suggestions ) {
         return;
       }
+      setCachedSuggestions( cacheKey, suggestions );
       setOfflineSuggestions( suggestions );
       onFetched( { isOnline: false } );
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

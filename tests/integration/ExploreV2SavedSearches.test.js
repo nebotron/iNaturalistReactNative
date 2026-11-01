@@ -12,10 +12,10 @@ import {
   enableExploreV2,
   lastObservationsSearchParams,
   navigateToExplore,
-  openUniversalSearch,
-  resetUniversalSearch,
+  openAdvancedSearch,
+  resetAdvancedSearch,
   searchForTaxon,
-  submitUniversalSearch,
+  submitAdvancedSearch,
 } from "tests/helpers/exploreV2";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
@@ -100,46 +100,40 @@ afterEach( async ( ) => {
 global.withAnimatedTimeTravelEnabled( { skipFakeTimers: true } );
 
 describe( "saved searches", ( ) => {
-  it( "saves the search, runs it again later, and unsaves it", async ( ) => {
+  it( "saves a named search, runs it again later, and deletes it", async ( ) => {
     renderApp( );
     await navigateToExplore( );
-    await openUniversalSearch( );
-    await searchForTaxon( mockTaxon );
+    await searchForTaxon( mockTaxon, global.mockRealms[__filename] );
 
-    await actor.press( await screen.findByLabelText( t( "Save-this-search" ) ) );
-
-    // The toast fades in, so it is on the screen before it is visible
-    expect( await screen.findByText( t( "Added-to-Saved-Searches" ) ) ).toBeOnTheScreen( );
-    expect( await screen.findByLabelText( t( "Remove-this-saved-search" ) ) ).toBeVisible( );
+    await openAdvancedSearch( );
+    expect( await screen.findByText( t( "No-saved-filters-yet" ) ) ).toBeVisible( );
+    await actor.press( screen.getByTestId( "SavedSearches.save" ) );
+    await actor.type( await screen.findByTestId( "TextInputSheet.notes" ), "Cup plants" );
+    await actor.press( screen.getByTestId( "TextInputSheet.confirm" ) );
+    expect( await screen.findByText( "Cup plants" ) ).toBeVisible( );
 
     // Clear the subject, so the search goes back to all organisms worldwide and applying
     // the saved search has something to change
-    await openUniversalSearch( );
-    await resetUniversalSearch( );
-    await submitUniversalSearch( );
+    await resetAdvancedSearch( );
+    await submitAdvancedSearch( );
     await waitFor( ( ) => {
       expect( lastObservationsSearchParams( ) ).not.toHaveProperty( "taxon_id" );
     } );
-    expect( await screen.findByLabelText( t( "Save-this-search" ) ) ).toBeVisible( );
 
-    await openUniversalSearch( );
+    await openAdvancedSearch( );
     const savedList = await screen.findByTestId( "SavedSearches" );
-    await actor.press( within( savedList ).getByText( mockTaxon.name ) );
+    await actor.press( within( savedList ).getByText( "Cup plants" ) );
 
     await screen.findByTestId( "ExploreResults" );
     await waitFor( ( ) => {
       expect( lastObservationsSearchParams( ) ).toMatchObject( { taxon_id: mockTaxon.id } );
     } );
-    const header = await screen.findByTestId( "ExploreV2Header" );
-    expect( within( header ).getByTestId( "ExploreV2Header.subject" ) ).toBeVisible( );
+    expect( screen.queryByLabelText( "Save this search" ) ).toBeNull( );
 
-    const removeStar = await screen.findByLabelText( t( "Remove-this-saved-search" ) );
-    expect( removeStar ).toBeVisible( );
-
-    await actor.press( removeStar );
-
-    expect( await screen.findByText( t( "Removed-from-Saved-Searches" ) ) ).toBeOnTheScreen( );
-    await openUniversalSearch( );
-    expect( screen.queryByTestId( "SavedSearches" ) ).toBeNull( );
+    await openAdvancedSearch( );
+    await actor.press( within( await screen.findByTestId( "SavedSearches" ) )
+      .getByLabelText( t( "Delete-saved-filter" ) ) );
+    await actor.press( await screen.findByText( t( "DELETE" ) ) );
+    expect( await screen.findByText( t( "No-saved-filters-yet" ) ) ).toBeVisible( );
   } );
 } );

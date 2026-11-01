@@ -11,10 +11,11 @@ import {
   View,
 } from "components/styledComponents";
 import React from "react";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useTranslation } from "sharedHooks";
 
-const HIGH_CONFIDENCE_THRESHOLD = 93;
-const LIKELY_CONFIDENCE_THRESHOLD = 50;
+const HIGH_CONFIDENCE_THRESHOLD = getTunable( "matchHighConfidence" );
+const LIKELY_CONFIDENCE_THRESHOLD = getTunable( "matchLikelyConfidence" );
 
 interface Props {
   topSuggestion?: ApiSuggestion;

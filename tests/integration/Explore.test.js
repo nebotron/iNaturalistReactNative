@@ -41,8 +41,6 @@ const switchToSpeciesView = async ( ) => {
   await actor.press( observationsViewIcon );
   const speciesRadioButton = await screen.findByText( "Species" );
   await actor.press( speciesRadioButton );
-  const confirmButton = await screen.findByText( /EXPLORE SPECIES/ );
-  await actor.press( confirmButton );
   const speciesViewIcon = await screen.findByLabelText( /Species View/ );
   expect( speciesViewIcon ).toBeVisible( );
 };

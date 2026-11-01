@@ -1,3 +1,4 @@
+import { AppState } from "react-native";
 import type { PerformanceEntry } from "react-native-performance";
 import performance from "react-native-performance";
 import { log } from "sharedHelpers/logger";
@@ -16,8 +17,19 @@ const getMark = ( name: string ): PerformanceEntry | undefined => (
 class StartupPerformanceTracker {
   private emitted: boolean;
 
+  // screenInteractiveMs is performance.now() at the (idle-scheduled) emit time
+  // minus native launch. requestIdleCallback does not run while backgrounded,
+  // so if the app was ever backgrounded before we emit, that elapsed time folds
+  // in hours of background/idle time and the value is meaningless. Track it so
+  // we can report "NA" instead of polluting the metric.
+  private backgroundedSinceLaunch: boolean;
+
   constructor( ) {
     this.emitted = false;
+    this.backgroundedSinceLaunch = false;
+    AppState.addEventListener( "change", state => {
+      if ( state === "background" ) { this.backgroundedSinceLaunch = true; }
+    } );
   }
 
   // Called from our target landing screen requestIdleCallback handlers. The emitted flag
@@ -51,9 +63,23 @@ class StartupPerformanceTracker {
         : "NA";
 
       // performance.now() is in the same time domain as the native marks
-      // (ms since performance.timeOrigin ≈ native launch)
-      const screenInteractiveMs = originMs !== undefined
+      // (ms since performance.timeOrigin ≈ native launch). Only meaningful for
+      // an uninterrupted foreground cold start — see backgroundedSinceLaunch.
+      // The background flag misses "inactive" gaps (screen lock, Control
+      // Center, a call banner) that don't emit a "background" event yet still
+      // stall requestIdleCallback, folding minutes/hours of idle into the
+      // value. A real cold start reaches interactive in a few seconds, so
+      // clamp implausible values to "NA" rather than pollute the metric.
+      const MAX_PLAUSIBLE_INTERACTIVE_MS = 60_000;
+      const rawInteractiveMs = originMs !== undefined
         ? Math.round( performance.now() - originMs )
+        : undefined;
+      const screenInteractiveMs = (
+        rawInteractiveMs !== undefined
+        && !this.backgroundedSinceLaunch
+        && rawInteractiveMs <= MAX_PLAUSIBLE_INTERACTIVE_MS
+      )
+        ? rawInteractiveMs
         : "NA";
 
       logger.infoWithExtra( "startup_tti", {

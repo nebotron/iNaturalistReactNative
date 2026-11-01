@@ -4,14 +4,11 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 // used in our e2e tests on Github Actions
 // eslint-disable-next-line import/no-unresolved
 import CameraContainer from "components/Camera/CameraContainer";
-import GroupPhotosContainer from "components/PhotoImporter/GroupPhotosContainer";
-import PhotoLibrary from "components/PhotoImporter/PhotoLibrary";
 import { Heading4 } from "components/SharedComponents";
 import Mortal from "components/SharedComponents/Mortal";
 import PermissionGateContainer from "components/SharedComponents/PermissionGateContainer";
 import SoundRecorder from "components/SoundRecorder/SoundRecorder";
 import { t } from "i18next";
-import ContextHeader from "navigation/ContextHeader";
 import {
   fadeInComponent,
   hideHeader,
@@ -25,6 +22,7 @@ import {
   CAMERA_PERMISSIONS,
 } from "sharedHelpers/permissions";
 
+import PhotoImporterStackScreens from "./PhotoImporterStackScreens";
 import SharedStackScreens from "./SharedStackScreens";
 
 const Stack = createNativeStackNavigator<NoBottomTabStackParamList>( );
@@ -40,12 +38,6 @@ const CAMERA_SCREEN_OPTIONS = {
   contentStyle: {
     backgroundColor: "black",
   },
-} as const;
-
-const GROUP_PHOTOS_OPTIONS = {
-  header: ContextHeader,
-  alignStart: true,
-  lazy: true,
 } as const;
 
 const SOUND_RECORDER_OPTIONS = {
@@ -73,18 +65,6 @@ const CameraContainerWithPermission = ( ) => fadeInComponent(
       <CameraContainer />
     </PermissionGateContainer>
   </Mortal>,
-);
-
-// On iOS we don't actually need PHOTO LIBRARY permission to import photos,
-// and in fact, if we ask for it and the user denies it after already
-// granting add-only permission, the user can never grant it again until they
-// uninstall the app. We *may* want to bring this back to handle writing to
-// albums, but for now this works. ~~~~kueda20240829
-//
-// On Android, ACCESS_MEDIA_LOCATION is requested inside PhotoLibrary before the
-// picker opens (MOB-1656); import is not blocked if the user denies it.
-const PhotoLibraryContainerWithPermission = ( ) => (
-  <PhotoLibrary />
 );
 
 const SoundRecorderWithPermission = ( ) => fadeInComponent(
@@ -121,16 +101,7 @@ const NoBottomTabStackNavigator = ( ) => (
           component={CameraContainerWithPermission}
           options={CAMERA_SCREEN_OPTIONS}
         />
-        <Stack.Screen
-          name="PhotoLibrary"
-          component={PhotoLibraryContainerWithPermission}
-          options={hideHeader}
-        />
-        <Stack.Screen
-          name="GroupPhotos"
-          component={GroupPhotosContainer}
-          options={GROUP_PHOTOS_OPTIONS}
-        />
+        {PhotoImporterStackScreens( )}
         <Stack.Screen
           name="SoundRecorder"
           component={SoundRecorderWithPermission}

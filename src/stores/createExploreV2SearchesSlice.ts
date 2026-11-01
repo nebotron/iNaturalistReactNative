@@ -1,9 +1,5 @@
-import type { ExploreV2Search, ExploreV2Subject, Place } from "providers/ExploreV2Context";
+import type { ExploreV2SearchWithTab, ExploreV2Subject } from "providers/ExploreV2Context";
 import type { StateCreator } from "zustand";
-
-export const RECENT_LIMIT = 10;
-
-export const SAVED_LIMIT = 20;
 
 export const subjectKey = ( subject: ExploreV2Subject ): string => {
   switch ( subject.type ) {
@@ -24,78 +20,30 @@ export const subjectKey = ( subject: ExploreV2Subject ): string => {
   }
 };
 
-export const placeKey = ( place: Place ): string => `place-${place.id}`;
-
-// Newest first, unique by key, capped at 10. Recording something already in the list
-// bumps it to the front instead of duplicating it.
-export const addRecent = <T>(
-  items: T[],
-  item: T,
-  keyFn: ( _item: T ) => string,
-  cap: number = RECENT_LIMIT,
-): T[] => [
-    item,
-    ...items.filter( existing => keyFn( existing ) !== keyFn( item ) ),
-  ].slice( 0, cap );
-
-// A search plus how we identify it and when it was saved
+// A named search plus a unique id and when it was saved. Searches saved before names
+// existed have no name.
 export type SavedSearch = {
   key: string;
+  name?: string;
   savedAt: number;
-} & ExploreV2Search;
+} & ExploreV2SearchWithTab;
 
-// What a caller hands us. The key comes from savedSearchKey in the ExploreV2 helpers, which
-// imports subjectKey from here. computing it in the slice would be circular.
 export type SavedSearchInput = Omit<SavedSearch, "savedAt">;
 
 export interface ExploreV2SearchesSlice {
-  exploreRecentSearches: {
-    subjects: ExploreV2Subject[];
-    places: Place[];
-    recordSubject: ( _subject: ExploreV2Subject ) => void;
-    recordPlace: ( _place: Place ) => void;
-    clearRecents: ( ) => void;
-  };
   exploreSavedSearches: {
     searches: SavedSearch[];
     saveSearch: ( _search: SavedSearchInput ) => void;
+    updateSearch: ( _key: string, _search: ExploreV2SearchWithTab ) => void;
     removeSearch: ( _key: string ) => void;
     clearSavedSearches: ( ) => void;
   };
+  // The Explore tab's most recent search, restored when the app relaunches
+  lastExploreSearch: ExploreV2SearchWithTab | null;
+  setLastExploreSearch: ( _search: ExploreV2SearchWithTab ) => void;
 }
 
 const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set => ( {
-  exploreRecentSearches: {
-    subjects: [],
-    places: [],
-    recordSubject: subject => set( state => ( {
-      exploreRecentSearches: {
-        ...state.exploreRecentSearches,
-        subjects: addRecent(
-          state.exploreRecentSearches.subjects,
-          subject,
-          subjectKey,
-        ),
-      },
-    } ) ),
-    recordPlace: place => set( state => ( {
-      exploreRecentSearches: {
-        ...state.exploreRecentSearches,
-        places: addRecent(
-          state.exploreRecentSearches.places,
-          place,
-          placeKey,
-        ),
-      },
-    } ) ),
-    clearRecents: ( ) => set( state => ( {
-      exploreRecentSearches: {
-        ...state.exploreRecentSearches,
-        subjects: [],
-        places: [],
-      },
-    } ) ),
-  },
   exploreSavedSearches: {
     searches: [],
     saveSearch: search => set( state => ( {
@@ -105,6 +53,14 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
           { ...search, savedAt: Date.now( ) },
           ...state.exploreSavedSearches.searches,
         ],
+      },
+    } ) ),
+    updateSearch: ( key, search ) => set( state => ( {
+      exploreSavedSearches: {
+        ...state.exploreSavedSearches,
+        searches: state.exploreSavedSearches.searches.map( saved => ( saved.key === key
+          ? { ...saved, ...search, key }
+          : saved ) ),
       },
     } ) ),
     removeSearch: key => set( state => ( {
@@ -117,6 +73,8 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
       exploreSavedSearches: { ...state.exploreSavedSearches, searches: [] },
     } ) ),
   },
+  lastExploreSearch: null,
+  setLastExploreSearch: lastExploreSearch => set( { lastExploreSearch } ),
 } );
 
 export default createExploreV2SearchesSlice;

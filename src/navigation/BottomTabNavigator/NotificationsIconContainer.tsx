@@ -1,11 +1,6 @@
-import { fetchUnviewedObservationUpdatesCount } from "api/observations";
 import NotificationsIcon from "navigation/BottomTabNavigator/NotificationsIcon";
-import React, { useEffect } from "react";
-import {
-  useAuthenticatedQuery,
-  useCurrentUser,
-} from "sharedHooks";
-import useStore from "stores/useStore";
+import React from "react";
+import { useUnviewedNotificationsCount } from "sharedHooks";
 
 interface Props {
   icon: string;
@@ -18,31 +13,8 @@ const NotificationsIconContainer = ( {
   icon,
   active,
 }: Props ) => {
-  const currentUser = useCurrentUser( );
-  const observationMarkedAsViewedAt = useStore( state => state.observationMarkedAsViewedAt );
-
-  // TODO: enable fields if it makes sense
-  // https://linear.app/inaturalist/issue/MOB-1362/enable-fields-for-unviewed-updates-count-in-notificationsicon
-  const { data: unviewedUpdatesCount, refetch } = useAuthenticatedQuery(
-    [
-      "notificationsCount",
-    ],
-    optsWithAuth => fetchUnviewedObservationUpdatesCount( {}, optsWithAuth ),
-    {
-      enabled: !!currentUser,
-      // We want to check for notifications at a set interval, but
-      // keep a stable query key so we don't create unbounded cached queries.
-      refetchInterval: 60_000,
-    },
-  );
-
-  useEffect( () => {
-    if ( currentUser ) {
-      refetch();
-    }
-  }, [observationMarkedAsViewedAt, refetch, currentUser] );
-
-  const hasUnread = ( unviewedUpdatesCount ?? 0 ) > 0;
+  const { ownerUnviewedCount, followingUnviewedCount } = useUnviewedNotificationsCount( );
+  const hasUnread = ( ownerUnviewedCount ?? 0 ) > 0 || ( followingUnviewedCount ?? 0 ) > 0;
 
   return (
     <NotificationsIcon

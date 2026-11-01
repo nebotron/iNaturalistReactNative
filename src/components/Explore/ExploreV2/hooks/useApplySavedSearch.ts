@@ -1,25 +1,27 @@
 import { useNavigation } from "@react-navigation/native";
-import countFilters from "components/Explore/ExploreV2/helpers/countFilters";
 import type { ExploreStackScreenProps } from "navigation/types";
 import { EXPLORE_V2_ACTION, useExploreV2 } from "providers/ExploreV2Context";
 import { useCallback } from "react";
 import type { SavedSearch } from "stores/createExploreV2SearchesSlice";
-import useStore from "stores/useStore";
+import useStore, { zustandStorage } from "stores/useStore";
 
 const useApplySavedSearch = ( ) => {
   const { dispatch } = useExploreV2( );
   const navigation = useNavigation<ExploreStackScreenProps<"ExploreResults">["navigation"]>( );
-  const setAdvancedSearchMode = useStore(
-    state => state.exploreV2AdvancedSearch.setAdvancedSearchMode,
-  );
 
   return useCallback( ( search: SavedSearch ) => {
     dispatch( { type: EXPLORE_V2_ACTION.APPLY_SEARCH, search } );
-    // Filters can only be edited on the advanced search screen, so a search that has them
-    // sends the header's search button there
-    if ( countFilters( search.filters ) > 0 ) { setAdvancedSearchMode( true ); }
+    if ( search.observationsLayout ) {
+      // ExploreResults' useStoredLayout listens for this key
+      zustandStorage.setItem( "exploreV2ObservationsLayout", search.observationsLayout );
+    }
+    if ( search.gridOverlays ) {
+      useStore.setState( state => ( {
+        layout: { ...state.layout, exploreGridOverlays: search.gridOverlays },
+      } ) );
+    }
     navigation.popTo( "ExploreResults" );
-  }, [dispatch, navigation, setAdvancedSearchMode] );
+  }, [dispatch, navigation] );
 };
 
 export default useApplySavedSearch;

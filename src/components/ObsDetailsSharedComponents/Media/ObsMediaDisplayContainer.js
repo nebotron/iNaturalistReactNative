@@ -3,6 +3,7 @@ import ObsMediaDisplay from "components/ObsDetailsSharedComponents/Media/ObsMedi
 import compact from "lodash/compact";
 import type { Node } from "react";
 import React, { useMemo } from "react";
+import { useCurrentUser } from "sharedHooks";
 
 type Props = {
   observation: Object,
@@ -30,6 +31,11 @@ const ObsMediaDisplayContainer = ( {
   observation,
   tablet = false,
 }: Props ): Node => {
+  const currentUser = useCurrentUser( );
+  // Only auto-frame to the detected subject for other people's observations.
+  // The user's own photos are cropped in the crop editor, not auto-detected
+  // when simply viewing them.
+  const belongsToCurrentUser = observation?.user?.login === currentUser?.login;
   const photos = useMemo( ( ) => jsonifyPotentialRealmObjects(
     (
       observation?.observationPhotos
@@ -50,10 +56,14 @@ const ObsMediaDisplayContainer = ( {
 
   return (
     <ObsMediaDisplay
+      autoDetectSubject={!belongsToCurrentUser}
       loading={!observation}
+      latitude={observation?.latitude}
+      longitude={observation?.longitude}
       photos={photos}
       sounds={sounds}
       tablet={tablet}
+      timeObservedAt={observation?.time_observed_at}
     />
   );
 };

@@ -17,11 +17,13 @@ import { Alert, StatusBar } from "react-native";
 import type {
   TakePhotoOptions,
 } from "react-native-vision-camera";
+import { startPositionWarmup } from "sharedHelpers/accuratePositionWatcher";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { log } from "sharedHelpers/logger";
 import { hasWriteMediaPermission } from "sharedHelpers/permissions";
 import { completeSentinelFile, createSentinelFile, logStage } from "sharedHelpers/sentinelFiles";
-import { useTranslation } from "sharedHooks";
+import { getTunable } from "sharedHelpers/tunableParams";
+import { useLayoutPrefs, useTranslation } from "sharedHooks";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import { FIREBASE_TRACE_ATTRIBUTES, FIREBASE_TRACES } from "stores/createFirebaseTraceSlice";
 import useStore from "stores/useStore";
@@ -53,7 +55,7 @@ export interface SavePhotoOptions {
   visionResult?: StoredResult | null;
 }
 
-export const MAX_PHOTOS_ALLOWED = 20;
+export const MAX_PHOTOS_ALLOWED = getTunable( "maxPhotosPerObservation" );
 
 const logger = log.extend( "CameraContainer" );
 
@@ -97,7 +99,12 @@ const CameraContainer = ( ) => {
 
   const { t } = useTranslation( );
 
-  const [cameraPosition, setCameraPosition] = useState<"front" | "back">( "back" );
+  const { aiCameraSettings, setAICameraSetting } = useLayoutPrefs( );
+  const isAICamera = cameraType === "AI";
+  const [localCameraPosition, setLocalCameraPosition] = useState<"front" | "back">( "back" );
+  const cameraPosition = isAICamera
+    ? aiCameraSettings.cameraPosition
+    : localCameraPosition;
   // https://react-native-vision-camera.com/docs/guides/devices#selecting-multi-cams
   const device = useCameraDevice( cameraPosition, {
     physicalDevices: [
@@ -133,7 +140,11 @@ const CameraContainer = ( ) => {
     // We had this set to true in Seek but received many reports of it not respecting OS-wide sound
     // level and scared away wildlife. So maybe better to just disable it.
     enableShutterSound: false,
-    ...( hasFlash && { flash: "off" } as const ),
+    ...( hasFlash && {
+      flash: isAICamera
+        ? aiCameraSettings.flash
+        : "off",
+    } as const ),
   } as const;
   const [takePhotoOptions, setTakePhotoOptions] = useState<TakePhotoOptions>( initialPhotoOptions );
   const [takingPhoto, setTakingPhoto] = useState( false );
@@ -156,7 +167,11 @@ const CameraContainer = ( ) => {
     const newPosition = cameraPosition === "back"
       ? "front"
       : "back";
-    setCameraPosition( newPosition );
+    if ( isAICamera ) {
+      setAICameraSetting( "cameraPosition", newPosition );
+    } else {
+      setLocalCameraPosition( newPosition );
+    }
   };
 
   const prepareStoreAndNavigate = usePrepareStoreAndNavigate( );
@@ -202,12 +217,11 @@ const CameraContainer = ( ) => {
   ] );
 
   const toggleFlash = ( ) => {
-    setTakePhotoOptions( {
-      ...takePhotoOptions,
-      flash: takePhotoOptions.flash === "on"
-        ? "off"
-        : "on",
-    } );
+    const flash = takePhotoOptions.flash === "on"
+      ? "off"
+      : "on";
+    setTakePhotoOptions( { ...takePhotoOptions, flash } );
+    if ( isAICamera ) setAICameraSetting( "flash", flash );
   };
 
   const updateTakePhotoStore = async (
@@ -276,15 +290,20 @@ const CameraContainer = ( ) => {
   }, [navigation] );
 
   useEffect( ( ) => {
-    const fetchLocation = async ( ) => {
-      const accurateUserLocation = await fetchAccurateUserLocation( );
-      setUserLocationForGeomodel( accurateUserLocation );
-      return accurateUserLocation;
-    };
+    if ( !hasLocationPermissions ) { return ( ) => {}; }
 
-    if ( hasLocationPermissions ) {
-      fetchLocation( );
-    }
+    // Keep a high accuracy watch running the whole time the camera is open.
+    // GPS needs a few seconds to converge, so warming it up here means the fix
+    // we geotag the photo with is already accurate when the user taps the
+    // shutter, instead of being whatever coarse fix the OS produces first.
+    const stopWarmup = startPositionWarmup( );
+
+    const fetchLocation = async ( ) => {
+      setUserLocationForGeomodel( await fetchAccurateUserLocation( ) );
+    };
+    fetchLocation( );
+
+    return stopWarmup;
   }, [hasLocationPermissions] );
 
   if ( loadingDevices ) {

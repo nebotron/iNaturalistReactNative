@@ -92,8 +92,17 @@ const useInfiniteObservationsScroll = ( {
     await fetchNextPage( );
   }, [fetchNextPage] );
 
+  // Same fix as useInfiniteExploreScroll: flattening every page fetched so far
+  // in the render body rebuilt the whole list on every render and gave it a new
+  // identity each time, so the list re-rendered all of it. MyObservationsResults
+  // is the second-worst screen in the app log's ui_stall lines, worst 12.9s.
+  const allObservations = useMemo(
+    ( ) => flatten( data?.pages?.map( page => page.results ) ),
+    [data?.pages],
+  );
+
   const infiniteScrollObject = {
-    observations: flatten( data?.pages?.map( page => page.results ) ),
+    observations: allObservations,
     status,
     firstObservationsInRealm: hasLocalObservations,
     totalResults: data?.pages?.[0]?.total_results,

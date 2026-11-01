@@ -3,6 +3,8 @@ import * as Exify from "@lodev09/react-native-exify";
 import type Realm from "realm";
 import Observation from "realmModels/Observation";
 import type { RealmObservation } from "realmModels/types";
+import { autoApplyTrackedLocationIfMissing } from "sharedHelpers/applyTrackedLocationToPhotos";
+import exifUri from "sharedHelpers/exifUri";
 import { log } from "sharedHelpers/logger";
 
 const logger = log.extend( "saveObservation.ts" );
@@ -32,7 +34,7 @@ const writeExifToCameraRollPhotos = async (
 
   // Update all photos taken via the app with the new fetched location.
   const results = await Promise.allSettled(
-    cameraRollUris.map( uri => Exify.write( uri, exifToWrite ) ),
+    cameraRollUris.map( uri => Exify.write( exifUri( uri ), exifToWrite ) ),
   );
   results
     .filter( ( r ): r is PromiseRejectedResult => r.status === "rejected" )
@@ -49,7 +51,20 @@ const saveObservation = async (
     longitude: observation.longitude,
     positional_accuracy: observation.positional_accuracy,
   } );
-  return Observation.saveLocalObservationForUpload( observation, realm );
+  const savedObservation = await Observation.saveLocalObservationForUpload( observation, realm );
+
+  // If the observation has no location (no GPS EXIF on its photos), auto-fill
+  // it from tracked location history, applying the match to both the
+  // observation and the originating Photos library assets.
+  if ( savedObservation ) {
+    try {
+      await autoApplyTrackedLocationIfMissing( realm, savedObservation as RealmObservation );
+    } catch ( error ) {
+      logger.error( "Failed to auto-apply tracked location on save", error );
+    }
+  }
+
+  return savedObservation;
 };
 
 export default saveObservation;

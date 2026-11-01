@@ -63,7 +63,9 @@ describe( "ObsEdit offline", ( ) => {
   beforeEach( ( ) => {
     // Turn on fetch mocks and make all fetch requests throw an error
     fetchMock.doMock( );
-    fetch.mockAbort( );
+    // The app installs a fetch interceptor that wraps global.fetch, so the
+    // jest-fetch-mock helpers are only available on the mock itself
+    fetchMock.mockAbort( );
     expect( fetch( "/" ) ).rejects.toThrow( );
 
     // Mock NetInfo so it says internet is not reachable

@@ -5,7 +5,7 @@ import React from "react";
 import { renderComponent } from "tests/helpers/render";
 
 const mockCloseModal = jest.fn( );
-const mockUpdateTaxon = jest.fn( );
+const mockUpdateTaxonFilters = jest.fn( );
 
 describe( "FilterModal", () => {
   test( "should not have accessibility errors", async () => {
@@ -13,7 +13,7 @@ describe( "FilterModal", () => {
       <ExploreProvider>
         <FilterModal
           closeModal={mockCloseModal}
-          updateTaxon={mockUpdateTaxon}
+          updateTaxonFilters={mockUpdateTaxonFilters}
         />
       </ExploreProvider>,
     );

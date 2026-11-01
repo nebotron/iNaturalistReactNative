@@ -1,10 +1,19 @@
 import type { ArgumentArray } from "classnames";
 import classNames from "classnames";
 import { INatIcon, PhotoCount } from "components/SharedComponents";
+import SoundPlayButton from "components/SharedComponents/SoundPlayButton";
 import { LinearGradient, View } from "components/styledComponents";
 import type { PropsWithChildren } from "react";
-import React from "react";
-import type { ViewStyle } from "react-native";
+import React, {
+  useCallback,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import type { LayoutChangeEvent, ViewStyle } from "react-native";
+import { FlatList } from "react-native";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 
@@ -16,95 +25,9 @@ const ICON_DROP_SHADOW = getShadow( {
   shadowRadius: 1,
 } );
 
-const GradientOverlay = ( { useShortGradient }: { useShortGradient?: boolean } ) => {
-  if ( useShortGradient ) {
-    return (
-      <LinearGradient
-        colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.6) 100%)"]}
-        className="absolute w-full h-full"
-        start={{ x: 0, y: 0.5 }}
-        end={{ x: 0, y: 1 }}
-      />
-    );
-  }
-  return (
-    <LinearGradient
-      colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.5) 100%)"]}
-      className="absolute w-full h-full"
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 0.75 }}
-    />
-  );
-};
-
-interface PhotoCountProps {
-  obsPhotosCount: number; // file-local use enforces non-null
-  isSmall?: boolean;
-  isMultiplePhotosTop?: boolean;
-}
-const ObsImagePreviewPhotoCount = (
-  { obsPhotosCount, isMultiplePhotosTop, isSmall }: PhotoCountProps,
-) => {
-  if ( isSmall ) {
-    return (
-      <View
-        className={classNames(
-          "absolute",
-          "right-1",
-          isMultiplePhotosTop
-            ? "top-1"
-            : "bottom-1",
-        )}
-        style={ICON_DROP_SHADOW}
-      >
-        <INatIcon name="photos-outline" color={colors.white} size={16} />
-      </View>
-    );
-  }
-
-  return (
-    <View
-      className={classNames(
-        "absolute",
-        "right-0",
-        "p-2",
-        isMultiplePhotosTop
-          ? "top-0"
-          : "bottom-0",
-      )}
-      style={ICON_DROP_SHADOW}
-    >
-      { obsPhotosCount !== 0
-          && <PhotoCount count={obsPhotosCount} /> }
-    </View>
-  );
-};
-
-const SoundIcon = ( { isSmall }: { isSmall?: boolean } ) => {
-  if ( isSmall ) {
-    return (
-      <View
-        className="absolute left-1 bottom-1"
-        style={ICON_DROP_SHADOW}
-      >
-        <INatIcon name="sound" color={colors.white} size={16} />
-      </View>
-    );
-  }
-
-  return (
-    <View
-      className={classNames( "absolute left-0 top-0 p-1", {
-        "p-2": !isSmall,
-      } )}
-      style={ICON_DROP_SHADOW}
-    >
-      <INatIcon name="sound" color={colors.white} size={18} />
-    </View>
-  );
-};
-
 interface Props extends PropsWithChildren {
+  autoDetectSubject?: boolean;
+  fitImage?: boolean;
   className?: string;
   hasSound?: boolean;
   height?: string;
@@ -114,9 +37,15 @@ interface Props extends PropsWithChildren {
   isMultiplePhotosTop?: boolean;
   isSmall?: boolean;
   obsPhotosCount?: number;
+  // Called when the image can't be decoded, so a caller that has another file
+  // to try (a device-photo cell whose generated thumbnail won't open) can.
+  onError?: ( ) => void;
   opaque?: boolean;
+  photos?: ( { uri: string } | null )[];
   selectable?: boolean;
   selected?: boolean;
+  // Shows a play button for this sound in place of the sound icon
+  soundUri?: string;
   source?: {
     uri: string;
   };
@@ -126,11 +55,26 @@ interface Props extends PropsWithChildren {
   white?: boolean;
   width?: string;
   hideGradientOverlay?: boolean;
+  squareCorners?: boolean;
 }
 
+const getBorderRadiusClass = (
+  squareCorners: boolean,
+  isSmall: boolean,
+): string | null => {
+  if ( squareCorners ) {
+    return null;
+  }
+  return isSmall
+    ? "rounded-lg"
+    : "rounded-2xl";
+};
+
 const ObsImagePreview = ( {
+  autoDetectSubject = false,
   children,
   className,
+  fitImage = false,
   hasSound = false,
   height = "h-[62px]",
   hidePhotoCount,
@@ -139,9 +83,12 @@ const ObsImagePreview = ( {
   isMultiplePhotosTop = false,
   isSmall = false,
   obsPhotosCount = 0,
+  onError,
   opaque = false,
+  photos,
   selectable = false,
   selected = false,
+  soundUri,
   source,
   style,
   testID,
@@ -149,24 +96,232 @@ const ObsImagePreview = ( {
   white = false,
   width = "w-[62px]",
   hideGradientOverlay = false,
+  squareCorners = false,
 }: Props ) => {
-  const borderRadius = isSmall
-    ? "rounded-lg"
-    : "rounded-2xl";
+  const [containerWidth, setContainerWidth] = useState<number | null>( null );
+  const currentIndexRef = useRef( 0 );
+  const flatListRef = useRef<FlatList<{ uri: string } | null>>( null );
+  const borderRadius = getBorderRadiusClass( squareCorners, isSmall );
+
+  useLayoutEffect( ( ) => {
+    currentIndexRef.current = 0;
+    flatListRef.current?.scrollToOffset?.( { offset: 0, animated: false } );
+  }, [photos] );
+
+  const goToPrev = useCallback( ( ) => {
+    const next = Math.max( 0, currentIndexRef.current - 1 );
+    currentIndexRef.current = next;
+    flatListRef.current?.scrollToIndex?.( { index: next, animated: true } );
+  }, [] );
+
+  const goToNext = useCallback( ( ) => {
+    if ( !photos ) return;
+    const next = Math.min( photos.length - 1, currentIndexRef.current + 1 );
+    currentIndexRef.current = next;
+    flatListRef.current?.scrollToIndex?.( { index: next, animated: true } );
+  }, [photos] );
+
+  const swipeGesture = useMemo(
+    ( ) => Gesture.Pan( )
+      .runOnJS( true )
+      .maxPointers( 1 )
+      .activeOffsetX( [-10, 10] )
+      .failOffsetY( [-10, 10] )
+      .onUpdate( ( { translationX } ) => {
+        if ( !containerWidth || !photos ) return;
+        const baseOffset = currentIndexRef.current * containerWidth;
+        const targetOffset = baseOffset - translationX;
+        const maxOffset = ( photos.length - 1 ) * containerWidth;
+        flatListRef.current?.scrollToOffset( {
+          offset: Math.max( 0, Math.min( maxOffset, targetOffset ) ),
+          animated: false,
+        } );
+      } )
+      .onEnd( ( { translationX, velocityX } ) => {
+        const isSwipeLeft = translationX < -30 || ( translationX < 0 && velocityX < -200 );
+        const isSwipeRight = translationX > 30 || ( translationX > 0 && velocityX > 200 );
+        if ( isSwipeLeft ) {
+          goToNext( );
+        } else if ( isSwipeRight ) {
+          goToPrev( );
+        } else {
+          flatListRef.current?.scrollToIndex( {
+            index: currentIndexRef.current,
+            animated: true,
+          } );
+        }
+      } ),
+    [containerWidth, goToNext, goToPrev, photos],
+  );
+
+  const carouselWidthStyle = useMemo(
+    ( ) => ( containerWidth
+      ? { width: containerWidth }
+      : undefined ),
+    [containerWidth],
+  );
+
+  const handleContainerLayout = useCallback( ( e: LayoutChangeEvent ) => {
+    setContainerWidth( Math.round( e.nativeEvent.layout.width ) );
+  }, [] );
 
   const imageClassNames: ArgumentArray = [
-    "max-h-[210px]",
     "overflow-hidden",
     "relative",
-    borderRadius,
-    height,
-    className,
-    width,
   ];
 
-  const shouldRenderPhotoCount = !hidePhotoCount && obsPhotosCount > 1;
+  if ( squareCorners ) {
+    imageClassNames.push( "w-full", "h-full" );
+  } else {
+    imageClassNames.push( "max-h-[210px]", height, width );
+  }
 
-  const shouldRenderGradient = !hideGradientOverlay && !isSmall;
+  if ( className ) {
+    imageClassNames.push( className );
+  }
+
+  if ( borderRadius ) {
+    imageClassNames.push( borderRadius );
+  }
+
+  const renderPhotoCount = useCallback( ( ) => {
+    if ( obsPhotosCount <= 1 || hidePhotoCount ) return null;
+
+    if ( isSmall ) {
+      return (
+        <View
+          className={classNames(
+            "absolute",
+            "right-1",
+            isMultiplePhotosTop
+              ? "top-1"
+              : "bottom-1",
+          )}
+          style={ICON_DROP_SHADOW}
+        >
+          <INatIcon name="photos-outline" color={colors.white} size={16} />
+        </View>
+      );
+    }
+
+    return (
+      <View
+        pointerEvents="none"
+        className={classNames(
+          "absolute",
+          "right-0",
+          "p-2",
+          isMultiplePhotosTop
+            ? "top-0"
+            : "bottom-0",
+        )}
+        style={ICON_DROP_SHADOW}
+      >
+        { obsPhotosCount !== 0
+          && <PhotoCount count={obsPhotosCount} /> }
+      </View>
+    );
+  }, [
+    hidePhotoCount,
+    isMultiplePhotosTop,
+    isSmall,
+    obsPhotosCount,
+  ] );
+
+  const renderSelectable = useCallback( ( ) => {
+    if ( selectable ) {
+      return (
+        <View
+          className={classNames(
+            "flex items-center justify-center",
+            "rounded-full",
+            "absolute top-2.5 right-2.5",
+            {
+              "bg-white": selected,
+              "w-[24px] h-[24px]": selected,
+              "w-[24px] h-[24px] border-2 border-white": !selected,
+            },
+          )}
+          style={ICON_DROP_SHADOW}
+        >
+          {selected && (
+            <INatIcon name="checkmark" color={colors.darkGray} size={12} />
+          )}
+        </View>
+      );
+    }
+    return null;
+  }, [selectable, selected] );
+
+  const renderGradient = useCallback( ( ) => {
+    if ( hideGradientOverlay ) return null;
+    if ( isSmall ) return null;
+    if ( useShortGradient ) {
+      return (
+        <LinearGradient
+          pointerEvents="none"
+          colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.6) 100%)"]}
+          className="absolute w-full h-full"
+          start={{ x: 0, y: 0.5 }}
+          end={{ x: 0, y: 1 }}
+        />
+      );
+    }
+    return (
+      <LinearGradient
+        pointerEvents="none"
+        colors={["rgba(0, 0, 0, 0)", "rgba(0, 0, 0, 0.5) 100%)"]}
+        className="absolute w-full h-full"
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 0.75 }}
+      />
+    );
+  }, [isSmall, useShortGradient, hideGradientOverlay] );
+
+  const renderSoundIcon = useCallback( ( ) => {
+    if ( soundUri ) {
+      return (
+        <View
+          className={classNames( "absolute left-0", isSmall
+            ? "bottom-0"
+            : "top-0" )}
+        >
+          <SoundPlayButton
+            uri={soundUri}
+            color={colors.white}
+            size={isSmall
+              ? 16
+              : 20}
+            dropShadow
+          />
+        </View>
+      );
+    }
+    if ( !hasSound ) return null;
+
+    if ( isSmall ) {
+      return (
+        <View
+          className="absolute left-1 bottom-1"
+          style={ICON_DROP_SHADOW}
+        >
+          <INatIcon name="sound" color={colors.white} size={16} />
+        </View>
+      );
+    }
+
+    return (
+      <View
+        pointerEvents="none"
+        className={classNames( "absolute left-0 top-0 p-1", {
+          "p-2": !isSmall,
+        } )}
+        style={ICON_DROP_SHADOW}
+      >
+        <INatIcon name="sound" color={colors.white} size={18} />
+      </View>
+    );
+  }, [hasSound, isSmall, soundUri] );
 
   let content;
 
@@ -175,65 +330,123 @@ const ObsImagePreview = ( {
     if ( white ) imageClassNames.push( "border-white" );
   }
 
-  if ( isSmall && obsPhotosCount === 0 && hasSound ) {
-    content = <INatIcon name="sound" color={colors.darkGray} size={24} />;
-  } else {
-    content = (
-      <>
+  const useCarousel = photos && photos.length > 1;
+
+  const carouselGetItemLayout = useCallback(
+    ( _: unknown, index: number ) => ( {
+      length: containerWidth ?? 0,
+      offset: ( containerWidth ?? 0 ) * index,
+      index,
+    } ),
+    [containerWidth],
+  );
+
+  const renderCarouselItem = useCallback(
+    ( info: { item: { uri: string } | null } ) => (
+      <View style={carouselWidthStyle} className="h-full">
         <ObsImage
-          uri={source}
+          autoDetectSubject={autoDetectSubject}
+          fitImage={fitImage}
+          initialContainerSize={containerWidth ?? undefined}
+          uri={info.item ?? undefined}
           opaque={opaque}
           iconicTaxonName={iconicTaxonName}
           white={white}
           isBackground={isBackground}
-          iconicTaxonIconSize={
-            isSmall
-              ? 22
-              : 100
-          }
+          iconicTaxonIconSize={isSmall
+            ? 22
+            : 100}
         />
-        {shouldRenderGradient && <GradientOverlay useShortGradient={useShortGradient} />}
-        {selectable && (
-          <View
-            className={classNames(
-              "flex items-center justify-center",
-              "rounded-full",
-              "absolute m-2.5 right-0",
-              {
-                "bg-white": selected,
-                "w-[24px] h-[24px]": selected,
-                "w-[24px] h-[24px] border-2 border-white": !selected,
-              },
-            )}
-            style={ICON_DROP_SHADOW}
-          >
-            {selected && (
-              <INatIcon name="checkmark" color={colors.darkGray} size={12} />
-            )}
-          </View>
-        )}
-        {shouldRenderPhotoCount && (
-          <ObsImagePreviewPhotoCount
-            isMultiplePhotosTop={isMultiplePhotosTop}
-            isSmall={isSmall}
-            obsPhotosCount={obsPhotosCount}
+      </View>
+    ),
+    [
+      autoDetectSubject,
+      carouselWidthStyle,
+      containerWidth,
+      fitImage,
+      iconicTaxonName,
+      isBackground,
+      isSmall,
+      opaque,
+      white,
+    ],
+  );
+
+  if ( isSmall && obsPhotosCount === 0 && !source?.uri && soundUri ) {
+    content = <SoundPlayButton uri={soundUri} color={colors.darkGray} size={24} />;
+  } else if ( isSmall && obsPhotosCount === 0 && hasSound ) {
+    content = <INatIcon name="sound" color={colors.darkGray} size={24} />;
+  } else if ( useCarousel ) {
+    content = (
+      <>
+        {carouselWidthStyle && (
+          <FlatList
+            ref={flatListRef}
+            data={photos}
+            renderItem={renderCarouselItem}
+            keyExtractor={( _, index ) => String( index )}
+            horizontal
+            pagingEnabled
+            scrollEnabled={false}
+            showsHorizontalScrollIndicator={false}
+            style={carouselWidthStyle}
+            className="h-full"
+            getItemLayout={carouselGetItemLayout}
+            extraData={containerWidth}
           />
         )}
-        {hasSound && <SoundIcon isSmall={isSmall} />}
+        {renderGradient( )}
+        {renderSelectable( )}
+        {renderPhotoCount( )}
+        {renderSoundIcon( )}
+        {children}
+      </>
+    );
+  } else {
+    content = (
+      <>
+        <ObsImage
+          autoDetectSubject={autoDetectSubject}
+          fitImage={fitImage}
+          uri={source}
+          onError={onError}
+          opaque={opaque}
+          iconicTaxonName={iconicTaxonName}
+          white={white}
+          isBackground={isBackground}
+          iconicTaxonIconSize={isSmall
+            ? 22
+            : 100}
+        />
+        {renderGradient( )}
+        {renderSelectable( )}
+        {renderPhotoCount( )}
+        {renderSoundIcon( )}
         {children}
       </>
     );
   }
 
-  return (
+  const containerView = (
     <View
       className={classNames( imageClassNames )}
       style={style}
       testID={testID}
+      onLayout={handleContainerLayout}
     >
       {content}
     </View>
   );
+
+  if ( useCarousel ) {
+    return (
+      <GestureDetector gesture={swipeGesture}>
+        {containerView}
+      </GestureDetector>
+    );
+  }
+
+  return containerView;
 };
 
 export default ObsImagePreview;

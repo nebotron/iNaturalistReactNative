@@ -19,11 +19,12 @@ import {
 } from "react-native-reanimated";
 import type { CameraDevice, CameraProps } from "react-native-vision-camera";
 import { scheduleOnRN } from "react-native-worklets";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 // This is taken from react-native-vision library itself: https://github.com/mrousavy/react-native-vision-camera/blob/9eed89aac6155eba155595f3e006707152550d0d/package/example/src/Constants.ts#L19 https://github.com/mrousavy/react-native-vision-camera/blob/9eed89aac6155eba155595f3e006707152550d0d/package/example/src/CameraPage.tsx#L34
 
 // The maximum zoom factor you should be able to zoom in
-const MAX_ZOOM_FACTOR = 20;
+const MAX_ZOOM_FACTOR = getTunable( "maxCameraZoom" );
 
 // Used for calculating the final zoom by pinch gesture
 const SCALE_FULL_ZOOM = 3;

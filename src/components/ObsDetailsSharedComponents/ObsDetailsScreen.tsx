@@ -19,6 +19,7 @@ const ObsDetailsScreen = () => {
   const { params } = useRoute<TabStackScreenProps<"ObsDetails">["route"]>( );
   const {
     uuid,
+    preloadedObservation,
   } = params;
   const currentUser = useCurrentUser( );
   const isConnected = !!useNetInfo( ).isConnected;
@@ -44,7 +45,11 @@ const ObsDetailsScreen = () => {
     fetchRemoteObservationError,
   } = useRemoteObservation( uuid, fetchRemoteObservationEnabled );
 
-  const observation = localObservation || Observation.mapApiToRealm( remoteObservation );
+  const observation = localObservation
+    || Observation.mapApiToRealm( remoteObservation )
+    || ( preloadedObservation
+      ? Observation.mapApiToRealm( preloadedObservation )
+      : null );
 
   // In theory the only situation in which an observation would not have a
   // user is when a user is not signed but has made a new observation in the

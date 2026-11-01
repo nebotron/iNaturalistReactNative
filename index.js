@@ -32,7 +32,7 @@ import {
   store as installDataMMKVStorage,
   LAST_CRASH_DATA,
 } from "sharedHelpers/installData";
-import { reactQueryRetry } from "sharedHelpers/logging";
+import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
 import DeviceInfo from "react-native-device-info";
 import useRozenite, { HaltedLaunch, shouldHaltLaunchForDebug } from "sharedHooks/useRozenite";
 import { createMMKVStorageAdapter } from "@rozenite/storage-plugin";
@@ -49,16 +49,24 @@ this.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true;
 // traces
 if (
   !__DEV__
-  && typeof (
-    // $FlowIgnore
-    HermesInternal?.enablePromiseRejectionTracker === "function"
-  )
+  // $FlowIgnore
+  && typeof HermesInternal?.enablePromiseRejectionTracker === "function"
 ) {
   // $FlowIgnore
   HermesInternal.enablePromiseRejectionTracker( {
     allRejections: true,
+    // The stack Hermes gives a release build for these is just the async
+    // trampoline (asyncGeneratorStep, tryCallOne…), not the call site, so the
+    // screen it happened on is the only lead the log carries toward finding it.
     onUnhandled: ( id, error ) => {
-      logger.error( "Unhandled promise rejection: ", error );
+      logger.errorWithExtra( "Unhandled promise rejection: ", error, {
+        errorName: error?.name ?? "unknown",
+        screen: getCurrentRoute()?.name || "unknown",
+        // inaturalistjs rejects HTTP failures with an empty message and the
+        // Response attached, so this is the only clue to which call leaked
+        status: error?.response?.status,
+        url: error?.response?.url,
+      } );
     },
   } );
 }
@@ -82,6 +90,20 @@ const jsErrorHandler = ( e, isFatal ) => {
   // if ( !e.name && !e.message ) return;
   if ( isFatal ) {
     logger.error( "Fatal JS Error: ", e );
+    try {
+      // Store crash data for retrieval on next app launch, same as the
+      // native exception handler below, so the full stack (not just the
+      // one line a user can see/copy from the alert) is captured in logs.
+      const crashData = {
+        error: `${e?.message}\n\n${e?.stack}`,
+        screen: getCurrentRoute()?.name || "",
+        timestamp: new Date().toISOString(),
+        appVersion: DeviceInfo.getVersion(),
+      };
+      installDataMMKVStorage.set( LAST_CRASH_DATA, JSON.stringify( crashData ) );
+    } catch ( storageError ) {
+      logger.error( "Failed to save fatal JS error context", storageError );
+    }
     Alert.alert( "Fatal JS Error", `${e.message}\n\n${e.stack}` );
   } else {
     // This should get logged by ErrorBoundary. For some reason this handler
@@ -137,6 +159,7 @@ const queryClient = new QueryClient( {
   defaultOptions: {
     queries: {
       retry: reactQueryRetry,
+      retryDelay: handleRetryDelay,
     },
   },
 } );

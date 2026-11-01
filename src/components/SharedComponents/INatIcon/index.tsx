@@ -26,7 +26,7 @@ const ALIASES: Aliases = {
   checkmark: "check",
   "close-large": "close",
   "close-small": "close-bold",
-  combine: "photos",
+  combine: "merge",
   multiplephotos: "photos",
   "multiplephotos-small": "photos-outline",
   "comment-fill": "comments",
@@ -63,7 +63,7 @@ const ALIASES: Aliases = {
   remark: "add-comment-outline",
   reset: "rotate-right",
   search: "magnifying-glass",
-  separate: "grid",
+  separate: "call-split",
   "sound-pause": "pause-circle",
   "sound-play": "play-circle",
   "sound-record": "microphone-circle",
@@ -89,9 +89,9 @@ const INatIcon = ( {
     // for glyph based icons to prevent them from affecting layout
     ...( Platform.OS === "android" && { includeFontPadding: false } ),
     ...( dropShadow && {
-      shadowOpacity: 2,
+      textShadowColor: "rgba(0, 0, 0, 0.75)",
       textShadowRadius: 4,
-      textShadowOffset: { width: 2, height: 2 },
+      textShadowOffset: { width: 0, height: 1 },
     } ),
   };
   return (

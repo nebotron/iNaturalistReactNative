@@ -6,6 +6,7 @@ import {
 import { View } from "components/styledComponents";
 import { useMyObservations } from "providers/MyObservationsContext";
 import React from "react";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
@@ -20,7 +21,9 @@ interface Props {
 }
 
 // Minimum uploaded observations count to show the Advanced Mode onboarding banner
-const ADVANCED_MODE_ONBOARDING_MIN_OBSERVATIONS = 100;
+const ADVANCED_MODE_ONBOARDING_MIN_OBSERVATIONS = getTunable(
+  "advancedModeOnboardingObservations",
+);
 
 const SimpleHeader = ( {
   isConnected,

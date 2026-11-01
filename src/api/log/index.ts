@@ -1,24 +1,12 @@
-import { getUserAgent } from "api/userAgent";
-import { create } from "apisauce";
-// eslint-disable-next-line import/no-cycle
-import { getAnonymousJWT, getJWT } from "components/LoginSignUp/AuthenticationService";
+import { AppState } from "react-native";
+import Config from "react-native-config";
 import type { transportFunctionType } from "react-native-logs";
-import { EnvConfig } from "sharedHelpers/envConfig";
-import { getInstallID } from "sharedHelpers/installData";
-import { isObject, isObjectWithPrimitiveValues } from "sharedHelpers/runtimeTypeUtil";
+import { MMKV } from "react-native-mmkv";
+// The git commit the bundle was built from (see scripts/writeAppCommit.js).
+import APP_COMMIT from "sharedHelpers/appCommit";
+import { isObject, isPrimitive } from "sharedHelpers/runtimeTypeUtil";
 
 import { extraSentinelKey } from "./enhanceLoggerWithExtra";
-
-const API_HOST: string
-    = EnvConfig.API_URL || process.env.API_URL || "https://api.inaturalist.org/v2";
-
-const api = create( {
-  baseURL: API_HOST,
-  headers: {
-    "User-Agent": getUserAgent( ),
-    "X-Installation-ID": getInstallID( ),
-  },
-} );
 
 // at least answers: does it look enough like an Error for logging purposes?
 function isError( value: unknown ): value is { message?: string; stack?: string } {
@@ -56,101 +44,211 @@ function extractExtra( rawMsg: unknown ) {
   ) {
     return nonExtraResult;
   }
-  // make sure our extra is actually valid for the API
+  // Serialize nested values (e.g. arrays of timings) rather than dropping the
+  // whole extra, which logged it as "[object Object]"
   const { [extraSentinelKey]: _sentinel, ...extraCandidate } = extraWrapperCandidate;
-  if ( !isObjectWithPrimitiveValues( extraCandidate ) ) {
-    console.warn( "[ERROR log.ts] `extra` must be a non-nested object with primitive values" );
-    return nonExtraResult;
-  }
+  const extra = Object.fromEntries( Object.entries( extraCandidate ).map( ( [key, value] ) => [
+    key,
+    isPrimitive( value )
+      ? value
+      : JSON.stringify( value ),
+  ] ) );
   return {
     // the rest of the log handling should act as if extra was separate from the rest params
     messageParams: rawMsg.slice( 0, -1 ),
-    extra: extraCandidate,
+    extra,
   };
 }
 
-// our transport has no options but this needs to be explicitly `object` for generic typing
-type iNatLogstashTransportOptions = object;
+// The log DB is publicly readable, so strip credentials and coordinates from
+// anything we send. Values are matched in plain text, JSON (incl. escaped
+// JSON inside a message string), and URL query strings.
+const SECRET_KEYS = "api_token|access_token|refresh_token|id_token|authorization|password"
+  + "|jwt|token|secret|api_key|apikey";
+const LOCATION_KEYS = "latitude|longitude|private_latitude|private_longitude|lat|lng|lon"
+  + "|nelat|nelng|swlat|swlng";
+const KEY_PREFIX = "(\\\\?\"?\\b(?:{keys})\\\\?\"?\\s*[:=]\\s*\\\\?\"?)";
+const SECRET_VALUE_RE = new RegExp( `${KEY_PREFIX.replace( "{keys}", SECRET_KEYS )}`
+  + "(?:Bearer\\s+)?[^\"\\\\&,\\s}]+", "gi" );
+const LOCATION_VALUE_RE = new RegExp( `${KEY_PREFIX.replace( "{keys}", LOCATION_KEYS )}`
+  + "-?\\d+(?:\\.\\d+)?", "gi" );
+const JWT_RE = /eyJ[\w-]+\.[\w-]+(?:\.[\w-]+)?/g;
+// "37.1234,-122.5678", e.g. a location param or a formatted coordinate pair
+const COORD_PAIR_RE = /-?\d{1,3}\.\d{3,}\s*(?:,|%2C)\s*-?\d{1,3}\.\d{3,}/gi;
+const SENSITIVE_KEY_RE = new RegExp( `^(?:${SECRET_KEYS}|${LOCATION_KEYS}|location|coords)$`, "i" );
+const REDACTED = "[REDACTED]";
 
-// Custom transport for posting to iNat API logging
-const iNatLogstashTransport: transportFunctionType<iNatLogstashTransportOptions> = async props => {
+export function redact( text: string ): string {
+  return text
+    .replace( JWT_RE, REDACTED )
+    .replace( SECRET_VALUE_RE, `$1${REDACTED}` )
+    .replace( LOCATION_VALUE_RE, `$1${REDACTED}` )
+    .replace( COORD_PAIR_RE, REDACTED );
+}
+
+function redactExtra( extra: Record<string, unknown> ) {
+  return Object.fromEntries( Object.entries( extra ).map( ( [key, value] ) => [
+    key,
+    // eslint-disable-next-line no-nested-ternary
+    SENSITIVE_KEY_RE.test( key )
+      ? REDACTED
+      : typeof value === "string"
+        ? redact( value )
+        : value,
+  ] ) );
+}
+
+// our transport has no options but this needs to be explicitly `object` for generic typing
+type firebaseLogTransportOptions = object;
+
+// Lines are sent in batches, one PATCH of push-ID children per batch, rather
+// than one POST per line. Long and large, so the radio wakes rarely; anything
+// still queued when the app dies goes out with the next launch (see `pending`).
+const FLUSH_MS = 60_000;
+const MAX_BATCH = 50;
+let queue: Record<string, { level: string }> = {};
+let queued = 0;
+let flushTimer: ReturnType<typeof setTimeout> | undefined;
+// Each queued line is also kept here until its batch is sent, so a launch that
+// crashes or hangs before its first flush is reported by the next launch
+// instead of vanishing.
+const pending = new MMKV( { id: "app-log-pending" } );
+
+// Client-side Firebase push IDs: a timestamp prefix, so app_log.py's $key
+// ordering stays chronological, and random characters to keep them unique.
+const PUSH_CHARS = "-0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz";
+const pushId = ( ) => {
+  let time = Date.now( );
+  let id = "";
+  for ( let i = 0; i < 8; i += 1 ) {
+    id = PUSH_CHARS.charAt( time % 64 ) + id;
+    time = Math.floor( time / 64 );
+  }
+  for ( let i = 0; i < 12; i += 1 ) {
+    id += PUSH_CHARS.charAt( Math.floor( Math.random( ) * 64 ) );
+  }
+  return id;
+};
+
+export const flushLogs = async ( ) => {
+  clearTimeout( flushTimer );
+  flushTimer = undefined;
+  if ( queued === 0 ) return;
+  const batch = queue;
+  queue = {};
+  queued = 0;
+  const body = JSON.stringify( batch );
+  // A batch holding an error gets a few retries rather than being dropped on a
+  // transient network failure. Others sync once to avoid amplifying
+  // high-volume info logging.
+  const maxAttempts = Object.values( batch ).some( e => e.level === "error" )
+    ? 3
+    : 1;
+  for ( let attempt = 1; attempt <= maxAttempts; attempt += 1 ) {
+    try {
+      // eslint-disable-next-line no-await-in-loop
+      const r = await fetch( `${Config.CROP_LOG_FIREBASE_URL}/app_log.json`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body,
+      } );
+      if ( r.ok ) break;
+    } catch {
+      // Retry below, or give up once the loop runs out of attempts. Never
+      // rethrow: we log to report errors, so failing to log must stay silent.
+    }
+    if ( attempt < maxAttempts ) {
+      // eslint-disable-next-line no-await-in-loop
+      await new Promise( resolve => { setTimeout( resolve, 500 * attempt ); } );
+    }
+  }
+  Object.keys( batch ).forEach( key => pending.delete( key ) );
+};
+
+// Send what a previous launch queued but never got out
+if ( !__DEV__ ) {
+  pending.getAllKeys( ).forEach( key => {
+    try {
+      queue[key] = JSON.parse( pending.getString( key ) || "" );
+      queued += 1;
+    } catch {
+      pending.delete( key );
+    }
+  } );
+  flushLogs( );
+}
+
+// iOS may suspend or kill the app once it's backgrounded.
+// Lines logged while backgrounded wait for a full batch, an error, or the next
+// foreground, rather than waking the radio on a timer.
+AppState.addEventListener( "change", state => {
+  if ( state === "background" ) flushLogs( );
+  if ( state === "active" && queued > 0 ) flushTimer ??= setTimeout( flushLogs, FLUSH_MS );
+} );
+
+// Custom transport that queues each log line as a push-ID child of
+// {CROP_LOG_FIREBASE_URL}/app_log. The log DB allows unauthenticated
+// writes, so no auth token is needed (same as the crop/brightness logs).
+const firebaseLogTransport: transportFunctionType<firebaseLogTransportOptions> = props => {
   // Don't bother to log from dev builds
   if ( __DEV__ ) return;
 
-  // Note on `console.errors`: we use logging to report errors, so validating input
-  // and making sure we have an auth token are some of a few cases where we really do want
-  // to squelch all errors to avoid recursion
+  const baseUrl = Config.CROP_LOG_FIREBASE_URL;
+  if ( !baseUrl ) return;
 
   // pull potential `extra` out of the rest params
   const { messageParams, extra } = extractExtra( props.rawMsg );
 
-  let userToken;
-  try {
-    userToken = await getJWT();
-  } catch ( _getJWTError ) {
-    console.error( "[ERROR log.ts] failed to retrieve user JWT while logging" );
-  }
-  const anonymousToken = getAnonymousJWT();
-  // Can't log w/o auth token
-  if ( !userToken && !anonymousToken ) {
-    console.error( "[ERROR log.ts] failed to retrieve user or anonymous JWT while logging" );
-    return;
-  }
-  // if message is an Error or is an array ending in an error, extract
-  // error_type and backtrace
-  let message;
-  let backtrace;
-  let errorType;
+  // if message is an Error or is an array ending in an error, extract it
+  // so we can report its stack alongside the message
+  let message: string;
+  let error: { message?: string; stack?: string } | undefined;
   if ( typeof ( messageParams ) === "string" ) {
     message = messageParams;
   } else if ( isError( messageParams ) ) {
-    // eslint-disable-next-line prefer-destructuring
-    message = messageParams;
-    errorType = messageParams.constructor?.name;
-    backtrace = messageParams.stack;
+    error = messageParams;
+    message = error.message ?? "Unknown error";
   } else if ( Array.isArray( messageParams ) ) {
-    // specially handle the cases where the last arg is
-    // an error: so we can attach appropriate error metadata
     const last = messageParams.at( -1 );
     if ( isError( last ) ) {
-      // eslint-disable-next-line prefer-destructuring
-      message = last.message;
-      errorType = last.constructor?.name;
-      backtrace = last.stack;
+      error = last;
+      message = [...messageParams.slice( 0, -1 ), error.message ?? "Unknown error"].join( " " );
     } else {
       message = messageParams.join( " " );
     }
   } else {
-    message = messageParams;
+    message = JSON.stringify( messageParams );
   }
-  const formData = {
+
+  const entry = {
+    // First, so an extra key like `level` can't overwrite the entry's own
+    ...( extra
+      ? redactExtra( extra )
+      : {} ),
+    timestamp: new Date( ).toISOString( ),
     level: props.level.text,
-    message,
-    context: props.extension,
-    extra,
-    timestamp: new Date().toISOString(),
-    error_type: errorType,
-    backtrace,
+    extension: props.extension,
+    // commit lets a log line be traced back to the exact code that produced it
+    commit: APP_COMMIT,
+    message: redact( message ),
+    ...( error?.stack
+      ? { stack: redact( error.stack ) }
+      : {} ),
   };
-  try {
-    await api.post( "/log", formData, {
-      headers: {
-        Authorization: [
-          userToken,
-          anonymousToken,
-        ].flat( ).join( ", " ),
-      },
-    } );
-  } catch ( e ) {
-    const postLogError = e as Error;
-    if ( postLogError.message.match( /Network request failed/ ) ) {
-      // If we're offline, we can't post logs to the server
-      return;
-    }
-    throw postLogError;
+
+  const id = pushId( );
+  queue[id] = entry;
+  queued += 1;
+  pending.set( id, JSON.stringify( entry ) );
+  // Errors go out at once, with whatever is queued: they're the entries we
+  // most need, and the one before a crash would otherwise die in the queue.
+  if ( props.level.text === "error" || queued >= MAX_BATCH ) {
+    flushLogs( );
+  } else if ( AppState.currentState !== "background" ) {
+    flushTimer ??= setTimeout( flushLogs, FLUSH_MS );
   }
 };
 
 export { default as enhanceLoggerWithExtra } from "./enhanceLoggerWithExtra";
 
-export default iNatLogstashTransport;
+export default firebaseLogTransport;

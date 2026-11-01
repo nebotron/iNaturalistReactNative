@@ -8,14 +8,13 @@ import initI18next from "i18n/initI18next";
 import inatjs from "inaturalistjs";
 import factory, { makeResponse } from "tests/factory";
 import {
+  addTaxonFilter,
   enableExploreV2,
-  focusSearchField,
   lastObservationsSearchParams,
   navigateToExplore,
-  openUniversalSearch,
+  openAdvancedSearch,
   searchForTaxon,
-  submitUniversalSearch,
-  typeIntoSearchField,
+  submitAdvancedSearch,
 } from "tests/helpers/exploreV2";
 import faker from "tests/helpers/faker";
 import { renderApp } from "tests/helpers/render";
@@ -38,8 +37,12 @@ const mockTaxon = factory( "RemoteTaxon", {
   rank_level: 10,
 } );
 
-const mockPlace = factory( "RemotePlace", {
-  display_name: "Oakland, CA",
+const mockOtherTaxon = factory( "RemoteTaxon", {
+  id: 746,
+  name: "Silphium laciniatum",
+  preferred_common_name: "Compass Plant",
+  rank: "species",
+  rank_level: 10,
 } );
 
 const mockObservations = [factory( "RemoteObservation", { taxon: mockTaxon } )];
@@ -73,14 +76,6 @@ afterAll( uniqueRealmAfterAll );
 
 const actor = userEvent.setup( );
 
-// The subject field and the location field both go through inatjs.search, told apart by source
-const mockAutocomplete = ( ) => inatjs.search.mockImplementation( params => {
-  if ( params.sources === "places" ) {
-    return makeResponse( [{ type: "place", score: 1, place: mockPlace }] );
-  }
-  return makeResponse( [{ type: "taxon", score: 1, taxon: mockTaxon }] );
-} );
-
 beforeAll( async ( ) => {
   await initI18next( );
   jest.useFakeTimers( );
@@ -94,7 +89,6 @@ beforeAll( async ( ) => {
 beforeEach( async ( ) => {
   setStoreStateLayout( { isDefaultMode: false, isAllAddObsOptionsMode: true } );
   enableExploreV2( );
-  mockAutocomplete( );
   inatjs.observations.search.mockClear( );
   await signIn( mockUser, { realm: global.mockRealms[__filename] } );
 } );
@@ -105,14 +99,14 @@ afterEach( async ( ) => {
 
 global.withAnimatedTimeTravelEnabled( { skipFakeTimers: true } );
 
-describe( "searching from Universal Search", ( ) => {
+describe( "searching from Advanced Search", ( ) => {
   it( "searches for species the signed-in user has not observed", async ( ) => {
     renderApp( );
     await navigateToExplore( );
-    await openUniversalSearch( );
+    await openAdvancedSearch( );
 
-    await actor.press( await screen.findByTestId( "DefaultSearchOptions.unobserved" ) );
-    await submitUniversalSearch( );
+    await actor.press( screen.getByText( "Unobserved by me" ) );
+    await submitAdvancedSearch( );
 
     await waitFor( ( ) => {
       expect( lastObservationsSearchParams( ) ).toMatchObject( {
@@ -123,36 +117,28 @@ describe( "searching from Universal Search", ( ) => {
     expect( within( header ).getByTestId( "ExploreV2Header.unobserved" ) ).toBeVisible( );
   } );
 
-  it( "searches the place the user picked and offers it again later", async ( ) => {
+  it( "searches for several taxa at once", async ( ) => {
     renderApp( );
     await navigateToExplore( );
-    await openUniversalSearch( );
+    await openAdvancedSearch( );
 
-    await typeIntoSearchField( "UniversalSearch.locationInput", "oakland" );
-    await actor.press( await screen.findByText( mockPlace.display_name ) );
-    await submitUniversalSearch( );
+    await addTaxonFilter( mockTaxon, global.mockRealms[__filename] );
+    await addTaxonFilter( mockOtherTaxon, global.mockRealms[__filename] );
+    await submitAdvancedSearch( );
 
     await waitFor( ( ) => {
-      expect( lastObservationsSearchParams( ) ).toMatchObject( { place_id: mockPlace.id } );
+      expect( lastObservationsSearchParams( ) ).toMatchObject( {
+        taxon_id: `${mockTaxon.id},${mockOtherTaxon.id}`,
+      } );
     } );
-    expect( lastObservationsSearchParams( ) ).not.toHaveProperty( "lat" );
     const header = await screen.findByTestId( "ExploreV2Header" );
-    expect( within( header ).getByText( mockPlace.display_name ) ).toBeVisible( );
-
-    // The place is remembered for the next search
-    await openUniversalSearch( );
-    await focusSearchField( "UniversalSearch.locationInput" );
-    expect(
-      within( await screen.findByTestId( "RecentLocations" ) )
-        .getByText( mockPlace.display_name ),
-    ).toBeVisible( );
+    expect( within( header ).getByText( mockTaxon.name ) ).toBeVisible( );
   } );
 
   it( "still has the search when the user comes back from another tab", async ( ) => {
     renderApp( );
     await navigateToExplore( );
-    await openUniversalSearch( );
-    await searchForTaxon( mockTaxon );
+    await searchForTaxon( mockTaxon, global.mockRealms[__filename] );
     await waitFor( ( ) => {
       expect( lastObservationsSearchParams( ) ).toMatchObject( { taxon_id: mockTaxon.id } );
     } );

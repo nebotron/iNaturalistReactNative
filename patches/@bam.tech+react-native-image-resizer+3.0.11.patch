@@ -1,0 +1,20 @@
+diff --git a/node_modules/@bam.tech/react-native-image-resizer/ios/ImageResizer.mm b/node_modules/@bam.tech/react-native-image-resizer/ios/ImageResizer.mm
+--- a/node_modules/@bam.tech/react-native-image-resizer/ios/ImageResizer.mm
++++ b/node_modules/@bam.tech/react-native-image-resizer/ios/ImageResizer.mm
+@@ -57,8 +57,14 @@
+                     reject([NSString stringWithFormat: @"%ld", (long)error.code], error.description, nil);
+                     return;
+                 }
+-                NSDictionary * response =  transformImage(image, uri, [rotation integerValue], newSize, fullPath, format, (int)quality, [keepMeta boolValue], @{@"mode": mode, @"onlyScaleDown": [NSNumber numberWithBool:onlyScaleDown]});
+-                resolve(response);
++                // This block runs after the outer @try has returned, so a failed
++                // save (e.g. a full disk) would otherwise crash the app.
++                @try {
++                    NSDictionary * response =  transformImage(image, uri, [rotation integerValue], newSize, fullPath, format, (int)quality, [keepMeta boolValue], @{@"mode": mode, @"onlyScaleDown": [NSNumber numberWithBool:onlyScaleDown]});
++                    resolve(response);
++                } @catch (NSException *exception) {
++                    reject(exception.name, exception.reason, nil);
++                }
+             }];
+         } @catch (NSException *exception) {
+             RCTLogError(@"%@", [NSString stringWithFormat:@"Code : %@ / Message : %@", exception.name, exception.reason]);

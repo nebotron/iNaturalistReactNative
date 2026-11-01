@@ -1,27 +1,35 @@
 import {
   useNetInfo,
 } from "@react-native-community/netinfo";
-import { useQueryClient } from "@tanstack/react-query";
 import scoreImage from "api/computerVision";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import {
-  useCallback, useEffect, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import {
+  getCachedSuggestions,
+  onlineSuggestionsCacheKey,
+  setCachedSuggestions,
+} from "sharedHelpers/suggestionsCache";
+import { getTunable } from "sharedHelpers/tunableParams";
 import {
   useAuthenticatedQuery,
   useCurrentUser,
 } from "sharedHooks";
 import useStore from "stores/useStore";
 
+import { log } from "../../../react-native-logs.config";
 import { startOfflineExperimentInBackground } from "./suggestionComparisonExperiment";
 import type { ScoreImageParams, UseSuggestionsOnlineSuggestion } from "./types";
 import { predictOffline } from "./useOfflineSuggestions";
 
-const SCORE_IMAGE_TIMEOUT = 5_000;
+const logger = log.extend( "useOnlineSuggestions" );
+
+const SCORE_IMAGE_TIMEOUT = getTunable( "onlineSuggestionsTimeoutSeconds" ) * 1000;
 
 const { useRealm } = RealmContext;
 
@@ -87,7 +95,6 @@ const useOnlineSuggestions = (
     shouldFetchOnlineSuggestions,
   } = options;
 
-  const queryClient = useQueryClient( );
   const [timedOut, setTimedOut] = useState( false );
   const { isConnected } = useNetInfo( );
   const currentUser = useCurrentUser();
@@ -95,12 +102,22 @@ const useOnlineSuggestions = (
   const locale = i18n?.language ?? "en";
 
   const getCurrentObservation = useStore( state => state.getCurrentObservation );
+  // Counts requests for the current query so retries are labeled in the log
+  const attempts = useRef( { key: "", count: 0 } );
+
+  // Read already-scored results synchronously so they show on the first render
+  // instead of after the image is resized and the query runs, which would
+  // briefly flash the offline suggestions
+  const syncCacheKey = onlineSuggestionsCacheKey( queryKey, !!currentUser, locale );
+  const cachedOnlineSuggestions = useMemo( ( ) => ( queryKey.length > 0
+    ? getCachedSuggestions<OnlineSuggestionsQueryResponse>( syncCacheKey )
+    : undefined ), [queryKey.length, syncCacheKey] );
 
   // TODO if this is a remote observation with an `id` param, use
   // scoreObservation instead so we don't have to spend time resizing and
   // uploading images
   const {
-    data: onlineSuggestions,
+    data: fetchedOnlineSuggestions,
     dataUpdatedAt,
     refetch,
     fetchStatus,
@@ -108,18 +125,37 @@ const useOnlineSuggestions = (
   } = useAuthenticatedQuery<OnlineSuggestionsQueryResponse>(
     queryKey,
     async optsWithAuth => {
+      // Calling the API is expensive (network + server-side scoring), so
+      // avoid re-fetching for a query/auth state we've already resolved,
+      // even across app restarts.
+      const cacheKey = onlineSuggestionsCacheKey( queryKey, !!currentUser, locale );
+      const cachedSuggestions = getCachedSuggestions<OnlineSuggestionsQueryResponse>( cacheKey );
+      if ( cachedSuggestions ) {
+        return cachedSuggestions;
+      }
+
       const obsUuid = getCurrentObservation().uuid;
       const params = {
         ...scoreImageParams,
         ...( !currentUser && { locale } ),
       };
 
-      const suggestionsResponse
-        = await scoreImage( params, optsWithAuth ) as OnlineSuggestionsApiResponse;
+      const attemptKey = queryKey.join( "|" );
+      if ( attempts.current.key !== attemptKey ) {
+        attempts.current = { key: attemptKey, count: 0 };
+      }
+      attempts.current.count += 1;
+      const suggestionsResponse = await scoreImage(
+        params,
+        optsWithAuth,
+        { source: "suggestions", attempt: attempts.current.count },
+      ) as OnlineSuggestionsApiResponse;
+      attempts.current.count = 0;
 
       // there's a slight discrepancy between online/offline responses which this smooths over for
       // the eventual UI
       const shimmedOnlineResponse = shimApiResponseForCommonAncestor( suggestionsResponse );
+      setCachedSuggestions( cacheKey, shimmedOnlineResponse );
 
       if ( !!scoreImageParams && typeof obsUuid === "string" ) {
         startOfflineExperimentInBackground(
@@ -143,11 +179,22 @@ const useOnlineSuggestions = (
     },
   );
 
-  // Give up on suggestions request after a timeout
+  const onlineSuggestions = fetchedOnlineSuggestions ?? cachedOnlineSuggestions;
+
+  // Stop blocking the UI on online suggestions after a timeout so the offline
+  // suggestions are shown. We intentionally do NOT cancel the query: a slow
+  // request is left running so its results still replace the offline ones once
+  // they arrive instead of being abandoned (which left online IDs never
+  // loading on slow connections). We also only start the timer once the request
+  // is actually in flight, so preparing the image (resizing) doesn't eat into
+  // the timeout window.
   useEffect( ( ) => {
+    if ( fetchStatus !== "fetching" ) {
+      return ( ) => { };
+    }
     const timer = setTimeout( ( ) => {
       if ( onlineSuggestions === undefined ) {
-        queryClient.cancelQueries( { queryKey } );
+        logger.info( `score_image soft_timeout ms=${SCORE_IMAGE_TIMEOUT}, showing offline` );
         onFetchError( { isOnline: true } );
         setTimedOut( true );
       }
@@ -156,7 +203,7 @@ const useOnlineSuggestions = (
     return ( ) => {
       clearTimeout( timer );
     };
-  }, [onlineSuggestions, queryKey, queryClient, onFetchError] );
+  }, [fetchStatus, onlineSuggestions, onFetchError] );
 
   const resetTimeout = useCallback( ( ) => {
     setTimedOut( false );
@@ -205,15 +252,13 @@ const useOnlineSuggestions = (
     fetchStatus,
   };
 
-  return timedOut
-    ? {
-      ...queryObject,
-      onlineSuggestions: undefined,
-    }
-    : {
-      ...queryObject,
-      onlineSuggestions,
-    };
+  // Always surface online suggestions once they exist. Even after a timeout we
+  // want a slow response to replace the offline suggestions when it lands,
+  // rather than being hidden permanently.
+  return {
+    ...queryObject,
+    onlineSuggestions,
+  };
 };
 
 export default useOnlineSuggestions;

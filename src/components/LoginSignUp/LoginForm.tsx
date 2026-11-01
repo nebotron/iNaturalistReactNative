@@ -19,6 +19,7 @@ import {
   Platform,
   TouchableWithoutFeedback,
 } from "react-native";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useCurrentUser, useLayoutPrefs } from "sharedHooks";
 import useKeyboardInfo from "sharedHooks/useKeyboardInfo";
 import colors from "styles/tailwindColors";
@@ -37,7 +38,9 @@ interface Props {
  * If a user loggs in and their account has at least this many
  * uploaded observations, auto-switch to advanced mode
  */
-export const AUTO_ADVANCED_MODE_OBSERVATION_THRESHOLD = 100;
+export const AUTO_ADVANCED_MODE_OBSERVATION_THRESHOLD = getTunable(
+  "autoAdvancedModeObservations",
+);
 
 const LoginForm = ( {
   scrollViewRef,

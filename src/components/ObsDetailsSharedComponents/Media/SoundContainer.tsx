@@ -5,6 +5,9 @@ import {
 import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
 import {
+  normalizedSoundUri, playerStarted, setPlayingAudio,
+} from "components/AudioId/audioIdSession";
+import {
   Body1,
   Body2,
   Body4,
@@ -58,7 +61,8 @@ interface SoundContainerProps {
   sizeClass: string;
   sound: {
     file_url: string;
-    hidden: boolean;
+    // Absent on API sounds that were never moderated
+    hidden?: boolean;
   };
 }
 
@@ -95,7 +99,8 @@ const SoundContainer = ( {
 
   const playSound = useCallback( ( position?: number ) => {
     async function playSoundAsync( ) {
-      await player.startPlayer( sound.file_url );
+      await player.startPlayer( await normalizedSoundUri( sound.file_url ) );
+      playerStarted( );
       if ( position ) {
         try {
           await player.seekToPlayer( position );
@@ -147,6 +152,16 @@ const SoundContainer = ( {
     isVisible,
     player,
   ] );
+
+  useEffect( ( ) => {
+    setPlayingAudio( player, playing, ( ) => {
+      player.removePlayBackListener( );
+      setPlaying( false );
+      // Resuming has to re-init the player, as after a swipe
+      setSwipedAway( true );
+    } );
+    return ( ) => setPlayingAudio( player, false );
+  }, [player, playing] );
 
   // Tapping the button can play, pause, or resume
   const togglePlay = useCallback( ( ) => {

@@ -5,6 +5,7 @@ import handleError from "./error";
 import type { ApiOpts, ApiPhotoWithLicense, ApiUntypedParams } from "./types";
 
 const ANCESTOR_FIELDS = {
+  id: true,
   name: true,
   preferred_common_name: true,
   rank: true,
@@ -105,9 +106,58 @@ async function fetchTaxon(
   }
 }
 
+// Global observation counts for a batch of taxa. Deliberately does not go
+// through fetchTaxon: this can run over every species a user has seen, so it
+// asks for the two fields it needs instead of ancestors, photos and summaries.
+async function fetchTaxaObservationsCounts(
+  ids: number[],
+  opts: ApiOpts = {},
+) {
+  try {
+    const response = await inatjs.taxa.fetch( ids, {
+      fields: { id: true, observations_count: true },
+    }, opts );
+    return response?.results || [];
+  } catch ( e ) {
+    return handleError( e, {
+      context: { functionName: "fetchTaxaObservationsCounts", ids, opts },
+    } );
+  }
+}
+
+// Default photos for a batch of taxa, for lists that would otherwise fetch
+// each taxon in full at once and get rate limited
+async function fetchTaxaBasics(
+  ids: number[],
+  opts: ApiOpts = {},
+  params: ApiUntypedParams = {},
+) {
+  try {
+    const response = await inatjs.taxa.fetch( ids, {
+      fields: {
+        id: true,
+        ancestor_ids: true,
+        default_photo: { id: true, url: true },
+        iconic_taxon_name: true,
+        name: true,
+        preferred_common_name: true,
+        rank: true,
+        rank_level: true,
+      },
+      ...params,
+    }, opts );
+    return response?.results || [];
+  } catch ( e ) {
+    return handleError( e as ErrorWithResponse, {
+      context: { functionName: "fetchTaxaBasics", ids, opts },
+    } );
+  }
+}
+
 async function searchTaxa( params: ApiUntypedParams = {}, opts: ApiOpts = {} ) {
   try {
-    const searchParams = { ...PARAMS, ...params };
+    // matched_term says which name the query hit, e.g. a 4-letter bird code
+    const searchParams = { fields: { ...FIELDS, matched_term: true }, ...params };
     const { results } = await inatjs.taxa.search( searchParams, opts );
     return results;
   } catch ( e ) {
@@ -116,6 +166,8 @@ async function searchTaxa( params: ApiUntypedParams = {}, opts: ApiOpts = {} ) {
 }
 
 export {
+  fetchTaxaBasics,
+  fetchTaxaObservationsCounts,
   fetchTaxon,
   searchTaxa,
 };

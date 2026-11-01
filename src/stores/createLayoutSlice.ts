@@ -16,6 +16,32 @@ export enum MAP_TYPES {
   HYBRID = "hybrid",
 }
 
+export interface HotspotSettings {
+  hotspotClusterRadiusKm: number;
+  hotspotMaxDetourCandidates: number;
+  hotspotObsPerPage: number;
+  hotspotParkingMinutes: number;
+  hotspotBboxPaddingKm: number;
+}
+
+export interface ExploreGridOverlays {
+  commonName: boolean;
+  scientificName: boolean;
+  location: boolean;
+  dateTime: boolean;
+  faveButton: boolean;
+  faveCount: boolean;
+}
+
+export interface AICameraSettings {
+  macroMode: boolean;
+  flash: "on" | "off";
+  cameraPosition: "front" | "back";
+  locationDisabled: boolean;
+}
+
+const MAX_RECENT_TAXA = 10;
+
 export interface LayoutSlice {
   isAdvancedUser: boolean;
   obsDetailsTab: OBS_DETAILS_TAB;
@@ -30,6 +56,8 @@ export interface LayoutSlice {
     setScreenAfterPhotoEvidence: ( screenAfterPhotoEvidence: SCREEN_AFTER_PHOTO_EVIDENCE ) => void;
     isAllAddObsOptionsMode: boolean;
     setIsAllAddObsOptionsMode: ( isAllAddObsOptionsMode: boolean ) => void;
+    isPhotoLibraryAddObsMode: boolean;
+    setIsPhotoLibraryAddObsMode: ( ) => void;
     shownOnce: object;
     setShownOnce: ( key: string ) => void;
     resetShownOnce: ( ) => void;
@@ -46,6 +74,19 @@ export interface LayoutSlice {
     toggleDebugMode: ( ) => void;
     mapType: MAP_TYPES;
     setMapType: ( mapType: MAP_TYPES ) => void;
+    ebirdEnabled: boolean;
+    setEbirdEnabled: ( ebirdEnabled: boolean ) => void;
+    hotspotSettings: HotspotSettings;
+    setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
+    exploreGridOverlays: ExploreGridOverlays;
+    setExploreGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
+    aiCameraSettings: AICameraSettings;
+    setAICameraSetting: <K extends keyof AICameraSettings>(
+      key: K,
+      value: AICameraSettings[K]
+    ) => void;
+    recentTaxonIds: number[];
+    addRecentTaxonId: ( taxonId: number ) => void;
   };
 }
 
@@ -70,6 +111,7 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
         // reset to AICamera mode if default mode is toggled on
         // and otherwise, advanced mode default is all options
         isAllAddObsOptionsMode: newValue !== true,
+        isPhotoLibraryAddObsMode: false,
         // reset to Match screen if default mode is toggled on
         // and otherwise, advanced mode default is Suggestions
         screenAfterPhotoEvidence: newValue === true
@@ -96,6 +138,16 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         isAllAddObsOptionsMode: newValue,
+        isPhotoLibraryAddObsMode: false,
+      },
+    } ) ),
+    // Green button goes straight to the photo importer
+    isPhotoLibraryAddObsMode: false,
+    setIsPhotoLibraryAddObsMode: ( ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        isAllAddObsOptionsMode: false,
+        isPhotoLibraryAddObsMode: true,
       },
     } ) ),
     // State to control pivot cards and other onboarding material being shown only once
@@ -165,12 +217,115 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
         debugModeEnabled: !state.layout.debugModeEnabled,
       },
     } ) ),
+    // Whether Explore includes eBird sightings
+    ebirdEnabled: false,
+    setEbirdEnabled: newValue => set( state => ( {
+      layout: {
+        ...state.layout,
+        ebirdEnabled: newValue,
+      },
+    } ) ),
+    // Most recently selected taxa in taxon search, newest first
+    recentTaxonIds: [],
+    addRecentTaxonId: taxonId => set( state => ( {
+      layout: {
+        ...state.layout,
+        recentTaxonIds: [
+          taxonId,
+          ...state.layout.recentTaxonIds.filter( id => id !== taxonId ),
+        ].slice( 0, MAX_RECENT_TAXA ),
+      },
+    } ) ),
     // Last selected map layers type for react-native-maps MapView ("standard" or "hybrid")
     mapType: MAP_TYPES.STANDARD,
     setMapType: newMapType => set( state => ( {
       layout: {
         ...state.layout,
         mapType: newMapType,
+      },
+    } ) ),
+    // Wildlife Hotspots algorithm tuning, edited in ExploreV2 Advanced Search
+    hotspotSettings: {
+      hotspotClusterRadiusKm: 1.5,
+      hotspotMaxDetourCandidates: 50,
+      hotspotObsPerPage: 200,
+      hotspotParkingMinutes: 5,
+      hotspotBboxPaddingKm: 80,
+    },
+    setHotspotSetting: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotSettings: { ...state.layout.hotspotSettings, [key]: value },
+      },
+    } ) ),
+    // AI camera configuration, kept across closing and reopening the camera
+    aiCameraSettings: {
+      macroMode: false,
+      flash: "off",
+      cameraPosition: "back",
+      locationDisabled: false,
+    },
+    setAICameraSetting: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        aiCameraSettings: { ...state.layout.aiCameraSettings, [key]: value },
+      },
+    } ) ),
+    // Info overlaid on each photo in the Explore observations grid
+    exploreGridOverlays: {
+      commonName: true,
+      scientificName: false,
+      location: false,
+      dateTime: false,
+      faveButton: false,
+      faveCount: false,
+    },
+    setExploreGridOverlay: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        exploreGridOverlays: { ...state.layout.exploreGridOverlays, [key]: value },
+      },
+    } ) ),
+    // Recently entered addresses in the Wildlife Hotspots address search,
+    // most-recent first. Used to prefill the address dropdown before typing.
+    hotspotAddressHistory: [] as {
+      place_id: number | string;
+      display_name: string;
+      lat: string;
+      lon: string;
+    }[],
+    addHotspotAddress: ( address: {
+      place_id: number | string;
+      display_name: string;
+      lat: string;
+      lon: string;
+    } ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        hotspotAddressHistory: [
+          address,
+          ...state.layout.hotspotAddressHistory.filter(
+            a => a.display_name !== address.display_name,
+          ),
+        ].slice( 0, 1000 ),
+      },
+    } ) ),
+    // Last viewport seen by the user in the Explore map
+    lastExploreMapRegion: null as {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    } | null,
+    setLastExploreMapRegion: ( region: {
+      latitude: number;
+      longitude: number;
+      latitudeDelta: number;
+      longitudeDelta: number;
+    } ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        lastExploreMapRegion: region,
       },
     } ) ),
   },
