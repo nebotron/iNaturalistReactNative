@@ -488,7 +488,7 @@ const ExploreResults = ( ) => {
             )}
             {!showMap && ( isEbirdEnabled( ) || ( layout === "grid" && !hasNoResults ) ) && (
               <INatIconButton
-                icon="layers"
+                icon="tune"
                 size={22}
                 className="bg-white rounded-full h-[46px] w-[46px] border-[1px] border-lightGray
                   absolute bottom-[76px] z-10 right-5"
