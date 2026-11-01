@@ -90,6 +90,7 @@ interface UsbStorageModule {
     maxCount: number
   ) => Promise<UsbListResult>;
   saveImageToPhotos: ( relativePath: string ) => Promise<{ saved: boolean }>;
+  copyImageToFile: ( relativePath: string, destPath: string ) => Promise<{ copied: boolean }>;
   deleteSourceImages: ( relativePaths: string[] ) => Promise<UsbDeleteResult>;
   getSavedImages: ( ) => Promise<Record<string, string>>;
   clearSavedImages: ( relativePaths: string[] ) => Promise<void>;
@@ -168,6 +169,11 @@ export const saveUsbImageToPhotos = ( relativePath: string ): Promise<{
   localIdentifier?: string;
 }> => (
   usbStorage?.saveImageToPhotos( relativePath ) ?? Promise.resolve( { saved: false } )
+);
+
+export const copyUsbImageToFile = ( relativePath: string, destPath: string ) => (
+  usbStorage?.copyImageToFile( relativePath, destPath )
+  ?? Promise.reject( new Error( "USB import is unavailable" ) )
 );
 
 export const deleteUsbSourceImages = ( relativePaths: string[] ): Promise<UsbDeleteResult> => (

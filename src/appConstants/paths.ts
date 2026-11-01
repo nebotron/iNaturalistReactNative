@@ -17,6 +17,9 @@ export const soundUploadPath = `${DocumentDirectoryPath}/soundUploads`;
 
 export const rollbackPhotosPath = `${DocumentDirectoryPath}/rollbackPhotos`;
 
+// Originals copied off a USB drive, kept until faved or expired (usbStaging.ts)
+export const usbStagingPath = `${DocumentDirectoryPath}/usbStaging`;
+
 export const videoLibraryPath = `${DocumentDirectoryPath}/videoLibrary`;
 
 export const cropSourcesPath = `${CachesDirectoryPath}/inatCropSources`;

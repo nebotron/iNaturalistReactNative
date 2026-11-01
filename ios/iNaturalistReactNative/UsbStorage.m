@@ -589,6 +589,43 @@ RCT_EXPORT_METHOD(saveImageToPhotos:(NSString *)relativePath
   }
 }
 
+// Copies one source image into a file the app owns (the import staging folder),
+// without going through Photos. Written to a temp name and renamed, so a copy
+// interrupted midway never leaves a partial file at destPath.
+RCT_EXPORT_METHOD(copyImageToFile:(NSString *)relativePath
+                         destPath:(NSString *)destPath
+                          resolve:(RCTPromiseResolveBlock)resolve
+                           reject:(RCTPromiseRejectBlock)reject)
+{
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
+    NSURL *folder = resolveSavedFolder( );
+    if ( !folder || ![folder startAccessingSecurityScopedResource] ) {
+      reject( @"unavailable", @"USB folder is not available", nil );
+      return;
+    }
+    NSFileManager *fm = [NSFileManager defaultManager];
+    NSString *partial = [destPath stringByAppendingString:@".partial"];
+    [fm removeItemAtPath:partial error:nil];
+    [fm createDirectoryAtPath:destPath.stringByDeletingLastPathComponent
+  withIntermediateDirectories:YES attributes:nil error:nil];
+    NSError *error = nil;
+    BOOL ok = [fm copyItemAtPath:[folder.path stringByAppendingPathComponent:relativePath]
+                          toPath:partial error:&error]
+      && [fm moveItemAtPath:partial toPath:destPath error:&error];
+    [folder stopAccessingSecurityScopedResource];
+    if ( ok ) {
+      resolve( @{ @"copied": @YES } );
+      return;
+    }
+    [fm removeItemAtPath:partial error:nil];
+    reject( errorIsOutOfSpace( error )
+              ? @"out-of-space"
+              : @"copy-failed",
+            error.localizedDescription ?: @"Could not copy source file",
+            error );
+  } );
+}
+
 // Deletes the given source files (by relative path) from the saved folder.
 // Called only after every file in the batch has been confirmed saved to Photos.
 RCT_EXPORT_METHOD(deleteSourceImages:(NSArray<NSString *> *)relativePaths

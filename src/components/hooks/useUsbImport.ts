@@ -1,19 +1,22 @@
+import { CommonActions } from "@react-navigation/native";
+import { getCurrentRoute, navigationRef } from "navigation/navigationUtils";
 import { useCallback, useEffect, useRef } from "react";
 import { AppState } from "react-native";
 import DeviceInfo from "react-native-device-info";
-import { recordAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
 import {
   beginBackgroundUsbImportTask,
   endBackgroundUsbImportTask,
 } from "sharedHelpers/backgroundExecution";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
-import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
+import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
+import { stagedPathFor, takeUnofferedStagedGroups } from "sharedHelpers/usbStaging";
 import {
   addPendingUsbDeletes,
   availableMemoryMb,
   clearPendingUsbDeletes,
   clearUsbOffloadMarker,
+  copyUsbImageToFile,
   deleteUsbSourceImages,
   getPendingUsbDeletes,
   getUsbFolderDiagnostics,
@@ -24,12 +27,11 @@ import {
   markUsbOffloadStarted,
   reconcileSavedUsbImages,
   refreshAvailableMemory,
-  requestUsbPhotosPermission,
-  saveUsbImageToPhotos,
   takeUnfinishedUsbOffload,
   updateUsbOffloadProgress,
 } from "sharedHelpers/usbStorage";
 import useUsbImportProgress from "stores/usbImportProgress";
+import useStore from "stores/useStore";
 
 const logger = log.extend( "useUsbImport" );
 
@@ -42,16 +44,6 @@ let loggedCameraSubfolder = false;
 // Photos import) can't freeze the whole run — that file is counted as failed
 // and the loop moves on.
 const SAVE_TIMEOUT_MS = 30_000;
-
-// The same net around the *wait* for the shared Photos-library write chain.
-// SAVE_TIMEOUT_MS only covers the native call once the chain reaches this
-// file; a task queued ahead of it that never settles holds the chain (see
-// enqueuePhotoLibraryWrite) and the await above it had no bound at all — which
-// is a run that stops dead with no line to say so. The Aug 12 offload sat for
-// 4h9m having saved 0 of 21, and nothing distinguished that from iOS having
-// suspended the app. Sized above the chain's own CHAIN_HOLD_MS (170s) so a
-// merely slow write ahead of us is never mistaken for a wedge.
-const QUEUED_SAVE_TIMEOUT_MS = 200_000;
 
 // Saving to Photos is a PHPhotoLibrary write, and those can wedge for the whole
 // device (see promptDeleteOriginalDevicePhotos.ts). When that happens every
@@ -133,10 +125,49 @@ const deletePendingFromDevice = async ( ) => {
   return { ...del, attempted: paths.length };
 };
 
-// Imports from the user's chosen USB folder (see UsbImportSetting) when they
-// press Import there; nothing scans on its own, so an idle app never wakes for
-// it. New images are offloaded: each is saved into the Photos library, then —
-// once the whole batch is safely saved — deleted from the source device. A
+// Screens a staged import may take the user away from: the tab roots and
+// Settings, never the middle of an observation.
+const IDLE_ROUTES = new Set( ["ObsList", "RootExplore", "Menu", "Notifications", "Settings"] );
+
+// Opens staged photos not yet offered (this run's, or ones an interrupted run
+// left behind) in Group Photos, straight into the bulk cropper.
+const openStagedInGroupPhotos = async ( ) => {
+  if ( useStore.getState( ).groupedPhotos.length > 0 ) return;
+  const route = getCurrentRoute( )?.name;
+  if ( !route || !IDLE_ROUTES.has( route ) ) return;
+  const groups = await takeUnofferedStagedGroups( );
+  if ( groups.length === 0 ) return;
+  useStore.getState( ).setGroupedPhotos( groups );
+  navigationRef.dispatch( CommonActions.reset( {
+    index: 0,
+    routes: [{
+      name: "TabNavigator",
+      state: {
+        routes: [{
+          name: "ObservationsTab",
+          state: {
+            index: 2,
+            routes: [
+              { name: "ObsList" },
+              { name: "GroupPhotos" },
+              {
+                name: "ImageCropEditor",
+                params: { context: "groupPhotos", cropImport: true, skipUris: [] },
+              },
+            ],
+          },
+        }],
+      },
+    }],
+  } ) );
+};
+
+// Imports from the user's chosen USB folder (see UsbImportSetting) whenever
+// the app comes to the foreground, or when they press Import there. New
+// images are copied into the app's staging folder (see usbStaging.ts), then —
+// once the whole batch is safely copied — deleted from the source device, and
+// opened in Group Photos. Only photos on faved observations ever reach the
+// Photos library. A
 // progress overlay (UsbImportProgress) reflects the run. Mounted once in App
 // so a run outlives the Settings screen that started it; the run is published
 // to that screen through the progress store.
@@ -250,17 +281,7 @@ const useUsbImport = ( ) => {
         return false;
       }
 
-      // Get Photos permission before showing progress or touching any file, so
-      // the system prompt appears up front rather than mid-loop (where it was
-      // hiding behind the overlay and stalling the run at 0/N).
-      const permission = await requestUsbPhotosPermission( );
-      logDiag( `photos permission: ${permission}` );
-      if ( permission !== "authorized" && permission !== "limited" ) {
-        logger.error( `USB offload: Photos permission ${permission}; not importing` );
-        return false;
-      }
-
-      logger.info( `USB offload: saving ${images.length} photos to Photos library` );
+      logger.info( `USB offload: copying ${images.length} photos to staging` );
       started = true;
       progress.start( images.length );
       markUsbOffloadStarted( images.length );
@@ -351,34 +372,19 @@ const useUsbImport = ( ) => {
           availableMemoryMb( ),
         );
         try {
-          // On the shared Photos-library write chain, like every other native
-          // library write in the app. This is the app's largest source of them
-          // — 114 in a run, one per file — and it was the one path outside the
-          // chain, so an offload overlapped whatever else the app was doing to
-          // the library — and a delete racing a save can hang on a library that
-          // is servicing both perfectly well, as the Aug 5 16:04–16:40 log
-          // showed while 68 assets were created without complaint.
-          // Enqueued per file rather than per run so a deletion waits for one
-          // photo, not a whole card.
+          updateUsbOffloadProgress(
+            savedPaths.length,
+            failedBeforeThisFile,
+            `saving ${position}`,
+            AppState.currentState,
+            availableMemoryMb( ),
+          );
           // eslint-disable-next-line no-await-in-loop
-          const saved = await withTimeout( enqueuePhotoLibraryWrite( ( ) => {
-            updateUsbOffloadProgress(
-              savedPaths.length,
-              failedBeforeThisFile,
-              `saving ${position}`,
-              AppState.currentState,
-              availableMemoryMb( ),
-            );
-            return withTimeout( saveUsbImageToPhotos( relativePath ), SAVE_TIMEOUT_MS );
-          } ), QUEUED_SAVE_TIMEOUT_MS );
+          await withTimeout(
+            copyUsbImageToFile( relativePath, stagedPathFor( relativePath ) ),
+            SAVE_TIMEOUT_MS,
+          );
           savedPaths.push( relativePath );
-          // Remember that this asset is ours. These are the only photos in the
-          // library the app created, and the only ones PhotoKit will let it
-          // delete without a confirmation — the confirmation the deletion
-          // hangs are stuck on.
-          if ( saved?.localIdentifier ) {
-            recordAppCreatedPhotoAssets( [saved.localIdentifier] );
-          }
           // Mark imported immediately, not after the whole batch: if the app
           // is killed mid-loop, photos already saved to this point must not
           // be saved again on restart.
@@ -574,12 +580,33 @@ const useUsbImport = ( ) => {
     return started;
   }, [onboardingShown, logDiag] );
 
-  useEffect( ( ) => {
-    useUsbImportProgress.setState( { startImport: offload } );
-    return ( ) => useUsbImportProgress.setState( { startImport: undefined } );
+  const run = useCallback( async ( ) => {
+    const started = await offload( );
+    await openStagedInGroupPhotos( ).catch( error => {
+      logger.error( "Could not open staged USB photos", error );
+    } );
+    return started;
   }, [offload] );
 
-  return offload;
+  useEffect( ( ) => {
+    useUsbImportProgress.setState( { startImport: run } );
+    return ( ) => useUsbImportProgress.setState( { startImport: undefined } );
+  }, [run] );
+
+  // A drive plugged in while the app was away is picked up on return. Also
+  // sweeps staging, whose expiry runs on the clock.
+  useEffect( ( ) => {
+    if ( !onboardingShown ) return ( ) => undefined;
+    void run( );
+    const subscription = AppState.addEventListener( "change", state => {
+      if ( state !== "active" ) return;
+      requestQueuedDeletionAlbumSync( );
+      void run( );
+    } );
+    return ( ) => subscription.remove( );
+  }, [onboardingShown, run] );
+
+  return run;
 };
 
 export default useUsbImport;

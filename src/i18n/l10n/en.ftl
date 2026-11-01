@@ -2037,6 +2037,10 @@ Tunable-uploadTimeoutMinutes-description = How long an observation can keep tryi
 Tunable-usbMaxPhotosPerScan = USB photos per scan
 # Description of a tunable parameter in settings
 Tunable-usbMaxPhotosPerScan-description = Maximum number of new photos imported from USB in one scan.
+# Label for a tunable parameter in settings
+Tunable-usbStagingRetentionDays = Days to keep USB originals
+# Description of a tunable parameter in settings
+Tunable-usbStagingRetentionDays-description = How long photos imported from USB are kept in the app after they reach Group Photos. Photos on observations you fave are saved to your photo library first.
 Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?
@@ -2080,12 +2084,12 @@ Uploading-x-of-y-observations =
        *[other] Uploading { $currentUploadCount } of { $total } observations
     }
 # Describes USB photo import before a folder has been chosen
-USB-import-choose-folder = Choose a folder on a USB drive or in Files, then tap Import From USB to save new photos in it to your photo library.
+USB-import-choose-folder = Choose a folder on a USB drive or in Files. New photos in it are imported whenever you open the app with the drive connected.
 # Describes USB photo import once a folder has been chosen
-USB-import-folder-chosen = Tap Import From USB to save new photos in "{ $folder }" to your photo library.
+USB-import-folder-chosen = New photos in "{ $folder }" are imported whenever you open the app with the drive connected.
 # Describes USB photo import when a folder has been chosen but the drive
 # holding it is not currently connected
-USB-import-folder-chosen-drive-not-connected = Connect this drive, then tap Import From USB to save its new photos to your photo library.
+USB-import-folder-chosen-drive-not-connected = Connect this drive and open the app to import its new photos.
 # Warns that the chosen folder is one folder created by a camera on a memory
 # card, which the camera stops adding to when the card is formatted or replaced
 USB-import-folder-is-a-camera-subfolder = "{ $folder }" is one folder created by your camera. When you format the card or use another one, your camera starts a new folder, and photos in it will not be imported. Choose the DCIM folder or the whole drive instead.

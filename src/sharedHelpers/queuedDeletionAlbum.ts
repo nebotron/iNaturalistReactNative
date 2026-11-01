@@ -4,6 +4,7 @@ import addPhotosToImportedAlbum, {
 } from "sharedHelpers/importedPhotoAlbum";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import classifyDevicePhotoUris from "sharedHelpers/unfavoritedDevicePhotos";
+import { sweepUsbStaging } from "sharedHelpers/usbStaging";
 import { readUserObservationsCache } from "sharedHelpers/userObservationsCache";
 
 // Keeps the "Imported to iNaturalist" album holding the photos on unfavorited
@@ -28,6 +29,8 @@ const syncNow = async ( ) => {
     ? readUserObservationsCache( userId )
     : undefined;
   const { unfavorited, favorited } = classifyDevicePhotoUris( realm, cache );
+  // Ahead of the early return: expiry depends on the clock, not on a change.
+  void sweepUsbStaging( favorited );
   const signature = JSON.stringify( [unfavorited.sort( ), favorited.sort( )] );
   if ( signature === lastSynced ) return;
   lastSynced = signature;
