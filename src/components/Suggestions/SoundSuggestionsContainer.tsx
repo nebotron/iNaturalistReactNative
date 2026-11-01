@@ -6,12 +6,12 @@ import React, { useEffect } from "react";
 import useStore from "stores/useStore";
 
 import useNavigateWithTaxonSelected from "./hooks/useNavigateWithTaxonSelected";
+import useSelectGenus from "./hooks/useSelectGenus";
 import Suggestions from "./Suggestions";
 import TaxonSearchButton from "./TaxonSearchButton";
 
-// Other species shown at most, and the least score that shows one
-const MAX_OTHER = 10;
-const MIN_OTHER_SCORE = 0.05;
+// The least score that shows a species: anything less displays as 0.0%
+const MIN_OTHER_SCORE = 0.0005;
 
 // Suggestions for an observation with sounds but no photos, from the on-device
 // Audio ID model run over its first sound, with species limited to those
@@ -50,12 +50,12 @@ const scoreSound = async (
       .slice( topSuggestion
         ? 1
         : 0 )
-      .filter( s => s.score >= MIN_OTHER_SCORE )
-      .slice( 0, MAX_OTHER ),
+      .filter( s => s.score >= MIN_OTHER_SCORE ),
   };
 };
 
 const headerRight = ( ) => <TaxonSearchButton />;
+const NO_SUGGESTIONS = { topSuggestion: null, otherSuggestions: [] };
 
 const SoundSuggestionsContainer = ( ) => {
   const navigation = useNavigation( );
@@ -78,6 +78,11 @@ const SoundSuggestionsContainer = ( ) => {
     enabled: !!soundUri,
     retry: false,
   } );
+  const suggestions = data || NO_SUGGESTIONS;
+  const { genusEligibleTaxonIds, handleSelectGenus } = useSelectGenus(
+    suggestions,
+    navigateWithTaxonSelected,
+  );
 
   useEffect( ( ) => {
     navigation.setOptions( { headerRight } );
@@ -93,13 +98,14 @@ const SoundSuggestionsContainer = ( ) => {
       isLoading={!!soundUri && isLoading}
       shouldUseEvidenceLocation={latitude != null}
       onPressPhoto={( ) => undefined}
-      onSelectGenus={( ) => undefined}
+      genusEligibleTaxonIds={genusEligibleTaxonIds}
+      onSelectGenus={handleSelectGenus}
       onTaxonChosen={navigateWithTaxonSelected}
       photoUris={[]}
       selectedPhotoUri=""
       showImproveWithLocationButton={false}
       soundUri={soundUri}
-      suggestions={data || { topSuggestion: null, otherSuggestions: [] }}
+      suggestions={suggestions}
       toggleLocation={( ) => undefined}
       toggleSuggestionsModel={( ) => undefined}
       useOfflineModel={false}
