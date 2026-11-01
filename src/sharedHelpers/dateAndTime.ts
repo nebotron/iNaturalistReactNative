@@ -332,6 +332,8 @@ interface FormatDateStringOptions {
   missing?: string | null;
   // IANA time zone name
   timeZone?: string;
+  // Omit the time zone abbreviation from the formatted datetime
+  hideTimeZone?: boolean;
 }
 
 type DateString = string | null;
@@ -453,7 +455,7 @@ function formatApiDatetime(
   if ( hasTime ) {
     return formatDateString(
       dateString,
-      options.literalTime && !options.timeZone
+      options.hideTimeZone || ( options.literalTime && !options.timeZone )
         ? i18n.t( "datetime-format-short" )
         : i18n.t( "datetime-format-short-with-zone" ),
       i18n,

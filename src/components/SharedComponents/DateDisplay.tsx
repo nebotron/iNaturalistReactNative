@@ -17,6 +17,7 @@ interface Props {
   dateString: string;
   geoprivacy?: string;
   hideIcon?: boolean;
+  hideTimeZone?: boolean;
   label?: string;
   // Display the time as literally expressed in the dateString, i.e. don't
   // assume it's in any time zone
@@ -36,6 +37,7 @@ const DateDisplay = ( {
   dateString,
   geoprivacy,
   hideIcon,
+  hideTimeZone,
   label,
   literalTime,
   maxFontSizeMultiplier = 2,
@@ -66,12 +68,13 @@ const DateDisplay = ( {
     if ( asDifference ) {
       return formatDifferenceForHumans( dateString, i18n );
     }
-    return formatApiDatetime( dateString, i18n, { literalTime, timeZone } );
+    return formatApiDatetime( dateString, i18n, { hideTimeZone, literalTime, timeZone } );
   }, [
     asDifference,
     belongsToCurrentUser,
     dateObscured,
     dateString,
+    hideTimeZone,
     isDebug,
     i18n,
     literalTime,

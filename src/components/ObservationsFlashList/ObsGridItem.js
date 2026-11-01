@@ -202,6 +202,7 @@ const ObsGridItem = ( {
             belongsToCurrentUser={isOwnObs}
             literalTime={!observation.observed_time_zone}
             hideIcon
+            hideTimeZone
             textComponent={WhiteBody4}
           />
         )}
