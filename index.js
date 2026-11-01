@@ -22,10 +22,12 @@ import inatjs from "inaturalistjs";
 import OfflineNavigationGuard from "navigation/OfflineNavigationGuard";
 import INatPaperProvider from "providers/INatPaperProvider";
 import RealmProvider from "providers/RealmProvider";
-import React from "react";
+import React, { useMemo } from "react";
 import { setJSExceptionHandler, setNativeExceptionHandler } from "react-native-exception-handler";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import {
+  SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { EnvConfig } from "sharedHelpers/envConfig";
 import {
   getInstallID,
@@ -180,22 +182,42 @@ const RozeniteContainer = () => {
   return null;
 };
 
+// The full insets leave dead space: the Dynamic Island ends ~10pt above the
+// top inset, and the home indicator needs only ~14pt of the 34pt bottom inset.
+const TrimmedSafeAreaInsets = ( { children } ) => {
+  const insets = useSafeAreaInsets( );
+  const trimmed = useMemo( ( ) => ( {
+    ...insets,
+    top: insets.top > 40
+      ? insets.top - 10
+      : insets.top,
+    bottom: Math.min( insets.bottom, 14 ),
+  } ), [insets] );
+  return (
+    <SafeAreaInsetsContext.Provider value={trimmed}>
+      {children}
+    </SafeAreaInsetsContext.Provider>
+  );
+};
+
 const AppWithProviders = ( ) => (
   <QueryClientProvider client={queryClient}>
     <RealmProvider>
       <SafeAreaProvider>
-        <INatPaperProvider>
-          <GestureHandlerRootView className="flex-1">
-            <BottomSheetModalProvider>
-              <OfflineNavigationGuard>
-                <ErrorBoundary>
-                  <App />
-                  <RozeniteContainer />
-                </ErrorBoundary>
-              </OfflineNavigationGuard>
-            </BottomSheetModalProvider>
-          </GestureHandlerRootView>
-        </INatPaperProvider>
+        <TrimmedSafeAreaInsets>
+          <INatPaperProvider>
+            <GestureHandlerRootView className="flex-1">
+              <BottomSheetModalProvider>
+                <OfflineNavigationGuard>
+                  <ErrorBoundary>
+                    <App />
+                    <RozeniteContainer />
+                  </ErrorBoundary>
+                </OfflineNavigationGuard>
+              </BottomSheetModalProvider>
+            </GestureHandlerRootView>
+          </INatPaperProvider>
+        </TrimmedSafeAreaInsets>
       </SafeAreaProvider>
     </RealmProvider>
   </QueryClientProvider>
