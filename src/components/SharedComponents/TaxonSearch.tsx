@@ -7,7 +7,7 @@ import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import { useStackHost } from "navigation/StackHostContext";
 import React, {
-  useEffect, useEffectEvent, useMemo, useRef,
+  useEffect, useEffectEvent, useMemo, useRef, useState,
 } from "react";
 import type { ListRenderItem, TextInput } from "react-native";
 import { FlatList } from "react-native";
@@ -51,6 +51,10 @@ const TaxonSearch = ( {
   const { keyboardHeight, keyboardShown } = useKeyboardInfo( );
   const navigation = useNavigation<NativeStackNavigationProp<ParamListBase>>( );
   const searchInputRef = useRef<TextInput>( null );
+  // Freeze the results while a finger is down. Online results replace local
+  // ones whenever they arrive, and if that happens mid-tap the row under the
+  // finger unmounts or moves and the tap is lost, so it took a second tap
+  const [heldTaxa, setHeldTaxa] = useState<RealmTaxon[] | null>( null );
 
   // onTransitionEnd here is defined as an effectEvent so that the listener
   // is not redefined when `query` changes which would otherwise be an effect dep
@@ -109,7 +113,10 @@ const TaxonSearch = ( {
       </View>
       <FlatList
         keyboardShouldPersistTaps="always"
-        data={taxa}
+        data={heldTaxa || taxa}
+        onTouchStart={( ) => setHeldTaxa( taxa )}
+        onTouchEnd={( ) => setHeldTaxa( null )}
+        onTouchCancel={( ) => setHeldTaxa( null )}
         renderItem={renderItem}
         keyExtractor={taxon => String( taxon.id )}
         ListEmptyComponent={emptyListComponent}
