@@ -65,9 +65,9 @@ const HotspotListItem = ( {
                   `View ${hotspot.observationCount} observations in Explore`
                 }
               >
-                {hotspot.observationCount.toLocaleString()}
+                {`${hotspot.observationCount.toLocaleString()} observations`}
               </Body2>
-              {` observations, ${hotspot.speciesCount.toLocaleString()} species`}
+              {`, ${hotspot.speciesCount.toLocaleString()} species`}
             </Body2>
           </View>
           <View className="flex-row items-center">
