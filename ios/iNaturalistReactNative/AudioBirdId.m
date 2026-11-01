@@ -63,26 +63,42 @@ withIntermediateDirectories:YES attributes:nil error:nil];
 // Raises every sound the app plays, Audio ID clips and observation sounds
 // alike, to the same loud RMS level (at most 40 dB of gain), and soft-limits
 // the peaks this pushes past full scale with 0.95 * tanh( x / 0.95 ):
-// unchanged when quiet, never past full scale.
+// unchanged when quiet, never past full scale. Loudness is the RMS of the
+// loudest quarter of 100 ms blocks, so silence around a call (a long
+// observation sound vs. a 5 s clip) doesn't change the level it plays at.
 static void ABNormalize( AVAudioPCMBuffer *buffer )
 {
   AVAudioChannelCount channels = buffer.format.channelCount;
-  float peak = 0, rms = 0;
+  AVAudioFrameCount frames = buffer.frameLength;
+  AVAudioFrameCount block = MAX( (AVAudioFrameCount)( buffer.format.sampleRate / 10 ), 1 );
+  NSUInteger blocks = MAX( ( frames + block - 1 ) / block, 1 );
+  float *energy = (float *)calloc( blocks, sizeof( float ) );
+  float peak = 0;
   for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
-    float p = 0, r = 0;
-    vDSP_maxmgv( buffer.floatChannelData[c], 1, &p, buffer.frameLength );
-    vDSP_rmsqv( buffer.floatChannelData[c], 1, &r, buffer.frameLength );
+    float p = 0;
+    vDSP_maxmgv( buffer.floatChannelData[c], 1, &p, frames );
     peak = MAX( peak, p );
-    rms = MAX( rms, r );
+    for ( NSUInteger b = 0; b * block < frames; b++ ) {
+      float e = 0;
+      vDSP_measqv( buffer.floatChannelData[c] + b * block, 1, &e,
+                   MIN( block, frames - b * block ) );
+      energy[b] = MAX( energy[b], e );
+    }
   }
+  vDSP_vsort( energy, blocks, -1 );
+  NSUInteger loud = MAX( blocks / 4, 1 );
+  float ms = 0;
+  vDSP_meanv( energy, 1, &ms, loud );
+  free( energy );
+  float rms = sqrtf( ms );
   const float ceiling = 0.95f;
-  float gain = peak > 0 ? MIN( MAX( 0.89f / peak, 0.6f / rms ), 100.0f ) / ceiling : 1;
-  int n = (int)buffer.frameLength;
+  float gain = peak > 0 && rms > 0 ? MIN( MAX( 0.89f / peak, 0.6f / rms ), 100.0f ) / ceiling : 1;
+  int n = (int)frames;
   for ( AVAudioChannelCount c = 0; c < channels; c++ ) {
     float *d = buffer.floatChannelData[c];
-    vDSP_vsmul( d, 1, &gain, d, 1, buffer.frameLength );
+    vDSP_vsmul( d, 1, &gain, d, 1, frames );
     vvtanhf( d, d, &n );
-    vDSP_vsmul( d, 1, &ceiling, d, 1, buffer.frameLength );
+    vDSP_vsmul( d, 1, &ceiling, d, 1, frames );
   }
 }
 
@@ -540,7 +556,7 @@ RCT_EXPORT_METHOD( normalizeSound:( NSString * )uri
   NSMutableString *name = [NSMutableString string];
   for ( int i = 0; i < CC_SHA1_DIGEST_LENGTH; i++ ) [name appendFormat:@"%02x", digest[i]];
   NSString *dir = [NSSearchPathForDirectoriesInDomains( NSCachesDirectory, NSUserDomainMask, YES )
-                     .firstObject stringByAppendingPathComponent:@"normalized-sounds"];
+                     .firstObject stringByAppendingPathComponent:@"normalized-sounds-2"];
   NSString *outPath = [[dir stringByAppendingPathComponent:name]
                          stringByAppendingPathExtension:@"caf"];
   NSFileManager *fm = [NSFileManager defaultManager];
@@ -740,7 +756,6 @@ RCT_EXPORT_METHOD( playClipRange:( NSString * )path
         ABDenoise( buffer.floatChannelData[c], (int)buffer.frameLength, buffer.format.sampleRate );
       }
     }
-    ABNormalize( buffer );
     double rate = buffer.format.sampleRate;
     AVAudioFramePosition f0 = MIN( (AVAudioFramePosition)MAX( from * rate, 0 ), buffer.frameLength );
     AVAudioFramePosition f1 = to < 0
@@ -756,6 +771,7 @@ RCT_EXPORT_METHOD( playClipRange:( NSString * )path
       }
       buffer = range;
     }
+    ABNormalize( buffer );
     AVAudioSession *session = [AVAudioSession sharedInstance];
     // Outside a listening session, a leftover record category (from an earlier
     // session, the camera or the sound recorder) would force the speaker.
