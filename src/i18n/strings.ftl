@@ -1226,6 +1226,8 @@ Observations-need-location-date--warning = iNaturalist observations need a locat
 Observations-View = Observations View
 # Description for observations sort order
 Observations-with-the-most-faves-appear-first = Observations with the most faves appear first
+# Sort option description: photos taken closest to the subject first
+Observations-with-the-nearest-subject-appear-first = Observations with the nearest subject appear first
 # Description for observations sort order
 Observations-with-the-most-recent-date-appear-first = Observations with the most recent date appear first
 # Description for observations sort order
@@ -1729,6 +1731,8 @@ Stops-recording-sound = Stops recording sound
 SUBMIT = SUBMIT
 SUGGEST-GENUS = SUGGEST GENUS
 SUGGEST-ID = SUGGEST ID
+# Sort option: distance from camera to subject, nearest first
+Subject-distance-Nearest = Subject distance (nearest)
 # Identification category
 supporting--identification = Supporting
 Switches-to-tab = Switches to { $tab } tab.
