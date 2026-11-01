@@ -91,6 +91,9 @@ interface TaxonExtras { url?: string; commonName?: string }
 // there yet are fetched in batches and saved: a long heard list mounting a
 // useTaxon per row fired dozens of full taxon fetches at once and got 429s
 const PHOTO_BATCH_SIZE = 30;
+// Fetched once per launch even if cached: a cached name can be stale, e.g. the
+// model's English name saved with an Audio ID observation
+const refreshedIds = new Set<number>( );
 const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
   const realm = useRealm( );
   const local = new Map( taxonIds.map( id => [
@@ -98,7 +101,8 @@ const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
   ] ) );
   // loadBirdCodes caches bird taxa without photos, so a name alone isn't enough
   const missing = taxonIds
-    .filter( id => !local.get( id )?.name || !local.get( id )?.default_photo?.url )
+    .filter( id => !refreshedIds.has( id )
+      || !local.get( id )?.name || !local.get( id )?.default_photo?.url )
     .sort( ( a, b ) => a - b );
   const currentUser = useCurrentUser( );
   // Signed-in users get names per their account settings; otherwise use the app locale
@@ -117,6 +121,7 @@ const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
             ? { locale }
             : {},
         );
+        missing.slice( i, i + PHOTO_BATCH_SIZE ).forEach( id => refreshedIds.add( id ) );
         safeRealmWrite( realm, ( ) => ( results || [] ).forEach( ( t: Record<string, unknown> ) => {
           realm.create( "Taxon", Taxon.forUpdate( Taxon.mapApiToRealm( t ) ), UpdateMode.Modified );
         } ), "saving Audio ID taxa" );

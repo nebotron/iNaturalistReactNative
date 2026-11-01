@@ -5,6 +5,7 @@ import { Pressable } from "components/styledComponents";
 import React from "react";
 
 import useAudioIdHistory, { clipAround } from "./audioIdHistory";
+import useCommonName from "./useCommonName";
 
 interface Props {
   currentObservation?: { observed_on_string?: string; time_observed_at?: string } | null;
@@ -21,6 +22,7 @@ const AudioIdRecordingLink = ( { currentObservation }: Props ) => {
   const clip = useAudioIdHistory( state => ( Number.isNaN( time )
     ? undefined
     : clipAround( state.clips, time ) ) );
+  const commonName = useCommonName( clip?.sp );
 
   if ( !clip ) return null;
   return (
@@ -32,7 +34,7 @@ const AudioIdRecordingLink = ( { currentObservation }: Props ) => {
     >
       <INatIcon name="microphone" size={14} />
       <Body3 className="ml-2 color-inatGreen">
-        {`Add sound from Audio ID (${clip.sp.commonName})`}
+        {`Add sound from Audio ID (${commonName})`}
       </Body3>
     </Pressable>
   );

@@ -15,6 +15,7 @@ import colors from "styles/tailwindColors";
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
 import { useOpenTopSounds } from "./AudioIdSoundsLink";
 import ClipPlayButton from "./ClipPlayButton";
+import useCommonName from "./useCommonName";
 
 const { useQuery } = RealmContext;
 
@@ -34,6 +35,7 @@ const AudioIdHistory = ( ) => {
     .filter( c => c.sp.taxonId === taxonId )
     .sort( ( a, b ) => b.time - a.time );
   const sp = ofSpecies[0]?.sp;
+  const commonName = useCommonName( sp );
   // Clips whose observation is still saved on this device
   const obsUuids = ofSpecies.flatMap( c => ( c.observationUuid
     ? [c.observationUuid]
@@ -62,14 +64,14 @@ const AudioIdHistory = ( ) => {
           id: taxonId, fromAudioId: true,
         } )}
       >
-        <Body1 className="color-inatGreen underline">{sp.commonName}</Body1>
+        <Body1 className="color-inatGreen underline">{commonName}</Body1>
         <List2 className="italic">{sp.name}</List2>
       </Pressable>
       <INatIconButton
         icon="sound-outline"
         color={colors.inatGreen}
         onPress={( ) => openTopSounds( {
-          id: taxonId, name: sp.name, preferred_common_name: sp.commonName,
+          id: taxonId, name: sp.name, preferred_common_name: commonName,
         } )}
         accessibilityLabel="Top-faved sounds"
         accessibilityHint="Opens top-faved sound observations in Explore."

@@ -12,6 +12,7 @@ import * as uuid from "uuid";
 import useAudioIdHistory from "./audioIdHistory";
 import { AudioBirdId } from "./audioIdSession";
 import ClipTrimmer, { useClipSpan } from "./ClipTrimmer";
+import useCommonName from "./useCommonName";
 
 // The Audio ID clip heard around an observation's time: trim it and add it
 // to the observation.
@@ -20,6 +21,7 @@ const AudioIdRecording = ( ) => {
   const { params } = useRoute( );
   const { id, time } = params as { id: string; time: number };
   const clip = useAudioIdHistory( state => state.clips[id] );
+  const commonName = useCommonName( clip?.sp );
   const updateClip = useAudioIdHistory( state => state.updateClip );
   const currentObservation = useStore( state => state.currentObservation );
   const observations = useStore( state => state.observations );
@@ -52,7 +54,7 @@ const AudioIdRecording = ( ) => {
 
   return (
     <View className="bg-white h-full px-5 pt-4">
-      <Body1>{clip.sp.commonName}</Body1>
+      <Body1>{commonName}</Body1>
       <Body3 className="mt-1">
         Drag the handles to set where the clip starts and ends, then add it.
       </Body3>

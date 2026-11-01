@@ -25,6 +25,7 @@ import * as uuid from "uuid";
 import useAudioIdHistory from "./audioIdHistory";
 import { AudioBirdId } from "./audioIdSession";
 import ClipTrimmer, { useClipSpan } from "./ClipTrimmer";
+import useCommonName from "./useCommonName";
 
 const { useQuery } = RealmContext;
 
@@ -42,6 +43,7 @@ const AudioIdClip = ( ) => {
   const { params } = useRoute( );
   const { id } = params as { id: string };
   const clip = useAudioIdHistory( state => state.clips[id] );
+  const commonName = useCommonName( clip?.sp );
   const updateClip = useAudioIdHistory( state => state.updateClip );
   const setObservations = useStore( state => state.setObservations );
   const prepareObsEdit = useStore( state => state.prepareObsEdit );
@@ -109,7 +111,7 @@ const AudioIdClip = ( ) => {
       } else if ( label?.taxonId ) {
         observation.taxon = { id: label.taxonId, name: label.name };
       } else if ( label?.taxonId !== null ) {
-        observation.taxon = { id: sp.taxonId, name: sp.name, preferred_common_name: sp.commonName };
+        observation.taxon = { id: sp.taxonId, name: sp.name, preferred_common_name: commonName };
       }
       updateClip( id, { observationUuid: observation.uuid } );
       setObservations( [observation] );
@@ -140,7 +142,7 @@ const AudioIdClip = ( ) => {
 
   return (
     <ScrollView className="bg-white h-full px-5 pt-4">
-      <Body1>{clip.sp.commonName}</Body1>
+      <Body1>{commonName}</Body1>
       <List2 className="italic">{clip.sp.name}</List2>
       <Body3>{formatISOTimestamp( clip.time )}</Body3>
       <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
