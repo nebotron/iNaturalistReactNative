@@ -100,7 +100,8 @@ const AICamera = ( {
   const sentinelFileName = useStore( state => state.sentinelFileName );
   const setAICameraSuggestion = useStore( state => state.setAICameraSuggestion );
 
-  const [macroMode, setMacroMode] = useState( false );
+  const { aiCameraSettings, setAICameraSetting } = useLayoutPrefs( );
+  const { macroMode } = aiCameraSettings;
   const devices = useCameraDevices( );
   const macroDevice = macroMode
     ? getMacroDevice( devices, defaultDevice?.position )
@@ -132,7 +133,7 @@ const AICamera = ( {
   const [initialVolume, setInitialVolume] = useState<number | null>( null );
   const [hasTakenPhoto, setHasTakenPhoto] = useState( false );
 
-  const [userDisabledLocation, setUserDisabledLocation] = useState( false );
+  const userDisabledLocation = aiCameraSettings.locationDisabled;
   const useLocation = hasLocationPermissions && !userDisabledLocation;
   const [locationStatusVisible, setLocationStatusVisible] = useState( false );
 
@@ -141,7 +142,7 @@ const AICamera = ( {
       requestLocationPermissions( );
       return;
     }
-    setUserDisabledLocation( prev => !prev );
+    setAICameraSetting( "locationDisabled", !userDisabledLocation );
     // Always show status when button is pressed
     setLocationStatusVisible( true );
   };
@@ -164,7 +165,7 @@ const AICamera = ( {
 
   const toggleMacro = ( ) => {
     resetZoom( );
-    setMacroMode( prev => !prev );
+    setAICameraSetting( "macroMode", !macroMode );
   };
 
   const onFlipCamera = () => {

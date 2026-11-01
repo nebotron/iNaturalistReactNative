@@ -23,7 +23,7 @@ import { log } from "sharedHelpers/logger";
 import { hasWriteMediaPermission } from "sharedHelpers/permissions";
 import { completeSentinelFile, createSentinelFile, logStage } from "sharedHelpers/sentinelFiles";
 import { getTunable } from "sharedHelpers/tunableParams";
-import { useTranslation } from "sharedHooks";
+import { useLayoutPrefs, useTranslation } from "sharedHooks";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import { FIREBASE_TRACE_ATTRIBUTES, FIREBASE_TRACES } from "stores/createFirebaseTraceSlice";
 import useStore from "stores/useStore";
@@ -99,7 +99,12 @@ const CameraContainer = ( ) => {
 
   const { t } = useTranslation( );
 
-  const [cameraPosition, setCameraPosition] = useState<"front" | "back">( "back" );
+  const { aiCameraSettings, setAICameraSetting } = useLayoutPrefs( );
+  const isAICamera = cameraType === "AI";
+  const [localCameraPosition, setLocalCameraPosition] = useState<"front" | "back">( "back" );
+  const cameraPosition = isAICamera
+    ? aiCameraSettings.cameraPosition
+    : localCameraPosition;
   // https://react-native-vision-camera.com/docs/guides/devices#selecting-multi-cams
   const device = useCameraDevice( cameraPosition, {
     physicalDevices: [
@@ -135,7 +140,11 @@ const CameraContainer = ( ) => {
     // We had this set to true in Seek but received many reports of it not respecting OS-wide sound
     // level and scared away wildlife. So maybe better to just disable it.
     enableShutterSound: false,
-    ...( hasFlash && { flash: "off" } as const ),
+    ...( hasFlash && {
+      flash: isAICamera
+        ? aiCameraSettings.flash
+        : "off",
+    } as const ),
   } as const;
   const [takePhotoOptions, setTakePhotoOptions] = useState<TakePhotoOptions>( initialPhotoOptions );
   const [takingPhoto, setTakingPhoto] = useState( false );
@@ -158,7 +167,11 @@ const CameraContainer = ( ) => {
     const newPosition = cameraPosition === "back"
       ? "front"
       : "back";
-    setCameraPosition( newPosition );
+    if ( isAICamera ) {
+      setAICameraSetting( "cameraPosition", newPosition );
+    } else {
+      setLocalCameraPosition( newPosition );
+    }
   };
 
   const prepareStoreAndNavigate = usePrepareStoreAndNavigate( );
@@ -204,12 +217,11 @@ const CameraContainer = ( ) => {
   ] );
 
   const toggleFlash = ( ) => {
-    setTakePhotoOptions( {
-      ...takePhotoOptions,
-      flash: takePhotoOptions.flash === "on"
-        ? "off"
-        : "on",
-    } );
+    const flash = takePhotoOptions.flash === "on"
+      ? "off"
+      : "on";
+    setTakePhotoOptions( { ...takePhotoOptions, flash } );
+    if ( isAICamera ) setAICameraSetting( "flash", flash );
   };
 
   const updateTakePhotoStore = async (

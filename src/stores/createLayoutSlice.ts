@@ -33,6 +33,13 @@ export interface ExploreGridOverlays {
   faveCount: boolean;
 }
 
+export interface AICameraSettings {
+  macroMode: boolean;
+  flash: "on" | "off";
+  cameraPosition: "front" | "back";
+  locationDisabled: boolean;
+}
+
 const MAX_RECENT_TAXA = 10;
 
 export interface LayoutSlice {
@@ -73,6 +80,11 @@ export interface LayoutSlice {
     setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
     exploreGridOverlays: ExploreGridOverlays;
     setExploreGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
+    aiCameraSettings: AICameraSettings;
+    setAICameraSetting: <K extends keyof AICameraSettings>(
+      key: K,
+      value: AICameraSettings[K]
+    ) => void;
     recentTaxonIds: number[];
     addRecentTaxonId: ( taxonId: number ) => void;
   };
@@ -244,6 +256,19 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         hotspotSettings: { ...state.layout.hotspotSettings, [key]: value },
+      },
+    } ) ),
+    // AI camera configuration, kept across closing and reopening the camera
+    aiCameraSettings: {
+      macroMode: false,
+      flash: "off",
+      cameraPosition: "back",
+      locationDisabled: false,
+    },
+    setAICameraSetting: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        aiCameraSettings: { ...state.layout.aiCameraSettings, [key]: value },
       },
     } ) ),
     // Info overlaid on each photo in the Explore observations grid
