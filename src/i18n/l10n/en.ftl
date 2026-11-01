@@ -479,6 +479,16 @@ Delete-comment = Delete comment
 DELETE-COMMENT--question = DELETE COMMENT?
 # Button that deletes the current observation in a batch of several observations
 Delete-current-observation = Delete current observation
+# Button that deletes imported photos from the USB drive or SD card
+Delete-from-drive = Delete from Drive
+# Title of prompt asking whether to delete photos from a USB drive or SD card after importing them
+Delete-imported-photos-from-USB = Delete imported photos from the drive?
+# Message of prompt asking whether to delete photos from a USB drive or SD card after importing them
+Delete-imported-photos-from-USB-message =
+    { $count ->
+        [one] { $count } photo was imported and can be deleted from the drive.
+       *[other] { $count } photos were imported and can be deleted from the drive.
+    }
 # Button that deletes an observation
 Delete-observation = Delete observation
 DELETE-OBSERVATION--question = DELETE OBSERVATION?
@@ -930,6 +940,8 @@ June = June
 Just-make-sure-the-organism-is-wild = Just make sure the organism is wild (not a pet, zoo animal, or garden plant)
 KEEP-EDITING = KEEP EDITING
 Keep-in-mind-that-project-curators = Keep in mind that project curators will still be able to add your observations to their project unless you change your account settings.
+# Button that keeps imported photos on the USB drive or SD card
+Keep-on-drive = Keep on Drive
 # Display name for the iconic taxa category chromista
 Kelp-and-Diatoms = Kelp & Diatoms
 # Shows date user last active on iNaturalist on user profile

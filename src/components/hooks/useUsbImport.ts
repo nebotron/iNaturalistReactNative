@@ -1,7 +1,8 @@
 import { CommonActions } from "@react-navigation/native";
+import i18next from "i18next";
 import { getCurrentRoute, navigationRef } from "navigation/navigationUtils";
 import { useCallback, useEffect, useRef } from "react";
-import { AppState } from "react-native";
+import { Alert, AppState } from "react-native";
 import DeviceInfo from "react-native-device-info";
 import {
   beginBackgroundUsbImportTask,
@@ -114,9 +115,35 @@ const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => {
 // a whole batch is safely saved, but each file is marked imported the moment it
 // saves, so a run iOS suspends mid-loop strands its saved files on the card
 // where no later scan will ever list them again.
+const confirmDeleteFromDevice = ( count: number ) => new Promise<boolean>( resolve => {
+  Alert.alert(
+    i18next.t( "Delete-imported-photos-from-USB" ),
+    i18next.t( "Delete-imported-photos-from-USB-message", { count } ),
+    [
+      {
+        text: i18next.t( "Keep-on-drive" ),
+        style: "cancel",
+        onPress: ( ) => resolve( false ),
+      },
+      {
+        text: i18next.t( "Delete-from-drive" ),
+        style: "destructive",
+        onPress: ( ) => resolve( true ),
+      },
+    ],
+    { cancelable: false },
+  );
+} );
+
 const deletePendingFromDevice = async ( ) => {
   const paths = getPendingUsbDeletes( );
   if ( paths.length === 0 ) return null;
+  // Declining keeps the files on the card but stops tracking them, so the
+  // prompt doesn't return on every later scan.
+  if ( !( await confirmDeleteFromDevice( paths.length ) ) ) {
+    clearPendingUsbDeletes( paths );
+    return { deleted: 0, failed: 0, attempted: paths.length };
+  }
   const del = await deleteUsbSourceImages( paths );
   // Keep them pending only when the drive went away — that is the recoverable
   // case, and the one a later run can finish. A failure with the drive present
