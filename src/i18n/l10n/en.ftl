@@ -1228,6 +1228,8 @@ Observations-View = Observations View
 Observations-with-the-most-faves-appear-first = Observations with the most faves appear first
 # Description for observations sort order
 Observations-with-the-most-recent-date-appear-first = Observations with the most recent date appear first
+# Sort option description: photos taken closest to the subject first
+Observations-with-the-nearest-subject-appear-first = Observations with the nearest subject appear first
 # Description for observations sort order
 Observations-with-the-oldest-date-appear-first = Observations with the oldest date appear first
 # Might be used when the number is represented using an image or other
@@ -1726,6 +1728,8 @@ Stop-upload = Stop upload
 Stop-verb = Stop
 # Accessibility hint for a button that stops the recording of a sound
 Stops-recording-sound = Stops recording sound
+# Sort option: distance from camera to subject, nearest first
+Subject-distance-Nearest = Subject distance (nearest)
 SUBMIT = SUBMIT
 SUGGEST-GENUS = SUGGEST GENUS
 SUGGEST-ID = SUGGEST ID
