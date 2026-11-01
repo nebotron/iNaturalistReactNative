@@ -43,6 +43,7 @@ export interface Cr3Summary {
   focalLength?: number;
   fNumber?: number;
   iso?: number;
+  focusDistance?: number;
   hasGps?: boolean;
   hasDateTimeOriginal?: boolean;
   sensorWidth?: number;
@@ -72,7 +73,7 @@ const CANON_UUID = "85c0b687820f11e08111f4ce462b6a48";
 const HEADER_BYTES = 1024 * 1024;
 
 /* eslint-disable no-bitwise -- reading bytes out of a binary file */
-class Bytes {
+export class Bytes {
   private readonly data: string;
 
   readonly length: number;
@@ -168,7 +169,7 @@ function findPath( bytes: Bytes, parent: Box, path: string[] ): Box | undefined 
 
 // ─── TIFF ────────────────────────────────────────────────────────────────────
 
-interface IfdEntry {
+export interface IfdEntry {
   tag: number;
   type: number;
   count: number;
@@ -179,8 +180,13 @@ const TYPE_SIZES: Record<number, number> = {
   1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8,
 };
 
-// Parses a TIFF block starting at `base` and returns its first IFD's entries.
-function parseTiff( bytes: Bytes, base: number ): Map<number, IfdEntry> {
+// Parses the IFD at `base + ifdOffset` of the TIFF block starting at `base`
+// (value offsets are relative to `base`); with no ifdOffset, its first IFD.
+export function parseTiff(
+  bytes: Bytes,
+  base: number,
+  ifdOffset?: number,
+): Map<number, IfdEntry> {
   const entries = new Map<number, IfdEntry>( );
   if ( base + 8 > bytes.length ) return entries;
   const little = bytes.text( base, 2 ) === "II";
@@ -191,7 +197,7 @@ function parseTiff( bytes: Bytes, base: number ): Map<number, IfdEntry> {
   const u32 = ( o: number ) => ( little
     ? bytes.u32le( o )
     : bytes.u32be( o ) );
-  const ifd = base + u32( base + 4 );
+  const ifd = base + ( ifdOffset ?? u32( base + 4 ) );
   if ( ifd + 2 > bytes.length ) return entries;
   const count = u16( ifd );
   for ( let i = 0; i < count; i += 1 ) {
@@ -247,6 +253,19 @@ function canonArray( bytes: Bytes, entry: IfdEntry | undefined, wide: boolean ):
       : bytes.i16le( entry.valueOffset + ( i * 2 ) ) );
   }
   return out;
+}
+
+// Canon ShotInfo (MakerNote 0x0004) records the focus distance as a range in
+// cm at int16 indexes 19 and 20 (ExifTool's FocusDistanceUpper/Lower; which
+// is the near end varies by body). 0 means unknown and 65535 infinity. Returns
+// the middle of the range in metres, as ExifTool's depth-of-field does.
+// Canon writes its MakerNote little-endian.
+export function canonFocusDistance( bytes: Bytes, shotInfo?: IfdEntry ): number | null {
+  if ( !shotInfo || shotInfo.type !== 3 || shotInfo.count < 21 ) return null;
+  const upper = bytes.u16le( shotInfo.valueOffset + 38 );
+  const lower = bytes.u16le( shotInfo.valueOffset + 40 );
+  if ( !upper || !lower || upper === 0xffff || lower === 0xffff ) return null;
+  return ( upper + lower ) / 200;
 }
 
 // ─── The lens correction packet (Canon tag 0x4015) ───────────────────────────
@@ -426,6 +445,7 @@ export async function readCr3Summary(
         const maker = parseTiff( header, box.start );
         summary.makerNoteTags = [...maker.keys( )].sort( ( a, b ) => a - b );
         summary.makerNoteLens = tiffString( header, maker.get( 0x0095 ) );
+        summary.focusDistance = canonFocusDistance( header, maker.get( 0x0004 ) ) ?? undefined;
         const sensor = canonArray( header, maker.get( 0x00e0 ), false );
         if ( sensor.length > 8 ) {
           [, summary.sensorWidth, summary.sensorHeight] = sensor;

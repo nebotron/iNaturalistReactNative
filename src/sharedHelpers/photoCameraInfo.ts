@@ -60,7 +60,7 @@ export const formatCameraInfo = ( tags?: ExifTags | null ): PhotoCameraInfo | nu
     : tags.ISOSpeedRatings );
   if ( iso ) settings.push( `ISO ${iso}` );
   const distance = positive( tags.SubjectDistance );
-  if ( distance ) settings.push( `${round( distance, 2 )} m away` );
+  if ( distance ) settings.push( `focused at ${round( distance, 2 )} m` );
 
   if ( !camera && !lens && settings.length === 0 ) return null;
   return {

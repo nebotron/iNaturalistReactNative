@@ -13,6 +13,7 @@ import {
   preserveCropOriginalPath,
   savedNormalizedCrop,
 } from "sharedHelpers/cropPhotoMetadata";
+import { copyFocusDistance } from "sharedHelpers/focusDistance";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import resizeImage from "sharedHelpers/resizeImage";
@@ -122,7 +123,10 @@ class Photo extends Realm.Object {
     // see the camera's embedded preview.
     if ( isCanonRawUri( pathOrUri ) ) {
       const decoded = await Photo.decodeRawForUpload( pathOrUri );
-      if ( decoded ) return decoded;
+      if ( decoded ) {
+        await copyFocusDistance( pathOrUri, decoded );
+        return decoded;
+      }
     }
 
     // The resizer needs a file:// URI for bare paths on both platforms.
@@ -136,7 +140,7 @@ class Photo extends Realm.Object {
       uriForResize = `file://${uriForResize}`;
     }
 
-    return resizeImage( uriForResize, {
+    const resized = await resizeImage( uriForResize, {
       width,
       outputPath: photoUploadPath,
       imageOptions: {
@@ -144,6 +148,8 @@ class Photo extends Realm.Object {
         onlyScaleDown: true,
       },
     } );
+    await copyFocusDistance( uriForResize, resized );
+    return resized;
   }
 
   // Guarantee the on-disk upload file is small enough to accept before we send
@@ -190,6 +196,10 @@ class Photo extends Realm.Object {
   // reopening the crop editor would treat the cropped file as the original.
   static async new( uri: string, cropMetadata?: GroupedPhotoCropMetadata ) {
     const localFilePath = await Photo.resizeImageForUpload( uri );
+    // A pre-cropped photo has lost Canon's MakerNote; its original still has it.
+    if ( cropMetadata?.cropOriginalUri ) {
+      await copyFocusDistance( cropMetadata.cropOriginalUri, localFilePath );
+    }
     const cropOriginalLocalFilePath = cropOriginalPathFromUri( cropMetadata?.cropOriginalUri );
     return {
       _created_at: new Date( ),
