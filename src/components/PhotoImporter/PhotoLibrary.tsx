@@ -231,7 +231,7 @@ const PhotoLibrary = ( ) => {
       }
       claimedFileNames.add( fileName );
       const destPath = `${path}/${fileName}`;
-      if ( Platform.OS === "ios" ) {
+      if ( Platform.OS === "ios" && !node.image.uri.startsWith( "file://" ) ) {
         // Use PHAssetResourceManager.writeData (via ImageCropper.exportPHAsset)
         // to write the original file bytes verbatim — no decode/re-encode,
         // so all EXIF (GPS, timestamp, camera details) is preserved.

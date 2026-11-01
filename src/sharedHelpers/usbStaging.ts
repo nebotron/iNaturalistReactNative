@@ -1,6 +1,7 @@
 import {
   copyFile, mkdir, readDir, unlink,
 } from "@dr.pogodin/react-native-fs";
+import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import { photoLibraryPhotosPath, usbStagingPath } from "appConstants/paths";
 import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
@@ -42,6 +43,36 @@ const stagedNameFromUri = ( uri: string ) => uri.match( /\/usbStaging\/([^/]+)$/
 
 const readStaged = async ( ) => ( await readDir( usbStagingPath ).catch( ( ) => [] ) )
   .filter( item => item.isFile( ) && !item.name.endsWith( ".partial" ) );
+
+// Staged photos as photo picker nodes, newest first, so the picker can offer
+// them alongside the Photos library (which they are never saved to).
+export const listStagedPhotoNodes = async ( ): Promise<PhotoIdentifier["node"][]> => (
+  ( await readStaged( ) ).map( item => {
+    // Seconds, like CameraRoll. The copy kept the card's modification date.
+    const timestamp = Math.round( ( item.mtime?.getTime( ) ?? Date.now( ) ) / 1000 );
+    return {
+      id: "",
+      type: "image",
+      subTypes: [],
+      sourceType: "UserLibrary",
+      group_name: [],
+      image: {
+        filename: item.name,
+        filepath: item.path,
+        extension: item.name.split( "." ).pop( ) ?? null,
+        uri: `file://${item.path}`,
+        height: 0,
+        width: 0,
+        fileSize: Number( item.size ),
+        playableDuration: 0,
+        orientation: null,
+      },
+      timestamp,
+      modificationTimestamp: timestamp,
+      location: null,
+    };
+  } ).sort( ( a, b ) => b.timestamp - a.timestamp )
+);
 
 // Copies the staged photos not yet offered to Group Photos into the importer's
 // folder, as Group Photos groups, and records them as offered.

@@ -48,6 +48,7 @@ import {
   addRemovedGroupPhotoUris,
   getRemovedGroupPhotoUris,
 } from "sharedHelpers/removedGroupPhotoUris";
+import { listStagedPhotoNodes } from "sharedHelpers/usbStaging";
 import { useGridLayout, useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
@@ -80,7 +81,8 @@ const GALLERY_INCLUDE: GalleryInclude = Platform.OS === "android"
   : ["filename", "fileSize", "imageSize", "location"];
 
 const getDeviceUriFromNode = ( node: PhotoNode ): string | null => {
-  if ( Platform.OS === "ios" ) {
+  // A staged SD card photo (see usbStaging.ts), not a library asset
+  if ( Platform.OS === "ios" && !node.image.uri.startsWith( "file://" ) ) {
     if ( !node.id ) {
       return null;
     }
@@ -104,9 +106,24 @@ const PhotoGallery = ( {
     numColumns,
   } = useGridLayout( undefined, "threeUp" );
 
-  const [photos, setPhotos] = useState<PhotoNode[]>( [] );
+  const [libraryPhotos, setPhotos] = useState<PhotoNode[]>( [] );
+  // Staged SD card photos, which live in the app rather than in Photos
+  const [stagedPhotos, setStagedPhotos] = useState<PhotoNode[]>( [] );
+  useEffect( ( ) => {
+    listStagedPhotoNodes( ).then( setStagedPhotos ).catch( error => {
+      logger.error( "Could not list staged SD card photos", error );
+    } );
+  }, [] );
   const [hasNextPage, setHasNextPage] = useState( true );
   const [loading, setLoading] = useState( true );
+  // Merged newest first, which the sections assume. A staged photo older than
+  // the last page loaded waits for that page, so it lands in the right place.
+  const photos = useMemo( ( ) => {
+    if ( stagedPhotos.length === 0 ) return libraryPhotos;
+    const oldestLoaded = libraryPhotos[libraryPhotos.length - 1]?.timestamp ?? Infinity;
+    const staged = stagedPhotos.filter( node => !hasNextPage || node.timestamp >= oldestLoaded );
+    return [...libraryPhotos, ...staged].sort( ( a, b ) => b.timestamp - a.timestamp );
+  }, [libraryPhotos, stagedPhotos, hasNextPage] );
   const [endCursor, setEndCursor] = useState<string | undefined>( undefined );
   const [selectedUris, setSelectedUris] = useState<Set<string>>( new Set( ) );
   const [importedUris, setImportedUris] = useState<Set<string>>( new Set( ) );
