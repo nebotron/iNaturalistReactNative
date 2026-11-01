@@ -40,13 +40,13 @@ const withRequestTimeout = async ( opts, request ) => {
 
 // Note that this should not be async. When you're using it with reactQuery,
 // returning a promise is like returning true, which means it retries forever.
-// Retries only on 5xx errors, network connection failures, or our own
-// request-timeout abort (see createRequestTimeoutSignal above).
+// Retries only on 5xx errors, network connection failures, or timeouts: our
+// own request-timeout abort (see createRequestTimeoutSignal above) and HTTP 408.
 function reactQueryRetry( failureCount, error ) {
-  const isNetworkFailure = ( error instanceof TypeError
-    && /Network request failed/i.test( error.message ) )
-    || error?.name === "AbortError";
-  const status = error.status ?? error.response?.status;
+  const isNetworkFailure = error instanceof TypeError
+    && /Network request failed/i.test( error.message );
+  const status = error?.status ?? error?.response?.status;
+  const isTimeout = error?.name === "AbortError" || status === 408 || status === 504;
   const is5xx = typeof status === "number" && status >= 500 && status < 600;
 
   // JWT refresh side-effect on auth errors — fire-and-forget, no retry
@@ -57,17 +57,22 @@ function reactQueryRetry( failureCount, error ) {
     return false;
   }
 
-  if ( !isNetworkFailure && !is5xx ) {
+  if ( !isNetworkFailure && !is5xx && !isTimeout ) {
     return false;
   }
 
   const shouldRetry = failureCount < 3;
-  if ( shouldRetry ) {
-    const label = isNetworkFailure
-      ? "Network failure"
-      : `HTTP ${status}`;
-    defaultLogger.warn( `reactQueryRetry: ${label}, attempt ${failureCount + 1}` );
+  let label = `HTTP ${status}`;
+  if ( isTimeout ) {
+    label = status
+      ? `Timeout HTTP ${status}`
+      : "Timeout";
+  } else if ( isNetworkFailure ) {
+    label = "Network failure";
   }
+  defaultLogger.warn( shouldRetry
+    ? `reactQueryRetry: ${label}, attempt ${failureCount + 1}`
+    : `reactQueryRetry: ${label}, gave up after ${failureCount + 1} attempts` );
 
   return shouldRetry;
 }

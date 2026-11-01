@@ -141,6 +141,7 @@ const prefetchOnlineSuggestions = async (
             ...( !hasCurrentUser && { locale } ),
           },
           { api_token: apiToken, signal },
+          { source: "prefetch" },
         ) as OnlineSuggestionsApiResponse;
       } finally {
         clear( );

@@ -5,7 +5,7 @@ import scoreImage from "api/computerVision";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import {
-  useCallback, useEffect, useMemo, useState,
+  useCallback, useEffect, useMemo, useRef, useState,
 } from "react";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
@@ -22,9 +22,12 @@ import {
 } from "sharedHooks";
 import useStore from "stores/useStore";
 
+import { log } from "../../../react-native-logs.config";
 import { startOfflineExperimentInBackground } from "./suggestionComparisonExperiment";
 import type { ScoreImageParams, UseSuggestionsOnlineSuggestion } from "./types";
 import { predictOffline } from "./useOfflineSuggestions";
+
+const logger = log.extend( "useOnlineSuggestions" );
 
 const SCORE_IMAGE_TIMEOUT = getTunable( "onlineSuggestionsTimeoutSeconds" ) * 1000;
 
@@ -99,6 +102,8 @@ const useOnlineSuggestions = (
   const locale = i18n?.language ?? "en";
 
   const getCurrentObservation = useStore( state => state.getCurrentObservation );
+  // Counts requests for the current query so retries are labeled in the log
+  const attempts = useRef( { key: "", count: 0 } );
 
   // Read already-scored results synchronously so they show on the first render
   // instead of after the image is resized and the query runs, which would
@@ -135,8 +140,17 @@ const useOnlineSuggestions = (
         ...( !currentUser && { locale } ),
       };
 
-      const suggestionsResponse
-        = await scoreImage( params, optsWithAuth ) as OnlineSuggestionsApiResponse;
+      const attemptKey = queryKey.join( "|" );
+      if ( attempts.current.key !== attemptKey ) {
+        attempts.current = { key: attemptKey, count: 0 };
+      }
+      attempts.current.count += 1;
+      const suggestionsResponse = await scoreImage(
+        params,
+        optsWithAuth,
+        { source: "suggestions", attempt: attempts.current.count },
+      ) as OnlineSuggestionsApiResponse;
+      attempts.current.count = 0;
 
       // there's a slight discrepancy between online/offline responses which this smooths over for
       // the eventual UI
@@ -180,6 +194,7 @@ const useOnlineSuggestions = (
     }
     const timer = setTimeout( ( ) => {
       if ( onlineSuggestions === undefined ) {
+        logger.info( `score_image soft_timeout ms=${SCORE_IMAGE_TIMEOUT}, showing offline` );
         onFetchError( { isOnline: true } );
         setTimedOut( true );
       }

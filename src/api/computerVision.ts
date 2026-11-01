@@ -1,7 +1,11 @@
 import inatjs from "inaturalistjs";
 import Taxon from "realmModels/Taxon";
 
+import { log } from "../../react-native-logs.config";
+import type { ErrorWithResponse } from "./error";
 import handleError from "./error";
+
+const logger = log.extend( "computerVision" );
 
 const PARAMS = {
   include_representative_photos: true,
@@ -13,14 +17,30 @@ const PARAMS = {
   },
 };
 
+// `source` and `attempt` only label the timing log line so slow, failed, and
+// retried requests can be told apart in the app log.
 const scoreImage = async (
   params = {},
   opts = {},
+  { source = "unknown", attempt = 1 }: { source?: string; attempt?: number } = {},
 ): Promise<object> => {
+  const start = Date.now( );
   try {
-    return inatjs.computervision.score_image( { ...PARAMS, ...params }, opts );
+    // Must await so a rejected request is caught here and routed through
+    // handleError; a bare `return` would leak the raw inatjs error.
+    const response = await inatjs.computervision.score_image( { ...PARAMS, ...params }, opts );
+    logger.info(
+      `score_image ok ms=${Date.now( ) - start} attempt=${attempt} source=${source}`,
+    );
+    return response;
   } catch ( e ) {
-    return handleError( e as Error, { context: { functionName: "scoreImage", opts } } );
+    const error = e as ErrorWithResponse;
+    const status = error.status ?? error.response?.status ?? error.name;
+    logger.warn(
+      `score_image failed status=${status} ms=${Date.now( ) - start} attempt=${attempt} `
+      + `source=${source}`,
+    );
+    return handleError( error, { context: { functionName: "scoreImage", opts } } );
   }
 };
 
