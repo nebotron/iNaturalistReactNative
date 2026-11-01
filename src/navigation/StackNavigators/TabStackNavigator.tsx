@@ -5,6 +5,7 @@ import AudioId from "components/AudioId/AudioId";
 import AudioIdClip from "components/AudioId/AudioIdClip";
 import AudioIdHistory from "components/AudioId/AudioIdHistory";
 import AudioIdTaxa from "components/AudioId/AudioIdTaxa";
+import CameraPairs from "components/CameraPairs/CameraPairs";
 import CropLogViewer from "components/CropLog/CropLogViewer";
 import Developer from "components/Developer/Developer";
 import Log from "components/Developer/Log";
@@ -118,6 +119,8 @@ const audioIdTaxaTitle = () => <Heading4 numberOfLines={1}>LISTENING FOR</Headin
 const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
 // eslint-disable-next-line i18next/no-literal-string
 const cameraClockTitle = () => <Heading4 numberOfLines={1}>CAMERA CLOCK</Heading4>;
+// eslint-disable-next-line i18next/no-literal-string
+const cameraPairsTitle = () => <Heading4 numberOfLines={1}>CAMERA PAIRS</Heading4>;
 const locationHistoryTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "LOCATION-HISTORY" )}
@@ -376,6 +379,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={CameraClockCheck}
             options={{
               headerTitle: cameraClockTitle,
+            }}
+          />
+          <Stack.Screen
+            name="CameraPairs"
+            component={CameraPairs}
+            options={{
+              headerTitle: cameraPairsTitle,
             }}
           />
           <Stack.Screen

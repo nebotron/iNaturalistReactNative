@@ -135,6 +135,12 @@ const Menu = ( ) => {
       navigation: "CameraClockCheck",
       icon: "clock-outline",
     },
+    cameraPairs: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CAMERA PAIRS",
+      navigation: "CameraPairs",
+      icon: "camera",
+    },
     about: {
       label: t( "ABOUT" ),
       navigation: "About",
