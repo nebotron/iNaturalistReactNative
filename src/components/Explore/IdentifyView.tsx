@@ -4,6 +4,8 @@ import { createIdentification } from "api/identifications";
 import { markAsReviewed } from "api/observations";
 import type { ApiObservation, ApiObservationsSearchParams } from "api/types";
 import classnames from "classnames";
+import AudioClipSpectrogram from "components/AudioId/AudioClipSpectrogram";
+import { normalizedSoundUri } from "components/AudioId/audioIdSession";
 import useInfiniteExploreScroll from "components/Explore/hooks/useInfiniteExploreScroll";
 import type { IdentifyPhotoHandle } from "components/MediaViewer/IdentifyPhoto";
 import {
@@ -85,6 +87,26 @@ interface Props {
   queryParams: ApiObservationsSearchParams;
   handleUpdateCount: ( view: string, count: number | null ) => void;
 }
+
+const SPECTROGRAM_STYLE = { height: 140 };
+
+// The native view reads a local file, so remote sounds go through the same
+// cached download the player uses.
+const SoundSpectrogram = ( { uri }: { uri: string } ) => {
+  const [path, setPath] = useState<string>( );
+  useEffect( ( ) => {
+    let cancelled = false;
+    normalizedSoundUri( uri ).then( local => {
+      if ( !cancelled && local.startsWith( "file://" ) ) {
+        setPath( decodeURIComponent( local.replace( /^file:\/\//, "" ) ) );
+      }
+    } );
+    return ( ) => { cancelled = true; };
+  }, [uri] );
+  return path
+    ? <AudioClipSpectrogram path={path} style={SPECTROGRAM_STYLE} />
+    : <View style={SPECTROGRAM_STYLE} />;
+};
 
 const IdentifyView = ( {
   canFetch,
@@ -302,6 +324,7 @@ const IdentifyView = ( {
     if ( currentSound ) {
       return (
         <View className="flex-1 bg-black justify-center">
+          <SoundSpectrogram uri={currentSound.file_url} />
           <SoundContainer
             key={currentSound.file_url}
             sizeClass="w-full"
