@@ -268,6 +268,10 @@ class Observation extends Realm.Object {
         // finding were the older ones.
         mappedObsPhoto.originalDevicePhotoUri = existingObsPhoto.originalDevicePhotoUri;
       }
+      // Local-only too, and the only record once the original is deleted.
+      if ( existingObsPhoto?.cameraInfo ) {
+        mappedObsPhoto.cameraInfo = existingObsPhoto.cameraInfo;
+      }
       return mappedObsPhoto;
     } );
 

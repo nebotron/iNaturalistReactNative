@@ -8,6 +8,7 @@ import {
   getGalleryAssetDevicePhotoUri,
   normalizeDevicePhotoUri,
 } from "sharedHelpers/getOriginalDevicePhotoUri";
+import { readCameraInfo } from "sharedHelpers/photoCameraInfo";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import * as uuid from "uuid";
 
@@ -137,7 +138,12 @@ class ObservationPhoto extends Realm.Object {
     originalDevicePhotoUri?: string | null,
     cropMetadata?: GroupedPhotoCropMetadata,
   ) {
-    const photo = await Photo.new( uri, cropMetadata );
+    // Read before resizing, from the uncropped original where there is one, and
+    // kept so the camera settings outlive the original in the photo library.
+    const [photo, cameraInfo] = await Promise.all( [
+      Photo.new( uri, cropMetadata ),
+      readCameraInfo( cropMetadata?.cropOriginalUri || uri ),
+    ] );
     return {
       _created_at: new Date( ),
       _updated_at: new Date( ),
@@ -145,6 +151,9 @@ class ObservationPhoto extends Realm.Object {
       photo,
       originalPhotoUri: uri,
       originalDevicePhotoUri: originalDevicePhotoUri ?? undefined,
+      cameraInfo: cameraInfo
+        ? JSON.stringify( cameraInfo )
+        : undefined,
       position,
     };
   }
@@ -287,6 +296,8 @@ class ObservationPhoto extends Realm.Object {
       uuid: "string",
       id: "int?",
       originalDevicePhotoUri: "string?",
+      // Local-only JSON PhotoCameraInfo read from the photo when it was added
+      cameraInfo: "string?",
       photo: "Photo?",
       position: "int?",
       // this creates an inverse relationship so observation photos

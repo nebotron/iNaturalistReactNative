@@ -43,6 +43,7 @@ export interface RealmObservationPhotoPojo extends RealmObject {
   id?: number;
   originalPhotoUri?: string;
   originalDevicePhotoUri?: string;
+  cameraInfo?: string;
   photo: RealmPhoto;
   position?: number;
 }

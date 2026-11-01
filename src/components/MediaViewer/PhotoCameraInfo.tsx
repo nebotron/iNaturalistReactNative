@@ -16,8 +16,8 @@ interface Props {
   url?: string | null;
 }
 
-// Camera, lens, exposure and focus distance of the local copy of a photo, read
-// from its EXIF, falling back to the original in the photo library for
+// Camera, lens, exposure and focus distance saved when the photo was added, else
+// read from the EXIF of the local copy, falling back to the original in the photo library for
 // uploaded photos (iNaturalist strips EXIF from the copies it hosts). Tapping
 // the summary shows every value in a table.
 const PhotoCameraInfo = ( { uri, url }: Props ) => {
@@ -26,29 +26,47 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
   const [read, setRead] = useState<{ key: string; info: Info | null } | null>( null );
   const [showTable, setShowTable] = useState( false );
 
-  const deviceUri = useMemo( ( ) => {
-    if ( !url ) return null;
+  const { deviceUri, stored } = useMemo( ( ) => {
+    const query = url
+      ? ["ANY observationPhotos.photo.url == $0", url]
+      : uri && ["ANY observationPhotos.photo.localFilePath ENDSWITH $0", uri.split( "/" ).pop( )];
+    if ( !query ) return { deviceUri: null, stored: null };
     const observation = realm.objects<RealmObservation>( "Observation" )
-      .filtered( "ANY observationPhotos.photo.url == $0", url )[0];
-    return observation?.observationPhotos
-      ?.find( obsPhoto => obsPhoto.photo?.url === url )?.originalDevicePhotoUri ?? null;
-  }, [realm, url] );
+      .filtered( query[0], query[1] )[0];
+    const obsPhoto = observation?.observationPhotos?.find( op => ( url
+      ? op.photo?.url === url
+      : op.photo?.localFilePath?.endsWith( query[1] as string ) ) );
+    let storedInfo: Info | null = null;
+    try {
+      storedInfo = obsPhoto?.cameraInfo
+        ? JSON.parse( obsPhoto.cameraInfo )
+        : null;
+    } catch {
+      storedInfo = null;
+    }
+    return {
+      deviceUri: url
+        ? obsPhoto?.originalDevicePhotoUri ?? null
+        : null,
+      stored: storedInfo,
+    };
+  }, [realm, uri, url] );
   const key = `${uri}|${deviceUri}`;
 
   useEffect( ( ) => {
-    if ( !uri && !deviceUri ) return;
+    if ( stored || ( !uri && !deviceUri ) ) return;
     ( async ( ) => {
       const info = ( uri && await readCameraInfo( uri ) )
         || ( deviceUri && await readCameraInfo( deviceUri ) )
         || null;
       setRead( { key, info } );
     } )( );
-  }, [uri, deviceUri, key] );
+  }, [stored, uri, deviceUri, key] );
 
   // Only the current photo's info, never the previous one's while it loads.
-  const info = read?.key === key
+  const info = stored || ( read?.key === key
     ? read.info
-    : null;
+    : null );
   if ( !info ) return null;
   const lines = [
     [info.camera, info.lens].filter( Boolean ).join( " · " ),
