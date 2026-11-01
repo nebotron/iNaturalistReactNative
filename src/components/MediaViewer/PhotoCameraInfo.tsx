@@ -87,8 +87,13 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
   if ( !info ) return null;
   const lines = [
     [info.camera, info.lens].filter( Boolean ).join( " · " ),
-    [info.focalLength, info.aperture, info.shutterSpeed, info.iso && `ISO ${info.iso}`]
-      .filter( Boolean ).join( " · " ),
+    [
+      info.focalLength,
+      info.aperture,
+      info.shutterSpeed,
+      info.iso && `ISO ${info.iso}`,
+      info.focusDistance,
+    ].filter( Boolean ).join( " · " ),
   ].filter( Boolean );
   const rows = [
     [t( "Camera" ), info.camera],
