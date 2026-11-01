@@ -84,8 +84,6 @@ Added-X-offline-observations =
         [one] { $count } new observation
        *[other] { $count } new observations
     }. { $total } saved for offline use.
-# Hint for a button that adds an identification
-Adds-ID = Adds ID
 # Hint for a button that adds a vote of agreement
 Adds-your-vote-of-agreement = Adds your vote of agreement
 # Hint for a button that adds a vote of disagreement
@@ -2163,7 +2161,6 @@ Withdraws-identification = Withdraws identification
 Worldwide = Worldwide
 WORLDWIDE = WORLDWIDE
 Would-you-like-to-discard-your-current-recording-and-start-over = Would you like to discard your current recording and start over?
-Would-you-like-to-suggest-the-following-identification = Would you like to suggest the following identification?
 x-comments =
     { $count ->
         [one] { $count } comment
@@ -2346,7 +2343,6 @@ x-uploads-failed =
 Yes-but-only-if-I-add-the-observation-to-the-project-myself = Yes, but only if I add the observation to the project myself
 Yes-no-matter-who-adds-the-observation-to-the-project = Yes, no matter who adds the observation to the project
 You-are-offline = You are offline
-You-are-offline-Tap-to-reload = You are offline. Tap to reload.
 You-are-offline-Tap-to-try-again = You are offline. Tap to try again.
 You-can-add-up-to-20-media = You can add up to 20 photos and 20 sounds per observation.
 You-can-also-check-out-merchandise = You can also check out merchandise for iNaturalist and Seek at our store below!
