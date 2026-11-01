@@ -146,8 +146,10 @@ const ObsPressable = ( {
             : [...selection, uuid] );
         }
         : onItemPress}
-      onLongPress={selectable && !selecting
-        ? ( ) => setCombineSelection( [uuid] )
+      // Stays defined while selecting: if it became undefined mid-press, Pressable would
+      // fire onPress on release and immediately deselect the long-pressed observation
+      onLongPress={selectable
+        ? ( ) => { if ( !selecting ) setCombineSelection( [uuid] ); }
         : undefined}
       accessibilityRole="link"
       accessibilityState={selecting
