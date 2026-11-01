@@ -14,7 +14,8 @@ const { useQuery } = RealmContext;
 
 type Setting = "focalLength" | "shutterSpeed" | "aperture" | "iso" | "focusDistance";
 const SETTINGS: Setting[] = ["focalLength", "focusDistance", "shutterSpeed", "aperture", "iso"];
-const TOLERANCES = [0.25, 0.5, 1, 2];
+// Max difference in distance to subject, relative to the nearer photo
+const TOLERANCES = [0.1, 0.2, 0.35, 0.5];
 const MAX_PAIRS = 200;
 
 interface Entry {
@@ -30,7 +31,7 @@ interface Pair {
   key: string;
   a: Entry;
   b: Entry;
-  // Mean difference in stops (log2 ratio) over the settings both photos have
+  // Difference in distance to subject, relative to the nearer photo
   score: number;
 }
 
@@ -51,16 +52,11 @@ const parse = ( setting: Setting, raw = "" ): number | undefined => {
 const differs = ( x?: string, y?: string ) => !!x && !!y && x !== y;
 
 const compare = ( a: Entry, b: Entry ): number | null => {
-  const diffs = SETTINGS.flatMap( setting => {
-    const x = a.values[setting];
-    const y = b.values[setting];
-    return x && y
-      ? [Math.abs( Math.log2( x / y ) )]
-      : [];
-  } );
-  // Need focal length plus at least one more setting to call them similar
-  if ( !a.values.focalLength || !b.values.focalLength || diffs.length < 2 ) return null;
-  return diffs.reduce( ( sum, d ) => sum + d, 0 ) / diffs.length;
+  const x = a.values.focusDistance;
+  const y = b.values.focusDistance;
+  return x && y
+    ? Math.abs( x - y ) / Math.min( x, y )
+    : null;
 };
 
 const PairPhoto = ( { entry, onPress }: { entry: Entry; onPress: ( ) => void } ) => (
@@ -86,11 +82,11 @@ const PairPhoto = ( { entry, onPress }: { entry: Entry; onPress: ( ) => void } )
 );
 
 // Pairs of the user's photos of the same species taken with a different
-// camera or lens but similar settings, for comparing gear like-for-like.
+// camera or lens at a similar distance, for comparing gear like-for-like.
 const CameraPairs = ( ) => {
   const navigation = useNavigation( );
   const observations = useQuery<RealmObservation>( "Observation" );
-  const [tolerance, setTolerance] = useState( 0.5 );
+  const [tolerance, setTolerance] = useState( 0.2 );
 
   const allPairs = useMemo( ( ) => {
     const byTaxon = new Map<number, Entry[]>( );
@@ -153,8 +149,8 @@ const CameraPairs = ( ) => {
       ListHeaderComponent={(
         <View className="mb-4">
           <Text className="text-sm mb-2">
-            Same species, different camera or lens, similar focal length (35 mm equiv.),
-            focus distance, shutter speed, aperture and ISO. Max mean difference:
+            Same species, different camera or lens, similar distance to subject.
+            Max distance difference:
           </Text>
           <View className="flex-row">
             {TOLERANCES.map( value => (
@@ -171,9 +167,7 @@ const CameraPairs = ( ) => {
                   ? "text-white"
                   : "text-inatGreen"}
                 >
-                  {`${value} stop${value === 1
-                    ? ""
-                    : "s"}`}
+                  {`${Math.round( value * 100 )}%`}
                 </Text>
               </Pressable>
             ) )}
@@ -193,7 +187,7 @@ const CameraPairs = ( ) => {
       renderItem={( { item } ) => (
         <View className="mb-6 border-b border-lightGray pb-4">
           <Text className="font-bold mb-2">
-            {`${item.a.taxonName} · ${item.score.toFixed( 2 )} stops apart`}
+            {`${item.a.taxonName} · ${Math.round( item.score * 100 )}% distance difference`}
           </Text>
           <View className="flex-row gap-3">
             <PairPhoto entry={item.a} onPress={( ) => open( item.a.uuid )} />
