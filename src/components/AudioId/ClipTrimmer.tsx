@@ -5,18 +5,14 @@ import { View } from "components/styledComponents";
 import React, {
   useEffect, useLayoutEffect, useRef, useState,
 } from "react";
-import type { ViewProps } from "react-native";
-import { PanResponder, requireNativeComponent } from "react-native";
+import { PanResponder } from "react-native";
 
+import AudioClipSpectrogram from "./AudioClipSpectrogram";
 import { clipPath, contextClipPath } from "./audioIdHistory";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
 import PlaybackFilterButton from "./PlaybackFilterButton";
 
 export interface Span { path: string; startMs: number; endMs: number }
-
-const AudioClipSpectrogram = requireNativeComponent<ViewProps & { path: string }>(
-  "AudioClipSpectrogram",
-);
 
 // How close in points a touch has to land to grab a start or end handle
 const GRAB = 24;

@@ -1,3 +1,4 @@
+import AudioClipSpectrogram from "components/AudioId/AudioClipSpectrogram";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import {
   Body2,
@@ -6,15 +7,10 @@ import {
 } from "components/SharedComponents";
 import { Pressable, View } from "components/styledComponents";
 import React from "react";
-import type { ViewProps } from "react-native";
-import { requireNativeComponent } from "react-native";
 import { useTranslation } from "sharedHooks";
 
 import ObsPhotoSelectionList from "./ObsPhotoSelectionList";
 
-const AudioClipSpectrogram = requireNativeComponent<ViewProps & { path: string }>(
-  "AudioClipSpectrogram",
-);
 const SPECTROGRAM_STYLE = { height: 140 };
 
 interface Props {
