@@ -17,9 +17,10 @@ interface Props {
 }
 
 // Camera, lens, exposure and focus distance saved when the photo was added, else
-// read from the EXIF of the local copy, falling back to the original in the photo library for
-// uploaded photos (iNaturalist strips EXIF from the copies it hosts). Tapping
-// the summary shows every value in a table.
+// read from the EXIF of the local copy, filled in from the original in the
+// photo library for uploaded photos (iNaturalist strips EXIF from the copies it
+// hosts) and anything the local copy lost. Tapping the summary shows every
+// value in a table.
 const PhotoCameraInfo = ( { uri, url }: Props ) => {
   const { t } = useTranslation( );
   const realm = useRealm( );
@@ -45,15 +46,14 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
       storedInfo = null;
     }
     return {
-      deviceUri: url
-        ? obsPhoto?.originalDevicePhotoUri ?? null
-        : null,
+      deviceUri: obsPhoto?.originalDevicePhotoUri ?? null,
       stored: storedInfo,
     };
   }, [realm, uri, url] );
   const key = `${uri}|${deviceUri}`;
-  // Saved before the full tag list was, so read the photo again where it can be.
-  const complete = stored?.metadata
+  // Saved before the full tag list was, or without a focus distance the
+  // library original may still have, so read the photos again where they can be.
+  const complete = stored?.metadata && stored.focusDistance
     ? stored
     : null;
 

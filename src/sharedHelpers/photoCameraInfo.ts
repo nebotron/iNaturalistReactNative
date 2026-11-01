@@ -108,17 +108,27 @@ export const formatCameraInfo = ( tags?: ExifTags | null ): PhotoCameraInfo | nu
 // Canon keeps the focus distance in its MakerNote, which Exify doesn't read,
 // so read it from the file: the local copy when copyFocusDistance couldn't
 // (photos imported from ph:// uris), or the library original behind one.
-const readCanonFocusDistance = async ( uri: string ): Promise<number | null> => {
+const readCanonFocusDistance = async ( uri: string, model: string ): Promise<number | null> => {
+  let source = uri.startsWith( "ph://" )
+    ? "ph"
+    : "file";
+  let reason = "";
   try {
     const path = uri.startsWith( "ph://" )
       ? ( await CameraRoll.iosGetImageDataById( uri.slice( "ph://".length ) ) )
         .node.image.filepath
       : uri;
-    return path
-      ? await readFocusDistanceFromFile( path )
+    // The scheme and extension only: a path names the user's file.
+    source += `:${path?.split( "?" )[0].split( "." ).pop( )?.toLowerCase( ) ?? "none"}`;
+    const distance = path
+      ? await readFocusDistanceFromFile( path, miss => { reason = miss; } )
       : null;
+    if ( distance === null ) {
+      logger.info( `photo_focus_distance_missing: ${model} ${source} ${reason || "no_path"}` );
+    }
+    return distance;
   } catch ( error ) {
-    logger.warn( "photo_focus_distance_unreadable", error );
+    logger.warn( `photo_focus_distance_unreadable: ${model} ${source}`, error );
     return null;
   }
 };
@@ -134,9 +144,14 @@ export const readCameraInfo = async ( uri: string ): Promise<PhotoCameraInfo | n
     logger.warn( "photo_camera_info_unreadable", error );
     return null;
   }
-  if ( tags && !tags.SubjectDistance && /canon/i.test( String( tags.Make ?? "" ) ) ) {
-    const distance = await readCanonFocusDistance( uri );
-    if ( distance ) tags = { ...tags, SubjectDistance: distance };
+  if ( tags && !tags.SubjectDistance ) {
+    const model = `${tags.Make ?? ""} ${tags.Model ?? ""}`.trim( );
+    if ( /canon/i.test( model ) ) {
+      const distance = await readCanonFocusDistance( uri, model );
+      if ( distance ) tags = { ...tags, SubjectDistance: distance };
+    } else {
+      logger.info( `photo_focus_distance_missing: ${model || "unknown"} not_canon` );
+    }
   }
   const info = formatCameraInfo( tags );
   if ( !info ) {

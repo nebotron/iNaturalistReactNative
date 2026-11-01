@@ -17,43 +17,60 @@ const logger = log.extend( "focusDistance" );
 // The Exif segment is at most 64KB and sits right after SOI (and maybe JFIF).
 const JPEG_HEADER_BYTES = 128 * 1024;
 
+// Why a read found no distance, for the log.
+type OnMiss = ( reason: string ) => void;
+
 // Focus distance in metres from a Canon JPEG's MakerNote ShotInfo.
 export async function readJpegFocusDistance(
   readSlice: SliceReader,
   fileSize: number,
+  onMiss: OnMiss = ( ) => undefined,
 ): Promise<number | null> {
+  const miss = ( reason: string ) => {
+    onMiss( reason );
+    return null;
+  };
   const bytes = new Bytes( await readSlice( Math.min( JPEG_HEADER_BYTES, fileSize ), 0 ) );
-  if ( bytes.u16be( 0 ) !== 0xffd8 ) return null;
+  if ( bytes.u16be( 0 ) !== 0xffd8 ) return miss( "not_jpeg" );
   let pos = 2;
   while ( pos + 4 <= bytes.length && bytes.u8( pos ) === 0xff ) {
     const marker = bytes.u8( pos + 1 );
     const length = bytes.u16be( pos + 2 );
-    if ( marker === 0xda || length < 2 ) return null;
+    if ( marker === 0xda || length < 2 ) return miss( "no_exif_segment" );
     if ( marker === 0xe1 && bytes.text( pos + 4, 6 ) === "Exif" ) {
       const base = pos + 10;
       const exifPointer = parseTiff( bytes, base ).get( 0x8769 );
-      if ( !exifPointer || bytes.text( base, 2 ) !== "II" ) return null;
+      if ( !exifPointer ) return miss( "no_exif_ifd" );
+      if ( bytes.text( base, 2 ) !== "II" ) return miss( "big_endian" );
       const exif = parseTiff( bytes, base, bytes.u32le( exifPointer.valueOffset ) );
       const makerNote = exif.get( 0x927c );
-      if ( !makerNote ) return null;
+      if ( !makerNote ) return miss( "no_makernote" );
       // Canon's MakerNote is a bare IFD whose offsets count from the TIFF header.
       const maker = parseTiff( bytes, base, makerNote.valueOffset - base );
-      return canonFocusDistance( bytes, maker.get( 0x0004 ) );
+      const shotInfo = maker.get( 0x0004 );
+      if ( !shotInfo ) return miss( "no_shot_info" );
+      return canonFocusDistance( bytes, shotInfo ) ?? miss( "shot_info_without_distance" );
     }
     pos += 2 + length;
   }
-  return null;
+  return miss( "no_exif_segment" );
 }
 
-export async function readFocusDistanceFromFile( pathOrUri: string ): Promise<number | null> {
+export async function readFocusDistanceFromFile(
+  pathOrUri: string,
+  onMiss?: OnMiss,
+): Promise<number | null> {
   if ( isCanonRawUri( pathOrUri ) ) {
-    return ( await readCr3SummaryFromFile( pathOrUri ) )?.focusDistance ?? null;
+    const distance = ( await readCr3SummaryFromFile( pathOrUri ) )?.focusDistance ?? null;
+    if ( distance === null ) onMiss?.( "raw_without_distance" );
+    return distance;
   }
   const path = stripFilePrefix( pathOrUri );
   const { size } = await stat( path );
   return readJpegFocusDistance(
     ( length, position ) => read( path, length, position, "ascii" ),
     Number( size ),
+    onMiss,
   );
 }
 
