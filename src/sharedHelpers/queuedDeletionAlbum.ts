@@ -30,7 +30,7 @@ const syncNow = async ( ) => {
     : undefined;
   const { unfavorited, favorited } = classifyDevicePhotoUris( realm, cache );
   // Ahead of the early return: expiry depends on the clock, not on a change.
-  void sweepUsbStaging( favorited );
+  void sweepUsbStaging( favorited, unfavorited );
   const signature = JSON.stringify( [unfavorited.sort( ), favorited.sort( )] );
   if ( signature === lastSynced ) return;
   lastSynced = signature;

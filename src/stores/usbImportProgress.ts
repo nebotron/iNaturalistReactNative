@@ -4,6 +4,9 @@ import { create } from "zustand";
 // and rendered by UsbImportProgress. Not persisted: it only reflects an
 // in-progress offload and is cleared shortly after one finishes.
 export type UsbImportPhase = "saving" | "waitingForSpace" | "deleting" | "done" | "error";
+// What the Me tab's import button offers: hidden with no folder chosen,
+// disabled once the card has been scanned and has nothing left to import.
+export type UsbCardState = "unconfigured" | "ready" | "empty";
 
 interface UsbImportProgressState {
   active: boolean;
@@ -15,6 +18,7 @@ interface UsbImportProgressState {
   // Why the run ended the way it did, when the counts alone don't say — e.g. a
   // full device, where "0 of 157 failed" reads as a bug in the app.
   note: string;
+  cardState: UsbCardState;
   // Starts an import; registered by useUsbImport, which App keeps mounted.
   // Resolves true when it found new photos.
   startImport?: ( ) => Promise<boolean>;
@@ -34,6 +38,7 @@ const useUsbImportProgress = create<UsbImportProgressState>( set => ( {
   failed: 0,
   deleted: 0,
   note: "",
+  cardState: "unconfigured",
   start: total => set( {
     active: true, phase: "saving", total, saved: 0, failed: 0, deleted: 0, note: "",
   } ),

@@ -27,6 +27,7 @@ import {
   markUsbOffloadStarted,
   reconcileSavedUsbImages,
   refreshAvailableMemory,
+  refreshUsbCardState,
   takeUnfinishedUsbOffload,
   updateUsbOffloadProgress,
 } from "sharedHelpers/usbStorage";
@@ -162,8 +163,8 @@ const openStagedInGroupPhotos = async ( ) => {
   } ) );
 };
 
-// Imports from the user's chosen USB folder (see UsbImportSetting) whenever
-// the app comes to the foreground, or when they press Import there. New
+// Imports from the user's chosen USB folder (see UsbImportSetting) when they
+// press the import button on My Observations (UsbImportButton). New
 // images are copied into the app's staging folder (see usbStaging.ts), then —
 // once the whole batch is safely copied — deleted from the source device, and
 // opened in Group Photos. Only photos on faved observations ever reach the
@@ -585,6 +586,7 @@ const useUsbImport = ( ) => {
     await openStagedInGroupPhotos( ).catch( error => {
       logger.error( "Could not open staged USB photos", error );
     } );
+    await refreshUsbCardState( );
     return started;
   }, [offload] );
 
@@ -593,18 +595,18 @@ const useUsbImport = ( ) => {
     return ( ) => useUsbImportProgress.setState( { startImport: undefined } );
   }, [run] );
 
-  // A drive plugged in while the app was away is picked up on return. Also
+  // A card swapped while the app was away re-enables the import button. Also
   // sweeps staging, whose expiry runs on the clock.
   useEffect( ( ) => {
     if ( !onboardingShown ) return ( ) => undefined;
-    void run( );
+    void refreshUsbCardState( );
     const subscription = AppState.addEventListener( "change", state => {
       if ( state !== "active" ) return;
       requestQueuedDeletionAlbumSync( );
-      void run( );
+      void refreshUsbCardState( );
     } );
     return ( ) => subscription.remove( );
-  }, [onboardingShown, run] );
+  }, [onboardingShown] );
 
   return run;
 };

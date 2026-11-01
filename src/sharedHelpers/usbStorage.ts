@@ -2,6 +2,7 @@ import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import { recordAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
 import { getTunable } from "sharedHelpers/tunableParams";
+import useUsbImportProgress from "stores/usbImportProgress";
 
 // JS side of the UsbStorage native module (iOS): the user grants access to a
 // folder once (e.g. a USB drive mounted in Files), then the offload flow lists
@@ -362,4 +363,21 @@ export const takeUnfinishedUsbOffload = ( ): UsbOffloadMarker | null => {
   } catch {
     return null;
   }
+};
+
+// Lists the card without importing, for the Me tab's import button: empty
+// only when the drive was read and nothing is left to import or delete.
+export const refreshUsbCardState = async ( ) => {
+  if ( !usbStorage ) return;
+  const result = await listNewUsbImages( ).catch( ( ) => null );
+  if ( !result ) return;
+  let cardState: "unconfigured" | "ready" | "empty" = "ready";
+  if ( result.reason === "no-folder-saved" ) {
+    cardState = "unconfigured";
+  } else if (
+    result.available && result.images.length === 0 && getPendingUsbDeletes( ).length === 0
+  ) {
+    cardState = "empty";
+  }
+  useUsbImportProgress.setState( { cardState } );
 };

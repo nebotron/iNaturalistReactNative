@@ -31,6 +31,7 @@ import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 import SimpleUploadBannerContainer from "./SimpleUploadBannerContainer";
+import UsbImportButton from "./UsbImportButton";
 
 const { useRealm } = RealmContext;
 
@@ -131,6 +132,7 @@ const MyObservationsSimpleHeader = ( {
           : <Heading3>{ t( "My-Observations" ) }</Heading3>}
         {currentUser && (
           <View className="flex-row items-center">
+            <UsbImportButton />
             <INatIconButton
               icon="magnifying-glass"
               className="mr-[7px]"

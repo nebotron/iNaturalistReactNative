@@ -804,8 +804,8 @@ IGNORE-LOCATION = IGNORE LOCATION
 # Button to stop recieving notifications about observation
 Ignore-notifications = Ignore notifications
 Ignoring-location = Ignoring location
-# Label for button that imports new photos from the chosen USB drive folder
-IMPORT-FROM-USB = IMPORT FROM USB
+# Accessibility label for the My Observations button that imports photos from a USB drive
+Import-photos-from-USB = Import photos from USB
 # Shows the number of observations a user is about to import
 IMPORT-X-OBSERVATIONS =
     IMPORT { $count ->
@@ -818,6 +818,8 @@ Importing-X-photos =
         [one] 1 photo
        *[other] { $count } photos
     }…
+# Accessibility hint for the My Observations button that imports photos from a USB drive
+Imports-new-photos-from-USB = Imports new photos from the USB drive.
 # Title of screen asking for permission to access location
 Improve-suggestions-by-using-your-location = Improve suggestions by using your location
 IMPROVE-THESE-SUGGESTIONS-BY-USING-YOUR-LOCATION = IMPROVE THESE SUGGESTIONS BY USING YOUR LOCATION
@@ -2040,7 +2042,7 @@ Tunable-usbMaxPhotosPerScan-description = Maximum number of new photos imported 
 # Label for a tunable parameter in settings
 Tunable-usbStagingRetentionDays = Days to keep USB originals
 # Description of a tunable parameter in settings
-Tunable-usbStagingRetentionDays-description = How long photos imported from USB are kept in the app after they reach Group Photos. Photos on observations you fave are saved to your photo library first.
+Tunable-usbStagingRetentionDays-description = How long photos imported from USB are kept in the app after they are added to an observation or deleted in Group Photos. Photos on observations you fave are saved to your photo library instead.
 Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?
@@ -2084,17 +2086,15 @@ Uploading-x-of-y-observations =
        *[other] Uploading { $currentUploadCount } of { $total } observations
     }
 # Describes USB photo import before a folder has been chosen
-USB-import-choose-folder = Choose a folder on a USB drive or in Files. New photos in it are imported whenever you open the app with the drive connected.
+USB-import-choose-folder = Choose a folder on a USB drive or in Files, then import its new photos from the button on My Observations.
 # Describes USB photo import once a folder has been chosen
-USB-import-folder-chosen = New photos in "{ $folder }" are imported whenever you open the app with the drive connected.
+USB-import-folder-chosen = Import new photos in "{ $folder }" from the button on My Observations.
 # Describes USB photo import when a folder has been chosen but the drive
 # holding it is not currently connected
-USB-import-folder-chosen-drive-not-connected = Connect this drive and open the app to import its new photos.
+USB-import-folder-chosen-drive-not-connected = Connect this drive, then import its new photos from the button on My Observations.
 # Warns that the chosen folder is one folder created by a camera on a memory
 # card, which the camera stops adding to when the card is formatted or replaced
 USB-import-folder-is-a-camera-subfolder = "{ $folder }" is one folder created by your camera. When you format the card or use another one, your camera starts a new folder, and photos in it will not be imported. Choose the DCIM folder or the whole drive instead.
-# Shown after tapping Import From USB when the chosen folder has no new photos
-USB-import-no-new-photos = No new photos in "{ $folder }".
 # Section header in settings for photo import from a USB drive
 USB-PHOTO-IMPORT = USB PHOTO IMPORT
 Use-iNaturalist-to-identify-any-living-thing = Use iNaturalist to identify any living thing

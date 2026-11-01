@@ -1,5 +1,5 @@
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
-import { sweepUsbStaging, takeUnofferedStagedGroups } from "sharedHelpers/usbStaging";
+import { sweepUsbStaging } from "sharedHelpers/usbStaging";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 let mockFiles = [];
@@ -29,23 +29,34 @@ jest.mock( "sharedHelpers/promptDeleteOriginalDevicePhotos", ( ) => ( {
   enqueuePhotoLibraryWrite: task => task( ( ) => undefined ),
 } ) );
 
-describe( "usbStaging", ( ) => {
-  it( "saves faved photos to the Shared Library album and expires old ones", async ( ) => {
-    const old = Date.now( ) - 4 * DAY_MS;
-    const recent = Date.now( ) - DAY_MS;
-    const offered = [`${old}_FAVED.JPG`, `${old}_OLD.JPG`, `${recent}_NEW.JPG`];
-    mockFiles = [...offered];
-    expect( await takeUnofferedStagedGroups( ) ).toHaveLength( 3 );
-    mockFiles = [...offered, `${old}_UNOFFERED.JPG`];
+const uri = name => `file:///old/container/usbStaging/${name}`;
 
-    await sweepUsbStaging( [`file:///old/container/usbStaging/${old}_FAVED.JPG`] );
+describe( "sweepUsbStaging", ( ) => {
+  it( "saves faved photos to the Shared Library album", async ( ) => {
+    mockFiles = ["1_FAVED.JPG"];
+    await sweepUsbStaging( [uri( "1_FAVED.JPG" )], [] );
 
-    expect( CameraRoll.saveAsset ).toHaveBeenCalledTimes( 1 );
     expect( CameraRoll.saveAsset ).toHaveBeenCalledWith(
-      `file:///docs/usbStaging/${old}_FAVED.JPG`,
+      "file:///docs/usbStaging/1_FAVED.JPG",
       { type: "photo", album: "→ Shared Library" },
     );
-    // Recent photos, and ones never offered to Group Photos, stay staged.
-    expect( mockFiles ).toEqual( [`${recent}_NEW.JPG`, `${old}_UNOFFERED.JPG`] );
+    expect( mockFiles ).toEqual( [] );
+  } );
+
+  it( "starts the clock when a photo is on an observation or removed", async ( ) => {
+    jest.useFakeTimers( { now: 0 } );
+    // Staged long ago, but only now put on an observation.
+    mockFiles = ["1_ON_OBS.JPG", "1_UNUSED.JPG"];
+    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" )] );
+
+    jest.setSystemTime( 2 * DAY_MS );
+    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" )] );
+    expect( mockFiles ).toEqual( ["1_ON_OBS.JPG", "1_UNUSED.JPG"] );
+
+    jest.setSystemTime( 4 * DAY_MS );
+    await sweepUsbStaging( [], [uri( "1_ON_OBS.JPG" )] );
+    // A photo nothing has used yet keeps no clock and stays staged.
+    expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
+    jest.useRealTimers( );
   } );
 } );

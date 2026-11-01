@@ -12,6 +12,7 @@ const mockTakeUnfinishedUsbOffload = jest.fn( ( ) => null );
 const mockUpdateUsbOffloadProgress = jest.fn( );
 const mockGetUsbFolderName = jest.fn( );
 const mockGetUsbFolderDiagnostics = jest.fn( );
+const mockRefreshUsbCardState = jest.fn( async ( ) => undefined );
 
 let mockPendingDeletes = [];
 const mockBeginBackgroundTask = jest.fn( ( ) => true );
@@ -40,6 +41,7 @@ jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
     mockPendingDeletes = mockPendingDeletes.filter( path => !done.has( path ) );
   },
   copyUsbImageToFile: ( ...args ) => mockCopyUsbImageToFile( ...args ),
+  refreshUsbCardState: ( ) => mockRefreshUsbCardState( ),
   takeUnfinishedUsbOffload: ( ) => mockTakeUnfinishedUsbOffload( ),
   updateUsbOffloadProgress: ( ...args ) => mockUpdateUsbOffloadProgress( ...args ),
 } ) );
@@ -448,13 +450,13 @@ describe( "useUsbImport", ( ) => {
     expect( mockPendingDeletes ).toEqual( ["IMG_LEFTOVER.CR3"] );
   } );
 
-  // A drive plugged in while the app was away is picked up without a tap.
-  it( "scans once when mounted, not on a timer", async ( ) => {
-    mockListNewUsbImages.mockResolvedValue( { available: false, images: [] } );
+  // Importing waits for the button; mounting only checks the card for it.
+  it( "does not import until the button is pressed", async ( ) => {
     renderHook( ( ) => useUsbImport( ) );
     await jest.advanceTimersByTimeAsync( 60_000 );
 
-    expect( mockListNewUsbImages ).toHaveBeenCalledTimes( 1 );
+    expect( mockListNewUsbImages ).not.toHaveBeenCalled( );
+    expect( mockRefreshUsbCardState ).toHaveBeenCalledTimes( 1 );
     expect( useUsbImportProgress.getState( ).startImport ).toBeDefined( );
   } );
 } );

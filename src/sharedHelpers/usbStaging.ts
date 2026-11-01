@@ -14,21 +14,25 @@ const logger = log.extend( "usbStaging" );
 
 // Photos copied off a USB drive land here instead of in the Photos library, so
 // the ones the user doesn't fave never need deleting from it. A staged photo
-// is offered to Group Photos once; after that it is saved to Photos (into an
-// album the user moves to their Shared Library) as soon as an observation it
-// is on is faved, or deleted once it is older than usbStagingRetentionDays.
-// Staged names are "<stagedAtMs>_<file name>", and photos are matched to
-// observations by that name alone: the app container's absolute path changes
-// across app updates.
+// is offered to Group Photos once. It is saved to Photos (into an album the
+// user moves to their Shared Library) as soon as an observation it is on is
+// faved. Otherwise it is deleted usbStagingRetentionDays after it was first
+// seen on an observation or removed in Group Photos or the cropper. Staged
+// names are "<stagedAtMs>_<file name>", and photos are matched to observations
+// by that name alone: the app container's absolute path changes across app
+// updates.
 
 export const SHARED_LIBRARY_ALBUM_TITLE = "→ Shared Library";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OFFERED_KEY = "offeredNames";
+// Staged name → when its retention clock started.
+const CLOCK_KEY = "clockStartedAt";
 const store = new MMKV( { id: "usb-staging" } );
 
 const getOffered = ( ): string[] => JSON.parse( store.getString( OFFERED_KEY ) ?? "[]" );
 const setOffered = ( names: string[] ) => store.set( OFFERED_KEY, JSON.stringify( names ) );
+const getClocks = ( ): Record<string, number> => JSON.parse( store.getString( CLOCK_KEY ) ?? "{}" );
 
 export const stagedPathFor = ( relativePath: string ) => (
   `${usbStagingPath}/${Date.now( )}_${relativePath.split( "/" ).pop( )}`
@@ -82,16 +86,29 @@ export const takeUnofferedStagedGroups = async ( ): Promise<GroupedMediaItem[]> 
 let sweeping = false;
 
 // favoritedUris: device photo URIs on observations the user has faved.
-export const sweepUsbStaging = async ( favoritedUris: string[] ) => {
+// unfavoritedUris: those on other observations, or removed from Group Photos.
+export const sweepUsbStaging = async (
+  favoritedUris: string[],
+  unfavoritedUris: string[],
+) => {
   if ( sweeping ) return;
   sweeping = true;
   try {
     const favorited = new Set( favoritedUris.map( stagedNameFromUri ).filter( Boolean ) );
-    const offered = new Set( getOffered( ) );
     const retentionMs = getTunable( "usbStagingRetentionDays" ) * DAY_MS;
+    const staged = await readStaged( );
+    const stagedNames = new Set( staged.map( item => item.name ) );
+    const clocks = Object.fromEntries( Object.entries( getClocks( ) )
+      .filter( ( [name] ) => stagedNames.has( name ) ) );
+    unfavoritedUris.forEach( uri => {
+      const name = stagedNameFromUri( uri );
+      if ( name && stagedNames.has( name ) && clocks[name] === undefined ) {
+        clocks[name] = Date.now( );
+      }
+    } );
     const removed = new Set<string>( );
     let saved = 0;
-    for ( const item of await readStaged( ) ) {
+    for ( const item of staged ) {
       if ( favorited.has( item.name ) ) {
         // eslint-disable-next-line no-await-in-loop
         const ok = await enqueuePhotoLibraryWrite( ( ) => CameraRoll.saveAsset(
@@ -108,14 +125,16 @@ export const sweepUsbStaging = async ( favoritedUris: string[] ) => {
         await unlink( item.path ).catch( ( ) => undefined );
         removed.add( item.name );
       } else if (
-        offered.has( item.name )
-        && Date.now( ) - ( Number( item.name.split( "_" )[0] ) || 0 ) > retentionMs
+        clocks[item.name] !== undefined
+        && Date.now( ) - clocks[item.name] > retentionMs
       ) {
         // eslint-disable-next-line no-await-in-loop
         await unlink( item.path ).catch( ( ) => undefined );
         removed.add( item.name );
       }
     }
+    removed.forEach( name => delete clocks[name] );
+    store.set( CLOCK_KEY, JSON.stringify( clocks ) );
     if ( removed.size > 0 ) {
       setOffered( getOffered( ).filter( name => !removed.has( name ) ) );
       logger.info( `USB staging: saved ${saved} faved photo(s) to Photos, `
