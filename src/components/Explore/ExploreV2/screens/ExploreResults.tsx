@@ -62,9 +62,9 @@ import React, {
 } from "react";
 import type { BoundingBox } from "react-native-maps";
 import { log } from "sharedHelpers/logger";
-import type { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import {
   EXPLORE_OBSERVATIONS_SORT_OPTIONS,
+  OBSERVATIONS_SORT,
   useObservationsSortLabels,
 } from "sharedHelpers/observationsSort";
 import type { SpeciesCountsSort } from "sharedHelpers/speciesSort";
@@ -78,6 +78,7 @@ import useCurrentUser from "sharedHooks/useCurrentUser";
 import useLocationPermission from "sharedHooks/useLocationPermission";
 import useSpeciesCount from "sharedHooks/useSpeciesCount";
 import useStoredLayout from "sharedHooks/useStoredLayout";
+import useSubjectDistances, { sortBySubjectDistance } from "sharedHooks/useSubjectDistances";
 import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 
@@ -257,6 +258,14 @@ const ExploreResults = ( ) => {
     totalBounds,
     totalResults,
   } = useInfiniteExploreScroll( { params: queryParams, enabled: canFetch } );
+
+  // Only the user's own local photos have a subject distance, so loaded results are
+  // sorted on device and everyone else's come last
+  const bySubjectDistance = state.sortBy === OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST;
+  const subjectDistances = useSubjectDistances( bySubjectDistance );
+  const sortedObservations = useMemo( ( ) => ( bySubjectDistance
+    ? sortBySubjectDistance( observations, subjectDistances )
+    : observations ), [bySubjectDistance, observations, subjectDistances] );
 
   // Diagnostics: observations sometimes show nothing after switching from
   // another view (e.g. Hotspots) or opening a hotspot in Explore, until a reload
@@ -462,7 +471,7 @@ const ExploreResults = ( ) => {
               )
               : (
                 <ObservationsFlashList
-                  data={observations}
+                  data={sortedObservations}
                   dataCanBeFetched={canFetch}
                   explore
                   fullWidthGrid={layout !== "list"}

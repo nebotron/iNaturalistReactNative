@@ -28,7 +28,7 @@ const OBSERVATIONS_SORT_TO_API_PARAMS: Record<OBSERVATIONS_SORT, ObservationSort
   [OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST]: { order_by: "observed_on", order: "desc" },
   [OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST]: { order_by: "observed_on", order: "asc" },
   [OBSERVATIONS_SORT.MOST_FAVED]: { order_by: "votes", order: "desc" },
-  // Subject distance only exists in local photo EXIF, so it's always sorted locally
+  // Subject distance only exists in local photo EXIF, so results are sorted on device
   [OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST]: { order_by: "created_at", order: "desc" },
 };
 
@@ -47,6 +47,7 @@ export const EXPLORE_OBSERVATIONS_SORT_OPTIONS: OBSERVATIONS_SORT[] = [
   OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST,
   OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST,
   OBSERVATIONS_SORT.MOST_FAVED,
+  OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST,
 ];
 
 export function observationSortToApiParams( sort: OBSERVATIONS_SORT ): ObservationSortAPIParams {
