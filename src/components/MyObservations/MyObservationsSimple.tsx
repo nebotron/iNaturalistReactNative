@@ -663,6 +663,7 @@ const MyObservationsSimple = ( {
       {openSheet === ACTIVE_SHEET.SORT && activeTab === OBSERVATIONS_TAB && (
         <RadioButtonSheet
           headerText={t( "SORT-OBSERVATIONS" )}
+          immediate
           radioValues={observationsSortOptions}
           selectedValue={observationsSortOptionId}
           confirm={optionId => handleObservationsSortConfirm( optionId as MyObservationsSort )}

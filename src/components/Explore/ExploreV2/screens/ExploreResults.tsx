@@ -681,6 +681,7 @@ const ExploreResults = ( ) => {
       {showSortSheet && state.activeTab === OBSERVATIONS_TAB && (
         <RadioButtonSheet
           headerText={t( "SORT-OBSERVATIONS" )}
+          immediate
           radioValues={sortOptions}
           selectedValue={state.sortBy}
           confirm={sortBy => {
