@@ -14,6 +14,7 @@ import { View } from "components/styledComponents";
 import React, {
   useCallback, useEffect, useMemo, useRef,
 } from "react";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { enqueuePreload } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import {
@@ -265,13 +266,15 @@ const GroupPhotos = ( {
     selectedObservations,
   };
 
-  // Leave room for the floating toolbar
+  // Leave room for the floating toolbar. It sits at the screen's bottom edge,
+  // over the wrapper's bottom inset, so the list only needs the rest of it.
+  const { bottom: bottomInset } = useSafeAreaInsets( );
   const listStyle = useMemo( ( ) => ( {
     ...flashListStyle,
     paddingBottom: groupedPhotos.length > 0
-      ? TOOLBAR_HEIGHT + 20
+      ? Math.max( 0, TOOLBAR_HEIGHT - bottomInset )
       : 20,
-  } ), [flashListStyle, groupedPhotos.length] );
+  } ), [bottomInset, flashListStyle, groupedPhotos.length] );
 
   return (
     <SharedStackViewWrapper>
