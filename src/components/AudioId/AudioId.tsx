@@ -96,7 +96,10 @@ const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
   const local = new Map( taxonIds.map( id => [
     id, realm.objectForPrimaryKey<RealmTaxon>( "Taxon", id ),
   ] ) );
-  const missing = taxonIds.filter( id => !local.get( id )?.name ).sort( ( a, b ) => a - b );
+  // loadBirdCodes caches bird taxa without photos, so a name alone isn't enough
+  const missing = taxonIds
+    .filter( id => !local.get( id )?.name || !local.get( id )?.default_photo?.url )
+    .sort( ( a, b ) => a - b );
   const currentUser = useCurrentUser( );
   // Signed-in users get names per their account settings; otherwise use the app locale
   const locale = currentUser
@@ -125,7 +128,7 @@ const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
   return new Map( taxonIds.flatMap( id => {
     const taxon = local.get( id );
     return taxon?.name
-      ? [[id, { url: taxon.defaultPhoto?.url, commonName: taxon.preferredCommonName }]]
+      ? [[id, { url: taxon.default_photo?.url, commonName: taxon.preferredCommonName }]]
       : [];
   } ) );
 };
