@@ -356,20 +356,23 @@ const WildlifeHotspotsScreen = ( {
     initializeLocation();
   }, [t] );
 
+  // The viewport only moves on its own when the set of waypoints changes, not
+  // when the same route is refetched (e.g. a filter change) or a hotspot is
+  // selected
+  const fittedWaypointsKeyRef = useRef<string | null>( null );
   useEffect( () => {
     if ( routeCoords.length === 0 || !mapRef.current ) return;
-    const coords: LatLng[] = routeCoords.map( toMapCoord );
-    hotspots.forEach( h => coords.push( {
-      latitude: h.centerLatitude,
-      longitude: h.centerLongitude,
-    } ) );
-    mapRef.current.fitToCoordinates( coords, {
+    const waypointsKey = JSON.stringify( confirmedStopPoints );
+    if ( fittedWaypointsKeyRef.current === waypointsKey ) return;
+    fittedWaypointsKeyRef.current = waypointsKey;
+    mapRef.current.fitToCoordinates( routeCoords.map( toMapCoord ), {
       edgePadding: {
         top: 60, right: 40, bottom: 60, left: 40,
       },
       animated: true,
     } );
-  }, [routeCoords, hotspots] );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeCoords] );
 
   const handleStopTextChange = useCallback( ( id: string, text: string ) => {
     editedStopIdsRef.current.add( id );
@@ -473,14 +476,6 @@ const WildlifeHotspotsScreen = ( {
       setHotspotRouteDurationSec( null );
       return;
     }
-    if ( mapRef.current ) {
-      mapRef.current.animateToRegion( {
-        latitude: hotspot.centerLatitude,
-        longitude: hotspot.centerLongitude,
-        latitudeDelta: 0.5,
-        longitudeDelta: 0.5,
-      }, 400 );
-    }
     if ( confirmedStopPoints.length < 2 ) return;
     setHotspotRouteDurationSec( null );
     setHotspotRouteLoading( true );
@@ -495,14 +490,6 @@ const WildlifeHotspotsScreen = ( {
       const { coords, durationSec } = await fetchOSRMRoute( withVia );
       setHotspotRouteCoords( coords );
       setHotspotRouteDurationSec( durationSec );
-      if ( mapRef.current ) {
-        mapRef.current.fitToCoordinates( coords.map( toMapCoord ), {
-          edgePadding: {
-            top: 60, right: 40, bottom: 60, left: 40,
-          },
-          animated: true,
-        } );
-      }
     } catch {
       // silently ignore route fetch failure for hotspot
     } finally {
