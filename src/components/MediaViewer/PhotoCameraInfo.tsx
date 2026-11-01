@@ -81,23 +81,26 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
         ) )}
       </Pressable>
       {showTable && (
-        <BottomSheet
-          headerText={t( "Camera-settings" )}
-          onPressClose={( ) => setShowTable( false )}
-          insideModal
-        >
-          <View className="p-5">
-            {rows.map( ( [label, value] ) => (
-              <View
-                key={label}
-                className="flex-row justify-between py-2 border-b border-lightGray"
-              >
-                <Body3 className="font-bold mr-4">{label}</Body3>
-                <Body3 className="flex-1 text-right" selectable>{value}</Body3>
-              </View>
-            ) )}
-          </View>
-        </BottomSheet>
+        // Above the thumbnails, which render after this in MediaViewer
+        <View className="absolute inset-0 z-10" pointerEvents="box-none">
+          <BottomSheet
+            headerText={t( "Camera-settings" )}
+            onPressClose={( ) => setShowTable( false )}
+            insideModal
+          >
+            <View className="p-5">
+              {rows.map( ( [label, value] ) => (
+                <View
+                  key={label}
+                  className="flex-row justify-between py-2 border-b border-lightGray"
+                >
+                  <Body3 className="font-bold mr-4">{label}</Body3>
+                  <Body3 className="flex-1 text-right" selectable>{value}</Body3>
+                </View>
+              ) )}
+            </View>
+          </BottomSheet>
+        </View>
       )}
     </>
   );
