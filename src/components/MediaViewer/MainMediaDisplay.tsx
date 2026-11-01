@@ -242,7 +242,7 @@ const MainMediaDisplay = ( {
                     onPress={( ) => openExternalWebBrowser(
                       `https://www.inaturalist.org/photos/${photo.id}`,
                     )}
-                    icon="globe-outline"
+                    icon="open-in-new"
                     color={colors.white}
                     accessibilityLabel={t( "View-in-browser" )}
                     optionalClasses="mr-2"

@@ -238,7 +238,7 @@ const BrightnessSlider = ( {
   disabled = false,
 }: BrightnessSliderProps ) => (
   <View className="flex-row items-center">
-    <INatIcon name="sun" size={18} color={iconColor} />
+    <INatIcon name="brightness" size={18} color={iconColor} />
     <FineSlider
       disabled={disabled}
       minimumValue={minimumValue}
