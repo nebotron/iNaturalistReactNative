@@ -839,7 +839,7 @@ const WildlifeHotspotsScreen = ( {
   const firstStop = stops[0];
   const lastStop = stops[stops.length - 1];
   const totalDriveTime = !loading && totalDriveMinutes !== null && (
-    <Body4 className="ml-2 font-bold">
+    <Body4 className="font-bold">
       {t( "Total-drive-time", {
         hours: Math.floor( totalDriveMinutes / 60 ),
         minutes: totalDriveMinutes % 60,
@@ -850,7 +850,7 @@ const WildlifeHotspotsScreen = ( {
     <>
       <TouchableOpacity
         onPress={() => setTimeLimitPopoverOpen( open => !open )}
-        className="flex-row items-center ml-2 px-2 py-1 border border-lightGray rounded-full"
+        className="flex-row items-center px-2 py-1 border border-lightGray rounded-full"
         accessibilityRole="button"
         accessibilityLabel={t( "Change-time-limit" )}
         testID="WildlifeHotspotsScreen.timeLimitChip"
@@ -912,7 +912,7 @@ const WildlifeHotspotsScreen = ( {
                   ) )}
                 </View>
               )}
-              <View className="flex-row items-center mt-1">
+              <View className="flex-row items-center gap-2 mt-1 min-h-8">
                 {totalDriveTime}
                 {timeLimitChip}
                 <INatIconButton
@@ -927,36 +927,43 @@ const WildlifeHotspotsScreen = ( {
             </>
           )
           : (
-            <View className="flex-row items-center">
-              <TouchableOpacity
-                className="flex-1"
-                onPress={() => setStopsExpanded( true )}
-                accessibilityRole="button"
-                accessibilityLabel={t( "Edit-route-stops" )}
-                testID="WildlifeHotspotsScreen.stopsSummary"
-              >
-                <Body3 className="flex-1" numberOfLines={1}>
-                  <Body3 style={{ color: stopDotColor( 0, stops.length ) }}>{"● "}</Body3>
-                  {firstStop.text || stopPlaceholder( 0, stops.length, t )}
-                  {"  →  "}
-                  <Body3 style={{ color: stopDotColor( stops.length - 1, stops.length ) }}>
-                    {"● "}
+            <>
+              <View className="flex-row items-center">
+                <TouchableOpacity
+                  className="flex-1"
+                  onPress={() => setStopsExpanded( true )}
+                  accessibilityRole="button"
+                  accessibilityLabel={t( "Edit-route-stops" )}
+                  testID="WildlifeHotspotsScreen.stopsSummary"
+                >
+                  <Body3 numberOfLines={1}>
+                    <Body3 style={{ color: stopDotColor( 0, stops.length ) }}>{"● "}</Body3>
+                    {firstStop.text || stopPlaceholder( 0, stops.length, t )}
+                    {"  →  "}
+                    <Body3 style={{ color: stopDotColor( stops.length - 1, stops.length ) }}>
+                      {"● "}
+                    </Body3>
+                    {lastStop.text || stopPlaceholder( stops.length - 1, stops.length, t )}
+                    {stops.length > 2
+                      && `  ·  ${t( "Route-stop-count", { count: stops.length } )}`}
                   </Body3>
-                  {lastStop.text || stopPlaceholder( stops.length - 1, stops.length, t )}
-                  {stops.length > 2 && `  ·  ${t( "Route-stop-count", { count: stops.length } )}`}
-                </Body3>
-              </TouchableOpacity>
-              {totalDriveTime}
-              {timeLimitChip}
-              <INatIconButton
-                className="w-8 h-8"
-                icon="caret-down"
-                size={16}
-                color={colors.darkGray}
-                onPress={() => setStopsExpanded( true )}
-                accessibilityLabel={t( "Edit-route-stops" )}
-              />
-            </View>
+                </TouchableOpacity>
+                <INatIconButton
+                  className="w-8 h-8"
+                  icon="caret-down"
+                  size={16}
+                  color={colors.darkGray}
+                  onPress={() => setStopsExpanded( true )}
+                  accessibilityLabel={t( "Edit-route-stops" )}
+                />
+              </View>
+              {( totalDriveTime || timeLimitChip ) && (
+                <View className="flex-row items-center gap-2 min-h-8">
+                  {totalDriveTime}
+                  {timeLimitChip}
+                </View>
+              )}
+            </>
           )}
       </View>
 
