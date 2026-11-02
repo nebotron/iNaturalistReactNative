@@ -123,7 +123,7 @@ const stopWatch = ( ) => {
 };
 
 const handleError = ( error: GeolocationError ) => {
-  console.warn( "accuratePositionWatcher error:", error );
+  logger.warn( "accuratePositionWatcher error:", error );
   stopWatch( );
   listeners.forEach( listener => listener.onError?.( ) );
 };

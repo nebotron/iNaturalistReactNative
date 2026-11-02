@@ -3260,8 +3260,7 @@ RCT_EXPORT_METHOD( deletePhotoAssets
           && asset.sourceType == PHAssetSourceTypeUserLibrary ) {
         // Nothing public distinguishes an asset this app added from any other
         // in the user's library, so this is the closest honest answer: it is
-        // ours to edit. See appCreatedPhotoAssets.ts for the identifiers the
-        // JS side records at creation time.
+        // ours to edit.
         [ourAssets addObject:asset];
       }
     }

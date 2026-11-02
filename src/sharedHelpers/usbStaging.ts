@@ -21,7 +21,7 @@ const logger = log.extend( "usbStaging" );
 // by that name alone: the app container's absolute path changes across app
 // updates.
 
-export const SHARED_LIBRARY_ALBUM_TITLE = "→ Shared Library";
+const SHARED_LIBRARY_ALBUM_TITLE = "→ Shared Library";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OFFERED_KEY = "offeredNames";
@@ -37,7 +37,7 @@ export const stagedPathFor = ( relativePath: string ) => (
   `${usbStagingPath}/${Date.now( )}_${relativePath.split( "/" ).pop( )}`
 );
 
-export const stagedNameFromUri = ( uri: string ) => uri.match( /\/usbStaging\/([^/]+)$/ )?.[1];
+const stagedNameFromUri = ( uri: string ) => uri.match( /\/usbStaging\/([^/]+)$/ )?.[1];
 
 const readStaged = async ( ) => ( await readDir( usbStagingPath ).catch( ( ) => [] ) )
   .filter( item => item.isFile( ) && !item.name.endsWith( ".partial" ) );

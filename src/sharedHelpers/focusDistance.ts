@@ -45,7 +45,7 @@ const uint = ( bytes: Bytes, pos: number, size: number ): number => {
 };
 
 // Where a HEIF's Exif item lies in the file, from its meta box's iinf and iloc.
-export function heifExifLocation(
+function heifExifLocation(
   bytes: Bytes,
   meta: Box,
 ): { offset: number; length: number } | null {

@@ -24,7 +24,6 @@ import {
   listNewUsbImages,
   markUsbImagesImported,
   markUsbOffloadStarted,
-  reconcileSavedUsbImages,
   refreshAvailableMemory,
   refreshUsbCardState,
   takeUnfinishedUsbOffload,
@@ -39,23 +38,15 @@ const logger = log.extend( "useUsbImport" );
 // about the setup, not an event, and every log line is a network POST.
 let loggedCameraSubfolder = false;
 
-// Safety net so a single native call that never resolves (a stuck copy or
-// Photos import) can't freeze the whole run — that file is counted as failed
+// Safety net so a single native call that never resolves (a stuck copy) can't
+// freeze the whole run — that file is counted as failed
 // and the loop moves on.
 const SAVE_TIMEOUT_MS = 30_000;
 
-// Saving to Photos is a PHPhotoLibrary write, and those can wedge for the whole
-// device (see promptDeleteOriginalDevicePhotos.ts). When that happens every
-// remaining file in the run burns the full SAVE_TIMEOUT_MS in turn — the Aug 5
-// log caught a 122-photo card starting down that path, which is an hour of
-// grinding to save nothing and one error line per file. A single failure is an
-// ordinary bad file and the loop should carry on past it; a run of them is a
-// condition of the device, and nothing on the card will save until it changes.
-// Counted for failures of *any* kind, not just timeouts: on Aug 6 the phone ran
-// out of disk space, every copy failed instantly rather than timing out, and a
-// timeouts-only counter reset on each one — so the loop ran all 157 files in a
-// second and a half and the poll did it again ten seconds later, 1,084 error
-// lines in 74 seconds.
+// A single failure is an ordinary bad file and the loop should carry on past
+// it; a run of them is a condition of the device (e.g. a full disk), and
+// nothing on the card will copy until it changes. Counted for failures of
+// *any* kind, not just timeouts: a full disk fails every copy instantly.
 const MAX_CONSECUTIVE_SAVE_FAILURES = 3;
 
 // How often to re-check free space while waiting for room for the next file.
@@ -66,7 +57,7 @@ const waitForSpaceInterval = ( ) => new Promise( resolve => {
 
 // Abandoned files stay unimported, so pressing Import again right away would
 // pick the same card up and grind through the same failures again.
-// Neither a wedged Photos library nor a full disk recovers on that timescale,
+// A full disk doesn't recover on that timescale,
 // so wait before trying the card again.
 const SAVE_FAILING_RETRY_DELAY_MS = 10 * 60 * 1000;
 
@@ -106,7 +97,7 @@ const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => {
   return Promise.race( [promise, deadline] ).finally( ( ) => clearInterval( timer ) );
 };
 
-// Delete from the card the files already saved into Photos, and stop tracking
+// Delete from the card the files already copied off it, and stop tracking
 // them once the card has answered. Separate from the run that saved them so it
 // can also finish what an earlier run left behind: deletion happens once, after
 // a whole batch is safely saved, but each file is marked imported the moment it
@@ -166,9 +157,7 @@ const useUsbImport = ( ) => {
   // the same diagnostics. Only emit one when its text changes from the last.
   // Remembered per kind of message, not as one last-seen string: a scan emits
   // "polling…" and then "list ok…", so two unchanging diagnostics alternate and
-  // a single slot never matches either of them. Nine of the 92 lines in the
-  // Aug 5 16:04–16:40 log were byte-identical repeats this already meant to
-  // suppress.
+  // a single slot never matches either of them.
   const lastDiag = useRef<Record<string, string>>( {} );
   const logDiag = useCallback( ( msg: string, level: "info" | "debug" = "info" ) => {
     const kind = msg.split( ":" )[0];
@@ -186,7 +175,7 @@ const useUsbImport = ( ) => {
     if ( offloading.current ) return false;
     if ( !onboardingShown ) { logDiag( "skip: onboarding not shown yet" ); return false; }
     if ( Date.now( ) < savesFailingUntil.current ) {
-      logDiag( "skip: waiting out a run of failed saves to the Photos library" );
+      logDiag( "skip: waiting out a run of failed copies" );
       return false;
     }
     offloading.current = true;
@@ -223,12 +212,6 @@ const useUsbImport = ( ) => {
       } );
     }
     try {
-      const reconciled = await reconcileSavedUsbImages( );
-      if ( reconciled > 0 ) {
-        logger.info(
-          `USB offload: recorded ${reconciled} save(s) an earlier run never heard back from`,
-        );
-      }
       const result = await listNewUsbImages( );
       logDiag( result.available
         ? `list ok: ${result.images.length} new; imageFiles=${result.imageFileCount}, `
@@ -277,13 +260,11 @@ const useUsbImport = ( ) => {
       // the grace period to a task that is already registered when the app
       // leaves the foreground; a
       // beginBackgroundTask that only starts once "inactive" has fired is
-      // racing the suspension it exists to survive, and loses often enough to
-      // matter — the Sep 5 run saved 9 of 141 and stopped 6.7 seconds in with
-      // appState "inactive", a fraction of the window it should have had.
+      // racing the suspension it exists to survive, and often loses.
       // Reference-counted, so this nests harmlessly inside other holds.
       heldBackgroundTask = await beginBackgroundUsbImportTask( );
 
-      // Save each image to Photos, one at a time so memory stays flat and the
+      // Copy each image to staging, one at a time so memory stays flat and the
       // progress count is accurate. Track successes for the batch delete.
       const savedPaths: string[] = [];
       let failed = 0;
@@ -421,14 +402,10 @@ const useUsbImport = ( ) => {
           }
           if ( loggedFailures < MAX_LOGGED_SAVE_FAILURES ) {
             loggedFailures += 1;
-            // Size and elapsed time: eight saves have timed out at exactly
-            // SAVE_TIMEOUT_MS over ~1,300 files, and nothing said whether 30s
-            // is simply short for a 40MB raw over USB or whether the write
-            // never started. Drive state separates a bad file from a card that
-            // was pulled mid-run — the Aug 13 run saved 15, deleted none, and
-            // logged one file that had stopped existing. AppState separates the
-            // third case: a deadline that came due while iOS had the process
-            // frozen, which is not the file's fault at all.
+            // Size and elapsed time say whether a timeout is just a slow raw
+            // over USB; drive state separates a bad file from a card pulled
+            // mid-run; AppState flags a deadline that came due while iOS had
+            // the process frozen.
             // eslint-disable-next-line no-await-in-loop
             const drive = await getUsbFolderDiagnostics( ).catch( ( ) => null );
             logger.errorWithExtra( `USB offload: failed to save ${relativePath}`, {
@@ -451,20 +428,16 @@ const useUsbImport = ( ) => {
 
       if ( abandonReason ) {
         // A card pulled mid-run fails every remaining copy instantly, which
-        // trips the consecutive-failure counter like a wedged library does —
-        // but it is not a condition of the device, and it is over the moment
-        // the card goes back in. Charging it the ten-minute cooldown below left
-        // the Sep 18 log skipping scans "waiting out a run of failed saves to
-        // the Photos library" when the library had never been asked: the drive
-        // had gone, 148 files unimported, and a card replugged a minute later
-        // would have sat there unread for nine more. Read the drive here rather
-        // than trusting the per-file diagnostics, which are only fetched for
-        // the first MAX_LOGGED_SAVE_FAILURES failures of a run.
+        // trips the consecutive-failure counter like a full disk does — but
+        // it is not a condition of the device, and it is over the moment the
+        // card goes back in, so it skips the cooldown below. Read the drive
+        // here rather than trusting the per-file diagnostics, which are only
+        // fetched for the first MAX_LOGGED_SAVE_FAILURES failures of a run.
         const driveAtAbandon = await getUsbFolderDiagnostics( ).catch( ( ) => null );
         // Explicitly false, not merely absent: a diagnostics call that failed
         // or came back without an answer says nothing about the drive, and
-        // waiving the cooldown on a wedged library is the one mistake here that
-        // costs an hour of grinding.
+        // waiving the cooldown on a device-wide failure is the one mistake here
+        // that costs an hour of grinding.
         const driveGone = abandonReason === "failures"
           && driveAtAbandon?.reachable === false;
         if ( !driveGone ) {
@@ -472,8 +445,8 @@ const useUsbImport = ( ) => {
         }
         // Distinct markers rather than one with a reason field: these are
         // different bugs with different fixes, and the grouped summary is only
-        // useful if it can tell "the library is wedged again" from "the phone
-        // is full" without opening the entries.
+        // useful if it can tell "copies keep timing out" from "the phone is
+        // full" without opening the entries.
         const marker = driveGone
           ? "usb_offload_drive_gone"
           : {
@@ -506,8 +479,8 @@ const useUsbImport = ( ) => {
         } );
       }
 
-      // Delete from the source device only after the whole batch is safely in
-      // Photos (per the user's choice), and only files that actually saved —
+      // Delete from the source device only after the whole batch is safely
+      // copied (per the user's choice), and only files that actually copied —
       // this run's, plus anything an earlier run saved and never deleted.
       let deletedFromDevice = 0;
       let deleteFailures = 0;

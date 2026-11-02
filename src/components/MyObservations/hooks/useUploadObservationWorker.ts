@@ -41,11 +41,8 @@ const logger = log.extend( "useUploadObservationWorker" );
 // it reads activeUploads, and both resetUploadObservationsSlice and
 // stopAllUploads empty that map wholesale while the promises it was tracking
 // are still running. Nothing then remembers those uploads exist, so the next
-// session starts them again on top of themselves: in the Aug 5 16:04–16:40 log
-// four of nine observations were uploading two or three times concurrently,
-// one of them for seven minutes, and the duplicate attempt on 4aeb0f76 is
-// where "Media attachment failed: Accessing object which has been invalidated
-// or deleted" came from — two attempts mutating one observation's photos.
+// session starts them again on top of themselves — two attempts mutating one
+// observation's photos ("Accessing object which has been invalidated").
 //
 // A module-level map survives those resets, which is the whole point. Entries
 // older than the upload timeout are treated as gone rather than blocking the

@@ -207,10 +207,9 @@ const raceWithTimeout = (
 const loggedFailures = new Set<string>( );
 
 // That still leaves a whole import of photos the decoder cannot read, each one
-// a distinct key and so a distinct warning — 1,137 of the 3,000 entries in the
-// Aug 6-19 app log, every one a .CR3, and every one a network POST. The first
-// few of a kind carry the detail; after that a rolling total is all the extra
-// POSTs can add.
+// a distinct key and so a distinct warning, and every one a network POST. The
+// first few of a kind carry the detail; after that a rolling total is all the
+// extra POSTs can add.
 const MAX_DETAILED_FAILURES_PER_TYPE = 3;
 const FAILURE_SUMMARY_EVERY = 100;
 const failuresByType = new Map<string, number>( );

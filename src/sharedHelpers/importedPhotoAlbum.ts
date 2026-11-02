@@ -36,7 +36,7 @@ const { ImageCropper } = NativeModules as {
 // queuedDeletionAlbum.ts keeps it in step with the unfavorited photos
 // as observations are created, faved and edited, and a deleted asset
 // leaves every album it is in, so the album holds only what is left behind.
-export const IMPORTED_ALBUM_TITLE = "Imported to iNaturalist";
+const IMPORTED_ALBUM_TITLE = "Imported to iNaturalist";
 
 // Files photos into the album. Never throws: this runs alongside a deletion
 // and must not be able to stop one, and a photo that isn't filed is a smaller

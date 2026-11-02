@@ -109,9 +109,7 @@ const cropImageFile = async (
     return adjustedUri;
   } catch ( error ) {
     // The crop the user framed is lost to a "Something went wrong" alert, so
-    // this line is the only record of which photo it was. Without the geometry
-    // and the source, eleven of these in the Sep 18-19 log said nothing beyond
-    // the fact that it happened.
+    // this line is the only record of which photo it was.
     logger.errorWithExtra( "crop_failed", {
       source: imageUri,
       imageWidth,

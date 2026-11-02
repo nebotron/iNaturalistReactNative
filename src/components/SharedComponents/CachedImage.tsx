@@ -19,7 +19,7 @@ import { NativeModules, StyleSheet } from "react-native";
 // on nearly every render, and misses outright when offline.
 // "discNoCacheControl" skips HTTP semantics entirely and keeps the bytes in
 // Nuke's DataCache until iOS reclaims them.
-export const IMMUTABLE_CACHE_POLICY = "discNoCacheControl";
+const IMMUTABLE_CACHE_POLICY = "discNoCacheControl";
 
 export type CachedImageResizeMode = "cover" | "contain" | "center" | "fill";
 

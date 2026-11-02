@@ -1,13 +1,12 @@
 import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
-import { recordAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
 import { getTunable } from "sharedHelpers/tunableParams";
 import useUsbImportProgress from "stores/usbImportProgress";
 
 // JS side of the UsbStorage native module (iOS): the user grants access to a
 // folder once (e.g. a USB drive mounted in Files), then the offload flow lists
-// not-yet-imported images (listNewUsbImages), saves each into the Photos
-// library (saveUsbImageToPhotos), and once the whole batch is saved, deletes
+// not-yet-imported images (listNewUsbImages), copies each into the import
+// staging folder (copyUsbImageToFile), and once the whole batch is copied, deletes
 // them from the source (deleteUsbSourceImages). Which files have been imported
 // is tracked here by their relative path on the drive, so a failed delete
 // doesn't cause a re-import.
@@ -73,28 +72,17 @@ export const isCameraSubfolder = (
   folder: { parentName?: string } | null | undefined,
 ): boolean => folder?.parentName?.toUpperCase( ) === "DCIM";
 
-export type PhotosPermissionStatus =
-  | "authorized"
-  | "limited"
-  | "denied"
-  | "restricted"
-  | "notDetermined";
-
 interface UsbStorageModule {
   pickFolder: ( ) => Promise<string | null>;
   getFolderName: ( ) => Promise<string | null>;
   getFolderDiagnostics: ( ) => Promise<UsbFolderDiagnostics>;
   forgetFolder: ( ) => Promise<void>;
-  requestPhotosPermission: ( ) => Promise<PhotosPermissionStatus>;
   listNewImages: (
     knownNames: string[],
     maxCount: number
   ) => Promise<UsbListResult>;
-  saveImageToPhotos: ( relativePath: string ) => Promise<{ saved: boolean }>;
   copyImageToFile: ( relativePath: string, destPath: string ) => Promise<{ copied: boolean }>;
   deleteSourceImages: ( relativePaths: string[] ) => Promise<UsbDeleteResult>;
-  getSavedImages: ( ) => Promise<Record<string, string>>;
-  clearSavedImages: ( relativePaths: string[] ) => Promise<void>;
 }
 
 const usbStorage = Platform.OS === "ios"
@@ -107,7 +95,7 @@ const usbStorage = Platform.OS === "ios"
 const MAX_PHOTOS_PER_SCAN = getTunable( "usbMaxPhotosPerScan" );
 const IMPORTED_NAMES_KEY = "importedNames";
 
-// Files saved into Photos that have not yet been deleted from the card.
+// Files copied off the card that have not yet been deleted from it.
 //
 // Deletion happens once per run, after the whole batch is safely saved, but
 // each file is marked imported the moment it saves — so a run that doesn't
@@ -149,10 +137,6 @@ export const forgetUsbFolder = async ( ) => {
   store.delete( PENDING_DELETE_KEY );
 };
 
-export const requestUsbPhotosPermission = ( ): Promise<PhotosPermissionStatus> => (
-  usbStorage?.requestPhotosPermission( ) ?? Promise.resolve( "denied" )
-);
-
 export const listNewUsbImages = async ( ): Promise<UsbListResult> => {
   if ( !usbStorage ) {
     return { available: false, reason: "no-folder-saved", images: [] };
@@ -161,16 +145,6 @@ export const listNewUsbImages = async ( ): Promise<UsbListResult> => {
   const result = await usbStorage.listNewImages( knownNames, MAX_PHOTOS_PER_SCAN );
   return { ...result, knownCount: knownNames.length };
 };
-
-// Resolves with the identifier of the asset created in the Photos library, so
-// the caller can record it as ours (appCreatedPhotoAssets.ts) — an asset the
-// app created is the one thing PhotoKit will delete without a confirmation.
-export const saveUsbImageToPhotos = ( relativePath: string ): Promise<{
-  saved: boolean;
-  localIdentifier?: string;
-}> => (
-  usbStorage?.saveImageToPhotos( relativePath ) ?? Promise.resolve( { saved: false } )
-);
 
 export const copyUsbImageToFile = ( relativePath: string, destPath: string ) => (
   usbStorage?.copyImageToFile( relativePath, destPath )
@@ -183,7 +157,7 @@ export const deleteUsbSourceImages = ( relativePaths: string[] ): Promise<UsbDel
 );
 
 // Track saved files as imported so a later delete failure (or an unplug before
-// deletion) doesn't cause them to be saved to Photos a second time.
+// deletion) doesn't cause them to be copied a second time.
 export const markUsbImagesImported = ( relativePaths: string[] ) => {
   if ( relativePaths.length === 0 ) return;
   store.set( IMPORTED_NAMES_KEY, JSON.stringify( [
@@ -245,35 +219,12 @@ export const clearPendingUsbDeletes = ( relativePaths: string[] ) => {
   ) );
 };
 
-// Fold in saves the native side recorded as committed to Photos but whose
-// result never reached the offload loop (a JS timeout on a write that then
-// landed, or a process killed between commit and resolve). Without this a
-// restarted import saves those files a second time. Cleared natively only after
-// they are persisted here, so a death in between just repeats this next time.
-export const reconcileSavedUsbImages = async ( ): Promise<number> => {
-  if ( !usbStorage ) return 0;
-  const saved = await usbStorage.getSavedImages( );
-  const paths = Object.keys( saved );
-  if ( paths.length === 0 ) return 0;
-  const known = new Set( getImportedNames( ) );
-  const unrecorded = paths.filter( path => !known.has( path ) );
-  markUsbImagesImported( unrecorded );
-  addPendingUsbDeletes( unrecorded );
-  recordAppCreatedPhotoAssets( unrecorded.map( path => saved[path] ) );
-  await usbStorage.clearSavedImages( paths );
-  return unrecorded.length;
-};
-
 // A breadcrumb that outlives the process, so an offload the app never came
 // back from can be reported on the next launch.
 //
-// The Aug 5 19:08–20:22 log has two offloads of the same 80 files, each
-// followed within a minute by a cold `pickup` and neither followed by an
-// outcome line, and the session before it had two more that "ended with the
-// app being killed before the outcome line". Every line in the log is a
-// network POST, so a run that dies takes its last lines with it and nothing
-// says how far it got. These are MMKV writes, not log lines: no POST, and
-// they survive the death that is the thing being measured.
+// Every line in the log is a network POST, so a run that dies takes its last
+// lines with it and nothing says how far it got. These are MMKV writes, not log
+// lines: no POST, and they survive the death that is the thing being measured.
 const OFFLOAD_IN_PROGRESS_KEY = "offloadInProgress";
 
 export interface UsbOffloadMarker {
@@ -284,8 +235,7 @@ export interface UsbOffloadMarker {
   // What the run was doing when it last touched the marker, and when. A run
   // that never finished is either stuck in a native call or was suspended by
   // iOS mid-loop, and startedAt alone can't tell those apart: both look like a
-  // marker left behind hours ago. The Aug 12 run reported 4h9m of "msRunning"
-  // with one file failed and nothing else said.
+  // marker left behind hours ago.
   phase?: string;
   lastProgressAt?: number;
   // AppState at the last update. A wedged native call leaves the app active;

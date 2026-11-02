@@ -16,8 +16,8 @@ import useDeviceOrientation from "sharedHooks/useDeviceOrientation";
 import type { SharedZoomableImageRef } from "./SharedZoomableImage";
 import SharedZoomableImage from "./SharedZoomableImage";
 
-export const IMAGE_ZOOM_MIN_SCALE = 0.5;
-export const IMAGE_ZOOM_MAX_SCALE = 100;
+const IMAGE_ZOOM_MIN_SCALE = 0.5;
+const IMAGE_ZOOM_MAX_SCALE = 100;
 
 // Fraction of the smaller viewport dimension the detected subject is framed to
 // fill. Shared with MediaViewer's crop read-back so a freshly framed subject

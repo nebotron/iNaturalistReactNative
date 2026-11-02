@@ -6,7 +6,6 @@ import i18next from "i18next";
 import {
   Alert, AppState, NativeModules, Platform,
 } from "react-native";
-import { forgetAppCreatedPhotoAssets } from "sharedHelpers/appCreatedPhotoAssets";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
 import addPhotosToImportedAlbum from "sharedHelpers/importedPhotoAlbum";
 import { log } from "sharedHelpers/logger";
@@ -223,8 +222,7 @@ const STILL_PENDING = { stillPending: true } as const;
 // Two of those outcomes say nothing about the library:
 //
 //   DELETE_NO_CALLBACK — the native watchdog gave up at 150s, which for an
-//     alert-gated transaction means the alert went untapped. The Sep 21 log has
-//     these with the app foreground-active and appStateChanges=0 throughout.
+//     alert-gated transaction means the alert went untapped.
 //   PHPhotosErrorDomain 3072 (PHPhotosErrorUserCancelled) — the user declined,
 //     which is an answer about this deletion and not about the library.
 //
@@ -291,9 +289,8 @@ const performDeleteOriginalDevicePhotos = async (
   // The album is for the photos the user has to delete by hand, and it used to
   // be filled from what survived the deletion. But a deletion PhotoKit never
   // answers leaves the write gate shut, so the filing behind it was refused
-  // too, and on relaunch the next cleanup hung first again: the Oct 2 log has
-  // every cleanup hanging on its first transaction, across device restarts,
-  // and the album never filled. Filing first always gets through. Photos that
+  // too, and on relaunch the next cleanup hung first again, so the album never
+  // filled. Filing first always gets through. Photos that
   // then delete cleanly leave the album with them, so it ends up holding only
   // what is still in the library.
   await addPhotosToImportedAlbum( uniqueUris );
@@ -334,11 +331,8 @@ const performDeleteOriginalDevicePhotos = async (
   // confirmation couldn't present (modal in vcChain, no scene…). Logged only
   // when something goes wrong — on the happy path it was pure volume.
   let deletionContext = "not captured";
-  // The transaction currently waiting on PhotoKit. The hang diagnostics used to
-  // describe `uniqueUris` — the whole cleanup — which is why five weeks of
-  // hangs never named the photos in the transaction that hung: the Sep 21 log
-  // reports a one-asset transaction outstanding for 21s and then dumps the
-  // first eight of 326 photos, none of which need be the one. Chunks are sent
+  // The transaction currently waiting on PhotoKit, so hang diagnostics name its
+  // photos rather than the whole cleanup's. Chunks are sent
   // one at a time and the loop stops at the first that doesn't answer, so
   // whatever is here when the hang timer fires is exactly what PhotoKit has.
   let inFlight: { chunk: string[]; index: number } | undefined;
@@ -412,10 +406,6 @@ const performDeleteOriginalDevicePhotos = async (
   // catch, which sees a chunk that failed after earlier ones landed, have to
   // read it.
   const progress = { deleted: 0, undeletable: 0, done: 0 };
-  // Deliberately not a field on `progress`, which gets logged: the ph:// URIs
-  // identify the user's photos, say nothing a count doesn't, and made single
-  // log lines kilobytes long.
-  const cleared: string[] = [];
   try {
     if ( Platform.OS === "ios" && ImageCropper?.photoDeletionContext ) {
       try {
@@ -496,11 +486,7 @@ const performDeleteOriginalDevicePhotos = async (
           // An alert the user never answered, or declined, says nothing about
           // the library — so it doesn't move the cap. Neither does a transaction the
           // write gate refused to open: nothing was sent, so there is nothing
-          // to have gone wrong with. The Sep 21 log has that costing a device
-          // everything it knew in 33ms — a cleanup of 23 photos refused at a
-          // wedged library came back a moment later with the cap at 11 and all
-          // 22 of its photos under suspicion, none of which had been asked
-          // for. Anything else is a refusal the library actually made.
+          // to have gone wrong with. Anything else is a refusal the library actually made.
           if ( !isUnconfirmedByUser( chunkError ) && !isLibraryBusy( chunkError ) ) {
             recordUnansweredSize( chunk.length );
           }
@@ -523,9 +509,6 @@ const performDeleteOriginalDevicePhotos = async (
         progress.deleted += chunkDeleted;
         progress.undeletable += chunkUndeletable;
         progress.done = index + 1;
-        // A transaction deletes all of its assets or none of them, so anything
-        // above zero means these are gone and no longer worth tracking as ours.
-        if ( chunkDeleted > 0 ) cleared.push( ...chunk );
         // Photos the app is not allowed to delete are left out of the
         // transaction (it's all or nothing, and PhotoKit answers a request it
         // can't carry out with silence). They're why a cleanup can't empty,
@@ -581,9 +564,7 @@ const performDeleteOriginalDevicePhotos = async (
           ms: Date.now( ) - startedAt,
           error: String( lateError ),
         } ),
-      // Chunks that did land are gone whatever the abandoned one does, so stop
-      // tracking them as ours either way.
-      ).finally( ( ) => forgetAppCreatedPhotoAssets( cleared ) );
+      );
       return {
         deleted: progress.deleted,
         requested,
@@ -595,7 +576,6 @@ const performDeleteOriginalDevicePhotos = async (
       `Deleted ${progress.deleted} of ${requested} `
       + `device photo(s); result=${JSON.stringify( result )}`,
     );
-    if ( cleared.length > 0 ) forgetAppCreatedPhotoAssets( cleared );
     return {
       deleted: progress.deleted,
       requested,
@@ -603,14 +583,10 @@ const performDeleteOriginalDevicePhotos = async (
       undeletable: progress.undeletable,
     };
   } catch ( deleteError ) {
-    // Chunks that landed before this one failed are gone, so they stop being
-    // ours to track and they count towards what the caller reports.
-    if ( cleared.length > 0 ) forgetAppCreatedPhotoAssets( cleared );
     if ( isLibraryBusy( deleteError ) ) {
       // Comes back in milliseconds, so the user isn't left waiting — and the
       // 150s this would otherwise have spent stacked on a wedged
-      // photolibraryd is exactly what made the Aug 9 log's second and third
-      // attempts as useless as the first.
+      // photolibraryd would make retries as useless as the first attempt.
       logger.warnWithExtra( "photo_delete_library_busy", {
         requested,
         chunk: progress.done,

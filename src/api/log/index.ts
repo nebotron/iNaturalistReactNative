@@ -78,7 +78,7 @@ const COORD_PAIR_RE = /-?\d{1,3}\.\d{3,}\s*(?:,|%2C)\s*-?\d{1,3}\.\d{3,}/gi;
 const SENSITIVE_KEY_RE = new RegExp( `^(?:${SECRET_KEYS}|${LOCATION_KEYS}|location|coords)$`, "i" );
 const REDACTED = "[REDACTED]";
 
-export function redact( text: string ): string {
+function redact( text: string ): string {
   return text
     .replace( JWT_RE, REDACTED )
     .replace( SECRET_VALUE_RE, `$1${REDACTED}` )
@@ -130,7 +130,7 @@ const pushId = ( ) => {
   return id;
 };
 
-export const flushLogs = async ( ) => {
+const flushLogs = async ( ) => {
   clearTimeout( flushTimer );
   flushTimer = undefined;
   if ( queued === 0 ) return;

@@ -1,5 +1,4 @@
 import { MMKV } from "react-native-mmkv";
-import { basePhotoAssetId } from "sharedHelpers/appCreatedPhotoAssets";
 
 // PhotoKit can take a deleteAssets transaction and never answer it: no
 // confirmation, no completion handler, no library change, and the transaction
@@ -12,6 +11,19 @@ import { basePhotoAssetId } from "sharedHelpers/appCreatedPhotoAssets";
 
 const store = new MMKV( { id: "unanswered-delete-assets" } );
 
+// fetchAssetsWithLocalIdentifiers matches with or without the "/L0/001"
+// suffix, but a returned localIdentifier always carries one. Compare on the
+// UUID ahead of the first slash, as ImageCropper.m does.
+export const basePhotoAssetId = ( uri: string ): string => {
+  const identifier = uri.startsWith( "ph://" )
+    ? uri.slice( 5 )
+    : uri;
+  const slash = identifier.indexOf( "/" );
+  return slash === -1
+    ? identifier
+    : identifier.slice( 0, slash );
+};
+
 // The assets of the transaction currently open, and the largest transaction the
 // same cleanup had already had answered. Written before performChanges is asked
 // for and cleared when it answers, so a record still here on the next launch is
@@ -23,7 +35,7 @@ const IN_FLIGHT_KEY = "inFlight";
 const CAP_KEY = "maxTransactionSize";
 
 // The biggest transaction a cleanup will ask for, and where the cap starts.
-export const MAX_TRANSACTION_SIZE = 200;
+const MAX_TRANSACTION_SIZE = 200;
 
 // The smallest it may shrink to.
 //
@@ -32,14 +44,12 @@ export const MAX_TRANSACTION_SIZE = 200;
 // permission. That is what made the cap a trap: the cap halved on every
 // transaction "the library never answered", but an unanswered transaction is
 // an alert nobody tapped, and the smaller the cap got the more alerts a cleanup
-// needed, so fewer were answered and the cap halved again. It went
-// 200 → 156 → 78 → 39 → 25 → 1 over two days, and at one photo per alert the
-// Sep 21 log has the user approving fifty in a row and then declining — which
-// the app recorded as further proof that the library was broken.
+// needed, so fewer were answered and the cap halved again, down to one photo
+// per alert.
 //
 // Below this a cleanup asks more times than anyone will answer, so shrinking
 // past it can only manufacture the evidence that shrank it.
-export const MIN_TRANSACTION_SIZE = 100;
+const MIN_TRANSACTION_SIZE = 100;
 
 // How many assets this device will currently take in one transaction.
 //
