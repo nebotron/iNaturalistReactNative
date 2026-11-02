@@ -133,7 +133,7 @@ const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
   return new Map( taxonIds.flatMap( id => {
     const taxon = local.get( id );
     return taxon?.name
-      ? [[id, { url: taxon.default_photo?.url, commonName: taxon.preferredCommonName }]]
+      ? [[id, { url: taxon.default_photo?.url, commonName: taxon.preferred_common_name }]]
       : [];
   } ) );
 };

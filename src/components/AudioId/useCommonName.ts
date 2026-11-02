@@ -10,7 +10,7 @@ interface Species { taxonId: number; commonName: string }
 const useCommonName = ( sp?: Species ) => {
   const realm = useRealm( );
   return sp && ( realm.objectForPrimaryKey<RealmTaxon>( "Taxon", sp.taxonId )
-    ?.preferredCommonName || sp.commonName );
+    ?.preferred_common_name || sp.commonName );
 };
 
 export default useCommonName;
