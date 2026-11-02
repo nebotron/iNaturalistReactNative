@@ -57,6 +57,36 @@ const compare = ( a: Entry, b: Entry ): number | null => {
     : null;
 };
 
+// A crop context makes the zoom engine keep the transform on release
+// instead of snapping back.
+const PairPhoto = ( { entry, size, onOpen }: {
+  entry: Entry; size: number; onOpen: ( uuid: string ) => void;
+} ) => {
+  const [dims, setDims] = useState<{ width: number; height: number }>( );
+  return (
+    <SharedZoomableImage
+      uri={Photo.displayLocalOrRemoteOriginalPhoto( entry.photo )}
+      fullResolution
+      style={{ width: size, height: size }}
+      minScale={1}
+      maxScale={20}
+      isPinchEnabled
+      isSingleFingerPanEnabled={false}
+      isDoubleTapEnabled={false}
+      isSingleTapEnabled
+      onSingleTap={( ) => onOpen( entry.uuid )}
+      onImageDimensionsChange={setDims}
+      cropPanContext={dims && {
+        imageWidth: dims.width,
+        imageHeight: dims.height,
+        viewportWidth: size,
+        viewportHeight: size,
+        cropSize: size,
+      }}
+    />
+  );
+};
+
 // Swipe horizontally between the pair's photos; two fingers pinch/pan;
 // one finger scrolls the list; tap opens the observation.
 const PairItem = ( { pair, onOpen }: { pair: Pair; onOpen: ( uuid: string ) => void } ) => {
@@ -71,18 +101,7 @@ const PairItem = ( { pair, onOpen }: { pair: Pair; onOpen: ( uuid: string ) => v
         data={[pair.a, pair.b]}
         keyExtractor={( _entry, index ) => `${index}`}
         renderItem={( { item: entry } ) => (
-          <SharedZoomableImage
-            uri={Photo.displayLocalOrRemoteOriginalPhoto( entry.photo )}
-            fullResolution
-            style={{ width, height: width }}
-            minScale={1}
-            maxScale={20}
-            isPinchEnabled
-            isSingleFingerPanEnabled={false}
-            isDoubleTapEnabled={false}
-            isSingleTapEnabled
-            onSingleTap={( ) => onOpen( entry.uuid )}
-          />
+          <PairPhoto entry={entry} size={width} onOpen={onOpen} />
         )}
       />
     </View>
