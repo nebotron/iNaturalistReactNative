@@ -16,8 +16,10 @@ import { navigationRef } from "navigation/navigationUtils";
 import { RealmContext } from "providers/contexts";
 import { useEffect } from "react";
 import { AppState } from "react-native";
+import type { RealmObservation } from "realmModels/types";
 import User from "realmModels/User";
 import { maintainAnimalCropLog } from "sharedHelpers/animalCropLog";
+import backfillCameraInfo from "sharedHelpers/backfillCameraInfo";
 import { maintainBrightnessLog } from "sharedHelpers/brightnessLog";
 import {
   clearComputerVisionPhotos,
@@ -152,6 +154,14 @@ const useDeferredStartup = ( ) => {
       zustandMMKVBackingStorage.trim( );
     } );
     const id14 = deferTask( "logThumbnailDiagnostics", logThumbnailDiagnostics );
+    // Camera settings of every observation photo still without them, newest
+    // first, a few at a time: originals in iCloud are downloaded to be read,
+    // which is what made the media viewer slow to show them.
+    const idCameraInfo = deferTask( "backfillCameraInfo", ( ) => backfillCameraInfo(
+      realm,
+      realm.objects<RealmObservation>( "Observation" ).sorted( "_created_at", true ),
+      3,
+    ) );
     const idBirdCodes = deferTask( "loadBirdCodes", async ( ) => loadBirdCodes( realm ), 30000 );
 
     const id9 = deferTask( "cleanupLogFiles", cleanupLogFiles );
@@ -188,6 +198,7 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( id12 );
       cancelIdleCallback( id13 );
       cancelIdleCallback( id14 );
+      cancelIdleCallback( idCameraInfo );
       cancelIdleCallback( id15 );
       cancelIdleCallback( id16 );
       cancelIdleCallback( id17 );
