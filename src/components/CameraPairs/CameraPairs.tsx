@@ -141,8 +141,12 @@ const CameraPairs = ( ) => {
               const flip = Math.random( ) < 0.5;
               pairs.push( {
                 key: `${a.taxonId}-${i}-${j}`,
-                a: flip ? b : a,
-                b: flip ? a : b,
+                a: flip
+                  ? b
+                  : a,
+                b: flip
+                  ? a
+                  : b,
                 score,
               } );
             }
