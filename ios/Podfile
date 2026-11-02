@@ -90,11 +90,6 @@ target "iNaturalistReactNative" do
     installer.pods_project.targets.each do | target |
       target.build_configurations.each do | build_config |
         build_config.build_settings["APPLICATION_EXTENSION_API_ONLY"] = "NO"
-        # Prebuilt React Native's headers aren't a module, and pods built as
-        # framework modules (e.g. VisionCamera) include them
-        if ENV["RCT_USE_PREBUILT_RNCORE"] == "1"
-          build_config.build_settings["CLANG_ALLOW_NON_MODULAR_INCLUDES_IN_FRAMEWORK_MODULES"] = "YES"
-        end
       end
     end
 

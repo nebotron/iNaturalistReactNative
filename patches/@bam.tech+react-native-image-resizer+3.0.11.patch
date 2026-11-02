@@ -1,8 +1,7 @@
 diff --git a/node_modules/@bam.tech/react-native-image-resizer/ios/ImageResizer.mm b/node_modules/@bam.tech/react-native-image-resizer/ios/ImageResizer.mm
-index ac23dd8..68420d6 100644
 --- a/node_modules/@bam.tech/react-native-image-resizer/ios/ImageResizer.mm
 +++ b/node_modules/@bam.tech/react-native-image-resizer/ios/ImageResizer.mm
-@@ -57,8 +57,14 @@ RCT_REMAP_METHOD(createResizedImage, uri:(NSString *)uri width:(double)width hei
+@@ -57,8 +57,14 @@
                      reject([NSString stringWithFormat: @"%ld", (long)error.code], error.description, nil);
                      return;
                  }
@@ -19,31 +18,3 @@ index ac23dd8..68420d6 100644
              }];
          } @catch (NSException *exception) {
              RCTLogError(@"%@", [NSString stringWithFormat:@"Code : %@ / Message : %@", exception.name, exception.reason]);
-diff --git a/node_modules/@bam.tech/react-native-image-resizer/react-native-image-resizer.podspec b/node_modules/@bam.tech/react-native-image-resizer/react-native-image-resizer.podspec
-index 1848ae8..b86b700 100644
---- a/node_modules/@bam.tech/react-native-image-resizer/react-native-image-resizer.podspec
-+++ b/node_modules/@bam.tech/react-native-image-resizer/react-native-image-resizer.podspec
-@@ -18,22 +18,6 @@ Pod::Spec.new do |s|
- 
-   s.ios.framework = 'AssetsLibrary', 'MobileCoreServices'
- 
--  # Don't install the dependencies when we run `pod install` in the old architecture.
--  if ENV['RCT_NEW_ARCH_ENABLED'] == '1' then
--    s.compiler_flags = folly_compiler_flags + " -DRCT_NEW_ARCH_ENABLED=1"
--    s.pod_target_xcconfig    = {
--        "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/boost\"",
--        "OTHER_CPLUSPLUSFLAGS" => "-DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
--        "CLANG_CXX_LANGUAGE_STANDARD" => "c++17"
--    }
--    s.dependency "React-Codegen"
--    s.dependency "RCT-Folly"
--    s.dependency "RCTRequired"
--    s.dependency "RCTTypeSafety"
--    s.dependency "ReactCommon/turbomodule/core"
--    install_modules_dependencies(s)
--  else
--    s.dependency "React-Core"
--  end
-+  install_modules_dependencies(s)
- end
- 
