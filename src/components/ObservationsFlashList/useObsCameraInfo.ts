@@ -1,9 +1,10 @@
 import { RealmContext } from "providers/contexts";
 import { useEffect, useMemo, useState } from "react";
 import type { RealmObservation } from "realmModels/types";
-import findLibraryOriginal from "sharedHelpers/findLibraryOriginal";
+import {
+  libraryOriginalQuery, readLibraryCameraInfo,
+} from "sharedHelpers/findLibraryOriginal";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
-import { readCameraInfo } from "sharedHelpers/photoCameraInfo";
 
 const { useRealm } = RealmContext;
 
@@ -13,8 +14,8 @@ const { useRealm } = RealmContext;
 // the original in the photo library, or the library photo matched to it.
 const useObsCameraInfo = ( uuid?: string, enabled = false ): PhotoCameraInfo | null => {
   const realm = useRealm( );
-  const { stored, deviceUri, findOriginal } = useMemo( ( ) => {
-    if ( !enabled || !uuid ) return { stored: null, deviceUri: null, findOriginal: null };
+  const { stored, library } = useMemo( ( ) => {
+    if ( !enabled || !uuid ) return { stored: null, library: null };
     const observation = realm.objectForPrimaryKey<RealmObservation>( "Observation", uuid );
     const obsPhoto = observation?.observationPhotos?.[0];
     let info: PhotoCameraInfo | null = null;
@@ -27,24 +28,17 @@ const useObsCameraInfo = ( uuid?: string, enabled = false ): PhotoCameraInfo | n
     }
     return {
       stored: info,
-      deviceUri: obsPhoto?.originalDevicePhotoUri ?? null,
-      findOriginal: observation && obsPhoto && !obsPhoto.originalDevicePhotoUri
-        ? ( ) => findLibraryOriginal( obsPhoto, observation )
+      library: observation && obsPhoto
+        ? libraryOriginalQuery( obsPhoto, observation )
         : null,
     };
   }, [enabled, realm, uuid] );
   const [read, setRead] = useState<{ uuid?: string; info: PhotoCameraInfo | null } | null>( null );
 
   useEffect( ( ) => {
-    if ( stored || ( !deviceUri && !findOriginal ) ) return;
-    ( async ( ) => {
-      const original = deviceUri ?? await findOriginal?.( );
-      const info = original
-        ? await readCameraInfo( original )
-        : null;
-      setRead( { uuid, info } );
-    } )( );
-  }, [stored, deviceUri, findOriginal, uuid] );
+    if ( stored || !library ) return;
+    readLibraryCameraInfo( library ).then( info => setRead( { uuid, info } ) );
+  }, [stored, library, uuid] );
 
   return stored || ( read?.uuid === uuid
     ? read.info

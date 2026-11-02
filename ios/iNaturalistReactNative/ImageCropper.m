@@ -3472,8 +3472,8 @@ RCT_EXPORT_METHOD( deletePhotoAssets
 //
 // Finds the photo-library asset a photo was imported from when the app never
 // recorded its ph:// uri: the one asset taken at the given time (to the
-// second) at the given location (to the metre). Resolves nil unless exactly
-// one asset matches.
+// second) at the given location (to the metre). Resolves its uri only when
+// exactly one asset matches, with how many matched each, for the log.
 RCT_EXPORT_METHOD( findLibraryOriginal
                   : ( NSDictionary * )options resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
@@ -3510,9 +3510,13 @@ RCT_EXPORT_METHOD( findLibraryOriginal
         [matches addObject:asset];
       }
     }];
-    resolve( matches.count == 1
-      ? @{ @"uri": [@"ph://" stringByAppendingString:matches.firstObject.localIdentifier] }
-      : nil );
+    NSMutableDictionary *result = [@{
+      @"inSecond": @( assets.count ), @"atLocation": @( matches.count ),
+    } mutableCopy];
+    if ( matches.count == 1 ) {
+      result[@"uri"] = [@"ph://" stringByAppendingString:matches.firstObject.localIdentifier];
+    }
+    resolve( result );
   } );
 }
 

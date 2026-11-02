@@ -6,7 +6,9 @@ import { RealmContext } from "providers/contexts";
 import React, { useEffect, useMemo, useState } from "react";
 import { useWindowDimensions } from "react-native";
 import type { RealmObservation } from "realmModels/types";
-import findLibraryOriginal from "sharedHelpers/findLibraryOriginal";
+import {
+  libraryOriginalQuery, readLibraryCameraInfo,
+} from "sharedHelpers/findLibraryOriginal";
 import type { PhotoCameraInfo as Info } from "sharedHelpers/photoCameraInfo";
 import { readCameraInfo } from "sharedHelpers/photoCameraInfo";
 import { useTranslation } from "sharedHooks";
@@ -30,11 +32,11 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
   const [read, setRead] = useState<{ key: string; info: Info | null } | null>( null );
   const [showTable, setShowTable] = useState( false );
 
-  const { deviceUri, stored, findOriginal } = useMemo( ( ) => {
+  const { library, stored } = useMemo( ( ) => {
     const query = url
       ? ["ANY observationPhotos.photo.url == $0", url]
       : uri && ["ANY observationPhotos.photo.localFilePath ENDSWITH $0", uri.split( "/" ).pop( )];
-    if ( !query ) return { deviceUri: null, stored: null, findOriginal: null };
+    if ( !query ) return { library: null, stored: null };
     const observation = realm.objects<RealmObservation>( "Observation" )
       .filtered( query[0], query[1] )[0];
     const obsPhoto = observation?.observationPhotos?.find( op => ( url
@@ -49,15 +51,13 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
       storedInfo = null;
     }
     return {
-      deviceUri: obsPhoto?.originalDevicePhotoUri ?? null,
-      stored: storedInfo,
-      // The library photo matched to it, when the app never recorded which.
-      findOriginal: obsPhoto && !obsPhoto.originalDevicePhotoUri
-        ? ( ) => findLibraryOriginal( obsPhoto, observation )
+      library: obsPhoto
+        ? libraryOriginalQuery( obsPhoto, observation )
         : null,
+      stored: storedInfo,
     };
   }, [realm, uri, url] );
-  const key = `${uri}|${deviceUri}`;
+  const key = `${uri}|${library?.uuid}`;
   // Saved before the full tag list was, or without a focus distance the
   // library original may still have, so read the photos again where they can be.
   const complete = stored?.metadata && stored.focusDistance
@@ -65,18 +65,15 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
     : null;
 
   useEffect( ( ) => {
-    if ( complete || ( !uri && !deviceUri && !findOriginal ) ) return;
+    if ( complete || ( !uri && !library ) ) return;
     ( async ( ) => {
       // The library original fills in what the local copy lost, like a Canon
       // focus distance when the photo was imported from the library.
       const local = uri
         ? await readCameraInfo( uri )
         : null;
-      const originalUri = !local?.focusDistance
-        ? deviceUri ?? await findOriginal?.( )
-        : null;
-      const original = originalUri
-        ? await readCameraInfo( originalUri )
+      const original = library && !local?.focusDistance
+        ? await readLibraryCameraInfo( library )
         : null;
       setRead( {
         key,
@@ -88,7 +85,7 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
           : null,
       } );
     } )( );
-  }, [complete, uri, deviceUri, findOriginal, key] );
+  }, [complete, uri, library, key] );
 
   // Only the current photo's info, never the previous one's while it loads.
   const info = complete || ( read?.key === key && read.info ) || stored;
