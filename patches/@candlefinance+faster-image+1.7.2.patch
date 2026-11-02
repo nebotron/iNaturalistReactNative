@@ -1,3 +1,28 @@
+diff --git a/node_modules/@candlefinance/faster-image/FasterImage.podspec b/node_modules/@candlefinance/faster-image/FasterImage.podspec
+index db9d4f0..090f9c4 100644
+--- a/node_modules/@candlefinance/faster-image/FasterImage.podspec
++++ b/node_modules/@candlefinance/faster-image/FasterImage.podspec
+@@ -29,19 +29,5 @@ Pod::Spec.new do |s|
+     ss.source_files = "ios/NukeUI/**/*.{h,m,mm,swift}"
+   end
+ 
+-  # Don't install the dependencies when we run `pod install` in the old architecture.
+-  if ENV['RCT_NEW_ARCH_ENABLED'] == '1' then
+-    s.compiler_flags = folly_compiler_flags + " -DRCT_NEW_ARCH_ENABLED=1"
+-    s.pod_target_xcconfig    = {
+-        "HEADER_SEARCH_PATHS" => "\"$(PODS_ROOT)/boost\"",
+-        "OTHER_CPLUSPLUSFLAGS" => "-DFOLLY_NO_CONFIG -DFOLLY_MOBILE=1 -DFOLLY_USE_LIBCPP=1",
+-        "CLANG_CXX_LANGUAGE_STANDARD" => "c++17"
+-    }
+-    s.dependency "React-RCTFabric"
+-    s.dependency "React-Codegen"
+-    s.dependency "RCT-Folly"
+-    s.dependency "RCTRequired"
+-    s.dependency "RCTTypeSafety"
+-    s.dependency "ReactCommon/turbomodule/core"
+-  end
++  install_modules_dependencies(s)
+ end
 diff --git a/node_modules/@candlefinance/faster-image/android/src/main/java/com/candlefinance/fasterimage/FasterImageViewManager.kt b/node_modules/@candlefinance/faster-image/android/src/main/java/com/candlefinance/fasterimage/FasterImageViewManager.kt
 index 5cf4dba..f75e080 100644
 --- a/node_modules/@candlefinance/faster-image/android/src/main/java/com/candlefinance/fasterimage/FasterImageViewManager.kt
@@ -78,12 +103,10 @@ diff --git a/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift b/no
 index e1cb690..a7a2235 100644
 --- a/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
 +++ b/node_modules/@candlefinance/faster-image/ios/CachePolicy.swift
-@@ -1,17 +1,35 @@
- /// How aggressively the cache should be used.
+@@ -2,16 +2,34 @@
  enum CachePolicy: String {
      case memory, discWithCacheControl, discNoCacheControl, memoryAndDisc
--    
-+
+ 
 +    // Pipelines are shared instead of being rebuilt per view. Every
 +    // ImagePipeline owns its own operation queues and in-flight task pool, so
 +    // constructing one per mounted image (the upstream behavior) both
