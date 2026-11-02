@@ -3469,4 +3469,149 @@ RCT_EXPORT_METHOD( deletePhotoAssets
   } );
 }
 
+// ─── Library original lookup ────────────────────────────────────────────────
+//
+// Finds the photo-library asset a photo was imported from when the app never
+// recorded its ph:// uri: assets taken near the given time, dropping any whose
+// location is far from the given one, ranked by how alike their Vision
+// feature prints are to the reference image. Resolves nil without a confident
+// match.
+
+static CGImageRef inatCreateDownsampledImage( NSString *uri, CGFloat maxPixels )
+{
+  CGImageSourceRef src = NULL;
+  if ( [uri hasPrefix:@"http"] ) {
+    NSData *data = [NSData dataWithContentsOfURL:[NSURL URLWithString:uri]];
+    if ( data ) src = CGImageSourceCreateWithData( (__bridge CFDataRef)data, nil );
+  } else {
+    NSString *path = [uri stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    src = CGImageSourceCreateWithURL( (__bridge CFURLRef)[NSURL fileURLWithPath:path], nil );
+  }
+  if ( !src ) return NULL;
+  NSDictionary *opts = @{
+    (__bridge NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+    (__bridge NSString *)kCGImageSourceCreateThumbnailWithTransform: @YES,
+    (__bridge NSString *)kCGImageSourceThumbnailMaxPixelSize: @( maxPixels ),
+  };
+  CGImageRef image = CGImageSourceCreateThumbnailAtIndex( src, 0, (__bridge CFDictionaryRef)opts );
+  CFRelease( src );
+  return image;
+}
+
+static VNFeaturePrintObservation *inatFeaturePrint( CGImageRef image )
+{
+  if ( !image ) return nil;
+  VNGenerateImageFeaturePrintRequest *request = [VNGenerateImageFeaturePrintRequest new];
+  VNImageRequestHandler *handler =
+    [[VNImageRequestHandler alloc] initWithCGImage:image options:@{}];
+  if ( ![handler performRequests:@[request] error:nil] ) return nil;
+  return ( VNFeaturePrintObservation * )request.results.firstObject;
+}
+
+RCT_EXPORT_METHOD( findLibraryOriginal
+                  : ( NSDictionary * )options resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_UTILITY, 0 ), ^{
+    PHAuthorizationStatus status =
+      [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+    NSNumber *timeMs = options[@"time"];
+    if ( ( status != PHAuthorizationStatusAuthorized && status != PHAuthorizationStatusLimited )
+      || ![timeMs isKindOfClass:[NSNumber class]] ) {
+      resolve( nil );
+      return;
+    }
+    NSDate *time = [NSDate dateWithTimeIntervalSince1970:timeMs.doubleValue / 1000];
+    // Wide enough for a camera whose clock is set to another time zone.
+    NSTimeInterval window = 14 * 3600;
+    PHFetchOptions *fetch = [PHFetchOptions new];
+    fetch.predicate = [NSPredicate predicateWithFormat:
+      @"mediaType == %ld AND creationDate >= %@ AND creationDate <= %@",
+      ( long )PHAssetMediaTypeImage,
+      [time dateByAddingTimeInterval:-window], [time dateByAddingTimeInterval:window]];
+    PHFetchResult<PHAsset *> *assets = [PHAsset fetchAssetsWithOptions:fetch];
+
+    NSNumber *lat = options[@"latitude"];
+    NSNumber *lng = options[@"longitude"];
+    CLLocation *place = [lat isKindOfClass:[NSNumber class]] && [lng isKindOfClass:[NSNumber class]]
+      ? [[CLLocation alloc] initWithLatitude:lat.doubleValue longitude:lng.doubleValue]
+      : nil;
+    NSMutableArray<PHAsset *> *candidates = [NSMutableArray array];
+    [assets enumerateObjectsUsingBlock:^( PHAsset *asset, NSUInteger idx, BOOL *stop ) {
+      if ( place && asset.location && [asset.location distanceFromLocation:place] > 2000 ) return;
+      [candidates addObject:asset];
+    }];
+    [candidates sortUsingComparator:^NSComparisonResult( PHAsset *a, PHAsset *b ) {
+      return [@( fabs( [a.creationDate timeIntervalSinceDate:time] ) )
+        compare:@( fabs( [b.creationDate timeIntervalSinceDate:time] ) )];
+    }];
+    if ( candidates.count > 60 ) {
+      [candidates removeObjectsInRange:NSMakeRange( 60, candidates.count - 60 )];
+    }
+    if ( candidates.count == 0 ) { resolve( nil ); return; }
+
+    NSString *referenceUri = options[@"uri"];
+    CGImageRef reference = [referenceUri isKindOfClass:[NSString class]]
+      ? inatCreateDownsampledImage( referenceUri, 512 )
+      : NULL;
+    VNFeaturePrintObservation *referencePrint = inatFeaturePrint( reference );
+    if ( reference ) CGImageRelease( reference );
+    if ( !referencePrint ) {
+      // Time alone: only one asset taken within a couple of seconds.
+      NSArray *close = [candidates filteredArrayUsingPredicate:
+        [NSPredicate predicateWithBlock:^BOOL( PHAsset *asset, NSDictionary *bindings ) {
+          return fabs( [asset.creationDate timeIntervalSinceDate:time] ) <= 2;
+        }]];
+      resolve( close.count == 1
+        ? @{ @"uri": [@"ph://" stringByAppendingString:[close.firstObject localIdentifier]],
+             @"method": @"time" }
+        : nil );
+      return;
+    }
+
+    PHImageRequestOptions *imageOptions = [PHImageRequestOptions new];
+    imageOptions.synchronous = YES;
+    imageOptions.deliveryMode = PHImageRequestOptionsDeliveryModeHighQualityFormat;
+    imageOptions.resizeMode = PHImageRequestOptionsResizeModeFast;
+    imageOptions.networkAccessAllowed = NO;
+    NSMutableArray<NSNumber *> *distances = [NSMutableArray array];
+    PHAsset *best = nil;
+    float bestDistance = FLT_MAX;
+    for ( PHAsset *asset in candidates ) {
+      @autoreleasepool {
+        __block UIImage *thumb = nil;
+        [[PHImageManager defaultManager] requestImageForAsset:asset
+          targetSize:CGSizeMake( 512, 512 ) contentMode:PHImageContentModeAspectFit
+          options:imageOptions resultHandler:^( UIImage *result, NSDictionary *info ) {
+            thumb = result;
+          }];
+        VNFeaturePrintObservation *print = inatFeaturePrint( thumb.CGImage );
+        float distance = 0;
+        if ( !print || ![print computeDistance:&distance toFeaturePrintObservation:referencePrint
+          error:nil] ) continue;
+        [distances addObject:@( distance )];
+        if ( distance < bestDistance ) {
+          bestDistance = distance;
+          best = asset;
+        }
+      }
+    }
+    if ( !best ) { resolve( nil ); return; }
+    // Feature print distances have no fixed scale across Vision revisions, so
+    // the match has to stand out from the other candidates: well under their
+    // median, or, with too few to compare, taken within a minute of the time.
+    [distances sortUsingSelector:@selector( compare: )];
+    float median = distances[distances.count / 2].floatValue;
+    BOOL confident = distances.count >= 3
+      ? bestDistance < median * 0.5f
+      : fabs( [best.creationDate timeIntervalSinceDate:time] ) <= 60;
+    resolve( confident
+      ? @{ @"uri": [@"ph://" stringByAppendingString:best.localIdentifier],
+           @"method": @"image", @"distance": @( bestDistance ), @"median": @( median ),
+           @"candidates": @( distances.count ) }
+      : nil );
+  } );
+}
+
 @end
