@@ -1,11 +1,10 @@
 /* eslint-disable i18next/no-literal-string */
 import { useNavigation } from "@react-navigation/native";
-import {
-  Image, Pressable, Text, View,
-} from "components/styledComponents";
+import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
+import { Text, TextInput, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, { useMemo, useState } from "react";
-import { FlatList } from "react-native";
+import { FlatList, useWindowDimensions } from "react-native";
 import Photo from "realmModels/Photo";
 import type { RealmObservation, RealmPhoto } from "realmModels/types";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
@@ -15,8 +14,6 @@ const { useQuery } = RealmContext;
 
 type Setting = "focalLength" | "shutterSpeed" | "aperture" | "iso" | "focusDistance";
 const SETTINGS: Setting[] = ["focalLength", "focusDistance", "shutterSpeed", "aperture", "iso"];
-// Max difference in distance to subject, relative to the nearer photo
-const TOLERANCES = [0.1, 0.2, 0.35, 0.5];
 const MAX_PAIRS = 200;
 
 interface Entry {
@@ -60,27 +57,43 @@ const compare = ( a: Entry, b: Entry ): number | null => {
     : null;
 };
 
-const PairPhoto = ( { entry, onPress }: { entry: Entry; onPress: ( ) => void } ) => (
-  <Pressable
-    className="flex-1"
-    accessibilityRole="button"
-    accessibilityLabel={entry.info.camera}
-    onPress={onPress}
-  >
-    <Image
-      className="w-full aspect-square rounded-md bg-lightGray"
-      source={{ uri: Photo.displayLocalOrRemoteSquarePhoto( entry.photo ) }}
-      accessibilityIgnoresInvertColors
-    />
-    <Text className="text-xs font-bold mt-1" numberOfLines={1}>{entry.info.camera ?? "?"}</Text>
-    <Text className="text-xs" numberOfLines={1}>{entry.info.lens ?? "—"}</Text>
-    {SETTINGS.map( setting => (
-      <Text key={setting} className="text-xs" numberOfLines={1}>
-        {entry.info[setting] ?? "—"}
-      </Text>
-    ) )}
-  </Pressable>
-);
+// Swipe horizontally between the pair's photos; two fingers pinch/pan;
+// one finger scrolls the list; tap opens the observation.
+const PairItem = ( { pair, onOpen }: { pair: Pair; onOpen: ( uuid: string ) => void } ) => {
+  const { width, height: windowHeight } = useWindowDimensions( );
+  const [aspects, setAspects] = useState<Record<string, number>>( {} );
+  const aspect = Math.max( 0.75, ...Object.values( aspects ) );
+  const height = Math.min( windowHeight * 0.8, width * aspect );
+  return (
+    <View className="mb-6">
+      <Text className="font-bold mb-2 px-4">{pair.a.taxonName}</Text>
+      <FlatList
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        data={[pair.a, pair.b]}
+        keyExtractor={( _entry, index ) => `${index}`}
+        renderItem={( { item: entry, index } ) => (
+          <SharedZoomableImage
+            uri={Photo.displayLocalOrRemoteOriginalPhoto( entry.photo )}
+            fullResolution
+            style={{ width, height }}
+            minScale={1}
+            maxScale={20}
+            isPinchEnabled
+            isSingleFingerPanEnabled={false}
+            isDoubleTapEnabled={false}
+            isSingleTapEnabled
+            onSingleTap={( ) => onOpen( entry.uuid )}
+            onImageDimensionsChange={dims => setAspects( prev => (
+              { ...prev, [index]: dims.height / dims.width }
+            ) )}
+          />
+        )}
+      />
+    </View>
+  );
+};
 
 // Pairs of the user's photos of the same species taken with a different
 // camera or lens at a similar distance, for comparing gear like-for-like.
@@ -88,7 +101,8 @@ const CameraPairs = ( ) => {
   const navigation = useNavigation( );
   const observations = useQuery<RealmObservation>( "Observation" );
   useBackfillCameraInfo( observations );
-  const [tolerance, setTolerance] = useState( 0.2 );
+  const [toleranceText, setToleranceText] = useState( "20" );
+  const tolerance = ( parseFloat( toleranceText ) || 0 ) / 100;
 
   const allPairs = useMemo( ( ) => {
     const byTaxon = new Map<number, Entry[]>( );
@@ -124,8 +138,12 @@ const CameraPairs = ( ) => {
           if ( differs( a.info.camera, b.info.camera ) || differs( a.info.lens, b.info.lens ) ) {
             const score = compare( a, b );
             if ( score !== null ) {
+              const flip = Math.random( ) < 0.5;
               pairs.push( {
-                key: `${a.taxonId}-${i}-${j}`, a, b, score,
+                key: `${a.taxonId}-${i}-${j}`,
+                a: flip ? b : a,
+                b: flip ? a : b,
+                score,
               } );
             }
           }
@@ -145,34 +163,24 @@ const CameraPairs = ( ) => {
   return (
     <FlatList
       className="bg-white"
-      contentContainerClassName="p-4 pb-20"
+      contentContainerClassName="py-4 pb-20"
       data={pairs}
       keyExtractor={pair => pair.key}
       ListHeaderComponent={(
-        <View className="mb-4">
+        <View className="mb-4 px-4">
           <Text className="text-sm mb-2">
             Same species, different camera or lens, similar distance to subject.
             Max distance difference:
           </Text>
-          <View className="flex-row">
-            {TOLERANCES.map( value => (
-              <Pressable
-                key={value}
-                accessibilityRole="button"
-                onPress={( ) => setTolerance( value )}
-                className={`px-3 py-1 mr-2 rounded-full border border-inatGreen ${
-                  tolerance === value
-                    ? "bg-inatGreen"
-                    : ""}`}
-              >
-                <Text className={tolerance === value
-                  ? "text-white"
-                  : "text-inatGreen"}
-                >
-                  {`${Math.round( value * 100 )}%`}
-                </Text>
-              </Pressable>
-            ) )}
+          <View className="flex-row items-center">
+            <TextInput
+              className="border border-lightGray rounded px-2 py-1 w-20"
+              keyboardType="decimal-pad"
+              value={toleranceText}
+              onChangeText={setToleranceText}
+              accessibilityLabel="Max distance difference percent"
+            />
+            <Text className="ml-1">%</Text>
           </View>
           <Text className="text-xs mt-2">
             {`${pairs.length}${pairs.length === MAX_PAIRS
@@ -186,17 +194,7 @@ const CameraPairs = ( ) => {
           No matching pairs among photos with camera info saved on this device.
         </Text>
       )}
-      renderItem={( { item } ) => (
-        <View className="mb-6 border-b border-lightGray pb-4">
-          <Text className="font-bold mb-2">
-            {`${item.a.taxonName} · ${Math.round( item.score * 100 )}% distance difference`}
-          </Text>
-          <View className="flex-row gap-3">
-            <PairPhoto entry={item.a} onPress={( ) => open( item.a.uuid )} />
-            <PairPhoto entry={item.b} onPress={( ) => open( item.b.uuid )} />
-          </View>
-        </View>
-      )}
+      renderItem={( { item } ) => <PairItem pair={item} onOpen={open} />}
     />
   );
 };
