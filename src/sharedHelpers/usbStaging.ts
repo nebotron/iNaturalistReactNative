@@ -1,11 +1,9 @@
 import {
-  copyFile, mkdir, readDir, unlink,
+  readDir, unlink,
 } from "@dr.pogodin/react-native-fs";
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
-import { photoLibraryPhotosPath, usbStagingPath } from "appConstants/paths";
-import { sortGroupsByTime } from "components/PhotoImporter/helpers/groupPhotoHelpers";
-import type { GroupedMediaItem } from "components/PhotoImporter/helpers/photoLibraryMediaHelpers";
+import { usbStagingPath } from "appConstants/paths";
 import { MMKV } from "react-native-mmkv";
 import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
@@ -82,46 +80,6 @@ export const listStagedPhotoNodes = async ( ): Promise<PhotoIdentifier["node"][]
     };
   } ).sort( ( a, b ) => b.timestamp - a.timestamp )
 );
-
-// Copies the staged photos not yet offered to Group Photos into the importer's
-// folder, as Group Photos groups, and records them as offered.
-export const takeUnofferedStagedGroups = async ( ): Promise<GroupedMediaItem[]> => {
-  const offered = new Set( getOffered( ) );
-  const items = ( await readStaged( ) ).filter( item => !offered.has( item.name ) );
-  if ( items.length === 0 ) return [];
-  await mkdir( photoLibraryPhotosPath );
-  const groups: GroupedMediaItem[] = [];
-  for ( const item of items ) {
-    const dest = `${photoLibraryPhotosPath}/${item.name}`;
-    try {
-      // eslint-disable-next-line no-await-in-loop
-      await unlink( dest ).catch( ( ) => undefined );
-      // eslint-disable-next-line no-await-in-loop
-      await copyFile( item.path, dest );
-    } catch ( error ) {
-      logger.error( "Could not copy a staged USB photo for Group Photos", error );
-      // eslint-disable-next-line no-continue
-      continue;
-    }
-    offered.add( item.name );
-    groups.push( {
-      photos: [{
-        image: {
-          uri: `file://${dest}`,
-          fileName: item.name,
-          type: "image/jpeg",
-          // Seconds, like the photo library picker. The copy kept the file's
-          // modification date from the card, which is when it was taken.
-          timestamp: String( Math.round( ( item.mtime?.getTime( ) ?? Date.now( ) ) / 1000 ) ),
-        },
-        originalDevicePhotoUri: `file://${item.path}`,
-        croppable: true,
-      }],
-    } );
-  }
-  setOffered( [...offered] );
-  return sortGroupsByTime( groups );
-};
 
 let sweeping = false;
 
