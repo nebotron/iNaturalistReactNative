@@ -127,9 +127,12 @@ let sweeping = false;
 
 // favoritedUris: device photo URIs on observations the user has faved.
 // unfavoritedUris: those on other observations, or removed from Group Photos.
+// onSavedToPhotos: the library URIs of faved photos just saved to Photos, which
+// are new assets the photo picker would otherwise offer again.
 export const sweepUsbStaging = async (
   favoritedUris: string[],
   unfavoritedUris: string[],
+  onSavedToPhotos?: ( uris: string[] ) => void,
 ) => {
   if ( sweeping ) return;
   sweeping = true;
@@ -147,6 +150,7 @@ export const sweepUsbStaging = async (
       }
     } );
     const removed = new Set<string>( );
+    const savedUris: string[] = [];
     let saved = 0;
     for ( const item of staged ) {
       if ( favorited.has( item.name ) ) {
@@ -154,7 +158,10 @@ export const sweepUsbStaging = async (
         const ok = await enqueuePhotoLibraryWrite( ( ) => CameraRoll.saveAsset(
           `file://${item.path}`,
           { type: "photo", album: SHARED_LIBRARY_ALBUM_TITLE },
-        ) ).then( ( ) => true, error => {
+        ) ).then( asset => {
+          if ( asset?.node?.id ) savedUris.push( `ph://${asset.node.id}` );
+          return true;
+        }, error => {
           logger.error( "Could not save a faved USB photo to Photos", error );
           return false;
         } );
@@ -173,6 +180,7 @@ export const sweepUsbStaging = async (
         removed.add( item.name );
       }
     }
+    if ( savedUris.length > 0 ) onSavedToPhotos?.( savedUris );
     removed.forEach( name => delete clocks[name] );
     store.set( CLOCK_KEY, JSON.stringify( clocks ) );
     if ( removed.size > 0 ) {

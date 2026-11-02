@@ -1,4 +1,5 @@
 import type Realm from "realm";
+import { recordUploadedDevicePhotoUris } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import addPhotosToImportedAlbum, {
   removePhotosFromImportedAlbum,
 } from "sharedHelpers/importedPhotoAlbum";
@@ -30,7 +31,9 @@ const syncNow = async ( ) => {
     : undefined;
   const { unfavorited, favorited } = classifyDevicePhotoUris( realm, cache );
   // Ahead of the early return: expiry depends on the clock, not on a change.
-  void sweepUsbStaging( favorited, unfavorited );
+  void sweepUsbStaging( favorited, unfavorited, uris => {
+    if ( !realm.isClosed ) recordUploadedDevicePhotoUris( realm, uris );
+  } );
   const signature = JSON.stringify( [unfavorited.sort( ), favorited.sort( )] );
   if ( signature === lastSynced ) return;
   lastSynced = signature;
