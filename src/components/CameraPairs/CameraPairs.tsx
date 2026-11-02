@@ -60,10 +60,7 @@ const compare = ( a: Entry, b: Entry ): number | null => {
 // Swipe horizontally between the pair's photos; two fingers pinch/pan;
 // one finger scrolls the list; tap opens the observation.
 const PairItem = ( { pair, onOpen }: { pair: Pair; onOpen: ( uuid: string ) => void } ) => {
-  const { width, height: windowHeight } = useWindowDimensions( );
-  const [aspects, setAspects] = useState<Record<string, number>>( {} );
-  const aspect = Math.max( 0.75, ...Object.values( aspects ) );
-  const height = Math.min( windowHeight * 0.8, width * aspect );
+  const { width } = useWindowDimensions( );
   return (
     <View className="mb-6">
       <Text className="font-bold mb-2 px-4">{pair.a.taxonName}</Text>
@@ -73,11 +70,11 @@ const PairItem = ( { pair, onOpen }: { pair: Pair; onOpen: ( uuid: string ) => v
         showsHorizontalScrollIndicator={false}
         data={[pair.a, pair.b]}
         keyExtractor={( _entry, index ) => `${index}`}
-        renderItem={( { item: entry, index } ) => (
+        renderItem={( { item: entry } ) => (
           <SharedZoomableImage
             uri={Photo.displayLocalOrRemoteOriginalPhoto( entry.photo )}
             fullResolution
-            style={{ width, height }}
+            style={{ width, height: width }}
             minScale={1}
             maxScale={20}
             isPinchEnabled
@@ -85,9 +82,6 @@ const PairItem = ( { pair, onOpen }: { pair: Pair; onOpen: ( uuid: string ) => v
             isDoubleTapEnabled={false}
             isSingleTapEnabled
             onSingleTap={( ) => onOpen( entry.uuid )}
-            onImageDimensionsChange={dims => setAspects( prev => (
-              { ...prev, [index]: dims.height / dims.width }
-            ) )}
           />
         )}
       />
