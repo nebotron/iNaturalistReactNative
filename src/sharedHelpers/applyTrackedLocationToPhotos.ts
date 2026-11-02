@@ -18,6 +18,7 @@ import { drainTrackedLocationFixes } from "sharedHelpers/locationHistoryTracker"
 import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import { usbStagedAtMs } from "sharedHelpers/usbStaging";
 import useStore from "stores/useStore";
 
 const logger = log.extend( "applyTrackedLocationToPhotos" );
@@ -377,8 +378,14 @@ export const autoApplyTrackedLocationIfMissing = async (
     return false;
   }
 
+  // A USB-imported photo was taken before it was copied off the card, so a fix
+  // from then on is where the import happened, not where the photo was taken.
+  const stagedAt = Math.min( ...Array.from( observation.observationPhotos ?? [] )
+    .map( obsPhoto => usbStagedAtMs( obsPhoto.originalDevicePhotoUri ) ?? Infinity ) );
   const trackedLocation = interpolateFromUsablePoints(
-    usablePoints,
+    Number.isFinite( stagedAt )
+      ? usablePoints.filter( point => point.recordedAt.getTime( ) < stagedAt )
+      : usablePoints,
     new Date( observedOn ).getTime(),
   );
   if ( !trackedLocation ) {

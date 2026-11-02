@@ -39,6 +39,14 @@ export const stagedPathFor = ( relativePath: string ) => (
 
 const stagedNameFromUri = ( uri: string ) => uri.match( /\/usbStaging\/([^/]+)$/ )?.[1];
 
+// When a staged photo was copied off the drive, from its "<stagedAtMs>_" prefix
+export const usbStagedAtMs = ( uri?: string | null ): number | null => {
+  const ms = Number( uri && stagedNameFromUri( uri )?.split( "_" )[0] );
+  return ms > 0
+    ? ms
+    : null;
+};
+
 const readStaged = async ( ) => ( await readDir( usbStagingPath ).catch( ( ) => [] ) )
   .filter( item => item.isFile( ) && !item.name.endsWith( ".partial" ) );
 

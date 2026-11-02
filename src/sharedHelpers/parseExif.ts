@@ -100,10 +100,7 @@ const readExifFromMultiplePhotos = async ( photoUris: string[] ) => {
   // PR 2365: https://github.com/react-native-image-picker/react-native-image-picker/pull/2365
   const normalizedUris = photoUris.map( uri => exifUri( uri ) );
 
-  for ( const [index, uri] of normalizedUris.slice( 0, MAX_EXIF_PHOTOS_TO_SCAN ).entries( ) ) {
-    // USB-imported photos (see usbStaging.ts) get their location only from
-    // location tracking, never from the card's GPS tags.
-    const skipGps = /\/usbStaging\//.test( photoUris[index] );
+  for ( const uri of normalizedUris.slice( 0, MAX_EXIF_PHOTOS_TO_SCAN ) ) {
     try {
       // Read photos one at a time so we can stop early once we have complete
       // EXIF data, rather than reading every photo up front
@@ -118,13 +115,13 @@ const readExifFromMultiplePhotos = async ( photoUris: string[] ) => {
           GPSHPositioningError,
         } = currentPhotoExif;
 
-        if ( !skipGps && !unifiedExif.latitude && GPSLatitude ) {
+        if ( !unifiedExif.latitude && GPSLatitude ) {
           unifiedExif.latitude
             = GPSLatitudeRef === "S"
               ? -GPSLatitude
               : GPSLatitude;
         }
-        if ( !skipGps && !unifiedExif.longitude && GPSLongitude ) {
+        if ( !unifiedExif.longitude && GPSLongitude ) {
           unifiedExif.longitude = GPSLongitudeRef === "W"
             ? -GPSLongitude
             : GPSLongitude;
@@ -132,7 +129,7 @@ const readExifFromMultiplePhotos = async ( photoUris: string[] ) => {
         if ( !unifiedExif.observed_on_string ) {
           unifiedExif.observed_on_string = formatExifDateAsString( currentPhotoExif ) || null;
         }
-        if ( !skipGps && GPSHPositioningError && !unifiedExif.positional_accuracy ) {
+        if ( GPSHPositioningError && !unifiedExif.positional_accuracy ) {
           unifiedExif.positional_accuracy = GPSHPositioningError;
         }
 
