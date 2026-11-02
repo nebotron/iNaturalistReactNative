@@ -2,6 +2,7 @@
 
 #import <CoreLocation/CoreLocation.h>
 #import <React/RCTBridgeModule.h>
+#import <UIKit/UIKit.h>
 
 static NSString *const kEnabledKey = @"INatLocationMonitorEnabled";
 static NSString *const kPendingKey = @"INatLocationMonitorPending";
@@ -16,6 +17,7 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
 
 @interface INatLocationMonitor () <CLLocationManagerDelegate>
 @property (nonatomic, strong) CLLocationManager *manager;
+@property (nonatomic) BOOL paused;
 @end
 
 @implementation INatLocationMonitor
@@ -47,20 +49,46 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
       self.manager = [CLLocationManager new];
       self.manager.delegate = self;
       self.manager.allowsBackgroundLocationUpdates = YES;
-      // Otherwise iOS pauses updates whenever it decides the user is
-      // stationary and does not resume them on its own for a long time, which
-      // leaves long gaps in the tracked history.
-      self.manager.pausesLocationUpdatesAutomatically = NO;
-      // ~10 m is plenty to geotag photos and draws far less power than
-      // kCLLocationAccuracyBest, and CLActivityTypeFitness tells iOS this is a
-      // moving-on-foot session so it can manage the location radio accordingly.
-      self.manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters;
+      // Let iOS turn the GPS off while the user is stationary; the
+      // significant-change monitor below relaunches/resumes updates once they
+      // move again (see locationManagerDidPauseLocationUpdates:).
+      self.manager.pausesLocationUpdatesAutomatically = YES;
+      // CLActivityTypeFitness tells iOS this is a moving-on-foot session so it
+      // can manage the location radio accordingly.
       self.manager.activityType = CLActivityTypeFitness;
       self.manager.distanceFilter = kDistanceFilterMeters;
+      NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+      [nc addObserver:self selector:@selector( updateAccuracy )
+                 name:UIApplicationDidBecomeActiveNotification object:nil];
+      [nc addObserver:self selector:@selector( updateAccuracy )
+                 name:UIApplicationDidEnterBackgroundNotification object:nil];
     }
+    [self updateAccuracy];
     [self.manager startMonitoringSignificantLocationChanges];
     [self.manager startUpdatingLocation];
   } );
+}
+
+// ~10 m while the app is in use; ~100 m in the background, which is still
+// enough to geotag photos and keeps the GPS radio mostly off.
+- (void)updateAccuracy
+{
+  BOOL active = [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
+  self.manager.desiredAccuracy = active
+    ? kCLLocationAccuracyNearestTenMeters
+    : kCLLocationAccuracyHundredMeters;
+  // Opening the app is a good moment to pick a paused session back up
+  if ( active && self.paused && [INatLocationMonitor enabled] ) {
+    self.paused = NO;
+    [self.manager startUpdatingLocation];
+  }
+}
+
+// Once iOS pauses for a stationary user, it won't resume on its own; the
+// significant-change monitor wakes us when they move, and we resume then.
+- (void)locationManagerDidPauseLocationUpdates:(CLLocationManager *)manager
+{
+  self.paused = YES;
 }
 
 - (void)stop
@@ -75,6 +103,11 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
 - (void)locationManager:(CLLocationManager *)manager
      didUpdateLocations:(NSArray<CLLocation *> *)locations
 {
+  if ( self.paused ) {
+    // A significant-change fix after a pause: the user moved, so resume
+    self.paused = NO;
+    [manager startUpdatingLocation];
+  }
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
   NSMutableArray *pending = [[defaults arrayForKey:kPendingKey] mutableCopy];
   if ( !pending ) pending = [NSMutableArray array];

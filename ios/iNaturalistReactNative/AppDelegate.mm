@@ -280,6 +280,8 @@ static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
   NSUnitDuration *sec = NSUnitDuration.seconds;
   NSUnitInformationStorage *mb = NSUnitInformationStorage.megabytes;
   for ( MXMetricPayload *p in payloads ) {
+    // iOS also delivers payloads spanning no time, with every metric missing
+    if ( ![p.timeStampEnd timeIntervalSinceDate:p.timeStampBegin] ) continue;
     MXLocationActivityMetric *loc = p.locationActivityMetrics;
     MXNetworkTransferMetric *net = p.networkTransferMetrics;
     MXAppRunTimeMetric *run = p.applicationTimeMetrics;
