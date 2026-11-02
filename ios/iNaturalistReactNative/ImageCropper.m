@@ -3497,6 +3497,10 @@ RCT_EXPORT_METHOD( findLibraryOriginal
     fetch.predicate = [NSPredicate predicateWithFormat:
       @"mediaType == %ld AND creationDate >= %@ AND creationDate < %@",
       ( long )PHAssetMediaTypeImage, time, [time dateByAddingTimeInterval:1]];
+    // iCloud Photos assets are in the user library whether downloaded or not
+    // (reading their EXIF downloads them); shared albums need asking for.
+    fetch.includeAssetSourceTypes = PHAssetSourceTypeUserLibrary | PHAssetSourceTypeCloudShared
+      | PHAssetSourceTypeiTunesSynced;
     PHFetchResult<PHAsset *> *assets = [PHAsset fetchAssetsWithOptions:fetch];
     CLLocation *place =
       [[CLLocation alloc] initWithLatitude:lat.doubleValue longitude:lng.doubleValue];
