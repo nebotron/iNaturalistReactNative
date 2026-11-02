@@ -80,7 +80,6 @@ jobs:
       uses: actions/setup-node@v6
       with:
         node-version-file: '.nvmrc'
-        cache: 'npm'
 
     - name: Setup Ruby version according to .ruby-version with cached gems
       uses: ruby/setup-ruby@v1
@@ -92,18 +91,22 @@ jobs:
     - name: Set Xcode Toolchain
       run: echo "TOOLCHAINS=com.apple.dt.toolchain.XcodeDefault" >> "$GITHUB_ENV"
 
-    # node_modules itself, not just the npm download cache, so an unchanged
-    # lockfile skips the install and the patch-package run entirely. Cached
-    # after postinstall, so the patches are already applied.
-    - name: Restore node_modules
-      id: node-modules
+    # node_modules and the installed Pods tree in one cache, so an unchanged
+    # set of lockfiles skips npm ci and patch-package entirely. node_modules is
+    # cached after postinstall, so the patches are already applied. No
+    # restore-keys: an installed Pods tree is only reusable for the exact
+    # lockfile that produced it, and pod install still runs on top of it.
+    - name: Restore node_modules and the installed Pods
+      id: deps
       uses: actions/cache@v4
       with:
-        path: node_modules
-        key: node-modules-${{ runner.os }}-${{ hashFiles( '.nvmrc', 'package-lock.json', 'patches/**' ) }}
+        path: |
+          node_modules
+          ios/Pods
+        key: deps-${{ runner.os }}-${{ inputs.prebuilt_react_native }}-${{ hashFiles( '.nvmrc', 'package-lock.json', 'patches/**', 'ios/Podfile.lock' ) }}
 
     - name: Install Dependencies
-      if: steps.node-modules.outputs.cache-hit != 'true'
+      if: steps.deps.outputs.cache-hit != 'true'
       run: npm ci
 
     - name: Create .env file
@@ -140,10 +143,19 @@ jobs:
 
     # Half the archive's ~1900 compiles are React Native core and its C++
     # dependencies, which change only when react-native does. ccache turns
-    # those into cache hits across runs.
+    # those into cache hits across runs. Installs ccache's own universal
+    # binary rather than brewing it and four dependencies (~20s).
     - name: Install ccache
       run: |
-        command -v ccache >/dev/null 2>&1 || HOMEBREW_NO_AUTO_UPDATE=1 brew install ccache
+        CCACHE_VERSION=4.14.2
+        curl -fsSL --retry 3 \
+          "https://github.com/ccache/ccache/releases/download/v$CCACHE_VERSION/ccache-$CCACHE_VERSION-darwin.tar.gz" \
+          | tar xz -C "$RUNNER_TEMP"
+        mkdir -p "$HOME/.local/bin"
+        mv "$RUNNER_TEMP/ccache-$CCACHE_VERSION-darwin/ccache" "$HOME/.local/bin/ccache"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        export PATH="$HOME/.local/bin:$PATH"
+        ccache --version | head -1
         echo "CCACHE_DIR=$HOME/.ccache" >> "$GITHUB_ENV"
         echo "CCACHE_MAXSIZE=2G" >> "$GITHUB_ENV"
         # Xcode exports build settings to script phases but not to CompileC,
@@ -153,27 +165,22 @@ jobs:
           node_modules/react-native/scripts/xcode/ccache-clang.sh
         cat node_modules/react-native/scripts/xcode/ccache-clang.sh
 
-    # Saved under a new key every run so the cache keeps up with the code; the
-    # restore-keys fall back to the newest cache built against the same Pods.
-    - name: Restore the ccache
+    # The ccache, and Metro's transform cache, read by metro.config.js through
+    # METRO_CACHE_DIR so the bundle phase only re-transforms changed files.
+    # Saved under a new key every run so the caches keep up with the code; the
+    # restore-keys fall back to the newest one built against the same
+    # dependencies. react-native-xcode.sh always bundles with --reset-cache,
+    # which would wipe the Metro cache, so the next step drops the flag.
+    - name: Restore the ccache and Metro cache
       uses: actions/cache@v4
       with:
-        path: ~/.ccache
-        key: ccache-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}-${{ github.run_id }}
+        path: |
+          ~/.ccache
+          ~/.metro-cache
+        key: build-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}-${{ github.run_id }}
         restore-keys: |
-          ccache-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock' ) }}-
-          ccache-${{ runner.os }}-
-
-    # Metro's transform cache, read by metro.config.js through METRO_CACHE_DIR,
-    # so the bundle phase only re-transforms changed files. react-native-xcode.sh
-    # always bundles with --reset-cache, which would wipe it, so drop the flag.
-    - name: Restore the Metro cache
-      uses: actions/cache@v4
-      with:
-        path: ~/.metro-cache
-        key: metro-${{ runner.os }}-${{ hashFiles( 'package-lock.json' ) }}-${{ github.run_id }}
-        restore-keys: |
-          metro-${{ runner.os }}-${{ hashFiles( 'package-lock.json' ) }}-
+          build-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}-
+          build-${{ runner.os }}-
 
     - name: Stop the bundle phase resetting the Metro cache
       run: |
@@ -191,14 +198,6 @@ jobs:
         restore-keys: |
           cocoapods-downloads-${{ runner.os }}-
 
-    # No restore-keys: an installed Pods tree is only reusable for the exact
-    # lockfile that produced it. pod install still runs on top of it.
-    - name: Restore the installed Pods
-      uses: actions/cache@v4
-      with:
-        path: ios/Pods
-        key: pods-${{ runner.os }}-${{ inputs.prebuilt_react_native }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}
-
     # RCT_USE_RN_DEP and RCT_USE_PREBUILT_RNCORE make the React Native podspecs
     # vend headers only and link Meta's published XCFrameworks instead. Both
     # check Maven for the artifacts first and fall back to building from source
@@ -210,7 +209,7 @@ jobs:
     #
     # Note that pod install rewrites Podfile.lock under these — the prebuilt
     # pods replace RCT-Folly, boost, glog and fmt — which is why the cache key
-    # above has to know which mode produced the tree.
+    # for the installed Pods has to know which mode produced the tree.
     - name: Update Pods
       run: |
         if [ "${{ inputs.prebuilt_react_native }}" = "true" ]; then
@@ -287,12 +286,14 @@ jobs:
         {
           echo '### ccache'
           echo '```'
-          ccache --show-stats
+          ccache --show-stats --verbose
           echo '```'
-        } >> "$GITHUB_STEP_SUMMARY"
+        } | tee -a "$GITHUB_STEP_SUMMARY"
 
     # destination=upload has the export sign the IPA and send it to App Store
     # Connect itself, saving the separate altool upload's repackaging pass.
+    # uploadSymbols is off to keep the upload small, so TestFlight crash
+    # reports arrive unsymbolicated.
     - name: Export and upload to TestFlight
       run: |
         cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
@@ -309,7 +310,7 @@ jobs:
           <key>signingStyle</key>
           <string>automatic</string>
           <key>uploadSymbols</key>
-          <true/>
+          <false/>
           <key>manageAppVersionAndBuildNumber</key>
           <false/>
         </dict>
