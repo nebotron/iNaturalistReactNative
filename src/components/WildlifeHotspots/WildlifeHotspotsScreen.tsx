@@ -355,23 +355,26 @@ const WildlifeHotspotsScreen = ( {
     initializeLocation();
   }, [t] );
 
-  // The viewport only moves on its own when the set of waypoints changes, not
-  // when the same route is refetched (e.g. a filter change) or a hotspot is
-  // selected
+  // The viewport only moves on its own when the set of waypoints or hotspots
+  // changes, not when the same route is refetched or a hotspot is selected.
+  // Once hotspots are chosen it covers them as well as the route.
   const fittedWaypointsKeyRef = useRef<string | null>( null );
   useEffect( () => {
     if ( routeCoords.length === 0 || !mapRef.current ) return;
-    const waypointsKey = JSON.stringify( confirmedStopPoints );
+    const waypointsKey = JSON.stringify( [confirmedStopPoints, hotspots.map( h => h.id )] );
     if ( fittedWaypointsKeyRef.current === waypointsKey ) return;
     fittedWaypointsKeyRef.current = waypointsKey;
-    mapRef.current.fitToCoordinates( routeCoords.map( toMapCoord ), {
+    mapRef.current.fitToCoordinates( [
+      ...routeCoords.map( toMapCoord ),
+      ...hotspots.map( h => ( { latitude: h.centerLatitude, longitude: h.centerLongitude } ) ),
+    ], {
       edgePadding: {
         top: 60, right: 40, bottom: 60, left: 40,
       },
       animated: true,
     } );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeCoords] );
+  }, [routeCoords, hotspots] );
 
   const handleStopTextChange = useCallback( ( id: string, text: string ) => {
     editedStopIdsRef.current.add( id );
