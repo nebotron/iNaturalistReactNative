@@ -1,9 +1,9 @@
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
-import { useFocusEffect } from "@react-navigation/native";
 import {
   CameraRoll,
   iosRequestReadWriteGalleryPermission,
 } from "@react-native-camera-roll/camera-roll";
+import { useFocusEffect } from "@react-navigation/native";
 import DevicePhotoGrid from "components/PhotoImporter/DevicePhotoGrid";
 import type { PhotoGalleryListItem } from "components/PhotoImporter/helpers/photoGallerySections";
 import buildSectionedGalleryItems from "components/PhotoImporter/helpers/photoGallerySections";
