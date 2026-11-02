@@ -101,6 +101,8 @@ const CameraPairs = ( ) => {
   const navigation = useNavigation( );
   const observations = useQuery<RealmObservation>( "Observation" );
   useBackfillCameraInfo( observations );
+  // Per-session seed so left/right is random but stable across re-renders
+  const [seed] = useState( ( ) => Math.random( ) * 1000 );
   const [toleranceText, setToleranceText] = useState( "20" );
   const tolerance = ( parseFloat( toleranceText ) || 0 ) / 100;
 
@@ -138,7 +140,7 @@ const CameraPairs = ( ) => {
           if ( differs( a.info.camera, b.info.camera ) || differs( a.info.lens, b.info.lens ) ) {
             const score = compare( a, b );
             if ( score !== null ) {
-              const flip = Math.random( ) < 0.5;
+              const flip = Math.sin( seed + a.taxonId + i * 12.9898 + j * 78.233 ) > 0;
               pairs.push( {
                 key: `${a.taxonId}-${i}-${j}`,
                 a: flip
@@ -155,7 +157,7 @@ const CameraPairs = ( ) => {
       }
     } );
     return pairs.sort( ( x, y ) => x.score - y.score );
-  }, [observations] );
+  }, [observations, seed] );
 
   const pairs = useMemo(
     ( ) => allPairs.filter( pair => pair.score <= tolerance ).slice( 0, MAX_PAIRS ),
