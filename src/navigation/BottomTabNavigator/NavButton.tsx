@@ -3,6 +3,7 @@ import { Pressable, View } from "components/styledComponents";
 import NotificationsIconContainer from "navigation/BottomTabNavigator/NotificationsIconContainer";
 import type { PropsWithChildren } from "react";
 import * as React from "react";
+import type { GestureResponderEvent } from "react-native";
 import colors from "styles/tailwindColors";
 
 interface IconFrameProps extends PropsWithChildren{
@@ -29,6 +30,9 @@ const IconFrame = ( { children, testID }: IconFrameProps ) => (
   </View>
 );
 
+// Ignore accidental brushes: touches that slide rather than tap
+const MAX_TAP_MOVEMENT = 10;
+
 const NavButton = ( {
   testID,
   size,
@@ -39,6 +43,20 @@ const NavButton = ( {
   accessibilityLabel,
   accessibilityHint,
 }: Props ) => {
+  const pressStart = React.useRef<{ x: number; y: number } | null>( null );
+  const onPressIn = ( e?: GestureResponderEvent ) => {
+    const ne = e?.nativeEvent;
+    pressStart.current = ne
+      ? { x: ne.pageX, y: ne.pageY }
+      : null;
+  };
+  const onDeliberatePress = ( e?: GestureResponderEvent ) => {
+    const start = pressStart.current;
+    const ne = e?.nativeEvent;
+    if ( start && ne
+      && Math.hypot( ne.pageX - start.x, ne.pageY - start.y ) > MAX_TAP_MOVEMENT ) return;
+    onPress( );
+  };
   let iconComponent;
   if ( userIconUri ) {
     iconComponent = (
@@ -73,7 +91,9 @@ const NavButton = ( {
   return (
     <Pressable
       className="min-h-[44px] min-w-[44px] items-center justify-end"
-      onPress={onPress}
+      onPressIn={onPressIn}
+      onPress={onDeliberatePress}
+      pressRetentionOffset={0}
       key={`NavButton-${accessibilityLabel}`}
       accessibilityLabel={accessibilityLabel}
       accessibilityRole="tab"
