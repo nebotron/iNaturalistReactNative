@@ -1917,6 +1917,14 @@ Tunable-cropCacheDays = Crop cache lifetime (days)
 # Description of a tunable parameter in settings
 Tunable-cropCacheDays-description = How long downloaded images for cropping are kept.
 # Label for a tunable parameter in settings
+Tunable-cropPreloadAhead = Photos to preload for cropping
+# Description of a tunable parameter in settings
+Tunable-cropPreloadAhead-description = How many photos ahead of the one on screen the cropper prepares at full resolution, so advancing doesn't wait.
+# Label for a tunable parameter in settings
+Tunable-cropPreloadConcurrency = Photos prepared at once for cropping
+# Description of a tunable parameter in settings
+Tunable-cropPreloadConcurrency-description = How many photos the cropper prepares at the same time. Higher is faster but uses more memory.
+# Label for a tunable parameter in settings
 Tunable-cropSourcesCacheMb = Crop source cache size (MB)
 # Description of a tunable parameter in settings
 Tunable-cropSourcesCacheMb-description = Maximum size of the cache of full-size photos prepared for cropping.

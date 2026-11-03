@@ -1035,7 +1035,7 @@ static NSData *croppedJpegData( UIImage *image, CGRect cropRect, NSDictionary *s
 // subject is detected. On one shared queue the detection the cropper's spinner
 // is actually waiting on sat behind seconds of work for photos that aren't on
 // screen -- which is what the wait between photos was. Give each kind of work
-// its own queue so they overlap. Each queue stays serial, so this adds no
+// its own queue so they overlap. Each queue but prepare's stays serial, so this adds no
 // concurrent full-resolution decodes: it only stops unrelated work from
 // blocking the one the user is waiting for.
 static dispatch_queue_t heavyImageQueue( const char *label )
@@ -1058,14 +1058,16 @@ static dispatch_queue_t subjectDetectionQueue( void )
 // The crop editor's prepare gets a queue of its own rather than the detection
 // one: the Group Photos grid detects subjects for a page of thumbnails at a
 // time (20 at ~115ms), and the photo the user just opened waited 2-4s behind
-// them. Detection decodes downscaled, so overlapping it with a prepare adds no
-// second full-resolution decode.
+// them. Concurrent: JS limits how many prepares run at once
+// (cropPreloadConcurrency, 1 by default).
 static dispatch_queue_t cropPrepareQueue( void )
 {
   static dispatch_queue_t queue;
   static dispatch_once_t  once;
   dispatch_once( &once, ^{
-    queue = heavyImageQueue( "org.inaturalist.imagecropper.prepare" );
+    queue = dispatch_queue_create( "org.inaturalist.imagecropper.prepare",
+      dispatch_queue_attr_make_with_qos_class(
+        DISPATCH_QUEUE_CONCURRENT, QOS_CLASS_USER_INITIATED, 0 ) );
   } );
   return queue;
 }

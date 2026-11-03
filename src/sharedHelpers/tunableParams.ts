@@ -87,6 +87,8 @@ export const TUNABLE_PARAMS = {
   cropCacheDays: def( "storage", 2, 0.1, 60, false ),
   remoteImageCacheMb: def( "storage", 500, 10, 10000 ),
   cropSourcesCacheMb: def( "storage", 1024, 10, 20000 ),
+  cropPreloadAhead: def( "storage", 10, 0, 100 ),
+  cropPreloadConcurrency: def( "storage", 1, 1, 4 ),
   syncedPhotoFolderMaxGb: def( "storage", 5, 0.1, 100, false ),
   maxOfflineObservations: def( "storage", 5000, 100, 50000 ),
   offlineMaxTileZoom: def( "storage", 18, 1, 21 ),

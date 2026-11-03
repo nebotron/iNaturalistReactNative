@@ -3,6 +3,7 @@ import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import prepareCropSource from "sharedHelpers/prepareCropSource";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { unlink } from "sharedHelpers/util";
 
 // What each stage of a preload cost, and when it finished. The wait between
@@ -27,10 +28,10 @@ export interface PreloadResult {
 }
 
 // How many upcoming photos in a bulk crop to preload ahead of the one
-// currently shown. Preloads run one at a time and leave their result on disk,
-// so a deeper lookahead costs no extra memory: it banks prepares while the
-// user frames a slow crop, to cover a later run of quick ones.
-export const PRELOAD_LOOKAHEAD = 10;
+// currently shown (Settings > Tunable Parameters). Preloads leave their result
+// on disk, so a deeper lookahead costs no extra memory: it banks prepares
+// while the user frames a slow crop, to cover a later run of quick ones.
+export const PRELOAD_LOOKAHEAD = getTunable( "cropPreloadAhead" );
 
 // Module-level cache so preloaded data survives navigation.replace cycles
 export const preloadCache = new Map<string, PreloadResult>( );
@@ -105,12 +106,12 @@ interface PreloadRequest {
   resolve: ( result: PreloadResult | null ) => void;
 }
 
-// Each preload runs a heavy native asset export + subject detection, and the
-// native prepare runs them one at a time in the order they arrive. Every load,
-// the photo on screen included, goes through this queue one at a time and in
-// the order it was asked for: a second one in flight only sat in the native
-// queue, where the photo on screen then waited behind it.
-const PRELOAD_CONCURRENCY = 1;
+// Each preload runs a heavy native full-resolution decode + subject detection.
+// Every load, the photo on screen included, goes through this queue in the
+// order it was asked for, this many at a time (Settings > Tunable Parameters).
+// The native prepare queue is concurrent, so this is the only limit; camera
+// raws are still decoded one at a time under the native raw decode lock.
+const PRELOAD_CONCURRENCY = getTunable( "cropPreloadConcurrency" );
 const preloadQueue: PreloadRequest[] = [];
 const preloadQueued = new Map<string, Promise<PreloadResult | null>>( );
 let activePreloadCount = 0;

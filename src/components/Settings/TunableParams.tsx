@@ -214,6 +214,14 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-remoteImageCacheMb" ),
     t( "Tunable-remoteImageCacheMb-description" ),
   ],
+  cropPreloadAhead: [
+    t( "Tunable-cropPreloadAhead" ),
+    t( "Tunable-cropPreloadAhead-description" ),
+  ],
+  cropPreloadConcurrency: [
+    t( "Tunable-cropPreloadConcurrency" ),
+    t( "Tunable-cropPreloadConcurrency-description" ),
+  ],
   cropSourcesCacheMb: [
     t( "Tunable-cropSourcesCacheMb" ),
     t( "Tunable-cropSourcesCacheMb-description" ),
