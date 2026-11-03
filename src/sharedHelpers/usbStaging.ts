@@ -90,7 +90,9 @@ const { ImageCropper } = NativeModules as {
   };
 };
 
-const isFullFrame = ( { x, y, w, h }: NormalizedCrop ) => (
+const isFullFrame = ( {
+  x, y, w, h,
+}: NormalizedCrop ) => (
   x <= 0.001 && y <= 0.001 && w >= 0.999 && h >= 0.999
 );
 
