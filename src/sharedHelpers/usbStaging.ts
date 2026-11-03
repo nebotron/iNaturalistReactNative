@@ -4,8 +4,10 @@ import {
 import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import { usbStagingPath } from "appConstants/paths";
+import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import { log } from "sharedHelpers/logger";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import { getTunable } from "sharedHelpers/tunableParams";
 
@@ -81,21 +83,54 @@ export const listStagedPhotoNodes = async ( ): Promise<PhotoIdentifier["node"][]
   } ).sort( ( a, b ) => b.timestamp - a.timestamp )
 );
 
+const { ImageCropper } = NativeModules as {
+  ImageCropper?: {
+    saveCroppedAsset?: ( uri: string, crop: NormalizedCrop ) => Promise<{ uri: string }>;
+    addAssetsToAlbum?: ( phUris: string[], album: string ) => Promise<unknown>;
+  };
+};
+
+const isFullFrame = ( { x, y, w, h }: NormalizedCrop ) => (
+  x <= 0.001 && y <= 0.001 && w >= 0.999 && h >= 0.999
+);
+
+// Saves a staged photo to Photos, cropped as it is on its observation. On iOS
+// the crop is a PhotoKit edit over the full original, so Revert in Photos
+// recovers the whole image. Resolves the new asset's ph:// URI.
+const saveStagedPhoto = async ( path: string, crop?: NormalizedCrop ) => {
+  if ( crop && !isFullFrame( crop ) && Platform.OS === "ios" && ImageCropper?.saveCroppedAsset ) {
+    const { uri } = await ImageCropper.saveCroppedAsset( `file://${path}`, crop );
+    await ImageCropper.addAssetsToAlbum?.( [uri], SHARED_LIBRARY_ALBUM_TITLE );
+    return uri;
+  }
+  const asset = await CameraRoll.saveAsset(
+    `file://${path}`,
+    { type: "photo", album: SHARED_LIBRARY_ALBUM_TITLE },
+  );
+  return asset?.node?.id
+    ? `ph://${asset.node.id}`
+    : undefined;
+};
+
 let sweeping = false;
 
 // favoritedUris: device photo URIs on observations the user has faved.
 // unfavoritedUris: those on other observations, or removed from Group Photos.
 // onSavedToPhotos: the library URIs of faved photos just saved to Photos, which
 // are new assets the photo picker would otherwise offer again.
+// crops: device photo URI → its crop on the observation.
 export const sweepUsbStaging = async (
   favoritedUris: string[],
   unfavoritedUris: string[],
   onSavedToPhotos?: ( uris: string[] ) => void,
+  crops: Record<string, NormalizedCrop> = {},
 ) => {
   if ( sweeping ) return;
   sweeping = true;
   try {
     const favorited = new Set( favoritedUris.map( stagedNameFromUri ).filter( Boolean ) );
+    const cropsByName = Object.fromEntries( Object.entries( crops )
+      .map( ( [uri, crop] ) => [stagedNameFromUri( uri ), crop] ) );
     const retentionMs = getTunable( "usbStagingRetentionDays" ) * DAY_MS;
     const staged = await readStaged( );
     const stagedNames = new Set( staged.map( item => item.name ) );
@@ -113,11 +148,10 @@ export const sweepUsbStaging = async (
     for ( const item of staged ) {
       if ( favorited.has( item.name ) ) {
         // eslint-disable-next-line no-await-in-loop
-        const ok = await enqueuePhotoLibraryWrite( ( ) => CameraRoll.saveAsset(
-          `file://${item.path}`,
-          { type: "photo", album: SHARED_LIBRARY_ALBUM_TITLE },
-        ) ).then( asset => {
-          if ( asset?.node?.id ) savedUris.push( `ph://${asset.node.id}` );
+        const ok = await enqueuePhotoLibraryWrite(
+          ( ) => saveStagedPhoto( item.path, cropsByName[item.name] ),
+        ).then( uri => {
+          if ( uri ) savedUris.push( uri );
           return true;
         }, error => {
           logger.error( "Could not save a faved USB photo to Photos", error );
