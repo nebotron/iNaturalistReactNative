@@ -89,7 +89,16 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
 
   // Only the current photo's info, never the previous one's while it loads.
   const info = complete || ( read?.key === key && read.info ) || stored;
-  if ( !info ) return null;
+  // Always two single-line rows, so the sliders above don't move whether or
+  // not this photo has camera info.
+  if ( !info ) {
+    return (
+      <View className="px-4 py-1" accessibilityElementsHidden>
+        <Body4 numberOfLines={1}>{" "}</Body4>
+        <Body4 numberOfLines={1}>{" "}</Body4>
+      </View>
+    );
+  }
   const lines = [
     [info.camera, info.lens].filter( Boolean ).join( " · " ),
     [
@@ -99,7 +108,7 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
       info.iso && `ISO ${info.iso}`,
       info.focusDistance,
     ].filter( Boolean ).join( " · " ),
-  ].filter( Boolean );
+  ];
   const rows = [
     [t( "Camera" ), info.camera],
     [t( "Lens" ), info.lens],
@@ -120,9 +129,10 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
         testID="MediaViewer.PhotoCameraInfo"
         onPress={( ) => setShowTable( true )}
       >
-        {lines.map( line => (
-          <Body4 key={line} className="text-white text-center">
-            {line}
+        {lines.map( ( line, index ) => (
+          // eslint-disable-next-line react/no-array-index-key
+          <Body4 key={index} numberOfLines={1} className="text-white text-center">
+            {line || " "}
           </Body4>
         ) )}
       </Pressable>
