@@ -47,7 +47,7 @@ export const libraryOriginalQuery = (
 
 // The library photo an observation photo was imported from, when the app never
 // recorded its uri or the one recorded is gone: the one taken at exactly the
-// observation's time and location (see findLibraryOriginal in
+// observation's time, at its location when several were (see findLibraryOriginal in
 // ImageCropper.m). Only for reading metadata — not saved as
 // originalDevicePhotoUri, which would let a wrong match be offered for deletion.
 const findLibraryOriginal = ( { uuid, deviceUri, ...options }: Query ): Promise<string | null> => {
