@@ -16,6 +16,7 @@ import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
 import { useOpenTopSounds } from "./AudioIdSoundsLink";
 import ClipPlayButton from "./ClipPlayButton";
 import useCommonName from "./useCommonName";
+import useEligibleClips from "./useEligibleClips";
 
 const { useQuery } = RealmContext;
 
@@ -45,6 +46,7 @@ const AudioIdHistory = ( ) => {
     query: observations => observations.filtered( "uuid IN $0", obsUuids ),
     keyPaths: ["uuid"],
   }, [obsUuids.join( )] );
+  const eligible = useEligibleClips( ofSpecies );
   const savedUuids = new Set( savedObs.map( o => o.uuid ) );
   const clipShade = ( clip: typeof ofSpecies[number] ) => {
     if ( clip.observationUuid && savedUuids.has( clip.observationUuid ) ) return OBSERVED_SHADE;
@@ -111,6 +113,9 @@ const AudioIdHistory = ( ) => {
               <Body1>{formatISOTimestamp( clip.time )}</Body1>
               <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
             </View>
+            {eligible.has( clip.id ) && (
+              <INatIcon name="merge" color={colors.inatGreen} size={20} />
+            )}
             <INatIconButton
               icon="check"
               color={colors.inatGreen}

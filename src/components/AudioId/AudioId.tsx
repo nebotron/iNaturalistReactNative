@@ -3,7 +3,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
 import { fetchTaxaBasics } from "api/taxa";
 import {
-  Body3, Button, DisplayTaxonName, IconicTaxonIcon,
+  Body3, Button, DisplayTaxonName, IconicTaxonIcon, INatIcon,
 } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
@@ -21,6 +21,7 @@ import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { getTunable } from "sharedHelpers/tunableParams";
 import { useCurrentUser } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
+import colors from "styles/tailwindColors";
 
 import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
@@ -28,6 +29,7 @@ import type { Heard } from "./audioIdSession";
 import useAudioIdSession, {
   isHeard, noteActivity, startDimming, stopDimming, useScreenDimmed,
 } from "./audioIdSession";
+import useEligibleClips from "./useEligibleClips";
 
 const { useRealm } = RealmContext;
 
@@ -218,6 +220,11 @@ const AudioId = ( ) => {
     ( ) => heardList.map( h => h.sp.taxonId ),
     [heardList],
   ) );
+  const clipList = useMemo( ( ) => Object.values( clips ), [clips] );
+  const eligible = useEligibleClips( clipList );
+  // Species with a clip that could still go on an observation and hasn't been labeled
+  const canAdd = new Set( clipList
+    .filter( c => eligible.has( c.id ) && !c.label ).map( c => c.sp.taxonId ) );
   const hasUnlabeled = useMemo( ( ) => new Set( Object.values( clips )
     .filter( c => !c.label ).map( c => c.sp.taxonId ) ), [clips] );
 
@@ -270,6 +277,11 @@ const AudioId = ( ) => {
             <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
           )}
         </View>
+        {canAdd.has( sp.taxonId ) && (
+          <View className="rounded-full bg-inatGreen p-1">
+            <INatIcon name="merge" color={colors.white} size={14} />
+          </View>
+        )}
       </View>
     </Pressable>
   );

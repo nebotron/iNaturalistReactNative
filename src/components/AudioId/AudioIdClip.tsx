@@ -26,13 +26,10 @@ import useAudioIdHistory from "./audioIdHistory";
 import { AudioBirdId } from "./audioIdSession";
 import ClipTrimmer, { useClipSpan } from "./ClipTrimmer";
 import useCommonName from "./useCommonName";
+import { clipTaxonId, NEARBY_MS, obsTime } from "./useEligibleClips";
 
 const { useQuery } = RealmContext;
 
-// Observations of the same species within this long of the clip are offered to add it to.
-const NEARBY_MS = 60 * 1000;
-const obsTime = ( obs: Observation ) => Date
-  .parse( obs.time_observed_at || obs.observed_on_string );
 const formatDelta = ( ms: number ) => `${ms < 0
   ? "-"
   : "+"}${Math.round( Math.abs( ms ) / 1000 )}s`;
@@ -78,11 +75,7 @@ const AudioIdClip = ( ) => {
       day,
     ),
   }, [day] );
-  // The user's label wins over the model's ID; "no organism" matches nothing.
-  const taxonId = clip?.label?.taxonId
-    || ( clip?.label?.taxonId === null
-      ? null
-      : clip?.sp.taxonId );
+  const taxonId = clip && clipTaxonId( clip );
   const nearbyObs = sameDayObs
     .filter( obs => taxonId && obs.taxon?.id === taxonId
       && Math.abs( obsTime( obs ) - time ) <= NEARBY_MS )
