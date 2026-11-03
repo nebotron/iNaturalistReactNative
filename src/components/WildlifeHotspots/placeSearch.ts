@@ -184,7 +184,9 @@ export async function searchPlaces(
         nearbyLatLng?.latitude ?? 0,
         nearbyLatLng?.longitude ?? 0,
         // 0 means no bias point; Apple then biases by the device's region.
-        nearbyLatLng ? BIAS_METERS : 0,
+        nearbyLatLng
+          ? BIAS_METERS
+          : 0,
         MAX_SUGGESTIONS,
       );
       if ( appleResults.length > 0 ) return remember( key, appleResults );
