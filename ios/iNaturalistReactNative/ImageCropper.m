@@ -3520,4 +3520,89 @@ RCT_EXPORT_METHOD( findLibraryOriginal
   } );
 }
 
+// Saves an original image file to Photos with a crop applied as a PhotoKit
+// edit: the asset keeps the full original, shows the cropped render, and the
+// Photos app's Revert brings the full image back. crop is normalized
+// {x, y, w, h} in display orientation. Resolves the new asset's ph:// URI.
+RCT_EXPORT_METHOD( saveCroppedAsset
+                  : ( NSString * )fileUri crop
+                  : ( NSDictionary * )crop resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  dispatch_async( cropWriteQueue( ), ^{
+    NSString *input = [fileUri stringByReplacingOccurrencesOfString:@"file://" withString:@""];
+    NSURL *inputURL = [NSURL fileURLWithPath:input];
+    CGImageSourceRef src = CGImageSourceCreateWithURL( (__bridge CFURLRef)inputURL, nil );
+    NSDictionary *srcMeta = nil;
+    if ( src ) {
+      srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
+      CFRelease( src );
+    }
+    NSData *data = nil;
+    @autoreleasepool {
+      UIImage *image = [UIImage imageWithContentsOfFile:input];
+      if ( image ) {
+        CGFloat w = image.size.width * image.scale;
+        CGFloat h = image.size.height * image.scale;
+        CGRect rect = CGRectIntegral( CGRectMake(
+          [crop[@"x"] doubleValue] * w, [crop[@"y"] doubleValue] * h,
+          [crop[@"w"] doubleValue] * w, [crop[@"h"] doubleValue] * h ) );
+        data = croppedJpegData( image, CGRectIntersection( rect, CGRectMake( 0, 0, w, h ) ),
+                                srcMeta );
+      }
+    }
+    if ( !data ) { reject( @"CROP_FAILED", @"Could not render cropped image", nil ); return; }
+    NSURL *rendered = [NSURL fileURLWithPath:[NSTemporaryDirectory()
+      stringByAppendingPathComponent:[[NSUUID UUID].UUIDString stringByAppendingString:@".jpg"]]];
+    if ( ![data writeToURL:rendered atomically:YES] ) {
+      reject( @"CROP_FAILED", @"Could not write cropped image", nil );
+      return;
+    }
+    NSData *adjustment = [NSJSONSerialization dataWithJSONObject:@{
+      @"crop": @{ @"x": crop[@"x"], @"y": crop[@"y"], @"w": crop[@"w"], @"h": crop[@"h"] },
+    } options:0 error:nil];
+
+    dispatch_async( dispatch_get_main_queue(), ^{
+      inatWhenClearToWrite( ^( NSString *busy ) {
+        if ( busy ) {
+          [[NSFileManager defaultManager] removeItemAtURL:rendered error:nil];
+          reject( @"PHOTOS_LIBRARY_BUSY", busy, nil );
+          return;
+        }
+        __block NSString *localId = nil;
+        __block NSError *copyError = nil;
+        NSUInteger writeToken = inatPhotoWriteBegan( @"saveCroppedAsset" );
+        [[PHPhotoLibrary sharedPhotoLibrary] performChanges:^{
+          PHAssetCreationRequest *request = [PHAssetCreationRequest creationRequestForAsset];
+          [request addResourceWithType:PHAssetResourceTypePhoto fileURL:inputURL options:nil];
+          PHContentEditingOutput *output = [[PHContentEditingOutput alloc]
+            initWithPlaceholderForCreatedAsset:request.placeholderForCreatedAsset];
+          output.adjustmentData = [[PHAdjustmentData alloc]
+            initWithFormatIdentifier:[NSBundle mainBundle].bundleIdentifier
+                       formatVersion:@"1.0"
+                                data:adjustment];
+          if ( [[NSFileManager defaultManager] copyItemAtURL:rendered
+                                                       toURL:output.renderedContentURL
+                                                       error:&copyError] ) {
+            request.contentEditingOutput = output;
+          }
+          localId = request.placeholderForCreatedAsset.localIdentifier;
+        } completionHandler:^( BOOL success, NSError *error ) {
+          inatPhotoWriteEnded( writeToken );
+          [[NSFileManager defaultManager] removeItemAtURL:rendered error:nil];
+          if ( success && localId ) {
+            resolve( @{
+              @"uri": [@"ph://" stringByAppendingString:localId],
+              @"cropped": @( copyError == nil ),
+            } );
+          } else {
+            reject( @"SAVE_FAILED", error.localizedDescription ?: @"unknown", error );
+          }
+        }];
+      } );
+    } );
+  } );
+}
+
 @end

@@ -29,11 +29,11 @@ const syncNow = async ( ) => {
   const cache = userId
     ? readUserObservationsCache( userId )
     : undefined;
-  const { unfavorited, favorited } = classifyDevicePhotoUris( realm, cache );
+  const { unfavorited, favorited, crops } = classifyDevicePhotoUris( realm, cache );
   // Ahead of the early return: expiry depends on the clock, not on a change.
   void sweepUsbStaging( favorited, unfavorited, uris => {
     if ( !realm.isClosed ) recordUploadedDevicePhotoUris( realm, uris );
-  } );
+  }, crops );
   const signature = JSON.stringify( [unfavorited.sort( ), favorited.sort( )] );
   if ( signature === lastSynced ) return;
   lastSynced = signature;

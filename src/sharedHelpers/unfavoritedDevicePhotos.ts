@@ -1,6 +1,9 @@
 import type Realm from "realm";
 import type { RealmObservation } from "realmModels/types";
+import { savedNormalizedCrop } from "sharedHelpers/cropPhotoMetadata";
 import { getDevicePhotoUrisFromObservation } from "sharedHelpers/duplicateUploadedDevicePhotos";
+import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { getRemovedGroupPhotoUris } from "sharedHelpers/removedGroupPhotoUris";
 import type { UserObservationsCache } from "sharedHelpers/userObservationsCache";
 
@@ -24,12 +27,18 @@ const isFavorited = ( observation: FavoritableObservation ): boolean => {
 // observation the current user has NOT favorited, plus photos already removed
 // via Group Photos, and those on a favorited one. Matching is by stored URI
 // only. A photo also stored on a favorited observation is protected.
+// crops: the crop each favorited device photo has on its observation.
 const classifyDevicePhotoUris = (
   realm: Realm,
   observationsCache?: UserObservationsCache,
-): { unfavorited: string[]; favorited: string[] } => {
+): {
+  unfavorited: string[];
+  favorited: string[];
+  crops: Record<string, NormalizedCrop>;
+} => {
   const unfavoritedUris = new Set<string>( );
   const favoritedUris = new Set<string>( );
+  const crops: Record<string, NormalizedCrop> = {};
 
   realm.objects<FavoritableObservation>( "Observation" ).forEach( observation => {
     // Realm's votes can be stale; prefer the shared cache, which is reconciled
@@ -43,6 +52,13 @@ const classifyDevicePhotoUris = (
         ? favoritedUris
         : unfavoritedUris ).add( uri );
     } );
+    if ( favorited ) {
+      ( observation.observationPhotos ?? [] ).forEach( obsPhoto => {
+        const uri = normalizeDevicePhotoUri( obsPhoto.originalDevicePhotoUri );
+        const crop = savedNormalizedCrop( obsPhoto.photo ?? {} );
+        if ( uri && crop ) crops[uri] = crop;
+      } );
+    }
   } );
 
   favoritedUris.forEach( uri => unfavoritedUris.delete( uri ) );
@@ -52,7 +68,7 @@ const classifyDevicePhotoUris = (
     unfavoritedUris.add( uri );
     favoritedUris.delete( uri );
   } );
-  return { unfavorited: [...unfavoritedUris], favorited: [...favoritedUris] };
+  return { unfavorited: [...unfavoritedUris], favorited: [...favoritedUris], crops };
 };
 
 export default classifyDevicePhotoUris;
