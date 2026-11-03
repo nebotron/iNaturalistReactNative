@@ -40,7 +40,7 @@ import {
   markDuplicatePhotosFromLibrary,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { getOriginalDevicePhotoUrisFromAssets } from "sharedHelpers/getOriginalDevicePhotoUri";
-import { enqueuePreload } from "sharedHelpers/imageCropPreload";
+import { aliasPreload, enqueuePreload } from "sharedHelpers/imageCropPreload";
 import {
   fileExtension,
   summarizeTypes,
@@ -394,6 +394,8 @@ const PhotoLibrary = ( ) => {
           copied.sourceAsset,
         );
         importedUris.push( photo.image.uri );
+        // A USB photo's prepare started when it was staged (useUsbImport)
+        aliasPreload( node.image.uri, photo.image.uri );
         // The photo the cropper opens on: start its prepare now rather than
         // when the cropper gets around to it.
         if ( node === photoNodes[0] && isCroppable( photo ) ) {

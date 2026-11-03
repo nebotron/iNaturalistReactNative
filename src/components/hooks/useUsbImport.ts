@@ -6,6 +6,7 @@ import {
   beginBackgroundUsbImportTask,
   endBackgroundUsbImportTask,
 } from "sharedHelpers/backgroundExecution";
+import { enqueuePreload, PRELOAD_LOOKAHEAD } from "sharedHelpers/imageCropPreload";
 import { useOnboardingShown } from "sharedHelpers/installData";
 import { log } from "sharedHelpers/logger";
 import { requestQueuedDeletionAlbumSync } from "sharedHelpers/queuedDeletionAlbum";
@@ -328,12 +329,21 @@ const useUsbImport = ( ) => {
             AppState.currentState,
             availableMemoryMb( ),
           );
+          const stagedPath = stagedPathFor( relativePath );
           // eslint-disable-next-line no-await-in-loop
           await withTimeout(
-            copyUsbImageToFile( relativePath, stagedPathFor( relativePath ) ),
+            copyUsbImageToFile( relativePath, stagedPath ),
             SAVE_TIMEOUT_MS,
           );
           savedPaths.push( relativePath );
+          // The drive is listed newest first, the order the cropper shows
+          // photos in, so start preparing the ones it opens on as soon as they
+          // land rather than after the user picks them (PhotoLibrary carries
+          // the preload over to the copy Done makes, via aliasPreload).
+          if ( savedPaths.length <= PRELOAD_LOOKAHEAD + 1 ) {
+            const stagedUri = `file://${stagedPath}`;
+            enqueuePreload( stagedUri, stagedUri, null ).catch( ( ) => undefined );
+          }
           // Mark imported immediately, not after the whole batch: if the app
           // is killed mid-loop, photos already saved to this point must not
           // be saved again on restart.

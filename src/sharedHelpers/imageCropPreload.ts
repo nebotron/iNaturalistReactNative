@@ -26,6 +26,12 @@ export interface PreloadResult {
   timing: PreloadTiming;
 }
 
+// How many upcoming photos in a bulk crop to preload ahead of the one
+// currently shown. Preloads run one at a time and leave their result on disk,
+// so a deeper lookahead costs no extra memory: it banks prepares while the
+// user frames a slow crop, to cover a later run of quick ones.
+export const PRELOAD_LOOKAHEAD = 10;
+
 // Module-level cache so preloaded data survives navigation.replace cycles
 export const preloadCache = new Map<string, PreloadResult>( );
 // Track in-flight loads by their promise so callers can await (and dedupe)
@@ -174,6 +180,35 @@ export function enqueuePreload(
   } );
   pumpPreloadQueue( );
   return promise;
+}
+
+// A photo the import copied to a new uri (a USB-staged photo copied into the
+// gallery folder on Done) keeps the preload started on its old uri: the bytes
+// are the same, so the cropper finds it under the new one instead of starting
+// over.
+export function aliasPreload( fromUri: string, toUri: string ) {
+  if ( fromUri === toUri || preloadCache.has( toUri ) || preloadInFlight.has( toUri ) ) {
+    return;
+  }
+  const cached = preloadCache.get( fromUri );
+  const pending = cached
+    ? Promise.resolve( cached )
+    : preloadInFlight.get( fromUri ) ?? preloadQueued.get( fromUri );
+  if ( !pending ) {
+    return;
+  }
+  const promise = pending.then( result => {
+    preloadCache.delete( fromUri );
+    if ( !result ) {
+      return null;
+    }
+    const aliased = { ...result, localUri: toUri };
+    preloadCache.set( toUri, aliased );
+    return aliased;
+  } ).finally( ( ) => {
+    preloadInFlight.delete( toUri );
+  } );
+  preloadInFlight.set( toUri, promise );
 }
 
 // Once a photo is cropped, the export and display file it was cropped from

@@ -36,6 +36,7 @@ import {
 import type { PreloadResult } from "sharedHelpers/imageCropPreload";
 import {
   enqueuePreload,
+  PRELOAD_LOOKAHEAD,
   preloadCache,
   releaseCropSource,
   takeCropRequestedAt,
@@ -54,11 +55,6 @@ type Route = RouteProp<SharedStackParamList, "ImageCropEditor">;
 
 const logger = log.extend( "ImageCropEditor" );
 
-// How many upcoming photos in a bulk crop to preload ahead of the one
-// currently shown. Preloads run one at a time and leave their result on disk,
-// so a deeper lookahead costs no extra memory: it buffers prepares while the
-// user frames a crop, to cover a run of quick deletes.
-const PRELOAD_LOOKAHEAD = 5;
 // How many of those to also decode off-screen (see ImageCropView's warmUris).
 // A decoded full-resolution photo is ~130MB, so only the next one.
 const DECODE_LOOKAHEAD = 1;
@@ -491,7 +487,7 @@ const ImageCropEditor = ( ) => {
     syncWarmUris( );
     preload( upcomingUris[0] );
     const handle = InteractionManager.runAfterInteractions( ( ) => {
-      upcomingUris.slice( 1, PRELOAD_LOOKAHEAD ).forEach( preload );
+      upcomingUris.slice( 1, PRELOAD_LOOKAHEAD + 1 ).forEach( preload );
     } );
     return ( ) => {
       cancelled = true;
