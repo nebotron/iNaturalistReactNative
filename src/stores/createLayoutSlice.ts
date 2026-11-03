@@ -82,6 +82,8 @@ export interface LayoutSlice {
     mapType: MAP_TYPES;
     setMapType: ( mapType: MAP_TYPES ) => void;
     ebirdEnabled: boolean;
+    usbDeleteAfterImport: boolean;
+    setUsbDeleteAfterImport: ( usbDeleteAfterImport: boolean ) => void;
     setEbirdEnabled: ( ebirdEnabled: boolean ) => void;
     hotspotSettings: HotspotSettings;
     setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
@@ -224,6 +226,14 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         debugModeEnabled: !state.layout.debugModeEnabled,
+      },
+    } ) ),
+    // Whether USB import deletes imported photos from the drive
+    usbDeleteAfterImport: false,
+    setUsbDeleteAfterImport: newValue => set( state => ( {
+      layout: {
+        ...state.layout,
+        usbDeleteAfterImport: newValue,
       },
     } ) ),
     // Whether Explore includes eBird sightings

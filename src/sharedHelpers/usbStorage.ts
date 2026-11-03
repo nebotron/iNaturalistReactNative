@@ -83,6 +83,7 @@ interface UsbStorageModule {
   ) => Promise<UsbListResult>;
   copyImageToFile: ( relativePath: string, destPath: string ) => Promise<{ copied: boolean }>;
   deleteSourceImages: ( relativePaths: string[] ) => Promise<UsbDeleteResult>;
+  notify: ( title: string, body: string ) => void;
 }
 
 const usbStorage = Platform.OS === "ios"
@@ -330,4 +331,8 @@ export const refreshUsbCardState = async ( ) => {
     cardState = "empty";
   }
   useUsbImportProgress.setState( { cardState } );
+};
+
+export const notifyUsbImportFinished = ( title: string, body: string ) => {
+  usbStorage?.notify( title, body );
 };

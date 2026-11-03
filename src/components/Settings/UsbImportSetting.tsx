@@ -2,6 +2,7 @@ import {
   Body3,
   Button,
   Heading4,
+  RadioButtonRow,
 } from "components/SharedComponents";
 import React, { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
@@ -15,6 +16,7 @@ import {
   refreshUsbCardState,
 } from "sharedHelpers/usbStorage";
 import { useTranslation } from "sharedHooks";
+import useStore from "stores/useStore";
 
 const UsbImportSetting = ( ) => {
   const { t } = useTranslation( );
@@ -23,6 +25,8 @@ const UsbImportSetting = ( ) => {
   // "choose a folder" to someone who already chose one invites them to choose
   // another. bookmarkPresent says whether the feature is set up at all.
   const [folder, setFolder] = useState<UsbFolderDiagnostics | null>( null );
+  const deleteAfterImport = useStore( state => state.layout.usbDeleteAfterImport );
+  const setDeleteAfterImport = useStore( state => state.layout.setUsbDeleteAfterImport );
 
   const refresh = useCallback( async ( ) => {
     setFolder( await getUsbFolderDiagnostics( ) );
@@ -75,6 +79,21 @@ const UsbImportSetting = ( ) => {
           onPress={chooseFolder}
         />
       )}
+      <Body3>{t( "USB-import-after-importing" )}</Body3>
+      <RadioButtonRow
+        classNames="ml-[6px] mt-[15px]"
+        smallLabel
+        checked={!deleteAfterImport}
+        onPress={( ) => setDeleteAfterImport( false )}
+        label={t( "Keep-on-drive" )}
+      />
+      <RadioButtonRow
+        classNames="ml-[6px] mt-[15px] mb-[15px]"
+        smallLabel
+        checked={deleteAfterImport}
+        onPress={( ) => setDeleteAfterImport( true )}
+        label={t( "Delete-from-drive" )}
+      />
       <Button
         level="neutral"
         text={configured

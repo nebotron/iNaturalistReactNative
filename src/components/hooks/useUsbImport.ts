@@ -1,6 +1,6 @@
 import i18next from "i18next";
 import { useCallback, useEffect, useRef } from "react";
-import { Alert, AppState } from "react-native";
+import { AppState } from "react-native";
 import DeviceInfo from "react-native-device-info";
 import {
   beginBackgroundUsbImportTask,
@@ -24,12 +24,14 @@ import {
   listNewUsbImages,
   markUsbImagesImported,
   markUsbOffloadStarted,
+  notifyUsbImportFinished,
   refreshAvailableMemory,
   refreshUsbCardState,
   takeUnfinishedUsbOffload,
   updateUsbOffloadProgress,
 } from "sharedHelpers/usbStorage";
 import useUsbImportProgress from "stores/usbImportProgress";
+import useStore from "stores/useStore";
 
 const logger = log.extend( "useUsbImport" );
 
@@ -103,32 +105,11 @@ const withTimeout = <T, >( promise: Promise<T>, ms: number ): Promise<T> => {
 // a whole batch is safely saved, but each file is marked imported the moment it
 // saves, so a run iOS suspends mid-loop strands its saved files on the card
 // where no later scan will ever list them again.
-const confirmDeleteFromDevice = ( count: number ) => new Promise<boolean>( resolve => {
-  Alert.alert(
-    i18next.t( "Delete-imported-photos-from-USB" ),
-    i18next.t( "Delete-imported-photos-from-USB-message", { count } ),
-    [
-      {
-        text: i18next.t( "Keep-on-drive" ),
-        style: "cancel",
-        onPress: ( ) => resolve( false ),
-      },
-      {
-        text: i18next.t( "Delete-from-drive" ),
-        style: "destructive",
-        onPress: ( ) => resolve( true ),
-      },
-    ],
-    { cancelable: false },
-  );
-} );
-
 const deletePendingFromDevice = async ( ) => {
   const paths = getPendingUsbDeletes( );
   if ( paths.length === 0 ) return null;
-  // Declining keeps the files on the card but stops tracking them, so the
-  // prompt doesn't return on every later scan.
-  if ( !( await confirmDeleteFromDevice( paths.length ) ) ) {
+  // Keeping (the setting) leaves the files on the card but stops tracking them.
+  if ( !useStore.getState( ).layout.usbDeleteAfterImport ) {
     clearPendingUsbDeletes( paths );
     return { deleted: 0, failed: 0, attempted: paths.length };
   }
@@ -480,7 +461,7 @@ const useUsbImport = ( ) => {
       }
 
       // Delete from the source device only after the whole batch is safely
-      // copied (per the user's choice), and only files that actually copied —
+      // copied (per the user's setting), and only files that actually copied —
       // this run's, plus anything an earlier run saved and never deleted.
       let deletedFromDevice = 0;
       let deleteFailures = 0;
@@ -520,6 +501,12 @@ const useUsbImport = ( ) => {
       progress.setPhase( failed > 0 || abandonReason
         ? "error"
         : "done" );
+      notifyUsbImportFinished(
+        i18next.t( "USB-import-complete" ),
+        deletedFromDevice > 0
+          ? i18next.t( "USB-import-complete-deleted-message", { count: savedPaths.length } )
+          : i18next.t( "USB-import-complete-message", { count: savedPaths.length } ),
+      );
     } catch ( error ) {
       logger.error( "USB offload failed", error );
       if ( started ) progress.setPhase( "error" );

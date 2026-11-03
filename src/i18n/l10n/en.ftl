@@ -479,16 +479,8 @@ Delete-comment = Delete comment
 DELETE-COMMENT--question = DELETE COMMENT?
 # Button that deletes the current observation in a batch of several observations
 Delete-current-observation = Delete current observation
-# Button that deletes imported photos from the USB drive or SD card
+# Settings option to delete imported photos from the USB drive or SD card
 Delete-from-drive = Delete from Drive
-# Title of prompt asking whether to delete photos from a USB drive or SD card after importing them
-Delete-imported-photos-from-USB = Delete imported photos from the drive?
-# Message of prompt asking whether to delete photos from a USB drive or SD card after importing them
-Delete-imported-photos-from-USB-message =
-    { $count ->
-        [one] { $count } photo was imported and can be deleted from the drive.
-       *[other] { $count } photos were imported and can be deleted from the drive.
-    }
 # Button that deletes an observation
 Delete-observation = Delete observation
 DELETE-OBSERVATION--question = DELETE OBSERVATION?
@@ -940,7 +932,7 @@ June = June
 Just-make-sure-the-organism-is-wild = Just make sure the organism is wild (not a pet, zoo animal, or garden plant)
 KEEP-EDITING = KEEP EDITING
 Keep-in-mind-that-project-curators = Keep in mind that project curators will still be able to add your observations to their project unless you change your account settings.
-# Button that keeps imported photos on the USB drive or SD card
+# Settings option to keep imported photos on the USB drive or SD card
 Keep-on-drive = Keep on Drive
 # Display name for the iconic taxa category chromista
 Kelp-and-Diatoms = Kelp & Diatoms
@@ -2183,8 +2175,24 @@ Uploading-x-of-y-observations =
         [one] Uploading { $currentUploadCount } observation
        *[other] Uploading { $currentUploadCount } of { $total } observations
     }
+# Settings label for what happens to photos on a USB drive after they are imported
+USB-import-after-importing = After importing photos:
 # Describes USB photo import before a folder has been chosen
 USB-import-choose-folder = Choose a folder on a USB drive or in Files, then import its new photos from the button on My Observations.
+# Notification title shown when a USB photo import finishes
+USB-import-complete = Photo import complete
+# Notification body shown when a USB photo import finishes and the photos were deleted from the drive
+USB-import-complete-deleted-message =
+    { $count ->
+        [one] { $count } photo was imported and deleted from the drive.
+       *[other] { $count } photos were imported and deleted from the drive.
+    }
+# Notification body shown when a USB photo import finishes
+USB-import-complete-message =
+    { $count ->
+        [one] { $count } photo was imported.
+       *[other] { $count } photos were imported.
+    }
 # Describes USB photo import once a folder has been chosen
 USB-import-folder-chosen = Import new photos in "{ $folder }" from the button on My Observations.
 # Describes USB photo import when a folder has been chosen but the drive

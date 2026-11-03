@@ -3,6 +3,7 @@
 #import <React/RCTUtils.h>
 #import <UIKit/UIKit.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
+#import <UserNotifications/UserNotifications.h>
 
 // Lets the user grant access to a folder (e.g. on a USB drive mounted in
 // Files) via the system document picker, persists that grant as a
@@ -368,6 +369,24 @@ RCT_EXPORT_METHOD(deleteSourceImages:(NSArray<NSString *> *)relativePaths
   }
   [folder stopAccessingSecurityScopedResource];
   resolve( @{ @"deleted": @( deleted ), @"failed": @( failed ), @"available": @YES } );
+}
+
+// Posts a local notification that an import finished. Asks for permission on
+// first use. Tagged so AudioBirdId's tap handler doesn't treat it as its own.
+RCT_EXPORT_METHOD(notify:(NSString *)title body:(NSString *)body)
+{
+  UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+  [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert | UNAuthorizationOptionSound
+                        completionHandler:^( BOOL granted, NSError *error ) {
+    if ( !granted ) return;
+    UNMutableNotificationContent *content = [UNMutableNotificationContent new];
+    content.title = title;
+    content.body = body;
+    content.userInfo = @{ @"source": @"usbImport" };
+    [center addNotificationRequest:[UNNotificationRequest
+      requestWithIdentifier:[NSUUID UUID].UUIDString content:content trigger:nil]
+             withCompletionHandler:nil];
+  }];
 }
 
 @end

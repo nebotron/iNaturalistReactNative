@@ -964,7 +964,9 @@ RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
 didReceiveNotificationResponse:(UNNotificationResponse *)response
          withCompletionHandler:(void ( ^ )( void ))completionHandler
 {
-  [self sendEventWithName:@"AudioBirdIdOpen" body:nil];
+  if ( ![response.notification.request.content.userInfo[@"source"] isEqual:@"usbImport"] ) {
+    [self sendEventWithName:@"AudioBirdIdOpen" body:nil];
+  }
   completionHandler( );
 }
 
