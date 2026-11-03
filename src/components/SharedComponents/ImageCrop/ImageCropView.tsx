@@ -548,6 +548,7 @@ const ImageCropView = ( {
           zoomAccessibilityLabel={t( "Adjust-zoom" )}
           brightnessAccessibilityLabel={t( "Adjust-brightness" )}
           iconColor={colors.white}
+          zoomSnapScale={cropSidePxFromScale( 1 ) / 2048}
         />
 
         <View

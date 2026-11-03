@@ -38,6 +38,9 @@ const zoomScaleToPos = ( scale: number ) => Math.min(
   Math.max( 0, Math.log( clampZoom( scale ) / MIN_ZOOM ) / Math.log( MAX_ZOOM / MIN_ZOOM ) ),
 );
 
+// Slider positions (0..1) this close to the zoom snap point snap to it.
+const ZOOM_SNAP_THRESHOLD = 0.015;
+
 const IDENTITY_TRANSFORM: ImageZoomTransform = {
   scale: 1, translateX: 0, translateY: 0, focalX: 0, focalY: 0,
 };
@@ -265,6 +268,8 @@ interface ZoomBrightnessSlidersProps {
   zoomAccessibilityLabel: string;
   brightnessAccessibilityLabel: string;
   iconColor?: string;
+  // Zoom scale the zoom slider snaps to and marks with a tick, if in range.
+  zoomSnapScale?: number;
   // Nothing to zoom or brighten (e.g. a sound-only observation), so the sliders
   // stay in the layout but don't respond.
   disabled?: boolean;
@@ -283,6 +288,7 @@ export const ZoomBrightnessSliders = ( {
   zoomAccessibilityLabel,
   brightnessAccessibilityLabel,
   iconColor = colors.darkGray,
+  zoomSnapScale,
   disabled = false,
 }: ZoomBrightnessSlidersProps ) => (
   <View className="px-4 pt-1">
@@ -291,6 +297,12 @@ export const ZoomBrightnessSliders = ( {
       <FineSlider
         disabled={disabled}
         value={zoomScaleToPos( zoomScale )}
+        snapValue={zoomSnapScale !== undefined
+          && zoomSnapScale >= MIN_ZOOM
+          && zoomSnapScale <= MAX_ZOOM
+          ? zoomScaleToPos( zoomSnapScale )
+          : undefined}
+        snapThreshold={ZOOM_SNAP_THRESHOLD}
         onChange={onZoomChange}
         onComplete={onZoomComplete}
         accessibilityLabel={zoomAccessibilityLabel}
