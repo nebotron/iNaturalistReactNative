@@ -2,6 +2,8 @@ import { refresh } from "@react-native-community/netinfo";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import type { FlashListRef } from "@shopify/flash-list";
 import type { ApiTaxon } from "api/types";
+import GridOverlaysSheet
+  from "components/Explore/ExploreV2/components/GridOverlaysSheet";
 import type { ViewOption } from "components/Explore/ObservationsViewBar";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
 import ObservationsFlashList from "components/ObservationsFlashList/ObservationsFlashList";
@@ -13,6 +15,7 @@ import {
 } from "components/OnboardingModal/PivotCards";
 import {
   Body1,
+  INatIconButton,
   InfiniteScrollLoadingWheel,
   OfflineNotice,
   PerformanceDebugView,
@@ -50,6 +53,7 @@ import { accessibleTaxonName } from "sharedHelpers/taxon";
 import { useGridLayout, useLayoutPrefs, useTranslation } from "sharedHooks";
 import useFeatureFlag from "sharedHooks/useFeatureFlag";
 import { FeatureFlag } from "stores/createFeatureFlagSlice";
+import { getShadow } from "styles/global";
 import colors from "styles/tailwindColors";
 import type { SpeciesCount } from "types/sorting";
 
@@ -128,6 +132,11 @@ interface ObservationsSortOption {
   text?: string;
   value: MyObservationsSort;
 }
+
+const DROP_SHADOW = getShadow( {
+  offsetHeight: 4,
+  elevation: 6,
+} );
 
 const STAT_TAB_PADDING = "pt-[10px] px-3 pb-3";
 
@@ -531,6 +540,17 @@ const MyObservationsSimple = ( {
             accessibilityLabel={t( "Change-observations-sort-order" )}
           />
         )}
+        {layout === "grid" && (
+          <INatIconButton
+            icon="tune"
+            size={22}
+            className="bg-white rounded-full h-[46px] w-[46px] border-[1px] border-lightGray
+              absolute bottom-[76px] z-10 right-5"
+            accessibilityLabel={t( "Change-view-options" )}
+            onPress={() => setOpenSheet( ACTIVE_SHEET.VIEW_OPTIONS )}
+            style={DROP_SHADOW}
+          />
+        )}
         <CombineObservationsBar />
       </>
     );
@@ -677,6 +697,13 @@ const MyObservationsSimple = ( {
           selectedValue={speciesSortOptionId}
           confirm={optionId => handleSpeciesSortConfirm( optionId as SPECIES_SORT )}
           onPressClose={() => setOpenSheet( ACTIVE_SHEET.NONE )}
+        />
+      )}
+      {openSheet === ACTIVE_SHEET.VIEW_OPTIONS && (
+        <GridOverlaysSheet
+          myObs
+          onPressClose={() => setOpenSheet( ACTIVE_SHEET.NONE )}
+          showGridOverlays
         />
       )}
       {openSheet === ACTIVE_SHEET.LOGIN && <LoginSheet setShowLoginSheet={setOpenSheet} />}

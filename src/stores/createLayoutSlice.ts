@@ -87,6 +87,8 @@ export interface LayoutSlice {
     setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
     exploreGridOverlays: ExploreGridOverlays;
     setExploreGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
+    myObsGridOverlays: ExploreGridOverlays;
+    setMyObsGridOverlay: ( key: keyof ExploreGridOverlays, value: boolean ) => void;
     aiCameraSettings: AICameraSettings;
     setAICameraSetting: <K extends keyof AICameraSettings>(
       key: K,
@@ -298,6 +300,21 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         exploreGridOverlays: { ...state.layout.exploreGridOverlays, [key]: value },
+      },
+    } ) ),
+    // Info overlaid on each photo in the Me tab observations grid
+    myObsGridOverlays: {
+      commonName: true,
+      scientificName: false,
+      location: false,
+      dateTime: false,
+      faveButton: true,
+      faveCount: false,
+    },
+    setMyObsGridOverlay: ( key, value ) => set( state => ( {
+      layout: {
+        ...state.layout,
+        myObsGridOverlays: { ...state.layout.myObsGridOverlays, [key]: value },
       },
     } ) ),
     // Recently entered addresses in the Wildlife Hotspots address search,

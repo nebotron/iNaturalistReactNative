@@ -9,13 +9,19 @@ import useStore from "stores/useStore";
 interface Props {
   onPressClose: ( ) => void;
   showGridOverlays: boolean;
+  // Use the Me tab's overlays instead of Explore's
+  myObs?: boolean;
 }
 
 // Options that only affect the Observations view
-const GridOverlaysSheet = ( { onPressClose, showGridOverlays }: Props ) => {
+const GridOverlaysSheet = ( { onPressClose, showGridOverlays, myObs }: Props ) => {
   const { t } = useTranslation( );
-  const overlays = useStore( state => state.layout.exploreGridOverlays );
-  const setOverlay = useStore( state => state.layout.setExploreGridOverlay );
+  const overlays = useStore( state => ( myObs
+    ? state.layout.myObsGridOverlays
+    : state.layout.exploreGridOverlays ) );
+  const setOverlay = useStore( state => ( myObs
+    ? state.layout.setMyObsGridOverlay
+    : state.layout.setExploreGridOverlay ) );
   const options: { key: keyof ExploreGridOverlays; label: string }[] = [
     { key: "commonName", label: t( "Common-name" ) },
     { key: "scientificName", label: t( "Scientific-name" ) },
@@ -36,7 +42,7 @@ const GridOverlaysSheet = ( { onPressClose, showGridOverlays }: Props ) => {
   return (
     <BottomSheet headerText={t( "VIEW-OPTIONS" )} onPressClose={onPressClose}>
       <View className="p-7 pt-2 gap-y-4">
-        <EbirdCheckbox />
+        {!myObs && <EbirdCheckbox />}
         {showGridOverlays && <Heading4>{t( "GRID-OVERLAYS" )}</Heading4>}
         {showGridOverlays && options.map( ( { key, label } ) => (
           <Checkbox

@@ -65,6 +65,7 @@ export enum ACTIVE_SHEET {
   NONE = "NONE",
   LOGIN = "LOGIN",
   SORT = "SORT",
+  VIEW_OPTIONS = "VIEW_OPTIONS",
 }
 
 const MyObservationsResults = ( ) => {

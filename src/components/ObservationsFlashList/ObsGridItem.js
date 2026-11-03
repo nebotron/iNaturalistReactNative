@@ -67,9 +67,10 @@ const ObsGridItem = ( {
 }: Props ): Node => {
   const isOwnObs = !!currentUser && observation?.user?.login === currentUser?.login;
   const exploreOverlays = useStore( state => state.layout.exploreGridOverlays );
+  const myObsOverlays = useStore( state => state.layout.myObsGridOverlays );
   const overlays = explore
     ? exploreOverlays
-    : null;
+    : myObsOverlays;
   const showCommon = !overlays || overlays.commonName;
   const showScientific = !overlays || overlays.scientificName;
   const showCameraInfo = !!overlays && CAMERA_INFO_LINES.flat( ).some( key => overlays[key] );
@@ -82,7 +83,7 @@ const ObsGridItem = ( {
         : cameraInfo[key] ) )
       .join( " · " ) ).filter( Boolean )
     : [];
-  const showFaveButton = ( !explore || overlays?.faveButton ) && !!currentUser;
+  const showFaveButton = !!overlays?.faveButton && !!currentUser;
   const faves = observation?.votes?.filter( v => v?.vote_scope === null ) || [];
   const initiallyFaved = faves.some( v => v.user_id === currentUser?.id );
   // Fave state after toggling here, so the count updates without a refetch
