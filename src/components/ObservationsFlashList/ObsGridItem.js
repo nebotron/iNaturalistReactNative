@@ -195,7 +195,9 @@ const ObsGridItem = ( {
         )}
         {overlays?.dateTime && (
           <DateDisplay
-            dateString={observation.time_observed_at || observation.observed_on}
+            dateString={observation.time_observed_at
+              || observation.observed_on
+              || observation.observed_on_string}
             classNameMargin="mt-1"
             geoprivacy={observation.geoprivacy}
             taxonGeoprivacy={observation.taxon_geoprivacy}
