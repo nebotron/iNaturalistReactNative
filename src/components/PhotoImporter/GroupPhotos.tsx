@@ -14,7 +14,7 @@ import { View } from "components/styledComponents";
 import React, {
   useCallback, useEffect, useMemo, useRef,
 } from "react";
-import { enqueuePreload } from "sharedHelpers/imageCropPreload";
+import { enqueuePreload, noteCropRequested } from "sharedHelpers/imageCropPreload";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import {
   prefetchDeviceImageThumbnails,
@@ -200,6 +200,7 @@ const GroupPhotos = ( {
   // cropper: the first opens immediately and the rest queue behind it, so the
   // checkmark advances to the next photo instead of returning to the grid.
   const cropSelectedPhotos = useCallback( ( ) => {
+    noteCropRequested( );
     if ( resume ) {
       navigation.navigate( "ImageCropEditor", { ...resume, onCropSaved: clearSelection } );
       return;

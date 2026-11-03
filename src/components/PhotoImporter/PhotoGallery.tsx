@@ -34,6 +34,7 @@ import {
   recordUploadedDevicePhotoUris,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import { normalizeDevicePhotoUri } from "sharedHelpers/getOriginalDevicePhotoUri";
+import { noteCropRequested } from "sharedHelpers/imageCropPreload";
 import {
   fileExtension,
   summarizeTypes,
@@ -302,6 +303,7 @@ const PhotoGallery = ( {
       return;
     }
     const selected = photos.filter( node => selectedUris.has( getSelectionKey( node ) ) );
+    noteCropRequested( );
     importingRef.current = true;
     setImportingCount( selected.length );
     setImportedCount( 0 );

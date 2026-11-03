@@ -15,6 +15,9 @@ const logger = log.extend( "prepareCropSource" );
 
 // Longest side of the file the cropper displays. Large enough to never
 // downscale, so the cropper draws the photo at full resolution.
+// NEVER reduce this, or display a downsampled decode in the cropper, to speed
+// up loading: the user needs full resolution to see the subject clearly.
+// Speed up loading some other way.
 const DISPLAY_MAX_PIXEL = 99999;
 
 interface PreparedSource {
