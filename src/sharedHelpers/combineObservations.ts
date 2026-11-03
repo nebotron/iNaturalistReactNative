@@ -37,6 +37,7 @@ const combineObservations = async ( realm: Realm, uuids: string[] ): Promise<str
           uuid: uuid.v4( ),
           _created_at: new Date( ),
           originalDevicePhotoUri: op.originalDevicePhotoUri,
+          cameraInfo: op.cameraInfo,
           photo: copyEmbedded( op.photo, Photo.schema ),
           position,
         } );
