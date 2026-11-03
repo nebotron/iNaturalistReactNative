@@ -1,4 +1,5 @@
 import { getUserAgent } from "api/userAgent";
+import { NativeModules } from "react-native";
 import type { LatLng } from "react-native-maps";
 import { log } from "sharedHelpers/logger";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -12,7 +13,10 @@ export interface PlaceResult {
   lon: string;
 }
 
-// Keyless OpenStreetMap geocoders, matching the OSRM routing this screen
+// On iOS, Apple Maps search (the PlaceSearch native module) comes first: it
+// matches partial street addresses and businesses about as well as Google Maps,
+// needs no key, and returns coordinates with each result. Below are the
+// fallbacks, keyless OpenStreetMap geocoders matching the OSRM routing this screen
 // already uses. Google's Places API needs a Cloud project with billing and
 // Places API (New) enabled, plus a key whose API restrictions allow it; when
 // either is missing every keystroke 403s and the dropdown stays empty, which
@@ -32,6 +36,18 @@ const PHOTON_ZOOM = 9;
 // Nominatim biases with a box instead. ~1.5 degrees of latitude is the same
 // ~100 mile radius.
 const BIAS_DEGREES = 1.5;
+const BIAS_METERS = 160000;
+
+interface PlaceSearchModule {
+  search: (
+    query: string,
+    latitude: number,
+    longitude: number,
+    radiusMeters: number,
+    limit: number,
+  ) => Promise<PlaceResult[]>;
+}
+const { PlaceSearch } = NativeModules as { PlaceSearch?: PlaceSearchModule };
 
 // Suggestions are cached by query so backspacing, retyping, or refocusing a
 // field doesn't refetch. The bias point is part of the key because the same
@@ -161,6 +177,21 @@ export async function searchPlaces(
   const key = cacheKey( text, nearbyLatLng );
   const cached = cache.get( key );
   if ( cached ) return cached;
+  if ( PlaceSearch ) {
+    try {
+      const appleResults = await PlaceSearch.search(
+        text,
+        nearbyLatLng?.latitude ?? 0,
+        nearbyLatLng?.longitude ?? 0,
+        // 0 means no bias point; Apple then biases by the device's region.
+        nearbyLatLng ? BIAS_METERS : 0,
+        MAX_SUGGESTIONS,
+      );
+      if ( appleResults.length > 0 ) return remember( key, appleResults );
+    } catch ( error ) {
+      logger.error( "Apple place search threw", error );
+    }
+  }
   try {
     const photonResults = await searchPhoton( text, nearbyLatLng );
     if ( photonResults.length > 0 ) return remember( key, photonResults );
