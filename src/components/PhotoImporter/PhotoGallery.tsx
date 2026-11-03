@@ -51,6 +51,7 @@ import {
 } from "sharedHelpers/removedGroupPhotoUris";
 import { devicePhotoKey, listStagedPhotoNodes } from "sharedHelpers/usbStaging";
 import { useGridLayout, useTranslation } from "sharedHooks";
+import useUsbImportProgress from "stores/usbImportProgress";
 import colors from "styles/tailwindColors";
 
 type PhotoNode = PhotoIdentifier["node"];
@@ -114,11 +115,24 @@ const PhotoGallery = ( {
   const [libraryPhotos, setPhotos] = useState<PhotoNode[]>( [] );
   // Staged SD card photos, which live in the app rather than in Photos
   const [stagedPhotos, setStagedPhotos] = useState<PhotoNode[]>( [] );
+  // Re-listed as a USB import copies each file, so groups appear as they fill
+  const usbImportActive = useUsbImportProgress( state => state.active );
+  const usbImportSaved = useUsbImportProgress( state => state.saved );
   useEffect( ( ) => {
     listStagedPhotoNodes( ).then( setStagedPhotos ).catch( error => {
       logger.error( "Could not list staged SD card photos", error );
     } );
-  }, [] );
+  }, [usbImportActive, usbImportSaved] );
+  // The import copies newest first, so the group holding the file it copied
+  // last is still filling. Staged names start with the time they were copied.
+  const usbImportingKey = useMemo( ( ) => {
+    if ( !usbImportActive || stagedPhotos.length === 0 ) return null;
+    const copiedAt = ( node: PhotoNode ) => parseInt( node.image.filename ?? "", 10 ) || 0;
+    const latest = stagedPhotos.reduce( ( a, b ) => ( copiedAt( b ) > copiedAt( a )
+      ? b
+      : a ) );
+    return getSelectionKey( latest );
+  }, [usbImportActive, stagedPhotos] );
   const [hasNextPage, setHasNextPage] = useState( true );
   const [loading, setLoading] = useState( true );
   // Merged newest first, which the sections assume. A staged photo older than
@@ -403,10 +417,16 @@ const PhotoGallery = ( {
     [photos, hideImported, isImported, deletedUris],
   );
 
-  const galleryItems = useMemo(
-    ( ) => buildSectionedGalleryItems( visiblePhotos, getSelectionKey, hasNextPage ),
-    [visiblePhotos, hasNextPage],
-  );
+  const galleryItems = useMemo( ( ) => {
+    const items = buildSectionedGalleryItems( visiblePhotos, getSelectionKey, hasNextPage );
+    if ( !usbImportingKey ) return items;
+    const partial = items.find( item => item.type === "header"
+      && item.nodes.some( node => getSelectionKey( node ) === usbImportingKey ) );
+    if ( partial?.type !== "header" ) return items;
+    const hidden = new Set( partial.nodes.map( getSelectionKey ) );
+    return items.filter( item => item !== partial
+      && !( item.type === "photo" && hidden.has( item.id ) ) );
+  }, [visiblePhotos, hasNextPage, usbImportingKey] );
 
   // The last section is withheld while more pages remain, since it may
   // still grow or split further. If that leaves nothing to show, the list
