@@ -38,6 +38,7 @@ import {
   enqueuePreload,
   preloadCache,
   releaseCropSource,
+  takeCropRequestedAt,
 } from "sharedHelpers/imageCropPreload";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
@@ -210,6 +211,17 @@ const ImageCropEditor = ( ) => {
   const shownAt = useRef( 0 );
   const shownFromCache = useRef( false );
   const loggedWaitFor = useRef<string | null>( null );
+  // How many of the upcoming photos had finished preloading when this one was
+  // shown, i.e. how much of the lookahead the user had banked.
+  const shownBuffered = useRef( 0 );
+  // Every photo's wait in this bulk crop, fast ones included, for
+  // crop_session_summary: crop_photo_slow only sees the slow ones, so it can't
+  // say how often a photo was ready in time.
+  const [cropRequestedAt] = useState( ( ) => ( context === "groupPhotos"
+    ? takeCropRequestedAt( )
+    : 0 ) );
+  const session = useRef<{ waitMs: number; buffered: number; preloaded: boolean }[]>( [] );
+  const firstFromTapMs = useRef<number | null>( null );
 
   // Seed state from the preload cache during render, before the first paint of
   // each image, so mounting the editor (and advancing to the next photo in a
@@ -221,6 +233,10 @@ const ImageCropEditor = ( ) => {
     const cached = preloadCache.get( imageUri );
     shownAt.current = Date.now( );
     shownFromCache.current = !!cached;
+    shownBuffered.current = ( cropImport
+      ? importedUris.filter( uri => !visitedUris.has( uri ) )
+      : pendingImageUris
+    ).filter( uri => uri !== imageUri && preloadCache.has( uri ) ).length;
     const { existingSavedCrop } = resolveCropContext( );
     setLocalImageUri( cached?.localUri ?? null );
     setDisplayImageUri( cached?.displayUri ?? null );
@@ -244,6 +260,14 @@ const ImageCropEditor = ( ) => {
     }
     loggedWaitFor.current = imageUri;
     const totalMs = Date.now( ) - shownAt.current;
+    if ( !session.current.length && cropRequestedAt ) {
+      firstFromTapMs.current = Date.now( ) - cropRequestedAt;
+    }
+    session.current.push( {
+      waitMs: totalMs,
+      buffered: shownBuffered.current,
+      preloaded: shownFromCache.current,
+    } );
     if ( totalMs < SLOW_PHOTO_MS ) {
       return;
     }
@@ -267,7 +291,36 @@ const ImageCropEditor = ( ) => {
       // Only groupPhotos preloads ahead
       context: context ?? null,
     } );
-  }, [context, imageUri] );
+  }, [context, cropRequestedAt, imageUri] );
+
+  // One line per bulk crop, when the editor closes: how many photos were ready
+  // when shown, how long the rest were waited on, and how much lookahead was
+  // banked at each photo -- a wait after a full buffer says preload further
+  // ahead; one that never had a buffer says each prepare is slower than the
+  // user crops.
+  useEffect( ( ) => ( ) => {
+    const photos = session.current;
+    if ( context !== "groupPhotos" || !photos.length ) {
+      return;
+    }
+    const waits = photos.map( photo => photo.waitMs );
+    logger.infoWithExtra( "crop_session_summary", {
+      photos: photos.length,
+      preloaded: photos.filter( photo => photo.preloaded ).length,
+      waitedOver300: waits.filter( ms => ms >= 300 ).length,
+      waitedOverSlow: waits.filter( ms => ms >= SLOW_PHOTO_MS ).length,
+      sumWaitMs: waits.reduce( ( sum, ms ) => sum + ms, 0 ),
+      maxWaitMs: Math.max( ...waits ),
+      firstWaitMs: waits[0],
+      // From the Done (or crop) tap, the copy out of the library included
+      firstFromTapMs: firstFromTapMs.current,
+      lookahead: PRELOAD_LOOKAHEAD,
+      // waitMs:bufferedAhead per photo, in the order shown
+      perPhoto: photos.slice( 0, 300 )
+        .map( photo => `${photo.waitMs}:${photo.buffered}` ).join( "," ),
+    } );
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [] );
 
   useEffect( ( ) => {
     navigation.setOptions( { headerShown: false } );

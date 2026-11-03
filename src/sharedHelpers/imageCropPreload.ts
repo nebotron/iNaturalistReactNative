@@ -186,3 +186,16 @@ export function releaseCropSource( imageUri: string, uris: ( string | null )[] )
     .filter( path => path?.startsWith( `${cropSourcesPath}/` ) )
     .forEach( path => { unlink( path ).catch( ( ) => {} ); } );
 }
+
+// When the user asked for a bulk crop (Done in the photo picker, or crop in
+// Group Photos), so the editor can report the first photo's wait from the tap,
+// the copy out of the library included, not just from when its file landed.
+let cropRequestedAt = 0;
+export function noteCropRequested( ) {
+  cropRequestedAt = Date.now( );
+}
+export function takeCropRequestedAt( ): number {
+  const at = cropRequestedAt;
+  cropRequestedAt = 0;
+  return at;
+}
