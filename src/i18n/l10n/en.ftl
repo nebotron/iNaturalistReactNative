@@ -360,6 +360,7 @@ Couldnt-combine-observations = Couldn't combine observations
 Couldnt-create-comment = Couldn't create comment
 Couldnt-create-identification-error = Couldn't create identification { $error }
 Couldnt-create-identification-unknown-error = Couldn't create identification, unknown error.
+Couldnt-delete-observations = Couldn't delete observations
 CREATE-AN-ACCOUNT = CREATE AN ACCOUNT
 Create-observation-with-no-evidence = Create observation with no evidence
 CROP-DRAG-HINT = Drag to pan. Pinch to zoom.
@@ -484,6 +485,8 @@ Delete-from-drive = Delete from Drive
 # Button that deletes an observation
 Delete-observation = Delete observation
 DELETE-OBSERVATION--question = DELETE OBSERVATION?
+# Button that deletes the selected observations
+Delete-Observations = Delete Observations
 # Title of dialog to delete Explore results saved for offline use
 Delete-offline-results = Delete saved offline results?
 # Button label or accessibility label for an element that deletes a photo
@@ -493,6 +496,12 @@ Delete-saved-filter-description = { $name } will be removed from your saved filt
 Delete-saved-filter-title = DELETE SAVED FILTER?
 Delete-selected-photos = Delete selected photos
 Delete-sound = Delete sound
+# Title of an alert confirming that selected observations should be deleted
+Delete-x-observations =
+    Delete { $count ->
+        [one] { $count } observation
+       *[other] { $count } observations
+    }?
 # Shows the progress of deletions for X of Y observations, but omits the
 # word "observations" so the message won't get cut off on small screens
 # Deleting-x-of-y = Deleting { $currentDeleteCount } of { $total }

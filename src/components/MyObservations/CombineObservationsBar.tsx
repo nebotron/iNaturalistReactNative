@@ -8,6 +8,7 @@ import { RealmContext } from "providers/contexts";
 import React, { useEffect, useState } from "react";
 import { Alert } from "react-native";
 import combineObservations from "sharedHelpers/combineObservations";
+import deleteObservations from "sharedHelpers/deleteObservations";
 import { useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
@@ -42,6 +43,27 @@ const CombineObservationsBar = ( ) => {
     }
   };
 
+  const remove = async ( ) => {
+    setCombining( true );
+    try {
+      await deleteObservations( realm, selection );
+      setCombineSelection( null );
+    } catch ( error ) {
+      Alert.alert( t( "Couldnt-delete-observations" ), ( error as Error ).message );
+    } finally {
+      setCombining( false );
+    }
+  };
+
+  const confirmDelete = ( ) => Alert.alert(
+    t( "Delete-x-observations", { count: selection.length } ),
+    undefined,
+    [
+      { text: t( "Cancel" ), style: "cancel" },
+      { text: t( "Delete-Observations" ), style: "destructive", onPress: remove },
+    ],
+  );
+
   const confirmCombine = ( ) => Alert.alert(
     t( "Combine-x-observations", { count: selection.length } ),
     t( "Combine-observations-explanation" ),
@@ -68,19 +90,31 @@ const CombineObservationsBar = ( ) => {
       {combining
         ? <ActivityIndicator size={58} />
         : (
-          <INatIconButton
-            icon="combine"
-            mode="contained"
-            size={26}
-            width={58}
-            height={58}
-            color={colors.white}
-            backgroundColor={colors.darkGray}
-            accessibilityLabel={t( "Combine-Observations" )}
-            disabled={selection.length < 2}
-            onPress={confirmCombine}
-            testID="MyObservations.combine"
-          />
+          <>
+            <INatIconButton
+              icon="trash-outline"
+              size={26}
+              width={58}
+              height={58}
+              accessibilityLabel={t( "Delete-Observations" )}
+              disabled={selection.length < 1}
+              onPress={confirmDelete}
+              testID="MyObservations.delete"
+            />
+            <INatIconButton
+              icon="combine"
+              mode="contained"
+              size={26}
+              width={58}
+              height={58}
+              color={colors.white}
+              backgroundColor={colors.darkGray}
+              accessibilityLabel={t( "Combine-Observations" )}
+              disabled={selection.length < 2}
+              onPress={confirmCombine}
+              testID="MyObservations.combine"
+            />
+          </>
         )}
     </View>
   );
