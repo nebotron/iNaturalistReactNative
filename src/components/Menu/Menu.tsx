@@ -114,8 +114,7 @@ const Menu = ( ) => {
 
   const menuItems: Record<string, MenuOption> = {
     audioId: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "AUDIO ID",
+      label: t( "AUDIO-ID" ),
       navigation: "AudioId",
       icon: "microphone",
     },
@@ -129,15 +128,8 @@ const Menu = ( ) => {
       navigation: "LocationHistory",
       icon: "location",
     },
-    cameraClockCheck: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "CAMERA CLOCK",
-      navigation: "CameraClockCheck",
-      icon: "clock-outline",
-    },
     cameraPairs: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "CAMERA PAIRS",
+      label: t( "CAMERA-PAIRS" ),
       navigation: "CameraPairs",
       icon: "camera",
     },
@@ -162,8 +154,7 @@ const Menu = ( ) => {
       icon: "help-circle",
     },
     cropLog: {
-      // eslint-disable-next-line i18next/no-literal-string
-      label: "CROP LOG",
+      label: t( "CROP-LOG" ),
       navigation: "CropLogViewer",
       icon: "clipboard",
     },

@@ -6,6 +6,7 @@ import {
   resolveEbirdTaxonFilter,
 } from "api/ebird";
 import { searchObservations } from "api/observations";
+import i18n from "i18next";
 import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -707,7 +708,7 @@ export function useRouteHotspots() {
         if ( isStale() ) return;
         setError( err instanceof Error
           ? err.message
-          : "Failed to load hotspot data" );
+          : i18n.t( "Failed-to-load-hotspot-data" ) );
       } finally {
         if ( !isStale() ) setLoading( false );
       }

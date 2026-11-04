@@ -18,7 +18,6 @@ import RootExploreContainer from "components/Explore/RootExploreContainer";
 import Help from "components/Help/Help";
 import Journal from "components/Journal/Journal";
 import PostDetails from "components/Journal/PostDetails";
-import CameraClockCheck from "components/LocationHistory/CameraClockCheck";
 import LocationHistory from "components/LocationHistory/LocationHistory";
 import LocationHistoryDetailMap from "components/LocationHistory/LocationHistoryDetailMap";
 import LocationHistoryPointsMap from "components/LocationHistory/LocationHistoryPointsMap";
@@ -107,20 +106,36 @@ const postDetailsTitle = () => (
   </Heading4>
 );
 
-// eslint-disable-next-line i18next/no-literal-string
-const audioIdTitle = () => <Heading4 numberOfLines={1}>AUDIO ID</Heading4>;
-// eslint-disable-next-line i18next/no-literal-string
-const audioIdHistoryTitle = () => <Heading4 numberOfLines={1}>HEARD</Heading4>;
-// eslint-disable-next-line i18next/no-literal-string
-const audioIdClipTitle = () => <Heading4 numberOfLines={1}>CLIP</Heading4>;
-// eslint-disable-next-line i18next/no-literal-string
-const audioIdTaxaTitle = () => <Heading4 numberOfLines={1}>LISTENING FOR</Heading4>;
-// eslint-disable-next-line i18next/no-literal-string
-const cropLogTitle = () => <Heading4 numberOfLines={1}>CROP LOG</Heading4>;
-// eslint-disable-next-line i18next/no-literal-string
-const cameraClockTitle = () => <Heading4 numberOfLines={1}>CAMERA CLOCK</Heading4>;
-// eslint-disable-next-line i18next/no-literal-string
-const cameraPairsTitle = () => <Heading4 numberOfLines={1}>CAMERA PAIRS</Heading4>;
+const audioIdTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "AUDIO-ID" )}
+  </Heading4>
+);
+const audioIdHistoryTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "HEARD--audio-id" )}
+  </Heading4>
+);
+const audioIdClipTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "CLIP--audio-id" )}
+  </Heading4>
+);
+const audioIdTaxaTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "LISTENING-FOR" )}
+  </Heading4>
+);
+const cropLogTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "CROP-LOG" )}
+  </Heading4>
+);
+const cameraPairsTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "CAMERA-PAIRS" )}
+  </Heading4>
+);
 const locationHistoryTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "LOCATION-HISTORY" )}
@@ -372,13 +387,6 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={LocationHistory}
             options={{
               headerTitle: locationHistoryTitle,
-            }}
-          />
-          <Stack.Screen
-            name="CameraClockCheck"
-            component={CameraClockCheck}
-            options={{
-              headerTitle: cameraClockTitle,
             }}
           />
           <Stack.Screen

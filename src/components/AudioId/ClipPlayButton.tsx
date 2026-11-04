@@ -1,5 +1,6 @@
 import { INatIconButton } from "components/SharedComponents";
 import React, { useEffect, useRef, useState } from "react";
+import { useTranslation } from "sharedHooks";
 
 import type { AudioIdClip } from "./audioIdHistory";
 import { clipPath, contextClipPath } from "./audioIdHistory";
@@ -8,6 +9,7 @@ import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
 // Plays or stops one Audio ID clip: the call found in it, else its 5 s
 // window. Starting another clip stops this one.
 const ClipPlayButton = ( { clip }: { clip: AudioIdClip } ) => {
+  const { t } = useTranslation( );
   const [player] = useState( ( ) => ( {} ) );
   const [playing, setPlaying] = useState( false );
 
@@ -45,11 +47,11 @@ const ClipPlayButton = ( { clip }: { clip: AudioIdClip } ) => {
         ? stop
         : play}
       accessibilityLabel={playing
-        ? "Stop"
-        : "Play"}
+        ? t( "Stop--audio" )
+        : t( "Play--audio" )}
       accessibilityHint={playing
-        ? "Stops the clip."
-        : "Plays the clip."}
+        ? t( "Stops-the-clip" )
+        : t( "Plays-the-clip" )}
     />
   );
 };

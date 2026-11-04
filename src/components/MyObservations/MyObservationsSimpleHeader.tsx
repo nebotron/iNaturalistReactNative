@@ -74,7 +74,10 @@ const MyObservationsSimpleHeader = ( {
     const unsyncedObs = Observation.filterUnsyncedObservations( realm );
     const unknownUnsyncedObs = unsyncedObs.filtered( "taxon == nil" );
     if ( unknownUnsyncedObs.length === 0 ) {
-      Alert.alert( "No Unuploaded Observations", "All your observations have been uploaded." );
+      Alert.alert(
+        t( "No-Unuploaded-Observations" ),
+        t( "All-your-observations-have-been-uploaded" ),
+      );
       return;
     }
     resetObservationFlowSlice( );
@@ -144,8 +147,7 @@ const MyObservationsSimpleHeader = ( {
             {numUnuploadedObsNoTaxon > 0 && (
               <INatIconButton
                 icon="sparkly-label"
-                // eslint-disable-next-line i18next/no-literal-string
-                accessibilityLabel="Add IDs to unuploaded observations"
+                accessibilityLabel={t( "Add-IDs-to-unuploaded-observations" )}
                 onPress={handleBulkIDPress}
                 color={String( colors?.inatGreen )}
                 size={26}

@@ -116,7 +116,7 @@ const ExploreV2Header = ( {
   } else if ( primary.display === "unobserved" ) {
     headerContent = (
       <TitleHeader
-        title={t( "Unobserved" )}
+        title={t( "Unobserved-by-me" )}
         place={place}
         testID="ExploreV2Header.unobserved"
       />

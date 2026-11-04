@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import { CachesDirectoryPath } from "@dr.pogodin/react-native-fs";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import ObsListItem from "components/ObservationsFlashList/ObsListItem";
@@ -18,7 +17,7 @@ import {
   interpolateFromUsablePoints,
   MAX_MATCH_GAP_MS,
 } from "sharedHelpers/interpolateTrackedLocation";
-import { useCurrentUser } from "sharedHooks";
+import { useCurrentUser, useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 import * as uuid from "uuid";
 
@@ -36,6 +35,7 @@ const formatDelta = ( ms: number ) => `${ms < 0
 
 // One Audio ID clip: trim it and make it an observation.
 const AudioIdClip = ( ) => {
+  const { t } = useTranslation( );
   const navigation = useNavigation( );
   const { params } = useRoute( );
   const { id } = params as { id: string };
@@ -47,7 +47,7 @@ const AudioIdClip = ( ) => {
   const updateObservations = useStore( state => state.updateObservations );
   const currentUser = useCurrentUser( );
   const [error, setError] = useState<string | null>( null );
-  const { span, trim, setTrim } = useClipSpan( id, clip?.time, false, clip?.call );
+  const { span, trim, setTrim } = useClipSpan( id, clip?.time, clip?.call );
   const time = clip?.time ?? 0;
   const trackPoints = useQuery(
     {
@@ -81,7 +81,7 @@ const AudioIdClip = ( ) => {
       && Math.abs( obsTime( obs ) - time ) <= NEARBY_MS )
     .sort( ( a, b ) => Math.abs( obsTime( a ) - time ) - Math.abs( obsTime( b ) - time ) );
 
-  if ( !clip ) return <Body3 className="p-5">This clip is no longer saved.</Body3>;
+  if ( !clip ) return <Body3 className="p-5">{t( "This-clip-is-no-longer-saved" )}</Body3>;
 
   // With `identify`, the observation gets no taxon and Suggestions opens to identify its sound.
   const createObservation = async ( identify = false ) => {
@@ -112,7 +112,7 @@ const AudioIdClip = ( ) => {
         ? "Suggestions"
         : "ObsEdit" );
     } catch ( e ) {
-      setError( `Couldn't create the observation: ${( e as Error ).message}` );
+      setError( t( "Couldnt-create-the-observation-error", { error: ( e as Error ).message } ) );
     }
   };
 
@@ -129,7 +129,7 @@ const AudioIdClip = ( ) => {
       updateClip( id, { observationUuid: obs.uuid } );
       navigation.navigate( "ObsEdit" );
     } catch ( e ) {
-      setError( `Couldn't add the sound: ${( e as Error ).message}` );
+      setError( t( "Couldnt-add-the-sound-error", { error: ( e as Error ).message } ) );
     }
   };
 
@@ -138,7 +138,9 @@ const AudioIdClip = ( ) => {
       <Body1>{commonName}</Body1>
       <List2 className="italic">{clip.sp.name}</List2>
       <Body3>{formatISOTimestamp( clip.time )}</Body3>
-      <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
+      <Body3>
+        {t( "X-percent-confidence", { count: Math.round( clip.confidence * 100 ) } )}
+      </Body3>
       {span && <ClipTrimmer span={span} trim={trim} onTrimChange={setTrim} />}
 
       {location
@@ -162,28 +164,30 @@ const AudioIdClip = ( ) => {
             />
           </View>
         )
-        : <Body3 className="mt-4">No location was recorded for this clip.</Body3>}
+        : (
+          <Body3 className="mt-4">{t( "No-location-was-recorded-for-this-clip" )}</Body3>
+        )}
 
       <Button
         className="mt-4"
         level="focus"
-        text="CREATE OBSERVATION"
+        text={t( "CREATE-OBSERVATION" )}
         onPress={( ) => createObservation( )}
       />
       <Button
         className="mt-4"
         level="neutral"
-        text="IDENTIFY"
+        text={t( "IDENTIFY" )}
         onPress={( ) => createObservation( true )}
       />
       {nearbyObs.length > 0 && (
-        <Body1 className="mt-6">Add to observation</Body1>
+        <Body1 className="mt-6">{t( "Add-to-observation" )}</Body1>
       )}
       {nearbyObs.map( obs => (
         <Pressable
           key={obs.uuid}
           accessibilityRole="button"
-          accessibilityHint="Adds the clip to this observation."
+          accessibilityHint={t( "Adds-the-clip-to-this-observation" )}
           className="-mx-5 justify-center"
           onPress={( ) => addToObservation( obs )}
         >

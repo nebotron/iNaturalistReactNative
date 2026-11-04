@@ -214,7 +214,7 @@ const backgroundTask = async ( ) => {
 const getBackgroundServiceOptions = ( ) => ( {
   taskName: BACKGROUND_TASK_NAME,
   taskTitle: t( "Tracking-your-location" ),
-  taskDesc: t( "Location-history-lets-you-compare-photos-to-your-tracked-location" ),
+  taskDesc: t( "Location-history-notification-description" ),
   taskIcon: {
     name: "ic_launcher",
     type: "mipmap",

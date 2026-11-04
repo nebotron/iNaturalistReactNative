@@ -7,6 +7,7 @@ import React, {
   useCallback, useContext, useEffect, useState,
 } from "react";
 import AudioRecorderPlayer from "react-native-audio-recorder-player";
+import useTranslation from "sharedHooks/useTranslation";
 
 interface Props {
   className?: string;
@@ -24,6 +25,7 @@ const SoundPlayButton = ( {
   size,
   uri,
 }: Props ) => {
+  const { t } = useTranslation( );
   const [player] = useState( ( ) => new AudioRecorderPlayer( ) );
   const [playing, setPlaying] = useState( false );
 
@@ -73,11 +75,11 @@ const SoundPlayButton = ( {
         ? stop
         : play}
       accessibilityLabel={playing
-        ? "Stop"
-        : "Play"}
+        ? t( "Stop--audio" )
+        : t( "Play--audio" )}
       accessibilityHint={playing
-        ? "Stops the sound."
-        : "Plays the sound."}
+        ? t( "Stops-the-sound" )
+        : t( "Plays-the-sound" )}
     />
   );
 };

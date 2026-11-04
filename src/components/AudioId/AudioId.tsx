@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
 import { fetchTaxaBasics } from "api/taxa";
@@ -10,6 +9,7 @@ import { Pressable, ScrollView, View } from "components/styledComponents";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import React, { useCallback, useEffect, useMemo } from "react";
+import { Trans } from "react-i18next";
 import type { ViewProps } from "react-native";
 import {
   AppState, Linking, Modal, requireNativeComponent,
@@ -21,7 +21,7 @@ import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { getTunable } from "sharedHelpers/tunableParams";
-import { useCurrentUser } from "sharedHooks";
+import { useCurrentUser, useTranslation } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import colors from "styles/tailwindColors";
 
@@ -144,21 +144,24 @@ const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
 
 const TaxonThumb = ( { url, onPress, children }: {
   url?: string; onPress: ( ) => void; children?: React.ReactNode;
-} ) => (
-  <Pressable
-    accessibilityRole="button"
-    accessibilityHint="Opens the species page."
-    className="w-[80px] h-[80px]"
-    onPress={onPress}
-  >
-    {url
-      ? <CachedImage source={{ uri: url }} className="w-full h-full" />
-      : <IconicTaxonIcon imageClassName="w-full h-full" iconicTaxonName="Aves" />}
-    <View pointerEvents="none" className="absolute bottom-[5px] right-[5px] flex-row">
-      {children}
-    </View>
-  </Pressable>
-);
+} ) => {
+  const { t } = useTranslation( );
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityHint={t( "Opens-the-species-page" )}
+      className="w-[80px] h-[80px]"
+      onPress={onPress}
+    >
+      {url
+        ? <CachedImage source={{ uri: url }} className="w-full h-full" />
+        : <IconicTaxonIcon imageClassName="w-full h-full" iconicTaxonName="Aves" />}
+      <View pointerEvents="none" className="absolute bottom-[5px] right-[5px] flex-row">
+        {children}
+      </View>
+    </Pressable>
+  );
+};
 
 // A small round marker on a species photo; badges share a shape and differ by icon and color.
 const ThumbBadge = ( { icon, className }: { icon: string; className: string } ) => (
@@ -168,20 +171,23 @@ const ThumbBadge = ( { icon, className }: { icon: string; className: string } ) 
 );
 
 // Explains the badges on species photos
-const BadgeKey = ( { showStar }: { showStar: boolean } ) => (
-  <View className="mb-3">
-    <View className="flex-row items-center">
-      <ThumbBadge icon="plus-bold" className="bg-inatGreen" />
-      <Body3 className="ml-2 flex-1">Has a clip you can add to an observation</Body3>
-    </View>
-    {showStar && (
-      <View className="flex-row items-center mt-1">
-        <ThumbBadge icon="star" className="bg-warningYellow" />
-        <Body3 className="ml-2 flex-1">You haven&apos;t observed this species yet</Body3>
+const BadgeKey = ( { showStar }: { showStar: boolean } ) => {
+  const { t } = useTranslation( );
+  return (
+    <View className="mb-3">
+      <View className="flex-row items-center">
+        <ThumbBadge icon="plus-bold" className="bg-inatGreen" />
+        <Body3 className="ml-2 flex-1">{t( "Has-a-clip-you-can-add-to-an-observation" )}</Body3>
       </View>
-    )}
-  </View>
-);
+      {showStar && (
+        <View className="flex-row items-center mt-1">
+          <ThumbBadge icon="star" className="bg-warningYellow" />
+          <Body3 className="ml-2 flex-1">{t( "Unobserved-by-me" )}</Body3>
+        </View>
+      )}
+    </View>
+  );
+};
 
 // The last 10 s of sound, Merlin-style: dark marks on a full-width white
 // strip, low frequencies at the bottom. Drawn natively from the microphone
@@ -195,6 +201,7 @@ const Spectrogram = ( ) => (
 );
 
 const AudioId = ( ) => {
+  const { t } = useTranslation( );
   const navigation = useNavigation( );
   // Keep the display awake while this screen is focused
   useFocusEffect( useCallback( ( ) => {
@@ -269,7 +276,7 @@ const AudioId = ( ) => {
     <Pressable
       key={sp.taxonId}
       accessibilityRole="button"
-      accessibilityHint="Opens the history of when this species was heard."
+      accessibilityHint={t( "Opens-the-history-of-when-this-species-was-heard" )}
       className={`flex-row items-center -ml-5 h-[80px] ${
         hearingNow( sp.taxonId )
           ? "bg-yellow"
@@ -294,7 +301,7 @@ const AudioId = ( ) => {
             {taxonExtras.get( sp.taxonId )?.commonName || sp.commonName}
           </Body1>
           <Body3 className="mt-1 text-darkGrayDisabled">
-            {`Last heard ${formatISOTimestamp( lastHeard )}`}
+            {t( "Last-heard-time", { time: formatISOTimestamp( lastHeard ) } )}
           </Body3>
         </View>
       </View>
@@ -307,37 +314,51 @@ const AudioId = ( ) => {
       <ScrollView className="bg-white h-full px-5 pt-4">
         <BadgeKey showStar={!!currentUser} />
         <Body3 className="mb-3">
-          {"Identifies "}
           {setup
             ? (
-              <Body3
-                accessibilityRole="link"
-                accessibilityHint="Opens a searchable list of the species it listens for."
-                className="underline"
-                onPress={( ) => navigation.navigate( "AudioIdTaxa" )}
-              >
-                {`${species.length} animals`}
-              </Body3>
+              <Trans
+                i18nKey="Audio-ID-identifies-X-animals-by-sound-using-BirdNET"
+                values={{ count: species.length }}
+                components={[
+                  <Body3
+                    key="0"
+                    accessibilityRole="link"
+                    accessibilityHint={t( "Opens-a-searchable-list-of-the-species-it-listens-for" )}
+                    className="underline"
+                    onPress={( ) => navigation.navigate( "AudioIdTaxa" )}
+                  />,
+                  <Body3
+                    key="1"
+                    accessibilityRole="link"
+                    accessibilityHint={t( "Opens-the-BirdNET-website" )}
+                    className="underline"
+                    onPress={( ) => Linking.openURL( "https://birdnet.cornell.edu" )}
+                  />,
+                ]}
+              />
             )
-            : "animals"}
-          {" by sound, using "}
-          <Body3
-            accessibilityRole="link"
-            accessibilityHint="Opens the BirdNET website."
-            className="underline"
-            onPress={( ) => Linking.openURL( "https://birdnet.cornell.edu" )}
-          >
-            BirdNET
-          </Body3>
-          .
+            : (
+              <Trans
+                i18nKey="Audio-ID-identifies-animals-by-sound-using-BirdNET"
+                components={[
+                  <Body3
+                    key="0"
+                    accessibilityRole="link"
+                    accessibilityHint={t( "Opens-the-BirdNET-website" )}
+                    className="underline"
+                    onPress={( ) => Linking.openURL( "https://birdnet.cornell.edu" )}
+                  />,
+                ]}
+              />
+            )}
         </Body3>
         <Button
           level={listening
             ? "warning"
             : "focus"}
           text={listening
-            ? "STOP LISTENING"
-            : "START LISTENING"}
+            ? t( "STOP-LISTENING" )
+            : t( "START-LISTENING" )}
           onPress={listening
             ? stop
             : start}
@@ -345,11 +366,11 @@ const AudioId = ( ) => {
         {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
         {listening && <Spectrogram />}
         {listening && !current && (
-          <Body3 className="mt-1">Listening…</Body3>
+          <Body3 className="mt-1">{t( "Listening" )}</Body3>
         )}
 
         <View className="h-6" />
-        {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
+        {heardList.length === 0 && <Body3 className="py-2">{t( "Nothing-heard-yet" )}</Body3>}
         {heardList.map( h => row( h.sp, h.lastHeard ) )}
 
         <View className="h-20" />
@@ -358,7 +379,7 @@ const AudioId = ( ) => {
       <Modal transparent visible={dimmed} animationType="fade">
         <Pressable
           accessibilityRole="button"
-          accessibilityHint="Brightens the screen."
+          accessibilityHint={t( "Brightens-the-screen" )}
           className="flex-1 bg-black/95"
           onPress={noteActivity}
         />

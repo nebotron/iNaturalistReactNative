@@ -60,8 +60,7 @@ const NearbyRadiusInput = ( {
           testID="nearby-radius-km-input"
           value={radiusText}
         />
-        {/* eslint-disable-next-line i18next/no-literal-string */}
-        <Body3 className="ml-3">km</Body3>
+        <Body3 className="ml-3">{t( "km--unit" )}</Body3>
       </View>
     </View>
   );

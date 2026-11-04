@@ -154,7 +154,7 @@ describe( "ExploreV2Header", () => {
     );
     renderComponent( <ExploreV2Header {...viewProps} showBackButton={false} /> );
 
-    expect( screen.getByText( "Unobserved" ) ).toBeTruthy();
+    expect( screen.getByText( "Unobserved by me" ) ).toBeTruthy();
     expect( screen.getByText( "Worldwide" ) ).toBeTruthy();
     expect( screen.getByTestId( "ExploreV2Header.unobserved" ) ).toBeTruthy();
     expect( screen.queryByTestId( "ExploreV2Header.subject" ) ).toBeNull();

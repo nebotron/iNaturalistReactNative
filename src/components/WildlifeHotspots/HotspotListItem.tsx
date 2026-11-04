@@ -33,15 +33,18 @@ const HotspotListItem = ( {
 }: Props ) => {
   const { t } = useTranslation();
   const detourText = hotspot.detourMinutes < 1
-    ? "On route"
-    : `+${hotspot.detourMinutes} min detour`;
+    ? t( "On-route" )
+    : t( "X-min-detour", { minutes: hotspot.detourMinutes } );
 
   return (
     <Pressable
       className="flex-1"
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Hotspot ${rank}, ${hotspot.observationCount} observations`}
+      accessibilityLabel={t( "Hotspot-X-with-Y-observations", {
+        number: rank,
+        count: hotspot.observationCount,
+      } )}
     >
       <View className="flex-1 p-2 bg-white border border-lightGray">
         <View className="flex-row items-center">
@@ -61,13 +64,13 @@ const HotspotListItem = ( {
                 className="font-bold text-inatGreen underline"
                 onPress={onObservationCountPress}
                 accessibilityRole="button"
-                accessibilityLabel={
-                  `View ${hotspot.observationCount} observations in Explore`
-                }
+                accessibilityLabel={t( "View-X-observations-in-Explore", {
+                  count: hotspot.observationCount,
+                } )}
               >
-                {`${hotspot.observationCount.toLocaleString()} observations`}
+                {t( "X-observations--lowercase", { count: hotspot.observationCount } )}
               </Body2>
-              {`, ${hotspot.speciesCount.toLocaleString()} species`}
+              {t( "comma-X-species", { count: hotspot.speciesCount } )}
             </Body2>
           </View>
           <View className="flex-row items-center">
@@ -108,10 +111,10 @@ const HotspotListItem = ( {
                         className="text-inatGreen underline"
                         onPress={() => onSpeciesCountPress?.( species )}
                         accessibilityRole="button"
-                        accessibilityLabel={
-                          `View ${species.count} observations of `
-                          + `${species.preferred_common_name || species.name} in Explore`
-                        }
+                        accessibilityLabel={t( "View-X-observations-of-taxon-in-Explore", {
+                          count: species.count,
+                          taxon: species.preferred_common_name || species.name,
+                        } )}
                       >
                         {species.count}
                       </Body3>

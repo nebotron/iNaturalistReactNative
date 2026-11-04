@@ -273,7 +273,7 @@ const LocationHistory = ( ) => {
               value={!!trackingEnabled}
             />
             <Body2 className="text-darkGray mb-3">
-              {t( "Location-history-lets-you-compare-photos-to-your-tracked-location" )}
+              {t( "Location-history-explanation" )}
             </Body2>
             <List2 className="mb-3">
               {t( "X-Location-Points-Recorded", { count: historyPoints.length } )}

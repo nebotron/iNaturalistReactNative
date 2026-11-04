@@ -46,7 +46,6 @@ interface LegacyExploreParams {
 // The type containing the mapping must be a type alias. It cannot be an interface.
 // eslint-disable-next-line @typescript-eslint/consistent-type-definitions
 export type SharedStackParamList = {
-  AudioIdRecording: { id: string; time: number };
   // From usePrepareStoreAndNavigate.ts
   // {
   //   entryScreen: "Camera";
@@ -442,7 +441,6 @@ export type BaseTabStackParamList = {
   AudioIdTaxa: undefined;
   CropLogViewer: undefined;
   LocationHistory: undefined;
-  CameraClockCheck: undefined;
   CameraPairs: undefined;
   LocationHistoryPointsMap: undefined;
   LocationHistoryDetailMap: {

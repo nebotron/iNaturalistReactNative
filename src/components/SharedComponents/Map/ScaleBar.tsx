@@ -1,6 +1,7 @@
 import { fontBold } from "appConstants/fontFamilies";
 import { Body4 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
+import i18n from "i18next";
 import type { Ref } from "react";
 import React, { useImperativeHandle, useState } from "react";
 import { usesMetricSystem } from "react-native-localize";
@@ -16,10 +17,21 @@ const niceNumber = ( max: number ) => {
   return [5, 2, 1].map( n => n * pow ).find( n => n <= max ) || pow;
 };
 
+type Unit = "km" | "m" | "mi" | "ft";
+
+const unitLabel = ( unit: Unit, value: number ) => {
+  switch ( unit ) {
+    case "km": return i18n.t( "X-km--distance", { value } );
+    case "m": return i18n.t( "X-m--distance", { value } );
+    case "mi": return i18n.t( "X-mi--distance", { value } );
+    default: return i18n.t( "X-ft--distance", { value } );
+  }
+};
+
 const scaleFor = ( metersPerPixel: number ) => {
   const maxMeters = metersPerPixel * MAX_BAR_WIDTH;
   let unitMeters: number;
-  let unit: string;
+  let unit: Unit;
   if ( usesMetricSystem( ) ) {
     [unitMeters, unit] = maxMeters >= 1000
       ? [1000, "km"]
@@ -30,7 +42,7 @@ const scaleFor = ( metersPerPixel: number ) => {
       : [METERS_PER_FOOT, "ft"];
   }
   const value = niceNumber( maxMeters / unitMeters );
-  return { label: `${value} ${unit}`, width: ( value * unitMeters ) / metersPerPixel };
+  return { label: unitLabel( unit, value ), width: ( value * unitMeters ) / metersPerPixel };
 };
 
 interface Props {
@@ -57,7 +69,6 @@ const ScaleBar = ( {
       className={`${className} px-1.5 py-1`}
       pointerEvents="none"
     >
-      {/* eslint-disable-next-line i18next/no-literal-string */}
       <Body4 className="text-white mb-0.5" style={{ fontFamily: fontBold }}>{label}</Body4>
       <View
         className="h-1 bg-white border border-t-0 border-black"

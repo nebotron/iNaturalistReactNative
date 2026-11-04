@@ -575,7 +575,7 @@ const ImageCropView = ( {
             : <View style={styles.confirmSlot} />}
           <INatIconButton
             icon="crop"
-            accessibilityLabel="2048×2048"
+            accessibilityLabel={t( "Crop-to-2048-by-2048" )}
             color={colors.inatGreen}
             height={CROP_BUTTON_SIZE}
             width={CROP_BUTTON_SIZE}

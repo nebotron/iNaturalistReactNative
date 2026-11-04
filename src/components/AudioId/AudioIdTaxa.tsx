@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import { useNavigation } from "@react-navigation/native";
 import {
   Body1, Body3, List2, SearchBar,
@@ -6,12 +5,14 @@ import {
 import { Pressable, View } from "components/styledComponents";
 import React, { useMemo, useState } from "react";
 import { FlatList } from "react-native";
+import { useTranslation } from "sharedHooks";
 
 import type { AudioIdSpecies } from "./audioIdModel";
 import useAudioIdSession from "./audioIdSession";
 
 // Every taxon Audio ID is currently listening for, searchable by name.
 const AudioIdTaxa = ( ) => {
+  const { t } = useTranslation( );
   const navigation = useNavigation( );
   const setup = useAudioIdSession( state => state.setup );
   const [query, setQuery] = useState( "" );
@@ -30,7 +31,7 @@ const AudioIdTaxa = ( ) => {
   const renderItem = ( { item }: { item: AudioIdSpecies } ) => (
     <Pressable
       accessibilityRole="button"
-      accessibilityHint="Opens the species page."
+      accessibilityHint={t( "Opens-the-species-page" )}
       className="py-2 px-5 border-b border-lightGray"
       onPress={( ) => navigation.navigate( "TaxonDetails", {
         id: item.taxonId, fromAudioId: true,
@@ -49,7 +50,7 @@ const AudioIdTaxa = ( ) => {
           value={query}
           handleTextChange={setQuery}
           clearSearch={( ) => setQuery( "" )}
-          placeholder="Search"
+          placeholder={t( "Search" )}
         />
       </View>
       <FlatList
@@ -57,7 +58,7 @@ const AudioIdTaxa = ( ) => {
         keyExtractor={item => String( item.taxonId )}
         renderItem={renderItem}
         keyboardShouldPersistTaps="handled"
-        ListEmptyComponent={<Body3 className="px-5 py-2">No matches.</Body3>}
+        ListEmptyComponent={<Body3 className="px-5 py-2">{t( "No-results-found" )}</Body3>}
       />
     </View>
   );

@@ -96,11 +96,11 @@ export const SaveOfflineButton = ( { getQueryParams, disabled }: SaveProps ) => 
   };
 
   const onPress = ( ) => Alert.alert(
-    t( "Save-for-offline-use" ),
+    t( "Download-for-offline-use" ),
     t( "Add-up-to-observations-from-this-search", { count: MAX_OFFLINE_OBSERVATIONS } ),
     [
       { text: t( "Cancel" ), style: "cancel" },
-      { text: t( "SAVE" ), onPress: save },
+      { text: t( "DOWNLOAD" ), onPress: save },
     ],
   );
 
@@ -108,12 +108,12 @@ export const SaveOfflineButton = ( { getQueryParams, disabled }: SaveProps ) => 
     <View className="px-4 mb-7">
       <Button
         text={progress === null
-          ? t( "SAVE-RESULTS-FOR-OFFLINE-USE" )
-          : t( "Saving-X-observations", { count: progress } )}
+          ? t( "DOWNLOAD-RESULTS-FOR-OFFLINE-USE" )
+          : t( "Downloading-X-observations", { count: progress } )}
         disabled={disabled || progress !== null}
         loading={progress !== null}
         onPress={onPress}
-        accessibilityLabel={t( "Save-for-offline-use" )}
+        accessibilityLabel={t( "Download-for-offline-use" )}
         testID="SaveOfflineButton"
       />
     </View>
