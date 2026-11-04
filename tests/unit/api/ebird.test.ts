@@ -1,5 +1,6 @@
 import {
   EbirdRateLimitError,
+  ebirdToInatObservation,
   fetchEbirdObservations,
   resetEbirdRateLimit,
   resolveEbirdTaxonFilter,
@@ -14,9 +15,9 @@ const TAXONOMY_CSV = "SCIENTIFIC_NAME,COMMON_NAME,SPECIES_CODE,CATEGORY\n"
   + "Some bird,\"Heron, Odd\",oddher,species\n";
 
 const SIGHTINGS = [
-  { subId: "S1", sciName: "Butorides virescens" },
-  { subId: "S2", sciName: "Turdus migratorius" },
-  { subId: "S3", sciName: "Turdus merula" },
+  { subId: "S1", sciName: "Butorides virescens", obsDt: "2026-10-01 08:15" },
+  { subId: "S2", sciName: "Turdus migratorius", obsDt: "2026-10-20" },
+  { subId: "S3", sciName: "Turdus merula", obsDt: "2026-11-02 17:40" },
 ];
 
 const mockFetch = jest.fn( ( _url: string ) => Promise.resolve( {
@@ -99,6 +100,16 @@ describe( "fetchEbirdObservations", ( ) => {
     expect( results.map( obs => obs.subId ) ).toEqual( ["S2"] );
   } );
 
+  it( "filters sightings by date as iNaturalist results are", async ( ) => {
+    const fetchWith = async ( dateParams: Record<string, unknown> ) => (
+      await fetchEbirdObservations( { ...area( ), taxonFilter: allBirds, dateParams } )
+    ).map( obs => obs.subId );
+    expect( await fetchWith( { d1: "2026-10-15" } ) ).toEqual( ["S2", "S3"] );
+    expect( await fetchWith( { d2: "2026-10-20" } ) ).toEqual( ["S1", "S2"] );
+    expect( await fetchWith( { observed_on: "2026-10-01" } ) ).toEqual( ["S1"] );
+    expect( await fetchWith( { month: [11] } ) ).toEqual( ["S3"] );
+  } );
+
   it( "reuses results for a day instead of refetching", async ( ) => {
     const repeated = area( );
     await fetchEbirdObservations( { ...repeated, taxonFilter: allBirds } );
@@ -151,5 +162,35 @@ describe( "resolveEbirdTaxonFilter", ( ) => {
     expect( await resolveEbirdTaxonFilter( { without_taxon_id: AVES.id } ) ).toBeNull( );
     expect( await resolveEbirdTaxonFilter( { iconic_taxa: ["Plantae"] } ) ).toBeNull( );
     expect( await resolveEbirdTaxonFilter( { user_id: 1 } ) ).toBeNull( );
+  } );
+
+  it( "skips eBird when the filters require what sightings lack", async ( ) => {
+    expect( await resolveEbirdTaxonFilter( { photos: true } ) ).toBeNull( );
+    expect( await resolveEbirdTaxonFilter( { quality_grade: ["needs_id"] } ) ).toBeNull( );
+    expect( await resolveEbirdTaxonFilter( { photos: false, quality_grade: ["research"] } ) )
+      .toEqual( { exclude: [] } );
+  } );
+} );
+
+describe( "ebirdToInatObservation", ( ) => {
+  it( "shapes a sighting like an iNaturalist observation", ( ) => {
+    expect( ebirdToInatObservation( {
+      comName: "Green Heron",
+      lat: 47.1,
+      lng: -122.7,
+      locName: "Nisqually NWR",
+      obsDt: "2026-10-12 09:00",
+      sciName: "Butorides virescens",
+      speciesCode: "grnher",
+      subId: "S1",
+    } ) ).toMatchObject( {
+      uuid: "ebird-S1-grnher",
+      ebirdChecklistUrl: "https://ebird.org/checklist/S1",
+      geojson: { coordinates: [-122.7, 47.1] },
+      place_guess: "Nisqually NWR",
+      observed_on: "2026-10-12",
+      time_observed_at: "2026-10-12T09:00",
+      taxon: { name: "Butorides virescens", preferred_common_name: "Green Heron" },
+    } );
   } );
 } );

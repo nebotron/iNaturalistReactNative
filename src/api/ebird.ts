@@ -1,4 +1,5 @@
 import { searchTaxa } from "api/taxa";
+import type { ApiObservation } from "api/types";
 import Config from "react-native-config";
 import { MMKV } from "react-native-mmkv";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -20,9 +21,24 @@ const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 20;
 
 const AVES_ID = 3;
-// eBird results can't be filtered by these, so skip eBird rather than show
-// results that ignore them
-export const EBIRD_EXCLUSIVE_PARAMS = ["user_id", "project_id", "ident_user_id"];
+// eBird sightings can't match these, so skip eBird rather than show results
+// that ignore them
+export const EBIRD_EXCLUSIVE_PARAMS = [
+  "user_id",
+  "project_id",
+  "ident_user_id",
+  "photos",
+  "sounds",
+  "captive",
+  "popular",
+  "reviewed",
+  "photo_license",
+  "created_on",
+  "created_d1",
+  "created_d2",
+];
+// Narrow eBird sightings by observation date, as they do iNaturalist results
+export const EBIRD_DATE_PARAMS = ["observed_on", "d1", "d2", "month", "year"];
 
 export interface EbirdObservation {
   comName: string;
@@ -35,6 +51,69 @@ export interface EbirdObservation {
   speciesCode: string;
   subId: string;
 }
+
+// An eBird sighting shaped like an iNaturalist API observation, so every view
+// can show and group it like one
+export interface EbirdInatObservation extends ApiObservation {
+  ebirdChecklistUrl: string;
+  place_guess: string;
+}
+
+export const ebirdToInatObservation = (
+  obs: EbirdObservation,
+  taxonId?: number,
+): EbirdInatObservation => ( {
+  uuid: `ebird-${obs.subId}-${obs.speciesCode}`,
+  ebirdChecklistUrl: `https://ebird.org/checklist/${obs.subId}`,
+  geojson: { coordinates: [obs.lng, obs.lat] },
+  latitude: obs.lat,
+  longitude: obs.lng,
+  place_guess: obs.locName,
+  observed_on: obs.obsDt.slice( 0, 10 ),
+  // obsDt is "YYYY-MM-DD HH:mm", or just the date when no time was recorded
+  time_observed_at: obs.obsDt.length > 10
+    ? obs.obsDt.replace( " ", "T" )
+    : undefined,
+  quality_grade: "research",
+  taxon: {
+    id: taxonId,
+    name: obs.sciName,
+    preferred_common_name: obs.comName,
+    rank: "species",
+    rank_level: 10,
+    iconic_taxon_name: "Aves",
+  },
+} );
+
+export const isEbirdObservation = ( obs: object ): obs is EbirdInatObservation => (
+  "ebirdChecklistUrl" in obs
+);
+
+const listOf = ( value: unknown ) => ( Array.isArray( value )
+  ? value
+  : String( value ?? "" ).split( "," ) ).map( String ).filter( Boolean );
+
+// Whether a sighting on `date` (YYYY-MM-DD) matches a search's date filters
+const matchesDates = ( params: Record<string, unknown>, date: string ) => {
+  const { observed_on: on, d1, d2 } = params;
+  if ( on && date !== on ) return false;
+  if ( d1 && date < String( d1 ) ) return false;
+  if ( d2 && date > String( d2 ) ) return false;
+  const months = listOf( params.month ).map( Number );
+  if ( months.length && !months.includes( Number( date.slice( 5, 7 ) ) ) ) return false;
+  const years = listOf( params.year ).map( Number );
+  return !years.length || years.includes( Number( date.slice( 0, 4 ) ) );
+};
+
+// Whether a search's date filters reach back further than eBird's window
+export const datesExceedEbirdWindow = ( params: Record<string, unknown> ) => {
+  if ( !EBIRD_DATE_PARAMS.some( key => params[key] ) ) return false;
+  const cutoff = new Date( Date.now( ) - EBIRD_BACK_DAYS * 24 * 60 * 60 * 1000 )
+    .toISOString( )
+    .slice( 0, 10 );
+  const start = params.observed_on || params.d1;
+  return !start || String( start ) < cutoff;
+};
 
 export class EbirdRateLimitError extends Error {}
 
@@ -174,6 +253,9 @@ export const resolveEbirdTaxonFilter = async (
   params: Record<string, unknown>,
 ): Promise<EbirdTaxonFilter | null> => {
   if ( EBIRD_EXCLUSIVE_PARAMS.some( key => params[key] ) ) return null;
+  // eBird sightings are treated as research grade
+  const qualityGrades = listOf( params.quality_grade );
+  if ( qualityGrades.length && !qualityGrades.includes( "research" ) ) return null;
   const includeIds = idList( params.taxon_id );
   const excludeIds = idList( params.without_taxon_id );
   const iconicTaxa = params.iconic_taxa as string[] | undefined;
@@ -206,11 +288,12 @@ export const resolveEbirdTaxonFilter = async (
 };
 
 // Most recent sighting at each location (with a single species) or of each
-// species within distKm of a point, matching the taxon filter
+// species within distKm of a point, matching the taxon and date filters
 export const fetchEbirdObservations = async ( {
-  taxonFilter, lat, lng, distKm,
+  taxonFilter, dateParams = {}, lat, lng, distKm,
 }: {
   taxonFilter: EbirdTaxonFilter;
+  dateParams?: Record<string, unknown>;
   lat: number;
   lng: number;
   distKm: number;
@@ -232,6 +315,7 @@ export const fetchEbirdObservations = async ( {
     async ( ) => ( await ebirdFetch( path ) ).json( ),
   );
   return observations
-    .filter( obs => matchesEbirdTaxonFilter( taxonFilter, obs.sciName ) )
+    .filter( obs => matchesEbirdTaxonFilter( taxonFilter, obs.sciName )
+      && matchesDates( dateParams, obs.obsDt.slice( 0, 10 ) ) )
     .slice( 0, EBIRD_MAX_RESULTS );
 };

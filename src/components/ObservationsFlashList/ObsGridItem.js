@@ -83,7 +83,9 @@ const ObsGridItem = ( {
         : cameraInfo[key] ) )
       .join( " · " ) ).filter( Boolean )
     : [];
-  const showFaveButton = !!overlays?.faveButton && !!currentUser;
+  // eBird sightings can't be faved
+  const showFaveButton = !!overlays?.faveButton && !!currentUser
+    && !observation?.ebirdChecklistUrl;
   const faves = observation?.votes?.filter( v => v?.vote_scope === null ) || [];
   const initiallyFaved = faves.some( v => v.user_id === currentUser?.id );
   // Fave state after toggling here, so the count updates without a refetch

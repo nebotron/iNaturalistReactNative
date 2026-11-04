@@ -262,10 +262,6 @@ const paramText = ( t: TFunction ): Record<TunableKey, [string, string]> => ( {
     t( "Tunable-ebirdMaxResults" ),
     t( "Tunable-ebirdMaxResults-description" ),
   ],
-  ebirdCollapsedCount: [
-    t( "Tunable-ebirdCollapsedCount" ),
-    t( "Tunable-ebirdCollapsedCount-description" ),
-  ],
   hotspotClusterRadiusKm: [
     t( "Tunable-hotspotClusterRadiusKm" ),
     t( "Tunable-hotspotClusterRadiusKm-description" ),

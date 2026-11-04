@@ -1,18 +1,23 @@
 import { useQuery } from "@tanstack/react-query";
-import type { EbirdTaxonFilter } from "api/ebird";
+import type { EbirdInatObservation, EbirdTaxonFilter } from "api/ebird";
 import {
+  datesExceedEbirdWindow,
+  EBIRD_DATE_PARAMS,
   EBIRD_EXCLUSIVE_PARAMS,
   EBIRD_MAX_DIST_KM,
   EBIRD_MAX_RESULTS,
   EbirdRateLimitError,
+  ebirdToInatObservation,
   fetchEbirdObservations,
   isEbirdEnabled,
   resolveEbirdTaxonFilter,
 } from "api/ebird";
 import fetchPlace from "api/places";
+import { useMemo } from "react";
+import useStore from "stores/useStore";
 
 const STALE_TIME_MS = 24 * 60 * 60 * 1000;
-const DATE_PARAMS = ["d1", "d2", "observed_on", "month", "year", "created_d1", "created_d2"];
+const NO_OBSERVATIONS: EbirdInatObservation[] = [];
 
 export type EbirdLimit = "area" | "dates" | "results" | "rate" | "noLocation";
 
@@ -50,27 +55,37 @@ const fetchPlaceArea = async ( placeId: number ): Promise<Area | null> => {
 // Round so small map moves reuse cached eBird results instead of refetching
 const round = ( n: number ) => Math.round( n * 100 ) / 100;
 
+const pick = ( params: Record<string, unknown>, keys: string[] ) => Object.fromEntries(
+  keys.filter( key => params[key] !== undefined ).map( key => [key, params[key]] ),
+);
+
+// eBird sightings matching an Explore search, shaped like iNaturalist
+// observations, or null when eBird is off or the filters exclude it
 const useEbirdObservations = ( params: Record<string, unknown>, enabled = true ) => {
+  const ebirdEnabled = useStore( state => state.layout.ebirdEnabled );
+  const active = enabled && ebirdEnabled && isEbirdEnabled( );
   // Only the params that decide which birds eBird results include
-  const taxonParams = Object.fromEntries( [
+  const taxonParams = pick( params, [
     "taxon_id",
     "without_taxon_id",
     "iconic_taxa",
+    "quality_grade",
     ...EBIRD_EXCLUSIVE_PARAMS,
-  ].map( key => [key, params[key]] ) );
+  ] );
+  const dateParams = pick( params, EBIRD_DATE_PARAMS );
   const { data: taxonFilter } = useQuery( {
     queryKey: ["ebirdTaxonFilter", taxonParams],
     queryFn: ( ) => resolveEbirdTaxonFilter( taxonParams ),
-    enabled: enabled && isEbirdEnabled( ),
+    enabled: active,
     staleTime: STALE_TIME_MS,
   } );
-  const applies = isEbirdEnabled( ) && !!taxonFilter;
+  const applies = active && !!taxonFilter;
 
   const placeId = Number( params.place_id ) || null;
   const { data: placeArea } = useQuery( {
     queryKey: ["ebirdPlaceArea", placeId],
     queryFn: ( ) => fetchPlaceArea( placeId as number ),
-    enabled: enabled && applies && !!placeId,
+    enabled: applies && !!placeId,
     staleTime: Infinity,
   } );
 
@@ -91,33 +106,40 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
   const lat = area && round( area.lat );
   const lng = area && round( area.lng );
   const distKm = area && Math.min( Math.ceil( area.distKm ), EBIRD_MAX_DIST_KM );
-  const { data: observations, error, isLoading } = useQuery( {
-    queryKey: ["ebirdObservations", taxonFilter, lat, lng, distKm],
+  const { data, error, isLoading } = useQuery( {
+    queryKey: ["ebirdObservations", taxonFilter, dateParams, lat, lng, distKm],
     queryFn: ( ) => fetchEbirdObservations( {
       taxonFilter: taxonFilter as EbirdTaxonFilter,
+      dateParams,
       lat: lat as number,
       lng: lng as number,
       distKm: distKm as number,
     } ),
-    enabled: enabled && applies && !!area,
+    enabled: applies && !!area,
     staleTime: STALE_TIME_MS,
     retry: false,
   } );
+  const observations = useMemo(
+    ( ) => ( data
+      ? data.map( obs => ebirdToInatObservation( obs ) )
+      : NO_OBSERVATIONS ),
+    [data],
+  );
 
   if ( !applies ) return null;
 
   const limits: EbirdLimit[] = [];
   if ( !placeId && !area ) limits.push( "noLocation" );
   if ( area && area.distKm > EBIRD_MAX_DIST_KM ) limits.push( "area" );
-  if ( DATE_PARAMS.some( key => params[key] ) ) limits.push( "dates" );
-  if ( ( observations?.length || 0 ) >= EBIRD_MAX_RESULTS ) limits.push( "results" );
+  if ( datesExceedEbirdWindow( dateParams ) ) limits.push( "dates" );
+  if ( observations.length >= EBIRD_MAX_RESULTS ) limits.push( "results" );
   if ( error instanceof EbirdRateLimitError ) limits.push( "rate" );
 
   return {
     error: error && !( error instanceof EbirdRateLimitError ),
     isLoading,
     limits,
-    observations: observations || [],
+    observations,
   };
 };
 

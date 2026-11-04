@@ -14,7 +14,7 @@ import {
   SPECIES_TAB,
 } from "appConstants/tabs";
 import CameraStatsView from "components/Explore/CameraStatsView";
-import EbirdResults from "components/Explore/EbirdResults";
+import EbirdNotice from "components/Explore/EbirdNotice";
 import ExploreV2Header
   from "components/Explore/ExploreV2/components/ExploreV2Header";
 import ExploreV2MapView
@@ -33,6 +33,8 @@ import ExploreV2UsersView
   from "components/Explore/ExploreV2/screens/ExploreV2UsersView";
 import useInfiniteExploreScroll
   from "components/Explore/hooks/useInfiniteExploreScroll";
+import useObservationsWithEbird
+  from "components/Explore/hooks/useObservationsWithEbird";
 import IdentifyView from "components/Explore/IdentifyView";
 import LifeListView from "components/Explore/LifeListView";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
@@ -250,6 +252,7 @@ const ExploreResults = ( ) => {
     error: observationsError,
     fetchNextPage,
     fetchStatus: observationsFetchStatus,
+    hasNextPage,
     isFetchingNextPage,
     isLoading,
     handlePullToRefresh,
@@ -258,14 +261,19 @@ const ExploreResults = ( ) => {
     totalBounds,
     totalResults,
   } = useInfiniteExploreScroll( { params: queryParams, enabled: canFetch } );
+  const { ebird, observations: observationsWithEbird } = useObservationsWithEbird(
+    observations,
+    queryParams,
+    { enabled: canFetch, complete: !isLoading && !hasNextPage },
+  );
 
   // Only the user's own local photos have a subject distance, so loaded results are
   // sorted on device and everyone else's come last
   const bySubjectDistance = state.sortBy === OBSERVATIONS_SORT.SUBJECT_DISTANCE_NEAREST;
   const subjectDistances = useSubjectDistances( bySubjectDistance );
   const sortedObservations = useMemo( ( ) => ( bySubjectDistance
-    ? sortBySubjectDistance( observations, subjectDistances )
-    : observations ), [bySubjectDistance, observations, subjectDistances] );
+    ? sortBySubjectDistance( observationsWithEbird, subjectDistances )
+    : observationsWithEbird ), [bySubjectDistance, observationsWithEbird, subjectDistances] );
 
   // Diagnostics: observations sometimes show nothing after switching from
   // another view (e.g. Hotspots) or opening a hotspot in Explore, until a reload
@@ -450,7 +458,7 @@ const ExploreResults = ( ) => {
   const renderTabContent = ( ) => {
     switch ( state.activeTab ) {
       case OBSERVATIONS_TAB: {
-        const hasNoResults = canFetch && totalResults === 0;
+        const hasNoResults = canFetch && totalResults === 0 && sortedObservations.length === 0;
         return (
           <>
             {showMap
@@ -482,7 +490,7 @@ const ExploreResults = ( ) => {
                   layout={layout === "list"
                     ? "list"
                     : "grid"}
-                  listHeaderContent={<EbirdResults enabled={canFetch} params={queryParams} />}
+                  listHeaderContent={<EbirdNotice ebird={ebird} />}
                   // bit over a misnomer on this prop; in this case it hides the
                   // ID/comments/quality badges that grid results can technically have
                   hideObsUploadStatus={layout !== "list"}

@@ -2,6 +2,7 @@
 import { prefetch } from "@candlefinance/faster-image";
 import { useNavigation } from "@react-navigation/native";
 import type { FlashListRef, ViewToken } from "@shopify/flash-list";
+import { isEbirdObservation } from "api/ebird";
 import {
   ActivityIndicator,
   Body3,
@@ -21,7 +22,7 @@ import React, {
 import type {
   LayoutChangeEvent, NativeScrollEvent, NativeSyntheticEvent, StyleProp, ViewStyle,
 } from "react-native";
-import { Animated } from "react-native";
+import { Animated, Linking } from "react-native";
 import RealmObservation from "realmModels/Observation";
 import Photo from "realmModels/Photo";
 import {
@@ -160,7 +161,9 @@ const ObservationsFlashList = ( {
     const queued = uploadQueue.includes( uuid );
 
     const onItemPress = ( ) => {
-      if ( obsNeedsSync && !isDefaultMode ) {
+      if ( isEbirdObservation( item ) ) {
+        Linking.openURL( item.ebirdChecklistUrl );
+      } else if ( obsNeedsSync && !isDefaultMode ) {
         const realmObservation = realm.objectForPrimaryKey( "Observation", uuid );
         navigateToObsEdit( realmObservation );
       } else {

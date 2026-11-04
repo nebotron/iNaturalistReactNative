@@ -27,6 +27,7 @@ interface UseInfiniteExploreScrollReturn {
   error: unknown;
   fetchStatus: string;
   fetchNextPage: ( ) => void;
+  hasNextPage: boolean;
   isLoading: boolean;
   isFetchingNextPage: boolean;
   handlePullToRefresh: ( ) => Promise<void>;
@@ -88,6 +89,7 @@ const useInfiniteExploreScroll = (
 
   const {
     data,
+    hasNextPage,
     isFetchingNextPage,
     isLoading,
     fetchNextPage,
@@ -137,6 +139,7 @@ const useInfiniteExploreScroll = (
     error,
     fetchStatus,
     fetchNextPage,
+    hasNextPage,
     isLoading,
     isFetchingNextPage: isFetchingNextPage || isRefetching,
     handlePullToRefresh,

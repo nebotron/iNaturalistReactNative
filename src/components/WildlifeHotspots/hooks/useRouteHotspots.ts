@@ -1,5 +1,6 @@
 import {
   EBIRD_MAX_DIST_KM,
+  ebirdToInatObservation,
   fetchEbirdObservations,
   isEbirdEnabled,
   resolveEbirdTaxonFilter,
@@ -34,6 +35,8 @@ export interface HotspotObservation {
   uuid: string;
   latitude: number;
   longitude: number;
+  // Set for eBird sightings, which open there instead of in iNaturalist
+  ebirdChecklistUrl?: string;
 }
 
 export interface Circle { lat: number; lng: number; radiusKm: number }
@@ -442,6 +445,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
           uuid: obs.uuid,
           latitude: points[i].lat,
           longitude: points[i].lng,
+          ebirdChecklistUrl: obs.ebirdChecklistUrl,
         } );
       }
     }
@@ -482,8 +486,8 @@ function ebirdSearchPoints( route: RoutePoint[] ): RoutePoint[] {
 }
 
 // eBird sightings along the route, shaped like iNaturalist observations and
-// matched to iNaturalist taxa by scientific name. Empty when the filters
-// allow no birds or can't apply to eBird.
+// matched to iNaturalist taxa by scientific name, filtered as Explore filters
+// them. Empty when the filters allow no birds or can't apply to eBird.
 async function fetchEbirdRouteObservations(
   route: RoutePoint[],
   filterParams: Record<string, unknown>,
@@ -495,6 +499,7 @@ async function fetchEbirdRouteObservations(
   const results = await Promise.allSettled( ebirdSearchPoints( route ).map(
     point => fetchEbirdObservations( {
       taxonFilter,
+      dateParams: filterParams,
       lat: Math.round( point.latitude * 100 ) / 100,
       lng: Math.round( point.longitude * 100 ) / 100,
       distKm: EBIRD_MAX_DIST_KM,
@@ -511,19 +516,7 @@ async function fetchEbirdRouteObservations(
     if ( seen.has( key ) ) return false;
     seen.add( key );
     return true;
-  } ).map( obs => ( {
-    geojson: { coordinates: [obs.lng, obs.lat] },
-    observed_on: obs.obsDt.slice( 0, 10 ),
-    // obsDt is "YYYY-MM-DD HH:mm", or just the date when no time was recorded
-    time_observed_at: obs.obsDt.length > 10
-      ? obs.obsDt.replace( " ", "T" )
-      : undefined,
-    taxon: {
-      id: taxonIdsByName.get( obs.sciName ),
-      name: obs.sciName,
-      preferred_common_name: obs.comName,
-    },
-  } ) );
+  } ).map( obs => ebirdToInatObservation( obs, taxonIdsByName.get( obs.sciName ) ) );
 }
 
 export function useRouteHotspots() {

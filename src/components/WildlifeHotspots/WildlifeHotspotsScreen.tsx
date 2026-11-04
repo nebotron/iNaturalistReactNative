@@ -47,7 +47,9 @@ import { useTranslation } from "sharedHooks";
 import useStore, { zustandStorage } from "stores/useStore";
 import colors from "styles/tailwindColors";
 
-import type { Hotspot, HotspotSpecies, RoutePoint } from "./hooks/useRouteHotspots";
+import type {
+  Hotspot, HotspotObservation, HotspotSpecies, RoutePoint,
+} from "./hooks/useRouteHotspots";
 import {
   fetchOSRMDurationMatrix,
   fetchOSRMRoute,
@@ -625,8 +627,12 @@ const WildlifeHotspotsScreen = ( {
   // The card panel is shown only while a hotspot is selected
   const selectedHotspotIndex = hotspots.findIndex( h => h.id === selectedHotspotId );
 
-  const handleObservationPress = useCallback( ( uuid: string ) => {
-    navigation.push( "ObsDetails", { uuid } );
+  const handleObservationPress = useCallback( ( obs: HotspotObservation ) => {
+    if ( obs.ebirdChecklistUrl ) {
+      Linking.openURL( obs.ebirdChecklistUrl );
+    } else {
+      navigation.push( "ObsDetails", { uuid: obs.uuid } );
+    }
   }, [navigation] );
 
   // Opens the observations map in Explore with the current filters, zoomed
@@ -1031,11 +1037,16 @@ const WildlifeHotspotsScreen = ( {
                     key={obs.uuid}
                     coordinate={{ latitude: obs.latitude, longitude: obs.longitude }}
                     anchor={{ x: 0.5, y: 0.5 }}
-                    onPress={() => handleObservationPress( obs.uuid )}
+                    onPress={() => handleObservationPress( obs )}
                   >
                     <View
                       className="w-2.5 h-2.5 rounded-full border border-white"
-                      style={{ backgroundColor: colors.inatGreen }}
+                      // eBird sightings match the color of eBird pins in Explore
+                      style={{
+                        backgroundColor: obs.ebirdChecklistUrl
+                          ? colors.blue
+                          : colors.inatGreen,
+                      }}
                     />
                   </Marker>
                 ) )}

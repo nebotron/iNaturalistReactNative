@@ -1,9 +1,8 @@
-import type { EbirdObservation } from "api/ebird";
+import type { EbirdInatObservation } from "api/ebird";
 import useEbirdObservations from "components/Explore/hooks/useEbirdObservations";
 import React, { useMemo } from "react";
 import { Linking } from "react-native";
 import { Marker } from "react-native-maps";
-import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
 interface Props {
@@ -12,29 +11,26 @@ interface Props {
 
 // One pin per eBird location, listing the species seen there
 const EbirdMapMarkers = ( { params }: Props ) => {
-  const ebirdEnabled = useStore( state => state.layout.ebirdEnabled );
-  const ebird = useEbirdObservations( params, ebirdEnabled );
-  const observations = ebird?.observations;
+  const observations = useEbirdObservations( params )?.observations;
   const locations = useMemo( ( ) => {
-    const byLocation = new Map<string, EbirdObservation[]>( );
+    const byLocation = new Map<string, EbirdInatObservation[]>( );
     ( observations || [] ).forEach( obs => {
-      const key = `${obs.lat},${obs.lng}`;
+      const key = `${obs.latitude},${obs.longitude}`;
       byLocation.set( key, [...( byLocation.get( key ) || [] ), obs] );
     } );
     return [...byLocation.entries( )];
   }, [observations] );
-  if ( !ebirdEnabled || !ebird ) return null;
   return locations.map( ( [key, obsAtLocation] ) => {
     const [first] = obsAtLocation;
     return (
       <Marker
         key={key}
-        coordinate={{ latitude: first.lat, longitude: first.lng }}
-        description={obsAtLocation.map( obs => obs.comName ).join( ", " )}
-        onCalloutPress={( ) => Linking.openURL( `https://ebird.org/checklist/${first.subId}` )}
+        coordinate={{ latitude: first.latitude as number, longitude: first.longitude as number }}
+        description={obsAtLocation.map( obs => obs.taxon?.preferred_common_name ).join( ", " )}
+        onCalloutPress={( ) => Linking.openURL( first.ebirdChecklistUrl )}
         pinColor={colors.blue}
         testID="EbirdMapMarker"
-        title={first.locName}
+        title={first.place_guess}
         tracksViewChanges={false}
       />
     );
