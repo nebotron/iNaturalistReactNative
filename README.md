@@ -5,8 +5,9 @@ New Features:
 - Improvements for bulk observation import
 - Map scale indicator
 - Explore search with multiple taxa
-- Saved Explore filters
-- More Explore views
+- Named saved filters
+- Life list view in explore for your new species
+- Animal audio ID tool, similar to Merlin, based on BirdNET model
 - Many more
 
 If you want to try it out, join the open beta on TestFlight: https://testflight.apple.com/join/XXDSpREq
