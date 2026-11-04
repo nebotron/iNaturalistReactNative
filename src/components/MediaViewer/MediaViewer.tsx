@@ -8,6 +8,7 @@ import type { ExifTags } from "@lodev09/react-native-exify";
 import * as Exify from "@lodev09/react-native-exify";
 import { WarningSheet } from "components/SharedComponents";
 import { View } from "components/styledComponents";
+import { format } from "date-fns";
 import React, {
   useCallback,
   useEffect,
@@ -198,11 +199,10 @@ const MediaViewer = ( {
       exifToWrite.GPSLongitude = longitude;
     }
     if ( timeObservedAt ) {
-      const d = new Date( timeObservedAt );
-      const pad = ( n: number ) => String( n ).padStart( 2, "0" );
-      const datePart = `${d.getFullYear()}:${pad( d.getMonth() + 1 )}:${pad( d.getDate() )}`;
-      const timePart = `${pad( d.getHours() )}:${pad( d.getMinutes() )}:${pad( d.getSeconds() )}`;
-      exifToWrite.DateTimeOriginal = `${datePart} ${timePart}`;
+      exifToWrite.DateTimeOriginal = format(
+        new Date( timeObservedAt ),
+        "yyyy:MM:dd HH:mm:ss",
+      );
     }
     if ( Object.keys( exifToWrite ).length > 0 ) {
       try {

@@ -11,20 +11,20 @@ import useUsbImportProgress from "stores/usbImportProgress";
 // is tracked here by their relative path on the drive, so a failed delete
 // doesn't cause a re-import.
 
-export interface UsbImageRef {
+interface UsbImageRef {
   relativePath: string;
   fileSize: number | null;
 }
 
 // Why a list produced no images, surfaced for diagnostics. "ok" means the drive
 // was scanned; the other values are the early-return reasons in UsbStorage.m.
-export type UsbImportReason =
+type UsbImportReason =
   | "ok"
   | "no-folder-saved"
   | "access-denied"
   | "drive-disconnected";
 
-export interface UsbListResult {
+interface UsbListResult {
   available: boolean;
   reason: UsbImportReason;
   images: UsbImageRef[];
@@ -43,7 +43,7 @@ export interface UsbListResult {
   knownCount?: number;
 }
 
-export interface UsbDeleteResult {
+interface UsbDeleteResult {
   deleted: number;
   failed: number;
   available?: boolean;
@@ -228,7 +228,7 @@ export const clearPendingUsbDeletes = ( relativePaths: string[] ) => {
 // lines: no POST, and they survive the death that is the thing being measured.
 const OFFLOAD_IN_PROGRESS_KEY = "offloadInProgress";
 
-export interface UsbOffloadMarker {
+interface UsbOffloadMarker {
   total: number;
   saved: number;
   failed: number;

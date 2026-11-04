@@ -6,14 +6,14 @@ type PhotoNode = PhotoIdentifier["node"];
 const SECTION_GAP_SECONDS = getTunable( "importSectionGapMinutes" ) * 60;
 const MAX_SECTION_SIZE = getTunable( "importMaxSectionSize" );
 
-export interface PhotoSectionHeaderItem {
+interface PhotoSectionHeaderItem {
   type: "header";
   id: string;
   timestamp: number;
   nodes: PhotoNode[];
 }
 
-export interface PhotoSectionPhotoItem {
+interface PhotoSectionPhotoItem {
   type: "photo";
   id: string;
   node: PhotoNode;

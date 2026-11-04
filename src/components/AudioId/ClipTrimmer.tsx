@@ -11,7 +11,7 @@ import AudioClipSpectrogram from "./AudioClipSpectrogram";
 import { clipPath, contextClipPath } from "./audioIdHistory";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
 
-export interface Span { path: string; startMs: number; endMs: number }
+interface Span { path: string; startMs: number; endMs: number }
 
 // How close in points a touch has to land to grab a start or end handle
 const GRAB = 24;

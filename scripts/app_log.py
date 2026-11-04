@@ -19,7 +19,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 import urllib.parse
@@ -29,24 +28,14 @@ from pathlib import Path
 
 sys.path.insert( 0, str( Path( __file__ ).parent ) )
 
-from firebase_auth import firebase_auth_query, firebase_base_url  # noqa: E402
+from firebase_auth import (  # noqa: E402
+    firebase_auth_query, firebase_base_url, load_env,
+)
 
 REPO_ROOT = Path( __file__ ).parent.parent
-ENV_FILE = REPO_ROOT / ".env"
 # Training data, not diagnostics: never cleared.
 KEEP_PATHS = { "crop_log", "brightness_log" }
 DEFAULT_LIMIT = 3000
-
-
-def load_env() -> None:
-    if not ENV_FILE.is_file():
-        return
-    for line in ENV_FILE.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith( "#" ) or "=" not in line:
-            continue
-        k, _, v = line.partition( "=" )
-        os.environ.setdefault( k.strip(), v.strip() )
 
 
 def request( url: str, method: str = "GET" ) -> object:

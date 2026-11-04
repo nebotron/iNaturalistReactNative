@@ -50,7 +50,7 @@ interface DeleteOriginalDevicePhotosOptions {
 // assuming every requested URI was deleted. A hung delete resolves normally
 // (the error is handled here), so without this a caller can't distinguish
 // "deleted 1159 photos" from "deleted none of them".
-export interface DeleteOriginalDevicePhotosResult {
+interface DeleteOriginalDevicePhotosResult {
   deleted: number;
   requested: number;
   succeeded: boolean;

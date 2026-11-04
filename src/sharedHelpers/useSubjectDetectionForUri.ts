@@ -35,7 +35,7 @@ const toLargeUri = ( uri: string ) => uri.replace(
   "large",
 );
 
-export interface SubjectDetectionOptions {
+interface SubjectDetectionOptions {
   // Only honor a crop the user framed by hand (a crop log entry); never run the
   // AI subject detector. This is how the user's own photos work: they're shown
   // full-frame unless the user has framed them themselves.

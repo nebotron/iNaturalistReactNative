@@ -2,6 +2,7 @@ import { Body2, INatIconButton, List2 } from "components/SharedComponents";
 import Map from "components/SharedComponents/Map/Map";
 import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
+import { format } from "date-fns";
 import { RealmContext } from "providers/contexts";
 import React, { useMemo, useState } from "react";
 import type { Region } from "react-native-maps";
@@ -13,18 +14,12 @@ import colors from "styles/tailwindColors";
 
 const { useQuery } = RealmContext;
 
-const pad = ( n: number ) => String( n ).padStart( 2, "0" );
-
 // Local calendar-day key, e.g. "2026-07-15", used to bucket points by the day
 // they were recorded in the device's timezone.
-const dayKeyForDate = ( date: Date ) => `${date.getFullYear()}-${
-  pad( date.getMonth() + 1 )}-${pad( date.getDate() )}`;
+const dayKeyForDate = ( date: Date ) => format( date, "yyyy-MM-dd" );
 
 // 12-hour "h:mm AM" label in the device's local time.
-const timeLabelForDate = ( date: Date ) => `${date.getHours( ) % 12 || 12}:${
-  pad( date.getMinutes() )} ${date.getHours( ) < 12
-  ? "AM"
-  : "PM"}`;
+const timeLabelForDate = ( date: Date ) => format( date, "h:mm a" );
 
 interface Day {
   key: string;

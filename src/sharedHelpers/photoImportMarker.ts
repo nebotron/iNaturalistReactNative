@@ -13,7 +13,7 @@ const store = new MMKV( { id: "photo-import" } );
 
 const IMPORT_IN_PROGRESS_KEY = "importInProgress";
 
-export interface PhotoImportMarker {
+interface PhotoImportMarker {
   selected: number;
   settled: number;
   failed: number;

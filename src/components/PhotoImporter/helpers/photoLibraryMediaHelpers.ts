@@ -46,7 +46,7 @@ export const buildGroupedSoundItem = (
 
 // Time spent reading metadata and resizing photos, summed over every group
 // passed the same object (so concurrent groups add up past wall time).
-export interface CreateObservationTimings {
+interface CreateObservationTimings {
   exifMs: number;
   resizeMs: number;
 }

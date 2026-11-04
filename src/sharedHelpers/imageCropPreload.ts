@@ -10,7 +10,7 @@ import { unlink } from "sharedHelpers/util";
 // photos in a bulk crop is whatever is left of this when the user advances, so
 // the editor reports it (crop_photo_slow) rather than leaving the wait as one
 // opaque number.
-export interface PreloadTiming {
+interface PreloadTiming {
   exportMs: number;
   prepareMs: number;
   finishedAt: number;

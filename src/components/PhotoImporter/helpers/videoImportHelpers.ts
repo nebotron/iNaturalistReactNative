@@ -71,7 +71,7 @@ const withTimeout = <T, >( promise: Promise<T>, label: string ): Promise<T> => (
   } )
 );
 
-export interface ExtractedVideoMedia {
+interface ExtractedVideoMedia {
   gifUri: string | null;
   audioUri: string | null;
 }

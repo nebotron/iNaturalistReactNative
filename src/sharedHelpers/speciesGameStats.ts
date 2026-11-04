@@ -3,7 +3,7 @@ import { zustandStorage } from "stores/useStore";
 const STATS_KEY = "speciesGameStats";
 const USED_UUIDS_KEY = "speciesGameUsedUuids";
 
-export interface TaxonStats {
+interface TaxonStats {
   correct: number;
   total: number;
 }

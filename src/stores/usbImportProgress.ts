@@ -3,10 +3,10 @@ import { create } from "zustand";
 // Transient UI state for the USB → Photos offload, driven by useUsbImport
 // and rendered by UsbImportProgress. Not persisted: it only reflects an
 // in-progress offload and is cleared shortly after one finishes.
-export type UsbImportPhase = "saving" | "waitingForSpace" | "deleting" | "done" | "error";
+type UsbImportPhase = "saving" | "waitingForSpace" | "deleting" | "done" | "error";
 // What the Me tab's import button offers: hidden with no folder chosen,
 // disabled once the card has been scanned and has nothing left to import.
-export type UsbCardState = "unconfigured" | "ready" | "empty";
+type UsbCardState = "unconfigured" | "ready" | "empty";
 
 interface UsbImportProgressState {
   active: boolean;

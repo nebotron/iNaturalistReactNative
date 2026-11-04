@@ -14,7 +14,7 @@ const store = new MMKV( { id: "unanswered-delete-assets" } );
 // fetchAssetsWithLocalIdentifiers matches with or without the "/L0/001"
 // suffix, but a returned localIdentifier always carries one. Compare on the
 // UUID ahead of the first slash, as ImageCropper.m does.
-export const basePhotoAssetId = ( uri: string ): string => {
+const basePhotoAssetId = ( uri: string ): string => {
   const identifier = uri.startsWith( "ph://" )
     ? uri.slice( 5 )
     : uri;

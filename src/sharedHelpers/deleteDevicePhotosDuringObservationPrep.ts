@@ -8,7 +8,7 @@ import {
 } from "sharedHelpers/getOriginalDevicePhotoUri";
 import useStore from "stores/useStore";
 
-export interface GroupedPhotoWithDeviceUri {
+interface GroupedPhotoWithDeviceUri {
   image: Asset;
   originalDevicePhotoUri?: string | null;
 }

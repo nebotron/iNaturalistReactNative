@@ -22,7 +22,7 @@ import useStore from "stores/useStore";
 
 const logger = log.extend( "applyTrackedLocationToPhotos" );
 
-export interface TrackedLocationMatch {
+interface TrackedLocationMatch {
   latitude: number;
   longitude: number;
   accuracy?: number | null;

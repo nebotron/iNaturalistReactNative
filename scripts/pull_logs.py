@@ -13,25 +13,12 @@ Usage:
 from __future__ import annotations
 
 import json
-import os
 import urllib.request
 from pathlib import Path
 
 REPO_ROOT = Path( __file__ ).parent.parent
 CROP_LOG_PATH = REPO_ROOT / "crop_training.json"
 BRIGHTNESS_LOG_PATH = REPO_ROOT / "brightness_training.json"
-ENV_FILE = REPO_ROOT / ".env"
-
-
-def load_env() -> None:
-    if not ENV_FILE.is_file():
-        return
-    for line in ENV_FILE.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith( "#" ) or "=" not in line:
-            continue
-        k, _, v = line.partition( "=" )
-        os.environ.setdefault( k.strip(), v.strip() )
 
 
 def fetch( base_url: str, path: str ) -> object:
@@ -110,7 +97,7 @@ def pull_brightness_log( base_url: str ) -> bool:
 
 
 def main() -> None:
-    from firebase_auth import firebase_base_url
+    from firebase_auth import firebase_base_url, load_env
     load_env()
     base_url = firebase_base_url()
 

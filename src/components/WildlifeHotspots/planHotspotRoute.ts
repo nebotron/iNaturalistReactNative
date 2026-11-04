@@ -4,7 +4,7 @@
 // that order; node fixedCount + i is candidate i, worth scores[i].
 // durations[a][b] is the driving time in seconds from node a to node b.
 
-export interface HotspotRoutePlan {
+interface HotspotRoutePlan {
   // Node indices in visiting order, fixed stops included
   sequence: number[];
   durationSec: number;

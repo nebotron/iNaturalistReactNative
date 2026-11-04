@@ -622,18 +622,6 @@ def print_report(cur_results: list[PaddingResult], imp_results: list[PaddingResu
 # ---------------------------------------------------------------------------
 
 _REPO_ROOT = Path(__file__).parent.parent
-_ENV_FILE = _REPO_ROOT / ".env"
-
-
-def _load_env() -> None:
-    if not _ENV_FILE.is_file():
-        return
-    for line in _ENV_FILE.read_text().splitlines():
-        line = line.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        k, _, v = line.partition("=")
-        os.environ.setdefault(k.strip(), v.strip())
 
 
 def _fetch_firebase(base_url: str) -> list:
@@ -684,8 +672,8 @@ def main() -> None:
         with open(args.feedback_json) as f:
             raw = json.load(f)
     else:
-        from firebase_auth import firebase_base_url
-        _load_env()
+        from firebase_auth import firebase_base_url, load_env
+        load_env()
         base_url = firebase_base_url()
         raw = _fetch_firebase(base_url)
 

@@ -82,7 +82,7 @@ export const dropPendingGroupPhotos = ( groups: GroupedPhoto[] ): GroupedPhoto[]
     .filter( group => group.photos.length > 0 || group.soundUri );
 };
 
-export interface LastLocationPickerState {
+interface LastLocationPickerState {
   region: {
     latitude: number;
     longitude: number;

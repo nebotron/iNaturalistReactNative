@@ -4,7 +4,7 @@ import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import * as uuid from "uuid";
 
-export interface CropOriginalStorage {
+interface CropOriginalStorage {
   cropOriginalLocalFilePath?: string | null;
   cropX?: number | null;
   cropY?: number | null;

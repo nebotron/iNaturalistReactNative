@@ -2,7 +2,7 @@ export const NEW_COMMUNITY_MEMBER_DAYS = 30;
 
 const NEW_COMMUNITY_MEMBER_MS = NEW_COMMUNITY_MEMBER_DAYS * 24 * 60 * 60 * 1000;
 
-export interface UserWithJoinDate {
+interface UserWithJoinDate {
   created_at?: string;
   createdAt?: string;
 }

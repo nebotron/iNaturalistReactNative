@@ -338,7 +338,7 @@ export interface ApiObservationFieldValue {
   value: string;
 }
 
-export interface ApiVote {
+interface ApiVote {
   id?: number;
   created_at?: string | null;
   user_id?: number;

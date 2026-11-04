@@ -111,7 +111,7 @@ export function longitudeSpan( swlng: number, nelng: number ): number {
     : span;
 }
 
-export interface GeoJsonPolygon {
+interface GeoJsonPolygon {
   coordinates: number[][][];
 }
 

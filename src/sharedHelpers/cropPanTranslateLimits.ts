@@ -12,7 +12,7 @@ export interface CropPanContext {
   cropSize: number;
 }
 
-export interface CropPanTranslateLimits {
+interface CropPanTranslateLimits {
   minTotalTranslateX: number;
   maxTotalTranslateX: number;
   minTotalTranslateY: number;

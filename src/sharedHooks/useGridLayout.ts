@@ -12,7 +12,7 @@ const flashListStyle = {
   paddingBottom: HALF_GUTTER,
 };
 
-export type GridLayoutVariant = "default" | "fullWidth" | "threeUp";
+type GridLayoutVariant = "default" | "fullWidth" | "threeUp";
 
 const THREE_UP_COLUMNS = 3;
 

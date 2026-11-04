@@ -21,7 +21,7 @@ const PAGE_SIZE = 200;
 // Safety valve so a huge history can't loop forever; 500 pages is 100k obs.
 const MAX_PAGES = 500;
 
-export interface CachedObservation {
+interface CachedObservation {
   uuid: string;
   // Favorited by at least one user, i.e. it has a vote with a null scope.
   faved: boolean;

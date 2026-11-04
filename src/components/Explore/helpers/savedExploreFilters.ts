@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import isEqual from "lodash/isEqual";
 import type { DATE_OBSERVED, DATE_UPLOADED, ExploreState } from "providers/ExploreContext";
 
@@ -46,11 +47,7 @@ const offsetToIsoDate = ( offset: number ): string => {
   const d = new Date( );
   d.setHours( 0, 0, 0, 0 );
   d.setDate( d.getDate( ) + offset );
-  // Use local date parts to avoid UTC-vs-local timezone shift
-  const year = d.getFullYear( );
-  const month = String( d.getMonth( ) + 1 ).padStart( 2, "0" );
-  const day = String( d.getDate( ) ).padStart( 2, "0" );
-  return `${year}-${month}-${day}`;
+  return format( d, "yyyy-MM-dd" );
 };
 
 export const getRelativeDateOffsets = (

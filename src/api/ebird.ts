@@ -40,7 +40,7 @@ export const EBIRD_EXCLUSIVE_PARAMS = [
 // Narrow eBird sightings by observation date, as they do iNaturalist results
 export const EBIRD_DATE_PARAMS = ["observed_on", "d1", "d2", "month", "year"];
 
-export interface EbirdObservation {
+interface EbirdObservation {
   comName: string;
   howMany?: number;
   lat: number;

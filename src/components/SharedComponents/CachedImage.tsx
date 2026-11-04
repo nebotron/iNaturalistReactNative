@@ -21,7 +21,7 @@ import { NativeModules, StyleSheet } from "react-native";
 // Nuke's DataCache until iOS reclaims them.
 const IMMUTABLE_CACHE_POLICY = "discNoCacheControl";
 
-export type CachedImageResizeMode = "cover" | "contain" | "center" | "fill";
+type CachedImageResizeMode = "cover" | "contain" | "center" | "fill";
 
 interface Props {
   accessibilityIgnoresInvertColors?: boolean;

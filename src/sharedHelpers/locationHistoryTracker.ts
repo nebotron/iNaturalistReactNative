@@ -224,7 +224,7 @@ const getBackgroundServiceOptions = ( ) => ( {
   parameters: {},
 } );
 
-export interface StartTrackingResult {
+interface StartTrackingResult {
   success: boolean;
   // Human-readable diagnostic detail, only set when success is false
   reason?: string;

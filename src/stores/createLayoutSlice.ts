@@ -42,7 +42,7 @@ export interface ExploreGridOverlays {
   focusDistance?: boolean;
 }
 
-export interface AICameraSettings {
+interface AICameraSettings {
   macroMode: boolean;
   flash: "on" | "off";
   cameraPosition: "front" | "back";

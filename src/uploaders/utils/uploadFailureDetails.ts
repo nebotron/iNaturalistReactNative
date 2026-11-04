@@ -1,7 +1,7 @@
 import type { INatApiError } from "api/error";
 import { AppState } from "react-native";
 
-export interface UploadFailureDetails {
+interface UploadFailureDetails {
   stage: string;
   durationMs: number;
   errorName: string;
@@ -13,7 +13,7 @@ export interface UploadFailureDetails {
   appState?: string;
 }
 
-export type ErrorWithUploadFailureDetails = Error & {
+type ErrorWithUploadFailureDetails = Error & {
   uploadFailureDetails?: UploadFailureDetails;
 };
 

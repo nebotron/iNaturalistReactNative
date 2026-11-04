@@ -24,7 +24,7 @@ import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 // Reads `length` bytes at `position`, as one character per byte.
 export type SliceReader = ( length: number, position: number ) => Promise<string>;
 
-export interface Cr3Curve {
+interface Cr3Curve {
   kind: "falloff" | "gain";
   points: number;
   first: number;
@@ -169,7 +169,7 @@ function findPath( bytes: Bytes, parent: Box, path: string[] ): Box | undefined 
 
 // ─── TIFF ────────────────────────────────────────────────────────────────────
 
-export interface IfdEntry {
+interface IfdEntry {
   tag: number;
   type: number;
   count: number;

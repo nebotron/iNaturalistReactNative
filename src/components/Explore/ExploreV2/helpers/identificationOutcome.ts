@@ -1,6 +1,6 @@
 import type { ApiIdentification } from "api/types";
 
-export interface IdentificationOutcome {
+interface IdentificationOutcome {
   agreed: boolean;
   disagreed: boolean;
 }

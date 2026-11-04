@@ -9,7 +9,7 @@ import {
 
 type ContentStyle = ComponentProps<typeof FlashList>["contentContainerStyle"];
 
-export interface DevicePhotoGridItem {
+interface DevicePhotoGridItem {
   id: string;
   type: "header" | "photo";
 }

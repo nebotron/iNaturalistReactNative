@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
-Firebase database location and email/password auth for the training-log scripts.
+Firebase database location, .env loading and auth for the log scripts.
 
-The Realtime Database rules allow unauthenticated reads and writes, so the auth
-here is optional — it's only useful if the project's rules are later locked down
-to require auth for reads. firebase_auth_query() signs in with
-FIREBASE_API_KEY / FIREBASE_EMAIL / FIREBASE_PASSWORD from the environment
-(.env) and returns "?auth=<idToken>" to append to REST URLs, or "" when
-credentials aren't configured.
+The Realtime Database rules require auth for reads. firebase_auth_query()
+uses FIREBASE_DB_SECRET, or signs in with FIREBASE_API_KEY / FIREBASE_EMAIL /
+FIREBASE_PASSWORD, from the environment (.env) and returns "?auth=<token>" to
+append to REST URLs, or "" when credentials aren't configured.
 """
 from __future__ import annotations
 
@@ -16,13 +14,26 @@ import os
 import time
 import urllib.parse
 import urllib.request
+from pathlib import Path
 
-# The project's Realtime Database. Reads and writes are unauthenticated, so a
-# fresh clone with no .env still reaches the logs; CROP_LOG_FIREBASE_URL
-# overrides this.
+# The project's Realtime Database; CROP_LOG_FIREBASE_URL overrides this.
 DEFAULT_FIREBASE_URL = "https://inaturalist-9001d-default-rtdb.firebaseio.com"
 
+ENV_FILE = Path( __file__ ).parent.parent / ".env"
+
 _cached: dict | None = None
+
+
+def load_env() -> None:
+    """Copy the repo's .env into os.environ without overriding set variables."""
+    if not ENV_FILE.is_file():
+        return
+    for line in ENV_FILE.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith( "#" ) or "=" not in line:
+            continue
+        k, _, v = line.partition( "=" )
+        os.environ.setdefault( k.strip(), v.strip() )
 
 
 def firebase_base_url() -> str:

@@ -50,7 +50,7 @@ const THRESHOLD = getTunable( "audioIdThreshold" );
 const NEW_CALL_GAP_MS = getTunable( "audioIdNewCallGapSeconds" ) * 1000;
 const REALERT_MS = getTunable( "audioIdRealertHours" ) * 3600000;
 // Scores by output index, as the native module sends them
-export type Scores = Record<number, number>;
+type Scores = Record<number, number>;
 export const isHeard = ( s: number ) => s >= THRESHOLD;
 
 const logger = log.extend( "AudioId" );

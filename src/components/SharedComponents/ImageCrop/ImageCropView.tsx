@@ -94,7 +94,7 @@ const styles = StyleSheet.create( {
   },
 } );
 
-export interface ImageCropLabels {
+interface ImageCropLabels {
   confirm: string;
   delete?: string;
   instructions: string;

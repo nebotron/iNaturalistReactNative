@@ -1,6 +1,6 @@
 export const JPEG_COMPRESSION_BLOCK_SIZE = 8;
 
-export interface PixelCrop {
+interface PixelCrop {
   originX: number;
   originY: number;
   width: number;

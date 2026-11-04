@@ -14,7 +14,7 @@ import type { AudioIdSpecies } from "./audioIdModel";
 
 const CLIPS_PATH = `${DocumentDirectoryPath}/audioIdClips`;
 
-export interface AudioIdLabel {
+interface AudioIdLabel {
   // null when the user says no organism is in the clip; undefined when they
   // only say the ID is wrong
   taxonId?: number | null;

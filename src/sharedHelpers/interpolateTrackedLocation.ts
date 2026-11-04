@@ -23,7 +23,7 @@ export interface TrackedPoint {
   recordedAt: Date;
 }
 
-export interface InterpolatedLocation {
+interface InterpolatedLocation {
   latitude: number;
   longitude: number;
   accuracy: number | null;
