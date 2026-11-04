@@ -17,7 +17,6 @@ const { useQuery } = RealmContext;
 
 type Setting = "focalLength" | "shutterSpeed" | "aperture" | "iso" | "focusDistance";
 const SETTINGS: Setting[] = ["focalLength", "focusDistance", "shutterSpeed", "aperture", "iso"];
-const MAX_PAIRS = 200;
 const VOTES_KEY = "camera-pair-votes";
 
 interface Entry {
@@ -259,7 +258,7 @@ const CameraPairs = ( ) => {
   }, [observations, seed] );
 
   const pairs = useMemo(
-    ( ) => allPairs.filter( pair => pair.score <= tolerance ).slice( 0, MAX_PAIRS ),
+    ( ) => allPairs.filter( pair => pair.score <= tolerance ),
     [allPairs, tolerance],
   );
 
@@ -353,9 +352,7 @@ const CameraPairs = ( ) => {
             <Text className="ml-1">%</Text>
           </View>
           <Text className="text-xs mt-2">
-            {`${pairs.length}${pairs.length === MAX_PAIRS
-              ? "+"
-              : ""} pairs`}
+            {`${pairs.length} pairs`}
           </Text>
         </View>
       )}
