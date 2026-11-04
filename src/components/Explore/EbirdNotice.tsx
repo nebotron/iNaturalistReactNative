@@ -16,7 +16,7 @@ const EbirdNotice = ( { ebird }: Props ) => {
   const limitTexts: Record<EbirdLimit, string> = {
     area: t( "eBird-limit-area" ),
     dates: t( "eBird-limit-dates-window" ),
-    filters: t( "eBird-limit-filters" ),
+    filters: t( "eBird-limit-no-matching-birds" ),
     noLocation: t( "eBird-limit-no-location" ),
     rate: t( "eBird-limit-rate" ),
     results: t( "eBird-limit-results" ),
