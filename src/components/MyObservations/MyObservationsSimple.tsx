@@ -431,7 +431,7 @@ const MyObservationsSimple = ( {
     const data = observationIds;
     // In grid layout fill up to 8 items to make sure the grid is filled
     // but don't add the empty boxes at the end of a long existing list
-    if ( layout === "grid" && data.length < 8 ) {
+    if ( layout === "grid" && data.length < 8 && !hasActiveSearch ) {
     // Fill up to 8 items to make sure the grid is filled
       const emptyBoxes = new Array( 8 - ( data.length % 8 ) ).fill( { empty: true } );
       // Add random id to empty boxes to ensure they are unique
@@ -442,7 +442,7 @@ const MyObservationsSimple = ( {
       return [...data, ...emptyBoxesWithId];
     }
     return data;
-  }, [observationIds, layout] );
+  }, [observationIds, layout, hasActiveSearch] );
 
   const renderOfflineFallback = ( onPress: ( ) => void ) => (
     <View className="flex-1 items-center justify-center">
