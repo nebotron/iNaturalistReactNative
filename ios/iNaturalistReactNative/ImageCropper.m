@@ -3474,8 +3474,10 @@ RCT_EXPORT_METHOD( deletePhotoAssets
 //
 // Finds the photo-library asset a photo was imported from when the app never
 // recorded its ph:// uri: the one asset taken at the given time (to the
-// second) at the given location (to the metre). Resolves its uri only when
-// exactly one asset matches, with how many matched each, for the log.
+// second) at the given location (to the metre), else the only asset taken in
+// that second when the observation has no location or it's within 100 m (an
+// edited or rounded observation location). Resolves its uri only when one
+// asset qualifies, with how many matched each, for the log.
 RCT_EXPORT_METHOD( findLibraryOriginal
                   : ( NSDictionary * )options resolver
                   : ( RCTPromiseResolveBlock )resolve rejecter
@@ -3488,8 +3490,7 @@ RCT_EXPORT_METHOD( findLibraryOriginal
     NSNumber *lat = options[@"latitude"];
     NSNumber *lng = options[@"longitude"];
     if ( ( status != PHAuthorizationStatusAuthorized && status != PHAuthorizationStatusLimited )
-      || ![timeMs isKindOfClass:[NSNumber class]]
-      || ![lat isKindOfClass:[NSNumber class]] || ![lng isKindOfClass:[NSNumber class]] ) {
+      || ![timeMs isKindOfClass:[NSNumber class]] ) {
       resolve( nil );
       return;
     }
@@ -3504,19 +3505,26 @@ RCT_EXPORT_METHOD( findLibraryOriginal
     fetch.includeAssetSourceTypes = PHAssetSourceTypeUserLibrary | PHAssetSourceTypeCloudShared
       | PHAssetSourceTypeiTunesSynced;
     PHFetchResult<PHAsset *> *assets = [PHAsset fetchAssetsWithOptions:fetch];
-    CLLocation *place =
-      [[CLLocation alloc] initWithLatitude:lat.doubleValue longitude:lng.doubleValue];
+    CLLocation *place = [lat isKindOfClass:[NSNumber class]] && [lng isKindOfClass:[NSNumber class]]
+      ? [[CLLocation alloc] initWithLatitude:lat.doubleValue longitude:lng.doubleValue]
+      : nil;
     NSMutableArray<PHAsset *> *matches = [NSMutableArray array];
     [assets enumerateObjectsUsingBlock:^( PHAsset *asset, NSUInteger idx, BOOL *stop ) {
-      if ( asset.location && [asset.location distanceFromLocation:place] <= 1 ) {
+      if ( place && asset.location && [asset.location distanceFromLocation:place] <= 1 ) {
         [matches addObject:asset];
       }
     }];
+    PHAsset *pick = matches.count == 1 ? matches.firstObject : nil;
+    PHAsset *only = assets.count == 1 ? assets.firstObject : nil;
+    if ( !pick && only
+      && ( !place || !only.location || [only.location distanceFromLocation:place] <= 100 ) ) {
+      pick = only;
+    }
     NSMutableDictionary *result = [@{
       @"inSecond": @( assets.count ), @"atLocation": @( matches.count ),
     } mutableCopy];
-    if ( matches.count == 1 ) {
-      result[@"uri"] = [@"ph://" stringByAppendingString:matches.firstObject.localIdentifier];
+    if ( pick ) {
+      result[@"uri"] = [@"ph://" stringByAppendingString:pick.localIdentifier];
     }
     resolve( result );
   } );
