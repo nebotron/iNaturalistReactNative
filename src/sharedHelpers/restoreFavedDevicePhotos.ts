@@ -10,26 +10,16 @@ import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevi
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import { saveLocalPhotoToLibrary } from "sharedHelpers/usbStaging";
 
-const logger = log.extend( "restoreRefavedDevicePhotos" );
+const logger = log.extend( "restoreFavedDevicePhotos" );
 
-// An unfaved observation's photos are filed into "Imported to iNaturalist" for
-// the user to delete from Photos. If they do, and then fave the observation
-// again, the photo belongs back in their library: this saves a copy from the
-// observation and remembers it in place of the deleted asset.
+// A faved observation's photos belong in the user's Photos library. One that
+// isn't there (deleted from Photos, e.g. from "Imported to iNaturalist" while
+// the observation was unfaved) is saved back from the observation, and the
+// copy is remembered in place of the missing asset.
 
 const store = new MMKV( { id: "restored-device-photos" } );
-// Library URIs last filed into the album, so a fave can tell a photo that was
-// filed (and so may have been deleted) from one that never was.
-const FILED_KEY = "filedUris";
 // Device photo URI → the ph:// URI it was saved back to Photos as.
 const RESTORED_KEY = "restoredUris";
-
-export const getFiledUris = ( ) => new Set<string>(
-  JSON.parse( store.getString( FILED_KEY ) ?? "[]" ),
-);
-export const setFiledUris = ( uris: Iterable<string> ) => (
-  store.set( FILED_KEY, JSON.stringify( [...new Set( uris )] ) )
-);
 
 const getRestored = ( ): Record<string, string> => JSON.parse(
   store.getString( RESTORED_KEY ) ?? "{}",
@@ -71,30 +61,31 @@ const restoreOne = async (
   );
 };
 
-// deviceUris: device photos on observations just faved again.
+// deviceUris: device photos on faved observations.
 // libraryUriFor: the Photos asset each currently maps to.
-// Resolves the device URIs whose restoration should be tried again later, and
-// the new assets saved.
-export const restoreRefavedDevicePhotos = async (
+// Resolves the new assets saved, and whether any save failed and is worth
+// trying again.
+export const restoreFavedDevicePhotos = async (
   realm: Realm,
   deviceUris: string[],
   libraryUriFor: ( uri: string ) => string,
-): Promise<{ retry: string[]; saved: string[] }> => {
-  if ( deviceUris.length === 0 ) return { retry: [], saved: [] };
-  if ( Platform.OS !== "ios" || !ImageCropper?.existingAssets ) {
-    return { retry: [], saved: [] };
-  }
-  const candidates = deviceUris.filter( uri => libraryUriFor( uri ).startsWith( "ph://" ) );
+): Promise<{ saved: string[]; failed: boolean }> => {
+  const none = { saved: [], failed: false };
+  if ( Platform.OS !== "ios" || !ImageCropper?.existingAssets ) return none;
+  // Staged USB photos not yet saved are sweepUsbStaging's to save.
+  const candidates = [...new Set( deviceUris )]
+    .filter( uri => libraryUriFor( uri ).startsWith( "ph://" ) );
+  if ( candidates.length === 0 ) return none;
   let existing: Set<string>;
   try {
     existing = new Set( await ImageCropper.existingAssets( candidates.map( libraryUriFor ) ) );
   } catch ( error ) {
     // Without full access a missing asset can't be told from a hidden one.
-    logger.warn( "Could not check which refaved photos are still in Photos", error );
-    return { retry: [], saved: [] };
+    logger.warn( "Could not check which faved photos are still in Photos", error );
+    return none;
   }
-  const retry: string[] = [];
   const saved: string[] = [];
+  let failed = false;
   const missing = candidates.filter( uri => !existing.has( libraryUriFor( uri ) ) );
   for ( const deviceUri of missing ) {
     if ( realm.isClosed ) break;
@@ -106,12 +97,12 @@ export const restoreRefavedDevicePhotos = async (
         saved.push( uri );
       }
     } catch ( error ) {
-      logger.error( "Could not put a refaved photo back in Photos", error );
-      retry.push( deviceUri );
+      logger.error( "Could not put a faved photo back in Photos", error );
+      failed = true;
     }
   }
   if ( saved.length > 0 ) {
-    logger.info( `Put ${saved.length} refaved photo(s) back in Photos` );
+    logger.info( `Put ${saved.length} faved photo(s) back in Photos` );
   }
-  return { retry, saved };
+  return { saved, failed };
 };

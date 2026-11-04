@@ -36,8 +36,8 @@ NativeModules.ImageCropper = {
 
 const {
   restoredUriFor,
-  restoreRefavedDevicePhotos,
-} = require( "sharedHelpers/restoreRefavedDevicePhotos" );
+  restoreFavedDevicePhotos,
+} = require( "sharedHelpers/restoreFavedDevicePhotos" );
 
 const realmWith = obsPhotos => ( {
   isClosed: false,
@@ -48,35 +48,35 @@ const realmWith = obsPhotos => ( {
 
 const identity = uri => uri;
 
-describe( "restoreRefavedDevicePhotos", ( ) => {
+describe( "restoreFavedDevicePhotos", ( ) => {
   beforeEach( ( ) => {
     mockStore.clear( );
     mockSave.mockClear( );
     mockExisting.mockReset( );
   } );
 
-  it( "saves a refaved photo that was deleted from Photos back to the library", async ( ) => {
+  it( "saves a faved photo missing from Photos back to the library", async ( ) => {
     mockExisting.mockResolvedValue( [] );
     const realm = realmWith( [{
       originalDevicePhotoUri: "ph://GONE",
       photo: { url: "https://static.inaturalist.org/photos/1/square.jpg" },
     }] );
 
-    const { saved } = await restoreRefavedDevicePhotos( realm, ["ph://GONE"], identity );
+    const { saved } = await restoreFavedDevicePhotos( realm, ["ph://GONE"], identity );
 
     expect( mockSave ).toHaveBeenCalledWith( "/caches/downloaded.jpg", undefined );
     expect( saved ).toEqual( ["ph://RESTORED"] );
     expect( restoredUriFor( "ph://GONE" ) ).toEqual( "ph://RESTORED" );
   } );
 
-  it( "leaves a refaved photo that is still in Photos alone", async ( ) => {
+  it( "leaves a faved photo that is still in Photos alone", async ( ) => {
     mockExisting.mockResolvedValue( ["ph://STILL"] );
     const realm = realmWith( [{
       originalDevicePhotoUri: "ph://STILL",
       photo: { url: "https://static.inaturalist.org/photos/1/square.jpg" },
     }] );
 
-    const { saved } = await restoreRefavedDevicePhotos( realm, ["ph://STILL"], identity );
+    const { saved } = await restoreFavedDevicePhotos( realm, ["ph://STILL"], identity );
 
     expect( mockSave ).not.toHaveBeenCalled( );
     expect( saved ).toEqual( [] );
@@ -89,7 +89,7 @@ describe( "restoreRefavedDevicePhotos", ( ) => {
       photo: { url: "https://static.inaturalist.org/photos/1/square.jpg" },
     }] );
 
-    await restoreRefavedDevicePhotos( realm, ["ph://GONE"], identity );
+    await restoreFavedDevicePhotos( realm, ["ph://GONE"], identity );
 
     expect( mockSave ).not.toHaveBeenCalled( );
   } );
@@ -102,8 +102,8 @@ describe( "restoreRefavedDevicePhotos", ( ) => {
       photo: { url: "https://static.inaturalist.org/photos/1/square.jpg" },
     }] );
 
-    const { retry } = await restoreRefavedDevicePhotos( realm, ["ph://GONE"], identity );
+    const { failed } = await restoreFavedDevicePhotos( realm, ["ph://GONE"], identity );
 
-    expect( retry ).toEqual( ["ph://GONE"] );
+    expect( failed ).toBe( true );
   } );
 } );
