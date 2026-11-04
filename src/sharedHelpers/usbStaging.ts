@@ -123,10 +123,10 @@ const isFullFrame = ( {
   x <= 0.001 && y <= 0.001 && w >= 0.999 && h >= 0.999
 );
 
-// Saves a staged photo to Photos, cropped as it is on its observation. On iOS
+// Saves a local photo to Photos, cropped as it is on its observation. On iOS
 // the crop is a PhotoKit edit over the full original, so Revert in Photos
 // recovers the whole image. Resolves the new asset's ph:// URI.
-const saveStagedPhoto = async ( path: string, crop?: NormalizedCrop ) => {
+export const saveLocalPhotoToLibrary = async ( path: string, crop?: NormalizedCrop ) => {
   if ( crop && !isFullFrame( crop ) && Platform.OS === "ios" && ImageCropper?.saveCroppedAsset ) {
     const { uri, cropped } = await ImageCropper.saveCroppedAsset( `file://${path}`, crop );
     // The original still landed whole; only the edit over it didn't.
@@ -187,7 +187,7 @@ export const sweepUsbStaging = async (
       if ( favorited.has( item.name ) ) {
         // eslint-disable-next-line no-await-in-loop
         const ok = await enqueuePhotoLibraryWrite(
-          ( ) => saveStagedPhoto( item.path, cropFor( item ) ),
+          ( ) => saveLocalPhotoToLibrary( item.path, cropFor( item ) ),
         ).then( uri => {
           if ( uri ) {
             savedUris.push( uri );
