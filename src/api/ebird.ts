@@ -262,10 +262,21 @@ export const resolveEbirdTaxonFilter = async (
   if ( !includeIds.length && iconicTaxa?.length && !iconicTaxa.includes( "Aves" ) ) return null;
   if ( !includeIds.length && !excludeIds.length ) return { exclude: [] };
 
-  const taxa: FilterTaxon[] = await searchTaxa( {
-    id: [AVES_ID, ...includeIds, ...excludeIds].join( "," ),
-    fields: TAXON_FIELDS,
-  } ) || [];
+  // A My Lifers search can exclude hundreds of species, more than one page.
+  // Without per_page the API returns only the first 30, dropping exclusions
+  // and possibly Aves itself.
+  const ids = [...new Set( [AVES_ID, ...includeIds, ...excludeIds] )];
+  const chunks: number[][] = [];
+  for ( let i = 0; i < ids.length; i += TAXA_PER_PAGE ) {
+    chunks.push( ids.slice( i, i + TAXA_PER_PAGE ) );
+  }
+  const taxa: FilterTaxon[] = ( await Promise.all( chunks.map( async chunk => (
+    await searchTaxa( {
+      id: chunk.join( "," ),
+      per_page: TAXA_PER_PAGE,
+      fields: TAXON_FIELDS,
+    } ) || []
+  ) ) ) ).flat( );
   const aves = taxa.find( taxon => taxon.id === AVES_ID );
   const containsBirds = ( id: number ) => id === AVES_ID || !!aves?.ancestor_ids.includes( id );
   const birdTaxa = ( ids: number[] ) => taxa.filter(
