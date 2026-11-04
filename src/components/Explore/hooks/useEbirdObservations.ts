@@ -71,7 +71,6 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
     "taxon_id",
     "without_taxon_id",
     "iconic_taxa",
-    "quality_grade",
   ] );
   const dateParams = pick( params, EBIRD_DATE_PARAMS );
   const { data: taxonFilter, error: taxonFilterError } = useQuery( {
@@ -139,7 +138,7 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
     [data],
   );
 
-  // With eBird alone, say why taxon or quality filters leave nothing
+  // With eBird alone, say why taxon filters leave nothing
   if ( active && source === "ebird" && taxonFilter === null ) {
     return {
       error: false,
