@@ -834,7 +834,9 @@ RCT_EXPORT_METHOD( vibrate:( NSString * )mode
 RCT_EXPORT_METHOD( notify:( NSString * )title body:( NSString * )body )
 {
   UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
-  if ( !center.delegate ) center.delegate = self;
+  // Replaces UsbStorage's delegate, if set: this one also presents its
+  // banners, and adds tap-to-open for detections.
+  center.delegate = self;
   [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert | UNAuthorizationOptionSound
                         completionHandler:^( BOOL granted, NSError *error ) {
     if ( !granted ) return;

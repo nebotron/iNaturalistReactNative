@@ -16,7 +16,8 @@
 
 static NSString *const kBookmarkKey = @"UsbStorageFolderBookmark";
 
-@interface UsbStorage : NSObject <RCTBridgeModule, UIDocumentPickerDelegate>
+@interface UsbStorage : NSObject <RCTBridgeModule, UIDocumentPickerDelegate,
+  UNUserNotificationCenterDelegate>
 @end
 
 @implementation UsbStorage {
@@ -373,9 +374,12 @@ RCT_EXPORT_METHOD(deleteSourceImages:(NSArray<NSString *> *)relativePaths
 
 // Posts a local notification that an import finished. Asks for permission on
 // first use. Tagged so AudioBirdId's tap handler doesn't treat it as its own.
+// Without a delegate iOS drops it while the app is in the foreground, so act
+// as one until AudioBirdId (which also presents banners) takes over.
 RCT_EXPORT_METHOD(notify:(NSString *)title body:(NSString *)body)
 {
   UNUserNotificationCenter *center = [UNUserNotificationCenter currentNotificationCenter];
+  if ( !center.delegate ) center.delegate = self;
   [center requestAuthorizationWithOptions:UNAuthorizationOptionAlert | UNAuthorizationOptionSound
                         completionHandler:^( BOOL granted, NSError *error ) {
     if ( !granted ) return;
@@ -387,6 +391,13 @@ RCT_EXPORT_METHOD(notify:(NSString *)title body:(NSString *)body)
       requestWithIdentifier:[NSUUID UUID].UUIDString content:content trigger:nil]
              withCompletionHandler:nil];
   }];
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center
+       willPresentNotification:(UNNotification *)notification
+         withCompletionHandler:(void ( ^ )( UNNotificationPresentationOptions ))completionHandler
+{
+  completionHandler( UNNotificationPresentationOptionBanner | UNNotificationPresentationOptionList );
 }
 
 @end
