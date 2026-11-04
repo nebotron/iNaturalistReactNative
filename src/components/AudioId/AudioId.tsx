@@ -3,7 +3,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
 import { fetchTaxaBasics } from "api/taxa";
 import {
-  Body3, Body4, Button, DisplayTaxonName, IconicTaxonIcon, INatIcon,
+  Body1, Body3, Button, IconicTaxonIcon, INatIcon,
 } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
@@ -15,7 +15,6 @@ import { AppState, Linking, Modal, requireNativeComponent } from "react-native";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import type { RealmTaxon } from "realmModels/types";
-import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -140,7 +139,9 @@ const useTaxonExtras = ( taxonIds: number[] ): Map<number, TaxonExtras> => {
   } ) );
 };
 
-const TaxonThumb = ( { url, onPress }: { url?: string; onPress: ( ) => void } ) => (
+const TaxonThumb = ( { url, onPress, children }: {
+  url?: string; onPress: ( ) => void; children?: React.ReactNode;
+} ) => (
   <Pressable
     accessibilityRole="button"
     accessibilityHint="Opens the species page."
@@ -150,7 +151,17 @@ const TaxonThumb = ( { url, onPress }: { url?: string; onPress: ( ) => void } ) 
     {url
       ? <CachedImage source={{ uri: url }} className="w-full h-full" />
       : <IconicTaxonIcon imageClassName="w-full h-full" iconicTaxonName="Aves" />}
+    <View pointerEvents="none" className="absolute top-[5px] right-[5px] flex-row">
+      {children}
+    </View>
   </Pressable>
+);
+
+// A small round marker on a species photo; badges share a shape and differ by icon and color.
+const ThumbBadge = ( { icon, className }: { icon: string; className: string } ) => (
+  <View className={`ml-1 rounded-full p-[3px] border-2 border-white ${className}`}>
+    <INatIcon name={icon} color={colors.white} size={12} />
+  </View>
 );
 
 // The last 10 s of sound, Merlin-style: dark marks on a full-width white
@@ -235,7 +246,7 @@ const AudioId = ( ) => {
   } );
 
   // Species being heard right now are highlighted in yellow.
-  const row = ( sp: AudioIdSpecies, detail?: string ) => (
+  const row = ( sp: AudioIdSpecies ) => (
     <Pressable
       key={sp.taxonId}
       accessibilityRole="button"
@@ -249,40 +260,19 @@ const AudioId = ( ) => {
       <TaxonThumb
         url={taxonExtras.get( sp.taxonId )?.url}
         onPress={( ) => openTaxon( sp.taxonId )}
-      />
+      >
+        {canAdd.has( sp.taxonId ) && <ThumbBadge icon="plus-bold" className="bg-inatGreen" />}
+        {currentUser && seen && !seen.has( sp.taxonId ) && (
+          <ThumbBadge icon="star" className="bg-warningYellow" />
+        )}
+      </TaxonThumb>
       <View
         className="flex-1 flex-row items-center self-stretch ml-3 pr-2 border-b border-lightGray"
       >
-        <View className="flex-1">
-          <View className="flex-row items-center">
-            <View className="shrink">
-              <DisplayTaxonName
-                taxon={{
-                  id: sp.taxonId,
-                  name: sp.name,
-                  rank_level: 10,
-                  // The model's English name until the localized one loads
-                  preferred_common_name: taxonExtras.has( sp.taxonId )
-                    ? taxonExtras.get( sp.taxonId )?.commonName
-                    : sp.commonName,
-                }}
-                prefersCommonNames={currentUser?.prefers_common_names ?? true}
-                scientificNameFirst={currentUser?.prefers_scientific_name_first}
-              />
-            </View>
-            {currentUser && seen && !seen.has( sp.taxonId ) && (
-              <View className="ml-2 px-[5px] rounded-full bg-inatGreen">
-                <Body4 className="text-white font-bold">NEW</Body4>
-              </View>
-            )}
-          </View>
-          {detail && <Body3>{detail}</Body3>}
-        </View>
-        {canAdd.has( sp.taxonId ) && (
-          <View className="rounded-full bg-inatGreen p-1">
-            <INatIcon name="merge" color={colors.white} size={14} />
-          </View>
-        )}
+        <Body1 numberOfLines={1} className="flex-1">
+          {/* The model's English name until the localized one loads */}
+          {taxonExtras.get( sp.taxonId )?.commonName || sp.commonName}
+        </Body1>
       </View>
     </Pressable>
   );
@@ -335,12 +325,7 @@ const AudioId = ( ) => {
 
         <View className="h-6" />
         {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
-        {heardList.map( h => row(
-          h.sp,
-          `${h.count} ${h.count === 1
-            ? "time"
-            : "times"}, last ${formatISOTimestamp( h.lastHeard )}`,
-        ) )}
+        {heardList.map( h => row( h.sp ) )}
 
         <View className="h-20" />
       </ScrollView>
