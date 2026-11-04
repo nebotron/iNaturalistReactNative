@@ -272,6 +272,18 @@ class Observation extends Realm.Object {
       if ( existingObsPhoto?.cameraInfo ) {
         mappedObsPhoto.cameraInfo = existingObsPhoto.cameraInfo;
       }
+      // The import crop is local-only as well; faved USB imports are saved to
+      // Photos with it as a reversible edit.
+      const existingPhoto = existingObsPhoto?.photo;
+      if ( existingPhoto?.cropW != null ) {
+        Object.assign( mappedObsPhoto.photo, {
+          cropX: existingPhoto.cropX,
+          cropY: existingPhoto.cropY,
+          cropW: existingPhoto.cropW,
+          cropH: existingPhoto.cropH,
+          cropOriginalLocalFilePath: existingPhoto.cropOriginalLocalFilePath,
+        } );
+      }
       return mappedObsPhoto;
     } );
 
