@@ -58,6 +58,8 @@ const findLibraryOriginal = ( { uuid, deviceUri, ...options }: Query ): Promise<
   if ( cached ) return cached;
   const result = ImageCropper.findLibraryOriginal( options )
     .then( match => {
+      // A miss with no candidates at all is the common case and says nothing.
+      if ( !match?.uri && !match?.inSecond && !match?.atLocation ) return null;
       logger.info( `library_original ${match?.uri
         ? "found"
         : "none"} recorded=${!!deviceUri} time=${!!options.time} `

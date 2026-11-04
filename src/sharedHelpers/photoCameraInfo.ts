@@ -141,7 +141,10 @@ export const readCameraInfo = async ( uri: string ): Promise<PhotoCameraInfo | n
   try {
     tags = await Exify.read( exifUri( uri ) );
   } catch ( error ) {
-    logger.warn( "photo_camera_info_unreadable", error );
+    // A library original the user deleted is expected, not worth a warning.
+    if ( !/Could not retrieve asset/.test( String( ( error as Error )?.message ) ) ) {
+      logger.warn( "photo_camera_info_unreadable", error );
+    }
     // A deleted library original stays deleted; don't read and warn again.
     cache.set( uri, null );
     return null;
