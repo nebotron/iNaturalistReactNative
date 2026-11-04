@@ -47,8 +47,12 @@ const UPLOAD_MAX_SIDE = getTunable( "uploadMaxDimension" );
 // side length) drift by a few pixels even when the user isn't deliberately
 // zooming. Right at the 2048 threshold that drift flips the warning border on
 // and off. Use hysteresis instead of a single-sample comparison so crossing
-// the threshold briefly during a gesture doesn't flicker the indicator.
+// the threshold briefly during a gesture doesn't flicker the indicator. The
+// band sits entirely above the threshold, so a crop of exactly 2048 (the
+// slider tick) is never flagged, whichever direction it was approached from.
 const DOWNSIZE_HYSTERESIS_PX = 8;
+// Float slack so the slider tick's scale round-trip still reads as <= 2048.
+const DOWNSIZE_EPSILON_PX = 0.5;
 // How long to wait before showing the loading spinner. With the next photo
 // preloaded and decoded ahead of time (see warmUris), advancing a bulk crop
 // waits a frame or two for the new image to paint -- just long enough to flash
@@ -56,7 +60,7 @@ const DOWNSIZE_HYSTERESIS_PX = 8;
 // that really is slow gets one.
 const SPINNER_DELAY_MS = 150;
 const isDownsized = ( sizePx: number, wasDownsized: boolean ) => ( wasDownsized
-  ? sizePx > UPLOAD_MAX_SIDE - DOWNSIZE_HYSTERESIS_PX
+  ? sizePx > UPLOAD_MAX_SIDE + DOWNSIZE_EPSILON_PX
   : sizePx > UPLOAD_MAX_SIDE + DOWNSIZE_HYSTERESIS_PX );
 
 const styles = StyleSheet.create( {
