@@ -37,6 +37,7 @@ import useObservationsWithEbird
   from "components/Explore/hooks/useObservationsWithEbird";
 import IdentifyView from "components/Explore/IdentifyView";
 import LifeListView from "components/Explore/LifeListView";
+import ObservationSourceToggle from "components/Explore/ObservationSourceToggle";
 import ObservationsViewBar from "components/Explore/ObservationsViewBar";
 import {
   OfflineMapView,
@@ -223,6 +224,7 @@ const ExploreResults = ( ) => {
   const needsPermission = isNearby && hasPermissions === false && !hasBlockedPermissions;
   const nearbyResolved = !isNearby || nearbyCoords !== undefined;
   const canFetch = !needsPermission && nearbyResolved;
+  const ebirdOnly = useStore( s => s.layout.observationSource === "ebird" );
 
   const queryParams = useMemo(
     ( ) => buildExploreV2QueryParams( state, nearbyCoords, currentUserId ),
@@ -260,12 +262,23 @@ const ExploreResults = ( ) => {
     status: observationsStatus,
     totalBounds,
     totalResults,
-  } = useInfiniteExploreScroll( { params: queryParams, enabled: canFetch } );
+  } = useInfiniteExploreScroll( { params: queryParams, enabled: canFetch && !ebirdOnly } );
   const { ebird, observations: observationsWithEbird } = useObservationsWithEbird(
     observations,
     queryParams,
     { enabled: canFetch, complete: !isLoading && !hasNextPage },
   );
+  const resultsLoading = ebirdOnly
+    ? !!ebird?.isLoading
+    : isLoading;
+  let observationsCount = totalResults;
+  if ( ebirdOnly ) {
+    observationsCount = ebird && !ebird.isLoading
+      ? observationsWithEbird.length
+      : null;
+  } else if ( typeof totalResults === "number" && ebird && !ebird.isLoading ) {
+    observationsCount = totalResults + ebird.observations.length;
+  }
 
   // Only the user's own local photos have a subject distance, so loaded results are
   // sorted on device and everyone else's come last
@@ -458,14 +471,15 @@ const ExploreResults = ( ) => {
   const renderTabContent = ( ) => {
     switch ( state.activeTab ) {
       case OBSERVATIONS_TAB: {
-        const hasNoResults = canFetch && totalResults === 0 && sortedObservations.length === 0;
+        const hasNoResults = canFetch && observationsCount === 0
+          && sortedObservations.length === 0;
         return (
           <>
             {showMap
               ? (
                 <ExploreV2MapView
                   appliedSearchCount={state.appliedSearchCount}
-                  isLoading={isLoading}
+                  isLoading={resultsLoading}
                   mapAreaBounds={state.location.placeMode === EXPLORE_V2_PLACE_MODE.MAP_AREA
                     ? state.location.bounds
                     : undefined}
@@ -512,7 +526,7 @@ const ExploreResults = ( ) => {
                 accessibilityLabel={t( "Change-observations-sort-order" )}
               />
             )}
-            {!showMap && ( isEbirdEnabled( ) || ( layout === "grid" && !hasNoResults ) ) && (
+            {!showMap && layout === "grid" && !hasNoResults && (
               <INatIconButton
                 icon="tune"
                 size={22}
@@ -654,8 +668,8 @@ const ExploreResults = ( ) => {
       return renderPermissionPrompt( );
     }
     const totalCount = {
-      [OBSERVATIONS_TAB]: typeof totalResults === "number"
-        && t( "X-Observations", { count: totalResults } ),
+      [OBSERVATIONS_TAB]: typeof observationsCount === "number"
+        && t( "X-Observations", { count: observationsCount } ),
       [SPECIES_TAB]: typeof speciesCount === "number"
         && t( "X-Species", { count: speciesCount } ),
       [LIFELIST_TAB]: typeof lifeListCount === "number"
@@ -665,10 +679,13 @@ const ExploreResults = ( ) => {
     }[state.activeTab as string];
     return (
       <>
-        {totalCount && (
-          <Body2 className="px-5 pb-2" testID="ExploreResults.totalCount">
-            {totalCount}
-          </Body2>
+        {( totalCount || ( state.activeTab === OBSERVATIONS_TAB && isEbirdEnabled( ) ) ) && (
+          <View className="flex-row items-center justify-between gap-2 px-5 pb-2">
+            {totalCount
+              ? <Body2 testID="ExploreResults.totalCount">{totalCount}</Body2>
+              : <View />}
+            {state.activeTab === OBSERVATIONS_TAB && <ObservationSourceToggle />}
+          </View>
         )}
         {renderTabContent( )}
       </>

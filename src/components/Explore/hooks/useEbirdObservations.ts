@@ -19,7 +19,7 @@ import useStore from "stores/useStore";
 const STALE_TIME_MS = 24 * 60 * 60 * 1000;
 const NO_OBSERVATIONS: EbirdInatObservation[] = [];
 
-export type EbirdLimit = "area" | "dates" | "results" | "rate" | "noLocation";
+export type EbirdLimit = "area" | "dates" | "filters" | "results" | "rate" | "noLocation";
 
 interface Area { lat: number; lng: number; distKm: number }
 
@@ -62,8 +62,8 @@ const pick = ( params: Record<string, unknown>, keys: string[] ) => Object.fromE
 // eBird sightings matching an Explore search, shaped like iNaturalist
 // observations, or null when eBird is off or the filters exclude it
 const useEbirdObservations = ( params: Record<string, unknown>, enabled = true ) => {
-  const ebirdEnabled = useStore( state => state.layout.ebirdEnabled );
-  const active = enabled && ebirdEnabled && isEbirdEnabled( );
+  const source = useStore( state => state.layout.observationSource );
+  const active = enabled && source !== "inaturalist" && isEbirdEnabled( );
   // Only the params that decide which birds eBird results include
   const taxonParams = pick( params, [
     "taxon_id",
@@ -126,6 +126,15 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
     [data],
   );
 
+  // With eBird alone, say why filters it can't match leave nothing
+  if ( active && source === "ebird" && taxonFilter === null ) {
+    return {
+      error: false,
+      isLoading: false,
+      limits: ["filters"] as EbirdLimit[],
+      observations: NO_OBSERVATIONS,
+    };
+  }
   if ( !applies ) return null;
 
   const limits: EbirdLimit[] = [];

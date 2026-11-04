@@ -1,4 +1,3 @@
-import EbirdCheckbox from "components/Explore/EbirdCheckbox";
 import { Body2, BottomSheet } from "components/SharedComponents";
 import { TextInput, View } from "components/styledComponents";
 import React, { useState } from "react";
@@ -73,7 +72,6 @@ const HotspotSettingsSheet = ( { onPressClose }: Props ) => {
       onPressClose={onPressClose}
     >
       <View className="p-7 pt-2">
-        <EbirdCheckbox />
         {FIELDS.map( field => <HotspotSettingField key={field.key} field={field} /> )}
       </View>
     </BottomSheet>

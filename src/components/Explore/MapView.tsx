@@ -88,6 +88,7 @@ const MapView = ( {
   const isFirstRender = useRef( true );
   const lastExploreMapRegion = useStore( state => state.layout.lastExploreMapRegion );
   const setLastExploreMapRegion = useStore( state => state.layout.setLastExploreMapRegion );
+  const ebirdOnly = useStore( state => state.layout.observationSource === "ebird" );
 
   const mapRef = useRef<RNMapView | null>( null );
 
@@ -245,7 +246,7 @@ const MapView = ( {
         showScaleBar
         showsUserLocation
         tileMapParams={tileMapParams}
-        withPressableObsTiles={tileMapParams !== null}
+        withPressableObsTiles={tileMapParams !== null && !ebirdOnly}
         onCurrentLocationPress={handleCurrentLocationPress}
       />
       {showRedoSearchButton && (

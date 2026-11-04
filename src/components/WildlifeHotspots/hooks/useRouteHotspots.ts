@@ -520,7 +520,7 @@ async function fetchEbirdRouteObservations(
 }
 
 export function useRouteHotspots() {
-  const ebirdEnabled = useStore( state => state.layout.ebirdEnabled );
+  const source = useStore( state => state.layout.observationSource );
   const [hotspots, setHotspots] = useState<Hotspot[]>( [] );
   // Every hotspot whose detour was evaluated, for route planning
   const [candidates, setCandidates] = useState<Hotspot[]>( [] );
@@ -603,17 +603,22 @@ export function useRouteHotspots() {
           },
           ...nonLocationParams,
         } );
+        const useEbird = source !== "inaturalist" && isEbirdEnabled( );
+        // With eBird alone, iNaturalist results are fetched only to match
+        // sightings to taxa, and aren't shown
         const numPages = Math.ceil( totalObs / API_PAGE_SIZE );
         const pages = await Promise.all(
           Array.from( { length: numPages }, ( _, i ) => fetchPage( i + 1 ) ),
         );
 
         const inatObservations = pages.flatMap( p => p?.results ?? [] ).slice( 0, totalObs );
-        const ebirdObservations = ebirdEnabled && isEbirdEnabled( )
+        const ebirdObservations = useEbird
           ? await fetchEbirdRouteObservations( routePoints, filterParams, inatObservations )
           : [];
         if ( isStale() ) return;
-        const observations = [...inatObservations, ...ebirdObservations];
+        const observations = useEbird && source === "ebird"
+          ? ebirdObservations
+          : [...inatObservations, ...ebirdObservations];
 
         // 3. Cluster observations with k-means (diameter ≤ 2× clusterRadiusKm per cluster)
         const cells = clusterByKMeans( observations, clusterRadiusKm );
@@ -707,7 +712,7 @@ export function useRouteHotspots() {
         if ( !isStale() ) setLoading( false );
       }
     },
-    [ebirdEnabled],
+    [source],
   );
 
   return {

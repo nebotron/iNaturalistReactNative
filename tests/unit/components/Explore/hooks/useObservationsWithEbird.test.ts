@@ -1,5 +1,6 @@
 import { renderHook } from "@testing-library/react-native";
 import useObservationsWithEbird from "components/Explore/hooks/useObservationsWithEbird";
+import useStore from "stores/useStore";
 
 const mockEbird = jest.fn( );
 jest.mock( "components/Explore/hooks/useEbirdObservations", ( ) => ( {
@@ -43,5 +44,16 @@ describe( "useObservationsWithEbird", ( ) => {
   it( "leaves results alone without eBird", ( ) => {
     mockEbird.mockReturnValue( null );
     expect( uuids( { order_by: "observed_on", order: "desc" }, true ) ).toEqual( ["i1", "i2"] );
+  } );
+
+  it( "shows only sorted sightings when eBird is the source", ( ) => {
+    useStore.setState( state => ( {
+      layout: { ...state.layout, observationSource: "ebird" },
+    } ) );
+    expect( uuids( { order_by: "observed_on", order: "desc" }, false ) )
+      .toEqual( ["e2", "e1"] );
+    useStore.setState( state => ( {
+      layout: { ...state.layout, observationSource: "inaturalist" },
+    } ) );
   } );
 } );

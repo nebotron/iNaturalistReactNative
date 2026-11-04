@@ -20,6 +20,7 @@ import React, {
 import type MapView from "react-native-maps";
 import type { Region } from "react-native-maps";
 import { useTranslation } from "sharedHooks";
+import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 
 // matching v1 explore: ~50km around the current location
@@ -78,6 +79,7 @@ const ExploreV2MapView = ( {
   totalBounds,
 }: Props ) => {
   const { t } = useTranslation( );
+  const ebirdOnly = useStore( state => state.layout.observationSource === "ebird" );
   const mapRef = useRef<MapView | null>( null );
   // The search the user panned away from. The "Redo search in this area"
   // button shows only while that is still the current search, so a new search
@@ -202,7 +204,7 @@ const ExploreV2MapView = ( {
         showsUserLocation
         switchMapTypeButtonClassName="right-5 bottom-20"
         tileMapParams={queryParams}
-        withPressableObsTiles
+        withPressableObsTiles={!ebirdOnly}
       />
       {showRedoSearch && (
         <View

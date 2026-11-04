@@ -410,19 +410,6 @@ Date-Added-Newest-Default = Date Added: Newest (Default)
 Date-Added-Oldest = Date Added: Oldest
 # Option for showing when an observation was made on its photo
 Date-and-time = Date and time
-# Date formatting using date-fns
-# Used for things like User Profile join date
-# See complete list of formatting styles: https://date-fns.org/v3.6.0/docs/format
-date-format-long = PP
-# Used when displaying a relative time - in this case, shows only month+year (same year) - e.g. Jul 3
-# See complete list of formatting styles: https://date-fns.org/v3.6.0/docs/format
-date-format-month-day = MMM d
-# Use when only showing an observations month and year
-# See complete list of formatting styles: https://date-fns.org/v3.6.0/docs/format
-date-format-month-year = MMM yyyy
-# Short date, e.g. on notifications from over a year ago
-# See complete list of formatting styles: https://date-fns.org/v3.6.0/docs/format
-date-format-short = M/d/yy
 DATE-OBSERVED = DATE OBSERVED
 Date-observed = Date observed
 Date-observed-header-short = Observed
@@ -452,24 +439,6 @@ datetime-difference-hours = { $count }h
 datetime-difference-minutes = { $count }m
 # Used when displaying a relative time - in this case, X weeks ago (e.g. 3w = 3 weeks ago)
 datetime-difference-weeks = { $count }w
-# Longer datetime, e.g. when editing an observation
-# See complete list of formatting styles: https://date-fns.org/v3.6.0/docs/format
-datetime-format-long = Pp
-# Longer datetime with time zone, e.g. when editing an observation and we know
-# the time zone See complete list of formatting styles at
-# https://date-fns.org/v3.6.0/docs/format and time zone formatting
-# characters at
-# https://github.com/marnusw/date-fns-tz?tab=readme-ov-file#formatintimezone
-datetime-format-long-with-zone = Pp (zzz)
-# Shorter datetime, e.g. on observation detail view
-# See complete list of formatting styles: https://date-fns.org/v3.6.0/docs/format
-datetime-format-short = M/d/yy h:mm a
-# Shorter datetime with time zone, e.g. on observation detail view
-# See complete list of formatting styles at
-# https://date-fns.org/v3.6.0/docs/format and time zone formatting
-# characters at
-# https://github.com/marnusw/date-fns-tz?tab=readme-ov-file#formatintimezone
-datetime-format-short-with-zone = M/d/yy h:mm a zzz
 # Explore filter option for an observation's evidence of presence annotation
 Dead-organism--evidence = Dead organism
 # Month of December
@@ -587,6 +556,8 @@ Each-species-with-the-date-it-was-first-observed = Each species with the date it
 eBird-limit-area = Only sightings within 50 km of the center of the search area are included.
 # Shown with eBird results when the search's dates reach back further than eBird sightings do
 eBird-limit-dates-window = Only eBird sightings from the last 30 days are included.
+# Shown when only eBird sightings are shown and the filters can't match any
+eBird-limit-filters = eBird has only bird sightings without photos, sounds, or iNaturalist users and projects, so none match these filters.
 # Shown with eBird results when the search has no location
 eBird-limit-no-location = Choose a location to include eBird sightings.
 # Shown with eBird results when the app has paused eBird searches to limit traffic
@@ -879,8 +850,6 @@ iNaturalist-users-who-have-left-an-identification = iNaturalist users who have l
 iNaturalist-users-who-have-observed = iNaturalist users who have observed a particular taxon at a particular time and place
 iNaturalists-apps-are-designed-and-developed-3 = iNaturalist's apps are designed, developed, and supported by the iNaturalist team: Yaron Budowski, Amanda Bullington, Tony Iwane, Johannes Klein, Patrick Leary, Joanne Lin, Scott Loarie, Abhas Misraraj, Sylvain Morin, Carrie Seltzer, Alex Shepard, Thea Skaff, Angie Ta, Ken-ichi Ueda, Kirk van Gorkom, Jason Walthall, & Jane Weeden.
 iNaturalists-vision-is-a-world = iNaturalist's vision is a world where everyone can understand and sustain biodiversity through the practice of observing wild organisms and sharing information about them.
-# Checkbox in Explore filters that adds eBird sightings to results, the map, and hotspots
-Include-eBird-sightings = Include eBird sightings
 Include-taxon = Include
 Individual-encounters-with-organisms = Individual encounters with organisms at a particular time and location, usually with evidence
 # Display name for the iconic taxa category for insecta
@@ -1216,6 +1185,12 @@ Observation-location-obscured-you-can-see-your-own = This observation’s locati
 Observation-location-obscured-you-have-permission = This observation’s location is obscured. You have permission to see this location.
 # Label for a menu that shows various actions you can take for an observation
 Observation-options = Observation options
+# Option in Explore and Hotspots that shows both iNaturalist observations and eBird sightings
+Observation-source-both = Both
+# Option in Explore and Hotspots that shows only eBird sightings
+Observation-source-eBird = eBird
+# Option in Explore and Hotspots that shows only iNaturalist observations
+Observation-source-iNaturalist = iNaturalist
 OBSERVATION-WAS-DELETED = OBSERVATION WAS DELETED
 Observation-with-no-evidence = Observation with no evidence
 Observations = Observations
@@ -1629,6 +1604,8 @@ Shorten-time-limit = Shorten time limit
 # Accessibility label for the photo picker button that shows photos already saved or deleted
 Show-all-photos = Show all photos
 Show-observation-options = Show observation options.
+# Accessibility label for the iNaturalist / eBird / Both toggle in Explore and Hotspots
+Show-observations-from = Show observations from
 # Label for button that shows identification suggestions
 Shows-identification-suggestions = Shows identification suggestions
 # Accessibility hint for the new community member duckling badge

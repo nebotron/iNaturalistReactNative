@@ -1,4 +1,3 @@
-import EbirdCheckbox from "components/Explore/EbirdCheckbox";
 import { BottomSheet, Checkbox, Heading4 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React from "react";
@@ -42,7 +41,6 @@ const GridOverlaysSheet = ( { onPressClose, showGridOverlays, myObs }: Props ) =
   return (
     <BottomSheet headerText={t( "VIEW-OPTIONS" )} onPressClose={onPressClose}>
       <View className="p-7 pt-2 gap-y-4">
-        {!myObs && <EbirdCheckbox />}
         {showGridOverlays && <Heading4>{t( "GRID-OVERLAYS" )}</Heading4>}
         {showGridOverlays && options.map( ( { key, label } ) => (
           <Checkbox

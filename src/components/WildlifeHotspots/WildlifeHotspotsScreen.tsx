@@ -2,6 +2,7 @@ import { useNavigation } from "@react-navigation/native";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
 import HotspotSettingsSheet
   from "components/Explore/ExploreV2/components/HotspotSettingsSheet";
+import ObservationSourceToggle from "components/Explore/ObservationSourceToggle";
 import {
   ActivityIndicator,
   Body2,
@@ -959,6 +960,7 @@ const WildlifeHotspotsScreen = ( {
               )}
             </>
           )}
+        <ObservationSourceToggle className="mt-1 self-start" />
       </View>
 
       {/* Map */}

@@ -1,12 +1,12 @@
 import type { ApiPlace, ApiProject } from "api/types";
 import classNames from "classnames";
-import EbirdCheckbox from "components/Explore/EbirdCheckbox";
 import ExploreSavedFilterSheets from "components/Explore/ExploreSavedFilterSheets";
 import ExploreSavedFiltersSection from "components/Explore/ExploreSavedFiltersSection";
 import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
 import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import NumberBadge from "components/Explore/NumberBadge";
+import ObservationSourceToggle from "components/Explore/ObservationSourceToggle";
 import type { ExploreSearchUser } from "components/Explore/SearchScreens/ExploreUserSearch";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
 import {
@@ -1314,7 +1314,7 @@ const FilterModal = ( {
             />
           </View>
 
-          <EbirdCheckbox />
+          <ObservationSourceToggle className="mb-7 self-start" />
           {/* Hotspot settings section */}
           <View>
             <Heading4 className="mb-5">{t( "HOTSPOT-SETTINGS" )}</Heading4>
