@@ -92,7 +92,7 @@ describe( "ProjectRequirements", ( ) => {
     } ) );
     renderComponent( <ProjectRequirements /> );
 
-    const startTime = await screen.findByText( "Start time: Feb 1, 2024" );
+    const startTime = await screen.findByText( "Start time: 2024-02-01" );
     expect( startTime ).toBeTruthy( );
   } );
 
@@ -102,7 +102,7 @@ describe( "ProjectRequirements", ( ) => {
     } ) );
     renderComponent( <ProjectRequirements /> );
 
-    const dateRange = await screen.findByText( "Mar 7, 2024 - Mar 14, 2024" );
+    const dateRange = await screen.findByText( "2024-03-07 - 2024-03-14" );
     expect( dateRange ).toBeTruthy( );
   } );
 
@@ -112,7 +112,7 @@ describe( "ProjectRequirements", ( ) => {
     } ) );
     renderComponent( <ProjectRequirements /> );
 
-    const observedOnDate = await screen.findByText( "Aug 24, 2022" );
+    const observedOnDate = await screen.findByText( "2022-08-24" );
     expect( observedOnDate ).toBeTruthy( );
   } );
 } );

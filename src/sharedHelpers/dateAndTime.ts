@@ -13,7 +13,6 @@ import {
   formatISO,
   fromUnixTime,
   getUnixTime,
-  getYear,
   isToday,
   isValid as isValidDate,
   parse,
@@ -291,13 +290,7 @@ function formatDifferenceForHumans( date: Date | string, i18n: i18next ) {
     }
     return i18n.t( "datetime-difference-weeks", { count: Math.floor( days / 7 ) } );
   }
-  const formatOpts = { locale: dateFnsLocale( i18n.language ) };
-  if ( getYear( now ) !== getYear( d ) ) {
-    // Previous year(s)
-    return format( d, i18n.t( "date-format-short" ), formatOpts );
-  }
-  // Current year
-  return format( d, i18n.t( "date-format-month-day" ), formatOpts );
+  return format( d, "yyyy-MM-dd" );
 }
 
 const ZONE_ABBREVIATION_TOKEN = /z+/;
@@ -424,7 +417,7 @@ function formatMonthYearDate(
   i18n: i18next,
   options: FormatDateStringOptions = {},
 ) {
-  return formatDateString( dateString, i18n.t( "date-format-month-year" ), i18n, options );
+  return formatDateString( dateString, "yyyy-MM", i18n, options );
 }
 
 function formatLongDate(
@@ -432,7 +425,7 @@ function formatLongDate(
   i18n: i18next,
   options: FormatDateStringOptions = {},
 ) {
-  return formatDateString( dateString, i18n.t( "date-format-long" ), i18n, options );
+  return formatDateString( dateString, "yyyy-MM-dd", i18n, options );
 }
 
 function formatLongDatetime(
@@ -441,8 +434,8 @@ function formatLongDatetime(
   options: FormatDateStringOptions = {},
 ) {
   const fmt = options.literalTime && !options.timeZone
-    ? i18n.t( "datetime-format-long" )
-    : i18n.t( "datetime-format-long-with-zone" );
+    ? "yyyy-MM-dd p"
+    : "yyyy-MM-dd p (zzz)";
   return formatDateString( dateString, fmt, i18n, options );
 }
 
@@ -456,15 +449,15 @@ function formatApiDatetime(
     return formatDateString(
       dateString,
       options.hideTimeZone || ( options.literalTime && !options.timeZone )
-        ? i18n.t( "datetime-format-short" )
-        : i18n.t( "datetime-format-short-with-zone" ),
+        ? "yyyy-MM-dd h:mm a"
+        : "yyyy-MM-dd h:mm a zzz",
       i18n,
       options,
     );
   }
   return formatDateString(
     dateString,
-    i18n.t( "date-format-short" ),
+    "yyyy-MM-dd",
     i18n,
     options,
   );
@@ -491,7 +484,7 @@ function formatProjectsApiDatetimeLong(
 
   const hasTime = String( dateString ).includes( "T" );
   if ( hasTime ) {
-    return formatDateString( dateString, i18n.t( "datetime-format-long" ), i18n, options );
+    return formatDateString( dateString, "yyyy-MM-dd p", i18n, options );
   }
   if ( dateString?.includes( "/" ) ) {
     // Convert from 2025/08/01 to 2025-08-01, so the date parsing function won't crash
@@ -502,7 +495,7 @@ function formatProjectsApiDatetimeLong(
     const dateWithoutOffset = dateString.split( " " )[0];
     return formatDateString(
       dateWithoutOffset,
-      i18n.t( "date-format-long" ),
+      "yyyy-MM-dd",
       i18n,
       options,
     );
@@ -518,13 +511,13 @@ function formatProjectsApiDatetimeLong(
 
     return formatDateString(
       formatISO( parsedDate ),
-      i18n.t( "date-format-long" ),
+      "yyyy-MM-dd",
       i18n,
       options,
     );
   }
 
-  return formatDateString( dateString, i18n.t( "date-format-long" ), i18n, options );
+  return formatDateString( dateString, "yyyy-MM-dd", i18n, options );
 }
 
 function formatObsFieldDate( date: Date ): string {

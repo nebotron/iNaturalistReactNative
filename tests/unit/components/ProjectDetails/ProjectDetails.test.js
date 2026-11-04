@@ -117,7 +117,7 @@ describe( "ProjectDetails", ( ) => {
     renderComponent( <ProjectDetails
       project={mockProjectWithDateRange}
     /> );
-    const dateRange = await screen.findByText( "Mar 7, 2024 - Mar 14, 2024" );
+    const dateRange = await screen.findByText( "2024-03-07 - 2024-03-14" );
     expect( dateRange ).toBeTruthy( );
   } );
 
@@ -147,7 +147,7 @@ describe( "ProjectDetails", ( ) => {
         project_type: "umbrella",
       }}
     /> );
-    const dateRange = await screen.findByText( "Mar 7, 2024 - Mar 14, 2024" );
+    const dateRange = await screen.findByText( "2024-03-07 - 2024-03-14" );
     expect( dateRange ).toBeTruthy( );
   } );
 

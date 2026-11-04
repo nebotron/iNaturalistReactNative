@@ -43,46 +43,46 @@ describe( "formatApiDatetime", ( ) => {
       expect( formatApiDatetime( date, i18next ) ).toEqual( "Missing Date" );
     } );
 
-    it( "should return a localized date when a date string is passed in", ( ) => {
+    it( "should return a YYYY-MM-DD date when a date string is passed in", ( ) => {
       const date = "2022-11-02";
-      expect( formatApiDatetime( date, i18next ) ).toEqual( "11/2/22" );
+      expect( formatApiDatetime( date, i18next ) ).toEqual( "2022-11-02" );
     } );
 
     it( "should return a localized datetime when a datetime string is passed in", ( ) => {
       const date = "2022-11-02T18:43:00+00:00";
-      expect( formatApiDatetime( date, i18next ) ).toEqual( "11/2/22 6:43 PM UTC" );
+      expect( formatApiDatetime( date, i18next ) ).toEqual( "2022-11-02 6:43 PM UTC" );
     } );
 
     it( "should return a localized datetime for a remote observation created_at date", ( ) => {
       expect(
         formatApiDatetime( remoteObservation.created_at, i18next, { inViewerTimeZone: true } ),
-      ).toEqual( "2/13/15 4:41 AM UTC" );
+      ).toEqual( "2015-02-13 4:41 AM UTC" );
     } );
 
     it( "should return a localized datetime for a remote identification created_at date", ( ) => {
       expect(
         formatApiDatetime( remoteIdentification.created_at, i18next ),
-      ).toEqual( "2/13/15 5:12 AM UTC" );
+      ).toEqual( "2015-02-13 5:12 AM UTC" );
     } );
 
     it( "should return a localized datetime for a remote comment created_at date", ( ) => {
       expect(
         formatApiDatetime( remoteComment.created_at, i18next ),
-      ).toEqual( "2/13/15 5:15 AM UTC" );
+      ).toEqual( "2015-02-13 5:15 AM UTC" );
     } );
 
     it( "should return the date in the local time zone by default", () => {
       expect( process.env.TZ ).toEqual( "UTC" );
       expect(
         formatApiDatetime( "2023-01-02T08:00:00+01:00", i18next ),
-      ).toEqual( "1/2/23 7:00 AM UTC" );
+      ).toEqual( "2023-01-02 7:00 AM UTC" );
     } );
 
     it( "should return the date in a requested time zone", () => {
       expect( process.env.TZ ).toEqual( "UTC" );
       expect(
         formatApiDatetime( "2023-01-02T08:00:00+01:00", i18next, { timeZone: "Asia/Tokyo" } ),
-      ).toEqual( "1/2/23 4:00 PM GMT+9" );
+      ).toEqual( "2023-01-02 4:00 PM GMT+9" );
     } );
 
     it.todo(
@@ -127,13 +127,13 @@ describe( "formatApiDatetime", ( ) => {
             i18next,
             { timeZone: "Australia/Sydney" },
           ),
-        ).toEqual( "1/2/23 6:00 PM GMT+11" );
+        ).toEqual( "2023-01-02 6:00 PM GMT+11" );
       } );
 
       it( "still shows a real GMT/UTC abbreviation for an actually-zero offset", () => {
         expect(
           formatApiDatetime( "2023-01-02T08:00:00+01:00", i18next, { timeZone: "UTC" } ),
-        ).toEqual( "1/2/23 7:00 AM UTC" );
+        ).toEqual( "2023-01-02 7:00 AM UTC" );
       } );
     } );
   } );
@@ -143,9 +143,9 @@ describe( "formatApiDatetime", ( ) => {
       await initI18next( { lng: "es-MX" } );
     } );
 
-    it( "should return a localized date when a date string is passed in", ( ) => {
+    it( "should return a YYYY-MM-DD date when a date string is passed in", ( ) => {
       const date = "2022-11-02";
-      expect( formatApiDatetime( date, i18next ) ).toEqual( "2/11/22" );
+      expect( formatApiDatetime( date, i18next ) ).toEqual( "2022-11-02" );
     } );
   } );
 } );
@@ -208,27 +208,10 @@ describe( "formatDifferenceForHumans", ( ) => {
   it( "should show not show fractional weeks", ( ) => {
     expect( formatDifferenceForHumans( subDays( new Date(), 16 ), i18next ) ).toMatch( /2w/ );
   } );
-  it( "should show day and month if over 30 days ago but still this year", ( ) => {
-    const now = new Date();
-    // This test will only work after the first 40 days of the year have
-    // passed
-    if ( now.getUTCMonth() <= 1 ) return;
-    if ( now.getUTCMonth() <= 2 && now.getDay() < 10 ) return;
-
-    const date = subDays( now, 40 );
-    const dateString = formatDifferenceForHumans( date, i18next );
-    const pattern = new RegExp( `\\w+ ${date.getDate()}` );
-    expect( dateString ).toMatch( pattern );
-  } );
-  it( "should show full date for prior years", ( ) => {
-    const date = subDays( new Date(), 400 );
-    const dateString = formatDifferenceForHumans( date, i18next );
-    const pattern = new RegExp( [
-      date.getMonth() + 1,
-      date.getDate(),
-      date.getFullYear() % 1000,
-    ].join( "/" ) );
-    expect( dateString ).toMatch( pattern );
+  it( "should show YYYY-MM-DD if over 30 days ago", ( ) => {
+    const date = subDays( new Date(), 40 );
+    expect( formatDifferenceForHumans( date, i18next ) )
+      .toEqual( date.toISOString( ).substring( 0, 10 ) );
   } );
 } );
 

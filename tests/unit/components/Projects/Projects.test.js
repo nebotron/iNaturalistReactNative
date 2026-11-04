@@ -89,7 +89,7 @@ describe( "Projects", ( ) => {
     renderComponent( <ProjectsContainer /> );
     const input = screen.getByTestId( "ProjectSearch.input" );
     fireEvent.changeText( input, "" );
-    const dateRange = await screen.findByText( "Mar 7, 2024 - Mar 14, 2024" );
+    const dateRange = await screen.findByText( "2024-03-07 - 2024-03-14" );
     expect( dateRange ).toBeTruthy( );
   } );
 
@@ -124,7 +124,7 @@ describe( "Projects", ( ) => {
     renderComponent( <ProjectsContainer /> );
     const input = screen.getByTestId( "ProjectSearch.input" );
     fireEvent.changeText( input, "" );
-    const dateRange = await screen.findByText( "Mar 7, 2024 - Mar 14, 2024" );
+    const dateRange = await screen.findByText( "2024-03-07 - 2024-03-14" );
     expect( dateRange ).toBeTruthy( );
   } );
 } );
