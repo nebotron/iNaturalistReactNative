@@ -167,18 +167,18 @@ function setCachedLookalikes( taxonId: number, value: LookalikeCacheEntry ): voi
 }
 
 const BUTTON_ROW_HEIGHT = 56;
-const OBSERVATION_TYPES: { label: string; value: ObservationType }[] = [
-  { label: "Egg", value: "egg" },
-  { label: "Juvenile", value: "juvenile" },
-  { label: "Adult", value: "adult" },
+const OBSERVATION_TYPES: { value: ObservationType }[] = [
+  { value: "egg" },
+  { value: "juvenile" },
+  { value: "adult" },
 ];
-const MEDIA_TYPES: { label: string; value: MediaType }[] = [
-  { label: "Photos", value: "photo" },
-  { label: "Sounds", value: "sound" },
+const MEDIA_TYPES: { value: MediaType }[] = [
+  { value: "photo" },
+  { value: "sound" },
 ];
-const SEX_TYPES: { label: string; value: SexType }[] = [
-  { label: "Male", value: "male" },
-  { label: "Female", value: "female" },
+const SEX_TYPES: { value: SexType }[] = [
+  { value: "male" },
+  { value: "female" },
 ];
 
 const gameStyles = StyleSheet.create( {
@@ -278,6 +278,15 @@ const SpeciesGame = ( ) => {
   const windowWidth = Dimensions.get( "window" ).width;
   const { bottom: bottomInset } = useSafeAreaInsets( );
   const { t } = useTranslation( );
+  const optionLabels: Record<ObservationType | MediaType | SexType, string> = {
+    egg: t( "Egg--life-stage" ),
+    juvenile: t( "Juvenile--life-stage" ),
+    adult: t( "Adult--life-stage" ),
+    photo: t( "Photos" ),
+    sound: t( "Sounds" ),
+    male: t( "Male--sex" ),
+    female: t( "Female--sex" ),
+  };
   const photoRef = useRef<IdentifyPhotoHandle | null>( null );
   const {
     brightness,
@@ -685,7 +694,7 @@ const SpeciesGame = ( ) => {
           } ) );
 
         if ( weightedCandidates.length === 0 ) {
-          if ( !cancelled ) setLoadError( "No similar species found to compare against." );
+          if ( !cancelled ) setLoadError( t( "No-similar-species-found-to-compare-against" ) );
           return;
         }
 
@@ -700,7 +709,11 @@ const SpeciesGame = ( ) => {
         );
         if ( cancelled ) return;
         if ( targetPool.length === 0 ) {
-          if ( !cancelled ) setLoadError( `Not enough ${mediaType}s found for this species.` );
+          if ( !cancelled ) {
+            setLoadError( mediaType === "sound"
+              ? t( "Not-enough-sounds-found-for-this-species" )
+              : t( "Not-enough-photos-found-for-this-species" ) );
+          }
           return;
         }
 
@@ -735,7 +748,9 @@ const SpeciesGame = ( ) => {
 
         if ( !firstLookalike ) {
           if ( !cancelled ) {
-            setLoadError( `Not enough ${mediaType}s found for this species pair.` );
+            setLoadError( mediaType === "sound"
+              ? t( "Not-enough-sounds-found-for-this-species-pair" )
+              : t( "Not-enough-photos-found-for-this-species-pair" ) );
           }
           return;
         }
@@ -810,7 +825,7 @@ const SpeciesGame = ( ) => {
           }
         } ).catch( ( ) => { /* best-effort */ } );
       } catch ( _e ) {
-        if ( !cancelled ) setLoadError( "Failed to load game data. Please try again." );
+        if ( !cancelled ) setLoadError( t( "Failed-to-load-game-data-Please-try-again" ) );
       }
     };
 
@@ -825,6 +840,7 @@ const SpeciesGame = ( ) => {
     selectedObsTypes,
     selectedSexes,
     mediaType,
+    t,
   ] );
 
   const handleGuess = useCallback( ( guessIsTarget: boolean ) => {
@@ -852,8 +868,12 @@ const SpeciesGame = ( ) => {
   }, [startRound, selectWeightedLookalike] );
 
   const accuracyStr = totalGuesses > 0
-    ? `${score}/${totalGuesses} (${Math.round( ( score / totalGuesses ) * 100 )}% accuracy)`
-    : "0/0";
+    ? t( "Species-game-score-with-accuracy", {
+      score,
+      total: totalGuesses,
+      percent: Math.round( ( score / totalGuesses ) * 100 ),
+    } )
+    : t( "Species-game-score", { score: 0, total: 0 } );
 
   if ( phase === "loading" || !target || !lookalike ) {
     return (
@@ -895,9 +915,8 @@ const SpeciesGame = ( ) => {
       <View className="items-center pt-3 pb-1">
         <View className="w-10 h-1 bg-lightGray rounded-full" />
       </View>
-      {/* eslint-disable-next-line i18next/no-literal-string */}
       <Body1 className="text-center font-bold px-4 pt-2 pb-1">
-        Filter by Life Stage
+        {t( "Filter-by-life-stage" )}
       </Body1>
 
       <ScrollView className="px-4" style={gameStyles.modalScrollView}>
@@ -906,7 +925,7 @@ const SpeciesGame = ( ) => {
             <View key={m.value} className="flex-1">
               <Button
                 className="w-full"
-                text={m.label}
+                text={optionLabels[m.value]}
                 level={mediaType === m.value
                   ? "focus"
                   : undefined}
@@ -920,9 +939,8 @@ const SpeciesGame = ( ) => {
             </View>
           ) )}
         </View>
-        {/* eslint-disable-next-line i18next/no-literal-string */}
         <Body2 className="text-center text-darkGray pb-3">
-          Select one or more life stages to filter observations:
+          {t( "Select-one-or-more-life-stages-to-filter-observations" )}
         </Body2>
 
         {OBSERVATION_TYPES.map( obsType => {
@@ -933,7 +951,7 @@ const SpeciesGame = ( ) => {
               onPress={() => {
                 setSelectedObsTypes( prev => (
                   isSelected
-                    ? prev.filter( t => t !== obsType.value )
+                    ? prev.filter( v => v !== obsType.value )
                     : [...prev, obsType.value]
                 ) );
               }}
@@ -948,15 +966,14 @@ const SpeciesGame = ( ) => {
                 {isSelected
                   ? "✓ "
                   : "  "}
-                {obsType.label}
+                {optionLabels[obsType.value]}
               </Body1>
             </Pressable>
           );
         } )}
 
-        {/* eslint-disable-next-line i18next/no-literal-string */}
         <Body1 className="text-center font-bold px-4 pt-4 pb-1">
-          Filter by Sex
+          {t( "Filter-by-sex" )}
         </Body1>
         {SEX_TYPES.map( sexType => {
           const isSelected = selectedSexes.includes( sexType.value );
@@ -966,7 +983,7 @@ const SpeciesGame = ( ) => {
               onPress={() => {
                 setSelectedSexes( prev => (
                   isSelected
-                    ? prev.filter( t => t !== sexType.value )
+                    ? prev.filter( v => v !== sexType.value )
                     : [...prev, sexType.value]
                 ) );
               }}
@@ -981,7 +998,7 @@ const SpeciesGame = ( ) => {
                 {isSelected
                   ? "✓ "
                   : "  "}
-                {sexType.label}
+                {optionLabels[sexType.value]}
               </Body1>
             </Pressable>
           );
@@ -989,13 +1006,13 @@ const SpeciesGame = ( ) => {
 
         <View className="pt-4 pb-6 gap-2">
           <Button
-            text="Apply"
+            text={t( "APPLY" )}
             onPress={() => setShowFilterModal( false )}
             level="focus"
             className="w-full"
           />
           <Button
-            text="Clear Filters"
+            text={t( "CLEAR-FILTERS" )}
             onPress={() => {
               setSelectedObsTypes( [] );
               setSelectedSexes( [] );
@@ -1015,9 +1032,8 @@ const SpeciesGame = ( ) => {
       <View className="items-center pt-3 pb-1">
         <View className="w-10 h-1 bg-lightGray rounded-full" />
       </View>
-      {/* eslint-disable-next-line i18next/no-literal-string */}
       <Body1 className="text-center font-bold px-4 pt-2 pb-1">
-        Why these species?
+        {t( "Why-these-species" )}
       </Body1>
 
       <ScrollView className="px-4" style={gameStyles.modalScrollView}>
@@ -1025,8 +1041,10 @@ const SpeciesGame = ( ) => {
           ? (
             <>
               <Body2 className="text-center text-darkGray pb-3">
-                {`Based on ${obsScannedCount} random observations of ${taxonLabel( target! )}`
-                  + " near your location, these species were most often identified instead:"}
+                {t( "Species-game-lookalikes-explanation", {
+                  count: obsScannedCount,
+                  taxon: taxonLabel( target! ),
+                } )}
               </Body2>
               {lookalikesData.length === 0
                 ? <ActivityIndicator />
@@ -1050,9 +1068,7 @@ const SpeciesGame = ( ) => {
                       )}
                     </Pressable>
                     <Body2 className="mt-1">
-                      {`Misidentified ${entry.count} time${entry.count !== 1
-                        ? "s"
-                        : ""}`}
+                      {t( "Misidentified-X-times", { count: entry.count } )}
                     </Body2>
                     <View className="flex-row flex-wrap mt-1 gap-x-3">
                       {entry.observationUuids.map( ( uuid, i ) => (
@@ -1068,7 +1084,7 @@ const SpeciesGame = ( ) => {
                           }}
                         >
                           <Body2 className="text-inatGreen underline">
-                            {`Obs ${i + 1}`}
+                            {t( "Obs-X--short", { number: i + 1 } )}
                           </Body2>
                         </Pressable>
                       ) )}
@@ -1079,13 +1095,12 @@ const SpeciesGame = ( ) => {
           )
           : (
             <Body2 className="text-center text-darkGray pb-3">
-              {"No misidentification data was found near your location. "
-                + `${taxonLabel( lookalike! )} is a related species in the same taxonomic group.`}
+              {t( "Species-game-no-misidentification-data", { taxon: taxonLabel( lookalike! ) } )}
             </Body2>
           )}
         <View className="pt-2 pb-2">
           <Button
-            text="Search 400 More Observations"
+            text={t( "SEARCH-X-MORE-OBSERVATIONS", { count: 400 } )}
             onPress={handleFetchMoreObservations}
             disabled={isFetchingMoreObs}
             loading={isFetchingMoreObs}
@@ -1094,7 +1109,7 @@ const SpeciesGame = ( ) => {
         </View>
         <View className="pt-2 pb-6">
           <Button
-            text="Close"
+            text={t( "CLOSE" )}
             onPress={() => setShowLookalikesModal( false )}
             level="focus"
             className="w-full"
@@ -1138,8 +1153,8 @@ const SpeciesGame = ( ) => {
             onPress={() => setShowFilterModal( true )}
             accessibilityLabel={
               selectedObsTypes.length > 0 || selectedSexes.length > 0
-                ? "Filter active"
-                : "Open filter"
+                ? t( "Filter-active" )
+                : t( "Open-filter" )
             }
           >
             {/* eslint-disable i18next/no-literal-string */}
@@ -1155,6 +1170,7 @@ const SpeciesGame = ( ) => {
             accessibilityRole="button"
             className="w-11 h-11 items-center justify-center"
             onPress={() => setShowLookalikesModal( true )}
+            accessibilityLabel={t( "Why-these-species" )}
           >
             <Body1 className="text-inatGreen font-bold">?</Body1>
           </Pressable>
@@ -1237,15 +1253,14 @@ const SpeciesGame = ( ) => {
         {phase === "playing"
           ? (
             <>
-              {/* eslint-disable-next-line i18next/no-literal-string */}
               <Body2 className="text-center text-darkGray mb-2">
-                {`Is this ${taxonLabel( target )}?`}
+                {t( "Is-this-taxon", { taxon: taxonLabel( target ) } )}
               </Body2>
               <View className="flex-row mb-3 gap-2" style={gameStyles.buttonRow}>
                 <View className="flex-1">
                   <Button
                     className="w-full h-full"
-                    text="Yes"
+                    text={t( "YES" )}
                     level="focus"
                     onPress={() => handleGuess( true )}
                   />
@@ -1253,14 +1268,14 @@ const SpeciesGame = ( ) => {
                 <View className="flex-1">
                   <Button
                     className="w-full h-full"
-                    text="IDK"
+                    text={t( "IDK--dont-know" )}
                     onPress={handleSkip}
                   />
                 </View>
                 <View className="flex-1">
                   <Button
                     className="w-full h-full"
-                    text="No"
+                    text={t( "NO" )}
                     onPress={() => handleGuess( false )}
                   />
                 </View>
@@ -1271,7 +1286,7 @@ const SpeciesGame = ( ) => {
             <View className="mb-3">
               <Button
                 className="w-full mb-2"
-                text="Next"
+                text={t( "NEXT" )}
                 level="focus"
                 onPress={handleNext}
               />
@@ -1285,7 +1300,10 @@ const SpeciesGame = ( ) => {
                   )}
                 >
                   <Body2 className={`text-center italic underline ${resultHeaderColor}`}>
-                    {`${taxonLabel( shownTaxon )} (${shownTaxon.name})`}
+                    {t( "Common-name-with-scientific-name", {
+                      commonName: taxonLabel( shownTaxon ),
+                      scientificName: shownTaxon.name,
+                    } )}
                   </Body2>
                 </Pressable>
               )}

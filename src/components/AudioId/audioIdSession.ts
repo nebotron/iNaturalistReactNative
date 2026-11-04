@@ -1,3 +1,4 @@
+import i18n from "i18next";
 import { navigationRef } from "navigation/navigationUtils";
 import { NativeEventEmitter, NativeModules } from "react-native";
 import type { UserLocation } from "sharedHelpers/fetchCoarseUserLocation";
@@ -204,7 +205,7 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
   setSeen: ( seen, recent ) => set( { seen, recent } ),
   start: async ( ) => {
     if ( !AudioBirdId ) {
-      set( { error: "Audio ID is only available on iOS." } );
+      set( { error: i18n.t( "Audio-ID-is-only-available-on-iOS" ) } );
       return;
     }
     if ( get( ).listening ) return;
@@ -406,7 +407,7 @@ const onScores = ( event: ScoresEvent ) => {
     inferMs: event.inferMs,
     heard: next,
     ...( event.error
-      ? { error: `Model error: ${event.error}` }
+      ? { error: i18n.t( "Audio-ID-model-error", { error: event.error } ) }
       : {} ),
   } );
 };

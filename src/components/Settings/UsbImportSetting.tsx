@@ -65,19 +65,12 @@ const UsbImportSetting = ( ) => {
   return (
     <View className="mt-[30px]">
       <Heading4 className="mb-[15px]">{t( "USB-PHOTO-IMPORT" )}</Heading4>
+      <Body3 className="mb-[15px]">{t( "USB-import-how-it-works" )}</Body3>
       <Body3 className="mb-[15px]">{description( )}</Body3>
       {cameraSubfolder && (
         <Body3 className="mb-[15px] color-warningRed">
           {t( "USB-import-folder-is-a-camera-subfolder", { folder: folder?.name } )}
         </Body3>
-      )}
-      {configured && cameraSubfolder && (
-        <Button
-          className="mb-[15px]"
-          level="primary"
-          text={t( "CHOOSE-USB-FOLDER" )}
-          onPress={chooseFolder}
-        />
       )}
       <Body3>{t( "USB-import-after-importing" )}</Body3>
       <RadioButtonRow
@@ -95,14 +88,22 @@ const UsbImportSetting = ( ) => {
         label={t( "Delete-from-drive" )}
       />
       <Button
-        level="neutral"
+        level={cameraSubfolder || !configured
+          ? "primary"
+          : "neutral"}
         text={configured
-          ? t( "FORGET-USB-FOLDER" )
+          ? t( "CHANGE-USB-FOLDER" )
           : t( "CHOOSE-USB-FOLDER" )}
-        onPress={configured
-          ? forgetFolder
-          : chooseFolder}
+        onPress={chooseFolder}
       />
+      {configured && (
+        <Button
+          className="mt-[15px]"
+          level="neutral"
+          text={t( "FORGET-USB-FOLDER" )}
+          onPress={forgetFolder}
+        />
+      )}
     </View>
   );
 };

@@ -4,7 +4,6 @@ import React, { useCallback } from "react";
 import { AppState } from "react-native";
 import {
   isUsbImportSupported,
-  pickUsbFolder,
   refreshUsbCardState,
 } from "sharedHelpers/usbStorage";
 import { useTranslation } from "sharedHooks";
@@ -15,9 +14,8 @@ import colors from "styles/tailwindColors";
 // empty and this screen is in front, look again now and then for a new one.
 const EMPTY_CARD_RECHECK_MS = 10_000;
 
-// Starts a USB import (useUsbImport). Until a folder is chosen, pressing it
-// chooses one; after that, a long press chooses a different one. Disabled once
-// the import is done and the card is empty.
+// Starts a USB import (useUsbImport). Hidden until a folder is chosen in
+// Settings; disabled once the import is done and the card is empty.
 const UsbImportButton = ( ) => {
   const { t } = useTranslation( );
   const cardState = useUsbImportProgress( state => state.cardState );
@@ -32,26 +30,7 @@ const UsbImportButton = ( ) => {
     return ( ) => clearInterval( interval );
   }, [cardState] ) );
 
-  const chooseFolder = useCallback( async ( ) => {
-    await pickUsbFolder( );
-    await refreshUsbCardState( );
-  }, [] );
-
-  if ( !isUsbImportSupported( ) ) return null;
-  if ( cardState === "unconfigured" ) {
-    return (
-      <INatIconButton
-        icon="arrow-down-bold-circle-outline"
-        className="mr-[7px]"
-        onPress={( ) => { void chooseFolder( ); }}
-        color={String( colors?.darkGray )}
-        accessibilityLabel={t( "CHOOSE-USB-FOLDER" )}
-        accessibilityHint={t( "Chooses-a-USB-folder-to-import-photos-from" )}
-        size={22}
-        testID="UsbImportButton"
-      />
-    );
-  }
+  if ( !isUsbImportSupported( ) || cardState === "unconfigured" ) return null;
   const disabled = cardState === "empty" || importing;
   return (
     <INatIconButton
@@ -60,9 +39,6 @@ const UsbImportButton = ( ) => {
         : "arrow-down-bold-circle"}
       className="mr-[7px]"
       onPress={( ) => { void startImport?.( ); }}
-      onLongPress={importing
-        ? undefined
-        : ( ) => { void chooseFolder( ); }}
       disabled={disabled}
       color={String( disabled
         ? colors?.darkGray

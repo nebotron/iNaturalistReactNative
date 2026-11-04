@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import { useNavigation, useRoute } from "@react-navigation/native";
 import {
   Body1, Body3, INatIcon, INatIconButton, List2,
@@ -10,6 +9,7 @@ import { FlatList } from "react-native";
 import Swipeable from "react-native-gesture-handler/ReanimatedSwipeable";
 import Observation from "realmModels/Observation";
 import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
+import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
 import useAudioIdHistory, { isClipCorrect } from "./audioIdHistory";
@@ -25,6 +25,7 @@ const OBSERVED_SHADE = "rgba(116, 172, 0, 0.5)";
 
 // Every time Audio ID heard one species, newest first.
 const AudioIdHistory = ( ) => {
+  const { t } = useTranslation( );
   const navigation = useNavigation( );
   const { params } = useRoute( );
   const { taxonId } = params as { taxonId: number };
@@ -60,7 +61,7 @@ const AudioIdHistory = ( ) => {
     <View className="flex-row items-center mb-3">
       <Pressable
         accessibilityRole="link"
-        accessibilityHint="Opens the species page."
+        accessibilityHint={t( "Opens-the-species-page" )}
         className="flex-1"
         onPress={( ) => navigation.navigate( "TaxonDetails", {
           id: taxonId, fromAudioId: true,
@@ -75,8 +76,8 @@ const AudioIdHistory = ( ) => {
         onPress={( ) => openTopSounds( {
           id: taxonId, name: sp.name, preferred_common_name: commonName,
         } )}
-        accessibilityLabel="Top-faved sounds"
-        accessibilityHint="Opens top-faved sound observations in Explore."
+        accessibilityLabel={t( "Top-faved-sounds" )}
+        accessibilityHint={t( "Opens-top-faved-sound-observations-in-Explore" )}
       />
     </View>
   );
@@ -90,7 +91,7 @@ const AudioIdHistory = ( ) => {
       data={ofSpecies}
       keyExtractor={clip => clip.id}
       ListHeaderComponent={header}
-      ListEmptyComponent={<Body3 className="py-2">No clips saved yet.</Body3>}
+      ListEmptyComponent={<Body3 className="py-2">{t( "No-clips-saved-yet" )}</Body3>}
       renderItem={( { item: clip } ) => (
         <Swipeable
           rightThreshold={40}
@@ -104,14 +105,16 @@ const AudioIdHistory = ( ) => {
         >
           <Pressable
             accessibilityRole="button"
-            accessibilityHint="Opens the clip's details."
+            accessibilityHint={t( "Opens-the-clips-details" )}
             className="flex-row items-center py-2 px-2 border-b border-lightGray"
             style={{ backgroundColor: clipShade( clip ) }}
             onPress={( ) => navigation.navigate( "AudioIdClip", { id: clip.id } )}
           >
             <View className="flex-1">
               <Body1>{formatISOTimestamp( clip.time )}</Body1>
-              <Body3>{`${Math.round( clip.confidence * 100 )}% confidence`}</Body3>
+              <Body3>
+                {t( "X-percent-confidence", { count: Math.round( clip.confidence * 100 ) } )}
+              </Body3>
             </View>
             {eligible.has( clip.id ) && (
               <INatIcon name="merge" color={colors.inatGreen} size={20} />
@@ -120,15 +123,15 @@ const AudioIdHistory = ( ) => {
               icon="check"
               color={colors.inatGreen}
               onPress={( ) => tagClip( clip.id, true )}
-              accessibilityLabel="Right"
-              accessibilityHint="Tags the ID as right."
+              accessibilityLabel={t( "Right--correct" )}
+              accessibilityHint={t( "Tags-the-ID-as-right" )}
             />
             <INatIconButton
               icon="close"
               color={colors.warningRed}
               onPress={( ) => tagClip( clip.id, false )}
-              accessibilityLabel="Wrong"
-              accessibilityHint="Tags the ID as wrong."
+              accessibilityLabel={t( "Wrong--incorrect" )}
+              accessibilityHint={t( "Tags-the-ID-as-wrong" )}
             />
             <ClipPlayButton clip={clip} />
           </Pressable>

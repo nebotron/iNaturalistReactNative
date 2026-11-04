@@ -1,16 +1,16 @@
-/* eslint-disable i18next/no-literal-string */
 import { useNavigation } from "@react-navigation/native";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import {
   Pressable, Text, TextInput, View,
 } from "components/styledComponents";
+import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, useWindowDimensions } from "react-native";
 import Photo from "realmModels/Photo";
 import type { RealmObservation, RealmPhoto } from "realmModels/types";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
-import { useBackfillCameraInfo } from "sharedHooks";
+import { useBackfillCameraInfo, useTranslation } from "sharedHooks";
 import { zustandStorage } from "stores/useStore";
 
 const { useQuery } = RealmContext;
@@ -58,7 +58,7 @@ const loadVotes = ( ): Votes => {
 };
 
 const gearLabel = ( info: PhotoCameraInfo ) => [info.camera, info.lens]
-  .filter( Boolean ).join( " + " ) || "Unknown gear";
+  .filter( Boolean ).join( " + " ) || i18n.t( "Unknown-gear" );
 
 const voteKey = ( pair: Pair ) => [pair.a.photoUuid, pair.b.photoUuid].sort( ).join( "|" );
 
@@ -146,6 +146,7 @@ const PairItem = ( {
   onOpen: ( uuid: string ) => void;
   onVote: ( pair: Pair, winner: string | "same" ) => void;
 } ) => {
+  const { t } = useTranslation( );
   const { width } = useWindowDimensions( );
   const [page, setPage] = useState( 0 );
   const sameGear = pair.a.gear === pair.b.gear;
@@ -166,22 +167,22 @@ const PairItem = ( {
         )}
       />
       <Text className="text-xs text-center mt-1">
-        {`Photo ${page + 1} of 2 — swipe to compare`}
+        {t( "Photo-X-of-Y-swipe-to-compare", { number: page + 1, total: 2 } )}
       </Text>
       {!sameGear && (
         <View className="flex-row mt-2 px-3">
           <VoteButton
-            label="1 is better"
+            label={t( "Photo-X-is-better", { number: 1 } )}
             selected={vote?.winner === pair.a.gear}
             onPress={( ) => onVote( pair, pair.a.gear )}
           />
           <VoteButton
-            label="Similar"
+            label={t( "Similar--comparison" )}
             selected={vote?.winner === "same"}
             onPress={( ) => onVote( pair, "same" )}
           />
           <VoteButton
-            label="2 is better"
+            label={t( "Photo-X-is-better", { number: 2 } )}
             selected={vote?.winner === pair.b.gear}
             onPress={( ) => onVote( pair, pair.b.gear )}
           />
@@ -194,6 +195,7 @@ const PairItem = ( {
 // Pairs of the user's photos of the same species taken with a different
 // camera or lens at a similar distance, for comparing gear like-for-like.
 const CameraPairs = ( ) => {
+  const { t } = useTranslation( );
   const navigation = useNavigation( );
   const observations = useQuery<RealmObservation>( "Observation" );
   useBackfillCameraInfo( observations );
@@ -313,14 +315,14 @@ const CameraPairs = ( ) => {
         <View className="mb-4 px-4">
           {breakdown.length > 0 && (
             <View className="mb-4">
-              <Text className="font-bold mb-2">Your preferences</Text>
+              <Text className="font-bold mb-2">{t( "Your-preferences" )}</Text>
               {breakdown.map( row => {
                 const total = row.firstWins + row.secondWins + row.same;
-                const pct = ( n: number ) => `${Math.round( ( n / total ) * 100 )}%`;
+                const pct = ( n: number ) => Math.round( ( n / total ) * 100 );
                 return (
                   <View key={`${row.first}|${row.second}`} className="mb-3">
                     <Text className="text-sm">
-                      {`${row.first} vs ${row.second} (${total})`}
+                      {t( "Gear-X-vs-Y", { first: row.first, second: row.second, count: total } )}
                     </Text>
                     <View className="flex-row h-2 rounded overflow-hidden my-1 bg-lightGray">
                       <View className="bg-inatGreen" style={{ flex: row.firstWins }} />
@@ -328,9 +330,16 @@ const CameraPairs = ( ) => {
                       <View className="bg-darkGray" style={{ flex: row.secondWins }} />
                     </View>
                     <Text className="text-xs">
-                      {`${row.first}: ${row.firstWins} (${pct( row.firstWins )}) · `
-                        + `Similar: ${row.same} (${pct( row.same )}) · `
-                        + `${row.second}: ${row.secondWins} (${pct( row.secondWins )})`}
+                      {t( "Gear-preference-breakdown", {
+                        first: row.first,
+                        firstWins: row.firstWins,
+                        firstPercent: pct( row.firstWins ),
+                        same: row.same,
+                        samePercent: pct( row.same ),
+                        second: row.second,
+                        secondWins: row.secondWins,
+                        secondPercent: pct( row.secondWins ),
+                      } )}
                     </Text>
                   </View>
                 );
@@ -338,8 +347,7 @@ const CameraPairs = ( ) => {
             </View>
           )}
           <Text className="text-sm mb-2">
-            Same species, different camera or lens, similar distance to subject.
-            Max distance difference:
+            {t( "Camera-pairs-explanation" )}
           </Text>
           <View className="flex-row items-center">
             <TextInput
@@ -347,18 +355,18 @@ const CameraPairs = ( ) => {
               keyboardType="decimal-pad"
               value={toleranceText}
               onChangeText={setToleranceText}
-              accessibilityLabel="Max distance difference percent"
+              accessibilityLabel={t( "Max-distance-difference-percent" )}
             />
-            <Text className="ml-1">%</Text>
+            <Text className="ml-1">{t( "Percent-sign" )}</Text>
           </View>
           <Text className="text-xs mt-2">
-            {`${pairs.length} pairs`}
+            {t( "X-pairs", { count: pairs.length } )}
           </Text>
         </View>
       )}
       ListEmptyComponent={(
         <Text className="text-center mt-10">
-          No matching pairs among photos with camera info saved on this device.
+          {t( "No-matching-camera-pairs" )}
         </Text>
       )}
       renderItem={( { item } ) => (

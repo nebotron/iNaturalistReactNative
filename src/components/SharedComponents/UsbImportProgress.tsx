@@ -1,13 +1,13 @@
 import ImportProgressBanner from "components/SharedComponents/ImportProgressBanner";
 import React from "react";
 import { StyleSheet, View } from "react-native";
+import { useTranslation } from "sharedHooks";
 import useUsbImportProgress from "stores/usbImportProgress";
 
 // Non-blocking status banner shown while useUsbImport offloads photos from
 // a USB device into the Photos library and clears them from the device. It sits
 // above the tab bar and uses pointerEvents="none" so the rest of the app stays
-// fully usable during the import. Text is intentionally simple/English here as
-// this is an iOS-first utility flow.
+// fully usable during the import.
 const styles = StyleSheet.create( {
   wrap: {
     position: "absolute",
@@ -20,6 +20,7 @@ const styles = StyleSheet.create( {
 } );
 
 const UsbImportProgress = ( ) => {
+  const { t } = useTranslation( );
   const {
     active, phase, total, saved, failed, deleted, note,
   } = useUsbImportProgress( );
@@ -31,28 +32,24 @@ const UsbImportProgress = ( ) => {
   let title;
   let detail;
   if ( phase === "waitingForSpace" ) {
-    title = "Waiting for space…";
-    detail = `Saved ${saved} of ${total}. Free up space on this device to continue.`;
+    title = t( "Waiting-for-space" );
+    detail = t( "Saved-X-of-Y-free-up-space-to-continue", { saved, total } );
   } else if ( phase === "deleting" ) {
-    title = "Clearing the storage device…";
-    detail = `Saved ${saved} of ${total}. Removing them from the device…`;
+    title = t( "Clearing-the-storage-device" );
+    detail = t( "Saved-X-of-Y-removing-them-from-the-device", { saved, total } );
   } else if ( phase === "done" ) {
-    const plural = saved === 1
-      ? ""
-      : "s";
-    const cleared = deleted > 0
-      ? ` and cleared ${deleted} from the device`
-      : "";
-    title = "Import complete";
-    detail = `Saved ${saved} photo${plural} to your library${cleared}.`;
+    title = t( "Import-complete" );
+    detail = deleted > 0
+      ? t( "Saved-X-photos-to-your-library-and-cleared-Y", { count: saved, deleted } )
+      : t( "Saved-X-photos-to-your-library", { count: saved } );
   } else if ( phase === "error" ) {
-    title = "Import finished with errors";
+    title = t( "Import-finished-with-errors" );
     // Without the note a device that ran out of room reads as the app failing
     // at random — "Saved 0 of 157" and nothing to act on.
-    detail = note || `Saved ${saved} of ${total}.`;
+    detail = note || t( "Saved-X-of-Y", { saved, total } );
   } else {
-    title = "Importing photos to your library…";
-    detail = `${saved} of ${total}`;
+    title = t( "Importing-photos-to-your-library" );
+    detail = t( "X-of-Y", { x: saved, y: total } );
   }
 
   return (
@@ -61,7 +58,7 @@ const UsbImportProgress = ( ) => {
         title={title}
         detail={detail}
         warning={failed > 0
-          ? `${failed} failed`
+          ? t( "X-failed", { count: failed } )
           : undefined}
         completed={saved + failed}
         total={total}

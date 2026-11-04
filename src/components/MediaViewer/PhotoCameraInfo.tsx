@@ -105,7 +105,7 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
       info.focalLength,
       info.aperture,
       info.shutterSpeed,
-      info.iso && `ISO ${info.iso}`,
+      info.iso && t( "ISO-value", { iso: info.iso } ),
       info.focusDistance,
     ].filter( Boolean ).join( " · " ),
   ];

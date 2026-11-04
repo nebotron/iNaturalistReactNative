@@ -1,7 +1,6 @@
 // @flow
 
 import classnames from "classnames";
-import AudioIdRecordingLink from "components/AudioId/AudioIdRecordingLink";
 import { MAX_PHOTOS_ALLOWED } from "components/Camera/StandardCamera/StandardCamera";
 import {
   ActivityIndicator,
@@ -162,7 +161,6 @@ const EvidenceSection = ( {
           currentObservation={currentObservation}
           updateObservationKeys={updateObservationKeys}
         />
-        <AudioIdRecordingLink currentObservation={currentObservation} />
       </View>
     </View>
   );

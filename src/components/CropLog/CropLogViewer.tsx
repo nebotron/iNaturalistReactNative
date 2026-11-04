@@ -1,4 +1,3 @@
-/* eslint-disable i18next/no-literal-string */
 import { INatIcon } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Text, View } from "components/styledComponents";
@@ -23,6 +22,7 @@ import {
 import detectSubjectInImage from "sharedHelpers/detectSubjectInImage";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import { useTranslation } from "sharedHooks";
 
 const LABEL_COLOR = "#22c55e";
 const DETECTOR_COLOR = "#eab308";
@@ -64,6 +64,7 @@ interface RowProps {
 }
 
 const Row = ( { entry, onDelete }: RowProps ) => {
+  const { t } = useTranslation( );
   const { width: screenWidth } = useWindowDimensions();
   const [detectorCrop, setDetectorCrop] = useState<NormalizedCrop | null>( null );
   const [detecting, setDetecting] = useState( true );
@@ -139,7 +140,7 @@ const Row = ( { entry, onDelete }: RowProps ) => {
         onPress={onDelete}
         className="p-2"
         style={styles.deleteButton}
-        accessibilityLabel="Delete entry"
+        accessibilityLabel={t( "Delete-entry" )}
       >
         <INatIcon name="trash-outline" size={22} color="red" />
       </Pressable>
@@ -147,29 +148,34 @@ const Row = ( { entry, onDelete }: RowProps ) => {
   );
 };
 
-const ListHeader = ( { count }: { count: number } ) => (
-  <View className="p-4 border-b border-lightGray">
-    <Text className="text-sm font-bold mb-2">
-      {`${count} ${count === 1
-        ? "entry"
-        : "entries"}`}
-    </Text>
-    <View className="flex-row items-center">
-      <View style={[styles.legendBox, { borderColor: LABEL_COLOR }]} />
-      <Text className="text-xs text-gray-500 mr-4">Ground truth</Text>
-      <View style={[styles.legendBox, { borderColor: DETECTOR_COLOR }]} />
-      <Text className="text-xs text-gray-500">AI detection</Text>
+const ListHeader = ( { count }: { count: number } ) => {
+  const { t } = useTranslation( );
+  return (
+    <View className="p-4 border-b border-lightGray">
+      <Text className="text-sm font-bold mb-2">
+        {t( "X-entries", { count } )}
+      </Text>
+      <View className="flex-row items-center">
+        <View style={[styles.legendBox, { borderColor: LABEL_COLOR }]} />
+        <Text className="text-xs text-gray-500 mr-4">{t( "Ground-truth" )}</Text>
+        <View style={[styles.legendBox, { borderColor: DETECTOR_COLOR }]} />
+        <Text className="text-xs text-gray-500">{t( "AI-detection" )}</Text>
+      </View>
     </View>
-  </View>
-);
+  );
+};
 
-const ListEmpty = ( ) => (
-  <View className="flex-1 items-center justify-center p-10">
-    <Text className="text-gray-400">No crop log entries yet</Text>
-  </View>
-);
+const ListEmpty = ( ) => {
+  const { t } = useTranslation( );
+  return (
+    <View className="flex-1 items-center justify-center p-10">
+      <Text className="text-gray-400">{t( "No-crop-log-entries-yet" )}</Text>
+    </View>
+  );
+};
 
 const CropLogViewer = ( ) => {
+  const { t } = useTranslation( );
   // The app never reads the remote log back (write-only sync), so the viewer
   // shows this device's local log — the same entries it synced up.
   const [entries, setEntries] = useState<Entry[]>( ( ) => getAnimalCropLogAsArray( ) );
@@ -177,21 +183,21 @@ const CropLogViewer = ( ) => {
 
   const handleDelete = useCallback( ( url: string ) => {
     Alert.alert(
-      "Delete Entry",
-      "Remove this crop from the log?",
+      t( "Delete-entry" ),
+      t( "Remove-this-crop-from-the-log" ),
       [
-        { style: "cancel", text: "Cancel" },
+        { style: "cancel", text: t( "Cancel" ) },
         {
           onPress: ( ) => {
             deleteAnimalCrop( url );
             setEntries( prev => prev.filter( e => e.url !== url ) );
           },
           style: "destructive",
-          text: "Delete",
+          text: t( "Delete" ),
         },
       ],
     );
-  }, [] );
+  }, [t] );
 
   if ( loading ) {
     return (

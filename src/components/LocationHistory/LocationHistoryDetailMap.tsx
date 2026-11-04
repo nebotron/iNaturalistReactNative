@@ -8,6 +8,7 @@ import React, { useCallback, useMemo } from "react";
 import { Marker } from "react-native-maps";
 import type { RealmObservation } from "realmModels/types";
 import applyTrackedLocationToObservation from "sharedHelpers/applyTrackedLocationToPhotos";
+import { useTranslation } from "sharedHooks";
 import { UPLOAD_PENDING } from "stores/createUploadObservationsSlice";
 import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
@@ -28,6 +29,7 @@ interface LocationHistoryDetailMapParams {
 const LocationHistoryDetailMap = (
   props: TabStackScreenProps<"LocationHistoryDetailMap">,
 ) => {
+  const { t } = useTranslation( );
   const { params } = props.route;
   const navigation = useNavigation( );
   const realm = useRealm( );
@@ -58,18 +60,18 @@ const LocationHistoryDetailMap = (
     <>
       <Marker
         coordinate={{ latitude: observationLat, longitude: observationLng }}
-        title="Photo location"
+        title={t( "Photo-location" )}
         description={observationDate}
         pinColor={colors.inatGreen}
       />
       {hasTrackedLocation && (
         <Marker
           coordinate={{ latitude: trackedLat, longitude: trackedLng }}
-          title="Tracked location"
+          title={t( "Tracked-location" )}
           description={
             distanceMeters === null
-              ? "No nearby tracked location"
-              : `${Math.round( distanceMeters )} meters away`
+              ? t( "No-tracked-location-nearby" )
+              : t( "Meters-Away", { meters: Math.round( distanceMeters ) } )
           }
           pinColor={colors.blue}
         />
@@ -83,6 +85,7 @@ const LocationHistoryDetailMap = (
     observationDate,
     distanceMeters,
     hasTrackedLocation,
+    t,
   ] );
 
   const legend = useMemo( ( ) => (
@@ -93,18 +96,16 @@ const LocationHistoryDetailMap = (
     >
       <View className="flex-row items-center">
         <View className="w-3 h-3 rounded-full mr-2 bg-inatGreen" />
-        {/* eslint-disable-next-line i18next/no-literal-string */}
-        <List2>Photo location</List2>
+        <List2>{t( "Photo-location" )}</List2>
       </View>
       {hasTrackedLocation && (
         <View className="flex-row items-center mt-1">
           <View className="w-3 h-3 rounded-full mr-2 bg-blue" />
-          {/* eslint-disable-next-line i18next/no-literal-string */}
-          <List2>Tracked location</List2>
+          <List2>{t( "Tracked-location" )}</List2>
         </View>
       )}
     </View>
-  ), [hasTrackedLocation] );
+  ), [hasTrackedLocation, t] );
 
   const handleSave = useCallback( async location => {
     if ( observation ) {

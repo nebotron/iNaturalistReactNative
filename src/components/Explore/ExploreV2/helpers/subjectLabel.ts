@@ -11,7 +11,7 @@ function subjectLabel( subject: ExploreV2Subject | null, t: TFunction ): string 
     case "project":
       return subject.project.title;
     case "unobserved":
-      return t( "Unobserved" );
+      return t( "Unobserved-by-me" );
     case "unknown":
       return t( "Unknown--taxon" );
     default:

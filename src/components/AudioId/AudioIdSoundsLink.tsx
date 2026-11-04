@@ -1,9 +1,9 @@
-/* eslint-disable i18next/no-literal-string */
 import type { ApiTaxon } from "api/types";
 import { Body2 } from "components/SharedComponents";
 import { MEDIA } from "providers/ExploreContext";
 import React, { useCallback } from "react";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
+import { useTranslation } from "sharedHooks";
 import useNavigateToExplore from "sharedHooks/useNavigateToExplore";
 
 interface Props {
@@ -22,15 +22,16 @@ export const useOpenTopSounds = ( ) => {
 };
 
 const AudioIdSoundsLink = ( { taxon }: Props ) => {
+  const { t } = useTranslation( );
   const openTopSounds = useOpenTopSounds( );
   return (
     <Body2
       onPress={( ) => openTopSounds( taxon )}
       accessibilityRole="link"
-      accessibilityHint="Opens top-faved sound observations in Explore."
+      accessibilityHint={t( "Opens-top-faved-sound-observations-in-Explore" )}
       className="mb-5 color-inatGreen underline"
     >
-      Listen to top-faved sound observations
+      {t( "Listen-to-top-faved-sound-observations" )}
     </Body2>
   );
 };

@@ -475,7 +475,7 @@ const TaxonDetails = ( ) => {
           <INatIconButton
             icon="play"
             onPress={( ) => navigation.navigate( "SpeciesGame", { taxonId: taxon?.id ?? id } )}
-            accessibilityLabel="Play species identification game"
+            accessibilityLabel={t( "Play-species-identification-game" )}
             size={20}
             color={colors.white}
             className="bg-inatGreen rounded-full"

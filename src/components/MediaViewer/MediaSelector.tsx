@@ -69,7 +69,7 @@ const MediaSelector = ( {
             <Pressable
               key={sound.file_url}
               accessibilityRole="button"
-              accessibilityLabel="Sound"
+              accessibilityLabel={t( "Sound" )}
               onPress={( ) => scrollToIndex( mediaIndex )}
               className={classnames(
                 "overflow-hidden",
@@ -94,6 +94,7 @@ const MediaSelector = ( {
   }, [
     itemClass,
     photos.length,
+    t,
     scrollToIndex,
     selectedMediaIndex,
     sounds,

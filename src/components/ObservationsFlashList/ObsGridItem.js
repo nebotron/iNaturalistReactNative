@@ -1,12 +1,12 @@
 // @flow
 
 import classNames from "classnames";
-import AudioIdClipBadge from "components/AudioId/AudioIdClipBadge";
 import FaveButton from "components/ObsDetails/FaveButton";
 import {
   Body2, Body4, DateDisplay, DisplayTaxonName, INatIcon,
 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
+import i18n from "i18next";
 import type { Node } from "react";
 import React, { useMemo, useState } from "react";
 import Photo from "realmModels/Photo";
@@ -79,7 +79,7 @@ const ObsGridItem = ( {
     ? CAMERA_INFO_LINES.map( keys => keys
       .filter( key => overlays?.[key] && cameraInfo[key] )
       .map( key => ( key === "iso"
-        ? `ISO ${cameraInfo.iso}`
+        ? i18n.t( "ISO-value", { iso: cameraInfo.iso } )
         : cameraInfo[key] ) )
       .join( " · " ) ).filter( Boolean )
     : [];
@@ -165,9 +165,6 @@ const ObsGridItem = ( {
           currentUser={currentUser}
           afterToggleFave={setFaved}
         />
-      )}
-      {!explore && (
-        <AudioIdClipBadge className="top-14 right-[22px]" observation={observation} />
       )}
       <View
         // Use explicit per-side padding when reserving space for the photo

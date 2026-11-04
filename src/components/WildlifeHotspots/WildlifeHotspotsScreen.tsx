@@ -207,7 +207,7 @@ const AddressInput = ( {
           <INatIcon name="location" size={8} color="white" />
         </View>
         <TextInput
-          accessibilityLabel="Text input field"
+          accessibilityLabel={placeholder}
           className="flex-1 text-darkGray"
           placeholder={placeholder}
           value={value}
