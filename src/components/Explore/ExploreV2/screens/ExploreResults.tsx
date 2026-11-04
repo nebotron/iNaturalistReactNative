@@ -292,6 +292,7 @@ const ExploreResults = ( ) => {
   // another view (e.g. Hotspots) or opening a hotspot in Explore, until a reload
   const diagnosticsRef = useRef<Record<string, unknown>>( {} );
   const errorStatus = ( observationsError as { status?: number } | null )?.status;
+  const withoutTaxonIds = String( queryParams.without_taxon_id ?? "" ).split( "," );
   const diagnostics = {
     activeTab: state.activeTab,
     layout,
@@ -306,10 +307,20 @@ const ExploreResults = ( ) => {
     error: observationsError
       ? `${errorStatus ?? ""} ${( observationsError as Error ).message ?? observationsError}`
       : null,
-    observationCount: observations.length,
+    ebirdOnly,
+    ebirdLimits: ebird?.limits,
+    ebirdError: !!ebird?.error,
+    // Includes eBird sightings, so eBird-only searches aren't counted as empty
+    observationCount: sortedObservations.length,
     totalResults,
     hasTotalBounds: !!totalBounds,
-    queryParams,
+    queryParams: {
+      ...queryParams,
+      // The My Lifers exclusion can list hundreds of IDs
+      without_taxon_id: withoutTaxonIds.length > 20
+        ? `${withoutTaxonIds.length} ids`
+        : queryParams.without_taxon_id,
+    },
   };
   useEffect( ( ) => {
     diagnosticsRef.current = diagnostics;
@@ -324,7 +335,11 @@ const ExploreResults = ( ) => {
       logger.info( "explore_tab_switch", JSON.stringify( { fromTab, ...diagnosticsRef.current } ) );
       timer = setTimeout( ( ) => {
         const latest = diagnosticsRef.current;
-        if ( latest.activeTab === OBSERVATIONS_TAB && latest.observationCount === 0 ) {
+        // eBird-only with filters eBird can't match is empty by design, and says so
+        const explained = latest.ebirdOnly
+          && ( latest.ebirdLimits as string[] | undefined )?.includes( "filters" );
+        if ( latest.activeTab === OBSERVATIONS_TAB && latest.observationCount === 0
+          && !explained ) {
           const details = JSON.stringify( { fromTab, ...latest } );
           logger.error( "explore_empty_after_tab_switch", details );
         }
@@ -484,6 +499,7 @@ const ExploreResults = ( ) => {
                     ? state.location.bounds
                     : undefined}
                   nearbyCoords={nearbyCoords}
+                  notice={<EbirdNotice ebird={ebird} />}
                   onCurrentLocationPress={handleCurrentLocationPress}
                   onRedoSearchPress={handleRedoSearchPress}
                   placeMode={state.location.placeMode}

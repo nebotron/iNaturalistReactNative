@@ -157,6 +157,17 @@ describe( "resolveEbirdTaxonFilter", ( ) => {
       .toEqual( { exclude: ["Turdus migratorius"] } );
   } );
 
+  it( "looks up every excluded taxon when there are more than a page", async ( ) => {
+    const many = Array.from( { length: 600 }, ( _, i ) => 100000 + i );
+    ( searchTaxa as jest.Mock ).mockClear( );
+    expect( await resolveEbirdTaxonFilter( {
+      without_taxon_id: [...many, ROBIN.id].join( "," ),
+    } ) ).toEqual( { exclude: ["Turdus migratorius"] } );
+    const calls = ( searchTaxa as jest.Mock ).mock.calls.map( ( [params] ) => params );
+    expect( calls ).toHaveLength( 2 );
+    calls.forEach( params => expect( params.per_page ).toBe( 500 ) );
+  } );
+
   it( "skips eBird when the filters allow no birds", async ( ) => {
     expect( await resolveEbirdTaxonFilter( { taxon_id: PLANTS.id } ) ).toBeNull( );
     expect( await resolveEbirdTaxonFilter( { without_taxon_id: AVES.id } ) ).toBeNull( );

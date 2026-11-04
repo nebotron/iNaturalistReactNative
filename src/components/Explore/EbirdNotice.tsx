@@ -22,7 +22,10 @@ const EbirdNotice = ( { ebird }: Props ) => {
     results: t( "eBird-limit-results" ),
   };
   return (
-    <View className="mx-4 my-3 p-3 rounded-lg border border-lightGray" testID="EbirdNotice">
+    <View
+      className="mx-4 my-3 p-3 rounded-lg border border-lightGray bg-white"
+      testID="EbirdNotice"
+    >
       {ebird.error
         ? <Body3>{t( "eBird-results-unavailable" )}</Body3>
         : <Body3 className="text-warningRed">{t( "eBird-results-incomplete" )}</Body3>}

@@ -13,8 +13,11 @@ import {
   resolveEbirdTaxonFilter,
 } from "api/ebird";
 import fetchPlace from "api/places";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { log } from "sharedHelpers/logger";
 import useStore from "stores/useStore";
+
+const logger = log.extend( "useEbirdObservations" );
 
 const STALE_TIME_MS = 24 * 60 * 60 * 1000;
 const NO_OBSERVATIONS: EbirdInatObservation[] = [];
@@ -73,7 +76,7 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
     ...EBIRD_EXCLUSIVE_PARAMS,
   ] );
   const dateParams = pick( params, EBIRD_DATE_PARAMS );
-  const { data: taxonFilter } = useQuery( {
+  const { data: taxonFilter, error: taxonFilterError } = useQuery( {
     queryKey: ["ebirdTaxonFilter", taxonParams],
     queryFn: ( ) => resolveEbirdTaxonFilter( taxonParams ),
     enabled: active,
@@ -119,6 +122,18 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
     staleTime: STALE_TIME_MS,
     retry: false,
   } );
+  // Either failure otherwise leaves eBird results silently empty
+  useEffect( ( ) => {
+    if ( taxonFilterError ) {
+      logger.warn( "ebird_taxon_filter_error", String( taxonFilterError ) );
+    }
+  }, [taxonFilterError] );
+  useEffect( ( ) => {
+    if ( error && !( error instanceof EbirdRateLimitError ) ) {
+      logger.warn( "ebird_observations_error", String( error ) );
+    }
+  }, [error] );
+
   const observations = useMemo(
     ( ) => ( data
       ? data.map( obs => ebirdToInatObservation( obs ) )
@@ -132,6 +147,15 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
       error: false,
       isLoading: false,
       limits: ["filters"] as EbirdLimit[],
+      observations: NO_OBSERVATIONS,
+    };
+  }
+  // With eBird alone, say so when its filters couldn't be worked out
+  if ( active && source === "ebird" && taxonFilterError ) {
+    return {
+      error: true,
+      isLoading: false,
+      limits: [] as EbirdLimit[],
       observations: NO_OBSERVATIONS,
     };
   }
