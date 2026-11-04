@@ -65,6 +65,15 @@ export const libraryUriForDevicePhoto = ( uri: string ) => {
   return ( name && getSaved( )[name] ) || uri;
 };
 
+// Where a staged photo's original can be read now: the Photos asset it was
+// saved as, else the staged file under the current app container (the
+// recorded path names the container it was imported in).
+export const readableUriForDevicePhoto = ( uri: string ) => {
+  const name = stagedNameFromUri( uri );
+  if ( !name ) return uri;
+  return getSaved( )[name] || `file://${usbStagingPath}/${name}`;
+};
+
 const readStaged = async ( ) => ( await readDir( usbStagingPath ).catch( ( ) => [] ) )
   .filter( item => item.isFile( ) && !item.name.endsWith( ".partial" ) );
 
