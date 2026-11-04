@@ -39,8 +39,11 @@ const useMarkViewedMutation = (
     ( viewedParams, optsWithAuth ) => markObservationUpdatesViewed( viewedParams, optsWithAuth ),
     {
       onSuccess: ( ) => {
-        markViewedLocally( );
+        if ( localObservation ) {
+          markViewedLocally( );
+        }
         queryClient.invalidateQueries( { queryKey: [fetchObservationUpdatesKey] } );
+        queryClient.invalidateQueries( { queryKey: ["useInfiniteNotificationsScroll"] } );
         refetchObservationUpdates( );
         // Set this value so NotificationsIconContainer knows to update the
         // notifications count
@@ -50,17 +53,9 @@ const useMarkViewedMutation = (
   );
 
   useEffect( ( ) => {
-    // If user is not signed in, we can't mark as viewed
     if ( !currentUser ) return;
-    // If a remote obs doesn't exist, we can't mark it as viewed, and if we
-    // don't have a copy b/c of no/weak internet connection, we also probably
-    // can't mark it as viewed
-    if ( !remoteObservation ) return;
-    // If we're already in the process of marking as viewed, we don't want to
-    // do it again
+    if ( !uuid ) return;
     if ( isMarkingViewed ) return;
-    // If a local copy exists and it's already been marked as viewed, we're
-    // probably good. Might be redundant with the prior check, though.
     if ( localObservation && localObservation.viewed( ) ) return;
 
     setIsMarkingViewed( true );
@@ -68,7 +63,6 @@ const useMarkViewedMutation = (
   }, [
     currentUser,
     localObservation,
-    remoteObservation,
     uuid,
     markViewedMutate,
     isMarkingViewed,

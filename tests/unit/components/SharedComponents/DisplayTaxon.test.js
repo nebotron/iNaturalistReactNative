@@ -42,9 +42,13 @@ describe( "DisplayTaxon", () => {
       />,
     );
 
-    expect(
-      screen.getByTestId( "DisplayTaxon.image" ).props.source,
-    ).toStrictEqual( { uri: taxonWithIconicTaxonPhoto?.default_photo?.url } );
+    // CachedImage puts the testID on a wrapper and the loader underneath. The
+    // remote loader names it `url` and the local one `uri`; this fixture's
+    // photo isn't an http URL, so it takes the local path.
+    // eslint-disable-next-line testing-library/no-node-access
+    const { source } = screen.getByTestId( "DisplayTaxon.image" ).children[0].props;
+    expect( source.url || source.uri )
+      .toStrictEqual( taxonWithIconicTaxonPhoto?.default_photo?.url );
   } );
 
   it( "displays 50% opacity when taxon id is withdrawn", () => {

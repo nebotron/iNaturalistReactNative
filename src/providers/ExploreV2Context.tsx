@@ -1,8 +1,12 @@
 import type { ApiProjectSummary, ApiTotalBounds, ApiUser } from "api/types";
-import type { IDENTIFIERS_TAB, OBSERVERS_TAB, SPECIES_TAB } from "appConstants/tabs";
+import type {
+  CAMERA_STATS_TAB, HOTSPOTS_TAB, IDENTIFICATIONS_TAB, IDENTIFIERS_TAB, IDENTIFY_TAB, LIFELIST_TAB,
+  OBSERVERS_TAB, SPECIES_TAB,
+} from "appConstants/tabs";
 import { OBSERVATIONS_TAB } from "appConstants/tabs";
+import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import type { ExploreV2EntryParams } from "navigation/types";
-import type { TAXONOMIC_RANK } from "providers/ExploreContext";
+import type { EVIDENCE_TYPE, TAXONOMIC_RANK } from "providers/ExploreContext";
 import {
   DATE_OBSERVED,
   DATE_UPLOADED,
@@ -16,6 +20,7 @@ import * as React from "react";
 import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 import type { SpeciesCountsSort } from "sharedHelpers/speciesSort";
 import { SPECIES_SORT } from "sharedHelpers/speciesSort";
+import type { ExploreGridOverlays } from "stores/createLayoutSlice";
 
 export enum EXPLORE_V2_ACTION {
   SET_SUBJECT = "SET_SUBJECT",
@@ -29,6 +34,8 @@ export enum EXPLORE_V2_ACTION {
   SET_FILTERS = "SET_FILTERS",
   SET_ACTIVE_TAB = "SET_ACTIVE_TAB",
   APPLY_SEARCH = "APPLY_SEARCH",
+  SEARCH_SPECIES = "SEARCH_SPECIES",
+  GO_BACK = "GO_BACK",
   RESET = "RESET"
 }
 
@@ -65,7 +72,12 @@ export type ExploreV2Tab =
   | typeof OBSERVATIONS_TAB
   | typeof SPECIES_TAB
   | typeof OBSERVERS_TAB
-  | typeof IDENTIFIERS_TAB;
+  | typeof IDENTIFIERS_TAB
+  | typeof HOTSPOTS_TAB
+  | typeof LIFELIST_TAB
+  | typeof IDENTIFY_TAB
+  | typeof IDENTIFICATIONS_TAB
+  | typeof CAMERA_STATS_TAB;
 
 export type ExploreV2Subject =
   | { type: "taxon"; taxon: Taxon }
@@ -99,10 +111,15 @@ export interface ExploreV2Filters {
   wildStatus: WILD_STATUS;
   reviewedFilter: REVIEWED;
   photoLicense: PHOTO_LICENSE;
+  evidenceTypes?: EVIDENCE_TYPE[] | null;
+  // At least one fave
+  popular?: boolean | null;
   // User / project, in ExploreV2 parlance we always consider taxon to be the "subject"
   user?: ApiUser | null;
   unobservedByUser?: ApiUser | null;
   project?: ApiProjectSummary | null;
+  // Taxa searched for beyond the subject taxon, and excluded taxa
+  taxonFilters?: ExploreTaxonFilter[] | null;
 }
 
 export const defaultExploreV2Filters: ExploreV2Filters = {
@@ -122,7 +139,7 @@ export const defaultExploreV2Filters: ExploreV2Filters = {
 
 export type ExploreV2LocationState =
   | { placeMode: EXPLORE_V2_PLACE_MODE.WORLDWIDE }
-  | { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY }
+  | { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY; radius?: number }
   | { placeMode: EXPLORE_V2_PLACE_MODE.PLACE; place: Place }
   | { placeMode: EXPLORE_V2_PLACE_MODE.MAP_AREA; bounds: ApiTotalBounds };
 
@@ -137,15 +154,34 @@ export interface ExploreV2State {
   // saved search. Lets a view tell "the search moved out from under me" apart from
   // "the same search re-rendered", which the search fields alone can't when they're equal.
   appliedSearchCount: number;
+  // Subjects, tabs and taxon filters to return to, pushed when a species card opens a
+  // search for it
+  backStack: {
+    subject: ExploreV2Subject | null;
+    activeTab: ExploreV2Tab;
+    taxonFilters?: ExploreTaxonFilter[] | null;
+  }[];
 }
 
 // Everything that defines a search, as opposed to how the results are being viewed
-export type ExploreV2Search = Omit<ExploreV2State, "activeTab" | "appliedSearchCount">;
+export type ExploreV2Search = Omit<
+  ExploreV2State,
+  "activeTab" | "appliedSearchCount" | "backStack"
+>;
+
+// A saved search also remembers the view it was saved from: the tab, the observations
+// map/grid/list layout, and the info overlaid on grid photos. Optional because searches
+// saved before views were recorded don't have one.
+export type ExploreV2SearchWithTab = ExploreV2Search & {
+  activeTab?: ExploreV2Tab;
+  observationsLayout?: string;
+  gridOverlays?: ExploreGridOverlays;
+};
 
 export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_SUBJECT; subject: ExploreV2Subject }
   | { type: EXPLORE_V2_ACTION.CLEAR_SUBJECT }
-  | { type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY }
+  | { type: EXPLORE_V2_ACTION.SET_LOCATION_NEARBY; radius?: number }
   | { type: EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE }
   | {
     type: EXPLORE_V2_ACTION.SET_LOCATION_PLACE;
@@ -159,7 +195,9 @@ export type ExploreV2Action =
   | { type: EXPLORE_V2_ACTION.SET_SPECIES_SORT; speciesSortBy: SpeciesCountsSort }
   | { type: EXPLORE_V2_ACTION.SET_FILTERS; filters: ExploreV2Filters }
   | { type: EXPLORE_V2_ACTION.SET_ACTIVE_TAB; tab: ExploreV2Tab }
-  | { type: EXPLORE_V2_ACTION.APPLY_SEARCH; search: ExploreV2Search }
+  | { type: EXPLORE_V2_ACTION.APPLY_SEARCH; search: ExploreV2SearchWithTab }
+  | { type: EXPLORE_V2_ACTION.SEARCH_SPECIES; subject: ExploreV2Subject }
+  | { type: EXPLORE_V2_ACTION.GO_BACK }
   | { type: EXPLORE_V2_ACTION.RESET };
 
 export const initialExploreV2State: ExploreV2State = {
@@ -170,6 +208,7 @@ export const initialExploreV2State: ExploreV2State = {
   filters: defaultExploreV2Filters,
   activeTab: OBSERVATIONS_TAB,
   appliedSearchCount: 0,
+  backStack: [],
 };
 
 export function initialStateFromEntryParams(
@@ -184,6 +223,8 @@ export function initialStateFromEntryParams(
     subject: params?.subject || base.subject,
     location: params?.location || base.location,
     activeTab: params?.activeTab || base.activeTab,
+    filters: { ...base.filters, ...params?.filters },
+    sortBy: params?.sortBy || base.sortBy,
   };
 }
 
@@ -193,13 +234,13 @@ export function exploreV2Reducer(
 ): ExploreV2State {
   switch ( action.type ) {
     case EXPLORE_V2_ACTION.SET_SUBJECT:
-      return { ...state, subject: action.subject };
+      return { ...state, subject: action.subject, backStack: [] };
     case EXPLORE_V2_ACTION.CLEAR_SUBJECT:
-      return { ...state, subject: null };
+      return { ...state, subject: null, backStack: [] };
     case EXPLORE_V2_ACTION.SET_LOCATION_NEARBY:
       return {
         ...state,
-        location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY },
+        location: { placeMode: EXPLORE_V2_PLACE_MODE.NEARBY, radius: action.radius },
       };
     case EXPLORE_V2_ACTION.SET_LOCATION_WORLDWIDE:
       return {
@@ -241,7 +282,43 @@ export function exploreV2Reducer(
         sortBy,
         speciesSortBy,
         filters,
+        activeTab: action.search.activeTab ?? state.activeTab,
         appliedSearchCount: state.appliedSearchCount + 1,
+        backStack: [],
+      };
+    }
+    case EXPLORE_V2_ACTION.SEARCH_SPECIES: {
+      // The species replaces the searched taxa rather than joining them; exclusions stay
+      const excluded = ( state.filters.taxonFilters || [] ).filter( filter => filter.exclude );
+      return {
+        ...state,
+        subject: action.subject,
+        filters: {
+          ...state.filters,
+          taxonFilters: excluded.length > 0
+            ? excluded
+            : null,
+        },
+        activeTab: OBSERVATIONS_TAB,
+        backStack: [
+          ...state.backStack,
+          {
+            subject: state.subject,
+            activeTab: state.activeTab,
+            taxonFilters: state.filters.taxonFilters,
+          },
+        ],
+      };
+    }
+    case EXPLORE_V2_ACTION.GO_BACK: {
+      const previous = state.backStack[state.backStack.length - 1];
+      if ( !previous ) return state;
+      return {
+        ...state,
+        subject: previous.subject,
+        activeTab: previous.activeTab,
+        filters: { ...state.filters, taxonFilters: previous.taxonFilters },
+        backStack: state.backStack.slice( 0, -1 ),
       };
     }
     case EXPLORE_V2_ACTION.RESET:

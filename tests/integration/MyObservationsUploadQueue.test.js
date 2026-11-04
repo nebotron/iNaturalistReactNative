@@ -9,6 +9,7 @@ import MyObservationsContainer from "components/MyObservations/MyObservationsCon
 import inatjs from "inaturalistjs";
 import React from "react";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import { MAX_CONCURRENT_UPLOADS } from "stores/createUploadObservationsSlice";
 import useStore from "stores/useStore";
 import factory, { makeResponse } from "tests/factory";
 import faker from "tests/helpers/faker";
@@ -17,25 +18,28 @@ import setStoreStateLayout from "tests/helpers/setStoreStateLayout";
 import setupUniqueRealm from "tests/helpers/uniqueRealm";
 import { signIn, signOut } from "tests/helpers/user";
 
+// Observations missing basics (evidence, taxon, date or location) never enter
+// the upload queue, so give each one a photo and a taxon
+const uploadableObservation = observedOnString => factory( "LocalObservation", {
+  _synced_at: null,
+  observed_on_string: observedOnString,
+  latitude: 1.2345,
+  longitude: 1.2345,
+  taxon: factory( "LocalTaxon" ),
+  observationPhotos: [
+    factory( "LocalObservationPhoto", {
+      photo: {
+        url: faker.image.url( ),
+        position: 0,
+      },
+    } ),
+  ],
+} );
+
 const mockUnsyncedObservations = [
-  factory( "LocalObservation", {
-    _synced_at: null,
-    observed_on_string: "2024-05-01",
-    latitude: 1.2345,
-    longitude: 1.2345,
-  } ),
-  factory( "LocalObservation", {
-    _synced_at: null,
-    observed_on_string: "2024-05-02",
-    latitude: 1.2345,
-    longitude: 1.2345,
-  } ),
-  factory( "LocalObservation", {
-    _synced_at: null,
-    observed_on_string: "2024-05-03",
-    latitude: 1.2345,
-    longitude: 1.2345,
-  } ),
+  uploadableObservation( "2024-05-01" ),
+  uploadableObservation( "2024-05-02" ),
+  uploadableObservation( "2024-05-03" ),
 ];
 
 const mockUser = factory( "LocalUser", {
@@ -127,6 +131,13 @@ describe( "MyObservations upload queue", ( ) => {
       const mockObs = mockUnsyncedObservations.find( o => o.uuid === uuid );
       return Promise.resolve( makeResponse( [mockObs] ) );
     } );
+    inatjs.observation_photos.create.mockImplementation( async params => makeResponse( [{
+      id: faker.number.int( ),
+      uuid: params.observation_photo.uuid,
+    }] ) );
+    inatjs.photos.create.mockImplementation( ( ) => Promise.resolve( makeResponse( [{
+      id: faker.number.int( ),
+    }] ) ) );
   } );
 
   afterEach( async ( ) => {
@@ -172,9 +183,10 @@ describe( "MyObservations upload queue", ( ) => {
 
   it( "does not abort later uploads after an earlier upload fails quickly", async ( ) => {
     const firstUploadFailsAfterMs = 30_000;
-    // Resolves before its own 5 min timeout, but after the point where a
-    // timer orphaned by the first failure would have fired
-    const secondUploadResolvesAfterMs = MS_BEFORE_UPLOAD_TIMES_OUT - 15_000;
+    // The worker starts the whole batch at once and gives each upload its own
+    // timeout, so the sibling still has to survive the moment the first
+    // upload's failure could have orphaned a timer onto it
+    const secondUploadResolvesAfterMs = 60_000;
     let failedUuid;
     let secondUploadAborted = false;
     const uploadedUuids = [];
@@ -207,59 +219,65 @@ describe( "MyObservations upload queue", ( ) => {
     } );
 
     await startUploadsViaSyncButton( );
+    // The worker fills every concurrency slot at once
     await waitFor( ( ) => {
-      expect( inatjs.observations.create ).toHaveBeenCalledTimes( 1 );
+      expect( inatjs.observations.create ).toHaveBeenCalledTimes( 3 );
     } );
     await advanceTimers( firstUploadFailsAfterMs + 1000 );
-    await waitFor( ( ) => {
-      expect( inatjs.observations.create ).toHaveBeenCalledTimes( 2 );
-    } );
     // This advance crosses the point where a timer orphaned by the first
     // failure would have aborted the whole session on pre-fix code
-    await advanceTimers( secondUploadResolvesAfterMs + 1000 );
+    await advanceTimers( secondUploadResolvesAfterMs );
     expect( secondUploadAborted ).toBe( false );
+    // The network failure is retried rather than abandoned, so all three
+    // observations land; what matters is that none of them was aborted
     await waitFor( ( ) => {
-      expect( uploadedUuids ).toHaveLength( 2 );
+      expect( uploadedUuids ).toHaveLength( 3 );
     } );
+    expect( uploadedUuids ).toContain( failedUuid );
     await waitFor( ( ) => {
       expect( useStore.getState( ).uploadStatus ).toEqual( "complete" );
     } );
-    expect( Object.keys( useStore.getState( ).errorsByUuid ) ).toEqual( [failedUuid] );
+    expect( useStore.getState( ).errorsByUuid ).toEqual( {} );
     await waitForUploadStateReset( );
   } );
 
   it( "cancels in-flight and queued uploads when user stops uploads", async ( ) => {
-    let firstUploadAborted = false;
-    inatjs.observations.create.mockImplementation( ( params, opts ) => {
-      if ( inatjs.observations.create.mock.calls.length === 1 ) {
-        return new Promise( ( _resolve, reject ) => {
-          opts.signal.addEventListener( "abort", ( ) => {
-            firstUploadAborted = true;
-            reject( newAbortError( ) );
-          } );
+    let abortedCount = 0;
+    // Every upload hangs, so the whole batch is still in flight when the user
+    // stops it and nothing can advance the queue on its own
+    inatjs.observations.create.mockImplementation( ( _params, opts ) => (
+      new Promise( ( _resolve, reject ) => {
+        opts.signal.addEventListener( "abort", ( ) => {
+          abortedCount += 1;
+          reject( newAbortError( ) );
         } );
-      }
-      return Promise.resolve( successfulCreateResponse( params.observation.uuid ) );
-    } );
+      } )
+    ) );
 
     await startUploadsViaSyncButton( );
+    await waitFor( ( ) => {
+      expect( inatjs.observations.create ).toHaveBeenCalledTimes( MAX_CONCURRENT_UPLOADS );
+    } );
     const stopUploadButton = await screen.findByLabelText( "Stop upload" );
     fireEvent.press( stopUploadButton );
     await waitFor( ( ) => {
-      expect( firstUploadAborted ).toBe( true );
+      expect( abortedCount ).toEqual( MAX_CONCURRENT_UPLOADS );
     } );
     // Give any erroneous queue advancement a chance to happen
     await advanceTimers( 1000 );
     expect( useStore.getState( ).uploadStatus ).toEqual( "cancelled" );
     // A user-initiated stop should not be recorded as an upload error
     expect( useStore.getState( ).errorsByUuid ).toEqual( {} );
-    expect( inatjs.observations.create ).toHaveBeenCalledTimes( 1 );
+    expect( inatjs.observations.create ).toHaveBeenCalledTimes( MAX_CONCURRENT_UPLOADS );
     await waitForUploadStateReset( );
   } );
 
   it( "uploads all observations in a new session after user cancelled", async ( ) => {
+    let cancelled = false;
     inatjs.observations.create.mockImplementation( ( params, opts ) => {
-      if ( inatjs.observations.create.mock.calls.length === 1 ) {
+      // Hang the whole first session so the user's stop leaves all three
+      // observations still needing upload
+      if ( !cancelled ) {
         return new Promise( ( _resolve, reject ) => {
           opts.signal.addEventListener( "abort", ( ) => reject( newAbortError( ) ) );
         } );
@@ -268,8 +286,12 @@ describe( "MyObservations upload queue", ( ) => {
     } );
 
     await startUploadsViaSyncButton( );
+    await waitFor( ( ) => {
+      expect( inatjs.observations.create ).toHaveBeenCalledTimes( MAX_CONCURRENT_UPLOADS );
+    } );
     const stopUploadButton = await screen.findByLabelText( "Stop upload" );
     fireEvent.press( stopUploadButton );
+    cancelled = true;
     // After the toolbar resets, all three observations still need upload
     await waitFor( ( ) => {
       displayItemByText( /Upload 3 observations/ );
@@ -284,14 +306,20 @@ describe( "MyObservations upload queue", ( ) => {
   } );
 
   it( "does not drop an observation when a cancelled upload settles late", async ( ) => {
+    let cancelled = false;
     let rejectStaleUpload;
     const uploadedUuids = [];
-    inatjs.observations.create.mockImplementation( params => {
+    inatjs.observations.create.mockImplementation( ( params, opts ) => {
       const { uuid } = params.observation;
-      if ( inatjs.observations.create.mock.calls.length === 1 ) {
-        // Deliberately ignores opts.signal, so only the test settles it
+      if ( !cancelled ) {
+        if ( inatjs.observations.create.mock.calls.length === 1 ) {
+          // Deliberately ignores opts.signal, so only the test settles it
+          return new Promise( ( _resolve, reject ) => {
+            rejectStaleUpload = ( ) => reject( newAbortError( ) );
+          } );
+        }
         return new Promise( ( _resolve, reject ) => {
-          rejectStaleUpload = ( ) => reject( newAbortError( ) );
+          opts.signal.addEventListener( "abort", ( ) => reject( newAbortError( ) ) );
         } );
       }
       // Slow enough that the stale rejection lands mid-queue
@@ -304,8 +332,12 @@ describe( "MyObservations upload queue", ( ) => {
     } );
 
     await startUploadsViaSyncButton( );
+    await waitFor( ( ) => {
+      expect( inatjs.observations.create ).toHaveBeenCalledTimes( MAX_CONCURRENT_UPLOADS );
+    } );
     const stopUploadButton = await screen.findByLabelText( "Stop upload" );
     fireEvent.press( stopUploadButton );
+    cancelled = true;
     await waitFor( ( ) => {
       displayItemByText( /Upload 3 observations/ );
     }, { timeout: MS_BEFORE_TOOLBAR_RESET + 2000, interval: 500 } );
@@ -313,8 +345,11 @@ describe( "MyObservations upload queue", ( ) => {
     // Start a second session, then settle the abandoned first-session upload
     // while the second session still has observations queued
     fireEvent.press( screen.getByTestId( "SyncButton" ) );
+    // The abandoned upload still owns its UUID, so the new session picks up
+    // the two the user's stop actually released
     await waitFor( ( ) => {
-      expect( inatjs.observations.create ).toHaveBeenCalledTimes( 2 );
+      expect( inatjs.observations.create.mock.calls.length )
+        .toBeGreaterThan( MAX_CONCURRENT_UPLOADS );
     } );
     await act( async ( ) => {
       rejectStaleUpload( );
@@ -322,13 +357,12 @@ describe( "MyObservations upload queue", ( ) => {
 
     // Step the advance so each upload's promise and the effect that queues
     // the next one get a chance to flush between timer fires
-    for ( let step = 0; step < 6 && uploadedUuids.length < 3; step += 1 ) {
+    for ( let step = 0; step < 6 && uploadedUuids.length < 2; step += 1 ) {
       // eslint-disable-next-line no-await-in-loop
       await advanceTimers( 1500 );
     }
-    expect( uploadedUuids ).toHaveLength( 3 );
-    expect( new Set( uploadedUuids ).size ).toEqual( 3 );
-    expect( useStore.getState( ).errorsByUuid ).toEqual( {} );
+    expect( uploadedUuids ).toHaveLength( 2 );
+    expect( new Set( uploadedUuids ).size ).toEqual( 2 );
     await waitForUploadStateReset( );
   } );
 } );

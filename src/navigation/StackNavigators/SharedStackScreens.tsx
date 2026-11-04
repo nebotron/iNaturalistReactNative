@@ -1,6 +1,7 @@
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import AddToProjects from "components/AddToProjects/AddToProjects";
+import AudioIdRecording from "components/AudioId/AudioIdRecording";
 import FullPageWebView from "components/FullPageWebView/FullPageWebView";
 import LocationPickerContainer from "components/LocationPicker/LocationPickerContainer";
 import MatchContainer from "components/Match/MatchContainer";
@@ -8,6 +9,8 @@ import MatchTaxonSearchScreen from "components/Match/MatchTaxonSearchScreen";
 import ObsEdit from "components/ObsEdit/ObsEdit";
 import PhotoSharing from "components/PhotoSharing";
 import { Heading4 } from "components/SharedComponents";
+import ImageCropEditor from "components/SharedComponents/ImageCrop/ImageCropEditor";
+import SpeciesGame from "components/SpeciesGame/SpeciesGame";
 import SuggestionsContainer from "components/Suggestions/SuggestionsContainer";
 import SuggestionsTaxonSearch from "components/Suggestions/SuggestionsTaxonSearch";
 import TaxonDetails from "components/TaxonDetails/TaxonDetails";
@@ -16,6 +19,7 @@ import {
   blankHeaderTitle,
   fadeInComponent,
   hideHeader,
+  preventSwipeToGoBack,
   showHeader,
   showSimpleCustomHeader,
 } from "navigation/navigationOptions";
@@ -42,6 +46,8 @@ const Stack = createNativeStackNavigator<SharedStackParamList>( );
 
 // note: react navigation 7 will have a layout prop
 // which should replace all of these individual wrappers
+// eslint-disable-next-line i18next/no-literal-string
+const audioIdRecordingTitle = () => <Heading4 numberOfLines={1}>AUDIO ID RECORDING</Heading4>;
 const FadeInObsEdit = ( ) => fadeInComponent( <ObsEdit /> );
 const FadeInLocationPickerContainer = ( ) => fadeInComponent( <LocationPickerContainer /> );
 const FadeInPhotoSharing = ( ) => fadeInComponent( <PhotoSharing /> );
@@ -50,8 +56,12 @@ const FadeInSuggestionsContainer = ( ) => fadeInComponent( <SuggestionsContainer
 const FadeInSuggestionsTaxonSearch = ( ) => fadeInComponent( <SuggestionsTaxonSearch /> );
 const FadeInMatchTaxonSearchScreen = ( ) => fadeInComponent( <MatchTaxonSearchScreen /> );
 const FadeInFullPageWebView = ( ) => fadeInComponent( <FullPageWebView /> );
-const FadeInMatchContainer = ( ) => fadeInComponent( <MatchContainer /> );
+const FadeInMatchContainer = ( ) => fadeInComponent(
+  <MatchContainer />,
+);
 const FadeInAddToProjects = ( ) => fadeInComponent( <AddToProjects /> );
+const FadeInImageCropEditor = ( ) => fadeInComponent( <ImageCropEditor /> );
+const FadeInSpeciesGame = ( ) => fadeInComponent( <SpeciesGame /> );
 
 const BASE_SCREEN_OPTIONS = {
   contentStyle: {
@@ -86,6 +96,10 @@ const SharedStackScreens = ( ) => (
       <Stack.Screen
         name="PhotoSharing"
         component={FadeInPhotoSharing}
+      />
+      <Stack.Screen
+        name="SpeciesGame"
+        component={FadeInSpeciesGame}
       />
     </Stack.Group>
     {/* Screens with centered header */}
@@ -135,6 +149,25 @@ const SharedStackScreens = ( ) => (
         component={FadeInAddToProjects}
         options={{
           headerTitle: addToProjectsTitle,
+        }}
+      />
+      <Stack.Screen
+        name="AudioIdRecording"
+        component={AudioIdRecording}
+        // The clip trimmer's drags would otherwise trigger the back gesture
+        options={{ headerTitle: audioIdRecordingTitle, ...preventSwipeToGoBack }}
+      />
+      <Stack.Screen
+        name="ImageCropEditor"
+        component={FadeInImageCropEditor}
+        options={{
+          ...hideHeader,
+          ...preventSwipeToGoBack,
+          headerTitleAlign: "center",
+          headerBackButtonDisplayMode: "minimal",
+          contentStyle: {
+            backgroundColor: "black",
+          },
         }}
       />
     </Stack.Group>

@@ -1,8 +1,20 @@
+diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h
+index fdbc012..f93960e 100644
+--- a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h
++++ b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.h
+@@ -26,6 +26,7 @@
+ 	BOOL _maximumNativeZSet;
+ 	BOOL _cachedOverlayCreated;
+ 	BOOL _opacitySet;
++	NSString *_previousUrlTemplate;
+ }
+ 
+ @property (nonatomic, weak) AIRMap *map;
 diff --git a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m
-index f77f627..1822bfa 100644
+index f77f627..58c1ddb 100644
 --- a/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m
 +++ b/node_modules/react-native-maps/ios/AirMaps/AIRMapUrlTile.m
-@@ -10,6 +10,26 @@
+@@ -10,6 +10,120 @@
  #import <React/UIView+React.h>
  #import "AIRMapUrlTileCachedOverlay.h"
  
@@ -14,14 +26,108 @@ index f77f627..1822bfa 100644
 +// makes any difference. Don't "clean this up" without retesting on iOS.
 +// MapKit bug, Apple-confirmed: https://developer.apple.com/forums/thread/125631
 +// Only known workaround, filed as FB9957545: https://github.com/briancoyner/MKOverlayRendererBug
++//
++// The renderer also keeps old tiles on screen until new ones load. MKTileOverlayRenderer
++// blanks any area whose tiles at the current zoom haven't loaded, so pinching or changing
++// the URL template (a new search, or the grid/points switch) cleared the layer. Every
++// loaded tile is kept in a shared cache, and an area the renderer can't draw yet is
++// filled from cached tiles at nearby zooms, or from the previous URL template.
++static NSCache *AIRMapUrlTileFallbackCache(void) {
++    static NSCache *cache;
++    static dispatch_once_t once;
++    dispatch_once(&once, ^{
++        cache = [[NSCache alloc] init];
++        cache.totalCostLimit = 32 * 1024 * 1024;
++    });
++    return cache;
++}
++
++static NSString *AIRMapUrlTileFallbackKey(NSString *urlTemplate, NSInteger z, NSInteger x, NSInteger y) {
++    return [NSString stringWithFormat:@"%ld/%ld/%ld/%@", (long)z, (long)x, (long)y, urlTemplate];
++}
++
++@interface AIRMapUrlTileFallbackOverlay : MKTileOverlay
++@end
++@implementation AIRMapUrlTileFallbackOverlay
++- (void)loadTileAtPath:(MKTileOverlayPath)path result:(void (^)(NSData *, NSError *))result {
++    NSString *urlTemplate = self.URLTemplate;
++    [super loadTileAtPath:path result:^(NSData *data, NSError *error) {
++        if (data.length > 0 && urlTemplate) {
++            [AIRMapUrlTileFallbackCache() setObject:data
++                                             forKey:AIRMapUrlTileFallbackKey(urlTemplate, path.z, path.x, path.y)
++                                               cost:data.length];
++        }
++        result(data, error);
++    }];
++}
++@end
++
 +@interface AIRMapUrlTileRenderer : MKTileOverlayRenderer
++// Templates to fall back on, current first
++@property (nonatomic, copy) NSArray<NSString *> *fallbackTemplates;
 +@end
 +@implementation AIRMapUrlTileRenderer
-+- (BOOL)canDrawMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale {
-+    return [super canDrawMapRect:mapRect zoomScale:zoomScale];
++
++// Cached tiles covering mapRect from the closest zoom level and template that has any,
++// preferring one that covers it completely
++- (NSArray<NSArray *> *)fallbackTilesForMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale {
++    CGFloat tileSize = MAX(((MKTileOverlay *)self.overlay).tileSize.width, 1);
++    NSInteger targetZ = lround(log2(MKMapSizeWorld.width * zoomScale / tileSize));
++    NSInteger offsets[] = {0, -1, 1, -2, 2, -3, -4, -5, -6};
++    NSArray<NSArray *> *best = nil;
++    for (NSString *urlTemplate in self.fallbackTemplates) {
++        for (int i = 0; i < 9; i++) {
++            NSInteger z = targetZ + offsets[i];
++            if (z < 0 || z > 22) continue;
++            double tileMapSize = MKMapSizeWorld.width / pow(2, z);
++            NSInteger minX = floor(MKMapRectGetMinX(mapRect) / tileMapSize);
++            NSInteger maxX = ceil(MKMapRectGetMaxX(mapRect) / tileMapSize) - 1;
++            NSInteger minY = floor(MKMapRectGetMinY(mapRect) / tileMapSize);
++            NSInteger maxY = ceil(MKMapRectGetMaxY(mapRect) / tileMapSize) - 1;
++            NSInteger count = (maxX - minX + 1) * (maxY - minY + 1);
++            if (count <= 0 || count > 16) continue;
++            NSMutableArray<NSArray *> *tiles = [NSMutableArray array];
++            NSInteger tilesAcross = (NSInteger)pow(2, z);
++            for (NSInteger x = minX; x <= maxX; x++) {
++                for (NSInteger y = minY; y <= maxY; y++) {
++                    NSInteger wrappedX = ((x % tilesAcross) + tilesAcross) % tilesAcross;
++                    NSData *data = [AIRMapUrlTileFallbackCache()
++                        objectForKey:AIRMapUrlTileFallbackKey(urlTemplate, z, wrappedX, y)];
++                    if (!data) continue;
++                    MKMapRect tileRect = MKMapRectMake(x * tileMapSize, y * tileMapSize, tileMapSize, tileMapSize);
++                    [tiles addObject:@[data, [NSValue valueWithBytes:&tileRect objCType:@encode(MKMapRect)]]];
++                }
++            }
++            if ((NSInteger)tiles.count == count) return tiles;
++            if (tiles.count > best.count) best = tiles;
++        }
++    }
++    return best;
 +}
++
++- (BOOL)canDrawMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale {
++    if ([super canDrawMapRect:mapRect zoomScale:zoomScale]) return YES;
++    return [self fallbackTilesForMapRect:mapRect zoomScale:zoomScale].count > 0;
++}
++
 +- (void)drawMapRect:(MKMapRect)mapRect zoomScale:(MKZoomScale)zoomScale inContext:(CGContextRef)context {
-+    [super drawMapRect:mapRect zoomScale:zoomScale inContext:context];
++    if ([super canDrawMapRect:mapRect zoomScale:zoomScale]) {
++        [super drawMapRect:mapRect zoomScale:zoomScale inContext:context];
++        return;
++    }
++    NSArray<NSArray *> *tiles = [self fallbackTilesForMapRect:mapRect zoomScale:zoomScale];
++    if (tiles.count == 0) return;
++    CGContextSaveGState(context);
++    CGContextClipToRect(context, [self rectForMapRect:mapRect]);
++    UIGraphicsPushContext(context);
++    for (NSArray *tile in tiles) {
++        UIImage *image = [UIImage imageWithData:tile[0]];
++        MKMapRect tileRect;
++        [tile[1] getValue:&tileRect];
++        [image drawInRect:[self rectForMapRect:tileRect]];
++    }
++    UIGraphicsPopContext();
++    CGContextRestoreGState(context);
 +}
 +@end
 +
@@ -29,12 +135,33 @@ index f77f627..1822bfa 100644
  @implementation AIRMapUrlTile 
  
  - (void)setShouldReplaceMapContent:(BOOL)shouldReplaceMapContent
-@@ -145,7 +165,7 @@ - (void)createTileOverlayAndRendererIfPossible
+@@ -63,6 +177,9 @@
+ 
+ - (void)setUrlTemplate:(NSString *)urlTemplate
+ {
++    if (_urlTemplate && ![_urlTemplate isEqualToString:urlTemplate]) {
++        _previousUrlTemplate = _urlTemplate;
++    }
+     _urlTemplate = urlTemplate;
+     _urlTemplateSet = YES;
+     [self createTileOverlayAndRendererIfPossible];
+@@ -139,13 +256,17 @@
+         }
+     } else {
+         NSLog(@"tileCache normal overlay");
+-        self.tileOverlay = [[MKTileOverlay alloc] initWithURLTemplate:self.urlTemplate];
++        self.tileOverlay = [[AIRMapUrlTileFallbackOverlay alloc] initWithURLTemplate:self.urlTemplate];
+         _cachedOverlayCreated = NO;
+     }
  
      [self updateProperties];
  
 -    self.renderer = [[MKTileOverlayRenderer alloc] initWithTileOverlay:self.tileOverlay];
-+    self.renderer = [[AIRMapUrlTileRenderer alloc] initWithTileOverlay:self.tileOverlay];
++    AIRMapUrlTileRenderer *renderer = [[AIRMapUrlTileRenderer alloc] initWithTileOverlay:self.tileOverlay];
++    renderer.fallbackTemplates = _previousUrlTemplate
++        ? @[self.urlTemplate, _previousUrlTemplate]
++        : @[self.urlTemplate];
++    self.renderer = renderer;
      if (_opacitySet) {
          self.renderer.alpha = self.opacity;
      }
@@ -42,7 +169,7 @@ diff --git a/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm b/node_
 index 447520d..8043dcb 100644
 --- a/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm
 +++ b/node_modules/react-native-maps/ios/AirMaps/RNMapsMapView.mm
-@@ -60,7 +60,7 @@ - (void)animateToRegion:(NSString *)regionJSON duration:(NSInteger)duration{
+@@ -60,7 +60,7 @@ using namespace facebook::react;
      NSDictionary* regionDic = [RCTConvert dictonaryFromString:regionJSON];
      MKCoordinateRegion region = [RCTConvert MKCoordinateRegion:regionDic];
      Boolean animated = duration == 0 ? NO :YES;

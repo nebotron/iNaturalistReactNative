@@ -7,6 +7,7 @@ import useFocusTap from "components/Camera/hooks/useFocusTap";
 import type { RefObject } from "react";
 import React, {
   useCallback,
+  useEffect,
 } from "react";
 import {
   Platform, StyleSheet,
@@ -26,8 +27,11 @@ import type {
   CameraPhotoOutput,
   CameraRef,
 } from "react-native-vision-camera";
+import { log } from "sharedHelpers/logger";
 
 import FocusSquare from "./FocusSquare";
+
+const logger = log.extend( "CameraView" );
 
 interface Props {
   cameraRef: RefObject<CameraRef | null>;
@@ -40,6 +44,7 @@ interface Props {
   pinchToZoom: PinchGesture;
   resizeMode?: "cover" | "contain";
   zoom: SharedValue<number>;
+  macroMode?: boolean;
 }
 
 // A container for the Camera component
@@ -55,9 +60,10 @@ const CameraView = ( {
   pinchToZoom,
   resizeMode,
   zoom,
+  macroMode = false,
 }: Props ) => {
   const { animatedStyle, tapToFocus, tappedCoordinates }
-    = useFocusTap( cameraRef, device.supportsFocusMetering );
+    = useFocusTap( cameraRef, device.supportsFocusMetering && !macroMode );
 
   // check if camera page is active
   const isFocused = useIsFocused( );
@@ -78,6 +84,27 @@ const CameraView = ( {
     },
     [onCameraError],
   );
+
+  // Macro mode locks the lens at its closest focus distance. The controller is
+  // recreated whenever the session restarts (e.g. switching to the macro
+  // device), so this runs both when macroMode changes and on every start.
+  const applyMacroFocus = useCallback( async ( ) => {
+    const controller = cameraRef.current?.controller;
+    if ( !controller?.device.supportsFocusLocking ) { return; }
+    try {
+      if ( macroMode ) {
+        await controller.setFocusLocked( 0 );
+      } else if ( controller.focusMode === "locked" ) {
+        await controller.resetFocus( );
+      }
+    } catch ( error ) {
+      logger.error( "Failed to apply macro focus", error );
+    }
+  }, [cameraRef, macroMode] );
+
+  useEffect( ( ) => {
+    applyMacroFocus( );
+  }, [applyMacroFocus] );
 
   const outputs = frameOutput
     ? [photoOutput, frameOutput]
@@ -102,6 +129,7 @@ const CameraView = ( {
           enableNativeZoomGesture={false}
           isActive={isActive}
           onError={onError}
+          onStarted={applyMacroFocus}
           orientationSource="device"
           outputs={outputs}
           resizeMode={resizeMode || "cover"}

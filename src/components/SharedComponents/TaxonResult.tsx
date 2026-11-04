@@ -38,7 +38,9 @@ interface TaxonResultBaseProps {
   hideNavButtons?: boolean;
   lastScreen?: "Suggestions";
   onPressInfo?: ( taxon: RealmTaxon | ApiTaxon ) => void;
+  onSelectGenus?: () => void;
   retryQuery?: boolean;
+  showCheckmark?: boolean;
   showEditButton?: boolean;
   showRemoveButton?: boolean;
   taxon: RealmTaxon | ApiTaxon;
@@ -60,7 +62,47 @@ type TaxonResultProps = TaxonResultBaseProps &
   );
 
 interface TaxonResultMainProps extends PropsWithChildren {
+  accessibilityHint?: string;
+  accessibilityLabel: string;
   className?: string;
+  onPress?: ( ) => void;
+  testID: string;
+  unpressable: boolean;
+}
+
+// Defined outside TaxonResult so it keeps one component identity: a component
+// recreated on every render remounts its subtree, which drops a press that is
+// in progress whenever the parent list re-renders.
+const TaxonResultMain = ( {
+  accessibilityHint,
+  accessibilityLabel,
+  children,
+  className,
+  onPress,
+  testID,
+  unpressable,
+}: TaxonResultMainProps ) => (
+  unpressable
+    ? <View className={className} testID={testID}>{ children }</View>
+    : (
+      <Pressable
+        className={className}
+        testID={testID}
+        onPress={onPress}
+        accessible
+        accessibilityRole="button"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityHint={accessibilityHint}
+      >
+        { children }
+      </Pressable>
+    )
+);
+
+// What a row represented when a button press on it began
+interface PressTarget {
+  onSelectGenus?: ( ) => void;
+  taxon: RealmTaxon | ApiTaxon;
 }
 
 const TaxonResult = ( {
@@ -80,7 +122,9 @@ const TaxonResult = ( {
   hideNavButtons = false,
   lastScreen,
   onPressInfo,
+  onSelectGenus,
   retryQuery = true,
+  showCheckmark = false,
   showEditButton = false,
   showRemoveButton = false,
   taxon: taxonProp,
@@ -152,6 +196,24 @@ const TaxonResult = ( {
       ( tp: RealmTaxonPhoto ) => tp.photo.id === representativePhoto.id,
     );
 
+  // Remember what this row represented when the finger went down. Lists like
+  // Suggestions can reflow mid-tap (e.g. online results replacing offline
+  // ones), and without this a press would act on whatever taxon happens to
+  // occupy the row by the time it's released. Freezing the target for the
+  // duration of the touch means such a press is safe to honor rather than
+  // having to be discarded, which is what made buttons feel unresponsive.
+  const pressTargetRef = React.useRef<PressTarget | null>( null );
+  const capturePressTarget = React.useCallback( ( ) => {
+    pressTargetRef.current = { onSelectGenus, taxon: usableTaxon };
+  }, [onSelectGenus, usableTaxon] );
+  // onPressOut runs synchronously before onPress, so clear the capture after
+  // the current tick instead: by then the press has resolved or been
+  // cancelled, and nothing stale is left for the next one, including an
+  // accessibility activation, which fires onPress with no onPressIn
+  const releasePressTarget = React.useCallback( ( ) => {
+    setTimeout( ( ) => { pressTargetRef.current = null; }, 0 );
+  }, [] );
+
   const navToTaxonDetails = React.useCallback( ( ) => {
     const params: SharedStackParamList["TaxonDetails"] = {
       id: usableTaxon?.id,
@@ -174,32 +236,6 @@ const TaxonResult = ( {
     taxonImage,
     isRepresentativeButOtherTaxon,
   ] );
-  const TaxonResultMain = React.useCallback( ( props: TaxonResultMainProps ) => (
-    unpressable
-      // eslint-disable-next-line react/jsx-props-no-spreading
-      ? <View {...props} testID={testID}>{ props.children }</View>
-      : (
-        <Pressable
-          // eslint-disable-next-line react/jsx-props-no-spreading
-          {...props}
-          testID={testID}
-          onPress={( ) => handleTaxonOrEditPress( usableTaxon )}
-          accessible
-          accessibilityRole="button"
-          accessibilityLabel={accessibleName}
-          accessibilityHint={accessibilityHint}
-        >
-          { props.children }
-        </Pressable>
-      )
-  ), [
-    accessibleName,
-    accessibilityHint,
-    handleTaxonOrEditPress,
-    usableTaxon,
-    testID,
-    unpressable,
-  ] );
 
   // useTaxon could return null, and it's at least remotely possible taxonProp is null
   if ( !usableTaxon ) return null;
@@ -218,6 +254,11 @@ const TaxonResult = ( {
       }
     >
       <TaxonResultMain
+        accessibilityHint={accessibilityHint}
+        accessibilityLabel={accessibleName}
+        onPress={( ) => handleTaxonOrEditPress?.( usableTaxon )}
+        testID={testID}
+        unpressable={unpressable}
         className={
           classnames( "flex-row items-center shrink", {
             "py-3": asListItem,
@@ -275,6 +316,23 @@ const TaxonResult = ( {
       </TaxonResultMain>
       { !unpressable && (
         <View className="flex-row items-center">
+          { onSelectGenus && (
+            <INatIconButton
+              icon="arrow-up-bold-circle-outline"
+              size={22}
+              onPressIn={capturePressTarget}
+              onPressOut={releasePressTarget}
+              onPress={( ) => (
+                pressTargetRef.current?.onSelectGenus || onSelectGenus
+              )?.( )}
+              color={String(
+                clearBackground
+                  ? colors?.white
+                  : colors?.darkGray,
+              )}
+              accessibilityLabel={t( "SUGGEST-GENUS" )}
+            />
+          )}
           { !hideInfoButton && (
             <INatIconButton
               icon="info-circle-outline"
@@ -293,6 +351,26 @@ const TaxonResult = ( {
               )}
               accessibilityLabel={t( "More-info" )}
               accessibilityHint={t( "Navigates-to-taxon-details" )}
+            />
+          )}
+          { showCheckmark && (
+            <INatIconButton
+              className="ml-2"
+              icon="checkmark-circle-outline"
+              size={40}
+              color={String(
+                clearBackground
+                  ? colors?.white
+                  : colors?.darkGray,
+              )}
+              onPressIn={capturePressTarget}
+              onPressOut={releasePressTarget}
+              onPress={() => handleTaxonOrEditPress?.(
+                pressTargetRef.current?.taxon || usableTaxon,
+              )}
+              accessibilityLabel={accessibleName}
+              accessibilityHint={accessibilityHint}
+              testID={`${testID}.checkmark`}
             />
           )}
           { showEditButton && handleTaxonOrEditPress

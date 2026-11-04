@@ -20,8 +20,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Alert } from "react-native";
-import Observation from "realmModels/Observation";
 import Taxon from "realmModels/Taxon";
 import type { RealmObservation } from "realmModels/types";
 import type { MyObservationsSort } from "sharedHelpers/observationsSort";
@@ -42,7 +40,6 @@ import {
   useNavigateToObsEdit,
   useObservationsUpdates,
   useStoredLayout,
-  useTranslation,
 } from "sharedHooks";
 import {
   markCurrentUserSpeciesCountStale,
@@ -74,11 +71,11 @@ export enum ACTIVE_SHEET {
   NONE = "NONE",
   LOGIN = "LOGIN",
   SORT = "SORT",
+  VIEW_OPTIONS = "VIEW_OPTIONS",
 }
 
 const MyObservationsResults = ( ) => {
   const { isDefaultMode, loggedInWhileInDefaultMode } = useLayoutPrefs();
-  const { t } = useTranslation( );
   const realm = useRealm( );
   const navigation = useNavigation<
     MyObservationsStackScreenProps<"MyObservationsResults">["navigation"]
@@ -131,6 +128,7 @@ const MyObservationsResults = ( ) => {
   const {
     numUnuploadedObservations,
     numObsMissingBasics,
+    numUnuploadedObsNoTaxon,
   } = useObservationCounts( );
   const prevObservationsLength = useRef( observationIds.length );
   const { layout, writeLayoutToStorage } = useStoredLayout( "myObservationsLayout" );
@@ -216,15 +214,7 @@ const MyObservationsResults = ( ) => {
     writeLayoutToStorage( value );
   };
 
-  const confirmInternetConnection = useCallback( ( ) => {
-    if ( !isConnected ) {
-      Alert.alert(
-        t( "Internet-Connection-Required" ),
-        t( "Please-try-again-when-you-are-connected-to-the-internet" ),
-      );
-    }
-    return isConnected;
-  }, [t, isConnected] );
+  const confirmInternetConnection = useCallback( ( ) => isConnected, [isConnected] );
 
   const confirmLoggedIn = useCallback( ( ) => {
     if ( !currentUser ) {
@@ -238,21 +228,11 @@ const MyObservationsResults = ( ) => {
     if ( !confirmInternetConnection( ) ) { return; }
 
     startManualSync( );
-    const syncOptions = isDefaultMode
-      ? {
-        skipSomeUploads: Observation
-          .filterUnsyncedObservations( realm )
-          .filter( ( obs: Observation ) => obs.missingBasics( ) )
-          .map( obs => obs.uuid ),
-      }
-      : { };
-    syncManually( syncOptions );
+    syncManually( {} );
   }, [
     confirmLoggedIn,
     confirmInternetConnection,
     startManualSync,
-    isDefaultMode,
-    realm,
     syncManually,
   ] );
 
@@ -379,16 +359,21 @@ const MyObservationsResults = ( ) => {
     const taxonIds: number[] = distinctTaxonObs
       .map( o => o.taxon?.id || 0 )
       .filter( Boolean );
-    const ancestorIds = distinctTaxonObs.map( o => {
+    // A Set, not an array: the leaf filter below asks "is this id an ancestor
+    // of anything?" once per distinct taxon, and Array.includes answers that by
+    // scanning. A library with a few hundred taxa has tens of thousands of
+    // ancestor ids between them, so the pair was quadratic and ran on the JS
+    // thread — this screen carries the app log's worst freeze, a 31s ui_hang.
+    const ancestorIds = new Set<number>( );
+    distinctTaxonObs.forEach( o => {
       // We're filtering b/c for taxa above species level, the taxon's own
       // ID is included in ancestor ids for some reason (this is a bug...
       // somewhere)
-      const taxonAncestorIds = (
-        o.taxon?.ancestor_ids || []
-      ).filter( id => Number( id ) !== Number( o.taxon?.id ) );
-      return taxonAncestorIds;
-    } ).flat( );
-    const leafTaxonIds = taxonIds.filter( taxonId => !ancestorIds.includes( taxonId ) );
+      ( o.taxon?.ancestor_ids || [] ).forEach( id => {
+        if ( Number( id ) !== Number( o.taxon?.id ) ) { ancestorIds.add( Number( id ) ); }
+      } );
+    } );
+    const leafTaxonIds = taxonIds.filter( taxonId => !ancestorIds.has( Number( taxonId ) ) );
 
     return {
       leafTaxonIds,
@@ -404,14 +389,40 @@ const MyObservationsResults = ( ) => {
     const localObs = realm.objects<RealmObservation>( "Observation" )
       .filtered( "taxon.id IN $0", leafTaxonIds );
 
-    return leafTaxonIds.map( id => {
-      const obs = localObs.filter( o => o.taxon.id === id );
-      return {
-        count: obs.length,
-        taxon: obs[0].taxon,
-        first_observed_on: earliestObservedOn( obs ),
-      };
+    // One pass over the observations, not one pass per taxon. This used to
+    // re-scan the whole collection for every leaf taxon, and each scan reads
+    // every object's taxon across the Realm boundary, so the cost was
+    // observations × taxa: a library with 1,400 observations and 500 leaf taxa
+    // meant 700,000 property reads in one synchronous go.
+    const countsByTaxonId = new Map<number, {
+      count: number;
+      taxon: RealmObservation["taxon"];
+      first_observed_on: string | null;
+    }>( );
+    localObs.forEach( o => {
+      const id = o.taxon?.id;
+      if ( id === undefined || id === null ) return;
+      const existing = countsByTaxonId.get( id );
+      if ( existing ) {
+        existing.count += 1;
+        existing.first_observed_on = earliestObservedOn( [
+          o,
+          { observed_on_string: existing.first_observed_on },
+        ] );
+      } else {
+        countsByTaxonId.set( id, {
+          count: 1,
+          taxon: o.taxon,
+          first_observed_on: earliestObservedOn( [o] ),
+        } );
+      }
     } );
+
+    // One entry per leaf taxon, in leafTaxonIds order, dropping any taxon the
+    // query returned nothing for.
+    return leafTaxonIds
+      .map( id => countsByTaxonId.get( id ) )
+      .filter( ( entry ): entry is NonNullable<typeof entry> => !!entry );
   }, [currentUser, activeTab, realm, leafTaxonIds] );
 
   // Count sorts use species_counts. Date sorts use taxa_observed, which can sort by first
@@ -633,6 +644,7 @@ const MyObservationsResults = ( ) => {
       numTotalTaxa={displayedSpeciesCount}
       numUnuploadedObservations={numUnuploadedObservations}
       numObsMissingBasics={numObsMissingBasics}
+      numUnuploadedObsNoTaxon={numUnuploadedObsNoTaxon}
       observationIds={observationIds}
       observationsSortOptionId={myObsState.observationsSort}
       onEndReached={handleEndReached}

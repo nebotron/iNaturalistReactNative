@@ -13,6 +13,7 @@ import {
   Body2,
   Body4,
   Button,
+  CachedImage,
   Heading1,
   Heading4,
   INatIcon,
@@ -23,7 +24,7 @@ import {
   WarningSheet,
 } from "components/SharedComponents";
 import {
-  Image, ImageBackground, View,
+  View,
 } from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
 import type { TabStackScreenProps } from "navigation/types";
@@ -182,11 +183,10 @@ const ProjectDetails = ( {
       );
     }
     return (
-      <Image
+      <CachedImage
         source={{ uri: productionIcon }}
         className={iconClassName}
         testID="ProjectDetails.projectIcon"
-        accessibilityIgnoresInvertColors
       />
     );
   };
@@ -198,14 +198,13 @@ const ProjectDetails = ( {
   return (
     <ScrollViewWrapper testID="project-details">
       <View className="pt-[24px]">
-        <ImageBackground
+        <CachedImage
           className="h-[164px] w-full items-center bg-darkGray"
           source={backgroundImageSource}
           testID="ProjectDetails.headerImage"
-          accessibilityIgnoresInvertColors
         >
           {displayProjectIcon( project.icon )}
-        </ImageBackground>
+        </CachedImage>
       </View>
       <View className="mx-4 pb-8">
         <Heading1 className="shrink mt-4">{project.title}</Heading1>

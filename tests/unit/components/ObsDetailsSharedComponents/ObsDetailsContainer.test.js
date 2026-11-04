@@ -202,6 +202,8 @@ describe( "ObsDetailsContainer", () => {
         taxon: factory( "RemoteTaxon", {
           preferred_common_name: "Red Fox",
           name: "Vulpes vulpes",
+          rank: "species",
+          rank_level: 10,
           is_active: true,
         } ),
         user: factory( "RemoteUser" ),

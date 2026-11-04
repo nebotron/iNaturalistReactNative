@@ -1,10 +1,14 @@
+import { isEbirdObservation } from "api/ebird";
 import type { ApiObservation } from "api/types";
-import { Pressable } from "components/styledComponents";
+import { INatIcon } from "components/SharedComponents";
+import { Pressable, View } from "components/styledComponents";
 import React, { useMemo } from "react";
 import RealmObservation from "realmModels/Observation";
 import type { RealmObservation as RealmObservationType } from "realmModels/types";
 import type { UserPojo } from "realmModels/User";
 import { useLayoutPrefs, useListItemObservation, useTranslation } from "sharedHooks";
+import useStore from "stores/useStore";
+import colors from "styles/tailwindColors";
 
 import ObsGridItem from "./ObsGridItem";
 import ObsListItem from "./ObsListItem";
@@ -36,6 +40,9 @@ interface Props {
   // whether to render an upload icon at all. Don't default/coalesce this at call sites.
   uploadProgress?: number;
   unsynced: boolean;
+  squareCorners?: boolean;
+  // Long press starts selecting observations to combine
+  selectable?: boolean;
 }
 
 const ObsPressable = ( {
@@ -58,6 +65,8 @@ const ObsPressable = ( {
   uuid,
   uploadProgress,
   unsynced,
+  squareCorners = false,
+  selectable = false,
 }: Props ) => {
   const { t } = useTranslation( );
   const { isDefaultMode } = useLayoutPrefs( );
@@ -79,6 +88,10 @@ const ObsPressable = ( {
       : RealmObservation.mapObservationForMyObsAdvancedMode( rawRealmObs );
   }, [rawRealmObs, isDefaultMode] );
 
+  const selecting = useStore( state => selectable && state.combineSelection !== null );
+  const selected = useStore( state => !!state.combineSelection?.includes( uuid ) );
+  const setCombineSelection = useStore( state => state.setCombineSelection );
+
   const observation = apiObservation || mappedRealmObs;
   if ( !observation ) return null;
 
@@ -96,6 +109,7 @@ const ObsPressable = ( {
         // better with RN styles than with Tailwind classes
         style={gridItemStyle}
         uploadProgress={uploadProgress}
+        squareCorners={squareCorners}
       />
     );
   } else if ( layout === "smallGrid" ) {
@@ -132,17 +146,40 @@ const ObsPressable = ( {
     );
   }
 
+  let accessibilityHint = unsynced
+    ? t( "Navigates-to-observation-edit-screen" )
+    : t( "Navigates-to-observation-details" );
+  if ( isEbirdObservation( observation ) ) accessibilityHint = t( "Opens-eBird-checklist" );
+
   return (
     <Pressable
       testID={`ObsPressable.${uuid}`}
-      onPress={onItemPress}
+      onPress={selecting
+        ? ( ) => {
+          const selection = useStore.getState( ).combineSelection || [];
+          setCombineSelection( selected
+            ? selection.filter( u => u !== uuid )
+            : [...selection, uuid] );
+        }
+        : onItemPress}
+      // Stays defined while selecting: if it became undefined mid-press, Pressable would
+      // fire onPress on release and immediately deselect the long-pressed observation
+      onLongPress={selectable
+        ? ( ) => { if ( !selecting ) setCombineSelection( [uuid] ); }
+        : undefined}
       accessibilityRole="link"
-      accessibilityHint={unsynced
-        ? t( "Navigates-to-observation-edit-screen" )
-        : t( "Navigates-to-observation-details" )}
+      accessibilityState={selecting
+        ? { selected }
+        : undefined}
+      accessibilityHint={accessibilityHint}
       disabled={queued}
     >
       {content}
+      {selected && (
+        <View className="absolute inset-0 border-4 border-inatGreen items-end p-1">
+          <INatIcon name="checkmark-circle" size={22} color={String( colors.inatGreen )} />
+        </View>
+      )}
     </Pressable>
   );
 };

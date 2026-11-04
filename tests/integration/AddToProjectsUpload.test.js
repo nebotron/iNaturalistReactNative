@@ -152,6 +152,9 @@ describe( "deselecting a synced project observation", ( ) => {
     wasSynced: jest.fn( ( ) => true ),
     user: mockUser,
     project_observations: [syncedPo],
+    // Observations missing basics (evidence, taxon) never enter the upload queue
+    taxon: factory( "RemoteTaxon" ),
+    observation_photos: [factory( "RemoteObservationPhoto" )],
   } );
   const remoteObservationWithoutPo = {
     ...remoteObservationWithPo,
@@ -293,6 +296,16 @@ describe( "422 surfacing", ( ) => {
     observed_on_string: "2024-05-01",
     latitude: 1.2345,
     longitude: 1.2345,
+    // Observations missing basics (evidence, taxon) never enter the upload queue
+    taxon: factory( "LocalTaxon" ),
+    observationPhotos: [
+      factory( "LocalObservationPhoto", {
+        photo: {
+          url: faker.image.url( ),
+          position: 0,
+        },
+      } ),
+    ],
     projectObservations: [{
       uuid: faker.string.uuid( ),
       projectId,
@@ -317,6 +330,11 @@ describe( "422 surfacing", ( ) => {
     inatjs.observation_field_values.create.mockResolvedValue(
       makeResponse( [{ id: faker.number.int( ) }] ),
     );
+    inatjs.observation_photos.create.mockImplementation( async params => makeResponse( [{
+      id: faker.number.int( ),
+      uuid: params.observation_photo.uuid,
+    }] ) );
+    inatjs.photos.create.mockResolvedValue( makeResponse( [{ id: faker.number.int( ) }] ) );
   } );
 
   const localObservation = ( ) => realm( ).objectForPrimaryKey(

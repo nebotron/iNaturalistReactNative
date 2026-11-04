@@ -63,9 +63,7 @@ enum MenuModalState {
 
 const feedbackLogger = log.extend( "feedback" );
 
-function showOfflineAlert( t: ( _: string ) => string ) {
-  Alert.alert( t( "You-are-offline" ), t( "Please-try-again-when-you-are-online" ) );
-}
+function showOfflineAlert( _t: ( _: string ) => string ) { }
 
 const getDeviceMetricsForFeedback = async () => {
   const freeDiskBytes = await DeviceInfo.getFreeDiskStorage();
@@ -109,17 +107,39 @@ const Menu = ( ) => {
   const currentUser = useCurrentUser( );
   const { t } = useTranslation( );
   const { bottom, top } = useSafeAreaInsets( );
-
   const { isConnected } = useNetInfo( );
 
   const layoutPrefs = useLayoutPrefs();
   const [modalState, setModalState] = useState<MenuModalState | null>( null );
 
   const menuItems: Record<string, MenuOption> = {
+    audioId: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "AUDIO ID",
+      navigation: "AudioId",
+      icon: "microphone",
+    },
     projects: {
       label: t( "PROJECTS" ),
       navigation: "Projects",
       icon: "briefcase",
+    },
+    locationHistory: {
+      label: t( "LOCATION-HISTORY" ),
+      navigation: "LocationHistory",
+      icon: "location",
+    },
+    cameraClockCheck: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CAMERA CLOCK",
+      navigation: "CameraClockCheck",
+      icon: "clock-outline",
+    },
+    cameraPairs: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CAMERA PAIRS",
+      navigation: "CameraPairs",
+      icon: "camera",
     },
     about: {
       label: t( "ABOUT" ),
@@ -140,6 +160,12 @@ const Menu = ( ) => {
       label: t( "HELP" ),
       navigation: "Help",
       icon: "help-circle",
+    },
+    cropLog: {
+      // eslint-disable-next-line i18next/no-literal-string
+      label: "CROP LOG",
+      navigation: "CropLogViewer",
+      icon: "clipboard",
     },
     settings: {
       testID: "settings",
@@ -215,6 +241,7 @@ const Menu = ( ) => {
     const {
       isDefaultMode,
       isAllAddObsOptionsMode,
+      isPhotoLibraryAddObsMode,
       screenAfterPhotoEvidence,
     } = layoutPrefs;
     const modeContext = ( isDefaultMode
@@ -225,9 +252,9 @@ const Menu = ( ) => {
       }
       : {
         mode: "advanced",
-        observationButtonMode: isAllAddObsOptionsMode
-          ? "Obs Sheet"
-          : "AI Camera",
+        observationButtonMode: ( isAllAddObsOptionsMode && "Obs Sheet" )
+          || ( isPhotoLibraryAddObsMode && "Photo Library" )
+          || "AI Camera",
         screenAfterPhotoEvidence,
       } );
     const loggedInContext = currentUser

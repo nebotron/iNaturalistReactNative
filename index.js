@@ -22,17 +22,19 @@ import inatjs from "inaturalistjs";
 import OfflineNavigationGuard from "navigation/OfflineNavigationGuard";
 import INatPaperProvider from "providers/INatPaperProvider";
 import RealmProvider from "providers/RealmProvider";
-import React from "react";
+import React, { useMemo } from "react";
 import { setJSExceptionHandler, setNativeExceptionHandler } from "react-native-exception-handler";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import {
+  SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { EnvConfig } from "sharedHelpers/envConfig";
 import {
   getInstallID,
   store as installDataMMKVStorage,
   LAST_CRASH_DATA,
 } from "sharedHelpers/installData";
-import { reactQueryRetry } from "sharedHelpers/logging";
+import { handleRetryDelay, reactQueryRetry } from "sharedHelpers/logging";
 import DeviceInfo from "react-native-device-info";
 import useRozenite, { HaltedLaunch, shouldHaltLaunchForDebug } from "sharedHooks/useRozenite";
 import { createMMKVStorageAdapter } from "@rozenite/storage-plugin";
@@ -49,16 +51,24 @@ this.RNFB_SILENCE_MODULAR_DEPRECATION_WARNINGS = true;
 // traces
 if (
   !__DEV__
-  && typeof (
-    // $FlowIgnore
-    HermesInternal?.enablePromiseRejectionTracker === "function"
-  )
+  // $FlowIgnore
+  && typeof HermesInternal?.enablePromiseRejectionTracker === "function"
 ) {
   // $FlowIgnore
   HermesInternal.enablePromiseRejectionTracker( {
     allRejections: true,
+    // The stack Hermes gives a release build for these is just the async
+    // trampoline (asyncGeneratorStep, tryCallOne…), not the call site, so the
+    // screen it happened on is the only lead the log carries toward finding it.
     onUnhandled: ( id, error ) => {
-      logger.error( "Unhandled promise rejection: ", error );
+      logger.errorWithExtra( "Unhandled promise rejection: ", error, {
+        errorName: error?.name ?? "unknown",
+        screen: getCurrentRoute()?.name || "unknown",
+        // inaturalistjs rejects HTTP failures with an empty message and the
+        // Response attached, so this is the only clue to which call leaked
+        status: error?.response?.status,
+        url: error?.response?.url,
+      } );
     },
   } );
 }
@@ -82,6 +92,20 @@ const jsErrorHandler = ( e, isFatal ) => {
   // if ( !e.name && !e.message ) return;
   if ( isFatal ) {
     logger.error( "Fatal JS Error: ", e );
+    try {
+      // Store crash data for retrieval on next app launch, same as the
+      // native exception handler below, so the full stack (not just the
+      // one line a user can see/copy from the alert) is captured in logs.
+      const crashData = {
+        error: `${e?.message}\n\n${e?.stack}`,
+        screen: getCurrentRoute()?.name || "",
+        timestamp: new Date().toISOString(),
+        appVersion: DeviceInfo.getVersion(),
+      };
+      installDataMMKVStorage.set( LAST_CRASH_DATA, JSON.stringify( crashData ) );
+    } catch ( storageError ) {
+      logger.error( "Failed to save fatal JS error context", storageError );
+    }
     Alert.alert( "Fatal JS Error", `${e.message}\n\n${e.stack}` );
   } else {
     // This should get logged by ErrorBoundary. For some reason this handler
@@ -137,6 +161,7 @@ const queryClient = new QueryClient( {
   defaultOptions: {
     queries: {
       retry: reactQueryRetry,
+      retryDelay: handleRetryDelay,
     },
   },
 } );
@@ -157,22 +182,42 @@ const RozeniteContainer = () => {
   return null;
 };
 
+// The full insets leave dead space: the Dynamic Island ends ~14pt above the
+// top inset, and the home indicator needs only ~14pt of the 34pt bottom inset.
+const TrimmedSafeAreaInsets = ( { children } ) => {
+  const insets = useSafeAreaInsets( );
+  const trimmed = useMemo( ( ) => ( {
+    ...insets,
+    top: insets.top > 40
+      ? insets.top - 16
+      : insets.top,
+    bottom: Math.min( insets.bottom, 14 ),
+  } ), [insets] );
+  return (
+    <SafeAreaInsetsContext.Provider value={trimmed}>
+      {children}
+    </SafeAreaInsetsContext.Provider>
+  );
+};
+
 const AppWithProviders = ( ) => (
   <QueryClientProvider client={queryClient}>
     <RealmProvider>
       <SafeAreaProvider>
-        <INatPaperProvider>
-          <GestureHandlerRootView className="flex-1">
-            <BottomSheetModalProvider>
-              <OfflineNavigationGuard>
-                <ErrorBoundary>
-                  <App />
-                  <RozeniteContainer />
-                </ErrorBoundary>
-              </OfflineNavigationGuard>
-            </BottomSheetModalProvider>
-          </GestureHandlerRootView>
-        </INatPaperProvider>
+        <TrimmedSafeAreaInsets>
+          <INatPaperProvider>
+            <GestureHandlerRootView className="flex-1">
+              <BottomSheetModalProvider>
+                <OfflineNavigationGuard>
+                  <ErrorBoundary>
+                    <App />
+                    <RozeniteContainer />
+                  </ErrorBoundary>
+                </OfflineNavigationGuard>
+              </BottomSheetModalProvider>
+            </GestureHandlerRootView>
+          </INatPaperProvider>
+        </TrimmedSafeAreaInsets>
       </SafeAreaProvider>
     </RealmProvider>
   </QueryClientProvider>

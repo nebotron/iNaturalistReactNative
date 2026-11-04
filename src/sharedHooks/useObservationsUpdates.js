@@ -29,7 +29,11 @@ const useObservationsUpdates = ( enabled: boolean ): Object => {
   } = useAuthenticatedQuery(
     [fetchObservationUpdatesKey],
     optsWithAuth => fetchObservationUpdates( baseParams, optsWithAuth ),
-    { enabled: !!( enabled ) },
+    // observations_by=owner is meaningless without a token, so a poll that
+    // fires before we know the user is signed in can only 401 — the app log
+    // has one, with opts.api_token null. Same guard the notifications count
+    // queries already use.
+    { enabled: !!( enabled ), requireLoggedIn: true },
   );
 
   /*
@@ -63,6 +67,14 @@ const useObservationsUpdates = ( enabled: boolean ): Object => {
   */
 
   useEffect( ( ) => {
+    // Only reconcile against a response we actually got back. `data` is
+    // undefined until the first fetch resolves (and null when the request was
+    // skipped for want of a token), and the sweep at the bottom of this effect
+    // reads an empty result as "the server says nothing is unviewed" — so
+    // running it on a non-response silently cleared every unviewed badge the
+    // user had.
+    if ( !Array.isArray( data ) ) return;
+
     // Looping through all unviewed updates
     const remoteUnviewed = data?.filter( result => result.viewed === false );
 

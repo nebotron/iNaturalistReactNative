@@ -31,6 +31,7 @@ import {
   taxonomyPath,
 } from "sharedHelpers/mlModel";
 import { logStage } from "sharedHelpers/sentinelFiles";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useLayoutPrefs } from "sharedHooks";
 import type { UserLocation } from "sharedHooks/useWatchPosition";
 import useStore from "stores/useStore";
@@ -52,12 +53,13 @@ interface Props {
   userLocation?: UserLocation | null;
   useLocation: boolean;
   zoom: SharedValue<number>;
+  macroMode?: boolean;
 }
 
-const FPS = 1;
-const CONFIDENCE_THRESHOLD = 70;
-const NUM_STORED_RESULTS = 5;
-const CROP_RATIO = 1.0;
+const FPS = getTunable( "aiCameraFps" );
+const CONFIDENCE_THRESHOLD = getTunable( "aiCameraConfidenceThreshold" );
+const NUM_STORED_RESULTS = getTunable( "aiCameraStoredResults" );
+const CROP_RATIO = getTunable( "aiCameraCropRatio" );
 
 const FrameProcessorCamera = ( {
   cameraRef,
@@ -75,6 +77,7 @@ const FrameProcessorCamera = ( {
   userLocation,
   useLocation,
   zoom,
+  macroMode,
 }: Props ) => {
   const sentinelFileName = useStore( state => state.sentinelFileName );
   const { isDefaultMode } = useLayoutPrefs( );
@@ -224,6 +227,7 @@ const FrameProcessorCamera = ( {
       device={device}
       frameOutput={frameOutput}
       inactive={inactive}
+      macroMode={macroMode}
       onCameraError={async error => {
         onCameraError( error );
         await logStage( sentinelFileName, "fallback_camera_error" );

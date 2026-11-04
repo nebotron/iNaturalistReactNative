@@ -28,7 +28,7 @@ describe( "PostDetails", ( ) => {
     renderComponent( <PostDetails /> );
 
     expect( screen.getByText( mockPost.title ) ).toBeVisible( );
-    expect( screen.getByText( "Mar 15, 2024" ) ).toBeVisible( );
+    expect( screen.getByText( "2024-03-15" ) ).toBeVisible( );
   } );
 
   it( "displays the post body", ( ) => {

@@ -22,7 +22,9 @@ import type {
 import { VolumeManager } from "react-native-volume-manager";
 import ObservationPhoto from "realmModels/ObservationPhoto";
 import { BREAKPOINTS } from "sharedHelpers/breakpoint";
+import { getTunable } from "sharedHelpers/tunableParams";
 import { useDeviceOrientation } from "sharedHooks";
+import useInputImageTracking from "sharedHooks/useInputImageTracking";
 import useStore from "stores/useStore";
 
 import type { SavePhotoOptions } from "../CameraContainer";
@@ -37,7 +39,7 @@ import PhotoPreview from "./PhotoPreview";
 
 const isTablet = DeviceInfo.isTablet( );
 
-export const MAX_PHOTOS_ALLOWED = 20;
+export const MAX_PHOTOS_ALLOWED = getTunable( "maxPhotosPerObservation" );
 
 interface Props {
   camera: RefObject<CameraRef | null>;
@@ -90,6 +92,7 @@ const StandardCamera = ( {
 
   const cameraUris = useStore( state => state.cameraUris );
   const prepareCamera = useStore( state => state.prepareCamera );
+  const { trackImageDeleted } = useInputImageTracking( );
   const photoLibraryUris = useStore( state => state.photoLibraryUris );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
 
@@ -132,8 +135,9 @@ const StandardCamera = ( {
     if ( !deletePhotoFromObservation ) return;
     deletePhotoFromObservation( photoUri );
     await ObservationPhoto.deletePhoto( photoUri );
+    trackImageDeleted( photoUri );
     setNewPhotoUris( newPhotoUris.filter( uri => uri !== photoUri ) );
-  }, [deletePhotoFromObservation, newPhotoUris, setNewPhotoUris] );
+  }, [deletePhotoFromObservation, newPhotoUris, setNewPhotoUris, trackImageDeleted] );
 
   const onFlipCamera = () => {
     flipCamera( );

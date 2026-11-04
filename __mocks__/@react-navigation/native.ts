@@ -14,6 +14,7 @@ const useNavigation = ( ) => ( {
   canGoBack: jest.fn( ( ) => true ),
   goBack: jest.fn( ),
   setOptions: jest.fn( ),
+  setParams: jest.fn( ),
 } );
 
 module.exports = {

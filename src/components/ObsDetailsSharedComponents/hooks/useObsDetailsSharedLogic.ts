@@ -215,7 +215,10 @@ const useObsDetailsSharedLogic = ( {
 
   const wasSynced = !!( localObservation && localObservation?.wasSynced() );
 
-  const hasPhotos = observation?.observationPhotos?.length > 0;
+  // Sounds get suggestions from Audio ID
+  const hasMedia = observation?.observationPhotos?.length > 0
+    || observation?.observationSounds?.length > 0
+    || observation?.observation_sounds?.length > 0;
 
   const { data: subscriptions, refetch: refetchSubscriptions } = useAuthenticatedQuery(
     [
@@ -288,7 +291,7 @@ const useObsDetailsSharedLogic = ( {
 
   const navToSuggestions = useCallback( ( ) => {
     setObservations( [observation] );
-    if ( hasPhotos ) {
+    if ( hasMedia ) {
       navigation.push( "Suggestions", {
         entryScreen: "ObsDetails",
         lastScreen: "ObsDetails",
@@ -298,7 +301,7 @@ const useObsDetailsSharedLogic = ( {
       // Go directly to taxon search in case there are no photos
       navigation.navigate( "SuggestionsTaxonSearch", { lastScreen: "ObsDetails" } );
     }
-  }, [hasPhotos, navigation, observation, setObservations] );
+  }, [hasMedia, navigation, observation, setObservations] );
 
   const invalidateQueryAndRefetch = useCallback( ( ) => {
     invalidateRemoteObservationFetch( );

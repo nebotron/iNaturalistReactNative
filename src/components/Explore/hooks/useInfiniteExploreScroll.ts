@@ -10,6 +10,7 @@ import type {
 import flatten from "lodash/flatten";
 import { useCallback, useMemo } from "react";
 import Observation from "realmModels/Observation";
+import Vote from "realmModels/Vote";
 import { useAuthenticatedInfiniteQuery } from "sharedHooks";
 
 import {
@@ -23,7 +24,10 @@ interface UseInfiniteExploreScrollParams {
 }
 
 interface UseInfiniteExploreScrollReturn {
+  error: unknown;
+  fetchStatus: string;
   fetchNextPage: ( ) => void;
+  hasNextPage: boolean;
   isLoading: boolean;
   isFetchingNextPage: boolean;
   handlePullToRefresh: ( ) => Promise<void>;
@@ -40,10 +44,28 @@ const useInfiniteExploreScroll = (
 
   const baseParams = useMemo( () => ( {
     ...newInputParams,
+    // Only what Explore's list, grid and Identify views draw. ObsDetails gets
+    // these as its preloaded observation and fetches the rest itself.
     fields: {
-      // the most data we display in the UI on any Observations view in Explore
-      // is the same amount of data we show for the Advanced list mode in MyObservations
-      ...Observation.ADVANCED_MODE_LIST_FIELDS,
+      ...Observation.DEFAULT_MODE_LIST_FIELDS,
+      // ObsStatus's identification and comment counts
+      identifications: Observation.ADVANCED_MODE_LIST_FIELDS.identifications,
+      comments: { uuid: true },
+      // ObsListItem's location and date
+      geoprivacy: true,
+      obscured: true,
+      observed_on: true,
+      observed_time_zone: true,
+      place_guess: true,
+      private_place_guess: true,
+      private_geojson: true,
+      taxon_geoprivacy: true,
+      // ObsGridItem's fave star and fave count
+      votes: Vote.VOTE_FIELDS,
+      // geojson is the reliable coordinate source on API observations (top-level
+      // latitude/longitude are often absent); the Identify auto-CV reads it to
+      // score with location, matching the Suggest ID screen.
+      geojson: true,
       // login is needed so ObsListItem can tell whether an observation belongs
       // to the current user (geoprivacy/obscured handling differs in that case)
       user: {
@@ -67,12 +89,15 @@ const useInfiniteExploreScroll = (
 
   const {
     data,
+    hasNextPage,
     isFetchingNextPage,
     isLoading,
     fetchNextPage,
     refetch,
     isRefetching,
     status,
+    error,
+    fetchStatus,
   } = useAuthenticatedInfiniteQuery(
     queryKey,
     async ( params, optsWithAuth ) => searchObservations(
@@ -92,15 +117,29 @@ const useInfiniteExploreScroll = (
 
   const pages = data?.pages as ApiObservationsSearchResponse[] | undefined;
 
-  const observations: ApiObservation[] = flatten( pages?.map( r => r.results ) ) || [];
-  let totalResults: number | null | undefined = pages?.[0]?.total_results;
+  // Memoized so a render doesn't re-flatten every page fetched so far and hand
+  // FlashList a new array identity, which re-renders the whole list.
+  const observations: ApiObservation[] = useMemo( ( ) => {
+    const seenKeys = new Set<string | number>( );
+    const deduped = ( flatten( pages?.map( r => r.results ) ) || [] ).filter( obs => {
+      const key = obs.uuid ?? obs.id;
+      if ( key == null || seenKeys.has( key ) ) return false;
+      seenKeys.add( key );
+      return true;
+    } );
+    return deduped;
+  }, [pages] );
 
+  let totalResults: number | null | undefined = pages?.[0]?.total_results;
   if ( totalResults !== 0 && !totalResults ) {
     totalResults = null;
   }
 
   return {
+    error,
+    fetchStatus,
     fetchNextPage,
+    hasNextPage,
     isLoading,
     isFetchingNextPage: isFetchingNextPage || isRefetching,
     handlePullToRefresh,

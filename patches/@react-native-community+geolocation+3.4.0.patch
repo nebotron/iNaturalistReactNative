@@ -1,0 +1,19 @@
+diff --git a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
+index 0000000..1111111 100644
+--- a/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
++++ b/node_modules/@react-native-community/geolocation/ios/RNCGeolocation.mm
+@@ -412,7 +412,13 @@
+                           useSignificantChanges:options.useSignificantChanges];
+ 
+   if (didPause) {
+-    [self startObserving];
++    // iNaturalist patch: RNCGeolocation subclasses RCTEventEmitter, whose
++    // -startObserving takes no arguments, so this call resolved to that no-op
++    // rather than to -startObserving: below. The watch paused for this one-shot
++    // request was therefore never resumed: _observingLocation stayed NO and no
++    // further geolocationDidChange events were sent for the rest of the
++    // process's life. Resume it with the options it was started with.
++    [self startObserving:_observerOptions];
+   }
+ }
+ 

@@ -1,6 +1,7 @@
 import find from "lodash/find";
 import orderBy from "lodash/orderBy";
 import remove from "lodash/remove";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 import isolateHumans, { humanFilter } from "./isolateHumans";
 import type { UseSuggestionsSuggestion } from "./types";
@@ -18,7 +19,7 @@ const initialSuggestions = {
 // namespaced to call out dependence on internal logic
 export const internalUseSuggestionsInitialSuggestions = initialSuggestions;
 
-const TOP_RESULT_SCORE_THRESHOLD = 78;
+const TOP_RESULT_SCORE_THRESHOLD = getTunable( "topSuggestionScoreThreshold" );
 
 // this function does a few things:
 // 1. it makes sure that if there is a human suggestion, human is the only result returned

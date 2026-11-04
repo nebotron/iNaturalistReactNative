@@ -3,13 +3,13 @@ import {
   DATE_OBSERVED,
   DATE_UPLOADED,
   ESTABLISHMENT_MEAN,
+  EVIDENCE_TYPE,
   MEDIA,
   PHOTO_LICENSE,
   REVIEWED,
   TAXONOMIC_RANK,
   WILD_STATUS,
 } from "providers/ExploreContext";
-import { OBSERVATIONS_SORT } from "sharedHelpers/observationsSort";
 
 export interface FilterOption<ValueT> {
   label: string;
@@ -19,40 +19,6 @@ const option = <ValueT extends string | number>(
   value: ValueT,
   label: string,
 ): [ValueT, FilterOption<ValueT>] => [value, { label, value }];
-
-// `label` / `text` are the two lines of each row in the sort sheet; `labelCaps`
-// is the single-line, all-caps version in the dropdown button
-export const getSortByValues = ( t: TFunction ) => ( {
-  [OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST]: {
-    label: t( "Date-uploaded" ),
-    labelCaps: t( "DATE-UPLOADED-NEWEST" ),
-    text: t( "Newest-to-oldest" ),
-    value: OBSERVATIONS_SORT.DATE_UPLOADED_NEWEST,
-  },
-  [OBSERVATIONS_SORT.DATE_UPLOADED_OLDEST]: {
-    label: t( "Date-uploaded" ),
-    labelCaps: t( "DATE-UPLOADED-OLDEST" ),
-    text: t( "Oldest-to-newest" ),
-    value: OBSERVATIONS_SORT.DATE_UPLOADED_OLDEST,
-  },
-  [OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST]: {
-    label: t( "Date-observed" ),
-    labelCaps: t( "DATE-OBSERVED-NEWEST" ),
-    text: t( "Newest-to-oldest" ),
-    value: OBSERVATIONS_SORT.DATE_OBSERVED_NEWEST,
-  },
-  [OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST]: {
-    label: t( "Date-observed" ),
-    labelCaps: t( "DATE-OBSERVED-OLDEST" ),
-    text: t( "Oldest-to-newest" ),
-    value: OBSERVATIONS_SORT.DATE_OBSERVED_OLDEST,
-  },
-  [OBSERVATIONS_SORT.MOST_FAVED]: {
-    label: t( "Most-faved" ),
-    labelCaps: t( "MOST-FAVED" ),
-    value: OBSERVATIONS_SORT.MOST_FAVED,
-  },
-} );
 
 export const getTaxonomicRankValues = ( t: TFunction ) => Object.fromEntries( [
   option( TAXONOMIC_RANK.none, t( "NONE--ranks" ) ),
@@ -188,4 +154,20 @@ export const getPhotoLicenseValues = ( t: TFunction ) => Object.fromEntries( [
   option( PHOTO_LICENSE.CCBYND, t( "CC-BY-ND" ) ),
   option( PHOTO_LICENSE.CCBYNCSA, t( "CC-BY-NC-SA" ) ),
   option( PHOTO_LICENSE.CCBYNCND, t( "CC-BY-NC-ND" ) ),
+] );
+
+export const getEvidenceTypeValues = ( t: TFunction ) => Object.fromEntries( [
+  option( EVIDENCE_TYPE.LIVE_ORGANISM, t( "Live-organism--evidence" ) ),
+  option( EVIDENCE_TYPE.DEAD_ORGANISM, t( "Dead-organism--evidence" ) ),
+  option( EVIDENCE_TYPE.FEATHER, t( "Feather--evidence" ) ),
+  option( EVIDENCE_TYPE.SCAT, t( "Scat--evidence" ) ),
+  option( EVIDENCE_TYPE.TRACK, t( "Track--evidence" ) ),
+  option( EVIDENCE_TYPE.BONE, t( "Bone--evidence" ) ),
+  option( EVIDENCE_TYPE.MOLT, t( "Molt--evidence" ) ),
+  option( EVIDENCE_TYPE.GALL, t( "Gall--evidence" ) ),
+  option( EVIDENCE_TYPE.EGG, t( "Egg--evidence" ) ),
+  option( EVIDENCE_TYPE.HAIR, t( "Hair--evidence" ) ),
+  option( EVIDENCE_TYPE.LEAFMINE, t( "Leafmine--evidence" ) ),
+  option( EVIDENCE_TYPE.CONSTRUCTION, t( "Construction--evidence" ) ),
+  option( EVIDENCE_TYPE.UNKNOWN, t( "Not-annotated--evidence" ) ),
 ] );

@@ -1,0 +1,237 @@
+import { cropSourcesPath } from "appConstants/paths";
+import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
+import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import prepareCropSource from "sharedHelpers/prepareCropSource";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
+import { getTunable } from "sharedHelpers/tunableParams";
+import { unlink } from "sharedHelpers/util";
+
+// What each stage of a preload cost, and when it finished. The wait between
+// photos in a bulk crop is whatever is left of this when the user advances, so
+// the editor reports it (crop_photo_slow) rather than leaving the wait as one
+// opaque number.
+interface PreloadTiming {
+  exportMs: number;
+  prepareMs: number;
+  finishedAt: number;
+  stageMs?: Record<string, number>;
+}
+
+export interface PreloadResult {
+  // The untouched original, which is what a crop is finally applied to.
+  localUri: string;
+  // The display-sized file decoded from it, which is what the cropper draws.
+  displayUri: string;
+  size: { w: number; h: number };
+  crop: NormalizedCrop;
+  timing: PreloadTiming;
+}
+
+// How many upcoming photos in a bulk crop to preload ahead of the one
+// currently shown (Settings > Tunable Parameters). Preloads leave their result
+// on disk, so a deeper lookahead costs no extra memory: it banks prepares
+// while the user frames a slow crop, to cover a later run of quick ones.
+export const PRELOAD_LOOKAHEAD = getTunable( "cropPreloadAhead" );
+
+// Module-level cache so preloaded data survives navigation.replace cycles
+export const preloadCache = new Map<string, PreloadResult>( );
+// Track in-flight loads by their promise so callers can await (and dedupe)
+// an ongoing preload instead of kicking off duplicate, contending work.
+const preloadInFlight = new Map<string, Promise<PreloadResult | null>>( );
+
+async function loadImageData(
+  imageUri: string,
+  cropSourceUri: string,
+  existingSavedCrop: NormalizedCrop | null,
+): Promise<PreloadResult | null> {
+  const startedAt = Date.now( );
+  const resolvedUri = await ensureLocalImageForCrop( cropSourceUri, "original" );
+  const exportedAt = Date.now( );
+  // One decode of the photo, off the screen the user is still cropping on,
+  // producing the size, the framing and the file the cropper will draw.
+  const prepared = await prepareCropSource( imageUri, resolvedUri, existingSavedCrop );
+  if ( !prepared ) {
+    return null;
+  }
+  const finishedAt = Date.now( );
+  return {
+    localUri: resolvedUri,
+    displayUri: prepared.displayUri,
+    size: prepared.size,
+    crop: prepared.crop,
+    timing: {
+      exportMs: exportedAt - startedAt,
+      prepareMs: finishedAt - exportedAt,
+      finishedAt,
+      stageMs: prepared.stageMs,
+    },
+  };
+}
+
+// Returns a promise resolving to the preload result. Reuses the module-level
+// cache and dedupes concurrent loads for the same imageUri so the same
+// expensive asset export + subject detection never runs twice at once.
+function preloadImage(
+  imageUri: string,
+  cropSourceUri: string,
+  existingSavedCrop: NormalizedCrop | null,
+): Promise<PreloadResult | null> {
+  const cached = preloadCache.get( imageUri );
+  if ( cached ) {
+    return Promise.resolve( cached );
+  }
+  const inFlight = preloadInFlight.get( imageUri );
+  if ( inFlight ) {
+    return inFlight;
+  }
+  const promise = loadImageData( imageUri, cropSourceUri, existingSavedCrop )
+    .then( result => {
+      if ( result ) {
+        preloadCache.set( imageUri, result );
+      }
+      return result;
+    } )
+    .catch( ( ) => null )
+    .finally( ( ) => {
+      preloadInFlight.delete( imageUri );
+    } );
+  preloadInFlight.set( imageUri, promise );
+  return promise;
+}
+
+interface PreloadRequest {
+  imageUri: string;
+  cropSourceUri: string;
+  existingSavedCrop: NormalizedCrop | null;
+  resolve: ( result: PreloadResult | null ) => void;
+}
+
+// Each preload runs a heavy native full-resolution decode + subject detection.
+// Every load, the photo on screen included, goes through this queue in the
+// order it was asked for, this many at a time (Settings > Tunable Parameters).
+// The native prepare queue is concurrent, so this is the only limit; camera
+// raws are still decoded one at a time under the native raw decode lock.
+const PRELOAD_CONCURRENCY = getTunable( "cropPreloadConcurrency" );
+const preloadQueue: PreloadRequest[] = [];
+const preloadQueued = new Map<string, Promise<PreloadResult | null>>( );
+let activePreloadCount = 0;
+
+function startNextPreload( ) {
+  const request = preloadQueue.shift( )!;
+  preloadQueued.delete( request.imageUri );
+  // May have been resolved or started directly (e.g. the user advanced to it)
+  // since it was enqueued; don't waste a slot on already-done/running work.
+  const cached = preloadCache.get( request.imageUri );
+  if ( cached ) {
+    request.resolve( cached );
+    return;
+  }
+  const inFlight = preloadInFlight.get( request.imageUri );
+  if ( inFlight ) {
+    inFlight.then( request.resolve, ( ) => request.resolve( null ) );
+    return;
+  }
+  activePreloadCount += 1;
+  preloadImage(
+    request.imageUri,
+    request.cropSourceUri,
+    request.existingSavedCrop,
+  ).then( request.resolve, ( ) => request.resolve( null ) ).finally( ( ) => {
+    activePreloadCount -= 1;
+    // eslint-disable-next-line no-use-before-define
+    pumpPreloadQueue( );
+  } );
+}
+
+function pumpPreloadQueue( ) {
+  while ( activePreloadCount < PRELOAD_CONCURRENCY && preloadQueue.length > 0 ) {
+    startNextPreload( );
+  }
+}
+
+// Enqueue a background preload that respects PRELOAD_CONCURRENCY, resolving
+// with the result so a caller that needs the data (rather than just warming
+// the cache) can await its turn in the queue. Already cached, in-flight, or
+// queued URIs reuse the existing work so callers can re-enqueue freely (e.g.
+// on every navigation.replace) without piling up duplicate loads.
+export function enqueuePreload(
+  imageUri: string,
+  cropSourceUri: string,
+  existingSavedCrop: NormalizedCrop | null,
+): Promise<PreloadResult | null> {
+  const cached = preloadCache.get( imageUri );
+  if ( cached ) {
+    return Promise.resolve( cached );
+  }
+  const inFlight = preloadInFlight.get( imageUri );
+  if ( inFlight ) {
+    return inFlight;
+  }
+  const queued = preloadQueued.get( imageUri );
+  if ( queued ) {
+    return queued;
+  }
+  let resolve: ( result: PreloadResult | null ) => void = ( ) => {};
+  const promise = new Promise<PreloadResult | null>( res => {
+    resolve = res;
+  } );
+  preloadQueued.set( imageUri, promise );
+  preloadQueue.push( {
+    imageUri, cropSourceUri, existingSavedCrop, resolve,
+  } );
+  pumpPreloadQueue( );
+  return promise;
+}
+
+// A photo the import copied to a new uri (a USB-staged photo copied into the
+// gallery folder on Done) keeps the preload started on its old uri: the bytes
+// are the same, so the cropper finds it under the new one instead of starting
+// over.
+export function aliasPreload( fromUri: string, toUri: string ) {
+  if ( fromUri === toUri || preloadCache.has( toUri ) || preloadInFlight.has( toUri ) ) {
+    return;
+  }
+  const cached = preloadCache.get( fromUri );
+  const pending = cached
+    ? Promise.resolve( cached )
+    : preloadInFlight.get( fromUri ) ?? preloadQueued.get( fromUri );
+  if ( !pending ) {
+    return;
+  }
+  const promise = pending.then( result => {
+    preloadCache.delete( fromUri );
+    if ( !result ) {
+      return null;
+    }
+    const aliased = { ...result, localUri: toUri };
+    preloadCache.set( toUri, aliased );
+    return aliased;
+  } ).finally( ( ) => {
+    preloadInFlight.delete( toUri );
+  } );
+  preloadInFlight.set( toUri, promise );
+}
+
+// Once a photo is cropped, the export and display file it was cropped from
+// have served their purpose (the original is copied to photoUploads), so drop
+// them instead of leaving full-size copies in cropSourcesPath.
+export function releaseCropSource( imageUri: string, uris: ( string | null )[] ) {
+  preloadCache.delete( imageUri );
+  uris
+    .map( uri => uri && stripFilePrefix( uri ) )
+    .filter( path => path?.startsWith( `${cropSourcesPath}/` ) )
+    .forEach( path => { unlink( path ).catch( ( ) => {} ); } );
+}
+
+// When the user asked for a bulk crop (Done in the photo picker, or crop in
+// Group Photos), so the editor can report the first photo's wait from the tap,
+// the copy out of the library included, not just from when its file landed.
+let cropRequestedAt = 0;
+export function noteCropRequested( ) {
+  cropRequestedAt = Date.now( );
+}
+export function takeCropRequestedAt( ): number {
+  const at = cropRequestedAt;
+  cropRequestedAt = 0;
+  return at;
+}

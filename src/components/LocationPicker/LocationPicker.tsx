@@ -5,6 +5,7 @@ import {
   KeyboardDismissableView,
   Map,
 } from "components/SharedComponents";
+import { hasValidMapCoordinates } from "components/SharedComponents/Map/helpers/mapHelpers";
 import { SharedStackViewWrapper } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import React from "react";
@@ -26,6 +27,8 @@ interface Props {
   loading: boolean;
   locationName: string;
   initialRegion: Region | null;
+  legend?: React.ReactNode;
+  mapChildren?: React.ReactNode;
   onCurrentLocationPress: ( ) => void;
   onMapReady: ( ) => void;
   onRegionChangeComplete: ( newRegion: Region ) => void;
@@ -42,6 +45,8 @@ const LocationPicker = ( {
   hidePlaceResults,
   loading,
   locationName,
+  legend,
+  mapChildren,
   regionToAnimate,
   initialRegion,
   onCurrentLocationPress,
@@ -55,12 +60,14 @@ const LocationPicker = ( {
   const { t } = useTranslation( );
 
   let regionToDisplay;
-  if ( region && region?.latitude !== 0 && region.longitude !== 0 ) {
+  if ( region && hasValidMapCoordinates( region.latitude, region.longitude ) ) {
     regionToDisplay = region;
-  } else {
+  } else if (
+    initialRegion
+    && hasValidMapCoordinates( initialRegion.latitude, initialRegion.longitude )
+  ) {
     regionToDisplay = initialRegion;
-  }
-  if ( !regionToDisplay ) {
+  } else {
     regionToDisplay = {
       latitude: 0,
       longitude: 0,
@@ -114,6 +121,7 @@ const LocationPicker = ( {
             // it requires the map ref to settle to inform region's delta properties, but
             // per docs, prop changes to `initialRegion` are ignored.
             initialRegion={initialRegion}
+            mapChildren={mapChildren}
             onCurrentLocationPress={onCurrentLocationPress}
             onMapReady={onMapReady}
             onRegionChangeComplete={onRegionChangeComplete}
@@ -124,7 +132,9 @@ const LocationPicker = ( {
             showsUserLocation
             testID="LocationPicker.Map"
             onMapLayout={onMapLayout}
-          />
+          >
+            {legend}
+          </Map>
         </View>
         <Footer handleSave={handleSave} />
       </SharedStackViewWrapper>

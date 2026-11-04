@@ -258,7 +258,7 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 - Arrow functions for React components: `const MyComponent = () => { };`
 - i18next string literal checking enforced - use `t()` for all user-facing text
 - Prefer TypeScript for new files (partial adoption, not required)
-- Husky pre-commit hook (`.husky/pre-commit`) runs `lint-staged` (eslint `--fix` on staged files), regenerates i18n translations, and runs a GitGuardian (`ggshield`) secrets scan
+- Husky pre-push hook (`.husky/pre-push`) runs only when pushing to `main` and checks only files changed in commits not yet on `main`: eslint `--fix`, `flow status`, rubocop, and i18n regeneration when `.ftl` files changed. If anything gets rewritten, the push fails so you can commit the changes.
 
 **Details:** TypeScript conventions (interface-vs-type, Flow coexistence) in `agent-docs/conventions/typescript.md`.
 
@@ -274,6 +274,25 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 
 - Custom logger: `react-native-logs.config.ts`
 - Sentry-style error tracking with Grafana integration
+- **The shipped app's log is readable from a checkout, with no `.env` and no
+  credentials.** Every logger line from a non-dev build is POSTed to a Firebase
+  Realtime Database that allows unauthenticated reads, and
+  `scripts/app_log.py` defaults to it. Read it before theorising about a
+  field bug — it is the only record of what the app actually did:
+  ```bash
+  python3 scripts/app_log.py                   # grouped summary of recent entries
+  python3 scripts/app_log.py --level error     # errors only
+  python3 scripts/app_log.py --grep slow_ui    # entries matching a regex
+  python3 scripts/app_log.py --detail 3        # full entries behind summary group 3
+  python3 scripts/app_log.py --dump log.json   # everything, for analysis
+  ```
+  Never run `--clear`. Entries carry the `commit` they came from, so check
+  whether a crash predates the fix before chasing it.
+- **UI responsiveness markers**, written by `sharedHelpers/uiDelayTracker.ts`
+  and searchable in that log: `slow_screen_transition` (tap to rendered
+  screen) and `slow_ui_work`. `button_stuck_processing` and
+  `button_stuck_loading` cover a responsive thread and a control that has
+  latched.
 - **Sentinel files** (`sharedHelpers/sentinelFiles.ts`) - Debug difficult hardware issues:
   - Created at flow start, deleted on success
   - Log stages during flow (e.g., camera permissions, save photo, location fetch)
@@ -297,7 +316,7 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
 - Branch naming: `mob-{number}-{short-description}` (e.g., `mob-123-fix-upload-crash`)
 - Commit messages: Imperative mood, describe user impact
 - Include `Closes MOB-123` in the commit body to auto-close issues
-- Husky pre-commit hook runs linters automatically
+- Husky pre-push hook runs linters automatically
 - Main branch: `main`
 
 ## Accessibility

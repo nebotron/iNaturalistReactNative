@@ -37,11 +37,26 @@ export async function advancePhotoLibraryTimers() {
   } );
 }
 
-/** Opens the add-observation bottom sheet from the tab bar. */
-export async function pressAddObservationsButton() {
+async function findAddObservationsButton() {
   const tabBar = await screen.findByTestId( "CustomTabBar" );
-  const addObsButton = await within( tabBar ).findByLabelText( "Add observations" );
-  await actor.press( addObsButton );
+  return within( tabBar ).findByLabelText( "Add observations" );
+}
+
+/**
+ * Opens the add-observation bottom sheet from the tab bar. A regular press
+ * navigates straight to the photo importer or the AI camera, so the wheel with
+ * all the options only opens on a long press.
+ */
+export async function pressAddObservationsButton() {
+  await actor.longPress( await findAddObservationsButton( ) );
+}
+
+/**
+ * A regular press on the add-observation button, which in the all-options
+ * layout goes straight to the photo importer.
+ */
+export async function tapAddObservationsButton() {
+  await actor.press( await findAddObservationsButton( ) );
 }
 
 /** Presses an option in the open add-observation bottom sheet. */
@@ -82,9 +97,11 @@ export async function navigateToPhotoImporterFromMyObs() {
   await waitFor( ( ) => {
     expect( screen.getByTestId( "CustomTabBar" ) ).toBeVisible( );
   } );
-  await pressAddObservationsButton( );
-  await pressAddObsOption( ADD_OBS_OPTIONS.photoImporter );
+  await tapAddObservationsButton( );
   await advancePhotoLibraryTimers( );
+  await waitFor( ( ) => {
+    expect( screen.getByTestId( "PhotoLibrary" ) ).toBeTruthy( );
+  }, { timeout: 10_000 } );
 }
 
 export async function waitForSoundRecorderScreen() {

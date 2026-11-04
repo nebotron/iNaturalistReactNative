@@ -1,6 +1,7 @@
 import { useNavigation } from "@react-navigation/native";
 import classnames from "classnames";
 import FadeInOutView from "components/Camera/FadeInOutView";
+import { useCameraDevices } from "components/Camera/helpers/visionCameraWrapper";
 import useRotation from "components/Camera/hooks/useRotation";
 import useZoom from "components/Camera/hooks/useZoom";
 import { Body1, INatIcon, TaxonResult } from "components/SharedComponents";
@@ -77,9 +78,19 @@ interface Props {
   photoOutput: CameraPhotoOutput;
 }
 
+// The physical camera on this side that can focus closest. VisionCamera 5 no
+// longer reports minimum focus distance, but on phones with a macro mode it's
+// the ultra-wide lens.
+const getMacroDevice = (
+  devices: CameraDevice[],
+  position: CameraDevice["position"] | undefined,
+) => devices.find( d => d.position === position
+  && !d.isVirtualDevice
+  && d.type === "ultra-wide-angle" );
+
 const AICamera = ( {
   camera,
-  device,
+  device: defaultDevice,
   flipCamera,
   isLandscapeMode,
   toggleFlash,
@@ -94,6 +105,14 @@ const AICamera = ( {
   const navigation = useNavigation<NoBottomTabStackScreenProps<"Camera">["navigation"]>( );
   const sentinelFileName = useStore( state => state.sentinelFileName );
   const setAICameraSuggestion = useStore( state => state.setAICameraSuggestion );
+
+  const { aiCameraSettings, setAICameraSetting } = useLayoutPrefs( );
+  const { macroMode } = aiCameraSettings;
+  const devices = useCameraDevices( );
+  const macroDevice = macroMode
+    ? getMacroDevice( devices, defaultDevice?.position )
+    : undefined;
+  const device = macroDevice || defaultDevice;
 
   const hasFlash = device?.hasFlash;
   const { isDebug } = useDebugMode( );
@@ -120,7 +139,7 @@ const AICamera = ( {
   const [initialVolume, setInitialVolume] = useState<number | null>( null );
   const [hasTakenPhoto, setHasTakenPhoto] = useState( false );
 
-  const [userDisabledLocation, setUserDisabledLocation] = useState( false );
+  const userDisabledLocation = aiCameraSettings.locationDisabled;
   const useLocation = hasLocationPermissions && !userDisabledLocation;
   const [locationStatusVisible, setLocationStatusVisible] = useState( false );
 
@@ -129,7 +148,7 @@ const AICamera = ( {
       requestLocationPermissions( );
       return;
     }
-    setUserDisabledLocation( prev => !prev );
+    setAICameraSetting( "locationDisabled", !userDisabledLocation );
     // Always show status when button is pressed
     setLocationStatusVisible( true );
   };
@@ -149,6 +168,11 @@ const AICamera = ( {
   const showPrediction = ( result && result?.taxon?.rank_level <= 40 ) || false;
 
   const insets = useSafeAreaInsets( );
+
+  const toggleMacro = ( ) => {
+    resetZoom( );
+    setAICameraSetting( "macroMode", !macroMode );
+  };
 
   const onFlipCamera = () => {
     flipCamera( );
@@ -246,6 +270,7 @@ const AICamera = ( {
             userLocation={userLocation}
             useLocation={useLocation}
             zoom={zoom}
+            macroMode={macroMode}
           />
         </View>
       )}
@@ -333,6 +358,8 @@ const AICamera = ( {
         zoomTextValue={zoomTextValue}
         useLocation={useLocation}
         toggleLocation={toggleLocation}
+        macroMode={macroMode}
+        toggleMacro={toggleMacro}
         completeSentinelFile={() => completeSentinelFile( sentinelFileName )}
       />
     </>

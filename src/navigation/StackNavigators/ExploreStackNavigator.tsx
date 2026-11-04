@@ -3,8 +3,6 @@ import AdvancedSearch
   from "components/Explore/ExploreV2/screens/AdvancedSearch";
 import ExploreResults
   from "components/Explore/ExploreV2/screens/ExploreResults";
-import UniversalSearch
-  from "components/Explore/ExploreV2/screens/UniversalSearch";
 import { hideHeader } from "navigation/navigationOptions";
 import type { ExploreStackParamList } from "navigation/types";
 import React from "react";
@@ -23,11 +21,6 @@ const ExploreStackNavigator = ( { showBackButton }: Props ) => (
       name="ExploreResults"
       component={ExploreResults}
       initialParams={{ showBackButton }}
-      options={hideHeader}
-    />
-    <Stack.Screen
-      name="UniversalSearch"
-      component={UniversalSearch}
       options={hideHeader}
     />
     <Stack.Screen

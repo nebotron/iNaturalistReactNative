@@ -14,6 +14,7 @@ const {
 } = require( "@rozenite/require-profiler-plugin/metro" );
 const { withNativeWind } = require( "nativewind/metro" );
 const { bundleModeMetroConfig } = require( "react-native-worklets/bundleMode" );
+const writeAppCommit = require( "./scripts/writeAppCommit" );
 
 const {
   resolver: { sourceExts, assetExts },
@@ -44,8 +45,32 @@ const config = {
   watchFolders: [...localPackagePaths],
 };
 
+const mergedConfig = mergeConfig( getDefaultConfig( __dirname ), bundleModeMetroConfig, config );
+
+// Stamp the git commit at config load, so the gitignored module exists before
+// Metro resolves anything (e.g. a CI build that skipped `npm ci`).
+writeAppCommit( );
+
+// And again at the start of every graph build, so a long-running dev server
+// picks up a new commit after a rebase. writeAppCommit only touches the file
+// when the commit changes.
+const { getTransformOptions } = mergedConfig.transformer;
+mergedConfig.transformer.getTransformOptions = async ( ...args ) => {
+  writeAppCommit( );
+  return getTransformOptions
+    ? getTransformOptions( ...args )
+    : {};
+};
+
+// The TestFlight workflow keeps the transform cache between runs
+if ( process.env.METRO_CACHE_DIR ) {
+  // eslint-disable-next-line import/no-extraneous-dependencies
+  const { FileStore } = require( "metro-cache" );
+  mergedConfig.cacheStores = [new FileStore( { root: process.env.METRO_CACHE_DIR } )];
+}
+
 const configWithRozenite = withRozenite(
-  mergeConfig( getDefaultConfig( __dirname ), bundleModeMetroConfig, config ),
+  mergedConfig,
   {
     enabled: process.env.WITH_ROZENITE === "true",
     enhanceMetroConfig: config => withRozeniteRequireProfiler( config ),

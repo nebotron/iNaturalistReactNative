@@ -24,6 +24,8 @@ import {
   observationHasSound,
   photoCountFromObservation,
   photoFromObservation,
+  photosFromObservation,
+  soundUriFromObservation,
 } from "./util";
 
 type Props = {
@@ -92,6 +94,10 @@ const ObsListItem = ( {
     observation?.uuid,
   ] );
 
+  const allPhotos = useMemo( ( ) => photosFromObservation( observation ).map(
+    p => ( { uri: Photo.displayLocalOrRemoteOriginalPhoto( p ) } ),
+  ), [observation] );
+
   return (
     <View
       testID={`MyObservations.obsListItem.${observation.uuid}`}
@@ -99,14 +105,18 @@ const ObsListItem = ( {
     >
       <View>
         <ObsImagePreview
+          key={observation.uuid}
+          autoDetectSubject={explore && !belongsToCurrentUser}
           source={{
-            uri: Photo.displayLocalOrRemoteSquarePhoto(
+            uri: Photo.displayLocalOrRemoteOriginalPhoto(
               photoFromObservation( observation ),
             ),
           }}
+          photos={allPhotos}
           obsPhotosCount={photoCountFromObservation( observation )}
           hidePhotoCount={missingBasics}
           hasSound={observationHasSound( observation )}
+          soundUri={soundUriFromObservation( observation )}
           opaque={!!currentUser && unsynced}
           isSmall
           iconicTaxonName={observation.taxon?.iconic_taxon_name}

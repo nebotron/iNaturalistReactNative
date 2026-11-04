@@ -1,3 +1,4 @@
+import AudioIdClipBadge from "components/AudioId/AudioIdClipBadge";
 import { Body3, DisplayTaxonName } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React from "react";
@@ -7,7 +8,7 @@ import type { UserPojo } from "realmModels/User";
 
 import ObsImagePreview from "./ObsImagePreview";
 import ObsUploadStatus from "./ObsUploadStatus";
-import { photoFromObservation } from "./util";
+import { photoFromObservation, soundUriFromObservation } from "./util";
 
 interface Props {
   currentUser: UserPojo | null;
@@ -38,14 +39,17 @@ const SmallGridObsItem = ( {
     <ObsImagePreview
       iconicTaxonName={taxon?.iconic_taxon_name}
       className="rounded-none"
+      fitImage
       source={photoUri
         ? { uri: photoUri }
         : undefined}
       // eslint-disable-next-line react-native/no-inline-styles
       style={{ width, height }}
+      soundUri={soundUriFromObservation( observation )}
       useShortGradient
       white
     >
+      <AudioIdClipBadge className="top-1 right-1" observation={observation} />
       <View className="absolute bottom-0 items-start p-2">
         <ObsUploadStatus
           classNameMargin="mb-1"

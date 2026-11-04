@@ -2,7 +2,7 @@ import { exists, unlink as rNFSUnlink } from "@dr.pogodin/react-native-fs";
 import { t } from "i18next";
 import { Alert, Linking } from "react-native";
 
-export const sleep = ( ms: number ) => new Promise( resolve => {
+export const sleep = ( ms: number ) => new Promise<void>( resolve => {
   setTimeout( resolve, ms );
 } );
 

@@ -1,16 +1,16 @@
-import type { UniversalSearchResultItem }
-  from "components/Explore/ExploreV2/hooks/useUniversalSearch";
-import type { TFunction } from "i18next";
+import type {
+  ApiProjectSummary,
+  ApiTaxon,
+  ApiUser,
+} from "api/types";
 import type { ExploreV2Subject } from "providers/ExploreV2Context";
-import { log } from "sharedHelpers/logger";
-import { generateTaxonPieces } from "sharedHelpers/taxon";
 
-const logger = log.extend( "universalSearchSubject" );
+export type UniversalSearchResultItem =
+  | { type: "taxon"; taxon: ApiTaxon }
+  | { type: "user"; user: ApiUser }
+  | { type: "project"; project: ApiProjectSummary };
 
-// Translation layer between the universal search API results
-// (UniversalSearchResultItem) and the ExploreV2 context's subject shape
-// (ExploreV2Subject), plus the inverse mapping from a subject to the text shown
-// in the search field.
+// Maps a taxon, user, or project to the ExploreV2 context's subject shape
 
 export const resultToSubject = ( result: UniversalSearchResultItem ): ExploreV2Subject => {
   switch ( result.type ) {
@@ -46,47 +46,5 @@ export const resultToSubject = ( result: UniversalSearchResultItem ): ExploreV2S
     default:
       throw new Error( `resultToSubject: Unknown explore 
         subject result type: ${( result as { type: string } ).type}` );
-  }
-};
-
-// Inverse of resultToSubject. Subjects that never came from a search
-// result (unobserved, unknown) have no result form and return null.
-export const subjectToResult = (
-  subject: ExploreV2Subject,
-): UniversalSearchResultItem | null => {
-  switch ( subject.type ) {
-    case "taxon":
-      return { type: "taxon", taxon: subject.taxon };
-    case "user":
-      return { type: "user", user: subject.user };
-    case "project":
-      return { type: "project", project: subject.project };
-    default:
-      return null;
-  }
-};
-
-export const subjectToText = (
-  subject: ExploreV2Subject,
-  commonNameIsPrimary: boolean,
-  t: TFunction,
-): string => {
-  switch ( subject.type ) {
-    case "user":
-      return subject.user.login;
-    case "project":
-      return subject.project.title;
-    case "taxon":
-      return ( commonNameIsPrimary && subject.taxon.preferred_common_name )
-        ? generateTaxonPieces( subject.taxon ).commonName ?? subject.taxon.name
-        : subject.taxon.name;
-    case "unobserved":
-      return t( "Species-I-havent-observed" );
-    case "unknown":
-      return t( "Unknown--taxon" );
-    default:
-      logger.error( `subjectToText: Unknown explore 
-        subject type: ${( subject as { type: string } ).type}` );
-      return "";
   }
 };
