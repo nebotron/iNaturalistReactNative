@@ -20,6 +20,7 @@ const { ImageCropper } = NativeModules as {
       uri?: string;
       inSecond?: number;
       atLocation?: number;
+      shifted?: number;
     } | null>;
   };
 };
@@ -47,8 +48,9 @@ export const libraryOriginalQuery = (
 
 // The library photo an observation photo was imported from, when the app never
 // recorded its uri or the one recorded is gone: the one taken at exactly the
-// observation's time and location, or the only one taken in that second
-// (see findLibraryOriginal in ImageCropper.m). Only for reading metadata — not saved as
+// observation's time and location, or the only one taken in that second, else
+// the one at its location taken a time-zone shift away (see findLibraryOriginal
+// in ImageCropper.m). Only for reading metadata — not saved as
 // originalDevicePhotoUri, which would let a wrong match be offered for deletion.
 const findLibraryOriginal = ( { uuid, deviceUri, ...options }: Query ): Promise<string | null> => {
   if ( Platform.OS !== "ios" || !ImageCropper?.findLibraryOriginal ) return Promise.resolve( null );
@@ -60,7 +62,7 @@ const findLibraryOriginal = ( { uuid, deviceUri, ...options }: Query ): Promise<
         ? "found"
         : "none"} recorded=${!!deviceUri} time=${!!options.time} `
         + `location=${options.latitude !== undefined} in_second=${match?.inSecond ?? "-"} `
-        + `at_location=${match?.atLocation ?? "-"}` );
+        + `at_location=${match?.atLocation ?? "-"} shifted=${match?.shifted ?? "-"}` );
       return match?.uri ?? null;
     } )
     .catch( error => {

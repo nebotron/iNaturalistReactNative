@@ -3476,7 +3476,8 @@ RCT_EXPORT_METHOD( deletePhotoAssets
 // recorded its ph:// uri: the one asset taken at the given time (to the
 // second) at the given location (to the metre), else the only asset taken in
 // that second when the observation has no location or it's within 100 m (an
-// edited or rounded observation location). Resolves its uri only when one
+// edited or rounded observation location), else the one at that location
+// taken a time-zone shift away (see below). Resolves its uri only when one
 // asset qualifies, with how many matched each, for the log.
 RCT_EXPORT_METHOD( findLibraryOriginal
                   : ( NSDictionary * )options resolver
@@ -3520,8 +3521,48 @@ RCT_EXPORT_METHOD( findLibraryOriginal
       && ( !place || !only.location || [only.location distanceFromLocation:place] <= 100 ) ) {
       pick = only;
     }
+    // Older photos often miss the exact second: their observation time was
+    // worked out in the account's or device's time zone rather than the one
+    // the photo was taken in (and photos from before cameras wrote
+    // OffsetTimeOriginal got a creationDate in whichever zone they were
+    // imported in), so the two differ by whole hours or a 15/30/45-minute zone
+    // step. Some observations also kept the time only to the minute. Look for
+    // an asset at such an offset, and accept one only when it is the single
+    // candidate at the observation's exact location (to the metre), or, for an
+    // observation without a location, the single candidate at all.
+    NSUInteger shiftedCount = 0;
+    if ( !pick ) {
+      static const NSTimeInterval maxShift = 14 * 3600;
+      static const double zoneStep = 15 * 60;
+      NSTimeInterval window = fmod( timeMs.doubleValue / 1000, 60 ) == 0 ? 60 : 1;
+      PHFetchOptions *wide = [PHFetchOptions new];
+      wide.predicate = [NSPredicate predicateWithFormat:
+        @"mediaType == %ld AND creationDate >= %@ AND creationDate < %@",
+        ( long )PHAssetMediaTypeImage, [time dateByAddingTimeInterval:-maxShift],
+        [time dateByAddingTimeInterval:maxShift + window]];
+      wide.includeAssetSourceTypes = fetch.includeAssetSourceTypes;
+      NSMutableArray<PHAsset *> *shifted = [NSMutableArray array];
+      NSMutableArray<PHAsset *> *shiftedAtLocation = [NSMutableArray array];
+      [[PHAsset fetchAssetsWithOptions:wide] enumerateObjectsUsingBlock:
+        ^( PHAsset *asset, NSUInteger idx, BOOL *stop ) {
+        NSTimeInterval offset = [asset.creationDate timeIntervalSinceDate:time];
+        double intoStep = fmod( fmod( offset, zoneStep ) + zoneStep, zoneStep );
+        if ( intoStep >= window ) return;
+        [shifted addObject:asset];
+        if ( place && asset.location && [asset.location distanceFromLocation:place] <= 1 ) {
+          [shiftedAtLocation addObject:asset];
+        }
+      }];
+      shiftedCount = shifted.count;
+      if ( place ) {
+        if ( shiftedAtLocation.count == 1 ) pick = shiftedAtLocation.firstObject;
+      } else if ( shifted.count == 1 ) {
+        pick = shifted.firstObject;
+      }
+    }
     NSMutableDictionary *result = [@{
       @"inSecond": @( assets.count ), @"atLocation": @( matches.count ),
+      @"shifted": @( shiftedCount ),
     } mutableCopy];
     if ( pick ) {
       result[@"uri"] = [@"ph://" stringByAppendingString:pick.localIdentifier];
