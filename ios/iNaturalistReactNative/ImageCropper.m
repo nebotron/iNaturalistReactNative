@@ -3590,10 +3590,16 @@ RCT_EXPORT_METHOD( saveCroppedAsset
       srcMeta = (__bridge_transfer NSDictionary *)CGImageSourceCopyPropertiesAtIndex( src, 0, nil );
       CFRelease( src );
     }
-    NSData *data = nil;
-    @autoreleasepool {
-      UIImage *image = [UIImage imageWithContentsOfFile:input];
-      if ( image ) {
+    // USB imports are often camera raws, whose decode needs the same lock and
+    // retries cropImage gives it; a bare decode that came back empty refused
+    // the save, which stopped the sweep at this photo on every run.
+    __block NSData *data = nil;
+    NSMutableArray<NSNumber *> *attemptMs     = [NSMutableArray array];
+    NSMutableArray<NSNumber *> *attemptFreeMB = [NSMutableArray array];
+    int attempts = withRawDecodeRetries( input, attemptMs, attemptFreeMB, ^BOOL {
+      @autoreleasepool {
+        UIImage *image = [UIImage imageWithContentsOfFile:input];
+        if ( !image ) return NO;
         CGFloat w = image.size.width * image.scale;
         CGFloat h = image.size.height * image.scale;
         CGRect rect = CGRectIntegral( CGRectMake(
@@ -3601,9 +3607,14 @@ RCT_EXPORT_METHOD( saveCroppedAsset
           [crop[@"w"] doubleValue] * w, [crop[@"h"] doubleValue] * h ) );
         data = croppedJpegData( image, CGRectIntersection( rect, CGRectMake( 0, 0, w, h ) ),
                                 srcMeta );
+        return data != nil;
       }
+    } );
+    if ( !data ) {
+      reject( @"CROP_FAILED", [NSString stringWithFormat:
+        @"Could not render cropped image (attempts=%d)", attempts], nil );
+      return;
     }
-    if ( !data ) { reject( @"CROP_FAILED", @"Could not render cropped image", nil ); return; }
     NSURL *rendered = [NSURL fileURLWithPath:[NSTemporaryDirectory()
       stringByAppendingPathComponent:[[NSUUID UUID].UUIDString stringByAppendingString:@".jpg"]]];
     if ( ![data writeToURL:rendered atomically:YES] ) {

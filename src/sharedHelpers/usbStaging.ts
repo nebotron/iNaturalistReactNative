@@ -109,7 +109,10 @@ export const listStagedPhotoNodes = async ( ): Promise<PhotoIdentifier["node"][]
 
 const { ImageCropper } = NativeModules as {
   ImageCropper?: {
-    saveCroppedAsset?: ( uri: string, crop: NormalizedCrop ) => Promise<{ uri: string }>;
+    saveCroppedAsset?: (
+      uri: string,
+      crop: NormalizedCrop,
+    ) => Promise<{ uri: string; cropped: boolean }>;
     addAssetsToAlbum?: ( phUris: string[], album: string ) => Promise<unknown>;
   };
 };
@@ -125,7 +128,9 @@ const isFullFrame = ( {
 // recovers the whole image. Resolves the new asset's ph:// URI.
 const saveStagedPhoto = async ( path: string, crop?: NormalizedCrop ) => {
   if ( crop && !isFullFrame( crop ) && Platform.OS === "ios" && ImageCropper?.saveCroppedAsset ) {
-    const { uri } = await ImageCropper.saveCroppedAsset( `file://${path}`, crop );
+    const { uri, cropped } = await ImageCropper.saveCroppedAsset( `file://${path}`, crop );
+    // The original still landed whole; only the edit over it didn't.
+    if ( !cropped ) logger.warn( `Saved a faved USB photo to Photos without its crop: ${uri}` );
     await ImageCropper.addAssetsToAlbum?.( [uri], SHARED_LIBRARY_ALBUM_TITLE );
     return uri;
   }
