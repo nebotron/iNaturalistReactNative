@@ -28,13 +28,6 @@ name: TestFlight iOS
 on:
   workflow_dispatch:
     inputs:
-      prebuilt_react_native:
-        description: >-
-          Link React Native's prebuilt XCFrameworks instead of compiling its
-          source. Removes ~45% of the archive's compiles, but swaps statically
-          linked React Native for two dynamic frameworks — experimental.
-        type: boolean
-        default: false
       runner:
         description: macOS runner image, for when macos-26 runners are unavailable.
         type: choice
@@ -108,7 +101,7 @@ jobs:
         path: |
           node_modules
           ios/Pods
-        key: deps-${{ runner.os }}-${{ inputs.prebuilt_react_native }}-${{ hashFiles( '.nvmrc', 'package-lock.json', 'patches/**', 'ios/Podfile.lock' ) }}
+        key: deps-${{ runner.os }}-${{ hashFiles( '.nvmrc', 'package-lock.json', 'patches/**', 'ios/Podfile.lock' ) }}
 
     - name: Install Dependencies
       if: steps.deps.outputs.cache-hit != 'true'
@@ -217,11 +210,6 @@ jobs:
     # for the installed Pods has to know which mode produced the tree.
     - name: Update Pods
       run: |
-        if [ "${{ inputs.prebuilt_react_native }}" = "true" ]; then
-          export RCT_USE_RN_DEP=1
-          export RCT_USE_PREBUILT_RNCORE=1
-          export RCT_SYMBOLICATE_PREBUILT_FRAMEWORKS=1
-        fi
         cd ios && pod install
 
     # altool and xcodebuild both look for the key in ~/.appstoreconnect
