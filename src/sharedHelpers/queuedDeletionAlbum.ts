@@ -5,7 +5,7 @@ import addPhotosToImportedAlbum, {
 } from "sharedHelpers/importedPhotoAlbum";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import classifyDevicePhotoUris from "sharedHelpers/unfavoritedDevicePhotos";
-import { sweepUsbStaging } from "sharedHelpers/usbStaging";
+import { libraryUriForDevicePhoto, sweepUsbStaging } from "sharedHelpers/usbStaging";
 import { readUserObservationsCache } from "sharedHelpers/userObservationsCache";
 
 // Keeps the "Imported to iNaturalist" album holding the photos on unfavorited
@@ -34,12 +34,15 @@ const syncNow = async ( ) => {
   void sweepUsbStaging( favorited, unfavorited, uris => {
     if ( !realm.isClosed ) recordUploadedDevicePhotoUris( realm, uris );
   }, crops );
-  const signature = JSON.stringify( [unfavorited.sort( ), favorited.sort( )] );
+  // Faved USB imports were saved to Photos as new assets; file those.
+  const toFile = unfavorited.map( libraryUriForDevicePhoto ).sort( );
+  const toUnfile = favorited.map( libraryUriForDevicePhoto ).sort( );
+  const signature = JSON.stringify( [toFile, toUnfile] );
   if ( signature === lastSynced ) return;
   lastSynced = signature;
   const ok = await enqueuePhotoLibraryWrite( async ( ) => {
-    const added = await addPhotosToImportedAlbum( unfavorited );
-    const removed = await removePhotosFromImportedAlbum( favorited );
+    const added = await addPhotosToImportedAlbum( toFile );
+    const removed = await removePhotosFromImportedAlbum( toUnfile );
     return !!added && removed;
   } );
   // Try again on the next change rather than believing a refused write.

@@ -34,12 +34,22 @@ const store = new MMKV( { id: "usb-staging" } );
 const getOffered = ( ): string[] => JSON.parse( store.getString( OFFERED_KEY ) ?? "[]" );
 const setOffered = ( names: string[] ) => store.set( OFFERED_KEY, JSON.stringify( names ) );
 const getClocks = ( ): Record<string, number> => JSON.parse( store.getString( CLOCK_KEY ) ?? "{}" );
+// Staged name → the ph:// URI it was saved to Photos as when faved. The
+// observation keeps the staged URI, so this is how an unfave finds the asset.
+const SAVED_KEY = "savedUris";
+const getSaved = ( ): Record<string, string> => JSON.parse( store.getString( SAVED_KEY ) ?? "{}" );
 
 export const stagedPathFor = ( relativePath: string ) => (
   `${usbStagingPath}/${Date.now( )}_${relativePath.split( "/" ).pop( )}`
 );
 
 const stagedNameFromUri = ( uri: string ) => uri.match( /\/usbStaging\/([^/]+)$/ )?.[1];
+
+// The Photos asset a staged photo URI was saved as, or the URI itself.
+export const libraryUriForDevicePhoto = ( uri: string ) => {
+  const name = stagedNameFromUri( uri );
+  return ( name && getSaved( )[name] ) || uri;
+};
 
 const readStaged = async ( ) => ( await readDir( usbStagingPath ).catch( ( ) => [] ) )
   .filter( item => item.isFile( ) && !item.name.endsWith( ".partial" ) );
@@ -153,7 +163,10 @@ export const sweepUsbStaging = async (
         const ok = await enqueuePhotoLibraryWrite(
           ( ) => saveStagedPhoto( item.path, cropsByName[item.name] ),
         ).then( uri => {
-          if ( uri ) savedUris.push( uri );
+          if ( uri ) {
+            savedUris.push( uri );
+            store.set( SAVED_KEY, JSON.stringify( { ...getSaved( ), [item.name]: uri } ) );
+          }
           return true;
         }, error => {
           logger.error( "Could not save a faved USB photo to Photos", error );
