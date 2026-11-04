@@ -379,16 +379,19 @@ const MyObservationsResults = ( ) => {
     const taxonIds: number[] = distinctTaxonObs
       .map( o => o.taxon?.id || 0 )
       .filter( Boolean );
-    const ancestorIds = distinctTaxonObs.map( o => {
+    // A Set, not an array: the leaf filter below asks "is this id an ancestor
+    // of anything?" once per distinct taxon, and Array.includes answers that by
+    // scanning, which made this quadratic on the JS thread.
+    const ancestorIds = new Set<number>( );
+    distinctTaxonObs.forEach( o => {
       // We're filtering b/c for taxa above species level, the taxon's own
       // ID is included in ancestor ids for some reason (this is a bug...
       // somewhere)
-      const taxonAncestorIds = (
-        o.taxon?.ancestor_ids || []
-      ).filter( id => Number( id ) !== Number( o.taxon?.id ) );
-      return taxonAncestorIds;
-    } ).flat( );
-    const leafTaxonIds = taxonIds.filter( taxonId => !ancestorIds.includes( taxonId ) );
+      ( o.taxon?.ancestor_ids || [] ).forEach( id => {
+        if ( Number( id ) !== Number( o.taxon?.id ) ) { ancestorIds.add( Number( id ) ); }
+      } );
+    } );
+    const leafTaxonIds = taxonIds.filter( taxonId => !ancestorIds.has( Number( taxonId ) ) );
 
     return {
       leafTaxonIds,
@@ -404,14 +407,34 @@ const MyObservationsResults = ( ) => {
     const localObs = realm.objects<RealmObservation>( "Observation" )
       .filtered( "taxon.id IN $0", leafTaxonIds );
 
-    return leafTaxonIds.map( id => {
-      const obs = localObs.filter( o => o.taxon.id === id );
-      return {
-        count: obs.length,
-        taxon: obs[0].taxon,
-        first_observed_on: earliestObservedOn( obs ),
-      };
+    // One pass over the observations, not one pass per taxon: re-scanning the
+    // whole collection for every leaf taxon read every object's taxon across
+    // the Realm boundary, so the cost was observations x taxa.
+    const countsByTaxonId = new Map<number, {
+      count: number;
+      taxon: RealmObservation["taxon"];
+      first_observed_on: string | null;
+    }>( );
+    localObs.forEach( o => {
+      const id = o.taxon?.id;
+      if ( id === undefined || id === null ) return;
+      const observedOn = earliestObservedOn( [o] );
+      const existing = countsByTaxonId.get( id );
+      if ( !existing ) {
+        countsByTaxonId.set( id, { count: 1, taxon: o.taxon, first_observed_on: observedOn } );
+        return;
+      }
+      existing.count += 1;
+      const earliest = existing.first_observed_on;
+      if ( observedOn && ( !earliest || observedOn < earliest ) ) {
+        existing.first_observed_on = observedOn;
+      }
     } );
+
+    // One entry per leaf taxon, in leafTaxonIds order
+    return leafTaxonIds
+      .map( id => countsByTaxonId.get( id ) )
+      .filter( ( entry ): entry is NonNullable<typeof entry> => !!entry );
   }, [currentUser, activeTab, realm, leafTaxonIds] );
 
   // Count sorts use species_counts. Date sorts use taxa_observed, which can sort by first
