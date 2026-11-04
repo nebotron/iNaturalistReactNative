@@ -232,13 +232,10 @@ const idList = ( value: unknown ) => String( value ?? "" )
   .filter( Boolean );
 
 // The birds a search's filters allow, or null when they allow none. Filters
-// eBird can't apply (photos, users, projects...) are ignored.
+// eBird can't apply (quality grade, photos, users...) are ignored.
 export const resolveEbirdTaxonFilter = async (
   params: Record<string, unknown>,
 ): Promise<EbirdTaxonFilter | null> => {
-  // eBird sightings are treated as research grade
-  const qualityGrades = listOf( params.quality_grade );
-  if ( qualityGrades.length && !qualityGrades.includes( "research" ) ) return null;
   const includeIds = idList( params.taxon_id );
   const excludeIds = idList( params.without_taxon_id );
   const iconicTaxa = params.iconic_taxa as string[] | undefined;

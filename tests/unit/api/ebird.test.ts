@@ -175,14 +175,9 @@ describe( "resolveEbirdTaxonFilter", ( ) => {
   } );
 
   it( "ignores filters eBird can't apply", async ( ) => {
-    expect( await resolveEbirdTaxonFilter( { photos: true, user_id: 1, project_id: 2 } ) )
-      .toEqual( { exclude: [] } );
-  } );
-
-  it( "skips eBird when only non-research grades are allowed", async ( ) => {
-    expect( await resolveEbirdTaxonFilter( { quality_grade: ["needs_id"] } ) ).toBeNull( );
-    expect( await resolveEbirdTaxonFilter( { photos: false, quality_grade: ["research"] } ) )
-      .toEqual( { exclude: [] } );
+    expect( await resolveEbirdTaxonFilter( {
+      photos: true, user_id: 1, project_id: 2, quality_grade: ["needs_id"],
+    } ) ).toEqual( { exclude: [] } );
   } );
 } );
 
