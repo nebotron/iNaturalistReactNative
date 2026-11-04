@@ -1723,6 +1723,39 @@ RCT_EXPORT_METHOD( removeAssetsFromAlbum
   } );
 }
 
+// Of these ph:// URIs, the ones whose asset is still in the library, so a
+// photo deleted while its observation was unfaved can be put back when it is
+// faved again. Rejects unless access is full: under limited access the fetch
+// leaves out every photo the user didn't pick, which would read as deleted.
+RCT_EXPORT_METHOD( existingAssets
+                  : ( NSArray<NSString *> * )phUris resolver
+                  : ( RCTPromiseResolveBlock )resolve rejecter
+                  : ( RCTPromiseRejectBlock )reject )
+{
+  PHAuthorizationStatus status;
+  if ( @available( iOS 14.0, * ) ) {
+    status = [PHPhotoLibrary authorizationStatusForAccessLevel:PHAccessLevelReadWrite];
+  } else {
+    status = [PHPhotoLibrary authorizationStatus];
+  }
+  if ( status != PHAuthorizationStatusAuthorized ) {
+    reject( @"PHOTOS_ACCESS_NOT_FULL",
+      [NSString stringWithFormat:@"photo library access is %ld, not full", ( long )status], nil );
+    return;
+  }
+  NSMutableArray<NSString *> *ids = [NSMutableArray array];
+  for ( NSString *u in ( phUris ?: @[] ) ) {
+    [ids addObject:( [u hasPrefix:@"ph://"] ? [u substringFromIndex:5] : u )];
+  }
+  NSMutableArray<NSString *> *existing = [NSMutableArray array];
+  if ( ids.count > 0 ) {
+    for ( PHAsset *asset in [PHAsset fetchAssetsWithLocalIdentifiers:ids options:nil] ) {
+      [existing addObject:[@"ph://" stringByAppendingString:asset.localIdentifier]];
+    }
+  }
+  resolve( existing );
+}
+
 // Matches the ph:// branch's highQualityDecode threshold in createThumbnail:
 // below this, a request is a grid tile that wants speed; at or above it, only
 // the Group Photos crop overlay is asking, and it wants real detail.

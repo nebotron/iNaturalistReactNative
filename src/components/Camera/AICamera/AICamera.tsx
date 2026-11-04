@@ -1,7 +1,6 @@
 import { useNavigation } from "@react-navigation/native";
 import classnames from "classnames";
 import FadeInOutView from "components/Camera/FadeInOutView";
-import type { Camera } from "components/Camera/helpers/visionCameraWrapper";
 import { useCameraDevices } from "components/Camera/helpers/visionCameraWrapper";
 import useRotation from "components/Camera/hooks/useRotation";
 import useZoom from "components/Camera/hooks/useZoom";
@@ -14,7 +13,9 @@ import React, { useCallback, useEffect, useState } from "react";
 import DeviceInfo from "react-native-device-info";
 import LinearGradient from "react-native-linear-gradient";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { CameraDevice, TakePhotoOptions } from "react-native-vision-camera";
+import type {
+  CameraDevice, CameraPhotoOutput, CameraRef, CapturePhotoSettings,
+} from "react-native-vision-camera";
 import { VolumeManager } from "react-native-volume-manager";
 import convertScoreToConfidence from "sharedHelpers/convertScores";
 import { completeSentinelFile, logStage } from "sharedHelpers/sentinelFiles";
@@ -31,9 +32,7 @@ import colors from "styles/tailwindColors";
 import type { SavePhotoOptions } from "../CameraContainer";
 import {
   handleCameraError,
-  handleCaptureError,
   handleClassifierError,
-  handleDeviceNotSupported,
   handleLog,
 } from "../helpers";
 import AICameraButtons from "./AICameraButtons";
@@ -65,23 +64,29 @@ const getResultContainerClassName = ( insetsTop: number ) => {
 // };
 
 interface Props {
-  camera: RefObject<Camera | null>;
+  camera: RefObject<CameraRef | null>;
   device: CameraDevice;
   flipCamera: ( ) => void;
   isLandscapeMode: boolean;
   toggleFlash: ( ) => void;
   takingPhoto: boolean;
-  takePhotoAndStoreUri: ( options: SavePhotoOptions ) => Promise<string>;
-  takePhotoOptions: TakePhotoOptions;
+  takePhotoAndStoreUri: ( options: SavePhotoOptions ) => Promise<string | undefined>;
+  takePhotoOptions: CapturePhotoSettings;
   userLocation: UserLocation | null;
   hasLocationPermissions: boolean;
   requestLocationPermissions: () => void;
+  photoOutput: CameraPhotoOutput;
 }
 
-// The single physical camera on this side that can focus closest
-const getMacroDevice = ( devices: CameraDevice[], position: CameraDevice["position"] ) => devices
-  .filter( d => d.position === position && d.physicalDevices.length === 1 )
-  .sort( ( a, b ) => a.minFocusDistance - b.minFocusDistance )[0];
+// The physical camera on this side that can focus closest. VisionCamera 5 no
+// longer reports minimum focus distance, but on phones with a macro mode it's
+// the ultra-wide lens.
+const getMacroDevice = (
+  devices: CameraDevice[],
+  position: CameraDevice["position"] | undefined,
+) => devices.find( d => d.position === position
+  && !d.isVirtualDevice
+  && d.type === "ultra-wide-angle" );
 
 const AICamera = ( {
   camera,
@@ -95,6 +100,7 @@ const AICamera = ( {
   userLocation,
   hasLocationPermissions,
   requestLocationPermissions,
+  photoOutput,
 }: Props ) => {
   const navigation = useNavigation<NoBottomTabStackScreenProps<"Camera">["navigation"]>( );
   const sentinelFileName = useStore( state => state.sentinelFileName );
@@ -112,13 +118,13 @@ const AICamera = ( {
   const { isDebug } = useDebugMode( );
   const { isDefaultMode } = useLayoutPrefs( );
   const {
-    animatedProps,
     handleZoomButtonPress,
     panToZoom,
     pinchToZoom,
     showZoomButton,
     zoomTextValue,
     resetZoom,
+    zoom,
   } = useZoom( device );
   const {
     rotatableAnimatedStyle,
@@ -169,7 +175,6 @@ const AICamera = ( {
   };
 
   const onFlipCamera = () => {
-    resetZoom( );
     flipCamera( );
   };
 
@@ -188,13 +193,16 @@ const AICamera = ( {
       : null;
     setAICameraSuggestion( visionResult );
 
-    await takePhotoAndStoreUri( {
-      replaceExisting: true,
-      inactivateCallback: () => setInactive( true ),
-      navigateImmediately: true,
-      visionResult,
-    } );
-    setHasTakenPhoto( false );
+    try {
+      await takePhotoAndStoreUri( {
+        replaceExisting: true,
+        inactivateCallback: () => setInactive( true ),
+        navigateImmediately: true,
+        visionResult,
+      } );
+    } finally {
+      setHasTakenPhoto( false );
+    }
   }, [
     showPrediction,
     setAICameraSuggestion,
@@ -250,19 +258,18 @@ const AICamera = ( {
             cameraRef={camera}
             device={device}
             onTaxaDetected={handleTaxaDetected}
-            onClassifierError={handleClassifierError}
-            onDeviceNotSupported={handleDeviceNotSupported}
-            onCaptureError={handleCaptureError}
             onCameraError={handleCameraError}
+            onClassifierError={handleClassifierError}
             onLog={handleLog}
-            animatedProps={animatedProps}
             panToZoom={panToZoom}
+            photoOutput={photoOutput}
             pinchToZoom={pinchToZoom}
             takingPhoto={takingPhoto}
             inactive={inactive}
             resetCameraOnFocus={resetCameraOnFocus}
             userLocation={userLocation}
             useLocation={useLocation}
+            zoom={zoom}
             macroMode={macroMode}
           />
         </View>

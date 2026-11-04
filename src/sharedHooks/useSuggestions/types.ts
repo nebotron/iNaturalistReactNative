@@ -52,7 +52,7 @@ export interface UseSuggestionsResult {
     commonAncestor?: UseSuggestionsOnlineSuggestion;
   };
   timedOut: boolean;
-  resetTimeout: () => void;
+  resetTimeout: ( options?: { isRetry?: boolean } ) => void;
 }
 
 type MaybeLatLng = { lat: number; lng: number } | { lat: undefined; lng: undefined };

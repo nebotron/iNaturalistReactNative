@@ -31,6 +31,7 @@ import {
   useCurrentUser,
   useTranslation,
 } from "sharedHooks";
+import useCurrentUserSpeciesCount from "sharedHooks/useCurrentUserSpeciesCount";
 import useNavigateToAccountSettings from "sharedHooks/useNavigateToAccountSettings";
 import useNavigateToExplore from "sharedHooks/useNavigateToExplore";
 import colors from "styles/tailwindColors";
@@ -87,6 +88,9 @@ const UserProfile = ( ) => {
   );
 
   const isCurrentUser = !!currentUser && currentUser?.login === user?.login;
+  // On your own profile, we show the live species count so it matches My Observations.
+  // Other profiles show the user record's cached count.
+  const currentUserSpeciesCount = useCurrentUserSpeciesCount( { enabled: isCurrentUser } );
   const navigateToAccountSettings = useNavigateToAccountSettings( { onFinish: refetchUser } );
 
   const headerRight = useCallback(
@@ -167,7 +171,9 @@ const UserProfile = ( ) => {
         )}
       </View>
       <OverviewCounts
-        counts={user}
+        counts={isCurrentUser && typeof currentUserSpeciesCount === "number"
+          ? { ...user, species_count: currentUserSpeciesCount }
+          : user}
         onObservationPressed={onObservationPressed}
         onSpeciesPressed={onSpeciesPressed}
         onIdentificationsPressed={onIdentificationsPressed}

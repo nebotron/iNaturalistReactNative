@@ -17,7 +17,6 @@ import Project from "./Project";
 import ProjectObservation from "./ProjectObservation";
 import ProjectObservationField from "./ProjectObservationField";
 import ProjectObservationRule from "./ProjectObservationRule";
-import ProjectRulePreference from "./ProjectRulePreference";
 import QueueItem from "./QueueItem";
 import Sound from "./Sound";
 import Taxon from "./Taxon";
@@ -44,7 +43,6 @@ export default {
     ProjectObservation,
     ProjectObservationField,
     ProjectObservationRule,
-    ProjectRulePreference,
     QueueItem,
     Sound,
     Taxon,
@@ -53,7 +51,7 @@ export default {
     User,
     Vote,
   ],
-  schemaVersion: 81,
+  schemaVersion: 82,
   path: `${DocumentDirectoryPath}/db.realm`,
   // https://github.com/realm/realm-js/pull/6076 embedded constraints
   migrationOptions: {

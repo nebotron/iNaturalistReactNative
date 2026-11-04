@@ -1,5 +1,6 @@
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
-import { sweepUsbStaging } from "sharedHelpers/usbStaging";
+import { usbStagingPath } from "appConstants/paths";
+import { readableUriForDevicePhoto, sweepUsbStaging } from "sharedHelpers/usbStaging";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 let mockFiles = [];
@@ -76,5 +77,23 @@ describe( "sweepUsbStaging", ( ) => {
     delete NativeModules.ImageCropper;
 
     expect( saveCroppedAsset ).toHaveBeenCalledWith( "file:///docs/usbStaging/1_CROPPED.JPG", crop );
+  } );
+} );
+
+describe( "readableUriForDevicePhoto", ( ) => {
+  it( "reads a faved photo from the Photos asset it was saved as", async ( ) => {
+    CameraRoll.saveAsset.mockResolvedValueOnce( { node: { id: "SAVED" } } );
+    mockFiles = ["2_SAVED.HIF"];
+    await sweepUsbStaging( [uri( "2_SAVED.HIF" )], [] );
+    expect( readableUriForDevicePhoto( uri( "2_SAVED.HIF" ) ) ).toBe( "ph://SAVED" );
+  } );
+
+  it( "reads a still-staged photo from the current app container", ( ) => {
+    expect( readableUriForDevicePhoto( uri( "3_STAGED.HIF" ) ) )
+      .toBe( `file://${usbStagingPath}/3_STAGED.HIF` );
+  } );
+
+  it( "leaves other device photos alone", ( ) => {
+    expect( readableUriForDevicePhoto( "ph://ASSET" ) ).toBe( "ph://ASSET" );
   } );
 } );

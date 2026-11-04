@@ -388,7 +388,9 @@ const SuggestionsContainer = ( ) => {
       return;
     }
     setPreferOfflineModel( nextUseOfflineModel );
-    resetTimeout( );
+    // Switching to the online model is an explicit request for online
+    // suggestions, so give it the longer retry timeout
+    resetTimeout( { isRetry: !nextUseOfflineModel } );
     dispatch( {
       type: "SWITCH_SUGGESTIONS_MODEL",
       useOfflineModel: nextUseOfflineModel,

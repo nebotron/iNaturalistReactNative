@@ -1,9 +1,11 @@
+import { exists } from "@dr.pogodin/react-native-fs";
 import type { ExifTags } from "@lodev09/react-native-exify";
 import * as Exify from "@lodev09/react-native-exify";
 import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import exifUri from "sharedHelpers/exifUri";
 import { readFocusDistanceFromFile } from "sharedHelpers/focusDistance";
 import { log } from "sharedHelpers/logger";
+import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 
 const logger = log.extend( "photoCameraInfo" );
 
@@ -135,17 +137,24 @@ const readCanonFocusDistance = async ( uri: string, model: string ): Promise<num
 
 const cache = new Map<string, PhotoCameraInfo | null>( );
 
+const isGone = async ( uri: string, error: unknown ): Promise<boolean> => {
+  if ( /Could not retrieve asset/.test( String( ( error as Error )?.message ) ) ) return true;
+  if ( !uri.startsWith( "/" ) && !uri.startsWith( "file://" ) ) return false;
+  return !( await exists( stripFilePrefix( uri ) ).catch( ( ) => true ) );
+};
+
 export const readCameraInfo = async ( uri: string ): Promise<PhotoCameraInfo | null> => {
   if ( cache.has( uri ) ) return cache.get( uri ) ?? null;
   let tags: ExifTags | null = null;
   try {
     tags = await Exify.read( exifUri( uri ) );
   } catch ( error ) {
-    // A library original the user deleted is expected, not worth a warning.
-    if ( !/Could not retrieve asset/.test( String( ( error as Error )?.message ) ) ) {
+    // A library original the user deleted, or a file since removed (like a
+    // staged USB photo that expired), is expected, not worth a warning.
+    if ( !( await isGone( uri, error ) ) ) {
       logger.warn( "photo_camera_info_unreadable", error );
     }
-    // A deleted library original stays deleted; don't read and warn again.
+    // A deleted original stays deleted; don't read and warn again.
     cache.set( uri, null );
     return null;
   }

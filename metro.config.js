@@ -13,6 +13,7 @@ const {
   withRozeniteRequireProfiler,
 } = require( "@rozenite/require-profiler-plugin/metro" );
 const { withNativeWind } = require( "nativewind/metro" );
+const { bundleModeMetroConfig } = require( "react-native-worklets/bundleMode" );
 const writeAppCommit = require( "./scripts/writeAppCommit" );
 
 const {
@@ -44,7 +45,7 @@ const config = {
   watchFolders: [...localPackagePaths],
 };
 
-const mergedConfig = mergeConfig( getDefaultConfig( __dirname ), config );
+const mergedConfig = mergeConfig( getDefaultConfig( __dirname ), bundleModeMetroConfig, config );
 
 // Stamp the git commit at config load, so the gitignored module exists before
 // Metro resolves anything (e.g. a CI build that skipped `npm ci`).

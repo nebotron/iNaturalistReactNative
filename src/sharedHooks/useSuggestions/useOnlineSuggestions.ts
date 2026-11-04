@@ -29,7 +29,10 @@ import { predictOffline } from "./useOfflineSuggestions";
 
 const logger = log.extend( "useOnlineSuggestions" );
 
-const SCORE_IMAGE_TIMEOUT = getTunable( "onlineSuggestionsTimeoutSeconds" ) * 1000;
+// Keep the first request short so we fall back to offline suggestions quickly,
+// but if the user explicitly retries, allow more time to get online suggestions
+export const INITIAL_SCORE_IMAGE_TIMEOUT = getTunable( "onlineSuggestionsTimeoutSeconds" ) * 1000;
+export const RETRY_SCORE_IMAGE_TIMEOUT = INITIAL_SCORE_IMAGE_TIMEOUT * 2;
 
 const { useRealm } = RealmContext;
 
@@ -49,7 +52,7 @@ interface UseOnlineSuggestionsResponse {
   };
   timedOut: boolean;
   error: Error | null;
-  resetTimeout: () => void;
+  resetTimeout: ( options?: { isRetry?: boolean } ) => void;
   refetch: () => void;
 }
 
@@ -96,6 +99,7 @@ const useOnlineSuggestions = (
   } = options;
 
   const [timedOut, setTimedOut] = useState( false );
+  const [timeoutMs, setTimeoutMs] = useState( INITIAL_SCORE_IMAGE_TIMEOUT );
   const { isConnected } = useNetInfo( );
   const currentUser = useCurrentUser();
   // Use locale in case there is no user session
@@ -194,19 +198,22 @@ const useOnlineSuggestions = (
     }
     const timer = setTimeout( ( ) => {
       if ( onlineSuggestions === undefined ) {
-        logger.info( `score_image soft_timeout ms=${SCORE_IMAGE_TIMEOUT}, showing offline` );
+        logger.info( `score_image soft_timeout ms=${timeoutMs}, showing offline` );
         onFetchError( { isOnline: true } );
         setTimedOut( true );
       }
-    }, SCORE_IMAGE_TIMEOUT );
+    }, timeoutMs );
 
     return ( ) => {
       clearTimeout( timer );
     };
-  }, [fetchStatus, onlineSuggestions, onFetchError] );
+  }, [fetchStatus, onlineSuggestions, onFetchError, timeoutMs] );
 
-  const resetTimeout = useCallback( ( ) => {
+  const resetTimeout = useCallback( ( { isRetry = false }: { isRetry?: boolean } = {} ) => {
     setTimedOut( false );
+    setTimeoutMs( isRetry
+      ? RETRY_SCORE_IMAGE_TIMEOUT
+      : INITIAL_SCORE_IMAGE_TIMEOUT );
   }, [] );
 
   useEffect( () => {

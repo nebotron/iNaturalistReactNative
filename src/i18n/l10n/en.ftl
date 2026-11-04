@@ -300,6 +300,7 @@ CHOOSE-A-USERNAME = CHOOSE A USERNAME
 Choose-photos = Choose Photos
 # Label for button that chooses a folder on a USB drive for photo import
 CHOOSE-USB-FOLDER = CHOOSE USB FOLDER
+# Accessibility hint for a button that chooses a taxon
 Chooses-taxon = Chooses taxon
 # Accessibility hint for button that chooses the best suggestion among a list of suggested
 # taxa for an identification

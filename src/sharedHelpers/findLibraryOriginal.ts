@@ -3,6 +3,7 @@ import type { RealmObservation, RealmObservationPhotoPojo } from "realmModels/ty
 import { log } from "sharedHelpers/logger";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
 import { readCameraInfo } from "sharedHelpers/photoCameraInfo";
+import { readableUriForDevicePhoto } from "sharedHelpers/usbStaging";
 
 const logger = log.extend( "findLibraryOriginal" );
 
@@ -37,7 +38,9 @@ export const libraryOriginalQuery = (
   const time = Date.parse( observation.time_observed_at ?? observation.observed_on_string ?? "" );
   return {
     uuid: obsPhoto.uuid,
-    deviceUri: obsPhoto.originalDevicePhotoUri ?? null,
+    deviceUri: obsPhoto.originalDevicePhotoUri
+      ? readableUriForDevicePhoto( obsPhoto.originalDevicePhotoUri )
+      : null,
     time: Number.isFinite( time )
       ? time
       : undefined,

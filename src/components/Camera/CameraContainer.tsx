@@ -1,8 +1,8 @@
 import { useNavigation, useRoute } from "@react-navigation/native";
-import type { Camera } from "components/Camera/helpers/visionCameraWrapper";
 import {
   useCameraDevice,
   useCameraDevices,
+  usePhotoOutput,
 } from "components/Camera/helpers/visionCameraWrapper";
 import { ActivityIndicator } from "components/SharedComponents";
 import { View } from "components/styledComponents";
@@ -14,9 +14,8 @@ import React, {
   useState,
 } from "react";
 import { Alert, StatusBar } from "react-native";
-import type {
-  TakePhotoOptions,
-} from "react-native-vision-camera";
+import type { CameraRef, CapturePhotoSettings } from "react-native-vision-camera";
+import { CommonResolutions } from "react-native-vision-camera";
 import { startPositionWarmup } from "sharedHelpers/accuratePositionWatcher";
 import fetchAccurateUserLocation from "sharedHelpers/fetchAccurateUserLocation";
 import { log } from "sharedHelpers/logger";
@@ -29,6 +28,7 @@ import { FIREBASE_TRACE_ATTRIBUTES, FIREBASE_TRACES } from "stores/createFirebas
 import useStore from "stores/useStore";
 
 import CameraWithDevice from "./CameraWithDevice";
+import { handleCameraError } from "./helpers";
 import savePhotoToDocumentsDirectory from "./helpers/savePhotoToDocumentsDirectory";
 import usePrepareStoreAndNavigate from "./hooks/usePrepareStoreAndNavigate";
 
@@ -108,9 +108,9 @@ const CameraContainer = ( ) => {
   // https://react-native-vision-camera.com/docs/guides/devices#selecting-multi-cams
   const device = useCameraDevice( cameraPosition, {
     physicalDevices: [
-      "ultra-wide-angle-camera",
-      "wide-angle-camera",
-      "telephoto-camera",
+      "ultra-wide-angle",
+      "wide-angle",
+      "telephoto",
     ],
   } );
   const devices = useCameraDevices( );
@@ -141,18 +141,20 @@ const CameraContainer = ( ) => {
     // level and scared away wildlife. So maybe better to just disable it.
     enableShutterSound: false,
     ...( hasFlash && {
-      flash: isAICamera
+      flashMode: isAICamera
         ? aiCameraSettings.flash
         : "off",
     } as const ),
   } as const;
-  const [takePhotoOptions, setTakePhotoOptions] = useState<TakePhotoOptions>( initialPhotoOptions );
+  const [takePhotoOptions, setTakePhotoOptions] = useState<CapturePhotoSettings>(
+    initialPhotoOptions,
+  );
   const [takingPhoto, setTakingPhoto] = useState( false );
   const [confirmPhotosInProgress, setconfirmPhotosInProgress] = useState( false );
   const confirmPhotosInProgressRef = useRef( false );
   const addEvidence = params?.addEvidence;
 
-  const camera = useRef<Camera>( null );
+  const camera = useRef<CameraRef>( null );
 
   useEffect( () => {
     const generateSentinelFile = async ( ) => {
@@ -217,11 +219,11 @@ const CameraContainer = ( ) => {
   ] );
 
   const toggleFlash = ( ) => {
-    const flash = takePhotoOptions.flash === "on"
+    const flashMode = takePhotoOptions.flashMode === "on"
       ? "off"
       : "on";
-    setTakePhotoOptions( { ...takePhotoOptions, flash } );
-    if ( isAICamera ) setAICameraSetting( "flash", flash );
+    setTakePhotoOptions( { ...takePhotoOptions, flashMode } );
+    if ( isAICamera ) setAICameraSetting( "flash", flashMode );
   };
 
   const updateTakePhotoStore = async (
@@ -255,26 +257,48 @@ const CameraContainer = ( ) => {
     return newCameraState;
   };
 
-  const takePhotoAndStoreUri = async ( options: SavePhotoOptions ) => {
+  const targetResolution = cameraType === "AI"
+    ? CommonResolutions.HIGHEST_16_9
+    : CommonResolutions.HIGHEST_4_3;
+  const photoOutput = usePhotoOutput( {
+    qualityPrioritization: "quality",
+    targetResolution,
+  } );
+  const takePhotoAndStoreUri = async (
+    options: SavePhotoOptions,
+  ): Promise<string | undefined> => {
     setTakingPhoto( true );
-    // Set the camera to inactive immediately after taking the photo,
-    // this does leave a short period of time where the camera preview is still active
-    // after taking the photo which we might to revisit if it doesn't look good.
-    const cameraPhoto = await camera?.current?.takePhoto( takePhotoOptions );
-    if ( options?.inactivateCallback ) options.inactivateCallback();
-    await logStageIfAICamera( "take_photo_complete" );
-    if ( !cameraPhoto ) {
+    let storedUri: string | undefined;
+
+    try {
+      // Set the camera to inactive immediately after taking the photo,
+      const cameraPhoto = await photoOutput.capturePhotoToFile( takePhotoOptions, {
+        onDidCapturePhoto: ( ) => {
+          if ( options?.inactivateCallback ) options.inactivateCallback();
+        },
+      } );
+      await logStageIfAICamera( "take_photo_complete" );
+      if ( !cameraPhoto ) {
+        throw new Error( "Failed to take photo: missing camera" );
+      }
+      const uri = await savePhotoToDocumentsDirectory( cameraPhoto );
+      const newPhotoState = await updateTakePhotoStore( uri, options );
+      if ( options?.navigateImmediately ) {
+        await handleNavigation( newPhotoState, options?.visionResult );
+      }
+      setNewPhotoUris( [...newPhotoUris, uri] );
+      storedUri = uri;
+    } catch ( captureError ) {
+      const error = captureError instanceof Error
+        ? captureError
+        : new Error( String( captureError ) );
       await logStageIfAICamera( "take_photo_error" );
-      throw new Error( "Failed to take photo: missing camera" );
+      handleCameraError( error );
+    } finally {
+      setTakingPhoto( false );
     }
-    const uri = await savePhotoToDocumentsDirectory( cameraPhoto );
-    const newPhotoState = await updateTakePhotoStore( uri, options );
-    if ( cameraType !== "AI" ) { setTakingPhoto( false ); }
-    if ( options?.navigateImmediately ) {
-      await handleNavigation( newPhotoState, options?.visionResult );
-    }
-    setNewPhotoUris( [...newPhotoUris, uri] );
-    return uri;
+
+    return storedUri;
   };
 
   useEffect( () => {
@@ -334,6 +358,7 @@ const CameraContainer = ( ) => {
         flipCamera={flipCamera}
         handleCheckmarkPress={handleNavigation}
         confirmPhotosInProgress={confirmPhotosInProgress}
+        photoOutput={photoOutput}
         toggleFlash={toggleFlash}
         takingPhoto={takingPhoto}
         takePhotoAndStoreUri={takePhotoAndStoreUri}
