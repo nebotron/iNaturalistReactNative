@@ -11,7 +11,9 @@ import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
 import React, { useCallback, useEffect, useMemo } from "react";
 import type { ViewProps } from "react-native";
-import { AppState, Linking, Modal, requireNativeComponent } from "react-native";
+import {
+  AppState, Linking, Modal, requireNativeComponent,
+} from "react-native";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import type { RealmTaxon } from "realmModels/types";
