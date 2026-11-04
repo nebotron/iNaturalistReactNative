@@ -15,6 +15,7 @@ import { AppState, Linking, Modal, requireNativeComponent } from "react-native";
 import { UpdateMode } from "realm";
 import Taxon from "realmModels/Taxon";
 import type { RealmTaxon } from "realmModels/types";
+import { formatISOTimestamp } from "sharedHelpers/dateAndTime";
 import { holdKeepAwake, releaseKeepAwake } from "sharedHelpers/keepAwake";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 import { getTunable } from "sharedHelpers/tunableParams";
@@ -151,7 +152,7 @@ const TaxonThumb = ( { url, onPress, children }: {
     {url
       ? <CachedImage source={{ uri: url }} className="w-full h-full" />
       : <IconicTaxonIcon imageClassName="w-full h-full" iconicTaxonName="Aves" />}
-    <View pointerEvents="none" className="absolute top-[5px] right-[5px] flex-row">
+    <View pointerEvents="none" className="absolute bottom-[5px] right-[5px] flex-row">
       {children}
     </View>
   </Pressable>
@@ -161,6 +162,22 @@ const TaxonThumb = ( { url, onPress, children }: {
 const ThumbBadge = ( { icon, className }: { icon: string; className: string } ) => (
   <View className={`ml-1 rounded-full p-[3px] border-2 border-white ${className}`}>
     <INatIcon name={icon} color={colors.white} size={12} />
+  </View>
+);
+
+// Explains the badges on species photos
+const BadgeKey = ( { showStar }: { showStar: boolean } ) => (
+  <View className="mb-3">
+    <View className="flex-row items-center">
+      <ThumbBadge icon="plus-bold" className="bg-inatGreen" />
+      <Body3 className="ml-2 flex-1">Has a clip you can add to an observation</Body3>
+    </View>
+    {showStar && (
+      <View className="flex-row items-center mt-1">
+        <ThumbBadge icon="star" className="bg-warningYellow" />
+        <Body3 className="ml-2 flex-1">You haven&apos;t observed this species yet</Body3>
+      </View>
+    )}
   </View>
 );
 
@@ -246,7 +263,7 @@ const AudioId = ( ) => {
   } );
 
   // Species being heard right now are highlighted in yellow.
-  const row = ( sp: AudioIdSpecies ) => (
+  const row = ( sp: AudioIdSpecies, lastHeard: number ) => (
     <Pressable
       key={sp.taxonId}
       accessibilityRole="button"
@@ -269,10 +286,15 @@ const AudioId = ( ) => {
       <View
         className="flex-1 flex-row items-center self-stretch ml-3 pr-2 border-b border-lightGray"
       >
-        <Body1 numberOfLines={1} className="flex-1">
-          {/* The model's English name until the localized one loads */}
-          {taxonExtras.get( sp.taxonId )?.commonName || sp.commonName}
-        </Body1>
+        <View className="flex-1">
+          <Body1 numberOfLines={1}>
+            {/* The model's English name until the localized one loads */}
+            {taxonExtras.get( sp.taxonId )?.commonName || sp.commonName}
+          </Body1>
+          <Body3 className="mt-1 text-darkGrayDisabled">
+            {`Last heard ${formatISOTimestamp( lastHeard )}`}
+          </Body3>
+        </View>
       </View>
     </Pressable>
   );
@@ -281,6 +303,7 @@ const AudioId = ( ) => {
     // Claiming the touch when dimmed keeps it from also pressing anything
     <View className="flex-1" onStartShouldSetResponderCapture={noteActivity}>
       <ScrollView className="bg-white h-full px-5 pt-4">
+        <BadgeKey showStar={!!currentUser} />
         <Body3 className="mb-3">
           {"Identifies "}
           {setup
@@ -325,7 +348,7 @@ const AudioId = ( ) => {
 
         <View className="h-6" />
         {heardList.length === 0 && <Body3 className="py-2">Nothing yet.</Body3>}
-        {heardList.map( h => row( h.sp ) )}
+        {heardList.map( h => row( h.sp, h.lastHeard ) )}
 
         <View className="h-20" />
       </ScrollView>
