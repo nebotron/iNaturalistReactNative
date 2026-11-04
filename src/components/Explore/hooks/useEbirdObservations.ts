@@ -3,7 +3,6 @@ import type { EbirdInatObservation, EbirdTaxonFilter } from "api/ebird";
 import {
   datesExceedEbirdWindow,
   EBIRD_DATE_PARAMS,
-  EBIRD_EXCLUSIVE_PARAMS,
   EBIRD_MAX_DIST_KM,
   EBIRD_MAX_RESULTS,
   EbirdRateLimitError,
@@ -73,7 +72,6 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
     "without_taxon_id",
     "iconic_taxa",
     "quality_grade",
-    ...EBIRD_EXCLUSIVE_PARAMS,
   ] );
   const dateParams = pick( params, EBIRD_DATE_PARAMS );
   const { data: taxonFilter, error: taxonFilterError } = useQuery( {
@@ -141,7 +139,7 @@ const useEbirdObservations = ( params: Record<string, unknown>, enabled = true )
     [data],
   );
 
-  // With eBird alone, say why filters it can't match leave nothing
+  // With eBird alone, say why taxon or quality filters leave nothing
   if ( active && source === "ebird" && taxonFilter === null ) {
     return {
       error: false,

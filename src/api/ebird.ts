@@ -21,22 +21,6 @@ const RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const RATE_LIMIT_MAX_REQUESTS = 20;
 
 const AVES_ID = 3;
-// eBird sightings can't match these, so skip eBird rather than show results
-// that ignore them
-export const EBIRD_EXCLUSIVE_PARAMS = [
-  "user_id",
-  "project_id",
-  "ident_user_id",
-  "photos",
-  "sounds",
-  "captive",
-  "popular",
-  "reviewed",
-  "photo_license",
-  "created_on",
-  "created_d1",
-  "created_d2",
-];
 // Narrow eBird sightings by observation date, as they do iNaturalist results
 export const EBIRD_DATE_PARAMS = ["observed_on", "d1", "d2", "month", "year"];
 
@@ -247,12 +231,11 @@ const idList = ( value: unknown ) => String( value ?? "" )
   .map( Number )
   .filter( Boolean );
 
-// The birds a search's filters allow, or null when they allow none or can't
-// apply to eBird
+// The birds a search's filters allow, or null when they allow none. Filters
+// eBird can't apply (photos, users, projects...) are ignored.
 export const resolveEbirdTaxonFilter = async (
   params: Record<string, unknown>,
 ): Promise<EbirdTaxonFilter | null> => {
-  if ( EBIRD_EXCLUSIVE_PARAMS.some( key => params[key] ) ) return null;
   // eBird sightings are treated as research grade
   const qualityGrades = listOf( params.quality_grade );
   if ( qualityGrades.length && !qualityGrades.includes( "research" ) ) return null;

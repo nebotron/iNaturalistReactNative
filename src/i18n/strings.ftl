@@ -556,10 +556,10 @@ Each-species-with-the-date-it-was-first-observed = Each species with the date it
 eBird-limit-area = Only sightings within 50 km of the center of the search area are included.
 # Shown with eBird results when the search's dates reach back further than eBird sightings do
 eBird-limit-dates-window = Only eBird sightings from the last 30 days are included.
-# Shown when only eBird sightings are shown and the filters can't match any
-eBird-limit-filters = eBird has only bird sightings without photos, sounds, or iNaturalist users and projects, so none match these filters.
 # Shown with eBird results when the search has no location
 eBird-limit-no-location = Choose a location to include eBird sightings.
+# Shown when only eBird sightings are shown and the taxon or quality grade filters can't match any
+eBird-limit-no-matching-birds = eBird has only research-grade bird sightings, so none match these filters.
 # Shown with eBird results when the app has paused eBird searches to limit traffic
 eBird-limit-rate = Too many eBird searches. Try again in a few minutes.
 # Shown with eBird results when the maximum number of sightings was returned

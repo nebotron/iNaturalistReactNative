@@ -172,11 +172,14 @@ describe( "resolveEbirdTaxonFilter", ( ) => {
     expect( await resolveEbirdTaxonFilter( { taxon_id: PLANTS.id } ) ).toBeNull( );
     expect( await resolveEbirdTaxonFilter( { without_taxon_id: AVES.id } ) ).toBeNull( );
     expect( await resolveEbirdTaxonFilter( { iconic_taxa: ["Plantae"] } ) ).toBeNull( );
-    expect( await resolveEbirdTaxonFilter( { user_id: 1 } ) ).toBeNull( );
   } );
 
-  it( "skips eBird when the filters require what sightings lack", async ( ) => {
-    expect( await resolveEbirdTaxonFilter( { photos: true } ) ).toBeNull( );
+  it( "ignores filters eBird can't apply", async ( ) => {
+    expect( await resolveEbirdTaxonFilter( { photos: true, user_id: 1, project_id: 2 } ) )
+      .toEqual( { exclude: [] } );
+  } );
+
+  it( "skips eBird when only non-research grades are allowed", async ( ) => {
     expect( await resolveEbirdTaxonFilter( { quality_grade: ["needs_id"] } ) ).toBeNull( );
     expect( await resolveEbirdTaxonFilter( { photos: false, quality_grade: ["research"] } ) )
       .toEqual( { exclude: [] } );
