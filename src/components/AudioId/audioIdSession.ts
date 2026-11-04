@@ -268,9 +268,12 @@ export const noteActivity = ( ) => {
   applyBrightness( );
   return true;
 };
+// Also called when the app returns to the foreground, so the screen is bright
+// again whenever it regains focus.
 export const startDimming = ( ) => {
   focused = true;
   dimmed = false;
+  applyBrightness( );
   noteActivity( );
 };
 export const stopDimming = ( ) => {
