@@ -1,23 +1,30 @@
 /* eslint-disable i18next/no-literal-string */
 import { useNavigation } from "@react-navigation/native";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
-import { Text, TextInput, View } from "components/styledComponents";
+import {
+  Pressable, Text, TextInput, View,
+} from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { FlatList, useWindowDimensions } from "react-native";
 import Photo from "realmModels/Photo";
 import type { RealmObservation, RealmPhoto } from "realmModels/types";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
 import { useBackfillCameraInfo } from "sharedHooks";
+import { zustandStorage } from "stores/useStore";
 
 const { useQuery } = RealmContext;
 
 type Setting = "focalLength" | "shutterSpeed" | "aperture" | "iso" | "focusDistance";
 const SETTINGS: Setting[] = ["focalLength", "focusDistance", "shutterSpeed", "aperture", "iso"];
 const MAX_PAIRS = 200;
+const VOTES_KEY = "camera-pair-votes";
 
 interface Entry {
   uuid: string;
+  // ObservationPhoto uuid, stable across sessions
+  photoUuid: string;
+  gear: string;
   taxonId: number;
   taxonName: string;
   photo: RealmPhoto;
@@ -32,6 +39,29 @@ interface Pair {
   // Difference in distance to subject, relative to the nearer photo
   score: number;
 }
+
+// Which gear won a pair, keyed by the pair's sorted photo uuids. Gear labels
+// are stored with the vote so the tally survives photos leaving the list.
+interface Vote {
+  gear: [string, string];
+  winner: string | "same";
+}
+type Votes = Record<string, Vote>;
+
+const loadVotes = ( ): Votes => {
+  const raw = zustandStorage.getItem( VOTES_KEY );
+  if ( typeof raw !== "string" ) return {};
+  try {
+    return JSON.parse( raw ) as Votes;
+  } catch {
+    return {};
+  }
+};
+
+const gearLabel = ( info: PhotoCameraInfo ) => [info.camera, info.lens]
+  .filter( Boolean ).join( " + " ) || "Unknown gear";
+
+const voteKey = ( pair: Pair ) => [pair.a.photoUuid, pair.b.photoUuid].sort( ).join( "|" );
 
 // "100 mm (160 mm equiv.)" → 160, "1/250 s" → 0.004, "f/5.6" → 5.6, "0.42 m" → 0.42
 const parse = ( setting: Setting, raw = "" ): number | undefined => {
@@ -89,8 +119,37 @@ const PairPhoto = ( { entry, size, onOpen }: {
 
 // Swipe horizontally between the pair's photos; two fingers pinch/pan;
 // one finger scrolls the list; tap opens the observation.
-const PairItem = ( { pair, onOpen }: { pair: Pair; onOpen: ( uuid: string ) => void } ) => {
+const VoteButton = ( { label, selected, onPress }: {
+  label: string; selected: boolean; onPress: ( ) => void;
+} ) => (
+  <Pressable
+    accessibilityRole="button"
+    accessibilityState={{ selected }}
+    onPress={onPress}
+    className={`flex-1 mx-1 py-2 rounded border ${selected
+      ? "bg-inatGreen border-inatGreen"
+      : "border-lightGray"}`}
+  >
+    <Text className={`text-center text-sm ${selected
+      ? "text-white font-bold"
+      : ""}`}
+    >
+      {label}
+    </Text>
+  </Pressable>
+);
+
+const PairItem = ( {
+  pair, vote, onOpen, onVote,
+}: {
+  pair: Pair;
+  vote?: Vote;
+  onOpen: ( uuid: string ) => void;
+  onVote: ( pair: Pair, winner: string | "same" ) => void;
+} ) => {
   const { width } = useWindowDimensions( );
+  const [page, setPage] = useState( 0 );
+  const sameGear = pair.a.gear === pair.b.gear;
   return (
     <View className="mb-6">
       <Text className="font-bold mb-2 px-4">{pair.a.taxonName}</Text>
@@ -100,10 +159,35 @@ const PairItem = ( { pair, onOpen }: { pair: Pair; onOpen: ( uuid: string ) => v
         showsHorizontalScrollIndicator={false}
         data={[pair.a, pair.b]}
         keyExtractor={( _entry, index ) => `${index}`}
+        onMomentumScrollEnd={e => setPage(
+          Math.round( e.nativeEvent.contentOffset.x / width ),
+        )}
         renderItem={( { item: entry } ) => (
           <PairPhoto entry={entry} size={width} onOpen={onOpen} />
         )}
       />
+      <Text className="text-xs text-center mt-1">
+        {`Photo ${page + 1} of 2 — swipe to compare`}
+      </Text>
+      {!sameGear && (
+        <View className="flex-row mt-2 px-3">
+          <VoteButton
+            label="1 is better"
+            selected={vote?.winner === pair.a.gear}
+            onPress={( ) => onVote( pair, pair.a.gear )}
+          />
+          <VoteButton
+            label="Similar"
+            selected={vote?.winner === "same"}
+            onPress={( ) => onVote( pair, "same" )}
+          />
+          <VoteButton
+            label="2 is better"
+            selected={vote?.winner === pair.b.gear}
+            onPress={( ) => onVote( pair, pair.b.gear )}
+          />
+        </View>
+      )}
     </View>
   );
 };
@@ -135,6 +219,8 @@ const CameraPairs = ( ) => {
         const entries = byTaxon.get( taxon.id ) ?? [];
         entries.push( {
           uuid: observation.uuid,
+          photoUuid: obsPhoto.uuid,
+          gear: gearLabel( info ),
           taxonId: taxon.id,
           taxonName: taxon.preferred_common_name || taxon.name,
           photo: obsPhoto.photo,
@@ -179,14 +265,79 @@ const CameraPairs = ( ) => {
 
   const open = ( uuid: string ) => navigation.navigate( "ObsDetails", { uuid } );
 
+  const [votes, setVotes] = useState<Votes>( loadVotes );
+  const castVote = useCallback( ( pair: Pair, winner: string | "same" ) => {
+    setVotes( current => {
+      const key = voteKey( pair );
+      const next = { ...current };
+      if ( next[key]?.winner === winner ) {
+        // Tapping the selected choice again clears it
+        delete next[key];
+      } else {
+        next[key] = {
+          gear: [pair.a.gear, pair.b.gear].sort( ) as [string, string],
+          winner,
+        };
+      }
+      zustandStorage.setItem( VOTES_KEY, JSON.stringify( next ) );
+      return next;
+    } );
+  }, [] );
+
+  const breakdown = useMemo( ( ) => {
+    const rows = new Map<string, {
+      first: string; second: string; firstWins: number; secondWins: number; same: number;
+    }>( );
+    Object.values( votes ).forEach( ( { gear: [first, second], winner } ) => {
+      const key = `${first}|${second}`;
+      const row = rows.get( key ) ?? {
+        first, second, firstWins: 0, secondWins: 0, same: 0,
+      };
+      if ( winner === "same" ) row.same += 1;
+      else if ( winner === first ) row.firstWins += 1;
+      else if ( winner === second ) row.secondWins += 1;
+      rows.set( key, row );
+    } );
+    return [...rows.values( )].sort( ( x, y ) => (
+      ( y.firstWins + y.secondWins + y.same ) - ( x.firstWins + x.secondWins + x.same )
+    ) );
+  }, [votes] );
+
   return (
     <FlatList
       className="bg-white"
       contentContainerClassName="py-4 pb-20"
       data={pairs}
       keyExtractor={pair => pair.key}
+      extraData={votes}
       ListHeaderComponent={(
         <View className="mb-4 px-4">
+          {breakdown.length > 0 && (
+            <View className="mb-4">
+              <Text className="font-bold mb-2">Your preferences</Text>
+              {breakdown.map( row => {
+                const total = row.firstWins + row.secondWins + row.same;
+                const pct = ( n: number ) => `${Math.round( ( n / total ) * 100 )}%`;
+                return (
+                  <View key={`${row.first}|${row.second}`} className="mb-3">
+                    <Text className="text-sm">
+                      {`${row.first} vs ${row.second} (${total})`}
+                    </Text>
+                    <View className="flex-row h-2 rounded overflow-hidden my-1 bg-lightGray">
+                      <View className="bg-inatGreen" style={{ flex: row.firstWins }} />
+                      <View className="bg-mediumGray" style={{ flex: row.same }} />
+                      <View className="bg-darkGray" style={{ flex: row.secondWins }} />
+                    </View>
+                    <Text className="text-xs">
+                      {`${row.first}: ${row.firstWins} (${pct( row.firstWins )}) · `
+                        + `Similar: ${row.same} (${pct( row.same )}) · `
+                        + `${row.second}: ${row.secondWins} (${pct( row.secondWins )})`}
+                    </Text>
+                  </View>
+                );
+              } )}
+            </View>
+          )}
           <Text className="text-sm mb-2">
             Same species, different camera or lens, similar distance to subject.
             Max distance difference:
@@ -213,7 +364,14 @@ const CameraPairs = ( ) => {
           No matching pairs among photos with camera info saved on this device.
         </Text>
       )}
-      renderItem={( { item } ) => <PairItem pair={item} onOpen={open} />}
+      renderItem={( { item } ) => (
+        <PairItem
+          pair={item}
+          vote={votes[voteKey( item )]}
+          onOpen={open}
+          onVote={castVote}
+        />
+      )}
     />
   );
 };
