@@ -5,6 +5,7 @@ import { saveBrightness } from "sharedHelpers/brightnessLog";
 import cropImageFile from "sharedHelpers/cropImageFile";
 import { cropOriginalUriFromPath, preserveCropOriginalPath } from "sharedHelpers/cropPhotoMetadata";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import { recordStagedImportCrop } from "sharedHelpers/usbStaging";
 import useStore from "stores/useStore";
 
 export interface GroupedPhotoImage {
@@ -87,6 +88,9 @@ export async function applyGroupPhotosCrop(
     existingPhoto?.image.cropOriginalUri,
     brightness,
   );
+  if ( existingPhoto?.originalDevicePhotoUri ) {
+    recordStagedImportCrop( existingPhoto.originalDevicePhotoUri, crop );
+  }
   if ( update.uri ) {
     // The slider reads brightness by uri, so a re-crop of the cropped file
     // starts from the brightness just baked in.

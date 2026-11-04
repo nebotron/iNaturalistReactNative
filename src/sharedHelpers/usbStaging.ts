@@ -6,6 +6,7 @@ import { CameraRoll } from "@react-native-camera-roll/camera-roll";
 import { usbStagingPath } from "appConstants/paths";
 import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
+import { getAnimalCrop } from "sharedHelpers/animalCropLog";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
@@ -38,12 +39,25 @@ const getClocks = ( ): Record<string, number> => JSON.parse( store.getString( CL
 // observation keeps the staged URI, so this is how an unfave finds the asset.
 const SAVED_KEY = "savedUris";
 const getSaved = ( ): Record<string, string> => JSON.parse( store.getString( SAVED_KEY ) ?? "{}" );
+// Staged name → its import crop. The observation's copy of the crop is
+// local-only and can be lost (e.g. to a re-download), so a faved photo would
+// otherwise be saved to Photos uncropped.
+const IMPORT_CROPS_KEY = "importCrops";
+const getImportCrops = ( ): Record<string, NormalizedCrop> => JSON.parse(
+  store.getString( IMPORT_CROPS_KEY ) ?? "{}",
+);
 
 export const stagedPathFor = ( relativePath: string ) => (
   `${usbStagingPath}/${Date.now( )}_${relativePath.split( "/" ).pop( )}`
 );
 
 const stagedNameFromUri = ( uri: string ) => uri.match( /\/usbStaging\/([^/]+)$/ )?.[1];
+
+export const recordStagedImportCrop = ( uri: string, crop: NormalizedCrop ) => {
+  const name = stagedNameFromUri( uri );
+  if ( !name ) return;
+  store.set( IMPORT_CROPS_KEY, JSON.stringify( { ...getImportCrops( ), [name]: crop } ) );
+};
 
 // The Photos asset a staged photo URI was saved as, or the URI itself.
 export const libraryUriForDevicePhoto = ( uri: string ) => {
@@ -141,8 +155,15 @@ export const sweepUsbStaging = async (
   sweeping = true;
   try {
     const favorited = new Set( favoritedUris.map( stagedNameFromUri ).filter( Boolean ) );
+    const importCrops = getImportCrops( );
     const cropsByName = Object.fromEntries( Object.entries( crops )
       .map( ( [uri, crop] ) => [stagedNameFromUri( uri ), crop] ) );
+    // Photos cropped before importCrops existed: the crop log has them by the
+    // staged file's URI.
+    const cropFor = ( item: { name: string; path: string } ) => cropsByName[item.name]
+      ?? importCrops[item.name]
+      ?? getAnimalCrop( `file://${item.path}` )
+      ?? undefined;
     const retentionMs = getTunable( "usbStagingRetentionDays" ) * DAY_MS;
     const staged = await readStaged( );
     const stagedNames = new Set( staged.map( item => item.name ) );
@@ -161,7 +182,7 @@ export const sweepUsbStaging = async (
       if ( favorited.has( item.name ) ) {
         // eslint-disable-next-line no-await-in-loop
         const ok = await enqueuePhotoLibraryWrite(
-          ( ) => saveStagedPhoto( item.path, cropsByName[item.name] ),
+          ( ) => saveStagedPhoto( item.path, cropFor( item ) ),
         ).then( uri => {
           if ( uri ) {
             savedUris.push( uri );
@@ -190,6 +211,11 @@ export const sweepUsbStaging = async (
     if ( savedUris.length > 0 ) onSavedToPhotos?.( savedUris );
     removed.forEach( name => delete clocks[name] );
     store.set( CLOCK_KEY, JSON.stringify( clocks ) );
+    if ( removed.size > 0 ) {
+      const keptCrops = Object.entries( getImportCrops( ) )
+        .filter( ( [name] ) => !removed.has( name ) );
+      store.set( IMPORT_CROPS_KEY, JSON.stringify( Object.fromEntries( keptCrops ) ) );
+    }
     if ( removed.size > 0 ) {
       setOffered( getOffered( ).filter( name => !removed.has( name ) ) );
       logger.info( `USB staging: saved ${saved} faved photo(s) to Photos, `

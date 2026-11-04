@@ -59,4 +59,22 @@ describe( "sweepUsbStaging", ( ) => {
     expect( mockFiles ).toEqual( ["1_UNUSED.JPG"] );
     jest.useRealTimers( );
   } );
+
+  it( "saves a faved photo with its import crop when the observation lost it", async ( ) => {
+    const { NativeModules } = jest.requireActual( "react-native" );
+    const saveCroppedAsset = jest.fn( async ( ) => ( { uri: "ph://CROPPED" } ) );
+    NativeModules.ImageCropper = { saveCroppedAsset, addAssetsToAlbum: jest.fn( ) };
+    const crop = {
+      x: 0.1, y: 0.2, w: 0.5, h: 0.6,
+    };
+    await jest.isolateModulesAsync( async ( ) => {
+      const staging = jest.requireActual( "sharedHelpers/usbStaging" );
+      mockFiles = ["1_CROPPED.JPG"];
+      staging.recordStagedImportCrop( uri( "1_CROPPED.JPG" ), crop );
+      await staging.sweepUsbStaging( [uri( "1_CROPPED.JPG" )], [], undefined, {} );
+    } );
+    delete NativeModules.ImageCropper;
+
+    expect( saveCroppedAsset ).toHaveBeenCalledWith( "file:///docs/usbStaging/1_CROPPED.JPG", crop );
+  } );
 } );

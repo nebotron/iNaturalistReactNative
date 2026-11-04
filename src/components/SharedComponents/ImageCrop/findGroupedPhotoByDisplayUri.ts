@@ -1,6 +1,7 @@
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 
 interface GroupedPhotoItem {
+  originalDevicePhotoUri?: string | null;
   image: {
     uri: string;
     cropOriginalUri?: string;
