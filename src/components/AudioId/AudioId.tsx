@@ -3,7 +3,7 @@ import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import { fetchSpeciesCounts } from "api/observations";
 import { fetchTaxaBasics } from "api/taxa";
 import {
-  Body3, Button, DisplayTaxonName, IconicTaxonIcon, INatIcon,
+  Body3, Body4, Button, DisplayTaxonName, IconicTaxonIcon, INatIcon,
 } from "components/SharedComponents";
 import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
@@ -225,8 +225,6 @@ const AudioId = ( ) => {
   // Species with a clip that could still go on an observation and hasn't been labeled
   const canAdd = new Set( clipList
     .filter( c => eligible.has( c.id ) && !c.label ).map( c => c.sp.taxonId ) );
-  const hasUnlabeled = useMemo( ( ) => new Set( Object.values( clips )
-    .filter( c => !c.label ).map( c => c.sp.taxonId ) ), [clips] );
 
   const openTaxon = ( taxonId: number ) => navigation.navigate( "TaxonDetails", {
     id: taxonId, fromAudioId: true,
@@ -268,14 +266,13 @@ const AudioId = ( ) => {
                 scientificNameFirst={currentUser?.prefers_scientific_name_first}
               />
             </View>
-            {hasUnlabeled.has( sp.taxonId ) && (
-              <View className="h-[8px] w-[8px] ml-2 rounded-full bg-inatGreen" />
+            {currentUser && seen && !seen.has( sp.taxonId ) && (
+              <View className="ml-2 px-[5px] rounded-full bg-inatGreen">
+                <Body4 className="text-white font-bold">NEW</Body4>
+              </View>
             )}
           </View>
           {detail && <Body3>{detail}</Body3>}
-          {currentUser && seen && !seen.has( sp.taxonId ) && (
-            <Body3 className="text-inatGreen">Not yet seen at research grade</Body3>
-          )}
         </View>
         {canAdd.has( sp.taxonId ) && (
           <View className="rounded-full bg-inatGreen p-1">
