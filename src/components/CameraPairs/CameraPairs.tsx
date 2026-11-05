@@ -197,6 +197,28 @@ const VoteButton = ( { label, selected, onPress }: {
   </Pressable>
 );
 
+const FIRST_COLOR = "#2563EB";
+const SAME_COLOR = "#BFBFBF";
+const SECOND_COLOR = "#DC2626";
+
+// One stretch of a preference bar, sized by and labeled with its vote count
+const BarSegment = ( { count, color, darkText = false }: {
+  count: number; color: string; darkText?: boolean;
+} ) => ( count > 0
+  ? (
+    <View className="justify-center" style={{ flex: count, backgroundColor: color }}>
+      <Text
+        numberOfLines={1}
+        className={`text-xs font-bold text-center ${darkText
+          ? "text-darkGray"
+          : "text-white"}`}
+      >
+        {count}
+      </Text>
+    </View>
+  )
+  : null );
+
 const PairItem = ( {
   pair, vote, onOpen, onVote,
 }: {
@@ -375,48 +397,20 @@ const CameraPairs = ( ) => {
           {breakdown.length > 0 && (
             <View className="mb-4">
               <Text className="font-bold mb-2">{t( "Your-preferences" )}</Text>
-              {breakdown.map( row => {
-                const total = row.firstWins + row.secondWins + row.same;
-                const pct = ( n: number ) => Math.round( ( n / total ) * 100 );
-                return (
-                  // Each gear is labeled once, on its own end of the bar
-                  <View key={`${row.first}|${row.second}`} className="flex-row items-center mb-3">
-                    <View className="flex-1 pr-2">
-                      <Text className="text-xs font-bold text-right">{row.first}</Text>
-                      <Text className="text-xs text-right">
-                        {t( "Gear-votes-count", {
-                          count: row.firstWins,
-                          percent: pct( row.firstWins ),
-                        } )}
-                      </Text>
-                    </View>
-                    <View className="flex-1">
-                      <View className="flex-row h-3 rounded overflow-hidden bg-lightGray">
-                        <View className="bg-inatGreen" style={{ flex: row.firstWins }} />
-                        <View className="bg-mediumGray" style={{ flex: row.same }} />
-                        <View className="bg-darkGray" style={{ flex: row.secondWins }} />
-                      </View>
-                      {row.same > 0 && (
-                        <Text className="text-xs text-center mt-1">
-                          {t( "Similar-votes-count", {
-                            count: row.same,
-                            percent: pct( row.same ),
-                          } )}
-                        </Text>
-                      )}
-                    </View>
-                    <View className="flex-1 pl-2">
-                      <Text className="text-xs font-bold">{row.second}</Text>
-                      <Text className="text-xs">
-                        {t( "Gear-votes-count", {
-                          count: row.secondWins,
-                          percent: pct( row.secondWins ),
-                        } )}
-                      </Text>
-                    </View>
+              {breakdown.map( row => (
+                // Each gear is labeled once, on its own end of the bar
+                <View key={`${row.first}|${row.second}`} className="flex-row items-center mb-3">
+                  <Text className="flex-1 pr-2 text-xs font-bold text-right">
+                    {row.first}
+                  </Text>
+                  <View className="w-2/5 flex-row h-6 rounded overflow-hidden bg-lightGray">
+                    <BarSegment count={row.firstWins} color={FIRST_COLOR} />
+                    <BarSegment count={row.same} color={SAME_COLOR} darkText />
+                    <BarSegment count={row.secondWins} color={SECOND_COLOR} />
                   </View>
-                );
-              } )}
+                  <Text className="flex-1 pl-2 text-xs font-bold">{row.second}</Text>
+                </View>
+              ) )}
             </View>
           )}
           <Text className="text-sm mb-2">
