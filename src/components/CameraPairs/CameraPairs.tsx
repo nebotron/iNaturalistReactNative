@@ -1,14 +1,18 @@
 import { useNavigation } from "@react-navigation/native";
+import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import {
   Pressable, Text, TextInput, View,
 } from "components/styledComponents";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
-import React, { useCallback, useMemo, useState } from "react";
+import React, {
+  useCallback, useEffect, useMemo, useRef, useState,
+} from "react";
 import { FlatList, useWindowDimensions } from "react-native";
 import Photo from "realmModels/Photo";
 import type { RealmObservation, RealmPhoto } from "realmModels/types";
+import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
 import { useBackfillCameraInfo, useTranslation } from "sharedHooks";
 import { zustandStorage } from "stores/useStore";
@@ -18,6 +22,7 @@ const { useQuery } = RealmContext;
 type Setting = "focalLength" | "shutterSpeed" | "aperture" | "iso" | "focusDistance";
 const SETTINGS: Setting[] = ["focalLength", "focusDistance", "shutterSpeed", "aperture", "iso"];
 const VOTES_KEY = "camera-pair-votes";
+const ZOOMS_KEY = "camera-pair-zooms";
 
 interface Entry {
   uuid: string;
@@ -57,6 +62,35 @@ const loadVotes = ( ): Votes => {
   }
 };
 
+// Pinch/pan position per photo, with the tile size it was set at. Offsets are
+// in pixels and scale with the square tile, so a different width rescales them.
+interface SavedZoom {
+  size: number;
+  transform: ImageZoomTransform;
+}
+let savedZooms: Record<string, SavedZoom> | undefined;
+const loadZooms = ( ): Record<string, SavedZoom> => {
+  if ( savedZooms ) return savedZooms;
+  const raw = zustandStorage.getItem( ZOOMS_KEY );
+  try {
+    savedZooms = typeof raw === "string"
+      ? JSON.parse( raw ) as Record<string, SavedZoom>
+      : {};
+  } catch {
+    savedZooms = {};
+  }
+  return savedZooms;
+};
+const saveZoom = ( photoUuid: string, zoom: SavedZoom ) => {
+  const zooms = loadZooms( );
+  if ( zoom.transform.scale <= 1.001 ) {
+    delete zooms[photoUuid];
+  } else {
+    zooms[photoUuid] = zoom;
+  }
+  zustandStorage.setItem( ZOOMS_KEY, JSON.stringify( zooms ) );
+};
+
 const gearLabel = ( info: PhotoCameraInfo ) => [info.camera, info.lens]
   .filter( Boolean ).join( " + " ) || i18n.t( "Unknown-gear" );
 
@@ -87,13 +121,37 @@ const compare = ( a: Entry, b: Entry ): number | null => {
 };
 
 // A crop context makes the zoom engine keep the transform on release
-// instead of snapping back.
+// instead of snapping back. The position is saved per photo on release and
+// restored on mount, so it survives list recycling, navigation and relaunch.
 const PairPhoto = ( { entry, size, onOpen }: {
   entry: Entry; size: number; onOpen: ( uuid: string ) => void;
 } ) => {
   const [dims, setDims] = useState<{ width: number; height: number }>( );
+  const zoomRef = useRef<SharedZoomableImageRef | null>( null );
+  const { photoUuid } = entry;
+
+  useEffect( ( ) => {
+    const saved = loadZooms( )[photoUuid];
+    if ( !saved || !zoomRef.current || size <= 0 || saved.size <= 0 ) return;
+    const ratio = size / saved.size;
+    const { transform } = saved;
+    zoomRef.current.applyTransform( {
+      scale: transform.scale,
+      translateX: transform.translateX * ratio,
+      translateY: transform.translateY * ratio,
+      focalX: transform.focalX * ratio,
+      focalY: transform.focalY * ratio,
+    } );
+  }, [photoUuid, size] );
+
+  const rememberZoom = useCallback( ( ) => {
+    if ( !zoomRef.current || size <= 0 ) return;
+    saveZoom( photoUuid, { size, transform: zoomRef.current.readTransform( ) } );
+  }, [photoUuid, size] );
+
   return (
     <SharedZoomableImage
+      ref={zoomRef}
       uri={Photo.displayLocalOrRemoteOriginalPhoto( entry.photo )}
       fullResolution
       style={{ width: size, height: size }}
@@ -105,6 +163,7 @@ const PairPhoto = ( { entry, size, onOpen }: {
       isSingleTapEnabled
       onSingleTap={( ) => onOpen( entry.uuid )}
       onImageDimensionsChange={setDims}
+      onInteractionEnd={rememberZoom}
       cropPanContext={dims && {
         imageWidth: dims.width,
         imageHeight: dims.height,
