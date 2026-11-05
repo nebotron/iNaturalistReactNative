@@ -398,17 +398,19 @@ const CameraPairs = ( ) => {
             <View className="mb-4">
               <Text className="font-bold mb-2">{t( "Your-preferences" )}</Text>
               {breakdown.map( row => (
-                // Each gear is labeled once, on its own end of the bar
-                <View key={`${row.first}|${row.second}`} className="flex-row items-center mb-3">
-                  <Text className="flex-1 pr-2 text-xs font-bold text-right">
-                    {row.first}
-                  </Text>
-                  <View className="w-2/5 flex-row h-6 rounded overflow-hidden bg-lightGray">
+                // Each gear is labeled once, under its own half of the bar
+                <View key={`${row.first}|${row.second}`} className="mb-3">
+                  <View className="flex-row h-6 rounded overflow-hidden bg-lightGray">
                     <BarSegment count={row.firstWins} color={FIRST_COLOR} />
                     <BarSegment count={row.same} color={SAME_COLOR} darkText />
                     <BarSegment count={row.secondWins} color={SECOND_COLOR} />
                   </View>
-                  <Text className="flex-1 pl-2 text-xs font-bold">{row.second}</Text>
+                  <View className="flex-row mt-1">
+                    <Text className="flex-1 pr-2 text-xs font-bold">{row.first}</Text>
+                    <Text className="flex-1 pl-2 text-xs font-bold text-right">
+                      {row.second}
+                    </Text>
+                  </View>
                 </View>
               ) )}
             </View>
