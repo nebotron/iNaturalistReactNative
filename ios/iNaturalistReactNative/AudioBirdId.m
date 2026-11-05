@@ -4,6 +4,7 @@
 #import <AudioToolbox/AudioToolbox.h>
 #import <CoreHaptics/CoreHaptics.h>
 #import <mach/mach.h>
+#import <malloc/malloc.h>
 #import <os/lock.h>
 #import <UIKit/UIKit.h>
 #import <React/RCTBridgeModule.h>
@@ -39,6 +40,15 @@
 #define AB_SPEC_LO  8       // lowest bin shown, 250 Hz
 #define AB_SPEC_H   376     // bins shown, up to 12 kHz
 #define AB_SPEC_W   800     // columns shown, 10 s
+// Footprint above which freed malloc memory is handed back to iOS, at most
+// once per AB_RELIEF_EVERY s. The footprint still climbed in a sawtooth to
+// the ~3 GB kill limit in long sessions after the spectrogram fix, with or
+// without the spectrogram on screen (killed Nov 5 at 2854 MB). With the ORT
+// arena off each run mallocs and frees its scratch tensors, which malloc may
+// keep dirty rather than return; the event's malloc used/held figures show
+// whether that's where the footprint goes.
+#define AB_RELIEF_MB    1200
+#define AB_RELIEF_EVERY 10
 
 // Writes mono samples as AAC at `path`, replacing any file there.
 static BOOL ABWriteClip( NSString *path, const float *samples, AVAudioFrameCount frames,
@@ -203,6 +213,7 @@ static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
   NSInteger         _specPending;
   float             _level;
   BOOL              _busy;
+  CFAbsoluteTime    _lastRelief; // inferQueue only
   dispatch_queue_t  _bufferQueue;
   dispatch_queue_t  _inferQueue;
   OrtEnv           *_env;
@@ -1091,6 +1102,16 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
       }
       double ms = ( CFAbsoluteTimeGetCurrent( ) - t0 ) * 1000;
       dispatch_async( self->_bufferQueue, ^{ self->_busy = NO; } );
+      double memMB = [self footprintMB];
+      malloc_statistics_t heap = { 0 };
+      malloc_zone_statistics( NULL, &heap );
+      double reliefMB = 0;
+      CFAbsoluteTime now = CFAbsoluteTimeGetCurrent( );
+      if ( memMB > AB_RELIEF_MB && now - self->_lastRelief > AB_RELIEF_EVERY ) {
+        self->_lastRelief = now;
+        malloc_zone_pressure_relief( NULL, 0 );
+        reliefMB = MAX( memMB - [self footprintMB], 0 );
+      }
       // By output index. Scores below the minimum can't count as heard, so
       // only the top one goes along with them, rather than one per species.
       const float *p = (const float *)probs.bytes;
@@ -1106,7 +1127,10 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
                                  @"level": @( level ),
                                  @"windowFrame": @( windowFrame ),
                                  @"inferMs": @( ms ),
-                                 @"memMB": @( [self footprintMB] ),
+                                 @"memMB": @( memMB ),
+                                 @"heapUsedMB": @( heap.size_in_use / 1048576.0 ),
+                                 @"heapHeldMB": @( heap.size_allocated / 1048576.0 ),
+                                 @"reliefMB": @( reliefMB ),
                                  @"spectrogramViews": @( abSpecViews ),
                                  @"error": inferError ?: [NSNull null] }];
     } );

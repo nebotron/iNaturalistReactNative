@@ -65,6 +65,11 @@ interface ScoresEvent {
   windowFrame: number;
   inferMs: number;
   memMB: number;
+  // malloc's bytes in use and held from the system, and what handing freed
+  // memory back to iOS released this run (0 when it didn't run)
+  heapUsedMB?: number;
+  heapHeldMB?: number;
+  reliefMB?: number;
   // Live spectrogram views on screen when it ran.
   spectrogramViews?: number;
   error: string | null;
@@ -340,6 +345,19 @@ export const playerStarted = ( ) => AudioBirdId?.setPlayingClip( players.size > 
 
 let runs: ScoresEvent[] = [];
 
+// Hermes' heap, which also counts toward the footprint iOS kills the app at.
+const jsHeapMB = ( ): number | null => {
+  const stats = ( global as { HermesInternal?: {
+    getInstrumentedStats?: ( ) => { js_heapSize?: number };
+  }; } ).HermesInternal?.getInstrumentedStats?.( );
+  return stats?.js_heapSize
+    ? stats.js_heapSize / 1048576
+    : null;
+};
+const mb = ( n: number | null | undefined ) => ( n == null
+  ? "?"
+  : String( Math.round( n ) ) );
+
 const onScores = ( event: ScoresEvent ) => {
   const { level } = event;
   const {
@@ -349,6 +367,7 @@ const onScores = ( event: ScoresEvent ) => {
   const sps = setup?.species || [];
   runs.push( event );
   if ( runs.length >= LOG_EVERY ) {
+    const last = runs[runs.length - 1];
     const best = runs.reduce( ( b, r ) => Object.entries( r.scores ).reduce(
       ( rb, [i, s] ) => ( s > rb.score
         ? { score: s, index: Number( i ) }
@@ -360,8 +379,10 @@ const onScores = ( event: ScoresEvent ) => {
     logger.info( `${runs.length} runs: level ${
       ( 20 * Math.log10( mean( r => r.level ) + 1e-9 ) ).toFixed( 0 )} dBFS, `
       + `infer ${mean( r => r.inferMs ).toFixed( 0 )} ms, `
-      + `mem ${Math.round( runs[runs.length - 1].memMB )} MB, `
-      + `spectrogram ${runs[runs.length - 1].spectrogramViews ?? "?"}, best ${
+      + `mem ${mb( last.memMB )} MB (malloc ${mb( last.heapUsedMB )}/${
+        mb( last.heapHeldMB )}, js ${mb( jsHeapMB( ) )}), `
+      + `relief ${mb( runs.reduce( ( sum, r ) => sum + ( r.reliefMB || 0 ), 0 ) )} MB, `
+      + `spectrogram ${last.spectrogramViews ?? "?"}, best ${
         best.index >= 0
           ? sps[best.index]?.commonName
           : "none"} ${best.score.toFixed( 2 )}, errors ${
