@@ -26,9 +26,16 @@ it through to the upload.
 
 4. **On success**, report it in one line with the build number.
 
-5. **On failure**, read the failing step's log (`gh run view <id> --log-failed`, or
+5. **If GitHub can't acquire a runner** — the job stays `queued` and ends
+   `cancelled` with no logs (`get_job_logs` 404s) and no step ever started —
+   that's runner availability, not the code. Don't treat it as a blocker: dispatch
+   a fresh run once per hour (`send_later` with `delay_minutes: 60`) until one
+   gets a runner, then continue from step 3. Tell the user once that you're
+   retrying hourly, and mention billing/spending limits as a possible cause.
+
+6. **On failure**, read the failing step's log (`gh run view <id> --log-failed`, or
    `get_job_logs` with `failed_only`) and fix it.
 
-6. **After fixing**, push the fix to `main` (step 1), dispatch a new run, and keep
+7. **After fixing**, push the fix to `main` (step 1), dispatch a new run, and keep
    checking every 5 minutes. Repeat until a run succeeds; stop only for a blocker
    only the user can fix (e.g. missing secrets).
