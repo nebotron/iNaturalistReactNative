@@ -22,6 +22,8 @@ const { ImageCropper } = NativeModules as {
       inSecond?: number;
       atLocation?: number;
       shifted?: number;
+      sameShot?: boolean;
+      onlyDistance?: number;
     } | null>;
   };
 };
@@ -36,6 +38,13 @@ export const libraryOriginalQuery = (
   observation: RealmObservation,
 ): Query => {
   const time = Date.parse( observation.time_observed_at ?? observation.observed_on_string ?? "" );
+  // An obscured observation synced without its private coordinates only has
+  // the randomized public point, often kilometres off, which ruled out the
+  // photo taken at its time; matched like an observation without a location.
+  // (Before upload, latitude is still the one the user set.)
+  const obscured = !!observation._synced_at && (
+    ["obscured", "private"].includes( observation.geoprivacy ?? "" )
+    || ["obscured", "private"].includes( observation.taxon_geoprivacy ?? "" ) );
   return {
     uuid: obsPhoto.uuid,
     deviceUri: obsPhoto.originalDevicePhotoUri
@@ -44,8 +53,12 @@ export const libraryOriginalQuery = (
     time: Number.isFinite( time )
       ? time
       : undefined,
-    latitude: observation.privateLatitude ?? observation.latitude ?? undefined,
-    longitude: observation.privateLongitude ?? observation.longitude ?? undefined,
+    latitude: observation.privateLatitude ?? ( obscured
+      ? undefined
+      : observation.latitude ) ?? undefined,
+    longitude: observation.privateLongitude ?? ( obscured
+      ? undefined
+      : observation.longitude ) ?? undefined,
   };
 };
 
@@ -67,7 +80,12 @@ const findLibraryOriginal = ( { uuid, deviceUri, ...options }: Query ): Promise<
         ? "found"
         : "none"} recorded=${!!deviceUri} time=${!!options.time} `
         + `location=${options.latitude !== undefined} in_second=${match?.inSecond ?? "-"} `
-        + `at_location=${match?.atLocation ?? "-"} shifted=${match?.shifted ?? "-"}` );
+        + `at_location=${match?.atLocation ?? "-"} shifted=${match?.shifted ?? "-"}`
+        + `${match?.sameShot
+          ? " same_shot"
+          : ""}${match?.onlyDistance !== undefined
+          ? ` only_m=${match.onlyDistance}`
+          : ""}` );
       return match?.uri ?? null;
     } )
     .catch( error => {

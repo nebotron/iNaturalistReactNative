@@ -3484,6 +3484,20 @@ RCT_EXPORT_METHOD( findLibraryOriginal
       && ( !place || !only.location || [only.location distanceFromLocation:place] <= 100 ) ) {
       pick = only;
     }
+    // Several assets taken in the same second at the observation's exact spot
+    // are one capture saved more than once (an edited duplicate, a RAW+JPEG
+    // pair, a burst), so any of them carries its camera settings. The log
+    // showed these, in_second=2 at_location=2, never matching.
+    BOOL sameShot = NO;
+    if ( !pick && matches.count > 1 && matches.count == assets.count ) {
+      pick = matches.firstObject;
+      sameShot = YES;
+    }
+    // How far the only asset in that second is from the observation, for the
+    // log when it's too far to be taken.
+    NSNumber *onlyDistance = only && place && only.location
+      ? @( round( [only.location distanceFromLocation:place] ) )
+      : nil;
     // Older photos often miss the exact second: their observation time was
     // worked out in the account's or device's time zone rather than the one
     // the photo was taken in (and photos from before cameras wrote
@@ -3525,8 +3539,9 @@ RCT_EXPORT_METHOD( findLibraryOriginal
     }
     NSMutableDictionary *result = [@{
       @"inSecond": @( assets.count ), @"atLocation": @( matches.count ),
-      @"shifted": @( shiftedCount ),
+      @"shifted": @( shiftedCount ), @"sameShot": @( sameShot ),
     } mutableCopy];
+    if ( onlyDistance ) result[@"onlyDistance"] = onlyDistance;
     if ( pick ) {
       result[@"uri"] = [@"ph://" stringByAppendingString:pick.localIdentifier];
     }
