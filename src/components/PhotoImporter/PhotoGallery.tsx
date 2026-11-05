@@ -155,6 +155,11 @@ const PhotoGallery = ( {
   const [failedCount, setFailedCount] = useState( 0 );
   const isFetchingRef = useRef( false );
   const importingRef = useRef( false );
+  // How long the picker took to show its first photo, and how many pages it
+  // had to read to get there (see the slow-open report below).
+  const openedAtRef = useRef( 0 );
+  const pagesFetchedRef = useRef( 0 );
+  const reportedOpenRef = useRef( false );
   // Photos the user removed from a Group Photos import previously (see
   // removedGroupPhotoUris.ts) — the device deletion may have silently failed
   // (iOS 26's PHPhotoLibrary confirmation bug), so they count as saved and are
@@ -250,27 +255,50 @@ const PhotoGallery = ( {
       } );
       setHasNextPage( result.page_info.has_next_page );
       setEndCursor( result.page_info.end_cursor );
-    } catch {
-      // permissions denied or no photos available
+      pagesFetchedRef.current += 1;
+    } catch ( error ) {
+      // Nothing changes after a failed page, so nothing would ever ask for
+      // the next one: with more pages assumed, the auto-fill below would leave
+      // the grid empty (or the newest-first sections withheld) for good. Treat
+      // the library as ending here so what did load is shown.
+      logger.error( "Could not load photos from the device library", error );
+      setHasNextPage( false );
     } finally {
       isFetchingRef.current = false;
       setLoading( false );
     }
   }, [] );
 
+  // Read through a ref so the permission request and first page run once per
+  // mount. onCancel changes whenever the screen's params do (PhotoLibrary sets
+  // them on every Done, and re-navigating here passes new ones), and each
+  // change re-requested permission and replaced every loaded page with the
+  // first one -- restarting a long auto-fill from scratch.
+  const onCancelRef = useRef( onCancel );
   useEffect( ( ) => {
+    onCancelRef.current = onCancel;
+  }, [onCancel] );
+
+  useEffect( ( ) => {
+    openedAtRef.current = Date.now( );
     if ( Platform.OS === "ios" ) {
       iosRequestReadWriteGalleryPermission( ).then( status => {
         if ( status === "granted" || status === "limited" ) {
           loadPhotos( );
         } else {
-          onCancel( );
+          // The screen closes itself here, which to the user is the picker
+          // failing to open, so leave a trace of why.
+          logger.info( `photo_gallery_permission_not_granted: ${status}` );
+          onCancelRef.current( );
         }
-      } ).catch( ( ) => loadPhotos( ) );
+      } ).catch( error => {
+        logger.error( "Could not request photo library permission", error );
+        loadPhotos( );
+      } );
     } else {
       loadPhotos( );
     }
-  }, [loadPhotos, onCancel] );
+  }, [loadPhotos] );
 
   const loadMore = useCallback( ( ) => {
     if ( hasNextPage && !isFetchingRef.current ) {
@@ -439,6 +467,31 @@ const PhotoGallery = ( {
       loadMore( );
     }
   }, [loading, hasNextPage, photos.length, galleryItems.length, loadMore] );
+  // Pages of nothing but saved (hidden) photos are fetched one after another
+  // before anything can be shown, and every page after the first makes iOS
+  // walk the library from the top to find its cursor. For someone who saves
+  // most of what they shoot that is a long wait on an empty grid, so show it
+  // as loading rather than as a picker that never opened.
+  const fillingFirstScreen = hasNextPage && galleryItems.length === 0;
+
+  useEffect( ( ) => {
+    if ( reportedOpenRef.current || loading || fillingFirstScreen ) return;
+    reportedOpenRef.current = true;
+    const ms = Date.now( ) - openedAtRef.current;
+    if ( ms > 2000 ) {
+      logger.infoWithExtra( "photo_gallery_slow_open", {
+        ms,
+        pages: pagesFetchedRef.current,
+        loaded: photos.length,
+        hidden: photos.length - visiblePhotos.length,
+      } );
+    }
+  }, [
+    loading,
+    fillingFirstScreen,
+    photos.length,
+    visiblePhotos.length,
+  ] );
 
   const toggleSectionSelection = useCallback( ( nodes: PhotoNode[] ) => {
     setSelectedUris( prev => {
@@ -591,6 +644,15 @@ const PhotoGallery = ( {
         onEndReached={loadMore}
         extraData={{ selectedUris, importedUris }}
       />
+      {fillingFirstScreen && (
+        <View
+          className="absolute inset-0 justify-center items-center"
+          pointerEvents="none"
+          testID="PhotoGallery.fillingIndicator"
+        >
+          <ActivityIndicator />
+        </View>
+      )}
       {/* Swapping the small header check for an equally small spinner was too
           easy to miss on an import that runs for tens of seconds, which is the
           whole window in which the screen looks dead. Cover the grid instead,
