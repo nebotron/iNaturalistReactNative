@@ -49,7 +49,7 @@ import {
 } from "providers/ExploreContext";
 import React, { useState } from "react";
 import type { RealmTaxon } from "realmModels/types";
-import { formatObsFieldDate } from "sharedHelpers/dateAndTime";
+import { formatObsFieldDate, getMonthsAroundDate } from "sharedHelpers/dateAndTime";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import type { LocationPermissionCallbacks } from "sharedHooks/useLocationPermission";
 import { getShadow } from "styles/global";
@@ -599,8 +599,6 @@ const FilterModal = ( {
     newDateObserved, newObservedOn, newD1, newD2, newMonths,
   } ) => {
     const today = formatObsFieldDate( new Date( ) );
-    // Array with the numbers from 1 to 12
-    const allMonths = new Array( 12 ).fill( 0 ).map( ( _, i ) => i + 1 );
 
     if ( newDateObserved === DATE_OBSERVED.ALL ) {
       dispatch( {
@@ -620,7 +618,7 @@ const FilterModal = ( {
     } else if ( newDateObserved === DATE_OBSERVED.MONTHS ) {
       dispatch( {
         type: EXPLORE_ACTION.SET_DATE_OBSERVED_MONTHS,
-        months: newMonths || allMonths,
+        months: newMonths || getMonthsAroundDate( ),
       } );
     }
   };

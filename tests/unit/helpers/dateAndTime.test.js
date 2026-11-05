@@ -15,6 +15,7 @@ import {
   formatObsFieldDatetime,
   formatObsFieldTime,
   formatProjectsApiDatetimeLong,
+  getMonthsAroundDate,
   getNowISO,
 } from "sharedHelpers/dateAndTime";
 
@@ -263,5 +264,19 @@ describe( "formatObsFieldDate/Time/Datetime", ( ) => {
     it( "stores datetime as UTC date and time", ( ) => {
       expect( formatObsFieldDatetime( picked ) ).toEqual( "2026-01-01 03:30" );
     } );
+  } );
+} );
+
+describe( "getMonthsAroundDate", ( ) => {
+  it( "returns the previous, current, and next month", ( ) => {
+    expect( getMonthsAroundDate( new Date( 2026, 5, 15 ) ) ).toEqual( [5, 6, 7] );
+  } );
+
+  it( "wraps around the start of the year", ( ) => {
+    expect( getMonthsAroundDate( new Date( 2026, 0, 1 ) ) ).toEqual( [12, 1, 2] );
+  } );
+
+  it( "wraps around the end of the year", ( ) => {
+    expect( getMonthsAroundDate( new Date( 2026, 11, 31 ) ) ).toEqual( [11, 12, 1] );
   } );
 } );

@@ -544,6 +544,13 @@ function formatObsFieldDatetime( date: Date ): string {
   );
 }
 
+// The previous, current, and next month (1-12), wrapping around the year
+// boundary, e.g. January -> [12, 1, 2]
+function getMonthsAroundDate( date: Date = new Date( ) ): number[] {
+  const current = date.getMonth( ) + 1;
+  return [-1, 0, 1].map( offset => ( ( current - 1 + offset + 12 ) % 12 ) + 1 );
+}
+
 export {
   formatApiDatetime,
   formatDateStringFromTimestamp,
@@ -558,5 +565,6 @@ export {
   formatObsFieldDatetime,
   formatObsFieldTime,
   formatProjectsApiDatetimeLong,
+  getMonthsAroundDate,
   getNowISO,
 };

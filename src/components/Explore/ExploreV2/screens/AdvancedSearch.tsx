@@ -71,7 +71,7 @@ import {
   useExploreV2,
 } from "providers/ExploreV2Context";
 import React, { useMemo, useReducer, useState } from "react";
-import { formatObsFieldDate } from "sharedHelpers/dateAndTime";
+import { formatObsFieldDate, getMonthsAroundDate } from "sharedHelpers/dateAndTime";
 import { DEFAULT_EXPLORE_V2_NEARBY_RADIUS_KM } from "sharedHelpers/nearbyRadius";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useIconicTaxa from "sharedHooks/useIconicTaxa";
@@ -86,8 +86,6 @@ import { getLatestTrackedLocation } from "../../../../sharedHelpers/locationHist
 type SheetName = "hrank" | "lrank" | "photoLicense";
 
 type PickerKind = "taxon" | "user" | "project" | "location";
-
-const ALL_MONTHS = new Array( 12 ).fill( 0 ).map( ( _, i ) => i + 1 );
 
 const isoToday = ( ) => formatObsFieldDate( new Date( ) );
 
@@ -278,7 +276,7 @@ const AdvancedSearch = ( ) => {
     } else if ( newDateObserved === DATE_OBSERVED.MONTHS ) {
       dispatch( {
         type: "SET_DATE_OBSERVED_MONTHS",
-        months: newMonths || ALL_MONTHS,
+        months: newMonths || getMonthsAroundDate( ),
       } );
     }
   };
