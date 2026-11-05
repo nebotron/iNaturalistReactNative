@@ -4,11 +4,16 @@ import {
   mkdir,
 } from "@dr.pogodin/react-native-fs";
 import { photoLibraryPhotosPath } from "appConstants/paths";
-import { moveSharedGroupedPhotos } from "sharedHelpers/shareExtensionFiles";
+import {
+  isSharedAudio,
+  moveSharedGroupedPhotos,
+  stageSharedSound,
+} from "sharedHelpers/shareExtensionFiles";
 import { unlink } from "sharedHelpers/util";
 
 jest.mock( "@dr.pogodin/react-native-fs", () => ( {
   __esModule: true,
+  CachesDirectoryPath: "caches/directory/path",
   DocumentDirectoryPath: "document/directory/path",
   copyFile: jest.fn( ).mockResolvedValue( undefined ),
   exists: jest.fn( ).mockResolvedValue( true ),
@@ -18,6 +23,8 @@ jest.mock( "@dr.pogodin/react-native-fs", () => ( {
 jest.mock( "react-native", () => ( {
   Platform: { OS: "ios" },
 } ) );
+
+jest.mock( "uuid", () => ( { v4: ( ) => "test-uuid" } ) );
 
 jest.mock( "sharedHelpers/util", () => ( {
   __esModule: true,
@@ -81,5 +88,39 @@ describe( "moveSharedGroupedPhotos", ( ) => {
 
     expect( copyFile ).not.toHaveBeenCalled( );
     expect( staged ).toEqual( groupedPhotos );
+  } );
+} );
+
+describe( "isSharedAudio", ( ) => {
+  it( "recognizes audio by MIME type or by extension", ( ) => {
+    expect( isSharedAudio( { mimeType: "audio/x-m4a", data: "file:///a/memo" } ) ).toBe( true );
+    expect( isSharedAudio( { mimeType: "*/*", data: "file:///a/memo.M4A" } ) ).toBe( true );
+    expect( isSharedAudio( { mimeType: "image/jpeg", data: "file:///a/p.jpg" } ) ).toBe( false );
+    expect( isSharedAudio( { mimeType: "application/pdf", data: "file:///a/d.pdf" } ) )
+      .toBe( false );
+  } );
+} );
+
+describe( "stageSharedSound", ( ) => {
+  it( "copies an App Group voice memo into caches and removes the source", async ( ) => {
+    const source = "/private/var/mobile/Containers/Shared/AppGroup/abc/memo.m4a";
+
+    const uri = await stageSharedSound( { mimeType: "audio/x-m4a", data: `file://${source}` } );
+
+    const dest = "caches/directory/path/shared_audio_test-uuid.m4a";
+    expect( copyFile ).toHaveBeenCalledWith( source, dest );
+    expect( unlink ).toHaveBeenCalledWith( source );
+    expect( uri ).toEqual( `file://${dest}` );
+  } );
+
+  it( "copies an Android content uri as-is", async ( ) => {
+    const source = "content://com.example.recorder/audio/42";
+
+    const uri = await stageSharedSound( { mimeType: "audio/mpeg", data: source } );
+
+    const dest = "caches/directory/path/shared_audio_test-uuid.m4a";
+    expect( copyFile ).toHaveBeenCalledWith( source, dest );
+    expect( unlink ).not.toHaveBeenCalled( );
+    expect( uri ).toEqual( `file://${dest}` );
   } );
 } );

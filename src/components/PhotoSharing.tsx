@@ -9,7 +9,11 @@ import { Alert } from "react-native";
 import Observation from "realmModels/Observation";
 import { fileExtension, summarizeTypes } from "sharedHelpers/importedFileTypes";
 import { log } from "sharedHelpers/logger";
-import { unlinkIfShareExtensionSource } from "sharedHelpers/shareExtensionFiles";
+import {
+  isSharedAudio,
+  stageSharedSound,
+  unlinkIfShareExtensionSource,
+} from "sharedHelpers/shareExtensionFiles";
 import { useLayoutPrefs } from "sharedHooks";
 import type { SharedData } from "sharedHooks/useShare";
 import useStore from "stores/useStore";
@@ -100,6 +104,39 @@ const PhotoSharing = ( ) => {
     }
   }, [prepareObsEdit, isDefaultMode, resetNavigator, screenAfterPhotoEvidence] );
 
+  // Shared audio, e.g. a Voice Memo. One sound on its own becomes an
+  // observation straight away and opens in ObsEdit, as a fresh recording
+  // does (Match needs a photo). Anything more goes to Group Photos, where
+  // sounds are items of their own that can be combined with photos.
+  const importSharedSounds = useCallback( async (
+    photoUris: SharedPhoto[],
+    sharedSounds: NonNullable<SharedData["data"]>,
+  ) => {
+    try {
+      const soundUris = await Promise.all( sharedSounds.map( stageSharedSound ) );
+      if ( photoUris.length === 0 && soundUris.length === 1 ) {
+        const newObservation = await Observation.createObsWithSoundPath( soundUris[0] );
+        prepareObsEdit( newObservation );
+        resetNavigator( "ObsEdit" );
+        return;
+      }
+      setPhotoImporterState( {
+        photoLibraryUris: photoUris.map( x => x.image.uri ),
+        groupedPhotos: [
+          ...photoUris.map( photo => ( { photos: [photo] } ) ),
+          ...soundUris.map( soundUri => ( { soundUri } ) ),
+        ],
+      } );
+      resetNavigator( "GroupPhotos" );
+    } catch ( e ) {
+      logger.error( "Failed to import shared audio", e );
+      Alert.alert(
+        "Sound sharing failed: couldn't create new observation:",
+        String( e ),
+      );
+    }
+  }, [prepareObsEdit, resetNavigator, setPhotoImporterState] );
+
   useEffect( ( ) => {
     const { data } = item;
 
@@ -113,15 +150,19 @@ const PhotoSharing = ( ) => {
 
     const sharedImages = data.filter( x => x.mimeType && x.mimeType.startsWith( "image/" ) );
     const photoUris = sharedImages.map( x => ( { image: { uri: x.data } } ) );
+    const sharedSounds = data.filter(
+      x => !x.mimeType?.startsWith( "image/" ) && isSharedAudio( x ),
+    );
 
-    // Anything that is not an image is dropped right here, silently: a shared
-    // video, PDF, or an item whose provider declared no MIME type simply never
-    // arrives, and nothing said so. One line per share (a share is one user
+    // Anything that is neither an image nor audio is dropped right here,
+    // silently: a shared video, PDF, or an item whose provider declared no
+    // MIME type simply never arrives, and nothing said so. One line per share (a share is one user
     // action, so this is not chatty) records what came in and what was kept.
-    const dropped = data.length - photoUris.length;
+    const dropped = data.length - photoUris.length - sharedSounds.length;
     const shareSummary = {
       shared: data.length,
       images: photoUris.length,
+      sounds: sharedSounds.length,
       dropped,
       mimeTypes: summarizeTypes( data.map( x => x.mimeType ) ),
       extensions: summarizeTypes( data.map( x => fileExtension( x.data ) ) ),
@@ -132,7 +173,9 @@ const PhotoSharing = ( ) => {
       logger.infoWithExtra( "share_import", shareSummary );
     }
 
-    if ( photoUris.length === 1 ) {
+    if ( sharedSounds.length > 0 ) {
+      importSharedSounds( photoUris, sharedSounds );
+    } else if ( photoUris.length === 1 ) {
       createObservationAndNavigate( photoUris );
     } else {
       // Go to GroupPhotos screen
@@ -146,6 +189,7 @@ const PhotoSharing = ( ) => {
     }
   }, [
     createObservationAndNavigate,
+    importSharedSounds,
     item,
     navigation,
     resetObservationFlowSlice,

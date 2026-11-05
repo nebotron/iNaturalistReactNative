@@ -185,14 +185,14 @@ const clearExpiredTempFiles = ( ) => clearExpiredFilesByTtl(
   true,
 );
 
-// Brightness-adjusted images and audio
-// extracted from imported videos are regenerated or moved on use.
+// Brightness-adjusted images, audio extracted from imported videos, and
+// shared audio are regenerated or moved on use.
 const clearExpiredMediaCaches = async ( ) => {
   await clearExpiredFilesByTtl( brightnessAdjustedPath );
   await clearExpiredFilesByTtl(
     CachesDirectoryPath,
     CROP_CACHE_TTL_MS,
-    name => name.startsWith( "video_audio_" ),
+    name => name.startsWith( "video_audio_" ) || name.startsWith( "shared_audio_" ),
   );
 };
 

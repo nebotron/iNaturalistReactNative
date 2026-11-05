@@ -11,6 +11,10 @@ import { renderComponent } from "tests/helpers/render";
 jest.mock( "realmModels/Observation" );
 jest.mock( "stores/useStore" );
 jest.mock( "sharedHooks" );
+jest.mock( "sharedHelpers/shareExtensionFiles", ( ) => ( {
+  ...jest.requireActual( "sharedHelpers/shareExtensionFiles" ),
+  stageSharedSound: jest.fn( async item => `file://staged/${item.data.split( "/" ).pop( )}` ),
+} ) );
 
 const JPEG = "image/jpeg";
 
@@ -211,6 +215,49 @@ describe( "PhotoSharing", ( ) => {
           } ),
         );
       } );
+    } );
+  } );
+
+  describe( "Share Audio", ( ) => {
+    it( "creates a sound observation from a single voice memo and opens ObsEdit", async ( ) => {
+      const mocks = setupMocks( );
+      const soundObs = { uuid: "sound-obs" };
+      Observation.createObsWithSoundPath.mockResolvedValue( soundObs );
+      mockUseRoute.mockReturnValue( createMockRoute( {
+        data: [{ data: "file://AppGroup/memo.m4a", mimeType: "audio/x-m4a" }],
+      } ) );
+
+      renderComponent( <PhotoSharing /> );
+
+      await waitFor( ( ) => {
+        expectNavigationReset( mocks.dispatch, "ObsEdit" );
+      } );
+      expect( Observation.createObsWithSoundPath ).toHaveBeenCalledWith( "file://staged/memo.m4a" );
+      expect( mocks.prepareObsEdit ).toHaveBeenCalledWith( soundObs );
+      expect( Observation.createObservationWithPhotos ).not.toHaveBeenCalled( );
+    } );
+
+    it( "sends photos and sounds shared together to GroupPhotos", async ( ) => {
+      const mocks = setupMocks( );
+      mockUseRoute.mockReturnValue( createMockRoute( {
+        data: [
+          { data: "file://photo1.jpg", mimeType: JPEG },
+          { data: "file://memo.m4a", mimeType: "audio/x-m4a" },
+        ],
+      } ) );
+
+      renderComponent( <PhotoSharing /> );
+
+      await waitFor( ( ) => {
+        expect( mocks.setPhotoImporterState ).toHaveBeenCalledWith( {
+          photoLibraryUris: ["file://photo1.jpg"],
+          groupedPhotos: [
+            { photos: [{ image: { uri: "file://photo1.jpg" } }] },
+            { soundUri: "file://staged/memo.m4a" },
+          ],
+        } );
+      } );
+      expectGroupPhotosReset( mocks );
     } );
   } );
 
