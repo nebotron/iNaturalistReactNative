@@ -1,5 +1,4 @@
 import type { ApiTotalBounds } from "api/types";
-import EbirdMapMarkers from "components/Explore/EbirdMapMarkers";
 import type {
   ExploreV2QueryParams,
   NearbyCoords,
@@ -20,7 +19,6 @@ import React, {
 import type MapView from "react-native-maps";
 import type { Region } from "react-native-maps";
 import { useTranslation } from "sharedHooks";
-import useStore from "stores/useStore";
 import { getShadow } from "styles/global";
 
 // matching v1 explore: ~50km around the current location
@@ -60,8 +58,6 @@ interface Props {
   isLoading: boolean;
   mapAreaBounds?: ApiTotalBounds;
   nearbyCoords?: NearbyCoords;
-  // Shown above the map, e.g. why eBird sightings are missing
-  notice?: React.ReactNode;
   onCurrentLocationPress?: ( ) => void;
   onRedoSearchPress?: ( _bounds: ApiTotalBounds ) => void;
   placeMode: EXPLORE_V2_PLACE_MODE;
@@ -74,7 +70,6 @@ const ExploreV2MapView = ( {
   isLoading,
   mapAreaBounds,
   nearbyCoords,
-  notice,
   onCurrentLocationPress,
   onRedoSearchPress,
   placeMode,
@@ -82,7 +77,6 @@ const ExploreV2MapView = ( {
   totalBounds,
 }: Props ) => {
   const { t } = useTranslation( );
-  const ebirdOnly = useStore( state => state.layout.observationSource === "ebird" );
   const mapRef = useRef<MapView | null>( null );
   // The search the user panned away from. The "Redo search in this area"
   // button shows only while that is still the current search, so a new search
@@ -196,7 +190,6 @@ const ExploreV2MapView = ( {
         ref={mapRef}
         initialRegion={initialRegion}
         isLoading={isLoading}
-        mapChildren={<EbirdMapMarkers params={queryParams} />}
         onCurrentLocationPress={onCurrentLocationPress}
         onPanDrag={handlePanDrag}
         regionToAnimate={targetRegion}
@@ -207,24 +200,21 @@ const ExploreV2MapView = ( {
         showsUserLocation
         switchMapTypeButtonClassName="right-5 bottom-20"
         tileMapParams={queryParams}
-        withPressableObsTiles={!ebirdOnly}
+        withPressableObsTiles
       />
-      <View className="absolute top-0 left-0 right-0 z-10" pointerEvents="box-none">
-        {notice}
-        {showRedoSearch && (
-          <View
-            className="mt-5 items-center"
-            style={DROP_SHADOW}
-            testID="ExploreV2MapView.redoSearch"
-          >
-            <Button
-              text={t( "REDO-SEARCH-IN-MAP-AREA" )}
-              level="focus"
-              onPress={handleRedoSearchPress}
-            />
-          </View>
-        )}
-      </View>
+      {showRedoSearch && (
+        <View
+          className="absolute top-5 left-0 right-0 items-center z-10"
+          style={DROP_SHADOW}
+          testID="ExploreV2MapView.redoSearch"
+        >
+          <Button
+            text={t( "REDO-SEARCH-IN-MAP-AREA" )}
+            level="focus"
+            onPress={handleRedoSearchPress}
+          />
+        </View>
+      )}
       {isLoading && (
         <View
           className="absolute top-0 bottom-0 left-0 right-0 items-center justify-center"

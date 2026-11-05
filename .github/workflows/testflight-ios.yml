@@ -110,10 +110,8 @@ jobs:
     - name: Create .env file
       env:
         DOTENV_BASE64: ${{ secrets.DOTENV_BASE64 }}
-        EBIRD_API_KEY: ${{ secrets.EBIRD_API_KEY }}
       run: |
         printf '%s' "$DOTENV_BASE64" | base64 --decode > .env
-        if [ -n "$EBIRD_API_KEY" ]; then printf '\nEBIRD_API_KEY=%s\n' "$EBIRD_API_KEY" >> .env; fi
         # DOTENV_BASE64 predates the per-platform OAuth rename
         sed -i '' -e 's/\r$//' -e 's/^OAUTH_CLIENT_/IOS_OAUTH_CLIENT_/' .env
         missing=""

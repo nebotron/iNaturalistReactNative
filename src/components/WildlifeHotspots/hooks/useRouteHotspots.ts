@@ -1,16 +1,8 @@
-import {
-  EBIRD_MAX_DIST_KM,
-  ebirdToInatObservation,
-  fetchEbirdObservations,
-  isEbirdEnabled,
-  resolveEbirdTaxonFilter,
-} from "api/ebird";
 import { searchObservations } from "api/observations";
 import i18n from "i18next";
 import { useCallback, useRef, useState } from "react";
 import { distanceInKm, EARTH_RADIUS_KM } from "sharedHelpers/geoDistance";
 import { getTunable } from "sharedHelpers/tunableParams";
-import useStore from "stores/useStore";
 
 export interface RoutePoint {
   latitude: number;
@@ -18,7 +10,6 @@ export interface RoutePoint {
 }
 
 export interface HotspotSpecies {
-  // Missing for eBird-only species with no matching iNaturalist observation
   id?: number;
   name: string;
   preferred_common_name?: string;
@@ -36,8 +27,6 @@ export interface HotspotObservation {
   uuid: string;
   latitude: number;
   longitude: number;
-  // Set for eBird sightings, which open there instead of in iNaturalist
-  ebirdChecklistUrl?: string;
 }
 
 export interface Circle { lat: number; lng: number; radiusKm: number }
@@ -65,10 +54,6 @@ const MAX_DETOUR_CANDIDATES = 50;
 const PARKING_MINUTES = getTunable( "hotspotParkingMinutes" );
 // Bbox padding around route to look for observations
 const BBOX_PADDING_KM = getTunable( "hotspotRoutePaddingKm" );
-// eBird searches are circles, so search at points this far apart along the
-// route, capped to keep traffic to eBird low
-const EBIRD_SPACING_KM = 80;
-const MAX_EBIRD_SEARCHES = 8;
 
 const HOTSPOT_PARAM_KEYS = [
   "hotspotClusterRadiusKm",
@@ -399,7 +384,6 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
     for ( const i of memberIndices ) {
       const obs = obsForPoint[i];
       const { taxon } = obs;
-      // eBird species with no iNaturalist match have only a name
       const taxonKey: number | string | undefined = taxon?.id ?? taxon?.name;
       const day = obs.observed_on ?? obs.time_observed_at?.slice( 0, 10 );
       const speciesDayKey = taxonKey && day
@@ -446,7 +430,6 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
           uuid: obs.uuid,
           latitude: points[i].lat,
           longitude: points[i].lng,
-          ebirdChecklistUrl: obs.ebirdChecklistUrl,
         } );
       }
     }
@@ -463,65 +446,7 @@ function clusterByKMeans( observations: any[], maxRadiusKm = MAX_CLUSTER_RADIUS_
   return cells;
 }
 
-// Points along the route at most EBIRD_SPACING_KM apart (wider for long routes)
-function ebirdSearchPoints( route: RoutePoint[] ): RoutePoint[] {
-  const legs = route.slice( 1 ).map( ( p, i ) => distanceInKm(
-    route[i].latitude,
-    route[i].longitude,
-    p.latitude,
-    p.longitude,
-  ) );
-  const total = legs.reduce( ( sum, d ) => sum + d, 0 );
-  const spacing = Math.max( EBIRD_SPACING_KM, total / ( MAX_EBIRD_SEARCHES - 1 ) );
-  const points = [route[0]];
-  let sinceLast = 0;
-  legs.forEach( ( d, i ) => {
-    sinceLast += d;
-    if ( sinceLast >= spacing ) {
-      points.push( route[i + 1] );
-      sinceLast = 0;
-    }
-  } );
-  if ( sinceLast > 0 ) points.push( route[route.length - 1] );
-  return points.slice( 0, MAX_EBIRD_SEARCHES );
-}
-
-// eBird sightings along the route, shaped like iNaturalist observations and
-// matched to iNaturalist taxa by scientific name, filtered as Explore filters
-// them. Empty when the filters allow no birds or can't apply to eBird.
-async function fetchEbirdRouteObservations(
-  route: RoutePoint[],
-  filterParams: Record<string, unknown>,
-  inatObservations: { taxon?: { id: number; name?: string } }[],
-) {
-  const taxonFilter = await resolveEbirdTaxonFilter( filterParams );
-  if ( !taxonFilter ) return [];
-
-  const results = await Promise.allSettled( ebirdSearchPoints( route ).map(
-    point => fetchEbirdObservations( {
-      taxonFilter,
-      dateParams: filterParams,
-      lat: Math.round( point.latitude * 100 ) / 100,
-      lng: Math.round( point.longitude * 100 ) / 100,
-      distKm: EBIRD_MAX_DIST_KM,
-    } ),
-  ) );
-  const taxonIdsByName = new Map( inatObservations
-    .filter( obs => obs.taxon?.name )
-    .map( obs => [obs.taxon?.name, obs.taxon?.id] ) );
-  const seen = new Set<string>( );
-  return results.flatMap( result => ( result.status === "fulfilled"
-    ? result.value
-    : [] ) ).filter( obs => {
-    const key = `${obs.subId}|${obs.speciesCode}`;
-    if ( seen.has( key ) ) return false;
-    seen.add( key );
-    return true;
-  } ).map( obs => ebirdToInatObservation( obs, taxonIdsByName.get( obs.sciName ) ) );
-}
-
 export function useRouteHotspots() {
-  const source = useStore( state => state.layout.observationSource );
   const [hotspots, setHotspots] = useState<Hotspot[]>( [] );
   // Every hotspot whose detour was evaluated, for route planning
   const [candidates, setCandidates] = useState<Hotspot[]>( [] );
@@ -604,22 +529,13 @@ export function useRouteHotspots() {
           },
           ...nonLocationParams,
         } );
-        const useEbird = source !== "inaturalist" && isEbirdEnabled( );
-        // With eBird alone, iNaturalist results are fetched only to match
-        // sightings to taxa, and aren't shown
         const numPages = Math.ceil( totalObs / API_PAGE_SIZE );
         const pages = await Promise.all(
           Array.from( { length: numPages }, ( _, i ) => fetchPage( i + 1 ) ),
         );
 
-        const inatObservations = pages.flatMap( p => p?.results ?? [] ).slice( 0, totalObs );
-        const ebirdObservations = useEbird
-          ? await fetchEbirdRouteObservations( routePoints, filterParams, inatObservations )
-          : [];
         if ( isStale() ) return;
-        const observations = useEbird && source === "ebird"
-          ? ebirdObservations
-          : [...inatObservations, ...ebirdObservations];
+        const observations = pages.flatMap( p => p?.results ?? [] ).slice( 0, totalObs );
 
         // 3. Cluster observations with k-means (diameter ≤ 2× clusterRadiusKm per cluster)
         const cells = clusterByKMeans( observations, clusterRadiusKm );
@@ -713,7 +629,7 @@ export function useRouteHotspots() {
         if ( !isStale() ) setLoading( false );
       }
     },
-    [source],
+    [],
   );
 
   return {

@@ -621,22 +621,6 @@ During-app-start-no-model-found = During app start there was no computer vision 
 # Button for editing something
 # Description of the Life List view in Explore
 Each-species-with-the-date-it-was-first-observed = Each species with the date it was first observed, most recent first
-# Shown with eBird results when the search area is larger than eBird allows
-eBird-limit-area = Only sightings within 50 km of the center of the search area are included.
-# Shown with eBird results when the search's dates reach back further than eBird sightings do
-eBird-limit-dates-window = Only eBird sightings from the last 30 days are included.
-# Shown when only eBird sightings are shown and the taxon filters exclude all birds
-eBird-limit-no-birds = eBird has only bird sightings, so none match these taxa.
-# Shown with eBird results when the search has no location
-eBird-limit-no-location = Choose a location to include eBird sightings.
-# Shown with eBird results when the app has paused eBird searches to limit traffic
-eBird-limit-rate = Too many eBird searches. Try again in a few minutes.
-# Shown with eBird results when the maximum number of sightings was returned
-eBird-limit-results = Only the first 100 eBird sightings are included.
-# Warning shown above the reasons eBird results are incomplete
-eBird-results-incomplete = eBird results are incomplete:
-# Shown when eBird results could not be loaded
-eBird-results-unavailable = eBird results could not be loaded.
 Edit = Edit
 EDIT-COMMENT = EDIT COMMENT
 Edit-comment = Edit comment
@@ -1329,12 +1313,6 @@ Observation-location-obscured-you-can-see-your-own = This observation’s locati
 Observation-location-obscured-you-have-permission = This observation’s location is obscured. You have permission to see this location.
 # Label for a menu that shows various actions you can take for an observation
 Observation-options = Observation options
-# Option in Explore and Hotspots that shows both iNaturalist observations and eBird sightings
-Observation-source-both = Both
-# Option in Explore and Hotspots that shows only eBird sightings
-Observation-source-eBird = eBird
-# Option in Explore and Hotspots that shows only iNaturalist observations
-Observation-source-iNaturalist = iNaturalist
 OBSERVATION-WAS-DELETED = OBSERVATION WAS DELETED
 Observation-with-no-evidence = Observation with no evidence
 Observations = Observations
@@ -1401,8 +1379,6 @@ Opens-a-searchable-list-of-the-species-it-listens-for = Opens a searchable list 
 Opens-add-comment-form = Opens add comment form.
 # Accessibility hint for button that opens the AI camera
 Opens-AI-camera = Opens AI camera.
-# Accessibility hint for an eBird sighting among Explore results
-Opens-eBird-checklist = Opens the eBird checklist.
 # Accessibility hint for a button that opens a form for editing a comment
 Opens-edit-comment-form = Opens edit comment form.
 # Accessibility hint for the button in the Explore header that picks what Explore shows
@@ -1785,8 +1761,6 @@ Shorten-time-limit = Shorten time limit
 # Accessibility label for the photo picker button that shows photos already saved or deleted
 Show-all-photos = Show all photos
 Show-observation-options = Show observation options.
-# Accessibility label for the iNaturalist / eBird / Both toggle in Explore and Hotspots
-Show-observations-from = Show observations from
 # Label for button that shows identification suggestions
 Shows-identification-suggestions = Shows identification suggestions
 # Accessibility hint for the new community member duckling badge
@@ -2107,18 +2081,6 @@ Tunable-defaultObsLocationAccuracyM-description = Accuracy assumed for observati
 Tunable-desiredLocationAccuracyM = Location picker accuracy (m)
 # Description of a tunable parameter in settings
 Tunable-desiredLocationAccuracyM-description = Accuracy below which the location picker shows the location as precise.
-# Label for a tunable parameter in settings
-Tunable-ebirdBackDays = eBird days back
-# Description of a tunable parameter in settings
-Tunable-ebirdBackDays-description = How many days of recent eBird sightings to show. eBird allows at most 30.
-# Label for a tunable parameter in settings
-Tunable-ebirdMaxDistKm = eBird search radius (km)
-# Description of a tunable parameter in settings
-Tunable-ebirdMaxDistKm-description = Radius for nearby eBird sightings. eBird allows at most 50 km.
-# Label for a tunable parameter in settings
-Tunable-ebirdMaxResults = eBird max results
-# Description of a tunable parameter in settings
-Tunable-ebirdMaxResults-description = Maximum number of eBird sightings shown.
 # Label for a tunable parameter in settings
 Tunable-gameLocationRadiusKm = Species game local radius (km)
 # Description of a tunable parameter in settings

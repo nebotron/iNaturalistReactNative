@@ -16,8 +16,6 @@ export enum MAP_TYPES {
   HYBRID = "hybrid",
 }
 
-export type ObservationSource = "inaturalist" | "ebird" | "both";
-
 export interface HotspotSettings {
   hotspotClusterRadiusKm: number;
   hotspotMaxDetourCandidates: number;
@@ -83,10 +81,8 @@ export interface LayoutSlice {
     toggleDebugMode: ( ) => void;
     mapType: MAP_TYPES;
     setMapType: ( mapType: MAP_TYPES ) => void;
-    observationSource: ObservationSource;
     usbDeleteAfterImport: boolean;
     setUsbDeleteAfterImport: ( usbDeleteAfterImport: boolean ) => void;
-    setObservationSource: ( observationSource: ObservationSource ) => void;
     hotspotSettings: HotspotSettings;
     setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
     exploreGridOverlays: ExploreGridOverlays;
@@ -236,14 +232,6 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
       layout: {
         ...state.layout,
         usbDeleteAfterImport: newValue,
-      },
-    } ) ),
-    // Whether Explore and Hotspots show iNaturalist, eBird, or both
-    observationSource: "inaturalist",
-    setObservationSource: newValue => set( state => ( {
-      layout: {
-        ...state.layout,
-        observationSource: newValue,
       },
     } ) ),
     // Most recently selected taxa in taxon search, newest first
