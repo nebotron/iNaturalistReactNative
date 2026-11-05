@@ -2,7 +2,7 @@ import { NativeModules, Platform } from "react-native";
 import { MMKV } from "react-native-mmkv";
 import type Realm from "realm";
 import Photo from "realmModels/Photo";
-import type { RealmObservationPhoto } from "realmModels/types";
+import type { RealmObservation, RealmObservationPhoto } from "realmModels/types";
 import { cropOriginalUriFromPath, savedNormalizedCrop } from "sharedHelpers/cropPhotoMetadata";
 import ensureLocalImageForCrop from "sharedHelpers/ensureLocalImageForCrop";
 import { log } from "sharedHelpers/logger";
@@ -36,10 +36,19 @@ const { ImageCropper } = NativeModules as {
 
 // The observation photo carrying this device photo, for something to save.
 // Stored URIs may lack the ph:// that normalizeDevicePhotoUri adds.
-const findObsPhoto = ( realm: Realm, deviceUri: string ) => (
-  realm.objects<RealmObservationPhoto>( "ObservationPhoto" )
-    .filtered( "originalDevicePhotoUri IN $0", [deviceUri, deviceUri.replace( /^ph:\/\//, "" )] )[0]
-);
+// ObservationPhoto is embedded, so it can only be reached through its
+// Observation: querying it directly threw "You cannot query an embedded
+// object" for every missing photo (156 errors in a day's log).
+const findObsPhoto = (
+  realm: Realm,
+  deviceUri: string,
+): RealmObservationPhoto | undefined => {
+  const uris = [deviceUri, deviceUri.replace( /^ph:\/\//, "" )];
+  const observation = realm.objects<RealmObservation>( "Observation" )
+    .filtered( "ANY observationPhotos.originalDevicePhotoUri IN $0", uris )[0];
+  return observation?.observationPhotos
+    ?.find( op => uris.includes( op.originalDevicePhotoUri ?? "" ) );
+};
 
 const restoreOne = async (
   realm: Realm,

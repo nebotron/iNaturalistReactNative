@@ -39,11 +39,18 @@ const {
   restoreFavedDevicePhotos,
 } = require( "sharedHelpers/restoreFavedDevicePhotos" );
 
+// ObservationPhoto is embedded: Realm refuses to query it on its own.
 const realmWith = obsPhotos => ( {
   isClosed: false,
-  objects: ( ) => ( {
-    filtered: ( ) => obsPhotos,
-  } ),
+  objects: type => {
+    if ( type !== "Observation" ) throw new Error( "You cannot query an embedded object." );
+    return {
+      filtered: ( query, uris ) => ( obsPhotos
+        .some( op => uris.includes( op.originalDevicePhotoUri ) )
+        ? [{ observationPhotos: obsPhotos }]
+        : [] ),
+    };
+  },
 } );
 
 const identity = uri => uri;

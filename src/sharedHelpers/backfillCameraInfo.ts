@@ -18,8 +18,11 @@ const attempted = new Set<string>( );
 // matches), by when that was, so every launch doesn't read thousands of them
 // again. Retried after a while: a matching photo may be added to the library.
 const RETRY_UNFILLABLE_MS = 7 * 24 * 60 * 60 * 1000;
-const UNFILLABLE_KEY = "unfillableAt";
+// Versioned: a change to how photos are matched retries every one it missed.
+// v2: same-shot duplicates and obscured observations match.
+const UNFILLABLE_KEY = "unfillableAt-v2";
 const store = new MMKV( { id: "camera-info-backfill" } );
+store.delete( "unfillableAt" );
 let unfillable: Record<string, number> | null = null;
 
 const getUnfillable = ( ): Record<string, number> => {
