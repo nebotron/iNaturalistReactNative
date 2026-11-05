@@ -379,27 +379,41 @@ const CameraPairs = ( ) => {
                 const total = row.firstWins + row.secondWins + row.same;
                 const pct = ( n: number ) => Math.round( ( n / total ) * 100 );
                 return (
-                  <View key={`${row.first}|${row.second}`} className="mb-3">
-                    <Text className="text-sm">
-                      {t( "Gear-X-vs-Y", { first: row.first, second: row.second, count: total } )}
-                    </Text>
-                    <View className="flex-row h-2 rounded overflow-hidden my-1 bg-lightGray">
-                      <View className="bg-inatGreen" style={{ flex: row.firstWins }} />
-                      <View className="bg-mediumGray" style={{ flex: row.same }} />
-                      <View className="bg-darkGray" style={{ flex: row.secondWins }} />
+                  // Each gear is labeled once, on its own end of the bar
+                  <View key={`${row.first}|${row.second}`} className="flex-row items-center mb-3">
+                    <View className="flex-1 pr-2">
+                      <Text className="text-xs font-bold text-right">{row.first}</Text>
+                      <Text className="text-xs text-right">
+                        {t( "Gear-votes-count", {
+                          count: row.firstWins,
+                          percent: pct( row.firstWins ),
+                        } )}
+                      </Text>
                     </View>
-                    <Text className="text-xs">
-                      {t( "Gear-preference-breakdown", {
-                        first: row.first,
-                        firstWins: row.firstWins,
-                        firstPercent: pct( row.firstWins ),
-                        same: row.same,
-                        samePercent: pct( row.same ),
-                        second: row.second,
-                        secondWins: row.secondWins,
-                        secondPercent: pct( row.secondWins ),
-                      } )}
-                    </Text>
+                    <View className="flex-1">
+                      <View className="flex-row h-3 rounded overflow-hidden bg-lightGray">
+                        <View className="bg-inatGreen" style={{ flex: row.firstWins }} />
+                        <View className="bg-mediumGray" style={{ flex: row.same }} />
+                        <View className="bg-darkGray" style={{ flex: row.secondWins }} />
+                      </View>
+                      {row.same > 0 && (
+                        <Text className="text-xs text-center mt-1">
+                          {t( "Similar-votes-count", {
+                            count: row.same,
+                            percent: pct( row.same ),
+                          } )}
+                        </Text>
+                      )}
+                    </View>
+                    <View className="flex-1 pl-2">
+                      <Text className="text-xs font-bold">{row.second}</Text>
+                      <Text className="text-xs">
+                        {t( "Gear-votes-count", {
+                          count: row.secondWins,
+                          percent: pct( row.secondWins ),
+                        } )}
+                      </Text>
+                    </View>
                   </View>
                 );
               } )}

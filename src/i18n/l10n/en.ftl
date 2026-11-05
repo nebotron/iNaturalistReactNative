@@ -765,10 +765,8 @@ Forgot-Password = Forgot Password
 Fungi = Fungi
 # Explore filter option for an observation's evidence of presence annotation
 Gall--evidence = Gall
-# Votes for each of two pieces of camera gear; percents are whole numbers
-Gear-preference-breakdown = { $first }: { $firstWins } ({ $firstPercent }%) · Similar: { $same } ({ $samePercent }%) · { $second }: { $secondWins } ({ $secondPercent }%)
-# Two pieces of camera gear compared, with the number of votes, e.g. "Canon R5 vs Sony A7 (4)"
-Gear-X-vs-Y = { $first } vs { $second } ({ $count })
+# Votes for one piece of camera gear in a comparison, with a whole-number percent, e.g. "3 (60%)"
+Gear-votes-count = { $count } ({ $percent }%)
 GEOPRIVACY = GEOPRIVACY
 Geoprivacy-status = Geoprivacy: { $status }
 # Onboarding message describing one of the reasons to use iNat
@@ -1780,6 +1778,8 @@ Sign-in-with-Google = Sign in with Google
 Sign-in-with-Google-Failed = Sign in with Google Failed
 # Button to vote that two compared photos are about as good
 Similar--comparison = Similar
+# Votes that two pieces of camera gear were similar, with a whole-number percent
+Similar-votes-count = Similar: { $count } ({ $percent }%)
 Skip-for-now = Skip for now
 # Button in bulk ID flow to move on without identifying the current observation
 SKIP-LEAVE-UNKNOWN = SKIP (LEAVE UNKNOWN)
