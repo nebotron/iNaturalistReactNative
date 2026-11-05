@@ -67,6 +67,15 @@ if ( process.env.METRO_CACHE_DIR ) {
   // eslint-disable-next-line import/no-extraneous-dependencies
   const { FileStore } = require( "metro-cache" );
   mergedConfig.cacheStores = [new FileStore( { root: process.env.METRO_CACHE_DIR } )];
+  // Metro's cache keys cover each file and the transformer, but not
+  // babel.config.js, so a kept cache would serve output from the old config.
+  // When worklets bundle mode was turned on, the build reused every
+  // pre-bundle-mode transform and the app launched to a black screen.
+  mergedConfig.cacheVersion = require( "crypto" )
+    .createHash( "sha1" )
+    .update( String( mergedConfig.cacheVersion ) )
+    .update( require( "fs" ).readFileSync( require.resolve( "./babel.config.js" ) ) )
+    .digest( "hex" );
 }
 
 const configWithRozenite = withRozenite(

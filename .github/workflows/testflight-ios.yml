@@ -169,12 +169,16 @@ jobs:
     # restore-keys fall back to the newest one built against the same
     # dependencies. react-native-xcode.sh always bundles with --reset-cache,
     # which would wipe the Metro cache, so the next step drops the flag.
+    # Worklets bundle mode writes each worklet to its own module under
+    # .worklets as a side effect of transforming the file that holds it, so a
+    # cached transform needs those modules kept alongside it.
     - name: Restore the ccache and Metro cache
       uses: actions/cache@v4
       with:
         path: |
           ~/.ccache
           ~/.metro-cache
+          node_modules/react-native-worklets/.worklets
         key: build-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}-${{ github.run_id }}
         restore-keys: |
           build-${{ runner.os }}-${{ hashFiles( 'ios/Podfile.lock', 'package-lock.json' ) }}-
