@@ -107,6 +107,59 @@ describe( "jpegCropBounds", ( ) => {
     } );
   } );
 
+  it( "keeps a square selection square when its edges snap unevenly", ( ) => {
+    // x snaps 0..1000 but y snaps 0..1008
+    const aligned = alignPixelCropOutwardToJpegBlocks(
+      {
+        originX: 0,
+        originY: 4,
+        width: 1000,
+        height: 1000,
+      },
+      2000,
+      1500,
+    );
+
+    expect( aligned.width ).toBe( aligned.height );
+    expect( aligned ).toEqual( {
+      originX: 0,
+      originY: 0,
+      width: 1008,
+      height: 1008,
+    } );
+  } );
+
+  it( "keeps a square selection square against the image edge", ( ) => {
+    // The image is 1001px tall, so the height can't snap up to 1008
+    const aligned = alignPixelCropOutwardToJpegBlocks(
+      {
+        originX: 300,
+        originY: 0,
+        width: 1001,
+        height: 1001,
+      },
+      1500,
+      1001,
+    );
+
+    expect( aligned.width ).toBe( aligned.height );
+    expect( aligned.originX + aligned.width ).toBeLessThanOrEqual( 1500 );
+    expect( aligned.originY + aligned.height ).toBeLessThanOrEqual( 1001 );
+  } );
+
+  it( "keeps a square selection square when normalized rounding is a pixel off", ( ) => {
+    const pixelCrop = pixelCropFromNormalizedCrop(
+      {
+        x: 0.1, y: 0.0, w: 999.5 / 3001, h: 999.5 / 2001,
+      },
+      3001,
+      2001,
+    );
+    const aligned = alignPixelCropOutwardToJpegBlocks( pixelCrop, 3001, 2001 );
+
+    expect( aligned.width ).toBe( aligned.height );
+  } );
+
   it( "converts normalized crops to pixel crops", ( ) => {
     expect(
       pixelCropFromNormalizedCrop(
