@@ -6,6 +6,7 @@ import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
 import pixelCropFromNormalizedCrop from "sharedHelpers/pixelCropBounds";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
+import { getTunable } from "sharedHelpers/tunableParams";
 import * as uuid from "uuid";
 
 const logger = log.extend( "cropImageFile" );
@@ -35,6 +36,10 @@ interface ImageCropperModule {
 // Below this, a written crop is dark enough to be worth a line in the log.
 const DARK_OUTPUT_LEVEL = 24;
 
+// A crop within a few pixels of this is written at exactly this size, so it
+// isn't resampled on upload.
+const UPLOAD_MAX_SIDE = getTunable( "uploadMaxDimension" );
+
 const { ImageCropper } = NativeModules as {
   ImageCropper?: ImageCropperModule;
 };
@@ -57,7 +62,12 @@ const cropImageFile = async (
   const outputPath = `${outputDir}/${uuid.v4()}.jpg`;
   const inputPath = stripFilePrefix( imageUri );
 
-  const pixelCrop = pixelCropFromNormalizedCrop( crop, imageWidth, imageHeight );
+  const pixelCrop = pixelCropFromNormalizedCrop(
+    crop,
+    imageWidth,
+    imageHeight,
+    UPLOAD_MAX_SIDE,
+  );
 
   try {
     const result = await ImageCropper.cropImage(

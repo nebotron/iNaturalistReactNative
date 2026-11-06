@@ -194,9 +194,12 @@ export function computeContainRect(
   };
 }
 
-export function square2048Crop(
+// A square crop sidePx on a side (or the whole short side, if the image is
+// smaller), centered on the current crop.
+export function squareCropOfSide(
   imageWidth: number,
   imageHeight: number,
+  sidePx: number,
   currentCrop?: NormalizedCrop | null,
 ): NormalizedCrop {
   if ( imageWidth <= 0 || imageHeight <= 0 ) {
@@ -205,12 +208,12 @@ export function square2048Crop(
     };
   }
 
-  const cropSize = Math.min( 2048, imageWidth, imageHeight );
+  const cropSize = Math.min( sidePx, imageWidth, imageHeight );
   const w = cropSize / imageWidth;
   const h = cropSize / imageHeight;
 
   // Keep the new crop centered on the current crop's center when one is
-  // provided, so resizing to 2048 doesn't jump the region back to the middle
+  // provided, so resizing to sidePx doesn't jump the region back to the middle
   // of the image. clampCrop keeps it inside the image bounds.
   const cx = currentCrop
     ? currentCrop.x + currentCrop.w / 2

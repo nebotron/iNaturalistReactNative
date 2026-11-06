@@ -218,7 +218,7 @@
   "CROP-DRAG-HINT": "Drag to pan. Pinch to zoom.",
   "CROP-LOG": "CROP LOG",
   "CROP-PHOTO": "Crop Photo",
-  "Crop-to-2048-by-2048": "Crop to 2048 × 2048",
+  "Crop-to-size-by-size": "Crop to { $size } × { $size }",
   "Current-location": "Current location",
   "DATA-QUALITY": "DATA QUALITY",
   "DATA-QUALITY-ASSESSMENT": "DATA QUALITY ASSESSMENT",

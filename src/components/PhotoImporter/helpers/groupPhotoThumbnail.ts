@@ -1,11 +1,12 @@
 import { PixelRatio } from "react-native";
+import { getTunable } from "sharedHelpers/tunableParams";
 
 // Generated larger than the 1x size a static cell shows: a cell that hasn't
 // loaded its full-resolution photo yet still shows this while the crop box is
 // zoomed in. Capped at the upload size, which is all the detail a crop can ever
 // carry.
 const ZOOM_THUMBNAIL_SCALE = 2;
-const MAX_ZOOM_THUMBNAIL_PIXEL = 2048;
+const MAX_ZOOM_THUMBNAIL_PIXEL = getTunable( "uploadMaxDimension" );
 // Subject detection runs on this same thumbnail, and the detector letterboxes
 // its input into a 640px square, so anything smaller is only upscaled back.
 const MIN_ZOOM_THUMBNAIL_PIXEL = 640;

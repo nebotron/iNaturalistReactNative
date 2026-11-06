@@ -421,8 +421,9 @@ CROP-DRAG-HINT = Drag to pan. Pinch to zoom.
 # Menu item and screen title for the log of photo crops
 CROP-LOG = CROP LOG
 CROP-PHOTO = Crop Photo
-# Accessibility label for the button that crops a photo to 2048 by 2048 pixels
-Crop-to-2048-by-2048 = Crop to 2048 × 2048
+# Accessibility label for the button that crops a photo to a square of the
+# upload size, e.g. "Crop to 2048 × 2048"; size is in pixels
+Crop-to-size-by-size = Crop to { $size } × { $size }
 # Label for current device location in Wildlife Hotspots tool
 Current-location = Current location
 DATA-QUALITY = DATA QUALITY

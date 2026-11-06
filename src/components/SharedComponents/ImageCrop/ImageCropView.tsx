@@ -25,7 +25,8 @@ import {
   normalizedCropToImageZoomTransform,
 } from "sharedHelpers/normalizedCropToImageZoomTransform";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
-import { computeContainRect, square2048Crop } from "sharedHelpers/normalizedCropTypes";
+import { computeContainRect, squareCropOfSide } from "sharedHelpers/normalizedCropTypes";
+import { SNAP_SIDE_TOLERANCE_PX } from "sharedHelpers/pixelCropBounds";
 import { getTunable } from "sharedHelpers/tunableParams";
 import {
   EXPOSURE_STOPS_MAX,
@@ -45,14 +46,18 @@ const UPLOAD_MAX_SIDE = getTunable( "uploadMaxDimension" );
 // Two-finger panning is implemented as a pinch with a scale ratio that stays
 // near 1, so ordinary hand tremor makes the live scale (and thus the cropped
 // side length) drift by a few pixels even when the user isn't deliberately
-// zooming. Right at the 2048 threshold that drift flips the warning border on
-// and off. Use hysteresis instead of a single-sample comparison so crossing
-// the threshold briefly during a gesture doesn't flicker the indicator. The
-// band sits entirely above the threshold, so a crop of exactly 2048 (the
-// slider tick) is never flagged, whichever direction it was approached from.
-const DOWNSIZE_HYSTERESIS_PX = 8;
-// Float slack so the slider tick's scale round-trip still reads as <= 2048.
-const DOWNSIZE_EPSILON_PX = 0.5;
+// zooming. Right at the upload-size threshold that drift flips the warning
+// border on and off. Use hysteresis instead of a single-sample comparison so
+// crossing the threshold briefly during a gesture doesn't flicker the
+// indicator.
+//
+// A crop within SNAP_SIDE_TOLERANCE_PX of the upload size is written at
+// exactly the upload size (see pixelCropFromNormalizedCrop), so it is only
+// downsized beyond that. The warning comes on past it and goes off a few
+// pixels inside it, so the slider tick (exactly the upload size) is never
+// flagged, whichever direction it was approached from.
+const DOWNSIZE_THRESHOLD_PX = UPLOAD_MAX_SIDE + SNAP_SIDE_TOLERANCE_PX;
+const DOWNSIZE_HYSTERESIS_PX = SNAP_SIDE_TOLERANCE_PX / 2;
 // How long to wait before showing the loading spinner. With the next photo
 // preloaded and decoded ahead of time (see warmUris), advancing a bulk crop
 // waits a frame or two for the new image to paint -- just long enough to flash
@@ -60,8 +65,8 @@ const DOWNSIZE_EPSILON_PX = 0.5;
 // that really is slow gets one.
 const SPINNER_DELAY_MS = 150;
 const isDownsized = ( sizePx: number, wasDownsized: boolean ) => ( wasDownsized
-  ? sizePx > UPLOAD_MAX_SIDE + DOWNSIZE_EPSILON_PX
-  : sizePx > UPLOAD_MAX_SIDE + DOWNSIZE_HYSTERESIS_PX );
+  ? sizePx > DOWNSIZE_THRESHOLD_PX - DOWNSIZE_HYSTERESIS_PX
+  : sizePx > DOWNSIZE_THRESHOLD_PX );
 
 const styles = StyleSheet.create( {
   confirmSlot: {
@@ -336,7 +341,7 @@ const ImageCropView = ( {
     updateDownsizeStatus( );
   }, [boxSize, cropAreaHeight, initialCrop, updateDownsizeStatus] );
 
-  const handleSet2048 = useCallback( ( ) => {
+  const handleSetUploadSize = useCallback( ( ) => {
     if ( !zoomRef.current || boxSize <= 0 || cropAreaHeight <= 0 ) {
       return;
     }
@@ -348,7 +353,7 @@ const ImageCropView = ( {
       boxSize,
       zoomRef.current.readTransform( ),
     );
-    const crop = square2048Crop( imageWidth, imageHeight, currentCrop );
+    const crop = squareCropOfSide( imageWidth, imageHeight, UPLOAD_MAX_SIDE, currentCrop );
     const transform = normalizedCropToImageZoomTransform(
       imageWidth,
       imageHeight,
@@ -358,7 +363,7 @@ const ImageCropView = ( {
       crop,
     );
     zoomRef.current.applyTransform( transform );
-    // square2048Crop never exceeds UPLOAD_MAX_SIDE by construction, so clear
+    // squareCropOfSide never exceeds UPLOAD_MAX_SIDE by construction, so clear
     // the warning directly instead of reading the transform back -- that read
     // can run before the just-applied worklet update reaches JS, and would
     // otherwise fall inside the hysteresis band and stay stuck on if the crop
@@ -552,7 +557,7 @@ const ImageCropView = ( {
           zoomAccessibilityLabel={t( "Adjust-zoom" )}
           brightnessAccessibilityLabel={t( "Adjust-brightness" )}
           iconColor={colors.white}
-          zoomSnapScale={cropSidePxFromScale( 1 ) / 2048}
+          zoomSnapScale={cropSidePxFromScale( 1 ) / UPLOAD_MAX_SIDE}
         />
 
         <View
@@ -575,12 +580,12 @@ const ImageCropView = ( {
             : <View style={styles.confirmSlot} />}
           <INatIconButton
             icon="crop"
-            accessibilityLabel={t( "Crop-to-2048-by-2048" )}
+            accessibilityLabel={t( "Crop-to-size-by-size", { size: UPLOAD_MAX_SIDE } )}
             color={colors.inatGreen}
             height={CROP_BUTTON_SIZE}
             width={CROP_BUTTON_SIZE}
             size={CROP_ICON_SIZE}
-            onPress={handleSet2048}
+            onPress={handleSetUploadSize}
             disabled={saving}
           />
           {saving

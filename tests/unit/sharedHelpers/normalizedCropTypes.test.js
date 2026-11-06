@@ -2,7 +2,7 @@ import {
   clampCrop,
   computeContainRect,
   defaultSquareCrop,
-  square2048Crop,
+  squareCropOfSide,
 } from "sharedHelpers/normalizedCropTypes";
 
 describe( "defaultSquareCrop", ( ) => {
@@ -49,16 +49,16 @@ describe( "computeContainRect", ( ) => {
   } );
 } );
 
-describe( "square2048Crop", ( ) => {
+describe( "squareCropOfSide", ( ) => {
   it( "returns full image for images smaller than 2048", ( ) => {
-    const crop = square2048Crop( 1000, 1000 );
+    const crop = squareCropOfSide( 1000, 1000, 2048 );
     expect( crop ).toEqual( {
       x: 0, y: 0, w: 1, h: 1,
     } );
   } );
 
   it( "returns centered 2048 crop for large landscape images", ( ) => {
-    const crop = square2048Crop( 4000, 3000 );
+    const crop = squareCropOfSide( 4000, 3000, 2048 );
     expect( crop.w ).toBeCloseTo( 2048 / 4000, 5 );
     expect( crop.h ).toBeCloseTo( 2048 / 3000, 5 );
     expect( crop.x ).toBeCloseTo( ( 1 - 2048 / 4000 ) / 2, 5 );
@@ -66,7 +66,7 @@ describe( "square2048Crop", ( ) => {
   } );
 
   it( "returns centered 2048 crop for large portrait images", ( ) => {
-    const crop = square2048Crop( 3000, 4000 );
+    const crop = squareCropOfSide( 3000, 4000, 2048 );
     expect( crop.w ).toBeCloseTo( 2048 / 3000, 5 );
     expect( crop.h ).toBeCloseTo( 2048 / 4000, 5 );
     expect( crop.x ).toBeCloseTo( ( 1 - 2048 / 3000 ) / 2, 5 );
@@ -74,14 +74,14 @@ describe( "square2048Crop", ( ) => {
   } );
 
   it( "returns full image for square 2048x2048 images", ( ) => {
-    const crop = square2048Crop( 2048, 2048 );
+    const crop = squareCropOfSide( 2048, 2048, 2048 );
     expect( crop ).toEqual( {
       x: 0, y: 0, w: 1, h: 1,
     } );
   } );
 
   it( "constrains crops to image boundaries", ( ) => {
-    const crop = square2048Crop( 4000, 3000 );
+    const crop = squareCropOfSide( 4000, 3000, 2048 );
     expect( crop.x ).toBeGreaterThanOrEqual( 0 );
     expect( crop.y ).toBeGreaterThanOrEqual( 0 );
     expect( crop.x + crop.w ).toBeLessThanOrEqual( 1 );
@@ -92,7 +92,7 @@ describe( "square2048Crop", ( ) => {
     const current = {
       x: 0.5, y: 0.5, w: 0.1, h: 0.1,
     };
-    const crop = square2048Crop( 4000, 3000, current );
+    const crop = squareCropOfSide( 4000, 3000, 2048, current );
     const cx = current.x + current.w / 2;
     const cy = current.y + current.h / 2;
     expect( crop.x + crop.w / 2 ).toBeCloseTo( cx, 5 );
@@ -103,7 +103,7 @@ describe( "square2048Crop", ( ) => {
     const current = {
       x: 0.95, y: 0.95, w: 0.05, h: 0.05,
     };
-    const crop = square2048Crop( 4000, 3000, current );
+    const crop = squareCropOfSide( 4000, 3000, 2048, current );
     expect( crop.x ).toBeGreaterThanOrEqual( 0 );
     expect( crop.y ).toBeGreaterThanOrEqual( 0 );
     expect( crop.x + crop.w ).toBeLessThanOrEqual( 1 );

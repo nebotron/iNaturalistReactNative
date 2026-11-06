@@ -41,6 +41,76 @@ describe( "pixelCropFromNormalizedCrop", ( ) => {
     } );
   } );
 
+  it.each( [2041, 2044, 2051, 2056] )(
+    "snaps a %ipx square crop to the upload size",
+    side => {
+      expect(
+        pixelCropFromNormalizedCrop(
+          {
+            x: 1003 / 4032,
+            y: 501 / 3024,
+            w: side / 4032,
+            h: side / 3024,
+          },
+          4032,
+          3024,
+          2048,
+        ),
+      ).toEqual( {
+        originX: 1003,
+        originY: 501,
+        width: 2048,
+        height: 2048,
+      } );
+    },
+  );
+
+  it.each( [2039, 2057] )( "leaves a %ipx crop alone, too far from the upload size", side => {
+    const pixelCrop = pixelCropFromNormalizedCrop(
+      {
+        x: 0, y: 0, w: side / 4032, h: side / 3024,
+      },
+      4032,
+      3024,
+      2048,
+    );
+
+    expect( pixelCrop.width ).toBe( side );
+    expect( pixelCrop.height ).toBe( side );
+  } );
+
+  it( "moves a snapped crop back inside the image edge", ( ) => {
+    const pixelCrop = pixelCropFromNormalizedCrop(
+      {
+        x: ( 4032 - 2044 ) / 4032, y: 0, w: 2044 / 4032, h: 2044 / 3024,
+      },
+      4032,
+      3024,
+      2048,
+    );
+
+    expect( pixelCrop ).toEqual( {
+      originX: 4032 - 2048,
+      originY: 0,
+      width: 2048,
+      height: 2048,
+    } );
+  } );
+
+  it( "doesn't snap past an image smaller than the upload size", ( ) => {
+    const pixelCrop = pixelCropFromNormalizedCrop(
+      {
+        x: 0, y: 0, w: 1, h: 1,
+      },
+      2045,
+      2045,
+      2048,
+    );
+
+    expect( pixelCrop.width ).toBe( 2045 );
+    expect( pixelCrop.height ).toBe( 2045 );
+  } );
+
   it( "keeps a square selection square when normalized rounding is a pixel off", ( ) => {
     const pixelCrop = pixelCropFromNormalizedCrop(
       {
@@ -74,7 +144,7 @@ describe( "cropImageFile bounds", ( ) => {
     jest.resetModules( );
   } );
 
-  it( "passes the selected pixel bounds to the native cropper unaligned", async ( ) => {
+  it( "passes the selected bounds unaligned, snapped to the upload size", async ( ) => {
     const cropImage = jest.fn( ( ) => Promise.resolve( {
       path: "/tmp/cropped.jpg",
       outputLevel: 100,
@@ -90,6 +160,9 @@ describe( "cropImageFile bounds", ( ) => {
     } ) );
     jest.doMock( "uuid", ( ) => ( {
       v4: ( ) => "test-crop-id",
+    } ) );
+    jest.doMock( "sharedHelpers/tunableParams", ( ) => ( {
+      getTunable: ( ) => 2048,
     } ) );
 
     const cropImageFile = require( "sharedHelpers/cropImageFile" ).default;
@@ -113,6 +186,29 @@ describe( "cropImageFile bounds", ( ) => {
       10,
       50,
       50,
+      "/tmp/output/test-crop-id.jpg",
+    );
+
+    cropImage.mockClear( );
+    await cropImageFile(
+      "file:///tmp/source.jpg",
+      {
+        x: 1003 / 4032,
+        y: 501 / 3024,
+        w: 2051 / 4032,
+        h: 2051 / 3024,
+      },
+      4032,
+      3024,
+      "/tmp/output",
+    );
+
+    expect( cropImage ).toHaveBeenCalledWith(
+      "/tmp/source.jpg",
+      1003,
+      501,
+      2048,
+      2048,
       "/tmp/output/test-crop-id.jpg",
     );
   } );
