@@ -1,4 +1,4 @@
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { SharedZoomableImageRef } from "components/MediaViewer/SharedZoomableImage";
 import SharedZoomableImage from "components/MediaViewer/SharedZoomableImage";
 import {
@@ -340,14 +340,24 @@ const CameraPairs = ( ) => {
     return pairs.sort( ( x, y ) => x.score - y.score );
   }, [observations, seed] );
 
-  const pairs = useMemo(
-    ( ) => allPairs.filter( pair => pair.score <= tolerance ),
-    [allPairs, tolerance],
-  );
-
   const open = ( uuid: string ) => navigation.navigate( "ObsDetails", { uuid } );
 
   const [votes, setVotes] = useState<Votes>( loadVotes );
+  // Pairs decided as of the last time the screen gained focus. Snapshotting
+  // keeps the list from reshuffling under the user while they vote; on
+  // return, undecided pairs move to the top.
+  const [decided, setDecided] = useState( ( ) => new Set( Object.keys( votes ) ) );
+  useFocusEffect( useCallback( ( ) => {
+    setDecided( new Set( Object.keys( loadVotes( ) ) ) );
+  }, [] ) );
+
+  const pairs = useMemo( ( ) => {
+    const within = allPairs.filter( pair => pair.score <= tolerance );
+    // Stable sort, so each group keeps its closest-distance-first order
+    return within.sort( ( x, y ) => Number( decided.has( voteKey( x ) ) )
+      - Number( decided.has( voteKey( y ) ) ) );
+  }, [allPairs, tolerance, decided] );
+
   const castVote = useCallback( ( pair: Pair, winner: string | "same" ) => {
     setVotes( current => {
       const key = voteKey( pair );
