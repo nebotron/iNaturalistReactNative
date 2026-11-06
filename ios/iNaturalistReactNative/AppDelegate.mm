@@ -269,7 +269,33 @@ static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
         @"to": describe( payload.timeStampEnd ),
       }, cpu.callStackTree, @"warn" );
     }
+    // iOS reports these when the app writes more than 1 GB to disk in a day;
+    // the stack shows which code did the writing.
+    for ( MXDiskWriteExceptionDiagnostic *disk in payload.diskWriteExceptionDiagnostics ) {
+      postDiagnostic( @"metrickit_disk_write_exception", @{
+        @"appBuild": describe( disk.metaData.applicationBuildVersion ),
+        @"writesMB": measure( disk.totalWritesCaused, NSUnitInformationStorage.megabytes ),
+        @"from": describe( payload.timeStampBegin ),
+        @"to": describe( payload.timeStampEnd ),
+      }, disk.callStackTree, @"warn" );
+    }
   }
+}
+
+// Total time a signpost interval was open, from its duration histogram: each
+// bucket's count at the bucket's midpoint.
+static NSNumber *histogramSeconds( MXHistogram<NSUnitDuration *> *histogram )
+{
+  if ( !histogram ) return @( -1 );
+  double total = 0;
+  for ( MXHistogramBucket<NSUnitDuration *> *bucket in histogram.bucketEnumerator ) {
+    double start = [bucket.bucketStart measurementByConvertingToUnit:NSUnitDuration.seconds]
+      .doubleValue;
+    double end = [bucket.bucketEnd measurementByConvertingToUnit:NSUnitDuration.seconds]
+      .doubleValue;
+    total += bucket.bucketCount * ( start + end ) / 2;
+  }
+  return @( round( total * 10 ) / 10 );
 }
 
 // One a day per device: what the app spent on the things that drain the
@@ -309,7 +335,29 @@ static NSNumber *measure( NSMeasurement *value, NSUnit *unit )
       @"diskWritesMB": measure( p.diskIOMetrics.cumulativeLogicalWrites, mb ),
       @"displayLuminanceAPL": measure( p.displayMetrics.averagePixelLuminance.averageMeasurement,
                                        MXUnitAveragePixelLuminance.apl ),
+      @"peakMemoryMB": measure( p.memoryMetrics.peakMemoryUsage, mb ),
     }, nil, @"info" );
+    // Where the day's CPU time and disk writes went: one entry per screen
+    // and activity PowerProfile marked (see PowerProfile.h). Each figure is
+    // the whole process's while that interval was open.
+    for ( MXSignpostMetric *signpost in p.signpostMetrics ) {
+      MXSignpostIntervalData *data = signpost.signpostIntervalData;
+      postDiagnostic( @"metrickit_signpost", @{
+        @"appBuild": describe( p.metaData.applicationBuildVersion ),
+        @"from": describe( p.timeStampBegin ),
+        @"to": describe( p.timeStampEnd ),
+        @"category": signpost.signpostCategory,
+        @"name": signpost.signpostName,
+        @"count": @( signpost.totalCount ),
+        @"seconds": histogramSeconds( data.histogrammedSignpostDuration ),
+        @"cpuSeconds": measure( data.cumulativeCPUTime, sec ),
+        @"diskWritesMB": measure( data.cumulativeLogicalWrites, mb ),
+        @"averageMemoryMB": measure( data.averageMemory.averageMeasurement, mb ),
+        @"hitchMsPerSecond": data.cumulativeHitchTimeRatio
+          ? @( round( data.cumulativeHitchTimeRatio.doubleValue * 10 ) / 10 )
+          : @( -1 ),
+      }, nil, @"info" );
+    }
   }
 }
 

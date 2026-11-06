@@ -288,6 +288,12 @@ Available aliases: `api`, `appConstants`, `components`, `dictionaries`, `i18n`, 
   ```
   Never run `--clear`. Entries carry the `commit` they came from, so check
   whether a crash predates the fix before chasing it.
+- **Battery use** comes from iOS MetricKit, once a day per device:
+  `python3 scripts/power_report.py` tabulates `metrickit_daily` (CPU, GPU,
+  location, network, disk writes), `metrickit_signpost` (the same split by
+  screen and by activity such as Audio ID listening, marked through
+  `ios/iNaturalistReactNative/PowerProfile.h`), and the CPU and disk-write
+  exception reports with their stacks.
 - **UI responsiveness markers**, written by `sharedHelpers/uiDelayTracker.ts`
   and searchable in that log: `slow_screen_transition` (tap to rendered
   screen) and `slow_ui_work`. `button_stuck_processing` and
