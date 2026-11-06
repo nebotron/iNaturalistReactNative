@@ -12,7 +12,7 @@ type Props = {
   filterByIconicTaxonUnknown: Function,
   renderLocationPermissionsGate: Function,
   requestLocationPermissions: Function,
-  updateTaxonFilters: Function,
+  updateTaxon: Function,
   updateLocation: Function,
   updateUser: Function,
   updateProject: Function
@@ -24,7 +24,7 @@ const ExploreFiltersModal = ( {
   filterByIconicTaxonUnknown,
   renderLocationPermissionsGate,
   requestLocationPermissions,
-  updateTaxonFilters,
+  updateTaxon,
   updateLocation,
   updateUser,
   updateProject,
@@ -40,7 +40,7 @@ const ExploreFiltersModal = ( {
         filterByIconicTaxonUnknown={filterByIconicTaxonUnknown}
         renderLocationPermissionsGate={renderLocationPermissionsGate}
         requestLocationPermissions={requestLocationPermissions}
-        updateTaxonFilters={updateTaxonFilters}
+        updateTaxon={updateTaxon}
         updateLocation={updateLocation}
         updateUser={updateUser}
         updateProject={updateProject}

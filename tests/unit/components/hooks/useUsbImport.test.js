@@ -10,7 +10,6 @@ const mockClearUsbOffloadMarker = jest.fn( );
 const mockMarkUsbOffloadStarted = jest.fn( );
 const mockTakeUnfinishedUsbOffload = jest.fn( ( ) => null );
 const mockUpdateUsbOffloadProgress = jest.fn( );
-const mockGetUsbFolderName = jest.fn( );
 const mockGetUsbFolderDiagnostics = jest.fn( );
 const mockRefreshUsbCardState = jest.fn( async ( ) => undefined );
 
@@ -24,7 +23,6 @@ jest.mock( "sharedHelpers/usbStorage", ( ) => ( {
   clearUsbOffloadMarker: ( ) => mockClearUsbOffloadMarker( ),
   deleteUsbSourceImages: ( ...args ) => mockDeleteUsbSourceImages( ...args ),
   getUsbFolderDiagnostics: ( ) => mockGetUsbFolderDiagnostics( ),
-  getUsbFolderName: ( ) => mockGetUsbFolderName( ),
   isCameraSubfolder: folder => folder?.parentName?.toUpperCase( ) === "DCIM",
   isUsbImportSupported: ( ) => true,
   listNewUsbImages: ( ...args ) => mockListNewUsbImages( ...args ),
@@ -102,7 +100,6 @@ describe( "useUsbImport", ( ) => {
     jest.clearAllMocks( );
     jest.useFakeTimers( );
     mockPendingDeletes = [];
-    mockGetUsbFolderName.mockResolvedValue( "101EOSR7" );
     mockGetUsbFolderDiagnostics.mockResolvedValue( { bookmarkPresent: true } );
     mockListNewUsbImages.mockResolvedValue( {
       available: true,

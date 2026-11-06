@@ -4,10 +4,9 @@ import ImageCropEditor from "components/SharedComponents/ImageCrop/ImageCropEdit
 import React from "react";
 import { preloadCache } from "sharedHelpers/imageCropPreload";
 import {
-  clearRemovedGroupPhotoUris,
   getRemovedGroupPhotoUris,
 } from "sharedHelpers/removedGroupPhotoUris";
-import useStore from "stores/useStore";
+import useStore, { zustandStorage } from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
 
 // The cropper itself is all gestures and reanimated; we only care about what
@@ -33,7 +32,7 @@ const initialStoreState = useStore.getState( );
 describe( "ImageCropEditor delete from Group Photos", ( ) => {
   beforeEach( ( ) => {
     useStore.setState( initialStoreState, true );
-    clearRemovedGroupPhotoUris( getRemovedGroupPhotoUris( ) );
+    zustandStorage.removeItem( "removedGroupPhotoUris" );
     // Seeds the editor so it renders the cropper instead of the spinner
     preloadCache.set( DISPLAY_URI, {
       localUri: DISPLAY_URI,

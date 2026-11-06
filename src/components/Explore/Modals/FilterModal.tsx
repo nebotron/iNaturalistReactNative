@@ -1,10 +1,5 @@
 import type { ApiPlace, ApiProject } from "api/types";
 import classNames from "classnames";
-import ExploreSavedFilterSheets from "components/Explore/ExploreSavedFilterSheets";
-import ExploreSavedFiltersSection from "components/Explore/ExploreSavedFiltersSection";
-import ExploreTaxonFiltersSection from "components/Explore/ExploreTaxonFiltersSection";
-import type { ExploreTaxonFilter } from "components/Explore/helpers/taxonFilters";
-import { toggleTaxonFilter } from "components/Explore/helpers/taxonFilters";
 import NumberBadge from "components/Explore/NumberBadge";
 import type { ExploreSearchUser } from "components/Explore/SearchScreens/ExploreUserSearch";
 import ProjectListItem from "components/ProjectList/ProjectListItem";
@@ -15,7 +10,8 @@ import {
   Button,
   ButtonBar,
   Checkbox,
-  DateSheet,
+  DateTimePicker,
+  DisplayTaxon,
   Heading1,
   Heading4,
   IconicTaxonChooser,
@@ -28,16 +24,13 @@ import {
   WarningSheet,
 } from "components/SharedComponents";
 import { TopAndBottomInsetViewWrapper } from "components/SharedComponents/ViewWrapper";
-import {
-  Pressable, ScrollView, TextInput, View,
-} from "components/styledComponents";
+import { Pressable, ScrollView, View } from "components/styledComponents";
 import UserListItem from "components/UserList/UserListItem";
 import { RealmContext } from "providers/contexts";
 import {
   DATE_OBSERVED,
   DATE_UPLOADED,
   ESTABLISHMENT_MEAN,
-  EVIDENCE_TYPE,
   EXPLORE_ACTION,
   MEDIA,
   PHOTO_LICENSE,
@@ -49,7 +42,6 @@ import {
 } from "providers/ExploreContext";
 import React, { useState } from "react";
 import type { RealmTaxon } from "realmModels/types";
-import { formatObsFieldDate, getMonthsAroundDate } from "sharedHelpers/dateAndTime";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import type { LocationPermissionCallbacks } from "sharedHooks/useLocationPermission";
 import { getShadow } from "styles/global";
@@ -61,16 +53,6 @@ import ExploreLocationSearchModal from "./ExploreLocationSearchModal";
 import ExploreProjectSearchModal from "./ExploreProjectSearchModal";
 import ExploreTaxonSearchModal from "./ExploreTaxonSearchModal";
 import ExploreUserSearchModal from "./ExploreUserSearchModal";
-
-// Parse a "YYYY-MM-DD" string as a local date (midnight local time). Using
-// `new Date( "YYYY-MM-DD" )` would parse it as UTC and then display it in the
-// local time zone, shifting the picker's initial date by a day for users
-// behind UTC. Pairs with formatObsFieldDate, which writes local date parts.
-const parseLocalDate = ( dateStr?: string ): Date => {
-  if ( !dateStr ) return new Date( );
-  const [year, month, day] = dateStr.split( "-" ).map( Number );
-  return new Date( year, month - 1, day );
-};
 
 const DROP_SHADOW = getShadow( {
   offsetHeight: 4,
@@ -84,8 +66,8 @@ interface Props {
   filterByIconicTaxonUnknown: () => void;
   renderLocationPermissionsGate: ( options: LocationPermissionCallbacks ) => React.FC;
   requestLocationPermissions: ( ) => void;
-  updateTaxonFilters: ( taxonFilters: ExploreTaxonFilter[] ) => void;
-  updateLocation: ( location: "worldwide" | "nearby" | ApiPlace ) => void | Promise<void>;
+  updateTaxon: ( taxon: RealmTaxon | null ) => void;
+  updateLocation: ( location: "worldwide" | ApiPlace ) => void;
   updateUser: ( user: ExploreSearchUser | null, exclude?: boolean ) => void;
   updateProject: ( project: ApiProject ) => void;
 }
@@ -95,7 +77,7 @@ const FilterModal = ( {
   filterByIconicTaxonUnknown,
   renderLocationPermissionsGate,
   requestLocationPermissions,
-  updateTaxonFilters,
+  updateTaxon,
   updateLocation,
   updateUser,
   updateProject,
@@ -123,7 +105,6 @@ const FilterModal = ( {
     dateObserved,
     dateUploaded,
     establishmentMean,
-    evidenceTypes,
     hrank,
     iconic_taxa: iconicTaxonNames,
     lrank,
@@ -138,35 +119,11 @@ const FilterModal = ( {
     researchGrade,
     reviewedFilter,
     sortBy,
-    taxonFilters,
+    taxon,
     user,
     excludeUser,
-    unobservedByMe,
-    popular,
     wildStatus,
-    hasLocationMissing,
-    hotspotClusterRadiusKm,
-    hotspotMaxDetourCandidates,
-    hotspotObsPerPage,
-    hotspotParkingMinutes,
-    hotspotBboxPaddingKm,
   } = state;
-
-  const [clusterRadiusText, setClusterRadiusText] = useState(
-    String( hotspotClusterRadiusKm ),
-  );
-  const [maxCandidatesText, setMaxCandidatesText] = useState(
-    String( hotspotMaxDetourCandidates ),
-  );
-  const [obsPerPageText, setObsPerPageText] = useState(
-    String( hotspotObsPerPage ),
-  );
-  const [parkingMinutesText, setParkingMinutesText] = useState(
-    String( hotspotParkingMinutes ),
-  );
-  const [bboxPaddingText, setBboxPaddingText] = useState(
-    String( hotspotBboxPaddingKm ),
-  );
 
   const NONE = "NONE";
   const SORT_BY_M = "SORT_BY_M";
@@ -184,11 +141,6 @@ const FilterModal = ( {
   const CONFIRMATION = "CONFIRMATION";
   const [openSheet, setOpenSheet] = useState( NONE );
   const [showTaxonSearchModal, setShowTaxonSearchModal] = useState( false );
-  const [showSaveFilterSheet, setShowSaveFilterSheet] = useState( false );
-  const [filterToDelete, setFilterToDelete] = useState<null | {
-    id: string;
-    name: string;
-  }>( null );
   const [showLocationSearchModal, setShowLocationSearchModal] = useState( false );
   const [showUserSearchModal, setShowUserSearchModal] = useState( false );
   const [showProjectSearchModal, setShowProjectSearchModal] = useState( false );
@@ -514,22 +466,6 @@ const FilterModal = ( {
     },
   };
 
-  const evidenceTypeLabels = {
-    [EVIDENCE_TYPE.LIVE_ORGANISM]: t( "Live-organism--evidence" ),
-    [EVIDENCE_TYPE.DEAD_ORGANISM]: t( "Dead-organism--evidence" ),
-    [EVIDENCE_TYPE.FEATHER]: t( "Feather--evidence" ),
-    [EVIDENCE_TYPE.SCAT]: t( "Scat--evidence" ),
-    [EVIDENCE_TYPE.TRACK]: t( "Track--evidence" ),
-    [EVIDENCE_TYPE.BONE]: t( "Bone--evidence" ),
-    [EVIDENCE_TYPE.MOLT]: t( "Molt--evidence" ),
-    [EVIDENCE_TYPE.GALL]: t( "Gall--evidence" ),
-    [EVIDENCE_TYPE.EGG]: t( "Egg--evidence" ),
-    [EVIDENCE_TYPE.HAIR]: t( "Hair--evidence" ),
-    [EVIDENCE_TYPE.LEAFMINE]: t( "Leafmine--evidence" ),
-    [EVIDENCE_TYPE.CONSTRUCTION]: t( "Construction--evidence" ),
-    [EVIDENCE_TYPE.UNKNOWN]: t( "Unknown--evidence" ),
-  };
-
   const wildValues = {
     [WILD_STATUS.ALL]: {
       label: t( "All" ),
@@ -598,7 +534,9 @@ const FilterModal = ( {
   const updateDateObserved = ( {
     newDateObserved, newObservedOn, newD1, newD2, newMonths,
   } ) => {
-    const today = formatObsFieldDate( new Date( ) );
+    const today = new Date( ).toISOString( ).split( "T" )[0];
+    // Array with the numbers from 1 to 12
+    const allMonths = new Array( 12 ).fill( 0 ).map( ( _, i ) => i + 1 );
 
     if ( newDateObserved === DATE_OBSERVED.ALL ) {
       dispatch( {
@@ -618,7 +556,7 @@ const FilterModal = ( {
     } else if ( newDateObserved === DATE_OBSERVED.MONTHS ) {
       dispatch( {
         type: EXPLORE_ACTION.SET_DATE_OBSERVED_MONTHS,
-        months: newMonths || getMonthsAroundDate( ),
+        months: newMonths || allMonths,
       } );
     }
   };
@@ -626,14 +564,14 @@ const FilterModal = ( {
   const updateObservedExact = date => {
     updateDateObserved( {
       newDateObserved: DATE_OBSERVED.EXACT_DATE,
-      newObservedOn: formatObsFieldDate( date ),
+      newObservedOn: date.toISOString().split( "T" )[0],
     } );
   };
 
   const updateObservedStart = date => {
     updateDateObserved( {
       newDateObserved: DATE_OBSERVED.DATE_RANGE,
-      newD1: formatObsFieldDate( date ),
+      newD1: date.toISOString().split( "T" )[0],
       newD2: d2,
     } );
   };
@@ -642,7 +580,7 @@ const FilterModal = ( {
     updateDateObserved( {
       newDateObserved: DATE_OBSERVED.DATE_RANGE,
       newD1: d1,
-      newD2: formatObsFieldDate( date ),
+      newD2: date.toISOString().split( "T" )[0],
     } );
   };
 
@@ -657,7 +595,7 @@ const FilterModal = ( {
   };
 
   const updateDateUploaded = ( { newDateUploaded, newD1, newD2 } ) => {
-    const today = formatObsFieldDate( new Date( ) );
+    const today = new Date().toISOString().split( "T" )[0];
     if ( newDateUploaded === DATE_UPLOADED.ALL ) {
       dispatch( {
         type: EXPLORE_ACTION.SET_DATE_UPLOADED_ALL,
@@ -679,7 +617,7 @@ const FilterModal = ( {
   const updateUploadedStart = date => {
     updateDateUploaded( {
       newDateUploaded: DATE_UPLOADED.DATE_RANGE,
-      newD1: formatObsFieldDate( date ),
+      newD1: date.toISOString().split( "T" )[0],
       newD2: createdD2,
     } );
   };
@@ -688,54 +626,9 @@ const FilterModal = ( {
     updateDateUploaded( {
       newDateUploaded: DATE_UPLOADED.DATE_RANGE,
       newD1: createdD1,
-      newD2: formatObsFieldDate( date ),
+      newD2: date.toISOString().split( "T" )[0],
     } );
   };
-
-  // A single date picker serves every date button here, rendered as a BottomSheet rather
-  // than a native modal. FilterModal is already shown inside a Modal, and a second native
-  // modal (react-native-modal-datetime-picker) nested inside it can leave the outer modal
-  // unresponsive to touches after closing - a known React Native issue with nested modals.
-  const datePickers: Record<string, {
-    date?: string;
-    headerText: string;
-    onDatePicked: ( date: Date ) => void;
-  }> = {
-    [OBSERVED_EXACT]: {
-      date: observedOn,
-      headerText: t( "CHANGE-DATE" ),
-      onDatePicked: updateObservedExact,
-    },
-    [OBSERVED_START]: {
-      date: d1,
-      headerText: t( "CHANGE-START-DATE" ),
-      onDatePicked: updateObservedStart,
-    },
-    [OBSERVED_END]: {
-      date: d2,
-      headerText: t( "CHANGE-END-DATE" ),
-      onDatePicked: updateObservedEnd,
-    },
-    [UPLOADED_EXACT]: {
-      date: createdOn,
-      headerText: t( "CHANGE-DATE" ),
-      onDatePicked: ( date: Date ) => updateDateUploaded( {
-        newDateUploaded: DATE_UPLOADED.EXACT_DATE,
-        newD1: formatObsFieldDate( date ),
-      } ),
-    },
-    [UPLOADED_START]: {
-      date: createdD1,
-      headerText: t( "CHANGE-START-DATE" ),
-      onDatePicked: updateUploadedStart,
-    },
-    [UPLOADED_END]: {
-      date: createdD2,
-      headerText: t( "CHANGE-END-DATE" ),
-      onDatePicked: updateUploadedEnd,
-    },
-  };
-  const openDatePicker = datePickers[openSheet];
 
   const observedEndBeforeStart = d1 > d2;
   const uploadedEndBeforeStart = createdD1 > createdD2;
@@ -802,36 +695,60 @@ const FilterModal = ( {
       </View>
 
       <ScrollView className="py-4">
-        <ExploreSavedFiltersSection
-          onLoadFilter={closeModal}
-          onOpenDeleteFilter={setFilterToDelete}
-          onOpenSaveSheet={() => setShowSaveFilterSheet( true )}
-        />
-        <ExploreTaxonFiltersSection
-          iconicTaxonNames={iconicTaxonNames}
-          onOpenTaxonSearch={() => {
-            setShowTaxonSearchModal( true );
-          }}
-          taxonFilters={taxonFilters || []}
-          updateTaxonFilters={updateTaxonFilters}
-        />
+        {/* Taxon Section */}
         <View className="mb-7">
+          <Heading4 className="px-4 mb-5">{t( "TAXON" )}</Heading4>
+          <View className="px-4 mb-5">
+            {( taxon || ( iconicTaxonNames || [] ).indexOf( "unknown" ) >= 0 )
+              ? (
+                <Pressable
+                  className="flex-row justify-between items-center"
+                  accessibilityRole="button"
+                  accessibilityLabel={t( "Change-taxon" )}
+                  onPress={() => {
+                    setShowTaxonSearchModal( true );
+                  }}
+                >
+                  <DisplayTaxon
+                    handlePress={() => {
+                      setShowTaxonSearchModal( true );
+                    }}
+                    taxon={taxon || "unknown"}
+                  />
+                  <View className="flex-row items-center">
+                    <INatIcon name="edit" size={22} />
+                    <INatIconButton
+                      className="ml-3"
+                      icon="close"
+                      size={20}
+                      onPress={() => updateTaxon( null )}
+                      accessibilityLabel={t( "Remove-taxon-filter" )}
+                    />
+                  </View>
+                </Pressable>
+              )
+              : (
+                <Button
+                  text={t( "SEARCH-FOR-A-TAXON" )}
+                  onPress={() => {
+                    setShowTaxonSearchModal( true );
+                  }}
+                  accessibilityLabel={t( "Search" )}
+                />
+              )}
+          </View>
           <IconicTaxonChooser
             before
-            chosen={[
-              ...( iconicTaxonNames || [] ),
-              ...( taxonFilters || [] )
-                .filter( filter => !filter.exclude )
-                .map( filter => filter.taxon?.name?.toLowerCase( ) )
-                .filter( Boolean ),
-            ]}
+            chosen={iconicTaxonNames || [taxon?.name?.toLowerCase()]}
             onTaxonChosen={( taxonName: string ) => {
               if ( taxonName === "unknown" ) {
                 if ( ( iconicTaxonNames || [] ).indexOf( taxonName ) >= 0 ) {
-                  updateTaxonFilters( [] );
+                  updateTaxon( null );
                 } else {
                   filterByIconicTaxonUnknown();
                 }
+              } else if ( taxon?.name?.toLowerCase() === taxonName ) {
+                updateTaxon( null );
               } else {
                 const selectedTaxon = realm
                   ?.objects<RealmTaxon>( "Taxon" )
@@ -839,11 +756,7 @@ const FilterModal = ( {
                 const iconicTaxon = selectedTaxon.length > 0
                   ? selectedTaxon[0]
                   : null;
-                if ( iconicTaxon ) {
-                  updateTaxonFilters(
-                    toggleTaxonFilter( taxonFilters || [], iconicTaxon, false ),
-                  );
-                }
+                updateTaxon( iconicTaxon );
               }
             }}
           />
@@ -868,13 +781,6 @@ const FilterModal = ( {
                     setShowLocationSearchModal( true );
                   }}
                   accessibilityLabel={t( "Edit" )}
-                />
-              </View>
-              <View className="mt-5">
-                <Checkbox
-                  text={t( "Location-Missing" )}
-                  isChecked={hasLocationMissing}
-                  onPress={() => dispatch( { type: EXPLORE_ACTION.TOGGLE_LOCATION_MISSING } )}
                 />
               </View>
             </View>
@@ -963,18 +869,6 @@ const FilterModal = ( {
                   />
                 )}
             </View>
-            {currentUser && (
-              <Checkbox
-                text={t( "Unobserved-by-me" )}
-                isChecked={unobservedByMe}
-                onPress={() => dispatch( { type: EXPLORE_ACTION.TOGGLE_UNOBSERVED_BY_ME } )}
-              />
-            )}
-            <Checkbox
-              text={t( "Popular-observations-filter" )}
-              isChecked={popular}
-              onPress={() => dispatch( { type: EXPLORE_ACTION.TOGGLE_POPULAR } )}
-            />
           </View>
 
           {/* Project Section */}
@@ -1069,6 +963,11 @@ const FilterModal = ( {
                   }}
                   accessibilityLabel={t( "Change-date" )}
                 />
+                <DateTimePicker
+                  isDateTimePickerVisible={openSheet === OBSERVED_EXACT}
+                  toggleDateTimePicker={() => setOpenSheet( NONE )}
+                  onDatePicked={date => updateObservedExact( date )}
+                />
               </View>
             )}
             {dateObserved === DATE_OBSERVED.DATE_RANGE && (
@@ -1112,6 +1011,16 @@ const FilterModal = ( {
                     </List2>
                   </View>
                 )}
+                <DateTimePicker
+                  isDateTimePickerVisible={openSheet === OBSERVED_START}
+                  toggleDateTimePicker={() => setOpenSheet( NONE )}
+                  onDatePicked={date => updateObservedStart( date )}
+                />
+                <DateTimePicker
+                  isDateTimePickerVisible={openSheet === OBSERVED_END}
+                  toggleDateTimePicker={() => setOpenSheet( NONE )}
+                  onDatePicked={date => updateObservedEnd( date )}
+                />
               </View>
             )}
             {dateObserved === DATE_OBSERVED.MONTHS
@@ -1149,6 +1058,14 @@ const FilterModal = ( {
                     setOpenSheet( UPLOADED_EXACT );
                   }}
                   accessibilityLabel={t( "Change-date" )}
+                />
+                <DateTimePicker
+                  isDateTimePickerVisible={openSheet === UPLOADED_EXACT}
+                  toggleDateTimePicker={() => setOpenSheet( NONE )}
+                  onDatePicked={date => updateDateUploaded( {
+                    newDateUploaded: DATE_UPLOADED.EXACT_DATE,
+                    newD1: date.toISOString().split( "T" )[0],
+                  } )}
                 />
               </View>
             )}
@@ -1193,6 +1110,16 @@ const FilterModal = ( {
                     </List2>
                   </View>
                 )}
+                <DateTimePicker
+                  isDateTimePickerVisible={openSheet === UPLOADED_START}
+                  toggleDateTimePicker={() => setOpenSheet( NONE )}
+                  onDatePicked={date => updateUploadedStart( date )}
+                />
+                <DateTimePicker
+                  isDateTimePickerVisible={openSheet === UPLOADED_END}
+                  toggleDateTimePicker={() => setOpenSheet( NONE )}
+                  onDatePicked={date => updateUploadedEnd( date )}
+                />
               </View>
             )}
           </View>
@@ -1258,23 +1185,6 @@ const FilterModal = ( {
             ) )}
           </View>
 
-          {/* Evidence Type section */}
-          <View className="mb-3">
-            <Heading4 className="mb-5">{t( "EVIDENCE-TYPE" )}</Heading4>
-            {Object.values( EVIDENCE_TYPE ).map( evidenceType => (
-              <View key={evidenceType} className="mb-4">
-                <Checkbox
-                  text={evidenceTypeLabels[evidenceType]}
-                  isChecked={!!evidenceTypes?.includes( evidenceType )}
-                  onPress={() => dispatch( {
-                    type: EXPLORE_ACTION.TOGGLE_EVIDENCE_TYPE,
-                    evidenceType,
-                  } )}
-                />
-              </View>
-            ) )}
-          </View>
-
           {/* Reviewed section */}
           {currentUser && (
             <View className="mb-3">
@@ -1298,7 +1208,7 @@ const FilterModal = ( {
           )}
 
           {/* Photo licensing section */}
-          <View className="mb-7">
+          <View>
             <Heading4 className="mb-5">{t( "PHOTO-LICENSING" )}</Heading4>
             <Button
               text={photoLicenseValues[photoLicense]?.label}
@@ -1308,132 +1218,6 @@ const FilterModal = ( {
                 setOpenSheet( PHOTO_LICENSING );
               }}
               accessibilityLabel={t( "View-photo-licensing-info" )}
-            />
-          </View>
-
-          {/* Hotspot settings section */}
-          <View>
-            <Heading4 className="mb-5">{t( "HOTSPOT-SETTINGS" )}</Heading4>
-            <Body2 className="mb-2">{t( "Hotspot-cluster-radius-km" )}</Body2>
-            <TextInput
-              accessibilityLabel={t( "Hotspot-cluster-radius-km" )}
-              className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
-              keyboardType="decimal-pad"
-              onBlur={() => {
-                const val = parseFloat( clusterRadiusText );
-                const clamped = isNaN( val )
-                  ? hotspotClusterRadiusKm
-                  : val;
-                setClusterRadiusText( String( clamped ) );
-                dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS, value: clamped } );
-              }}
-              onChangeText={text => {
-                setClusterRadiusText( text );
-                const val = parseFloat( text );
-                if ( !isNaN( val ) ) {
-                  dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_CLUSTER_RADIUS, value: val } );
-                }
-              }}
-              returnKeyType="done"
-              value={clusterRadiusText}
-            />
-            <Body2 className="mb-2">{t( "Hotspot-max-detour-candidates" )}</Body2>
-            <TextInput
-              accessibilityLabel={t( "Hotspot-max-detour-candidates" )}
-              className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
-              keyboardType="number-pad"
-              onBlur={() => {
-                const val = parseInt( maxCandidatesText, 10 );
-                const clamped = isNaN( val )
-                  ? hotspotMaxDetourCandidates
-                  : val;
-                setMaxCandidatesText( String( clamped ) );
-                dispatch( {
-                  type: EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES,
-                  value: clamped,
-                } );
-              }}
-              onChangeText={text => {
-                setMaxCandidatesText( text );
-                const val = parseInt( text, 10 );
-                if ( !isNaN( val ) ) {
-                  dispatch( {
-                    type: EXPLORE_ACTION.SET_HOTSPOT_MAX_DETOUR_CANDIDATES,
-                    value: val,
-                  } );
-                }
-              }}
-              returnKeyType="done"
-              value={maxCandidatesText}
-            />
-            <Body2 className="mb-2">{t( "Hotspot-obs-per-page" )}</Body2>
-            <TextInput
-              accessibilityLabel={t( "Hotspot-obs-per-page" )}
-              className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
-              keyboardType="number-pad"
-              onBlur={() => {
-                const val = parseInt( obsPerPageText, 10 );
-                const clamped = isNaN( val )
-                  ? hotspotObsPerPage
-                  : val;
-                setObsPerPageText( String( clamped ) );
-                dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE, value: clamped } );
-              }}
-              onChangeText={text => {
-                setObsPerPageText( text );
-                const val = parseInt( text, 10 );
-                if ( !isNaN( val ) ) {
-                  dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_OBS_PER_PAGE, value: val } );
-                }
-              }}
-              returnKeyType="done"
-              value={obsPerPageText}
-            />
-            <Body2 className="mb-2">{t( "Hotspot-parking-minutes" )}</Body2>
-            <TextInput
-              accessibilityLabel={t( "Hotspot-parking-minutes" )}
-              className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
-              keyboardType="number-pad"
-              onBlur={() => {
-                const val = parseInt( parkingMinutesText, 10 );
-                const clamped = isNaN( val )
-                  ? hotspotParkingMinutes
-                  : val;
-                setParkingMinutesText( String( clamped ) );
-                dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES, value: clamped } );
-              }}
-              onChangeText={text => {
-                setParkingMinutesText( text );
-                const val = parseInt( text, 10 );
-                if ( !isNaN( val ) ) {
-                  dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_PARKING_MINUTES, value: val } );
-                }
-              }}
-              returnKeyType="done"
-              value={parkingMinutesText}
-            />
-            <Body2 className="mb-2">{t( "Hotspot-bbox-padding-km" )}</Body2>
-            <TextInput
-              accessibilityLabel={t( "Hotspot-bbox-padding-km" )}
-              className="border border-lightGray h-10 rounded-xl px-3 text-base"
-              keyboardType="number-pad"
-              onBlur={() => {
-                const val = parseInt( bboxPaddingText, 10 );
-                const clamped = isNaN( val )
-                  ? hotspotBboxPaddingKm
-                  : val;
-                setBboxPaddingText( String( clamped ) );
-                dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM, value: clamped } );
-              }}
-              onChangeText={text => {
-                setBboxPaddingText( text );
-                const val = parseInt( text, 10 );
-                if ( !isNaN( val ) ) {
-                  dispatch( { type: EXPLORE_ACTION.SET_HOTSPOT_BBOX_PADDING_KM, value: val } );
-                }
-              }}
-              returnKeyType="done"
-              value={bboxPaddingText}
             />
           </View>
         </View>
@@ -1555,31 +1339,11 @@ const FilterModal = ( {
           insideModal
         />
       )}
-      {openDatePicker && (
-        <DateSheet
-          headerText={openDatePicker.headerText}
-          date={parseLocalDate( openDatePicker.date )}
-          maximumDate={new Date( )}
-          onPressClose={() => setOpenSheet( NONE )}
-          confirm={date => {
-            openDatePicker.onDatePicked( date );
-            setOpenSheet( NONE );
-          }}
-          insideModal
-        />
-      )}
-      <ExploreSavedFilterSheets
-        filterToDelete={filterToDelete}
-        onCloseDeleteFilter={() => setFilterToDelete( null )}
-        onCloseSaveSheet={() => setShowSaveFilterSheet( false )}
-        showSaveSheet={showSaveFilterSheet}
-      />
       <ExploreTaxonSearchModal
         closeModal={() => { setShowTaxonSearchModal( false ); }}
         showModal={showTaxonSearchModal}
         onPressInfo={( ) => { closeModal(); }}
-        taxonFilters={taxonFilters || []}
-        updateTaxonFilters={updateTaxonFilters}
+        updateTaxon={updateTaxon}
       />
       <ExploreLocationSearchModal
         closeModal={() => { setShowLocationSearchModal( false ); }}

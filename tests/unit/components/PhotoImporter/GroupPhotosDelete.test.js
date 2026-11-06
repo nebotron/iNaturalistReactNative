@@ -6,10 +6,9 @@ import {
   getPreviouslyUploadedDevicePhotoUrisSet,
 } from "sharedHelpers/duplicateUploadedDevicePhotos";
 import {
-  clearRemovedGroupPhotoUris,
   getRemovedGroupPhotoUris,
 } from "sharedHelpers/removedGroupPhotoUris";
-import useStore from "stores/useStore";
+import useStore, { zustandStorage } from "stores/useStore";
 import { renderComponent } from "tests/helpers/render";
 
 jest.mock( "@react-navigation/native", ( ) => {
@@ -37,7 +36,7 @@ describe( "GroupPhotos delete syncs to device", ( ) => {
 
   beforeEach( ( ) => {
     useStore.setState( initialStoreState, true );
-    clearRemovedGroupPhotoUris( getRemovedGroupPhotoUris( ) );
+    zustandStorage.removeItem( "removedGroupPhotoUris" );
     jest.clearAllMocks( );
   } );
 

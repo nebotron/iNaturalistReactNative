@@ -137,12 +137,6 @@ const useStore = create<StoreState>()( persist(
       firstObservationDefaults: state.firstObservationDefaults,
       pendingGroupPhotoDeletionUris: state.pendingGroupPhotoDeletionUris,
       groupCropResume: state.groupCropResume,
-
-      // Explore tab filters and related search state
-      rootExploreView: state.rootExploreView,
-      rootRelativeDateOffsets: state.rootRelativeDateOffsets,
-      rootStoredParams: state.rootStoredParams,
-      savedExploreFilters: state.savedExploreFilters,
     } ),
     storage: createFieldStorage( storage ),
     // We need to deep merge to persist nested objects, like layout

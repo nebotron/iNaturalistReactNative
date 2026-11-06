@@ -315,9 +315,9 @@ const signOut = async (
 
   await removeAllFilesFromDirectory( logFileDirectory );
 
-  // delete all keys from mmkv, except saved Explore filters and searches,
-  // which stay on the device
-  const kept = ["savedExploreFilters", "exploreSavedSearches"].map( field => {
+  // delete all keys from mmkv, except saved Explore searches, which stay on
+  // the device
+  const kept = ["exploreSavedSearches"].map( field => {
     const key = `persisted-zustand.${field}`;
     return [key, zustandMMKVBackingStorage.getString( key )];
   } );

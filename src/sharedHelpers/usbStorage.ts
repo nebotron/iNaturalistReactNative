@@ -74,7 +74,6 @@ export const isCameraSubfolder = (
 
 interface UsbStorageModule {
   pickFolder: ( ) => Promise<string | null>;
-  getFolderName: ( ) => Promise<string | null>;
   getFolderDiagnostics: ( ) => Promise<UsbFolderDiagnostics>;
   forgetFolder: ( ) => Promise<void>;
   listNewImages: (
@@ -122,8 +121,6 @@ const getImportedNames = ( ): string[] => JSON.parse(
 export const isUsbImportSupported = ( ) => !!usbStorage;
 
 export const pickUsbFolder = ( ) => usbStorage?.pickFolder( ) ?? Promise.resolve( null );
-
-export const getUsbFolderName = ( ) => usbStorage?.getFolderName( ) ?? Promise.resolve( null );
 
 export const getUsbFolderDiagnostics = ( ): Promise<UsbFolderDiagnostics> => (
   usbStorage?.getFolderDiagnostics( )

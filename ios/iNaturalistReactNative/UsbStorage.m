@@ -116,17 +116,10 @@ RCT_EXPORT_METHOD(pickFolder:(RCTPromiseResolveBlock)resolve
   _pickResolve = nil;
 }
 
-RCT_EXPORT_METHOD(getFolderName:(RCTPromiseResolveBlock)resolve
-                         reject:(__unused RCTPromiseRejectBlock)reject)
-{
-  NSURL *url = resolveSavedFolder( );
-  resolve( url ? url.lastPathComponent : [NSNull null] );
-}
-
-// Diagnostics for a null getFolderName: distinguishes "no bookmark was ever
-// saved" (folder never picked, or the pick didn't persist) from "a bookmark is
-// saved but won't resolve right now" (typically the drive isn't mounted). Both
-// otherwise surface identically as a null folder name.
+// Diagnostics for a saved folder that won't open: distinguishes "no bookmark
+// was ever saved" (folder never picked, or the pick didn't persist) from "a
+// bookmark is saved but won't resolve right now" (typically the drive isn't
+// mounted).
 RCT_EXPORT_METHOD(getFolderDiagnostics:(RCTPromiseResolveBlock)resolve
                                 reject:(__unused RCTPromiseRejectBlock)reject)
 {

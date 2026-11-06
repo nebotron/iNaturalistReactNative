@@ -4,10 +4,11 @@ import { SPECIES_COUNTS_SUMMARY_FIELDS } from "api/fields";
 import { fetchSpeciesCounts } from "api/observations";
 import ExploreTaxonGridItem from "components/Explore/ExploreTaxonGridItem";
 import i18n from "i18next";
+import {
+  useExplore,
+} from "providers/ExploreContext";
 import type { Node } from "react";
-import React, {
-  useEffect, useMemo, useRef, useState,
-} from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Taxon from "realmModels/Taxon";
 import {
   useCurrentUser,
@@ -31,18 +32,39 @@ const SpeciesView = ( {
   queryParams,
   handleUpdateCount,
 }: Props ): Node => {
-  // Prevents flickering when a user scrolls and new species are loaded on screen
+  // 20240814 - amanda: not sure if we actually need observedTaxonIds in state in the long
+  // run, but for now, it prevents flickering when a user scrolls and new species are loaded
+  // on screen
   const [observedTaxonIds, setObservedTaxonIds] = useState( new Set( ) );
-  // Tracks which taxon IDs have already been sent to the seen-status query so we only
-  // request new IDs on each page load rather than re-fetching all accumulated IDs.
-  const queriedTaxonIdsRef = useRef( new Set( ) );
-  const [pendingTaxonIds, setPendingTaxonIds] = useState( [] );
   const currentUser = useCurrentUser( );
+  const { state } = useExplore();
+  const { excludeUser } = state;
   const {
     flashListStyle,
     gridItemStyle,
     numColumns,
   } = useGridLayout( );
+
+  // query all of current users seen species if "not by me" explore filter
+  const { data: seenByCurrentUserAll } = useQuery(
+    ["fetchSpeciesCountsAll"],
+    ( ) => fetchSpeciesCounts( { // ApiSpeciesCountSummary
+      user_id: currentUser?.id,
+      ttl: -1,
+      fields: SPECIES_COUNTS_SUMMARY_FIELDS,
+    } ),
+    {
+      enabled: ( !!currentUser && !!excludeUser ),
+    },
+  );
+
+  const pageObservedTaxonIdsAll = useMemo( ( ) => seenByCurrentUserAll?.results?.map(
+    r => r.taxon.id,
+  ) || [], [seenByCurrentUserAll?.results] );
+
+  const params = excludeUser
+    ? { ...queryParams, without_taxon_id: pageObservedTaxonIdsAll }
+    : queryParams;
 
   const locale = i18n?.language ?? "en";
 
@@ -55,7 +77,7 @@ const SpeciesView = ( {
     "fetchSpeciesCounts",
     fetchSpeciesCounts,
     {
-      ...queryParams,
+      ...params,
       ...( !currentUser && { locale } ),
       fields: {
         taxon: Taxon.LIMITED_TAXON_FIELDS,
@@ -68,32 +90,15 @@ const SpeciesView = ( {
 
   const taxonIds = data.map( r => r.taxon.id );
 
-  // Reset per-session seen-status cache when the user changes (login/logout).
-  useEffect( ( ) => {
-    queriedTaxonIdsRef.current = new Set( );
-    setObservedTaxonIds( new Set( ) );
-    setPendingTaxonIds( [] );
-  }, [currentUser?.id] );
-
-  // Only enqueue taxon IDs that haven't been checked yet so each page load sends
-  // exactly one small request instead of re-fetching all accumulated IDs.
-  useEffect( ( ) => {
-    if ( !currentUser ) return;
-    const newIds = taxonIds.filter( id => !queriedTaxonIdsRef.current.has( id ) );
-    if ( newIds.length === 0 ) return;
-    newIds.forEach( id => queriedTaxonIdsRef.current.add( id ) );
-    setPendingTaxonIds( newIds );
-  }, [taxonIds, currentUser] );
-
   const { data: seenByCurrentUser } = useQuery(
-    ["fetchSpeciesSeenStatus", pendingTaxonIds],
+    ["fetchSpeciesCounts", taxonIds],
     ( ) => fetchSpeciesCounts( { // ApiSpeciesCountSummary
       user_id: currentUser?.id,
-      taxon_id: pendingTaxonIds,
+      taxon_id: taxonIds,
       fields: SPECIES_COUNTS_SUMMARY_FIELDS,
     } ),
     {
-      enabled: !!( pendingTaxonIds.length > 0 && currentUser ),
+      enabled: !!( taxonIds.length > 0 && currentUser ),
     },
   );
 
@@ -103,13 +108,12 @@ const SpeciesView = ( {
 
   useEffect( ( ) => {
     if ( pageObservedTaxonIds.length > 0 ) {
-      setObservedTaxonIds( prev => {
-        const next = new Set( prev );
-        pageObservedTaxonIds.forEach( id => next.add( id ) );
-        return next;
+      pageObservedTaxonIds.forEach( id => {
+        observedTaxonIds.add( id );
       } );
+      setObservedTaxonIds( observedTaxonIds );
     }
-  }, [pageObservedTaxonIds] );
+  }, [pageObservedTaxonIds, observedTaxonIds] );
 
   const renderItem = ( { item } ) => {
     const taxon = item?.taxon;
