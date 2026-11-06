@@ -1,5 +1,5 @@
 import { exists } from "@dr.pogodin/react-native-fs";
-import { Body3, INatIconButton } from "components/SharedComponents";
+import { INatIconButton } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, {
   useEffect, useLayoutEffect, useRef, useState,
@@ -162,8 +162,6 @@ const ClipTrimmer = ( {
     },
   } ) );
 
-  // Seconds from the span's start
-  const label = ( at: number ) => t( "X-seconds--short", { seconds: at.toFixed( 1 ) } );
   const percent = ( at: number ) => `${( at / duration ) * 100}%`;
   const handle = ( at: number ) => (
     <View
@@ -209,12 +207,7 @@ const ClipTrimmer = ( {
           position={position}
         />
       )}
-      <View className="flex-row justify-between mt-1">
-        <Body3>{t( "Clip-start-time", { time: label( trim[0] ) } )}</Body3>
-        <Body3>{t( "Clip-end-time", { time: label( trim[1] ) } )}</Body3>
-      </View>
-      <View className="flex-row items-center justify-between">
-        <Body3>{label( position )}</Body3>
+      <View className="flex-row items-center justify-center mt-1">
         <INatIconButton
           icon={playing
             ? "stop"
@@ -229,9 +222,6 @@ const ClipTrimmer = ( {
             ? t( "Stops-the-recording" )
             : t( "Plays-the-trimmed-clip-from-the-playhead" )}
         />
-        <Body3>
-          {t( "Clip-length", { time: label( trim[1] - trim[0] ) } )}
-        </Body3>
       </View>
     </View>
   );

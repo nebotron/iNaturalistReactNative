@@ -310,12 +310,6 @@ CLEAR-FILTERS = CLEAR FILTERS
 Clearing-the-storage-device = Clearing the storage device…
 # Screen title for one Audio ID sound clip
 CLIP--audio-id = CLIP
-# Where a trimmed Audio ID clip ends; time is like "8.0 s"
-Clip-end-time = End { $time }
-# Length of a trimmed Audio ID clip; time is like "4.8 s"
-Clip-length = Clip { $time }
-# Where a trimmed Audio ID clip starts; time is like "3.2 s"
-Clip-start-time = Start { $time }
 # Label for a button that closes a window or popup
 Close = Close
 CLOSE = CLOSE
@@ -2603,8 +2597,6 @@ x-saved =
         [one] { $count } saved
        *[other] { $count } saved
     }
-# A duration or position in seconds, abbreviated; seconds is a decimal number
-X-seconds--short = { $seconds } s
 # Number of observations selected to combine
 X-selected = { $count } selected
 # Displays number of sounds attached to an observation in the Media Viewer
