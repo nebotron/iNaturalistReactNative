@@ -62,7 +62,6 @@ interface Props {
   onTrimChange: ( trim: [number, number] ) => void;
   // The species identified, whose probability is graphed below the spectrogram
   sp: AudioIdSpecies;
-  speciesName: string;
   // The live session's timeline of the context clip, when it was kept
   timeline?: ( number | null )[];
 }
@@ -70,7 +69,7 @@ interface Props {
 // A clip's spectrogram: drag the handles to set where it starts and ends, or
 // anywhere else to scrub, then hear it from there.
 const ClipTrimmer = ( {
-  span, trim, onTrimChange, sp, speciesName, timeline,
+  span, trim, onTrimChange, sp, timeline,
 }: Props ) => {
   const { t } = useTranslation( );
   const logits = useClipTimeline( span.path, sp, span.context
@@ -208,7 +207,6 @@ const ClipTrimmer = ( {
           duration={duration}
           trim={trim}
           position={position}
-          speciesName={speciesName}
         />
       )}
       <View className="flex-row justify-between mt-1">

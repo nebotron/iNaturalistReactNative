@@ -1,16 +1,13 @@
-import { Body3 } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import React, { useEffect, useState } from "react";
-import Svg, { Line, Path } from "react-native-svg";
+import Svg, { Path } from "react-native-svg";
 import { log } from "sharedHelpers/logger";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
 
 import type { AudioIdSpecies } from "./audioIdModel";
 import { speciesOutput } from "./audioIdModel";
-import {
-  AudioBirdId, BINS_PER_S, CALL_LOGIT,
-} from "./audioIdSession";
+import { AudioBirdId, BINS_PER_S } from "./audioIdSession";
 
 const logger = log.extend( "AudioId" );
 const HEIGHT = 56;
@@ -54,14 +51,13 @@ interface Props {
   // Seconds from the clip's start, as the spectrogram above shows them
   trim: [number, number];
   position: number;
-  speciesName: string;
 }
 
 // How likely the model hears the species at each moment of the clip (the
 // sigmoid of its per-frame logits, which the clip's score pools over 5 s),
-// lined up with the spectrogram above it, with the level a call is found at.
+// lined up with the spectrogram above it.
 const ClipProbabilityGraph = ( {
-  logits, duration, trim, position, speciesName,
+  logits, duration, trim, position,
 }: Props ) => {
   const { t } = useTranslation( );
   const [width, setWidth] = useState( 0 );
@@ -101,15 +97,6 @@ const ClipProbabilityGraph = ( {
         <Svg width={width} height={HEIGHT}>
           <Path d={area} fill={colors.inatGreen} fillOpacity={0.3} />
           <Path d={line} stroke={colors.inatGreen} strokeWidth={2} fill="none" />
-          <Line
-            x1={0}
-            x2={width}
-            y1={y( sigmoid( CALL_LOGIT ) )}
-            y2={y( sigmoid( CALL_LOGIT ) )}
-            stroke={colors.darkGray}
-            strokeWidth={1}
-            strokeDasharray="4,4"
-          />
         </Svg>
       )}
       <View
@@ -124,15 +111,6 @@ const ClipProbabilityGraph = ( {
         className="absolute h-full w-0.5 bg-warningRed"
         style={{ left: percent( position ) }}
       />
-      <Body3 className="absolute top-0.5 left-1 text-darkGray">
-        {t( "X-percent", { count: 100 } )}
-      </Body3>
-      <Body3 className="absolute bottom-0.5 left-1 text-darkGray">
-        {t( "X-percent", { count: 0 } )}
-      </Body3>
-      <Body3 className="absolute top-0.5 right-1 text-darkGray" numberOfLines={1}>
-        {t( "X-probability-over-time", { name: speciesName } )}
-      </Body3>
     </View>
   );
 };

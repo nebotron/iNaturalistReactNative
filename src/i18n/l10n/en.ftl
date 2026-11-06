@@ -2596,8 +2596,6 @@ X-PHOTOS-Y-SOUNDS =
         [one] 1 SOUND
        *[other] { $soundCount } SOUNDS
     }
-# Title of the Audio ID clip graph of how likely the identified species is heard at each moment
-X-probability-over-time = { $name } probability over time
 X-PROJECTS = { $projectCount } PROJECTS
 # Number of observations saved in ObsEdit multiple observation screen
 x-saved =
