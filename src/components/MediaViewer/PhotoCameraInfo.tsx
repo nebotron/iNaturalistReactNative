@@ -7,10 +7,10 @@ import { RealmContext } from "providers/contexts";
 import React, { useEffect, useMemo, useState } from "react";
 import { useWindowDimensions } from "react-native";
 import type { RealmObservation } from "realmModels/types";
-import type { GearKind } from "sharedHelpers/gearNicknames";
 import {
   libraryOriginalQuery, readLibraryCameraInfo,
 } from "sharedHelpers/findLibraryOriginal";
+import type { GearKind } from "sharedHelpers/gearNicknames";
 import type { PhotoCameraInfo as Info } from "sharedHelpers/photoCameraInfo";
 import { readCameraInfo } from "sharedHelpers/photoCameraInfo";
 import { useGearNicknames, useTranslation } from "sharedHooks";
