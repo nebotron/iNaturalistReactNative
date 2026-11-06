@@ -20,13 +20,30 @@ import React, {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
-import { PanResponder } from "react-native";
 import AudioRecorderPlayer from "react-native-audio-recorder-player";
+import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
+
+const PLAYHEAD_STYLE = {
+  position: "absolute" as const,
+  left: 0,
+  top: 0,
+  bottom: 0,
+  width: 2,
+  backgroundColor: colors.warningRed,
+};
 
 interface SoundContainerProps {
   autoPlay?: boolean;
@@ -71,7 +88,33 @@ const SoundContainer = ( {
   const pendingSeek = useRef<number | null>( null );
   // Where the playhead is being dragged, as a fraction of the sound
   const [dragAt, setDragAt] = useState<number | null>( null );
+  const dragging = useRef( false );
   const width = useRef( 1 );
+  // The playhead, as a fraction of the sound. Between playback events it
+  // glides at the playback rate, so it moves continuously instead of in steps.
+  const progress = useSharedValue( 0 );
+  const layoutWidth = useSharedValue( 0 );
+
+  const holdPlayhead = useCallback( ( fraction?: number ) => {
+    cancelAnimation( progress );
+    if ( fraction !== undefined ) progress.set( fraction );
+  }, [progress] );
+
+  const followPlayback = useCallback( ( position: number, duration: number ) => {
+    if ( dragging.current || duration <= 0 ) return;
+    const fraction = Math.min( position / duration, 1 );
+    const remaining = duration - position;
+    if ( remaining <= 0 ) {
+      holdPlayhead( 1 );
+      return;
+    }
+    // Snap when it's clearly off (a seek, a stall); otherwise glide on from
+    // where it's drawn so small timing jitter never makes it jump.
+    if ( Math.abs( progress.get( ) - fraction ) * duration > 150 ) {
+      progress.set( fraction );
+    }
+    progress.set( withTiming( 1, { duration: remaining, easing: Easing.linear } ) );
+  }, [holdPlayhead, progress] );
 
   const mmss = useCallback( ( value: number ) => player.mmss(
     Math.floor( value / 1000 ),
@@ -79,6 +122,8 @@ const SoundContainer = ( {
 
   const playSound = useCallback( ( position?: number ) => {
     async function playSoundAsync( ) {
+      // Frequent events keep the gliding playhead in step with the audio
+      await player.setSubscriptionDuration( 0.1 );
       await player.startPlayer( await normalizedSoundUri( sound.file_url ) );
       playerStarted( );
       if ( position ) {
@@ -100,6 +145,7 @@ const SoundContainer = ( {
           pendingSeek.current = null;
           player.seekToPlayer( at ).catch( ( ) => undefined );
         }
+        followPlayback( playBackEvent.currentPosition, playBackEvent.duration );
         setPlayBackState( {
           currentPosition: playBackEvent.currentPosition,
           duration: playBackEvent.duration,
@@ -118,9 +164,10 @@ const SoundContainer = ( {
     return ( ) => {
       player.removePlayBackListener( );
     };
-  }, [player, sound.file_url, mmss] );
+  }, [player, sound.file_url, mmss, followPlayback] );
 
   const stopSound = useCallback( async ( ) => {
+    holdPlayhead( );
     setPlaying( false );
     setSwipedAway( !isVisible );
     try {
@@ -135,6 +182,7 @@ const SoundContainer = ( {
     }
     player.removePlayBackListener( );
   }, [
+    holdPlayhead,
     isVisible,
     player,
   ] );
@@ -142,12 +190,13 @@ const SoundContainer = ( {
   useEffect( ( ) => {
     setPlayingAudio( player, playing, ( ) => {
       player.removePlayBackListener( );
+      holdPlayhead( );
       setPlaying( false );
       // Resuming has to re-init the player, as after a swipe
       setSwipedAway( true );
     } );
     return ( ) => setPlayingAudio( player, false );
-  }, [player, playing] );
+  }, [holdPlayhead, player, playing] );
 
   // Tapping the button can play, pause, or resume
   const togglePlay = useCallback( ( ) => {
@@ -218,6 +267,7 @@ const SoundContainer = ( {
       return;
     }
     const at = Math.min( fraction, 0.999 ) * duration;
+    holdPlayhead( at / duration );
     setPlayBackState( {
       ...playBackState,
       currentPosition: at,
@@ -230,28 +280,46 @@ const SoundContainer = ( {
     }
   };
 
-  // The responder is made once, so it reads the latest seekTo through a ref.
+  // The gesture is made once, so it reads the latest seekTo through a ref.
   const latestSeekTo = useRef( seekTo );
   useLayoutEffect( ( ) => { latestSeekTo.current = seekTo; } );
-  // Where the touch began, in points from the left edge
-  const grantX = useRef( 0 );
-  const [responder] = useState( ( ) => {
+  // A gesture-handler pan that takes the touch from the first point, so a
+  // drag moves only the playhead and never pages the carousel it's in
+  const scrub = useMemo( ( ) => {
     const fraction = ( x: number ) => Math.min( Math.max( x / width.current, 0 ), 1 );
-    return PanResponder.create( {
-      onStartShouldSetPanResponder: ( ) => true,
-      onPanResponderTerminationRequest: ( ) => false,
-      onPanResponderGrant: e => {
-        grantX.current = e.nativeEvent.locationX;
-        setDragAt( fraction( grantX.current ) );
-      },
-      onPanResponderMove: ( _e, g ) => setDragAt( fraction( grantX.current + g.dx ) ),
-      onPanResponderRelease: ( _e, g ) => {
-        setDragAt( null );
-        latestSeekTo.current( fraction( grantX.current + g.dx ) );
-      },
-      onPanResponderTerminate: ( ) => setDragAt( null ),
-    } );
-  } );
+    const dragTo = ( x: number ) => {
+      dragging.current = true;
+      const at = fraction( x );
+      holdPlayhead( at );
+      setDragAt( at );
+    };
+    const release = ( x: number ) => {
+      dragging.current = false;
+      setDragAt( null );
+      latestSeekTo.current( fraction( x ) );
+    };
+    const pan = Gesture.Pan( )
+      .runOnJS( true )
+      .minDistance( 0 )
+      .maxPointers( 1 )
+      .onStart( e => dragTo( e.x ) )
+      .onUpdate( e => dragTo( e.x ) )
+      .onEnd( e => release( e.x ) )
+      .onFinalize( ( _e, success ) => {
+        if ( !success && dragging.current ) {
+          dragging.current = false;
+          setDragAt( null );
+        }
+      } );
+    const tap = Gesture.Tap( )
+      .runOnJS( true )
+      .onEnd( ( e, success ) => { if ( success ) release( e.x ); } );
+    return Gesture.Race( pan, tap );
+  }, [holdPlayhead] );
+
+  const playheadStyle = useAnimatedStyle( ( ) => ( {
+    transform: [{ translateX: progress.value * layoutWidth.value }],
+  } ) );
 
   if ( sound.hidden ) {
     return (
@@ -275,12 +343,6 @@ const SoundContainer = ( {
       />
     );
   }
-  let playhead = dragAt;
-  if ( playhead === null ) {
-    playhead = playBackState.duration > 0
-      ? Math.min( playBackState.currentPosition / playBackState.duration, 1 )
-      : 0;
-  }
   let shownPosition = playBackState.formattedCurrentPosition;
   if ( dragAt !== null && playBackState.duration > 0 ) {
     shownPosition = mmss( dragAt * playBackState.duration );
@@ -290,20 +352,23 @@ const SoundContainer = ( {
   // it to hear the sound from there.
   return (
     <View className={`${sizeClass} justify-center px-4`}>
-      <View
-        className="rounded overflow-hidden"
-        style={{ height: SPECTROGRAM_HEIGHT }}
-        onLayout={e => { width.current = e.nativeEvent.layout.width || 1; }}
-        // eslint-disable-next-line react/jsx-props-no-spreading
-        {...responder.panHandlers}
-      >
-        <SoundSpectrogram uri={sound.file_url} />
+      <GestureDetector gesture={scrub}>
         <View
-          className="absolute h-full w-0.5 bg-warningRed"
-          style={{ left: `${playhead * 100}%` }}
-          pointerEvents="none"
-        />
-      </View>
+          className="rounded overflow-hidden"
+          collapsable={false}
+          style={{ height: SPECTROGRAM_HEIGHT }}
+          onLayout={e => {
+            width.current = e.nativeEvent.layout.width || 1;
+            layoutWidth.set( e.nativeEvent.layout.width );
+          }}
+        >
+          <SoundSpectrogram uri={sound.file_url} />
+          <Animated.View
+            style={[PLAYHEAD_STYLE, playheadStyle]}
+            pointerEvents="none"
+          />
+        </View>
+      </GestureDetector>
       <View className="flex-row items-center">
         <INatIconButton
           icon={playing
