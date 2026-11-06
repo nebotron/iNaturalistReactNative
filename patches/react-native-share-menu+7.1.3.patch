@@ -1,0 +1,113 @@
+diff --git a/node_modules/react-native-share-menu/ios/ShareViewController.swift b/node_modules/react-native-share-menu/ios/ShareViewController.swift
+index af9fdbe..e8816f8 100644
+--- a/node_modules/react-native-share-menu/ios/ShareViewController.swift
++++ b/node_modules/react-native-share-menu/ios/ShareViewController.swift
+@@ -172,39 +172,64 @@ class ShareViewController: SLComposeServiceViewController {
+ 
+   func storeFile(withProvider provider: NSItemProvider, _ semaphore: DispatchSemaphore) {
+     provider.loadItem(forTypeIdentifier: kUTTypeData as String, options: nil) { (data, error) in
+-      guard (error == nil) else {
+-        self.exit(withError: error.debugDescription)
+-        return
+-      }
+-      guard let url = data as? URL else {
+-        self.exit(withError: COULD_NOT_FIND_IMG_ERROR)
+-        return
+-      }
+-      guard let hostAppId = self.hostAppId else {
+-        self.exit(withError: NO_INFO_PLIST_INDENTIFIER_ERROR)
+-        return
+-      }
+-      guard let groupFileManagerContainer = FileManager.default
+-              .containerURL(forSecurityApplicationGroupIdentifier: "group.\(hostAppId)")
+-      else {
+-        self.exit(withError: NO_APP_GROUP_ERROR)
++      if error == nil, let url = data as? URL {
++        self.storeSharedFile(at: url, semaphore)
+         return
+       }
+-      
+-      let mimeType = url.extractMimeType()
+-      let fileExtension = url.pathExtension
+-      let fileName = UUID().uuidString
+-      let filePath = groupFileManagerContainer
+-        .appendingPathComponent("\(fileName).\(fileExtension)")
+-      
+-      guard self.moveFileToDisk(from: url, to: filePath) else {
+-        self.exit(withError: COULD_NOT_SAVE_FILE_ERROR)
++      // Voice Memos, and other apps that only register a file representation
++      // of their own type (com.apple.m4a-audio), can't be loaded as a generic
++      // public.data item: the load fails or hands back something other than a
++      // file URL. Ask for a file copy of the provider's own type instead.
++      self.storeFileRepresentation(withProvider: provider, semaphore)
++    }
++  }
++
++  func storeFileRepresentation(withProvider provider: NSItemProvider, _ semaphore: DispatchSemaphore) {
++    let typeIdentifier = provider.registeredTypeIdentifiers.first {
++      UTTypeConformsTo($0 as CFString, kUTTypeData)
++    } ?? kUTTypeData as String
++    provider.loadFileRepresentation(forTypeIdentifier: typeIdentifier) { (url, error) in
++      guard error == nil, let url = url else {
++        self.exit(withError: error.map { "\($0)" } ?? COULD_NOT_FIND_IMG_ERROR)
+         return
+       }
+-      
+-      self.sharedItems.append([DATA_KEY: filePath.absoluteString, MIME_TYPE_KEY: mimeType])
+-      semaphore.signal()
++      // The provider deletes this file once the handler returns, so it has
++      // to be copied into the App Group before then
++      self.storeSharedFile(at: url, typeIdentifier: typeIdentifier, semaphore)
++    }
++  }
++
++  func storeSharedFile(at url: URL, typeIdentifier: String? = nil, _ semaphore: DispatchSemaphore) {
++    guard let hostAppId = self.hostAppId else {
++      self.exit(withError: NO_INFO_PLIST_INDENTIFIER_ERROR)
++      return
+     }
++    guard let groupFileManagerContainer = FileManager.default
++            .containerURL(forSecurityApplicationGroupIdentifier: "group.\(hostAppId)")
++    else {
++      self.exit(withError: NO_APP_GROUP_ERROR)
++      return
++    }
++
++    var fileExtension = url.pathExtension
++    if fileExtension.isEmpty, let typeIdentifier = typeIdentifier,
++       let preferred = UTTypeCopyPreferredTagWithClass(
++         typeIdentifier as CFString,
++         kUTTagClassFilenameExtension
++       )?.takeRetainedValue() {
++      fileExtension = preferred as String
++    }
++    let fileName = UUID().uuidString
++    let filePath = groupFileManagerContainer
++      .appendingPathComponent("\(fileName).\(fileExtension)")
++
++    guard self.moveFileToDisk(from: url, to: filePath) else {
++      self.exit(withError: COULD_NOT_SAVE_FILE_ERROR)
++      return
++    }
++
++    self.sharedItems.append([DATA_KEY: filePath.absoluteString, MIME_TYPE_KEY: filePath.extractMimeType()])
++    semaphore.signal()
+   }
+ 
+   func moveFileToDisk(from srcUrl: URL, to destUrl: URL) -> Bool {
+@@ -248,7 +273,14 @@ class ShareViewController: SLComposeServiceViewController {
+   }
+ 
+   func cancelRequest() {
+-    extensionContext!.cancelRequest(withError: NSError())
++    // A bare NSError() has no domain, and bridging it to Swift's Error traps
++    // (SIGTRAP in CFErrorRef._domain), which crashed the extension instead
++    // of dismissing it
++    let error = NSError(
++      domain: "org.inaturalist.ShareExtension",
++      code: DISMISS_SHARE_EXTENSION_WITH_ERROR_CODE
++    )
++    extensionContext?.cancelRequest(withError: error)
+   }
+ 
+ }
