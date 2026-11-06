@@ -226,6 +226,10 @@ BY-ME = BY ME
 # Lead in to a list including "Get your identifcation verified..." and "Share your observation..."
 By-uploading-your-observation-to-iNaturalist-you-can = By uploading your observation to iNaturalist, you can:
 Camera = Camera
+# Settings heading for the list of cameras and lenses the user can rename
+CAMERA-AND-LENS-NICKNAMES = CAMERA AND LENS NICKNAMES
+# Header of the sheet for renaming a camera
+Camera-nickname = Camera nickname
 # Menu item and screen title for comparing photos of a species taken with different cameras
 CAMERA-PAIRS = CAMERA PAIRS
 Camera-pairs-explanation = Same species, different camera or lens, similar distance to subject. Max distance difference:
@@ -239,6 +243,8 @@ Camera-settings-of-X-photos-added-on-this-device =
     } added on this device
 # Accessibility label for the Explore view showing camera setting distributions
 Camera-Settings-View = Camera Settings View
+# Settings text shown before any photo with a camera or lens was added
+Cameras-and-lenses-appear-here-once-you-add-photos = Cameras and lenses appear here once you add photos taken with them.
 CANCEL = CANCEL
 Cancel = Cancel
 Captive-Cultivated = Captive/Cultivated
@@ -769,6 +775,8 @@ Get-feedback-from-naturalists-and-experts-who-will-help-verify = Get feedback fr
 Get-your-identification-verified-by-real-people = Get your identification verified by real people in the iNaturalist community
 # Badge on an animated GIF in the photo picker
 GIF-badge = ▶ GIF
+# Settings text explaining camera and lens nicknames
+Give-your-cameras-and-lenses-nicknames = Give your cameras and lenses nicknames of your own. Nicknames are shown everywhere the app names a camera or lens.
 # Label for button that returns to the previous screen
 Go-back = Go back
 Google-Play-Services-Not-Installed = Google Play Services Not Installed
@@ -1019,6 +1027,8 @@ Leave-your-observations-revoke-hidden-coordinates = Leave your observations in t
 Lengthen-time-limit = Lengthen time limit
 # Label for the lens a photo was taken with
 Lens = Lens
+# Header of the sheet for renaming a lens
+Lens-nickname = Lens nickname
 Lets-reset-your-password = Let’s reset your password.
 Licenses = Licenses
 Life-List = Life List
@@ -1209,6 +1219,8 @@ Next-day = Next day
 Next-observation = Next observation
 # Accessibility label for a button that goes to the next slide on onboarding cards
 Next-slide = Next slide
+# Description in the sheet for renaming a camera or lens
+Nickname-for-X-leave-empty-to-use-its-own-name = Nickname for { $name }. Leave empty to use its own name.
 # As a categorical answer to the question presented on joining traditional projects: Do you want private coordinates be shared?
 No = No
 NO = NO
@@ -1619,6 +1631,8 @@ Removes-this-observations-taxon = Removes this observation's taxon
 Removes-your-vote-of-agreement = Removes your vote of agreement
 # Hint for a button that removes a vote of disagreement
 Removes-your-vote-of-disagreement = Removes your vote of disagreement
+# Accessibility hint for a camera or lens that can be renamed
+Renames-this-camera-or-lens = Renames this camera or lens.
 # Accessibility label for the drag handle used to reorder a stop on a multi-stop route
 Reorder-stop = Reorder stop
 # Display name for the iconic taxa category for reptilia

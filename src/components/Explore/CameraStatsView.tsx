@@ -6,7 +6,7 @@ import { RealmContext } from "providers/contexts";
 import React, { useMemo } from "react";
 import type { RealmObservation } from "realmModels/types";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
-import { useBackfillCameraInfo, useTranslation } from "sharedHooks";
+import { useBackfillCameraInfo, useGearNicknames, useTranslation } from "sharedHooks";
 
 const { useQuery } = RealmContext;
 
@@ -48,6 +48,7 @@ const CameraStatsView = ( { queryParams }: Props ) => {
   const observations = useQuery<RealmObservation>( "Observation" );
   const taxonIds = useMemo( ( ) => toIds( queryParams.taxon_id ), [queryParams.taxon_id] );
   useBackfillCameraInfo( observations );
+  const { nameGear } = useGearNicknames( );
 
   const { photoCount, distributions } = useMemo( ( ) => {
     const counts: Record<Field, Map<string, number>> = {
@@ -76,9 +77,10 @@ const CameraStatsView = ( { queryParams }: Props ) => {
         ( Object.keys( counts ) as Field[] ).forEach( field => {
           const raw = info[field];
           if ( !raw ) return;
-          const value = field === "focusDistance"
-            ? distanceBucket( raw )
-            : raw;
+          let value = raw;
+          if ( field === "focusDistance" ) value = distanceBucket( raw );
+          // Gear sharing a nickname is counted together
+          else if ( field === "camera" || field === "lens" ) value = nameGear( field, raw ) ?? raw;
           counts[field].set( value, ( counts[field].get( value ) ?? 0 ) + 1 );
         } );
       } );
@@ -93,7 +95,7 @@ const CameraStatsView = ( { queryParams }: Props ) => {
       return { field, rows };
     } );
     return { photoCount: total, distributions: sorted };
-  }, [observations, taxonIds] );
+  }, [observations, taxonIds, nameGear] );
 
   const labels: Record<Field, string> = {
     camera: t( "Camera" ),

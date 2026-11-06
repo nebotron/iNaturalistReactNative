@@ -10,6 +10,7 @@ import i18n from "i18next";
 import type { Node } from "react";
 import React, { useMemo, useState } from "react";
 import Photo from "realmModels/Photo";
+import { withGearNicknames } from "sharedHelpers/gearNicknames";
 import useStore from "stores/useStore";
 import colors from "styles/tailwindColors";
 
@@ -74,7 +75,11 @@ const ObsGridItem = ( {
   const showCommon = !overlays || overlays.commonName;
   const showScientific = !overlays || overlays.scientificName;
   const showCameraInfo = !!overlays && CAMERA_INFO_LINES.flat( ).some( key => overlays[key] );
-  const cameraInfo = useObsCameraInfo( observation?.uuid, showCameraInfo );
+  const gearNicknames = useStore( state => state.layout.gearNicknames );
+  const cameraInfo = withGearNicknames(
+    useObsCameraInfo( observation?.uuid, showCameraInfo ),
+    gearNicknames,
+  );
   const cameraInfoLines = cameraInfo
     ? CAMERA_INFO_LINES.map( keys => keys
       .filter( key => overlays?.[key] && cameraInfo[key] )

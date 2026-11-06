@@ -1,3 +1,4 @@
+import GearNicknameSheet from "components/GearNicknames/GearNicknameSheet";
 import {
   Body3, Body4, BottomSheet,
 } from "components/SharedComponents";
@@ -6,12 +7,13 @@ import { RealmContext } from "providers/contexts";
 import React, { useEffect, useMemo, useState } from "react";
 import { useWindowDimensions } from "react-native";
 import type { RealmObservation } from "realmModels/types";
+import type { GearKind } from "sharedHelpers/gearNicknames";
 import {
   libraryOriginalQuery, readLibraryCameraInfo,
 } from "sharedHelpers/findLibraryOriginal";
 import type { PhotoCameraInfo as Info } from "sharedHelpers/photoCameraInfo";
 import { readCameraInfo } from "sharedHelpers/photoCameraInfo";
-import { useTranslation } from "sharedHooks";
+import { useGearNicknames, useTranslation } from "sharedHooks";
 
 const { useRealm } = RealmContext;
 
@@ -31,6 +33,9 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
   const realm = useRealm( );
   const [read, setRead] = useState<{ key: string; info: Info | null } | null>( null );
   const [showTable, setShowTable] = useState( false );
+  const { nameGear } = useGearNicknames( );
+  // Camera or lens being renamed from the table
+  const [renaming, setRenaming] = useState<{ kind: GearKind; name: string } | null>( null );
 
   const { library, stored } = useMemo( ( ) => {
     const query = url
@@ -99,8 +104,10 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
       </View>
     );
   }
+  const camera = nameGear( "camera", info.camera );
+  const lens = nameGear( "lens", info.lens );
   const lines = [
-    [info.camera, info.lens].filter( Boolean ).join( " · " ),
+    [camera, lens].filter( Boolean ).join( " · " ),
     [
       info.focalLength,
       info.aperture,
@@ -109,9 +116,13 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
       info.focusDistance,
     ].filter( Boolean ).join( " · " ),
   ];
+  // Camera and lens rows show the nickname and can be tapped to rename
+  const gearRows: Record<string, { kind: GearKind; name: string }> = {};
+  if ( info.camera ) gearRows[t( "Camera" )] = { kind: "camera", name: info.camera };
+  if ( info.lens ) gearRows[t( "Lens" )] = { kind: "lens", name: info.lens };
   const rows = [
-    [t( "Camera" ), info.camera],
-    [t( "Lens" ), info.lens],
+    [t( "Camera" ), camera],
+    [t( "Lens" ), lens],
     [t( "Focal-length" ), info.focalLength],
     [t( "Aperture" ), info.aperture],
     [t( "Shutter-speed" ), info.shutterSpeed],
@@ -147,17 +158,57 @@ const PhotoCameraInfo = ( { uri, url }: Props ) => {
             maxHeight={windowHeight * 0.6}
           >
             <View className="p-5">
-              {rows.map( ( [label, value] ) => (
-                <View
-                  key={label}
-                  className="flex-row justify-between py-2 border-b border-lightGray"
-                >
-                  <Body3 className="font-bold mr-4">{label}</Body3>
-                  <Body3 className="flex-1 text-right" selectable>{value}</Body3>
-                </View>
-              ) )}
+              {rows.map( ( [label, value] ) => {
+                const gear = gearRows[label];
+                if ( gear ) {
+                  return (
+                    <Pressable
+                      key={label}
+                      accessibilityRole="button"
+                      accessibilityHint={t( "Renames-this-camera-or-lens" )}
+                      className="flex-row justify-between py-2 border-b border-lightGray"
+                      onPress={( ) => {
+                        setShowTable( false );
+                        setRenaming( gear );
+                      }}
+                    >
+                      <Body3 className="font-bold mr-4">{label}</Body3>
+                      <View className="flex-1">
+                        <Body3 className="text-right underline">{value}</Body3>
+                        {value !== gear.name && (
+                          <Body4 className="text-right text-darkGrayDisabled">
+                            {gear.name}
+                          </Body4>
+                        )}
+                      </View>
+                    </Pressable>
+                  );
+                }
+                return (
+                  <View
+                    key={label}
+                    className="flex-row justify-between py-2 border-b border-lightGray"
+                  >
+                    <Body3 className="font-bold mr-4">{label}</Body3>
+                    <Body3 className="flex-1 text-right" selectable>{value}</Body3>
+                  </View>
+                );
+              } )}
             </View>
           </BottomSheet>
+        </View>
+      )}
+      {renaming && (
+        <View className="absolute inset-0 z-10" pointerEvents="box-none">
+          <GearNicknameSheet
+            kind={renaming.kind}
+            name={renaming.name}
+            insideModal
+            onPressClose={( ) => {
+              setRenaming( null );
+              setShowTable( true );
+            }}
+          />
         </View>
       )}
     </>

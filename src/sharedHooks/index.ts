@@ -8,6 +8,7 @@ export { default as useDeviceOrientation } from "./useDeviceOrientation";
 export { default as useExitObservationFlow } from "./useExitObservationFlow";
 export { default as useFeatureFlag } from "./useFeatureFlag";
 export { default as useFontScale } from "./useFontScale";
+export { default as useGearNicknames } from "./useGearNicknames";
 export { default as useGridLayout } from "./useGridLayout";
 export { default as useIconicTaxa } from "./useIconicTaxa";
 export { default as useInfiniteNotificationsScroll } from "./useInfiniteNotificationsScroll";

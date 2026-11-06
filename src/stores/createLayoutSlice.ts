@@ -1,3 +1,4 @@
+import type { GearKind, GearNicknames } from "sharedHelpers/gearNicknames";
 import type { StateCreator } from "zustand";
 
 export enum OBS_DETAILS_TAB {
@@ -83,6 +84,8 @@ export interface LayoutSlice {
     setMapType: ( mapType: MAP_TYPES ) => void;
     usbDeleteAfterImport: boolean;
     setUsbDeleteAfterImport: ( usbDeleteAfterImport: boolean ) => void;
+    gearNicknames: GearNicknames;
+    setGearNickname: ( kind: GearKind, name: string, nickname: string ) => void;
     hotspotSettings: HotspotSettings;
     setHotspotSetting: ( key: keyof HotspotSettings, value: number ) => void;
     exploreGridOverlays: ExploreGridOverlays;
@@ -234,6 +237,25 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
         usbDeleteAfterImport: newValue,
       },
     } ) ),
+    // Nicknames for cameras and lenses, keyed by their EXIF names. An empty
+    // nickname removes it.
+    gearNicknames: { camera: {}, lens: {} },
+    setGearNickname: ( kind, name, nickname ) => set( state => {
+      const current = state.layout.gearNicknames;
+      const names = { ...current[kind] };
+      const trimmed = nickname.trim( );
+      if ( trimmed && trimmed !== name ) {
+        names[name] = trimmed;
+      } else {
+        delete names[name];
+      }
+      return {
+        layout: {
+          ...state.layout,
+          gearNicknames: { ...current, [kind]: names },
+        },
+      };
+    } ),
     // Most recently selected taxa in taxon search, newest first
     recentTaxonIds: [],
     addRecentTaxonId: taxonId => set( state => ( {

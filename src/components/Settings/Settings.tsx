@@ -16,6 +16,7 @@ import {
 } from "sharedHooks";
 
 import AdvancedSettings from "./AdvancedSettings";
+import GearNicknamesSetting from "./GearNicknamesSetting";
 import LanguageSetting from "./LanguageSetting";
 import LoggedInDefaultSettings from "./LoggedInDefaultSettings";
 import UsbImportSetting from "./UsbImportSetting";
@@ -37,6 +38,7 @@ const Settings = ( ) => {
             </View>
           )}
         <UsbImportSetting />
+        <GearNicknamesSetting />
         <Button
           className="mt-[30px]"
           level="neutral"

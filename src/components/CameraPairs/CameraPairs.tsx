@@ -12,9 +12,10 @@ import React, {
 import { FlatList, useWindowDimensions } from "react-native";
 import Photo from "realmModels/Photo";
 import type { RealmObservation, RealmPhoto } from "realmModels/types";
+import type { GearKind } from "sharedHelpers/gearNicknames";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
-import { useBackfillCameraInfo, useTranslation } from "sharedHooks";
+import { useBackfillCameraInfo, useGearNicknames, useTranslation } from "sharedHooks";
 import { zustandStorage } from "stores/useStore";
 
 const { useQuery } = RealmContext;
@@ -91,8 +92,26 @@ const saveZoom = ( photoUuid: string, zoom: SavedZoom ) => {
   zustandStorage.setItem( ZOOMS_KEY, JSON.stringify( zooms ) );
 };
 
+// EXIF names, not nicknames, so votes keep matching their gear after a rename
+const GEAR_SEPARATOR = " + ";
 const gearLabel = ( info: PhotoCameraInfo ) => [info.camera, info.lens]
-  .filter( Boolean ).join( " + " ) || i18n.t( "Unknown-gear" );
+  .filter( Boolean ).join( GEAR_SEPARATOR ) || i18n.t( "Unknown-gear" );
+
+// A gear label with camera and lens nicknames. A label of one name may be
+// either a camera or a lens.
+const nicknamedGear = (
+  gear: string,
+  nameGear: ( kind: GearKind, name?: string ) => string | undefined,
+) => {
+  const parts = gear.split( GEAR_SEPARATOR );
+  if ( parts.length === 2 ) {
+    return [nameGear( "camera", parts[0] ), nameGear( "lens", parts[1] )].join( GEAR_SEPARATOR );
+  }
+  const asCamera = nameGear( "camera", gear );
+  return asCamera !== gear
+    ? asCamera
+    : nameGear( "lens", gear );
+};
 
 const voteKey = ( pair: Pair ) => [pair.a.photoUuid, pair.b.photoUuid].sort( ).join( "|" );
 
@@ -289,6 +308,7 @@ const CameraPairs = ( ) => {
   const tolerance = ( parseFloat( toleranceText ) || 0 ) / 100;
   // Gear combination picked by tapping its preference bar
   const [gearFilter, setGearFilter] = useState<string | null>( null );
+  const { nameGear } = useGearNicknames( );
 
   const allPairs = useMemo( ( ) => {
     const byTaxon = new Map<number, Entry[]>( );
@@ -425,6 +445,8 @@ const CameraPairs = ( ) => {
               {breakdown.map( row => {
                 const key = `${row.first}|${row.second}`;
                 const selected = activeFilter === key;
+                const first = nicknamedGear( row.first, nameGear );
+                const second = nicknamedGear( row.second, nameGear );
                 // Each gear is labeled once, under its own half of the bar, in the
                 // color of its segment.
                 // Tapping a bar shows only that combination's pairs; tapping
@@ -434,7 +456,7 @@ const CameraPairs = ( ) => {
                     key={key}
                     accessibilityRole="button"
                     accessibilityState={{ selected }}
-                    accessibilityLabel={t( "X-vs-Y", { first: row.first, second: row.second } )}
+                    accessibilityLabel={t( "X-vs-Y", { first, second } )}
                     accessibilityHint={selected
                       ? t( "Shows-all-pairs" )
                       : t( "Shows-only-pairs-with-this-gear" )}
@@ -455,13 +477,13 @@ const CameraPairs = ( ) => {
                         className="flex-1 pr-2 text-xs font-bold"
                         style={{ color: FIRST_COLOR }}
                       >
-                        {row.first}
+                        {first}
                       </Text>
                       <Text
                         className="flex-1 pl-2 text-xs font-bold text-right"
                         style={{ color: SECOND_COLOR }}
                       >
-                        {row.second}
+                        {second}
                       </Text>
                     </View>
                   </Pressable>
