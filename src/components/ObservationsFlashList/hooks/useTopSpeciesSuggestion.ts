@@ -8,6 +8,7 @@ interface RankedTaxon {
   id?: number;
   rank?: string;
   rank_level?: number;
+  ancestor_ids?: number[];
 }
 
 interface CVResult {
@@ -145,7 +146,12 @@ const useTopSpeciesSuggestion = (
     && ( topResult.combined_score ?? 0 ) > TOP_RESULT_SCORE_THRESHOLD
     && topRankLevel != null
     && topRankLevel <= Taxon.SPECIES_LEVEL;
-  return isConfidentSpecies
+  // Only replace the broad taxon with one inside it: a CV species from a
+  // different lineage contradicts the existing ID rather than refining it.
+  const communityTaxonId = observation?.taxon?.id;
+  const isDescendant = communityTaxonId != null
+    && !!topResult?.taxon?.ancestor_ids?.includes( communityTaxonId );
+  return isConfidentSpecies && isDescendant
     ? topResult?.taxon
     : undefined;
 };

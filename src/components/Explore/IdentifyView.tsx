@@ -226,9 +226,9 @@ const IdentifyView = ( {
   }, [navigation, observation, observationUuid] );
 
   // If the community taxon is genus or broader, suggest the most likely
-  // species-level CV taxon instead of the coarser community taxon. Score the
-  // currently displayed photo through the same pipeline as the Suggest ID
-  // screen so the suggestion matches it.
+  // species-level CV taxon descended from it instead of the coarser community
+  // taxon. Score the currently displayed photo through the same pipeline as
+  // the Suggest ID screen so the suggestion matches it.
   const topSpeciesSuggestion = useTopSpeciesSuggestion( observation, currentPhotoUrl );
   const taxon = topSpeciesSuggestion || observation?.taxon;
 

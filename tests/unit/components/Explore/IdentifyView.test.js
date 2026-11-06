@@ -25,7 +25,11 @@ jest.mock( "sharedHelpers/useSubjectDetectionForUri", ( ) => ( {
 } ) );
 jest.mock(
   "components/ObservationsFlashList/hooks/useTopSpeciesSuggestion",
-  ( ) => ( { __esModule: true, default: ( ) => undefined } ),
+  ( ) => ( {
+    ...jest.requireActual( "components/ObservationsFlashList/hooks/useTopSpeciesSuggestion" ),
+    __esModule: true,
+    default: ( ) => undefined,
+  } ),
 );
 
 const renderIdentifyView = ( ) => renderComponent(
