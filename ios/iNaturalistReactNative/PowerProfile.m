@@ -84,16 +84,11 @@ static void PPAppStateChanged( BOOL active )
   os_unfair_lock_unlock( &ppLock );
 }
 
-@interface PowerProfile : NSObject <RCTBridgeModule>
-@end
-
-@implementation PowerProfile
-
-RCT_EXPORT_MODULE( );
-
 // Watches the app state from launch rather than from the module's creation,
-// so time before JS asks for the module still counts as background.
-+ (void)load
+// so time before JS asks for the module still counts as background. A
+// constructor runs when the image loads, as +load would, but RCT_EXPORT_MODULE
+// already defines +load to register the module, so the class can't have one.
+__attribute__( ( constructor ) ) static void PPObserveAppState( void )
 {
   NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
   [nc addObserverForName:UIApplicationDidBecomeActiveNotification object:nil
@@ -101,6 +96,13 @@ RCT_EXPORT_MODULE( );
   [nc addObserverForName:UIApplicationWillResignActiveNotification object:nil
                    queue:nil usingBlock:^( NSNotification *n ) { PPAppStateChanged( NO ); }];
 }
+
+@interface PowerProfile : NSObject <RCTBridgeModule>
+@end
+
+@implementation PowerProfile
+
+RCT_EXPORT_MODULE( );
 
 + (BOOL)requiresMainQueueSetup
 {
