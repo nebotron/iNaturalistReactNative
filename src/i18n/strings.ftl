@@ -1411,6 +1411,9 @@ OTHER-SUGGESTIONS = OTHER SUGGESTIONS
 OTHERS--notifications = OTHERS
 Overwrite-saved-filter = Overwrite saved filter
 PASSWORD = PASSWORD
+# Accessibility label for a button that pauses audio
+Pause--audio = Pause
+Pauses-the-sound = Pauses the sound.
 # Title showing user profile details about who a user follows and is following
 PEOPLE--title = PEOPLE
 # Percent sign shown after a number input

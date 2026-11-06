@@ -1,4 +1,3 @@
-import AudioClipSpectrogram from "components/AudioId/AudioClipSpectrogram";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import {
   Body2,
@@ -10,8 +9,6 @@ import React from "react";
 import { useTranslation } from "sharedHooks";
 
 import ObsPhotoSelectionList from "./ObsPhotoSelectionList";
-
-const SPECTROGRAM_STYLE = { height: 140 };
 
 interface Props {
   detectSubject?: boolean;
@@ -48,12 +45,8 @@ const SuggestionsHeader = ( {
         {soundUri
           ? (
             <View className="bg-black rounded-lg overflow-hidden">
-              <AudioClipSpectrogram
-                path={soundUri.replace( /^file:\/\//, "" )}
-                style={SPECTROGRAM_STYLE}
-              />
               <SoundContainer
-                sizeClass="w-full h-[188px]"
+                sizeClass="w-full py-4"
                 sound={{ file_url: soundUri }}
                 isVisible
               />

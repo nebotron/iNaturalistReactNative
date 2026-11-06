@@ -2,14 +2,14 @@ import {
   refresh as refreshNetInfo,
   useNetInfo,
 } from "@react-native-community/netinfo";
-import Slider from "@react-native-community/slider";
 import { useFocusEffect } from "@react-navigation/native";
 import {
   normalizedSoundUri, playerStarted, setPlayingAudio,
 } from "components/AudioId/audioIdSession";
+import SoundSpectrogram, { SPECTROGRAM_HEIGHT } from "components/AudioId/SoundSpectrogram";
 import {
-  Body1,
   Body2,
+  Body3,
   Body4,
   INatIcon,
   INatIconButton,
@@ -19,41 +19,14 @@ import { View } from "components/styledComponents";
 import React, {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
+import { PanResponder } from "react-native";
 import AudioRecorderPlayer from "react-native-audio-recorder-player";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
-
-interface SoundSliderProps {
-  playBackState: {
-    currentPosition: number;
-    duration: number;
-  };
-  onSlidingComplete: ( value: number ) => void;
-}
-
-const SoundSlider = ( { playBackState, onSlidingComplete }: SoundSliderProps ) => {
-  const sliderStyle = {
-    width: "100%",
-  } as const;
-  return (
-    <Slider
-      style={sliderStyle}
-      minimumValue={0}
-      maximumValue={playBackState.duration}
-      lowerLimit={0}
-      upperLimit={playBackState.duration}
-      minimumTrackTintColor="#FFFFFF"
-      maximumTrackTintColor="#FFFFFF"
-      thumbTintColor={colors.inatGreen}
-      tapToSeek
-      value={playBackState.currentPosition}
-      onSlidingComplete={onSlidingComplete}
-    />
-  );
-};
 
 interface SoundContainerProps {
   autoPlay?: boolean;
@@ -93,6 +66,13 @@ const SoundContainer = ( {
     formattedDuration: "00:00",
   } );
 
+  // Where a scrub that began before playback knew the duration should land,
+  // as a fraction of the sound
+  const pendingSeek = useRef<number | null>( null );
+  // Where the playhead is being dragged, as a fraction of the sound
+  const [dragAt, setDragAt] = useState<number | null>( null );
+  const width = useRef( 1 );
+
   const mmss = useCallback( ( value: number ) => player.mmss(
     Math.floor( value / 1000 ),
   ), [player] );
@@ -114,6 +94,12 @@ const SoundContainer = ( {
         }
       }
       player.addPlayBackListener( playBackEvent => {
+        // A scrub made before the duration was known lands once it is
+        if ( pendingSeek.current !== null && playBackEvent.duration > 0 ) {
+          const at = pendingSeek.current * playBackEvent.duration;
+          pendingSeek.current = null;
+          player.seekToPlayer( at ).catch( ( ) => undefined );
+        }
         setPlayBackState( {
           currentPosition: playBackEvent.currentPosition,
           duration: playBackEvent.duration,
@@ -223,6 +209,50 @@ const SoundContainer = ( {
     }
   }, [autoPlay, isVisible, playSound] );
 
+  // Hear the sound from `fraction` of the way through it
+  const seekTo = ( fraction: number ) => {
+    const { duration } = playBackState;
+    if ( duration <= 0 ) {
+      pendingSeek.current = fraction;
+      playSound( );
+      return;
+    }
+    const at = Math.min( fraction, 0.999 ) * duration;
+    setPlayBackState( {
+      ...playBackState,
+      currentPosition: at,
+      formattedCurrentPosition: mmss( at ),
+    } );
+    if ( playing ) {
+      player.seekToPlayer( at ).catch( ( ) => undefined );
+    } else {
+      playSound( at );
+    }
+  };
+
+  // The responder is made once, so it reads the latest seekTo through a ref.
+  const latestSeekTo = useRef( seekTo );
+  useLayoutEffect( ( ) => { latestSeekTo.current = seekTo; } );
+  // Where the touch began, in points from the left edge
+  const grantX = useRef( 0 );
+  const [responder] = useState( ( ) => {
+    const fraction = ( x: number ) => Math.min( Math.max( x / width.current, 0 ), 1 );
+    return PanResponder.create( {
+      onStartShouldSetPanResponder: ( ) => true,
+      onPanResponderTerminationRequest: ( ) => false,
+      onPanResponderGrant: e => {
+        grantX.current = e.nativeEvent.locationX;
+        setDragAt( fraction( grantX.current ) );
+      },
+      onPanResponderMove: ( _e, g ) => setDragAt( fraction( grantX.current + g.dx ) ),
+      onPanResponderRelease: ( _e, g ) => {
+        setDragAt( null );
+        latestSeekTo.current( fraction( grantX.current + g.dx ) );
+      },
+      onPanResponderTerminate: ( ) => setDragAt( null ),
+    } );
+  } );
+
   if ( sound.hidden ) {
     return (
       <View className={`${sizeClass} p-4 items-center justify-center`}>
@@ -245,53 +275,52 @@ const SoundContainer = ( {
       />
     );
   }
+  let playhead = dragAt;
+  if ( playhead === null ) {
+    playhead = playBackState.duration > 0
+      ? Math.min( playBackState.currentPosition / playBackState.duration, 1 )
+      : 0;
+  }
+  let shownPosition = playBackState.formattedCurrentPosition;
+  if ( dragAt !== null && playBackState.duration > 0 ) {
+    shownPosition = mmss( dragAt * playBackState.duration );
+  }
+
+  // The same spectrogram interface as Audio ID clips: drag or tap anywhere on
+  // it to hear the sound from there.
   return (
-    <View className={`${sizeClass} items-center justify-center`}>
-      <INatIconButton
-        className="mx-auto"
-        icon={
-          playing
-            ? "pause-circle"
-            : "play-circle"
-        }
-        onPress={togglePlay}
-        mode="contained"
-        color="white"
-        accessibilityLabel="Play"
-        width={82}
-        height={82}
-        size={80}
-      />
-      <View className="flex-row mt-[30px] mb-2">
-        <View className="text-white w-full items-end">
-          <Body1 className="text-white text-end">
-            {playBackState.formattedCurrentPosition}
-          </Body1>
-        </View>
-        <Body1 className="text-white mx-1 self-center">{ t( "sound-playback-separator" ) }</Body1>
-        <Body1 className="text-white w-full items-start">
-          {playBackState.formattedDuration}
-        </Body1>
-      </View>
-      <View className="relative w-3/4 h-4 justify-center">
-        <SoundSlider
-          playBackState={playBackState}
-          onSlidingComplete={value => {
-            setPlayBackState( {
-              ...playBackState,
-              currentPosition: value,
-              formattedCurrentPosition: mmss( value ),
-            } );
-            player.seekToPlayer( value )
-              .catch( seekToPlayerError => {
-                if ( seekToPlayerError.message.match( /Player is null/ ) ) {
-                  // Occurs when player reaches end of audio and tries to seek.
-                  return;
-                }
-                throw seekToPlayerError;
-              } );
-          }}
+    <View className={`${sizeClass} justify-center px-4`}>
+      <View
+        className="rounded overflow-hidden"
+        style={{ height: SPECTROGRAM_HEIGHT }}
+        onLayout={e => { width.current = e.nativeEvent.layout.width || 1; }}
+        // eslint-disable-next-line react/jsx-props-no-spreading
+        {...responder.panHandlers}
+      >
+        <SoundSpectrogram uri={sound.file_url} />
+        <View
+          className="absolute h-full w-0.5 bg-warningRed"
+          style={{ left: `${playhead * 100}%` }}
+          pointerEvents="none"
         />
+      </View>
+      <View className="flex-row items-center">
+        <INatIconButton
+          icon={playing
+            ? "pause"
+            : "play"}
+          onPress={togglePlay}
+          color={colors.white}
+          accessibilityLabel={playing
+            ? t( "Pause--audio" )
+            : t( "Play--audio" )}
+          accessibilityHint={playing
+            ? t( "Pauses-the-sound" )
+            : t( "Plays-the-sound" )}
+        />
+        <Body3 className="text-white">
+          {`${shownPosition} ${t( "sound-playback-separator" )} ${playBackState.formattedDuration}`}
+        </Body3>
       </View>
     </View>
   );

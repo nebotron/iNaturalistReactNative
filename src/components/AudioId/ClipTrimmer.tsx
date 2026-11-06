@@ -7,18 +7,17 @@ import React, {
 import { PanResponder } from "react-native";
 import { useTranslation } from "sharedHooks";
 
-import AudioClipSpectrogram from "./AudioClipSpectrogram";
 import { clipPath, contextClipPath } from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
 import ClipProbabilityGraph, { useClipProbabilities } from "./ClipProbabilityGraph";
+import SoundSpectrogram from "./SoundSpectrogram";
 
 interface Span { path: string; startMs: number; endMs: number }
 
 // How close in points a touch has to land to grab a start or end handle
 const GRAB = 24;
 const MIN_CLIP = 0.2;
-const SPECTROGRAM_STYLE = { height: 140 };
 
 // The audio around a clip, with the trim it starts with: the 15 s context
 // clip, trimmed to the call found in it, or else to the
@@ -172,7 +171,7 @@ const ClipTrimmer = ( {
         // eslint-disable-next-line react/jsx-props-no-spreading
         {...responder.panHandlers}
       >
-        <AudioClipSpectrogram path={span.path} style={SPECTROGRAM_STYLE} pointerEvents="none" />
+        <SoundSpectrogram uri={span.path} />
         {/* Touches pass through to the container, so locations are relative to it */}
         <View className="absolute inset-0" pointerEvents="none">
           <View
