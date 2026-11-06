@@ -14,7 +14,7 @@ import { cleanupLogFiles } from "components/Developer/logManagementHelpers";
 import { isLoggedIn } from "components/LoginSignUp/AuthenticationService";
 import { navigationRef } from "navigation/navigationUtils";
 import { RealmContext } from "providers/contexts";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AppState } from "react-native";
 import type { RealmObservation } from "realmModels/types";
 import User from "realmModels/User";
@@ -100,8 +100,21 @@ const checkForPreviousCrash = async () => {
 const useDeferredStartup = ( ) => {
   const realm = useRealm( );
   const { i18n } = useTranslation( );
+  // iOS relaunches the app in the background for location events
+  // (LocationRelaunch.h), where none of this is wanted: cache sweeps, iCloud
+  // downloads for camera settings, and syncs, on every relaunch, with no one
+  // looking. They run once the app is opened instead.
+  const [opened, setOpened] = useState( AppState.currentState !== "background" );
+  useEffect( ( ) => {
+    if ( opened ) return ( ) => undefined;
+    const subscription = AppState.addEventListener( "change", state => {
+      if ( state === "active" ) setOpened( true );
+    } );
+    return ( ) => subscription.remove( );
+  }, [opened] );
 
   useEffect( ( ) => {
+    if ( !opened ) return ( ) => undefined;
     const id0 = deferTask( "checkLoggedInStatuses", async () => {
       const currentUser = User.currentUser( realm );
       if ( currentUser && !( await isLoggedIn() ) && navigationRef.isReady() ) {
@@ -207,7 +220,7 @@ const useDeferredStartup = ( ) => {
       cancelIdleCallback( idImport );
       cancelIdleCallback( idBirdCodes );
     };
-  }, [i18n, realm] );
+  }, [i18n, opened, realm] );
 
   // Crop sources expire after an hour, which a session can outlast.
   useEffect( ( ) => {

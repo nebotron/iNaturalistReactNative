@@ -89,3 +89,20 @@ notes of what did and did not work at the end of this skill.
   `findCall` (`audioIdSession.ts`) picks the call's span, saved as the clip's `call`. On the 62
   labeled 15 s clips it found a span in all 42 right ones, 2 s at the median (vs the 5 s
   window). No ground truth for spans yet: user trims before making an observation would be one.
+
+### Activity gate for battery (not shipped)
+
+- Idea: run the model every 1 s only while the 5 s window has sound above the background, every
+  few seconds otherwise. `scripts/bird_audio/eval_gate.py` replays the live spectrogram's noise
+  tracker (`ABSpectrogramColumn`) over the 323 labeled clips (154 right, 83 wrong reported at
+  0.5) and checks whether each detection's window would still have been run.
+- No setting works. Thresholds that lose no right detection (10 dB above the floor in 1-3
+  bins) find 0% of 1 s steps quiet, so they save nothing; single-bin fluctuations always clear
+  them. Requiring the sound to last 3-8 columns (~40-100 ms) helps little: 2% quiet costs 4-18
+  right detections, 36% quiet costs 77. Every setting drops right detections much faster than
+  wrong ones: many right calls are faint, while false positives are mostly loud.
+- Quiet shares are a floor (clips only exist around detections), but a gate that drops right
+  detections at any savings fails the "no right lost" rule regardless.
+- Audio ID's power use goes down instead by running the model on CoreML / the Neural Engine
+  (`-checkCoreML` in AudioBirdId.m, chosen per build after comparing against the CPU; look for
+  "model provider" in the app log).

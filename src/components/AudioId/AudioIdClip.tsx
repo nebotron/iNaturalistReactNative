@@ -7,7 +7,7 @@ import {
 import LocationIndicator from "components/SharedComponents/Map/LocationIndicator";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
 import Observation from "realmModels/Observation";
 import ObservationSound from "realmModels/ObservationSound";
@@ -17,6 +17,7 @@ import {
   interpolateFromUsablePoints,
   MAX_MATCH_GAP_MS,
 } from "sharedHelpers/interpolateTrackedLocation";
+import { drainTrackedLocationFixes } from "sharedHelpers/locationHistoryTracker";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useStore from "stores/useStore";
 import * as uuid from "uuid";
@@ -49,6 +50,8 @@ const AudioIdClip = ( ) => {
   const [error, setError] = useState<string | null>( null );
   const { span, trim, setTrim } = useClipSpan( id, clip?.time, clip?.call );
   const time = clip?.time ?? 0;
+  // A clip heard minutes ago can be newer than the last drained fix
+  useEffect( ( ) => { drainTrackedLocationFixes( ); }, [] );
   const trackPoints = useQuery(
     {
       type: LocationHistoryPoint,

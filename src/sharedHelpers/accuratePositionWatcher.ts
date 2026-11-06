@@ -2,6 +2,7 @@ import type {
   GeolocationError,
   GeolocationResponse,
 } from "@react-native-community/geolocation";
+import { NativeModules } from "react-native";
 import { log } from "sharedHelpers/logger";
 import { getTunable } from "sharedHelpers/tunableParams";
 
@@ -45,6 +46,12 @@ interface Listener {
   onLocation: ( location: UserLocation ) => void;
   onError?: ( ) => void;
 }
+
+// The iOS location-history monitor keeps its track at ~100 m, and at ~10 m
+// while this watch has the GPS on anyway (LocationRelaunch.h).
+const locationRelaunch = ( NativeModules as {
+  LocationRelaunch?: { setPrecise?: ( precise: boolean ) => void };
+} ).LocationRelaunch;
 
 // One watch for the whole app: the OS drives a single location manager, so
 // overlapping watches would just fight over its options.
@@ -120,6 +127,7 @@ const stopWatch = ( ) => {
   if ( watchId === null ) return;
   clearWatch( watchId );
   watchId = null;
+  locationRelaunch?.setPrecise?.( false );
 };
 
 const handleError = ( error: GeolocationError ) => {
@@ -133,6 +141,7 @@ const startWatch = ( ) => {
   watchStartedAt = Date.now( );
   loggedFixes = 0;
   watchId = watchPosition( handlePosition, handleError, geolocationOptions );
+  locationRelaunch?.setPrecise?.( true );
 };
 
 // Adds a listener and returns a function that removes it. The watch runs for

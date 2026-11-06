@@ -18,6 +18,7 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
 @interface INatLocationMonitor () <CLLocationManagerDelegate>
 @property (nonatomic, strong) CLLocationManager *manager;
 @property (nonatomic) BOOL paused;
+@property (nonatomic) BOOL precise;
 @end
 
 @implementation INatLocationMonitor
@@ -69,12 +70,15 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
   } );
 }
 
-// ~10 m while the app is in use; ~100 m in the background, which is still
-// enough to geotag photos and keeps the GPS radio mostly off.
+// ~100 m, which is enough to geotag photos and lets iOS locate us from Wi-Fi
+// and cell towers with the GPS mostly off. ~10 m only while the app is in use
+// and already running the GPS for a precise watch of its own (the camera),
+// when the finer track costs nothing extra. It used to be ~10 m whenever the
+// app was in use, which kept the GPS on for all of it.
 - (void)updateAccuracy
 {
   BOOL active = [UIApplication sharedApplication].applicationState == UIApplicationStateActive;
-  self.manager.desiredAccuracy = active
+  self.manager.desiredAccuracy = active && self.precise
     ? kCLLocationAccuracyNearestTenMeters
     : kCLLocationAccuracyHundredMeters;
   // Opening the app is a good moment to pick a paused session back up
@@ -82,6 +86,14 @@ static const CLLocationDistance kDistanceFilterMeters = 50;
     self.paused = NO;
     [self.manager startUpdatingLocation];
   }
+}
+
+- (void)setPrecise:(BOOL)precise
+{
+  dispatch_async( dispatch_get_main_queue(), ^{
+    self.precise = precise;
+    if ( self.manager ) [self updateAccuracy];
+  } );
 }
 
 // Once iOS pauses for a stationary user, it won't resume on its own; the
@@ -162,6 +174,11 @@ RCT_EXPORT_METHOD( start )
 RCT_EXPORT_METHOD( stop )
 {
   [[INatLocationMonitor shared] stop];
+}
+
+RCT_EXPORT_METHOD( setPrecise:( BOOL )precise )
+{
+  [[INatLocationMonitor shared] setPrecise:precise];
 }
 
 RCT_EXPORT_METHOD( drainPendingLocations:(RCTPromiseResolveBlock)resolve

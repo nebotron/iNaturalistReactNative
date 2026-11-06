@@ -28,6 +28,9 @@
 + (BOOL)enabled;
 - (void)start;
 - (void)stop;
+// Whether something in the app is running its own precise location watch (the
+// camera, a location picker). The track is kept at ~100 m otherwise.
+- (void)setPrecise:(BOOL)precise;
 // Returns and clears the buffered fixes.
 - (NSArray<NSDictionary *> *)drainPendingLocations;
 @end

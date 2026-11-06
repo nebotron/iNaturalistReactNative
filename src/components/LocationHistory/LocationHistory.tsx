@@ -11,7 +11,7 @@ import { ScreenShell } from "components/SharedComponents/ViewWrapper";
 import { View } from "components/styledComponents";
 import { RealmContext } from "providers/contexts";
 import React, {
-  useCallback, useMemo, useState,
+  useCallback, useEffect, useMemo, useState,
 } from "react";
 import { Alert, FlatList, Pressable } from "react-native";
 import LocationHistoryPoint from "realmModels/LocationHistoryPoint";
@@ -25,6 +25,7 @@ import {
   interpolateFromUsablePoints,
 } from "sharedHelpers/interpolateTrackedLocation";
 import {
+  drainTrackedLocationFixes,
   startLocationHistoryTracking,
   stopLocationHistoryTracking,
   useLocationHistoryTrackingEnabled,
@@ -110,6 +111,8 @@ const LocationHistory = ( ) => {
   const navigation = useNavigation();
   const [trackingEnabled] = useLocationHistoryTrackingEnabled();
   const [isApplyingLocation, setIsApplyingLocation] = useState( false );
+  // Show the fixes still waiting for the tracker's drain timer
+  useEffect( ( ) => { drainTrackedLocationFixes( ); }, [] );
 
   const historyPoints = useQuery(
     {

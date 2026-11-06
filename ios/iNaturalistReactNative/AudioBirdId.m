@@ -51,6 +51,14 @@
 // whether that's where the footprint goes.
 #define AB_RELIEF_MB    1200
 #define AB_RELIEF_EVERY 10
+// Where audio_id.onnx runs, decided once per build (see -checkCoreML):
+// "<build>:coreml", "<build>:cpu", or "<build>:checking" while a check runs.
+static NSString *const kABProviderKey = @"AudioBirdIdProvider";
+// How far CoreML's scores may stray from the CPU's on the check's audio. The
+// app reports a species at 0.5, so this keeps a score from crossing it unless
+// it was within a few hundredths already.
+// Frame logits are compared as probabilities too.
+#define AB_COREML_MAX_SCORE_DIFF 0.03f
 
 // Writes mono samples as AAC at `path`, replacing any file there.
 static BOOL ABWriteClip( NSString *path, const float *samples, AVAudioFrameCount frames,
@@ -226,6 +234,7 @@ static CGImageRef ABSpectrogramImage( const uint8_t *levels, NSInteger width )
   NSMutableArray<NSArray *> *_frameRuns;
   float             _minScore;
   OrtSession       *_geoSession;
+  BOOL              _checkCoreML; // inferQueue only: compare CoreML once listening
   BOOL              _wantListening;
   dispatch_source_t _watchdog;
   CHHapticEngine   *_haptics;
@@ -278,6 +287,16 @@ RCT_EXPORT_MODULE( );
 
 - (OrtSession *)openSession:(NSString *)path
 {
+  return [self openSession:path coreMLCache:nil];
+}
+
+// With `cache`, the parts of the model CoreML supports run there (on the
+// Neural Engine, which draws far less power than two CPU cores), and the
+// rest stay on the CPU. CoreML converts the model on first load and keeps it
+// in `cache`; without one it would write the converted model out again on
+// every load.
+- (OrtSession *)openSession:(NSString *)path coreMLCache:(NSString *)cache
+{
   const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
   if ( !_env && ort->CreateEnv( ORT_LOGGING_LEVEL_WARNING, "iNatAudio", &_env ) ) return NULL;
   OrtSessionOptions *opts;
@@ -286,11 +305,142 @@ RCT_EXPORT_MODULE( );
   // The arena keeps peak scratch memory for good; a smaller footprint makes
   // iOS less likely to kill the app in the background.
   ort->DisableCpuMemArena( opts );
+  OrtStatus *status = NULL;
+  if ( cache ) {
+    [[NSFileManager defaultManager] createDirectoryAtPath:cache withIntermediateDirectories:YES
+                                               attributes:nil error:nil];
+    // Every run is one window, and a fixed batch lets the shape arithmetic
+    // fold away, leaving CoreML larger static pieces of the graph.
+    status = ort->AddFreeDimensionOverrideByName( opts, "batch", 1 );
+    if ( !status ) {
+      const char *keys[] = { "ModelFormat", "MLComputeUnits", "ModelCacheDirectory" };
+      const char *values[] = { "MLProgram", "CPUAndNeuralEngine", cache.UTF8String };
+      status = ort->SessionOptionsAppendExecutionProvider( opts, "CoreML", keys, values, 3 );
+    }
+  }
   OrtSession *session = NULL;
-  OrtStatus *status = ort->CreateSession( _env, [path UTF8String], opts, &session );
+  if ( !status ) status = ort->CreateSession( _env, [path UTF8String], opts, &session );
   ort->ReleaseSessionOptions( opts );
   if ( status ) { ort->ReleaseStatus( status ); return NULL; }
   return session;
+}
+
+- (NSString *)coreMLCache
+{
+  NSString *caches = NSSearchPathForDirectoriesInDomains( NSCachesDirectory, NSUserDomainMask,
+                                                          YES ).firstObject;
+  return [caches stringByAppendingPathComponent:@"AudioIdCoreML"];
+}
+
+// inferQueue only. The CoreML session if this build's check chose it, else
+// the CPU one, and flags a check for this build if it hasn't had one.
+- (OrtSession *)openAudioModel:(NSString *)path
+{
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSString *build = [NSBundle mainBundle].infoDictionary[@"CFBundleVersion"] ?: @"";
+  NSString *choice = [defaults stringForKey:kABProviderKey];
+  if ( [choice isEqualToString:[build stringByAppendingString:@":coreml"]] ) {
+    OrtSession *session = [self openSession:path coreMLCache:[self coreMLCache]];
+    if ( session ) return session;
+  } else if ( [choice isEqualToString:[build stringByAppendingString:@":checking"]] ) {
+    // The last check never finished: the app died during it, quite possibly
+    // because of it, so don't try again on this build.
+    [defaults setObject:[build stringByAppendingString:@":cpu"] forKey:kABProviderKey];
+    [[NSFileManager defaultManager] removeItemAtPath:[self coreMLCache] error:nil];
+    [self status:@"model provider cpu: CoreML check did not finish"];
+  } else if ( ![choice hasPrefix:[build stringByAppendingString:@":"]] ) {
+    _checkCoreML = YES;
+  }
+  return [self openSession:path];
+}
+
+// The largest difference between two runs' outputs, as probabilities: with
+// `logits`, through a sigmoid first, so fp16 drift far below zero, where no
+// score is near being heard, doesn't count.
+static float ABMaxDiff( NSData *a, NSData *b, BOOL logits )
+{
+  if ( !a || !b || a.length != b.length ) return INFINITY;
+  const float *p = (const float *)a.bytes, *q = (const float *)b.bytes;
+  float diff = 0;
+  for ( NSUInteger i = 0; i < a.length / sizeof( float ); i++ ) {
+    float d = logits
+      ? fabsf( 1 / ( 1 + expf( -p[i] ) ) - 1 / ( 1 + expf( -q[i] ) ) )
+      : fabsf( p[i] - q[i] );
+    if ( isnan( d ) ) return INFINITY;
+    diff = MAX( diff, d );
+  }
+  return diff;
+}
+
+// inferQueue only. Runs the model on CoreML and on the CPU over silence and
+// the microphone's latest window, and keeps CoreML for this build if every score agrees and
+// it's no slower; otherwise the CPU, as before. Reported as a status line.
+- (void)checkCoreML
+{
+  _checkCoreML = NO;
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  NSString *build = [NSBundle mainBundle].infoDictionary[@"CFBundleVersion"] ?: @"";
+  NSString *path = [[NSBundle mainBundle] pathForResource:@"audio_id" ofType:@"onnx"];
+  NSString *cache = [self coreMLCache];
+  if ( !path || !_session ) return;
+  // Converted models from earlier builds are stale, and large.
+  [[NSFileManager defaultManager] removeItemAtPath:cache error:nil];
+  [defaults setObject:[build stringByAppendingString:@":checking"] forKey:kABProviderKey];
+  CFAbsoluteTime t0 = CFAbsoluteTimeGetCurrent( );
+  OrtSession *coreML = [self openSession:path coreMLCache:cache];
+  double loadMs = ( CFAbsoluteTimeGetCurrent( ) - t0 ) * 1000;
+
+  float *audio = (float *)calloc( AB_WIN, sizeof( float ) );
+  float scoreDiff = coreML ? 0 : INFINITY;
+  double cpuMs = INFINITY, coreMLMs = INFINITY;
+  NSString *error = nil;
+  for ( int input = 0; input < 2 && coreML; input++ ) {
+    if ( input == 1 ) {
+      dispatch_sync( _bufferQueue, ^{
+        memcpy( audio, self->_modelWindow, AB_WIN * sizeof( float ) );
+      } );
+    }
+    NSData *results[2][2] = { { nil, nil }, { nil, nil } };
+    OrtSession *sessions[2] = { _session, coreML };
+    for ( int k = 0; k < 2; k++ ) {
+      // The first run warms up; the second is timed.
+      for ( int rep = 0; rep < 2; rep++ ) {
+        NSData *frames = nil;
+        NSInteger frameCount = 0;
+        CFAbsoluteTime start = CFAbsoluteTimeGetCurrent( );
+        NSData *probs = [self run:sessions[k] input:audio length:AB_WIN inputName:"input"
+                       outputName:"output" outputs:nil frames:&frames frameCount:&frameCount
+                            error:&error];
+        double ms = ( CFAbsoluteTimeGetCurrent( ) - start ) * 1000;
+        if ( rep == 1 && input == 1 ) {
+          if ( k == 0 ) cpuMs = ms; else coreMLMs = ms;
+        }
+        results[k][0] = probs;
+        results[k][1] = frames;
+      }
+    }
+    scoreDiff = MAX( scoreDiff, ABMaxDiff( results[0][0], results[1][0], NO ) );
+    scoreDiff = MAX( scoreDiff, ABMaxDiff( results[0][1], results[1][1], YES ) );
+  }
+  free( audio );
+
+  BOOL useCoreML = coreML && scoreDiff <= AB_COREML_MAX_SCORE_DIFF && coreMLMs <= cpuMs;
+  const OrtApi *ort = OrtGetApiBase()->GetApi( ORT_API_VERSION );
+  if ( useCoreML ) {
+    ort->ReleaseSession( _session );
+    _session = coreML;
+  } else {
+    if ( coreML ) ort->ReleaseSession( coreML );
+    [[NSFileManager defaultManager] removeItemAtPath:cache error:nil];
+  }
+  [defaults setObject:[build stringByAppendingFormat:@":%@", useCoreML ? @"coreml" : @"cpu"]
+               forKey:kABProviderKey];
+  [self status:[NSString stringWithFormat:
+    @"model provider %@: CoreML %@, load %.0f ms, run %.0f ms vs CPU %.0f ms, "
+    @"max score diff %.4f%@",
+    useCoreML ? @"coreml" : @"cpu", coreML ? @"opened" : @"failed to open", loadMs,
+    coreMLMs, cpuMs, scoreDiff,
+    error ? [@", error: " stringByAppendingString:error] : @""]];
 }
 
 - (BOOL)loadModel
@@ -299,7 +449,7 @@ RCT_EXPORT_MODULE( );
   dispatch_sync( _inferQueue, ^{
     if ( !self->_session ) {
       NSString *path = [[NSBundle mainBundle] pathForResource:@"audio_id" ofType:@"onnx"];
-      self->_session = path ? [self openSession:path] : NULL;
+      self->_session = path ? [self openAudioModel:path] : NULL;
     }
     ok = self->_session != NULL;
   } );
@@ -364,6 +514,11 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
       }
       [self startWatchdog];
       INatPowerSetActivity( @"AudioIdListening", YES );
+      // Once listening, so the check (a model conversion and a few runs, once
+      // per build) delays a few runs rather than the start.
+      dispatch_async( self->_inferQueue, ^{
+        if ( self->_checkCoreML ) [self checkCoreML];
+      } );
       AVAudioFormat *f = [self->_engine.inputNode outputFormatForBus:0];
       resolve( @{ @"sampleRate": @( f.sampleRate ), @"channels": @( f.channelCount ) } );
     } );

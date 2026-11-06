@@ -32,8 +32,10 @@ const MIN_DISTANCE_METERS = getTunable( "locationHistoryDistanceM" );
 // Requested update interval for the Android background watch
 const MIN_INTERVAL_MS = getTunable( "locationHistoryIntervalMinutes" ) * 60 * 1000;
 const POLL_MS = 1000;
-// How often JS pulls the fixes the iOS native monitor has buffered into Realm
-const DRAIN_INTERVAL_MS = 60 * 1000;
+// How often JS pulls the fixes the iOS native monitor has buffered into Realm.
+// Everything that reads the history drains first (drainTrackedLocationFixes),
+// so this only bounds how far Realm lags, and a longer one means fewer writes.
+const DRAIN_INTERVAL_MS = 5 * 60 * 1000;
 
 const usesAndroidBackgroundLocationPermission = Platform.OS === "android" && Platform.Version >= 29;
 
