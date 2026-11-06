@@ -290,27 +290,27 @@ const CameraPairs = ( ) => {
     observations.forEach( observation => {
       const { taxon } = observation;
       if ( !taxon?.id || ( taxon.rank_level ?? 0 ) > 10 ) return;
-      observation.observationPhotos?.forEach( obsPhoto => {
-        if ( !obsPhoto.cameraInfo ) return;
-        let info: PhotoCameraInfo;
-        try {
-          info = JSON.parse( obsPhoto.cameraInfo );
-        } catch {
-          return;
-        }
-        const entries = byTaxon.get( taxon.id ) ?? [];
-        entries.push( {
-          uuid: observation.uuid,
-          photoUuid: obsPhoto.uuid,
-          gear: gearLabel( info ),
-          taxonId: taxon.id,
-          taxonName: taxon.preferred_common_name || taxon.name,
-          photo: obsPhoto.photo,
-          info,
-          values: Object.fromEntries( SETTINGS.map( s => [s, parse( s, info[s] )] ) ),
-        } );
-        byTaxon.set( taxon.id, entries );
+      // Only the first photo represents the observation
+      const obsPhoto = observation.observationPhotos?.[0];
+      if ( !obsPhoto?.cameraInfo ) return;
+      let info: PhotoCameraInfo;
+      try {
+        info = JSON.parse( obsPhoto.cameraInfo );
+      } catch {
+        return;
+      }
+      const entries = byTaxon.get( taxon.id ) ?? [];
+      entries.push( {
+        uuid: observation.uuid,
+        photoUuid: obsPhoto.uuid,
+        gear: gearLabel( info ),
+        taxonId: taxon.id,
+        taxonName: taxon.preferred_common_name || taxon.name,
+        photo: obsPhoto.photo,
+        info,
+        values: Object.fromEntries( SETTINGS.map( s => [s, parse( s, info[s] )] ) ),
       } );
+      byTaxon.set( taxon.id, entries );
     } );
     const pairs: Pair[] = [];
     byTaxon.forEach( entries => {
