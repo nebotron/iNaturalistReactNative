@@ -425,7 +425,8 @@ const CameraPairs = ( ) => {
               {breakdown.map( row => {
                 const key = `${row.first}|${row.second}`;
                 const selected = activeFilter === key;
-                // Each gear is labeled once, under its own half of the bar.
+                // Each gear is labeled once, under its own half of the bar, in the
+                // color of its segment.
                 // Tapping a bar shows only that combination's pairs; tapping
                 // it again shows all pairs.
                 return (
@@ -450,8 +451,16 @@ const CameraPairs = ( ) => {
                       <BarSegment count={row.secondWins} color={SECOND_COLOR} />
                     </View>
                     <View className="flex-row mt-1">
-                      <Text className="flex-1 pr-2 text-xs font-bold">{row.first}</Text>
-                      <Text className="flex-1 pl-2 text-xs font-bold text-right">
+                      <Text
+                        className="flex-1 pr-2 text-xs font-bold"
+                        style={{ color: FIRST_COLOR }}
+                      >
+                        {row.first}
+                      </Text>
+                      <Text
+                        className="flex-1 pl-2 text-xs font-bold text-right"
+                        style={{ color: SECOND_COLOR }}
+                      >
                         {row.second}
                       </Text>
                     </View>
