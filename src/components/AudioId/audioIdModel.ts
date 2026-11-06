@@ -29,6 +29,11 @@ export interface AudioIdSetup {
   location: UserLocation | null; // the user's, when no place was given
 }
 
+// The model output that scores `sp`, or -1 if the model no longer has it.
+export const speciesOutput = ( sp: AudioIdSpecies ) => (
+  SPECIES as [string, string, number, number, number][]
+).findIndex( ( [name, , taxonId] ) => taxonId === sp.taxonId && name === sp.name );
+
 // BirdNET's 48-week year: four weeks per month.
 const birdnetWeek = ( d: Date ) => d.getMonth( ) * 4
   + Math.min( 4, Math.floor( ( d.getDate( ) - 1 ) / 7 ) + 1 );

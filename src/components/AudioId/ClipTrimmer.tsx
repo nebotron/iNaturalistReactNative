@@ -9,7 +9,9 @@ import { useTranslation } from "sharedHooks";
 
 import AudioClipSpectrogram from "./AudioClipSpectrogram";
 import { clipPath, contextClipPath } from "./audioIdHistory";
+import type { AudioIdSpecies } from "./audioIdModel";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
+import ClipProbabilityGraph, { useClipProbabilities } from "./ClipProbabilityGraph";
 
 interface Span { path: string; startMs: number; endMs: number }
 
@@ -51,12 +53,18 @@ interface Props {
   span: Span;
   trim: [number, number];
   onTrimChange: ( trim: [number, number] ) => void;
+  // The species identified, whose probability is graphed below the spectrogram
+  sp?: AudioIdSpecies;
+  speciesName?: string;
 }
 
 // A clip's spectrogram: drag the handles to set where it starts and ends, or
 // anywhere else to scrub, then hear it from there.
-const ClipTrimmer = ( { span, trim, onTrimChange }: Props ) => {
+const ClipTrimmer = ( {
+  span, trim, onTrimChange, sp, speciesName,
+}: Props ) => {
   const { t } = useTranslation( );
+  const probabilities = useClipProbabilities( span.path, sp );
   const duration = ( span.endMs - span.startMs ) / 1000;
   // In seconds from the span's start
   const [position, setPosition] = useState( trim[0] );
@@ -183,6 +191,15 @@ const ClipTrimmer = ( { span, trim, onTrimChange }: Props ) => {
           {handle( trim[1] )}
         </View>
       </View>
+      {probabilities && probabilities.length > 0 && (
+        <ClipProbabilityGraph
+          probabilities={probabilities}
+          duration={duration}
+          trim={trim}
+          position={position}
+          speciesName={speciesName || sp?.name || ""}
+        />
+      )}
       <View className="flex-row justify-between mt-1">
         <Body3>{t( "Clip-start-time", { time: label( trim[0] ) } )}</Body3>
         <Body3>{t( "Clip-end-time", { time: label( trim[1] ) } )}</Body3>

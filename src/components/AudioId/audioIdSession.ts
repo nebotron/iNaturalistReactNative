@@ -40,6 +40,7 @@ export const { AudioBirdId } = NativeModules as {
     normalizeSound: ( uri: string ) => Promise<string>;
     trimClip: ( path: string, from: number, to: number, outPath: string ) => Promise<string>;
     timeline: ( index: number, endFrame: number, seconds: number ) => Promise<( number | null )[]>;
+    clipTimeline: ( path: string, output: number, hop: number ) => Promise<number[]>;
     stopClip: ( ) => void;
   };
 };
@@ -47,7 +48,7 @@ export const { AudioBirdId } = NativeModules as {
 // Up from 0.3: on users' labeled detections it cut wrong birds from 23 to 8
 // and lost 2 of 20 right ones; on held-out recordings, bird recall fell 1.2 points.
 // Raised to 0.6 so everything listed as heard is also confident enough to alert on.
-const THRESHOLD = getTunable( "audioIdThreshold" );
+export const THRESHOLD = getTunable( "audioIdThreshold" );
 const NEW_CALL_GAP_MS = getTunable( "audioIdNewCallGapSeconds" ) * 1000;
 const REALERT_MS = getTunable( "audioIdRealertHours" ) * 3600000;
 // Scores by output index, as the native module sends them

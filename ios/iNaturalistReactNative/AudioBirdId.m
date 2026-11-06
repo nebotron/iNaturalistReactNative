@@ -632,6 +632,52 @@ RCT_EXPORT_METHOD( scoreSound:( NSString * )uri
   }];
 }
 
+// The Audio ID model's probability for model output `output` (as start takes
+// outputs) over the clip at `path` (32 kHz mono, as Audio ID saves them): one
+// score per `hop` seconds from the clip's start to its end, each from the 5 s
+// window centered there, with silence past the clip's ends.
+RCT_EXPORT_METHOD( clipTimeline:( NSString * )path
+                   output:( double )output
+                   hop:( double )hop
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  if ( ![self loadModel] ) {
+    reject( @"model", @"Could not load the audio model", nil );
+    return;
+  }
+  dispatch_async( dispatch_get_global_queue( QOS_CLASS_USER_INITIATED, 0 ), ^{
+    NSError *error = nil;
+    AVAudioFile *file = [[AVAudioFile alloc] initForReading:[NSURL fileURLWithPath:path]
+                                                      error:&error];
+    AVAudioPCMBuffer *buffer = file
+      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                      frameCapacity:(AVAudioFrameCount)file.length]
+      : nil;
+    if ( !buffer || ![file readIntoBuffer:buffer error:&error] || buffer.frameLength == 0 ) {
+      reject( @"clip", error.localizedDescription ?: @"Could not read the clip", error );
+      return;
+    }
+    NSInteger n = buffer.frameLength, half = AB_WIN / 2;
+    NSInteger step = MAX( (NSInteger)lround( MAX( hop, 0.1 ) * AB_SR ), 1 );
+    float *samples = (float *)calloc( n + AB_WIN, sizeof( float ) );
+    memcpy( samples + half, buffer.floatChannelData[0], n * sizeof( float ) );
+    NSArray<NSNumber *> *outputs = @[@( (NSInteger)output )];
+    NSMutableArray *scores = [NSMutableArray array];
+    NSString *inferError = nil;
+    for ( NSInteger center = 0; center <= n; center += step ) {
+      NSData *probs = [self run:self->_session input:samples + center length:AB_WIN
+                      inputName:"input" outputName:"output" outputs:outputs
+                          error:&inferError];
+      if ( !probs || probs.length < sizeof( float ) ) break;
+      [scores addObject:@( ( (const float *)probs.bytes )[0] )];
+    }
+    free( samples );
+    if ( !inferError && scores.count > 0 ) resolve( scores );
+    else reject( @"model", inferError ?: @"Could not score the clip", nil );
+  } );
+}
+
 // Plays a clip, resolving when it ends or is stopped. Measurement mode records
 // without gain control, so clips are quiet; this raises them in memory with
 // ABNormalize, leaving the file untouched.

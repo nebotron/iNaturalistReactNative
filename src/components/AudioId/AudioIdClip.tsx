@@ -141,7 +141,15 @@ const AudioIdClip = ( ) => {
       <Body3>
         {t( "X-percent-confidence", { count: Math.round( clip.confidence * 100 ) } )}
       </Body3>
-      {span && <ClipTrimmer span={span} trim={trim} onTrimChange={setTrim} />}
+      {span && (
+        <ClipTrimmer
+          span={span}
+          trim={trim}
+          onTrimChange={setTrim}
+          sp={clip.sp}
+          speciesName={commonName || clip.sp.name}
+        />
+      )}
 
       {location
         ? (
