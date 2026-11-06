@@ -40,7 +40,7 @@ export const { AudioBirdId } = NativeModules as {
     normalizeSound: ( uri: string ) => Promise<string>;
     trimClip: ( path: string, from: number, to: number, outPath: string ) => Promise<string>;
     timeline: ( index: number, endFrame: number, seconds: number ) => Promise<( number | null )[]>;
-    clipTimeline: ( path: string, output: number, hop: number ) => Promise<number[]>;
+    clipTimeline: ( path: string, output: number ) => Promise<( number | null )[]>;
     stopClip: ( ) => void;
   };
 };
@@ -48,7 +48,7 @@ export const { AudioBirdId } = NativeModules as {
 // Up from 0.3: on users' labeled detections it cut wrong birds from 23 to 8
 // and lost 2 of 20 right ones; on held-out recordings, bird recall fell 1.2 points.
 // Raised to 0.6 so everything listed as heard is also confident enough to alert on.
-export const THRESHOLD = getTunable( "audioIdThreshold" );
+const THRESHOLD = getTunable( "audioIdThreshold" );
 const NEW_CALL_GAP_MS = getTunable( "audioIdNewCallGapSeconds" ) * 1000;
 const REALERT_MS = getTunable( "audioIdRealertHours" ) * 3600000;
 // Scores by output index, as the native module sends them
@@ -92,10 +92,10 @@ let sessionLocation: UserLocation | null = null;
 // weaker), joined across gaps of up to the call gap, the strongest one in the
 // 5 s window the call was heard in, padded by some bins each side to at least
 // the minimum length.
-const BINS_PER_S = 3;
+export const BINS_PER_S = 3;
 const CONTEXT_S = 15;
 const WINDOW_BINS = [5 * BINS_PER_S, 10 * BINS_PER_S - 1];
-const CALL_LOGIT = getTunable( "audioIdCallLogit" );
+export const CALL_LOGIT = getTunable( "audioIdCallLogit" );
 const CALL_PEAK_RANGE = getTunable( "audioIdCallPeakRange" );
 const CALL_GAP_BINS = Math.round( getTunable( "audioIdCallGapSeconds" ) * BINS_PER_S );
 const CALL_PADDING_BINS = getTunable( "audioIdCallPaddingBins" );
@@ -171,8 +171,17 @@ const saveCallClip = (
     AudioBirdId?.saveClip( contextClipPath( id ), CONTEXT_S, endFrame )
       .then( ( ) => AudioBirdId?.timeline( output, endFrame, CONTEXT_S ) )
       .then( timeline => {
-        const call = timeline && findCall( timeline );
-        if ( call ) history.updateClip( id, { call } );
+        if ( !timeline ) return;
+        const call = findCall( timeline );
+        // Kept for the clip's graph, so it needs no runs of the model.
+        history.updateClip( id, {
+          timeline: timeline.map( b => ( b == null
+            ? null
+            : Math.round( b * 100 ) / 100 ) ),
+          ...( call
+            ? { call }
+            : {} ),
+        } );
       } )
       .catch( ( e: Error ) => logger.error( `saving context clip failed: ${e.message}` ) );
   }, 5000 ) );

@@ -632,13 +632,13 @@ RCT_EXPORT_METHOD( scoreSound:( NSString * )uri
   }];
 }
 
-// The Audio ID model's probability for model output `output` (as start takes
-// outputs) over the clip at `path` (32 kHz mono, as Audio ID saves them): one
-// score per `hop` seconds from the clip's start to its end, each from the 5 s
-// window centered there, with silence past the clip's ends.
+// What timeline gives for the clip at `path` (32 kHz mono, as Audio ID saves
+// them): model output `output`'s (as start takes outputs) mean per-frame logit
+// in each 1/3 s, from 5 s windows every 2.5 s, the last ending at the clip's
+// end, and a clip shorter than a window padded with silence. A 15 s clip takes
+// 5 runs.
 RCT_EXPORT_METHOD( clipTimeline:( NSString * )path
                    output:( double )output
-                   hop:( double )hop
                    resolver:( RCTPromiseResolveBlock )resolve
                    rejecter:( RCTPromiseRejectBlock )reject )
 {
@@ -658,22 +658,45 @@ RCT_EXPORT_METHOD( clipTimeline:( NSString * )path
       reject( @"clip", error.localizedDescription ?: @"Could not read the clip", error );
       return;
     }
-    NSInteger n = buffer.frameLength, half = AB_WIN / 2;
-    NSInteger step = MAX( (NSInteger)lround( MAX( hop, 0.1 ) * AB_SR ), 1 );
-    float *samples = (float *)calloc( n + AB_WIN, sizeof( float ) );
-    memcpy( samples + half, buffer.floatChannelData[0], n * sizeof( float ) );
+    NSInteger n = buffer.frameLength, length = MAX( n, (NSInteger)AB_WIN );
+    float *samples = (float *)calloc( length, sizeof( float ) );
+    memcpy( samples, buffer.floatChannelData[0], n * sizeof( float ) );
+    double binLen = AB_SR / 3.0;
+    NSInteger bins = MAX( (NSInteger)lround( n / binLen ), 1 );
+    double *sum = (double *)calloc( bins, sizeof( double ) );
+    int *count = (int *)calloc( bins, sizeof( int ) );
     NSArray<NSNumber *> *outputs = @[@( (NSInteger)output )];
-    NSMutableArray *scores = [NSMutableArray array];
     NSString *inferError = nil;
-    for ( NSInteger center = 0; center <= n; center += step ) {
-      NSData *probs = [self run:self->_session input:samples + center length:AB_WIN
+    BOOL ran = NO;
+    for ( NSInteger start = 0; ; start += AB_WIN / 2 ) {
+      BOOL last = start + AB_WIN >= length;
+      if ( last ) start = length - AB_WIN;
+      NSData *frames = nil;
+      NSInteger t = 0;
+      NSData *probs = [self run:self->_session input:samples + start length:AB_WIN
                       inputName:"input" outputName:"output" outputs:outputs
-                          error:&inferError];
-      if ( !probs || probs.length < sizeof( float ) ) break;
-      [scores addObject:@( ( (const float *)probs.bytes )[0] )];
+                         frames:&frames frameCount:&t error:&inferError];
+      if ( !probs || !frames || t <= 0 || (NSInteger)frames.length < t * (NSInteger)sizeof( float ) ) {
+        break;
+      }
+      ran = YES;
+      const float *f = (const float *)frames.bytes;
+      for ( NSInteger i = 0; i < t; i++ ) {
+        NSInteger b = (NSInteger)floor( ( start + ( i + 0.5 ) * AB_WIN / t ) / binLen );
+        if ( b < 0 || b >= bins ) continue;
+        sum[b] += f[i];
+        count[b]++;
+      }
+      if ( last ) break;
+    }
+    NSMutableArray *out = [NSMutableArray arrayWithCapacity:bins];
+    for ( NSInteger b = 0; b < bins; b++ ) {
+      [out addObject:count[b] ? @( sum[b] / count[b] ) : [NSNull null]];
     }
     free( samples );
-    if ( !inferError && scores.count > 0 ) resolve( scores );
+    free( sum );
+    free( count );
+    if ( ran && !inferError ) resolve( out );
     else reject( @"model", inferError ?: @"Could not score the clip", nil );
   } );
 }

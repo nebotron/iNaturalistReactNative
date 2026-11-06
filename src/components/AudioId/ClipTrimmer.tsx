@@ -10,10 +10,11 @@ import { useTranslation } from "sharedHooks";
 import { clipPath, contextClipPath } from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import { AudioBirdId, setPlayingAudio } from "./audioIdSession";
-import ClipProbabilityGraph, { useClipProbabilities } from "./ClipProbabilityGraph";
+import ClipProbabilityGraph, { useClipTimeline } from "./ClipProbabilityGraph";
 import SoundSpectrogram from "./SoundSpectrogram";
 
-interface Span { path: string; startMs: number; endMs: number }
+// `context` when it's the 15 s context clip rather than the 5 s one
+interface Span { path: string; startMs: number; endMs: number; context: boolean }
 
 // How close in points a touch has to land to grab a start or end handle
 const GRAB = 24;
@@ -36,8 +37,15 @@ export const useClipSpan = (
     if ( !heardAt ) return;
     exists( contextClipPath( id ) ).then( hasContext => {
       const s = hasContext
-        ? { path: contextClipPath( id ), startMs: heardAt - 10000, endMs: heardAt + 5000 }
-        : { path: clipPath( id ), startMs: heardAt - 5000, endMs: heardAt };
+        ? {
+          path: contextClipPath( id ),
+          startMs: heardAt - 10000,
+          endMs: heardAt + 5000,
+          context: true,
+        }
+        : {
+          path: clipPath( id ), startMs: heardAt - 5000, endMs: heardAt, context: false,
+        };
       const duration = ( s.endMs - s.startMs ) / 1000;
       setSpan( s );
       setTrim( !hasContext
@@ -53,17 +61,21 @@ interface Props {
   trim: [number, number];
   onTrimChange: ( trim: [number, number] ) => void;
   // The species identified, whose probability is graphed below the spectrogram
-  sp?: AudioIdSpecies;
-  speciesName?: string;
+  sp: AudioIdSpecies;
+  speciesName: string;
+  // The live session's timeline of the context clip, when it was kept
+  timeline?: ( number | null )[];
 }
 
 // A clip's spectrogram: drag the handles to set where it starts and ends, or
 // anywhere else to scrub, then hear it from there.
 const ClipTrimmer = ( {
-  span, trim, onTrimChange, sp, speciesName,
+  span, trim, onTrimChange, sp, speciesName, timeline,
 }: Props ) => {
   const { t } = useTranslation( );
-  const probabilities = useClipProbabilities( span.path, sp );
+  const logits = useClipTimeline( span.path, sp, span.context
+    ? timeline
+    : undefined );
   const duration = ( span.endMs - span.startMs ) / 1000;
   // In seconds from the span's start
   const [position, setPosition] = useState( trim[0] );
@@ -190,13 +202,13 @@ const ClipTrimmer = ( {
           {handle( trim[1] )}
         </View>
       </View>
-      {probabilities && probabilities.length > 0 && (
+      {logits && logits.length > 0 && (
         <ClipProbabilityGraph
-          probabilities={probabilities}
+          logits={logits}
           duration={duration}
           trim={trim}
           position={position}
-          speciesName={speciesName || sp?.name || ""}
+          speciesName={speciesName}
         />
       )}
       <View className="flex-row justify-between mt-1">

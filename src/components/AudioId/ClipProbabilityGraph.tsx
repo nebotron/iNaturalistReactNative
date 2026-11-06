@@ -8,43 +8,48 @@ import colors from "styles/tailwindColors";
 
 import type { AudioIdSpecies } from "./audioIdModel";
 import { speciesOutput } from "./audioIdModel";
-import { AudioBirdId, THRESHOLD } from "./audioIdSession";
+import {
+  AudioBirdId, BINS_PER_S, CALL_LOGIT,
+} from "./audioIdSession";
 
 const logger = log.extend( "AudioId" );
-
-// Seconds between scores: 61 windows for a 15 s clip, scored off the main
-// thread in a few seconds.
-const HOP_S = 0.25;
 const HEIGHT = 56;
 
-// The model's probability for `sp` at each HOP_S of the clip at `path`, or
-// null until it is scored (or when it can't be).
-export const useClipProbabilities = (
-  path: string | undefined,
-  sp: AudioIdSpecies | undefined,
+const sigmoid = ( logit: number ) => 1 / ( 1 + Math.exp( -logit ) );
+
+interface Scored { key: string; logits: ( number | null )[] }
+
+// The model's per-frame logits for `sp` in each 1/3 s of the clip at `path`
+// (null where none were scored), or null until it is scored or when it can't
+// be. A timeline the live session kept is used as it is; otherwise the clip
+// is scored, which takes 5 runs of the model for a 15 s clip.
+export const useClipTimeline = (
+  path: string,
+  sp: AudioIdSpecies,
+  kept?: ( number | null )[],
 ) => {
-  const output = sp
-    ? speciesOutput( sp )
-    : -1;
+  const output = speciesOutput( sp );
   const key = `${path}:${output}`;
   // Kept with what they score, so a new clip shows none until it is scored.
-  const [scored, setScored] = useState<{ key: string; scores: number[] } | null>( null );
+  const [scored, setScored] = useState<Scored | null>( null );
+  const needed = !kept;
   useEffect( ( ) => {
     let current = true;
-    if ( path && output >= 0 && AudioBirdId?.clipTimeline ) {
-      AudioBirdId.clipTimeline( path, output, HOP_S )
-        .then( scores => { if ( current ) setScored( { key, scores } ); } )
+    if ( needed && output >= 0 && AudioBirdId?.clipTimeline ) {
+      AudioBirdId.clipTimeline( path, output )
+        .then( logits => { if ( current ) setScored( { key, logits } ); } )
         .catch( ( e: Error ) => logger.error( `scoring clip timeline failed: ${e.message}` ) );
     }
     return ( ) => { current = false; };
-  }, [path, output, key] );
+  }, [needed, path, output, key] );
+  if ( kept ) return kept;
   return scored?.key === key
-    ? scored.scores
+    ? scored.logits
     : null;
 };
 
 interface Props {
-  probabilities: number[];
+  logits: ( number | null )[];
   duration: number;
   // Seconds from the clip's start, as the spectrogram above shows them
   trim: [number, number];
@@ -52,21 +57,36 @@ interface Props {
   speciesName: string;
 }
 
-// How likely the model hears the species at each moment of the clip, lined up
-// with the spectrogram above it, with the threshold for counting it as heard.
+// How likely the model hears the species at each moment of the clip (the
+// sigmoid of its per-frame logits, which the clip's score pools over 5 s),
+// lined up with the spectrogram above it, with the level a call is found at.
 const ClipProbabilityGraph = ( {
-  probabilities, duration, trim, position, speciesName,
+  logits, duration, trim, position, speciesName,
 }: Props ) => {
   const { t } = useTranslation( );
   const [width, setWidth] = useState( 0 );
   const x = ( at: number ) => ( Math.min( Math.max( at, 0 ), duration ) / duration ) * width;
   const y = ( p: number ) => ( 1 - Math.min( Math.max( p, 0 ), 1 ) ) * HEIGHT;
-  const points = probabilities
-    .map( ( p, i ) => `${x( i * HOP_S ).toFixed( 1 )},${y( p ).toFixed( 1 )}` );
-  const line = `M${points.join( "L" )}`;
-  const lastX = x( ( probabilities.length - 1 ) * HOP_S ).toFixed( 1 );
-  const area = `${line}L${lastX},${HEIGHT}L0,${HEIGHT}Z`;
-  const peak = Math.round( Math.max( ...probabilities ) * 100 );
+  // One stretch of line per run of scored bins, each at its bin's middle
+  const stretches: [number, number][][] = [];
+  logits.forEach( ( logit, i ) => {
+    if ( logit == null ) {
+      stretches.push( [] );
+      return;
+    }
+    if ( stretches.length === 0 ) stretches.push( [] );
+    const at = ( i + 0.5 ) / BINS_PER_S;
+    stretches[stretches.length - 1].push( [x( at ), y( sigmoid( logit ) )] );
+  } );
+  const drawn = stretches.filter( pts => pts.length > 0 );
+  const xy = ( [px, py]: [number, number] ) => `${px.toFixed( 1 )},${py.toFixed( 1 )}`;
+  const line = drawn.map( pts => `M${pts.map( xy ).join( "L" )}` ).join( "" );
+  const area = drawn
+    .map( pts => `M${pts[0][0].toFixed( 1 )},${HEIGHT}L${pts.map( xy ).join( "L" )}`
+      + `L${pts[pts.length - 1][0].toFixed( 1 )},${HEIGHT}Z` )
+    .join( "" );
+  const scoredLogits = logits.filter( ( l ): l is number => l != null );
+  const peak = Math.round( sigmoid( Math.max( ...scoredLogits ) ) * 100 );
   const percent = ( at: number ) => `${( at / duration ) * 100}%`;
 
   return (
@@ -84,8 +104,8 @@ const ClipProbabilityGraph = ( {
           <Line
             x1={0}
             x2={width}
-            y1={y( THRESHOLD )}
-            y2={y( THRESHOLD )}
+            y1={y( sigmoid( CALL_LOGIT ) )}
+            y2={y( sigmoid( CALL_LOGIT ) )}
             stroke={colors.darkGray}
             strokeWidth={1}
             strokeDasharray="4,4"

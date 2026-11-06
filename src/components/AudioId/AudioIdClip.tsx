@@ -148,6 +148,7 @@ const AudioIdClip = ( ) => {
           onTrimChange={setTrim}
           sp={clip.sp}
           speciesName={commonName || clip.sp.name}
+          timeline={clip.timeline}
         />
       )}
 
