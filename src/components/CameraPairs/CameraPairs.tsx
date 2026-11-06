@@ -96,6 +96,9 @@ const gearLabel = ( info: PhotoCameraInfo ) => [info.camera, info.lens]
 
 const voteKey = ( pair: Pair ) => [pair.a.photoUuid, pair.b.photoUuid].sort( ).join( "|" );
 
+// Same key the preference breakdown uses for a gear combination
+const gearKey = ( pair: Pair ) => [pair.a.gear, pair.b.gear].sort( ).join( "|" );
+
 // "100 mm (160 mm equiv.)" → 160, "1/250 s" → 0.004, "f/5.6" → 5.6, "0.42 m" → 0.42
 const parse = ( setting: Setting, raw = "" ): number | undefined => {
   const text = setting === "focalLength"
@@ -284,6 +287,8 @@ const CameraPairs = ( ) => {
   const [seed] = useState( ( ) => Math.random( ) * 1000 );
   const [toleranceText, setToleranceText] = useState( "20" );
   const tolerance = ( parseFloat( toleranceText ) || 0 ) / 100;
+  // Gear combination picked by tapping its preference bar
+  const [gearFilter, setGearFilter] = useState<string | null>( null );
 
   const allPairs = useMemo( ( ) => {
     const byTaxon = new Map<number, Entry[]>( );
@@ -395,11 +400,21 @@ const CameraPairs = ( ) => {
     ) );
   }, [votes] );
 
+  // Ignore a filter whose bar went away when its last vote was cleared,
+  // so the list can't get stuck filtered with nothing to tap
+  const activeFilter = gearFilter
+    && breakdown.some( row => `${row.first}|${row.second}` === gearFilter )
+    ? gearFilter
+    : null;
+  const shownPairs = useMemo( ( ) => ( activeFilter
+    ? pairs.filter( pair => gearKey( pair ) === activeFilter )
+    : pairs ), [pairs, activeFilter] );
+
   return (
     <FlatList
       className="bg-white"
       contentContainerClassName="py-4 pb-20"
-      data={pairs}
+      data={shownPairs}
       keyExtractor={pair => pair.key}
       extraData={votes}
       ListHeaderComponent={(
@@ -407,22 +422,42 @@ const CameraPairs = ( ) => {
           {breakdown.length > 0 && (
             <View className="mb-4">
               <Text className="font-bold mb-2">{t( "Your-preferences" )}</Text>
-              {breakdown.map( row => (
-                // Each gear is labeled once, under its own half of the bar
-                <View key={`${row.first}|${row.second}`} className="mb-3">
-                  <View className="flex-row h-6 rounded overflow-hidden bg-lightGray">
-                    <BarSegment count={row.firstWins} color={FIRST_COLOR} />
-                    <BarSegment count={row.same} color={SAME_COLOR} darkText />
-                    <BarSegment count={row.secondWins} color={SECOND_COLOR} />
-                  </View>
-                  <View className="flex-row mt-1">
-                    <Text className="flex-1 pr-2 text-xs font-bold">{row.first}</Text>
-                    <Text className="flex-1 pl-2 text-xs font-bold text-right">
-                      {row.second}
-                    </Text>
-                  </View>
-                </View>
-              ) )}
+              {breakdown.map( row => {
+                const key = `${row.first}|${row.second}`;
+                const selected = activeFilter === key;
+                // Each gear is labeled once, under its own half of the bar.
+                // Tapping a bar shows only that combination's pairs; tapping
+                // it again shows all pairs.
+                return (
+                  <Pressable
+                    key={key}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={t( "X-vs-Y", { first: row.first, second: row.second } )}
+                    accessibilityHint={selected
+                      ? t( "Shows-all-pairs" )
+                      : t( "Shows-only-pairs-with-this-gear" )}
+                    onPress={( ) => setGearFilter( selected
+                      ? null
+                      : key )}
+                    className={`mb-3 ${activeFilter && !selected
+                      ? "opacity-40"
+                      : ""}`}
+                  >
+                    <View className="flex-row h-6 rounded overflow-hidden bg-lightGray">
+                      <BarSegment count={row.firstWins} color={FIRST_COLOR} />
+                      <BarSegment count={row.same} color={SAME_COLOR} darkText />
+                      <BarSegment count={row.secondWins} color={SECOND_COLOR} />
+                    </View>
+                    <View className="flex-row mt-1">
+                      <Text className="flex-1 pr-2 text-xs font-bold">{row.first}</Text>
+                      <Text className="flex-1 pl-2 text-xs font-bold text-right">
+                        {row.second}
+                      </Text>
+                    </View>
+                  </Pressable>
+                );
+              } )}
             </View>
           )}
           <Text className="text-sm mb-2">
@@ -439,7 +474,7 @@ const CameraPairs = ( ) => {
             <Text className="ml-1">{t( "Percent-sign" )}</Text>
           </View>
           <Text className="text-xs mt-2">
-            {t( "X-pairs", { count: pairs.length } )}
+            {t( "X-pairs", { count: shownPairs.length } )}
           </Text>
         </View>
       )}

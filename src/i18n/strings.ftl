@@ -1757,12 +1757,16 @@ Shorten-time-limit = Shorten time limit
 # Accessibility label for the photo picker button that shows photos already saved or deleted
 Show-all-photos = Show all photos
 Show-observation-options = Show observation options.
+# Accessibility hint for a selected camera pairs preference bar; tapping it clears the filter
+Shows-all-pairs = Shows all pairs.
 # Label for button that shows identification suggestions
 Shows-identification-suggestions = Shows identification suggestions
 # Accessibility hint for the new community member duckling badge
 Shows-information-about-new-community-members = Shows information about new community members
 # Accessibility hint for button that shows observation creation options
 Shows-observation-creation-options = Shows observation creation options
+# Accessibility hint for a camera pairs preference bar; tapping it filters pairs to that camera/lens combination
+Shows-only-pairs-with-this-gear = Shows only pairs comparing this gear.
 # Accessibility hint for the camera summary under a photo
 Shows-the-camera-settings-of-this-photo = Shows the camera settings of this photo.
 # Label for a photo's exposure time in its camera settings
@@ -2639,6 +2643,8 @@ x-uploads-failed =
         [one] { $count } upload failed
        *[other] { $count } uploads failed
     }
+# Accessibility label for a camera pairs preference bar comparing two camera/lens combinations
+X-vs-Y = { $first } vs. { $second }
 YES = YES
 Yes-but-only-if-I-add-the-observation-to-the-project-myself = Yes, but only if I add the observation to the project myself
 Yes-no-matter-who-adds-the-observation-to-the-project = Yes, no matter who adds the observation to the project
