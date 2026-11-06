@@ -8,7 +8,9 @@ import CachedImage from "components/SharedComponents/CachedImage";
 import { Pressable, ScrollView, View } from "components/styledComponents";
 import i18n from "i18next";
 import { RealmContext } from "providers/contexts";
-import React, { useCallback, useEffect, useMemo } from "react";
+import React, {
+  useCallback, useEffect, useMemo, useSyncExternalStore,
+} from "react";
 import { Trans } from "react-i18next";
 import type { ViewProps } from "react-native";
 import {
@@ -24,6 +26,7 @@ import { getTunable } from "sharedHelpers/tunableParams";
 import { useCurrentUser, useTranslation } from "sharedHooks";
 import useAuthenticatedQuery from "sharedHooks/useAuthenticatedQuery";
 import colors from "styles/tailwindColors";
+import type { StoreApi, UseBoundStore } from "zustand";
 
 import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
@@ -194,11 +197,30 @@ const BadgeKey = ( { showStar }: { showStar: boolean } ) => {
 // audio.
 const AudioSpectrogram = requireNativeComponent<ViewProps>( "AudioSpectrogram" );
 const SPECTROGRAM_STYLE = { height: 140 };
-const Spectrogram = ( ) => (
+// While dimmed the view is left out, so it stops drawing every frame; the
+// native module keeps the audio, so it shows the last 10 s when it's back.
+const Spectrogram = ( { paused }: { paused: boolean } ) => (
   <View className="mt-4 -mx-5 border-y border-lightGray">
-    <AudioSpectrogram style={SPECTROGRAM_STYLE} />
+    {paused
+      ? <View style={SPECTROGRAM_STYLE} />
+      : <AudioSpectrogram style={SPECTROGRAM_STYLE} />}
   </View>
 );
+
+// A store's value that stops re-rendering the screen while it's dimmed, so
+// the runs coming in every second don't redraw a screen nobody can see.
+// Brightening subscribes again, which picks up the live value. The selector
+// must return a value already in the store, not a new object.
+const useWhileBright = <S, T>(
+  useStore: UseBoundStore<StoreApi<S>>,
+  selector: ( state: S ) => T,
+): T => {
+  const dimmed = useScreenDimmed( );
+  const subscribe = useCallback( ( onChange: ( ) => void ) => ( dimmed
+    ? ( ) => undefined
+    : useStore.subscribe( onChange ) ), [useStore, dimmed] );
+  return useSyncExternalStore( subscribe, ( ) => selector( useStore.getState( ) ) );
+};
 
 const AudioId = ( ) => {
   const { t } = useTranslation( );
@@ -219,7 +241,7 @@ const AudioId = ( ) => {
   const {
     listening, error, current, setup, setSeen, start,
     stop,
-  } = useAudioIdSession( );
+  } = useWhileBright( useAudioIdSession, state => state );
   const dimmed = useScreenDimmed( );
   const species = useMemo( ( ) => setup?.species || [], [setup] );
   const currentUser = useCurrentUser( );
@@ -242,7 +264,7 @@ const AudioId = ( ) => {
   );
   const scoreNow = ( taxonId: number ) => current?.[outputOf.get( taxonId ) ?? -1] || 0;
   const hearingNow = ( taxonId: number ) => listening && isHeard( scoreNow( taxonId ) );
-  const clips = useAudioIdHistory( state => state.clips );
+  const clips = useWhileBright( useAudioIdHistory, state => state.clips );
   // Every species ever heard, most recently heard first.
   const heardList = useMemo( ( ) => {
     const bySpecies = new Map<number, Heard>( );
@@ -364,7 +386,7 @@ const AudioId = ( ) => {
             : start}
         />
         {error && <Body3 className="mt-2 text-warningRed">{error}</Body3>}
-        {listening && <Spectrogram />}
+        {listening && <Spectrogram paused={dimmed} />}
         {listening && !current && (
           <Body3 className="mt-1">{t( "Listening" )}</Body3>
         )}
