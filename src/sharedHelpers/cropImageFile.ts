@@ -2,12 +2,9 @@ import { mkdir, unlink } from "@dr.pogodin/react-native-fs";
 import { photoUploadPath } from "appConstants/paths";
 import { NativeModules } from "react-native";
 import adjustImageBrightness from "sharedHelpers/adjustImageBrightness";
-import {
-  alignPixelCropOutwardToJpegBlocks,
-  pixelCropFromNormalizedCrop,
-} from "sharedHelpers/jpegCropBounds";
 import { log } from "sharedHelpers/logger";
 import type { NormalizedCrop } from "sharedHelpers/normalizedCropTypes";
+import pixelCropFromNormalizedCrop from "sharedHelpers/pixelCropBounds";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";
 import * as uuid from "uuid";
 
@@ -60,11 +57,7 @@ const cropImageFile = async (
   const outputPath = `${outputDir}/${uuid.v4()}.jpg`;
   const inputPath = stripFilePrefix( imageUri );
 
-  const pixelCrop = alignPixelCropOutwardToJpegBlocks(
-    pixelCropFromNormalizedCrop( crop, imageWidth, imageHeight ),
-    imageWidth,
-    imageHeight,
-  );
+  const pixelCrop = pixelCropFromNormalizedCrop( crop, imageWidth, imageHeight );
 
   try {
     const result = await ImageCropper.cropImage(
