@@ -5,6 +5,7 @@ import { NavigationContainer } from "@react-navigation/native";
 import { useReactNavigationDevTools } from "@rozenite/react-navigation-plugin";
 import type { PropsWithChildren } from "react";
 import React, { useRef } from "react";
+import setPowerProfileScreen from "sharedHelpers/powerProfile";
 import { logFirebaseScreenView } from "sharedHelpers/tracking";
 import {
   markNavigationDispatched,
@@ -32,6 +33,7 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
     // screen we launched on counted as none.
     if ( screenChanged ) {
       logFirebaseScreenView( currentRouteName );
+      setPowerProfileScreen( currentRouteName );
     }
     routeNameRef.current = currentRouteName;
     if ( currentRouteName === "Login" && !isConnected ) {
@@ -50,6 +52,7 @@ const OfflineNavigationGuard = ( { children }: PropsWithChildren ) => {
       ref={navigationRef}
       onReady={() => {
         routeNameRef.current = navigationRef.current?.getCurrentRoute()?.name;
+        setPowerProfileScreen( routeNameRef.current );
         // The action listener is documented as debugging-only, which is exactly
         // what this is: it's the only hook that fires when navigation is asked
         // to move, before any state change, so it's where a transition's clock

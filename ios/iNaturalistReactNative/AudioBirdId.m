@@ -13,6 +13,8 @@
 #import <UserNotifications/UserNotifications.h>
 #include "onnxruntime_c_api.h"
 
+#import "PowerProfile.h"
+
 // Live bird identification by sound. Taps the microphone, resamples to
 // 32 kHz mono, keeps the most recent 5 s in a sliding window, and every second
 // runs the bundled audio_id.onnx on it: BirdNET v3.0 (CC BY-SA 4.0, "Powered
@@ -361,6 +363,7 @@ RCT_EXPORT_METHOD( start:( NSArray<NSNumber *> * )outputs
         return;
       }
       [self startWatchdog];
+      INatPowerSetActivity( @"AudioIdListening", YES );
       AVAudioFormat *f = [self->_engine.inputNode outputFormatForBus:0];
       resolve( @{ @"sampleRate": @( f.sampleRate ), @"channels": @( f.channelCount ) } );
     } );
@@ -808,6 +811,7 @@ RCT_EXPORT_METHOD( stop )
     if ( self->_watchdog ) dispatch_source_cancel( self->_watchdog );
     self->_watchdog = nil;
     [self stopEngine];
+    INatPowerSetActivity( @"AudioIdListening", NO );
   } );
 }
 
@@ -1380,7 +1384,10 @@ didReceiveNotificationResponse:(UNNotificationResponse *)response
   if ( !self.window ) return;
   [self restart];
   _link = [CADisplayLink displayLinkWithTarget:self selector:@selector( tick )];
-  _link.preferredFrameRateRange = CAFrameRateRangeMake( 30, 60, 60 );
+  // 30 fps scrolls the spectrogram smoothly enough at its ~40 pt/s, and
+  // compared with 60 it halves the strips on screen and the frames composited
+  // for the hours a listening session can run.
+  _link.preferredFrameRateRange = CAFrameRateRangeMake( 15, 30, 30 );
   abSpecViews += 1;
   [_link addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
 }
