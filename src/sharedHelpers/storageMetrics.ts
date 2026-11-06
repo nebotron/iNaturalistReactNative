@@ -55,7 +55,7 @@ const largestDirs = async ( ): Promise<{ largestDirsMB: string; totalsMB: string
   const totals: Record<string, number> = {};
   const extraRoots: Record<string, string> = { Bundle: MainBundlePath };
   if ( Platform.OS === "ios" ) {
-    extraRoots.AppGroup = await pathForGroup( `group.${DeviceInfo.getBundleId( )}` )
+    extraRoots.AppGroup = await pathForGroup( "group.org.inaturalist.iNaturalistMobile" )
       .catch( ( ) => "" );
   }
   await Promise.all( Object.entries( extraRoots ).map( async ( [name, root] ) => {

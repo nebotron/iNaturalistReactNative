@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>HostAppBundleIdentifier</key>
-	<string>com.benhannel.inat.dev</string>
+	<string>org.inaturalist.iNaturalistMobile</string>
 	<key>HostAppURLScheme</key>
 	<string>inaturalistmobile://</string>
 	<key>NSAppTransportSecurity</key>
