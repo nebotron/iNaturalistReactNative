@@ -1,5 +1,6 @@
 import { Body2, BottomSheet } from "components/SharedComponents";
 import { TextInput, View } from "components/styledComponents";
+import type { TFunction } from "i18next";
 import React, { useState } from "react";
 import { useTranslation } from "sharedHooks";
 import type { HotspotSettings } from "stores/createLayoutSlice";
@@ -7,17 +8,21 @@ import useStore from "stores/useStore";
 
 const FIELDS: {
   key: keyof HotspotSettings;
-  label: string;
+  // Literal t( ) calls, so the i18n unused-key check sees each key
+  label: ( t: TFunction ) => string;
   min: number;
   decimal?: boolean;
 }[] = [
   {
-    key: "hotspotClusterRadiusKm", label: "Hotspot-cluster-radius-km", min: 0.1, decimal: true,
+    key: "hotspotClusterRadiusKm",
+    label: t => t( "Hotspot-cluster-radius-km" ),
+    min: 0.1,
+    decimal: true,
   },
-  { key: "hotspotMaxDetourCandidates", label: "Hotspot-max-detour-candidates", min: 1 },
-  { key: "hotspotObsPerPage", label: "Hotspot-obs-per-page", min: 1 },
-  { key: "hotspotParkingMinutes", label: "Hotspot-parking-minutes", min: 0 },
-  { key: "hotspotBboxPaddingKm", label: "Hotspot-bbox-padding-km", min: 0 },
+  { key: "hotspotMaxDetourCandidates", label: t => t( "Hotspot-max-detour-candidates" ), min: 1 },
+  { key: "hotspotObsPerPage", label: t => t( "Hotspot-obs-per-page" ), min: 1 },
+  { key: "hotspotParkingMinutes", label: t => t( "Hotspot-parking-minutes" ), min: 0 },
+  { key: "hotspotBboxPaddingKm", label: t => t( "Hotspot-bbox-padding-km" ), min: 0 },
 ];
 
 interface FieldProps {
@@ -43,9 +48,9 @@ const HotspotSettingField = ( { field }: FieldProps ) => {
 
   return (
     <>
-      <Body2 className="mb-2">{t( field.label )}</Body2>
+      <Body2 className="mb-2">{field.label( t )}</Body2>
       <TextInput
-        accessibilityLabel={t( field.label )}
+        accessibilityLabel={field.label( t )}
         className="border border-lightGray h-10 rounded-xl px-3 mb-5 text-base"
         keyboardType={field.decimal
           ? "decimal-pad"

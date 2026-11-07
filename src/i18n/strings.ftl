@@ -1059,8 +1059,6 @@ LOCATION-HISTORY = LOCATION HISTORY
 Location-history-explanation = When this is enabled, the app will track your location in the background at all times. This data will not leave your device. The location data will be applied to any observations which are imported with no GPS metadata. This is helpful for importing photos from a camera with no GPS module.
 # Android notification text shown while location history tracks in the background
 Location-history-notification-description = Recording your location for photos imported without GPS. This data stays on your device.
-# Checkbox label for filtering observations without location data
-Location-Missing = Location Missing
 Location-Permission-Required = Location Permission Required
 # Header for traditonal projects join flow: curator access to hidden observation coordinates (not device GPS)
 LOCATION-PERMISSIONS = LOCATION PERMISSIONS
@@ -1694,7 +1692,6 @@ SAVE-LOCATION = SAVE LOCATION
 Saved-filter-already-exists-description = You already have a saved filter with this name. Choose a different name.
 Saved-filter-already-exists-title = Name already in use
 Saved-filter-name-placeholder = e.g. Nearby birds
-Saved-filters = Saved filters
 Saved-Observation = Saved observation, in queue to upload
 # Heading of the saved searches section on the advanced search screen
 SAVED-SEARCHES = SAVED SEARCHES
@@ -2301,8 +2298,6 @@ Tunable-usbStagingRetentionDays-description = How long photos imported from USB 
 Umbrella-Project = Umbrella Project
 UNFOLLOW = UNFOLLOW
 UNFOLLOW-USER = UNFOLLOW USER?
-# Explore filter option for an observation's evidence of presence annotation
-Unknown--evidence = Unknown
 # Text to show when a taoxn rank is unknown or missing
 Unknown--rank = Unknown
 # Text to show when a taxon or identification is unknown or missing
@@ -2640,12 +2635,6 @@ X-SPECIES--below-number =
     { $count ->
         [one] SPECIES
        *[other] SPECIES
-    }
-# Number of taxa selected in the Explore header taxon filter
-X-taxa =
-    { $count ->
-        [one] { $count } taxon
-       *[other] { $count } taxa
     }
 # Number of observations uploaded in ObsEdit multiple observation screen
 x-uploaded =
