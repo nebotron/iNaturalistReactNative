@@ -96,19 +96,22 @@ const gearLabel = ( info: PhotoCameraInfo ) => [info.camera, info.lens]
   .filter( Boolean ).join( GEAR_SEPARATOR ) || i18n.t( "Unknown-gear" );
 
 // A gear label with camera and lens nicknames. A label of one name may be
-// either a camera or a lens.
+// either a camera or a lens. A lens with an extender has the separator in its
+// own name (Canon's "... USM + 1.4x"), so split at the first one only.
 const nicknamedGear = (
   gear: string,
   nameGear: ( kind: GearKind, name?: string ) => string | undefined,
 ) => {
-  const parts = gear.split( GEAR_SEPARATOR );
-  if ( parts.length === 2 ) {
-    return [nameGear( "camera", parts[0] ), nameGear( "lens", parts[1] )].join( GEAR_SEPARATOR );
-  }
   const asCamera = nameGear( "camera", gear );
-  return asCamera !== gear
-    ? asCamera
-    : nameGear( "lens", gear );
+  if ( asCamera !== gear ) return asCamera;
+  const asLens = nameGear( "lens", gear );
+  if ( asLens !== gear ) return asLens;
+  const at = gear.indexOf( GEAR_SEPARATOR );
+  if ( at < 0 ) return gear;
+  return [
+    nameGear( "camera", gear.slice( 0, at ) ),
+    nameGear( "lens", gear.slice( at + GEAR_SEPARATOR.length ) ),
+  ].join( GEAR_SEPARATOR );
 };
 
 const voteKey = ( pair: Pair ) => [pair.a.photoUuid, pair.b.photoUuid].sort( ).join( "|" );
