@@ -3,7 +3,7 @@ import AdvancedSearch
   from "components/Explore/ExploreV2/screens/AdvancedSearch";
 import ExploreResults
   from "components/Explore/ExploreV2/screens/ExploreResults";
-import { hideHeader } from "navigation/navigationOptions";
+import { hideHeader, preventSwipeToGoBack } from "navigation/navigationOptions";
 import type { ExploreStackParamList } from "navigation/types";
 import React from "react";
 
@@ -16,7 +16,10 @@ interface Props {
 }
 
 const ExploreStackNavigator = ( { showBackButton }: Props ) => (
-  <Stack.Navigator initialRouteName="ExploreResults">
+  <Stack.Navigator
+    screenOptions={preventSwipeToGoBack}
+    initialRouteName="ExploreResults"
+  >
     <Stack.Screen
       name="ExploreResults"
       component={ExploreResults}
