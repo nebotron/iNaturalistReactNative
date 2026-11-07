@@ -286,6 +286,7 @@ CHANGE-START-DATE = CHANGE START DATE
 # Label for a button that changes a selected start date
 Change-start-date = Change start date
 # Button that changes the taxon filter on Explore
+Change-taxon = Change taxon
 Change-taxon-filter = Change taxon filter
 # Accessibility label for the chip that shows the hotspot route time limit and opens its controls
 Change-time-limit = Change time limit
