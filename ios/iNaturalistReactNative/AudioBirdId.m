@@ -790,6 +790,57 @@ RCT_EXPORT_METHOD( scoreSound:( NSString * )uri
   }];
 }
 
+// Saves the sound at `uri` (as normalizeSound takes it, e.g. a shared Voice
+// Memo) as an Audio ID clip at `outPath`: 32 kHz mono AAC, as saveClip writes
+// them, so trimClip, playClipRange and clipTimeline read it the same way.
+// Resolves its length in seconds.
+RCT_EXPORT_METHOD( importClip:( NSString * )uri
+                   outPath:( NSString * )outPath
+                   resolver:( RCTPromiseResolveBlock )resolve
+                   rejecter:( RCTPromiseRejectBlock )reject )
+{
+  NSString *name = [NSUUID UUID].UUIDString;
+  [self withLocalSound:uri name:name done:^( NSURL *source, NSError *error ) {
+    AVAudioFile *file = source ? [[AVAudioFile alloc] initForReading:source error:&error] : nil;
+    AVAudioPCMBuffer *buffer = file
+      ? [[AVAudioPCMBuffer alloc] initWithPCMFormat:file.processingFormat
+                                      frameCapacity:(AVAudioFrameCount)file.length]
+      : nil;
+    if ( !buffer || ![file readIntoBuffer:buffer error:&error] ) {
+      reject( @"sound", error.localizedDescription ?: @"Could not read the sound", error );
+      return;
+    }
+    AVAudioFormat *mono = [[AVAudioFormat alloc] initWithCommonFormat:AVAudioPCMFormatFloat32
+                                                           sampleRate:AB_SR channels:1
+                                                          interleaved:NO];
+    AVAudioConverter *converter = [[AVAudioConverter alloc] initFromFormat:buffer.format
+                                                                  toFormat:mono];
+    converter.downmix = YES;
+    AVAudioPCMBuffer *out = [[AVAudioPCMBuffer alloc] initWithPCMFormat:mono
+      frameCapacity:(AVAudioFrameCount)ceil( buffer.frameLength * AB_SR
+                                             / buffer.format.sampleRate ) + 32];
+    __block BOOL fed = NO;
+    [converter convertToBuffer:out error:&error
+            withInputFromBlock:^AVAudioBuffer *( AVAudioPacketCount n,
+                                                 AVAudioConverterInputStatus *status ) {
+      *status = fed ? AVAudioConverterInputStatus_EndOfStream
+                    : AVAudioConverterInputStatus_HaveData;
+      if ( fed ) return nil;
+      fed = YES;
+      return buffer;
+    }];
+    if ( error || out.frameLength == 0 ) {
+      reject( @"sound", error.localizedDescription ?: @"Could not convert the sound", error );
+      return;
+    }
+    if ( !ABWriteClip( outPath, out.floatChannelData[0], out.frameLength, &error ) ) {
+      reject( @"clip", error.localizedDescription ?: @"Could not save the clip", error );
+      return;
+    }
+    resolve( @( (double)out.frameLength / AB_SR ) );
+  }];
+}
+
 // What timeline gives for the clip at `path` (32 kHz mono, as Audio ID saves
 // them): model output `output`'s (as start takes outputs) mean per-frame logit
 // in each 1/3 s, from 5 s windows every 2.5 s, the last ending at the clip's

@@ -1,4 +1,5 @@
 import { CommonActions, useNavigation, useRoute } from "@react-navigation/native";
+import importSharedClip, { canImportSharedClip } from "components/AudioId/importSharedClip";
 import { ActivityAnimation, ViewWrapper } from "components/SharedComponents";
 import { View } from "components/styledComponents";
 import type { NoBottomTabStackScreenProps, TabStackScreenProps } from "navigation/types";
@@ -14,6 +15,7 @@ import {
   stageSharedSound,
   unlinkIfShareExtensionSource,
 } from "sharedHelpers/shareExtensionFiles";
+import { unlink } from "sharedHelpers/util";
 import { useLayoutPrefs } from "sharedHooks";
 import type { SharedData } from "sharedHooks/useShare";
 import useStore from "stores/useStore";
@@ -104,16 +106,33 @@ const PhotoSharing = ( ) => {
     }
   }, [prepareObsEdit, isDefaultMode, resetNavigator, screenAfterPhotoEvidence] );
 
-  // Shared audio, e.g. a Voice Memo. One sound on its own becomes an
-  // observation straight away and opens in ObsEdit, as a fresh recording
-  // does (Match needs a photo). Anything more goes to Group Photos, where
-  // sounds are items of their own that can be combined with photos.
+  // Shared audio, e.g. a Voice Memo. One sound on its own becomes an Audio ID
+  // clip and opens on its clip page, to be trimmed, identified and made an
+  // observation; where Audio ID is unavailable it becomes an observation
+  // straight away and opens in ObsEdit, as a fresh recording does (Match
+  // needs a photo). Anything more goes to Group Photos, where sounds are
+  // items of their own that can be combined with photos.
   const importSharedSounds = useCallback( async (
     photoUris: SharedPhoto[],
     sharedSounds: NonNullable<SharedData["data"]>,
   ) => {
     try {
       const soundUris = await Promise.all( sharedSounds.map( stageSharedSound ) );
+      if ( photoUris.length === 0 && soundUris.length === 1 && canImportSharedClip( ) ) {
+        const id = await importSharedClip( soundUris[0] );
+        // The clip keeps its own copy
+        unlink( soundUris[0].replace( /^file:\/\//, "" ) ).catch( ( ) => undefined );
+        // Audio ID lives in the Menu tab; drop the sharing stack, then go to the clip.
+        navigation.dispatch( CommonActions.reset( {
+          index: 0,
+          routes: [{ name: "TabNavigator" }],
+        } ) );
+        navigation.navigate( "TabNavigator", {
+          screen: "MenuTab",
+          params: { screen: "AudioIdClip", params: { id } },
+        } );
+        return;
+      }
       if ( photoUris.length === 0 && soundUris.length === 1 ) {
         const newObservation = await Observation.createObsWithSoundPath( soundUris[0] );
         prepareObsEdit( newObservation );
@@ -135,7 +154,7 @@ const PhotoSharing = ( ) => {
         String( e ),
       );
     }
-  }, [prepareObsEdit, resetNavigator, setPhotoImporterState] );
+  }, [navigation, prepareObsEdit, resetNavigator, setPhotoImporterState] );
 
   useEffect( ( ) => {
     const { data } = item;

@@ -36,6 +36,9 @@ export interface AudioIdClip {
   timeline?: ( number | null )[];
   // the observation last made from this clip
   observationUuid?: string;
+  // Seconds the context clip lasts when it isn't the 15 s centered on the
+  // call: a sound shared to the app is kept whole, ending at `time`.
+  duration?: number;
 }
 
 // The app container's path changes across installs, so only ids are stored.
@@ -45,7 +48,9 @@ export const contextClipPath = ( id: string ) => `${CLIPS_PATH}/${id}-15s.m4a`;
 
 interface AudioIdHistoryState {
   clips: Record<string, AudioIdClip>;
-  addClip: ( sp: AudioIdSpecies, confidence: number ) => AudioIdClip;
+  addClip: (
+    sp: AudioIdSpecies, confidence: number, extra?: Partial<AudioIdClip>
+  ) => AudioIdClip;
   updateClip: ( id: string, changes: Partial<AudioIdClip> ) => void;
   labelClip: (
     id: string, taxonId: number | null | undefined, name: string | null
@@ -106,9 +111,9 @@ const uploadLabel = async ( id: string, clip: AudioIdClip, label: AudioIdLabel )
 
 const useAudioIdHistory = create<AudioIdHistoryState>( )( ( set, get ) => ( {
   clips: clipStore.loadAll( ),
-  addClip: ( sp, confidence ) => {
+  addClip: ( sp, confidence, extra = {} ) => {
     const clip = {
-      id: uuid.v4( ), sp, time: Date.now( ), confidence,
+      id: uuid.v4( ), sp, time: Date.now( ), confidence, ...extra,
     };
     set( { clips: { ...get( ).clips, [clip.id]: clip } } );
     clipStore.put( clip.id, clip );

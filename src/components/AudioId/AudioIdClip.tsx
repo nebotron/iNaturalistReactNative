@@ -48,7 +48,7 @@ const AudioIdClip = ( ) => {
   const updateObservations = useStore( state => state.updateObservations );
   const currentUser = useCurrentUser( );
   const [error, setError] = useState<string | null>( null );
-  const { span, trim, setTrim } = useClipSpan( id, clip?.time, clip?.call );
+  const { span, trim, setTrim } = useClipSpan( id, clip?.time, clip?.call, clip?.duration );
   const time = clip?.time ?? 0;
   // A clip heard minutes ago can be newer than the last drained fix
   useEffect( ( ) => { drainTrackedLocationFixes( ); }, [] );

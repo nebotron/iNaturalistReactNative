@@ -29,6 +29,7 @@
 			<string>Editor</string>
 			<key>CFBundleURLSchemes</key>
 			<array>
+				<string>feralinat</string>
 				<string>inaturalistmobile</string>
 			</array>
 		</dict>

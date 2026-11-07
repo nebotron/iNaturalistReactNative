@@ -29,8 +29,12 @@ export const useClipSpan = (
   id: string,
   heardAt: number | undefined,
   call?: [number, number],
+  // The context clip's length, when it isn't 15 s (see AudioIdClip.duration)
+  clipDuration?: number,
 ) => {
-  const [callStart, callEnd] = call || [5, 10];
+  const [callStart, callEnd] = call || ( clipDuration
+    ? [0, clipDuration]
+    : [5, 10] );
   const [span, setSpan] = useState<Span | null>( null );
   const [trim, setTrim] = useState<[number, number]>( [0, 0] );
   useEffect( ( ) => {
@@ -39,8 +43,12 @@ export const useClipSpan = (
       const s = hasContext
         ? {
           path: contextClipPath( id ),
-          startMs: heardAt - 10000,
-          endMs: heardAt + 5000,
+          startMs: clipDuration
+            ? heardAt - clipDuration * 1000
+            : heardAt - 10000,
+          endMs: clipDuration
+            ? heardAt
+            : heardAt + 5000,
           context: true,
         }
         : {
@@ -52,7 +60,7 @@ export const useClipSpan = (
         ? [0, duration]
         : [callStart, callEnd] );
     } );
-  }, [id, heardAt, callStart, callEnd] );
+  }, [id, heardAt, callStart, callEnd, clipDuration] );
   return { span, trim, setTrim };
 };
 

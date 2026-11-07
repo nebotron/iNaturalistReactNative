@@ -5,7 +5,7 @@
 	<key>HostAppBundleIdentifier</key>
 	<string>com.benhannel.inat.dev</string>
 	<key>HostAppURLScheme</key>
-	<string>inaturalistmobile://</string>
+	<string>feralinat://</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
