@@ -242,16 +242,20 @@ const BarSegment = ( { count, color, darkText = false }: {
   : null );
 
 const PairItem = ( {
-  pair, vote, onOpen, onVote,
+  pair, vote, onOpen, onVote, nameGear,
 }: {
   pair: Pair;
   vote?: Vote;
   onOpen: ( uuid: string ) => void;
   onVote: ( pair: Pair, winner: string | "same" ) => void;
+  nameGear: ( kind: GearKind, name?: string ) => string | undefined;
 } ) => {
   const { t } = useTranslation( );
   const { width } = useWindowDimensions( );
   const [page, setPage] = useState( 0 );
+  // Gear stays hidden until the user has voted and asks to see it, so
+  // knowing the camera can't bias the choice
+  const [revealed, setRevealed] = useState( false );
   const sameGear = pair.a.gear === pair.b.gear;
   return (
     <View className="mb-6">
@@ -289,6 +293,39 @@ const PairItem = ( {
             selected={vote?.winner === pair.b.gear}
             onPress={( ) => onVote( pair, pair.b.gear )}
           />
+        </View>
+      )}
+      {!sameGear && vote && (
+        <View className="mt-2 px-4 items-center">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: revealed }}
+            onPress={( ) => setRevealed( current => !current )}
+            className="py-1"
+          >
+            <Text className="text-sm underline">
+              {revealed
+                ? t( "Hide-gear" )
+                : t( "Reveal-gear" )}
+            </Text>
+          </Pressable>
+          {revealed && [pair.a, pair.b].map( ( entry, index ) => {
+            const won = vote.winner === entry.gear;
+            return (
+              <Text
+                key={entry.photoUuid}
+                className={`text-sm mt-1 ${won
+                  ? "font-bold text-inatGreen"
+                  : ""}`}
+              >
+                {t( "Photo-X-gear", {
+                  number: index + 1,
+                  gear: nicknamedGear( entry.gear, nameGear ),
+                } )}
+                {won && " ✓"}
+              </Text>
+            );
+          } )}
         </View>
       )}
     </View>
@@ -520,6 +557,7 @@ const CameraPairs = ( ) => {
           vote={votes[voteKey( item )]}
           onOpen={open}
           onVote={castVote}
+          nameGear={nameGear}
         />
       )}
     />

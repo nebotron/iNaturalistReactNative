@@ -800,6 +800,8 @@ Help-create-Research-Grade-data-used-in-science-and-conservation = Help create R
 Help-protect-species = Help protect species
 Help-us-translate-the-app = Help us translate the app!
 Hide = Hide
+# Button on a voted camera pair that hides which camera/lens took each photo again
+Hide-gear = Hide gear
 # Accessibility label for the photo picker button that hides photos already saved or deleted
 Hide-saved-photos = Hide saved photos
 Highest = Highest
@@ -1431,6 +1433,8 @@ Photo-importer = Photo importer
 PHOTO-LICENSING = PHOTO LICENSING
 # Legend label for the marker showing a photo's EXIF location
 Photo-location = Photo location
+# Under a voted camera pair, the camera/lens that took one of the photos, e.g. "Photo 1: Pixel 8 + Main"
+Photo-X-gear = Photo { $number }: { $gear }
 # Button to vote that one of two compared photos is better, e.g. "1 is better"
 Photo-X-is-better = { $number } is better
 # Under two swipeable photos being compared, e.g. "Photo 1 of 2 — swipe to compare"
@@ -1657,6 +1661,8 @@ RESTART-APP = RESTART APP
 # Label for button that restores a withdrawn identification
 Restore = Restore
 Reveal = Reveal
+# Button on a voted camera pair that shows which camera/lens took each photo
+Reveal-gear = Reveal gear
 REVIEW-INATURALIST = REVIEW INATURALIST
 REVIEWED = REVIEWED
 # Label for a button that marks an observation as reviewed
