@@ -45,10 +45,8 @@ interface Pair {
   score: number;
 }
 
-// Which gear won a pair, keyed by the pair's sorted photo uuids. Gear labels
-// are stored with the vote so the tally survives photos leaving the list.
+// Which gear won a pair, keyed by the pair's sorted photo uuids
 interface Vote {
-  gear: [string, string];
   winner: string | "same";
 }
 type Votes = Record<string, Vote>;
@@ -391,10 +389,7 @@ const CameraPairs = ( ) => {
         // Tapping the selected choice again clears it
         delete next[key];
       } else {
-        next[key] = {
-          gear: [pair.a.gear, pair.b.gear].sort( ) as [string, string],
-          winner,
-        };
+        next[key] = { winner };
       }
       zustandStorage.setItem( VOTES_KEY, JSON.stringify( next ) );
       return next;
@@ -405,8 +400,14 @@ const CameraPairs = ( ) => {
     const rows = new Map<string, {
       first: string; second: string; firstWins: number; secondWins: number; same: number;
     }>( );
-    Object.values( votes ).forEach( ( { gear: [first, second], winner } ) => {
-      const key = `${first}|${second}`;
+    // Only votes on pairs in the list, so the bars add up to the voted pairs
+    // shown below and follow the distance tolerance
+    pairs.forEach( pair => {
+      const vote = votes[voteKey( pair )];
+      if ( !vote ) return;
+      const { winner } = vote;
+      const [first, second] = [pair.a.gear, pair.b.gear].sort( );
+      const key = gearKey( pair );
       const row = rows.get( key ) ?? {
         first, second, firstWins: 0, secondWins: 0, same: 0,
       };
@@ -418,10 +419,11 @@ const CameraPairs = ( ) => {
     return [...rows.values( )].sort( ( x, y ) => (
       ( y.firstWins + y.secondWins + y.same ) - ( x.firstWins + x.secondWins + x.same )
     ) );
-  }, [votes] );
+  }, [pairs, votes] );
 
-  // Ignore a filter whose bar went away when its last vote was cleared,
-  // so the list can't get stuck filtered with nothing to tap
+  // Ignore a filter whose bar went away when its last vote was cleared or
+  // the tolerance left none of its voted pairs, so the list can't get stuck
+  // filtered with nothing to tap
   const activeFilter = gearFilter
     && breakdown.some( row => `${row.first}|${row.second}` === gearFilter )
     ? gearFilter
