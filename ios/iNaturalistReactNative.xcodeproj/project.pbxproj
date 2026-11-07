@@ -40,6 +40,7 @@
 		PP1B2C3D4E5F60718293A4B5 /* PowerProfile.m in Sources */ = {isa = PBXBuildFile; fileRef = PP1B2C3D4E5F60718293A4B6 /* PowerProfile.m */; };
 		PS1B2C3D4E5F60718293A4B5 /* PlaceSearch.m in Sources */ = {isa = PBXBuildFile; fileRef = PS1B2C3D4E5F60718293A4B6 /* PlaceSearch.m */; };
 		US1B2C3D4E5F60718293A4B5 /* UsbStorage.m in Sources */ = {isa = PBXBuildFile; fileRef = US1B2C3D4E5F60718293A4B6 /* UsbStorage.m */; };
+		CK1B2C3D4E5F60718293A4B5 /* CloudKeyValueStore.m in Sources */ = {isa = PBXBuildFile; fileRef = CK1B2C3D4E5F60718293A4B6 /* CloudKeyValueStore.m */; };
 		AB1B2C3D4E5F60718293A4B5 /* AudioBirdId.m in Sources */ = {isa = PBXBuildFile; fileRef = AB1B2C3D4E5F60718293A4B6 /* AudioBirdId.m */; };
 		AB4BF6B1234567890ABCDEF0 /* audio_id.onnx in Resources */ = {isa = PBXBuildFile; fileRef = AB4BF6A1234567890ABCDEF0 /* audio_id.onnx */; };
 		AB4BF6B3234567890ABCDEF0 /* audio_id.data0 in Resources */ = {isa = PBXBuildFile; fileRef = AB4BF6A3234567890ABCDEF0 /* audio_id.data0 */; };
@@ -120,6 +121,7 @@
 		PP1B2C3D4E5F60718293A4B7 /* PowerProfile.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = PowerProfile.h; path = iNaturalistReactNative/PowerProfile.h; sourceTree = "<group>"; };
 		PS1B2C3D4E5F60718293A4B6 /* PlaceSearch.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = PlaceSearch.m; path = iNaturalistReactNative/PlaceSearch.m; sourceTree = "<group>"; };
 		US1B2C3D4E5F60718293A4B6 /* UsbStorage.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = UsbStorage.m; path = iNaturalistReactNative/UsbStorage.m; sourceTree = "<group>"; };
+		CK1B2C3D4E5F60718293A4B6 /* CloudKeyValueStore.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = CloudKeyValueStore.m; path = iNaturalistReactNative/CloudKeyValueStore.m; sourceTree = "<group>"; };
 		AB1B2C3D4E5F60718293A4B6 /* AudioBirdId.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; name = AudioBirdId.m; path = iNaturalistReactNative/AudioBirdId.m; sourceTree = "<group>"; };
 		AB4BF6A1234567890ABCDEF0 /* audio_id.onnx */ = {isa = PBXFileReference; lastKnownFileType = file; name = audio_id.onnx; path = iNaturalistReactNative/audio_id.onnx; sourceTree = "<group>"; };
 		AB4BF6A3234567890ABCDEF0 /* audio_id.data0 */ = {isa = PBXFileReference; lastKnownFileType = file; name = audio_id.data0; path = iNaturalistReactNative/audio_id.data0; sourceTree = "<group>"; };
@@ -169,6 +171,7 @@
 				IC1B2C3D4E5F60718293A4B6 /* ImageCropper.m */,
 				PS1B2C3D4E5F60718293A4B6 /* PlaceSearch.m */,
 				US1B2C3D4E5F60718293A4B6 /* UsbStorage.m */,
+				CK1B2C3D4E5F60718293A4B6 /* CloudKeyValueStore.m */,
 				AB1B2C3D4E5F60718293A4B6 /* AudioBirdId.m */,
 				AB4BF6A1234567890ABCDEF0 /* audio_id.onnx */,
 				AB4BF6A3234567890ABCDEF0 /* audio_id.data0 */,
@@ -555,6 +558,7 @@
 				IC1B2C3D4E5F60718293A4B5 /* ImageCropper.m in Sources */,
 				PS1B2C3D4E5F60718293A4B5 /* PlaceSearch.m in Sources */,
 				US1B2C3D4E5F60718293A4B5 /* UsbStorage.m in Sources */,
+				CK1B2C3D4E5F60718293A4B5 /* CloudKeyValueStore.m in Sources */,
 				AB1B2C3D4E5F60718293A4B5 /* AudioBirdId.m in Sources */,
 				LR1B2C3D4E5F60718293A4B5 /* LocationRelaunch.m in Sources */,
 				PP1B2C3D4E5F60718293A4B5 /* PowerProfile.m in Sources */,

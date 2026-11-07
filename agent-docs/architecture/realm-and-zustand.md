@@ -131,6 +131,10 @@ MMKV backend: `src/stores/zustandMMKVBackingStorage.ts`
 - `loginBannerDismissed` — Login banner state
 - `justFinishedSignup` — Post-signup flag
 
+### iCloud backup (iOS)
+
+Deleting the app removes MMKV and Realm with it, and Android has `allowBackup="false"`. On iOS, `sharedHelpers/cloudBackup.ts` mirrors an allowlist (`BACKED_UP`) of MMKV keys — settings, saved searches, tunable parameters, the USB import list, game and vote history — to iCloud key-value storage via the `CloudKeyValueStore` native module, and a fresh install restores them. When you add a persisted value that a user would miss after a reinstall, add its key there. Leave out caches, tokens, and anything pointing at a file inside the app container. Apple's limit is 1 MB in total.
+
 ## Screen state that has to live in Zustand
 
 **A React context mounted inside a bottom-tab screen cannot hold state that should survive navigation.** Two independent mechanisms destroy the tree:
