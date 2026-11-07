@@ -207,7 +207,12 @@ const AddressInput = ( {
         </View>
         <TextInput
           accessibilityLabel={placeholder}
-          className="flex-1 text-darkGray"
+          // Always one line: a fixed height, no vertical padding, and long
+          // addresses scroll horizontally instead of wrapping.
+          className="flex-1 h-8 py-0 text-darkGray"
+          multiline={false}
+          numberOfLines={1}
+          textAlignVertical="center"
           placeholder={placeholder}
           value={value}
           onChangeText={handleChange}
