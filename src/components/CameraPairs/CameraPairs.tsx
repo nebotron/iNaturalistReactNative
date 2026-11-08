@@ -11,7 +11,7 @@ import React, {
 } from "react";
 import { FlatList, useWindowDimensions } from "react-native";
 import Photo from "realmModels/Photo";
-import type { RealmObservation, RealmPhoto } from "realmModels/types";
+import type { RealmObservation } from "realmModels/types";
 import type { GearKind } from "sharedHelpers/gearNicknames";
 import type { ImageZoomTransform } from "sharedHelpers/imageZoomTransformToCrop";
 import type { PhotoCameraInfo } from "sharedHelpers/photoCameraInfo";
@@ -32,7 +32,9 @@ interface Entry {
   gear: string;
   taxonId: number;
   taxonName: string;
-  photo: RealmPhoto;
+  // Resolved when the pairs are built: a live Realm Photo would throw at
+  // render once it's deleted, e.g. by a sync or an edit from ObsDetails
+  uri?: string;
   info: PhotoCameraInfo;
   values: Partial<Record<Setting, number>>;
 }
@@ -175,7 +177,7 @@ const PairPhoto = ( { entry, size, onOpen }: {
   return (
     <SharedZoomableImage
       ref={zoomRef}
-      uri={Photo.displayLocalOrRemoteOriginalPhoto( entry.photo )}
+      uri={entry.uri}
       fullResolution
       style={{ width: size, height: size }}
       minScale={1}
@@ -355,7 +357,7 @@ const CameraPairs = ( ) => {
       if ( !taxon?.id || ( taxon.rank_level ?? 0 ) > 10 ) return;
       // Only the first photo represents the observation
       const obsPhoto = observation.observationPhotos?.[0];
-      if ( !obsPhoto?.cameraInfo ) return;
+      if ( !obsPhoto?.cameraInfo || !obsPhoto.photo?.isValid( ) ) return;
       let info: PhotoCameraInfo;
       try {
         info = JSON.parse( obsPhoto.cameraInfo );
@@ -369,7 +371,7 @@ const CameraPairs = ( ) => {
         gear: gearLabel( info ),
         taxonId: taxon.id,
         taxonName: taxon.preferred_common_name || taxon.name,
-        photo: obsPhoto.photo,
+        uri: Photo.displayLocalOrRemoteOriginalPhoto( obsPhoto.photo ),
         info,
         values: Object.fromEntries( SETTINGS.map( s => [s, parse( s, info[s] )] ) ),
       } );
