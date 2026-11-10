@@ -1,5 +1,6 @@
 import classnames from "classnames";
 import locationLabel from "components/Explore/ExploreV2/helpers/locationLabel";
+import relativeSavedSearch from "components/Explore/ExploreV2/helpers/relativeSavedSearch";
 import savedSearchKey from "components/Explore/ExploreV2/helpers/savedSearchKey";
 import subjectLabel from "components/Explore/ExploreV2/helpers/subjectLabel";
 import {
@@ -124,7 +125,7 @@ const SavedSearches = ( {
       {searches.length === 0
         ? <Body3 className="text-darkGray">{t( "No-saved-filters-yet" )}</Body3>
         : searches.map( search => {
-          const isActive = savedSearchKey( search ) === currentKey;
+          const isActive = savedSearchKey( relativeSavedSearch( search ) ) === currentKey;
           return (
             <View key={search.key} className="flex-row items-center mb-4">
               <Pressable

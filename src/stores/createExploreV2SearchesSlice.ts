@@ -1,3 +1,4 @@
+import { format } from "date-fns";
 import type { ExploreV2SearchWithTab, ExploreV2Subject } from "providers/ExploreV2Context";
 import type { StateCreator } from "zustand";
 
@@ -21,14 +22,19 @@ export const subjectKey = ( subject: ExploreV2Subject ): string => {
 };
 
 // A named search plus a unique id and when it was saved. Searches saved before names
-// existed have no name.
+// existed have no name. datesAsOf is the local day (yyyy-MM-dd) its date filters were
+// chosen on, so they can move forward with the calendar; searches saved before it existed
+// fall back to savedAt.
 export type SavedSearch = {
   key: string;
   name?: string;
   savedAt: number;
+  datesAsOf?: string;
 } & ExploreV2SearchWithTab;
 
-export type SavedSearchInput = Omit<SavedSearch, "savedAt">;
+export type SavedSearchInput = Omit<SavedSearch, "savedAt" | "datesAsOf">;
+
+const today = ( ) => format( new Date( ), "yyyy-MM-dd" );
 
 export interface ExploreV2SearchesSlice {
   exploreSavedSearches: {
@@ -50,7 +56,7 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
       exploreSavedSearches: {
         ...state.exploreSavedSearches,
         searches: [
-          { ...search, savedAt: Date.now( ) },
+          { ...search, savedAt: Date.now( ), datesAsOf: today( ) },
           ...state.exploreSavedSearches.searches,
         ],
       },
@@ -59,7 +65,9 @@ const createExploreV2SearchesSlice: StateCreator<ExploreV2SearchesSlice> = set =
       exploreSavedSearches: {
         ...state.exploreSavedSearches,
         searches: state.exploreSavedSearches.searches.map( saved => ( saved.key === key
-          ? { ...saved, ...search, key }
+          ? {
+            ...saved, ...search, key, datesAsOf: today( ),
+          }
           : saved ) ),
       },
     } ) ),
