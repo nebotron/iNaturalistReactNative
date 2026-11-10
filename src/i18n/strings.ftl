@@ -110,6 +110,9 @@ Agree-with-ID-description = Would you like to agree with the ID and suggest the 
 AI-Camera = AI Camera
 # Legend for the crop box the AI detected
 AI-detection = AI detection
+# Storage category: on-device computer vision model files
+AI-models--storage = AI models
+AI-models--storage-description = Files the AI Camera uses to identify species offline
 ALL = ALL
 All = All
 All-observation-options--list = All observation options: iNaturalist AI Camera, Standard Camera, Uploading from Photo Library, and Sound Recorder
@@ -155,7 +158,13 @@ Any--user = Any
 Anyone-using-iNaturalist-can-see = Anyone using iNaturalist can see where this species was observed, and scientists can most easily use it for research.
 # Label for a photo's aperture (f-number) in its camera settings
 Aperture = Aperture
+# Storage category: the installed app itself
+App--storage = App
+App--storage-description = The app itself, including its offline AI models
 APP-LANGUAGE = APP LANGUAGE
+# Storage category: app preferences and saved state
+App-settings--storage = App settings
+App-settings--storage-description = Preferences and saved app state
 # Combine pieces of a person's name provided by Apple. See
 # https://developer.apple.com/documentation/foundation/nspersonnamecomponents
 # for documentation of what the variables mean. The JOIN function will
@@ -188,6 +197,9 @@ attribution-cc-by-nd = some rights reserved (CC BY-ND)
 attribution-cc-by-sa = some rights reserved (CC BY-SA)
 # Menu item and screen title for identifying animals by sound
 AUDIO-ID = AUDIO ID
+# Storage category: short audio clips saved with each Audio ID detection
+Audio-ID-clips--storage = Audio ID clips
+Audio-ID-clips--storage-description = Short clips of each call Audio ID heard
 # Audio ID intro before the species list loads; <0> links to the BirdNET website
 Audio-ID-identifies-animals-by-sound-using-BirdNET = Identifies animals by sound, using <0>BirdNET</0>.
 # Audio ID intro; <0> links to the list of species, <1> links to the BirdNET website
@@ -210,6 +222,8 @@ Birds = Birds
 BLOG = BLOG
 # Explore filter option for an observation's evidence of presence annotation
 Bone--evidence = Bone
+# Header above the list of storage categories on the storage usage screen
+BREAKDOWN--storage = BREAKDOWN
 # Accessibility hint for the dimmed overlay on the Audio ID screen
 Brightens-the-screen = Brightens the screen.
 # Accessibility label for bulk import / photo import button
@@ -225,6 +239,9 @@ By-exiting-your-recorded-sound-will-not-be-saved = By exiting, your recorded sou
 BY-ME = BY ME
 # Lead in to a list including "Get your identifcation verified..." and "Share your observation..."
 By-uploading-your-observation-to-iNaturalist-you-can = By uploading your observation to iNaturalist, you can:
+# Storage category: cached images and temporary files
+Cache--storage = Cache
+Cache--storage-description = Downloaded images and temporary files the system can clear
 Camera = Camera
 # Settings heading for the list of cameras and lenses the user can rename
 CAMERA-AND-LENS-NICKNAMES = CAMERA AND LENS NICKNAMES
@@ -461,6 +478,9 @@ Data-quality-assessment-title-casual = This observation is Casual Grade
 Data-quality-assessment-title-needs-id = This observation Needs ID
 # Data Quality Assessment description of the final quality grade when Research Grade
 Data-quality-assessment-title-research = This observation is Research Grade!
+# Storage category: the app's local database of observations, taxa and users
+Database--storage = Database
+Database--storage-description = Observations, taxa and other records kept on this device
 DATE = DATE
 # label in project requirements
 Date = Date
@@ -1100,6 +1120,8 @@ Maverick-IDs-only = Maverick IDs only
 Max-distance-difference-percent = Max distance difference percent
 # Month of May
 May = May
+# Shown on the storage usage screen while folder sizes are being added up
+Measuring-storage = Measuring storage…
 MEDIA = MEDIA
 # Header for a project rule requiring an observation to have photos or sounds
 Media--project-rule = Media
@@ -1317,6 +1339,12 @@ Observation-location-obscured-you-can-see-your-own = This observation’s locati
 Observation-location-obscured-you-have-permission = This observation’s location is obscured. You have permission to see this location.
 # Label for a menu that shows various actions you can take for an observation
 Observation-options = Observation options
+# Storage category: resized photos attached to observations
+Observation-photos--storage = Observation photos
+Observation-photos--storage-description = Photos in your observations on this device
+# Storage category: sound recordings attached to observations
+Observation-sounds--storage = Observation sounds
+Observation-sounds--storage-description = Sound recordings in your observations
 OBSERVATION-WAS-DELETED = OBSERVATION WAS DELETED
 Observation-with-no-evidence = Observation with no evidence
 Observations = Observations
@@ -1354,6 +1382,9 @@ Observers-View = Observers View
 # Month of October
 October = October
 Offline-DQA-description = The DQA may not be accurate. Check your internet connection and try again.
+# Storage category: observations and map tiles downloaded for offline Explore
+Offline-Explore--storage = Offline Explore
+Offline-Explore--storage-description = Observations and map tiles downloaded for use offline
 Offline-suggestions-may-differ-from-online = Offline suggestions may differ from online suggestions, and taxon images and common names may not load.
 # Label shown in Explore when offline, with the count of saved results matching the filters
 Offline-X-of-Y-saved-observations = Offline: { $count } of { $total } saved
@@ -1410,6 +1441,9 @@ Organism-is-captive = Organism is captive
 Organisms-that-are-identified-to-species = Organisms that are identified to species rank or below
 # Display name for the iconic taxa category for other: anything that doesn't fit into another category
 Other = Other
+# Storage category: everything that doesn't fit another category
+Other--storage = Other
+Other--storage-description = Everything else the app keeps
 # Display name for the iconic taxa category for animalia: anything that is an animal, but doesn't fit into a tighter category
 Other-Animals = Other Animals
 OTHER-DATA = OTHER DATA
@@ -1896,6 +1930,12 @@ Stops-recording-sound = Stops recording sound
 Stops-the-clip = Stops the clip.
 Stops-the-recording = Stops the recording.
 Stops-the-sound = Stops the sound.
+# Free space left on the phone, shown on the storage usage screen
+Storage-free-on-device = { $size } free on this device
+# Settings button and screen title for the breakdown of storage used by the app
+STORAGE-USAGE = STORAGE USAGE
+# Shown on the storage usage screen when folder sizes could not be read
+Storage-usage-could-not-be-measured = Storage usage could not be measured.
 # Sort option: distance from camera to subject, nearest first
 Subject-distance-Nearest = Subject distance (nearest)
 SUBMIT = SUBMIT
@@ -1924,6 +1964,9 @@ TAXONOMIC-RANKS = TAXONOMIC RANKS
 # Header for a block of text describing a taxon's taxonomy
 TAXONOMY-header = TAXONOMY
 TEAM = TEAM
+# Storage category: photo copies kept briefly while creating or editing observations
+Temporary-photos--storage = Temporary photos
+Temporary-photos--storage-description = Copies made while adding photos, cleared on the next launch
 Terms-of-Use = Terms of Use
 TERMS-OF-USE = TERMS OF USE
 Thank-you-for-sharing-your-feedback = Thank you for sharing your feedback to help us improve!
@@ -1987,6 +2030,8 @@ Total-drive-time =
         [0] { $minutes } min
        *[other] { $hours } h { $minutes } min
     }
+# Header above the total storage used by the app on the storage usage screen
+TOTAL-STORAGE-USED = TOTAL STORAGE USED
 # Explore filter option for an observation's evidence of presence annotation
 Track--evidence = Track
 # Switch label for enabling continuous background location tracking
@@ -2363,6 +2408,9 @@ USB-import-folder-chosen-drive-not-connected = Connect this drive, then import i
 USB-import-folder-is-a-camera-subfolder = "{ $folder }" is one folder created by your camera. When you format the card or use another one, your camera starts a new folder, and photos in it will not be imported. Choose the DCIM folder or the whole drive instead.
 # Settings explanation of how USB photo import works
 USB-import-how-it-works = Import photos from a camera's memory card or another USB drive connected to this device. Choose the folder your camera saves photos to, usually DCIM or the whole drive. Once a folder is chosen, an import button appears at the top of My Observations. Tap it while the drive is connected to copy new photos into your photo library, then choose them in the photo importer to create observations. Photos that were already imported are skipped.
+# Storage category: original photos copied off a USB drive
+USB-imports--storage = USB imports
+USB-imports--storage-description = Originals copied off a USB drive, kept until faved or expired
 # Section header in settings for photo import from a USB drive
 USB-PHOTO-IMPORT = USB PHOTO IMPORT
 Use-iNaturalist-to-identify-any-living-thing = Use iNaturalist to identify any living thing
@@ -2385,6 +2433,9 @@ Verifiable--project-rule = Verifiable
 Verified-IDs-are-used-for-science-and-conservation = Verified IDs are used for science and conservation
 # Listing of app and build versions
 Version-app-build = Version { $appVersion } ({ $buildVersion })
+# Storage category: videos saved in the app
+Videos--storage = Videos
+Videos--storage-description = Videos saved in the app
 # Button that opens the full list and map of recorded location history points
 View-all-location-points = View all location points
 VIEW-ALL-X-PLACES = VIEW ALL { $count } PLACES

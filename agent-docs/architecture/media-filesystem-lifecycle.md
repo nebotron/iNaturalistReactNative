@@ -35,6 +35,7 @@ For the upload pipeline after media is on disk, see `upload-system.md`.
 | `src/components/Suggestions/helpers/flattenUploadParams.ts` | 640px CV resize for `score_image` |
 | `src/uploaders/dataTransformation/prepareMediaForUpload.ts` | Photo/Sound → upload payload |
 | `src/components/Developer/hooks/useAppSize.ts` | Developer screen directory size breakdown |
+| `src/sharedHelpers/storageBreakdown.ts` | Settings > Storage Usage breakdown by category |
 
 ## Filesystem Paths
 

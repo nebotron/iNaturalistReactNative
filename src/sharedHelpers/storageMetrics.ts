@@ -34,7 +34,7 @@ export interface StorageMetrics {
 
 const MIN_REPORTED_BYTES = 50 * 1024 * 1024;
 
-const directoryBytes = async ( path: string ): Promise<number> => {
+export const directoryBytes = async ( path: string ): Promise<number> => {
   const entries = await readDir( path ).catch( ( ) => [] );
   const sizes = await Promise.all( entries.map( entry => ( entry.isDirectory( )
     ? directoryBytes( entry.path )

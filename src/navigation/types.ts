@@ -458,6 +458,7 @@ export type BaseTabStackParamList = {
   Log: undefined;
   Settings: undefined;
   TunableParams: undefined;
+  StorageUsage: undefined;
   About: undefined;
   Donate: undefined;
   Help: undefined;

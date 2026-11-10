@@ -45,6 +45,12 @@ const Settings = ( ) => {
           text={t( "TUNABLE-PARAMETERS" )}
           onPress={( ) => navigation.navigate( "TunableParams" )}
         />
+        <Button
+          className="mt-[15px]"
+          level="neutral"
+          text={t( "STORAGE-USAGE" )}
+          onPress={( ) => navigation.navigate( "StorageUsage" )}
+        />
       </View>
     </ScrollViewWrapper>
   );

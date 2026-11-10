@@ -32,6 +32,7 @@ import ProjectRequirements from "components/ProjectDetails/ProjectRequirements";
 import ProjectListContainer from "components/ProjectList/ProjectListContainer";
 import ProjectsContainer from "components/Projects/ProjectsContainer";
 import Settings from "components/Settings/Settings";
+import StorageUsage from "components/Settings/StorageUsage";
 import TunableParams from "components/Settings/TunableParams";
 import { Heading4 } from "components/SharedComponents";
 import FollowersList from "components/UserProfile/FollowersList";
@@ -93,6 +94,11 @@ const settingsTitle = () => (
 const tunableParamsTitle = () => (
   <Heading4 accessibilityRole="header" numberOfLines={1}>
     {t( "TUNABLE-PARAMETERS" )}
+  </Heading4>
+);
+const storageUsageTitle = () => (
+  <Heading4 accessibilityRole="header" numberOfLines={1}>
+    {t( "STORAGE-USAGE" )}
   </Heading4>
 );
 const notificationsTitle = () => (
@@ -161,6 +167,7 @@ const FadeInProjectRequirements = ( ) => fadeInComponent( <ProjectRequirements /
 const FadeInProjectMembers = ( ) => fadeInComponent( <ProjectMembers /> );
 const FadeInSettings = ( ) => fadeInComponent( <Settings /> );
 const FadeInTunableParams = ( ) => fadeInComponent( <TunableParams /> );
+const FadeInStorageUsage = ( ) => fadeInComponent( <StorageUsage /> );
 const FadeInHelp = ( ) => fadeInComponent( <Help /> );
 const FadeInAbout = ( ) => fadeInComponent( <About /> );
 const FadeInDonate = ( ) => fadeInComponent( <Donate /> );
@@ -459,6 +466,13 @@ const TabStackNavigator = ( { route }: BottomTabProps ) => {
             component={FadeInTunableParams}
             options={{
               headerTitle: tunableParamsTitle,
+            }}
+          />
+          <Stack.Screen
+            name="StorageUsage"
+            component={FadeInStorageUsage}
+            options={{
+              headerTitle: storageUsageTitle,
             }}
           />
           <Stack.Screen
