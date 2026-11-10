@@ -1,6 +1,5 @@
 import { CommonActions } from "@react-navigation/native";
 import { act, waitFor } from "@testing-library/react-native";
-import importSharedClip, { canImportSharedClip } from "components/AudioId/importSharedClip";
 import PhotoSharing from "components/PhotoSharing";
 import React from "react";
 import { Alert } from "react-native";
@@ -12,11 +11,6 @@ import { renderComponent } from "tests/helpers/render";
 jest.mock( "realmModels/Observation" );
 jest.mock( "stores/useStore" );
 jest.mock( "sharedHooks" );
-jest.mock( "components/AudioId/importSharedClip", ( ) => ( {
-  __esModule: true,
-  default: jest.fn( async ( ) => "clip-id" ),
-  canImportSharedClip: jest.fn( ( ) => false ),
-} ) );
 jest.mock( "sharedHelpers/shareExtensionFiles", ( ) => ( {
   ...jest.requireActual( "sharedHelpers/shareExtensionFiles" ),
   stageSharedSound: jest.fn( async item => `file://staged/${item.data.split( "/" ).pop( )}` ),
@@ -225,26 +219,7 @@ describe( "PhotoSharing", ( ) => {
   } );
 
   describe( "Share Audio", ( ) => {
-    it( "opens a single voice memo on the Audio ID clip page", async ( ) => {
-      canImportSharedClip.mockReturnValueOnce( true );
-      const mocks = setupMocks( );
-      mockUseRoute.mockReturnValue( createMockRoute( {
-        data: [{ data: "file://AppGroup/memo.m4a", mimeType: "audio/x-m4a" }],
-      } ) );
-
-      renderComponent( <PhotoSharing /> );
-
-      await waitFor( ( ) => {
-        expect( mocks.navigate ).toHaveBeenCalledWith( "TabNavigator", {
-          screen: "MenuTab",
-          params: { screen: "AudioIdClip", params: { id: "clip-id" } },
-        } );
-      } );
-      expect( importSharedClip ).toHaveBeenCalledWith( "file://staged/memo.m4a" );
-      expect( Observation.createObsWithSoundPath ).not.toHaveBeenCalled( );
-    } );
-
-    it( "opens a single voice memo in ObsEdit without Audio ID", async ( ) => {
+    it( "opens a single voice memo in ObsEdit as an observation of Life", async ( ) => {
       const mocks = setupMocks( );
       const soundObs = { uuid: "sound-obs" };
       Observation.createObsWithSoundPath.mockResolvedValue( soundObs );
@@ -259,6 +234,7 @@ describe( "PhotoSharing", ( ) => {
       } );
       expect( Observation.createObsWithSoundPath ).toHaveBeenCalledWith( "file://staged/memo.m4a" );
       expect( mocks.prepareObsEdit ).toHaveBeenCalledWith( soundObs );
+      expect( soundObs.taxon ).toEqual( expect.objectContaining( { id: 48460, name: "Life" } ) );
       expect( Observation.createObservationWithPhotos ).not.toHaveBeenCalled( );
     } );
 

@@ -40,7 +40,6 @@ export const { AudioBirdId } = NativeModules as {
     playClipRange: ( path: string, from: number, to: number ) => Promise<void>;
     normalizeSound: ( uri: string ) => Promise<string>;
     trimClip: ( path: string, from: number, to: number, outPath: string ) => Promise<string>;
-    importClip: ( uri: string, outPath: string ) => Promise<number>;
     timeline: ( index: number, endFrame: number, seconds: number ) => Promise<( number | null )[]>;
     clipTimeline: ( path: string, output: number ) => Promise<( number | null )[]>;
     stopClip: ( ) => void;
