@@ -26,24 +26,8 @@ import React, {
 } from "react";
 import AudioRecorderPlayer from "react-native-audio-recorder-player";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  cancelAnimation,
-  Easing,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import { useTranslation } from "sharedHooks";
 import colors from "styles/tailwindColors";
-
-const PLAYHEAD_STYLE = {
-  position: "absolute" as const,
-  left: 0,
-  top: 0,
-  bottom: 0,
-  width: 2,
-  backgroundColor: colors.warningRed,
-};
 
 interface SoundContainerProps {
   autoPlay?: boolean;
@@ -90,45 +74,46 @@ const SoundContainer = ( {
   const [dragAt, setDragAt] = useState<number | null>( null );
   const dragging = useRef( false );
   const width = useRef( 1 );
-  // The playhead, as a fraction of the sound. Between playback events it
-  // glides at the playback rate, so it moves continuously instead of in steps.
-  const progress = useSharedValue( 0 );
-  const layoutWidth = useSharedValue( 0 );
+  // The playhead, as a fraction of the sound. As on the Audio ID clip
+  // screen, it's moved by the wall clock from where playback started, not by
+  // the player's position events, whose timing jitters and pulls it back and
+  // forth.
+  const [position, setPosition] = useState( 0 );
+  const timer = useRef<ReturnType<typeof setInterval>>( undefined );
+  const clock = useRef( { fromMs: 0, started: 0 } );
+  const durationMs = useRef( 0 );
 
   const holdPlayhead = useCallback( ( fraction?: number ) => {
-    cancelAnimation( progress );
-    if ( fraction !== undefined ) progress.set( fraction );
-  }, [progress] );
+    clearInterval( timer.current );
+    if ( fraction !== undefined ) setPosition( fraction );
+  }, [] );
 
-  const followPlayback = useCallback( ( position: number, duration: number ) => {
-    if ( dragging.current || duration <= 0 ) return;
-    const fraction = Math.min( position / duration, 1 );
-    const remaining = duration - position;
-    if ( remaining <= 0 ) {
-      holdPlayhead( 1 );
-      return;
-    }
-    // Snap when it's clearly off (a seek, a stall); otherwise glide on from
-    // where it's drawn so small timing jitter never makes it jump.
-    if ( Math.abs( progress.get( ) - fraction ) * duration > 150 ) {
-      progress.set( fraction );
-    }
-    progress.set( withTiming( 1, { duration: remaining, easing: Easing.linear } ) );
-  }, [holdPlayhead, progress] );
+  // Move the playhead on from `fromMs` into the sound, starting now
+  const startPlayhead = useCallback( ( fromMs: number ) => {
+    clock.current = { fromMs, started: Date.now( ) };
+    clearInterval( timer.current );
+    timer.current = setInterval( ( ) => {
+      const duration = durationMs.current;
+      if ( dragging.current || duration <= 0 ) return;
+      const { fromMs: from, started } = clock.current;
+      setPosition( Math.min( ( from + Date.now( ) - started ) / duration, 1 ) );
+    }, 50 );
+  }, [] );
+
+  useEffect( ( ) => ( ) => clearInterval( timer.current ), [] );
 
   const mmss = useCallback( ( value: number ) => player.mmss(
     Math.floor( value / 1000 ),
   ), [player] );
 
-  const playSound = useCallback( ( position?: number ) => {
+  const playSound = useCallback( ( from?: number ) => {
     async function playSoundAsync( ) {
-      // Frequent events keep the gliding playhead in step with the audio
       await player.setSubscriptionDuration( 0.1 );
       await player.startPlayer( await normalizedSoundUri( sound.file_url ) );
       playerStarted( );
-      if ( position ) {
+      if ( from ) {
         try {
-          await player.seekToPlayer( position );
+          await player.seekToPlayer( from );
         } catch ( seekPlayerError ) {
           if ( seekPlayerError instanceof Error && seekPlayerError.message.match( /Player has already stopped/ ) ) {
             // Something else might be wrong, but it's not really something to
@@ -138,14 +123,16 @@ const SoundContainer = ( {
           throw seekPlayerError;
         }
       }
+      startPlayhead( from || 0 );
       player.addPlayBackListener( playBackEvent => {
+        durationMs.current = playBackEvent.duration;
         // A scrub made before the duration was known lands once it is
         if ( pendingSeek.current !== null && playBackEvent.duration > 0 ) {
           const at = pendingSeek.current * playBackEvent.duration;
           pendingSeek.current = null;
           player.seekToPlayer( at ).catch( ( ) => undefined );
+          startPlayhead( at );
         }
-        followPlayback( playBackEvent.currentPosition, playBackEvent.duration );
         setPlayBackState( {
           currentPosition: playBackEvent.currentPosition,
           duration: playBackEvent.duration,
@@ -154,6 +141,7 @@ const SoundContainer = ( {
         } );
         // Update UI when playback is complete
         if ( playBackEvent.currentPosition >= playBackEvent.duration ) {
+          holdPlayhead( 1 );
           setPlaying( false );
         }
       } );
@@ -164,7 +152,7 @@ const SoundContainer = ( {
     return ( ) => {
       player.removePlayBackListener( );
     };
-  }, [player, sound.file_url, mmss, followPlayback] );
+  }, [player, sound.file_url, mmss, startPlayhead, holdPlayhead] );
 
   const stopSound = useCallback( async ( ) => {
     holdPlayhead( );
@@ -275,6 +263,7 @@ const SoundContainer = ( {
     } );
     if ( playing ) {
       player.seekToPlayer( at ).catch( ( ) => undefined );
+      startPlayhead( at );
     } else {
       playSound( at );
     }
@@ -289,9 +278,7 @@ const SoundContainer = ( {
     const fraction = ( x: number ) => Math.min( Math.max( x / width.current, 0 ), 1 );
     const dragTo = ( x: number ) => {
       dragging.current = true;
-      const at = fraction( x );
-      holdPlayhead( at );
-      setDragAt( at );
+      setDragAt( fraction( x ) );
     };
     const release = ( x: number ) => {
       dragging.current = false;
@@ -315,11 +302,7 @@ const SoundContainer = ( {
       .runOnJS( true )
       .onEnd( ( e, success ) => { if ( success ) release( e.x ); } );
     return Gesture.Race( pan, tap );
-  }, [holdPlayhead] );
-
-  const playheadStyle = useAnimatedStyle( ( ) => ( {
-    transform: [{ translateX: progress.value * layoutWidth.value }],
-  } ) );
+  }, [] );
 
   if ( sound.hidden ) {
     return (
@@ -357,14 +340,12 @@ const SoundContainer = ( {
           className="rounded overflow-hidden"
           collapsable={false}
           style={{ height: SPECTROGRAM_HEIGHT }}
-          onLayout={e => {
-            width.current = e.nativeEvent.layout.width || 1;
-            layoutWidth.set( e.nativeEvent.layout.width );
-          }}
+          onLayout={e => { width.current = e.nativeEvent.layout.width || 1; }}
         >
           <SoundSpectrogram uri={sound.file_url} />
-          <Animated.View
-            style={[PLAYHEAD_STYLE, playheadStyle]}
+          <View
+            className="absolute h-full w-0.5 bg-warningRed"
+            style={{ left: `${( dragAt ?? position ) * 100}%` }}
             pointerEvents="none"
           />
         </View>
