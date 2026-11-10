@@ -34,7 +34,7 @@ import flattenUploadParams from "./helpers/flattenUploadParams";
 import useNavigateWithTaxonSelected from "./hooks/useNavigateWithTaxonSelected";
 import usePreloadNextObservationSuggestions from "./hooks/usePreloadNextObservationSuggestions";
 import useSelectGenus from "./hooks/useSelectGenus";
-import SoundSuggestionsContainer from "./SoundSuggestionsContainer";
+import SoundSuggestionsContainer, { soundUrisForObservation } from "./SoundSuggestionsContainer";
 import Suggestions from "./Suggestions";
 import TaxonSearchButton from "./TaxonSearchButton";
 
@@ -171,6 +171,21 @@ const SuggestionsContainer = ( ) => {
     ( ) => ObservationPhoto.mapObsPhotoUris( currentObservation ),
     [currentObservation],
   );
+  const soundUris = useMemo(
+    ( ) => soundUrisForObservation( currentObservation ),
+    [currentObservation],
+  );
+  // A sound picked from the thumbnail strip. This container stays mounted
+  // while it's selected so the photo's suggestions are still there when the
+  // user taps back to a photo. Kept per observation, so moving to another
+  // observation starts over on its first photo.
+  const [selectedSound, setSelectedSound] = useState<{
+    observationUuid?: string;
+    uri: string;
+  } | null>( null );
+  const selectedSoundUri = selectedSound?.observationUuid === currentObservation?.uuid
+    ? selectedSound?.uri
+    : undefined;
   const updateObservationKeys = useStore( state => state.updateObservationKeys );
   const deletePhotoFromObservation = useStore( state => state.deletePhotoFromObservation );
   const { trackImageDeleted } = useInputImageTracking( );
@@ -554,6 +569,17 @@ const SuggestionsContainer = ( ) => {
     if ( photoUris[photoIdx] ) { onCropPhotoUri( photoUris[photoIdx] ); }
   }, [innerPhotos, onCropPhotoUri, photoUris] );
 
+  const onPressSound = useCallback( ( uri: string ) => {
+    setSelectedSound( { observationUuid: currentObservation?.uuid, uri } );
+  }, [currentObservation?.uuid] );
+
+  // From a sound, tapping the photo that was last selected just shows its
+  // suggestions again instead of opening the media viewer.
+  const onPressPhotoFromSound = useCallback( ( uri: string ) => {
+    setSelectedSound( null );
+    if ( uri !== selectedPhotoUri ) { void onPressPhoto( uri ); }
+  }, [onPressPhoto, selectedPhotoUri] );
+
   const handleReorderPhotos = useCallback( ( { data: newPhotoUris }: { data: string[] } ) => {
     const newObsPhotos = observationPhotos.map( obsPhoto => {
       const photoUri = Photo.displayLocalOrRemoteMediumPhoto( obsPhoto.photo );
@@ -563,6 +589,18 @@ const SuggestionsContainer = ( ) => {
     const sortedObsPhotos = sortBy( newObsPhotos, obsPhoto => obsPhoto.position );
     updateObservationKeys( { observationPhotos: sortedObsPhotos } );
   }, [observationPhotos, updateObservationKeys] );
+
+  if ( selectedSoundUri && soundUris.includes( selectedSoundUri ) ) {
+    return (
+      <SoundSuggestionsContainer
+        detectSubject={detectSubject}
+        onPressPhoto={onPressPhotoFromSound}
+        onPressSound={onPressSound}
+        photoUris={photoUris}
+        soundUri={selectedSoundUri}
+      />
+    );
+  }
 
   return (
     <>
@@ -577,12 +615,14 @@ const SuggestionsContainer = ( ) => {
         shouldUseEvidenceLocation={shouldUseEvidenceLocation}
         onCropPhoto={onCropPhotoUri}
         onPressPhoto={onPressPhoto}
+        onPressSound={onPressSound}
         onReorderPhotos={handleReorderPhotos}
         onSelectGenus={handleSelectGenus}
         onTaxonChosen={navigateWithTaxonSelected}
         photoUris={photoUris}
         selectedPhotoUri={selectedPhotoUri}
         showImproveWithLocationButton={!!showImproveWithLocationButton}
+        soundUris={soundUris}
         suggestions={suggestions}
         toggleLocation={toggleLocation}
         toggleSuggestionsModel={toggleSuggestionsModel}
@@ -612,8 +652,7 @@ const SuggestionsContainer = ( ) => {
 const SuggestionsScreen = ( ) => {
   const currentObservation = useStore( state => state.currentObservation );
   return ObservationPhoto.mapObsPhotoUris( currentObservation ).length === 0
-    && ( currentObservation?.observationSounds?.length
-      || currentObservation?.observation_sounds?.length )
+    && soundUrisForObservation( currentObservation ).length > 0
     ? <SoundSuggestionsContainer />
     : <SuggestionsContainer />;
 };
