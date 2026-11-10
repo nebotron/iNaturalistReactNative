@@ -16,6 +16,7 @@ import React from "react";
 import { Alert } from "react-native";
 import Observation from "realmModels/Observation";
 import type { UserPojo } from "realmModels/User";
+import { hasCachedOnlineSuggestions } from "sharedHelpers/prefetchObservationSuggestions";
 import { useTranslation } from "sharedHooks";
 import {
   MANUAL_SYNC_IN_PROGRESS,
@@ -80,8 +81,17 @@ const MyObservationsSimpleHeader = ( {
       );
       return;
     }
+    // Open an observation whose online suggestions are already cached first,
+    // so the flow starts on a screen that's ready instead of on a network wait.
+    const observations = Array.from( unknownUnsyncedObs );
+    const firstCachedIndex = observations.findIndex(
+      observation => hasCachedOnlineSuggestions( observation, realm ),
+    );
+    if ( firstCachedIndex > 0 ) {
+      observations.unshift( ...observations.splice( firstCachedIndex, 1 ) );
+    }
     resetObservationFlowSlice( );
-    setObservations( Array.from( unknownUnsyncedObs ) );
+    setObservations( observations );
     setBulkUploadMode( true );
     navigation.navigate( "Suggestions", {
       entryScreen: "ObsEdit",

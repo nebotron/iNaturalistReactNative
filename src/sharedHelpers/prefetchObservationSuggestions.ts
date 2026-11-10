@@ -73,6 +73,26 @@ export const prefetchOfflineSuggestions = async (
   return offlineSuggestions;
 };
 
+// Whether the online model's result for this observation is already on disk,
+// under the same key the Suggestions screen reads, so opening it would show
+// online suggestions without waiting on the network.
+export const hasCachedOnlineSuggestions = (
+  observation: RealmObservationPojo,
+  realm: Realm,
+): boolean => {
+  const { photoUri, shouldUseEvidenceLocation } = scoreParamsForObservation( observation );
+  if ( !photoUri ) {
+    return false;
+  }
+  const queryKey = onlineSuggestionsQueryKey( photoUri, shouldUseEvidenceLocation );
+  const onlineKey = onlineSuggestionsCacheKey(
+    queryKey,
+    !!User.currentUser( realm ),
+    i18n?.language ?? "en",
+  );
+  return !!getCachedSuggestions( onlineKey );
+};
+
 const shimApiResponseForCommonAncestor = (
   apiSuggestions: OnlineSuggestionsApiResponse,
 ): OnlineSuggestionsQueryResponse => {
