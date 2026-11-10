@@ -311,6 +311,10 @@ static NSNumber *histogramSeconds( MXHistogram<NSUnitDuration *> *histogram )
     MXLocationActivityMetric *loc = p.locationActivityMetrics;
     MXNetworkTransferMetric *net = p.networkTransferMetrics;
     MXAppRunTimeMetric *run = p.applicationTimeMetrics;
+    // Why the app ended: iOS kills it at its memory limit without a crash
+    // report, so these counts are the only record of those kills.
+    MXForegroundExitData *fgExit = p.applicationExitMetrics.foregroundExitData;
+    MXBackgroundExitData *bgExit = p.applicationExitMetrics.backgroundExitData;
     postDiagnostic( @"metrickit_daily", @{
       @"appBuild": describe( p.metaData.applicationBuildVersion ),
       @"multipleVersions": @( p.includesMultipleApplicationVersions ),
@@ -336,6 +340,11 @@ static NSNumber *histogramSeconds( MXHistogram<NSUnitDuration *> *histogram )
       @"displayLuminanceAPL": measure( p.displayMetrics.averagePixelLuminance.averageMeasurement,
                                        MXUnitAveragePixelLuminance.apl ),
       @"peakMemoryMB": measure( p.memoryMetrics.peakMemoryUsage, mb ),
+      @"fgMemoryLimitExits": @( fgExit.cumulativeMemoryResourceLimitExitCount ),
+      @"fgWatchdogExits": @( fgExit.cumulativeAppWatchdogExitCount ),
+      @"bgMemoryLimitExits": @( bgExit.cumulativeMemoryResourceLimitExitCount ),
+      @"bgMemoryPressureExits": @( bgExit.cumulativeMemoryPressureExitCount ),
+      @"bgWatchdogExits": @( bgExit.cumulativeAppWatchdogExitCount ),
     }, nil, @"info" );
     // Where the day's CPU time and disk writes went: one entry per screen
     // and activity PowerProfile marked (see PowerProfile.h). Each figure is

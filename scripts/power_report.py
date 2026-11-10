@@ -43,6 +43,9 @@ DAILY_COLUMNS = [
     ( "cellDownMB", "cellDn GB", 1024 ),
     ( "cellUpMB", "cellUp MB", 1 ),
     ( "peakMemoryMB", "peakMem MB", 1 ),
+    # Kills at iOS's memory limit, which leave no crash report
+    ( "fgMemoryLimitExits", "fgMemKill", 1 ),
+    ( "bgMemoryLimitExits", "bgMemKill", 1 ),
 ]
 
 

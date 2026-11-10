@@ -1,6 +1,7 @@
 import i18n from "i18next";
 import { navigationRef } from "navigation/navigationUtils";
-import { NativeEventEmitter, NativeModules } from "react-native";
+import { AppState, NativeEventEmitter, NativeModules } from "react-native";
+import { MMKV } from "react-native-mmkv";
 import type { UserLocation } from "sharedHelpers/fetchCoarseUserLocation";
 import fetchCoarseUserLocation from "sharedHelpers/fetchCoarseUserLocation";
 import { log } from "sharedHelpers/logger";
@@ -204,6 +205,21 @@ interface AudioIdState {
   stop: ( ) => void;
 }
 
+// Set while listening, so a session the app died in (iOS kills it at its
+// memory limit without a crash report) is logged on the next launch, with
+// the footprint at the last summary line.
+const listeningMarker = new MMKV( { id: "audio-id-listening" } );
+const lastSession = listeningMarker.getString( "session" );
+if ( lastSession ) {
+  logger.error( `listening ended without stopping, app killed or crashed: ${lastSession}` );
+  listeningMarker.clearAll( );
+}
+const markListening = ( detail: string | null ) => {
+  if ( detail ) listeningMarker.set( "session", detail );
+  else listeningMarker.clearAll( );
+};
+let sessionStarted = "";
+
 // What was heard is kept across app restarts, one key per species
 const heardStore = createMmkvRecordStore<Heard>( AUDIO_ID_HEARD_MMKV_ID );
 heardStore.migrateFrom( "audio-id-session", "heard" );
@@ -235,6 +251,8 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
       logger.info( `started, ${s.species.length} species, located ${s.located}, `
         + `mic ${mic.sampleRate} Hz x${mic.channels}` );
       set( { listening: true } );
+      sessionStarted = new Date( ).toISOString( );
+      markListening( `started ${sessionStarted}, no summary yet` );
     } catch ( e ) {
       logger.error( `start failed: ${( e as Error ).message}` );
       set( { error: ( e as Error ).message } );
@@ -242,6 +260,7 @@ const useAudioIdSession = create<AudioIdState>( )( ( set, get ) => ( {
   },
   stop: ( ) => {
     AudioBirdId?.stop( );
+    markListening( null );
     set( { listening: false } );
   },
 } ) );
@@ -269,8 +288,34 @@ let flashing = false;
 let dimTimer: ReturnType<typeof setTimeout> | undefined;
 let flashTimer: ReturnType<typeof setTimeout> | undefined;
 export const useScreenDimmed = create<boolean>( ( ) => false );
+// Whether the screen skips the re-renders the runs would cause: while it's
+// dimmed, and while nobody can see it at all (another screen or tab on top,
+// where it stays mounted, or the app in the background). Re-rendering its
+// list every second while away from it left Fabric shadow trees for Hermes'
+// GC to free, and native memory climbed to the ~3 GB kill limit within an
+// hour or two of listening (killed Nov 9 at 3211 and 3080 MB).
+export const useScreenPaused = create<boolean>( ( ) => true );
+let appActive = AppState.currentState !== "background"
+  && AppState.currentState !== "inactive";
 const applyBrightness = ( ) => {
-  useScreenDimmed.setState( focused && dimmed && !flashing, true );
+  const dim = focused && dimmed && !flashing;
+  useScreenDimmed.setState( dim, true );
+  useScreenPaused.setState( !focused || !appActive || dim, true );
+};
+AppState.addEventListener( "change", state => {
+  appActive = state === "active";
+  applyBrightness( );
+} );
+// Renders of the screen since the last summary line, so a screen that keeps
+// rendering while paused shows up in the app log.
+let screenRenders = 0;
+export const noteScreenRender = ( ) => { screenRenders += 1; };
+const screenState = ( ) => {
+  if ( !focused ) return "away";
+  if ( !appActive ) return "background";
+  return useScreenDimmed.getState( )
+    ? "dimmed"
+    : "shown";
 };
 // Returns whether the screen was dimmed, so the touch only wakes it
 export const noteActivity = ( ) => {
@@ -397,7 +442,16 @@ const onScores = ( event: ScoresEvent ) => {
         best.index >= 0
           ? sps[best.index]?.commonName
           : "none"} ${best.score.toFixed( 2 )}, errors ${
-        runs.filter( r => r.error ).length} ${runs.find( r => r.error )?.error || ""}` );
+        runs.filter( r => r.error ).length} ${runs.find( r => r.error )?.error || ""}, `
+      + `screen ${screenState( )}${useScreenPaused.getState( )
+        ? " paused"
+        : ""} renders ${screenRenders}` );
+    if ( useAudioIdSession.getState( ).listening ) {
+      markListening( `started ${sessionStarted}, last summary ${new Date( ).toISOString( )}: `
+        + `mem ${mb( last.memMB )} MB (malloc ${mb( last.heapUsedMB )}/${
+          mb( last.heapHeldMB )}, js ${mb( jsHeapMB( ) )}), screen ${screenState( )}` );
+    }
+    screenRenders = 0;
     runs = [];
   }
   const now = Date.now( );

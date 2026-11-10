@@ -32,7 +32,8 @@ import useAudioIdHistory from "./audioIdHistory";
 import type { AudioIdSpecies } from "./audioIdModel";
 import type { Heard } from "./audioIdSession";
 import useAudioIdSession, {
-  isHeard, noteActivity, startDimming, stopDimming, useScreenDimmed,
+  isHeard, noteActivity, noteScreenRender, startDimming, stopDimming, useScreenDimmed,
+  useScreenPaused,
 } from "./audioIdSession";
 import useEligibleClips from "./useEligibleClips";
 
@@ -207,22 +208,24 @@ const Spectrogram = ( { paused }: { paused: boolean } ) => (
   </View>
 );
 
-// A store's value that stops re-rendering the screen while it's dimmed, so
-// the runs coming in every second don't redraw a screen nobody can see.
-// Brightening subscribes again, which picks up the live value. The selector
-// must return a value already in the store, not a new object.
+// A store's value that stops re-rendering the screen while it's dimmed or
+// out of sight (see useScreenPaused), so the runs coming in every second
+// don't redraw a screen nobody can see. Showing it again subscribes again,
+// which picks up the live value. The selector must return a value already in
+// the store, not a new object.
 const useWhileBright = <S, T>(
   useStore: UseBoundStore<StoreApi<S>>,
   selector: ( state: S ) => T,
 ): T => {
-  const dimmed = useScreenDimmed( );
-  const subscribe = useCallback( ( onChange: ( ) => void ) => ( dimmed
+  const paused = useScreenPaused( );
+  const subscribe = useCallback( ( onChange: ( ) => void ) => ( paused
     ? ( ) => undefined
-    : useStore.subscribe( onChange ) ), [useStore, dimmed] );
+    : useStore.subscribe( onChange ) ), [useStore, paused] );
   return useSyncExternalStore( subscribe, ( ) => selector( useStore.getState( ) ) );
 };
 
 const AudioId = ( ) => {
+  noteScreenRender( );
   const { t } = useTranslation( );
   const navigation = useNavigation( );
   // Keep the display awake while this screen is focused
