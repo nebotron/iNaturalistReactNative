@@ -135,6 +135,8 @@ MMKV backend: `src/stores/zustandMMKVBackingStorage.ts`
 
 Deleting the app removes MMKV and Realm with it, and Android has `allowBackup="false"`. On iOS, `sharedHelpers/cloudBackup.ts` mirrors an allowlist (`BACKED_UP`) of MMKV keys — settings, saved searches, tunable parameters, the USB import list, game and vote history — to iCloud key-value storage via the `CloudKeyValueStore` native module, and a fresh install restores them. When you add a persisted value that a user would miss after a reinstall, add its key there. Leave out caches, tokens, and anything pointing at a file inside the app container. Apple's limit is 1 MB in total.
 
+The device-photo records Realm keeps but the API never returns — `UploadedDevicePhotoUri`, and each `ObservationPhoto`'s `originalDevicePhotoUri` and `cameraInfo` — are too big for that, so `sharedHelpers/cloudPhotoBackup.ts` keeps them as one JSON document in the app's iCloud Drive container (no photo contents). After a reinstall they wait in MMKV until `upsertRemoteObservations` brings each observation photo back. If you add another local-only field to an observation photo, add it to that document and to the restore in `upsertRemoteObservations`.
+
 ## Screen state that has to live in Zustand
 
 **A React context mounted inside a bottom-tab screen cannot hold state that should survive navigation.** Two independent mechanisms destroy the tree:

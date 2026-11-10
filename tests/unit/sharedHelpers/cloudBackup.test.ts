@@ -1,5 +1,6 @@
 import { NativeModules } from "react-native";
 import type * as CloudBackup from "sharedHelpers/cloudBackup";
+import type * as CloudPhotoBackup from "sharedHelpers/cloudPhotoBackup";
 
 // MMKV instances that share their contents by id, as on a device
 const mockInstances: Record<string, Map<string, string | number | boolean>> = {};
@@ -36,7 +37,15 @@ jest.mock( "sharedHelpers/changeLanguage", ( ) => ( {
 } ) );
 
 let icloud: Record<string, string>;
+let documents: Record<string, string>;
 const cloud = {
+  readDocument: jest.fn( async ( name: string ) => ( name in documents
+    ? { status: "ok", contents: documents[name] }
+    : { status: "downloading" } ) ),
+  writeDocument: jest.fn( async ( name: string, contents: string ) => {
+    documents[name] = contents;
+    return true;
+  } ),
   isAvailable: jest.fn( async ( ) => true ),
   getAll: jest.fn( async ( ) => ( { ...icloud } ) ),
   update: jest.fn( async ( values: Record<string, string>, removals: string[] ) => {
@@ -55,6 +64,36 @@ const load = ( ) => {
   return backup!;
 };
 
+interface FakeObsPhoto {
+  uuid: string;
+  originalDevicePhotoUri?: string;
+  cameraInfo?: string;
+}
+interface Uploaded { uri: string; uploadedAt: Date }
+
+// The little of Realm the backup touches
+const fakeRealm = ( observations: { observationPhotos: FakeObsPhoto[] }[] = [] ) => {
+  const uploaded: Uploaded[] = [];
+  const collection = <T, >( items: T[] ) => Object.assign(
+    [...items],
+    { addListener: jest.fn( ) },
+  );
+  return {
+    isClosed: false,
+    isInTransaction: false,
+    beginTransaction: jest.fn( ),
+    commitTransaction: jest.fn( ),
+    cancelTransaction: jest.fn( ),
+    uploaded,
+    objects: ( name: string ) => collection<unknown>( name === "Observation"
+      ? observations
+      : uploaded ),
+    create: jest.fn( ( _name: string, record: Uploaded ) => { uploaded.push( record ); } ),
+  };
+};
+let realm: ReturnType<typeof fakeRealm>;
+const start = ( backup: typeof CloudBackup ) => backup.startCloudBackup( realm as never );
+
 const local = ( id = "default" ) => {
   mockInstances[id] ??= new Map( );
   return mockInstances[id];
@@ -64,6 +103,8 @@ describe( "cloudBackup", ( ) => {
   beforeEach( ( ) => {
     Object.keys( mockInstances ).forEach( id => delete mockInstances[id] );
     icloud = {};
+    documents = {};
+    realm = fakeRealm( );
     jest.clearAllMocks( );
     jest.useFakeTimers( );
     ( NativeModules as Record<string, unknown> ).CloudKeyValueStore = cloud;
@@ -80,7 +121,7 @@ describe( "cloudBackup", ( ) => {
       "usb-import/importedNames": "[\"DCIM/1.JPG\"]",
       "default/lastDeletedSyncTime": "not backed up",
     };
-    await load( ).startCloudBackup( );
+    await start( load( ) );
 
     expect( local( ).get( "persisted-zustand.layout" ) ).toBe( "{\"isDefaultMode\":false}" );
     expect( local( "install-data" ).get( "onboardingShown" ) ).toBe( true );
@@ -98,7 +139,7 @@ describe( "cloudBackup", ( ) => {
     local( ).set( "persisted-zustand.groupedPhotos", "[\"file:///gone.jpg\"]" );
     local( "tunable-params" ).set( "hotspotRadius", 5 );
     const backup = load( );
-    await backup.startCloudBackup( );
+    await start( backup );
 
     expect( cloud.getAll ).not.toHaveBeenCalled( );
     expect( icloud ).toEqual( {
@@ -119,7 +160,7 @@ describe( "cloudBackup", ( ) => {
     local( ).set( "persisted-zustand.layout", "{}" );
     local( ).set( "persisted-zustand.exploreSavedSearches", "{\"searches\":[]}" );
     const backup = load( );
-    await backup.startCloudBackup( );
+    await start( backup );
 
     local( ).delete( "persisted-zustand.layout" );
     await backup.mirror( );
@@ -130,7 +171,7 @@ describe( "cloudBackup", ( ) => {
 
   it( "doesn't back up a fresh install's defaults before it has restored", async ( ) => {
     const backup = load( );
-    const started = backup.startCloudBackup( );
+    const started = start( backup );
     // Defaults written at launch, while iCloud hasn't downloaded yet
     local( ).set( "persisted-zustand.layout", "{\"isDefaultMode\":true}" );
     await jest.advanceTimersByTimeAsync( 15_000 );
@@ -146,11 +187,84 @@ describe( "cloudBackup", ( ) => {
 
   it( "backs up once a fresh install has nothing in iCloud to restore", async ( ) => {
     const backup = load( );
-    const started = backup.startCloudBackup( );
+    const started = start( backup );
     local( ).set( "currentLocale", "de" );
     await jest.advanceTimersByTimeAsync( 60 * 60 * 1000 );
     await started;
 
     expect( icloud ).toEqual( { "default/currentLocale": "de" } );
+  } );
+
+  describe( "device photos", ( ) => {
+    const cameraInfo = JSON.stringify( { camera: "Canon EOS R5", metadata: [["Flash", "Off"]] } );
+
+    it( "backs up which photos were imported and their camera settings", async ( ) => {
+      local( ).set( "currentLocale", "en" );
+      realm = fakeRealm( [{
+        observationPhotos: [
+          { uuid: "op-1", originalDevicePhotoUri: "ph://A/L0/001", cameraInfo },
+          { uuid: "op-2" },
+        ],
+      }] );
+      realm.uploaded.push( { uri: "ph://B/L0/001", uploadedAt: new Date( 1000 ) } );
+      await start( load( ) );
+
+      expect( JSON.parse( documents["devicePhotos.json"] ) ).toEqual( {
+        v: 1,
+        uploaded: [["ph://B/L0/001", 1000]],
+        photos: [["op-1", "ph://A/L0/001", cameraInfo]],
+      } );
+      expect( icloud["devicePhotos/hash"] ).toBeDefined( );
+    } );
+
+    it( "writes no document when there's nothing to keep", async ( ) => {
+      local( ).set( "currentLocale", "en" );
+      await start( load( ) );
+      expect( cloud.writeDocument ).not.toHaveBeenCalled( );
+    } );
+
+    it( "restores them on a fresh install, for observations still to download", async ( ) => {
+      icloud = { "default/currentLocale": "en", "devicePhotos/hash": "x" };
+      documents = {
+        "devicePhotos.json": JSON.stringify( {
+          v: 1,
+          uploaded: [["ph://B/L0/001", 1000]],
+          photos: [["op-1", "ph://A/L0/001", cameraInfo]],
+        } ),
+      };
+      const backup = load( );
+      await start( backup );
+      await jest.advanceTimersByTimeAsync( 0 );
+
+      expect( realm.uploaded ).toEqual( [{ uri: "ph://B/L0/001", uploadedAt: new Date( 1000 ) }] );
+      let photoBackup: typeof CloudPhotoBackup | undefined;
+      jest.isolateModules( ( ) => {
+        photoBackup = jest.requireActual<typeof CloudPhotoBackup>(
+          "sharedHelpers/cloudPhotoBackup",
+        );
+      } );
+      expect( photoBackup?.restoredDevicePhoto( "op-1" ) ).toEqual( {
+        originalDevicePhotoUri: "ph://A/L0/001",
+        cameraInfo,
+      } );
+      expect( photoBackup?.restoredDevicePhoto( "op-2" ) ).toEqual( {} );
+
+      // Still in the backup while its observation hasn't come back
+      realm.uploaded.length = 0;
+      local( ).set( "currentLocale", "fr" );
+      await backup.mirror( );
+      expect( JSON.parse( documents["devicePhotos.json"] ).photos )
+        .toEqual( [["op-1", "ph://A/L0/001", cameraInfo]] );
+    } );
+
+    it( "doesn't back up over a document that hasn't downloaded yet", async ( ) => {
+      icloud = { "default/currentLocale": "en", "devicePhotos/hash": "x" };
+      realm = fakeRealm( [{ observationPhotos: [{ uuid: "op-9", cameraInfo }] }] );
+      const backup = load( );
+      await start( backup );
+      local( ).set( "currentLocale", "fr" );
+      await backup.mirror( );
+      expect( cloud.writeDocument ).not.toHaveBeenCalled( );
+    } );
   } );
 } );

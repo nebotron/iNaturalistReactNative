@@ -4,6 +4,7 @@ import {
   PROJECT_OBSERVATION_FIELDS,
   PROJECT_SUMMARY_FIELDS,
 } from "api/fields";
+import { restoredDevicePhoto } from "sharedHelpers/cloudPhotoBackup";
 import { formatDateStringFromTimestamp, getNowISO } from "sharedHelpers/dateAndTime";
 import { firstDevicePhotoLocation } from "sharedHelpers/devicePhotoLocation";
 import { recordUploadedDevicePhotoUrisFromObservation } from
@@ -255,6 +256,8 @@ class Observation extends Realm.Object {
       if ( !existingObsPhoto ) {
         mappedObsPhoto._created_at = new Date( );
         mappedObsPhoto.photo._created_at = new Date( );
+        // Back from iCloud after a reinstall (cloudPhotoBackup)
+        Object.assign( mappedObsPhoto, restoredDevicePhoto( obsPhoto.uuid ) );
       } else if ( existingObsPhoto.originalDevicePhotoUri ) {
         // ObservationPhoto is an embedded object, so it has no identity of its
         // own and "modified" can't merge into it: assigning this list replaces

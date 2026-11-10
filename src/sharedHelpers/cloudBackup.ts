@@ -1,6 +1,11 @@
-import { AppState, NativeModules } from "react-native";
+import { AppState } from "react-native";
 import { MMKV } from "react-native-mmkv";
+import type Realm from "realm";
 import changeLanguage from "sharedHelpers/changeLanguage";
+import {
+  backUpDevicePhotos, markDevicePhotosToRestore, restoreDevicePhotos,
+} from "sharedHelpers/cloudPhotoBackup";
+import { cloud, hash, wait } from "sharedHelpers/cloudStore";
 import { log } from "sharedHelpers/logger";
 import useStore from "stores/useStore";
 import zustandMMKVBackingStorage, { hadDataAtLaunch } from "stores/zustandMMKVBackingStorage";
@@ -10,18 +15,10 @@ import zustandMMKVBackingStorage, { hadDataAtLaunch } from "stores/zustandMMKVBa
 // them. A fresh install restores them; after that, local changes are pushed
 // up, and a key sign-out clears locally is cleared in iCloud too. Caches,
 // tokens, Realm and anything naming a file inside the app are left out: a
-// reinstall rebuilds the first three and the files are gone.
+// reinstall rebuilds the first three and the files are gone. The device photo
+// records Realm keeps are backed up alongside, by cloudPhotoBackup.
 
 const logger = log.extend( "cloudBackup" );
-
-interface CloudKeyValueStoreModule {
-  isAvailable: ( ) => Promise<boolean>;
-  getAll: ( ) => Promise<Record<string, string>>;
-  update: ( values: Record<string, string>, removals: string[] ) => Promise<boolean>;
-}
-
-const cloud = ( NativeModules as { CloudKeyValueStore?: CloudKeyValueStoreModule } )
-  .CloudKeyValueStore;
 
 type Kind = "string" | "number" | "boolean";
 interface BackedUp {
@@ -60,8 +57,9 @@ const BACKED_UP: BackedUp[] = [
   { id: "default", kind: "number", keys: ["persisted-zustand."] },
   { id: "install-data", kind: "boolean", keys: ["onboardingShown"] },
   { id: "tunable-params", kind: "number" },
-  // Without it, the next offload imports the whole drive again
-  { id: "usb-import", kind: "string", keys: ["importedNames"] },
+  // Without it, the next offload imports the whole drive again; the second is
+  // what's imported but not yet deleted from it
+  { id: "usb-import", kind: "string", keys: ["importedNames", "pendingDeletePaths"] },
   { id: "restored-device-photos", kind: "string", keys: ["restoredUris"] },
 ];
 
@@ -89,18 +87,6 @@ const instance = ( id: string ) => {
 };
 
 const cloudKey = ( id: string, key: string ) => `${id}/${key}`;
-
-// FNV-1a, enough to tell a changed value from an unchanged one
-/* eslint-disable no-bitwise */
-const hash = ( value: string ) => {
-  let h = 0x811c9dc5;
-  for ( let i = 0; i < value.length; i += 1 ) {
-    h ^= value.charCodeAt( i );
-    h = Math.imul( h, 0x01000193 );
-  }
-  return `${( h >>> 0 ).toString( 36 )}.${value.length}`;
-};
-/* eslint-enable no-bitwise */
 
 const read = ( store: MMKV, key: string, kind: Kind ): string | undefined => {
   let value: string | number | boolean | undefined;
@@ -167,6 +153,7 @@ export const restore = ( values: Record<string, string> ) => {
 };
 
 let mirroring: Promise<void> | null = null;
+let backupRealm: Realm | null = null;
 
 // Sends iCloud whatever changed since the last mirror
 export const mirror = ( ): Promise<void> => {
@@ -190,9 +177,11 @@ export const mirror = ( ): Promise<void> => {
       logger.warn( `Backup is ${total} chars, past ${MAX_TOTAL_CHARS}; not all of it was sent` );
     }
     const removals = Object.keys( mirrored ).filter( key => !( key in next ) );
-    if ( Object.keys( changed ).length === 0 && removals.length === 0 ) return;
-    await cloud.update( changed, removals );
-    backupStore.set( MIRRORED_KEY, JSON.stringify( next ) );
+    if ( Object.keys( changed ).length > 0 || removals.length > 0 ) {
+      await cloud.update( changed, removals );
+      backupStore.set( MIRRORED_KEY, JSON.stringify( next ) );
+    }
+    if ( backupRealm ) await backUpDevicePhotos( backupRealm );
   } )( ).catch( error => {
     logger.error( "iCloud backup failed:", error );
   } ).finally( ( ) => {
@@ -200,8 +189,6 @@ export const mirror = ( ): Promise<void> => {
   } );
   return mirroring;
 };
-
-const wait = ( ms: number ) => new Promise( resolve => { setTimeout( resolve, ms ); } );
 
 // A fresh install restores what iCloud has. iCloud downloads it some time
 // after launch, so keep asking until it turns up or there's clearly nothing.
@@ -215,6 +202,7 @@ const restoreWhenAvailable = async ( ) => {
       const values = await cloud.getAll( );
       if ( Object.keys( values ).length > 0 ) {
         restore( values );
+        markDevicePhotosToRestore( values );
         break;
       }
       // eslint-disable-next-line no-await-in-loop
@@ -229,9 +217,10 @@ let started = false;
 
 // Called once startup has signed a fresh install out, which clears MMKV, so
 // nothing restored here gets cleared by it
-export const startCloudBackup = async ( ) => {
+export const startCloudBackup = async ( realm: Realm ) => {
   if ( !cloud || started ) return;
   started = true;
+  backupRealm = realm;
   if ( !backupStore.contains( STATE_KEY ) ) {
     backupStore.set( STATE_KEY, hadDataAtLaunch
       ? "done"
@@ -240,6 +229,10 @@ export const startCloudBackup = async ( ) => {
   if ( backupStore.getString( STATE_KEY ) === "pending" ) {
     await restoreWhenAvailable( );
   }
+  // Can take a while: the document downloads after key-value storage does
+  restoreDevicePhotos( realm ).catch( error => {
+    logger.error( "Restoring device photos from iCloud failed:", error );
+  } );
   await mirror( );
   // Leaving the app is the last chance before it's killed, so every change
   // goes up then

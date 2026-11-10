@@ -4,11 +4,14 @@ import zustandMMKVBackingStorage from "stores/zustandMMKVBackingStorage";
 export const USER_OBSERVATIONS_MMKV_ID = "user-observations";
 export const AUDIO_ID_CLIPS_MMKV_ID = "audio-id-clips";
 export const AUDIO_ID_HEARD_MMKV_ID = "audio-id-heard";
+// Device photo records restored from iCloud, waiting for their observation
+export const CLOUD_PHOTO_RESTORE_MMKV_ID = "cloud-photo-restore";
 // Instances holding user data outside the default one, which sign-out clears
 // along with it. Audio ID clips stay on the device. The last two are the
 // local copies of the Firebase crop and brightness logs (urlKeyedFirebaseLog).
 const instanceIds = [
   USER_OBSERVATIONS_MMKV_ID,
+  CLOUD_PHOTO_RESTORE_MMKV_ID,
   "animalCropLog",
   "brightnessLog",
 ];
