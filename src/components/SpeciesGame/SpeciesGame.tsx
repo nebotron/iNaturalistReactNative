@@ -131,8 +131,23 @@ function computeLookalikesFromObs(
   };
 }
 
-function getCachedLookalikes( taxonId: number ): LookalikeCacheEntry | null {
-  const raw = zustandStorage.getItem( `${LOOKALIKE_CACHE_KEY}_${taxonId}` );
+// Restricts an observations query to the media the game is played with, so photo games
+// only learn lookalikes from photo observations and sound games from sound observations.
+function mediaQueryParam( mediaType: MediaType ): string {
+  return mediaType === "sound"
+    ? "&sounds=true"
+    : "&photos=true";
+}
+
+function lookalikeCacheKey( taxonId: number, mediaType: MediaType ): string {
+  return `${LOOKALIKE_CACHE_KEY}_${mediaType}_${taxonId}`;
+}
+
+function getCachedLookalikes(
+  taxonId: number,
+  mediaType: MediaType,
+): LookalikeCacheEntry | null {
+  const raw = zustandStorage.getItem( lookalikeCacheKey( taxonId, mediaType ) );
   if ( !raw || typeof raw !== "string" ) return null;
   try {
     return JSON.parse( raw ) as LookalikeCacheEntry;
@@ -146,11 +161,12 @@ function getCachedLookalikes( taxonId: number ): LookalikeCacheEntry | null {
 async function isFoundNear(
   taxonId: number,
   location: { latitude: number; longitude: number } | null,
+  mediaType: MediaType,
 ): Promise<boolean> {
   if ( !location ) return true;
   try {
     const res = await fetch(
-      `${INATURALIST_API}/observations?taxon_id=${taxonId}`
+      `${INATURALIST_API}/observations?taxon_id=${taxonId}${mediaQueryParam( mediaType )}`
         + `&lat=${location.latitude}&lng=${location.longitude}`
         + `&radius=${LOCATION_FILTER_RADIUS_KM}&per_page=0`,
     );
@@ -162,8 +178,12 @@ async function isFoundNear(
   }
 }
 
-function setCachedLookalikes( taxonId: number, value: LookalikeCacheEntry ): void {
-  zustandStorage.setItem( `${LOOKALIKE_CACHE_KEY}_${taxonId}`, JSON.stringify( value ) );
+function setCachedLookalikes(
+  taxonId: number,
+  mediaType: MediaType,
+  value: LookalikeCacheEntry,
+): void {
+  zustandStorage.setItem( lookalikeCacheKey( taxonId, mediaType ), JSON.stringify( value ) );
 }
 
 const BUTTON_ROW_HEIGHT = 56;
@@ -487,7 +507,7 @@ const SpeciesGame = ( ) => {
     entries: { taxonId: number; count: number; observationUuids: string[] }[];
     obsScanned: number;
   }> => {
-    const cached = getCachedLookalikes( id );
+    const cached = getCachedLookalikes( id, mediaType );
     if ( cached ) {
       return { topId: cached.topId, entries: cached.entries, obsScanned: cached.obsScanned };
     }
@@ -497,7 +517,8 @@ const SpeciesGame = ( ) => {
       ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
       : "";
     const baseUrl = `${INATURALIST_API}/observations`
-      + `?taxon_id=${id}${locationParams}&per_page=200&order_by=random`;
+      + `?taxon_id=${id}${locationParams}${mediaQueryParam( mediaType )}`
+      + "&per_page=200&order_by=random";
 
     const PAGE_BATCH = 2;
     const MAX_PAGES = MAX_LOOKALIKE_OBS / 200;
@@ -523,10 +544,10 @@ const SpeciesGame = ( ) => {
       ...result,
       obsScanned: allResults.length,
     };
-    setCachedLookalikes( id, cacheEntry );
+    setCachedLookalikes( id, mediaType, cacheEntry );
 
     return { ...result, obsScanned: allResults.length };
-  }, [] );
+  }, [mediaType] );
 
   // Fetches basic taxon info (name, common name) by ID.
   const fetchTaxonInfo = useCallback( async ( id: number ): Promise<TaxonInfo | null> => {
@@ -546,7 +567,7 @@ const SpeciesGame = ( ) => {
   const handleFetchMoreObservations = useCallback( async ( ) => {
     setIsFetchingMoreObs( true );
     try {
-      const cached = getCachedLookalikes( taxonId );
+      const cached = getCachedLookalikes( taxonId, mediaType );
       const baseObsScanned = cached?.obsScanned ?? obsScannedCount;
       const seedEntries = cached?.entries ?? [];
 
@@ -555,7 +576,8 @@ const SpeciesGame = ( ) => {
         ? `&lat=${location.latitude}&lng=${location.longitude}&radius=${LOOKALIKE_RADIUS_KM}`
         : "";
       const baseUrl = `${INATURALIST_API}/observations`
-        + `?taxon_id=${taxonId}${locationParams}&per_page=${LOOKALIKE_PAGE_SIZE}&order_by=random`;
+        + `?taxon_id=${taxonId}${locationParams}${mediaQueryParam( mediaType )}`
+        + `&per_page=${LOOKALIKE_PAGE_SIZE}&order_by=random`;
       const startPage = Math.floor( baseObsScanned / LOOKALIKE_PAGE_SIZE ) + 1;
       const pageCount = FETCH_MORE_OBS_COUNT / LOOKALIKE_PAGE_SIZE;
       const pages = Array.from( { length: pageCount }, ( _, i ) => startPage + i );
@@ -572,7 +594,7 @@ const SpeciesGame = ( ) => {
 
       const merged = computeLookalikesFromObs( newResults, taxonId, seedEntries );
       const newObsScanned = baseObsScanned + newResults.length;
-      setCachedLookalikes( taxonId, {
+      setCachedLookalikes( taxonId, mediaType, {
         entries: merged.entries,
         topId: merged.topId,
         obsScanned: newObsScanned,
@@ -592,7 +614,7 @@ const SpeciesGame = ( ) => {
       if ( newWeightedCandidates.length > 0 ) {
         const newCandidateResults = await Promise.all(
           newWeightedCandidates.map( async ( { taxonId: id, count } ) => {
-            if ( !await isFoundNear( id, location ) ) return null;
+            if ( !await isFoundNear( id, location, mediaType ) ) return null;
             const [info, pool] = await Promise.all( [
               fetchTaxonInfo( id ),
               fetchMediaPool(
@@ -651,6 +673,7 @@ const SpeciesGame = ( ) => {
     fetchMediaPool,
     selectedObsTypes,
     selectedSexes,
+    mediaType,
   ] );
 
   useEffect( ( ) => {
@@ -680,7 +703,7 @@ const SpeciesGame = ( ) => {
 
         // Filter misidentification candidates to species actually found nearby.
         const nearbyChecks = await Promise.all(
-          misidentEntries.map( entry => isFoundNear( entry.taxonId, userLocation ) ),
+          misidentEntries.map( entry => isFoundNear( entry.taxonId, userLocation, mediaType ) ),
         );
         const nearbyMisidentEntries = misidentEntries.filter( ( _, i ) => nearbyChecks[i] );
 
