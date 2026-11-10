@@ -2,7 +2,7 @@ import { useNavigation, useRoute } from "@react-navigation/native";
 import { useQuery } from "@tanstack/react-query";
 import { prepareAudioId } from "components/AudioId/audioIdModel";
 import { AudioBirdId, isHeard } from "components/AudioId/audioIdSession";
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import useStore from "stores/useStore";
 
 import useNavigateWithTaxonSelected from "./hooks/useNavigateWithTaxonSelected";
@@ -57,13 +57,38 @@ const scoreSound = async (
 const headerRight = ( ) => <TaxonSearchButton />;
 const NO_SUGGESTIONS = { topSuggestion: null, otherSuggestions: [] };
 
-const SoundSuggestionsContainer = ( ) => {
+export const soundUrisForObservation = ( observation ): string[] => (
+  ( observation?.observationSounds || observation?.observation_sounds || [] )
+    .map( os => os?.sound?.file_url )
+    .filter( ( uri ): uri is string => !!uri )
+);
+
+interface Props {
+  // When the photo suggestions screen hands over to a sound, it owns which
+  // sound is selected and what happens when a photo thumbnail is tapped.
+  detectSubject?: boolean;
+  onPressPhoto?: ( _uri: string ) => void;
+  onPressSound?: ( _uri: string ) => void;
+  photoUris?: string[];
+  soundUri?: string;
+}
+
+const SoundSuggestionsContainer = ( {
+  detectSubject,
+  onPressPhoto,
+  onPressSound,
+  photoUris = [],
+  soundUri: controlledSoundUri,
+}: Props ) => {
   const navigation = useNavigation( );
   const { params } = useRoute( );
   const currentObservation = useStore( state => state.currentObservation );
-  const sounds = currentObservation?.observationSounds
-    || currentObservation?.observation_sounds;
-  const soundUri: string | undefined = sounds?.[0]?.sound?.file_url;
+  const soundUris = soundUrisForObservation( currentObservation );
+  const [ownSoundUri, setOwnSoundUri] = useState<string | undefined>( );
+  const soundUri: string | undefined = controlledSoundUri
+    ?? ( ownSoundUri && soundUris.includes( ownSoundUri )
+      ? ownSoundUri
+      : soundUris[0] );
   const { latitude, longitude } = currentObservation || {};
   const observedAt = currentObservation?.time_observed_at || currentObservation?.observed_on;
   const navigateWithTaxonSelected = useNavigateWithTaxonSelected( { vision: false } );
@@ -97,14 +122,17 @@ const SoundSuggestionsContainer = ( ) => {
       improveWithLocationButtonOnPress={( ) => undefined}
       isLoading={!!soundUri && isLoading}
       shouldUseEvidenceLocation={latitude != null}
-      onPressPhoto={( ) => undefined}
+      detectSubject={detectSubject}
+      onPressPhoto={onPressPhoto ?? ( ( ) => undefined )}
+      onPressSound={onPressSound ?? setOwnSoundUri}
       genusEligibleTaxonIds={genusEligibleTaxonIds}
       onSelectGenus={handleSelectGenus}
       onTaxonChosen={navigateWithTaxonSelected}
-      photoUris={[]}
+      photoUris={photoUris}
       selectedPhotoUri=""
       showImproveWithLocationButton={false}
       soundUri={soundUri}
+      soundUris={soundUris}
       suggestions={suggestions}
       toggleLocation={( ) => undefined}
       toggleSuggestionsModel={( ) => undefined}

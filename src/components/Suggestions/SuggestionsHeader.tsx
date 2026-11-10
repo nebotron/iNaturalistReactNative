@@ -1,3 +1,4 @@
+import classnames from "classnames";
 import SoundContainer from "components/ObsDetailsSharedComponents/Media/SoundContainer";
 import {
   Body2,
@@ -18,6 +19,8 @@ interface Props {
   photoUris: string[];
   selectedPhotoUri: string;
   soundUri?: string;
+  soundUris?: string[];
+  onPressSound?: ( _uri: string ) => void;
   showOfflineModelInfo: boolean;
   toggleSuggestionsModel: ( useOfflineModel: boolean ) => void;
   improveWithLocationButtonOnPress: () => void;
@@ -32,36 +35,51 @@ const SuggestionsHeader = ( {
   photoUris,
   selectedPhotoUri,
   soundUri,
+  soundUris = [],
+  onPressSound,
   showOfflineModelInfo,
   toggleSuggestionsModel,
   improveWithLocationButtonOnPress,
   showImproveWithLocationButton,
 }: Props ) => {
   const { t } = useTranslation( );
+  const hasMultipleMedia = photoUris.length + soundUris.length > 1;
 
   return (
     <>
       <View className="mx-5">
-        {soundUri
-          ? (
-            <View className="bg-black rounded-lg overflow-hidden">
-              <SoundContainer
-                sizeClass="w-full py-4"
-                sound={{ file_url: soundUri }}
-                isVisible
-              />
-            </View>
-          )
-          : (
-            <ObsPhotoSelectionList
-              detectSubject={detectSubject}
-              onCropPhoto={onCropPhoto}
-              photoUris={photoUris}
-              selectedPhotoUri={selectedPhotoUri}
-              onPressPhoto={onPressPhoto}
-              onReorderPhotos={onReorderPhotos}
+        {/* With only one piece of evidence there's nothing to pick between, so
+            a lone sound gets just its player. Otherwise every photo and sound
+            sits in the thumbnail strip, with the selected sound's player
+            below it. */}
+        {( hasMultipleMedia || !soundUri ) && (
+          <ObsPhotoSelectionList
+            detectSubject={detectSubject}
+            onCropPhoto={onCropPhoto}
+            photoUris={photoUris}
+            selectedPhotoUri={selectedPhotoUri}
+            onPressPhoto={onPressPhoto}
+            onReorderPhotos={onReorderPhotos}
+            soundUris={soundUris}
+            selectedSoundUri={soundUri}
+            onPressSound={onPressSound}
+          />
+        )}
+        {soundUri && (
+          <View
+            className={classnames(
+              "bg-black rounded-lg overflow-hidden",
+              { "mt-3": hasMultipleMedia },
+            )}
+          >
+            <SoundContainer
+              key={soundUri}
+              sizeClass="w-full py-4"
+              sound={{ file_url: soundUri }}
+              isVisible
             />
-          )}
+          </View>
+        )}
       </View>
       {showImproveWithLocationButton && (
         <View className="mx-5 mt-5">

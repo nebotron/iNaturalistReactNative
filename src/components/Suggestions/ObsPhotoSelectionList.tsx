@@ -1,5 +1,7 @@
 import classnames from "classnames";
-import { CachedImage, TransparentCircleButton } from "components/SharedComponents";
+import {
+  CachedImage, INatIcon, TransparentCircleButton,
+} from "components/SharedComponents";
 import {
   Pressable, View,
 } from "components/styledComponents";
@@ -9,6 +11,7 @@ import DraggableFlatList, { ScaleDecorator } from "react-native-draggable-flatli
 import { computeCropStyles } from "sharedHelpers/normalizedCropTypes";
 import useSubjectDetectionForUri from "sharedHelpers/useSubjectDetectionForUri";
 import { useTranslation } from "sharedHooks";
+import colors from "styles/tailwindColors";
 
 interface Props {
   detectSubject?: boolean;
@@ -17,6 +20,11 @@ interface Props {
   selectedPhotoUri: string;
   onPressPhoto: ( _uri: string ) => void;
   onReorderPhotos?: ( _data: { data: string[] } ) => void;
+  // The observation's sounds, shown after its photos so every piece of
+  // evidence can be picked from the same strip.
+  soundUris?: string[];
+  selectedSoundUri?: string;
+  onPressSound?: ( _uri: string ) => void;
 }
 
 // The list is keyed on medium-sized remote URLs, but the thumbnail often zooms
@@ -87,6 +95,7 @@ const ObsPhotoSelectionList = ( {
   detectSubject,
   onCropPhoto,
   photoUris, selectedPhotoUri, onPressPhoto, onReorderPhotos,
+  soundUris = [], selectedSoundUri, onPressSound,
 }: Props ) => {
   const { t } = useTranslation( );
 
@@ -128,6 +137,36 @@ const ObsPhotoSelectionList = ( {
     </ScaleDecorator>
   ), [detectSubject, onCropPhoto, selectedPhotoUri, onPressPhoto, t] );
 
+  // Sounds follow the photos as a footer rather than as list items, so they
+  // can't be dragged in among the photos and reordering stays photos-only.
+  const renderSounds = useCallback( ( ) => (
+    <View className="flex-row">
+      {soundUris.map( uri => (
+        <Pressable
+          key={uri}
+          accessibilityRole="button"
+          accessibilityState={{ selected: selectedSoundUri === uri }}
+          onPress={( ) => onPressSound?.( uri )}
+          className="w-[188px] h-[188px] justify-center mx-1.5 rounded-lg"
+          accessibilityLabel={t( "Select-sound" )}
+          testID={`ObsPhotoSelectionList.sound.${uri}`}
+        >
+          <View
+            className={classnames(
+              "w-full aspect-square rounded-lg overflow-hidden bg-black",
+              "items-center justify-center",
+              {
+                "border-inatGreen border-[3px]": selectedSoundUri === uri,
+              },
+            )}
+          >
+            <INatIcon name="sounds" size={64} color={colors.white} />
+          </View>
+        </Pressable>
+      ) )}
+    </View>
+  ), [onPressSound, selectedSoundUri, soundUris, t] );
+
   return (
     <DraggableFlatList
       data={photoUris}
@@ -135,6 +174,9 @@ const ObsPhotoSelectionList = ( {
       keyExtractor={uri => uri}
       horizontal
       onDragEnd={onReorderPhotos ?? ( ( ) => undefined )}
+      ListFooterComponent={soundUris.length > 0
+        ? renderSounds
+        : undefined}
     />
   );
 };

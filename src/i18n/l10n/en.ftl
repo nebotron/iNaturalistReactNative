@@ -1789,6 +1789,8 @@ Select-one-or-more-life-stages-to-filter-observations = Select one or more life 
 Select-or-drag-media = Select or drag media
 Select-photo = Select photo
 Select-photos-from-your-device-to-create-observations = Select photos from your device to create observations
+# Accessibility label for a sound's thumbnail on the Add an ID screen
+Select-sound = Select sound
 SELECT-THIS-TAXON = SELECT THIS TAXON
 # Label for an element that let's you select a user
 Select-user = Select user

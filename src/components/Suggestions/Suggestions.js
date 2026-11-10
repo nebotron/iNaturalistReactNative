@@ -36,6 +36,8 @@ type Props = {
   selectedPhotoUri: string,
   showImproveWithLocationButton: boolean,
   soundUri?: string,
+  soundUris?: string[],
+  onPressSound?: Function,
   suggestions: Object,
   toggleLocation: Function,
   toggleSuggestionsModel: Function,
@@ -61,6 +63,8 @@ const Suggestions = ( {
   selectedPhotoUri,
   showImproveWithLocationButton,
   soundUri,
+  soundUris,
+  onPressSound,
   suggestions,
   toggleLocation,
   toggleSuggestionsModel,
@@ -132,6 +136,8 @@ const Suggestions = ( {
       photoUris={photoUris}
       selectedPhotoUri={selectedPhotoUri}
       soundUri={soundUri}
+      soundUris={soundUris}
+      onPressSound={onPressSound}
       showOfflineModelInfo={showOfflineModelInfo}
       toggleSuggestionsModel={toggleSuggestionsModel}
       improveWithLocationButtonOnPress={improveWithLocationButtonOnPress}
@@ -145,6 +151,8 @@ const Suggestions = ( {
     photoUris,
     selectedPhotoUri,
     soundUri,
+    soundUris,
+    onPressSound,
     improveWithLocationButtonOnPress,
     showImproveWithLocationButton,
     showOfflineModelInfo,

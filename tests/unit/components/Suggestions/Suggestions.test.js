@@ -174,4 +174,44 @@ describe( "Suggestions", ( ) => {
       expect( mockCreateId ).toHaveBeenCalled( );
     } );
   } );
+
+  describe( "with photos and sounds", ( ) => {
+    const photoUri = "https://example.com/photo/medium.jpg";
+    const soundUri = "https://example.com/sound.wav";
+
+    it( "shows a thumbnail for each sound after the photos", ( ) => {
+      const onPressSound = jest.fn( );
+      renderComponent( <Suggestions
+        photoUris={[photoUri]}
+        selectedPhotoUri={photoUri}
+        soundUris={[soundUri]}
+        onPressPhoto={jest.fn( )}
+        onPressSound={onPressSound}
+        suggestions={initialSuggestions}
+        onTaxonChosen={mockOnTaxonChosen}
+      /> );
+      expect( screen.getByTestId( `ObsPhotoSelectionList.${photoUri}` ) ).toBeVisible( );
+      const soundThumbnail = screen.getByTestId( `ObsPhotoSelectionList.sound.${soundUri}` );
+      expect( soundThumbnail ).toBeVisible( );
+      fireEvent.press( soundThumbnail );
+      expect( onPressSound ).toHaveBeenCalledWith( soundUri );
+    } );
+
+    it( "keeps the photo thumbnails available while a sound is selected", ( ) => {
+      const onPressPhoto = jest.fn( );
+      renderComponent( <Suggestions
+        photoUris={[photoUri]}
+        selectedPhotoUri=""
+        soundUri={soundUri}
+        soundUris={[soundUri]}
+        onPressPhoto={onPressPhoto}
+        onPressSound={jest.fn( )}
+        suggestions={initialSuggestions}
+        onTaxonChosen={mockOnTaxonChosen}
+      /> );
+      expect( screen.getByTestId( `ObsPhotoSelectionList.sound.${soundUri}` ) ).toBeSelected( );
+      fireEvent.press( screen.getByTestId( `ObsPhotoSelectionList.${photoUri}` ) );
+      expect( onPressPhoto ).toHaveBeenCalledWith( photoUri );
+    } );
+  } );
 } );
