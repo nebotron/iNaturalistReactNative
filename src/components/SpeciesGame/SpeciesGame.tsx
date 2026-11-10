@@ -87,9 +87,23 @@ interface LookalikeCacheEntry {
   obsScanned: number;
 }
 
+// A taxon is never a lookalike of the target if it is the target itself or in its
+// lineage, e.g. the parent species of a subspecies target, or a descendant of the target.
+function isInTargetLineage(
+  id: number,
+  targetId: number,
+  targetAncestorIds: number[],
+  ancestorIds?: number[],
+): boolean {
+  return id === targetId
+    || targetAncestorIds.includes( id )
+    || !!ancestorIds?.includes( targetId );
+}
+
 function computeLookalikesFromObs(
   results: unknown[],
   targetId: number,
+  targetAncestorIds: number[],
   seed?: { taxonId: number; count: number; observationUuids: string[] }[],
 ): {
   topId: number | null;
@@ -97,7 +111,7 @@ function computeLookalikesFromObs(
 } {
   const counts: Record<number, { count: number; observationUuids: string[] }> = {};
   for ( const s of seed ?? [] ) {
-    if ( s.taxonId !== targetId ) {
+    if ( !isInTargetLineage( s.taxonId, targetId, targetAncestorIds ) ) {
       counts[s.taxonId] = { count: s.count, observationUuids: [...s.observationUuids] };
     }
   }
@@ -106,7 +120,13 @@ function computeLookalikesFromObs(
       const altId: number | undefined = ( ident as { taxon?: { id?: number } } ).taxon?.id;
       const rankLevel: number | undefined
         = ( ident as { taxon?: { rank_level?: number } } ).taxon?.rank_level;
-      if ( altId && altId !== targetId && rankLevel === 10 ) {
+      const ancestorIds: number[] | undefined
+        = ( ident as { taxon?: { ancestor_ids?: number[] } } ).taxon?.ancestor_ids;
+      if (
+        altId
+        && rankLevel === 10
+        && !isInTargetLineage( altId, targetId, targetAncestorIds, ancestorIds )
+      ) {
         if ( !counts[altId] ) counts[altId] = { count: 0, observationUuids: [] };
         counts[altId].count += 1;
         const { uuid } = ( obs as { uuid?: string } );
@@ -280,6 +300,7 @@ const SpeciesGame = ( ) => {
   const lookalikePoolRef = useRef<PhotoEntry[]>( [] );
   const lookalikeIdRef = useRef<number | null>( null );
   const lookalikeCandidatesRef = useRef<LookalikeCandidate[]>( [] );
+  const targetAncestorIdsRef = useRef<number[]>( [] );
   const usedUuidsRef = useRef<Set<string>>( new Set( ) );
   const userLocationRef = useRef<{ latitude: number; longitude: number } | null>( null );
   // Next API page already loaded per taxon id, so refills fetch new observations.
@@ -501,6 +522,7 @@ const SpeciesGame = ( ) => {
   // Stops fetching early once lookalikes are found. Results are cached in persistent storage.
   const findMisidentifiedLookalikes = useCallback( async (
     id: number,
+    targetAncestorIds: number[],
     prefetchedLocation?: { latitude: number; longitude: number } | null,
   ): Promise<{
     topId: number | null;
@@ -509,7 +531,9 @@ const SpeciesGame = ( ) => {
   }> => {
     const cached = getCachedLookalikes( id, mediaType );
     if ( cached ) {
-      return { topId: cached.topId, entries: cached.entries, obsScanned: cached.obsScanned };
+      // Recompute from the cached entries so ones cached before lineage filtering drop out
+      const recomputed = computeLookalikesFromObs( [], id, targetAncestorIds, cached.entries );
+      return { ...recomputed, obsScanned: cached.obsScanned };
     }
 
     const location = prefetchedLocation ?? await fetchCoarseUserLocation( );
@@ -535,11 +559,11 @@ const SpeciesGame = ( ) => {
           allResults.push( ...( d.results ?? [] ) );
         }
       }
-      const interim = computeLookalikesFromObs( allResults, id );
+      const interim = computeLookalikesFromObs( allResults, id, targetAncestorIds );
       if ( interim.entries.length > 0 ) break;
     }
 
-    const result = computeLookalikesFromObs( allResults, id );
+    const result = computeLookalikesFromObs( allResults, id, targetAncestorIds );
     const cacheEntry: LookalikeCacheEntry = {
       ...result,
       obsScanned: allResults.length,
@@ -592,7 +616,12 @@ const SpeciesGame = ( ) => {
         }
       }
 
-      const merged = computeLookalikesFromObs( newResults, taxonId, seedEntries );
+      const merged = computeLookalikesFromObs(
+        newResults,
+        taxonId,
+        targetAncestorIdsRef.current,
+        seedEntries,
+      );
       const newObsScanned = baseObsScanned + newResults.length;
       setCachedLookalikes( taxonId, mediaType, {
         entries: merged.entries,
@@ -609,7 +638,8 @@ const SpeciesGame = ( ) => {
         lookalikeCandidatesRef.current.map( c => c.info.id ),
       );
       const newWeightedCandidates = merged.entries.filter(
-        e => e.taxonId !== taxonId && !existingCandidateIds.has( e.taxonId ),
+        e => !isInTargetLineage( e.taxonId, taxonId, targetAncestorIdsRef.current )
+          && !existingCandidateIds.has( e.taxonId ),
       );
       if ( newWeightedCandidates.length > 0 ) {
         const newCandidateResults = await Promise.all(
@@ -688,6 +718,8 @@ const SpeciesGame = ( ) => {
         const taxonData = await taxonRes.json( );
         const taxon = taxonData.results?.[0];
         if ( !taxon || cancelled ) return;
+        const targetAncestorIds: number[] = taxon.ancestor_ids ?? [];
+        targetAncestorIdsRef.current = targetAncestorIds;
 
         // Fetch user location once so it can be reused for both lookalike detection
         // and candidate filtering without duplicate GPS/network calls.
@@ -699,7 +731,7 @@ const SpeciesGame = ( ) => {
           topId: misidentifiedId,
           entries: misidentEntries,
           obsScanned,
-        } = await findMisidentifiedLookalikes( taxonId, userLocation );
+        } = await findMisidentifiedLookalikes( taxonId, targetAncestorIds, userLocation );
 
         // Filter misidentification candidates to species actually found nearby.
         const nearbyChecks = await Promise.all(
