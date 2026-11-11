@@ -309,13 +309,9 @@ const ImageCropEditor = ( ) => {
       prepareMs: timing?.prepareMs ?? null,
       // Native split of prepareMs: waits (queue, lock) versus work
       stageMs: timing?.stageMs ?? null,
-      // What was decoded (draw is most of a slow prepare, and depends on these)
-      sourceType: timing?.source?.type ?? null,
-      sourceDepth: timing?.source?.depth ?? null,
-      sourceProfile: timing?.source?.profile ?? null,
-      sourceMB: timing?.source?.bytes
-        ? Math.round( timing.source.bytes / 1e5 ) / 10
-        : null,
+      // What was decoded and how (draw is most of a slow prepare, and depends
+      // on these): type, bit depth, profile, bytes, decoded format, HDR
+      source: timing?.source ?? null,
       megapixels: imageSize
         ? Math.round( ( imageSize.w * imageSize.h ) / 1e5 ) / 10
         : null,

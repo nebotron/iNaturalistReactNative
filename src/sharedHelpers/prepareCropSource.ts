@@ -25,6 +25,14 @@ export interface PreparedSourceFile {
   depth?: number;
   profile?: string;
   bytes?: number;
+  // How ImageIO decoded it (non-raw only): bits per component and pixel, the
+  // colour space, whether that space is HDR (PQ/HLG), and whether the eager
+  // decode was used, which is when stageMs splits draw into decode + convert.
+  bpc?: number;
+  bpp?: number;
+  space?: string;
+  hdr?: boolean;
+  eager?: boolean;
 }
 
 interface PreparedSource {
