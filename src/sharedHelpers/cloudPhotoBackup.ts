@@ -21,7 +21,7 @@ import safeRealmWrite from "sharedHelpers/safeRealmWrite";
 const logger = log.extend( "cloudPhotoBackup" );
 
 const DOCUMENT = "devicePhotos.json";
-export const DOCUMENT_HASH_KEY = "devicePhotos/hash";
+const DOCUMENT_HASH_KEY = "devicePhotos/hash";
 // How long a restore keeps trying to download a document iCloud says exists,
 // across launches, before backing up over it
 const RESTORE_WAIT_MS = 7 * 24 * 60 * 60 * 1000;
@@ -70,7 +70,7 @@ const fill = ( obsPhoto: RealmObservationPhoto ) => {
   }
 };
 
-export const applyDocument = ( realm: Realm, document: DevicePhotosDocument ) => {
+const applyDocument = ( realm: Realm, document: DevicePhotosDocument ) => {
   document.photos.forEach( ( [uuid, uri, cameraInfo] ) => {
     pendingStore.set( uuid, JSON.stringify( [uri, cameraInfo] ) );
   } );
@@ -92,7 +92,7 @@ export const applyDocument = ( realm: Realm, document: DevicePhotosDocument ) =>
 
 // Realm's records plus restored ones still waiting for their observation.
 // Those that found it are dropped from the wait.
-export const buildDocument = ( realm: Realm ): DevicePhotosDocument => {
+const buildDocument = ( realm: Realm ): DevicePhotosDocument => {
   const photos: DevicePhotosDocument["photos"] = [];
   const inRealm = new Set<string>( );
   realm.objects<RealmObservation>( "Observation" ).forEach( observation => {

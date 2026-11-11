@@ -3,6 +3,7 @@ import type { PhotoIdentifier } from "@react-native-camera-roll/camera-roll";
 import { videoLibraryPath } from "appConstants/paths";
 import { NativeModules, Platform } from "react-native";
 import { log } from "sharedHelpers/logger";
+import withTimeout from "sharedHelpers/withTimeout";
 import * as uuid from "uuid";
 
 type PhotoNode = PhotoIdentifier["node"];
@@ -52,25 +53,6 @@ export function deviceVideoUriFromNode( node: PhotoNode ): string | null {
 // download over a slow connection, and finite.
 const VIDEO_EXTRACT_TIMEOUT_MS = 2 * 60 * 1000;
 
-const withTimeout = <T, >( promise: Promise<T>, label: string ): Promise<T> => (
-  new Promise<T>( ( resolve, reject ) => {
-    const timer = setTimeout(
-      ( ) => reject( new Error( `${label} timed out after ${VIDEO_EXTRACT_TIMEOUT_MS}ms` ) ),
-      VIDEO_EXTRACT_TIMEOUT_MS,
-    );
-    promise.then(
-      value => {
-        clearTimeout( timer );
-        resolve( value );
-      },
-      error => {
-        clearTimeout( timer );
-        reject( error );
-      },
-    );
-  } )
-);
-
 interface ExtractedVideoMedia {
   gifUri: string | null;
   audioUri: string | null;
@@ -98,10 +80,12 @@ export async function extractVideoMedia(
   const [audioUri, gifUri] = await Promise.all( [
     withTimeout(
       ImageCropper.extractAudioFromVideo( videoUri, audioCache ),
+      VIDEO_EXTRACT_TIMEOUT_MS,
       "extractAudioFromVideo",
     ).catch( () => null ),
     withTimeout(
       ImageCropper.convertVideoToGif( videoUri, gifDest ),
+      VIDEO_EXTRACT_TIMEOUT_MS,
       "convertVideoToGif",
     ).catch( error => {
       logger.warn( "Could not make a GIF out of an imported video", error );

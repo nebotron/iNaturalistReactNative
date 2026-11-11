@@ -38,7 +38,7 @@ interface Props {
  * If a user loggs in and their account has at least this many
  * uploaded observations, auto-switch to advanced mode
  */
-const AUTO_ADVANCED_MODE_OBSERVATION_THRESHOLD = getTunable(
+export const AUTO_ADVANCED_MODE_OBSERVATION_THRESHOLD = getTunable(
   "autoAdvancedModeObservations",
 );
 
