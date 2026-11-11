@@ -433,7 +433,7 @@ const initialState: State = {
   verifiable: true,
   nearbyRadiusKm: DEFAULT_NEARBY_RADIUS_KM,
   hotspotClusterRadiusKm: 1.5,
-  hotspotMaxDetourCandidates: 50,
+  hotspotMaxDetourCandidates: 200,
   hotspotObsPerPage: 200,
   hotspotParkingMinutes: 5,
   hotspotBboxPaddingKm: 80,

@@ -278,7 +278,7 @@ const createLayoutSlice: StateCreator<LayoutSlice> = set => ( {
     // Wildlife Hotspots algorithm tuning, edited in ExploreV2 Advanced Search
     hotspotSettings: {
       hotspotClusterRadiusKm: 1.5,
-      hotspotMaxDetourCandidates: 50,
+      hotspotMaxDetourCandidates: 200,
       hotspotObsPerPage: 200,
       hotspotParkingMinutes: 5,
       hotspotBboxPaddingKm: 80,

@@ -49,7 +49,7 @@ const OSRM_TABLE_BASE = "https://router.project-osrm.org/table/v1/driving";
 // Max radius for each k-means cluster (2 km diameter)
 const MAX_CLUSTER_RADIUS_KM = getTunable( "hotspotClusterRadiusKm" );
 // Evaluate detour times for this many top-by-obs candidates
-const MAX_DETOUR_CANDIDATES = 50;
+const MAX_DETOUR_CANDIDATES = 200;
 // Extra minutes added to travel time to account for parking when ranking hotspots
 const PARKING_MINUTES = getTunable( "hotspotParkingMinutes" );
 // Bbox padding around route to look for observations
@@ -111,19 +111,6 @@ export async function fetchOSRMRoute( waypoints: RoutePoint[] ): Promise<{
   };
 }
 
-async function fetchOSRMDuration( waypoints: RoutePoint[] ): Promise<number> {
-  const wStr = waypoints.map( w => `${w.longitude},${w.latitude}` ).join( ";" );
-  const url = `${OSRM_BASE}/${wStr}?overview=false`;
-  try {
-    const response = await fetch( url );
-    if ( !response.ok ) return Infinity;
-    const data = await response.json();
-    return ( data.routes?.[0]?.duration as number ) ?? Infinity;
-  } catch {
-    return Infinity;
-  }
-}
-
 // Driving times in seconds between every pair of points, Infinity where unroutable
 export async function fetchOSRMDurationMatrix( points: RoutePoint[] ): Promise<number[][]> {
   const wStr = points.map( w => `${w.longitude},${w.latitude}` ).join( ";" );
@@ -160,6 +147,38 @@ export function findBestInsertion( stops: RoutePoint[], candidate: RoutePoint ):
     }
   }
   return bestIdx;
+}
+
+// The public OSRM server rejects table requests with more than 100 coordinates
+const OSRM_TABLE_MAX_COORDS = 100;
+
+// Seconds of driving each candidate adds to the route through `stops` when inserted
+// where findBestInsertion puts it (the same place adding it to the route does).
+// Infinity where unroutable.
+async function fetchDetoursSec(
+  stops: RoutePoint[],
+  candidates: RoutePoint[],
+): Promise<number[]> {
+  const chunkSize = Math.max( 1, OSRM_TABLE_MAX_COORDS - stops.length );
+  const chunks: RoutePoint[][] = [];
+  for ( let i = 0; i < candidates.length; i += chunkSize ) {
+    chunks.push( candidates.slice( i, i + chunkSize ) );
+  }
+  const results = await Promise.allSettled(
+    chunks.map( chunk => fetchOSRMDurationMatrix( [...stops, ...chunk] ) ),
+  );
+  if ( chunks.length > 0 && results.every( r => r.status === "rejected" ) ) {
+    throw ( results[0] as PromiseRejectedResult ).reason;
+  }
+  return results.flatMap( ( result, chunkIdx ) => chunks[chunkIdx].map( ( candidate, j ) => {
+    if ( result.status === "rejected" ) return Infinity;
+    const durations = result.value;
+    const p = stops.length + j;
+    const insertIdx = findBestInsertion( stops, candidate );
+    const a = insertIdx - 1;
+    const b = insertIdx;
+    return durations[a][p] + durations[p][b] - durations[a][b];
+  } ) );
 }
 
 // Km per degree of latitude/longitude, used to pad the bbox by a fixed distance
@@ -580,35 +599,29 @@ export function useRouteHotspots() {
         candidates.sort( ( a, b ) => b.count - a.count );
         const topCandidates = candidates.slice( 0, maxDetourCandidates );
 
-        // 5. Compute actual travel time in parallel for each candidate, inserted at
-        // whichever point along the current stops minimizes the added distance
-        const withDetours = await Promise.all(
-          topCandidates.map( async candidate => {
-            const point = { latitude: candidate.centerLat, longitude: candidate.centerLng };
-            const insertIdx = findBestInsertion( stops, point );
-            const withCandidate = [
-              ...stops.slice( 0, insertIdx ),
-              point,
-              ...stops.slice( insertIdx ),
-            ];
-            const detourSec = await fetchOSRMDuration( withCandidate );
-            const detourMinutes = Math.max(
-              0,
-              Math.round( ( detourSec - directDurationSec ) / 60 ),
-            );
-            return {
-              id: candidate.id,
-              centerLatitude: candidate.centerLat,
-              centerLongitude: candidate.centerLng,
-              area: candidate.area,
-              observationCount: candidate.count,
-              detourMinutes,
-              speciesCount: candidate.speciesCount,
-              topSpecies: candidate.topSpecies,
-              observations: candidate.observations,
-            };
-          } ),
+        // 5. Driving time added by visiting each candidate between the two stops it's
+        // inserted between: d(A,P) + d(P,B) - d(A,B). OSRM table requests cover every
+        // candidate in a few calls instead of one route request each.
+        const detoursSec = await fetchDetoursSec(
+          stops,
+          topCandidates.map( c => ( { latitude: c.centerLat, longitude: c.centerLng } ) ),
         );
+        if ( isStale() ) return;
+        const withDetours: Hotspot[] = [];
+        topCandidates.forEach( ( candidate, i ) => {
+          if ( !Number.isFinite( detoursSec[i] ) ) return;
+          withDetours.push( {
+            id: candidate.id,
+            centerLatitude: candidate.centerLat,
+            centerLongitude: candidate.centerLng,
+            area: candidate.area,
+            observationCount: candidate.count,
+            detourMinutes: Math.max( 0, Math.round( detoursSec[i] / 60 ) ),
+            speciesCount: candidate.speciesCount,
+            topSpecies: candidate.topSpecies,
+            observations: candidate.observations,
+          } );
+        } );
 
         // 6. Rank by ratio of added travel time to observations (lower = better)
         withDetours.sort( ( a, b ) => {
