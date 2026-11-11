@@ -16,7 +16,7 @@
 //
 // Field offsets for the Canon binary blocks follow ExifTool's Canon.pm. The
 // layout of the curves inside 0x4015 is not documented, so they are found by
-// shape (see scanCurves), the same way tools/craw does it.
+// shape (see scanCurves).
 
 import { read, stat } from "@dr.pogodin/react-native-fs";
 import stripFilePrefix from "sharedHelpers/stripFilePrefix";

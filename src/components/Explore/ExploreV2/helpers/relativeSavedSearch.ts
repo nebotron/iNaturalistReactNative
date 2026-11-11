@@ -13,7 +13,7 @@ const DATE_FIELDS = [
   "created_d2",
 ] as const satisfies readonly ( keyof ExploreV2Filters )[];
 
-export const isoDay = ( date: Date | number ): string => format( date, "yyyy-MM-dd" );
+const isoDay = ( date: Date | number ): string => format( date, "yyyy-MM-dd" );
 
 // Saved dates are relative to the day the search was saved, so a search saved for "today"
 // shows today's observations when it's opened tomorrow. Searches saved before datesAsOf

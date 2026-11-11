@@ -18,16 +18,11 @@ import { onlineSuggestionsQueryKey } from "sharedHelpers/suggestionsQueryKey";
 import type { OfflineSuggestionsResponse } from "sharedHooks/useSuggestions/useOfflineSuggestions";
 import { predictOffline } from "sharedHooks/useSuggestions/useOfflineSuggestions";
 import type {
-  OnlineSuggestionsQueryResponse,
+  OnlineSuggestionsApiResponse,
 } from "sharedHooks/useSuggestions/useOnlineSuggestions";
-
-interface OnlineSuggestionsApiResponse {
-  results: OnlineSuggestionsQueryResponse["results"];
-  common_ancestor?: {
-    score: number;
-    taxon: OnlineSuggestionsQueryResponse["results"][0]["taxon"];
-  };
-}
+import {
+  shimApiResponseForCommonAncestor,
+} from "sharedHooks/useSuggestions/useOnlineSuggestions";
 
 // Mirror the Suggestions screen: the evidence location is only used when the
 // observation actually has one, and that choice is baked into both cache keys.
@@ -91,22 +86,6 @@ export const hasCachedOnlineSuggestions = (
     i18n?.language ?? "en",
   );
   return !!getCachedSuggestions( onlineKey );
-};
-
-const shimApiResponseForCommonAncestor = (
-  apiSuggestions: OnlineSuggestionsApiResponse,
-): OnlineSuggestionsQueryResponse => {
-  const shimmedCommonAncestor = apiSuggestions.common_ancestor
-    ? {
-      ...apiSuggestions.common_ancestor,
-      combined_score: apiSuggestions.common_ancestor.score,
-      taxon: apiSuggestions.common_ancestor.taxon,
-    }
-    : undefined;
-  return {
-    results: apiSuggestions.results,
-    common_ancestor: shimmedCommonAncestor,
-  };
 };
 
 // Online model: warm the persistent cache (survives restarts) as well as the

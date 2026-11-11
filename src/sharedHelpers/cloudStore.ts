@@ -3,7 +3,7 @@ import { NativeModules } from "react-native";
 // The CloudKeyValueStore native module (iOS): iCloud key-value storage, plus
 // documents in the app's iCloud Drive container for what's too big for it.
 // Undefined on Android.
-export interface CloudDocument {
+interface CloudDocument {
   status: "unavailable" | "downloading" | "ok";
   contents?: string;
 }

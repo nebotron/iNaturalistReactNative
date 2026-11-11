@@ -18,6 +18,7 @@ import { drainTrackedLocationFixes } from "sharedHelpers/locationHistoryTracker"
 import { log } from "sharedHelpers/logger";
 import { enqueuePhotoLibraryWrite } from "sharedHelpers/promptDeleteOriginalDevicePhotos";
 import safeRealmWrite from "sharedHelpers/safeRealmWrite";
+import withTimeout from "sharedHelpers/withTimeout";
 import useStore from "stores/useStore";
 
 const logger = log.extend( "applyTrackedLocationToPhotos" );
@@ -37,24 +38,6 @@ const { ImageCropper } = NativeModules as {
     ) => Promise<{ updated: number; requested: number }>;
   };
 };
-
-const withTimeout = <T, >( promise: Promise<T>, ms: number, label: string ): Promise<T> => (
-  new Promise<T>( ( resolve, reject ) => {
-    const timer = setTimeout(
-      ( ) => reject( new Error( `${label} timed out after ${ms}ms` ) ),
-      ms,
-    );
-    promise
-      .then( value => {
-        clearTimeout( timer );
-        resolve( value );
-      } )
-      .catch( error => {
-        clearTimeout( timer );
-        reject( error );
-      } );
-  } )
-);
 
 // Whether the Photos library accepts writes is a device-wide condition, but it
 // is discovered once per photo: a single wedged library turned into 156 near
